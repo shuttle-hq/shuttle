@@ -40,7 +40,6 @@ async fn create_deployment(state: &State<ApiState>, crate_file: Data<'_>, config
     let deployment = state.deployment_manager
         .deploy(crate_file, &config)
         .await?;
-
     Ok(json!(deployment))
 }
 

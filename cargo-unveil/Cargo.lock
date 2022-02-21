@@ -43,6 +43,7 @@ dependencies = [
  "cargo",
  "libloading",
  "rocket",
+ "service",
 ]
 >>>>>>> feat: set up  crate for calling linked libraries:api/Cargo.lock
 
@@ -1317,8 +1318,17 @@ dependencies = [
 ]
 
 [[package]]
+<<<<<<< HEAD:cargo-unveil/Cargo.lock
 name = "serde_urlencoded"
 version = "0.7.1"
+=======
+name = "service"
+version = "0.1.0"
+
+[[package]]
+name = "sha2"
+version = "0.9.9"
+>>>>>>> feat: set up system for loading from  an implementation of a dyn trait:api/Cargo.lock
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3491c14715ca2294c4d6a88f15e84739788c1d030eed8c110436aafdaa2f3fd"
 dependencies = [

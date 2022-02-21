@@ -11,7 +11,7 @@ use rocket::serde::json::Value;
 use uuid::Uuid;
 
 use crate::build::{BuildSystem, FsBuildSystem, ProjectConfig};
-use crate::deployment::{Deployment, DeploymentError, DeploymentId, DeploymentManager};
+use crate::deployment::{DeploymentInfo, DeploymentError, DeploymentId, DeploymentSystem};
 
 #[get("/deployments/<id>")]
 fn get_deployment(state: &State<ApiState>, id: Uuid) -> Result<Value, DeploymentError> {
@@ -37,13 +37,13 @@ fn create_deployment(state: &State<ApiState>, crate_file: Data) -> Result<Value,
 }
 
 struct ApiState {
-    deployment_manager: Mutex<DeploymentManager>,
+    deployment_manager: Mutex<DeploymentSystem>,
 }
 
 //noinspection ALL
 #[launch]
 fn rocket() -> _ {
-    let deployment_manager = DeploymentManager::new(Box::new(FsBuildSystem));
+    let deployment_manager = DeploymentSystem::new(Box::new(FsBuildSystem));
     let state = ApiState {
         // we probably want to put the Mutex deeper in the object tree.
         // but it's ok for prototype

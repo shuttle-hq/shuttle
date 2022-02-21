@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::{Arc};
+use std::time::Duration;
 use rocket::{Data, Request};
 use rocket::response::Responder;
 use uuid::Uuid;
@@ -28,7 +29,7 @@ pub enum DeploymentError {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Deployment {
+pub struct DeploymentInfo {
     id: DeploymentId,
     project_name: String,
     state: DeploymentState,
@@ -37,14 +38,30 @@ pub struct Deployment {
     runtime_logs: Option<String>
 }
 
+pub(crate) trait Service: Send + Sync {
+
+}
+
+impl Service for () {
+
+}
+
+pub(crate) type Library = ();
+
+pub(crate) struct Deployment {
+    info: DeploymentInfo,
+    service: Box<dyn Service>,
+    so: Library
+}
+
 type Deployments = HashMap<DeploymentId, Deployment>;
 
-pub(crate) struct DeploymentManager {
+pub(crate) struct DeploymentSystem {
     build_system: Box<dyn BuildSystem>,
     deployments: Deployments,
 }
 
-impl DeploymentManager {
+impl DeploymentSystem {
     pub(crate) fn new(build_system: Box<dyn BuildSystem>) -> Self {
         Self {
             build_system,
@@ -52,17 +69,18 @@ impl DeploymentManager {
         }
     }
 
-    pub(crate) fn get_deployment(&self, id: &DeploymentId) -> Option<Deployment> {
-        self.deployments.get(id).map(|d| d.clone())
+    /// Get's the deployment information back to the user
+    pub(crate) fn get_deployment(&self, id: &DeploymentId) -> Option<DeploymentInfo> {
+        self.deployments.get(id).map(|d| d.info.clone())
     }
 
     /// Main way to interface with the deployment manager.
     /// Will take a crate through the whole lifecycle.
     pub(crate) fn deploy(&mut self,
                                crate_file: Data,
-                               project_config: &ProjectConfig) -> Result<Deployment, DeploymentError> {
+                               project_config: &ProjectConfig) -> Result<DeploymentInfo, DeploymentError> {
 
-        let deployment = Deployment {
+        let info = DeploymentInfo {
             id: Uuid::new_v4(),
             project_name: project_config.name.clone(),
             state: DeploymentState::QUEUED,
@@ -71,9 +89,17 @@ impl DeploymentManager {
             runtime_logs: None
         };
 
-        self.deployments.insert(deployment.id.clone(), deployment.clone());
+        let deployment = Deployment {
+            info,
+            service: Box::new(()),
+            so: ()
+        };
 
-        Ok(deployment)
+        let info = deployment.info.clone();
+
+        self.deployments.insert(deployment.info.id.clone(), deployment);
+
+        Ok(info)
     }
 
     fn create_url(project_config: &ProjectConfig) -> String {

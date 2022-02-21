@@ -34,10 +34,18 @@ fn deploy(state: State<ApiState>, crate_file: Data, api_key: ApiKey) -> Result<S
         name: "some_project".to_string()
     };
 
-    let _build = state.build_system.build(crate_file, &api_key, &project);
+    let build = state.build_system.build(crate_file, &api_key, &project)?;
 
-    // load so file somehow
-    Ok("Done!".to_string())
+    let service = unsafe {
+        let so = libloading::Library::new("libtemp.so")?;
+        // TODO: `fn() -> u64` is of course temporary - will instead return `Box<dyn Service>`
+        let entrypoint: libloading::Symbol<unsafe extern fn() -> u64> = so.get(b"entrypoint\0")?;
+        entrypoint()
+    };
+
+    // ...
+
+    Ok(service.to_string())
 }
 
 struct ApiState {

@@ -15,8 +15,7 @@ pub struct ProjectConfig {
 }
 
 pub(crate) struct Build {
-    // should be ok for now
-    shared_object: File,
+    pub(crate) so_path: PathBuf,
 }
 
 pub(crate) trait BuildSystem: Send + Sync {
@@ -39,7 +38,7 @@ impl BuildSystem for FsBuildSystem {
         dbg!(&project_path);
 
         // clear directory
-        clear_project_dir(&project_path);
+        clear_project_dir(&project_path)?;
 
         // crate path
         let crate_path = crate_location(&project_path, project_name);
@@ -54,12 +53,7 @@ impl BuildSystem for FsBuildSystem {
         // run cargo build (--debug for now)
         let so_path = build_crate(&project_path)?;
 
-        // read path into file
-        let so_file = File::open(so_path)?;
-
-        Ok(Build {
-            shared_object: so_file
-        })
+        Ok(Build { so_path })
     }
 }
 

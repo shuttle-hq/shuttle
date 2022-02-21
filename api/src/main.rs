@@ -7,21 +7,14 @@ mod deploy;
 #[macro_use]
 extern crate rocket;
 
-
-
-
-
-
-
-
-
-
+use std::sync::Mutex;
 
 use rocket::{Data, State};
 use anyhow::{anyhow, Result};
 
 use crate::auth::{ApiKey, AuthSystem, TestAuthSystem};
 use crate::build::{BuildSystem, FsBuildSystem, ProjectConfig};
+use crate::deploy::{DeploySystem, ServiceDeploySystem};
 
 #[post("/deploy", data = "<crate_file>")]
 fn deploy(state: State<ApiState>, crate_file: Data, api_key: ApiKey) -> Result<String> {
@@ -37,28 +30,25 @@ fn deploy(state: State<ApiState>, crate_file: Data, api_key: ApiKey) -> Result<S
 
     let build = state.build_system.build(crate_file, &api_key, &project)?;
 
-    // deploy::load_service_from_so(&build.so_path);
+    state.deploy_system.lock().unwrap().deploy(project.name.clone(), &build.so_path)?;
 
     Ok("OK".to_string())
 }
 
 struct ApiState {
     build_system: Box<dyn BuildSystem>,
-    auth_system: Box<dyn AuthSystem>
+    auth_system: Box<dyn AuthSystem>,
+    deploy_system: Mutex<Box<dyn DeploySystem>>,
 }
 
 fn main() {
     let state = ApiState {
         build_system: Box::new(FsBuildSystem),
-        auth_system: Box::new(TestAuthSystem)
+        auth_system: Box::new(TestAuthSystem),
+        deploy_system: Mutex::new(Box::new(ServiceDeploySystem::default())),
     };
 
-    let (lib, service) = deploy::load_service_from_so("/home/max/Projects/unveil/temp/target/debug/libtemp.so").unwrap(); // TODO: temp
-    println!("Calling Service::start: {}", service.start());
-
-    /*
     rocket::ignite()
         .manage(state)
         .mount("/", routes![deploy]).launch();
-    */
 }

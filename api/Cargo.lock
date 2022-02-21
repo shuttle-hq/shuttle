@@ -94,6 +94,7 @@ dependencies = [
  "cargo",
  "libloading",
  "rocket",
+ "service",
 ]
 
 [[package]]
@@ -1414,6 +1415,10 @@ dependencies = [
  "ryu",
  "serde",
 ]
+
+[[package]]
+name = "service"
+version = "0.1.0"
 
 [[package]]
 name = "sha2"

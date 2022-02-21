@@ -2,6 +2,7 @@
 
 mod auth;
 mod build;
+mod deploy;
 
 #[macro_use]
 extern crate rocket;
@@ -36,16 +37,9 @@ fn deploy(state: State<ApiState>, crate_file: Data, api_key: ApiKey) -> Result<S
 
     let build = state.build_system.build(crate_file, &api_key, &project)?;
 
-    let service = unsafe {
-        let so = libloading::Library::new("libtemp.so")?;
-        // TODO: `fn() -> u64` is of course temporary - will instead return `Box<dyn Service>`
-        let entrypoint: libloading::Symbol<unsafe extern fn() -> u64> = so.get(b"entrypoint\0")?;
-        entrypoint()
-    };
+    // deploy::load_service_from_so(&build.so_path);
 
-    // ...
-
-    Ok(service.to_string())
+    Ok("OK".to_string())
 }
 
 struct ApiState {
@@ -59,7 +53,12 @@ fn main() {
         auth_system: Box::new(TestAuthSystem)
     };
 
+    let (lib, service) = deploy::load_service_from_so("/home/max/Projects/unveil/temp/target/debug/libtemp.so").unwrap(); // TODO: temp
+    println!("Calling Service::start: {}", service.start());
+
+    /*
     rocket::ignite()
         .manage(state)
         .mount("/", routes![deploy]).launch();
+    */
 }

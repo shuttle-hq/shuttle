@@ -1,0 +1,8 @@
+[workspace]
+members = [
+  "api",
+  "cargo-unveil"
+]
+exclude = [
+  "examples"
+]

@@ -40,8 +40,11 @@ pub enum DeploymentError {
     BadRequest(String),
 }
 
+/// Deployment metadata. This serves two purposes. Storing information
+/// used for the deployment process and also providing the client with
+/// information on the state of the deployment
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DeploymentInfo {
+pub struct DeploymentMeta {
     id: DeploymentId,
     config: ProjectConfig,
     state: DeploymentStateLabel,
@@ -50,27 +53,32 @@ pub struct DeploymentInfo {
     runtime_logs: Option<String>,
 }
 
+/// A wrapper struct for encapsulation and interior mutability
+pub(crate) struct Deployment(RwLock<DeploymentInner>);
+
+/// Inner struct of a deployment which holds the deployment itself
+/// and the some metadata
 pub(crate) struct DeploymentInner {
-    info: DeploymentInfo,
+    info: DeploymentMeta,
     state: DeploymentState,
 }
 
-pub(crate) struct Deployment {
-    inner: RwLock<DeploymentInner>,
-}
-
 impl Deployment {
-    pub(crate) async fn info(&self) -> DeploymentInfo {
+    pub(crate) async fn info(&self) -> DeploymentMeta {
         self.inner().await.info.clone()
     }
 
-    pub(crate) async fn is_terminated(&self) -> bool {
+    /// Evaluates if the deployment can be advanced. If the deployment
+    /// has reached a state where it can no longer advance, returns `false`.
+    pub(crate) async fn deployment_finished(&self) -> bool {
         match self.inner().await.state {
             DeploymentState::QUEUED(_) | DeploymentState::BUILT(_) | DeploymentState::LOADED(_) => false,
             DeploymentState::DEPLOYED(_) | DeploymentState::ERROR => true,
         }
     }
 
+    /// Tries to advance the deployment one stage. Does nothing if the deployment
+    /// is in a terminal state.
     pub(crate) async fn advance(&self, build_system: Arc<Box<dyn BuildSystem>>) {
         let mut inner = self.inner_mut().await;
         match &inner.state {
@@ -99,19 +107,21 @@ impl Deployment {
     }
 
     async fn inner_mut(&self) -> RwLockWriteGuard<'_, DeploymentInner> {
-        self.inner.write().await
+        self.0.write().await
     }
 
     async fn inner(&self) -> RwLockReadGuard<'_, DeploymentInner> {
-        self.inner.read().await
+        self.0.read().await
     }
 }
 
 type Deployments = HashMap<DeploymentId, Arc<Deployment>>;
 
+/// The top-level manager for deployments. Is responsible for their
+/// creation and lifecycle.
 pub(crate) struct DeploymentSystem {
     build_system: Arc<Box<dyn BuildSystem>>,
-    deployments: Arc<RwLock<Deployments>>,
+    deployments: RwLock<Deployments>,
 }
 
 impl DeploymentSystem {
@@ -123,7 +133,7 @@ impl DeploymentSystem {
     }
 
     /// Retrieves a clone of the deployment information
-     pub(crate) async fn get_deployment(&self, id: &DeploymentId) -> Result<DeploymentInfo, DeploymentError> {
+    pub(crate) async fn get_deployment(&self, id: &DeploymentId) -> Result<DeploymentMeta, DeploymentError> {
         match self.deployments.read().await.get(&id) {
             Some(deployment) => Ok(deployment.info().await),
             None => Err(DeploymentError::NotFound(format!("could not find deployment for id '{}'", &id)))
@@ -134,14 +144,14 @@ impl DeploymentSystem {
     /// Will take a crate through the whole lifecycle.
     pub(crate) async fn deploy(&self,
                                crate_file: Data<'_>,
-                               project_config: &ProjectConfig) -> Result<DeploymentInfo, DeploymentError> {
+                               project_config: &ProjectConfig) -> Result<DeploymentMeta, DeploymentError> {
         let crate_bytes = crate_file
             .open(ByteUnit::max_value()).into_bytes()
             .await
             .map_err(|_| DeploymentError::BadRequest("could not read crate file into bytes".to_string()))?
             .to_vec();
 
-        let info = DeploymentInfo {
+        let info = DeploymentMeta {
             id: Uuid::new_v4(),
             config: project_config.clone(),
             state: DeploymentStateLabel::QUEUED,
@@ -155,12 +165,12 @@ impl DeploymentSystem {
             crate_bytes
         };
 
-        let deployment = Deployment {
-            inner: RwLock::new(DeploymentInner {
+        let deployment = Deployment(
+            RwLock::new(DeploymentInner {
                 info: info.clone(),
                 state: DeploymentState::QUEUED(queued_state),
             })
-        };
+        );
 
         let deployment = Arc::new(deployment);
 
@@ -188,7 +198,7 @@ impl DeploymentSystem {
 
         dbg!("started deployment job for id: {}", id);
 
-        while !deployment.is_terminated().await {
+        while !deployment.deployment_finished().await {
             deployment.advance(build_system.clone()).await
         }
     }
@@ -217,9 +227,8 @@ fn load_service_from_so_file(so_path: &Path) -> anyhow::Result<(Box<dyn Service>
     }
 }
 
-// ---------
-
-
+/// Finite-state machine representing the various stages of the build
+/// process.
 enum DeploymentState {
     QUEUED(QueuedState),
     BUILT(BuiltState),

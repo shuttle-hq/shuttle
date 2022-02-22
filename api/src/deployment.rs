@@ -1,5 +1,7 @@
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
+// use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::Arc;
+use tokio::sync::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::time::Duration;
 use std::path::Path;
 use rocket::{Data};
@@ -16,7 +18,7 @@ use service::Service;
 pub type DeploymentId = Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum DeploymentState {
+pub enum DeploymentStateLabel {
     QUEUED,
     BUILDING,
     LOADING,
@@ -41,18 +43,15 @@ pub enum DeploymentError {
 pub struct DeploymentInfo {
     id: DeploymentId,
     config: ProjectConfig,
-    state: DeploymentState,
+    state: DeploymentStateLabel,
     url: String,
     build_logs: Option<String>,
     runtime_logs: Option<String>,
 }
 
-pub(crate) struct Deployment {
+pub(crate) struct DeploymentInner {
     info: DeploymentInfo,
-    /// A user's particular implementation of the [`Service`] trait.
-    service: Option<Box<dyn Service>>,
-    so: Option<Library>,
-    build: Option<Build>,
+    state: DeploymentState
 }
 
 pub(crate) struct Deployment {
@@ -60,34 +59,59 @@ pub(crate) struct Deployment {
 }
 
 impl Deployment {
-    pub(crate) fn info(&self) -> DeploymentInfo {
-        self.inner().info.clone()
+    pub(crate) async fn info(&self) -> DeploymentInfo {
+        self.inner().await.info.clone()
     }
 
-    pub(crate) fn state(&self) -> DeploymentState {
-        self.inner().info.state.clone()
+    pub(crate) async fn is_terminated(&self) -> bool {
+        match self.inner().await.state {
+            DeploymentState::QUEUED(_) | DeploymentState::BUILT(_) | DeploymentState::LOADED(_) => false,
+            DeploymentState::DEPLOYED(_) | DeploymentState::ERROR => true,
+        }
     }
 
-    pub(crate) fn update_state(&self, state: DeploymentState) {
-        let mut inner = self.inner_mut();
+    pub(crate) async fn advance(&self, build_system: Arc<Box<dyn BuildSystem>>) {
+        let mut inner = self.inner_mut().await;
+        match &inner.state {
+            DeploymentState::QUEUED(queued) => {
+                match build_system.build(&queued.crate_bytes, &self.info().await.config).await {
+                    Ok(build) => inner.state = DeploymentState::built(build),
+                    Err(_) => inner.state = DeploymentState::ERROR
+                }
+            },
+            DeploymentState::BUILT(built) => {
+                // let path = built.build.shared_object;
+                // let (so, service) = service::load_service_from_so_file(path);
+                inner.state = DeploymentState::loaded((), Box::new(()))
+            },
+            DeploymentState::LOADED(loaded) => {
+                inner.state = DeploymentState::deployed((), Box::new(()), 0)
+            }
+            DeploymentState::DEPLOYED(_) => { /* nothing to do here */ }
+            DeploymentState::ERROR => { /* nothing to do here */ }
+        }
+    }
+
+    pub(crate) async fn update_state(&self, state: DeploymentStateLabel) {
+        let mut inner = self.inner_mut().await;
         inner.info.state = state;
     }
 
-    pub(crate) fn project_config(&self) -> ProjectConfig {
-        self.inner().info.config.clone()
+    pub(crate) async fn project_config(&self) -> ProjectConfig {
+        self.inner().await.info.config.clone()
     }
 
-    pub(crate) fn attach_build_artifact(&self, build: Build) {
-        let mut inner = self.inner_mut();
-        inner.build = Some(build)
+    // pub(crate) fn attach_build_artifact(&self, build: Build) {
+    //     let mut inner = self.inner_mut();
+    //     inner.build = Some(build)
+    // }
+
+    async fn inner_mut(&self) -> RwLockWriteGuard<'_, DeploymentInner> {
+        self.inner.write().await
     }
 
-    fn inner_mut(&self) -> RwLockWriteGuard<'_, DeploymentInner> {
-        self.inner.write().unwrap()
-    }
-
-    fn inner(&self) -> RwLockReadGuard<'_, DeploymentInner> {
-        self.inner.read().unwrap()
+    async fn inner(&self) -> RwLockReadGuard<'_, DeploymentInner> {
+        self.inner.read().await
     }
 }
 
@@ -106,15 +130,15 @@ impl DeploymentSystem {
         }
     }
 
-    /// Get's the deployment information back to the user
-    pub(crate) fn get_deployment(&self, id: &DeploymentId) -> Result<DeploymentInfo, DeploymentError> {
-        self.deployments
-            .read()
-            .unwrap()
-            .get(&id)
-            .map(|deployment| deployment.info())
-            .ok_or(DeploymentError::NotFound("could not find deployment".to_string()))
-    }
+    // /// Get's the deployment information back to the user
+    // pub(crate) fn get_deployment(&self, id: &DeploymentId) -> Result<DeploymentInfo, DeploymentError> {
+    //     self.deployments
+    //         .read()
+    //         .unwrap()
+    //         .get(&id)
+    //         .map(|deployment| deployment.info())
+    //         .ok_or(DeploymentError::NotFound("could not find deployment".to_string()))
+    // }
 
     /// Main way to interface with the deployment manager.
     /// Will take a crate through the whole lifecycle.
@@ -122,25 +146,30 @@ impl DeploymentSystem {
                                crate_file: Data<'_>,
                                project_config: &ProjectConfig) -> Result<DeploymentInfo, DeploymentError> {
 
-        // for crate file consider placing somewhere in the file system via the build system
+        let crate_bytes = crate_file
+            .open(ByteUnit::max_value()).into_bytes()
+            .await
+            .map_err(|_| DeploymentError::BadRequest("could not read crate file into bytes".to_string()))?
+            .to_vec();
 
         let info = DeploymentInfo {
             id: Uuid::new_v4(),
             config: project_config.clone(),
-            state: DeploymentState::QUEUED,
+            state: DeploymentStateLabel::QUEUED,
             url: Self::create_url(project_config),
             build_logs: None,
             runtime_logs: None,
         };
 
         let id = info.id.clone();
+        let queued_state = QueuedState {
+            crate_bytes
+        };
 
         let deployment = Deployment {
             inner: RwLock::new(DeploymentInner {
                 info: info.clone(),
-                service: None,
-                so: None,
-                build: None,
+                state: DeploymentState::QUEUED(queued_state)
             })
         };
 
@@ -148,23 +177,17 @@ impl DeploymentSystem {
 
         self.deployments
             .write()
-            .unwrap()
+            .await
             .insert(id.clone(), deployment.clone());
 
         let build_system = self.build_system.clone();
         let deployments = self.deployments.clone();
-        let crate_bytes = crate_file
-            .open(ByteUnit::max_value()).into_bytes()
-            .await
-            .map_err(|_| DeploymentError::BadRequest("could not read crate file into bytes".to_string()))?
-            .to_vec();
+
 
         tokio::spawn(async move {
             Self::start_deployment_job(
                 build_system,
-                id.clone(),
-                deployment,
-                crate_bytes,
+                deployment
             )
         });
 
@@ -173,50 +196,14 @@ impl DeploymentSystem {
 
     async fn start_deployment_job(
         build_system: Arc<Box<dyn BuildSystem>>,
-        id: DeploymentId,
-        deployment: Arc<Deployment>,
-        crate_file: Vec<u8>) {
+        deployment: Arc<Deployment>) {
+        let id = deployment.info().await.id;
+
         dbg!("started deployment job for id: {}", id);
 
-        loop {
-            match deployment.state() {
-                DeploymentState::QUEUED => {
-                    dbg!("job '{}' is queued", id);
-                    deployment.update_state(DeploymentState::BUILDING);
-                    let config = deployment.project_config();
-                    match build_system.build(&crate_file, &config).await {
-                        Ok(build) => {
-                            deployment.attach_build_artifact(build);
-                            deployment.update_state(DeploymentState::LOADING)
-                        }
-                        Err(_) => deployment.update_state(DeploymentState::ERROR)
-                    }
-                }
-                DeploymentState::BUILDING => continue,
-                DeploymentState::LOADING => {
-                    dbg!("job '{}' is loading", id);
-                    // todo load the dynamic library
-                }
-                DeploymentState::DEPLOYING => {
-                    dbg!("job '{}' is deploying", id);
-                    // todo update routing table
-                }
-                DeploymentState::READY => {
-                    dbg!("job '{}' is ready", id);
-                    break;
-                }
-                DeploymentState::CANCELLED => {
-                    dbg!("job '{}' is cancelled", id);
-                    break;
-                }
-                DeploymentState::ERROR => {
-                    dbg!("job '{}' is errored", id);
-                    break;
-                }
-            }
+        while !deployment.is_terminated().await {
+            deployment.advance(build_system.clone()).await
         }
-
-        // load so file
     }
 
     fn create_url(project_config: &ProjectConfig) -> String {
@@ -243,3 +230,69 @@ fn load_service_from_so_file(so_path: &Path) -> anyhow::Result<(Box<dyn Service>
     }
 }
 
+// ---------
+
+
+enum DeploymentState {
+    QUEUED(QueuedState),
+    BUILT(BuiltState),
+    LOADED(LoadedState),
+    DEPLOYED(DeployedState),
+    ERROR
+}
+
+impl DeploymentState {
+    fn queued(crate_bytes: Vec<u8>) -> Self {
+        Self::QUEUED(
+            QueuedState {
+                crate_bytes
+            }
+        )
+    }
+
+    fn built(build: Build) -> Self {
+        Self::BUILT(
+            BuiltState {
+                build
+            }
+        )
+    }
+
+    fn loaded(so: Library, service: Box<dyn Service>) -> Self {
+        Self::LOADED(
+            LoadedState {
+                service,
+                so
+            }
+        )
+    }
+
+    fn deployed(so: Library, service: Box<dyn Service>, port: u16) -> Self {
+        Self::DEPLOYED(
+            DeployedState {
+                service,
+                so,
+                port
+            }
+        )
+    }
+}
+
+struct QueuedState {
+    crate_bytes: Vec<u8>
+}
+
+struct BuiltState {
+    build: Build
+}
+
+struct LoadedState {
+    service: Box<dyn Service>,
+    so: Library
+}
+
+struct DeployedState {
+    service: Box<dyn Service>,
+    so: Library,
+    port: u16
+}

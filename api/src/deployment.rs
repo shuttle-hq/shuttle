@@ -119,13 +119,13 @@ impl Deployment {
             }
             DeploymentState::LOADED(_loaded) => {
                 dbg!("deployment '{}' getting deployed...", &id);
-                todo!("functionality to load an initialise the system is not implemented yet")
+                todo!("functionality to load service objects not ready")
             }
             DeploymentState::DEPLOYED(_) => { /* nothing to do here */ }
             DeploymentState::ERROR => { /* nothing to do here */ }
         }
         // ensures that the metadata state is inline with the actual
-        // state
+        // state. This can go when we have an API layer.
         self.update_meta_state().await
     }
 

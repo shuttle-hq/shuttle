@@ -11,7 +11,7 @@ pub(crate) fn deploy(package_file: File, api_key: ApiKey, project: Project) -> R
     let client = reqwest::blocking::Client::new();
     // example from Stripe:
     // curl https://api.stripe.com/v1/charges -u sk_test_BQokikJOvBiI2HlWgH4olfQ2:
-    client.post(url)
+    let res = client.post(url)
         .body(package_file)
         .basic_auth(api_key, Some(""))
         .send()?;

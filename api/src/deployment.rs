@@ -18,17 +18,6 @@ use service::Service;
 
 pub type DeploymentId = Uuid;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum DeploymentStateLabel {
-    QUEUED,
-    BUILDING,
-    LOADING,
-    DEPLOYING,
-    READY,
-    CANCELLED,
-    ERROR,
-}
-
 // TODO: Determine error handling strategy - error types or just use `anyhow`?
 #[derive(Debug, Clone, Serialize, Deserialize, Responder)]
 pub enum DeploymentError {
@@ -47,10 +36,27 @@ pub enum DeploymentError {
 pub struct DeploymentMeta {
     id: DeploymentId,
     config: ProjectConfig,
-    state: DeploymentStateLabel,
+    state: DeploymentStateMeta,
     url: String,
     build_logs: Option<String>,
     runtime_logs: Option<String>,
+}
+
+impl DeploymentMeta {
+    fn new(config: &ProjectConfig) -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            config: config.clone(),
+            state: DeploymentStateMeta::QUEUED,
+            url: Self::create_url(config),
+            build_logs: None,
+            runtime_logs: None,
+        }
+    }
+
+    fn create_url(project_config: &ProjectConfig) -> String {
+        format!("{}.unveil.sh", project_config.name)
+    }
 }
 
 /// A wrapper struct for encapsulation and interior mutability
@@ -64,7 +70,19 @@ pub(crate) struct DeploymentInner {
 }
 
 impl Deployment {
+    fn new(config: &ProjectConfig, crate_bytes: Vec<u8>) -> Self {
+        Self(
+            RwLock::new(DeploymentInner {
+                info: DeploymentMeta::new(&config),
+                state: DeploymentState::queued(crate_bytes),
+            })
+        )
+    }
+}
+
+impl Deployment {
     pub(crate) async fn info(&self) -> DeploymentMeta {
+        dbg!("trying to get info");
         self.inner().await.info.clone()
     }
 
@@ -80,26 +98,35 @@ impl Deployment {
     /// Tries to advance the deployment one stage. Does nothing if the deployment
     /// is in a terminal state.
     pub(crate) async fn advance(&self, build_system: Arc<Box<dyn BuildSystem>>) {
+        /// We get the project first so that we don't deadlock
+        let config = self.project_config().await;
         let mut inner = self.inner_mut().await;
+        let id = inner.info.id.clone();
         match &inner.state {
             DeploymentState::QUEUED(queued) => {
-                match build_system.build(&queued.crate_bytes, &self.project_config().await).await {
+                dbg!("deployment '{}' build starting...", &id);
+                match build_system.build(&queued.crate_bytes, &config).await {
                     Ok(build) => inner.state = DeploymentState::built(build),
                     Err(_) => inner.state = DeploymentState::ERROR
                 }
             }
             DeploymentState::BUILT(built) => {
+                dbg!("deployment '{}' loading shared object and service...", &id);
                 match load_service_from_so_file(&built.build.so_path) {
                     Ok((svc, so)) => inner.state = DeploymentState::loaded(so, svc),
                     Err(_) => inner.state = DeploymentState::ERROR
                 }
             }
             DeploymentState::LOADED(_loaded) => {
+                dbg!("deployment '{}' getting deployed...", &id);
                 todo!("functionality to load an initialise the system is not implemented yet")
             }
             DeploymentState::DEPLOYED(_) => { /* nothing to do here */ }
             DeploymentState::ERROR => { /* nothing to do here */ }
         }
+        // ensures that the metadata state is inline with the actual
+        // state
+        self.update_meta_state().await
     }
 
     pub(crate) async fn project_config(&self) -> ProjectConfig {
@@ -112,6 +139,11 @@ impl Deployment {
 
     async fn inner(&self) -> RwLockReadGuard<'_, DeploymentInner> {
         self.0.read().await
+    }
+
+    async fn update_meta_state(&self) {
+        let mut inner = self.inner_mut().await;
+        inner.info.state = inner.state.meta()
     }
 }
 
@@ -151,33 +183,14 @@ impl DeploymentSystem {
             .map_err(|_| DeploymentError::BadRequest("could not read crate file into bytes".to_string()))?
             .to_vec();
 
-        let info = DeploymentMeta {
-            id: Uuid::new_v4(),
-            config: project_config.clone(),
-            state: DeploymentStateLabel::QUEUED,
-            url: Self::create_url(project_config),
-            build_logs: None,
-            runtime_logs: None,
-        };
-
+        let deployment = Arc::new(Deployment::new(&project_config, crate_bytes));
+        let info = deployment.info().await;
         let id = info.id.clone();
-        let queued_state = QueuedState {
-            crate_bytes
-        };
-
-        let deployment = Deployment(
-            RwLock::new(DeploymentInner {
-                info: info.clone(),
-                state: DeploymentState::QUEUED(queued_state),
-            })
-        );
-
-        let deployment = Arc::new(deployment);
 
         self.deployments
             .write()
             .await
-            .insert(id.clone(), deployment.clone());
+            .insert(info.id.clone(), deployment.clone());
 
         let build_system = self.build_system.clone();
 
@@ -185,7 +198,7 @@ impl DeploymentSystem {
             Self::start_deployment_job(
                 build_system,
                 deployment,
-            )
+            ).await
         });
 
         Ok(info)
@@ -194,17 +207,17 @@ impl DeploymentSystem {
     async fn start_deployment_job(
         build_system: Arc<Box<dyn BuildSystem>>,
         deployment: Arc<Deployment>) {
+        dbg!("function called");
+
         let id = deployment.info().await.id;
 
-        dbg!("started deployment job for id: {}", id);
+        dbg!("started deployment job for id: '{}'", id);
 
         while !deployment.deployment_finished().await {
             deployment.advance(build_system.clone()).await
         }
-    }
 
-    fn create_url(project_config: &ProjectConfig) -> String {
-        format!("{}.unveil.sh", project_config.name)
+        dbg!("ended deployment job for id: '{}'", id);
     }
 }
 
@@ -225,6 +238,16 @@ fn load_service_from_so_file(so_path: &Path) -> anyhow::Result<(Box<dyn Service>
 
         Ok((Box::from_raw(raw), lib))
     }
+}
+
+/// A label used to represent the deployment state in `DeploymentMeta`
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum DeploymentStateMeta {
+    QUEUED,
+    BUILT,
+    LOADED,
+    DEPLOYED,
+    ERROR,
 }
 
 /// Finite-state machine representing the various stages of the build
@@ -271,6 +294,16 @@ impl DeploymentState {
                 port,
             }
         )
+    }
+
+    fn meta(&self) -> DeploymentStateMeta {
+        match self {
+            DeploymentState::QUEUED(_) => DeploymentStateMeta::QUEUED,
+            DeploymentState::BUILT(_) => DeploymentStateMeta::BUILT,
+            DeploymentState::LOADED(_) => DeploymentStateMeta::LOADED,
+            DeploymentState::DEPLOYED(_) => DeploymentStateMeta::DEPLOYED,
+            DeploymentState::ERROR => DeploymentStateMeta::ERROR
+        }
     }
 }
 

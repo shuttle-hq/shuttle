@@ -4,8 +4,7 @@ use anyhow::Result;
 use cargo::core::compiler::{CompileMode};
 use cargo::core::Workspace;
 use cargo::ops::CompileOptions;
-use rocket::{Data, tokio};
-use rocket::data::ByteUnit;
+use rocket::tokio;
 use rocket::tokio::io::AsyncWriteExt;
 use rocket::serde::{Serialize, Deserialize};
 

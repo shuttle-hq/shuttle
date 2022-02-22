@@ -4,7 +4,6 @@ extern crate rocket;
 mod build;
 mod deployment;
 
-use std::sync::Mutex;
 use rocket::{Data, State};
 use rocket::serde::json::serde_json::json;
 use rocket::serde::json::Value;
@@ -14,14 +13,12 @@ use crate::build::{BuildSystem, FsBuildSystem, ProjectConfig};
 use crate::deployment::{DeploymentError, DeploymentSystem};
 
 #[get("/deployments/<id>")]
-fn get_deployment(state: &State<ApiState>, id: Uuid) -> Result<Value, DeploymentError> {
-    // let deployment = state.deployment_manager.lock()
-    //     .map_err(|_| DeploymentError::Internal("an internal error occurred".to_string()))?
-    //     .get_deployment(&id)
-    //     .ok_or(DeploymentError::NotFound("could not find deployment".to_string()))?;
-    //
-    // Ok(json!(deployment))
-    unimplemented!()
+async fn get_deployment(state: &State<ApiState>, id: Uuid) -> Result<Value, DeploymentError> {
+    let deployment = state.deployment_manager
+        .get_deployment(&id)
+        .await?;
+
+    Ok(json!(deployment))
 }
 
 #[post("/deployments", data = "<crate_file>")]

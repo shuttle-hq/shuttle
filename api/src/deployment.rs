@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 // use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::sync::Arc;
-use tokio::sync::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
-use std::time::Duration;
+use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::path::Path;
 use libloading::Library;
 use rocket::{Data};
@@ -76,7 +75,7 @@ impl Deployment {
         let mut inner = self.inner_mut().await;
         match &inner.state {
             DeploymentState::QUEUED(queued) => {
-                match build_system.build(&queued.crate_bytes, &self.info().await.config).await {
+                match build_system.build(&queued.crate_bytes, &self.project_config().await).await {
                     Ok(build) => inner.state = DeploymentState::built(build),
                     Err(_) => inner.state = DeploymentState::ERROR
                 }
@@ -87,27 +86,17 @@ impl Deployment {
                     Err(_) => inner.state = DeploymentState::ERROR
                 }
             }
-            DeploymentState::LOADED(loaded) => {
-                // inner.state = DeploymentState::deployed((), Box::new(()), 0)
+            DeploymentState::LOADED(_loaded) => {
+                todo!("functionality to load an initialise the system is not implemented yet")
             }
             DeploymentState::DEPLOYED(_) => { /* nothing to do here */ }
             DeploymentState::ERROR => { /* nothing to do here */ }
         }
     }
 
-    pub(crate) async fn update_state(&self, state: DeploymentStateLabel) {
-        let mut inner = self.inner_mut().await;
-        inner.info.state = state;
-    }
-
     pub(crate) async fn project_config(&self) -> ProjectConfig {
         self.inner().await.info.config.clone()
     }
-
-    // pub(crate) fn attach_build_artifact(&self, build: Build) {
-    //     let mut inner = self.inner_mut();
-    //     inner.build = Some(build)
-    // }
 
     async fn inner_mut(&self) -> RwLockWriteGuard<'_, DeploymentInner> {
         self.inner.write().await
@@ -133,15 +122,13 @@ impl DeploymentSystem {
         }
     }
 
-    // /// Get's the deployment information back to the user
-    // pub(crate) fn get_deployment(&self, id: &DeploymentId) -> Result<DeploymentInfo, DeploymentError> {
-    //     self.deployments
-    //         .read()
-    //         .unwrap()
-    //         .get(&id)
-    //         .map(|deployment| deployment.info())
-    //         .ok_or(DeploymentError::NotFound("could not find deployment".to_string()))
-    // }
+    /// Retrieves a clone of the deployment information
+     pub(crate) async fn get_deployment(&self, id: &DeploymentId) -> Result<DeploymentInfo, DeploymentError> {
+        match self.deployments.read().await.get(&id) {
+            Some(deployment) => Ok(deployment.info().await),
+            None => Err(DeploymentError::NotFound(format!("could not find deployment for id '{}'", &id)))
+        }
+    }
 
     /// Main way to interface with the deployment manager.
     /// Will take a crate through the whole lifecycle.
@@ -183,7 +170,6 @@ impl DeploymentSystem {
             .insert(id.clone(), deployment.clone());
 
         let build_system = self.build_system.clone();
-        let deployments = self.deployments.clone();
 
         tokio::spawn(async move {
             Self::start_deployment_job(

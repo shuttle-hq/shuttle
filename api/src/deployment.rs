@@ -17,10 +17,10 @@ pub type DeploymentId = Uuid;
 pub enum DeploymentState {
     QUEUED,
     BUILDING,
-    ERROR,
-    INITIALIZING,
     READY,
+    DEPLOYED,
     CANCELLED,
+    ERROR,
 }
 
 // TODO: Determine error handling strategy - error types or just use `anyhow`?
@@ -30,12 +30,14 @@ pub enum DeploymentError {
     Internal(String),
     #[response(status = 404)]
     NotFound(String),
+    #[response(status = 400)]
+    BadRequest(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeploymentInfo {
     id: DeploymentId,
-    project_name: String,
+    config: ProjectConfig,
     state: DeploymentState,
     url: String,
     build_logs: Option<String>,
@@ -86,15 +88,15 @@ impl DeploymentSystem {
 
     /// Main way to interface with the deployment manager.
     /// Will take a crate through the whole lifecycle.
-    pub(crate) fn deploy(&self,
-                         crate_file: Data,
-                         project_config: &ProjectConfig) -> Result<DeploymentInfo, DeploymentError> {
+    pub(crate) async fn deploy(&self,
+                               crate_file: Data<'_>,
+                               project_config: &ProjectConfig) -> Result<DeploymentInfo, DeploymentError> {
 
         // for crate file consider placing somewhere in the file system via the build system
 
         let info = DeploymentInfo {
             id: Uuid::new_v4(),
-            project_name: project_config.name.clone(),
+            config: project_config.clone(),
             state: DeploymentState::QUEUED,
             url: Self::create_url(project_config),
             build_logs: None,
@@ -116,13 +118,18 @@ impl DeploymentSystem {
 
         let build_system = self.build_system.clone();
         let deployments = self.deployments.clone();
+        let crate_bytes = crate_file
+            .open(ByteUnit::max_value()).into_bytes()
+            .await
+            .map_err(|_| DeploymentError::BadRequest("could not read crate file into bytes".to_string()))?
+            .to_vec();
 
         tokio::spawn(async move {
             Self::start_deployment_job(
                 build_system,
                 info.id.clone(),
                 deployments,
-                (),
+                crate_bytes,
             )
         });
 
@@ -132,10 +139,38 @@ impl DeploymentSystem {
     async fn start_deployment_job(
         build_system: Arc<Box<dyn BuildSystem>>,
         id: DeploymentId,
-        deployment: Arc<RwLock<Deployments>>,
-        crate_file: ()) {
-        println!("started deployment job");
-        unimplemented!()
+        deployments: Arc<RwLock<Deployments>>,
+        crate_file: Vec<u8>) {
+        dbg!("started deployment job for id: {}", id);
+
+        loop {
+            let mut deployment = {
+                deployments.read().unwrap().get(&id).clone()
+            };
+            let mut deployment = match deployment {
+                None => {
+                    dbg!("deployment {} no longer exists. aborting build job", &id);
+                    continue;
+                }
+                Some(d) => d
+            };
+            match deployment.info.state {
+                DeploymentState::QUEUED => {
+                    deployment.info.state = DeploymentState::BUILDING;
+                    match build_system.build(&crate_file, &deployment.info.config).await {
+                        Ok(build) => unimplemented!(),
+                        Err(e) => unimplemented!()
+                    };
+                },
+                DeploymentState::BUILDING => continue,
+                DeploymentState::READY => unimplemented!(),
+                DeploymentState::CANCELLED => break,
+                DeploymentState::ERROR => break,
+                DeploymentState::DEPLOYED => break,
+            }
+        }
+
+        // load so file
     }
 
     fn create_url(project_config: &ProjectConfig) -> String {
@@ -161,3 +196,4 @@ fn load_service_from_so_file(so_path: &Path) -> anyhow::Result<(Box<dyn Service>
         Ok((Box::from_raw(raw), lib))
     }
 }
+

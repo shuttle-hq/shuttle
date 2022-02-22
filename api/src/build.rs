@@ -6,9 +6,12 @@ use cargo::core::Workspace;
 use cargo::ops::CompileOptions;
 use rocket::{Data, tokio};
 use rocket::data::ByteUnit;
+use rocket::tokio::io::AsyncWriteExt;
+use rocket::serde::{Serialize, Deserialize};
 
 const FS_ROOT: &'static str = "/tmp/crates/";
 
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct ProjectConfig {
     pub name: String,
 }
@@ -19,8 +22,8 @@ pub(crate) struct Build {
 
 #[async_trait]
 pub(crate) trait BuildSystem: Send + Sync {
-    async fn build<'a>(&self,
-             crate_file: Data<'a>,
+    async fn build(&self,
+             crate_bytes: &Vec<u8>,
              project_config: &ProjectConfig) -> Result<Build>;
 }
 
@@ -29,7 +32,7 @@ pub(crate) struct FsBuildSystem;
 
 #[async_trait]
 impl BuildSystem for FsBuildSystem {
-    async fn build<'a>(&self, crate_file: Data<'a>, project_config: &ProjectConfig) -> Result<Build> {
+    async fn build(&self, crate_bytes: &Vec<u8>, project_config: &ProjectConfig) -> Result<Build> {
         let project_name = &project_config.name;
 
         // project path
@@ -44,10 +47,10 @@ impl BuildSystem for FsBuildSystem {
         dbg!(&crate_path);
 
         // create target file
-        let target_file = tokio::fs::File::create(&crate_path).await?;
+        let mut target_file = tokio::fs::File::create(&crate_path).await?;
 
-        // stream to file
-        crate_file.open(ByteUnit::max_value()).stream_to(target_file).await?;
+        // write bytes to file
+        target_file.write_all(crate_bytes).await?;
 
         // extract tarball
         extract_tarball(&crate_path, &project_path)?;

@@ -13,3 +13,4 @@ service = { path = "../service/" }
 uuid = { version = "0.8.2", features = ["v4"] }
 async-mutex = "1.4.0"
 serde = "1.0.136"
+structopt = "0.3.26"

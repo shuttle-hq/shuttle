@@ -1,4 +1,3 @@
-use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use anyhow::Result;
@@ -15,8 +14,7 @@ pub struct ProjectConfig {
 }
 
 pub(crate) struct Build {
-    // should be ok for now
-    shared_object: PathBuf,
+    pub(crate) so_path: PathBuf,
 }
 
 #[async_trait]
@@ -39,7 +37,7 @@ impl BuildSystem for FsBuildSystem {
         dbg!(&project_path);
 
         // clear directory
-        clear_project_dir(&project_path);
+        clear_project_dir(&project_path)?;
 
         // crate path
         let crate_path = crate_location(&project_path, project_name);
@@ -57,9 +55,7 @@ impl BuildSystem for FsBuildSystem {
         // run cargo build (--debug for now)
         let so_path = build_crate(&project_path)?;
 
-        Ok(Build {
-            shared_object: so_path
-        })
+        Ok(Build { so_path })
     }
 }
 

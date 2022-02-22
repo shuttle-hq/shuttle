@@ -1,6 +1,7 @@
 [workspace]
 members = [
   "api",
+  "service",
   "cargo-unveil"
 ]
 exclude = [

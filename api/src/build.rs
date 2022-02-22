@@ -9,11 +9,11 @@ use rocket::tokio;
 use rocket::tokio::io::AsyncWriteExt;
 
 #[cfg(debug_assertions)]
-const FS_ROOT: &'static str = "/tmp/unveil/crates/";
+const DEFAULT_FS_ROOT: &'static str = "/tmp/unveil/crates/";
 
 #[cfg(not(debug_assertions))]
 // as per: https://stackoverflow.com/questions/1510104/where-to-store-application-data-non-user-specific-on-linux
-const FS_ROOT: &'static str = "/var/lib/unveil/crates/";
+const DEFAULT_FS_ROOT: &'static str = "/var/lib/unveil/crates/";
 
 
 pub(crate) struct Build {
@@ -38,10 +38,10 @@ impl FsBuildSystem {
     /// The FS Build System will fail to intialise if the directory does not.
     /// exist
     pub(crate) fn initialise(path: Option<PathBuf>) -> Result<Self> {
-        let fs_root = path.unwrap_or(PathBuf::from(FS_ROOT));
+        let fs_root = path.unwrap_or(PathBuf::from(DEFAULT_FS_ROOT));
         if !(fs_root.exists()) {
             return Err(anyhow!(r#"
-            failed to initialise FS Build System.
+            Failed to initialise FS Build System.
             The path {:?} does not exist.
             Please create the directory to continue with deployment"#, &fs_root));
         }

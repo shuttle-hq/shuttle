@@ -1,5 +1,6 @@
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::time::Duration;
 use std::path::Path;
 use rocket::{Data};
 use rocket::response::Responder;
@@ -8,6 +9,7 @@ use rocket::serde::{Serialize, Deserialize};
 use rocket::tokio;
 
 use crate::{BuildSystem, ProjectConfig};
+use crate::build::Build;
 
 use service::Service;
 
@@ -17,8 +19,9 @@ pub type DeploymentId = Uuid;
 pub enum DeploymentState {
     QUEUED,
     BUILDING,
+    LOADING,
+    DEPLOYING,
     READY,
-    DEPLOYED,
     CANCELLED,
     ERROR,
 }
@@ -48,20 +51,47 @@ pub(crate) struct Deployment {
     info: DeploymentInfo,
     /// A user's particular implementation of the [`Service`] trait.
     service: Option<Box<dyn Service>>,
-    /// This [`libloading::Library`] instance must be kept alive in order to use
-    /// the `service` field without causing a segmentation fault.
-    lib: Option<libloading::Library>,
+    so: Option<Library>,
+    build: Option<Build>,
+}
+
+pub(crate) struct Deployment {
+    inner: RwLock<DeploymentInner>,
 }
 
 impl Deployment {
-    fn shareable(self) -> Arc<RwLock<Self>> {
-        Arc::new(RwLock::new(self))
+    pub(crate) fn info(&self) -> DeploymentInfo {
+        self.inner().info.clone()
+    }
+
+    pub(crate) fn state(&self) -> DeploymentState {
+        self.inner().info.state.clone()
+    }
+
+    pub(crate) fn update_state(&self, state: DeploymentState) {
+        let mut inner = self.inner_mut();
+        inner.info.state = state;
+    }
+
+    pub(crate) fn project_config(&self) -> ProjectConfig {
+        self.inner().info.config.clone()
+    }
+
+    pub(crate) fn attach_build_artifact(&self, build: Build) {
+        let mut inner = self.inner_mut();
+        inner.build = Some(build)
+    }
+
+    fn inner_mut(&self) -> RwLockWriteGuard<'_, DeploymentInner> {
+        self.inner.write().unwrap()
+    }
+
+    fn inner(&self) -> RwLockReadGuard<'_, DeploymentInner> {
+        self.inner.read().unwrap()
     }
 }
 
-// could use `chashmap` here but it is unclear if we'll need to iterate
-// over the whole thing at some point in the future.
-type Deployments = HashMap<DeploymentId, Deployment>;
+type Deployments = HashMap<DeploymentId, Arc<Deployment>>;
 
 pub(crate) struct DeploymentSystem {
     build_system: Arc<Box<dyn BuildSystem>>,
@@ -82,7 +112,7 @@ impl DeploymentSystem {
             .read()
             .unwrap()
             .get(&id)
-            .map(|deployment| deployment.info.clone())
+            .map(|deployment| deployment.info())
             .ok_or(DeploymentError::NotFound("could not find deployment".to_string()))
     }
 
@@ -103,18 +133,23 @@ impl DeploymentSystem {
             runtime_logs: None,
         };
 
+        let id = info.id.clone();
+
         let deployment = Deployment {
-            info,
-            service: None,
-            lib: None,
+            inner: RwLock::new(DeploymentInner {
+                info: info.clone(),
+                service: None,
+                so: None,
+                build: None,
+            })
         };
 
-        let info = deployment.info.clone();
+        let deployment = Arc::new(deployment);
 
         self.deployments
             .write()
             .unwrap()
-            .insert(info.id.clone(), deployment);
+            .insert(id.clone(), deployment.clone());
 
         let build_system = self.build_system.clone();
         let deployments = self.deployments.clone();
@@ -127,8 +162,8 @@ impl DeploymentSystem {
         tokio::spawn(async move {
             Self::start_deployment_job(
                 build_system,
-                info.id.clone(),
-                deployments,
+                id.clone(),
+                deployment,
                 crate_bytes,
             )
         });
@@ -139,34 +174,45 @@ impl DeploymentSystem {
     async fn start_deployment_job(
         build_system: Arc<Box<dyn BuildSystem>>,
         id: DeploymentId,
-        deployments: Arc<RwLock<Deployments>>,
+        deployment: Arc<Deployment>,
         crate_file: Vec<u8>) {
         dbg!("started deployment job for id: {}", id);
 
         loop {
-            let mut deployment = {
-                deployments.read().unwrap().get(&id).clone()
-            };
-            let mut deployment = match deployment {
-                None => {
-                    dbg!("deployment {} no longer exists. aborting build job", &id);
-                    continue;
-                }
-                Some(d) => d
-            };
-            match deployment.info.state {
+            match deployment.state() {
                 DeploymentState::QUEUED => {
-                    deployment.info.state = DeploymentState::BUILDING;
-                    match build_system.build(&crate_file, &deployment.info.config).await {
-                        Ok(build) => unimplemented!(),
-                        Err(e) => unimplemented!()
-                    };
-                },
+                    dbg!("job '{}' is queued", id);
+                    deployment.update_state(DeploymentState::BUILDING);
+                    let config = deployment.project_config();
+                    match build_system.build(&crate_file, &config).await {
+                        Ok(build) => {
+                            deployment.attach_build_artifact(build);
+                            deployment.update_state(DeploymentState::LOADING)
+                        }
+                        Err(_) => deployment.update_state(DeploymentState::ERROR)
+                    }
+                }
                 DeploymentState::BUILDING => continue,
-                DeploymentState::READY => unimplemented!(),
-                DeploymentState::CANCELLED => break,
-                DeploymentState::ERROR => break,
-                DeploymentState::DEPLOYED => break,
+                DeploymentState::LOADING => {
+                    dbg!("job '{}' is loading", id);
+                    // todo load the dynamic library
+                }
+                DeploymentState::DEPLOYING => {
+                    dbg!("job '{}' is deploying", id);
+                    // todo update routing table
+                }
+                DeploymentState::READY => {
+                    dbg!("job '{}' is ready", id);
+                    break;
+                }
+                DeploymentState::CANCELLED => {
+                    dbg!("job '{}' is cancelled", id);
+                    break;
+                }
+                DeploymentState::ERROR => {
+                    dbg!("job '{}' is errored", id);
+                    break;
+                }
             }
         }
 

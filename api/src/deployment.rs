@@ -1,15 +1,15 @@
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, RwLock};
-use std::time::Duration;
+use std::sync::{Arc, RwLock};
+use std::path::Path;
 use rocket::{Data};
-use rocket::data::ByteUnit;
-use rocket::futures::executor::block_on;
 use rocket::response::Responder;
 use uuid::Uuid;
 use rocket::serde::{Serialize, Deserialize};
 use rocket::tokio;
 
 use crate::{BuildSystem, ProjectConfig};
+
+use service::Service;
 
 pub type DeploymentId = Uuid;
 
@@ -23,6 +23,7 @@ pub enum DeploymentState {
     CANCELLED,
 }
 
+// TODO: Determine error handling strategy - error types or just use `anyhow`?
 #[derive(Debug, Clone, Serialize, Deserialize, Responder)]
 pub enum DeploymentError {
     #[response(status = 500)]
@@ -41,16 +42,13 @@ pub struct DeploymentInfo {
     runtime_logs: Option<String>,
 }
 
-pub(crate) trait Service: Send + Sync {}
-
-impl Service for () {}
-
-pub(crate) type Library = ();
-
 pub(crate) struct Deployment {
     info: DeploymentInfo,
+    /// A user's particular implementation of the [`Service`] trait.
     service: Option<Box<dyn Service>>,
-    so: Option<Library>,
+    /// This [`libloading::Library`] instance must be kept alive in order to use
+    /// the `service` field without causing a segmentation fault.
+    lib: Option<libloading::Library>,
 }
 
 impl Deployment {
@@ -106,7 +104,7 @@ impl DeploymentSystem {
         let deployment = Deployment {
             info,
             service: None,
-            so: None,
+            lib: None,
         };
 
         let info = deployment.info.clone();
@@ -142,5 +140,24 @@ impl DeploymentSystem {
 
     fn create_url(project_config: &ProjectConfig) -> String {
         format!("{}.unveil.sh", project_config.name)
+    }
+}
+
+const ENTRYPOINT_SYMBOL_NAME: &'static [u8] = b"_create_service\0";
+
+type CreateService = unsafe extern fn() -> *mut dyn Service;
+
+/// Dynamically load from a `.so` file a value of a type implementing the
+/// [`Service`] trait. Relies on the `.so` library having an ``extern "C"`
+/// function called [`ENTRYPOINT_SYMBOL_NAME`], likely automatically generated
+/// using the [`service::declare_service`] macro.
+fn load_service_from_so_file(so_path: &Path) -> anyhow::Result<(Box<dyn Service>, libloading::Library)> {
+    unsafe {
+        let lib = libloading::Library::new(so_path)?;
+
+        let entrypoint: libloading::Symbol<CreateService> = lib.get(ENTRYPOINT_SYMBOL_NAME)?;
+        let raw = entrypoint();
+
+        Ok((Box::from_raw(raw), lib))
     }
 }

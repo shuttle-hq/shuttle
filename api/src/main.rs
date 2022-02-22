@@ -1,57 +1,55 @@
-#![feature(proc_macro_hygiene, decl_macro)]
-
-mod auth;
-mod build;
-
 #[macro_use]
 extern crate rocket;
 
+mod build;
+mod deployment;
 
-
-
-
-
-
-
-
-
-
+use std::sync::Mutex;
 use rocket::{Data, State};
-use anyhow::{anyhow, Result};
+use rocket::serde::json::serde_json::json;
+use rocket::serde::json::Value;
+use uuid::Uuid;
 
-use crate::auth::{ApiKey, AuthSystem, TestAuthSystem};
 use crate::build::{BuildSystem, FsBuildSystem, ProjectConfig};
+use crate::deployment::{DeploymentError, DeploymentSystem};
 
-#[post("/deploy", data = "<crate_file>")]
-fn deploy(state: State<ApiState>, crate_file: Data, api_key: ApiKey) -> Result<String> {
-    // Ideally this would be done with Rocket's fairing system, but they
-    // don't support state
-    if !state.auth_system.authorize(&api_key)? {
-        return Err(anyhow!("API key is unauthorized"));
-    }
+#[get("/deployments/<id>")]
+fn get_deployment(state: &State<ApiState>, id: Uuid) -> Result<Value, DeploymentError> {
+    // let deployment = state.deployment_manager.lock()
+    //     .map_err(|_| DeploymentError::Internal("an internal error occurred".to_string()))?
+    //     .get_deployment(&id)
+    //     .ok_or(DeploymentError::NotFound("could not find deployment".to_string()))?;
+    //
+    // Ok(json!(deployment))
+    unimplemented!()
+}
 
+#[post("/deployments", data = "<crate_file>")]
+fn create_deployment(state: &State<ApiState>, crate_file: Data) -> Result<Value, DeploymentError> {
     let project = ProjectConfig {
         name: "some_project".to_string()
     };
 
-    let _build = state.build_system.build(crate_file, &api_key, &project);
+    let deployment = state.deployment_manager.deploy(crate_file, &project)?;
 
-    // load so file somehow
-    Ok("Done!".to_string())
+    Ok(json!(deployment))
 }
 
 struct ApiState {
-    build_system: Box<dyn BuildSystem>,
-    auth_system: Box<dyn AuthSystem>
+    deployment_manager: DeploymentSystem,
 }
 
-fn main() {
+//noinspection ALL
+#[launch]
+fn rocket() -> _ {
+    let deployment_manager = DeploymentSystem::new(Box::new(FsBuildSystem));
     let state = ApiState {
-        build_system: Box::new(FsBuildSystem),
-        auth_system: Box::new(TestAuthSystem)
+        // we probably want to put the Mutex deeper in the object tree.
+        // but it's ok for prototype
+        deployment_manager: deployment_manager
     };
 
-    rocket::ignite()
+    rocket::build()
+        .mount("/", routes![create_deployment, get_deployment])
         .manage(state)
-        .mount("/", routes![deploy]).launch();
 }

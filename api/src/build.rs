@@ -5,8 +5,8 @@ use anyhow::Result;
 use cargo::core::compiler::{CompileMode};
 use cargo::core::Workspace;
 use cargo::ops::CompileOptions;
-use rocket::Data;
-use crate::ApiKey;
+use rocket::{Data, tokio};
+use rocket::data::ByteUnit;
 
 const FS_ROOT: &'static str = "/tmp/crates/";
 
@@ -16,26 +16,26 @@ pub struct ProjectConfig {
 
 pub(crate) struct Build {
     // should be ok for now
-    shared_object: File,
+    shared_object: PathBuf,
 }
 
+#[async_trait]
 pub(crate) trait BuildSystem: Send + Sync {
-    fn build(&self,
-             crate_file: Data,
-             api_key: &ApiKey,
+    async fn build<'a>(&self,
+             crate_file: Data<'a>,
              project_config: &ProjectConfig) -> Result<Build>;
 }
 
 /// A basic build system that uses the file system for caching and storage
 pub(crate) struct FsBuildSystem;
 
+#[async_trait]
 impl BuildSystem for FsBuildSystem {
-    fn build(&self, crate_file: Data, api_key: &ApiKey, project_config: &ProjectConfig) -> Result<Build> {
-        let api_key = api_key.as_str();
+    async fn build<'a>(&self, crate_file: Data<'a>, project_config: &ProjectConfig) -> Result<Build> {
         let project_name = &project_config.name;
 
         // project path
-        let project_path = project_path(api_key, project_name)?;
+        let project_path = project_path(project_name)?;
         dbg!(&project_path);
 
         // clear directory
@@ -45,8 +45,11 @@ impl BuildSystem for FsBuildSystem {
         let crate_path = crate_location(&project_path, project_name);
         dbg!(&crate_path);
 
+        // create target file
+        let target_file = tokio::fs::File::create(&crate_path).await?;
+
         // stream to file
-        crate_file.stream_to_file(&crate_path).map(|n| n.to_string())?;
+        crate_file.open(ByteUnit::max_value()).stream_to(target_file).await?;
 
         // extract tarball
         extract_tarball(&crate_path, &project_path)?;
@@ -54,20 +57,16 @@ impl BuildSystem for FsBuildSystem {
         // run cargo build (--debug for now)
         let so_path = build_crate(&project_path)?;
 
-        // read path into file
-        let so_file = File::open(so_path)?;
-
         Ok(Build {
-            shared_object: so_file
+            shared_object: so_path
         })
     }
 }
 
 /// Given an api key and project name returns a `PathBuf` to the project
 /// If the directory does not exist, creates it.
-fn project_path(api_key: &str, project: &str) -> Result<PathBuf> {
+fn project_path(project: &str) -> Result<PathBuf> {
     let mut project_path = PathBuf::from(FS_ROOT);
-    project_path.push(api_key);
     project_path.push(project);
     // create directory
     std::fs::create_dir_all(&project_path)?;

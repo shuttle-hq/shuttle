@@ -16,7 +16,7 @@ pub struct ProjectConfig {
 
 pub(crate) struct Build {
     // should be ok for now
-    shared_object: File,
+    shared_object: PathBuf,
 }
 
 #[async_trait]
@@ -57,11 +57,8 @@ impl BuildSystem for FsBuildSystem {
         // run cargo build (--debug for now)
         let so_path = build_crate(&project_path)?;
 
-        // read path into file
-        let so_file = File::open(so_path)?;
-
         Ok(Build {
-            shared_object: so_file
+            shared_object: so_path
         })
     }
 }

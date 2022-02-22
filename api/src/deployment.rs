@@ -1,10 +1,13 @@
 use std::collections::HashMap;
-use std::sync::{Arc};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
-use rocket::{Data, Request};
+use rocket::{Data};
+use rocket::data::ByteUnit;
+use rocket::futures::executor::block_on;
 use rocket::response::Responder;
 use uuid::Uuid;
 use rocket::serde::{Serialize, Deserialize};
+use rocket::tokio;
 
 use crate::{BuildSystem, ProjectConfig};
 
@@ -17,7 +20,7 @@ pub enum DeploymentState {
     ERROR,
     INITIALIZING,
     READY,
-    CANCELLED
+    CANCELLED,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Responder)]
@@ -25,7 +28,7 @@ pub enum DeploymentError {
     #[response(status = 500)]
     Internal(String),
     #[response(status = 404)]
-    NotFound(String)
+    NotFound(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -35,50 +38,61 @@ pub struct DeploymentInfo {
     state: DeploymentState,
     url: String,
     build_logs: Option<String>,
-    runtime_logs: Option<String>
+    runtime_logs: Option<String>,
 }
 
-pub(crate) trait Service: Send + Sync {
+pub(crate) trait Service: Send + Sync {}
 
-}
-
-impl Service for () {
-
-}
+impl Service for () {}
 
 pub(crate) type Library = ();
 
 pub(crate) struct Deployment {
     info: DeploymentInfo,
-    service: Box<dyn Service>,
-    so: Library
+    service: Option<Box<dyn Service>>,
+    so: Option<Library>,
 }
 
+impl Deployment {
+    fn shareable(self) -> Arc<RwLock<Self>> {
+        Arc::new(RwLock::new(self))
+    }
+}
+
+// could use `chashmap` here but it is unclear if we'll need to iterate
+// over the whole thing at some point in the future.
 type Deployments = HashMap<DeploymentId, Deployment>;
 
 pub(crate) struct DeploymentSystem {
-    build_system: Box<dyn BuildSystem>,
-    deployments: Deployments,
+    build_system: Arc<Box<dyn BuildSystem>>,
+    deployments: Arc<RwLock<Deployments>>,
 }
 
 impl DeploymentSystem {
     pub(crate) fn new(build_system: Box<dyn BuildSystem>) -> Self {
         Self {
-            build_system,
-            deployments: Default::default()
+            build_system: Arc::new(build_system),
+            deployments: Default::default(),
         }
     }
 
     /// Get's the deployment information back to the user
-    pub(crate) fn get_deployment(&self, id: &DeploymentId) -> Option<DeploymentInfo> {
-        self.deployments.get(id).map(|d| d.info.clone())
+    pub(crate) fn get_deployment(&self, id: &DeploymentId) -> Result<DeploymentInfo, DeploymentError> {
+        self.deployments
+            .read()
+            .unwrap()
+            .get(&id)
+            .map(|deployment| deployment.info.clone())
+            .ok_or(DeploymentError::NotFound("could not find deployment".to_string()))
     }
 
     /// Main way to interface with the deployment manager.
     /// Will take a crate through the whole lifecycle.
-    pub(crate) fn deploy(&mut self,
-                               crate_file: Data,
-                               project_config: &ProjectConfig) -> Result<DeploymentInfo, DeploymentError> {
+    pub(crate) fn deploy(&self,
+                         crate_file: Data,
+                         project_config: &ProjectConfig) -> Result<DeploymentInfo, DeploymentError> {
+
+        // for crate file consider placing somewhere in the file system via the build system
 
         let info = DeploymentInfo {
             id: Uuid::new_v4(),
@@ -86,20 +100,44 @@ impl DeploymentSystem {
             state: DeploymentState::QUEUED,
             url: Self::create_url(project_config),
             build_logs: None,
-            runtime_logs: None
+            runtime_logs: None,
         };
 
         let deployment = Deployment {
             info,
-            service: Box::new(()),
-            so: ()
+            service: None,
+            so: None,
         };
 
         let info = deployment.info.clone();
 
-        self.deployments.insert(deployment.info.id.clone(), deployment);
+        self.deployments
+            .write()
+            .unwrap()
+            .insert(info.id.clone(), deployment);
+
+        let build_system = self.build_system.clone();
+        let deployments = self.deployments.clone();
+
+        tokio::spawn(async move {
+            Self::start_deployment_job(
+                build_system,
+                info.id.clone(),
+                deployments,
+                (),
+            )
+        });
 
         Ok(info)
+    }
+
+    async fn start_deployment_job(
+        build_system: Arc<Box<dyn BuildSystem>>,
+        id: DeploymentId,
+        deployment: Arc<RwLock<Deployments>>,
+        crate_file: ()) {
+        println!("started deployment job");
+        unimplemented!()
     }
 
     fn create_url(project_config: &ProjectConfig) -> String {

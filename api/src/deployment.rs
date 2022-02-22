@@ -4,7 +4,9 @@ use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::time::Duration;
 use std::path::Path;
+use libloading::Library;
 use rocket::{Data};
+use rocket::data::ByteUnit;
 use rocket::response::Responder;
 use uuid::Uuid;
 use rocket::serde::{Serialize, Deserialize};
@@ -51,7 +53,7 @@ pub struct DeploymentInfo {
 
 pub(crate) struct DeploymentInner {
     info: DeploymentInfo,
-    state: DeploymentState
+    state: DeploymentState,
 }
 
 pub(crate) struct Deployment {
@@ -78,14 +80,15 @@ impl Deployment {
                     Ok(build) => inner.state = DeploymentState::built(build),
                     Err(_) => inner.state = DeploymentState::ERROR
                 }
-            },
+            }
             DeploymentState::BUILT(built) => {
-                // let path = built.build.shared_object;
-                // let (so, service) = service::load_service_from_so_file(path);
-                inner.state = DeploymentState::loaded((), Box::new(()))
-            },
+                match load_service_from_so_file(&built.build.so_path) {
+                    Ok((svc, so)) => inner.state = DeploymentState::loaded(so, svc),
+                    Err(_) => inner.state = DeploymentState::ERROR
+                }
+            }
             DeploymentState::LOADED(loaded) => {
-                inner.state = DeploymentState::deployed((), Box::new(()), 0)
+                // inner.state = DeploymentState::deployed((), Box::new(()), 0)
             }
             DeploymentState::DEPLOYED(_) => { /* nothing to do here */ }
             DeploymentState::ERROR => { /* nothing to do here */ }
@@ -145,7 +148,6 @@ impl DeploymentSystem {
     pub(crate) async fn deploy(&self,
                                crate_file: Data<'_>,
                                project_config: &ProjectConfig) -> Result<DeploymentInfo, DeploymentError> {
-
         let crate_bytes = crate_file
             .open(ByteUnit::max_value()).into_bytes()
             .await
@@ -169,7 +171,7 @@ impl DeploymentSystem {
         let deployment = Deployment {
             inner: RwLock::new(DeploymentInner {
                 info: info.clone(),
-                state: DeploymentState::QUEUED(queued_state)
+                state: DeploymentState::QUEUED(queued_state),
             })
         };
 
@@ -183,11 +185,10 @@ impl DeploymentSystem {
         let build_system = self.build_system.clone();
         let deployments = self.deployments.clone();
 
-
         tokio::spawn(async move {
             Self::start_deployment_job(
                 build_system,
-                deployment
+                deployment,
             )
         });
 
@@ -219,7 +220,7 @@ type CreateService = unsafe extern fn() -> *mut dyn Service;
 /// [`Service`] trait. Relies on the `.so` library having an ``extern "C"`
 /// function called [`ENTRYPOINT_SYMBOL_NAME`], likely automatically generated
 /// using the [`service::declare_service`] macro.
-fn load_service_from_so_file(so_path: &Path) -> anyhow::Result<(Box<dyn Service>, libloading::Library)> {
+fn load_service_from_so_file(so_path: &Path) -> anyhow::Result<(Box<dyn Service>, Library)> {
     unsafe {
         let lib = libloading::Library::new(so_path)?;
 
@@ -238,7 +239,7 @@ enum DeploymentState {
     BUILT(BuiltState),
     LOADED(LoadedState),
     DEPLOYED(DeployedState),
-    ERROR
+    ERROR,
 }
 
 impl DeploymentState {
@@ -262,7 +263,7 @@ impl DeploymentState {
         Self::LOADED(
             LoadedState {
                 service,
-                so
+                so,
             }
         )
     }
@@ -272,27 +273,27 @@ impl DeploymentState {
             DeployedState {
                 service,
                 so,
-                port
+                port,
             }
         )
     }
 }
 
 struct QueuedState {
-    crate_bytes: Vec<u8>
+    crate_bytes: Vec<u8>,
 }
 
 struct BuiltState {
-    build: Build
+    build: Build,
 }
 
 struct LoadedState {
     service: Box<dyn Service>,
-    so: Library
+    so: Library,
 }
 
 struct DeployedState {
     service: Box<dyn Service>,
     so: Library,
-    port: u16
+    port: u16,
 }

@@ -132,7 +132,7 @@ impl Deployment {
     }
 
     async fn port(&self) -> Option<Port> {
-        match self.state.read().await {
+        match *self.state.read().await {
             DeploymentState::DEPLOYED(deployed) => Some(deployed.port),
             _ => None
         }

@@ -4,16 +4,11 @@ use anyhow::{anyhow, Result};
 use cargo::core::compiler::{CompileMode};
 use cargo::core::Workspace;
 use cargo::ops::CompileOptions;
+use lib::ProjectConfig;
 use rocket::tokio;
 use rocket::tokio::io::AsyncWriteExt;
-use rocket::serde::{Serialize, Deserialize};
 
 const FS_ROOT: &'static str = "/tmp/crates/";
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct ProjectConfig {
-    pub name: String,
-}
 
 
 pub(crate) struct Build {

@@ -9,8 +9,9 @@ use rocket::serde::json::serde_json::json;
 use rocket::serde::json::Value;
 use uuid::Uuid;
 
-use crate::build::{BuildSystem, FsBuildSystem, ProjectConfig};
+use crate::build::{BuildSystem, FsBuildSystem};
 use crate::deployment::{DeploymentError, DeploymentSystem};
+use lib::ProjectConfig;
 
 #[get("/deployments/<id>")]
 async fn get_deployment(state: &State<ApiState>, id: Uuid) -> Result<Value, DeploymentError> {

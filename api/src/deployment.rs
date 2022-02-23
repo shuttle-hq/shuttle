@@ -18,6 +18,7 @@ use crate::BuildSystem;
 use lib::{DeploymentId, DeploymentMeta, DeploymentStateMeta, ProjectConfig};
 
 use service::Service;
+use crate::router::Router;
 
 // TODO: Determine error handling strategy - error types or just use `anyhow`?
 #[derive(Debug, Clone, Serialize, Deserialize, Responder)]
@@ -63,7 +64,7 @@ impl Deployment {
 
     /// Tries to advance the deployment one stage. Does nothing if the deployment
     /// is in a terminal state.
-    pub(crate) async fn advance(&self, build_system: Arc<Box<dyn BuildSystem>>) {
+    pub(crate) async fn advance(&self, context: &Context) {
         dbg!("waiting to get write on the state");
         {
             let meta = self.meta().await;
@@ -73,7 +74,7 @@ impl Deployment {
                 DeploymentState::QUEUED(queued) => {
                     dbg!("deployment '{}' build starting...", &meta.id);
                     let console_writer = BuildOutputWriter::new(self.meta.clone());
-                    match build_system
+                    match context.build_system
                         .build(&queued.crate_bytes, &meta.config, Box::new(console_writer))
                         .await
                     {
@@ -120,7 +121,6 @@ impl Deployment {
                 deployed_or_error => deployed_or_error, /* nothing to do here */
             };
         }
-
         // ensures that the metadata state is inline with the actual
         // state. This can go when we have an API layer.
         self.update_meta_state().await
@@ -208,6 +208,7 @@ type Deployments = HashMap<DeploymentId, Arc<Deployment>>;
 pub(crate) struct DeploymentSystem {
     deployments: RwLock<Deployments>,
     job_queue: Arc<JobQueue>,
+    router: Arc<Router>,
 }
 
 #[derive(Default)]
@@ -225,14 +226,14 @@ impl JobQueue {
     }
 
     /// Returns a JobQueue with the job processor already running
-    async fn initialise(build_system: Arc<Box<dyn BuildSystem>>) -> Arc<Self> {
+    async fn initialise(context: Context) -> Arc<Self> {
         let job_queue = Arc::new(JobQueue::default());
 
         let queue_ref = job_queue.clone();
 
         tokio::spawn(async move {
             Self::start_job_processor(
-                build_system,
+                context,
                 queue_ref,
             ).await
         });
@@ -242,8 +243,9 @@ impl JobQueue {
 
 
     async fn start_job_processor(
-        build_system: Arc<Box<dyn BuildSystem>>,
-        queue: Arc<JobQueue>) {
+        context: Context,
+        queue: Arc<JobQueue>,
+    ) {
         dbg!("job processor started");
         loop {
             if let Some(deployment) = queue.pop() {
@@ -252,7 +254,7 @@ impl JobQueue {
                 dbg!("started deployment job for id: '{}'", id);
 
                 while !deployment.deployment_finished().await {
-                    deployment.advance(build_system.clone()).await
+                    deployment.advance(&context).await
                 }
 
                 dbg!("ended deployment job for id: '{}'", id);
@@ -263,11 +265,25 @@ impl JobQueue {
     }
 }
 
+/// Convenience stuct used to store a bunch of stuff needed
+/// for the job processor
+pub(crate) struct Context {
+    router: Arc<Router>,
+    build_system: Box<dyn BuildSystem>,
+}
+
 impl DeploymentSystem {
     pub(crate) async fn new(build_system: Box<dyn BuildSystem>) -> Self {
+        let router: Arc<Router> = Default::default();
+        let context = Context {
+            router: router.clone(),
+            build_system,
+        };
+
         Self {
             deployments: Default::default(),
-            job_queue: JobQueue::initialise(Arc::new(build_system)).await,
+            job_queue: JobQueue::initialise(context).await,
+            router,
         }
     }
 

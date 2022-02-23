@@ -4,6 +4,7 @@ extern crate rocket;
 mod build;
 mod deployment;
 mod args;
+mod router;
 
 use rocket::{Data, State};
 use rocket::serde::json::serde_json::json;

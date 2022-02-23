@@ -66,9 +66,11 @@ impl Deployment {
         let meta = self.meta().await;
         dbg!("waiting to get write on the state");
         let mut state = self.state.write().await;
+
         match &*state {
             DeploymentState::QUEUED(queued) => {
                 dbg!("deployment '{}' build starting...", &meta.id);
+
                 match build_system.build(&queued.crate_bytes, &meta.config).await {
                     Ok(build) => *state = DeploymentState::built(build),
                     Err(_) => *state = DeploymentState::ERROR
@@ -76,14 +78,35 @@ impl Deployment {
             }
             DeploymentState::BUILT(built) => {
                 dbg!("deployment '{}' loading shared object and service...", &meta.id);
+
                 match load_service_from_so_file(&built.build.so_path) {
                     Ok((svc, so)) => *state = DeploymentState::loaded(so, svc),
                     Err(_) => *state = DeploymentState::ERROR
                 }
             }
-            DeploymentState::LOADED(_loaded) => {
-                dbg!("deployment '{}' getting deployed...", &meta.id);
-                todo!("functionality to load service objects not ready")
+            DeploymentState::LOADED(loaded) => {
+                let port = 6969u16; // TODO: proper port assignment.
+
+                dbg!("deployment '{}' getting deployed on port {}...", &meta.id, port);
+
+                let mut r = loaded.service.build_rocket();
+
+                let config = rocket::Config {
+                    port,
+                    log_level: rocket::config::LogLevel::Normal,
+                    ..Default::default()
+                };
+
+                r = r.configure(rocket::Config::default());
+
+                rocket::tokio::spawn(async move {
+                    // TODO: use oneshot channel to kill?
+                    r.launch().await
+                });
+
+                // TODO: Change state and move so and service.
+                loop {}
+                //*state = DeploymentState::deployed(loaded.so, loaded.service, port)
             }
             DeploymentState::DEPLOYED(_) => { /* nothing to do here */ }
             DeploymentState::ERROR => { /* nothing to do here */ }

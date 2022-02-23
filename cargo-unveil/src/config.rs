@@ -1,3 +1,4 @@
+use lib::ProjectConfig;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use serde::Deserialize;
@@ -9,12 +10,6 @@ use anyhow::{anyhow, Result};
 #[derive(Deserialize)]
 pub(crate) struct Config {
     api_key: ApiKey,
-}
-
-/// Per-Project config. Deserialized from `Unveil.toml`.
-#[derive(Deserialize)]
-pub(crate) struct Project {
-    name: String,
 }
 
 pub(crate) fn get_api_key() -> Result<ApiKey> {
@@ -37,7 +32,7 @@ fn unveil_config_dir() -> Result<PathBuf> {
     Ok(unveil_config_dir.join("unveil"))
 }
 
-pub(crate) fn get_project(working_directory: &Path) -> Result<Project> {
+pub(crate) fn get_project(working_directory: &Path) -> Result<ProjectConfig> {
     let project_config_path = working_directory.join("Unveil.toml");
     let file_contents: String = match std::fs::read_to_string(project_config_path) {
         Ok(file_contents) => Ok(file_contents),
@@ -46,6 +41,7 @@ pub(crate) fn get_project(working_directory: &Path) -> Result<Project> {
             _ => Err(e.into())
         }
     }?;
-    let project: Project = toml::from_str(&file_contents)?;
+    let project: ProjectConfig = toml::from_str(&file_contents)?;
     Ok(project)
 }
+

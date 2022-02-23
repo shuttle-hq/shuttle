@@ -1,11 +1,10 @@
-use crate::config::Project;
 use anyhow::{Context, Result};
-use lib::{DeploymentMeta, DeploymentStateMeta};
+use lib::{DeploymentMeta, DeploymentStateMeta, ProjectConfig};
 use std::{fs::File, thread::sleep, time::Duration};
 
 pub(crate) type ApiKey = String;
 
-pub(crate) fn deploy(package_file: File, api_key: ApiKey, project: Project) -> Result<()> {
+pub(crate) fn deploy(package_file: File, api_key: ApiKey, project: ProjectConfig) -> Result<()> {
     let mut url = get_url().to_string();
     url.push_str("/deployments");
     let client = reqwest::blocking::Client::new();

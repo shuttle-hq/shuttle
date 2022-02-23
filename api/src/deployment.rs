@@ -65,7 +65,7 @@ impl DeploymentMeta {
 /// and the some metadata
 pub(crate) struct Deployment {
     meta: RwLock<DeploymentMeta>,
-        state: RwLock<DeploymentState>,
+    state: RwLock<DeploymentState>,
 }
 
 impl Deployment {
@@ -96,6 +96,7 @@ impl Deployment {
     /// is in a terminal state.
     pub(crate) async fn advance(&self, build_system: Arc<Box<dyn BuildSystem>>) {
         let meta = self.meta().await;
+        dbg!("waiting to get write on the state");
         let mut state = self.state.write().await;
         match &*state {
             DeploymentState::QUEUED(queued) => {
@@ -119,6 +120,7 @@ impl Deployment {
             DeploymentState::DEPLOYED(_) => { /* nothing to do here */ }
             DeploymentState::ERROR => { /* nothing to do here */ }
         }
+        drop(state);
         // ensures that the metadata state is inline with the actual
         // state. This can go when we have an API layer.
         self.update_meta_state().await

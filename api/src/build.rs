@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use cargo::core::compiler::{CompileMode};
 use cargo::core::Workspace;
 use cargo::ops::CompileOptions;
@@ -14,6 +14,7 @@ const FS_ROOT: &'static str = "/tmp/crates/";
 pub struct ProjectConfig {
     pub name: String,
 }
+
 
 pub(crate) struct Build {
     pub(crate) so_path: PathBuf,
@@ -117,12 +118,12 @@ fn extract_tarball(crate_path: &Path, project_path: &Path) -> Result<()> {
 /// Given a project directory path, builds the crate
 fn build_crate(project_path: &Path) -> Result<PathBuf> {
     // This config needs to be tweaked s.t the
-    let config = cargo::util::config::Config::default()?;
+    let mut config = cargo::util::config::Config::default()?;
     let manifest_path = project_path.join("Cargo.toml");
 
     let ws = Workspace::new(&manifest_path, &config)?;
     let opts = CompileOptions::new(&config, CompileMode::Build)?;
     let _compilation = cargo::ops::compile(&ws, &opts)?;
 
-    todo!("next step is to figure out how to get the .so file from the compilation output")
+    Err(anyhow!("next step is to figure out how to get the .so file from the compilation output"))
 }

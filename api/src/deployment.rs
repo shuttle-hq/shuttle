@@ -1,8 +1,11 @@
 use std::collections::HashMap;
 // use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::path::Path;
+use std::time::Duration;
+use core::default::Default;
+use cargo::util::Queue;
 use libloading::Library;
 use rocket::{Data};
 use rocket::data::ByteUnit;
@@ -64,6 +67,7 @@ pub(crate) struct Deployment(RwLock<DeploymentInner>);
 
 /// Inner struct of a deployment which holds the deployment itself
 /// and the some metadata
+/// todo maybe but separate locks on info and state
 pub(crate) struct DeploymentInner {
     info: DeploymentMeta,
     state: DeploymentState,
@@ -152,15 +156,69 @@ type Deployments = HashMap<DeploymentId, Arc<Deployment>>;
 /// The top-level manager for deployments. Is responsible for their
 /// creation and lifecycle.
 pub(crate) struct DeploymentSystem {
-    build_system: Arc<Box<dyn BuildSystem>>,
     deployments: RwLock<Deployments>,
+    job_queue: Arc<JobQueue>
 }
 
+#[derive(Default)]
+struct JobQueue{
+    queue: Arc<Mutex<Vec<Arc<Deployment>>>>
+}
+
+impl JobQueue {
+    fn push(&self, deployment: Arc<Deployment>) {
+        self.queue.lock().unwrap().push(deployment)
+    }
+
+    fn pop(&self) -> Option<Arc<Deployment>> {
+        self.queue.lock().unwrap().pop()
+    }
+
+    /// Returns a JobQueue with the job processor already running
+    async fn initialise(build_system: Arc<Box<dyn BuildSystem>>) -> Arc<Self> {
+        let job_queue = Arc::new(JobQueue::default());
+
+        let queue_ref = job_queue.clone();
+
+        tokio::spawn(async move {
+            Self::start_job_processor(
+                build_system,
+                queue_ref,
+            ).await
+        });
+
+        job_queue
+    }
+
+
+    async fn start_job_processor(
+        build_system: Arc<Box<dyn BuildSystem>>,
+        queue: Arc<JobQueue>) {
+        dbg!("job processor started");
+        loop {
+            if let Some(deployment) = queue.pop() {
+                let id = deployment.info().await.id;
+
+                dbg!("started deployment job for id: '{}'", id);
+
+                while !deployment.deployment_finished().await {
+                    deployment.advance(build_system.clone()).await
+                }
+
+                dbg!("ended deployment job for id: '{}'", id);
+            } else {
+                tokio::time::sleep(Duration::from_millis(100)).await
+            }
+        }
+    }
+}
+
+
 impl DeploymentSystem {
-    pub(crate) fn new(build_system: Box<dyn BuildSystem>) -> Self {
+    pub(crate) async fn new(build_system: Box<dyn BuildSystem>) -> Self {
         Self {
-            build_system: Arc::new(build_system),
             deployments: Default::default(),
+            job_queue: JobQueue::initialise(Arc::new(build_system)).await
         }
     }
 
@@ -185,39 +243,19 @@ impl DeploymentSystem {
 
         let deployment = Arc::new(Deployment::new(&project_config, crate_bytes));
         let info = deployment.info().await;
-        let id = info.id.clone();
 
         self.deployments
             .write()
             .await
             .insert(info.id.clone(), deployment.clone());
 
-        let build_system = self.build_system.clone();
-
-        tokio::spawn(async move {
-            Self::start_deployment_job(
-                build_system,
-                deployment,
-            ).await
-        });
+        self.add_to_job_queue(deployment);
 
         Ok(info)
     }
 
-    async fn start_deployment_job(
-        build_system: Arc<Box<dyn BuildSystem>>,
-        deployment: Arc<Deployment>) {
-        dbg!("function called");
-
-        let id = deployment.info().await.id;
-
-        dbg!("started deployment job for id: '{}'", id);
-
-        while !deployment.deployment_finished().await {
-            deployment.advance(build_system.clone()).await
-        }
-
-        dbg!("ended deployment job for id: '{}'", id);
+    fn add_to_job_queue(&self, deployment: Arc<Deployment>) {
+        self.job_queue.push(deployment)
     }
 }
 

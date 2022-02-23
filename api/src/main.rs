@@ -38,8 +38,8 @@ struct ApiState {
 
 //noinspection ALL
 #[launch]
-fn rocket() -> _ {
-    let deployment_manager = DeploymentSystem::new(Box::new(FsBuildSystem));
+async fn rocket() -> _ {
+    let deployment_manager = DeploymentSystem::new(Box::new(FsBuildSystem)).await;
     let state = ApiState {
         // we probably want to put the Mutex deeper in the object tree.
         // but it's ok for prototype

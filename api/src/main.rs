@@ -3,12 +3,15 @@ extern crate rocket;
 
 mod build;
 mod deployment;
+mod args;
 
 use rocket::{Data, State};
 use rocket::serde::json::serde_json::json;
 use rocket::serde::json::Value;
 use uuid::Uuid;
+use structopt::StructOpt;
 
+use crate::args::Args;
 use crate::build::{BuildSystem, FsBuildSystem};
 use crate::deployment::{DeploymentError, DeploymentSystem};
 use lib::ProjectConfig;
@@ -40,7 +43,9 @@ struct ApiState {
 //noinspection ALL
 #[launch]
 async fn rocket() -> _ {
-    let deployment_manager = DeploymentSystem::new(Box::new(FsBuildSystem)).await;
+    let args: Args = Args::from_args();
+    let build_system = FsBuildSystem::initialise(args.path).unwrap();
+    let deployment_manager = DeploymentSystem::new(Box::new(build_system)).await;
     let state = ApiState {
         // we probably want to put the Mutex deeper in the object tree.
         // but it's ok for prototype

@@ -1,6 +1,6 @@
+use anyhow::{Result, anyhow};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use anyhow::{anyhow, Result};
 use cargo::core::compiler::{CompileMode};
 use cargo::core::Workspace;
 use cargo::ops::CompileOptions;
@@ -8,7 +8,12 @@ use lib::ProjectConfig;
 use rocket::tokio;
 use rocket::tokio::io::AsyncWriteExt;
 
-const FS_ROOT: &'static str = "/tmp/crates/";
+#[cfg(debug_assertions)]
+const DEFAULT_FS_ROOT: &'static str = "/tmp/unveil/crates/";
+
+#[cfg(not(debug_assertions))]
+// as per: https://stackoverflow.com/questions/1510104/where-to-store-application-data-non-user-specific-on-linux
+const DEFAULT_FS_ROOT: &'static str = "/var/lib/unveil/crates/";
 
 
 pub(crate) struct Build {
@@ -23,7 +28,40 @@ pub(crate) trait BuildSystem: Send + Sync {
 }
 
 /// A basic build system that uses the file system for caching and storage
-pub(crate) struct FsBuildSystem;
+pub(crate) struct FsBuildSystem {
+    fs_root: PathBuf,
+}
+
+impl FsBuildSystem {
+    /// Intialises the FS Build System. Optionally you can define the root
+    /// of its file system. If unspecified, will default to `FS_ROOT`.
+    /// The FS Build System will fail to intialise if the directory does not.
+    /// exist
+    pub(crate) fn initialise(path: Option<PathBuf>) -> Result<Self> {
+        let fs_root = path.unwrap_or(PathBuf::from(DEFAULT_FS_ROOT));
+        if !(fs_root.exists()) {
+            return Err(anyhow!(r#"
+            Failed to initialise FS Build System.
+            The path {:?} does not exist.
+            Please create the directory to continue with deployment"#, &fs_root));
+        }
+        Ok(
+            FsBuildSystem {
+                fs_root
+            }
+        )
+    }
+
+    /// Given an api key and project name returns a `PathBuf` to the project
+    /// If the directory does not exist, creates it.
+    fn project_path(&self, project: &str) -> Result<PathBuf> {
+        let mut project_path = self.fs_root.clone();
+        project_path.push(project);
+        // create directory
+        std::fs::create_dir_all(&project_path)?;
+        Ok(project_path)
+    }
+}
 
 #[async_trait]
 impl BuildSystem for FsBuildSystem {
@@ -31,7 +69,7 @@ impl BuildSystem for FsBuildSystem {
         let project_name = &project_config.name;
 
         // project path
-        let project_path = project_path(project_name)?;
+        let project_path = self.project_path(project_name)?;
         dbg!(&project_path);
 
         // clear directory
@@ -55,16 +93,6 @@ impl BuildSystem for FsBuildSystem {
 
         Ok(Build { so_path })
     }
-}
-
-/// Given an api key and project name returns a `PathBuf` to the project
-/// If the directory does not exist, creates it.
-fn project_path(project: &str) -> Result<PathBuf> {
-    let mut project_path = PathBuf::from(FS_ROOT);
-    project_path.push(project);
-    // create directory
-    std::fs::create_dir_all(&project_path)?;
-    Ok(project_path)
 }
 
 /// Clear everything which is not the target folder from the project path

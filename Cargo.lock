@@ -264,6 +264,7 @@ dependencies = [
  "anyhow",
  "cargo",
  "dirs",
+ "lib",
  "reqwest",
  "serde",
  "serde_json",

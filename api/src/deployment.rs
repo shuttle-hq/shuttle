@@ -1,27 +1,22 @@
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+// use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Arc, Mutex};
+use tokio::sync::{RwLock, RwLockWriteGuard};
 use std::path::Path;
+use std::time::Duration;
+use core::default::Default;
+use libloading::Library;
 use rocket::{Data};
+use rocket::data::ByteUnit;
 use rocket::response::Responder;
-use uuid::Uuid;
 use rocket::serde::{Serialize, Deserialize};
 use rocket::tokio;
 
-use crate::{BuildSystem, ProjectConfig};
+use crate::build::Build;
+use crate::BuildSystem;
+use lib::{DeploymentId, DeploymentMeta, DeploymentStateMeta, ProjectConfig};
 
 use service::Service;
-
-pub type DeploymentId = Uuid;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum DeploymentState {
-    QUEUED,
-    BUILDING,
-    ERROR,
-    INITIALIZING,
-    READY,
-    CANCELLED,
-}
 
 // TODO: Determine error handling strategy - error types or just use `anyhow`?
 #[derive(Debug, Clone, Serialize, Deserialize, Responder)]
@@ -30,116 +25,189 @@ pub enum DeploymentError {
     Internal(String),
     #[response(status = 404)]
     NotFound(String),
+    #[response(status = 400)]
+    BadRequest(String),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DeploymentInfo {
-    id: DeploymentId,
-    project_name: String,
-    state: DeploymentState,
-    url: String,
-    build_logs: Option<String>,
-    runtime_logs: Option<String>,
-}
-
+/// Inner struct of a deployment which holds the deployment itself
+/// and the some metadata
 pub(crate) struct Deployment {
-    info: DeploymentInfo,
-    /// A user's particular implementation of the [`Service`] trait.
-    service: Option<Box<dyn Service>>,
-    /// This [`libloading::Library`] instance must be kept alive in order to use
-    /// the `service` field without causing a segmentation fault.
-    lib: Option<libloading::Library>,
+    meta: RwLock<DeploymentMeta>,
+    state: RwLock<DeploymentState>,
 }
 
 impl Deployment {
-    fn shareable(self) -> Arc<RwLock<Self>> {
-        Arc::new(RwLock::new(self))
+    fn new(config: &ProjectConfig, crate_bytes: Vec<u8>) -> Self {
+        Self {
+            meta: RwLock::new(DeploymentMeta::new(&config)),
+            state: RwLock::new(DeploymentState::queued(crate_bytes)),
+        }
     }
 }
 
-// could use `chashmap` here but it is unclear if we'll need to iterate
-// over the whole thing at some point in the future.
-type Deployments = HashMap<DeploymentId, Deployment>;
+impl Deployment {
+    pub(crate) async fn meta(&self) -> DeploymentMeta {
+        dbg!("trying to get meta");
+        self.meta.read().await.clone()
+    }
 
-pub(crate) struct DeploymentSystem {
-    build_system: Arc<Box<dyn BuildSystem>>,
-    deployments: Arc<RwLock<Deployments>>,
-}
-
-impl DeploymentSystem {
-    pub(crate) fn new(build_system: Box<dyn BuildSystem>) -> Self {
-        Self {
-            build_system: Arc::new(build_system),
-            deployments: Default::default(),
+    /// Evaluates if the deployment can be advanced. If the deployment
+    /// has reached a state where it can no longer `advance`, returns `false`.
+    pub(crate) async fn deployment_finished(&self) -> bool {
+        match *self.state.read().await {
+            DeploymentState::QUEUED(_) | DeploymentState::BUILT(_) | DeploymentState::LOADED(_) => false,
+            DeploymentState::DEPLOYED(_) | DeploymentState::ERROR => true,
         }
     }
 
-    /// Get's the deployment information back to the user
-    pub(crate) fn get_deployment(&self, id: &DeploymentId) -> Result<DeploymentInfo, DeploymentError> {
-        self.deployments
-            .read()
-            .unwrap()
-            .get(&id)
-            .map(|deployment| deployment.info.clone())
-            .ok_or(DeploymentError::NotFound("could not find deployment".to_string()))
+    /// Tries to advance the deployment one stage. Does nothing if the deployment
+    /// is in a terminal state.
+    pub(crate) async fn advance(&self, build_system: Arc<Box<dyn BuildSystem>>) {
+        let meta = self.meta().await;
+        dbg!("waiting to get write on the state");
+        let mut state = self.state.write().await;
+        match &*state {
+            DeploymentState::QUEUED(queued) => {
+                dbg!("deployment '{}' build starting...", &meta.id);
+                match build_system.build(&queued.crate_bytes, &meta.config).await {
+                    Ok(build) => *state = DeploymentState::built(build),
+                    Err(_) => *state = DeploymentState::ERROR
+                }
+            }
+            DeploymentState::BUILT(built) => {
+                dbg!("deployment '{}' loading shared object and service...", &meta.id);
+                match load_service_from_so_file(&built.build.so_path) {
+                    Ok((svc, so)) => *state = DeploymentState::loaded(so, svc),
+                    Err(_) => *state = DeploymentState::ERROR
+                }
+            }
+            DeploymentState::LOADED(_loaded) => {
+                dbg!("deployment '{}' getting deployed...", &meta.id);
+                todo!("functionality to load service objects not ready")
+            }
+            DeploymentState::DEPLOYED(_) => { /* nothing to do here */ }
+            DeploymentState::ERROR => { /* nothing to do here */ }
+        }
+        drop(state);
+        // ensures that the metadata state is inline with the actual
+        // state. This can go when we have an API layer.
+        self.update_meta_state().await
+    }
+
+    async fn state_mut(&self) -> RwLockWriteGuard<'_, DeploymentState> {
+        self.state.write().await
+    }
+
+    async fn update_meta_state(&self) {
+        self.meta.write().await.state = self.state_mut().await.meta()
+    }
+}
+
+type Deployments = HashMap<DeploymentId, Arc<Deployment>>;
+
+/// The top-level manager for deployments. Is responsible for their
+/// creation and lifecycle.
+pub(crate) struct DeploymentSystem {
+    deployments: RwLock<Deployments>,
+    job_queue: Arc<JobQueue>,
+}
+
+#[derive(Default)]
+struct JobQueue {
+    queue: Arc<Mutex<Vec<Arc<Deployment>>>>,
+}
+
+impl JobQueue {
+    fn push(&self, deployment: Arc<Deployment>) {
+        self.queue.lock().unwrap().push(deployment)
+    }
+
+    fn pop(&self) -> Option<Arc<Deployment>> {
+        self.queue.lock().unwrap().pop()
+    }
+
+    /// Returns a JobQueue with the job processor already running
+    async fn initialise(build_system: Arc<Box<dyn BuildSystem>>) -> Arc<Self> {
+        let job_queue = Arc::new(JobQueue::default());
+
+        let queue_ref = job_queue.clone();
+
+        tokio::spawn(async move {
+            Self::start_job_processor(
+                build_system,
+                queue_ref,
+            ).await
+        });
+
+        job_queue
+    }
+
+
+    async fn start_job_processor(
+        build_system: Arc<Box<dyn BuildSystem>>,
+        queue: Arc<JobQueue>) {
+        dbg!("job processor started");
+        loop {
+            if let Some(deployment) = queue.pop() {
+                let id = deployment.meta().await.id;
+
+                dbg!("started deployment job for id: '{}'", id);
+
+                while !deployment.deployment_finished().await {
+                    deployment.advance(build_system.clone()).await
+                }
+
+                dbg!("ended deployment job for id: '{}'", id);
+            } else {
+                tokio::time::sleep(Duration::from_millis(100)).await
+            }
+        }
+    }
+}
+
+
+impl DeploymentSystem {
+    pub(crate) async fn new(build_system: Box<dyn BuildSystem>) -> Self {
+        Self {
+            deployments: Default::default(),
+            job_queue: JobQueue::initialise(Arc::new(build_system)).await,
+        }
+    }
+
+    /// Retrieves a clone of the deployment information
+    pub(crate) async fn get_deployment(&self, id: &DeploymentId) -> Result<DeploymentMeta, DeploymentError> {
+        match self.deployments.read().await.get(&id) {
+            Some(deployment) => Ok(deployment.meta().await),
+            None => Err(DeploymentError::NotFound(format!("could not find deployment for id '{}'", &id)))
+        }
     }
 
     /// Main way to interface with the deployment manager.
     /// Will take a crate through the whole lifecycle.
-    pub(crate) fn deploy(&self,
-                         crate_file: Data,
-                         project_config: &ProjectConfig) -> Result<DeploymentInfo, DeploymentError> {
+    pub(crate) async fn deploy(&self,
+                               crate_file: Data<'_>,
+                               project_config: &ProjectConfig) -> Result<DeploymentMeta, DeploymentError> {
+        let crate_bytes = crate_file
+            .open(ByteUnit::max_value()).into_bytes()
+            .await
+            .map_err(|_| DeploymentError::BadRequest("could not read crate file into bytes".to_string()))?
+            .to_vec();
 
-        // for crate file consider placing somewhere in the file system via the build system
-
-        let info = DeploymentInfo {
-            id: Uuid::new_v4(),
-            project_name: project_config.name.clone(),
-            state: DeploymentState::QUEUED,
-            url: Self::create_url(project_config),
-            build_logs: None,
-            runtime_logs: None,
-        };
-
-        let deployment = Deployment {
-            info,
-            service: None,
-            lib: None,
-        };
-
-        let info = deployment.info.clone();
+        let deployment = Arc::new(Deployment::new(&project_config, crate_bytes));
+        let info = deployment.meta().await;
 
         self.deployments
             .write()
-            .unwrap()
-            .insert(info.id.clone(), deployment);
+            .await
+            .insert(info.id.clone(), deployment.clone());
 
-        let build_system = self.build_system.clone();
-        let deployments = self.deployments.clone();
-
-        tokio::spawn(async move {
-            Self::start_deployment_job(
-                build_system,
-                info.id.clone(),
-                deployments,
-                (),
-            )
-        });
+        self.add_to_job_queue(deployment);
 
         Ok(info)
     }
 
-    async fn start_deployment_job(
-        build_system: Arc<Box<dyn BuildSystem>>,
-        id: DeploymentId,
-        deployment: Arc<RwLock<Deployments>>,
-        crate_file: ()) {
-        println!("started deployment job");
-        unimplemented!()
-    }
-
-    fn create_url(project_config: &ProjectConfig) -> String {
-        format!("{}.unveil.sh", project_config.name)
+    fn add_to_job_queue(&self, deployment: Arc<Deployment>) {
+        self.job_queue.push(deployment)
     }
 }
 
@@ -151,7 +219,7 @@ type CreateService = unsafe extern fn() -> *mut dyn Service;
 /// [`Service`] trait. Relies on the `.so` library having an ``extern "C"`
 /// function called [`ENTRYPOINT_SYMBOL_NAME`], likely automatically generated
 /// using the [`service::declare_service`] macro.
-fn load_service_from_so_file(so_path: &Path) -> anyhow::Result<(Box<dyn Service>, libloading::Library)> {
+fn load_service_from_so_file(so_path: &Path) -> anyhow::Result<(Box<dyn Service>, Library)> {
     unsafe {
         let lib = libloading::Library::new(so_path)?;
 
@@ -160,4 +228,80 @@ fn load_service_from_so_file(so_path: &Path) -> anyhow::Result<(Box<dyn Service>
 
         Ok((Box::from_raw(raw), lib))
     }
+}
+
+/// Finite-state machine representing the various stages of the build
+/// process.
+enum DeploymentState {
+    QUEUED(QueuedState),
+    BUILT(BuiltState),
+    LOADED(LoadedState),
+    DEPLOYED(DeployedState),
+    ERROR,
+}
+
+impl DeploymentState {
+    fn queued(crate_bytes: Vec<u8>) -> Self {
+        Self::QUEUED(
+            QueuedState {
+                crate_bytes
+            }
+        )
+    }
+
+    fn built(build: Build) -> Self {
+        Self::BUILT(
+            BuiltState {
+                build
+            }
+        )
+    }
+
+    fn loaded(so: Library, service: Box<dyn Service>) -> Self {
+        Self::LOADED(
+            LoadedState {
+                service,
+                so,
+            }
+        )
+    }
+
+    fn deployed(so: Library, service: Box<dyn Service>, port: u16) -> Self {
+        Self::DEPLOYED(
+            DeployedState {
+                service,
+                so,
+                port,
+            }
+        )
+    }
+
+    fn meta(&self) -> DeploymentStateMeta {
+        match self {
+            DeploymentState::QUEUED(_) => DeploymentStateMeta::QUEUED,
+            DeploymentState::BUILT(_) => DeploymentStateMeta::BUILT,
+            DeploymentState::LOADED(_) => DeploymentStateMeta::LOADED,
+            DeploymentState::DEPLOYED(_) => DeploymentStateMeta::DEPLOYED,
+            DeploymentState::ERROR => DeploymentStateMeta::ERROR
+        }
+    }
+}
+
+struct QueuedState {
+    crate_bytes: Vec<u8>,
+}
+
+struct BuiltState {
+    build: Build,
+}
+
+struct LoadedState {
+    service: Box<dyn Service>,
+    so: Library,
+}
+
+struct DeployedState {
+    service: Box<dyn Service>,
+    so: Library,
+    port: u16,
 }

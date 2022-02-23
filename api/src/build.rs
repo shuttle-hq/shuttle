@@ -1,17 +1,15 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use cargo::core::compiler::{CompileMode};
 use cargo::core::Workspace;
 use cargo::ops::CompileOptions;
-use rocket::{Data, tokio};
-use rocket::data::ByteUnit;
+use lib::ProjectConfig;
+use rocket::tokio;
+use rocket::tokio::io::AsyncWriteExt;
 
 const FS_ROOT: &'static str = "/tmp/crates/";
 
-pub struct ProjectConfig {
-    pub name: String,
-}
 
 pub(crate) struct Build {
     pub(crate) so_path: PathBuf,
@@ -19,8 +17,8 @@ pub(crate) struct Build {
 
 #[async_trait]
 pub(crate) trait BuildSystem: Send + Sync {
-    async fn build<'a>(&self,
-             crate_file: Data<'a>,
+    async fn build(&self,
+             crate_bytes: &Vec<u8>,
              project_config: &ProjectConfig) -> Result<Build>;
 }
 
@@ -29,7 +27,7 @@ pub(crate) struct FsBuildSystem;
 
 #[async_trait]
 impl BuildSystem for FsBuildSystem {
-    async fn build<'a>(&self, crate_file: Data<'a>, project_config: &ProjectConfig) -> Result<Build> {
+    async fn build(&self, crate_bytes: &Vec<u8>, project_config: &ProjectConfig) -> Result<Build> {
         let project_name = &project_config.name;
 
         // project path
@@ -44,10 +42,10 @@ impl BuildSystem for FsBuildSystem {
         dbg!(&crate_path);
 
         // create target file
-        let target_file = tokio::fs::File::create(&crate_path).await?;
+        let mut target_file = tokio::fs::File::create(&crate_path).await?;
 
-        // stream to file
-        crate_file.open(ByteUnit::max_value()).stream_to(target_file).await?;
+        // write bytes to file
+        target_file.write_all(crate_bytes).await?;
 
         // extract tarball
         extract_tarball(&crate_path, &project_path)?;
@@ -115,12 +113,12 @@ fn extract_tarball(crate_path: &Path, project_path: &Path) -> Result<()> {
 /// Given a project directory path, builds the crate
 fn build_crate(project_path: &Path) -> Result<PathBuf> {
     // This config needs to be tweaked s.t the
-    let config = cargo::util::config::Config::default()?;
+    let mut config = cargo::util::config::Config::default()?;
     let manifest_path = project_path.join("Cargo.toml");
 
     let ws = Workspace::new(&manifest_path, &config)?;
     let opts = CompileOptions::new(&config, CompileMode::Build)?;
     let _compilation = cargo::ops::compile(&ws, &opts)?;
 
-    todo!("next step is to figure out how to get the .so file from the compilation output")
+    Err(anyhow!("next step is to figure out how to get the .so file from the compilation output"))
 }

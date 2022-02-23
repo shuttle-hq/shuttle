@@ -5,8 +5,10 @@ mod build;
 mod deployment;
 mod args;
 mod router;
+mod proxy;
 
 use rocket::{Data, State};
+use rocket::http::Status;
 use rocket::serde::json::serde_json::json;
 use rocket::serde::json::Value;
 use uuid::Uuid;
@@ -16,6 +18,12 @@ use crate::args::Args;
 use crate::build::{BuildSystem, FsBuildSystem};
 use crate::deployment::{DeploymentError, DeploymentSystem};
 use lib::ProjectConfig;
+
+/// A sync to send requests when a `Host` is not found
+#[get("/404")]
+fn not_found_sink() -> Status {
+    Status::NotFound
+}
 
 #[get("/deployments/<id>")]
 async fn get_deployment(state: &State<ApiState>, id: Uuid) -> Result<Value, DeploymentError> {

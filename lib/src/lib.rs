@@ -6,7 +6,9 @@ use uuid::Uuid;
 
 pub const UNVEIL_PROJECT_HEADER: &'static str = "Unveil-Project";
 
+pub type Host = String;
 pub type DeploymentId = Uuid;
+pub type Port = u16;
 
 /// Deployment metadata. This serves two purposes. Storing information
 /// used for the deployment process and also providing the client with
@@ -16,7 +18,7 @@ pub struct DeploymentMeta {
     pub id: DeploymentId,
     pub config: ProjectConfig,
     pub state: DeploymentStateMeta,
-    pub url: String,
+    pub host: String,
     pub build_logs: Option<String>,
     pub runtime_logs: Option<String>,
 }
@@ -28,13 +30,13 @@ impl DeploymentMeta {
             id: Uuid::new_v4(),
             config: config.clone(),
             state: DeploymentStateMeta::QUEUED,
-            url: Self::create_url(config),
+            host: Self::create_host(config),
             build_logs: None,
             runtime_logs: None,
         }
     }
 
-    pub fn create_url(project_config: &ProjectConfig) -> String {
+    pub fn create_host(project_config: &ProjectConfig) -> Host {
         format!("{}.unveil.sh", project_config.name)
     }
 }

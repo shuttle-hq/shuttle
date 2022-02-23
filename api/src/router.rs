@@ -1,8 +1,6 @@
 use std::collections::HashMap;
 use rocket::tokio::sync::RwLock;
-use lib::DeploymentId;
-
-type Host = String;
+use lib::{DeploymentId, Host};
 
 #[derive(Default)]
 /// Deployment router which figures out which `DeploymentId`

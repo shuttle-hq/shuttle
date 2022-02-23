@@ -15,7 +15,7 @@ use std::time::Duration;
 
 use crate::build::Build;
 use crate::BuildSystem;
-use lib::{DeploymentId, DeploymentMeta, DeploymentStateMeta, ProjectConfig};
+use lib::{DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, Port, ProjectConfig};
 
 use service::Service;
 use crate::router::Router;
@@ -45,9 +45,8 @@ impl Deployment {
             state: RwLock::new(DeploymentState::queued(crate_bytes)),
         }
     }
-}
 
-impl Deployment {
+    /// Gets a `clone`ed copy of the metadata.
     pub(crate) async fn meta(&self) -> DeploymentMeta {
         dbg!("trying to get meta");
         self.meta.read().await.clone()
@@ -116,6 +115,8 @@ impl Deployment {
                         }
                     });
 
+                    context.router.promote(meta.host, meta.id);
+
                     DeploymentState::deployed(loaded.so, loaded.service, port, kill_oneshot)
                 }
                 deployed_or_error => deployed_or_error, /* nothing to do here */
@@ -128,6 +129,13 @@ impl Deployment {
 
     async fn update_meta_state(&self) {
         self.meta.write().await.state = self.state.read().await.meta()
+    }
+
+    async fn port(&self) -> Option<Port> {
+        match self.state.read().await {
+            DeploymentState::DEPLOYED(deployed) => Some(deployed.port),
+            _ => None
+        }
     }
 }
 
@@ -287,6 +295,17 @@ impl DeploymentSystem {
         }
     }
 
+    /// Returns the port for a given host.
+    /// If the host does not exist, returns `None`
+    pub(crate) async fn port_for_host(&self, host: &Host) -> Option<Port> {
+        let id_for_host = self.router.id_for_host(host).await?;
+        self.deployments.read()
+            .await
+            .get(&id_for_host)?
+            .port()
+            .await
+    }
+
     /// Retrieves a clone of the deployment information
     pub(crate) async fn get_deployment(&self, id: &DeploymentId) -> Result<DeploymentMeta, DeploymentError> {
         match self.deployments.read().await.get(&id) {
@@ -388,7 +407,7 @@ impl DeploymentState {
         )
     }
 
-    fn deployed(so: Library, service: Box<dyn Service>, port: u16, kill_oneshot: oneshot::Sender<()>) -> Self {
+    fn deployed(so: Library, service: Box<dyn Service>, port: Port, kill_oneshot: oneshot::Sender<()>) -> Self {
         Self::DEPLOYED(
             DeployedState {
                 service,
@@ -426,6 +445,6 @@ struct LoadedState {
 struct DeployedState {
     service: Box<dyn Service>,
     so: Library,
-    port: u16,
+    port: Port,
     kill_oneshot: oneshot::Sender<()>,
 }

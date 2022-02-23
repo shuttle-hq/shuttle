@@ -1,11 +1,10 @@
 use std::collections::HashMap;
 // use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::sync::{Arc, Mutex};
-use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use tokio::sync::{RwLock, RwLockWriteGuard};
 use std::path::Path;
 use std::time::Duration;
 use core::default::Default;
-use cargo::util::Queue;
 use libloading::Library;
 use rocket::{Data};
 use rocket::data::ByteUnit;
@@ -62,38 +61,32 @@ impl DeploymentMeta {
     }
 }
 
-/// A wrapper struct for encapsulation and interior mutability
-pub(crate) struct Deployment(RwLock<DeploymentInner>);
-
 /// Inner struct of a deployment which holds the deployment itself
 /// and the some metadata
-/// todo maybe but separate locks on info and state
-pub(crate) struct DeploymentInner {
-    info: DeploymentMeta,
-    state: DeploymentState,
+pub(crate) struct Deployment {
+    meta: RwLock<DeploymentMeta>,
+        state: RwLock<DeploymentState>,
 }
 
 impl Deployment {
     fn new(config: &ProjectConfig, crate_bytes: Vec<u8>) -> Self {
-        Self(
-            RwLock::new(DeploymentInner {
-                info: DeploymentMeta::new(&config),
-                state: DeploymentState::queued(crate_bytes),
-            })
-        )
+        Self {
+            meta: RwLock::new(DeploymentMeta::new(&config)),
+            state: RwLock::new(DeploymentState::queued(crate_bytes)),
+        }
     }
 }
 
 impl Deployment {
-    pub(crate) async fn info(&self) -> DeploymentMeta {
-        dbg!("trying to get info");
-        self.inner().await.info.clone()
+    pub(crate) async fn meta(&self) -> DeploymentMeta {
+        dbg!("trying to get meta");
+        self.meta.read().await.clone()
     }
 
     /// Evaluates if the deployment can be advanced. If the deployment
-    /// has reached a state where it can no longer advance, returns `false`.
+    /// has reached a state where it can no longer `advance`, returns `false`.
     pub(crate) async fn deployment_finished(&self) -> bool {
-        match self.inner().await.state {
+        match *self.state.read().await {
             DeploymentState::QUEUED(_) | DeploymentState::BUILT(_) | DeploymentState::LOADED(_) => false,
             DeploymentState::DEPLOYED(_) | DeploymentState::ERROR => true,
         }
@@ -102,27 +95,25 @@ impl Deployment {
     /// Tries to advance the deployment one stage. Does nothing if the deployment
     /// is in a terminal state.
     pub(crate) async fn advance(&self, build_system: Arc<Box<dyn BuildSystem>>) {
-        /// We get the project first so that we don't deadlock
-        let config = self.project_config().await;
-        let mut inner = self.inner_mut().await;
-        let id = inner.info.id.clone();
-        match &inner.state {
+        let meta = self.meta().await;
+        let mut state = self.state.write().await;
+        match &*state {
             DeploymentState::QUEUED(queued) => {
-                dbg!("deployment '{}' build starting...", &id);
-                match build_system.build(&queued.crate_bytes, &config).await {
-                    Ok(build) => inner.state = DeploymentState::built(build),
-                    Err(_) => inner.state = DeploymentState::ERROR
+                dbg!("deployment '{}' build starting...", &meta.id);
+                match build_system.build(&queued.crate_bytes, &meta.config).await {
+                    Ok(build) => *state = DeploymentState::built(build),
+                    Err(_) => *state = DeploymentState::ERROR
                 }
             }
             DeploymentState::BUILT(built) => {
-                dbg!("deployment '{}' loading shared object and service...", &id);
+                dbg!("deployment '{}' loading shared object and service...", &meta.id);
                 match load_service_from_so_file(&built.build.so_path) {
-                    Ok((svc, so)) => inner.state = DeploymentState::loaded(so, svc),
-                    Err(_) => inner.state = DeploymentState::ERROR
+                    Ok((svc, so)) => *state = DeploymentState::loaded(so, svc),
+                    Err(_) => *state = DeploymentState::ERROR
                 }
             }
             DeploymentState::LOADED(_loaded) => {
-                dbg!("deployment '{}' getting deployed...", &id);
+                dbg!("deployment '{}' getting deployed...", &meta.id);
                 todo!("functionality to load service objects not ready")
             }
             DeploymentState::DEPLOYED(_) => { /* nothing to do here */ }
@@ -133,21 +124,12 @@ impl Deployment {
         self.update_meta_state().await
     }
 
-    pub(crate) async fn project_config(&self) -> ProjectConfig {
-        self.inner().await.info.config.clone()
-    }
-
-    async fn inner_mut(&self) -> RwLockWriteGuard<'_, DeploymentInner> {
-        self.0.write().await
-    }
-
-    async fn inner(&self) -> RwLockReadGuard<'_, DeploymentInner> {
-        self.0.read().await
+    async fn state_mut(&self) -> RwLockWriteGuard<'_, DeploymentState> {
+        self.state.write().await
     }
 
     async fn update_meta_state(&self) {
-        let mut inner = self.inner_mut().await;
-        inner.info.state = inner.state.meta()
+        self.meta.write().await.state = self.state_mut().await.meta()
     }
 }
 
@@ -157,12 +139,12 @@ type Deployments = HashMap<DeploymentId, Arc<Deployment>>;
 /// creation and lifecycle.
 pub(crate) struct DeploymentSystem {
     deployments: RwLock<Deployments>,
-    job_queue: Arc<JobQueue>
+    job_queue: Arc<JobQueue>,
 }
 
 #[derive(Default)]
-struct JobQueue{
-    queue: Arc<Mutex<Vec<Arc<Deployment>>>>
+struct JobQueue {
+    queue: Arc<Mutex<Vec<Arc<Deployment>>>>,
 }
 
 impl JobQueue {
@@ -197,7 +179,7 @@ impl JobQueue {
         dbg!("job processor started");
         loop {
             if let Some(deployment) = queue.pop() {
-                let id = deployment.info().await.id;
+                let id = deployment.meta().await.id;
 
                 dbg!("started deployment job for id: '{}'", id);
 
@@ -218,14 +200,14 @@ impl DeploymentSystem {
     pub(crate) async fn new(build_system: Box<dyn BuildSystem>) -> Self {
         Self {
             deployments: Default::default(),
-            job_queue: JobQueue::initialise(Arc::new(build_system)).await
+            job_queue: JobQueue::initialise(Arc::new(build_system)).await,
         }
     }
 
     /// Retrieves a clone of the deployment information
     pub(crate) async fn get_deployment(&self, id: &DeploymentId) -> Result<DeploymentMeta, DeploymentError> {
         match self.deployments.read().await.get(&id) {
-            Some(deployment) => Ok(deployment.info().await),
+            Some(deployment) => Ok(deployment.meta().await),
             None => Err(DeploymentError::NotFound(format!("could not find deployment for id '{}'", &id)))
         }
     }
@@ -242,7 +224,7 @@ impl DeploymentSystem {
             .to_vec();
 
         let deployment = Arc::new(Deployment::new(&project_config, crate_bytes));
-        let info = deployment.info().await;
+        let info = deployment.meta().await;
 
         self.deployments
             .write()

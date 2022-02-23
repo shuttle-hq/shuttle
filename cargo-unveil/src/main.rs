@@ -16,8 +16,8 @@ fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
     println!("{:?}",args.get(0)); // 1 is the right index
     let working_directory = env::current_dir()?;
-    let project = config::get_project(&working_directory).context("failed to retrieve project configuration")?;
     let api_key = config::get_api_key().context("failed to retrieve api key")?;
+    let project = config::get_project(&working_directory).context("failed to retrieve project configuration")?;
     let package_file = run_cargo_package(&working_directory).context("failed to package cargo project")?;
     client::deploy(package_file, api_key, project).context("failed to deploy cargo project")?;
     Ok(())

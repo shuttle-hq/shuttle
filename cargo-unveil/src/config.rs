@@ -15,13 +15,19 @@ pub(crate) struct Config {
 pub(crate) fn get_api_key() -> Result<ApiKey> {
     let mut directory = unveil_config_dir()?;
     let file_path = unveil_config_file(&mut directory);
-    let file_contents = std::fs::read_to_string(file_path)?;
-    let config: Config = serde_json::from_str(&file_contents)?;
+    let file_contents: String = match std::fs::read_to_string(file_path) {
+        Ok(file_contents) => Ok(file_contents),
+        Err(e) => match e.kind() {
+            ErrorKind::NotFound => Err(anyhow!("could not find `config.toml` in {:?}", directory)),
+            _ => Err(e.into())
+        }
+    }?;
+    let config: Config = toml::from_str(&file_contents)?;
     Ok(config.api_key)
 }
 
 fn unveil_config_file(path: &mut PathBuf) -> PathBuf {
-    path.join("config.json")
+    path.join("config.toml")
 }
 
 fn unveil_config_dir() -> Result<PathBuf> {

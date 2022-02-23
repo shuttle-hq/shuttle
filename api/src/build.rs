@@ -1,4 +1,4 @@
-use anyhow::{Result, anyhow}
+use anyhow::{Result, anyhow};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use cargo::core::compiler::{CompileMode};

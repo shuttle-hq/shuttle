@@ -1,7 +1,10 @@
 use std::any::Any;
 
+use rocket::{Rocket, Build};
+
 pub trait Service: Any + Send + Sync {
     fn start(&self) -> &'static str;
+    fn my_rocket(&self) -> &Rocket<Build>;
 }
 
 #[macro_export]

@@ -4,7 +4,8 @@ extern crate rocket;
 mod build;
 mod deployment;
 
-use std::sync::Mutex;
+use std::path::Path;
+
 use rocket::{Data, State};
 use rocket::serde::json::serde_json::json;
 use rocket::serde::json::Value;
@@ -42,14 +43,22 @@ struct ApiState {
 //noinspection ALL
 #[launch]
 fn rocket() -> _ {
+    let (service, lib) = deployment::load_service_from_so_file(Path::new("/home/max/Projects/unveil/examples/rocket/hello-world/target/debug/libhello_world.so")).unwrap();
+
+    println!("{}", service.start());
+    println!("{}", service.my_rocket().routes().next().unwrap().uri);
+    panic!()
+
+    /*
     let deployment_manager = DeploymentSystem::new(Box::new(FsBuildSystem));
     let state = ApiState {
         // we probably want to put the Mutex deeper in the object tree.
         // but it's ok for prototype
-        deployment_manager: deployment_manager
+        deployment_manager
     };
 
     rocket::build()
         .mount("/", routes![create_deployment, get_deployment])
         .manage(state)
+    */
 }

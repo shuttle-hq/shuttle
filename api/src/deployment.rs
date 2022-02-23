@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::path::Path;
-use rocket::{Data};
+use rocket::Data;
 use rocket::response::Responder;
 use uuid::Uuid;
 use rocket::serde::{Serialize, Deserialize};
@@ -151,7 +151,7 @@ type CreateService = unsafe extern fn() -> *mut dyn Service;
 /// [`Service`] trait. Relies on the `.so` library having an ``extern "C"`
 /// function called [`ENTRYPOINT_SYMBOL_NAME`], likely automatically generated
 /// using the [`service::declare_service`] macro.
-fn load_service_from_so_file(so_path: &Path) -> anyhow::Result<(Box<dyn Service>, libloading::Library)> {
+pub /* TODO: temp pub */ fn load_service_from_so_file(so_path: &Path) -> anyhow::Result<(Box<dyn Service>, libloading::Library)> {
     unsafe {
         let lib = libloading::Library::new(so_path)?;
 

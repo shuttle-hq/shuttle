@@ -1,14 +1,28 @@
 #[macro_use] extern crate rocket;
 
+use rocket::{Rocket, Build};
+
 #[get("/")]
 fn index() -> &'static str {
     "Hello, world!"
 }
 
-impl service::Service for rocket::Rocket<rocket::Phase::Build> {
-    fn start(&self) ->&'static str {
-        "sup"
+struct MyRocket(Rocket<Build>);
+
+impl MyRocket {
+    fn new() -> Self {
+        MyRocket(rocket::build().mount("/hello", routes![index]))
     }
 }
 
-service::declare_service!(rocket::Rocket<rocket::Phase::Build>, rocket::build);
+impl service::Service for MyRocket {
+    fn start(&self) ->&'static str {
+        "sup"
+    }
+
+    fn my_rocket(&self) -> &Rocket<Build> {
+        &self.0
+    }
+}
+
+service::declare_service!(MyRocket, MyRocket::new);

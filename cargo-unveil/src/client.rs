@@ -1,22 +1,45 @@
-use std::fs::File;
-use anyhow::Result;
-use crate::config::Project;
+use anyhow::{Context, Result};
+use lib::{DeploymentMeta, DeploymentStateMeta, ProjectConfig};
+use std::{fs::File, thread::sleep, time::Duration};
 
 pub(crate) type ApiKey = String;
-type DeployResult = String;
 
-pub(crate) fn deploy(package_file: File, api_key: ApiKey, project: Project) -> Result<DeployResult> {
+pub(crate) fn deploy(package_file: File, api_key: ApiKey, project: ProjectConfig) -> Result<()> {
     let mut url = get_url().to_string();
     url.push_str("/deployments");
     let client = reqwest::blocking::Client::new();
     // example from Stripe:
     // curl https://api.stripe.com/v1/charges -u sk_test_BQokikJOvBiI2HlWgH4olfQ2:
-    client.post(url)
+    let mut res: DeploymentMeta = client
+        .post(url.clone())
         .body(package_file)
-        .basic_auth(api_key, Some(""))
-        .send()?;
+        .basic_auth(api_key.clone(), Some(""))
+        .send()
+        .context("failed to send deployment to the Unveil server")?
+        .json()
+        .context("failed to parse Unveil response")?;
 
-    Ok("Deployed!".to_string())
+    url.push_str(&format!("/{}", res.id));
+
+    while !matches!(
+        res.state,
+        DeploymentStateMeta::DEPLOYED | DeploymentStateMeta::ERROR
+    ) {
+        let output = serde_json::to_string_pretty(&res)?;
+        println!("{}", output);
+
+        sleep(Duration::from_secs(3));
+
+        res = client
+            .get(url.clone())
+            .basic_auth(api_key.clone(), Some(""))
+            .send()
+            .context("failed to get deployment from the Unveil server")?
+            .json()
+            .context("failed to parse Unveil response")?;
+    }
+
+    Ok(())
 }
 
 #[cfg(debug_assertions)]

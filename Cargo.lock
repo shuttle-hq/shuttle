@@ -46,6 +46,7 @@ dependencies = [
  "async-mutex",
  "cargo",
  "flurry",
+ "lib",
  "libloading",
  "rocket",
  "serde",
@@ -1097,6 +1098,10 @@ checksum = "830d08ce1d1d941e6b30645f1a0eb5643013d835ce3779a5fc208261dbe10f55"
 [[package]]
 name = "lib"
 version = "0.1.0"
+dependencies = [
+ "serde",
+ "uuid",
+]
 
 [[package]]
 name = "libc"

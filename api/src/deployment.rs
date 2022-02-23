@@ -7,16 +7,14 @@ use libloading::Library;
 use rocket::{Data};
 use rocket::data::ByteUnit;
 use rocket::response::Responder;
-use uuid::Uuid;
 use rocket::serde::{Serialize, Deserialize};
 use rocket::tokio;
 
-use crate::{BuildSystem, ProjectConfig};
 use crate::build::Build;
+use crate::BuildSystem;
+use lib::{DeploymentId, DeploymentMeta, DeploymentStateMeta, ProjectConfig};
 
 use service::Service;
-
-pub type DeploymentId = Uuid;
 
 // TODO: Determine error handling strategy - error types or just use `anyhow`?
 #[derive(Debug, Clone, Serialize, Deserialize, Responder)]
@@ -27,36 +25,6 @@ pub enum DeploymentError {
     NotFound(String),
     #[response(status = 400)]
     BadRequest(String),
-}
-
-/// Deployment metadata. This serves two purposes. Storing information
-/// used for the deployment process and also providing the client with
-/// information on the state of the deployment
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DeploymentMeta {
-    id: DeploymentId,
-    config: ProjectConfig,
-    state: DeploymentStateMeta,
-    url: String,
-    build_logs: Option<String>,
-    runtime_logs: Option<String>,
-}
-
-impl DeploymentMeta {
-    fn new(config: &ProjectConfig) -> Self {
-        Self {
-            id: Uuid::new_v4(),
-            config: config.clone(),
-            state: DeploymentStateMeta::QUEUED,
-            url: Self::create_url(config),
-            build_logs: None,
-            runtime_logs: None,
-        }
-    }
-
-    fn create_url(project_config: &ProjectConfig) -> String {
-        format!("{}.unveil.sh", project_config.name)
-    }
 }
 
 /// A wrapper struct for encapsulation and interior mutability
@@ -238,16 +206,6 @@ fn load_service_from_so_file(so_path: &Path) -> anyhow::Result<(Box<dyn Service>
 
         Ok((Box::from_raw(raw), lib))
     }
-}
-
-/// A label used to represent the deployment state in `DeploymentMeta`
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum DeploymentStateMeta {
-    QUEUED,
-    BUILT,
-    LOADED,
-    DEPLOYED,
-    ERROR,
 }
 
 /// Finite-state machine representing the various stages of the build

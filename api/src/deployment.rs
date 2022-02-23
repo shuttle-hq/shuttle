@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 // use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::sync::{Arc, Mutex};
-use tokio::sync::{RwLock, RwLockWriteGuard};
+use tokio::sync::{RwLock, RwLockWriteGuard, oneshot};
 use std::path::Path;
 use std::time::Duration;
 use core::default::Default;
@@ -97,15 +97,19 @@ impl Deployment {
                     ..Default::default()
                 };
 
-                r = r.configure(rocket::Config::default());
+                r = r.configure(config);
+
+                let (kill_oneshot, kill_receiver) = oneshot::channel::<()>();
 
                 rocket::tokio::spawn(async move {
-                    // TODO: use oneshot channel to kill?
-                    r.launch().await
+                    tokio::select! {
+                        _ = kill_receiver => {}
+                        _ = r.launch() => {}
+                    }
                 });
 
-                // TODO: Change state and move so and service.
-                loop {}
+                // TODO: Change state and move `so` and `service`.
+                // TODO: Store `kill_oneshot`.
                 //*state = DeploymentState::deployed(loaded.so, loaded.service, port)
             }
             DeploymentState::DEPLOYED(_) => { /* nothing to do here */ }
@@ -242,7 +246,7 @@ type CreateService = unsafe extern fn() -> *mut dyn Service;
 /// [`Service`] trait. Relies on the `.so` library having an ``extern "C"`
 /// function called [`ENTRYPOINT_SYMBOL_NAME`], likely automatically generated
 /// using the [`service::declare_service`] macro.
-pub /* TODO: pub temporary */ fn load_service_from_so_file(so_path: &Path) -> anyhow::Result<(Box<dyn Service>, Library)> {
+fn load_service_from_so_file(so_path: &Path) -> anyhow::Result<(Box<dyn Service>, Library)> {
     unsafe {
         let lib = libloading::Library::new(so_path)?;
 
@@ -289,12 +293,13 @@ impl DeploymentState {
         )
     }
 
-    fn deployed(so: Library, service: Box<dyn Service>, port: u16) -> Self {
+    fn deployed(so: Library, service: Box<dyn Service>, port: u16, kill_oneshot: oneshot::Sender<()>) -> Self {
         Self::DEPLOYED(
             DeployedState {
                 service,
                 so,
                 port,
+                kill_oneshot,
             }
         )
     }
@@ -327,4 +332,5 @@ struct DeployedState {
     service: Box<dyn Service>,
     so: Library,
     port: u16,
+    kill_oneshot: oneshot::Sender<()>,
 }

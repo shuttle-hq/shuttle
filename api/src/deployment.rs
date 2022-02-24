@@ -198,7 +198,7 @@ impl DeploymentSystem {
         }
     }
 
-    /// Retrieves a clone of the deployment information
+    /// Retrieves a clone of the deployment information.
     pub(crate) async fn get_deployment(&self, id: &DeploymentId) -> Result<DeploymentMeta, DeploymentError> {
         match self.deployments.read().await.get(&id) {
             Some(deployment) => Ok(deployment.meta().await),
@@ -206,12 +206,13 @@ impl DeploymentSystem {
         }
     }
 
+    /// Remove a deployment from the deployments hash map and, if it has
+    /// already been deployed, kill the Tokio task in which it is running.
     pub(crate) async fn kill_deployment(&self, id: &DeploymentId) -> Result<DeploymentMeta, DeploymentError> {
         let removed = {
             let mut deployments = self.deployments.write().await;
             deployments.remove(&id)
         };
-
 
         match removed {
             Some(removed) => {

@@ -384,7 +384,8 @@ fn identify_free_port() -> u16 {
     TcpListener::bind(ip).unwrap().local_addr().unwrap().port()
 }
 
-/// Finite-state machine representing the various stages of the build process.
+/// Finite-state machine representing the various stages of the build
+/// process.
 enum DeploymentState {
     /// Deployment waiting to be built.
     Queued(QueuedState),

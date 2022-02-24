@@ -324,12 +324,13 @@ impl DeploymentSystem {
         }
     }
 
+    /// Remove a deployment from the deployments hash map and, if it has
+    /// already been deployed, kill the Tokio task in which it is running.
     pub(crate) async fn kill_deployment(&self, id: &DeploymentId) -> Result<DeploymentMeta, DeploymentError> {
         let removed = {
             let mut deployments = self.deployments.write().await;
             deployments.remove(&id)
         };
-
 
         match removed {
             Some(removed) => {
@@ -337,7 +338,7 @@ impl DeploymentSystem {
 
                 // If the deployment is in the 'deployed' state, kill the Tokio task
                 // in which it is deployed:
-                if let DeploymentState::DEPLOYED(DeployedState { kill_oneshot, .. }) = removed.state.write().await.take() {
+                if let DeploymentState::Deployed(DeployedState { kill_oneshot, .. }) = removed.state.write().await.take() {
                     kill_oneshot.send(()).unwrap();
                 }
 

@@ -54,8 +54,6 @@ async fn rocket() -> _ {
     start_proxy(8000, 8001, deployment_manager.clone()).await;
 
     let state = ApiState {
-        // we probably want to put the Mutex deeper in the object tree.
-        // but it's ok for prototype
         deployment_manager
     };
     rocket::build()

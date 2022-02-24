@@ -46,9 +46,8 @@ async fn handle(
     };
 
     // if we could not get a port from the deployment manager,
-    // the host does not exist so we use the api port and route to
-    // the /404 endpoint
-
+    // the host does not exist or is not initialised yet - so
+    // we return a 404
     let port = match port {
         None => {
             // no port being assigned here means that we couldn't
@@ -63,8 +62,7 @@ async fn handle(
         }
         Some(port) => port
     };
-
-    // let's proxy
+    
     match reverse_proxy(
         remote_addr.ip(),
         port,

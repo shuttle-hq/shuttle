@@ -1,13 +1,12 @@
 use std::collections::HashMap;
-// use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::sync::{Arc, Mutex};
 use std::path::Path;
 use std::time::Duration;
 use std::net::{SocketAddrV4, Ipv4Addr, TcpListener};
-use tokio::sync::{RwLock, RwLockWriteGuard, oneshot};
+use tokio::sync::{RwLock, oneshot};
 use core::default::Default;
 use libloading::Library;
-use rocket::{Data};
+use rocket::Data;
 use rocket::data::ByteUnit;
 use rocket::response::Responder;
 use rocket::serde::{Serialize, Deserialize};
@@ -34,14 +33,16 @@ pub enum DeploymentError {
 /// and the some metadata
 pub(crate) struct Deployment {
     meta: RwLock<DeploymentMeta>,
-    state: RwLock<DeploymentState>,
+    // TODO: wrapped in option so that `.take` can be used to move values out when changing state - having
+    // `DeploymentState` mutate itself would likely be a cleaner approach.
+    state: RwLock<Option<DeploymentState>>,
 }
 
 impl Deployment {
     fn new(config: &ProjectConfig, crate_bytes: Vec<u8>) -> Self {
         Self {
             meta: RwLock::new(DeploymentMeta::new(&config)),
-            state: RwLock::new(DeploymentState::queued(crate_bytes)),
+            state: RwLock::new(Some(DeploymentState::queued(crate_bytes))),
         }
     }
 }
@@ -56,8 +57,8 @@ impl Deployment {
     /// has reached a state where it can no longer `advance`, returns `false`.
     pub(crate) async fn deployment_finished(&self) -> bool {
         match *self.state.read().await {
-            DeploymentState::QUEUED(_) | DeploymentState::BUILT(_) | DeploymentState::LOADED(_) => false,
-            DeploymentState::DEPLOYED(_) | DeploymentState::ERROR => true,
+            Some(DeploymentState::QUEUED(_) | DeploymentState::BUILT(_) | DeploymentState::LOADED(_)) => false,
+            Some(DeploymentState::DEPLOYED(_) | DeploymentState::ERROR) | None => true,
         }
     }
 
@@ -68,21 +69,21 @@ impl Deployment {
         dbg!("waiting to get write on the state");
         let mut state = self.state.write().await;
 
-        match &*state {
+        *state = Some(match state.take().unwrap() {
             DeploymentState::QUEUED(queued) => {
                 dbg!("deployment '{}' build starting...", &meta.id);
 
                 match build_system.build(&queued.crate_bytes, &meta.config).await {
-                    Ok(build) => *state = DeploymentState::built(build),
-                    Err(_) => *state = DeploymentState::ERROR
+                    Ok(build) => DeploymentState::built(build),
+                    Err(_) => DeploymentState::ERROR
                 }
             }
             DeploymentState::BUILT(built) => {
                 dbg!("deployment '{}' loading shared object and service...", &meta.id);
 
                 match load_service_from_so_file(&built.build.so_path) {
-                    Ok((svc, so)) => *state = DeploymentState::loaded(so, svc),
-                    Err(_) => *state = DeploymentState::ERROR
+                    Ok((svc, so)) => DeploymentState::loaded(so, svc),
+                    Err(_) => DeploymentState::ERROR
                 }
             }
             DeploymentState::LOADED(loaded) => {
@@ -102,7 +103,7 @@ impl Deployment {
                     }
                 };
 
-                let (_kill_oneshot, kill_receiver) = oneshot::channel::<()>();
+                let (kill_oneshot, kill_receiver) = oneshot::channel::<()>();
 
                 tokio::spawn(async move {
                     tokio::select! {
@@ -111,24 +112,18 @@ impl Deployment {
                     }
                 });
 
-                // TODO: Change state and move `so` and `service`.
-                //*state = DeploymentState::deployed(loaded.so, loaded.service, port, kill_oneshot)
+                DeploymentState::deployed(loaded.so, loaded.service, port, kill_oneshot)
             }
-            DeploymentState::DEPLOYED(_) => { /* nothing to do here */ }
-            DeploymentState::ERROR => { /* nothing to do here */ }
-        }
+            deployed_or_error => deployed_or_error, /* nothing to do here */
+        });
         drop(state);
         // ensures that the metadata state is inline with the actual
         // state. This can go when we have an API layer.
         self.update_meta_state().await
     }
 
-    async fn state_mut(&self) -> RwLockWriteGuard<'_, DeploymentState> {
-        self.state.write().await
-    }
-
     async fn update_meta_state(&self) {
-        self.meta.write().await.state = self.state_mut().await.meta()
+        self.meta.write().await.state = self.state.read().await.as_ref().map(DeploymentState::meta).unwrap()
     }
 }
 

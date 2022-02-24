@@ -90,21 +90,24 @@ impl Deployment {
 
                 dbg!("deployment '{}' getting deployed on port {}...", &meta.id, port);
 
-                let config = rocket::Config {
-                    port,
-                    log_level: rocket::config::LogLevel::Normal,
-                    ..Default::default()
-                };
+                let deployed_future = match loaded.service.deploy() {
+                    service::Deployment::Rocket(r) => {
+                        let config = rocket::Config {
+                            port,
+                            log_level: rocket::config::LogLevel::Normal,
+                            ..Default::default()
+                        };
 
-                let mut r = loaded.service.build_rocket();
-                r = r.configure(config);
+                        r.configure(config).launch()
+                    }
+                };
 
                 let (_kill_oneshot, kill_receiver) = oneshot::channel::<()>();
 
-                rocket::tokio::spawn(async move {
+                tokio::spawn(async move {
                     tokio::select! {
                         _ = kill_receiver => {}
-                        _ = r.launch() => {}
+                        _ = deployed_future => {}
                     }
                 });
 

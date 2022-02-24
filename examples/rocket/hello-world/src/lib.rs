@@ -1,7 +1,5 @@
 #[macro_use] extern crate rocket;
 
-use rocket::{Rocket, Build};
-
 #[get("/")]
 fn index() -> &'static str {
     "Hello, world!"
@@ -11,8 +9,8 @@ fn index() -> &'static str {
 struct App;
 
 impl service::Service for App {
-    fn setup_rocket(&self, rocket: Rocket<Build>) -> Rocket<Build> {
-        rocket.mount("/hello", routes![index])
+    fn deploy(&self) -> service::Deployment {
+        rocket::build().mount("/hello", routes![index]).into()
     }
 }
 

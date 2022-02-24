@@ -3,7 +3,17 @@ use std::any::Any;
 use rocket::{Rocket, Build};
 
 pub trait Service: Any + Send + Sync {
-    fn build_rocket(&self) -> Rocket<Build>;
+    fn deploy(&self) -> Deployment;
+}
+
+pub enum Deployment {
+    Rocket(Rocket<Build>),
+}
+
+impl From<Rocket<Build>> for Deployment {
+    fn from(r: Rocket<Build>) -> Self {
+        Deployment::Rocket(r)
+    }
 }
 
 #[macro_export]

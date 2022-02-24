@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 // use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::sync::{Arc, Mutex};
-use tokio::sync::{RwLock, RwLockWriteGuard, oneshot};
 use std::path::Path;
 use std::time::Duration;
+use std::net::{SocketAddrV4, Ipv4Addr, TcpListener};
+use tokio::sync::{RwLock, RwLockWriteGuard, oneshot};
 use core::default::Default;
 use libloading::Library;
 use rocket::{Data};
@@ -85,11 +86,9 @@ impl Deployment {
                 }
             }
             DeploymentState::LOADED(loaded) => {
-                let port = 6969u16; // TODO: proper port assignment.
+                let port = identify_free_port();
 
                 dbg!("deployment '{}' getting deployed on port {}...", &meta.id, port);
-
-                let mut r = loaded.service.build_rocket();
 
                 let config = rocket::Config {
                     port,
@@ -97,9 +96,10 @@ impl Deployment {
                     ..Default::default()
                 };
 
+                let mut r = loaded.service.build_rocket();
                 r = r.configure(config);
 
-                let (kill_oneshot, kill_receiver) = oneshot::channel::<()>();
+                let (_kill_oneshot, kill_receiver) = oneshot::channel::<()>();
 
                 rocket::tokio::spawn(async move {
                     tokio::select! {
@@ -109,8 +109,7 @@ impl Deployment {
                 });
 
                 // TODO: Change state and move `so` and `service`.
-                // TODO: Store `kill_oneshot`.
-                //*state = DeploymentState::deployed(loaded.so, loaded.service, port)
+                //*state = DeploymentState::deployed(loaded.so, loaded.service, port, kill_oneshot)
             }
             DeploymentState::DEPLOYED(_) => { /* nothing to do here */ }
             DeploymentState::ERROR => { /* nothing to do here */ }
@@ -255,6 +254,11 @@ fn load_service_from_so_file(so_path: &Path) -> anyhow::Result<(Box<dyn Service>
 
         Ok((Box::from_raw(raw), lib))
     }
+}
+
+fn identify_free_port() -> u16 {
+    let ip = SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0);
+    TcpListener::bind(ip).unwrap().local_addr().unwrap().port()
 }
 
 /// Finite-state machine representing the various stages of the build

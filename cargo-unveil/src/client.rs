@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use lib::{DeploymentMeta, DeploymentStateMeta, ProjectConfig};
+use lib::{DeploymentMeta, DeploymentStateMeta, ProjectConfig, UNVEIL_PROJECT_HEADER};
 use std::{fs::File, thread::sleep, time::Duration};
 
 pub(crate) type ApiKey = String;
@@ -13,6 +13,7 @@ pub(crate) fn deploy(package_file: File, api_key: ApiKey, project: ProjectConfig
     let mut res: DeploymentMeta = client
         .post(url.clone())
         .body(package_file)
+        .header(UNVEIL_PROJECT_HEADER, serde_json::to_string(&project)?)
         .basic_auth(api_key.clone(), Some(""))
         .send()
         .context("failed to send deployment to the Unveil server")?

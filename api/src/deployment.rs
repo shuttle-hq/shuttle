@@ -324,6 +324,29 @@ impl DeploymentSystem {
         }
     }
 
+    pub(crate) async fn kill_deployment(&self, id: &DeploymentId) -> Result<DeploymentMeta, DeploymentError> {
+        let removed = {
+            let mut deployments = self.deployments.write().await;
+            deployments.remove(&id)
+        };
+
+
+        match removed {
+            Some(removed) => {
+                let meta = removed.meta().await;
+
+                // If the deployment is in the 'deployed' state, kill the Tokio task
+                // in which it is deployed:
+                if let DeploymentState::DEPLOYED(DeployedState { kill_oneshot, .. }) = removed.state.write().await.take() {
+                    kill_oneshot.send(()).unwrap();
+                }
+
+                Ok(meta)
+            }
+            None => Err(DeploymentError::NotFound(String::new()))
+        }
+    }
+
     /// Main way to interface with the deployment manager.
     /// Will take a crate through the whole lifecycle.
     pub(crate) async fn deploy(

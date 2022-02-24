@@ -25,6 +25,13 @@ async fn get_deployment(state: &State<ApiState>, id: Uuid) -> Result<Value, Depl
     Ok(json!(deployment))
 }
 
+#[delete("/deployments/<id>")]
+async fn delete_deployment(state: &State<ApiState>, id: Uuid) -> Result<Value, DeploymentError> {
+    let deployment = state.deployment_manager.kill_deployment(&id).await?;
+
+    Ok(json!(deployment))
+}
+
 #[post("/deployments", data = "<crate_file>")]
 async fn create_deployment(state: &State<ApiState>, crate_file: Data<'_>) -> Result<Value, DeploymentError> {
     let project = ProjectConfig {

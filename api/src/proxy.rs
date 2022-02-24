@@ -1,16 +1,13 @@
 use std::convert::Infallible;
-use std::future::Future;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use hyper_reverse_proxy::ProxyError;
 use ::hyper::server::{Server, conn::AddrStream};
 use ::hyper::{Body, Request, Response, StatusCode};
 use ::hyper::service::{service_fn, make_service_fn};
-use ::hyper::http::uri::InvalidUri;
 use lib::Port;
 
 use crate::DeploymentSystem;
-use crate::router::Router;
 
 pub(crate) async fn start(proxy_port: Port, api_port: Port, deployment_manager: Arc<DeploymentSystem>) {
     let socket_address = ([127, 0, 0, 1], proxy_port).into();
@@ -51,17 +48,26 @@ async fn handle(
     // if we could not get a port from the deployment manager,
     // the host does not exist so we use the api port and route to
     // the /404 endpoint
-    let uri = req.uri().clone();
-    let (port, path) = match port {
-        None => (api_port, "/404"),
-        Some(port) => (port, uri.path())
+
+    let port = match port {
+        None => {
+            // no port being assigned here means that we couldn't
+            // find a service for a given host
+            let response_body = format!("could not find service for host '{:?}'", &req.headers().get("Host"));
+            return Ok(
+                Response::builder()
+                    .status(StatusCode::NOT_FOUND)
+                    .body(response_body.into())
+                    .unwrap()
+            );
+        }
+        Some(port) => port
     };
 
     // let's proxy
     match reverse_proxy(
         remote_addr.ip(),
         port,
-        path,
         req,
     ).await {
         Ok(response) => { Ok(response) }
@@ -81,8 +87,8 @@ async fn handle(
     }
 }
 
-async fn reverse_proxy(ip: IpAddr, port: Port, path: &str, req: Request<Body>) -> Result<Response<Body>, ProxyError> {
-    let forward_uri = format!("http://127.0.0.1:{}{}", port, path);
+async fn reverse_proxy(ip: IpAddr, port: Port, req: Request<Body>) -> Result<Response<Body>, ProxyError> {
+    let forward_uri = format!("http://127.0.0.1:{}", port);
     hyper_reverse_proxy::call(
         ip,
         &forward_uri,

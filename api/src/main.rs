@@ -20,12 +20,6 @@ use crate::build::{BuildSystem, FsBuildSystem};
 use crate::deployment::{DeploymentError, DeploymentSystem};
 use lib::{Port, ProjectConfig};
 
-/// A sync to send requests when a `Host` is not found
-#[get("/404")]
-fn not_found_sink() -> Status {
-    Status::NotFound
-}
-
 #[get("/deployments/<id>")]
 async fn get_deployment(state: &State<ApiState>, id: Uuid) -> Result<Value, DeploymentError> {
     let deployment = state.deployment_manager

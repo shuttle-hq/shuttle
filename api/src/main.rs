@@ -9,7 +9,6 @@ mod proxy;
 
 use std::sync::Arc;
 use rocket::{Data, State, tokio};
-use rocket::http::Status;
 use rocket::serde::json::serde_json::json;
 use rocket::serde::json::Value;
 use uuid::Uuid;

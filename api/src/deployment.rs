@@ -115,7 +115,9 @@ impl Deployment {
                         }
                     });
 
-                    context.router.promote(meta.host, meta.id);
+                    // todo, when we add deletion logic, the deployment id
+                    // returned from promotion should be deleted
+                    context.router.promote(meta.host, meta.id).await;
 
                     DeploymentState::deployed(loaded.so, loaded.service, port, kill_oneshot)
                 }

@@ -26,12 +26,10 @@ async fn get_deployment(state: &State<ApiState>, id: Uuid) -> Result<Value, Depl
 }
 
 #[post("/deployments", data = "<crate_file>")]
-async fn create_deployment(state: &State<ApiState>, crate_file: Data<'_>) -> Result<Value, DeploymentError> {
-    let project = ProjectConfig {
-        name: "some_project".to_string()
-    };
-
-    let deployment = state.deployment_manager.deploy(crate_file, &project).await?;
+async fn create_deployment(state: &State<ApiState>, crate_file: Data<'_>, config: ProjectConfig) -> Result<Value, DeploymentError> {
+    let deployment = state.deployment_manager
+        .deploy(crate_file, &config)
+        .await?;
 
     Ok(json!(deployment))
 }

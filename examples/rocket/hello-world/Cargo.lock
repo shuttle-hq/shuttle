@@ -360,7 +360,7 @@ name = "hello-world"
 version = "0.1.0"
 dependencies = [
  "rocket",
- "service",
+ "unveil-service",
 ]
 
 [[package]]
@@ -958,14 +958,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "service"
-version = "0.1.0"
-source = "git+ssh://git@github.com/getsynth/unveil.git#e20269a005555c64575db5908ad7a0eb8b868101"
-dependencies = [
- "rocket",
-]
-
-[[package]]
 name = "sha1"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1336,6 +1328,15 @@ name = "unicode-xid"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ccb82d61f80a663efe1f787a51b16b5a51e3314d6ac365b08639f52387b33f3"
+
+[[package]]
+name = "unveil-service"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b4d55c29ae32c6ae2d432380073ab84ca925e1a8189d36ffba2eb99862b2e562"
+dependencies = [
+ "rocket",
+]
 
 [[package]]
 name = "valuable"

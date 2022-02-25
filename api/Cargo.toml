@@ -11,7 +11,7 @@ anyhow = "1.0.54"
 libloading = "0.7.3"
 futures = "0.3"
 lib = { path = "../lib/" }
-service = { path = "../service/" }
+unveil-service = { path = "../service/" }
 uuid = { version = "0.8.2", features = ["v4"] }
 async-mutex = "1.4.0"
 serde = "1.0.136"

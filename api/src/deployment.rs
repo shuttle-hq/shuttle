@@ -17,7 +17,7 @@ use crate::build::Build;
 use crate::BuildSystem;
 use lib::{DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, Port, ProjectConfig};
 
-use service::Service;
+use unveil_service::Service;
 use crate::router::Router;
 
 // TODO: Determine error handling strategy - error types or just use `anyhow`?
@@ -101,7 +101,7 @@ impl Deployment {
                     dbg!("deployment '{}' getting deployed on port {}...", &meta.id, port);
 
                     let deployed_future = match loaded.service.deploy() {
-                        service::Deployment::Rocket(r) => {
+                        unveil_service::Deployment::Rocket(r) => {
                             let config = rocket::Config {
                                 port,
                                 log_level: rocket::config::LogLevel::Normal,

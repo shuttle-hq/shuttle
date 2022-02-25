@@ -146,7 +146,11 @@ fn build_crate(project_path: &Path) -> Result<PathBuf> {
 
     let ws = Workspace::new(&manifest_path, &config)?;
     let opts = CompileOptions::new(&config, CompileMode::Build)?;
-    let _compilation = cargo::ops::compile(&ws, &opts)?;
+    let compilation = cargo::ops::compile(&ws, &opts)?;
 
-    Err(anyhow!("next step is to figure out how to get the .so file from the compilation output"))
+    if compilation.cdylibs.is_empty() {
+        return Err(anyhow!("a cdylib was not created"));
+    }
+
+    Ok(compilation.cdylibs[0].path.clone())
 }

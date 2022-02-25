@@ -39,6 +39,8 @@ dependencies = [
  "anyhow",
  "async-mutex",
  "cargo",
+ "cargo-util",
+ "futures",
  "lib",
  "libloading",
  "rocket",

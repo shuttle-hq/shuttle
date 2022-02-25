@@ -1,12 +1,12 @@
-use anyhow::{Result, anyhow};
-use std::path::{Path, PathBuf};
-use std::process::Command;
-use cargo::core::compiler::{CompileMode};
+use anyhow::{anyhow, Context, Result};
+use cargo::core::compiler::CompileMode;
 use cargo::core::Workspace;
 use cargo::ops::CompileOptions;
 use lib::ProjectConfig;
 use rocket::tokio;
 use rocket::tokio::io::AsyncWriteExt;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
 #[cfg(debug_assertions)]
 const DEFAULT_FS_ROOT: &'static str = "/tmp/unveil/crates/";
@@ -15,16 +15,18 @@ const DEFAULT_FS_ROOT: &'static str = "/tmp/unveil/crates/";
 // as per: https://stackoverflow.com/questions/1510104/where-to-store-application-data-non-user-specific-on-linux
 const DEFAULT_FS_ROOT: &'static str = "/var/lib/unveil/crates/";
 
-
 pub(crate) struct Build {
     pub(crate) so_path: PathBuf,
 }
 
 #[async_trait]
 pub(crate) trait BuildSystem: Send + Sync {
-    async fn build(&self,
-             crate_bytes: &Vec<u8>,
-             project_config: &ProjectConfig) -> Result<Build>;
+    async fn build(
+        &self,
+        crate_bytes: &Vec<u8>,
+        project_config: &ProjectConfig,
+        buf: Box<dyn std::io::Write + Send>,
+    ) -> Result<Build>;
 }
 
 /// A basic build system that uses the file system for caching and storage
@@ -65,7 +67,12 @@ impl FsBuildSystem {
 
 #[async_trait]
 impl BuildSystem for FsBuildSystem {
-    async fn build(&self, crate_bytes: &Vec<u8>, project_config: &ProjectConfig) -> Result<Build> {
+    async fn build(
+        &self,
+        crate_bytes: &Vec<u8>,
+        project_config: &ProjectConfig,
+        buf: Box<dyn std::io::Write + Send>,
+    ) -> Result<Build> {
         let project_name = &project_config.name;
 
         // project path
@@ -89,7 +96,7 @@ impl BuildSystem for FsBuildSystem {
         extract_tarball(&crate_path, &project_path)?;
 
         // run cargo build (--debug for now)
-        let so_path = build_crate(&project_path)?;
+        let so_path = build_crate(&project_path, buf)?;
 
         Ok(Build { so_path })
     }
@@ -139,9 +146,21 @@ fn extract_tarball(crate_path: &Path, project_path: &Path) -> Result<()> {
 }
 
 /// Given a project directory path, builds the crate
-fn build_crate(project_path: &Path) -> Result<PathBuf> {
-    // This config needs to be tweaked s.t the
-    let config = cargo::util::config::Config::default()?;
+fn build_crate(project_path: &Path, buf: Box<dyn std::io::Write>) -> Result<PathBuf> {
+    let mut shell = cargo::core::Shell::from_write(buf);
+    shell.set_verbosity(cargo::core::Verbosity::Normal);
+
+    let cwd = std::env::current_dir()
+        .with_context(|| "couldn't get the current directory of the process")?;
+    let homedir = cargo::util::homedir(&cwd).ok_or_else(|| {
+        anyhow!(
+            "Cargo couldn't find your home directory. \
+                 This probably means that $HOME was not set."
+        )
+    })?;
+
+    let config = cargo::Config::new(shell, cwd, homedir);
+
     let manifest_path = project_path.join("Cargo.toml");
 
     let ws = Workspace::new(&manifest_path, &config)?;

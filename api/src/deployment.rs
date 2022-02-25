@@ -1,16 +1,17 @@
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use std::path::Path;
-use std::time::Duration;
 use std::net::{SocketAddrV4, Ipv4Addr, TcpListener};
 use tokio::sync::{RwLock, oneshot};
 use core::default::Default;
 use libloading::Library;
-use rocket::Data;
+use std::io::Write;
 use rocket::data::ByteUnit;
 use rocket::response::Responder;
-use rocket::serde::{Serialize, Deserialize};
+use rocket::serde::{Deserialize, Serialize};
 use rocket::tokio;
+use rocket::Data;
+use std::path::Path;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use crate::build::Build;
 use crate::BuildSystem;
@@ -32,14 +33,14 @@ pub enum DeploymentError {
 /// Inner struct of a deployment which holds the deployment itself
 /// and the some metadata
 pub(crate) struct Deployment {
-    meta: RwLock<DeploymentMeta>,
+    meta: Arc<RwLock<DeploymentMeta>>,
     state: RwLock<DeploymentState>,
 }
 
 impl Deployment {
     fn new(config: &ProjectConfig, crate_bytes: Vec<u8>) -> Self {
         Self {
-            meta: RwLock::new(DeploymentMeta::new(&config)),
+            meta: Arc::new(RwLock::new(DeploymentMeta::new(&config))),
             state: RwLock::new(DeploymentState::queued(crate_bytes)),
         }
     }
@@ -71,8 +72,11 @@ impl Deployment {
             *state = match state.take() {
                 DeploymentState::QUEUED(queued) => {
                     dbg!("deployment '{}' build starting...", &meta.id);
-
-                    match build_system.build(&queued.crate_bytes, &meta.config).await {
+                    let console_writer = BuildOutputWriter::new(self.meta.clone());
+                    match build_system
+                        .build(&queued.crate_bytes, &meta.config, Box::new(console_writer))
+                        .await
+                    {
                         Ok(build) => DeploymentState::built(build),
                         Err(_) => DeploymentState::ERROR
                     }
@@ -124,6 +128,76 @@ impl Deployment {
 
     async fn update_meta_state(&self) {
         self.meta.write().await.state = self.state.read().await.meta()
+    }
+}
+
+// Provides a `Write` wrapper around the build logs
+// Ie. the build output is written into our build logs using this wrapper
+struct BuildOutputWriter {
+    meta: Arc<RwLock<DeploymentMeta>>,
+    buf: String,
+}
+
+impl BuildOutputWriter {
+    pub fn new(meta: Arc<RwLock<DeploymentMeta>>) -> Self {
+        Self {
+            meta,
+            buf: String::new(),
+        }
+    }
+}
+
+impl Write for BuildOutputWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let write_len = buf.len();
+        let is_new_line = buf[write_len - 1] == b'\n';
+        if let Ok(buf) = std::str::from_utf8(buf) {
+            self.buf.push_str(buf);
+
+            // The flush step introduces async code which can potentially execute out of order.
+            // For example, if the write is called with inputs a, b, and c then a new threads will be
+            // spawned to add a, b, and c to meta. However, the threads might execute in others b, a,
+            // and c if they are too close to one another. This `write` method seems to be called for
+            // every character which causes many threads with overlapping lifetimes and therefore
+            // many out of order executions which just mess up the log output.
+            // Since line orders rarely matter and only spawning a thread for each output line also
+            // reduces the likelyhood of threads with overlapping lifetimes, the guard exists.
+            if is_new_line {
+                // Safe to unwrap since `flush` has no errors internally
+                self.flush().unwrap();
+            }
+
+            return Ok(write_len);
+        }
+
+        Ok(0)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        let handle = tokio::runtime::Handle::current();
+        let meta = self.meta.clone();
+        let buf = self.buf.clone();
+        self.buf = String::new();
+
+        // Can't call `block_on` on a thread that already has a tokio executor, so spawn a new one
+        std::thread::spawn(move || {
+            handle.block_on(async {
+                meta.write()
+                    .await
+                    .build_logs
+                    .get_or_insert("".to_string())
+                    .push_str(&buf)
+            });
+        });
+
+        Ok(())
+    }
+}
+
+// Make sure to clean the buffer one last time
+impl Drop for BuildOutputWriter {
+    fn drop(&mut self) {
+        self.flush().unwrap();
     }
 }
 
@@ -188,7 +262,6 @@ impl JobQueue {
         }
     }
 }
-
 
 impl DeploymentSystem {
     pub(crate) async fn new(build_system: Box<dyn BuildSystem>) -> Self {

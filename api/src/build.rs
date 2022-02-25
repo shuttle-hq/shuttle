@@ -160,7 +160,6 @@ fn build_crate(project_path: &Path, buf: Box<dyn std::io::Write>) -> Result<Path
     })?;
 
     let config = cargo::Config::new(shell, cwd, homedir);
-
     let manifest_path = project_path.join("Cargo.toml");
 
     let ws = Workspace::new(&manifest_path, &config)?;

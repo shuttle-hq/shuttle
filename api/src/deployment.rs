@@ -15,9 +15,10 @@ use std::time::Duration;
 
 use crate::build::Build;
 use crate::BuildSystem;
-use lib::{DeploymentId, DeploymentMeta, DeploymentStateMeta, ProjectConfig};
+use lib::{DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, Port, ProjectConfig};
 
 use service::Service;
+use crate::router::Router;
 
 // TODO: Determine error handling strategy - error types or just use `anyhow`?
 #[derive(Debug, Clone, Serialize, Deserialize, Responder)]
@@ -44,9 +45,8 @@ impl Deployment {
             state: RwLock::new(DeploymentState::queued(crate_bytes)),
         }
     }
-}
 
-impl Deployment {
+    /// Gets a `clone`ed copy of the metadata.
     pub(crate) async fn meta(&self) -> DeploymentMeta {
         dbg!("trying to get meta");
         self.meta.read().await.clone()
@@ -63,7 +63,7 @@ impl Deployment {
 
     /// Tries to advance the deployment one stage. Does nothing if the deployment
     /// is in a terminal state.
-    pub(crate) async fn advance(&self, build_system: Arc<Box<dyn BuildSystem>>) {
+    pub(crate) async fn advance(&self, context: &Context) {
         dbg!("waiting to get write on the state");
         {
             let meta = self.meta().await;
@@ -73,12 +73,15 @@ impl Deployment {
                 DeploymentState::QUEUED(queued) => {
                     dbg!("deployment '{}' build starting...", &meta.id);
                     let console_writer = BuildOutputWriter::new(self.meta.clone());
-                    match build_system
+                    match context.build_system
                         .build(&queued.crate_bytes, &meta.config, Box::new(console_writer))
                         .await
                     {
                         Ok(build) => DeploymentState::built(build),
-                        Err(_) => DeploymentState::ERROR
+                        Err(e) => {
+                            dbg!("failed to build with error: {}", e);
+                            DeploymentState::ERROR
+                        }
                     }
                 }
                 DeploymentState::BUILT(built) => {
@@ -86,7 +89,10 @@ impl Deployment {
 
                     match load_service_from_so_file(&built.build.so_path) {
                         Ok((svc, so)) => DeploymentState::loaded(so, svc),
-                        Err(_) => DeploymentState::ERROR
+                        Err(e) => {
+                            dbg!("failed to load with error: {}", e);
+                            DeploymentState::ERROR
+                        }
                     }
                 }
                 DeploymentState::LOADED(loaded) => {
@@ -115,12 +121,15 @@ impl Deployment {
                         }
                     });
 
+                    // todo, when we add deletion logic, the deployment id
+                    // returned from promotion should be deleted
+                    context.router.promote(meta.host, meta.id).await;
+
                     DeploymentState::deployed(loaded.so, loaded.service, port, kill_oneshot)
                 }
                 deployed_or_error => deployed_or_error, /* nothing to do here */
             };
         }
-
         // ensures that the metadata state is inline with the actual
         // state. This can go when we have an API layer.
         self.update_meta_state().await
@@ -128,6 +137,13 @@ impl Deployment {
 
     async fn update_meta_state(&self) {
         self.meta.write().await.state = self.state.read().await.meta()
+    }
+
+    async fn port(&self) -> Option<Port> {
+        match &*self.state.read().await {
+            DeploymentState::DEPLOYED(deployed) => Some(deployed.port),
+            _ => None
+        }
     }
 }
 
@@ -208,6 +224,7 @@ type Deployments = HashMap<DeploymentId, Arc<Deployment>>;
 pub(crate) struct DeploymentSystem {
     deployments: RwLock<Deployments>,
     job_queue: Arc<JobQueue>,
+    router: Arc<Router>,
 }
 
 #[derive(Default)]
@@ -225,14 +242,14 @@ impl JobQueue {
     }
 
     /// Returns a JobQueue with the job processor already running
-    async fn initialise(build_system: Arc<Box<dyn BuildSystem>>) -> Arc<Self> {
+    async fn initialise(context: Context) -> Arc<Self> {
         let job_queue = Arc::new(JobQueue::default());
 
         let queue_ref = job_queue.clone();
 
         tokio::spawn(async move {
             Self::start_job_processor(
-                build_system,
+                context,
                 queue_ref,
             ).await
         });
@@ -242,8 +259,9 @@ impl JobQueue {
 
 
     async fn start_job_processor(
-        build_system: Arc<Box<dyn BuildSystem>>,
-        queue: Arc<JobQueue>) {
+        context: Context,
+        queue: Arc<JobQueue>,
+    ) {
         dbg!("job processor started");
         loop {
             if let Some(deployment) = queue.pop() {
@@ -252,7 +270,7 @@ impl JobQueue {
                 dbg!("started deployment job for id: '{}'", id);
 
                 while !deployment.deployment_finished().await {
-                    deployment.advance(build_system.clone()).await
+                    deployment.advance(&context).await
                 }
 
                 dbg!("ended deployment job for id: '{}'", id);
@@ -263,12 +281,37 @@ impl JobQueue {
     }
 }
 
+/// Convenience stuct used to store a bunch of stuff needed
+/// for the job processor
+pub(crate) struct Context {
+    router: Arc<Router>,
+    build_system: Box<dyn BuildSystem>,
+}
+
 impl DeploymentSystem {
     pub(crate) async fn new(build_system: Box<dyn BuildSystem>) -> Self {
+        let router: Arc<Router> = Default::default();
+        let context = Context {
+            router: router.clone(),
+            build_system,
+        };
+
         Self {
             deployments: Default::default(),
-            job_queue: JobQueue::initialise(Arc::new(build_system)).await,
+            job_queue: JobQueue::initialise(context).await,
+            router,
         }
+    }
+
+    /// Returns the port for a given host.
+    /// If the host does not exist, returns `None`
+    pub(crate) async fn port_for_host(&self, host: &Host) -> Option<Port> {
+        let id_for_host = self.router.id_for_host(host).await?;
+        self.deployments.read()
+            .await
+            .get(&id_for_host)?
+            .port()
+            .await
     }
 
     /// Retrieves a clone of the deployment information
@@ -372,7 +415,7 @@ impl DeploymentState {
         )
     }
 
-    fn deployed(so: Library, service: Box<dyn Service>, port: u16, kill_oneshot: oneshot::Sender<()>) -> Self {
+    fn deployed(so: Library, service: Box<dyn Service>, port: Port, kill_oneshot: oneshot::Sender<()>) -> Self {
         Self::DEPLOYED(
             DeployedState {
                 service,
@@ -410,6 +453,6 @@ struct LoadedState {
 struct DeployedState {
     service: Box<dyn Service>,
     so: Library,
-    port: u16,
+    port: Port,
     kill_oneshot: oneshot::Sender<()>,
 }

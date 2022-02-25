@@ -960,6 +960,7 @@ dependencies = [
 [[package]]
 name = "service"
 version = "0.1.0"
+source = "git+ssh://git@github.com/getsynth/unveil.git#e20269a005555c64575db5908ad7a0eb8b868101"
 dependencies = [
  "rocket",
 ]

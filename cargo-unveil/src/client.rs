@@ -10,10 +10,12 @@ pub(crate) fn deploy(package_file: File, api_key: ApiKey, project: ProjectConfig
     let client = reqwest::blocking::Client::new();
     // example from Stripe:
     // curl https://api.stripe.com/v1/charges -u sk_test_BQokikJOvBiI2HlWgH4olfQ2:
+
     let mut res: DeploymentMeta = client
         .post(url.clone())
         .body(package_file)
         .header(UNVEIL_PROJECT_HEADER, serde_json::to_string(&project)?)
+        .header("Host", "unveil.sh")
         .basic_auth(api_key.clone(), Some(""))
         .send()
         .context("failed to send deployment to the Unveil server")?
@@ -33,6 +35,7 @@ pub(crate) fn deploy(package_file: File, api_key: ApiKey, project: ProjectConfig
 
         res = client
             .get(url.clone())
+            .header("Host", "unveil.sh")
             .basic_auth(api_key.clone(), Some(""))
             .send()
             .context("failed to get deployment from the Unveil server")?

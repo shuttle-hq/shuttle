@@ -41,6 +41,8 @@ dependencies = [
  "cargo",
  "cargo-util",
  "futures",
+ "hyper",
+ "hyper-reverse-proxy",
  "lib",
  "libloading",
  "rocket",
@@ -269,9 +271,9 @@ dependencies = [
 
 [[package]]
 name = "cargo-util"
-version = "0.1.1"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f2bf633f7ad4e022f63c4197085047af9606a08a3df17badbb7bd3644dc7faeb"
+checksum = "a51c783163bdf4549820b80968d386c94ed45ed23819c93f59cca7ebd97fe0eb"
 dependencies = [
  "anyhow",
  "core-foundation",
@@ -372,9 +374,9 @@ checksum = "5827cebf4670468b8772dd191856768aedcb1b0278a04f989f7766351917b9dc"
 
 [[package]]
 name = "crates-io"
-version = "0.33.0"
+version = "0.33.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "217138863f33507d7a8edef10fc673c4911679ef7aeb9ff53ee7bb82dc7bf590"
+checksum = "b2d7714dc2b336c5a579a1a2aa2d41c7cd7a31ccb25e2ea908dba8934cfeb75a"
 dependencies = [
  "anyhow",
  "curl",
@@ -913,6 +915,16 @@ dependencies = [
  "tower-service",
  "tracing",
  "want",
+]
+
+[[package]]
+name = "hyper-reverse-proxy"
+version = "0.6.0"
+source = "git+https://github.com/jtroo/hyper-reverse-proxy#91adb990ed8c8be8b27bd797d0bd0491ad30d006"
+dependencies = [
+ "hyper",
+ "lazy_static",
+ "unicase",
 ]
 
 [[package]]
@@ -2366,6 +2378,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5baeed7327e25054889b9bd4f975f32e5f4c5d434042d59ab6cd4142c0a76ed0"
 dependencies = [
  "serde",
+ "version_check",
+]
+
+[[package]]
+name = "unicase"
+version = "2.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "50f37be617794602aabbeee0be4f259dc1778fabe05e2d67ee8f79326d5cb4f6"
+dependencies = [
  "version_check",
 ]
 

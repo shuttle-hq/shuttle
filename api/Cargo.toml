@@ -16,4 +16,6 @@ uuid = { version = "0.8.2", features = ["v4"] }
 async-mutex = "1.4.0"
 serde = "1.0.136"
 structopt = "0.3.26"
-
+# not great, but the changes for hyper 0.14 and tokio 1 have not been merged on the main repo
+hyper-reverse-proxy = { git = "https://github.com/jtroo/hyper-reverse-proxy" }
+hyper = { version = "0.14", features = ["client", "http1", "http2", "tcp" ] } # for reverse proxying

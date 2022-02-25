@@ -40,7 +40,7 @@ impl DeploymentMeta {
 }
 
 /// A label used to represent the deployment state in `DeploymentMeta`
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum DeploymentStateMeta {
     QUEUED,
     BUILT,

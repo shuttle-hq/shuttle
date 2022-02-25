@@ -1,12 +1,12 @@
 use std::collections::HashMap;
-// use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::sync::{Arc, Mutex};
-use tokio::sync::{RwLock, RwLockWriteGuard};
 use std::path::Path;
 use std::time::Duration;
+use std::net::{SocketAddrV4, Ipv4Addr, TcpListener};
+use tokio::sync::{RwLock, oneshot};
 use core::default::Default;
 use libloading::Library;
-use rocket::{Data};
+use rocket::Data;
 use rocket::data::ByteUnit;
 use rocket::response::Responder;
 use rocket::serde::{Serialize, Deserialize};
@@ -63,43 +63,67 @@ impl Deployment {
     /// Tries to advance the deployment one stage. Does nothing if the deployment
     /// is in a terminal state.
     pub(crate) async fn advance(&self, build_system: Arc<Box<dyn BuildSystem>>) {
-        let meta = self.meta().await;
         dbg!("waiting to get write on the state");
-        let mut state = self.state.write().await;
-        match &*state {
-            DeploymentState::QUEUED(queued) => {
-                dbg!("deployment '{}' build starting...", &meta.id);
-                match build_system.build(&queued.crate_bytes, &meta.config).await {
-                    Ok(build) => *state = DeploymentState::built(build),
-                    Err(_) => *state = DeploymentState::ERROR
+        {
+            let meta = self.meta().await;
+            let mut state = self.state.write().await;
+
+            *state = match state.take() {
+                DeploymentState::QUEUED(queued) => {
+                    dbg!("deployment '{}' build starting...", &meta.id);
+
+                    match build_system.build(&queued.crate_bytes, &meta.config).await {
+                        Ok(build) => DeploymentState::built(build),
+                        Err(_) => DeploymentState::ERROR
+                    }
                 }
-            }
-            DeploymentState::BUILT(built) => {
-                dbg!("deployment '{}' loading shared object and service...", &meta.id);
-                match load_service_from_so_file(&built.build.so_path) {
-                    Ok((svc, so)) => *state = DeploymentState::loaded(so, svc),
-                    Err(_) => *state = DeploymentState::ERROR
+                DeploymentState::BUILT(built) => {
+                    dbg!("deployment '{}' loading shared object and service...", &meta.id);
+
+                    match load_service_from_so_file(&built.build.so_path) {
+                        Ok((svc, so)) => DeploymentState::loaded(so, svc),
+                        Err(_) => DeploymentState::ERROR
+                    }
                 }
-            }
-            DeploymentState::LOADED(_loaded) => {
-                dbg!("deployment '{}' getting deployed...", &meta.id);
-                todo!("functionality to load service objects not ready")
-            }
-            DeploymentState::DEPLOYED(_) => { /* nothing to do here */ }
-            DeploymentState::ERROR => { /* nothing to do here */ }
+                DeploymentState::LOADED(loaded) => {
+                    let port = identify_free_port();
+
+                    dbg!("deployment '{}' getting deployed on port {}...", &meta.id, port);
+
+                    let deployed_future = match loaded.service.deploy() {
+                        service::Deployment::Rocket(r) => {
+                            let config = rocket::Config {
+                                port,
+                                log_level: rocket::config::LogLevel::Normal,
+                                ..Default::default()
+                            };
+
+                            r.configure(config).launch()
+                        }
+                    };
+
+                    let (kill_oneshot, kill_receiver) = oneshot::channel::<()>();
+
+                    tokio::spawn(async move {
+                        tokio::select! {
+                            _ = kill_receiver => {}
+                            _ = deployed_future => {}
+                        }
+                    });
+
+                    DeploymentState::deployed(loaded.so, loaded.service, port, kill_oneshot)
+                }
+                deployed_or_error => deployed_or_error, /* nothing to do here */
+            };
         }
-        drop(state);
+
         // ensures that the metadata state is inline with the actual
         // state. This can go when we have an API layer.
         self.update_meta_state().await
     }
 
-    async fn state_mut(&self) -> RwLockWriteGuard<'_, DeploymentState> {
-        self.state.write().await
-    }
-
     async fn update_meta_state(&self) {
-        self.meta.write().await.state = self.state_mut().await.meta()
+        self.meta.write().await.state = self.state.read().await.meta()
     }
 }
 
@@ -230,6 +254,11 @@ fn load_service_from_so_file(so_path: &Path) -> anyhow::Result<(Box<dyn Service>
     }
 }
 
+fn identify_free_port() -> u16 {
+    let ip = SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0);
+    TcpListener::bind(ip).unwrap().local_addr().unwrap().port()
+}
+
 /// Finite-state machine representing the various stages of the build
 /// process.
 enum DeploymentState {
@@ -241,6 +270,10 @@ enum DeploymentState {
 }
 
 impl DeploymentState {
+    fn take(&mut self) -> Self {
+        std::mem::replace(self, DeploymentState::ERROR)
+    }
+
     fn queued(crate_bytes: Vec<u8>) -> Self {
         Self::QUEUED(
             QueuedState {
@@ -266,12 +299,13 @@ impl DeploymentState {
         )
     }
 
-    fn deployed(so: Library, service: Box<dyn Service>, port: u16) -> Self {
+    fn deployed(so: Library, service: Box<dyn Service>, port: u16, kill_oneshot: oneshot::Sender<()>) -> Self {
         Self::DEPLOYED(
             DeployedState {
                 service,
                 so,
                 port,
+                kill_oneshot,
             }
         )
     }
@@ -304,4 +338,5 @@ struct DeployedState {
     service: Box<dyn Service>,
     so: Library,
     port: u16,
+    kill_oneshot: oneshot::Sender<()>,
 }

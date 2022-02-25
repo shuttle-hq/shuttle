@@ -44,10 +44,11 @@ async fn rocket() -> _ {
     let args: Args = Args::from_args();
     let build_system = FsBuildSystem::initialise(args.path).unwrap();
     let deployment_manager = DeploymentSystem::new(Box::new(build_system)).await;
+
     let state = ApiState {
         // we probably want to put the Mutex deeper in the object tree.
         // but it's ok for prototype
-        deployment_manager: deployment_manager
+        deployment_manager
     };
 
     rocket::build()

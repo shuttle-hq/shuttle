@@ -141,7 +141,7 @@ fn extract_tarball(crate_path: &Path, project_path: &Path) -> Result<()> {
 /// Given a project directory path, builds the crate
 fn build_crate(project_path: &Path) -> Result<PathBuf> {
     // This config needs to be tweaked s.t the
-    let mut config = cargo::util::config::Config::default()?;
+    let config = cargo::util::config::Config::default()?;
     let manifest_path = project_path.join("Cargo.toml");
 
     let ws = Workspace::new(&manifest_path, &config)?;

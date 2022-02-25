@@ -78,7 +78,10 @@ impl Deployment {
                         .await
                     {
                         Ok(build) => DeploymentState::built(build),
-                        Err(_) => DeploymentState::ERROR
+                        Err(e) => {
+                            dbg!("failed to build with error: {}", e);
+                            DeploymentState::ERROR
+                        }
                     }
                 }
                 DeploymentState::BUILT(built) => {
@@ -86,7 +89,10 @@ impl Deployment {
 
                     match load_service_from_so_file(&built.build.so_path) {
                         Ok((svc, so)) => DeploymentState::loaded(so, svc),
-                        Err(_) => DeploymentState::ERROR
+                        Err(e) => {
+                            dbg!("failed to load with error: {}", e);
+                            DeploymentState::ERROR
+                        }
                     }
                 }
                 DeploymentState::LOADED(loaded) => {

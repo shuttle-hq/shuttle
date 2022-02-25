@@ -21,15 +21,15 @@ pub(crate) fn deploy(package_file: File, api_key: ApiKey, project: ProjectConfig
         .context("failed to parse Unveil response")?;
 
     url.push_str(&format!("/{}", res.id));
+    let mut log_pos = 0;
 
     while !matches!(
         res.state,
         DeploymentStateMeta::DEPLOYED | DeploymentStateMeta::ERROR
     ) {
-        let output = serde_json::to_string_pretty(&res)?;
-        println!("{}", output);
+        print_log(res.build_logs, &mut log_pos);
 
-        sleep(Duration::from_secs(3));
+        sleep(Duration::from_millis(350));
 
         res = client
             .get(url.clone())
@@ -40,7 +40,20 @@ pub(crate) fn deploy(package_file: File, api_key: ApiKey, project: ProjectConfig
             .context("failed to parse Unveil response")?;
     }
 
+    print_log(res.build_logs, &mut log_pos);
+
     Ok(())
+}
+
+fn print_log(logs: Option<String>, log_pos: &mut usize) {
+    if let Some(logs) = logs {
+        let new = &logs[*log_pos..];
+
+        if !new.is_empty() {
+            *log_pos = logs.len();
+            print!("{}", new);
+        }
+    }
 }
 
 #[cfg(debug_assertions)]

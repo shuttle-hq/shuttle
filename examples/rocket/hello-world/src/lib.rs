@@ -1,5 +1,7 @@
 #[macro_use] extern crate rocket;
 
+use unveil_service::{Deployment, Service, declare_service};
+
 #[get("/")]
 fn index() -> &'static str {
     "Hello, world!"
@@ -8,10 +10,10 @@ fn index() -> &'static str {
 #[derive(Default)]
 struct App;
 
-impl service::Service for App {
-    fn deploy(&self) -> service::Deployment {
+impl Service for App {
+    fn deploy(&self) -> Deployment {
         rocket::build().mount("/hello", routes![index]).into()
     }
 }
 
-service::declare_service!(App, App::default);
+declare_service!(App, App::default);

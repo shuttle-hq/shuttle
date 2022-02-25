@@ -1,3 +1,4 @@
+use std::fmt::{Display, Formatter};
 use rocket::http::Status;
 use rocket::Request;
 use rocket::request::{FromRequest, Outcome};
@@ -49,6 +50,19 @@ pub enum DeploymentStateMeta {
     LOADED,
     DEPLOYED,
     ERROR,
+}
+
+impl Display for DeploymentStateMeta {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            DeploymentStateMeta::QUEUED => "QUEUED",
+            DeploymentStateMeta::BUILT => "BUILT",
+            DeploymentStateMeta::LOADED => "LOADED",
+            DeploymentStateMeta::DEPLOYED => "DEPLOYED",
+            DeploymentStateMeta::ERROR => "ERROR"
+        };
+        write!(f, "{}", s)
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]

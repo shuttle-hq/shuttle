@@ -10,4 +10,4 @@ crate-type = ["cdylib"]
 
 [dependencies]
 rocket = "0.5.0-rc.1"
-service = { git = "ssh://git@github.com/getsynth/unveil.git", version = "0.1.0" }
+unveil-service = "0.1.0"

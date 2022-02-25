@@ -45,6 +45,14 @@ pub(crate) fn deploy(package_file: File, api_key: ApiKey, project: ProjectConfig
 
     print_log(res.build_logs, &mut log_pos);
 
+    println!(
+        r#"
+        Deployment Id:      {}
+        Deployment Status:  {}
+        Host:               {}
+        "#,
+    res.id, res.state, res.host);
+
     Ok(())
 }
 

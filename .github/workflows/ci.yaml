@@ -29,7 +29,7 @@ jobs:
       with:
         context: .
         push: true
-        tags: $CONTAINER_REGISTRY:$GITHUB_SHA,$CONTAINER_REGISTRY:latest
+        tags: ${{ env.CONTAINER_REGISTRY }}:${{ env.GITHUB_SHA }},${{ env.CONTAINER_REGISTRY }}:latest
     - name: Deploy Image
       run: |
         aws ecs update-service --cluster $BACKEND_CLUSTER --service $BACKEND_SERVICE --force-new-deployment

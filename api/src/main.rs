@@ -20,6 +20,12 @@ use crate::build::{BuildSystem, FsBuildSystem};
 use crate::deployment::{DeploymentError, DeploymentSystem};
 use lib::{Port, ProjectConfig};
 
+/// Status API to be used to check if the service is alive
+#[get("/status")]
+async fn status() -> () {
+    ()
+}
+
 #[get("/deployments/<id>")]
 async fn get_deployment(state: &State<ApiState>, id: Uuid) -> Result<Value, DeploymentError> {
     let deployment = state.deployment_manager
@@ -62,7 +68,7 @@ async fn rocket() -> _ {
         deployment_manager
     };
     rocket::build()
-        .mount("/", routes![create_deployment, get_deployment])
+        .mount("/", routes![create_deployment, get_deployment, status])
         .manage(state)
 }
 
@@ -76,6 +82,7 @@ async fn start_proxy(
             bind_addr,
             proxy_port,
             api_port,
-            deployment_manager).await
+            deployment_manager
+        ).await
     });
 }

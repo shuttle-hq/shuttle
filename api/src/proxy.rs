@@ -9,8 +9,13 @@ use lib::Port;
 
 use crate::DeploymentSystem;
 
-pub(crate) async fn start(proxy_port: Port, api_port: Port, deployment_manager: Arc<DeploymentSystem>) {
-    let socket_address = ([127, 0, 0, 1], proxy_port).into();
+pub(crate) async fn start(
+    bind_addr: IpAddr,
+    proxy_port: Port,
+    api_port: Port,
+    deployment_manager: Arc<DeploymentSystem>
+) {
+    let socket_address = (bind_addr, proxy_port).into();
 
     // A `Service` is needed for every connection.
     let make_svc = make_service_fn(|socket: &AddrStream| {
@@ -22,10 +27,14 @@ pub(crate) async fn start(proxy_port: Port, api_port: Port, deployment_manager: 
     });
 
     let server = Server::bind(&socket_address).serve(make_svc);
+
+    dbg!("starting proxy server: {}", &socket_address);
+
     if let Err(e) = server.await {
         eprintln!("server error: {}", e);
+        eprintln!("proxy died, killing process...");
+        std::process::exit(1);
     }
-    // todo, need to kill everything if proxy dies
 }
 
 async fn handle(

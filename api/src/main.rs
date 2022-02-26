@@ -7,6 +7,7 @@ mod args;
 mod router;
 mod proxy;
 
+use std::net::IpAddr;
 use std::sync::Arc;
 use rocket::{Data, State, tokio};
 use rocket::serde::json::serde_json::json;
@@ -50,7 +51,12 @@ async fn rocket() -> _ {
         DeploymentSystem::new(Box::new(build_system)).await
     );
 
-    start_proxy(args.proxy_port,args.api_port, deployment_manager.clone()).await;
+    start_proxy(
+        args.bind_addr,
+        args.proxy_port,
+        8001,
+        deployment_manager.clone()
+    ).await;
 
     let state = ApiState {
         deployment_manager
@@ -60,6 +66,16 @@ async fn rocket() -> _ {
         .manage(state)
 }
 
-async fn start_proxy(proxy_port: Port, api_port: Port, deployment_manager: Arc<DeploymentSystem>) {
-    tokio::spawn(async move { proxy::start(proxy_port, api_port, deployment_manager).await });
+async fn start_proxy(
+    bind_addr: IpAddr,
+    proxy_port: Port,
+    api_port: Port,
+    deployment_manager: Arc<DeploymentSystem>) {
+    tokio::spawn(async move {
+        proxy::start(
+            bind_addr,
+            proxy_port,
+            api_port,
+            deployment_manager).await
+    });
 }

@@ -50,7 +50,7 @@ async fn rocket() -> _ {
         DeploymentSystem::new(Box::new(build_system)).await
     );
 
-    start_proxy(8000, 8001, deployment_manager.clone()).await;
+    start_proxy(args.proxy_port,args.api_port, deployment_manager.clone()).await;
 
     let state = ApiState {
         deployment_manager

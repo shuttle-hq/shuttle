@@ -69,6 +69,7 @@ async fn rocket() -> _ {
     };
 
     let config = rocket::Config {
+        address: args.bind_addr,
         port: args.api_port,
         ..Default::default()
     };

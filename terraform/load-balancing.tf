@@ -18,6 +18,12 @@ resource "aws_lb" "api" {
 resource "aws_lb_target_group" "api" {
   name = "unveil-lb-tg-http"
 
+  health_check {
+    enabled = true
+    path = "/status"
+    port = var.api_container_port
+  }
+
   port = var.api_container_port
 
   protocol = "HTTP"
@@ -72,6 +78,12 @@ resource "aws_lb_listener" "user" {
 
 resource "aws_lb_target_group" "user" {
   name = "unveil-user-lb-tg-http"
+
+  health_check {
+    enabled = true
+    path = "/status"
+    port = var.api_container_port
+  }
 
   port = var.proxy_container_port
 

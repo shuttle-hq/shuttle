@@ -46,11 +46,19 @@ resource "aws_ecs_task_definition" "api" {
 
       essential = true
 
-      command = ["--path", "/opt/unveil/crates"]
+      command = [
+        "--path",
+        "/opt/unveil/crates",
+        "--bind-addr",
+        "0.0.0.0",
+        "--api-port",
+        tostring(var.api_container_port),
+        "--proxy-port",
+        tostring(var.proxy_container_port)
+      ]
 
-      // TODO: /status endpoint
       healthCheck = {
-        command = ["CMD-SHELL", "exit 0"]
+        command = ["CMD", "curl", "http://localhost:${tostring(var.api_container_port)}/status"]
       }
 
       // TODO: Do we need this?

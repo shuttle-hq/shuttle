@@ -383,13 +383,13 @@ enum DeploymentState {
     Queued(QueuedState),
     /// Built deployment that is ready and waiting to be loaded.
     Built(BuiltState),
-    /// Deployment is loaded is loaded into the  server application as a
-    /// dynamically-linked library. The [`libloading`] crate has been used to
-    /// achieve this and to obtain this particular deployment's implementation
-    /// of the [`unveil_service::Service`] trait.
+    /// Deployment is loaded into the server application as a
+    /// dynamically-linked library (`.so` file). The [`libloading`] crate has
+    /// been used to achieve this and to obtain this particular deployment's
+    /// implementation of the [`unveil_service::Service`] trait.
     Loaded(LoadedState),
     /// Deployment that is actively running inside a Tokio task and listening
-    /// for connections on some port.
+    /// for connections on some port indicated in [`DeployedState`].
     Deployed(DeployedState),
     /// A state entered when something unexpected occurs during the deployment
     /// process.

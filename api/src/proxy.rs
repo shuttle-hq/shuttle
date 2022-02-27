@@ -12,7 +12,6 @@ use crate::DeploymentSystem;
 pub(crate) async fn start(
     bind_addr: IpAddr,
     proxy_port: Port,
-    api_port: Port,
     deployment_manager: Arc<DeploymentSystem>
 ) {
     let socket_address = (bind_addr, proxy_port).into();
@@ -22,7 +21,7 @@ pub(crate) async fn start(
         let dm_ref = deployment_manager.clone();
         let remote_addr = socket.remote_addr();
         async move {
-            Ok::<_, Infallible>(service_fn(move |req| handle(remote_addr, req, api_port, dm_ref.clone())))
+            Ok::<_, Infallible>(service_fn(move |req| handle(remote_addr, req, dm_ref.clone())))
         }
     });
 
@@ -40,28 +39,22 @@ pub(crate) async fn start(
 async fn handle(
     remote_addr: SocketAddr,
     req: Request<Body>,
-    api_port: Port,
     deployment_manager: Arc<DeploymentSystem>,
 ) -> Result<Response<Body>, Infallible> {
-    // if no subdomain or `unveil.sh`, route to our API.
-    let port = match req.headers().get("Host") {
-        None => Some(api_port),
-        Some(host) => {
-            match host.to_str().unwrap() {
-                "unveil.sh" => Some(api_port),
-                host => deployment_manager.port_for_host(&String::from(host)).await
-            }
-        }
+    // if no `Host:` or invalid value, return 400
+    let host = match req.headers().get("Host") {
+        Some(host) if host.to_str().is_ok() => host.to_str().unwrap().to_owned(),
+        _ => return Ok(Response::builder().status(StatusCode::BAD_REQUEST).body(Body::empty()).unwrap())
     };
 
     // if we could not get a port from the deployment manager,
     // the host does not exist or is not initialised yet - so
     // we return a 404
-    let port = match port {
+    let port = match deployment_manager.port_for_host(&host).await {
         None => {
             // no port being assigned here means that we couldn't
             // find a service for a given host
-            let response_body = format!("could not find service for host '{:?}'", &req.headers().get("Host"));
+            let response_body = format!("could not find service for host: {}", host);
             return Ok(
                 Response::builder()
                     .status(StatusCode::NOT_FOUND)

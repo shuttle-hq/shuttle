@@ -10,7 +10,7 @@ variable "service_memory" {
 
 variable "desired_count" {
   type = number
-  default = 2 // 1 per AZ
+  default = 1
 }
 
 variable "api_container_port" {

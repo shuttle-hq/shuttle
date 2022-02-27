@@ -46,6 +46,8 @@ resource "aws_ecs_task_definition" "api" {
 
       essential = true
 
+      user = "root"
+
       command = [
         "--path",
         "/opt/unveil/crates",

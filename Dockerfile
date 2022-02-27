@@ -2,7 +2,7 @@ FROM rust:buster as chef
 RUN cargo install cargo-chef
 WORKDIR app
 
-FROM debian:buster-slim AS runtime
+FROM rust:buster AS runtime
 RUN apt-get update &&\
     apt-get install -y curl
 

@@ -7,6 +7,12 @@ use uuid::Uuid;
 
 pub const UNVEIL_PROJECT_HEADER: &'static str = "Unveil-Project";
 
+#[cfg(debug_assertions)]
+pub const API_URL: &'static str = "http://localhost:8001";
+
+#[cfg(not(debug_assertions))]
+pub const API_URL: &'static str = "https://21ac7btou0.execute-api.eu-west-2.amazonaws.com/valpha";
+
 pub type Host = String;
 pub type DeploymentId = Uuid;
 pub type Port = u16;

@@ -60,7 +60,6 @@ async fn rocket() -> _ {
     start_proxy(
         args.bind_addr,
         args.proxy_port,
-        args.api_port,
         deployment_manager.clone()
     ).await;
 
@@ -81,13 +80,11 @@ async fn rocket() -> _ {
 async fn start_proxy(
     bind_addr: IpAddr,
     proxy_port: Port,
-    api_port: Port,
     deployment_manager: Arc<DeploymentSystem>) {
     tokio::spawn(async move {
         proxy::start(
             bind_addr,
             proxy_port,
-            api_port,
             deployment_manager
         ).await
     });

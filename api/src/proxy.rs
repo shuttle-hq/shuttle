@@ -70,13 +70,13 @@ async fn handle(
         Err(error) => {
             match error {
                 ProxyError::InvalidUri(e) => {
-                    log::debug!("error while handling request in reverse proxy: {}", e);
+                    log::warn!("error while handling request in reverse proxy: {}", e);
                 }
                 ProxyError::HyperError(e) => {
-                    log::debug!("error while handling request in reverse proxy: {}", e);
+                    log::warn!("error while handling request in reverse proxy: {}", e);
                 }
                 ProxyError::ForwardHeaderError => {
-                    log::debug!(
+                    log::warn!(
                         "error while handling request in reverse proxy: 'fwd header error'"
                     );
                 }

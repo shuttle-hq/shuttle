@@ -19,3 +19,5 @@ structopt = "0.3.26"
 # not great, but the changes for hyper 0.14 and tokio 1 have not been merged on the main repo
 hyper-reverse-proxy = { git = "https://github.com/jtroo/hyper-reverse-proxy" }
 hyper = { version = "0.14", features = ["client", "http1", "http2", "tcp" ] } # for reverse proxying
+log = "0.4.14"
+env_logger = "0.9.0"

@@ -51,6 +51,8 @@ struct ApiState {
 //noinspection ALL
 #[launch]
 async fn rocket() -> _ {
+    env_logger::init();
+
     let args: Args = Args::from_args();
     let build_system = FsBuildSystem::initialise(args.path).unwrap();
     let deployment_manager = Arc::new(

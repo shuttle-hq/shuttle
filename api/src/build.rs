@@ -42,16 +42,15 @@ impl FsBuildSystem {
     pub(crate) fn initialise(path: Option<PathBuf>) -> Result<Self> {
         let fs_root = path.unwrap_or(PathBuf::from(DEFAULT_FS_ROOT));
         if !(fs_root.exists()) {
-            return Err(anyhow!(r#"
+            return Err(anyhow!(
+                r#"
             Failed to initialise FS Build System.
             The path {:?} does not exist.
-            Please create the directory to continue with deployment"#, &fs_root));
+            Please create the directory to continue with deployment"#,
+                &fs_root
+            ));
         }
-        Ok(
-            FsBuildSystem {
-                fs_root
-            }
-        )
+        Ok(FsBuildSystem { fs_root })
     }
 
     /// Given an api key and project name returns a `PathBuf` to the project
@@ -77,14 +76,14 @@ impl BuildSystem for FsBuildSystem {
 
         // project path
         let project_path = self.project_path(project_name)?;
-        dbg!(&project_path);
+        log::debug!("Project path: {}", project_path.display());
 
         // clear directory
         clear_project_dir(&project_path)?;
 
         // crate path
         let crate_path = crate_location(&project_path, project_name);
-        dbg!(&crate_path);
+        log::debug!("Crate path: {}", crate_path.display());
 
         // create target file
         let mut target_file = tokio::fs::File::create(&crate_path).await?;
@@ -111,7 +110,7 @@ fn clear_project_dir(project_path: &Path) -> Result<()> {
         .filter(|dir| dir.file_name() != "target")
         .for_each(|dir| match dir.file_type() {
             Ok(file) => {
-                dbg!(&dir);
+                log::debug!("{:?}", dir);
                 if file.is_dir() {
                     std::fs::remove_dir_all(&dir.path()).unwrap();
                 } else if file.is_file() {
@@ -137,7 +136,7 @@ fn extract_tarball(crate_path: &Path, project_path: &Path) -> Result<()> {
     Command::new("tar")
         .arg("-xzvf") // extract
         .arg(crate_path)
-        .arg("-C")    // target
+        .arg("-C") // target
         .arg(project_path)
         .arg("--strip-components") // remove top-level directory
         .arg("1")

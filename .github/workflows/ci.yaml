@@ -1,0 +1,33 @@
+name: CI
+on:
+  push:
+    branches:
+      - 'main'
+
+jobs:
+  Build-And-Deploy:
+    runs-on: ubuntu-latest
+    env:
+      CONTAINER_REGISTRY: 506436569174.dkr.ecr.eu-west-2.amazonaws.com/backend
+      BACKEND_CLUSTER: unveil-ecs-cluster
+      BACKEND_SERVICE: backend
+    steps:
+    - uses: actions/checkout@v2
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: eu-west-2
+    - name: Docker Login
+      run: |
+        aws ecr get-login-password | docker login --username AWS --password-stdin $CONTAINER_REGISTRY
+    - name: Build And Push Image
+      uses: docker/build-push-action@v2
+      with:
+        context: .
+        push: true
+        tags: ${{ env.CONTAINER_REGISTRY }}:${{ github.sha }},${{ env.CONTAINER_REGISTRY }}:latest
+    - name: Deploy Image
+      run: |
+        aws ecs update-service --cluster $BACKEND_CLUSTER --service $BACKEND_SERVICE --force-new-deployment

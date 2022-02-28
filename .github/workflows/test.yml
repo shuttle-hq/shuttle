@@ -22,4 +22,5 @@ jobs:
         with:
           toolchain: nightly
           override: true
+      - run: cargo build
       - run: cargo test

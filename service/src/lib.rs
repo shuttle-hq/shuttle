@@ -1,6 +1,6 @@
 use std::any::Any;
 
-use rocket::{Rocket, Build};
+use rocket::{Build, Rocket};
 
 pub trait Service: Any + Send + Sync {
     fn deploy(&self) -> Deployment;
@@ -28,5 +28,5 @@ macro_rules! declare_service {
             let boxed: Box<dyn $crate::Service> = Box::new(obj);
             Box::into_raw(boxed)
         }
-    }
+    };
 }

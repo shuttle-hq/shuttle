@@ -56,7 +56,9 @@ impl Deployment {
     /// has reached a state where it can no longer `advance`, returns `false`.
     pub(crate) async fn deployment_finished(&self) -> bool {
         match *self.state.read().await {
-            DeploymentState::Queued(_) | DeploymentState::Built(_) | DeploymentState::Loaded(_) => false,
+            DeploymentState::Queued(_) | DeploymentState::Built(_) | DeploymentState::Loaded(_) => {
+                false
+            }
             DeploymentState::Deployed(_) | DeploymentState::Error => true,
         }
     }
@@ -71,7 +73,7 @@ impl Deployment {
 
             *state = match state.take() {
                 DeploymentState::Queued(queued) => {
-                log::debug!("deployment '{}' build starting...", &meta.id);
+                    log::debug!("deployment '{}' build starting...", &meta.id);
                     let console_writer = BuildOutputWriter::new(self.meta.clone());
                     match context
                         .build_system
@@ -86,7 +88,10 @@ impl Deployment {
                     }
                 }
                 DeploymentState::Built(built) => {
-                    log::debug!("deployment '{}' loading shared object and service...", &meta.id);
+                    log::debug!(
+                        "deployment '{}' loading shared object and service...",
+                        &meta.id
+                    );
                     match load_service_from_so_file(&built.build.so_path) {
                         Ok((svc, so)) => DeploymentState::loaded(so, svc),
                         Err(e) => {
@@ -146,7 +151,7 @@ impl Deployment {
     async fn port(&self) -> Option<Port> {
         match &*self.state.read().await {
             DeploymentState::Deployed(deployed) => Some(deployed.port),
-            _ => None
+            _ => None,
         }
     }
 }
@@ -409,39 +414,29 @@ impl DeploymentState {
     }
 
     fn queued(crate_bytes: Vec<u8>) -> Self {
-        Self::Queued(
-            QueuedState {
-                crate_bytes
-            }
-        )
+        Self::Queued(QueuedState { crate_bytes })
     }
 
     fn built(build: Build) -> Self {
-        Self::Built(
-            BuiltState {
-                build
-            }
-        )
+        Self::Built(BuiltState { build })
     }
 
     fn loaded(so: Library, service: Box<dyn Service>) -> Self {
-        Self::Loaded(
-            LoadedState {
-                service,
-                so,
-            }
-        )
+        Self::Loaded(LoadedState { service, so })
     }
 
-    fn deployed(so: Library, service: Box<dyn Service>, port: Port, kill_oneshot: oneshot::Sender<()>) -> Self {
-        Self::Deployed(
-            DeployedState {
-                service,
-                so,
-                port,
-                kill_oneshot,
-            }
-        )
+    fn deployed(
+        so: Library,
+        service: Box<dyn Service>,
+        port: Port,
+        kill_oneshot: oneshot::Sender<()>,
+    ) -> Self {
+        Self::Deployed(DeployedState {
+            service,
+            so,
+            port,
+            kill_oneshot,
+        })
     }
 
     fn meta(&self) -> DeploymentStateMeta {
@@ -450,7 +445,7 @@ impl DeploymentState {
             DeploymentState::Built(_) => DeploymentStateMeta::Built,
             DeploymentState::Loaded(_) => DeploymentStateMeta::Loaded,
             DeploymentState::Deployed(_) => DeploymentStateMeta::Deployed,
-            DeploymentState::Error => DeploymentStateMeta::Error
+            DeploymentState::Error => DeploymentStateMeta::Error,
         }
     }
 }

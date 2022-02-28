@@ -1,12 +1,12 @@
-use std::collections::HashMap;
-use rocket::tokio::sync::RwLock;
 use lib::{DeploymentId, Host};
+use rocket::tokio::sync::RwLock;
+use std::collections::HashMap;
 
 #[derive(Default)]
 /// Deployment router which figures out which `DeploymentId`
 /// a `Host` corresponds to
 pub(crate) struct Router {
-    table: RwLock<HashMap<Host, DeploymentId>>
+    table: RwLock<HashMap<Host, DeploymentId>>,
 }
 
 impl Router {
@@ -22,5 +22,3 @@ impl Router {
         self.table.read().await.get(host).map(|id| id.clone())
     }
 }
-
-

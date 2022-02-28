@@ -1,23 +1,23 @@
-mod config;
 mod client;
+mod config;
 
-
-use std::env;
-use std::fs::File;
-use std::path::Path;
-use std::rc::Rc;
 use anyhow::{Context, Result};
 use cargo::core::resolver::CliFeatures;
 use cargo::core::Workspace;
 use cargo::ops::{PackageOpts, Packages};
-
+use std::env;
+use std::fs::File;
+use std::path::Path;
+use std::rc::Rc;
 
 fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
     let working_directory = env::current_dir()?;
     let api_key = config::get_api_key().context("failed to retrieve api key")?;
-    let project = config::get_project(&working_directory).context("failed to retrieve project configuration")?;
-    let package_file = run_cargo_package(&working_directory).context("failed to package cargo project")?;
+    let project = config::get_project(&working_directory)
+        .context("failed to retrieve project configuration")?;
+    let package_file =
+        run_cargo_package(&working_directory).context("failed to package cargo project")?;
     client::deploy(package_file, api_key, project).context("failed to deploy cargo project")?;
     Ok(())
 }
@@ -48,4 +48,3 @@ fn run_cargo_package(working_directory: &Path) -> Result<File> {
     let owned = locks.get(0).unwrap().file().try_clone()?;
     Ok(owned)
 }
-

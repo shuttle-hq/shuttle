@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use lib::{DeploymentMeta, DeploymentStateMeta, ProjectConfig, UNVEIL_PROJECT_HEADER, API_URL};
+use lib::{DeploymentMeta, DeploymentStateMeta, ProjectConfig, API_URL, UNVEIL_PROJECT_HEADER};
 use std::{fs::File, thread::sleep, time::Duration};
 
 pub(crate) type ApiKey = String;
@@ -49,7 +49,8 @@ pub(crate) fn deploy(package_file: File, api_key: ApiKey, project: ProjectConfig
         Deployment Status:  {}
         Host:               {}
         "#,
-    res.id, res.state, res.host);
+        res.id, res.state, res.host
+    );
 
     Ok(())
 }

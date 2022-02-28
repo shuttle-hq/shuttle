@@ -1,8 +1,8 @@
-use std::fmt::{Display, Formatter};
 use rocket::http::Status;
-use rocket::Request;
 use rocket::request::{FromRequest, Outcome};
+use rocket::Request;
 use serde::{Deserialize, Serialize};
+use std::fmt::{Display, Formatter};
 use uuid::Uuid;
 
 pub const UNVEIL_PROJECT_HEADER: &'static str = "Unveil-Project";
@@ -29,7 +29,6 @@ pub struct DeploymentMeta {
     pub build_logs: Option<String>,
     pub runtime_logs: Option<String>,
 }
-
 
 impl DeploymentMeta {
     pub fn new(config: &ProjectConfig) -> Self {
@@ -65,7 +64,7 @@ impl Display for DeploymentStateMeta {
             DeploymentStateMeta::Built => "BUILT",
             DeploymentStateMeta::Loaded => "LOADED",
             DeploymentStateMeta::Deployed => "DEPLOYED",
-            DeploymentStateMeta::Error => "ERROR"
+            DeploymentStateMeta::Error => "ERROR",
         };
         write!(f, "{}", s)
     }
@@ -89,12 +88,12 @@ impl<'r> FromRequest<'r> for ProjectConfig {
     async fn from_request(req: &'r Request<'_>) -> Outcome<Self, Self::Error> {
         let config_string = match req.headers().get_one(UNVEIL_PROJECT_HEADER) {
             None => return Outcome::Failure((Status::BadRequest, ProjectConfigError::Missing)),
-            Some(config_string) => config_string
+            Some(config_string) => config_string,
         };
 
         match serde_json::from_str::<ProjectConfig>(config_string) {
             Ok(config) => Outcome::Success(config),
-            Err(_) => Outcome::Failure((Status::BadRequest, ProjectConfigError::Malformed))
+            Err(_) => Outcome::Failure((Status::BadRequest, ProjectConfigError::Malformed)),
         }
     }
 }

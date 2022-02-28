@@ -1,0 +1,27 @@
+name: cargo-test
+
+on:
+  push:
+    branches: [main]
+    paths: ["**/*.rs"]
+  pull_request:
+    branches: [main]
+    paths: ["**/*.rs"]
+
+  workflow_dispatch:
+
+jobs:
+  cargo_test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          override: true
+      - name: Make config file
+        run: mkdir -p ~/.config/unveil/ && echo "api_key = \"ci-test\"" > ~/.config/unveil/config.toml
+      - run: cargo test

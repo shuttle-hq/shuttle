@@ -3,7 +3,8 @@ members = [
   "api",
   "service",
   "cargo-unveil",
-  "lib"
+  "lib",
+  "e2e"
 ]
 exclude = [
   "examples"

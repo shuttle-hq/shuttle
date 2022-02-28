@@ -12,14 +12,20 @@ use anyhow::{Context, Result};
 use cargo::core::resolver::CliFeatures;
 use cargo::core::Workspace;
 use cargo::ops::{PackageOpts, Packages};
-use crate::args::{Args, DeployArgs};
+use crate::args::{Args, DeployArgs, StatusArgs};
 
 
 fn main() -> Result<()> {
     let args: Args = Args::from_args();
     match args {
-        Args::Deploy(deploy_args) => deploy(deploy_args)
+        Args::Deploy(deploy_args) => deploy(deploy_args),
+        Args::Status(status_args) => status(status_args)
     }
+}
+
+fn status(args: StatusArgs) -> Result<()> {
+    let api_key = config::get_api_key().context("failed to retrieve api key")?;
+    client::status(api_key, args.deployment_id).context("failed to deploy cargo project")
 }
 
 fn deploy(args: DeployArgs) -> Result<()> {
@@ -27,8 +33,7 @@ fn deploy(args: DeployArgs) -> Result<()> {
     let api_key = config::get_api_key().context("failed to retrieve api key")?;
     let project = config::get_project(&working_directory).context("failed to retrieve project configuration")?;
     let package_file = run_cargo_package(&working_directory, args.allow_dirty).context("failed to package cargo project")?;
-    client::deploy(package_file, api_key, project).context("failed to deploy cargo project")?;
-    Ok(())
+    client::deploy(package_file, api_key, project).context("failed to deploy cargo project")
 }
 
 // Packages the cargo project and returns a File to that file

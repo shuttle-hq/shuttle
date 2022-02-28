@@ -1,4 +1,5 @@
 use structopt::StructOpt;
+use lib::DeploymentId;
 
 #[derive(StructOpt)]
 #[structopt(
@@ -11,8 +12,17 @@ use structopt::StructOpt;
 )]
 pub enum Args {
     #[structopt(about = "deploy an unveil project")]
-    Deploy(DeployArgs)
+    Deploy(DeployArgs),
+    #[structopt(about = "view the status of an unveil deployment")]
+    Status(StatusArgs)
 }
+
+#[derive(StructOpt)]
+pub struct StatusArgs {
+    #[structopt(about = "The id of the target deployment")]
+    pub deployment_id: DeploymentId
+}
+
 
 #[derive(StructOpt)]
 pub struct DeployArgs {

@@ -48,6 +48,17 @@ impl DeploymentMeta {
     }
 }
 
+impl Display for DeploymentMeta {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f,
+        r#"
+        Deployment Id:      {}
+        Deployment Status:  {}
+        Host:               {}
+        "#, self.id, self.state, self.host)
+    }
+}
+
 /// A label used to represent the deployment state in `DeploymentMeta`
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum DeploymentStateMeta {

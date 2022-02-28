@@ -55,6 +55,7 @@ pub enum DeploymentStateMeta {
     Built,
     Loaded,
     Deployed,
+    Ending,
     Error,
 }
 
@@ -65,6 +66,7 @@ impl Display for DeploymentStateMeta {
             DeploymentStateMeta::Built => "BUILT",
             DeploymentStateMeta::Loaded => "LOADED",
             DeploymentStateMeta::Deployed => "DEPLOYED",
+            DeploymentStateMeta::Ending => "TODO",
             DeploymentStateMeta::Error => "ERROR"
         };
         write!(f, "{}", s)

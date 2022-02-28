@@ -38,6 +38,7 @@ async fn get_deployment(state: &State<ApiState>, id: Uuid) -> Result<Value, Depl
 #[delete("/deployments/<id>")]
 async fn delete_deployment(state: &State<ApiState>, id: Uuid) -> Result<Value, DeploymentError> {
     let deployment = state.deployment_manager.kill_deployment(&id).await?;
+    log::warn!("5");
 
     Ok(json!(deployment))
 }
@@ -57,16 +58,14 @@ struct ApiState {
 //noinspection ALL
 #[launch]
 async fn rocket() -> _ {
-    env_logger::Builder::new()
-        .filter_module("rocket", log::LevelFilter::Info)
-        .filter_module("_", log::LevelFilter::Info)
-        .init();
+    env_logger::init();
 
     let args: Args = Args::from_args();
     let build_system = FsBuildSystem::initialise(args.path).unwrap();
     let deployment_manager = Arc::new(
         DeploymentSystem::new(Box::new(build_system)).await
     );
+    log::warn!("hello");
 
     start_proxy(
         args.bind_addr,

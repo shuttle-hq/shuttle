@@ -11,6 +11,7 @@ use rocket::data::ByteUnit;
 use rocket::response::Responder;
 use rocket::serde::{Deserialize, Serialize};
 use rocket::tokio;
+use futures::future::{abortable, AbortHandle};
 use std::io::Write;
 
 use crate::build::Build;
@@ -56,7 +57,7 @@ impl Deployment {
     /// has reached a state where it can no longer `advance`, returns `false`.
     pub(crate) async fn deployment_finished(&self) -> bool {
         match *self.state.read().await {
-            DeploymentState::Queued(_) | DeploymentState::Built(_) | DeploymentState::Loaded(_) => false,
+            DeploymentState::Queued(_) | DeploymentState::Built(_) | DeploymentState::Loaded(_) | DeploymentState::Ending(_) => false,
             DeploymentState::Deployed(_) | DeploymentState::Error => true,
         }
     }
@@ -71,7 +72,8 @@ impl Deployment {
 
             *state = match state.take() {
                 DeploymentState::Queued(queued) => {
-                log::debug!("deployment '{}' build starting...", &meta.id);
+                    log::debug!("deployment '{}' build starting...", &meta.id);
+
                     let console_writer = BuildOutputWriter::new(self.meta.clone());
                     match context
                         .build_system
@@ -87,6 +89,7 @@ impl Deployment {
                 }
                 DeploymentState::Built(built) => {
                     log::debug!("deployment '{}' loading shared object and service...", &meta.id);
+
                     match load_service_from_so_file(&built.build.so_path) {
                         Ok((svc, so)) => DeploymentState::loaded(so, svc),
                         Err(e) => {
@@ -116,20 +119,19 @@ impl Deployment {
                         }
                     };
 
-                    let (kill_oneshot, kill_receiver) = oneshot::channel::<()>();
-
-                    tokio::spawn(async move {
-                        tokio::select! {
-                            _ = kill_receiver => {}
-                            _ = deployed_future => {}
-                        }
-                    });
+                    let (task, abort_handle) = abortable(deployed_future);
+                    tokio::spawn(task);
 
                     // todo, when we add deletion logic, the deployment id
                     // returned from promotion should be deleted
                     context.router.promote(meta.host, meta.id).await;
 
-                    DeploymentState::deployed(loaded.so, loaded.service, port, kill_oneshot)
+                    DeploymentState::deployed(loaded.so, loaded.service, port, abort_handle)
+                }
+                DeploymentState::Ending(so) => {
+                    log::debug!("linked library of deployment '{}' being deallocated", meta.id);
+                    so.close().unwrap();
+                    DeploymentState::Error
                 }
                 deployed_or_error => deployed_or_error, /* nothing to do here */
             };
@@ -327,21 +329,16 @@ impl DeploymentSystem {
     /// Remove a deployment from the deployments hash map and, if it has
     /// already been deployed, kill the Tokio task in which it is running.
     pub(crate) async fn kill_deployment(&self, id: &DeploymentId) -> Result<DeploymentMeta, DeploymentError> {
-        let removed = {
-            let mut deployments = self.deployments.write().await;
-            deployments.remove(&id)
-        };
-
-        match removed {
-            Some(removed) => {
-                let meta = removed.meta().await;
+        match self.deployments.read().await.get(&id) {
+            Some(deployment) => {
+                let meta = deployment.meta().await;
 
                 // If the deployment is in the 'deployed' state, kill the Tokio task
                 // in which it is deployed:
-                if let DeploymentState::Deployed(DeployedState { kill_oneshot, .. }) = removed.state.write().await.take() {
-                    if let Err(e) = kill_oneshot.send(()) {
-                        log::debug!("there was an error killing the tokio task: {:?}", e);
-                    }
+                let mut lock = deployment.state.write().await;
+                if let DeploymentState::Deployed(DeployedState { so, abort_handle, .. }) = lock.take() {
+                    abort_handle.abort();
+                    *lock = DeploymentState::Ending(so);
                 }
 
                 Ok(meta)
@@ -425,6 +422,8 @@ enum DeploymentState {
     /// Deployment that is actively running inside a Tokio task and listening
     /// for connections on some port indicated in [`DeployedState`].
     Deployed(DeployedState),
+    /// TODO
+    Ending(Library),
     /// A state entered when something unexpected occurs during the deployment
     /// process.
     Error,
@@ -460,15 +459,19 @@ impl DeploymentState {
         )
     }
 
-    fn deployed(so: Library, service: Box<dyn Service>, port: Port, kill_oneshot: oneshot::Sender<()>) -> Self {
+    fn deployed(so: Library, service: Box<dyn Service>, port: Port, abort_handle: AbortHandle) -> Self {
         Self::Deployed(
             DeployedState {
                 service,
                 so,
                 port,
-                kill_oneshot,
+                abort_handle,
             }
         )
+    }
+
+    fn ending(so: Library) -> Self {
+        Self::Ending(so)
     }
 
     fn meta(&self) -> DeploymentStateMeta {
@@ -477,6 +480,7 @@ impl DeploymentState {
             DeploymentState::Built(_) => DeploymentStateMeta::Built,
             DeploymentState::Loaded(_) => DeploymentStateMeta::Loaded,
             DeploymentState::Deployed(_) => DeploymentStateMeta::Deployed,
+            DeploymentState::Ending(_) => DeploymentStateMeta::Ending,
             DeploymentState::Error => DeploymentStateMeta::Error
         }
     }
@@ -499,5 +503,5 @@ struct DeployedState {
     service: Box<dyn Service>,
     so: Library,
     port: Port,
-    kill_oneshot: oneshot::Sender<()>,
+    abort_handle: AbortHandle,
 }

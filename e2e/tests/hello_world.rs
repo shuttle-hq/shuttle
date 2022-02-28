@@ -1,11 +1,22 @@
 use std::process::Command;
 use std::str;
 
+use tempdir::TempDir;
+
 #[test]
 fn hello() {
+    let tmp_dir = TempDir::new("e2e").unwrap();
+
     // Spawn into background
     let mut api_process = Command::new("cargo")
-        .args(["run", "--bin", "api"])
+        .args([
+            "run",
+            "--bin",
+            "api",
+            "--",
+            "--path",
+            tmp_dir.path().to_str().unwrap(),
+        ])
         .current_dir("../")
         .spawn()
         .unwrap();

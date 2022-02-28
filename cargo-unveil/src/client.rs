@@ -26,7 +26,7 @@ pub(crate) fn deploy(package_file: File, api_key: ApiKey, project: ProjectConfig
 
     while !matches!(
         res.state,
-        DeploymentStateMeta::DEPLOYED | DeploymentStateMeta::ERROR
+        DeploymentStateMeta::Deployed | DeploymentStateMeta::Error
     ) {
         print_log(res.build_logs, &mut log_pos);
 

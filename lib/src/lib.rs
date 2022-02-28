@@ -36,7 +36,7 @@ impl DeploymentMeta {
         Self {
             id: Uuid::new_v4(),
             config: config.clone(),
-            state: DeploymentStateMeta::QUEUED,
+            state: DeploymentStateMeta::Queued,
             host: Self::create_host(config),
             build_logs: None,
             runtime_logs: None,
@@ -51,21 +51,21 @@ impl DeploymentMeta {
 /// A label used to represent the deployment state in `DeploymentMeta`
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum DeploymentStateMeta {
-    QUEUED,
-    BUILT,
-    LOADED,
-    DEPLOYED,
-    ERROR,
+    Queued,
+    Built,
+    Loaded,
+    Deployed,
+    Error,
 }
 
 impl Display for DeploymentStateMeta {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let s = match self {
-            DeploymentStateMeta::QUEUED => "QUEUED",
-            DeploymentStateMeta::BUILT => "BUILT",
-            DeploymentStateMeta::LOADED => "LOADED",
-            DeploymentStateMeta::DEPLOYED => "DEPLOYED",
-            DeploymentStateMeta::ERROR => "ERROR"
+            DeploymentStateMeta::Queued => "QUEUED",
+            DeploymentStateMeta::Built => "BUILT",
+            DeploymentStateMeta::Loaded => "LOADED",
+            DeploymentStateMeta::Deployed => "DEPLOYED",
+            DeploymentStateMeta::Error => "ERROR"
         };
         write!(f, "{}", s)
     }

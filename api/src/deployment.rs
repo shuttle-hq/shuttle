@@ -56,8 +56,8 @@ impl Deployment {
     /// has reached a state where it can no longer `advance`, returns `false`.
     pub(crate) async fn deployment_finished(&self) -> bool {
         match *self.state.read().await {
-            DeploymentState::QUEUED(_) | DeploymentState::BUILT(_) | DeploymentState::LOADED(_) => false,
-            DeploymentState::DEPLOYED(_) | DeploymentState::ERROR => true,
+            DeploymentState::Queued(_) | DeploymentState::Built(_) | DeploymentState::Loaded(_) => false,
+            DeploymentState::Deployed(_) | DeploymentState::Error => true,
         }
     }
 
@@ -70,7 +70,7 @@ impl Deployment {
             let mut state = self.state.write().await;
 
             *state = match state.take() {
-                DeploymentState::QUEUED(queued) => {
+                DeploymentState::Queued(queued) => {
                     dbg!("deployment '{}' build starting...", &meta.id);
                     let console_writer = BuildOutputWriter::new(self.meta.clone());
                     match context.build_system
@@ -80,22 +80,22 @@ impl Deployment {
                         Ok(build) => DeploymentState::built(build),
                         Err(e) => {
                             dbg!("failed to build with error: {}", e);
-                            DeploymentState::ERROR
+                            DeploymentState::Error
                         }
                     }
                 }
-                DeploymentState::BUILT(built) => {
+                DeploymentState::Built(built) => {
                     dbg!("deployment '{}' loading shared object and service...", &meta.id);
 
                     match load_service_from_so_file(&built.build.so_path) {
                         Ok((svc, so)) => DeploymentState::loaded(so, svc),
                         Err(e) => {
                             dbg!("failed to load with error: {}", e);
-                            DeploymentState::ERROR
+                            DeploymentState::Error
                         }
                     }
                 }
-                DeploymentState::LOADED(loaded) => {
+                DeploymentState::Loaded(loaded) => {
                     let port = identify_free_port();
 
                     dbg!("deployment '{}' getting deployed on port {}...", &meta.id, port);
@@ -130,8 +130,8 @@ impl Deployment {
                 deployed_or_error => deployed_or_error, /* nothing to do here */
             };
         }
-        // ensures that the metadata state is inline with the actual
-        // state. This can go when we have an API layer.
+        // ensures that the metadata state is inline with the actual state. This
+        // can go when we have an API layer.
         self.update_meta_state().await
     }
 
@@ -141,14 +141,14 @@ impl Deployment {
 
     async fn port(&self) -> Option<Port> {
         match &*self.state.read().await {
-            DeploymentState::DEPLOYED(deployed) => Some(deployed.port),
+            DeploymentState::Deployed(deployed) => Some(deployed.port),
             _ => None
         }
     }
 }
 
-// Provides a `Write` wrapper around the build logs
-// Ie. the build output is written into our build logs using this wrapper
+/// Provides a `Write` wrapper around the build logs - i.e., the build output
+/// is written into our build logs using this wrapper.
 struct BuildOutputWriter {
     meta: Arc<RwLock<DeploymentMeta>>,
     buf: String,
@@ -177,7 +177,7 @@ impl Write for BuildOutputWriter {
             // every character which causes many threads with overlapping lifetimes and therefore
             // many out of order executions which just mess up the log output.
             // Since line orders rarely matter and only spawning a thread for each output line also
-            // reduces the likelyhood of threads with overlapping lifetimes, the guard exists.
+            // reduces the likelihood of threads with overlapping lifetimes, the guard exists.
             if is_new_line {
                 // Safe to unwrap since `flush` has no errors internally
                 self.flush().unwrap();
@@ -219,8 +219,8 @@ impl Drop for BuildOutputWriter {
 
 type Deployments = HashMap<DeploymentId, Arc<Deployment>>;
 
-/// The top-level manager for deployments. Is responsible for their
-/// creation and lifecycle.
+/// The top-level manager for deployments. Is responsible for their creation
+/// and lifecycle.
 pub(crate) struct DeploymentSystem {
     deployments: RwLock<Deployments>,
     job_queue: Arc<JobQueue>,
@@ -281,8 +281,8 @@ impl JobQueue {
     }
 }
 
-/// Convenience stuct used to store a bunch of stuff needed
-/// for the job processor
+/// Convenience struct used to store a bunch of stuff needed for the job
+/// processor.
 pub(crate) struct Context {
     router: Arc<Router>,
     build_system: Box<dyn BuildSystem>,
@@ -303,8 +303,8 @@ impl DeploymentSystem {
         }
     }
 
-    /// Returns the port for a given host.
-    /// If the host does not exist, returns `None`
+    /// Returns the port for a given host. If the host does not exist, returns
+    /// `None`.
     pub(crate) async fn port_for_host(&self, host: &Host) -> Option<Port> {
         let id_for_host = self.router.id_for_host(host).await?;
         self.deployments.read()
@@ -358,7 +358,7 @@ type CreateService = unsafe extern fn() -> *mut dyn Service;
 /// Dynamically load from a `.so` file a value of a type implementing the
 /// [`Service`] trait. Relies on the `.so` library having an ``extern "C"`
 /// function called [`ENTRYPOINT_SYMBOL_NAME`], likely automatically generated
-/// using the [`service::declare_service`] macro.
+/// using the [`unveil_service::declare_service`] macro.
 fn load_service_from_so_file(so_path: &Path) -> anyhow::Result<(Box<dyn Service>, Library)> {
     unsafe {
         let lib = libloading::Library::new(so_path)?;
@@ -370,28 +370,39 @@ fn load_service_from_so_file(so_path: &Path) -> anyhow::Result<(Box<dyn Service>
     }
 }
 
+/// Call on the operating system to identify an available port on which a
+/// deployment may then be hosted.
 fn identify_free_port() -> u16 {
     let ip = SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0);
     TcpListener::bind(ip).unwrap().local_addr().unwrap().port()
 }
 
-/// Finite-state machine representing the various stages of the build
-/// process.
+/// Finite-state machine representing the various stages of the build process.
 enum DeploymentState {
-    QUEUED(QueuedState),
-    BUILT(BuiltState),
-    LOADED(LoadedState),
-    DEPLOYED(DeployedState),
-    ERROR,
+    /// Deployment waiting to be built.
+    Queued(QueuedState),
+    /// Built deployment that is ready and waiting to be loaded.
+    Built(BuiltState),
+    /// Deployment is loaded into the server application as a
+    /// dynamically-linked library (`.so` file). The [`libloading`] crate has
+    /// been used to achieve this and to obtain this particular deployment's
+    /// implementation of the [`unveil_service::Service`] trait.
+    Loaded(LoadedState),
+    /// Deployment that is actively running inside a Tokio task and listening
+    /// for connections on some port indicated in [`DeployedState`].
+    Deployed(DeployedState),
+    /// A state entered when something unexpected occurs during the deployment
+    /// process.
+    Error,
 }
 
 impl DeploymentState {
     fn take(&mut self) -> Self {
-        std::mem::replace(self, DeploymentState::ERROR)
+        std::mem::replace(self, DeploymentState::Error)
     }
 
     fn queued(crate_bytes: Vec<u8>) -> Self {
-        Self::QUEUED(
+        Self::Queued(
             QueuedState {
                 crate_bytes
             }
@@ -399,7 +410,7 @@ impl DeploymentState {
     }
 
     fn built(build: Build) -> Self {
-        Self::BUILT(
+        Self::Built(
             BuiltState {
                 build
             }
@@ -407,7 +418,7 @@ impl DeploymentState {
     }
 
     fn loaded(so: Library, service: Box<dyn Service>) -> Self {
-        Self::LOADED(
+        Self::Loaded(
             LoadedState {
                 service,
                 so,
@@ -416,7 +427,7 @@ impl DeploymentState {
     }
 
     fn deployed(so: Library, service: Box<dyn Service>, port: Port, kill_oneshot: oneshot::Sender<()>) -> Self {
-        Self::DEPLOYED(
+        Self::Deployed(
             DeployedState {
                 service,
                 so,
@@ -428,11 +439,11 @@ impl DeploymentState {
 
     fn meta(&self) -> DeploymentStateMeta {
         match self {
-            DeploymentState::QUEUED(_) => DeploymentStateMeta::QUEUED,
-            DeploymentState::BUILT(_) => DeploymentStateMeta::BUILT,
-            DeploymentState::LOADED(_) => DeploymentStateMeta::LOADED,
-            DeploymentState::DEPLOYED(_) => DeploymentStateMeta::DEPLOYED,
-            DeploymentState::ERROR => DeploymentStateMeta::ERROR
+            DeploymentState::Queued(_) => DeploymentStateMeta::Queued,
+            DeploymentState::Built(_) => DeploymentStateMeta::Built,
+            DeploymentState::Loaded(_) => DeploymentStateMeta::Loaded,
+            DeploymentState::Deployed(_) => DeploymentStateMeta::Deployed,
+            DeploymentState::Error => DeploymentStateMeta::Error
         }
     }
 }

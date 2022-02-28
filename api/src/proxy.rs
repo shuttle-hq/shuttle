@@ -1,11 +1,11 @@
+use ::hyper::server::{conn::AddrStream, Server};
+use ::hyper::service::{make_service_fn, service_fn};
+use ::hyper::{Body, Request, Response, StatusCode};
+use hyper_reverse_proxy::ProxyError;
+use lib::Port;
 use std::convert::Infallible;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
-use hyper_reverse_proxy::ProxyError;
-use ::hyper::server::{Server, conn::AddrStream};
-use ::hyper::{Body, Request, Response, StatusCode};
-use ::hyper::service::{service_fn, make_service_fn};
-use lib::Port;
 
 use crate::DeploymentSystem;
 
@@ -62,35 +62,38 @@ async fn handle(
                     .unwrap()
             );
         }
-        Some(port) => port
+        Some(port) => port,
     };
-    
-    match reverse_proxy(
-        remote_addr.ip(),
-        port,
-        req,
-    ).await {
-        Ok(response) => { Ok(response) }
+
+    match reverse_proxy(remote_addr.ip(), port, req).await {
+        Ok(response) => Ok(response),
         Err(error) => {
             match error {
-                ProxyError::InvalidUri(e) => { dbg!("error while handling request in reverse proxy: {}", e); }
-                ProxyError::HyperError(e) => { dbg!("error while handling request in reverse proxy: {}", e); }
-                ProxyError::ForwardHeaderError => { dbg!("error while handling request in reverse proxy: 'fwd header error'"); }
+                ProxyError::InvalidUri(e) => {
+                    log::warn!("error while handling request in reverse proxy: {}", e);
+                }
+                ProxyError::HyperError(e) => {
+                    log::warn!("error while handling request in reverse proxy: {}", e);
+                }
+                ProxyError::ForwardHeaderError => {
+                    log::warn!(
+                        "error while handling request in reverse proxy: 'fwd header error'"
+                    );
+                }
             };
-            Ok(
-                Response::builder()
-                    .status(StatusCode::INTERNAL_SERVER_ERROR)
-                    .body(Body::empty())
-                    .unwrap()
-            )
+            Ok(Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(Body::empty())
+                .unwrap())
         }
     }
 }
 
-async fn reverse_proxy(ip: IpAddr, port: Port, req: Request<Body>) -> Result<Response<Body>, ProxyError> {
+async fn reverse_proxy(
+    ip: IpAddr,
+    port: Port,
+    req: Request<Body>,
+) -> Result<Response<Body>, ProxyError> {
     let forward_uri = format!("http://127.0.0.1:{}", port);
-    hyper_reverse_proxy::call(
-        ip,
-        &forward_uri,
-        req).await
+    hyper_reverse_proxy::call(ip, &forward_uri, req).await
 }

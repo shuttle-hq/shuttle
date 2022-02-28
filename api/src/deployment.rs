@@ -1,24 +1,24 @@
-use std::collections::HashMap;
-use std::net::{SocketAddrV4, Ipv4Addr, TcpListener};
-use tokio::sync::{RwLock, oneshot};
 use core::default::Default;
 use libloading::Library;
-use std::io::Write;
 use rocket::data::ByteUnit;
 use rocket::response::Responder;
 use rocket::serde::{Deserialize, Serialize};
 use rocket::tokio;
 use rocket::Data;
+use std::collections::HashMap;
+use std::io::Write;
+use std::net::{Ipv4Addr, SocketAddrV4, TcpListener};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use tokio::sync::{oneshot, RwLock};
 
 use crate::build::Build;
 use crate::BuildSystem;
 use lib::{DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, Port, ProjectConfig};
 
-use unveil_service::Service;
 use crate::router::Router;
+use unveil_service::Service;
 
 // TODO: Determine error handling strategy - error types or just use `anyhow`?
 #[derive(Debug, Clone, Serialize, Deserialize, Responder)]
@@ -48,7 +48,7 @@ impl Deployment {
 
     /// Gets a `clone`ed copy of the metadata.
     pub(crate) async fn meta(&self) -> DeploymentMeta {
-        dbg!("trying to get meta");
+        log::debug!("trying to get meta");
         self.meta.read().await.clone()
     }
 
@@ -64,16 +64,17 @@ impl Deployment {
     /// Tries to advance the deployment one stage. Does nothing if the deployment
     /// is in a terminal state.
     pub(crate) async fn advance(&self, context: &Context) {
-        dbg!("waiting to get write on the state");
+        log::debug!("waiting to get write on the state");
         {
             let meta = self.meta().await;
             let mut state = self.state.write().await;
 
             *state = match state.take() {
                 DeploymentState::Queued(queued) => {
-                    dbg!("deployment '{}' build starting...", &meta.id);
+                log::debug!("deployment '{}' build starting...", &meta.id);
                     let console_writer = BuildOutputWriter::new(self.meta.clone());
-                    match context.build_system
+                    match context
+                        .build_system
                         .build(&queued.crate_bytes, &meta.config, Box::new(console_writer))
                         .await
                     {
@@ -85,12 +86,11 @@ impl Deployment {
                     }
                 }
                 DeploymentState::Built(built) => {
-                    dbg!("deployment '{}' loading shared object and service...", &meta.id);
-
+                    log::debug!("deployment '{}' loading shared object and service...", &meta.id);
                     match load_service_from_so_file(&built.build.so_path) {
                         Ok((svc, so)) => DeploymentState::loaded(so, svc),
                         Err(e) => {
-                            dbg!("failed to load with error: {}", e);
+                            log::debug!("failed to load with error: {}", e);
                             DeploymentState::Error
                         }
                     }
@@ -98,7 +98,11 @@ impl Deployment {
                 DeploymentState::Loaded(loaded) => {
                     let port = identify_free_port();
 
-                    dbg!("deployment '{}' getting deployed on port {}...", &meta.id, port);
+                    log::debug!(
+                        "deployment '{}' getting deployed on port {}...",
+                        meta.id,
+                        port
+                    );
 
                     let deployed_future = match loaded.service.deploy() {
                         unveil_service::Deployment::Rocket(r) => {
@@ -247,33 +251,24 @@ impl JobQueue {
 
         let queue_ref = job_queue.clone();
 
-        tokio::spawn(async move {
-            Self::start_job_processor(
-                context,
-                queue_ref,
-            ).await
-        });
+        tokio::spawn(async move { Self::start_job_processor(context, queue_ref).await });
 
         job_queue
     }
 
-
-    async fn start_job_processor(
-        context: Context,
-        queue: Arc<JobQueue>,
-    ) {
-        dbg!("job processor started");
+    async fn start_job_processor(context: Context, queue: Arc<JobQueue>) {
+        log::debug!("job processor started");
         loop {
             if let Some(deployment) = queue.pop() {
                 let id = deployment.meta().await.id;
 
-                dbg!("started deployment job for id: '{}'", id);
+                log::debug!("started deployment job for id: '{}'", id);
 
                 while !deployment.deployment_finished().await {
                     deployment.advance(&context).await
                 }
 
-                dbg!("ended deployment job for id: '{}'", id);
+                log::debug!("ended deployment job for id: '{}'", id);
             } else {
                 tokio::time::sleep(Duration::from_millis(100)).await
             }
@@ -307,7 +302,8 @@ impl DeploymentSystem {
     /// `None`.
     pub(crate) async fn port_for_host(&self, host: &Host) -> Option<Port> {
         let id_for_host = self.router.id_for_host(host).await?;
-        self.deployments.read()
+        self.deployments
+            .read()
             .await
             .get(&id_for_host)?
             .port()
@@ -315,22 +311,33 @@ impl DeploymentSystem {
     }
 
     /// Retrieves a clone of the deployment information
-    pub(crate) async fn get_deployment(&self, id: &DeploymentId) -> Result<DeploymentMeta, DeploymentError> {
+    pub(crate) async fn get_deployment(
+        &self,
+        id: &DeploymentId,
+    ) -> Result<DeploymentMeta, DeploymentError> {
         match self.deployments.read().await.get(&id) {
             Some(deployment) => Ok(deployment.meta().await),
-            None => Err(DeploymentError::NotFound(format!("could not find deployment for id '{}'", &id)))
+            None => Err(DeploymentError::NotFound(format!(
+                "could not find deployment for id '{}'",
+                &id
+            ))),
         }
     }
 
     /// Main way to interface with the deployment manager.
     /// Will take a crate through the whole lifecycle.
-    pub(crate) async fn deploy(&self,
-                               crate_file: Data<'_>,
-                               project_config: &ProjectConfig) -> Result<DeploymentMeta, DeploymentError> {
+    pub(crate) async fn deploy(
+        &self,
+        crate_file: Data<'_>,
+        project_config: &ProjectConfig,
+    ) -> Result<DeploymentMeta, DeploymentError> {
         let crate_bytes = crate_file
-            .open(ByteUnit::max_value()).into_bytes()
+            .open(ByteUnit::max_value())
+            .into_bytes()
             .await
-            .map_err(|_| DeploymentError::BadRequest("could not read crate file into bytes".to_string()))?
+            .map_err(|_| {
+                DeploymentError::BadRequest("could not read crate file into bytes".to_string())
+            })?
             .to_vec();
 
         let deployment = Arc::new(Deployment::new(&project_config, crate_bytes));
@@ -353,7 +360,7 @@ impl DeploymentSystem {
 
 const ENTRYPOINT_SYMBOL_NAME: &'static [u8] = b"_create_service\0";
 
-type CreateService = unsafe extern fn() -> *mut dyn Service;
+type CreateService = unsafe extern "C" fn() -> *mut dyn Service;
 
 /// Dynamically load from a `.so` file a value of a type implementing the
 /// [`Service`] trait. Relies on the `.so` library having an ``extern "C"`

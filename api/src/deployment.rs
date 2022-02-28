@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use std::path::Path;
 use std::time::Duration;
 use std::net::{SocketAddrV4, Ipv4Addr, TcpListener};
-use tokio::sync::{RwLock, oneshot};
+use tokio::sync::RwLock;
 use core::default::Default;
 use libloading::Library;
 use rocket::Data;
@@ -64,9 +64,9 @@ impl Deployment {
 
     /// Tries to advance the deployment one stage. Does nothing if the deployment
     /// is in a terminal state.
-    pub(crate) async fn advance(&self, context: &Context) {
-        log::debug!("waiting to get write on the state");
+    pub(crate) async fn advance(&self, context: &Context) -> bool {
         {
+            log::debug!("waiting to get write on the state");
             let meta = self.meta().await;
             let mut state = self.state.write().await;
 
@@ -130,15 +130,19 @@ impl Deployment {
                 }
                 DeploymentState::Ending(so) => {
                     log::debug!("linked library of deployment '{}' being deallocated", meta.id);
+
                     so.close().unwrap();
-                    DeploymentState::Error
+                    return false
                 }
                 deployed_or_error => deployed_or_error, /* nothing to do here */
             };
         }
+
         // ensures that the metadata state is inline with the actual state. This
         // can go when we have an API layer.
-        self.update_meta_state().await
+        self.update_meta_state().await;
+
+        true
     }
 
     async fn update_meta_state(&self) {
@@ -267,7 +271,7 @@ impl JobQueue {
                 log::debug!("started deployment job for id: '{}'", id);
 
                 while !deployment.deployment_finished().await {
-                    deployment.advance(&context).await
+                    deployment.advance(&context).await;
                 }
 
                 log::debug!("ended deployment job for id: '{}'", id);
@@ -329,16 +333,19 @@ impl DeploymentSystem {
     /// Remove a deployment from the deployments hash map and, if it has
     /// already been deployed, kill the Tokio task in which it is running.
     pub(crate) async fn kill_deployment(&self, id: &DeploymentId) -> Result<DeploymentMeta, DeploymentError> {
-        match self.deployments.read().await.get(&id) {
+        match self.deployments.write().await.get(&id) {
             Some(deployment) => {
                 let meta = deployment.meta().await;
 
+                let mut lock = deployment.state.write().await;
+
                 // If the deployment is in the 'deployed' state, kill the Tokio task
                 // in which it is deployed:
-                let mut lock = deployment.state.write().await;
                 if let DeploymentState::Deployed(DeployedState { so, abort_handle, .. }) = lock.take() {
                     abort_handle.abort();
-                    *lock = DeploymentState::Ending(so);
+                    tokio::spawn(async move {
+                        so.close().unwrap();
+                    });
                 }
 
                 Ok(meta)

@@ -64,7 +64,7 @@ impl Deployment {
 
     /// Tries to advance the deployment one stage. Does nothing if the deployment
     /// is in a terminal state.
-    pub(crate) async fn advance(&self, context: &Context) -> bool {
+    pub(crate) async fn advance(&self, context: &Context) {
         {
             log::debug!("waiting to get write on the state");
             let meta = self.meta().await;
@@ -135,8 +135,6 @@ impl Deployment {
         // ensures that the metadata state is inline with the actual state. This
         // can go when we have an API layer.
         self.update_meta_state().await;
-
-        true
     }
 
     async fn update_meta_state(&self) {
@@ -497,6 +495,7 @@ struct LoadedState {
 }
 
 struct DeployedState {
+    #[allow(dead_code)]
     service: Box<dyn Service>,
     so: Library,
     port: Port,

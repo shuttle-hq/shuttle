@@ -57,7 +57,7 @@ impl Deployment {
     /// has reached a state where it can no longer `advance`, returns `false`.
     pub(crate) async fn deployment_finished(&self) -> bool {
         match *self.state.read().await {
-            DeploymentState::Queued(_) | DeploymentState::Built(_) | DeploymentState::Loaded(_) | DeploymentState::Ending(_) => false,
+            DeploymentState::Queued(_) | DeploymentState::Built(_) | DeploymentState::Loaded(_) => false,
             DeploymentState::Deployed(_) | DeploymentState::Error => true,
         }
     }
@@ -127,12 +127,6 @@ impl Deployment {
                     context.router.promote(meta.host, meta.id).await;
 
                     DeploymentState::deployed(loaded.so, loaded.service, port, abort_handle)
-                }
-                DeploymentState::Ending(so) => {
-                    log::debug!("linked library of deployment '{}' being deallocated", meta.id);
-
-                    so.close().unwrap();
-                    return false
                 }
                 deployed_or_error => deployed_or_error, /* nothing to do here */
             };
@@ -331,18 +325,21 @@ impl DeploymentSystem {
     }
 
     /// Remove a deployment from the deployments hash map and, if it has
-    /// already been deployed, kill the Tokio task in which it is running.
+    /// already been deployed, kill the Tokio task in which it is running
+    /// and deallocate the linked library.
     pub(crate) async fn kill_deployment(&self, id: &DeploymentId) -> Result<DeploymentMeta, DeploymentError> {
-        match self.deployments.write().await.get(&id) {
+        match self.deployments.write().await.remove(&id) {
             Some(deployment) => {
                 let meta = deployment.meta().await;
 
-                let mut lock = deployment.state.write().await;
+                // If the deployment is in the 'deployed' state, kill the Tokio
+                // task in which it is deployed and deallocate the linked
+                // library when the runtime gets around to it.
 
-                // If the deployment is in the 'deployed' state, kill the Tokio task
-                // in which it is deployed:
+                let mut lock = deployment.state.write().await;
                 if let DeploymentState::Deployed(DeployedState { so, abort_handle, .. }) = lock.take() {
                     abort_handle.abort();
+
                     tokio::spawn(async move {
                         so.close().unwrap();
                     });
@@ -429,8 +426,6 @@ enum DeploymentState {
     /// Deployment that is actively running inside a Tokio task and listening
     /// for connections on some port indicated in [`DeployedState`].
     Deployed(DeployedState),
-    /// TODO
-    Ending(Library),
     /// A state entered when something unexpected occurs during the deployment
     /// process.
     Error,
@@ -477,17 +472,12 @@ impl DeploymentState {
         )
     }
 
-    fn ending(so: Library) -> Self {
-        Self::Ending(so)
-    }
-
     fn meta(&self) -> DeploymentStateMeta {
         match self {
             DeploymentState::Queued(_) => DeploymentStateMeta::Queued,
             DeploymentState::Built(_) => DeploymentStateMeta::Built,
             DeploymentState::Loaded(_) => DeploymentStateMeta::Loaded,
             DeploymentState::Deployed(_) => DeploymentStateMeta::Deployed,
-            DeploymentState::Ending(_) => DeploymentStateMeta::Ending,
             DeploymentState::Error => DeploymentStateMeta::Error
         }
     }

@@ -38,7 +38,6 @@ async fn get_deployment(state: &State<ApiState>, id: Uuid) -> Result<Value, Depl
 #[delete("/deployments/<id>")]
 async fn delete_deployment(state: &State<ApiState>, id: Uuid) -> Result<Value, DeploymentError> {
     let deployment = state.deployment_manager.kill_deployment(&id).await?;
-    log::warn!("5");
 
     Ok(json!(deployment))
 }
@@ -65,7 +64,6 @@ async fn rocket() -> _ {
     let deployment_manager = Arc::new(
         DeploymentSystem::new(Box::new(build_system)).await
     );
-    log::warn!("hello");
 
     start_proxy(
         args.bind_addr,

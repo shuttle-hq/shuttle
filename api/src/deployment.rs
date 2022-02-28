@@ -339,7 +339,9 @@ impl DeploymentSystem {
                 // If the deployment is in the 'deployed' state, kill the Tokio task
                 // in which it is deployed:
                 if let DeploymentState::Deployed(DeployedState { kill_oneshot, .. }) = removed.state.write().await.take() {
-                    kill_oneshot.send(()).unwrap();
+                    if let Err(e) = kill_oneshot.send(()) {
+                        log::debug!("there was an error killing the tokio task: {:?}", e);
+                    }
                 }
 
                 Ok(meta)

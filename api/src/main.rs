@@ -84,7 +84,7 @@ async fn rocket() -> _ {
         ..Default::default()
     };
     rocket::custom(config)
-        .mount("/", routes![create_deployment, get_deployment, status])
+        .mount("/", routes![delete_deployment, create_deployment, get_deployment, status])
         .manage(state)
 }
 

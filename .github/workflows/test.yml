@@ -22,5 +22,6 @@ jobs:
         with:
           toolchain: nightly
           override: true
-      - run: cargo build
+      - name: Make config file
+        run: mkdir -p ~/.config/unveil/ && echo "api_key = \"ci-test\"" > ~/.config/unveil/config.toml
       - run: cargo test

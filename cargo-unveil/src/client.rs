@@ -5,6 +5,24 @@ use reqwest::blocking::Client;
 
 pub(crate) type ApiKey = String;
 
+pub(crate) fn delete(api_key: ApiKey, deployment_id: DeploymentId) -> Result<()> {
+    let client = reqwest::blocking::Client::new();
+
+    let mut url = API_URL.to_string();
+    url.push_str(&format!("/deployments/{}", deployment_id));
+    let deployment_meta: DeploymentMeta = client
+        .delete(url.clone())
+        .basic_auth(api_key.clone(), Some(""))
+        .send()
+        .context("failed to delete deployment on the Unveil server")?
+        .json()
+        .context("failed to parse Unveil response")?;
+
+    println!("{}", deployment_meta);
+
+    Ok(())
+}
+
 pub(crate) fn status(api_key: ApiKey, deployment_id: DeploymentId) -> Result<()> {
     let client = reqwest::blocking::Client::new();
 

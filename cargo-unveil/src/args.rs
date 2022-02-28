@@ -14,18 +14,26 @@ pub enum Args {
     #[structopt(about = "deploy an unveil project")]
     Deploy(DeployArgs),
     #[structopt(about = "view the status of an unveil deployment")]
-    Status(StatusArgs)
+    Status(StatusArgs),
+    #[structopt(about = "view the status of an unveil deployment")]
+    Delete(DeleteArgs)
 }
 
 #[derive(StructOpt)]
 pub struct StatusArgs {
-    #[structopt(about = "The id of the target deployment")]
+    #[structopt(about = "the id of the target deployment")]
+    pub deployment_id: DeploymentId
+}
+
+#[derive(StructOpt)]
+pub struct DeleteArgs {
+    #[structopt(about = "the id of the target deployment")]
     pub deployment_id: DeploymentId
 }
 
 
 #[derive(StructOpt)]
 pub struct DeployArgs {
-    #[structopt(long, about = "Allow dirty working directories to be packaged")]
+    #[structopt(long, about = "allow dirty working directories to be packaged")]
     pub allow_dirty: bool
 }

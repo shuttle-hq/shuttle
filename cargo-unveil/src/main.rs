@@ -12,20 +12,26 @@ use anyhow::{Context, Result};
 use cargo::core::resolver::CliFeatures;
 use cargo::core::Workspace;
 use cargo::ops::{PackageOpts, Packages};
-use crate::args::{Args, DeployArgs, StatusArgs};
+use crate::args::{Args, DeleteArgs, DeployArgs, StatusArgs};
 
 
 fn main() -> Result<()> {
     let args: Args = Args::from_args();
     match args {
         Args::Deploy(deploy_args) => deploy(deploy_args),
-        Args::Status(status_args) => status(status_args)
+        Args::Status(status_args) => status(status_args),
+        Args::Delete(delete_args) => delete(delete_args)
     }
+}
+
+fn delete(args: DeleteArgs) -> Result<()> {
+    let api_key = config::get_api_key().context("failed to retrieve api key")?;
+    client::delete(api_key, args.deployment_id).context("failed to delete deployment")
 }
 
 fn status(args: StatusArgs) -> Result<()> {
     let api_key = config::get_api_key().context("failed to retrieve api key")?;
-    client::status(api_key, args.deployment_id).context("failed to deploy cargo project")
+    client::status(api_key, args.deployment_id).context("failed to get status of deployment")
 }
 
 fn deploy(args: DeployArgs) -> Result<()> {

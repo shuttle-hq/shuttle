@@ -1,9 +1,19 @@
 use std::any::Any;
 
-use rocket::{Rocket, Build};
+use rocket::{Build, Rocket};
 
-pub trait Service: Any + Send + Sync {
-    fn deploy(&self) -> Deployment;
+mod error;
+mod factory;
+
+pub use error::Error;
+pub use factory::Factory;
+
+pub trait Service<F>
+where
+    Self: Any + Send + Sync,
+    F: Factory,
+{
+    fn deploy(&self, factory: &F) -> Deployment;
 }
 
 pub enum Deployment {
@@ -20,13 +30,13 @@ impl From<Rocket<Build>> for Deployment {
 macro_rules! declare_service {
     ($service_type:ty, $constructor:path) => {
         #[no_mangle]
-        pub extern "C" fn _create_service() -> *mut dyn $crate::Service {
+        pub extern "C" fn _create_service() -> *mut dyn $crate::Service<Box<dyn $crate::Factory>> {
             // Ensure constructor returns concrete type.
             let constructor: fn() -> $service_type = $constructor;
 
             let obj = constructor();
-            let boxed: Box<dyn $crate::Service> = Box::new(obj);
+            let boxed: Box<dyn $crate::Service<Box<dyn $crate::Factory>>> = Box::new(obj);
             Box::into_raw(boxed)
         }
-    }
+    };
 }

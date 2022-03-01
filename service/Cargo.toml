@@ -7,3 +7,5 @@ description = "Service traits and macros to deploy on the unveil platform"
 
 [dependencies]
 rocket = "0.5.0-rc.1"
+sqlx = { version = "0.5", features = ["runtime-tokio-native-tls", "postgres"] }
+thiserror = "1.0"

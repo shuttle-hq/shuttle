@@ -5,11 +5,13 @@ mod build;
 mod deployment;
 mod args;
 mod router;
+mod factory;
 mod proxy;
 
 use std::net::IpAddr;
 use std::sync::Arc;
 use rocket::{Data, State, tokio};
+use factory::UnveilFactory;
 use rocket::serde::json::serde_json::json;
 use rocket::serde::json::Value;
 use uuid::Uuid;
@@ -64,9 +66,9 @@ async fn rocket() -> _ {
 
     let args: Args = Args::from_args();
     let build_system = FsBuildSystem::initialise(args.path).unwrap();
-    let deployment_manager = Arc::new(
-        DeploymentSystem::new(Box::new(build_system)).await
-    );
+    let factory = UnveilFactory {};
+    let deployment_manager =
+        Arc::new(DeploymentSystem::new(Box::new(build_system), Box::new(factory)).await);
 
     start_proxy(
         args.bind_addr,

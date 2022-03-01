@@ -6,7 +6,6 @@ use lib::Port;
 #[derive(StructOpt)]
 #[structopt(
 name = "unveil",
-about = "synthetic data engine on the command line",
 )]
 pub struct Args {
     #[structopt(long, about = "Override the default root path for unveil")]

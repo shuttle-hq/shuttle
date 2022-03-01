@@ -27,7 +27,7 @@ pub(crate) async fn start(
 
     let server = Server::bind(&socket_address).serve(make_svc);
 
-    dbg!("starting proxy server: {}", &socket_address);
+    log::debug!("starting proxy server: {}", &socket_address);
 
     if let Err(e) = server.await {
         eprintln!("server error: {}", e);

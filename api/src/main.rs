@@ -57,7 +57,10 @@ struct ApiState {
 //noinspection ALL
 #[launch]
 async fn rocket() -> _ {
-    env_logger::init();
+    env_logger::Builder::new()
+        .filter_module("rocket", log::LevelFilter::Info)
+        .filter_module("_", log::LevelFilter::Info)
+        .init();
 
     let args: Args = Args::from_args();
     let build_system = FsBuildSystem::initialise(args.path).unwrap();

@@ -343,6 +343,8 @@ impl DeploymentSystem {
                     });
                 }
 
+                let _ = self.router.remove(&meta.host);
+
                 Ok(meta)
             }
             None => Err(DeploymentError::NotFound(String::new()))

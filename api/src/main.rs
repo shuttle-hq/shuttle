@@ -1,21 +1,21 @@
 #[macro_use]
 extern crate rocket;
 
+mod args;
 mod build;
 mod deployment;
-mod args;
-mod router;
 mod factory;
 mod proxy;
+mod router;
 
-use std::net::IpAddr;
-use std::sync::Arc;
-use rocket::{Data, State, tokio};
 use factory::UnveilFactory;
 use rocket::serde::json::serde_json::json;
 use rocket::serde::json::Value;
-use uuid::Uuid;
+use rocket::{tokio, Data, State};
+use std::net::IpAddr;
+use std::sync::Arc;
 use structopt::StructOpt;
+use uuid::Uuid;
 
 use crate::args::Args;
 use crate::build::{BuildSystem, FsBuildSystem};
@@ -30,9 +30,7 @@ async fn status() -> () {
 
 #[get("/deployments/<id>")]
 async fn get_deployment(state: &State<ApiState>, id: Uuid) -> Result<Value, DeploymentError> {
-    let deployment = state.deployment_manager
-        .get_deployment(&id)
-        .await?;
+    let deployment = state.deployment_manager.get_deployment(&id).await?;
 
     Ok(json!(deployment))
 }
@@ -45,10 +43,12 @@ async fn delete_deployment(state: &State<ApiState>, id: Uuid) -> Result<Value, D
 }
 
 #[post("/deployments", data = "<crate_file>")]
-async fn create_deployment(state: &State<ApiState>, crate_file: Data<'_>, config: ProjectConfig) -> Result<Value, DeploymentError> {
-    let deployment = state.deployment_manager
-        .deploy(crate_file, &config)
-        .await?;
+async fn create_deployment(
+    state: &State<ApiState>,
+    crate_file: Data<'_>,
+    config: ProjectConfig,
+) -> Result<Value, DeploymentError> {
+    let deployment = state.deployment_manager.deploy(crate_file, &config).await?;
     Ok(json!(deployment))
 }
 
@@ -70,15 +70,9 @@ async fn rocket() -> _ {
     let deployment_manager =
         Arc::new(DeploymentSystem::new(Box::new(build_system), Box::new(factory)).await);
 
-    start_proxy(
-        args.bind_addr,
-        args.proxy_port,
-        deployment_manager.clone()
-    ).await;
+    start_proxy(args.bind_addr, args.proxy_port, deployment_manager.clone()).await;
 
-    let state = ApiState {
-        deployment_manager
-    };
+    let state = ApiState { deployment_manager };
 
     let config = rocket::Config {
         address: args.bind_addr,
@@ -86,19 +80,17 @@ async fn rocket() -> _ {
         ..Default::default()
     };
     rocket::custom(config)
-        .mount("/", routes![delete_deployment, create_deployment, get_deployment, status])
+        .mount(
+            "/",
+            routes![delete_deployment, create_deployment, get_deployment, status],
+        )
         .manage(state)
 }
 
 async fn start_proxy(
     bind_addr: IpAddr,
     proxy_port: Port,
-    deployment_manager: Arc<DeploymentSystem>) {
-    tokio::spawn(async move {
-        proxy::start(
-            bind_addr,
-            proxy_port,
-            deployment_manager
-        ).await
-    });
+    deployment_manager: Arc<DeploymentSystem>,
+) {
+    tokio::spawn(async move { proxy::start(bind_addr, proxy_port, deployment_manager).await });
 }

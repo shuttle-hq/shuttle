@@ -1,7 +1,10 @@
 use anyhow::{Context, Result};
-use lib::{DeploymentMeta, DeploymentStateMeta, ProjectConfig, UNVEIL_PROJECT_HEADER, API_URL, DeploymentId};
-use std::{fs::File, thread::sleep, time::Duration};
+use lib::{
+    DeploymentId, DeploymentMeta, DeploymentStateMeta, ProjectConfig, API_URL,
+    UNVEIL_PROJECT_HEADER,
+};
 use reqwest::blocking::Client;
+use std::{fs::File, thread::sleep, time::Duration};
 
 pub(crate) type ApiKey = String;
 
@@ -33,7 +36,11 @@ pub(crate) fn status(api_key: ApiKey, deployment_id: DeploymentId) -> Result<()>
     Ok(())
 }
 
-fn get_deployment_meta(api_key: &ApiKey, deployment_id: &DeploymentId, client: &Client) -> Result<DeploymentMeta> {
+fn get_deployment_meta(
+    api_key: &ApiKey,
+    deployment_id: &DeploymentId,
+    client: &Client,
+) -> Result<DeploymentMeta> {
     let mut url = API_URL.to_string();
     url.push_str(&format!("/deployments/{}", deployment_id));
     client

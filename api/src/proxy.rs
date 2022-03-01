@@ -12,7 +12,7 @@ use crate::DeploymentSystem;
 pub(crate) async fn start(
     bind_addr: IpAddr,
     proxy_port: Port,
-    deployment_manager: Arc<DeploymentSystem>
+    deployment_manager: Arc<DeploymentSystem>,
 ) {
     let socket_address = (bind_addr, proxy_port).into();
 
@@ -21,7 +21,9 @@ pub(crate) async fn start(
         let dm_ref = deployment_manager.clone();
         let remote_addr = socket.remote_addr();
         async move {
-            Ok::<_, Infallible>(service_fn(move |req| handle(remote_addr, req, dm_ref.clone())))
+            Ok::<_, Infallible>(service_fn(move |req| {
+                handle(remote_addr, req, dm_ref.clone())
+            }))
         }
     });
 
@@ -44,7 +46,12 @@ async fn handle(
     // if no `Host:` or invalid value, return 400
     let host = match req.headers().get("Host") {
         Some(host) if host.to_str().is_ok() => host.to_str().unwrap().to_owned(),
-        _ => return Ok(Response::builder().status(StatusCode::BAD_REQUEST).body(Body::empty()).unwrap())
+        _ => {
+            return Ok(Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body(Body::empty())
+                .unwrap())
+        }
     };
 
     // if we could not get a port from the deployment manager,
@@ -55,12 +62,10 @@ async fn handle(
             // no port being assigned here means that we couldn't
             // find a service for a given host
             let response_body = format!("could not find service for host: {}", host);
-            return Ok(
-                Response::builder()
-                    .status(StatusCode::NOT_FOUND)
-                    .body(response_body.into())
-                    .unwrap()
-            );
+            return Ok(Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(response_body.into())
+                .unwrap());
         }
         Some(port) => port,
     };
@@ -76,9 +81,7 @@ async fn handle(
                     log::warn!("error while handling request in reverse proxy: {}", e);
                 }
                 ProxyError::ForwardHeaderError => {
-                    log::warn!(
-                        "error while handling request in reverse proxy: 'fwd header error'"
-                    );
+                    log::warn!("error while handling request in reverse proxy: 'fwd header error'");
                 }
             };
             Ok(Response::builder()

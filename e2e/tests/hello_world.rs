@@ -29,7 +29,7 @@ fn hello() {
             "--manifest-path",
             "../../../Cargo.toml",
             "--",
-            "deploy"
+            "deploy",
         ])
         .current_dir("../examples/rocket/hello-world")
         .output()

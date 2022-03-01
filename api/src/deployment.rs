@@ -1,18 +1,18 @@
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use std::path::Path;
-use std::time::Duration;
-use std::net::{SocketAddrV4, Ipv4Addr, TcpListener};
-use tokio::sync::RwLock;
 use core::default::Default;
+use futures::future::{abortable, AbortHandle};
 use libloading::Library;
-use rocket::Data;
 use rocket::data::ByteUnit;
 use rocket::response::Responder;
 use rocket::serde::{Deserialize, Serialize};
 use rocket::tokio;
-use futures::future::{abortable, AbortHandle};
+use rocket::Data;
+use std::collections::HashMap;
 use std::io::Write;
+use std::net::{Ipv4Addr, SocketAddrV4, TcpListener};
+use std::path::Path;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+use tokio::sync::RwLock;
 
 use crate::build::Build;
 use crate::BuildSystem;
@@ -57,7 +57,9 @@ impl Deployment {
     /// has reached a state where it can no longer `advance`, returns `false`.
     pub(crate) async fn deployment_finished(&self) -> bool {
         match *self.state.read().await {
-            DeploymentState::Queued(_) | DeploymentState::Built(_) | DeploymentState::Loaded(_) => false,
+            DeploymentState::Queued(_) | DeploymentState::Built(_) | DeploymentState::Loaded(_) => {
+                false
+            }
             DeploymentState::Deployed(_) | DeploymentState::Error => true,
         }
     }
@@ -88,7 +90,10 @@ impl Deployment {
                     }
                 }
                 DeploymentState::Built(built) => {
-                    log::debug!("deployment '{}' loading shared object and service...", &meta.id);
+                    log::debug!(
+                        "deployment '{}' loading shared object and service...",
+                        &meta.id
+                    );
 
                     match load_service_from_so_file(&built.build.so_path) {
                         Ok((svc, so)) => DeploymentState::loaded(so, svc),
@@ -144,7 +149,7 @@ impl Deployment {
     async fn port(&self) -> Option<Port> {
         match &*self.state.read().await {
             DeploymentState::Deployed(deployed) => Some(deployed.port),
-            _ => None
+            _ => None,
         }
     }
 }
@@ -327,7 +332,10 @@ impl DeploymentSystem {
     /// Remove a deployment from the deployments hash map and, if it has
     /// already been deployed, kill the Tokio task in which it is running
     /// and deallocate the linked library.
-    pub(crate) async fn kill_deployment(&self, id: &DeploymentId) -> Result<DeploymentMeta, DeploymentError> {
+    pub(crate) async fn kill_deployment(
+        &self,
+        id: &DeploymentId,
+    ) -> Result<DeploymentMeta, DeploymentError> {
         match self.deployments.write().await.remove(&id) {
             Some(deployment) => {
                 let meta = deployment.meta().await;
@@ -337,7 +345,10 @@ impl DeploymentSystem {
                 // library when the runtime gets around to it.
 
                 let mut lock = deployment.state.write().await;
-                if let DeploymentState::Deployed(DeployedState { so, abort_handle, .. }) = lock.take() {
+                if let DeploymentState::Deployed(DeployedState {
+                    so, abort_handle, ..
+                }) = lock.take()
+                {
                     abort_handle.abort();
 
                     tokio::spawn(async move {
@@ -349,7 +360,7 @@ impl DeploymentSystem {
 
                 Ok(meta)
             }
-            None => Err(DeploymentError::NotFound(String::new()))
+            None => Err(DeploymentError::NotFound(String::new())),
         }
     }
 
@@ -441,44 +452,29 @@ impl DeploymentState {
     }
 
     fn queued(crate_bytes: Vec<u8>) -> Self {
-        Self::Queued(
-            QueuedState {
-                crate_bytes
-            }
-        )
+        Self::Queued(QueuedState { crate_bytes })
     }
 
     fn built(build: Build) -> Self {
-        Self::Built(
-            BuiltState {
-                build
-            }
-        )
+        Self::Built(BuiltState { build })
     }
 
     fn loaded(so: Library, service: Box<dyn Service<Box<dyn Factory>>>) -> Self {
-        Self::Loaded(
-            LoadedState {
-                service,
-                so,
-            }
-        )
+        Self::Loaded(LoadedState { service, so })
     }
 
     fn deployed(
         so: Library,
         service: Box<dyn Service<Box<dyn Factory>>>,
         port: Port,
-        abort_handle: AbortHandle
+        abort_handle: AbortHandle,
     ) -> Self {
-        Self::Deployed(
-            DeployedState {
-                service,
-                so,
-                port,
-                abort_handle,
-            }
-        )
+        Self::Deployed(DeployedState {
+            service,
+            so,
+            port,
+            abort_handle,
+        })
     }
 
     fn meta(&self) -> DeploymentStateMeta {
@@ -487,7 +483,7 @@ impl DeploymentState {
             DeploymentState::Built(_) => DeploymentStateMeta::Built,
             DeploymentState::Loaded(_) => DeploymentStateMeta::Loaded,
             DeploymentState::Deployed(_) => DeploymentStateMeta::Deployed,
-            DeploymentState::Error => DeploymentStateMeta::Error
+            DeploymentState::Error => DeploymentStateMeta::Error,
         }
     }
 }

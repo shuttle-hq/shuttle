@@ -18,7 +18,7 @@ use crate::BuildSystem;
 use lib::{DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, Port, ProjectConfig};
 
 use crate::router::Router;
-use unveil_service::Service;
+use unveil_service::{Factory, Service};
 
 // TODO: Determine error handling strategy - error types or just use `anyhow`?
 #[derive(Debug, Clone, Serialize, Deserialize, Responder)]
@@ -104,7 +104,7 @@ impl Deployment {
                         port
                     );
 
-                    let deployed_future = match loaded.service.deploy() {
+                    let deployed_future = match loaded.service.deploy(&context.factory) {
                         unveil_service::Deployment::Rocket(r) => {
                             let config = rocket::Config {
                                 port,
@@ -281,14 +281,16 @@ impl JobQueue {
 pub(crate) struct Context {
     router: Arc<Router>,
     build_system: Box<dyn BuildSystem>,
+    factory: Box<dyn Factory>,
 }
 
 impl DeploymentSystem {
-    pub(crate) async fn new(build_system: Box<dyn BuildSystem>) -> Self {
+    pub(crate) async fn new(build_system: Box<dyn BuildSystem>, factory: Box<dyn Factory>) -> Self {
         let router: Arc<Router> = Default::default();
         let context = Context {
             router: router.clone(),
             build_system,
+            factory,
         };
 
         Self {
@@ -360,13 +362,15 @@ impl DeploymentSystem {
 
 const ENTRYPOINT_SYMBOL_NAME: &'static [u8] = b"_create_service\0";
 
-type CreateService = unsafe extern "C" fn() -> *mut dyn Service;
+type CreateService = unsafe extern "C" fn() -> *mut dyn Service<Box<dyn Factory>>;
 
 /// Dynamically load from a `.so` file a value of a type implementing the
 /// [`Service`] trait. Relies on the `.so` library having an ``extern "C"`
 /// function called [`ENTRYPOINT_SYMBOL_NAME`], likely automatically generated
 /// using the [`unveil_service::declare_service`] macro.
-fn load_service_from_so_file(so_path: &Path) -> anyhow::Result<(Box<dyn Service>, Library)> {
+fn load_service_from_so_file(
+    so_path: &Path,
+) -> anyhow::Result<(Box<dyn Service<Box<dyn Factory>>>, Library)> {
     unsafe {
         let lib = libloading::Library::new(so_path)?;
 
@@ -424,7 +428,7 @@ impl DeploymentState {
         )
     }
 
-    fn loaded(so: Library, service: Box<dyn Service>) -> Self {
+    fn loaded(so: Library, service: Box<dyn Service<Box<dyn Factory>>>) -> Self {
         Self::Loaded(
             LoadedState {
                 service,
@@ -433,7 +437,12 @@ impl DeploymentState {
         )
     }
 
-    fn deployed(so: Library, service: Box<dyn Service>, port: Port, kill_oneshot: oneshot::Sender<()>) -> Self {
+    fn deployed(
+        so: Library,
+        service: Box<dyn Service<Box<dyn Factory>>>,
+        port: Port,
+        kill_oneshot: oneshot::Sender<()>,
+    ) -> Self {
         Self::Deployed(
             DeployedState {
                 service,
@@ -464,12 +473,12 @@ struct BuiltState {
 }
 
 struct LoadedState {
-    service: Box<dyn Service>,
+    service: Box<dyn Service<Box<dyn Factory>>>,
     so: Library,
 }
 
 struct DeployedState {
-    service: Box<dyn Service>,
+    service: Box<dyn Service<Box<dyn Factory>>>,
     so: Library,
     port: Port,
     kill_oneshot: oneshot::Sender<()>,

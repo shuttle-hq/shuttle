@@ -1,6 +1,12 @@
 use std::any::Any;
 
-use rocket::{Rocket, Build};
+use rocket::{Build, Rocket};
+
+mod error;
+mod factory;
+
+pub use error::Error;
+pub use factory::Factory;
 
 pub trait Service: Any + Send + Sync {
     fn deploy(&self) -> Deployment;

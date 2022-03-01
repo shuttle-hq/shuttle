@@ -1,5 +1,5 @@
-use structopt::StructOpt;
 use lib::DeploymentId;
+use structopt::StructOpt;
 
 #[derive(StructOpt)]
 #[structopt(
@@ -16,24 +16,23 @@ pub enum Args {
     #[structopt(about = "view the status of an unveil deployment")]
     Status(StatusArgs),
     #[structopt(about = "view the status of an unveil deployment")]
-    Delete(DeleteArgs)
+    Delete(DeleteArgs),
 }
 
 #[derive(StructOpt)]
 pub struct StatusArgs {
     #[structopt(about = "the id of the target deployment")]
-    pub deployment_id: DeploymentId
+    pub deployment_id: DeploymentId,
 }
 
 #[derive(StructOpt)]
 pub struct DeleteArgs {
     #[structopt(about = "the id of the target deployment")]
-    pub deployment_id: DeploymentId
+    pub deployment_id: DeploymentId,
 }
-
 
 #[derive(StructOpt)]
 pub struct DeployArgs {
     #[structopt(long, about = "allow dirty working directories to be packaged")]
-    pub allow_dirty: bool
+    pub allow_dirty: bool,
 }

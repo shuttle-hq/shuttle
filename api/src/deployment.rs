@@ -1,17 +1,18 @@
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::path::Path;
+use std::time::Duration;
+use std::net::{SocketAddrV4, Ipv4Addr, TcpListener};
+use tokio::sync::RwLock;
 use core::default::Default;
 use libloading::Library;
+use rocket::Data;
 use rocket::data::ByteUnit;
 use rocket::response::Responder;
 use rocket::serde::{Deserialize, Serialize};
 use rocket::tokio;
-use rocket::Data;
-use std::collections::HashMap;
+use futures::future::{abortable, AbortHandle};
 use std::io::Write;
-use std::net::{Ipv4Addr, SocketAddrV4, TcpListener};
-use std::path::Path;
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
-use tokio::sync::{oneshot, RwLock};
 
 use crate::build::Build;
 use crate::BuildSystem;
@@ -64,14 +65,15 @@ impl Deployment {
     /// Tries to advance the deployment one stage. Does nothing if the deployment
     /// is in a terminal state.
     pub(crate) async fn advance(&self, context: &Context) {
-        log::debug!("waiting to get write on the state");
         {
+            log::debug!("waiting to get write on the state");
             let meta = self.meta().await;
             let mut state = self.state.write().await;
 
             *state = match state.take() {
                 DeploymentState::Queued(queued) => {
-                log::debug!("deployment '{}' build starting...", &meta.id);
+                    log::debug!("deployment '{}' build starting...", &meta.id);
+
                     let console_writer = BuildOutputWriter::new(self.meta.clone());
                     match context
                         .build_system
@@ -87,6 +89,7 @@ impl Deployment {
                 }
                 DeploymentState::Built(built) => {
                     log::debug!("deployment '{}' loading shared object and service...", &meta.id);
+
                     match load_service_from_so_file(&built.build.so_path) {
                         Ok((svc, so)) => DeploymentState::loaded(so, svc),
                         Err(e) => {
@@ -116,27 +119,22 @@ impl Deployment {
                         }
                     };
 
-                    let (kill_oneshot, kill_receiver) = oneshot::channel::<()>();
-
-                    tokio::spawn(async move {
-                        tokio::select! {
-                            _ = kill_receiver => {}
-                            _ = deployed_future => {}
-                        }
-                    });
+                    let (task, abort_handle) = abortable(deployed_future);
+                    tokio::spawn(task);
 
                     // todo, when we add deletion logic, the deployment id
                     // returned from promotion should be deleted
                     context.router.promote(meta.host, meta.id).await;
 
-                    DeploymentState::deployed(loaded.so, loaded.service, port, kill_oneshot)
+                    DeploymentState::deployed(loaded.so, loaded.service, port, abort_handle)
                 }
                 deployed_or_error => deployed_or_error, /* nothing to do here */
             };
         }
+
         // ensures that the metadata state is inline with the actual state. This
         // can go when we have an API layer.
-        self.update_meta_state().await
+        self.update_meta_state().await;
     }
 
     async fn update_meta_state(&self) {
@@ -265,7 +263,7 @@ impl JobQueue {
                 log::debug!("started deployment job for id: '{}'", id);
 
                 while !deployment.deployment_finished().await {
-                    deployment.advance(&context).await
+                    deployment.advance(&context).await;
                 }
 
                 log::debug!("ended deployment job for id: '{}'", id);
@@ -321,6 +319,35 @@ impl DeploymentSystem {
                 "could not find deployment for id '{}'",
                 &id
             ))),
+        }
+    }
+
+    /// Remove a deployment from the deployments hash map and, if it has
+    /// already been deployed, kill the Tokio task in which it is running
+    /// and deallocate the linked library.
+    pub(crate) async fn kill_deployment(&self, id: &DeploymentId) -> Result<DeploymentMeta, DeploymentError> {
+        match self.deployments.write().await.remove(&id) {
+            Some(deployment) => {
+                let meta = deployment.meta().await;
+
+                // If the deployment is in the 'deployed' state, kill the Tokio
+                // task in which it is deployed and deallocate the linked
+                // library when the runtime gets around to it.
+
+                let mut lock = deployment.state.write().await;
+                if let DeploymentState::Deployed(DeployedState { so, abort_handle, .. }) = lock.take() {
+                    abort_handle.abort();
+
+                    tokio::spawn(async move {
+                        so.close().unwrap();
+                    });
+                }
+
+                let _ = self.router.remove(&meta.host);
+
+                Ok(meta)
+            }
+            None => Err(DeploymentError::NotFound(String::new()))
         }
     }
 
@@ -384,7 +411,8 @@ fn identify_free_port() -> u16 {
     TcpListener::bind(ip).unwrap().local_addr().unwrap().port()
 }
 
-/// Finite-state machine representing the various stages of the build process.
+/// Finite-state machine representing the various stages of the build
+/// process.
 enum DeploymentState {
     /// Deployment waiting to be built.
     Queued(QueuedState),
@@ -433,13 +461,13 @@ impl DeploymentState {
         )
     }
 
-    fn deployed(so: Library, service: Box<dyn Service>, port: Port, kill_oneshot: oneshot::Sender<()>) -> Self {
+    fn deployed(so: Library, service: Box<dyn Service>, port: Port, abort_handle: AbortHandle) -> Self {
         Self::Deployed(
             DeployedState {
                 service,
                 so,
                 port,
-                kill_oneshot,
+                abort_handle,
             }
         )
     }
@@ -469,8 +497,9 @@ struct LoadedState {
 }
 
 struct DeployedState {
+    #[allow(dead_code)]
     service: Box<dyn Service>,
     so: Library,
     port: Port,
-    kill_oneshot: oneshot::Sender<()>,
+    abort_handle: AbortHandle,
 }

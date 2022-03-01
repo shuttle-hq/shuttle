@@ -30,7 +30,22 @@ dependencies = [
 name = "anyhow"
 version = "1.0.53"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+<<<<<<< HEAD:cargo-unveil/Cargo.lock
 checksum = "94a45b455c14666b85fc40a019e8ab9eb75e3a124e05494f5397122bc9eb06e0"
+=======
+checksum = "7a99269dff3bc004caa411f38845c20303f1e393ca2bd6581576fa3a7f59577d"
+
+[[package]]
+name = "api"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cargo",
+ "libloading",
+ "rocket",
+ "service",
+]
+>>>>>>> feat: set up  crate for calling linked libraries:api/Cargo.lock
 
 [[package]]
 name = "arrayvec"
@@ -842,6 +857,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "libloading"
+version = "0.7.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "efbc0f03f9a775e9f6aed295c6a1ba2253c5757a9e03d55c6caa46a681abcddd"
+dependencies = [
+ "cfg-if",
+ "winapi",
+]
+
+[[package]]
 name = "libnghttp2-sys"
 version = "0.1.7+1.45.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1293,8 +1318,17 @@ dependencies = [
 ]
 
 [[package]]
+<<<<<<< HEAD:cargo-unveil/Cargo.lock
 name = "serde_urlencoded"
 version = "0.7.1"
+=======
+name = "service"
+version = "0.1.0"
+
+[[package]]
+name = "sha2"
+version = "0.9.9"
+>>>>>>> feat: set up system for loading from  an implementation of a dyn trait:api/Cargo.lock
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3491c14715ca2294c4d6a88f15e84739788c1d030eed8c110436aafdaa2f3fd"
 dependencies = [

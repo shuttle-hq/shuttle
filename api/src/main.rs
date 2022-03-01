@@ -35,12 +35,18 @@ async fn get_deployment(state: &State<ApiState>, id: Uuid) -> Result<Value, Depl
     Ok(json!(deployment))
 }
 
+#[delete("/deployments/<id>")]
+async fn delete_deployment(state: &State<ApiState>, id: Uuid) -> Result<Value, DeploymentError> {
+    let deployment = state.deployment_manager.kill_deployment(&id).await?;
+
+    Ok(json!(deployment))
+}
+
 #[post("/deployments", data = "<crate_file>")]
 async fn create_deployment(state: &State<ApiState>, crate_file: Data<'_>, config: ProjectConfig) -> Result<Value, DeploymentError> {
     let deployment = state.deployment_manager
         .deploy(crate_file, &config)
         .await?;
-
     Ok(json!(deployment))
 }
 
@@ -51,10 +57,7 @@ struct ApiState {
 //noinspection ALL
 #[launch]
 async fn rocket() -> _ {
-    env_logger::Builder::new()
-        .filter_module("rocket", log::LevelFilter::Info)
-        .filter_module("_", log::LevelFilter::Info)
-        .init();
+    env_logger::init();
 
     let args: Args = Args::from_args();
     let build_system = FsBuildSystem::initialise(args.path).unwrap();
@@ -78,7 +81,7 @@ async fn rocket() -> _ {
         ..Default::default()
     };
     rocket::custom(config)
-        .mount("/", routes![create_deployment, get_deployment, status])
+        .mount("/", routes![delete_deployment, create_deployment, get_deployment, status])
         .manage(state)
 }
 

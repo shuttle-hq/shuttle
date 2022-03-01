@@ -21,6 +21,11 @@ impl Router {
     pub(crate) async fn id_for_host(&self, host: &Host) -> Option<DeploymentId> {
         self.table.read().await.get(host).map(|id| id.clone())
     }
+
+    /// Removes an entry for a given `Host`
+    pub(crate) async fn remove(&self, host: &Host) -> Option<DeploymentId> {
+        self.table.write().await.remove(host)
+    }
 }
 
 

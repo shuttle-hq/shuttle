@@ -5,6 +5,7 @@ mod args;
 mod build;
 mod deployment;
 mod factory;
+mod database;
 mod proxy;
 mod router;
 

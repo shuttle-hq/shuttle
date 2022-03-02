@@ -39,18 +39,15 @@ fn unveil_config_dir() -> Result<PathBuf> {
     Ok(unveil_config_dir.join("unveil"))
 }
 
-pub(crate) fn get_project(working_directory: &Path) -> Result<ProjectConfig> {
+pub(crate) fn get_project(working_directory: &Path) -> Result<Option<ProjectConfig>> {
     let project_config_path = working_directory.join("Unveil.toml");
     let file_contents: String = match std::fs::read_to_string(project_config_path) {
-        Ok(file_contents) => Ok(file_contents),
-        Err(e) => match e.kind() {
-            ErrorKind::NotFound => Err(anyhow!(
-                "could not find `Unveil.toml` in {:?}",
-                working_directory
-            )),
+        Ok(file_contents) => file_contents,
+        Err(e) => return match e.kind() {
+            ErrorKind::NotFound => Ok(None),
             _ => Err(e.into()),
         },
-    }?;
+    };
     let project: ProjectConfig = toml::from_str(&file_contents)?;
-    Ok(project)
+    Ok(Some(project))
 }

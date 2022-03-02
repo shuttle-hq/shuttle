@@ -3,15 +3,17 @@ mod client;
 mod config;
 
 use crate::args::{Args, DeleteArgs, DeployArgs, StatusArgs};
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use cargo::core::resolver::CliFeatures;
 use cargo::core::Workspace;
 use cargo::ops::{PackageOpts, Packages};
 use std::env;
 use std::fs::File;
+use std::io::ErrorKind;
 use std::path::Path;
 use std::rc::Rc;
 use structopt::StructOpt;
+use lib::ProjectConfig;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -40,13 +42,46 @@ async fn status(args: StatusArgs) -> Result<()> {
 async fn deploy(args: DeployArgs) -> Result<()> {
     let working_directory = env::current_dir()?;
     let api_key = config::get_api_key().context("failed to retrieve api key")?;
-    let project = config::get_project(&working_directory)
+    let project = get_project(&working_directory)
         .context("failed to retrieve project configuration")?;
     let package_file = run_cargo_package(&working_directory, args.allow_dirty)
         .context("failed to package cargo project")?;
     client::deploy(package_file, api_key, project)
         .await
         .context("failed to deploy cargo project")
+}
+
+/// Tries to get the project configuration.
+/// Will first check for an Unveil.toml via `config`.
+///
+/// If it cannot find it, it will create one using sensible
+/// default values such as the name of the crate.
+fn get_project(working_directory: &Path) -> Result<ProjectConfig> {
+    let config = match config::get_project(&working_directory)? {
+        Some(config) => config,
+        None => {
+            let file_contents: String = match std::fs::read_to_string(working_directory.join("Cargo.toml")) {
+                Ok(file_contents) => Ok(file_contents),
+                Err(e) => match e.kind() {
+                    ErrorKind::NotFound => Err(anyhow!("could not find `Config.toml` in {:?}", &working_directory)),
+                    _ => Err(e.into()),
+                },
+            }?;
+            // Using the `cargo` crate's structs here is a pain.
+            // Going via `toml::Value` more straightforward.
+            let manifest: toml::Value = toml::from_str(&file_contents)?;
+            let project_name = manifest.get("package")
+                .ok_or(anyhow!("could not find `Config.toml` in {:?}", &working_directory))?
+                .get("name")
+                .ok_or(anyhow!("could not find `name` in `Config.toml` in {:?}", &working_directory))?
+                .as_str()
+                .ok_or(anyhow!("`name` in was not a string in `Config.toml` in {:?}", &working_directory))?;
+            ProjectConfig {
+                name: project_name.to_string()
+            }
+        }
+    };
+    Ok(config)
 }
 
 // Packages the cargo project and returns a File to that file

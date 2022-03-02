@@ -24,9 +24,7 @@ use lib::{Port, ProjectConfig};
 
 /// Status API to be used to check if the service is alive
 #[get("/status")]
-async fn status() -> () {
-    ()
-}
+async fn status() {}
 
 #[get("/deployments/<id>")]
 async fn get_deployment(state: &State<ApiState>, id: Uuid) -> Result<Value, DeploymentError> {

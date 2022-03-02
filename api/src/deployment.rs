@@ -42,7 +42,7 @@ pub(crate) struct Deployment {
 impl Deployment {
     fn new(config: &ProjectConfig, crate_bytes: Vec<u8>) -> Self {
         Self {
-            meta: Arc::new(RwLock::new(DeploymentMeta::new(&config))),
+            meta: Arc::new(RwLock::new(DeploymentMeta::new(config))),
             state: RwLock::new(DeploymentState::queued(crate_bytes)),
         }
     }
@@ -320,7 +320,7 @@ impl DeploymentSystem {
         &self,
         id: &DeploymentId,
     ) -> Result<DeploymentMeta, DeploymentError> {
-        match self.deployments.read().await.get(&id) {
+        match self.deployments.read().await.get(id) {
             Some(deployment) => Ok(deployment.meta().await),
             None => Err(DeploymentError::NotFound(format!(
                 "could not find deployment for id '{}'",
@@ -336,7 +336,7 @@ impl DeploymentSystem {
         &self,
         id: &DeploymentId,
     ) -> Result<DeploymentMeta, DeploymentError> {
-        match self.deployments.write().await.remove(&id) {
+        match self.deployments.write().await.remove(id) {
             Some(deployment) => {
                 let meta = deployment.meta().await;
 
@@ -380,13 +380,13 @@ impl DeploymentSystem {
             })?
             .to_vec();
 
-        let deployment = Arc::new(Deployment::new(&project_config, crate_bytes));
+        let deployment = Arc::new(Deployment::new(project_config, crate_bytes));
         let info = deployment.meta().await;
 
         self.deployments
             .write()
             .await
-            .insert(info.id.clone(), deployment.clone());
+            .insert(info.id, deployment.clone());
 
         self.add_to_job_queue(deployment);
 
@@ -398,7 +398,7 @@ impl DeploymentSystem {
     }
 }
 
-const ENTRYPOINT_SYMBOL_NAME: &'static [u8] = b"_create_service\0";
+const ENTRYPOINT_SYMBOL_NAME: &[u8] = b"_create_service\0";
 
 type CreateService = unsafe extern "C" fn() -> *mut dyn Service<Box<dyn Factory>>;
 
@@ -406,6 +406,7 @@ type CreateService = unsafe extern "C" fn() -> *mut dyn Service<Box<dyn Factory>
 /// [`Service`] trait. Relies on the `.so` library having an ``extern "C"`
 /// function called [`ENTRYPOINT_SYMBOL_NAME`], likely automatically generated
 /// using the [`unveil_service::declare_service`] macro.
+#[allow(clippy::type_complexity)]
 fn load_service_from_so_file(
     so_path: &Path,
 ) -> anyhow::Result<(Box<dyn Service<Box<dyn Factory>>>, Library)> {

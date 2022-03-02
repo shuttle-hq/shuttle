@@ -15,7 +15,7 @@ pub(crate) fn delete(api_key: ApiKey, deployment_id: DeploymentId) -> Result<()>
     url.push_str(&format!("/deployments/{}", deployment_id));
     let deployment_meta: DeploymentMeta = client
         .delete(url.clone())
-        .basic_auth(api_key.clone(), Some(""))
+        .basic_auth(api_key, Some(""))
         .send()
         .context("failed to delete deployment on the Unveil server")?
         .json()

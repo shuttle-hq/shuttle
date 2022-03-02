@@ -15,11 +15,12 @@ use std::time::Duration;
 use tokio::sync::RwLock;
 
 use crate::build::Build;
-use crate::BuildSystem;
+use crate::{BuildSystem, UnveilFactory};
 use lib::{DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, Port, ProjectConfig};
 
 use crate::router::Router;
 use unveil_service::{Factory, Service};
+use crate::dependency::DependencyService;
 
 // TODO: Determine error handling strategy - error types or just use `anyhow`?
 #[derive(Debug, Clone, Serialize, Deserialize, Responder)]
@@ -112,7 +113,13 @@ impl Deployment {
                         port
                     );
 
-                    let deployed_future = match loaded.service.deploy(&context.factory) {
+                    let db_state = Arc::new(DatabaseState::Uninitialised);
+
+                    let factory = UnveilFactory::new(
+                        state: db_state.clone(),
+                    );
+
+                    let deployed_future = match loaded.service.deploy(&factory) {
                         unveil_service::Deployment::Rocket(r) => {
                             let config = rocket::Config {
                                 port,
@@ -125,13 +132,18 @@ impl Deployment {
                     };
 
                     let (task, abort_handle) = abortable(deployed_future);
+
                     tokio::spawn(task);
 
-                    // todo, when we add deletion logic, the deployment id
-                    // returned from promotion should be deleted
                     context.router.promote(meta.host, meta.id).await;
 
-                    DeploymentState::deployed(loaded.so, loaded.service, port, abort_handle)
+                    DeploymentState::deployed(
+                        loaded.so,
+                        loaded.service,
+                        port,
+                        abort_handle,
+                        db_state
+                    )
                 }
                 deployed_or_error => deployed_or_error, /* nothing to do here */
             };
@@ -228,7 +240,7 @@ type Deployments = HashMap<DeploymentId, Arc<Deployment>>;
 
 /// The top-level manager for deployments. Is responsible for their creation
 /// and lifecycle.
-pub(crate) struct DeploymentSystem {
+pub(crate) struct DeploymentService {
     deployments: RwLock<Deployments>,
     job_queue: Arc<JobQueue>,
     router: Arc<Router>,
@@ -283,17 +295,15 @@ impl JobQueue {
 /// processor.
 pub(crate) struct Context {
     router: Arc<Router>,
-    build_system: Box<dyn BuildSystem>,
-    factory: Box<dyn Factory>,
+    build_system: Box<dyn BuildSystem>
 }
 
-impl DeploymentSystem {
-    pub(crate) async fn new(build_system: Box<dyn BuildSystem>, factory: Box<dyn Factory>) -> Self {
+impl DeploymentService {
+    pub(crate) async fn new(build_system: Box<dyn BuildSystem>) -> Self {
         let router: Arc<Router> = Default::default();
         let context = Context {
             router: router.clone(),
             build_system,
-            factory,
         };
 
         Self {
@@ -468,12 +478,14 @@ impl DeploymentState {
         service: Box<dyn Service<Box<dyn Factory>>>,
         port: Port,
         abort_handle: AbortHandle,
+        database: Arc<DatabaseStatea>
     ) -> Self {
         Self::Deployed(DeployedState {
             service,
             so,
             port,
             abort_handle,
+            database
         })
     }
 
@@ -507,4 +519,10 @@ struct DeployedState {
     so: Library,
     port: Port,
     abort_handle: AbortHandle,
+    database: Arc<DatabaseState>
+}
+
+enum DatabaseState {
+    Uninitialised,
+    Initialised(())
 }

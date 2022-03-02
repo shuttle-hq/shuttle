@@ -49,6 +49,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-mutex",
+ "async-trait",
  "cargo",
  "cargo-util",
  "env_logger",

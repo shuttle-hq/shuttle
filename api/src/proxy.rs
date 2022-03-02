@@ -7,12 +7,12 @@ use std::convert::Infallible;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 
-use crate::DeploymentSystem;
+use crate::DeploymentService;
 
 pub(crate) async fn start(
     bind_addr: IpAddr,
     proxy_port: Port,
-    deployment_manager: Arc<DeploymentSystem>,
+    deployment_manager: Arc<DeploymentService>,
 ) {
     let socket_address = (bind_addr, proxy_port).into();
 
@@ -41,7 +41,7 @@ pub(crate) async fn start(
 async fn handle(
     remote_addr: SocketAddr,
     req: Request<Body>,
-    deployment_manager: Arc<DeploymentSystem>,
+    deployment_manager: Arc<DeploymentService>,
 ) -> Result<Response<Body>, Infallible> {
     // if no `Host:` or invalid value, return 400
     let host = match req.headers().get("Host") {

@@ -1,9 +1,20 @@
 use std::sync::Arc;
+use lib::ProjectConfig;
 use unveil_service::Factory;
+use crate::database::DatabaseState;
 
 pub(crate) struct UnveilFactory {
     database: Arc<DatabaseState>,
-    context: SomeContext
+    project: ProjectConfig
+}
+
+impl UnveilFactory {
+    pub(crate) fn new(database: Arc<DatabaseState>, project: ProjectConfig) -> Self {
+        Self {
+            database,
+            project
+        }
+    }
 }
 
 impl Factory for UnveilFactory {

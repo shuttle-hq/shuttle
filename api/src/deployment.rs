@@ -20,7 +20,7 @@ use lib::{DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, Port, Project
 
 use crate::router::Router;
 use unveil_service::{Factory, Service};
-use crate::dependency::DependencyService;
+use crate::database::DatabaseState;
 
 // TODO: Determine error handling strategy - error types or just use `anyhow`?
 #[derive(Debug, Clone, Serialize, Deserialize, Responder)]
@@ -115,9 +115,10 @@ impl Deployment {
 
                     let db_state = Arc::new(DatabaseState::Uninitialised);
 
-                    let factory = UnveilFactory::new(
-                        state: db_state.clone(),
-                    );
+                    let factory: Box<dyn Factory> = Box::new(UnveilFactory::new(
+                        db_state.clone(),
+                        meta.config.clone()
+                    ));
 
                     let deployed_future = match loaded.service.deploy(&factory) {
                         unveil_service::Deployment::Rocket(r) => {
@@ -478,7 +479,7 @@ impl DeploymentState {
         service: Box<dyn Service<Box<dyn Factory>>>,
         port: Port,
         abort_handle: AbortHandle,
-        database: Arc<DatabaseStatea>
+        database: Arc<DatabaseState>
     ) -> Self {
         Self::Deployed(DeployedState {
             service,
@@ -520,9 +521,4 @@ struct DeployedState {
     port: Port,
     abort_handle: AbortHandle,
     database: Arc<DatabaseState>
-}
-
-enum DatabaseState {
-    Uninitialised,
-    Initialised(())
 }

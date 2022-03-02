@@ -7,7 +7,7 @@ mod deployment;
 mod factory;
 mod proxy;
 mod router;
-mod dependency;
+mod database;
 
 use factory::UnveilFactory;
 use rocket::serde::json::serde_json::json;

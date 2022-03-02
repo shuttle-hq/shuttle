@@ -18,7 +18,6 @@ impl TryFrom<Option<&str>> for ApiKey {
         match s {
             None => Err(AuthorizationError::Missing),
             Some(s) => {
-                eprintln!("APIKEY -----  {}", s);
                 let parts: Vec<&str> = s.split(" ").collect();
                 if parts.len() != 2 {
                     return Err(AuthorizationError::Malformed);
@@ -70,7 +69,7 @@ impl<'r> FromRequest<'r> for User {
         };
         match USER_DIRECTORY.user_for_api_key(&api_key) {
             None => {
-                eprintln!("authorization failure for api key {:?}", &api_key);
+                log::warn!("authorization failure for api key {:?}", &api_key);
                 Outcome::Failure((Status::Unauthorized, AuthorizationError::Unauthorized))
             }
             Some(user) => Outcome::Success(user)

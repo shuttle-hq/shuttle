@@ -12,6 +12,7 @@ use std::fs::File;
 use std::io::ErrorKind;
 use std::path::Path;
 use std::rc::Rc;
+use cargo_metadata::MetadataCommand;
 use structopt::StructOpt;
 use lib::ProjectConfig;
 
@@ -60,24 +61,16 @@ fn get_project(working_directory: &Path) -> Result<ProjectConfig> {
     let config = match config::get_project(&working_directory)? {
         Some(config) => config,
         None => {
-            let file_contents: String = match std::fs::read_to_string(working_directory.join("Cargo.toml")) {
-                Ok(file_contents) => Ok(file_contents),
-                Err(e) => match e.kind() {
-                    ErrorKind::NotFound => Err(anyhow!("could not find `Config.toml` in {:?}", &working_directory)),
-                    _ => Err(e.into()),
-                },
-            }?;
-            // Using the `cargo` crate's structs here is a pain.
-            // Going via `toml::Value` more straightforward.
-            let manifest: toml::Value = toml::from_str(&file_contents)?;
-            let project_name = manifest.get("package")
-                .ok_or(anyhow!("could not find `Config.toml` in {:?}", &working_directory))?
-                .get("name")
-                .ok_or(anyhow!("could not find `name` in `Config.toml` in {:?}", &working_directory))?
-                .as_str()
-                .ok_or(anyhow!("`name` in was not a string in `Config.toml` in {:?}", &working_directory))?;
+            let meta = MetadataCommand::new()
+                .current_dir(&working_directory)
+                .exec()
+                .unwrap();
+            let package_name = meta.root_package()
+                .ok_or(anyhow!("could not find Cargo.toml in {:?}", &working_directory))?
+                .name
+                .clone();
             ProjectConfig {
-                name: project_name.to_string()
+                name: package_name
             }
         }
     };

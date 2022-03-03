@@ -49,12 +49,14 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-mutex",
+ "base64",
  "cargo",
  "cargo-util",
  "env_logger",
  "futures",
  "hyper",
  "hyper-reverse-proxy",
+ "lazy_static",
  "lib",
  "libloading",
  "log",
@@ -62,6 +64,7 @@ dependencies = [
  "serde",
  "sqlx",
  "structopt",
+ "toml",
  "unveil-service",
  "uuid",
 ]

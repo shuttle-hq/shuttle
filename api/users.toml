@@ -1,0 +1,6 @@
+# api key / user pairs are defined like this.
+[my_api_key]
+name = "test_user"
+
+[ci-test]
+name = "ci"

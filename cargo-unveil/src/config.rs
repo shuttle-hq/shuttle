@@ -1,5 +1,4 @@
-use crate::client::ApiKey;
-use lib::ProjectConfig;
+use lib::{ApiKey, ProjectConfig};
 use serde::Deserialize;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};

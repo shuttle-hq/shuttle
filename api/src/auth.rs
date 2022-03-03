@@ -76,7 +76,7 @@ impl<'r> FromRequest<'r> for User {
     }
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize, Debug)]
 pub(crate) struct User {
     pub(crate) name: String,
     pub(crate) project_name: String

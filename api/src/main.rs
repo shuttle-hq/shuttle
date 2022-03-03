@@ -32,21 +32,17 @@ async fn status() -> () {
 
 #[get("/projects/<project_name>")]
 async fn get_project(state: &State<ApiState>, project_name: String, user: User) -> Result<Value, DeploymentApiError> {
-    if project_name != user.project_name {
-        return Err(DeploymentApiError::NotFound(format!("could not find project `{}`", &project_name)));
-    }
+    validate_user_for_project(&user, &project_name)?;
+
     let deployment = state.deployment_manager.get_deployment_for_project(&project_name).await?;
     Ok(json!(deployment))
 }
 
 #[delete("/projects/<project_name>")]
 async fn delete_project(state: &State<ApiState>, project_name: String, user: User) -> Result<Value, DeploymentApiError> {
-    if project_name != user.project_name {
-        return Err(DeploymentApiError::NotFound(format!("could not find project `{}`", &project_name)));
-    }
+    validate_user_for_project(&user, &project_name)?;
 
     let deployment = state.deployment_manager.kill_deployment_for_project(&project_name).await?;
-
     Ok(json!(deployment))
 }
 
@@ -57,12 +53,19 @@ async fn create_project(
     project: ProjectConfig,
     user: User
 ) -> Result<Value, DeploymentApiError> {
-    if project.name != user.project_name {
-        return Err(DeploymentApiError::NotFound(format!("could not find project `{}`", &project.name)));
-    }
+    validate_user_for_project(&user, &project.name)?;
 
     let deployment = state.deployment_manager.deploy(crate_file, &project).await?;
     Ok(json!(deployment))
+}
+
+fn validate_user_for_project(user: &User, project_name: &str) -> Result<(), DeploymentApiError> {
+    if project_name != user.project_name {
+        log::warn!("failed to authenticate user {:?} for project `{}`", &user, project_name);
+        Err(DeploymentApiError::NotFound(format!("could not find project `{}`", &project_name)))
+    } else {
+        Ok(())
+    }
 }
 
 struct ApiState {

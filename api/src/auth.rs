@@ -22,7 +22,7 @@ impl TryFrom<Option<&str>> for ApiKey {
                 if parts.len() != 2 {
                     return Err(AuthorizationError::Malformed);
                 }
-                // remove ok because of explicit check
+                // unwrap ok because of explicit check above
                 let key = *parts.get(1).unwrap();
                 // comes in base64 encoded
                 let decoded_bytes = base64::decode(key)

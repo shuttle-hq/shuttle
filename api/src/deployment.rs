@@ -12,7 +12,7 @@ use std::net::{Ipv4Addr, SocketAddrV4, TcpListener};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, Mutex as TokioMutex};
 
 use crate::build::Build;
 use crate::{BuildSystem, UnveilFactory};
@@ -113,10 +113,12 @@ impl Deployment {
                         port
                     );
 
-                    let db_state = Arc::new(DatabaseResource::new());
+                    match DatabaseResource::new() {
+                        Ok(db) => {
+                            let sync_db = Arc::new(TokioMutex::new(db));
 
                     let factory: Box<dyn Factory> =
-                        Box::new(UnveilFactory::new(db_state.clone(), meta.config.clone()));
+                        Box::new(UnveilFactory::new(sync_db.clone(), meta.config.clone()));
 
                     let deployed_future = match loaded.service.deploy(&factory) {
                         unveil_service::Deployment::Rocket(r) => {
@@ -141,8 +143,14 @@ impl Deployment {
                         loaded.service,
                         port,
                         abort_handle,
-                        db_state,
+                        sync_db,
                     )
+                        }
+                        Err(e) => {
+                            log::debug!("Failed to lead database resource: {}", e);
+                            DeploymentState::Error
+                        }
+                    }
                 }
                 deployed_or_error => deployed_or_error, /* nothing to do here */
             };
@@ -478,7 +486,7 @@ impl DeploymentState {
         service: Box<dyn Service<Box<dyn Factory>>>,
         port: Port,
         abort_handle: AbortHandle,
-        database: Arc<DatabaseResource>,
+        database: Arc<TokioMutex<DatabaseResource>>,
     ) -> Self {
         Self::Deployed(DeployedState {
             service,
@@ -519,5 +527,5 @@ struct DeployedState {
     so: Library,
     port: Port,
     abort_handle: AbortHandle,
-    database: Arc<DatabaseResource>,
+    database: Arc<TokioMutex<DatabaseResource>>,
 }

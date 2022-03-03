@@ -1,8 +1,6 @@
 use sqlx::pool::PoolConnection;
 use sqlx::postgres::{PgPool, PgPoolOptions};
 
-use lib::DeploymentId;
-
 const SUDO_POSTGRES_CONNECTION_STR: &str = "postgres://localhost";
 
 pub(crate) struct DatabaseResource {
@@ -22,9 +20,9 @@ impl DatabaseResource {
 
     pub(crate) async fn get_client(
         &mut self,
-        id: DeploymentId,
+        name: &str,
     ) -> sqlx::Result<PoolConnection<sqlx::Postgres>> {
-        let id_string = id.to_hyphenated().to_string();
+        let id_string = name.to_string(); // TODO
         let role_name = format!("user-{}", id_string);
         let role_password = "pa55w0rd".to_string(); // TODO
         let database_name = format!("db-{}", id_string);

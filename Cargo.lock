@@ -655,6 +655,7 @@ checksum = "77c90badedccf4105eca100756a0b1289e191f6fcbdadd3cee1d2f614f97da8f"
 name = "e2e"
 version = "0.1.0"
 dependencies = [
+ "lazy_static",
  "reqwest",
  "tempdir",
 ]

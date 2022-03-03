@@ -521,8 +521,8 @@ struct LoadedState {
     so: Library,
 }
 
+#[allow(dead_code)]
 struct DeployedState {
-    #[allow(dead_code)]
     service: Box<dyn Service<Box<dyn Factory>>>,
     so: Library,
     port: Port,

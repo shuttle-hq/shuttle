@@ -1,5 +1,8 @@
 use anyhow::{Context, Result};
-use lib::{DeploymentId, DeploymentMeta, DeploymentStateMeta, ProjectConfig, API_URL, UNVEIL_PROJECT_HEADER, ApiKey};
+use lib::{
+    ApiKey, DeploymentId, DeploymentMeta, DeploymentStateMeta, ProjectConfig, API_URL,
+    UNVEIL_PROJECT_HEADER,
+};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
 use std::{fs::File, io::Read, thread::sleep, time::Duration};
@@ -54,11 +57,9 @@ async fn get_deployment_meta(
 
 fn get_retry_client() -> ClientWithMiddleware {
     let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
-    let client = ClientBuilder::new(reqwest::Client::new())
+    ClientBuilder::new(reqwest::Client::new())
         .with(RetryTransientMiddleware::new_with_policy(retry_policy))
-        .build();
-
-    client
+        .build()
 }
 
 pub(crate) async fn deploy(

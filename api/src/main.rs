@@ -2,13 +2,13 @@
 extern crate rocket;
 
 mod args;
+mod auth;
 mod build;
 mod database;
 mod deployment;
 mod factory;
 mod proxy;
 mod router;
-mod auth;
 
 use factory::UnveilFactory;
 use lib::{Port, ProjectConfig};
@@ -21,25 +21,31 @@ use structopt::StructOpt;
 use uuid::Uuid;
 
 use crate::args::Args;
+use crate::auth::User;
 use crate::build::{BuildSystem, FsBuildSystem};
 use crate::deployment::{DeploymentError, DeploymentService};
-use lib::{Port, ProjectConfig};
-use crate::deployment::{DeploymentError, DeploymentSystem};
-use crate::auth::User;
 
 /// Status API to be used to check if the service is alive
 #[get("/status")]
 async fn status() {}
 
 #[get("/deployments/<id>")]
-async fn get_deployment(state: &State<ApiState>, id: Uuid, user: User) -> Result<Value, DeploymentError> {
+async fn get_deployment(
+    state: &State<ApiState>,
+    id: Uuid,
+    _user: User,
+) -> Result<Value, DeploymentError> {
     let deployment = state.deployment_manager.get_deployment(&id).await?;
 
     Ok(json!(deployment))
 }
 
 #[delete("/deployments/<id>")]
-async fn delete_deployment(state: &State<ApiState>, id: Uuid, user: User) -> Result<Value, DeploymentError> {
+async fn delete_deployment(
+    state: &State<ApiState>,
+    id: Uuid,
+    _user: User,
+) -> Result<Value, DeploymentError> {
     let deployment = state.deployment_manager.kill_deployment(&id).await?;
 
     Ok(json!(deployment))
@@ -50,7 +56,7 @@ async fn create_deployment(
     state: &State<ApiState>,
     crate_file: Data<'_>,
     config: ProjectConfig,
-    user: User
+    _user: User,
 ) -> Result<Value, DeploymentError> {
     let deployment = state.deployment_manager.deploy(crate_file, &config).await?;
     Ok(json!(deployment))

@@ -36,7 +36,7 @@ impl DatabaseResource {
                     .fetch_all(&self.sudo_pool)
                     .await?;
 
-                if rows.len() == 0 {
+                if rows.is_empty() {
                     // Create role if it does not already exist:
 
                     sqlx::query("CREATE ROLE $1 PASSWORD $2 LOGIN")

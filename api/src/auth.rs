@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
+use std::path::{Path, PathBuf};
 use lazy_static::lazy_static;
 use rocket::{Request};
 use rocket::http::Status;
@@ -96,7 +97,8 @@ impl UserDirectory {
     }
 
     fn from_user_file() -> Self {
-        let file_path = "./users.toml";
+        let manifest_path: PathBuf = env!("CARGO_MANIFEST_DIR").into();
+        let file_path = manifest_path.join("users.toml");
         let file_contents: String = std::fs::read_to_string(file_path).expect("this should blow up if the users.toml file is not present");
         Self {
             users: toml::from_str(&file_contents).expect("this should blow up if the users.toml file is unparseable")

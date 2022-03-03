@@ -3001,6 +3001,7 @@ dependencies = [
  "rocket",
  "sqlx",
  "thiserror",
+ "tokio",
 ]
 
 [[package]]

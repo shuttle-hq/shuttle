@@ -1,19 +1,18 @@
-#[macro_use] extern crate rocket;
+#[macro_use]
+extern crate rocket;
 
-use unveil_service::{Deployment, Service, declare_service};
+use rocket::{Rocket, Build};
+
+#[macro_use]
+extern crate unveil_service;
 
 #[get("/")]
 fn index() -> &'static str {
     "Hello, world!"
 }
 
-#[derive(Default)]
-struct App;
-
-impl Service for App {
-    fn deploy(&self) -> Deployment {
-        rocket::build().mount("/hello", routes![index]).into()
-    }
+fn rocket() -> Rocket<Build> {
+    rocket::build().mount("/hello", routes![index])
 }
 
-declare_service!(App, App::default);
+declare_service!(Rocket<Build>, rocket);

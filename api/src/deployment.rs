@@ -5,14 +5,16 @@ use rocket::data::ByteUnit;
 use rocket::tokio;
 use rocket::Data;
 use std::collections::HashMap;
+use std::fs::{DirEntry, ReadDir};
 use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddrV4, TcpListener};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::RwLock;
 
-use crate::build::Build;
+use crate::build::{Build, DEFAULT_FS_ROOT};
 use crate::BuildSystem;
 use lib::{DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, Port, ProjectConfig};
 
@@ -32,6 +34,11 @@ impl Deployment {
             meta: Arc::new(RwLock::new(DeploymentMeta::new(&config))),
             state: RwLock::new(DeploymentState::queued(crate_bytes)),
         }
+    }
+
+    /// Initialise a deployment from a directory.
+    fn from_directory(dir: DirEntry) -> Result<Self, ()> {
+        let project_name = dir.file_name().to_s;
     }
 
     /// Gets a `clone`ed copy of the metadata.
@@ -280,7 +287,12 @@ pub(crate) struct Context {
 impl DeploymentSystem {
     pub(crate) async fn new(build_system: Box<dyn BuildSystem>, factory: Box<dyn Factory>) -> Arc<Self> {
         let router: Arc<Router> = Default::default();
-        let deployments: Arc<RwLock<Deployments>> = Default::default();
+
+        let deployments = Arc::new(
+            RwLock::new(
+                Self::initialise_from_fs(&build_system).await
+            )
+        );
 
         let context = Context {
             router: router.clone(),
@@ -296,6 +308,28 @@ impl DeploymentSystem {
             router,
         })
     }
+
+    /// Traverse the build directory re-create deployments
+    async fn initialise_from_fs(fs_root: &Path) -> Deployments {
+        let mut deployments = HashMap::default();
+        for project_dir in std::fs::read_dir(fs_root)
+            .unwrap() // safety: api can read the fs root dir
+            .into_iter() {
+            match Deployment::from_directory(project_dir.unwrap()) {
+                Err(e) => {
+                    log::debug!("failed to re-create deployment for TODO");
+                }
+                Ok(deployment) => {
+                    let deployment = Arc::new(deployment);
+                    let info = deployment.meta().await;
+                    deployments.insert(info.id.clone(), deployment.clone());
+                    // todo put in job queue
+                }
+            }
+        }
+        deployments
+    }
+
 
     /// Returns the port for a given host. If the host does not exist, returns
     /// `None`.

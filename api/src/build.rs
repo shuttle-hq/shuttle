@@ -9,16 +9,18 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 #[cfg(debug_assertions)]
-const DEFAULT_FS_ROOT: &'static str = "/tmp/unveil/crates/";
+pub const DEFAULT_FS_ROOT: &'static str = "/tmp/unveil/crates/";
 
 #[cfg(not(debug_assertions))]
 // as per: https://stackoverflow.com/questions/1510104/where-to-store-application-data-non-user-specific-on-linux
-const DEFAULT_FS_ROOT: &'static str = "/var/lib/unveil/crates/";
+pub const DEFAULT_FS_ROOT: &'static str = "/var/lib/unveil/crates/";
 
 pub(crate) struct Build {
     pub(crate) so_path: PathBuf,
 }
 
+
+// remove the trait at some point
 #[async_trait]
 pub(crate) trait BuildSystem: Send + Sync {
     async fn build(
@@ -27,6 +29,8 @@ pub(crate) trait BuildSystem: Send + Sync {
         project_config: &ProjectConfig,
         buf: Box<dyn std::io::Write + Send>,
     ) -> Result<Build>;
+
+    fn fs_root(&self) -> PathBuf;
 }
 
 /// A basic build system that uses the file system for caching and storage
@@ -97,9 +101,27 @@ impl BuildSystem for FsBuildSystem {
         // run cargo build (--debug for now)
         let so_path = build_crate(&project_path, buf)?;
 
+        // create marker file
+        create_so_marker(&project_path, &so_path);
+
         Ok(Build { so_path })
     }
+
+    fn fs_root(&self) -> PathBuf {
+        self.fs_root.clone()
+    }
 }
+
+/// Creates a marker file with the location of the `so` file
+/// so that we can use it when bootstrapping the deployment
+/// system
+fn create_so_marker(project_path: &Path, so_path: &Path) {
+    let marker_path = project_path.join(".unveil_marker");
+    // unwraps here are ok since we are writing a valid `Path`
+    std::fs::write(&marker_path, so_path.to_str().unwrap()).unwrap();
+}
+
+
 
 /// Clear everything which is not the target folder from the project path
 fn clear_project_dir(project_path: &Path) -> Result<()> {

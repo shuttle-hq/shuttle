@@ -10,8 +10,7 @@ export PG_PORT=${PG_PORT:-5432}
 
 export PG_PASSWORD=${PG_PASSWORD:-postgres}
 
-if [ ! -f "$PG_DATA/PG_VERSION" ]; then
-    # Assume the data directory is not setup
+if [[ "$(pg_lsclusters -h | wc -l)" -ne "1" ]]; then
     set -e
     pg_createcluster -d $PG_DATA $PG_VERSION $PG_CLUSTER_NAME
 
@@ -24,6 +23,8 @@ if [ ! -f "$PG_DATA/PG_VERSION" ]; then
     pg_ctlcluster $PG_VERSION $PG_CLUSTER_NAME start
     su postgres -c "psql -c \"ALTER USER postgres PASSWORD '${PG_PASSWORD}'\""
     pg_ctlcluster $PG_VERSION $PG_CLUSTER_NAME stop
+
+    cp -R /etc/postgresql/$PG_VERSION/$PG_CLUSTER_NAME/* $PG_DATA/
     set +e
 fi
 

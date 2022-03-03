@@ -226,6 +226,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c58ec36aac5066d5ca17df51b3e70279f5670a72102f5752cb7e7c856adfc70"
 
 [[package]]
+name = "camino"
+version = "1.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6f3132262930b0522068049f5870a856ab8affc80c70d08b6ecb785771a6fc23"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "cargo"
 version = "0.59.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -299,6 +308,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "cargo",
+ "cargo_metadata",
  "dirs",
  "lib",
  "reqwest",
@@ -331,6 +341,19 @@ dependencies = [
  "tempfile",
  "walkdir",
  "winapi",
+]
+
+[[package]]
+name = "cargo_metadata"
+version = "0.14.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4acbb09d9ee8e23699b9634375c72795d095bf268439da88562cf9b501f181fa"
+dependencies = [
+ "camino",
+ "cargo-platform",
+ "semver 1.0.6",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

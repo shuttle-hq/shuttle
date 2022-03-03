@@ -115,6 +115,9 @@ impl Deployment {
 
                     match DatabaseResource::new() {
                         Ok(db) => {
+                            self.meta.write().await.database_role_password =
+                                Some(db.role_password());
+
                             let sync_db = Arc::new(TokioMutex::new(db));
 
                             let factory: Box<dyn Factory> =
@@ -521,8 +524,8 @@ struct LoadedState {
     so: Library,
 }
 
-#[allow(dead_code)]
 struct DeployedState {
+    #[allow(dead_code)]
     service: Box<dyn Service<Box<dyn Factory>>>,
     so: Library,
     port: Port,

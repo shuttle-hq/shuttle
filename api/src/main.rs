@@ -72,6 +72,7 @@ async fn rocket() -> _ {
     env_logger::Builder::new()
         .filter_module("rocket", log::LevelFilter::Info)
         .filter_module("_", log::LevelFilter::Info)
+        .filter_module("api", log::LevelFilter::Debug)
         .init();
 
     let args: Args = Args::from_args();

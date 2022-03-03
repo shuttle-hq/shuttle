@@ -1,11 +1,21 @@
+use rand::Rng;
 use sqlx::pool::PoolConnection;
 use sqlx::postgres::{PgPool, PgPoolOptions};
 
 const SUDO_POSTGRES_CONNECTION_STR: &str = "postgres://localhost";
 
+fn generate_role_password() -> String {
+    rand::thread_rng()
+        .sample_iter(&rand::distributions::Alphanumeric)
+        .take(15)
+        .map(char::from)
+        .collect()
+}
+
 pub(crate) struct DatabaseResource {
     state: DatabaseState,
     sudo_pool: PgPool, // TODO: share this pool properly
+    role_password: String,
 }
 
 impl DatabaseResource {
@@ -15,6 +25,7 @@ impl DatabaseResource {
             sudo_pool: PgPoolOptions::new()
                 .max_connections(10)
                 .connect_lazy(SUDO_POSTGRES_CONNECTION_STR)?,
+            role_password: generate_role_password(),
         })
     }
 
@@ -22,10 +33,8 @@ impl DatabaseResource {
         &mut self,
         name: &str,
     ) -> sqlx::Result<PoolConnection<sqlx::Postgres>> {
-        let id_string = name.to_string(); // TODO
-        let role_name = format!("user-{}", id_string);
-        let role_password = "pa55w0rd".to_string(); // TODO
-        let database_name = format!("db-{}", id_string);
+        let role_name = format!("user-{}", name);
+        let database_name = format!("db-{}", name);
 
         match self.state {
             DatabaseState::Uninitialised => {
@@ -41,7 +50,7 @@ impl DatabaseResource {
 
                     sqlx::query("CREATE ROLE $1 PASSWORD $2 LOGIN")
                         .bind(&role_name)
-                        .bind(&role_password)
+                        .bind(&self.role_password)
                         .execute(&self.sudo_pool)
                         .await?;
                 }
@@ -58,7 +67,7 @@ impl DatabaseResource {
 
                 let connection_string = format!(
                     "postgres://{}:{}@localhost/{}",
-                    role_name, role_password, database_name
+                    role_name, self.role_password, database_name
                 );
                 let pool = PgPoolOptions::new()
                     .max_connections(10)
@@ -74,6 +83,10 @@ impl DatabaseResource {
             }
             DatabaseState::Ready(ref pool) => pool.acquire().await,
         }
+    }
+
+    pub(crate) fn role_password(&self) -> String {
+        self.role_password.clone()
     }
 }
 

@@ -61,6 +61,7 @@ dependencies = [
  "lib",
  "libloading",
  "log",
+ "rand 0.8.5",
  "rocket",
  "serde",
  "sqlx",

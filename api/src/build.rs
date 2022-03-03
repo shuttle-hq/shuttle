@@ -108,7 +108,8 @@ fn clear_project_dir(project_path: &Path) -> Result<()> {
         .into_iter()
         .map(|dir| dir.unwrap())
         .filter(|dir| dir.file_name() != "target")
-        .for_each(|dir| if let Ok(file) = dir.file_type() {
+        .for_each(|dir| {
+            if let Ok(file) = dir.file_type() {
                 log::debug!("{:?}", dir);
                 if file.is_dir() {
                     std::fs::remove_dir_all(&dir.path()).unwrap();
@@ -118,6 +119,7 @@ fn clear_project_dir(project_path: &Path) -> Result<()> {
                     // there shouldn't be any symlinks here
                     unimplemented!()
                 }
+            }
         });
     Ok(())
 }

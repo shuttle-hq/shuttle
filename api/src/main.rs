@@ -3,9 +3,9 @@ extern crate rocket;
 
 mod args;
 mod build;
+mod database;
 mod deployment;
 mod factory;
-mod database;
 mod proxy;
 mod router;
 

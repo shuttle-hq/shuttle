@@ -1,34 +1,9 @@
-use std::process::Command;
-use std::str;
-
 mod helpers;
 
 #[test]
 fn hello_world() {
     let _api = helpers::Api::new();
-
-    let unveil_output = Command::new("cargo")
-        .args([
-            "run",
-            "--bin",
-            "cargo-unveil",
-            "--manifest-path",
-            "../../../Cargo.toml",
-            "--",
-            "deploy",
-        ])
-        .current_dir("../examples/rocket/hello-world")
-        .output()
-        .unwrap();
-
-    let stdout = str::from_utf8(&unveil_output.stdout).unwrap();
-    assert!(
-        stdout.contains("Finished dev"),
-        "output does not contain 'Finished dev':\nstdout = {}\nstderr = {}",
-        stdout,
-        str::from_utf8(&unveil_output.stderr).unwrap()
-    );
-    assert!(stdout.contains("Deployment Status:  DEPLOYED"));
+    helpers::deploy("../examples/rocket/hello-world");
 
     let request_text = reqwest::blocking::Client::new()
         .get("http://localhost:8000/hello")
@@ -43,30 +18,8 @@ fn hello_world() {
 
 #[test]
 fn postgres() {
-    let api = helpers::Api::new();
-
-    let unveil_output = Command::new("cargo")
-        .args([
-            "run",
-            "--bin",
-            "cargo-unveil",
-            "--manifest-path",
-            "../../../Cargo.toml",
-            "--",
-            "deploy",
-        ])
-        .current_dir("../examples/rocket/postgres")
-        .output()
-        .unwrap();
-
-    let stdout = str::from_utf8(&unveil_output.stdout).unwrap();
-    assert!(
-        stdout.contains("Finished dev"),
-        "output does not contain 'Finished dev':\nstdout = {}\nstderr = {}",
-        stdout,
-        str::from_utf8(&unveil_output.stderr).unwrap()
-    );
-    assert!(stdout.contains("Deployment Status:  DEPLOYED"));
+    let _api = helpers::Api::new();
+    helpers::deploy("../examples/rocket/postgres");
 
     let client = reqwest::blocking::Client::new();
     let add_response = client
@@ -89,6 +42,4 @@ fn postgres() {
         .unwrap();
 
     assert_eq!(fetch_response, "{\"id\":1,\"note\":\"To the stars\"}");
-
-    drop(api);
 }

@@ -10,14 +10,17 @@ mod router;
 mod auth;
 
 use factory::UnveilFactory;
+<<<<<<< HEAD
 use lib::{DeploymentApiError, DeploymentMeta, Port, ProjectConfig};
+=======
+use lib::{DeploymentApiError, Port, ProjectConfig};
+>>>>>>> feat: project user mapping
 use rocket::serde::json::serde_json::json;
 use rocket::serde::json::Value;
 use rocket::{Data, State, tokio};
 use std::net::IpAddr;
 use std::sync::Arc;
 use structopt::StructOpt;
-use uuid::Uuid;
 
 use crate::args::Args;
 use crate::build::{BuildSystem, FsBuildSystem};
@@ -31,6 +34,7 @@ async fn status() -> () {
     ()
 }
 
+<<<<<<< HEAD
 #[get("/deployments/<id>")]
 async fn get_deployment(state: &State<ApiState>, id: Uuid, user: User) -> Result<Value, DeploymentApiError> {
     let deployment = state.deployment_manager.get_deployment(&id).await?;

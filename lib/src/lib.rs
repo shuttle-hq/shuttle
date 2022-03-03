@@ -62,7 +62,11 @@ impl Display for DeploymentMeta {
         Host:               {}
         Created At:         {}
         "#,
+<<<<<<< HEAD
             self.config.name, self.id, self.state, self.host, self.created_at
+=======
+            self.config.name, self.id, self.state, self.host
+>>>>>>> feat: project user mapping
         )
     }
 }

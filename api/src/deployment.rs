@@ -2,8 +2,6 @@ use core::default::Default;
 use futures::future::{abortable, AbortHandle};
 use libloading::Library;
 use rocket::data::ByteUnit;
-use rocket::response::Responder;
-use rocket::serde::{Deserialize, Serialize};
 use rocket::tokio;
 use rocket::Data;
 use std::collections::HashMap;
@@ -16,21 +14,10 @@ use tokio::sync::RwLock;
 
 use crate::build::Build;
 use crate::BuildSystem;
-use lib::{DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, Port, ProjectConfig};
+use lib::{DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, Port, ProjectConfig};
 
 use crate::router::Router;
 use unveil_service::{Factory, Service};
-
-// TODO: Determine error handling strategy - error types or just use `anyhow`?
-#[derive(Debug, Clone, Serialize, Deserialize, Responder)]
-pub enum DeploymentError {
-    #[response(status = 500)]
-    Internal(String),
-    #[response(status = 404)]
-    NotFound(String),
-    #[response(status = 400)]
-    BadRequest(String),
-}
 
 /// Inner struct of a deployment which holds the deployment itself
 /// and the some metadata
@@ -316,17 +303,28 @@ impl DeploymentSystem {
     }
 
     /// Retrieves a clone of the deployment information
-    pub(crate) async fn get_deployment(
+    /// for a given project
+    pub(crate) async fn get_deployment_for_project(
         &self,
-        id: &DeploymentId,
-    ) -> Result<DeploymentMeta, DeploymentError> {
-        match self.deployments.read().await.get(&id) {
-            Some(deployment) => Ok(deployment.meta().await),
-            None => Err(DeploymentError::NotFound(format!(
-                "could not find deployment for id '{}'",
-                &id
-            ))),
+        project_name: &String,
+    ) -> Result<DeploymentMeta, DeploymentApiError> {
+        for deployment in self.deployments.read().await.values() {
+            if &deployment.meta.read().await.config.name == project_name {
+                return Ok(deployment.meta().await);
+            }
         }
+        Err(DeploymentApiError::NotFound(format!(
+            "could not find deployment for project '{}'",
+            &project_name
+        )))
+    }
+
+    pub(crate) async fn kill_deployment_for_project(
+        &self,
+        project_name: &String
+    ) -> Result<DeploymentMeta, DeploymentApiError> {
+        let id = self.get_deployment_for_project(&project_name).await?.id;
+        self.kill_deployment(&id).await
     }
 
     /// Remove a deployment from the deployments hash map and, if it has
@@ -335,7 +333,7 @@ impl DeploymentSystem {
     pub(crate) async fn kill_deployment(
         &self,
         id: &DeploymentId,
-    ) -> Result<DeploymentMeta, DeploymentError> {
+    ) -> Result<DeploymentMeta, DeploymentApiError> {
         match self.deployments.write().await.remove(&id) {
             Some(deployment) => {
                 let meta = deployment.meta().await;
@@ -346,8 +344,8 @@ impl DeploymentSystem {
 
                 let mut lock = deployment.state.write().await;
                 if let DeploymentState::Deployed(DeployedState {
-                    so, abort_handle, ..
-                }) = lock.take()
+                                                     so, abort_handle, ..
+                                                 }) = lock.take()
                 {
                     abort_handle.abort();
 
@@ -360,7 +358,7 @@ impl DeploymentSystem {
 
                 Ok(meta)
             }
-            None => Err(DeploymentError::NotFound(String::new())),
+            None => Err(DeploymentApiError::NotFound(String::new())),
         }
     }
 
@@ -370,13 +368,13 @@ impl DeploymentSystem {
         &self,
         crate_file: Data<'_>,
         project_config: &ProjectConfig,
-    ) -> Result<DeploymentMeta, DeploymentError> {
+    ) -> Result<DeploymentMeta, DeploymentApiError> {
         let crate_bytes = crate_file
             .open(ByteUnit::max_value())
             .into_bytes()
             .await
             .map_err(|_| {
-                DeploymentError::BadRequest("could not read crate file into bytes".to_string())
+                DeploymentApiError::BadRequest("could not read crate file into bytes".to_string())
             })?
             .to_vec();
 

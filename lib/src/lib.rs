@@ -1,6 +1,6 @@
 use rocket::http::Status;
 use rocket::request::{FromRequest, Outcome};
-use rocket::Request;
+use rocket::{Request, Responder};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use uuid::Uuid;
@@ -53,11 +53,12 @@ impl Display for DeploymentMeta {
         write!(
             f,
             r#"
+        Project:            {}
         Deployment Id:      {}
         Deployment Status:  {}
         Host:               {}
         "#,
-            self.id, self.state, self.host
+            self.config.name, self.id, self.state, self.host
         )
     }
 }
@@ -111,4 +112,29 @@ impl<'r> FromRequest<'r> for ProjectConfig {
             Err(_) => Outcome::Failure((Status::BadRequest, ProjectConfigError::Malformed)),
         }
     }
+}
+
+// TODO: Determine error handling strategy - error types or just use `anyhow`?
+#[derive(Debug, Clone, Serialize, Deserialize, Responder)]
+pub enum DeploymentApiError {
+    #[response(status = 500)]
+    Internal(String),
+    #[response(status = 404)]
+    NotFound(String),
+    #[response(status = 400)]
+    BadRequest(String),
+}
+
+impl Display for DeploymentApiError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DeploymentApiError::Internal(s) => write!(f, "internal: {}", s),
+            DeploymentApiError::NotFound(s) => write!(f, "internal: {}", s),
+            DeploymentApiError::BadRequest(s) => write!(f, "internal: {}", s),
+        }
+    }
+}
+
+impl std::error::Error for DeploymentApiError {
+
 }

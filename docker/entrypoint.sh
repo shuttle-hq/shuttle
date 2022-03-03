@@ -8,6 +8,8 @@ export PG_DATA=${PG_DATA:-/var/lib/postgresql/$PG_VERSION/$PG_CLUSTER_NAME}
 
 export PG_PORT=${PG_PORT:-5432}
 
+export PG_PASSWORD=${PG_PASSWORD:-postgres}
+
 if [ ! -f "$PG_DATA/PG_VERSION" ]; then
     # Assume the data directory is not setup
     set -e
@@ -18,13 +20,12 @@ if [ ! -f "$PG_DATA/PG_VERSION" ]; then
     }
     conftool port $PG_PORT
     conftool log_statement all
+
     pg_ctlcluster $PG_VERSION $PG_CLUSTER_NAME start
+    su postgres -c "psql -c \"ALTER USER postgres PASSWORD '${PG_PASSWORD}'\""
+    pg_ctlcluster $PG_VERSION $PG_CLUSTER_NAME stop
     set +e
 fi
-
-export PG_PASSWORD=${PG_PASSWORD:-postgres}
-
-su postgres -c "psql -c \"ALTER USER postgres PASSWORD '${PG_PASSWORD}'\""
 
 export PG_LOG=$(pg_lsclusters -h | cut -d' ' -f7)
 

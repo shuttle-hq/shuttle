@@ -48,15 +48,23 @@ resource "aws_ecs_task_definition" "api" {
 
       user = "root"
 
-      command = [
-        "--path",
-        "/opt/unveil/crates",
-        "--bind-addr",
-        "0.0.0.0",
-        "--api-port",
-        tostring(var.api_container_port),
-        "--proxy-port",
-        tostring(var.proxy_container_port)
+      environment = [
+        {
+          name = "CRATES_PATH"
+          value = "/opt/unveil/crates"
+        },
+        {
+          name = "API_PORT",
+          value = tostring(var.api_container_port)
+        },
+        {
+          name = "PROXY_PORT",
+          value = tostring(var.proxy_container_port)
+        },
+        {
+          name = "PG_DATA",
+          value = "/opt/unveil/postgres/"
+        }
       ]
 
       healthCheck = {
@@ -87,7 +95,7 @@ resource "aws_ecs_task_definition" "api" {
       mountPoints = [
         {
           sourceVolume = "user-data"
-          containerPath = "/opt/unveil/crates"
+          containerPath = "/opt/unveil/"
         }
       ]
     }

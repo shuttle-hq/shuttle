@@ -12,7 +12,7 @@ use std::net::{Ipv4Addr, SocketAddrV4, TcpListener};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tokio::sync::{RwLock, Mutex as TokioMutex};
+use tokio::sync::{Mutex as TokioMutex, RwLock};
 
 use crate::build::Build;
 use crate::{BuildSystem, UnveilFactory};
@@ -117,34 +117,34 @@ impl Deployment {
                         Ok(db) => {
                             let sync_db = Arc::new(TokioMutex::new(db));
 
-                    let factory: Box<dyn Factory> =
-                        Box::new(UnveilFactory::new(sync_db.clone(), meta.config.clone()));
+                            let factory: Box<dyn Factory> =
+                                Box::new(UnveilFactory::new(sync_db.clone(), meta.config.clone()));
 
-                    let deployed_future = match loaded.service.deploy(&factory) {
-                        unveil_service::Deployment::Rocket(r) => {
-                            let config = rocket::Config {
-                                port,
-                                log_level: rocket::config::LogLevel::Normal,
-                                ..Default::default()
+                            let deployed_future = match loaded.service.deploy(&factory) {
+                                unveil_service::Deployment::Rocket(r) => {
+                                    let config = rocket::Config {
+                                        port,
+                                        log_level: rocket::config::LogLevel::Normal,
+                                        ..Default::default()
+                                    };
+
+                                    r.configure(config).launch()
+                                }
                             };
 
-                            r.configure(config).launch()
-                        }
-                    };
+                            let (task, abort_handle) = abortable(deployed_future);
 
-                    let (task, abort_handle) = abortable(deployed_future);
+                            tokio::spawn(task);
 
-                    tokio::spawn(task);
+                            context.router.promote(meta.host, meta.id).await;
 
-                    context.router.promote(meta.host, meta.id).await;
-
-                    DeploymentState::deployed(
-                        loaded.so,
-                        loaded.service,
-                        port,
-                        abort_handle,
-                        sync_db,
-                    )
+                            DeploymentState::deployed(
+                                loaded.so,
+                                loaded.service,
+                                port,
+                                abort_handle,
+                                sync_db,
+                            )
                         }
                         Err(e) => {
                             log::debug!("Failed to lead database resource: {}", e);

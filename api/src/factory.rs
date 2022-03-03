@@ -1,11 +1,11 @@
-use std::convert::Into;
 use crate::database::DatabaseResource;
+use async_trait::async_trait;
 use lib::ProjectConfig;
+use sqlx::pool::PoolConnection;
+use std::convert::Into;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use unveil_service::Factory;
-use sqlx::pool::PoolConnection;
-use async_trait::async_trait;
 
 pub(crate) struct UnveilFactory {
     database: Arc<Mutex<DatabaseResource>>,
@@ -24,6 +24,11 @@ impl Factory for UnveilFactory {
     async fn get_postgres_connection_pool(
         &mut self,
     ) -> Result<PoolConnection<sqlx::Postgres>, unveil_service::Error> {
-            self.database.lock().await.get_client(&self.project.name).await.map_err(Into::into)
+        self.database
+            .lock()
+            .await
+            .get_client(&self.project.name)
+            .await
+            .map_err(Into::into)
     }
 }

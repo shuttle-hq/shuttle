@@ -58,7 +58,10 @@ impl DatabaseResource {
 
                 // Create connection pool:
 
-                let connection_string = format!("postgres://{}:{}@localhost/{}", role_name, role_password, database_name);
+                let connection_string = format!(
+                    "postgres://{}:{}@localhost/{}",
+                    role_name, role_password, database_name
+                );
                 let pool = PgPoolOptions::new()
                     .max_connections(10)
                     .connect(&connection_string)

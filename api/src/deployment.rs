@@ -114,9 +114,7 @@ impl Deployment {
                     let (task, abort_handle) = abortable(deployed_future);
                     tokio::spawn(task);
 
-                    // todo, when we add deletion logic, the deployment id
-                    // returned from promotion should be deleted
-                    context.router.promote(meta.host, meta.id).await;
+                    let _ = context.router.promote(meta.host, meta.id);
 
                     DeploymentState::deployed(loaded.so, loaded.service, port, abort_handle)
                 }
@@ -275,7 +273,7 @@ pub(crate) struct Context {
 }
 
 impl DeploymentSystem {
-    pub(crate) async fn new(build_system: Box<dyn BuildSystem>, factory: Box<dyn Factory>) -> Self {
+    pub(crate) async fn new(build_system: Box<dyn BuildSystem>, factory: Box<dyn Factory>) -> Arc<Self> {
         let router: Arc<Router> = Default::default();
         let context = Context {
             router: router.clone(),
@@ -283,12 +281,39 @@ impl DeploymentSystem {
             factory,
         };
 
-        Self {
+        let ds = Arc::new(Self {
             deployments: Default::default(),
             job_queue: JobQueue::initialise(context).await,
             router,
+        });
+
+        let ds_ref = ds.clone();
+
+        tokio::spawn(async move { Self::start_garbage_collector(ds_ref).await });
+
+        ds
+    }
+
+    /// Starts a garbage collection daemon which will remove stale deployments
+    async fn start_garbage_collector(deployment_system: Arc<DeploymentSystem>) {
+        log::debug!("garbage collector started");
+        loop {
+            deployment_system.collect_garbage().await;
+            tokio::time::sleep(Duration::from_millis(500)).await
         }
     }
+
+    /// Removes all 'finished' deployments for a given project except for the latest one
+    /// Option 1: remove all deployments except for latest. This however will result
+    ///     in 'Building' deployments removing active ones.
+    /// Option 2: remove all deployments in a terminated state except for the latest one.
+    ///    However this will result in the project status returning undeterministic results.
+    /// Option 3: Option 2 + get_projects returns most recent deployed instead of the first one
+    ///
+    async fn collect_garbage(&self) {
+        todo!()
+    }
+
 
     /// Returns the port for a given host. If the host does not exist, returns
     /// `None`.
@@ -321,7 +346,7 @@ impl DeploymentSystem {
 
     pub(crate) async fn kill_deployment_for_project(
         &self,
-        project_name: &String
+        project_name: &String,
     ) -> Result<DeploymentMeta, DeploymentApiError> {
         let id = self.get_deployment_for_project(&project_name).await?.id;
         self.kill_deployment(&id).await
@@ -343,9 +368,10 @@ impl DeploymentSystem {
                 // library when the runtime gets around to it.
 
                 let mut lock = deployment.state.write().await;
-                if let DeploymentState::Deployed(DeployedState {
-                                                     so, abort_handle, ..
-                                                 }) = lock.take()
+                if let DeploymentState::Deployed(
+                    DeployedState {
+                        so, abort_handle, ..
+                    }) = lock.take()
                 {
                     abort_handle.abort();
 

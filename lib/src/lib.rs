@@ -3,6 +3,7 @@ use rocket::request::{FromRequest, Outcome};
 use rocket::{Request, Responder};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
+use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 pub const UNVEIL_PROJECT_HEADER: &'static str = "Unveil-Project";
@@ -29,6 +30,7 @@ pub struct DeploymentMeta {
     pub host: String,
     pub build_logs: Option<String>,
     pub runtime_logs: Option<String>,
+    pub created_at: DateTime<Utc>,
 }
 
 impl DeploymentMeta {
@@ -40,6 +42,7 @@ impl DeploymentMeta {
             host: Self::create_host(config),
             build_logs: None,
             runtime_logs: None,
+            created_at: Utc::now()
         }
     }
 
@@ -57,8 +60,9 @@ impl Display for DeploymentMeta {
         Deployment Id:      {}
         Deployment Status:  {}
         Host:               {}
+        Created At:         {}
         "#,
-            self.config.name, self.id, self.state, self.host
+            self.config.name, self.id, self.state, self.host, self.created_at
         )
     }
 }

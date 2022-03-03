@@ -289,13 +289,24 @@ impl DeploymentSystem {
             deployments: deployments.clone(),
         };
 
-
         Arc::new(Self {
             deployments,
             job_queue: JobQueue::initialise(context).await,
             router,
         })
     }
+
+    /// Removes all 'finished' deployments for a given project except for the latest one
+    /// Option 1: remove all deployments except for latest. This however will result
+    ///     in 'Building' deployments removing active ones.
+    /// Option 2: remove all deployments in a terminated state except for the latest one.
+    ///    However this will result in the project status returning undeterministic results.
+    /// Option 3: Option 2 + get_projects returns most recent deployed instead of the first one
+    ///
+    async fn collect_garbage(&self) {
+        todo!()
+    }
+
 
     /// Returns the port for a given host. If the host does not exist, returns
     /// `None`.

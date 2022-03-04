@@ -1,8 +1,9 @@
 use rocket::http::Status;
 use rocket::request::{FromRequest, Outcome};
-use rocket::Request;
+use rocket::{Request, Responder};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
+use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 pub const UNVEIL_PROJECT_HEADER: &'static str = "Unveil-Project";
@@ -29,6 +30,7 @@ pub struct DeploymentMeta {
     pub host: String,
     pub build_logs: Option<String>,
     pub runtime_logs: Option<String>,
+    pub created_at: DateTime<Utc>,
 }
 
 impl DeploymentMeta {
@@ -40,6 +42,7 @@ impl DeploymentMeta {
             host: Self::create_host(config),
             build_logs: None,
             runtime_logs: None,
+            created_at: Utc::now()
         }
     }
 
@@ -53,11 +56,13 @@ impl Display for DeploymentMeta {
         write!(
             f,
             r#"
+        Project:            {}
         Deployment Id:      {}
         Deployment Status:  {}
         Host:               {}
+        Created At:         {}
         "#,
-            self.id, self.state, self.host
+            self.config.name, self.id, self.state, self.host, self.created_at
         )
     }
 }
@@ -111,4 +116,29 @@ impl<'r> FromRequest<'r> for ProjectConfig {
             Err(_) => Outcome::Failure((Status::BadRequest, ProjectConfigError::Malformed)),
         }
     }
+}
+
+// TODO: Determine error handling strategy - error types or just use `anyhow`?
+#[derive(Debug, Clone, Serialize, Deserialize, Responder)]
+pub enum DeploymentApiError {
+    #[response(status = 500)]
+    Internal(String),
+    #[response(status = 404)]
+    NotFound(String),
+    #[response(status = 400)]
+    BadRequest(String),
+}
+
+impl Display for DeploymentApiError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DeploymentApiError::Internal(s) => write!(f, "internal: {}", s),
+            DeploymentApiError::NotFound(s) => write!(f, "not found: {}", s),
+            DeploymentApiError::BadRequest(s) => write!(f, "bad request: {}", s),
+        }
+    }
+}
+
+impl std::error::Error for DeploymentApiError {
+
 }

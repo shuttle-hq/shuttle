@@ -2,8 +2,6 @@ use core::default::Default;
 use futures::future::{abortable, AbortHandle};
 use libloading::Library;
 use rocket::data::ByteUnit;
-use rocket::response::Responder;
-use rocket::serde::{Deserialize, Serialize};
 use rocket::tokio;
 use rocket::Data;
 use std::collections::HashMap;
@@ -16,21 +14,10 @@ use tokio::sync::RwLock;
 
 use crate::build::Build;
 use crate::BuildSystem;
-use lib::{DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, Port, ProjectConfig};
+use lib::{DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, Port, ProjectConfig};
 
 use crate::router::Router;
 use unveil_service::{Factory, Service};
-
-// TODO: Determine error handling strategy - error types or just use `anyhow`?
-#[derive(Debug, Clone, Serialize, Deserialize, Responder)]
-pub enum DeploymentError {
-    #[response(status = 500)]
-    Internal(String),
-    #[response(status = 404)]
-    NotFound(String),
-    #[response(status = 400)]
-    BadRequest(String),
-}
 
 /// Inner struct of a deployment which holds the deployment itself
 /// and the some metadata
@@ -127,9 +114,11 @@ impl Deployment {
                     let (task, abort_handle) = abortable(deployed_future);
                     tokio::spawn(task);
 
-                    // todo, when we add deletion logic, the deployment id
-                    // returned from promotion should be deleted
-                    context.router.promote(meta.host, meta.id).await;
+                    // Remove stale active deployments
+                    if let Some(stale_id) = context.router.promote(meta.host, meta.id).await {
+                        log::debug!("removing stale deployment `{}`", &stale_id);
+                        context.deployments.write().await.remove(&stale_id);
+                    }
 
                     DeploymentState::deployed(loaded.so, loaded.service, port, abort_handle)
                 }
@@ -229,7 +218,7 @@ type Deployments = HashMap<DeploymentId, Arc<Deployment>>;
 /// The top-level manager for deployments. Is responsible for their creation
 /// and lifecycle.
 pub(crate) struct DeploymentSystem {
-    deployments: RwLock<Deployments>,
+    deployments: Arc<RwLock<Deployments>>,
     job_queue: Arc<JobQueue>,
     router: Arc<Router>,
 }
@@ -285,22 +274,27 @@ pub(crate) struct Context {
     router: Arc<Router>,
     build_system: Box<dyn BuildSystem>,
     factory: Box<dyn Factory>,
+    deployments: Arc<RwLock<Deployments>>,
 }
 
 impl DeploymentSystem {
-    pub(crate) async fn new(build_system: Box<dyn BuildSystem>, factory: Box<dyn Factory>) -> Self {
+    pub(crate) async fn new(build_system: Box<dyn BuildSystem>, factory: Box<dyn Factory>) -> Arc<Self> {
         let router: Arc<Router> = Default::default();
+        let deployments: Arc<RwLock<Deployments>> = Default::default();
+
         let context = Context {
             router: router.clone(),
             build_system,
             factory,
+            deployments: deployments.clone(),
         };
 
-        Self {
-            deployments: Default::default(),
+
+        Arc::new(Self {
+            deployments,
             job_queue: JobQueue::initialise(context).await,
             router,
-        }
+        })
     }
 
     /// Returns the port for a given host. If the host does not exist, returns
@@ -319,14 +313,50 @@ impl DeploymentSystem {
     pub(crate) async fn get_deployment(
         &self,
         id: &DeploymentId,
-    ) -> Result<DeploymentMeta, DeploymentError> {
+    ) -> Result<DeploymentMeta, DeploymentApiError> {
         match self.deployments.read().await.get(&id) {
             Some(deployment) => Ok(deployment.meta().await),
-            None => Err(DeploymentError::NotFound(format!(
+            None => Err(DeploymentApiError::NotFound(format!(
                 "could not find deployment for id '{}'",
                 &id
             ))),
         }
+    }
+
+    /// Retrieves a clone of the deployment information
+    /// for a given project. If there are multiple deployments
+    /// for a given project, will return the latest.
+    pub(crate) async fn get_deployment_for_project(
+        &self,
+        project_name: &String,
+    ) -> Result<DeploymentMeta, DeploymentApiError> {
+        let mut candidates = Vec::new();
+
+        for deployment in self.deployments.read().await.values() {
+            if &deployment.meta.read().await.config.name == project_name {
+                candidates.push(deployment.meta().await);
+            }
+        }
+
+        let latest = candidates
+            .into_iter()
+            .max_by(|d1, d2| d1.created_at.cmp(&d2.created_at));
+
+        match latest {
+            Some(latest) => Ok(latest),
+            None => Err(DeploymentApiError::NotFound(format!(
+                "could not find deployment for project '{}'",
+                &project_name
+            )))
+        }
+    }
+
+    pub(crate) async fn kill_deployment_for_project(
+        &self,
+        project_name: &String,
+    ) -> Result<DeploymentMeta, DeploymentApiError> {
+        let id = self.get_deployment_for_project(&project_name).await?.id;
+        self.kill_deployment(&id).await
     }
 
     /// Remove a deployment from the deployments hash map and, if it has
@@ -335,7 +365,7 @@ impl DeploymentSystem {
     pub(crate) async fn kill_deployment(
         &self,
         id: &DeploymentId,
-    ) -> Result<DeploymentMeta, DeploymentError> {
+    ) -> Result<DeploymentMeta, DeploymentApiError> {
         match self.deployments.write().await.remove(&id) {
             Some(deployment) => {
                 let meta = deployment.meta().await;
@@ -345,9 +375,10 @@ impl DeploymentSystem {
                 // library when the runtime gets around to it.
 
                 let mut lock = deployment.state.write().await;
-                if let DeploymentState::Deployed(DeployedState {
-                    so, abort_handle, ..
-                }) = lock.take()
+                if let DeploymentState::Deployed(
+                    DeployedState {
+                        so, abort_handle, ..
+                    }) = lock.take()
                 {
                     abort_handle.abort();
 
@@ -360,7 +391,7 @@ impl DeploymentSystem {
 
                 Ok(meta)
             }
-            None => Err(DeploymentError::NotFound(String::new())),
+            None => Err(DeploymentApiError::NotFound(String::new())),
         }
     }
 
@@ -370,13 +401,13 @@ impl DeploymentSystem {
         &self,
         crate_file: Data<'_>,
         project_config: &ProjectConfig,
-    ) -> Result<DeploymentMeta, DeploymentError> {
+    ) -> Result<DeploymentMeta, DeploymentApiError> {
         let crate_bytes = crate_file
             .open(ByteUnit::max_value())
             .into_bytes()
             .await
             .map_err(|_| {
-                DeploymentError::BadRequest("could not read crate file into bytes".to_string())
+                DeploymentApiError::BadRequest("could not read crate file into bytes".to_string())
             })?
             .to_vec();
 

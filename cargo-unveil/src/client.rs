@@ -1,14 +1,14 @@
 use anyhow::{Context, Result};
-use lib::{DeploymentId, DeploymentMeta, DeploymentStateMeta, ProjectConfig, API_URL, UNVEIL_PROJECT_HEADER, ApiKey};
+use lib::{DeploymentMeta, DeploymentStateMeta, ProjectConfig, API_URL, UNVEIL_PROJECT_HEADER, ApiKey};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
 use std::{fs::File, io::Read, thread::sleep, time::Duration};
 
-pub(crate) async fn delete(api_key: ApiKey, deployment_id: DeploymentId) -> Result<()> {
+pub(crate) async fn delete(api_key: ApiKey, project: ProjectConfig) -> Result<()> {
     let client = get_retry_client();
 
     let mut url = API_URL.to_string();
-    url.push_str(&format!("/deployments/{}", deployment_id));
+    url.push_str(&format!("/projects/{}", project.name));
     let deployment_meta: DeploymentMeta = client
         .delete(url.clone())
         .basic_auth(api_key.clone(), Some(""))
@@ -24,10 +24,10 @@ pub(crate) async fn delete(api_key: ApiKey, deployment_id: DeploymentId) -> Resu
     Ok(())
 }
 
-pub(crate) async fn status(api_key: ApiKey, deployment_id: DeploymentId) -> Result<()> {
+pub(crate) async fn status(api_key: ApiKey, project: ProjectConfig) -> Result<()> {
     let client = get_retry_client();
 
-    let deployment_meta = get_deployment_meta(&api_key, &deployment_id, &client).await?;
+    let deployment_meta = get_deployment_meta(&api_key, &project, &client).await?;
 
     println!("{}", deployment_meta);
 
@@ -36,11 +36,11 @@ pub(crate) async fn status(api_key: ApiKey, deployment_id: DeploymentId) -> Resu
 
 async fn get_deployment_meta(
     api_key: &ApiKey,
-    deployment_id: &DeploymentId,
+    project: &ProjectConfig,
     client: &ClientWithMiddleware,
 ) -> Result<DeploymentMeta> {
     let mut url = API_URL.to_string();
-    url.push_str(&format!("/deployments/{}", deployment_id));
+    url.push_str(&format!("/projects/{}", project.name));
     client
         .get(url.clone())
         .basic_auth(api_key.clone(), Some(""))
@@ -67,7 +67,7 @@ pub(crate) async fn deploy(
     project: ProjectConfig,
 ) -> Result<()> {
     let mut url = API_URL.to_string();
-    url.push_str("/deployments");
+    url.push_str("/projects");
 
     let client = get_retry_client();
 
@@ -102,7 +102,7 @@ pub(crate) async fn deploy(
 
         sleep(Duration::from_millis(350));
 
-        deployment_meta = get_deployment_meta(&api_key, &deployment_meta.id, &client).await?;
+        deployment_meta = get_deployment_meta(&api_key, &project, &client).await?;
     }
 
     print_log(&deployment_meta.build_logs, &mut log_pos);

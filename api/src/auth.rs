@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use lazy_static::lazy_static;
 use rocket::{Request};
 use rocket::http::Status;
@@ -41,7 +41,6 @@ impl TryFrom<Option<&str>> for ApiKey {
 #[derive(Debug)]
 pub enum AuthorizationError {
     Missing,
-    Invalid,
     Malformed,
     Unauthorized,
 }
@@ -50,7 +49,6 @@ impl Display for AuthorizationError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             AuthorizationError::Missing => write!(f, "API key is missing"),
-            AuthorizationError::Invalid => write!(f, "API key is invalid"),
             AuthorizationError::Malformed => write!(f, "API key is malformed"),
             AuthorizationError::Unauthorized => write!(f, "API key is unauthorized"),
         }
@@ -78,9 +76,10 @@ impl<'r> FromRequest<'r> for User {
     }
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize, Debug)]
 pub(crate) struct User {
-    name: String,
+    pub(crate) name: String,
+    pub(crate) project_name: String
 }
 
 lazy_static! {

@@ -54,7 +54,11 @@ impl Display for DeploymentMeta {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let db_role = {
             if let Some(pwd) = &self.database_role_password {
-                format!("Database role passwd: {}", pwd)
+                // TODO: What's the correct domain here?
+                format!(
+                    "Database URI:         posgres://user-{}:{}@unveil.sh/db-{}",
+                    self.config.name, pwd, self.config.name
+                )
             } else {
                 "".to_string()
             }

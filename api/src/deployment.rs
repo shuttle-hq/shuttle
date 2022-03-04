@@ -113,8 +113,9 @@ impl Deployment {
                         port
                     );
 
-                    match DatabaseResource::new() {
-                        Ok(db) => {
+                    match DatabaseResource::new().await {
+                        Ok(mut db) => {
+                            db.get_client("hello-world").await.unwrap(); // TODO: temp
                             self.meta.write().await.database_role_password =
                                 Some(db.role_password());
 
@@ -150,7 +151,7 @@ impl Deployment {
                             )
                         }
                         Err(e) => {
-                            log::debug!("Failed to lead database resource: {}", e);
+                            log::debug!("Failed to load database resource: {}", e);
                             DeploymentState::Error
                         }
                     }

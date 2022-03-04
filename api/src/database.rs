@@ -1,13 +1,19 @@
+use lazy_static::lazy_static;
 use rand::Rng;
 use sqlx::pool::PoolConnection;
 use sqlx::postgres::{PgPool, PgPoolOptions};
 
-const SUDO_POSTGRES_CONNECTION_STR: &str = "postgres://localhost";
+lazy_static! {
+    static ref SUDO_POSTGRES_CONNECTION_STRING: String = format!(
+        "postgres://postgres:{}@localhost",
+        std::env::var("SUDO_POSTGRES_PASSWORD").expect("superuser postgres role password expected as environment variable SUDO_POSTGRES_PASSWORD")
+    );
+}
 
 fn generate_role_password() -> String {
     rand::thread_rng()
         .sample_iter(&rand::distributions::Alphanumeric)
-        .take(15)
+        .take(12)
         .map(char::from)
         .collect()
 }
@@ -19,12 +25,14 @@ pub(crate) struct DatabaseResource {
 }
 
 impl DatabaseResource {
-    pub(crate) fn new() -> sqlx::Result<Self> {
+    pub(crate) async fn new() -> sqlx::Result<Self> {
+        log::debug!("preparing database resource");
         Ok(Self {
             state: DatabaseState::Uninitialised,
             sudo_pool: PgPoolOptions::new()
                 .max_connections(10)
-                .connect_lazy(SUDO_POSTGRES_CONNECTION_STR)?,
+                .connect(&SUDO_POSTGRES_CONNECTION_STRING)
+                .await?,
             role_password: generate_role_password(),
         })
     }
@@ -33,6 +41,8 @@ impl DatabaseResource {
         &mut self,
         name: &str,
     ) -> sqlx::Result<PoolConnection<sqlx::Postgres>> {
+        log::debug!("getting database client for project '{}'", name);
+
         let role_name = format!("user-{}", name);
         let database_name = format!("db-{}", name);
 
@@ -40,7 +50,7 @@ impl DatabaseResource {
             DatabaseState::Uninitialised => {
                 // Check if this deployment already has its own role:
 
-                let rows = sqlx::query("SELECT * FROM pg_roles WHERE rolname=$1")
+                let rows = sqlx::query("SELECT * FROM pg_roles WHERE rolname = $1")
                     .bind(&role_name)
                     .fetch_all(&self.sudo_pool)
                     .await?;
@@ -48,20 +58,38 @@ impl DatabaseResource {
                 if rows.is_empty() {
                     // Create role if it does not already exist:
 
-                    sqlx::query("CREATE ROLE $1 PASSWORD $2 LOGIN")
-                        .bind(&role_name)
-                        .bind(&self.role_password)
+                    // TODO: Should be able to use `.bind` instead of `format!` but doesn't seem to
+                    // insert quotes correctly.
+                    let create_role_query = format!(
+                        "CREATE ROLE \"{}\" PASSWORD '{}' LOGIN",
+                        role_name, self.role_password
+                    );
+                    sqlx::query(&create_role_query)
                         .execute(&self.sudo_pool)
                         .await?;
+
+                    log::debug!(
+                        "created new role '{}' in database for project '{}'",
+                        role_name,
+                        name
+                    );
+
+                    // Create the database (owned by the new role):
+
+                    let create_database_query = format!(
+                        "CREATE DATABASE \"{}\" OWNER '{}'",
+                        database_name, role_name
+                    );
+                    sqlx::query(&create_database_query)
+                        .execute(&self.sudo_pool)
+                        .await?;
+
+                    log::debug!(
+                        "created database '{}' belonging to '{}'",
+                        database_name,
+                        role_name
+                    );
                 }
-
-                // Create the database (owned by the new role):
-
-                sqlx::query("CREATE DATABASE $1 OWNER $2")
-                    .bind(&database_name)
-                    .bind(&role_name)
-                    .execute(&self.sudo_pool)
-                    .await?;
 
                 // Create connection pool:
 
@@ -69,6 +97,7 @@ impl DatabaseResource {
                     "postgres://{}:{}@localhost/{}",
                     role_name, self.role_password, database_name
                 );
+                log::debug!("{}", connection_string);
                 let pool = PgPoolOptions::new()
                     .max_connections(10)
                     .connect(&connection_string)

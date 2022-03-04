@@ -310,6 +310,20 @@ impl DeploymentSystem {
     }
 
     /// Retrieves a clone of the deployment information
+    pub(crate) async fn get_deployment(
+        &self,
+        id: &DeploymentId,
+    ) -> Result<DeploymentMeta, DeploymentApiError> {
+        match self.deployments.read().await.get(&id) {
+            Some(deployment) => Ok(deployment.meta().await),
+            None => Err(DeploymentApiError::NotFound(format!(
+                "could not find deployment for id '{}'",
+                &id
+            ))),
+        }
+    }
+
+    /// Retrieves a clone of the deployment information
     /// for a given project. If there are multiple deployments
     /// for a given project, will return the latest.
     pub(crate) async fn get_deployment_for_project(

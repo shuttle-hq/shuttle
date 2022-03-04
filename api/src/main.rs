@@ -17,6 +17,7 @@ use rocket::{Data, State, tokio};
 use std::net::IpAddr;
 use std::sync::Arc;
 use structopt::StructOpt;
+use uuid::Uuid;
 
 use crate::args::Args;
 use crate::build::{BuildSystem, FsBuildSystem};

@@ -10,13 +10,14 @@ mod router;
 mod auth;
 
 use factory::UnveilFactory;
-use lib::{DeploymentApiError, Port, ProjectConfig};
+use lib::{DeploymentApiError, DeploymentMeta, Port, ProjectConfig};
 use rocket::serde::json::serde_json::json;
 use rocket::serde::json::Value;
 use rocket::{Data, State, tokio};
 use std::net::IpAddr;
 use std::sync::Arc;
 use structopt::StructOpt;
+use uuid::Uuid;
 
 use crate::args::Args;
 use crate::build::{BuildSystem, FsBuildSystem};
@@ -28,6 +29,26 @@ use crate::auth::User;
 #[get("/status")]
 async fn status() -> () {
     ()
+}
+
+#[get("/deployments/<id>")]
+async fn get_deployment(state: &State<ApiState>, id: Uuid, user: User) -> Result<Value, DeploymentApiError> {
+    let deployment = state.deployment_manager.get_deployment(&id).await?;
+
+    validate_user_for_deployment(&user, &deployment)?;
+
+    Ok(json!(deployment))
+}
+
+#[delete("/deployments/<id>")]
+async fn delete_deployment(state: &State<ApiState>, id: Uuid, user: User) -> Result<Value, DeploymentApiError> {
+    let deployment = state.deployment_manager.get_deployment(&id).await?;
+
+    validate_user_for_deployment(&user, &deployment)?;
+
+    let deployment = state.deployment_manager.kill_deployment(&id).await?;
+
+    Ok(json!(deployment))
 }
 
 #[get("/projects/<project_name>")]
@@ -68,6 +89,15 @@ fn validate_user_for_project(user: &User, project_name: &str) -> Result<(), Depl
     }
 }
 
+fn validate_user_for_deployment(user: &User, meta: &DeploymentMeta) -> Result<(), DeploymentApiError> {
+    if meta.config.name != user.project_name {
+        log::warn!("failed to authenticate user {:?} for deployment `{}`", &user, &meta.id);
+        Err(DeploymentApiError::NotFound(format!("could not find deployment `{}`", &meta.id)))
+    } else {
+        Ok(())
+    }
+}
+
 struct ApiState {
     deployment_manager: Arc<DeploymentSystem>,
 }
@@ -97,7 +127,13 @@ async fn rocket() -> _ {
     rocket::custom(config)
         .mount(
             "/",
-            routes![delete_project, create_project, get_project, status],
+            routes![
+                delete_deployment,
+                get_deployment,
+                delete_project,
+                create_project,
+                get_project,
+                status],
         )
         .manage(state)
 }

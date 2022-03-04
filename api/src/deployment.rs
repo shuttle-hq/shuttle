@@ -114,7 +114,11 @@ impl Deployment {
                     let (task, abort_handle) = abortable(deployed_future);
                     tokio::spawn(task);
 
-                    let _ = context.router.promote(meta.host, meta.id);
+                    // Remove stale active deployments
+                    if let Some(stale_id) = context.router.promote(meta.host, meta.id).await {
+                            log::debug!("removing stale deployment `{}`", &stale_id);
+                            context.deployments.write().await.remove(&stale_id);
+                    }
 
                     DeploymentState::deployed(loaded.so, loaded.service, port, abort_handle)
                 }
@@ -214,7 +218,7 @@ type Deployments = HashMap<DeploymentId, Arc<Deployment>>;
 /// The top-level manager for deployments. Is responsible for their creation
 /// and lifecycle.
 pub(crate) struct DeploymentSystem {
-    deployments: RwLock<Deployments>,
+    deployments: Arc<RwLock<Deployments>>,
     job_queue: Arc<JobQueue>,
     router: Arc<Router>,
 }
@@ -270,50 +274,28 @@ pub(crate) struct Context {
     router: Arc<Router>,
     build_system: Box<dyn BuildSystem>,
     factory: Box<dyn Factory>,
+    deployments: Arc<RwLock<Deployments>>
 }
 
 impl DeploymentSystem {
     pub(crate) async fn new(build_system: Box<dyn BuildSystem>, factory: Box<dyn Factory>) -> Arc<Self> {
         let router: Arc<Router> = Default::default();
+        let deployments: Arc<RwLock<Deployments>> = Default::default();
+
         let context = Context {
             router: router.clone(),
             build_system,
             factory,
+            deployments: deployments.clone()
         };
 
-        let ds = Arc::new(Self {
-            deployments: Default::default(),
+
+        Arc::new(Self {
+            deployments,
             job_queue: JobQueue::initialise(context).await,
             router,
-        });
-
-        let ds_ref = ds.clone();
-
-        tokio::spawn(async move { Self::start_garbage_collector(ds_ref).await });
-
-        ds
+        })
     }
-
-    /// Starts a garbage collection daemon which will remove stale deployments
-    async fn start_garbage_collector(deployment_system: Arc<DeploymentSystem>) {
-        log::debug!("garbage collector started");
-        loop {
-            deployment_system.collect_garbage().await;
-            tokio::time::sleep(Duration::from_millis(500)).await
-        }
-    }
-
-    /// Removes all 'finished' deployments for a given project except for the latest one
-    /// Option 1: remove all deployments except for latest. This however will result
-    ///     in 'Building' deployments removing active ones.
-    /// Option 2: remove all deployments in a terminated state except for the latest one.
-    ///    However this will result in the project status returning undeterministic results.
-    /// Option 3: Option 2 + get_projects returns most recent deployed instead of the first one
-    ///
-    async fn collect_garbage(&self) {
-        todo!()
-    }
-
 
     /// Returns the port for a given host. If the host does not exist, returns
     /// `None`.

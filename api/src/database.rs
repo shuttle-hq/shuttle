@@ -1,6 +1,5 @@
 use lazy_static::lazy_static;
 use rand::Rng;
-use sqlx::pool::PoolConnection;
 use sqlx::postgres::{PgPool, PgPoolOptions};
 
 lazy_static! {
@@ -40,7 +39,7 @@ impl DatabaseResource {
     pub(crate) async fn get_client(
         &mut self,
         name: &str,
-    ) -> sqlx::Result<PoolConnection<sqlx::Postgres>> {
+    ) -> sqlx::Result<PgPool> {
         log::debug!("getting database client for project '{}'", name);
 
         let role_name = format!("user-{}", name);
@@ -103,14 +102,12 @@ impl DatabaseResource {
                     .connect(&connection_string)
                     .await?;
 
-                let connection = pool.acquire().await;
-
                 // Transition to the 'ready' state:
-                self.state = DatabaseState::Ready(pool);
+                self.state = DatabaseState::Ready(pool.clone());
 
-                connection
+                Ok(pool)
             }
-            DatabaseState::Ready(ref pool) => pool.acquire().await,
+            DatabaseState::Ready(ref pool) => Ok(pool.clone()),
         }
     }
 

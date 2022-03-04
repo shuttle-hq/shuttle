@@ -1,7 +1,7 @@
 use crate::database::DatabaseResource;
 use async_trait::async_trait;
 use lib::ProjectConfig;
-use sqlx::pool::PoolConnection;
+use sqlx::PgPool;
 use std::convert::Into;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -23,7 +23,7 @@ impl Factory for UnveilFactory {
     /// Lazily gets a connection pool
     async fn get_postgres_connection_pool(
         &mut self,
-    ) -> Result<PoolConnection<sqlx::Postgres>, unveil_service::Error> {
+    ) -> Result<PgPool, unveil_service::Error> {
         self.database
             .lock()
             .await

@@ -326,8 +326,6 @@ impl DeploymentSystem {
     /// Retrieves a clone of the deployment information
     /// for a given project. If there are multiple deployments
     /// for a given project, will return the latest.
-    ///
-    ///
     pub(crate) async fn get_deployment_for_project(
         &self,
         project_name: &String,

@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use cargo::util::toml::parse;
 use tokio::sync::RwLock;
 
 use crate::build::{Build, DEFAULT_FS_ROOT};
@@ -29,16 +30,32 @@ pub(crate) struct Deployment {
 }
 
 impl Deployment {
-    fn new(config: &ProjectConfig, crate_bytes: Vec<u8>) -> Self {
+    fn new(meta: DeploymentMeta, state: DeploymentState) -> Self {
         Self {
-            meta: Arc::new(RwLock::new(DeploymentMeta::new(&config))),
+            meta: Arc::new(RwLock::new(meta)),
+            state: RwLock::new(state)
+        }
+    }
+
+    fn from_bytes(config: &ProjectConfig, crate_bytes: Vec<u8>) -> Self {
+        Self {
+            meta: Arc::new(RwLock::new(DeploymentMeta::queued(&config))),
             state: RwLock::new(DeploymentState::queued(crate_bytes)),
         }
     }
 
     /// Initialise a deployment from a directory.
     fn from_directory(dir: DirEntry) -> Result<Self, ()> {
-        let project_name = dir.file_name().to_s;
+        let project_path = dir.path();
+        let project_name = dir.file_name().into_string().unwrap();
+        // find marker which points to so file
+        let marker_path = project_path.join(".unveil_marker");
+        // todo fix here as the marker may not exist
+        let so_path: PathBuf = String::from_utf8_lossy(&std::fs::read(&marker_path).unwrap()).parse().unwrap();
+        // try to find so file, if no so file, fail
+        let meta = DeploymentMeta::built(&ProjectConfig::new(project_name));
+        let state = DeploymentState::built(Build { so_path });
+        Ok(Self::new(meta, state))
     }
 
     /// Gets a `clone`ed copy of the metadata.
@@ -255,8 +272,15 @@ impl JobQueue {
         job_queue
     }
 
+    /// Starts the job processor. Before it begins, it will add all projects
+    /// from the deployment service into the queue.
     async fn start_job_processor(context: Context, queue: Arc<JobQueue>) {
-        log::debug!("job processor started");
+        log::debug!("loading deployments into job processor");
+        for deployment in context.deployments.read().await.values() {
+            queue.push(deployment.clone());
+            log::debug!("loading deployment: {:?}", deployment.meta);
+        }
+        log::debug!("starting job processor loop");
         loop {
             if let Some(deployment) = queue.pop() {
                 let id = deployment.meta().await.id;
@@ -269,7 +293,7 @@ impl JobQueue {
 
                 log::debug!("ended deployment job for id: '{}'", id);
             } else {
-                tokio::time::sleep(Duration::from_millis(100)).await
+                tokio::time::sleep(Duration::from_millis(50)).await
             }
         }
     }
@@ -290,7 +314,7 @@ impl DeploymentSystem {
 
         let deployments = Arc::new(
             RwLock::new(
-                Self::initialise_from_fs(&build_system).await
+                Self::initialise_from_fs(&build_system.fs_root()).await
             )
         );
 
@@ -323,7 +347,6 @@ impl DeploymentSystem {
                     let deployment = Arc::new(deployment);
                     let info = deployment.meta().await;
                     deployments.insert(info.id.clone(), deployment.clone());
-                    // todo put in job queue
                 }
             }
         }
@@ -445,7 +468,7 @@ impl DeploymentSystem {
             })?
             .to_vec();
 
-        let deployment = Arc::new(Deployment::new(&project_config, crate_bytes));
+        let deployment = Arc::new(Deployment::from_bytes(&project_config, crate_bytes));
         let info = deployment.meta().await;
 
         self.deployments

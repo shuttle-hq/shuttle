@@ -133,8 +133,8 @@ impl Display for DeploymentApiError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             DeploymentApiError::Internal(s) => write!(f, "internal: {}", s),
-            DeploymentApiError::NotFound(s) => write!(f, "internal: {}", s),
-            DeploymentApiError::BadRequest(s) => write!(f, "internal: {}", s),
+            DeploymentApiError::NotFound(s) => write!(f, "not found: {}", s),
+            DeploymentApiError::BadRequest(s) => write!(f, "bad request: {}", s),
         }
     }
 }

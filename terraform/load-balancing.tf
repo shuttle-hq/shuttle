@@ -1,5 +1,5 @@
 resource "aws_lb" "api" {
-  name = "unveil-api-load-balancer"
+  name = "shuttle"
 
   internal = true
 
@@ -47,7 +47,7 @@ resource "aws_lb_listener" "api" {
 }
 
 resource "aws_lb" "user" {
-  name = "unveil-user-load-balancer"
+  name = "shuttleapp"
 
   internal = false
 

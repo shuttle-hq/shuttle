@@ -116,8 +116,8 @@ impl Deployment {
 
                     // Remove stale active deployments
                     if let Some(stale_id) = context.router.promote(meta.host, meta.id).await {
-                            log::debug!("removing stale deployment `{}`", &stale_id);
-                            context.deployments.write().await.remove(&stale_id);
+                        log::debug!("removing stale deployment `{}`", &stale_id);
+                        context.deployments.write().await.remove(&stale_id);
                     }
 
                     DeploymentState::deployed(loaded.so, loaded.service, port, abort_handle)
@@ -274,7 +274,7 @@ pub(crate) struct Context {
     router: Arc<Router>,
     build_system: Box<dyn BuildSystem>,
     factory: Box<dyn Factory>,
-    deployments: Arc<RwLock<Deployments>>
+    deployments: Arc<RwLock<Deployments>>,
 }
 
 impl DeploymentSystem {
@@ -286,7 +286,7 @@ impl DeploymentSystem {
             router: router.clone(),
             build_system,
             factory,
-            deployments: deployments.clone()
+            deployments: deployments.clone(),
         };
 
 
@@ -310,20 +310,33 @@ impl DeploymentSystem {
     }
 
     /// Retrieves a clone of the deployment information
-    /// for a given project
+    /// for a given project. If there are multiple deployments
+    /// for a given project, will return the latest.
+    ///
+    ///
     pub(crate) async fn get_deployment_for_project(
         &self,
         project_name: &String,
     ) -> Result<DeploymentMeta, DeploymentApiError> {
+        let mut candidates = Vec::new();
+
         for deployment in self.deployments.read().await.values() {
             if &deployment.meta.read().await.config.name == project_name {
-                return Ok(deployment.meta().await);
+                candidates.push(deployment.meta().await);
             }
         }
-        Err(DeploymentApiError::NotFound(format!(
-            "could not find deployment for project '{}'",
-            &project_name
-        )))
+
+        let latest = candidates
+            .into_iter()
+            .max_by(|d1, d2| d1.created_at.cmp(&d2.created_at));
+
+        match latest {
+            Some(latest) => Ok(latest),
+            None => Err(DeploymentApiError::NotFound(format!(
+                "could not find deployment for project '{}'",
+                &project_name
+            )))
+        }
     }
 
     pub(crate) async fn kill_deployment_for_project(

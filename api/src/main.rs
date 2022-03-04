@@ -51,7 +51,7 @@ async fn create_project(
     state: &State<ApiState>,
     crate_file: Data<'_>,
     project: ProjectConfig,
-    user: User
+    user: User,
 ) -> Result<Value, DeploymentApiError> {
     validate_user_for_project(&user, &project.name)?;
 

@@ -30,7 +30,6 @@ pub struct DeploymentMeta {
     pub host: String,
     pub build_logs: Option<String>,
     pub runtime_logs: Option<String>,
-    pub database_role_password: Option<String>,
 }
 
 impl DeploymentMeta {
@@ -42,7 +41,6 @@ impl DeploymentMeta {
             host: Self::create_host(config),
             build_logs: None,
             runtime_logs: None,
-            database_role_password: None,
         }
     }
 
@@ -58,25 +56,14 @@ lazy_static! {
 
 impl Display for DeploymentMeta {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let db_role = {
-            if let Some(pwd) = &self.database_role_password {
-                format!(
-                    "Database URI:         posgres://user-{}:{}@{}/db-{}",
-                    self.config.name, pwd, *PUBLIC_IP, self.config.name
-                )
-            } else {
-                "".to_string()
-            }
-        };
         write!(
             f,
             r#"
         Deployment Id:        {}
         Deployment Status:    {}
         Host:                 {}
-        {}
         "#,
-            self.id, self.state, self.host, db_role
+            self.id, self.state, self.host
         )
     }
 }

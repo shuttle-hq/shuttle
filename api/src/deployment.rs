@@ -115,12 +115,13 @@ impl Deployment {
 
                     let db_state = Arc::new(TokioMutex::new(database::State::default()));
 
-                    let factory: Box<dyn Factory> = Box::new(UnveilFactory::new(
+                    let mut factory: Box<dyn Factory> = Box::new(UnveilFactory::new(
                         Arc::clone(&db_state),
                         meta.config.clone(),
                         db_context.clone(),
                     ));
 
+                    factory.get_postgres_connection_pool().await.unwrap(); // TODO
                     let deployed_future = match loaded.service.deploy(&factory) {
                         unveil_service::Deployment::Rocket(r) => {
                             let config = rocket::Config {

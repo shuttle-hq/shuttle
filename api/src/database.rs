@@ -5,7 +5,9 @@ use sqlx::postgres::{PgPool, PgPoolOptions};
 lazy_static! {
     static ref SUDO_POSTGRES_CONNECTION_STRING: String = format!(
         "postgres://postgres:{}@localhost",
-        std::env::var("PG_PASSWORD").expect("superuser postgres role password expected as environment variable SUDO_POSTGRES_PASSWORD")
+        std::env::var("PG_PASSWORD").expect(
+            "superuser postgres role password expected as environment variable PG_PASSWORD"
+        )
     );
 }
 
@@ -69,6 +71,21 @@ impl State {
                     log::debug!(
                         "created database '{}' belonging to '{}'",
                         database_name,
+                        role_name
+                    );
+                } else {
+                    // If the role already exists then change its password:
+
+                    let alter_password_query = format!(
+                        "ALTER ROLE \"{}\" WITH PASSWORD '{}'",
+                        role_name, role_password
+                    );
+                    sqlx::query(&alter_password_query)
+                        .execute(&ctx.sudo_pool)
+                        .await?;
+
+                    log::debug!(
+                        "role '{}' already exists so updating their password",
                         role_name
                     );
                 }

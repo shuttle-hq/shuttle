@@ -30,6 +30,7 @@ pub struct DeploymentMeta {
     pub host: String,
     pub build_logs: Option<String>,
     pub runtime_logs: Option<String>,
+    pub database_deployment: Option<DatabaseReadyInfo>,
 }
 
 impl DeploymentMeta {
@@ -41,6 +42,7 @@ impl DeploymentMeta {
             host: Self::create_host(config),
             build_logs: None,
             runtime_logs: None,
+            database_deployment: None,
         }
     }
 
@@ -56,14 +58,37 @@ lazy_static! {
 
 impl Display for DeploymentMeta {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let db = {
+            if let Some(info) = &self.database_deployment {
+                format!("\n        Database URI:         {}", info.connection_string(&*PUBLIC_IP))
+            } else {
+                "".to_string()
+            }
+        };
         write!(
             f,
             r#"
         Deployment Id:        {}
         Deployment Status:    {}
-        Host:                 {}
+        Host:                 {}{}
         "#,
-            self.id, self.state, self.host
+            self.id, self.state, self.host, db
+        )
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DatabaseReadyInfo {
+    pub role_name: String,
+    pub role_password: String,
+    pub database_name: String,
+}
+
+impl DatabaseReadyInfo {
+    pub fn connection_string(&self, ip: &str) -> String {
+        format!(
+            "postgres://{}:{}@{}/{}",
+            self.role_name, self.role_password, ip, self.database_name
         )
     }
 }

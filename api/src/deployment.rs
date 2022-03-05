@@ -12,7 +12,7 @@ use std::net::{Ipv4Addr, SocketAddrV4, TcpListener};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tokio::sync::{Mutex as TokioMutex, RwLock};
+use tokio::sync::RwLock;
 
 use crate::build::Build;
 use crate::{BuildSystem, UnveilFactory};
@@ -124,6 +124,9 @@ impl Deployment {
                     factory.get_postgres_connection_pool().await.unwrap(); // TODO
                     let deployed_future = match loaded.service.deploy(&factory) {
                         unveil_service::Deployment::Rocket(r) => {
+                            if let database::State::Ready(ready) = &db_state {
+                                self.meta.write().await.database_deployment = Some(ready.clone());
+                            }
                             let config = rocket::Config {
                                 port,
                                 log_level: rocket::config::LogLevel::Normal,

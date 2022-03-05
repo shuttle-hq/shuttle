@@ -1,6 +1,7 @@
 use lazy_static::lazy_static;
 use rand::Rng;
 use sqlx::postgres::{PgPool, PgPoolOptions};
+use lib::DatabaseReadyInfo;
 
 lazy_static! {
     static ref SUDO_POSTGRES_CONNECTION_STRING: String = format!(
@@ -21,11 +22,11 @@ fn generate_role_password() -> String {
 
 pub(crate) enum State {
     Uninitialised,
-    Ready(ReadyState),
+    Ready(DatabaseReadyInfo),
 }
 
 impl State {
-    pub(crate) async fn advance(&mut self, name: &str, ctx: &Context) -> sqlx::Result<ReadyState> {
+    pub(crate) async fn advance(&mut self, name: &str, ctx: &Context) -> sqlx::Result<DatabaseReadyInfo> {
         match self {
             State::Uninitialised => {
                 let role_name = format!("user-{}", name);
@@ -92,7 +93,7 @@ impl State {
 
                 // Transition to the 'ready' state:
 
-                let ready = ReadyState {
+                let ready = DatabaseReadyInfo {
                     role_name,
                     role_password,
                     database_name,
@@ -110,22 +111,6 @@ impl State {
 impl Default for State {
     fn default() -> Self {
         State::Uninitialised
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ReadyState {
-    role_name: String,
-    role_password: String,
-    database_name: String,
-}
-
-impl ReadyState {
-    pub fn connection_string(&self) -> String {
-        format!(
-            "postgres://{}:{}@localhost/{}",
-            self.role_name, self.role_password, self.database_name
-        )
     }
 }
 

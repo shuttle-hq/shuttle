@@ -2,8 +2,6 @@ use crate::database;
 use async_trait::async_trait;
 use lib::ProjectConfig;
 use sqlx::{postgres::PgPoolOptions, PgPool};
-use std::sync::Arc;
-use tokio::sync::Mutex;
 use unveil_service::Factory;
 
 pub(crate) struct UnveilFactory<'a> {
@@ -38,7 +36,7 @@ impl Factory for UnveilFactory<'_> {
 
         PgPoolOptions::new()
             .max_connections(10)
-            .connect(&ready_state.connection_string())
+            .connect(&ready_state.connection_string("localhost"))
             .await
             .map_err(unveil_service::Error::from)
     }

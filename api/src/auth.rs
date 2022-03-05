@@ -39,6 +39,7 @@ impl TryFrom<Option<&str>> for ApiKey {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum AuthorizationError {
     Missing,
     Invalid,

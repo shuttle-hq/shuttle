@@ -42,7 +42,7 @@ fn hello() {
         stdout,
         str::from_utf8(&unveil_output.stderr).unwrap()
     );
-    assert!(stdout.contains("Deployment Status:  DEPLOYED"));
+    assert!(stdout.contains("Deployment Status:    DEPLOYED"));
 
     let request_text = reqwest::blocking::Client::new()
         .get("http://localhost:8000/hello")

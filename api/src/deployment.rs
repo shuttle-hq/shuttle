@@ -12,8 +12,7 @@ use std::net::{Ipv4Addr, SocketAddrV4, TcpListener};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tokio::sync::RwLock;
-use sqlx::PgPool;
+use tokio::sync::{Mutex as TokioMutex, RwLock};
 
 use crate::build::Build;
 use crate::{BuildSystem, UnveilFactory};
@@ -114,10 +113,13 @@ impl Deployment {
                         port
                     );
 
-                    let mut db_state = database::State::default();
+                    let db_state = Arc::new(TokioMutex::new(database::State::default()));
 
-                    let factory: Box<dyn Factory> =
-                        Box::new(UnveilFactory::new(&mut db_state, meta.config.clone(), db_context.clone()));
+                    let factory: Box<dyn Factory> = Box::new(UnveilFactory::new(
+                        Arc::clone(&db_state),
+                        meta.config.clone(),
+                        db_context.clone(),
+                    ));
 
                     let deployed_future = match loaded.service.deploy(&factory) {
                         unveil_service::Deployment::Rocket(r) => {
@@ -266,12 +268,18 @@ impl JobQueue {
 
         let queue_ref = job_queue.clone();
 
-        tokio::spawn(async move { Self::start_job_processor(context, db_context, queue_ref).await });
+        tokio::spawn(
+            async move { Self::start_job_processor(context, db_context, queue_ref).await },
+        );
 
         job_queue
     }
 
-    async fn start_job_processor(context: Context, db_context: database::Context, queue: Arc<JobQueue>) {
+    async fn start_job_processor(
+        context: Context,
+        db_context: database::Context,
+        queue: Arc<JobQueue>,
+    ) {
         log::debug!("job processor started");
         loop {
             if let Some(deployment) = queue.pop() {
@@ -305,7 +313,9 @@ impl DeploymentService {
             router: router.clone(),
             build_system,
         };
-        let db_context = database::Context::new().await.expect("failed to create lazy connection to database");
+        let db_context = database::Context::new()
+            .await
+            .expect("failed to create lazy connection to database");
 
         Self {
             deployments: Default::default(),
@@ -418,9 +428,7 @@ type CreateService = unsafe extern "C" fn() -> *mut dyn Service;
 /// function called [`ENTRYPOINT_SYMBOL_NAME`], likely automatically generated
 /// using the [`unveil_service::declare_service`] macro.
 #[allow(clippy::type_complexity)]
-fn load_service_from_so_file(
-    so_path: &Path,
-) -> anyhow::Result<(Box<dyn Service>, Library)> {
+fn load_service_from_so_file(so_path: &Path) -> anyhow::Result<(Box<dyn Service>, Library)> {
     unsafe {
         let lib = libloading::Library::new(so_path)?;
 
@@ -480,14 +488,14 @@ impl DeploymentState {
         service: Box<dyn Service>,
         port: Port,
         abort_handle: AbortHandle,
-        db_state: database::State,
+        db_state: Arc<TokioMutex<database::State>>,
     ) -> Self {
         Self::Deployed(DeployedState {
             service,
             so,
             port,
             abort_handle,
-            db_state
+            db_state,
         })
     }
 
@@ -515,11 +523,11 @@ struct LoadedState {
     so: Library,
 }
 
+#[allow(dead_code)]
 struct DeployedState {
-    #[allow(dead_code)]
     service: Box<dyn Service>,
     so: Library,
     port: Port,
     abort_handle: AbortHandle,
-    db_state: database::State
+    db_state: Arc<TokioMutex<database::State>>,
 }

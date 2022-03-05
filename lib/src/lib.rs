@@ -1,10 +1,10 @@
+use lazy_static::lazy_static;
 use rocket::http::Status;
 use rocket::request::{FromRequest, Outcome};
 use rocket::Request;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use uuid::Uuid;
-use lazy_static::lazy_static;
 
 pub const UNVEIL_PROJECT_HEADER: &str = "Unveil-Project";
 
@@ -52,7 +52,8 @@ impl DeploymentMeta {
 }
 
 lazy_static! {
-    static ref PUBLIC_IP: String = std::env::var("PUBLIC_IP").unwrap_or_else(|_| "localhost".to_string());
+    static ref PUBLIC_IP: String =
+        std::env::var("PUBLIC_IP").unwrap_or_else(|_| "localhost".to_string());
 }
 
 impl Display for DeploymentMeta {

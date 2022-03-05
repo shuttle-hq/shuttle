@@ -23,11 +23,7 @@ pub(crate) enum State {
 }
 
 impl State {
-    pub(crate) async fn advance(
-        &mut self,
-        name: &str,
-        ctx: &Context,
-    ) -> sqlx::Result<ReadyState> {
+    pub(crate) async fn advance(&mut self, name: &str, ctx: &Context) -> sqlx::Result<ReadyState> {
         match self {
             State::Uninitialised => {
                 let role_name = format!("user-{}", name);
@@ -80,7 +76,9 @@ impl State {
                 // Transition to the 'ready' state:
 
                 let ready = ReadyState {
-                    role_name, role_password, database_name
+                    role_name,
+                    role_password,
+                    database_name,
                 };
 
                 *self = State::Ready(ready.clone());
@@ -99,10 +97,10 @@ impl Default for State {
 }
 
 #[derive(Debug, Clone)]
-struct ReadyState {
+pub struct ReadyState {
     role_name: String,
     role_password: String,
-    database_name: String
+    database_name: String,
 }
 
 impl ReadyState {

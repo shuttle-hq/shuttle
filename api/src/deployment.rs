@@ -5,6 +5,7 @@ use rocket::data::ByteUnit;
 use rocket::tokio;
 use rocket::Data;
 use std::collections::HashMap;
+use std::ffi::OsString;
 use std::fs::{DirEntry, ReadDir};
 use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddrV4, TcpListener};
@@ -12,6 +13,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use anyhow::{anyhow, Context as AnyhowContext};
 use cargo::util::toml::parse;
 use tokio::sync::RwLock;
 
@@ -44,15 +46,20 @@ impl Deployment {
         }
     }
 
-    /// Initialise a deployment from a directory.
-    fn from_directory(dir: DirEntry) -> Result<Self, ()> {
+    /// Initialise a deployment from a directory
+    fn from_directory(dir: DirEntry) -> Result<Self, anyhow::Error> {
         let project_path = dir.path();
-        let project_name = dir.file_name().into_string().unwrap();
+        let project_name = dir.file_name()
+            .into_string()
+            .map_err(|os_str| anyhow!("could not parse project name `{:?}` to string", os_str))?;
         // find marker which points to so file
         let marker_path = project_path.join(".unveil_marker");
-        // todo fix here as the marker may not exist
-        let so_path: PathBuf = String::from_utf8_lossy(&std::fs::read(&marker_path).unwrap()).parse().unwrap();
-        // try to find so file, if no so file, fail
+        let so_path_str = std::fs::read(&marker_path)
+            .context(anyhow!("could not find so marker file at {:?}", marker_path))?;
+        let so_path: PathBuf = String::from_utf8_lossy(&so_path_str)
+            .parse()
+            .context("could not parse contents of marker file to a valid path")?;
+
         let meta = DeploymentMeta::built(&ProjectConfig::new(project_name));
         let state = DeploymentState::built(Build { so_path });
         Ok(Self::new(meta, state))
@@ -333,15 +340,29 @@ impl DeploymentSystem {
         })
     }
 
-    /// Traverse the build directory re-create deployments
+    /// Traverse the build directory re-create deployments.
+    /// If a project could not be re-created, this will get logged and skipped.
     async fn initialise_from_fs(fs_root: &Path) -> Deployments {
         let mut deployments = HashMap::default();
         for project_dir in std::fs::read_dir(fs_root)
             .unwrap() // safety: api can read the fs root dir
             .into_iter() {
-            match Deployment::from_directory(project_dir.unwrap()) {
+            let project_dir = match project_dir {
+                Ok(project_dir) => project_dir,
                 Err(e) => {
-                    log::debug!("failed to re-create deployment for TODO");
+                    log::warn!("failed to read directory for project with error `{:?}`", e);
+                    log::warn!("skipping...");
+                    continue;
+                }
+            };
+            let project_name = project_dir.file_name();
+            match Deployment::from_directory(project_dir) {
+                Err(e) => {
+                    log::warn!(
+                        "failed to re-create deployment for project `{:?}` with error: {:?}",
+                        project_name,
+                        e
+                    );
                 }
                 Ok(deployment) => {
                     let deployment = Arc::new(deployment);

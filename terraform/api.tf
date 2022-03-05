@@ -1,6 +1,23 @@
 resource "aws_apigatewayv2_api" "backend" {
   name = "unveil-api-gateway"
   protocol_type = "HTTP"
+  disable_execute_api_endpoint = true
+}
+
+resource "aws_apigatewayv2_domain_name" "backend" {
+  domain_name = "api.shuttle.rs"
+
+  domain_name_configuration {
+    certificate_arn = aws_acm_certificate.api.arn
+    endpoint_type = "REGIONAL"
+    security_policy = "TLS_1_2"
+  }
+}
+
+resource "aws_apigatewayv2_api_mapping" "backend" {
+  api_id = aws_apigatewayv2_api.backend.id
+  domain_name = aws_apigatewayv2_domain_name.backend.id
+  stage = aws_apigatewayv2_stage.alpha.id
 }
 
 resource "aws_api_gateway_account" "backend" {

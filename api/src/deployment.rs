@@ -5,19 +5,16 @@ use rocket::data::ByteUnit;
 use rocket::tokio;
 use rocket::Data;
 use std::collections::HashMap;
-use std::ffi::OsString;
-use std::fs::{DirEntry, ReadDir};
+use std::fs::{DirEntry};
 use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddrV4, TcpListener};
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use anyhow::{anyhow, Context as AnyhowContext};
-use cargo::util::toml::parse;
 use tokio::sync::RwLock;
 
-use crate::build::{Build, DEFAULT_FS_ROOT};
+use crate::build::{Build};
 use crate::BuildSystem;
 use lib::{DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, Port, ProjectConfig};
 

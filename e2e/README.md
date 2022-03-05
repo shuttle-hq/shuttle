@@ -15,11 +15,3 @@ unveil-service = { path = "[base]/unveil/service" }
 ```
 
 Now the tests will run against the changes made in `unveil-service`.
-
-## Isolating tests
-Cargo defaults to running tests in parallel. But two `api` services cannot be started by the tests at the same time. So
-make the test harness run the tests in serial using:
-
-``` shell
-cargo test -- --test-threads 1
-```

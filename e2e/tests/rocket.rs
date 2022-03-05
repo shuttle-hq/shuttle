@@ -2,8 +2,8 @@ mod helpers;
 
 #[test]
 fn hello_world() {
-    let _api = helpers::Api::new();
-    helpers::deploy("../examples/rocket/hello-world");
+    let client = helpers::Api::new();
+    client.deploy("../examples/rocket/hello-world");
 
     let request_text = reqwest::blocking::Client::new()
         .get("http://localhost:8000/hello")
@@ -18,8 +18,8 @@ fn hello_world() {
 
 #[test]
 fn postgres() {
-    let _api = helpers::Api::new();
-    helpers::deploy("../examples/rocket/postgres");
+    let client = helpers::Api::new();
+    client.deploy("../examples/rocket/postgres");
 
     let client = reqwest::blocking::Client::new();
     let add_response = client

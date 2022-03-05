@@ -1,5 +1,5 @@
 resource "aws_lb" "api" {
-  name = "unveil-api-load-balancer"
+  name = "shuttle"
 
   internal = true
 
@@ -47,7 +47,7 @@ resource "aws_lb_listener" "api" {
 }
 
 resource "aws_lb" "user" {
-  name = "unveil-user-load-balancer"
+  name = "shuttleapp"
 
   internal = false
 
@@ -69,6 +69,27 @@ resource "aws_lb_listener" "user" {
   port = "80"
 
   protocol = "HTTP"
+
+  default_action {
+    type = "redirect"
+
+    redirect {
+      status_code = "HTTP_301"
+      port = "443"
+      protocol = "HTTPS"
+    }
+  }
+}
+
+resource "aws_lb_listener" "user_tls" {
+  load_balancer_arn = aws_lb.user.arn
+
+  port = "443"
+
+  protocol = "HTTPS"
+
+  ssl_policy = "ELBSecurityPolicy-2016-08"
+  certificate_arn = aws_acm_certificate.user.arn
 
   default_action {
     type = "forward"

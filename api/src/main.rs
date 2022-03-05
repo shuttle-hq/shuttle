@@ -11,16 +11,18 @@ mod proxy;
 mod router;
 
 use factory::UnveilFactory;
-use lib::{Port, ProjectConfig};
+use lib::{DeploymentApiError, DeploymentMeta, Port, ProjectConfig};
 use rocket::serde::json::serde_json::json;
 use rocket::serde::json::Value;
-use rocket::{tokio, Data, State};
+use rocket::{Data, State, tokio};
 use std::net::IpAddr;
 use std::sync::Arc;
 use structopt::StructOpt;
 use uuid::Uuid;
 
 use crate::args::Args;
+use crate::build::{BuildSystem, FsBuildSystem};
+use crate::deployment::DeploymentSystem;
 use crate::auth::User;
 use crate::build::{BuildSystem, FsBuildSystem};
 use crate::deployment::{DeploymentError, DeploymentService};
@@ -30,36 +32,70 @@ use crate::deployment::{DeploymentError, DeploymentService};
 async fn status() {}
 
 #[get("/deployments/<id>")]
-async fn get_deployment(
-    state: &State<ApiState>,
-    id: Uuid,
-    _user: User,
-) -> Result<Value, DeploymentError> {
+async fn get_deployment(state: &State<ApiState>, id: Uuid, user: User) -> Result<Value, DeploymentApiError> {
     let deployment = state.deployment_manager.get_deployment(&id).await?;
+
+    validate_user_for_deployment(&user, &deployment)?;
 
     Ok(json!(deployment))
 }
 
 #[delete("/deployments/<id>")]
-async fn delete_deployment(
-    state: &State<ApiState>,
-    id: Uuid,
-    _user: User,
-) -> Result<Value, DeploymentError> {
+async fn delete_deployment(state: &State<ApiState>, id: Uuid, user: User) -> Result<Value, DeploymentApiError> {
+    let deployment = state.deployment_manager.get_deployment(&id).await?;
+
+    validate_user_for_deployment(&user, &deployment)?;
+
     let deployment = state.deployment_manager.kill_deployment(&id).await?;
 
     Ok(json!(deployment))
 }
 
-#[post("/deployments", data = "<crate_file>")]
-async fn create_deployment(
+#[get("/projects/<project_name>")]
+async fn get_project(state: &State<ApiState>, project_name: String, user: User) -> Result<Value, DeploymentApiError> {
+    validate_user_for_project(&user, &project_name)?;
+
+    let deployment = state.deployment_manager.get_deployment_for_project(&project_name).await?;
+    Ok(json!(deployment))
+}
+
+#[delete("/projects/<project_name>")]
+async fn delete_project(state: &State<ApiState>, project_name: String, user: User) -> Result<Value, DeploymentApiError> {
+    validate_user_for_project(&user, &project_name)?;
+
+    let deployment = state.deployment_manager.kill_deployment_for_project(&project_name).await?;
+    Ok(json!(deployment))
+}
+
+#[post("/projects", data = "<crate_file>")]
+async fn create_project(
     state: &State<ApiState>,
     crate_file: Data<'_>,
-    config: ProjectConfig,
-    _user: User,
-) -> Result<Value, DeploymentError> {
-    let deployment = state.deployment_manager.deploy(crate_file, &config).await?;
+    project: ProjectConfig,
+    user: User,
+) -> Result<Value, DeploymentApiError> {
+    validate_user_for_project(&user, &project.name)?;
+
+    let deployment = state.deployment_manager.deploy(crate_file, &project).await?;
     Ok(json!(deployment))
+}
+
+fn validate_user_for_project(user: &User, project_name: &str) -> Result<(), DeploymentApiError> {
+    if project_name != user.project_name {
+        log::warn!("failed to authenticate user {:?} for project `{}`", &user, project_name);
+        Err(DeploymentApiError::NotFound(format!("could not find project `{}`", &project_name)))
+    } else {
+        Ok(())
+    }
+}
+
+fn validate_user_for_deployment(user: &User, meta: &DeploymentMeta) -> Result<(), DeploymentApiError> {
+    if meta.config.name != user.project_name {
+        log::warn!("failed to authenticate user {:?} for deployment `{}`", &user, &meta.id);
+        Err(DeploymentApiError::NotFound(format!("could not find deployment `{}`", &meta.id)))
+    } else {
+        Ok(())
+    }
 }
 
 struct ApiState {
@@ -91,7 +127,13 @@ async fn rocket() -> _ {
     rocket::custom(config)
         .mount(
             "/",
-            routes![delete_deployment, create_deployment, get_deployment, status],
+            routes![
+                delete_deployment,
+                get_deployment,
+                delete_project,
+                create_project,
+                get_project,
+                status],
         )
         .manage(state)
 }

@@ -1,9 +1,10 @@
 use lazy_static::lazy_static;
 use rocket::http::Status;
 use rocket::request::{FromRequest, Outcome};
-use rocket::Request;
+use rocket::{Request, Responder};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
+use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 pub const UNVEIL_PROJECT_HEADER: &str = "Unveil-Project";
@@ -13,6 +14,7 @@ pub const API_URL: &str = "http://localhost:8001";
 
 #[cfg(not(debug_assertions))]
 pub const API_URL: &str = "https://21ac7btou0.execute-api.eu-west-2.amazonaws.com/valpha";
+pub const API_URL: &'static str = "https://api.shuttle.rs";
 
 pub type ApiKey = String;
 pub type Host = String;
@@ -31,6 +33,7 @@ pub struct DeploymentMeta {
     pub build_logs: Option<String>,
     pub runtime_logs: Option<String>,
     pub database_deployment: Option<DatabaseReadyInfo>,
+    pub created_at: DateTime<Utc>,
 }
 
 impl DeploymentMeta {
@@ -43,6 +46,7 @@ impl DeploymentMeta {
             build_logs: None,
             runtime_logs: None,
             database_deployment: None,
+            created_at: Utc::now()
         }
     }
 
@@ -60,7 +64,7 @@ impl Display for DeploymentMeta {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let db = {
             if let Some(info) = &self.database_deployment {
-                format!("\n        Database URI:         {}", info.connection_string(&*PUBLIC_IP))
+                format!("\n        Database URI:       {}", info.connection_string(&*PUBLIC_IP))
             } else {
                 "".to_string()
             }
@@ -68,11 +72,13 @@ impl Display for DeploymentMeta {
         write!(
             f,
             r#"
-        Deployment Id:        {}
-        Deployment Status:    {}
-        Host:                 {}{}
+        Project:            {}
+        Deployment Id:      {}
+        Deployment Status:  {}
+        Host:               {}
+        Created At:         {}{}
         "#,
-            self.id, self.state, self.host, db
+            self.config.name, self.id, self.state, self.host, self.created_at, db
         )
     }
 }
@@ -142,4 +148,29 @@ impl<'r> FromRequest<'r> for ProjectConfig {
             Err(_) => Outcome::Failure((Status::BadRequest, ProjectConfigError::Malformed)),
         }
     }
+}
+
+// TODO: Determine error handling strategy - error types or just use `anyhow`?
+#[derive(Debug, Clone, Serialize, Deserialize, Responder)]
+pub enum DeploymentApiError {
+    #[response(status = 500)]
+    Internal(String),
+    #[response(status = 404)]
+    NotFound(String),
+    #[response(status = 400)]
+    BadRequest(String),
+}
+
+impl Display for DeploymentApiError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DeploymentApiError::Internal(s) => write!(f, "internal: {}", s),
+            DeploymentApiError::NotFound(s) => write!(f, "not found: {}", s),
+            DeploymentApiError::BadRequest(s) => write!(f, "bad request: {}", s),
+        }
+    }
+}
+
+impl std::error::Error for DeploymentApiError {
+
 }

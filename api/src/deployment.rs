@@ -113,13 +113,13 @@ impl Deployment {
                         port
                     );
 
-                    let db_state = Arc::new(TokioMutex::new(database::State::default()));
+                    let mut db_state = database::State::default();
 
-                    let mut factory: Box<dyn Factory> = Box::new(UnveilFactory::new(
-                        Arc::clone(&db_state),
+                    let mut factory = UnveilFactory::new(
+                        &mut db_state,
                         meta.config.clone(),
                         db_context.clone(),
-                    ));
+                    );
 
                     factory.get_postgres_connection_pool().await.unwrap(); // TODO
                     let deployed_future = match loaded.service.deploy(&factory) {
@@ -489,7 +489,7 @@ impl DeploymentState {
         service: Box<dyn Service>,
         port: Port,
         abort_handle: AbortHandle,
-        db_state: Arc<TokioMutex<database::State>>,
+        db_state: database::State,
     ) -> Self {
         Self::Deployed(DeployedState {
             service,
@@ -530,5 +530,5 @@ struct DeployedState {
     so: Library,
     port: Port,
     abort_handle: AbortHandle,
-    db_state: Arc<TokioMutex<database::State>>,
+    db_state: database::State,
 }

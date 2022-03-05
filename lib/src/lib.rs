@@ -4,6 +4,7 @@ use rocket::Request;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use uuid::Uuid;
+use lazy_static::lazy_static;
 
 pub const UNVEIL_PROJECT_HEADER: &str = "Unveil-Project";
 
@@ -50,14 +51,17 @@ impl DeploymentMeta {
     }
 }
 
+lazy_static! {
+    static ref PUBLIC_IP: String = std::env::var("PUBLIC_IP").unwrap_or_else(|_| "localhost".to_string());
+}
+
 impl Display for DeploymentMeta {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let db_role = {
             if let Some(pwd) = &self.database_role_password {
-                // TODO: What's the correct domain here?
                 format!(
-                    "Database URI:         posgres://user-{}:{}@unveil.sh/db-{}",
-                    self.config.name, pwd, self.config.name
+                    "Database URI:         posgres://user-{}:{}@{}/db-{}",
+                    self.config.name, pwd, *PUBLIC_IP, self.config.name
                 )
             } else {
                 "".to_string()

@@ -12,13 +12,14 @@ use std::net::{Ipv4Addr, SocketAddrV4, TcpListener};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tokio::sync::{Mutex as TokioMutex, RwLock};
+use tokio::sync::RwLock;
+use sqlx::PgPool;
 
 use crate::build::Build;
 use crate::{BuildSystem, UnveilFactory};
 use lib::{DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, Port, ProjectConfig};
 
-use crate::database::DatabaseResource;
+use crate::database;
 use crate::router::Router;
 use unveil_service::{Factory, Service};
 
@@ -67,7 +68,7 @@ impl Deployment {
 
     /// Tries to advance the deployment one stage. Does nothing if the deployment
     /// is in a terminal state.
-    pub(crate) async fn advance(&self, context: &Context) {
+    pub(crate) async fn advance(&self, context: &Context, db_context: &database::Context) {
         {
             log::debug!("waiting to get write on the state");
             let meta = self.meta().await;
@@ -113,48 +114,36 @@ impl Deployment {
                         port
                     );
 
-                    match DatabaseResource::new().await {
-                        Ok(mut db) => {
-                            db.get_client("hello-world").await.unwrap(); // TODO: temp
-                            self.meta.write().await.database_role_password =
-                                Some(db.role_password());
+                    let mut db_state = database::State::default();
 
-                            let sync_db = Arc::new(TokioMutex::new(db));
+                    let factory: Box<dyn Factory> =
+                        Box::new(UnveilFactory::new(&mut db_state, meta.config.clone(), db_context.clone()));
 
-                            let factory: Box<dyn Factory> =
-                                Box::new(UnveilFactory::new(sync_db.clone(), meta.config.clone()));
-
-                            let deployed_future = match loaded.service.deploy(&factory) {
-                                unveil_service::Deployment::Rocket(r) => {
-                                    let config = rocket::Config {
-                                        port,
-                                        log_level: rocket::config::LogLevel::Normal,
-                                        ..Default::default()
-                                    };
-
-                                    r.configure(config).launch()
-                                }
+                    let deployed_future = match loaded.service.deploy(&factory) {
+                        unveil_service::Deployment::Rocket(r) => {
+                            let config = rocket::Config {
+                                port,
+                                log_level: rocket::config::LogLevel::Normal,
+                                ..Default::default()
                             };
 
-                            let (task, abort_handle) = abortable(deployed_future);
-
-                            tokio::spawn(task);
-
-                            context.router.promote(meta.host, meta.id).await;
-
-                            DeploymentState::deployed(
-                                loaded.so,
-                                loaded.service,
-                                port,
-                                abort_handle,
-                                sync_db,
-                            )
+                            r.configure(config).launch()
                         }
-                        Err(e) => {
-                            log::debug!("Failed to load database resource: {}", e);
-                            DeploymentState::Error
-                        }
-                    }
+                    };
+
+                    let (task, abort_handle) = abortable(deployed_future);
+
+                    tokio::spawn(task);
+
+                    context.router.promote(meta.host, meta.id).await;
+
+                    DeploymentState::deployed(
+                        loaded.so,
+                        loaded.service,
+                        port,
+                        abort_handle,
+                        db_state,
+                    )
                 }
                 deployed_or_error => deployed_or_error, /* nothing to do here */
             };
@@ -272,17 +261,17 @@ impl JobQueue {
     }
 
     /// Returns a JobQueue with the job processor already running
-    async fn initialise(context: Context) -> Arc<Self> {
+    async fn initialise(context: Context, db_context: database::Context) -> Arc<Self> {
         let job_queue = Arc::new(JobQueue::default());
 
         let queue_ref = job_queue.clone();
 
-        tokio::spawn(async move { Self::start_job_processor(context, queue_ref).await });
+        tokio::spawn(async move { Self::start_job_processor(context, db_context, queue_ref).await });
 
         job_queue
     }
 
-    async fn start_job_processor(context: Context, queue: Arc<JobQueue>) {
+    async fn start_job_processor(context: Context, db_context: database::Context, queue: Arc<JobQueue>) {
         log::debug!("job processor started");
         loop {
             if let Some(deployment) = queue.pop() {
@@ -291,7 +280,7 @@ impl JobQueue {
                 log::debug!("started deployment job for id: '{}'", id);
 
                 while !deployment.deployment_finished().await {
-                    deployment.advance(&context).await;
+                    deployment.advance(&context, &db_context).await;
                 }
 
                 log::debug!("ended deployment job for id: '{}'", id);
@@ -316,10 +305,11 @@ impl DeploymentService {
             router: router.clone(),
             build_system,
         };
+        let db_context = database::Context::new().await.expect("failed to create lazy connection to database");
 
         Self {
             deployments: Default::default(),
-            job_queue: JobQueue::initialise(context).await,
+            job_queue: JobQueue::initialise(context, db_context).await,
             router,
         }
     }
@@ -421,7 +411,7 @@ impl DeploymentService {
 
 const ENTRYPOINT_SYMBOL_NAME: &[u8] = b"_create_service\0";
 
-type CreateService = unsafe extern "C" fn() -> *mut dyn Service<Box<dyn Factory>>;
+type CreateService = unsafe extern "C" fn() -> *mut dyn Service;
 
 /// Dynamically load from a `.so` file a value of a type implementing the
 /// [`Service`] trait. Relies on the `.so` library having an ``extern "C"`
@@ -430,7 +420,7 @@ type CreateService = unsafe extern "C" fn() -> *mut dyn Service<Box<dyn Factory>
 #[allow(clippy::type_complexity)]
 fn load_service_from_so_file(
     so_path: &Path,
-) -> anyhow::Result<(Box<dyn Service<Box<dyn Factory>>>, Library)> {
+) -> anyhow::Result<(Box<dyn Service>, Library)> {
     unsafe {
         let lib = libloading::Library::new(so_path)?;
 
@@ -481,23 +471,23 @@ impl DeploymentState {
         Self::Built(BuiltState { build })
     }
 
-    fn loaded(so: Library, service: Box<dyn Service<Box<dyn Factory>>>) -> Self {
+    fn loaded(so: Library, service: Box<dyn Service>) -> Self {
         Self::Loaded(LoadedState { service, so })
     }
 
     fn deployed(
         so: Library,
-        service: Box<dyn Service<Box<dyn Factory>>>,
+        service: Box<dyn Service>,
         port: Port,
         abort_handle: AbortHandle,
-        database: Arc<TokioMutex<DatabaseResource>>,
+        db_state: database::State,
     ) -> Self {
         Self::Deployed(DeployedState {
             service,
             so,
             port,
             abort_handle,
-            database,
+            db_state
         })
     }
 
@@ -521,15 +511,15 @@ struct BuiltState {
 }
 
 struct LoadedState {
-    service: Box<dyn Service<Box<dyn Factory>>>,
+    service: Box<dyn Service>,
     so: Library,
 }
 
 struct DeployedState {
     #[allow(dead_code)]
-    service: Box<dyn Service<Box<dyn Factory>>>,
+    service: Box<dyn Service>,
     so: Library,
     port: Port,
     abort_handle: AbortHandle,
-    database: Arc<TokioMutex<DatabaseResource>>,
+    db_state: database::State
 }

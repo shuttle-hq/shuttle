@@ -1,34 +1,32 @@
-use crate::database::DatabaseResource;
+use crate::database;
 use async_trait::async_trait;
 use lib::ProjectConfig;
-use sqlx::PgPool;
+use sqlx::{PgPool, postgres::PgPoolOptions};
 use std::convert::Into;
-use std::sync::Arc;
-use tokio::sync::Mutex;
 use unveil_service::Factory;
 
-pub(crate) struct UnveilFactory {
-    database: Arc<Mutex<DatabaseResource>>,
+pub(crate) struct UnveilFactory<'a> {
+    database: &'a mut database::State,
     project: ProjectConfig,
+    ctx: database::Context
 }
 
-impl UnveilFactory {
-    pub(crate) fn new(database: Arc<Mutex<DatabaseResource>>, project: ProjectConfig) -> Self {
-        Self { database, project }
+impl<'a> UnveilFactory<'a> {
+    pub(crate) fn new(database: &'a mut database::State, project: ProjectConfig, ctx: database::Context) -> Self {
+        Self { database, project, ctx }
     }
 }
 
 #[async_trait]
-impl Factory for UnveilFactory {
+impl Factory for UnveilFactory<'_> {
     /// Lazily gets a connection pool
     async fn get_postgres_connection_pool(
         &mut self,
     ) -> Result<PgPool, unveil_service::Error> {
-        self.database
-            .lock()
-            .await
-            .get_client(&self.project.name)
-            .await
-            .map_err(Into::into)
+        let ready_state = self.database.advance(&self.project.name, &self.ctx).await.map_err(Into::into)?;
+
+        PgPoolOptions::new()
+                .max_connections(10)
+                .connect(&ready_state.connection_string()).await
     }
 }

@@ -5,7 +5,7 @@ use sqlx::postgres::{PgPool, PgPoolOptions};
 lazy_static! {
     static ref SUDO_POSTGRES_CONNECTION_STRING: String = format!(
         "postgres://postgres:{}@localhost",
-        std::env::var("SUDO_POSTGRES_PASSWORD").expect("superuser postgres role password expected as environment variable SUDO_POSTGRES_PASSWORD")
+        std::env::var("PG_PASSWORD").expect("superuser postgres role password expected as environment variable SUDO_POSTGRES_PASSWORD")
     );
 }
 
@@ -17,41 +17,28 @@ fn generate_role_password() -> String {
         .collect()
 }
 
-pub(crate) struct DatabaseResource {
-    state: DatabaseState,
-    sudo_pool: PgPool, // TODO: share this pool properly
-    role_password: String,
+pub(crate) enum State {
+    Uninitialised,
+    Ready(ReadyState),
 }
 
-impl DatabaseResource {
-    pub(crate) async fn new() -> sqlx::Result<Self> {
-        log::debug!("preparing database resource");
-        Ok(Self {
-            state: DatabaseState::Uninitialised,
-            sudo_pool: PgPoolOptions::new()
-                .max_connections(10)
-                .connect(&SUDO_POSTGRES_CONNECTION_STRING)
-                .await?,
-            role_password: generate_role_password(),
-        })
-    }
-
-    pub(crate) async fn get_client(
+impl State {
+    pub(crate) async fn advance(
         &mut self,
         name: &str,
-    ) -> sqlx::Result<PgPool> {
-        log::debug!("getting database client for project '{}'", name);
+        ctx: &Context,
+    ) -> sqlx::Result<ReadyState> {
+        match self {
+            State::Uninitialised => {
+                let role_name = format!("user-{}", name);
+                let role_password = generate_role_password();
+                let database_name = format!("db-{}", name);
 
-        let role_name = format!("user-{}", name);
-        let database_name = format!("db-{}", name);
-
-        match self.state {
-            DatabaseState::Uninitialised => {
                 // Check if this deployment already has its own role:
 
                 let rows = sqlx::query("SELECT * FROM pg_roles WHERE rolname = $1")
                     .bind(&role_name)
-                    .fetch_all(&self.sudo_pool)
+                    .fetch_all(&ctx.sudo_pool)
                     .await?;
 
                 if rows.is_empty() {
@@ -61,10 +48,10 @@ impl DatabaseResource {
                     // insert quotes correctly.
                     let create_role_query = format!(
                         "CREATE ROLE \"{}\" PASSWORD '{}' LOGIN",
-                        role_name, self.role_password
+                        role_name, role_password
                     );
                     sqlx::query(&create_role_query)
-                        .execute(&self.sudo_pool)
+                        .execute(&ctx.sudo_pool)
                         .await?;
 
                     log::debug!(
@@ -80,7 +67,7 @@ impl DatabaseResource {
                         database_name, role_name
                     );
                     sqlx::query(&create_database_query)
-                        .execute(&self.sudo_pool)
+                        .execute(&ctx.sudo_pool)
                         .await?;
 
                     log::debug!(
@@ -90,33 +77,54 @@ impl DatabaseResource {
                     );
                 }
 
-                // Create connection pool:
-
-                let connection_string = format!(
-                    "postgres://{}:{}@localhost/{}",
-                    role_name, self.role_password, database_name
-                );
-                log::debug!("{}", connection_string);
-                let pool = PgPoolOptions::new()
-                    .max_connections(10)
-                    .connect(&connection_string)
-                    .await?;
-
                 // Transition to the 'ready' state:
-                self.state = DatabaseState::Ready(pool.clone());
 
-                Ok(pool)
+                let ready = ReadyState {
+                    role_name, role_password, database_name
+                };
+
+                *self = State::Ready(ready.clone());
+
+                Ok(ready)
             }
-            DatabaseState::Ready(ref pool) => Ok(pool.clone()),
+            State::Ready(ref ready) => Ok(ready.clone()),
         }
-    }
-
-    pub(crate) fn role_password(&self) -> String {
-        self.role_password.clone()
     }
 }
 
-enum DatabaseState {
-    Uninitialised,
-    Ready(PgPool),
+impl Default for State {
+    fn default() -> Self {
+        State::Uninitialised
+    }
+}
+
+#[derive(Debug, Clone)]
+struct ReadyState {
+    role_name: String,
+    role_password: String,
+    database_name: String
+}
+
+impl ReadyState {
+    pub fn connection_string(&self) -> String {
+        format!(
+            "postgres://{}:{}@localhost/{}",
+            self.role_name, self.role_password, self.database_name
+        )
+    }
+}
+
+#[derive(Clone)]
+pub struct Context {
+    sudo_pool: PgPool,
+}
+
+impl Context {
+    pub async fn new() -> sqlx::Result<Self> {
+        Ok(Context {
+            sudo_pool: PgPoolOptions::new()
+                .max_connections(10)
+                .connect_lazy(&SUDO_POSTGRES_CONNECTION_STRING)?,
+        })
+    }
 }

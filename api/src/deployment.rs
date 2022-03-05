@@ -121,7 +121,6 @@ impl Deployment {
                         db_context.clone(),
                     );
 
-                    factory.get_postgres_connection_pool().await.unwrap(); // TODO
                     let deployed_future = match loaded.service.deploy(&factory) {
                         unveil_service::Deployment::Rocket(r) => {
                             if let database::State::Ready(ready) = &db_state {

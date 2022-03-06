@@ -1,7 +1,7 @@
 use lazy_static::lazy_static;
+use lib::DatabaseReadyInfo;
 use rand::Rng;
 use sqlx::postgres::{PgPool, PgPoolOptions};
-use lib::DatabaseReadyInfo;
 
 lazy_static! {
     static ref SUDO_POSTGRES_CONNECTION_STRING: String = format!(
@@ -26,7 +26,11 @@ pub(crate) enum State {
 }
 
 impl State {
-    pub(crate) async fn advance(&mut self, name: &str, ctx: &Context) -> sqlx::Result<DatabaseReadyInfo> {
+    pub(crate) async fn advance(
+        &mut self,
+        name: &str,
+        ctx: &Context,
+    ) -> sqlx::Result<DatabaseReadyInfo> {
         match self {
             State::Uninitialised => {
                 let role_name = format!("user-{}", name);

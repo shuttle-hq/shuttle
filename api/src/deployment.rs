@@ -12,10 +12,13 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::RwLock;
 
-use crate::BuildSystem;
 use crate::build::Build;
 use crate::factory::UnveilFactory;
-use lib::{DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, Port, ProjectConfig};
+use crate::BuildSystem;
+use lib::{
+    DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, Port,
+    ProjectConfig,
+};
 
 use crate::database;
 use crate::router::Router;
@@ -103,11 +106,8 @@ impl Deployment {
 
                     let mut db_state = database::State::default();
 
-                    let mut factory = UnveilFactory::new(
-                        &mut db_state,
-                        meta.config.clone(),
-                        db_context.clone(),
-                    );
+                    let mut factory =
+                        UnveilFactory::new(&mut db_state, meta.config.clone(), db_context.clone());
 
                     let deployed_future = match loaded.service.deploy(&factory) {
                         unveil_service::Deployment::Rocket(r) => {
@@ -373,7 +373,7 @@ impl DeploymentService {
             None => Err(DeploymentApiError::NotFound(format!(
                 "could not find deployment for project '{}'",
                 &project_name
-            )))
+            ))),
         }
     }
 
@@ -401,10 +401,9 @@ impl DeploymentService {
                 // library when the runtime gets around to it.
 
                 let mut lock = deployment.state.write().await;
-                if let DeploymentState::Deployed(
-                    DeployedState {
-                        so, abort_handle, ..
-                    }) = lock.take()
+                if let DeploymentState::Deployed(DeployedState {
+                    so, abort_handle, ..
+                }) = lock.take()
                 {
                     abort_handle.abort();
 

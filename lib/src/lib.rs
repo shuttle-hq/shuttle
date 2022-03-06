@@ -1,10 +1,10 @@
+use chrono::{DateTime, Utc};
 use lazy_static::lazy_static;
 use rocket::http::Status;
 use rocket::request::{FromRequest, Outcome};
 use rocket::{Request, Responder};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
-use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 pub const UNVEIL_PROJECT_HEADER: &str = "Unveil-Project";
@@ -45,7 +45,7 @@ impl DeploymentMeta {
             build_logs: None,
             runtime_logs: None,
             database_deployment: None,
-            created_at: Utc::now()
+            created_at: Utc::now(),
         }
     }
 
@@ -63,7 +63,10 @@ impl Display for DeploymentMeta {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let db = {
             if let Some(info) = &self.database_deployment {
-                format!("\n        Database URI:       {}", info.connection_string(&*PUBLIC_IP))
+                format!(
+                    "\n        Database URI:       {}",
+                    info.connection_string(&*PUBLIC_IP)
+                )
             } else {
                 "".to_string()
             }
@@ -170,6 +173,4 @@ impl Display for DeploymentApiError {
     }
 }
 
-impl std::error::Error for DeploymentApiError {
-
-}
+impl std::error::Error for DeploymentApiError {}

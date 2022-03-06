@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
 use lib::{
-    ApiKey, DeploymentMeta, DeploymentStateMeta, ProjectConfig, API_URL,
-    UNVEIL_PROJECT_HEADER,
+    ApiKey, DeploymentMeta, DeploymentStateMeta, ProjectConfig, API_URL, UNVEIL_PROJECT_HEADER,
 };
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};

@@ -237,7 +237,7 @@ type Deployments = HashMap<DeploymentId, Arc<Deployment>>;
 
 /// The top-level manager for deployments. Is responsible for their creation
 /// and lifecycle.
-pub(crate) struct DeploymentService {
+pub(crate) struct DeploymentSystem {
     deployments: RwLock<Deployments>,
     job_queue: Arc<JobQueue>,
     router: Arc<Router>,
@@ -302,7 +302,7 @@ pub(crate) struct Context {
     deployments: Arc<RwLock<Deployments>>,
 }
 
-impl DeploymentService {
+impl DeploymentSystem {
     pub(crate) async fn new(build_system: Box<dyn BuildSystem>) -> Self {
         let router: Arc<Router> = Default::default();
         let deployments: Arc<RwLock<Deployments>> = Default::default();

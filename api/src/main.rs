@@ -22,7 +22,7 @@ use uuid::Uuid;
 use crate::args::Args;
 use crate::auth::User;
 use crate::build::{BuildSystem, FsBuildSystem};
-use crate::deployment::DeploymentService;
+use crate::deployment::DeploymentSystem;
 
 /// Status API to be used to check if the service is alive
 #[get("/status")]
@@ -138,7 +138,7 @@ fn validate_user_for_deployment(
 }
 
 struct ApiState {
-    deployment_manager: Arc<DeploymentService>,
+    deployment_manager: Arc<DeploymentSystem>,
 }
 
 //noinspection ALL
@@ -152,7 +152,7 @@ async fn rocket() -> _ {
 
     let args: Args = Args::from_args();
     let build_system = FsBuildSystem::initialise(args.path).unwrap();
-    let deployment_manager = Arc::new(DeploymentService::new(Box::new(build_system)).await);
+    let deployment_manager = Arc::new(DeploymentSystem::new(Box::new(build_system)).await);
 
     start_proxy(args.bind_addr, args.proxy_port, deployment_manager.clone()).await;
 
@@ -181,7 +181,7 @@ async fn rocket() -> _ {
 async fn start_proxy(
     bind_addr: IpAddr,
     proxy_port: Port,
-    deployment_manager: Arc<DeploymentService>,
+    deployment_manager: Arc<DeploymentSystem>,
 ) {
     tokio::spawn(async move { proxy::start(bind_addr, proxy_port, deployment_manager).await });
 }

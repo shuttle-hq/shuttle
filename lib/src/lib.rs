@@ -13,7 +13,6 @@ pub const UNVEIL_PROJECT_HEADER: &str = "Unveil-Project";
 pub const API_URL: &str = "http://localhost:8001";
 
 #[cfg(not(debug_assertions))]
-pub const API_URL: &str = "https://21ac7btou0.execute-api.eu-west-2.amazonaws.com/valpha";
 pub const API_URL: &'static str = "https://api.shuttle.rs";
 
 pub type ApiKey = String;

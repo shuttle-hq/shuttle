@@ -10,7 +10,6 @@ mod factory;
 mod proxy;
 mod router;
 
-use factory::UnveilFactory;
 use lib::{DeploymentApiError, DeploymentMeta, Port, ProjectConfig};
 use rocket::serde::json::serde_json::json;
 use rocket::serde::json::Value;
@@ -21,11 +20,9 @@ use structopt::StructOpt;
 use uuid::Uuid;
 
 use crate::args::Args;
-use crate::build::{BuildSystem, FsBuildSystem};
-use crate::deployment::DeploymentSystem;
 use crate::auth::User;
 use crate::build::{BuildSystem, FsBuildSystem};
-use crate::deployment::{DeploymentError, DeploymentService};
+use crate::deployment::DeploymentService;
 
 /// Status API to be used to check if the service is alive
 #[get("/status")]

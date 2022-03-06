@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use lib::{
-    ApiKey, DeploymentId, DeploymentMeta, DeploymentStateMeta, ProjectConfig, API_URL,
+    ApiKey, DeploymentMeta, DeploymentStateMeta, ProjectConfig, API_URL,
     UNVEIL_PROJECT_HEADER,
 };
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};

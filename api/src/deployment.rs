@@ -12,8 +12,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::RwLock;
 
-use crate::build::Build;
 use crate::BuildSystem;
+use crate::build::Build;
+use crate::factory::UnveilFactory;
 use lib::{DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, Port, ProjectConfig};
 
 use crate::database;
@@ -298,17 +299,18 @@ impl JobQueue {
 pub(crate) struct Context {
     router: Arc<Router>,
     build_system: Box<dyn BuildSystem>,
+    deployments: Arc<RwLock<Deployments>>,
 }
 
 impl DeploymentService {
     pub(crate) async fn new(build_system: Box<dyn BuildSystem>) -> Self {
-
         let router: Arc<Router> = Default::default();
         let deployments: Arc<RwLock<Deployments>> = Default::default();
 
         let context = Context {
             router: router.clone(),
             build_system,
+            deployments,
         };
         let db_context = database::Context::new()
             .await
@@ -318,7 +320,7 @@ impl DeploymentService {
             deployments: Default::default(),
             job_queue: JobQueue::initialise(context, db_context).await,
             router,
-        })
+        }
     }
 
     /// Returns the port for a given host. If the host does not exist, returns

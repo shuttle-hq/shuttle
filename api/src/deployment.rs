@@ -22,7 +22,7 @@ use lib::{
 
 use crate::database;
 use crate::router::Router;
-use unveil_service::{Factory, Service};
+use unveil_service::Service;
 
 /// Inner struct of a deployment which holds the deployment itself
 /// and the some metadata
@@ -106,7 +106,7 @@ impl Deployment {
 
                     let mut db_state = database::State::default();
 
-                    let mut factory =
+                    let factory =
                         UnveilFactory::new(&mut db_state, meta.config.clone(), db_context.clone());
 
                     let deployed_future = match loaded.service.deploy(&factory) {
@@ -340,7 +340,7 @@ impl DeploymentService {
         &self,
         id: &DeploymentId,
     ) -> Result<DeploymentMeta, DeploymentApiError> {
-        match self.deployments.read().await.get(&id) {
+        match self.deployments.read().await.get(id) {
             Some(deployment) => Ok(deployment.meta().await),
             None => Err(DeploymentApiError::NotFound(format!(
                 "could not find deployment for id '{}'",
@@ -354,12 +354,12 @@ impl DeploymentService {
     /// for a given project, will return the latest.
     pub(crate) async fn get_deployment_for_project(
         &self,
-        project_name: &String,
+        project_name: &str,
     ) -> Result<DeploymentMeta, DeploymentApiError> {
         let mut candidates = Vec::new();
 
         for deployment in self.deployments.read().await.values() {
-            if &deployment.meta.read().await.config.name == project_name {
+            if deployment.meta.read().await.config.name == project_name {
                 candidates.push(deployment.meta().await);
             }
         }
@@ -379,9 +379,9 @@ impl DeploymentService {
 
     pub(crate) async fn kill_deployment_for_project(
         &self,
-        project_name: &String,
+        project_name: &str,
     ) -> Result<DeploymentMeta, DeploymentApiError> {
-        let id = self.get_deployment_for_project(&project_name).await?.id;
+        let id = self.get_deployment_for_project(project_name).await?.id;
         self.kill_deployment(&id).await
     }
 
@@ -392,7 +392,7 @@ impl DeploymentService {
         &self,
         id: &DeploymentId,
     ) -> Result<DeploymentMeta, DeploymentApiError> {
-        match self.deployments.write().await.remove(&id) {
+        match self.deployments.write().await.remove(id) {
             Some(deployment) => {
                 let meta = deployment.meta().await;
 

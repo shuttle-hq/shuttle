@@ -34,11 +34,19 @@ pub struct DeploymentMeta {
 }
 
 impl DeploymentMeta {
-    pub fn new(config: &ProjectConfig) -> Self {
+    pub fn queued(config: &ProjectConfig) -> Self {
+        Self::new(config, DeploymentStateMeta::Queued)
+    }
+
+    pub fn built(config: &ProjectConfig) -> Self {
+        Self::new(config, DeploymentStateMeta::Built)
+    }
+
+    fn new(config: &ProjectConfig, state: DeploymentStateMeta) -> Self {
         Self {
             id: Uuid::new_v4(),
             config: config.clone(),
-            state: DeploymentStateMeta::Queued,
+            state,
             host: Self::create_host(config),
             build_logs: None,
             runtime_logs: None,
@@ -93,6 +101,14 @@ impl Display for DeploymentStateMeta {
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct ProjectConfig {
     pub name: String,
+}
+
+impl ProjectConfig {
+    pub fn new(name: String) -> Self {
+        Self {
+            name
+        }
+    }
 }
 
 #[derive(Debug)]

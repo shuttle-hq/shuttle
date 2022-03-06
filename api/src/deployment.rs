@@ -5,14 +5,16 @@ use rocket::data::ByteUnit;
 use rocket::tokio;
 use rocket::Data;
 use std::collections::HashMap;
+use std::fs::{DirEntry};
 use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddrV4, TcpListener};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use anyhow::{anyhow, Context as AnyhowContext};
 use tokio::sync::RwLock;
 
-use crate::build::Build;
+use crate::build::{Build};
 use crate::BuildSystem;
 use lib::{DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, Port, ProjectConfig};
 
@@ -27,11 +29,37 @@ pub(crate) struct Deployment {
 }
 
 impl Deployment {
-    fn new(config: &ProjectConfig, crate_bytes: Vec<u8>) -> Self {
+    fn new(meta: DeploymentMeta, state: DeploymentState) -> Self {
         Self {
-            meta: Arc::new(RwLock::new(DeploymentMeta::new(&config))),
+            meta: Arc::new(RwLock::new(meta)),
+            state: RwLock::new(state)
+        }
+    }
+
+    fn from_bytes(config: &ProjectConfig, crate_bytes: Vec<u8>) -> Self {
+        Self {
+            meta: Arc::new(RwLock::new(DeploymentMeta::queued(&config))),
             state: RwLock::new(DeploymentState::queued(crate_bytes)),
         }
+    }
+
+    /// Initialise a deployment from a directory
+    fn from_directory(dir: DirEntry) -> Result<Self, anyhow::Error> {
+        let project_path = dir.path();
+        let project_name = dir.file_name()
+            .into_string()
+            .map_err(|os_str| anyhow!("could not parse project name `{:?}` to string", os_str))?;
+        // find marker which points to so file
+        let marker_path = project_path.join(".unveil_marker");
+        let so_path_str = std::fs::read(&marker_path)
+            .context(anyhow!("could not find so marker file at {:?}", marker_path))?;
+        let so_path: PathBuf = String::from_utf8_lossy(&so_path_str)
+            .parse()
+            .context("could not parse contents of marker file to a valid path")?;
+
+        let meta = DeploymentMeta::built(&ProjectConfig::new(project_name));
+        let state = DeploymentState::built(Build { so_path });
+        Ok(Self::new(meta, state))
     }
 
     /// Gets a `clone`ed copy of the metadata.
@@ -248,8 +276,15 @@ impl JobQueue {
         job_queue
     }
 
+    /// Starts the job processor. Before it begins, it will add all projects
+    /// from the deployment service into the queue.
     async fn start_job_processor(context: Context, queue: Arc<JobQueue>) {
-        log::debug!("job processor started");
+        log::debug!("loading deployments into job processor");
+        for deployment in context.deployments.read().await.values() {
+            queue.push(deployment.clone());
+            log::debug!("loading deployment: {:?}", deployment.meta);
+        }
+        log::debug!("starting job processor loop");
         loop {
             if let Some(deployment) = queue.pop() {
                 let id = deployment.meta().await.id;
@@ -262,7 +297,7 @@ impl JobQueue {
 
                 log::debug!("ended deployment job for id: '{}'", id);
             } else {
-                tokio::time::sleep(Duration::from_millis(100)).await
+                tokio::time::sleep(Duration::from_millis(50)).await
             }
         }
     }
@@ -280,7 +315,12 @@ pub(crate) struct Context {
 impl DeploymentSystem {
     pub(crate) async fn new(build_system: Box<dyn BuildSystem>, factory: Box<dyn Factory>) -> Arc<Self> {
         let router: Arc<Router> = Default::default();
-        let deployments: Arc<RwLock<Deployments>> = Default::default();
+
+        let deployments = Arc::new(
+            RwLock::new(
+                Self::initialise_from_fs(&build_system.fs_root()).await
+            )
+        );
 
         let context = Context {
             router: router.clone(),
@@ -296,6 +336,41 @@ impl DeploymentSystem {
             router,
         })
     }
+
+    /// Traverse the build directory re-create deployments.
+    /// If a project could not be re-created, this will get logged and skipped.
+    async fn initialise_from_fs(fs_root: &Path) -> Deployments {
+        let mut deployments = HashMap::default();
+        for project_dir in std::fs::read_dir(fs_root)
+            .unwrap() // safety: api can read the fs root dir
+            .into_iter() {
+            let project_dir = match project_dir {
+                Ok(project_dir) => project_dir,
+                Err(e) => {
+                    log::warn!("failed to read directory for project with error `{:?}`", e);
+                    log::warn!("skipping...");
+                    continue;
+                }
+            };
+            let project_name = project_dir.file_name();
+            match Deployment::from_directory(project_dir) {
+                Err(e) => {
+                    log::warn!(
+                        "failed to re-create deployment for project `{:?}` with error: {:?}",
+                        project_name,
+                        e
+                    );
+                }
+                Ok(deployment) => {
+                    let deployment = Arc::new(deployment);
+                    let info = deployment.meta().await;
+                    deployments.insert(info.id.clone(), deployment.clone());
+                }
+            }
+        }
+        deployments
+    }
+
 
     /// Returns the port for a given host. If the host does not exist, returns
     /// `None`.
@@ -411,7 +486,7 @@ impl DeploymentSystem {
             })?
             .to_vec();
 
-        let deployment = Arc::new(Deployment::new(&project_config, crate_bytes));
+        let deployment = Arc::new(Deployment::from_bytes(&project_config, crate_bytes));
         let info = deployment.meta().await;
 
         self.deployments

@@ -1,8 +1,10 @@
+use colored::Color;
+
 mod helpers;
 
 #[test]
 fn hello_world() {
-    let client = helpers::Api::new();
+    let client = helpers::Api::new_process("hello-world", Color::Green);
     client.deploy("../examples/rocket/hello-world");
 
     let request_text = reqwest::blocking::Client::new()
@@ -18,7 +20,7 @@ fn hello_world() {
 
 #[test]
 fn postgres() {
-    let client = helpers::Api::new();
+    let client = helpers::Api::new_docker("postgres", Color::Blue);
     client.deploy("../examples/rocket/postgres");
 
     let client = reqwest::blocking::Client::new();

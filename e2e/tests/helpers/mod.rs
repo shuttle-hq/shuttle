@@ -1,27 +1,81 @@
 use std::{
     process::{Child, Command},
     str,
-    io,
+    time::SystemTime,
+    io::{self, BufRead},
     time::Duration,
 };
-use std::process::Output;
-use std::ffi::OsStr;
+use std::process::{ExitStatus, Stdio};
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+use std::thread::sleep;
 
+use colored::*;
 use tempdir::TempDir;
 use portpicker::pick_unused_port;
 
+trait EnsureSuccess {
+    fn ensure_success<S: AsRef<str>>(self, s: S);
+}
+
+impl EnsureSuccess for io::Result<ExitStatus> {
+    fn ensure_success<S: AsRef<str>>(self, s: S) {
+        let exit_status = self.unwrap();
+        if ! exit_status.success() {
+            panic!("{}: exit code {}", s.as_ref(), exit_status.code().unwrap())
+        }
+    }
+}
+
+pub enum Server {
+    Process(TempDir, Child),
+    Docker(Child)
+}
+
 pub struct Api {
-    process: Child,
-    tmp_dir: TempDir,
+    server: Option<Server>,
     api_addr: SocketAddr,
     proxy_addr: SocketAddr,
+    target: String,
+    color: Color
+}
+
+pub fn log_lines<R: io::Read, D: std::fmt::Display>(mut reader: R, target: D) {
+    let mut buf = [0; 6048];
+    loop {
+        let n = reader.read(&mut buf).unwrap();
+        if n == 0 {
+            break
+        } else {
+            for line in io::BufReader::new(&buf[0..n]).lines() {
+                eprintln!("{} {}", target, line.unwrap());
+            }
+        }
+    }
+}
+
+pub fn spawn_and_log<D: std::fmt::Display, C: Into<Color>>(cmd: &mut Command, target: D, color: C) -> Child {
+    let mut child = cmd
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+
+    let color = color.into();
+    let mut stdout = child.stdout.take().unwrap();
+    let mut stderr = child.stderr.take().unwrap();
+    let stdout_target = format!("{} >>>", target).color(color.clone());
+    let stderr_target = format!("{} >>>", target).bold().color(color);
+    std::thread::spawn(move || log_lines(&mut stdout, stdout_target));
+    std::thread::spawn(move || log_lines(&mut stderr, stderr_target));
+    child
 }
 
 impl Api {
-    pub fn new() -> Self {
-        let tmp_dir = TempDir::new("e2e").unwrap();
-
+    fn new_free<D, C>(target: D, color: C) -> Self
+    where
+        D: std::fmt::Display,
+        C: Into<Color>
+    {
         let api_port = pick_unused_port()
             .expect("could not find a free port for API");
 
@@ -34,65 +88,154 @@ impl Api {
         let proxy_addr = SocketAddrV4::new(Ipv4Addr::LOCALHOST, proxy_port)
             .into();
 
-        // Spawn into background
-        let process = Command::new("cargo")
+        Self {
+            server: None,
+            api_addr,
+            proxy_addr,
+            target: target.to_string(),
+            color: color.into()
+        }
+    }
+
+    pub fn new_docker<D, C>(target: D, color: C) -> Self
+    where
+        D: std::fmt::Display,
+        C: Into<Color>
+    {
+        let mut api = Self::new_free(target, color);
+
+        let api_target = format!("   {} api", api.target);
+
+        let mut build = Command::new("docker");
+
+        build
+            .args(["build", "-f", "./Dockerfile", "."])
+            .current_dir("../");
+
+        spawn_and_log(&mut build, api_target.as_str(), Color::White)
+            .wait()
+            .ensure_success("failed to build `api` image");
+
+        let output = Command::new("docker")
+            .args(["build", "-q", "-f", "./Dockerfile", "."])
+            .current_dir("../")
+            .output()
+            .unwrap();
+
+        let image = String::from_utf8(output.stdout).unwrap().trim().to_owned();
+
+        let mut run = Command::new("docker");
+        run
             .args([
                 "run",
-                "--bin",
-                "api",
-                "--",
+                "-i",
+                "--rm",
+                "-p",
+                format!("{}:{}", api.proxy_addr.port(), 8000).as_str(),
+                "-p",
+                format!("{}:{}", api.api_addr.port(), 8001).as_str(),
+                "-e",
+                "PROXY_PORT=8000",
+                "-e",
+                "API_PORT=8001",
+                image.as_str()
+            ]);
+
+        let child = spawn_and_log(&mut run, api_target, api.color);
+
+        api.server = Some(Server::Docker(child));
+
+        api.wait_ready(Duration::from_secs(120));
+
+        api
+    }
+
+    pub fn new_process<D, C>(target: D, color: C) -> Self
+        where
+            D: std::fmt::Display,
+            C: Into<Color>
+    {
+        let mut api = Self::new_free(target, color);
+
+        let tmp_dir = TempDir::new("e2e").unwrap();
+
+        let api_target = format!("   {} api", api.target);
+
+        let mut build = Command::new("cargo");
+        build.args(["build", "--bin", "api"]).current_dir("../");
+        spawn_and_log(&mut build, api_target.as_str(), Color::White)
+            .wait()
+            .ensure_success("could not build `api`");
+
+        let mut run = Command::new("target/debug/api");
+        run
+            .args([
                 "--path",
                 tmp_dir.path().to_str().unwrap(),
                 "--api-port",
-                api_port.to_string().as_str(),
+                api.api_addr.port().to_string().as_str(),
                 "--proxy-port",
-                proxy_port.to_string().as_str()
+                api.proxy_addr.port().to_string().as_str()
             ])
-            .current_dir("../")
-            .spawn()
-            .unwrap();
+            .current_dir("../");
 
-        std::thread::sleep(Duration::from_secs(1));
+        let process = spawn_and_log(&mut run, api_target, api.color);
 
-        Self { process, tmp_dir, api_addr, proxy_addr }
+        api.server = Some(Server::Process(tmp_dir, process));
+
+        api.wait_ready(Duration::from_secs(120));
+
+        api
     }
 
-    pub fn run_client<'s, I>(&self, args: I, project_path: &str) -> io::Result<Output>
+    pub fn wait_ready(&self, mut timeout: Duration) {
+        let mut now = SystemTime::now();
+        while ! timeout.is_zero() {
+            match reqwest::blocking::get(format!("http://{}/status", self.api_addr)) {
+                Ok(resp) if resp.status().is_success() => return,
+                _ => sleep(Duration::from_secs(1))
+            }
+            timeout = timeout.checked_sub(now.elapsed().unwrap()).unwrap_or_default();
+            now = SystemTime::now();
+        }
+        panic!("timed out while waiting for api to /status OK");
+    }
+
+    pub fn run_client<'s, I>(&self, args: I, path: &str) -> Child
         where
-            I: IntoIterator<Item = &'s str>,
+            I: IntoIterator<Item = &'s str>
     {
-        Command::new("cargo")
-            .args([
-                "run",
-                "--bin",
-                "cargo-unveil",
-                "--manifest-path",
-                "../../../Cargo.toml",
-                "--"
-            ].into_iter().chain(args))
-            .current_dir(project_path)
-            .env("UNVEIL_API", format!("http://{}", self.api_addr))
-            .output()
+        let client_target = format!("{} client", self.target);
+
+        let mut build = Command::new("cargo");
+        build
+            .args(["build", "--bin", "cargo-unveil"])
+            .current_dir("../");
+        spawn_and_log(&mut build, client_target.as_str(), Color::White)
+            .wait()
+            .ensure_success("failed to build `cargo-unveil`");
+
+        let mut run = Command::new("../../../target/debug/cargo-unveil");
+        run
+            .args(args)
+            .current_dir(path)
+            .env("UNVEIL_API", format!("http://{}", self.api_addr));
+        spawn_and_log(&mut run, client_target, self.color)
     }
 
     pub fn deploy(&self, project_path: &str) {
-        let unveil_output = self.run_client(["deploy"], project_path).unwrap();
-
-        let stdout = str::from_utf8(&unveil_output.stdout).unwrap();
-        assert!(
-            stdout.contains("Finished dev"),
-            "output does not contain 'Finished dev':\nstdout = {}\nstderr = {}",
-            stdout,
-            str::from_utf8(&unveil_output.stderr).unwrap()
-        );
-        assert!(stdout.contains("Deployment Status:  DEPLOYED"));
+        self.run_client(["deploy", "--allow-dirty"], project_path)
+            .wait()
+            .ensure_success("failed to run deploy");
     }
-
 }
 
 impl Drop for Api {
     fn drop(&mut self) {
-        self.process.kill().unwrap();
-        std::fs::remove_dir_all(self.tmp_dir.path()).unwrap();
+        if let Some(server) = self.server.as_mut() {
+            match server {
+                Server::Process(_, child) | Server::Docker(child) => child.kill().unwrap(),
+            };
+        }
     }
 }

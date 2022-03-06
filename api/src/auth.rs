@@ -96,11 +96,22 @@ impl UserDirectory {
     }
 
     fn from_user_file() -> Self {
-        let manifest_path: PathBuf = env!("CARGO_MANIFEST_DIR").into();
-        let file_path = manifest_path.join("users.toml");
-        let file_contents: String = std::fs::read_to_string(file_path).expect("this should blow up if the users.toml file is not present");
+        let file_path = Self::users_toml_file_path();
+        let file_contents: String = std::fs::read_to_string(&file_path)
+            .expect(&format!("this should blow up if the users.toml file is not present at {:?}", &file_path));
         Self {
             users: toml::from_str(&file_contents).expect("this should blow up if the users.toml file is unparseable")
+        }
+    }
+
+    fn users_toml_file_path() -> PathBuf {
+        match std::env::var("UNVEIL_USERS_TOML") {
+            Ok(val) => val.into(),
+            Err(_) => {
+                log::debug!("could not find environment variable `UNVEIL_USERS_TOML`, defaulting to MANIFEST_DIR");
+                let manifest_path: PathBuf = env!("CARGO_MANIFEST_DIR").into();
+                 manifest_path.join("users.toml")
+            }
         }
     }
 }

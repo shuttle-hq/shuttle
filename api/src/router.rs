@@ -19,7 +19,7 @@ impl Router {
     /// Gets a `DeploymentId` for a given `Host`. Returns `None` if it
     /// does not exist.
     pub(crate) async fn id_for_host(&self, host: &Host) -> Option<DeploymentId> {
-        self.table.read().await.get(host).map(|id| id.clone())
+        self.table.read().await.get(host).copied()
     }
 
     /// Removes an entry for a given `Host`

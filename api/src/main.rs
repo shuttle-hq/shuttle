@@ -2,37 +2,38 @@
 extern crate rocket;
 
 mod args;
+mod auth;
 mod build;
+mod database;
 mod deployment;
 mod factory;
 mod proxy;
 mod router;
-mod auth;
 
-use factory::UnveilFactory;
 use lib::{DeploymentApiError, DeploymentMeta, Port, ProjectConfig};
 use rocket::serde::json::serde_json::json;
 use rocket::serde::json::Value;
-use rocket::{Data, State, tokio};
+use rocket::{tokio, Data, State};
 use std::net::IpAddr;
 use std::sync::Arc;
 use structopt::StructOpt;
 use uuid::Uuid;
 
 use crate::args::Args;
+use crate::auth::User;
 use crate::build::{BuildSystem, FsBuildSystem};
 use crate::deployment::DeploymentSystem;
-use crate::auth::User;
-
 
 /// Status API to be used to check if the service is alive
 #[get("/status")]
-async fn status() -> () {
-    ()
-}
+async fn status() {}
 
 #[get("/deployments/<id>")]
-async fn get_deployment(state: &State<ApiState>, id: Uuid, user: User) -> Result<Value, DeploymentApiError> {
+async fn get_deployment(
+    state: &State<ApiState>,
+    id: Uuid,
+    user: User,
+) -> Result<Value, DeploymentApiError> {
     let deployment = state.deployment_manager.get_deployment(&id).await?;
 
     validate_user_for_deployment(&user, &deployment)?;
@@ -41,7 +42,11 @@ async fn get_deployment(state: &State<ApiState>, id: Uuid, user: User) -> Result
 }
 
 #[delete("/deployments/<id>")]
-async fn delete_deployment(state: &State<ApiState>, id: Uuid, user: User) -> Result<Value, DeploymentApiError> {
+async fn delete_deployment(
+    state: &State<ApiState>,
+    id: Uuid,
+    user: User,
+) -> Result<Value, DeploymentApiError> {
     let deployment = state.deployment_manager.get_deployment(&id).await?;
 
     validate_user_for_deployment(&user, &deployment)?;
@@ -52,18 +57,32 @@ async fn delete_deployment(state: &State<ApiState>, id: Uuid, user: User) -> Res
 }
 
 #[get("/projects/<project_name>")]
-async fn get_project(state: &State<ApiState>, project_name: String, user: User) -> Result<Value, DeploymentApiError> {
+async fn get_project(
+    state: &State<ApiState>,
+    project_name: String,
+    user: User,
+) -> Result<Value, DeploymentApiError> {
     validate_user_for_project(&user, &project_name)?;
 
-    let deployment = state.deployment_manager.get_deployment_for_project(&project_name).await?;
+    let deployment = state
+        .deployment_manager
+        .get_deployment_for_project(&project_name)
+        .await?;
     Ok(json!(deployment))
 }
 
 #[delete("/projects/<project_name>")]
-async fn delete_project(state: &State<ApiState>, project_name: String, user: User) -> Result<Value, DeploymentApiError> {
+async fn delete_project(
+    state: &State<ApiState>,
+    project_name: String,
+    user: User,
+) -> Result<Value, DeploymentApiError> {
     validate_user_for_project(&user, &project_name)?;
 
-    let deployment = state.deployment_manager.kill_deployment_for_project(&project_name).await?;
+    let deployment = state
+        .deployment_manager
+        .kill_deployment_for_project(&project_name)
+        .await?;
     Ok(json!(deployment))
 }
 
@@ -76,23 +95,43 @@ async fn create_project(
 ) -> Result<Value, DeploymentApiError> {
     validate_user_for_project(&user, &project.name)?;
 
-    let deployment = state.deployment_manager.deploy(crate_file, &project).await?;
+    let deployment = state
+        .deployment_manager
+        .deploy(crate_file, &project)
+        .await?;
     Ok(json!(deployment))
 }
 
 fn validate_user_for_project(user: &User, project_name: &str) -> Result<(), DeploymentApiError> {
     if project_name != user.project_name {
-        log::warn!("failed to authenticate user {:?} for project `{}`", &user, project_name);
-        Err(DeploymentApiError::NotFound(format!("could not find project `{}`", &project_name)))
+        log::warn!(
+            "failed to authenticate user {:?} for project `{}`",
+            &user,
+            project_name
+        );
+        Err(DeploymentApiError::NotFound(format!(
+            "could not find project `{}`",
+            &project_name
+        )))
     } else {
         Ok(())
     }
 }
 
-fn validate_user_for_deployment(user: &User, meta: &DeploymentMeta) -> Result<(), DeploymentApiError> {
+fn validate_user_for_deployment(
+    user: &User,
+    meta: &DeploymentMeta,
+) -> Result<(), DeploymentApiError> {
     if meta.config.name != user.project_name {
-        log::warn!("failed to authenticate user {:?} for deployment `{}`", &user, &meta.id);
-        Err(DeploymentApiError::NotFound(format!("could not find deployment `{}`", &meta.id)))
+        log::warn!(
+            "failed to authenticate user {:?} for deployment `{}`",
+            &user,
+            &meta.id
+        );
+        Err(DeploymentApiError::NotFound(format!(
+            "could not find deployment `{}`",
+            &meta.id
+        )))
     } else {
         Ok(())
     }
@@ -108,12 +147,12 @@ async fn rocket() -> _ {
     env_logger::Builder::new()
         .filter_module("rocket", log::LevelFilter::Info)
         .filter_module("_", log::LevelFilter::Info)
+        .filter_module("api", log::LevelFilter::Debug)
         .init();
 
     let args: Args = Args::from_args();
     let build_system = FsBuildSystem::initialise(args.path).unwrap();
-    let factory = UnveilFactory {};
-    let deployment_manager = DeploymentSystem::new(Box::new(build_system), Box::new(factory)).await;
+    let deployment_manager = Arc::new(DeploymentSystem::new(Box::new(build_system)).await);
 
     start_proxy(args.bind_addr, args.proxy_port, deployment_manager.clone()).await;
 
@@ -133,7 +172,8 @@ async fn rocket() -> _ {
                 delete_project,
                 create_project,
                 get_project,
-                status],
+                status
+            ],
         )
         .manage(state)
 }

@@ -8,7 +8,6 @@ use rocket::tokio::io::AsyncWriteExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-#[cfg(debug_assertions)]
 pub const DEFAULT_FS_ROOT: &'static str = "/tmp/unveil/crates/";
 
 #[cfg(not(debug_assertions))]
@@ -25,7 +24,7 @@ pub(crate) struct Build {
 pub(crate) trait BuildSystem: Send + Sync {
     async fn build(
         &self,
-        crate_bytes: &Vec<u8>,
+        crate_bytes: &[u8],
         project_config: &ProjectConfig,
         buf: Box<dyn std::io::Write + Send>,
     ) -> Result<Build>;
@@ -44,7 +43,7 @@ impl FsBuildSystem {
     /// The FS Build System will fail to intialise if the directory does not.
     /// exist
     pub(crate) fn initialise(path: Option<PathBuf>) -> Result<Self> {
-        let fs_root = path.unwrap_or(PathBuf::from(DEFAULT_FS_ROOT));
+        let fs_root = path.unwrap_or_else(|| PathBuf::from(DEFAULT_FS_ROOT));
         if !(fs_root.exists()) {
             return Err(anyhow!(
                 r#"
@@ -72,7 +71,7 @@ impl FsBuildSystem {
 impl BuildSystem for FsBuildSystem {
     async fn build(
         &self,
-        crate_bytes: &Vec<u8>,
+        crate_bytes: &[u8],
         project_config: &ProjectConfig,
         buf: Box<dyn std::io::Write + Send>,
     ) -> Result<Build> {
@@ -130,8 +129,8 @@ fn clear_project_dir(project_path: &Path) -> Result<()> {
         .into_iter()
         .map(|dir| dir.unwrap())
         .filter(|dir| dir.file_name() != "target")
-        .for_each(|dir| match dir.file_type() {
-            Ok(file) => {
+        .for_each(|dir| {
+            if let Ok(file) = dir.file_type() {
                 log::debug!("{:?}", dir);
                 if file.is_dir() {
                     std::fs::remove_dir_all(&dir.path()).unwrap();
@@ -142,7 +141,6 @@ fn clear_project_dir(project_path: &Path) -> Result<()> {
                     unimplemented!()
                 }
             }
-            Err(_) => {} // file type could not be read, should not happen
         });
     Ok(())
 }

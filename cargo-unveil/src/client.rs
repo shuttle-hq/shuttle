@@ -9,7 +9,7 @@ pub(crate) async fn delete(api_key: ApiKey, project: ProjectConfig) -> Result<()
     let client = get_retry_client();
 
     let mut url = API_URL.to_string();
-    url.push_str(&format!("/projects/{}", project.name));
+    url.push_str(&format!("/projects/{}", project.name()));
     let deployment_meta: DeploymentMeta = client
         .delete(url.clone())
         .basic_auth(api_key.clone(), Some(""))
@@ -41,7 +41,7 @@ async fn get_deployment_meta(
     client: &ClientWithMiddleware,
 ) -> Result<DeploymentMeta> {
     let mut url = API_URL.to_string();
-    url.push_str(&format!("/projects/{}", project.name));
+    url.push_str(&format!("/projects/{}", project.name()));
     client
         .get(url.clone())
         .basic_auth(api_key.clone(), Some(""))

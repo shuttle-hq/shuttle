@@ -76,7 +76,7 @@ impl BuildSystem for FsBuildSystem {
         project_config: &ProjectConfig,
         buf: Box<dyn std::io::Write + Send>,
     ) -> Result<Build> {
-        let project_name = &project_config.name;
+        let project_name = project_config.name();
 
         // project path
         let project_path = self.project_path(project_name)?;

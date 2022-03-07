@@ -58,7 +58,7 @@ impl Deployment {
             .parse()
             .context("could not parse contents of marker file to a valid path")?;
 
-        let meta = DeploymentMeta::built(&ProjectConfig::new(project_name));
+        let meta = DeploymentMeta::built(&ProjectConfig::new(project_name)?);
         let state = DeploymentState::built(Build { so_path });
         Ok(Self::new(meta, state))
     }
@@ -409,7 +409,7 @@ impl DeploymentSystem {
         let mut candidates = Vec::new();
 
         for deployment in self.deployments.read().await.values() {
-            if &deployment.meta.read().await.config.name == project_name {
+            if deployment.meta.read().await.config.name() == project_name {
                 candidates.push(deployment.meta().await);
             }
         }

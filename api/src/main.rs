@@ -75,7 +75,7 @@ async fn create_project(
     project: ProjectConfig,
     user: User,
 ) -> Result<Value, DeploymentApiError> {
-    validate_user_for_project(&user, &project.name)?;
+    validate_user_for_project(&user, project.name())?;
 
     let deployment = state.deployment_manager.deploy(crate_file, &project).await?;
     Ok(json!(deployment))
@@ -91,7 +91,7 @@ fn validate_user_for_project(user: &User, project_name: &str) -> Result<(), Depl
 }
 
 fn validate_user_for_deployment(user: &User, meta: &DeploymentMeta) -> Result<(), DeploymentApiError> {
-    if meta.config.name != user.project_name {
+    if meta.config.name() != &user.project_name {
         log::warn!("failed to authenticate user {:?} for deployment `{}`", &user, &meta.id);
         Err(DeploymentApiError::NotFound(format!("could not find deployment `{}`", &meta.id)))
     } else {

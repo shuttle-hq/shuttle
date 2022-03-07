@@ -1,3 +1,5 @@
+use std::error::Error;
+use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 use rocket::request::{FromRequest, Outcome};
 use rocket::Request;
@@ -43,23 +45,49 @@ impl FromStr for ProjectName {
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct ProjectConfig {
-    pub name: String,
+    name: ProjectName,
 }
 
 impl ProjectConfig {
-    pub fn new(name: String) -> Self {
-        Self {
-            name
-        }
+    pub fn new(name: String) -> Result<Self, ProjectConfigError> {
+        Ok(Self {
+            name: (&name).parse()?
+        })
+    }
+
+    pub fn name(&self) -> &String {
+        &self.name.0
     }
 }
 
 #[derive(Debug)]
 pub enum ProjectConfigError {
     Missing,
-    Malformed,
-    InvalidName
+    Malformed(String),
+    InvalidName,
 }
+
+impl ProjectConfigError {
+    fn malformed(msg: &str) -> Self {
+        Self::Malformed(msg.to_string())
+    }
+}
+
+impl Display for ProjectConfigError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ProjectConfigError::Missing => write!(f, "missing"),
+            ProjectConfigError::Malformed(msg) => write!(f, "malformed: {}", msg),
+            ProjectConfigError::InvalidName => write!(f, r#"
+invalid project name: project name must
+1. not start or end with `-`.
+2. not contain any characters outside of the alphanumeric range, except for `-`.
+3. not be empty."#),
+        }
+    }
+}
+
+impl Error for ProjectConfigError {}
 
 #[rocket::async_trait]
 impl<'r> FromRequest<'r> for ProjectConfig {
@@ -73,13 +101,13 @@ impl<'r> FromRequest<'r> for ProjectConfig {
 
         match serde_json::from_str::<ProjectConfig>(config_string) {
             Ok(config) => Outcome::Success(config),
-            Err(_) => Outcome::Failure((Status::BadRequest, ProjectConfigError::Malformed)),
+            Err(_) => Outcome::Failure((Status::BadRequest, ProjectConfigError::malformed("could not parse project config from json"))),
         }
     }
 }
 
 /// Test examples taken from a [Pop-OS project](https://github.com/pop-os/hostname-validator/blob/master/src/lib.rs)
-/// and modified to our usecase
+/// and modified to our use case
 #[cfg(test)]
 pub mod tests {
     use super::*;
@@ -94,7 +122,7 @@ pub mod tests {
             "123",
         ] {
             let project_name = ProjectName::from_str(hostname);
-            assert!(project_name.is_ok(),"{:?} was err", hostname);
+            assert!(project_name.is_ok(), "{:?} was err", hostname);
         }
     }
 
@@ -111,7 +139,7 @@ pub mod tests {
             "invalid.name.",
         ] {
             let project_name = ProjectName::from_str(hostname);
-            assert!(project_name.is_err(),"{:?} was ok", hostname);
+            assert!(project_name.is_err(), "{:?} was ok", hostname);
         }
     }
 }

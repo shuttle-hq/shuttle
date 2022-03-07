@@ -57,7 +57,7 @@ impl DeploymentMeta {
     }
 
     pub fn create_host(project_config: &ProjectConfig) -> Host {
-        format!("{}.unveil.sh", project_config.name)
+        format!("{}.unveil.sh", project_config.name())
     }
 }
 
@@ -72,7 +72,7 @@ impl Display for DeploymentMeta {
         Host:               {}
         Created At:         {}
         "#,
-            self.config.name, self.id, self.state, self.host, self.created_at
+            self.config.name(), self.id, self.state, self.host, self.created_at
         )
     }
 }

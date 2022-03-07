@@ -75,9 +75,7 @@ fn get_project(working_directory: &Path) -> Result<ProjectConfig> {
                 .ok_or(anyhow!("could not find Cargo.toml in {:?}", &working_directory))?
                 .name
                 .clone();
-            ProjectConfig {
-                name: package_name
-            }
+            ProjectConfig::new(package_name)?
         }
     };
     Ok(config)

@@ -263,7 +263,7 @@ type Deployments = HashMap<DeploymentId, Arc<Deployment>>;
 /// The top-level manager for deployments. Is responsible for their creation
 /// and lifecycle.
 pub(crate) struct DeploymentSystem {
-    deployments: RwLock<Deployments>,
+    deployments: Arc<RwLock<Deployments>>,
     job_queue: Arc<JobQueue>,
     router: Arc<Router>,
 }
@@ -347,14 +347,14 @@ impl DeploymentSystem {
         let context = Context {
             router: router.clone(),
             build_system,
-            deployments,
+            deployments: deployments.clone(),
         };
         let db_context = database::Context::new()
             .await
             .expect("failed to create lazy connection to database");
 
         Self {
-            deployments: Default::default(),
+            deployments,
             job_queue: JobQueue::initialise(context, db_context).await,
             router,
         }

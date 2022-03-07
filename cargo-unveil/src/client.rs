@@ -1,9 +1,10 @@
 use anyhow::{Context, Result};
 use lib::{API_URL, ApiKey, DeploymentMeta, DeploymentStateMeta, UNVEIL_PROJECT_HEADER};
+use lib::project::ProjectConfig;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
 use std::{fs::File, io::Read, thread::sleep, time::Duration};
-use lib::project::ProjectConfig;
+
 
 pub(crate) async fn delete(api_key: ApiKey, project: ProjectConfig) -> Result<()> {
     let client = get_retry_client();
@@ -12,7 +13,7 @@ pub(crate) async fn delete(api_key: ApiKey, project: ProjectConfig) -> Result<()
     url.push_str(&format!("/projects/{}", project.name()));
     let deployment_meta: DeploymentMeta = client
         .delete(url.clone())
-        .basic_auth(api_key.clone(), Some(""))
+        .basic_auth(api_key, Some(""))
         .send()
         .await
         .context("failed to delete deployment on the Unveil server")?
@@ -55,11 +56,9 @@ async fn get_deployment_meta(
 
 fn get_retry_client() -> ClientWithMiddleware {
     let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
-    let client = ClientBuilder::new(reqwest::Client::new())
+    ClientBuilder::new(reqwest::Client::new())
         .with(RetryTransientMiddleware::new_with_policy(retry_policy))
-        .build();
-
-    client
+        .build()
 }
 
 pub(crate) async fn deploy(

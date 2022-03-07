@@ -1,17 +1,18 @@
 pub mod project;
 
+use chrono::{DateTime, Utc};
+use lazy_static::lazy_static;
 use rocket::http::Status;
 use rocket::{Responder};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
-use chrono::{DateTime, Utc};
 use uuid::Uuid;
 use project::ProjectConfig;
 
-pub const UNVEIL_PROJECT_HEADER: &'static str = "Unveil-Project";
+pub const UNVEIL_PROJECT_HEADER: &str = "Unveil-Project";
 
 #[cfg(debug_assertions)]
-pub const API_URL: &'static str = "http://localhost:8001";
+pub const API_URL: &str = "http://localhost:8001";
 
 #[cfg(not(debug_assertions))]
 pub const API_URL: &'static str = "https://api.shuttle.rs";
@@ -32,6 +33,7 @@ pub struct DeploymentMeta {
     pub host: String,
     pub build_logs: Option<String>,
     pub runtime_logs: Option<String>,
+    pub database_deployment: Option<DatabaseReadyInfo>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -52,7 +54,8 @@ impl DeploymentMeta {
             host: Self::create_host(config),
             build_logs: None,
             runtime_logs: None,
-            created_at: Utc::now()
+            database_deployment: None,
+            created_at: Utc::now(),
         }
     }
 
@@ -61,8 +64,23 @@ impl DeploymentMeta {
     }
 }
 
+lazy_static! {
+    static ref PUBLIC_IP: String =
+        std::env::var("PUBLIC_IP").unwrap_or_else(|_| "localhost".to_string());
+}
+
 impl Display for DeploymentMeta {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let db = {
+            if let Some(info) = &self.database_deployment {
+                format!(
+                    "\n        Database URI:       {}",
+                    info.connection_string(&*PUBLIC_IP)
+                )
+            } else {
+                "".to_string()
+            }
+        };
         write!(
             f,
             r#"
@@ -70,9 +88,25 @@ impl Display for DeploymentMeta {
         Deployment Id:      {}
         Deployment Status:  {}
         Host:               {}
-        Created At:         {}
+        Created At:         {}{}
         "#,
-            self.config.name(), self.id, self.state, self.host, self.created_at
+            self.config.name(), self.id, self.state, self.host, self.created_at, db
+        )
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DatabaseReadyInfo {
+    pub role_name: String,
+    pub role_password: String,
+    pub database_name: String,
+}
+
+impl DatabaseReadyInfo {
+    pub fn connection_string(&self, ip: &str) -> String {
+        format!(
+            "postgres://{}:{}@{}/{}",
+            self.role_name, self.role_password, ip, self.database_name
         )
     }
 }
@@ -121,6 +155,4 @@ impl Display for DeploymentApiError {
     }
 }
 
-impl std::error::Error for DeploymentApiError {
-
-}
+impl std::error::Error for DeploymentApiError {}

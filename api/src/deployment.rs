@@ -15,12 +15,13 @@ use anyhow::{anyhow, Context as AnyhowContext};
 use tokio::sync::RwLock;
 
 use crate::build::Build;
-use crate::BuildSystem;
+use crate::{BuildSystem, UnveilFactory};
 use lib::{DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, Port};
 use lib::project::ProjectConfig;
 
+use crate::database;
 use crate::router::Router;
-use unveil_service::{Factory, Service};
+use unveil_service::Service;
 
 /// Inner struct of a deployment which holds the deployment itself
 /// and the some metadata
@@ -82,7 +83,7 @@ impl Deployment {
 
     /// Tries to advance the deployment one stage. Does nothing if the deployment
     /// is in a terminal state.
-    pub(crate) async fn advance(&self, context: &Context) {
+    pub(crate) async fn advance(&self, context: &Context, db_context: &database::Context) {
         {
             log::debug!("waiting to get write on the state");
             let meta = self.meta().await;
@@ -128,8 +129,16 @@ impl Deployment {
                         port
                     );
 
-                    let deployed_future = match loaded.service.deploy(&context.factory) {
+                    let mut db_state = database::State::default();
+
+                    let factory =
+                        UnveilFactory::new(&mut db_state, meta.config.clone(), db_context.clone());
+
+                    let deployed_future = match loaded.service.deploy(&factory) {
                         unveil_service::Deployment::Rocket(r) => {
+                            if let database::State::Ready(ready) = &db_state {
+                                self.meta.write().await.database_deployment = Some(ready.clone());
+                            }
                             let config = rocket::Config {
                                 port,
                                 log_level: rocket::config::LogLevel::Normal,
@@ -141,6 +150,7 @@ impl Deployment {
                     };
 
                     let (task, abort_handle) = abortable(deployed_future);
+
                     tokio::spawn(task);
 
                     // Remove stale active deployments
@@ -149,7 +159,13 @@ impl Deployment {
                         context.deployments.write().await.remove(&stale_id);
                     }
 
-                    DeploymentState::deployed(loaded.so, loaded.service, port, abort_handle)
+                    DeploymentState::deployed(
+                        loaded.so,
+                        loaded.service,
+                        port,
+                        abort_handle,
+                        db_state,
+                    )
                 }
                 deployed_or_error => deployed_or_error, /* nothing to do here */
             };
@@ -247,7 +263,7 @@ type Deployments = HashMap<DeploymentId, Arc<Deployment>>;
 /// The top-level manager for deployments. Is responsible for their creation
 /// and lifecycle.
 pub(crate) struct DeploymentSystem {
-    deployments: Arc<RwLock<Deployments>>,
+    deployments: RwLock<Deployments>,
     job_queue: Arc<JobQueue>,
     router: Arc<Router>,
 }
@@ -267,19 +283,25 @@ impl JobQueue {
     }
 
     /// Returns a JobQueue with the job processor already running
-    async fn initialise(context: Context) -> Arc<Self> {
+    async fn initialise(context: Context, db_context: database::Context) -> Arc<Self> {
         let job_queue = Arc::new(JobQueue::default());
 
         let queue_ref = job_queue.clone();
 
-        tokio::spawn(async move { Self::start_job_processor(context, queue_ref).await });
+        tokio::spawn(
+            async move { Self::start_job_processor(context, db_context, queue_ref).await },
+        );
 
         job_queue
     }
 
     /// Starts the job processor. Before it begins, it will add all projects
     /// from the deployment service into the queue.
-    async fn start_job_processor(context: Context, queue: Arc<JobQueue>) {
+    async fn start_job_processor(
+        context: Context,
+        db_context: database::Context,
+        queue: Arc<JobQueue>,
+    ) {
         log::debug!("loading deployments into job processor");
         for deployment in context.deployments.read().await.values() {
             queue.push(deployment.clone());
@@ -293,7 +315,7 @@ impl JobQueue {
                 log::debug!("started deployment job for id: '{}'", id);
 
                 while !deployment.deployment_finished().await {
-                    deployment.advance(&context).await;
+                    deployment.advance(&context, &db_context).await;
                 }
 
                 log::debug!("ended deployment job for id: '{}'", id);
@@ -309,12 +331,11 @@ impl JobQueue {
 pub(crate) struct Context {
     router: Arc<Router>,
     build_system: Box<dyn BuildSystem>,
-    factory: Box<dyn Factory>,
     deployments: Arc<RwLock<Deployments>>,
 }
 
 impl DeploymentSystem {
-    pub(crate) async fn new(build_system: Box<dyn BuildSystem>, factory: Box<dyn Factory>) -> Arc<Self> {
+    pub(crate) async fn new(build_system: Box<dyn BuildSystem>) -> Self {
         let router: Arc<Router> = Default::default();
 
         let deployments = Arc::new(
@@ -326,16 +347,17 @@ impl DeploymentSystem {
         let context = Context {
             router: router.clone(),
             build_system,
-            factory,
-            deployments: deployments.clone(),
-        };
-
-
-        Arc::new(Self {
             deployments,
-            job_queue: JobQueue::initialise(context).await,
+        };
+        let db_context = database::Context::new()
+            .await
+            .expect("failed to create lazy connection to database");
+
+        Self {
+            deployments: Default::default(),
+            job_queue: JobQueue::initialise(context, db_context).await,
             router,
-        })
+        }
     }
 
     /// Traverse the build directory re-create deployments.
@@ -390,7 +412,7 @@ impl DeploymentSystem {
         &self,
         id: &DeploymentId,
     ) -> Result<DeploymentMeta, DeploymentApiError> {
-        match self.deployments.read().await.get(&id) {
+        match self.deployments.read().await.get(id) {
             Some(deployment) => Ok(deployment.meta().await),
             None => Err(DeploymentApiError::NotFound(format!(
                 "could not find deployment for id '{}'",
@@ -404,7 +426,7 @@ impl DeploymentSystem {
     /// for a given project, will return the latest.
     pub(crate) async fn get_deployment_for_project(
         &self,
-        project_name: &String,
+        project_name: &str,
     ) -> Result<DeploymentMeta, DeploymentApiError> {
         let mut candidates = Vec::new();
 
@@ -423,15 +445,15 @@ impl DeploymentSystem {
             None => Err(DeploymentApiError::NotFound(format!(
                 "could not find deployment for project '{}'",
                 &project_name
-            )))
+            ))),
         }
     }
 
     pub(crate) async fn kill_deployment_for_project(
         &self,
-        project_name: &String,
+        project_name: &str,
     ) -> Result<DeploymentMeta, DeploymentApiError> {
-        let id = self.get_deployment_for_project(&project_name).await?.id;
+        let id = self.get_deployment_for_project(project_name).await?.id;
         self.kill_deployment(&id).await
     }
 
@@ -442,7 +464,7 @@ impl DeploymentSystem {
         &self,
         id: &DeploymentId,
     ) -> Result<DeploymentMeta, DeploymentApiError> {
-        match self.deployments.write().await.remove(&id) {
+        match self.deployments.write().await.remove(id) {
             Some(deployment) => {
                 let meta = deployment.meta().await;
 
@@ -451,10 +473,9 @@ impl DeploymentSystem {
                 // library when the runtime gets around to it.
 
                 let mut lock = deployment.state.write().await;
-                if let DeploymentState::Deployed(
-                    DeployedState {
-                        so, abort_handle, ..
-                    }) = lock.take()
+                if let DeploymentState::Deployed(DeployedState {
+                    so, abort_handle, ..
+                }) = lock.take()
                 {
                     abort_handle.abort();
 
@@ -488,12 +509,13 @@ impl DeploymentSystem {
             .to_vec();
 
         let deployment = Arc::new(Deployment::from_bytes(&project_config, crate_bytes));
+      
         let info = deployment.meta().await;
 
         self.deployments
             .write()
             .await
-            .insert(info.id.clone(), deployment.clone());
+            .insert(info.id, deployment.clone());
 
         self.add_to_job_queue(deployment);
 
@@ -505,17 +527,16 @@ impl DeploymentSystem {
     }
 }
 
-const ENTRYPOINT_SYMBOL_NAME: &'static [u8] = b"_create_service\0";
+const ENTRYPOINT_SYMBOL_NAME: &[u8] = b"_create_service\0";
 
-type CreateService = unsafe extern "C" fn() -> *mut dyn Service<Box<dyn Factory>>;
+type CreateService = unsafe extern "C" fn() -> *mut dyn Service;
 
 /// Dynamically load from a `.so` file a value of a type implementing the
 /// [`Service`] trait. Relies on the `.so` library having an ``extern "C"`
 /// function called [`ENTRYPOINT_SYMBOL_NAME`], likely automatically generated
 /// using the [`unveil_service::declare_service`] macro.
-fn load_service_from_so_file(
-    so_path: &Path,
-) -> anyhow::Result<(Box<dyn Service<Box<dyn Factory>>>, Library)> {
+#[allow(clippy::type_complexity)]
+fn load_service_from_so_file(so_path: &Path) -> anyhow::Result<(Box<dyn Service>, Library)> {
     unsafe {
         let lib = libloading::Library::new(so_path)?;
 
@@ -566,21 +587,23 @@ impl DeploymentState {
         Self::Built(BuiltState { build })
     }
 
-    fn loaded(so: Library, service: Box<dyn Service<Box<dyn Factory>>>) -> Self {
+    fn loaded(so: Library, service: Box<dyn Service>) -> Self {
         Self::Loaded(LoadedState { service, so })
     }
 
     fn deployed(
         so: Library,
-        service: Box<dyn Service<Box<dyn Factory>>>,
+        service: Box<dyn Service>,
         port: Port,
         abort_handle: AbortHandle,
+        db_state: database::State,
     ) -> Self {
         Self::Deployed(DeployedState {
             service,
             so,
             port,
             abort_handle,
+            db_state,
         })
     }
 
@@ -604,14 +627,15 @@ struct BuiltState {
 }
 
 struct LoadedState {
-    service: Box<dyn Service<Box<dyn Factory>>>,
+    service: Box<dyn Service>,
     so: Library,
 }
 
+#[allow(dead_code)]
 struct DeployedState {
-    #[allow(dead_code)]
-    service: Box<dyn Service<Box<dyn Factory>>>,
+    service: Box<dyn Service>,
     so: Library,
     port: Port,
     abort_handle: AbortHandle,
+    db_state: database::State,
 }

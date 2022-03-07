@@ -8,12 +8,11 @@ mod factory;
 pub use error::Error;
 pub use factory::Factory;
 
-pub trait Service<F>
+pub trait Service
 where
     Self: Any + Send + Sync,
-    F: Factory,
 {
-    fn deploy(&self, factory: &F) -> Deployment;
+    fn deploy(&self, factory: &dyn Factory) -> Deployment;
 }
 
 pub enum Deployment {
@@ -30,12 +29,12 @@ impl From<Rocket<Build>> for Deployment {
 macro_rules! declare_service {
     ($service_type:ty, $constructor:path) => {
         #[no_mangle]
-        pub extern "C" fn _create_service() -> *mut dyn $crate::Service<Box<dyn $crate::Factory>> {
+        pub extern "C" fn _create_service() -> *mut dyn $crate::Service {
             // Ensure constructor returns concrete type.
             let constructor: fn() -> $service_type = $constructor;
 
             let obj = constructor();
-            let boxed: Box<dyn $crate::Service<Box<dyn $crate::Factory>>> = Box::new(obj);
+            let boxed: Box<dyn $crate::Service> = Box::new(obj);
             Box::into_raw(boxed)
         }
     };

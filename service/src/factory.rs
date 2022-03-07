@@ -1,9 +1,15 @@
+use crate::Error;
+use async_trait::async_trait;
+use sqlx::PgPool;
+
+#[async_trait]
 pub trait Factory: Send + Sync {
-    fn get_postgres_connection_pool(&self, name: &str) -> Result<sqlx::PgPool, crate::Error>;
+    async fn get_postgres_connection_pool(&mut self) -> Result<PgPool, Error>;
 }
 
+#[async_trait]
 impl Factory for Box<dyn Factory> {
-    fn get_postgres_connection_pool(&self, name: &str) -> Result<sqlx::PgPool, crate::Error> {
-        self.as_ref().get_postgres_connection_pool(name)
+    async fn get_postgres_connection_pool(&mut self) -> Result<PgPool, Error> {
+        self.as_mut().get_postgres_connection_pool().await
     }
 }

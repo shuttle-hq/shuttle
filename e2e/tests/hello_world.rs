@@ -17,6 +17,7 @@ fn hello() {
             "--path",
             tmp_dir.path().to_str().unwrap(),
         ])
+        .env("PG_PASSWORD", "super-secret-pwd")
         .current_dir("../")
         .spawn()
         .unwrap();

@@ -8,7 +8,7 @@ use cargo::core::resolver::CliFeatures;
 use cargo::core::Workspace;
 use cargo::ops::{PackageOpts, Packages};
 use cargo_metadata::MetadataCommand;
-use lib::{ApiKey, ProjectConfig};
+use lib::{ApiKey, project::ProjectConfig};
 use std::env;
 use std::fs::File;
 use std::path::Path;
@@ -75,7 +75,7 @@ fn get_project(working_directory: &Path) -> Result<ProjectConfig> {
                 .ok_or_else(|| anyhow!("could not find Cargo.toml in {:?}", &working_directory))?
                 .name
                 .clone();
-            ProjectConfig { name: package_name }
+            ProjectConfig::new(package_name)?
         }
     };
     Ok(config)

@@ -2,7 +2,7 @@ use anyhow::{anyhow, Context, Result};
 use cargo::core::compiler::CompileMode;
 use cargo::core::Workspace;
 use cargo::ops::CompileOptions;
-use lib::ProjectConfig;
+use lib::project::ProjectConfig;
 use rocket::tokio;
 use rocket::tokio::io::AsyncWriteExt;
 use std::path::{Path, PathBuf};
@@ -75,7 +75,7 @@ impl BuildSystem for FsBuildSystem {
         project_config: &ProjectConfig,
         buf: Box<dyn std::io::Write + Send>,
     ) -> Result<Build> {
-        let project_name = &project_config.name;
+        let project_name = project_config.name();
 
         // project path
         let project_path = self.project_path(project_name)?;

@@ -10,7 +10,9 @@ mod factory;
 mod proxy;
 mod router;
 
-use lib::{DeploymentApiError, DeploymentMeta, Port, ProjectConfig};
+use factory::UnveilFactory;
+use lib::{DeploymentApiError, DeploymentMeta, Port};
+use lib::project::ProjectConfig;
 use rocket::serde::json::serde_json::json;
 use rocket::serde::json::Value;
 use rocket::{tokio, Data, State};
@@ -18,6 +20,7 @@ use std::net::IpAddr;
 use std::sync::Arc;
 use structopt::StructOpt;
 use uuid::Uuid;
+
 
 use crate::args::Args;
 use crate::auth::User;
@@ -93,7 +96,7 @@ async fn create_project(
     project: ProjectConfig,
     user: User,
 ) -> Result<Value, DeploymentApiError> {
-    validate_user_for_project(&user, &project.name)?;
+    validate_user_for_project(&user, project.name())?;
 
     let deployment = state
         .deployment_manager
@@ -122,7 +125,7 @@ fn validate_user_for_deployment(
     user: &User,
     meta: &DeploymentMeta,
 ) -> Result<(), DeploymentApiError> {
-    if meta.config.name != user.project_name {
+    if meta.config.name() != &user.project_name {
         log::warn!(
             "failed to authenticate user {:?} for deployment `{}`",
             &user,

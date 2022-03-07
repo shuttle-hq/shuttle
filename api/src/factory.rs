@@ -1,6 +1,6 @@
 use crate::database;
 use async_trait::async_trait;
-use lib::ProjectConfig;
+use lib::project::ProjectConfig;
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use unveil_service::Factory;
 
@@ -30,7 +30,7 @@ impl Factory for UnveilFactory<'_> {
     async fn get_postgres_connection_pool(&mut self) -> Result<PgPool, unveil_service::Error> {
         let ready_state = self
             .database
-            .advance(&self.project.name, &self.ctx)
+            .advance(&self.project.name(), &self.ctx)
             .await
             .map_err(unveil_service::Error::from)?;
 

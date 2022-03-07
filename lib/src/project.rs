@@ -3,8 +3,9 @@ use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 use rocket::request::{FromRequest, Outcome};
 use rocket::Request;
-use crate::{Status, UNVEIL_PROJECT_HEADER};
 use serde::{Deserialize, Serialize};
+use serde::de::Error as DeError;
+use crate::{Status, UNVEIL_PROJECT_HEADER};
 
 
 /// Project names should conform to valid Host segments (or labels)
@@ -13,8 +14,17 @@ use serde::{Deserialize, Serialize};
 /// - It does not start or end with `-`.
 /// - It does not contain any characters outside of the alphanumeric range, except for `-`.
 /// - It is not empty.
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Debug)]
 struct ProjectName(String);
+
+fn deserialize_project_name<'de, D>(deserializer: D) -> Result<ProjectName, D::Error>
+    where
+        D: serde::Deserializer<'de> {
+    let s: String = String::deserialize(deserializer)?;
+
+    s.parse().map_err(DeError::custom)
+}
+
 
 impl ProjectName {
     pub fn is_valid(hostname: &str) -> bool {
@@ -38,13 +48,14 @@ impl FromStr for ProjectName {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match ProjectName::is_valid(s) {
             true => Ok(ProjectName(s.to_string())),
-            false => Err(ProjectConfigError::InvalidName)
+            false => Err(ProjectConfigError::InvalidName(s.to_string()))
         }
     }
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct ProjectConfig {
+    #[serde(deserialize_with = "deserialize_project_name")]
     name: ProjectName,
 }
 
@@ -64,7 +75,7 @@ impl ProjectConfig {
 pub enum ProjectConfigError {
     Missing,
     Malformed(String),
-    InvalidName,
+    InvalidName(String),
 }
 
 impl ProjectConfigError {
@@ -78,11 +89,11 @@ impl Display for ProjectConfigError {
         match self {
             ProjectConfigError::Missing => write!(f, "missing"),
             ProjectConfigError::Malformed(msg) => write!(f, "malformed: {}", msg),
-            ProjectConfigError::InvalidName => write!(f, r#"
-invalid project name: project name must
+            ProjectConfigError::InvalidName(name) => write!(f, r#"
+`{}` is an invalid project name. project name must
 1. not start or end with `-`.
 2. not contain any characters outside of the alphanumeric range, except for `-`.
-3. not be empty."#),
+3. not be empty."#, name),
         }
     }
 }

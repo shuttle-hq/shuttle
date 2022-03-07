@@ -136,6 +136,7 @@ impl Display for DeploymentStateMeta {
 
 // TODO: Determine error handling strategy - error types or just use `anyhow`?
 #[derive(Debug, Clone, Serialize, Deserialize, Responder)]
+#[response(content_type = "json")]
 pub enum DeploymentApiError {
     #[response(status = 500)]
     Internal(String),

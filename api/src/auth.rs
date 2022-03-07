@@ -56,6 +56,7 @@ impl Display for AuthorizationError {
     }
 }
 
+
 impl Error for AuthorizationError {}
 
 #[rocket::async_trait]
@@ -87,6 +88,7 @@ lazy_static! {
     static ref USER_DIRECTORY: UserDirectory = UserDirectory::from_user_file();
 }
 
+#[derive(Debug)]
 struct UserDirectory {
     users: HashMap<String, User>,
 }
@@ -100,10 +102,14 @@ impl UserDirectory {
         let file_path = Self::users_toml_file_path();
         let file_contents: String = std::fs::read_to_string(&file_path)
             .expect(&format!("this should blow up if the users.toml file is not present at {:?}", &file_path));
-        Self {
+        let directory = Self {
             users: toml::from_str(&file_contents)
                 .expect("this should blow up if the users.toml file is unparseable"),
-        }
+        };
+
+        log::debug!("initialising user directory: {:#?}", &directory);
+
+        directory
     }
 
     fn users_toml_file_path() -> PathBuf {

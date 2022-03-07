@@ -10,7 +10,7 @@ mod router;
 mod auth;
 
 use factory::UnveilFactory;
-use lib::{DeploymentApiError, DeploymentMeta, Port, ProjectConfig};
+use lib::{DeploymentApiError, DeploymentMeta, Port};
 use rocket::serde::json::serde_json::json;
 use rocket::serde::json::Value;
 use rocket::{Data, State, tokio};
@@ -18,6 +18,7 @@ use std::net::IpAddr;
 use std::sync::Arc;
 use structopt::StructOpt;
 use uuid::Uuid;
+use lib::project::ProjectConfig;
 
 use crate::args::Args;
 use crate::build::{BuildSystem, FsBuildSystem};

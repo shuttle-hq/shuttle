@@ -1,9 +1,10 @@
-use lib::{ApiKey, ProjectConfig};
+use lib::ApiKey;
 use serde::Deserialize;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Result};
+use lib::project::ProjectConfig;
 
 /// Global client config for things like API keys.
 #[derive(Deserialize)]

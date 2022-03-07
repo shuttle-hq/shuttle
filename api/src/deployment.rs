@@ -5,7 +5,7 @@ use rocket::data::ByteUnit;
 use rocket::tokio;
 use rocket::Data;
 use std::collections::HashMap;
-use std::fs::{DirEntry};
+use std::fs::DirEntry;
 use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddrV4, TcpListener};
 use std::path::{Path, PathBuf};
@@ -14,9 +14,10 @@ use std::time::Duration;
 use anyhow::{anyhow, Context as AnyhowContext};
 use tokio::sync::RwLock;
 
-use crate::build::{Build};
+use crate::build::Build;
 use crate::BuildSystem;
-use lib::{DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, Port, ProjectConfig};
+use lib::{DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, Port};
+use lib::project::ProjectConfig;
 
 use crate::router::Router;
 use unveil_service::{Factory, Service};

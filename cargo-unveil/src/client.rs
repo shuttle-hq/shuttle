@@ -1,8 +1,9 @@
 use anyhow::{Context, Result};
-use lib::{DeploymentMeta, DeploymentStateMeta, ProjectConfig, API_URL, UNVEIL_PROJECT_HEADER, ApiKey};
+use lib::{API_URL, ApiKey, DeploymentMeta, DeploymentStateMeta, UNVEIL_PROJECT_HEADER};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
 use std::{fs::File, io::Read, thread::sleep, time::Duration};
+use lib::project::ProjectConfig;
 
 pub(crate) async fn delete(api_key: ApiKey, project: ProjectConfig) -> Result<()> {
     let client = get_retry_client();

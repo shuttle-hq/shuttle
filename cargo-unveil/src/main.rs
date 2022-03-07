@@ -13,7 +13,8 @@ use std::path::Path;
 use std::rc::Rc;
 use cargo_metadata::MetadataCommand;
 use structopt::StructOpt;
-use lib::{ApiKey, ProjectConfig};
+use lib::ApiKey;
+use lib::project::ProjectConfig;
 
 #[tokio::main]
 async fn main() -> Result<()> {

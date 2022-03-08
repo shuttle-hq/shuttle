@@ -18,15 +18,15 @@ pub use error::Error;
 pub use factory::Factory;
 
 #[async_trait]
-pub trait Service
-where
-    Self: Send + Sync,
-{
+pub trait Service: Send + Sync {
     async fn build(&mut self, _: &dyn Factory) -> Result<(), Error> {
         Ok(())
     }
 
-    fn bind(&mut self, addr: SocketAddr) -> Pin<Box<dyn Future<Output = Result<(), Error>> + Send + Sync + 'static>>;
+    fn bind(
+        &mut self,
+        addr: SocketAddr,
+    ) -> Pin<Box<dyn Future<Output = Result<(), Error>> + Send + Sync + 'static>>;
 }
 
 pub trait IntoService {
@@ -45,7 +45,10 @@ impl IntoService for Rocket<Build> {
 
 #[async_trait]
 impl Service for RocketService {
-    fn bind(&mut self, addr: SocketAddr) -> Pin<Box<dyn Future<Output = Result<(), Error>> + Send + Sync + 'static>> {
+    fn bind(
+        &mut self,
+        addr: SocketAddr,
+    ) -> Pin<Box<dyn Future<Output = Result<(), Error>> + Send + Sync + 'static>> {
         let rocket = self.0.take().expect("service has already been bound");
         Box::pin(async move {
             let runtime = Runtime::new()?;

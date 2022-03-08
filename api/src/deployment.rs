@@ -12,7 +12,6 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use anyhow::{anyhow, Context as AnyhowContext};
 use tokio::task::JoinHandle;
-use tokio::runtime::Handle;
 use tokio::sync::RwLock;
 use crate::build::Build;
 use crate::{BuildSystem, UnveilFactory};
@@ -134,10 +133,12 @@ impl Deployment {
                     let factory =
                         UnveilFactory::new(&mut db_state, meta.config.clone(), db_context.clone());
 
-                    if let Err(_) = loaded.service.build(&factory).await {
+                    if loaded.service.build(&factory).await.is_err() {
                         DeploymentState::Error
                     } else {
-                        let serve_task = loaded.service.bind(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port));
+                        let serve_task = loaded
+                            .service
+                            .bind(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port));
 
                         // TODO: upon resolving this future, change the status of the deployment
                         let handle = tokio::spawn(serve_task);
@@ -148,12 +149,7 @@ impl Deployment {
                             context.deployments.write().await.remove(&stale_id);
                         }
 
-                        DeploymentState::deployed(
-                            loaded.so,
-                            port,
-                            handle,
-                            db_state,
-                        )
+                        DeploymentState::deployed(loaded.so, port, handle, db_state)
                     }
                 }
                 deployed_or_error => deployed_or_error, /* nothing to do here */

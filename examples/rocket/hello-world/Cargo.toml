@@ -11,4 +11,4 @@ crate-type = ["cdylib"]
 [dependencies]
 async-trait = "0.1"
 rocket = "0.5.0-rc.1"
-unveil-service = "0.1.0"
+unveil-service = "0.2.0"

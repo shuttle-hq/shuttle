@@ -7,6 +7,12 @@ use rocket::tokio;
 use rocket::tokio::io::AsyncWriteExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use uuid::Uuid;
+
+#[cfg(not(debug_assertions))]
+// as per: https://stackoverflow.com/questions/1510104/where-to-store-application-data-non-user-specific-on-linux
+pub const DEFAULT_FS_ROOT: &'static str = "/var/lib/unveil/crates/";
+
 
 pub const DEFAULT_FS_ROOT: &'static str = "/tmp/unveil/crates/";
 
@@ -100,6 +106,9 @@ impl BuildSystem for FsBuildSystem {
         // run cargo build (--debug for now)
         let so_path = build_crate(&project_path, buf)?;
 
+        // create uniquely named so file to satisfy `libloading`
+        let so_path = create_unique_named_so_file(&project_path, &so_path)?;
+
         // create marker file
         create_so_marker(&project_path, &so_path);
 
@@ -121,6 +130,13 @@ fn create_so_marker(project_path: &Path, so_path: &Path) {
 }
 
 
+fn create_unique_named_so_file(project_path: &Path, so_path: &Path) -> Result<PathBuf> {
+    let so_unique_path = project_path.join(&format!("{}.so", Uuid::new_v4()));
+    std::fs::copy(so_path,&so_unique_path)?;
+    Ok(so_unique_path)
+}
+
+
 
 /// Clear everything which is not the target folder from the project path
 fn clear_project_dir(project_path: &Path) -> Result<()> {
@@ -128,7 +144,7 @@ fn clear_project_dir(project_path: &Path) -> Result<()> {
     std::fs::read_dir(project_path)?
         .into_iter()
         .map(|dir| dir.unwrap())
-        .filter(|dir| dir.file_name() != "target")
+        //.filter(|dir| dir.file_name() != "target") FIXME @christos compilation overwrites target
         .for_each(|dir| {
             if let Ok(file) = dir.file_type() {
                 log::debug!("{:?}", dir);

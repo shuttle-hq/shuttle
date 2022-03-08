@@ -11,6 +11,7 @@ use std::{
 
 use colored::*;
 use portpicker::pick_unused_port;
+use reqwest::blocking::RequestBuilder;
 use tempdir::TempDir;
 
 trait EnsureSuccess {
@@ -238,6 +239,10 @@ impl Api {
         self.run_client(["deploy", "--allow-dirty"], project_path)
             .wait()
             .ensure_success("failed to run deploy");
+    }
+
+    pub fn request(&self, sub_path: &str) -> RequestBuilder {
+        reqwest::blocking::Client::new().get(format!("http://{}/{}", self.proxy_addr, sub_path))
     }
 }
 

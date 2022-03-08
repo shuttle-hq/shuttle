@@ -7,8 +7,8 @@ fn hello_world() {
     let client = helpers::Api::new_docker("hello-world", Color::Green);
     client.deploy("../examples/rocket/hello-world");
 
-    let request_text = reqwest::blocking::Client::new()
-        .get("http://localhost:8000/hello")
+    let request_text = client
+        .request("hello")
         .header("Host", "hello-world-rocket-app.unveil.sh")
         .send()
         .unwrap()

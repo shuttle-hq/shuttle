@@ -92,7 +92,7 @@ pub(crate) async fn deploy(
 
     while !matches!(
         deployment_meta.state,
-        DeploymentStateMeta::Deployed | DeploymentStateMeta::Error
+        DeploymentStateMeta::Deployed | DeploymentStateMeta::Error(_)
     ) {
         print_log(&deployment_meta.build_logs, &mut log_pos);
 

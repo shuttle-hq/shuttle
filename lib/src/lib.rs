@@ -112,25 +112,25 @@ impl DatabaseReadyInfo {
 }
 
 /// A label used to represent the deployment state in `DeploymentMeta`
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DeploymentStateMeta {
     Queued,
     Built,
     Loaded,
     Deployed,
-    Error,
+    Error(String),
     Deleted
 }
 
 impl Display for DeploymentStateMeta {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let s = match self {
-            DeploymentStateMeta::Queued => "QUEUED",
-            DeploymentStateMeta::Built => "BUILT",
-            DeploymentStateMeta::Loaded => "LOADED",
-            DeploymentStateMeta::Deployed => "DEPLOYED",
-            DeploymentStateMeta::Error => "ERROR",
-            DeploymentStateMeta::Deleted => "DELETED"
+            DeploymentStateMeta::Queued => "QUEUED".to_string(),
+            DeploymentStateMeta::Built => "BUILT".to_string(),
+            DeploymentStateMeta::Loaded => "LOADED".to_string(),
+            DeploymentStateMeta::Deployed => "DEPLOYED".to_string(),
+            DeploymentStateMeta::Error(msg) => format!("ERROR: {}", &msg),
+            DeploymentStateMeta::Deleted => "DELETED".to_string()
         };
         write!(f, "{}", s)
     }

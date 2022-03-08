@@ -41,15 +41,23 @@ pub struct Api {
 
 pub fn log_lines<R: io::Read, D: std::fmt::Display>(mut reader: R, target: D) {
     let mut buf = [0; 6048];
+    let mut current_pos = 0;
     loop {
-        let n = reader.read(&mut buf).unwrap();
+        let n = reader.read(&mut buf[current_pos..]).unwrap();
         if n == 0 {
-            break
-        } else {
-            for line in io::BufReader::new(&buf[0..n]).lines() {
-                eprintln!("{} {}", target, line.unwrap());
-            }
+            break;
         }
+        current_pos += n;
+
+        if buf[current_pos - 1] != b'\n' {
+            continue;
+        }
+
+        for line in io::BufReader::new(&buf[..current_pos]).lines() {
+            eprintln!("{} {}", target, line.unwrap());
+        }
+
+        current_pos = 0;
     }
 }
 

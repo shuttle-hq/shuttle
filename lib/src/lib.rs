@@ -119,6 +119,7 @@ pub enum DeploymentStateMeta {
     Loaded,
     Deployed,
     Error,
+    Deleted
 }
 
 impl Display for DeploymentStateMeta {
@@ -129,6 +130,7 @@ impl Display for DeploymentStateMeta {
             DeploymentStateMeta::Loaded => "LOADED",
             DeploymentStateMeta::Deployed => "DEPLOYED",
             DeploymentStateMeta::Error => "ERROR",
+            DeploymentStateMeta::Deleted => "DELETED"
         };
         write!(f, "{}", s)
     }

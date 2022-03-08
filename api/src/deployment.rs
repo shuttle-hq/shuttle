@@ -76,7 +76,7 @@ impl Deployment {
             DeploymentState::Queued(_) | DeploymentState::Built(_) | DeploymentState::Loaded(_) => {
                 false
             }
-            DeploymentState::Deployed(_) | DeploymentState::Error => true,
+            DeploymentState::Deployed(_) | DeploymentState::Error | DeploymentState::Deleted => true,
         }
     }
 
@@ -451,7 +451,7 @@ impl DeploymentSystem {
     ) -> Result<DeploymentMeta, DeploymentApiError> {
         match self.deployments.write().await.remove(id) {
             Some(deployment) => {
-                let meta = deployment.meta().await;
+                let mut meta = deployment.meta().await;
 
                 // If the deployment is in the 'deployed' state, kill the Tokio
                 // task in which it is deployed and deallocate the linked
@@ -466,6 +466,8 @@ impl DeploymentSystem {
                 }
 
                 let _ = self.router.remove(&meta.host);
+
+                meta.state = DeploymentStateMeta::Deleted;
 
                 Ok(meta)
             }
@@ -555,6 +557,10 @@ enum DeploymentState {
     /// A state entered when something unexpected occurs during the deployment
     /// process.
     Error,
+    /// A state indicating that the user has intentionally terminated this
+    /// deployment
+    #[allow(dead_code)]
+    Deleted
 }
 
 impl DeploymentState {
@@ -595,6 +601,7 @@ impl DeploymentState {
             DeploymentState::Loaded(_) => DeploymentStateMeta::Loaded,
             DeploymentState::Deployed(_) => DeploymentStateMeta::Deployed,
             DeploymentState::Error => DeploymentStateMeta::Error,
+            DeploymentState::Deleted => DeploymentStateMeta::Deleted
         }
     }
 }

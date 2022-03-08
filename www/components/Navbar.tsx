@@ -44,10 +44,11 @@ const Navbar: FunctionComponent = ({children}: Props) => {
                 </NavBarMenu>
                 <ul className="ml-5 gap-8 lg:gap-10 pt-0.5 hidden md:inline-flex">
                     <li>
-                        <a href="https://github.com/getsynth/synth">
+                        <a href="https://github.com/getsynth/unveil">
                             <FontAwesomeIcon
                                 className="h-8 hover:text-white transition"
-                                icon={faGithub}/>
+                                icon={faGithub}
+                            />
                         </a>
                     </li>
                     {/* <li>

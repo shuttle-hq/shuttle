@@ -1,3 +1,5 @@
+import { faTimes } from "@fortawesome/free-solid-svg-icons";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import React, {useState} from "react"
 
 import styles from "./styles.module.css"
@@ -15,7 +17,7 @@ const AnnouncementBar = () => {
                 ⭐️ If you like Shuttle,&nbsp;
                 <a
                     className={styles.announcement__link}
-                    href={"https://github.com/getsynth/synth"}
+                    href={"https://github.com/getsynth/unveil"}
                     rel="noopener noreferrer"
                     target="_blank"
                 >
@@ -30,7 +32,7 @@ const AnnouncementBar = () => {
                 type="button"
                 onClick={() =>setClosed(true)}
             >
-                <span aria-hidden="true">&times;</span>
+                <FontAwesomeIcon icon={faTimes}/>
             </button>
         </div>
     )

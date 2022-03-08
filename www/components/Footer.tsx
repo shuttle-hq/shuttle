@@ -20,7 +20,7 @@ const Footer = () => {
                         <Logo classNameLarge='h-16'/>
                         <div className="flex flex-row">
                             <div className="pt-4 pb-3 grid gap-y-4 grid-rows-1 grid-cols-4">
-                                <a target= "_blank" className = "pr-4" href="https://github.com/getsynth/synth">
+                                <a target= "_blank" className = "pr-4" href="https://github.com/getsynth/unveil">
                                     <FontAwesomeIcon className="h-8 hover:text-white transition" icon={faGithub}/>
                                 </a>
                                 <a target= "_blank" className = "pr-4" href="https://twitter.com/getsynth">

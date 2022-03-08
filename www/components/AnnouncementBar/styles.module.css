@@ -12,7 +12,8 @@
     right: 0;
     top: 0;
     height: 100%;
-    width: 4rem;
+    width: 1rem;
+    margin: 0 1rem;
     padding: 0;
     justify-content: center;
     align-items: center;
@@ -44,8 +45,3 @@
     color: inherit;
 }
 
-@media screen and (max-width: 576px) {
-    .announcement__close {
-        width: 2.5rem;
-    }
-}

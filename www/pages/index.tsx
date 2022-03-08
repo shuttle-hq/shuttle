@@ -12,6 +12,6 @@ export default function Home() {
         {/* <UseCases/> */}
         {/* <Examples/> */}
         {/* <Features/> */}
-        <CallToAction/>
+        {/* <CallToAction/> */}
     </>
 }

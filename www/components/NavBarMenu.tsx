@@ -28,7 +28,7 @@ const NavBarMenu = ({children}: NavBarMenuProps) => {
                         <div
                             className={
                                 (index == childActive || index == defaultActive ? "border-opacity-100" : "border-opacity-0")
-                                + " border-b-2 border-brand-600 hover:border-brand-400 transition font-medium"
+                                + " border-b-2 border-brand-900 hover:border-brand-700 transition font-medium"
                             }
                         >
                             {props.text}

@@ -4,7 +4,7 @@ mod helpers;
 
 #[test]
 fn hello_world() {
-    let client = helpers::Api::new_process("hello-world", Color::Green);
+    let client = helpers::Api::new_docker("hello-world", Color::Green);
     client.deploy("../examples/rocket/hello-world");
 
     let request_text = reqwest::blocking::Client::new()

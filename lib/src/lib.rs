@@ -9,7 +9,6 @@ use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use uuid::Uuid;
 
-#[macro_use]
 extern crate lazy_static;
 
 pub const UNVEIL_PROJECT_HEADER: &str = "Unveil-Project";

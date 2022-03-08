@@ -6,7 +6,8 @@ license = "Apache-2.0"
 description = "Service traits and macros to deploy on the unveil platform"
 
 [dependencies]
+async-trait = "0.1"
 rocket = "0.5.0-rc.1"
 sqlx = { version = "0.5", features = ["runtime-tokio-native-tls", "postgres"] }
+tokio = { version = "1.0", features = ["rt"] }
 thiserror = "1.0"
-async-trait = "0.1.52"

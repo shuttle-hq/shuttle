@@ -1,5 +1,4 @@
 use core::default::Default;
-use futures::future::{abortable, AbortHandle};
 use libloading::Library;
 use rocket::data::ByteUnit;
 use rocket::tokio;
@@ -7,13 +6,13 @@ use rocket::Data;
 use std::collections::HashMap;
 use std::fs::DirEntry;
 use std::io::Write;
-use std::net::{Ipv4Addr, SocketAddrV4, TcpListener};
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use anyhow::{anyhow, Context as AnyhowContext};
+use tokio::task::JoinHandle;
 use tokio::sync::RwLock;
-
 use crate::build::Build;
 use crate::{BuildSystem, UnveilFactory};
 use lib::{DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, Port};
@@ -120,7 +119,7 @@ impl Deployment {
                         }
                     }
                 }
-                DeploymentState::Loaded(loaded) => {
+                DeploymentState::Loaded(mut loaded) => {
                     let port = identify_free_port();
 
                     log::debug!(
@@ -134,38 +133,24 @@ impl Deployment {
                     let factory =
                         UnveilFactory::new(&mut db_state, meta.config.clone(), db_context.clone());
 
-                    let deployed_future = match loaded.service.deploy(&factory) {
-                        unveil_service::Deployment::Rocket(r) => {
-                            if let database::State::Ready(ready) = &db_state {
-                                self.meta.write().await.database_deployment = Some(ready.clone());
-                            }
-                            let config = rocket::Config {
-                                port,
-                                log_level: rocket::config::LogLevel::Normal,
-                                ..Default::default()
-                            };
+                    if loaded.service.build(&factory).await.is_err() {
+                        DeploymentState::Error
+                    } else {
+                        let serve_task = loaded
+                            .service
+                            .bind(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port));
 
-                            r.configure(config).launch()
+                        // TODO: upon resolving this future, change the status of the deployment
+                        let handle = tokio::spawn(serve_task);
+
+                        // Remove stale active deployments
+                        if let Some(stale_id) = context.router.promote(meta.host, meta.id).await {
+                            log::debug!("removing stale deployment `{}`", &stale_id);
+                            context.deployments.write().await.remove(&stale_id);
                         }
-                    };
 
-                    let (task, abort_handle) = abortable(deployed_future);
-
-                    tokio::spawn(task);
-
-                    // Remove stale active deployments
-                    if let Some(stale_id) = context.router.promote(meta.host, meta.id).await {
-                        log::debug!("removing stale deployment `{}`", &stale_id);
-                        context.deployments.write().await.remove(&stale_id);
+                        DeploymentState::deployed(loaded.so, port, handle, db_state)
                     }
-
-                    DeploymentState::deployed(
-                        loaded.so,
-                        loaded.service,
-                        port,
-                        abort_handle,
-                        db_state,
-                    )
                 }
                 deployed_or_error => deployed_or_error, /* nothing to do here */
             };
@@ -473,12 +458,8 @@ impl DeploymentSystem {
                 // library when the runtime gets around to it.
 
                 let mut lock = deployment.state.write().await;
-                if let DeploymentState::Deployed(DeployedState {
-                    so, abort_handle, ..
-                }) = lock.take()
-                {
-                    abort_handle.abort();
-
+                if let DeploymentState::Deployed(DeployedState { so, handle, .. }) = lock.take() {
+                    handle.abort();
                     tokio::spawn(async move {
                         so.close().unwrap();
                     });
@@ -528,6 +509,8 @@ impl DeploymentSystem {
 }
 
 const ENTRYPOINT_SYMBOL_NAME: &[u8] = b"_create_service\0";
+
+type ServeHandle = JoinHandle<Result<(), unveil_service::Error>>;
 
 type CreateService = unsafe extern "C" fn() -> *mut dyn Service;
 
@@ -593,16 +576,14 @@ impl DeploymentState {
 
     fn deployed(
         so: Library,
-        service: Box<dyn Service>,
         port: Port,
-        abort_handle: AbortHandle,
+        handle: ServeHandle,
         db_state: database::State,
     ) -> Self {
         Self::Deployed(DeployedState {
-            service,
             so,
             port,
-            abort_handle,
+            handle,
             db_state,
         })
     }
@@ -633,9 +614,8 @@ struct LoadedState {
 
 #[allow(dead_code)]
 struct DeployedState {
-    service: Box<dyn Service>,
     so: Library,
     port: Port,
-    abort_handle: AbortHandle,
+    handle: ServeHandle,
     db_state: database::State,
 }

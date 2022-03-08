@@ -8,7 +8,7 @@ extern crate unveil_service;
 
 #[get("/")]
 fn index() -> &'static str {
-    "Hello, world 2!"
+    "Hello, world!"
 }
 
 fn rocket() -> Rocket<Build> {

@@ -126,6 +126,8 @@ fn create_so_marker(project_path: &Path, so_path: &Path) {
 }
 
 
+/// Copies the original `so` file to the project directory with a random name
+/// to appease `libloading`.
 fn create_unique_named_so_file(project_path: &Path, so_path: &Path) -> Result<PathBuf> {
     let so_unique_path = project_path.join(&format!("{}.so", Uuid::new_v4()));
     std::fs::copy(so_path,&so_unique_path)?;

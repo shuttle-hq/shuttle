@@ -1,10 +1,13 @@
 #[macro_use]
 extern crate rocket;
 
-use rocket::{response::status::BadRequest, serde::json::Json, State};
+use rocket::{response::status::BadRequest, serde::json::Json, Build, Rocket, State};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgPool};
-use unveil_service::{declare_service, Deployment, Factory, Service};
+use unveil_service::Factory;
+
+#[macro_use]
+extern crate unveil_service;
 
 #[get("/<id>")]
 async fn retrieve(id: i32, state: &State<MyState>) -> Result<Json<Todo>, BadRequest<String>> {
@@ -35,25 +38,23 @@ struct MyState {
     pool: PgPool,
 }
 
-#[derive(Default)]
-struct App;
-
-#[async_trait]
-impl<F: Factory> Service<F> for App {
-    async fn deploy(&self, factory: &F) -> Result<Deployment, unveil_service::Error> {
-        let pool = factory.get_postgres_connection_pool("todo").await?;
-        let state = MyState { pool };
-
-        let rocket = rocket::build()
-            .manage(state)
-            .mount("/todo", routes![retrieve, add])
-            .into();
-
-        Ok(rocket)
-    }
+fn rocket() -> Rocket<Build> {
+    rocket::build().mount("/todo", routes![retrieve, add])
 }
 
-declare_service!(App, App::default);
+async fn build_state(factory: &dyn Factory) -> MyState {
+    // let pool = sqlx::postgres::PgPoolOptions::new()
+    //     .max_connections(5)
+    //     .connect("postgres:password@localhost:5432/postgres")
+    //     .await
+    //     .unwrap();
+    let pool = factory.get_postgres_connection_pool().await.unwrap();
+    let state = MyState { pool };
+
+    state
+}
+
+declare_service!(Rocket<Build>, rocket, build_state);
 
 #[derive(Deserialize)]
 struct TodoNew {

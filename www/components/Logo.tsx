@@ -15,7 +15,7 @@ const Logo = ({classNameLarge, classNameSmall}: LogoProps) => {
             <a>
                 <img
                     alt="The Open Source Declarative Data Generator"
-                    src={`${basePath}/images/synth_logo_large.png`}
+                    src={`${basePath}/images/logo.svg`}
                     className={`${classNameLarge || 'h-10'} hidden sm:block`}/>
             </a>
         </Link>
@@ -23,7 +23,7 @@ const Logo = ({classNameLarge, classNameSmall}: LogoProps) => {
             <a>
                 <img
                     alt="The Open Source Declarative Data Generator"
-                    src={`${basePath}/images/synth_logo_large.png`}
+                    src={`${basePath}/images/logo.svg`}
                     className={`${classNameSmall || 'h-10'} block sm:hidden`}/>
             </a>
         </Link>

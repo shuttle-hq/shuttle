@@ -12,7 +12,7 @@ const AnnouncementBar = () => {
     return (
         <div className={styles.announcement} role="banner">
             <p className={styles.announcement__content}>
-                ⭐️ If you like Synth,&nbsp;
+                ⭐️ If you like Shuttle,&nbsp;
                 <a
                     className={styles.announcement__link}
                     href={"https://github.com/getsynth/synth"}

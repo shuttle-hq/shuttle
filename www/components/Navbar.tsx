@@ -50,11 +50,11 @@ const Navbar: FunctionComponent = ({children}: Props) => {
                                 icon={faGithub}/>
                         </a>
                     </li>
-                    <li>
+                    {/* <li>
                         <AccentButton link="/download">
                             <FontAwesomeIcon icon={faDownload} className="h-4 pr-2 pt-0.5"/>GET SYNTH
                         </AccentButton>
-                    </li>
+                    </li> */}
                 </ul>
             </div>
         </div>

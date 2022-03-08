@@ -35,7 +35,7 @@ const Footer = () => {
                             </div>
                         </div>
                     </div>
-                    <div>
+                    {/* <div>
                         <div className="grid text-dark-300 font-medium lg:grid-rows-4 gap-4 py-4">
                             <div className="text-dark-400 font-semibold font-mono uppercase">
                                 Product
@@ -53,7 +53,7 @@ const Footer = () => {
                                 <Link href="/download">Download</Link>
                             </div>
                         </div>
-                    </div>
+                    </div> */}
                     <div>
                         <div className="grid text-dark-300 font-medium grid-rows-4 gap-4 py-4">
                             <div className="text-dark-400 font-semibold font-mono uppercase">
@@ -83,7 +83,7 @@ const Footer = () => {
                             </div>
                         </div>
                     </div>
-                    <div>
+                    {/* <div>
                         <div className="grid text-dark-300 font-medium grid-rows-4 gap-4 py-4">
                             <div className="text-dark-400 font-semibold font-mono uppercase">
                                 More
@@ -98,14 +98,14 @@ const Footer = () => {
                                 <Link href="/privacy">Privacy Policy</Link>
                             </div>
                         </div>
-                    </div>
+                    </div> */}
                 </div>
                 <div className=" border-t border-gray-400 pt-4"/>
                 <div className="pb-16 text-sm text-gray-300">
-                    &copy; 2021 OpenQuery Inc.
+                    &copy; 2022 OpenQuery Inc.
                 </div>
             </div>
-            <ChatWidget
+            {/* <ChatWidget
                 accountId="41ff5b3d-e2c2-42ed-bed3-ef7a6c0dde62"
                 title="Welcome to Synth"
                 subtitle="Ask us anything in the chat window below 😊"
@@ -118,7 +118,7 @@ const Footer = () => {
                 agentUnavailableText="We're away at the moment."
                 requireEmailUpfront={false}
                 iconVariant="outlined"
-            />
+            /> */}
         </div>
     )
 }

@@ -9,9 +9,9 @@ import CallToAction from "../components/CallToAction"
 export default function Home() {
     return <>
         <Hero/>
-        <UseCases/>
-        <Examples/>
-        <Features/>
+        {/* <UseCases/> */}
+        {/* <Examples/> */}
+        {/* <Features/> */}
         <CallToAction/>
     </>
 }

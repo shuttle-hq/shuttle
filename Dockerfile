@@ -18,6 +18,7 @@ COPY . .
 RUN cargo build --release --bin api
 
 FROM runtime
+RUN mkdir -p ~/.cargo && echo "[patch.crates-io]\nunveil-service = { path = \"/app/service\" }" > ~/.cargo/config.toml
 COPY --from=builder /app/target/release/api /usr/local/bin/unveil-backend
 COPY docker/entrypoint.sh /bin/entrypoint.sh
 COPY docker/supervisord.conf /usr/share/supervisord/supervisord.conf

@@ -107,3 +107,4 @@ fn run_cargo_package(working_directory: &Path, allow_dirty: bool) -> Result<File
     let owned = locks.get(0).unwrap().file().try_clone()?;
     Ok(owned)
 }
+

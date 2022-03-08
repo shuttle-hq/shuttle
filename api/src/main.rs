@@ -13,8 +13,7 @@ mod router;
 use factory::UnveilFactory;
 use lib::{DeploymentApiError, DeploymentMeta, Port};
 use lib::project::ProjectConfig;
-use rocket::serde::json::serde_json::json;
-use rocket::serde::json::Value;
+use rocket::serde::json::{Json};
 use rocket::{tokio, Data, State};
 use std::net::IpAddr;
 use std::sync::Arc;
@@ -27,6 +26,8 @@ use crate::auth::User;
 use crate::build::{BuildSystem, FsBuildSystem};
 use crate::deployment::DeploymentSystem;
 
+type ApiResult<T, E> = Result<Json<T>, E>;
+
 /// Status API to be used to check if the service is alive
 #[get("/status")]
 async fn status() {}
@@ -36,12 +37,12 @@ async fn get_deployment(
     state: &State<ApiState>,
     id: Uuid,
     user: User,
-) -> Result<Value, DeploymentApiError> {
+) -> ApiResult<DeploymentMeta, DeploymentApiError> {
     let deployment = state.deployment_manager.get_deployment(&id).await?;
 
     validate_user_for_deployment(&user, &deployment)?;
 
-    Ok(json!(deployment))
+    Ok(Json(deployment))
 }
 
 #[delete("/deployments/<id>")]
@@ -49,14 +50,14 @@ async fn delete_deployment(
     state: &State<ApiState>,
     id: Uuid,
     user: User,
-) -> Result<Value, DeploymentApiError> {
+) -> ApiResult<DeploymentMeta, DeploymentApiError> {
     let deployment = state.deployment_manager.get_deployment(&id).await?;
 
     validate_user_for_deployment(&user, &deployment)?;
 
     let deployment = state.deployment_manager.kill_deployment(&id).await?;
 
-    Ok(json!(deployment))
+    Ok(Json(deployment))
 }
 
 #[get("/projects/<project_name>")]
@@ -64,14 +65,15 @@ async fn get_project(
     state: &State<ApiState>,
     project_name: String,
     user: User,
-) -> Result<Value, DeploymentApiError> {
+) -> ApiResult<DeploymentMeta, DeploymentApiError> {
     validate_user_for_project(&user, &project_name)?;
 
     let deployment = state
         .deployment_manager
         .get_deployment_for_project(&project_name)
         .await?;
-    Ok(json!(deployment))
+
+    Ok(Json(deployment))
 }
 
 #[delete("/projects/<project_name>")]
@@ -79,14 +81,14 @@ async fn delete_project(
     state: &State<ApiState>,
     project_name: String,
     user: User,
-) -> Result<Value, DeploymentApiError> {
+) -> ApiResult<DeploymentMeta, DeploymentApiError> {
     validate_user_for_project(&user, &project_name)?;
 
     let deployment = state
         .deployment_manager
         .kill_deployment_for_project(&project_name)
         .await?;
-    Ok(json!(deployment))
+    Ok(Json(deployment))
 }
 
 #[post("/projects", data = "<crate_file>")]
@@ -95,14 +97,14 @@ async fn create_project(
     crate_file: Data<'_>,
     project: ProjectConfig,
     user: User,
-) -> Result<Value, DeploymentApiError> {
+) -> ApiResult<DeploymentMeta, DeploymentApiError> {
     validate_user_for_project(&user, project.name())?;
 
     let deployment = state
         .deployment_manager
         .deploy(crate_file, &project)
         .await?;
-    Ok(json!(deployment))
+    Ok(Json(deployment))
 }
 
 fn validate_user_for_project(user: &User, project_name: &str) -> Result<(), DeploymentApiError> {

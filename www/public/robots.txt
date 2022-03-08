@@ -1,0 +1,9 @@
+# *
+User-agent: *
+Allow: /
+
+# Host
+Host: https://getsynth.com
+
+# Sitemaps
+Sitemap: https://getsynth.com/sitemap.xml

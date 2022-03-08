@@ -1,0 +1,34 @@
+{
+  "redirects": [
+    {
+      "source":  "/blog/:match*",
+      "destination": "/docs/blog/:match*"
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/docs",
+      "destination": "https://synth-docs.vercel.app/docs"
+    },
+    {
+      "source": "/docs/:match*",
+      "destination": "https://synth-docs.vercel.app/docs/:match*"
+    },
+    {
+      "source": "/install",
+      "destination": "/api/install"
+    },
+    {
+      "source": "/static/releases/latest/install.sh",
+      "destination": "https://storage.googleapis.com/getsynth-public/install/install.sh"
+    },
+    {
+      "source": "/static/releases/latest/:file",
+      "destination": "https://github.com/getsynth/synth/releases/latest/download/:file"
+    },
+    {
+      "source": "/playground",
+      "destination": "https://dev.getsynth.com/playground"
+    }
+  ]
+}

@@ -9,10 +9,6 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use uuid::Uuid;
 
-#[cfg(not(debug_assertions))]
-// as per: https://stackoverflow.com/questions/1510104/where-to-store-application-data-non-user-specific-on-linux
-pub const DEFAULT_FS_ROOT: &'static str = "/var/lib/unveil/crates/";
-
 
 pub const DEFAULT_FS_ROOT: &'static str = "/tmp/unveil/crates/";
 

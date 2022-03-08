@@ -4,6 +4,7 @@ use rocket::data::ByteUnit;
 use rocket::tokio;
 use rocket::Data;
 use std::collections::HashMap;
+use std::error::Error;
 use std::fs::DirEntry;
 use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener};
@@ -76,7 +77,7 @@ impl Deployment {
             DeploymentState::Queued(_) | DeploymentState::Built(_) | DeploymentState::Loaded(_) => {
                 false
             }
-            DeploymentState::Deployed(_) | DeploymentState::Error | DeploymentState::Deleted => true,
+            DeploymentState::Deployed(_) | DeploymentState::Error(_) | DeploymentState::Deleted => true,
         }
     }
 
@@ -100,8 +101,8 @@ impl Deployment {
                     {
                         Ok(build) => DeploymentState::built(build),
                         Err(e) => {
-                            dbg!("failed to build with error: {}", e);
-                            DeploymentState::Error
+                            dbg!("failed to build with error: {}", &e);
+                            DeploymentState::Error(e)
                         }
                     }
                 }
@@ -114,8 +115,8 @@ impl Deployment {
                     match load_service_from_so_file(&built.build.so_path) {
                         Ok((svc, so)) => DeploymentState::loaded(so, svc),
                         Err(e) => {
-                            log::debug!("failed to load with error: {}", e);
-                            DeploymentState::Error
+                            log::debug!("failed to load with error: {}", &e);
+                            DeploymentState::Error(e)
                         }
                     }
                 }
@@ -133,23 +134,25 @@ impl Deployment {
                     let factory =
                         UnveilFactory::new(&mut db_state, meta.config.clone(), db_context.clone());
 
-                    if loaded.service.build(&factory).await.is_err() {
-                        DeploymentState::Error
-                    } else {
-                        let serve_task = loaded
-                            .service
-                            .bind(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port));
+                    match loaded.service.build(&factory).await {
+                        Err(e) => DeploymentState::Error(e.into()),
+                        Ok(_) => {
+                            let serve_task = loaded
+                                .service
+                                .bind(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port));
 
-                        // TODO: upon resolving this future, change the status of the deployment
-                        let handle = tokio::spawn(serve_task);
+                            // TODO: upon resolving this future, change the status of the deployment
+                            let handle = tokio::spawn(serve_task);
 
-                        // Remove stale active deployments
-                        if let Some(stale_id) = context.router.promote(meta.host, meta.id).await {
-                            log::debug!("removing stale deployment `{}`", &stale_id);
-                            context.deployments.write().await.remove(&stale_id);
+                            // Remove stale active deployments
+                            if let Some(stale_id) = context.router.promote(meta.host, meta.id).await {
+                                log::debug!("removing stale deployment `{}`", &stale_id);
+                                context.deployments.write().await.remove(&stale_id);
+                            }
+
+                            DeploymentState::deployed(loaded.so, port, handle, db_state)
+
                         }
-
-                        DeploymentState::deployed(loaded.so, port, handle, db_state)
                     }
                 }
                 deployed_or_error => deployed_or_error, /* nothing to do here */
@@ -556,7 +559,7 @@ enum DeploymentState {
     Deployed(DeployedState),
     /// A state entered when something unexpected occurs during the deployment
     /// process.
-    Error,
+    Error(anyhow::Error),
     /// A state indicating that the user has intentionally terminated this
     /// deployment
     #[allow(dead_code)]
@@ -565,7 +568,7 @@ enum DeploymentState {
 
 impl DeploymentState {
     fn take(&mut self) -> Self {
-        std::mem::replace(self, DeploymentState::Error)
+        std::mem::replace(self, DeploymentState::Deleted)
     }
 
     fn queued(crate_bytes: Vec<u8>) -> Self {
@@ -600,7 +603,7 @@ impl DeploymentState {
             DeploymentState::Built(_) => DeploymentStateMeta::Built,
             DeploymentState::Loaded(_) => DeploymentStateMeta::Loaded,
             DeploymentState::Deployed(_) => DeploymentStateMeta::Deployed,
-            DeploymentState::Error => DeploymentStateMeta::Error,
+            DeploymentState::Error(e) => DeploymentStateMeta::Error(format!("{:#?}", e)),
             DeploymentState::Deleted => DeploymentStateMeta::Deleted
         }
     }

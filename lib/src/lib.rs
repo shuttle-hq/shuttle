@@ -21,7 +21,7 @@ lazy_static! {
 
 #[cfg(not(debug_assertions))]
 lazy_static! {
-    pub static ref API_URL: String = { "https://api.shuttle.rs".to_string() };
+    pub static ref API_URL: String = "https://api.shuttle.rs".to_string();
 }
 
 pub type ApiKey = String;

@@ -8,6 +8,7 @@ use rocket::tokio::io::AsyncWriteExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+#[cfg(debug_assertions)]
 pub const DEFAULT_FS_ROOT: &'static str = "/tmp/unveil/crates/";
 
 #[cfg(not(debug_assertions))]
@@ -17,7 +18,6 @@ pub const DEFAULT_FS_ROOT: &'static str = "/var/lib/unveil/crates/";
 pub(crate) struct Build {
     pub(crate) so_path: PathBuf,
 }
-
 
 // remove the trait at some point
 #[async_trait]
@@ -119,8 +119,6 @@ fn create_so_marker(project_path: &Path, so_path: &Path) {
     // unwraps here are ok since we are writing a valid `Path`
     std::fs::write(&marker_path, so_path.to_str().unwrap()).unwrap();
 }
-
-
 
 /// Clear everything which is not the target folder from the project path
 fn clear_project_dir(project_path: &Path) -> Result<()> {

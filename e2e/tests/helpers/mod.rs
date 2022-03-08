@@ -145,6 +145,10 @@ impl Api {
             "PROXY_PORT=8000",
             "-e",
             "API_PORT=8001",
+            "-e",
+            "UNVEIL_USERS_TOML=/config/users.toml",
+            "-v",
+            "./users.toml:/config/users.toml",
             image.as_str(),
         ]);
 

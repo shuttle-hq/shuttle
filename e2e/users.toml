@@ -1,0 +1,5 @@
+# api key / user mappings for tests.
+
+[ci-test]
+name = "ci"
+project_name = "hello-world-rocket-app"

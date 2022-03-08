@@ -3,7 +3,3 @@
 [my_api_key]
 name = "test_user"
 project_name = "hello-world-rocket-app"
-
-[ci-test]
-name = "ci"
-project_name = "hello-world-rocket-app"

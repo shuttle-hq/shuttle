@@ -7,9 +7,9 @@ const Privacy = () => {
                 <div className="my-auto gap-10 text-lg">
                     Effective date: 08/07/2020<br/> <br/><strong>1. Introduction<br/></strong>
                         <br/>Welcome to OpenQuery Ltd..<br/> <br/>OpenQuery Ltd. (“us”, “we”, or “our”) operates
-                        http://getsynth.com (hereinafter referred to as “Service”).<br/> <br/>Our Privacy Policy governs
+                        https://shuttle.rs (hereinafter referred to as “Service”).<br/> <br/>Our Privacy Policy governs
                         your
-                        visit to http://getsynth.com, and explains how we collect, safeguard and disclose information that
+                        visit to https://shuttle.rs, and explains how we collect, safeguard and disclose information that
                         results from your use of our Service. <br/> <br/>We use your data to provide and improve Service. By
                         using Service, you agree to the collection and use of information in accordance with this policy.
                         Unless
@@ -18,7 +18,7 @@ const Privacy = () => {
                         as in our Terms and Conditions.<br/> <br/>Our Terms and Conditions (“Terms”) govern all use of our
                         Service and together with the Privacy Policy constitutes your agreement with us (“agreement”).<br/>
                         <br/><strong>2. Definitions<br/></strong> <br/><strong>SERVICE</strong> means the
-                        http://getsynth.com
+                        https://shuttle.rs
                         website operated by OpenQuery Ltd..<br/> <br/><strong>PERSONAL DATA</strong> means data about a
                         living
                         individual who can be identified from those data (or from those and other information either in our
@@ -52,7 +52,7 @@ const Privacy = () => {
                         information
                         that may be of interest to you. You may opt out of receiving any, or all, of these communications
                         from
-                        us by following the unsubscribe link or by emailing at info@getsynth.com.<br/> <br/><strong>Usage
+                        us by following the unsubscribe link or by emailing at info@shuttle.rs.<br/> <br/><strong>Usage
                             Data<br/></strong>We may also collect information that your browser sends whenever you visit our
                         Service or when you access Service by or through a mobile device (“Usage Data”).<br/> <br/>This
                         Usage
@@ -146,7 +146,7 @@ const Privacy = () => {
                         Data.<br/>
                         <br/>If you wish to be informed what Personal Data we hold about you and if you want it to be
                         removed
-                        from our systems, please email us at info@getsynth.com. <br/> <br/>In certain circumstances, you
+                        from our systems, please email us at info@shuttle.rs. <br/> <br/>In certain circumstances, you
                         have
                         the following data protection rights:<br/> <br/>(a) the right to access, update or to delete the
                         information we have on you;<br/> <br/>(b) the right of rectification. You have the right to have
@@ -177,7 +177,7 @@ const Privacy = () => {
                         anonymously;<br/> <br/>(b) our Privacy Policy link includes the word “Privacy”, and can easily be
                         found on the page specified above on the home page of our website;<br/> <br/>(c) users will be
                         notified of any privacy policy changes on our Privacy Policy Page;<br/> <br/>(d) users are able to
-                        change their personal information by emailing us at info@getsynth.com. <br/> <br/>Our Policy on “Do
+                        change their personal information by emailing us at info@shuttle.rs. <br/> <br/>Our Policy on “Do
                         Not Track” Signals:<br/> <br/>We honor Do Not Track signals and do not track, plant cookies, or use
                         advertising when a Do Not Track browser mechanism is in place. Do Not Track is a preference you can
                         set
@@ -229,8 +229,8 @@ const Privacy = () => {
                         which require the usage of your personal information to function. But in no circumstances, we will
                         discriminate against you for exercising your rights.<br/> <br/>To exercise your California data
                         protection rights described above, please send your request(s) by one of the following means:<br/>
-                        <br/>By email: info@getsynth.com<br/> <br/>By visiting this page on our website:
-                        http://getsynth.com/contact<br/> <br/>Your data protection rights, described above, are covered by
+                        <br/>By email: info@shuttle.rs<br/> <br/>By visiting this page on our website:
+                        https://shuttle.rs/contact<br/> <br/>Your data protection rights, described above, are covered by
                         the
                         CCPA, short for the California Consumer Privacy Act. To find out more, visit the official California
                         Legislative Information website. The CCPA took effect on 01/01/2020. <br/> <br/><strong>13. Service
@@ -286,7 +286,7 @@ const Privacy = () => {
                         Policy
                         are effective when they are posted on this page.<br/> <br/><strong>20. Contact Us<br/></strong>
                         <br/>If you have any questions about this Privacy Policy, please contact us:<br/> <br/>By email:
-                        info@getsynth.com.<br/> <br/>By visiting this page on our website: http://getsynth.com/contact.
+                        info@shuttle.rs.<br/> <br/>By visiting this page on our website: https://shuttle.rs/contact.
                 </div>
 
             </div>

@@ -43,7 +43,7 @@ in the root `www` folder will deploy to a test deployment, and:
 $ vercel --prod
 ```
 
-will deploy to production and override the current `getsynth.com` page.
+will deploy to production and override the current `shuttle.rs` page.
 
 ## Testing
 All Synth code block examples should be marked as 'json synth' to automatically run them on the CI.

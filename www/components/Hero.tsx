@@ -6,7 +6,7 @@ import Code from "./Code";
 import {faGithub} from "@fortawesome/free-brands-svg-icons";
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome';
 
-const install_code = "curl -sSL https://getsynth.com/install | sh"
+const install_code = "curl -sSL https://shuttle.rs/install | sh"
 
 const Hero = () => {
     const {basePath} = useRouter();

@@ -1,4 +1,4 @@
 module.exports = {
-    siteUrl: process.env.SITE_URL || 'https://getsynth.com',
+    siteUrl: process.env.SITE_URL || 'https://shuttle.rs',
     generateRobotsTxt: true,
 }

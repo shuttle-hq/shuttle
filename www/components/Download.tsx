@@ -9,7 +9,7 @@ import {FontAwesomeIcon} from "@fortawesome/react-fontawesome";
 import {useUserAgent} from "next-useragent";
 import {useForm} from "@formspree/react";
 
-const install_code = "curl -sSL https://getsynth.com/install | sh";
+const install_code = "curl -sSL https://shuttle.rs/install | sh";
 const windows_install_link = "/install?os=windows";
 
 const DownloadSection = () => {

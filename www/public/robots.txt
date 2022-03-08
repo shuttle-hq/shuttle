@@ -3,7 +3,7 @@ User-agent: *
 Allow: /
 
 # Host
-Host: https://getsynth.com
+Host: https://shuttle.rs
 
 # Sitemaps
-Sitemap: https://getsynth.com/sitemap.xml
+Sitemap: https://shuttle.rs/sitemap.xml

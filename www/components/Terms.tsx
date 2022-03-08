@@ -11,19 +11,19 @@ const Terms = () => {
                         following
                         pages. It will take you approximately 20 minutes.<br/> <br/>These Terms of Service (“Terms”,
                         “Terms of
-                        Service”) govern your use of our web pages located at http://www.getsynth.com operated by
+                        Service”) govern your use of our web pages located at http://www.shuttle.rs operated by
                         OpenQuery
                         Ltd.<br/> <br/>Our Privacy Policy also governs your use of our Service and explains how we
                         collect,
                         safeguard and disclose information that results from your use of our web pages. Please read
                         it <a
-                            href="http://www.getsynth.com/privacy">here</a>.<br/> <br/>Your agreement with us includes
+                            href="http://www.shuttle.rs/privacy">here</a>.<br/> <br/>Your agreement with us includes
                         these
                         Terms and our Privacy Policy (“Agreements”). You acknowledge that you have read and understood
                         Agreements, and agree to be bound of them.<br/> <br/>If you do not agree with (or cannot comply
                         with)
                         Agreements, then you may not use the Service, but please let us know by emailing at
-                        info@getsynth.com so
+                        info@shuttle.rs so
                         we can try to find a solution. These Terms apply to all visitors, users and others who wish to
                         access or
                         use Service.<br/> <br/>Thank you for being responsible.<br/> <br/><strong> 2.
@@ -253,7 +253,7 @@ const Terms = () => {
                         copyright owner or authorized to act on the copyright owner&#x27;s behalf.<br/> <br/>You can
                         contact
                         our Copyright Agent via email at legal@openquery.io<br/> <br/><strong> 17. Error Reporting and
-                            Feedback<br/></strong>You may provide us either directly at info@getsynth.com or via third
+                            Feedback<br/></strong>You may provide us either directly at info@shuttle.rs or via third
                         party
                         sites and tools with information and feedback concerning errors, suggestions for improvements,
                         ideas,
@@ -402,8 +402,8 @@ const Terms = () => {
                         OF
                         SERVICE AND AGREE TO BE BOUND BY THEM.<br/> <br/><strong> 27. Contact Us<br/></strong>Please
                         send
-                        your feedback, comments, requests for technical support:<br/>By email: info@getsynth.com.<br/>By
-                        visiting this page on our website: http://www.getsynth.com/contact.
+                        your feedback, comments, requests for technical support:<br/>By email: info@shuttle.rs.<br/>By
+                        visiting this page on our website: http://www.shuttle.rs/contact.
                     </div>
                 </div>
 

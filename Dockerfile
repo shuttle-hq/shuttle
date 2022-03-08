@@ -9,7 +9,7 @@ RUN pg_dropcluster $(pg_lsclusters -h | cut -d' ' -f-2 | head -n1)
 
 FROM chef AS planner
 COPY . .
-RUN cargo chef prepare  --recipe-path recipe.json
+RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS builder
 COPY --from=planner /app/recipe.json recipe.json
@@ -18,8 +18,9 @@ COPY . .
 RUN cargo build --release --bin api
 
 FROM runtime
-RUN mkdir -p ~/.cargo && echo "[patch.crates-io]\nunveil-service = { path = \"/app/service\" }" > ~/.cargo/config.toml
+RUN mkdir -p ~/.cargo && echo -e "[patch.crates-io]\nunveil-service = { path = \"/app/service\" }" > ~/.cargo/config.toml
 COPY --from=builder /app/target/release/api /usr/local/bin/unveil-backend
+COPY --from=builder /app/service /app/service
 COPY docker/entrypoint.sh /bin/entrypoint.sh
 COPY docker/supervisord.conf /usr/share/supervisord/supervisord.conf
 ENTRYPOINT ["/bin/entrypoint.sh"]

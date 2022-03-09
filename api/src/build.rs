@@ -8,6 +8,7 @@ use rocket::tokio::io::AsyncWriteExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+#[cfg(debug_assertions)]
 pub const DEFAULT_FS_ROOT: &'static str = "/tmp/unveil/crates/";
 
 #[cfg(not(debug_assertions))]

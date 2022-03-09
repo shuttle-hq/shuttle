@@ -18,6 +18,11 @@ variable "api_container_port" {
   default = 8001
 }
 
+variable "postgres_container_port" {
+  type = number
+  default = 5432
+}
+
 variable "proxy_container_port" {
   type = number
   default = 8000

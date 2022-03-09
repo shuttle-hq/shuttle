@@ -1,7 +1,6 @@
 pub mod project;
 
 use chrono::{DateTime, Utc};
-use lazy_static::lazy_static;
 use rocket::http::Status;
 use rocket::{Responder};
 use serde::{Deserialize, Serialize};
@@ -64,10 +63,11 @@ impl DeploymentMeta {
     }
 }
 
-lazy_static! {
-    static ref PUBLIC_IP: String =
-        std::env::var("PUBLIC_IP").unwrap_or_else(|_| "localhost".to_string());
-}
+#[cfg(debug_assertions)]
+const PUBLIC_IP: &'static str = "localhost";
+
+#[cfg(not(debug_assertions))]
+const PUBLIC_IP: &'static str = "pg.shuttle.rs";
 
 impl Display for DeploymentMeta {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -75,7 +75,7 @@ impl Display for DeploymentMeta {
             if let Some(info) = &self.database_deployment {
                 format!(
                     "\n        Database URI:       {}",
-                    info.connection_string(&*PUBLIC_IP)
+                    info.connection_string(PUBLIC_IP)
                 )
             } else {
                 "".to_string()

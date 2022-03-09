@@ -17,7 +17,7 @@ const NavBarMenu = ({children}: NavBarMenuProps) => {
     let childrenItems = [];
     Children.forEach(children, ({props}, index) => {
         childrenItems.push(
-            <Link href={props.link}>
+            <Link href={props.link} key={index}>
                 <a>
                     <li
                         className="pl-2 pr-2 lg:pr-5 pt-1.5 lg:pl-5"
@@ -49,8 +49,8 @@ const NavBarMenu = ({children}: NavBarMenuProps) => {
                                  setDropDownActive(!dropDownActive);
                              }}>
 
-                            {childrenItems.map(child => (
-                                <div className="text-center">{child}</div>
+                            {childrenItems.map((child, index) => (
+                                <div className="text-center" key={index}>{child}</div>
                             ))}
                         </div>
                     </>

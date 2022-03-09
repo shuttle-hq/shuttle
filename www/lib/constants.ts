@@ -1,8 +1,8 @@
 export const APP_NAME = 'Shuttle'
 
-export const SITE_TITLE = 'The Open Source Declarative Data Generator'
+export const SITE_TITLE = 'Deploying lightweight Rust services to AWS'
 
-export const SITE_DESCRIPTION = 'Generate test data programmatically. Need fake data for application testing or anything else? Just use Synth.'
+export const SITE_DESCRIPTION = 'A cargo subcommand for deploying lightweight Rust services to AWS in 30 seconds. Even with databases.'
 
 export const SITE_URL = 'https://shuttle.rs/'
 

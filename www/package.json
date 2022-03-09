@@ -9,18 +9,14 @@
     "postbuild": "next-sitemap"
   },
   "dependencies": {
-    "@formspree/react": "^2.2.3",
     "@fortawesome/fontawesome-svg-core": "^1.2.34",
     "@fortawesome/free-brands-svg-icons": "^6.0.0",
     "@fortawesome/free-regular-svg-icons": "^6.0.0",
     "@fortawesome/free-solid-svg-icons": "^6.0.0",
     "@fortawesome/react-fontawesome": "^0.1.14",
-    "@papercups-io/chat-widget": "^1.1.10-beta.0",
     "fathom-client": "^3.0.0",
-    "inter-ui": "^3.15.0",
     "next": "^12.1.0",
     "next-seo": "^5.1.0",
-    "next-useragent": "^2.7.0",
     "posthog-js": "^1.13.13",
     "prismjs": "^1.23.0",
     "react": "^17.0.2",

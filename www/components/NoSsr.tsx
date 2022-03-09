@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from "react";
 
 const NoSsr = ({ children }): JSX.Element => {
   const [isMounted, setMount] = useState(false);

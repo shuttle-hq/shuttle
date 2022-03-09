@@ -12,8 +12,8 @@ const Footer = () => {
   return (
     <div className="relative w-full bg-gray-600">
       <div className="container w-10/12 xl:w-8/12 xl:px-12 py-5 mx-auto">
-        <div className="pt-16 pb-16 grid grid-cols-1 md:grid-cols-4 lg:grid-cols-6">
-          <div className="col-span-2 md:col-span-4 lg:col-span-2">
+        <div className="pt-16 pb-16 grid grid-cols-1 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+          <div className="sm:col-span-1 md:col-span-2 lg:col-span-4">
             <Logo classNameLarge="h-16" />
             <div className="flex flex-row">
               <div className="pt-4 pb-3 grid gap-y-4 grid-rows-1 grid-cols-4">

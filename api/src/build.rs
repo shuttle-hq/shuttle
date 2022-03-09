@@ -168,13 +168,13 @@ fn crate_location(project_path: &Path, project_name: &str) -> PathBuf {
 /// into the project_path
 fn extract_tarball(crate_path: &Path, project_path: &Path) -> Result<()> {
     Command::new("tar")
-        .arg("-xzvf") // extract
+        .arg("-xzvf")               // extract
         .arg(crate_path)
-        .arg("-C") // target
+        .arg("-C")                  // target
         .arg(project_path)
-        .arg("--strip-components") // remove top-level directory
+        .arg("--strip-components")  // remove top-level directory
         .arg("1")
-        .arg("--touch")
+        .arg("--touch")             // touch to update mtime for cargo
         .output()?;
     Ok(())
 }

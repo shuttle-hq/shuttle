@@ -1,3 +1,5 @@
+import { faClipboard } from "@fortawesome/free-regular-svg-icons";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import ReactTooltip from "react-tooltip";
 import NoSsr from "./NoSsr";
 
@@ -23,8 +25,12 @@ const Code = ({ code, lang }: CodeProps) => {
       data-event-off="click"
       data-delay-hide="2000"
     >
-      <pre className={`rounded-md flex-grow ${lang}`}>
+      <pre className={`rounded-md flex-grow flex justify-between ${lang}`}>
         <code className={`${language}`}>$ {code}</code>
+        <FontAwesomeIcon
+          className="h-6"
+          icon={faClipboard}
+        />
       </pre>
       <NoSsr>
         <ReactTooltip

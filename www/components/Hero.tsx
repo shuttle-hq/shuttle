@@ -36,6 +36,7 @@ const Hero = () => {
               <AccentButton
                 className="text-white font-bold bg-brand-900 hover:bg-brand-700 p-3"
                 link="https://discord.gg/H33rRDTm3p"
+                target="_blank"
               >
                 Join Discord
               </AccentButton>

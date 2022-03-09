@@ -1,15 +1,14 @@
-import React, { ReactNode } from "react";
-
+import React from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { IconProp } from "@fortawesome/fontawesome-svg-core";
-
 import Link from "next/link";
 
 type AccentButtonProps = {
   link?: string;
   compact?: boolean;
   className?: string;
-  children: ReactNode;
+  children: React.ReactNode;
+  target?: React.HTMLAttributeAnchorTarget | undefined;
 };
 
 const AccentButton = ({
@@ -17,6 +16,7 @@ const AccentButton = ({
   className,
   compact,
   children,
+  target
 }: AccentButtonProps) => {
   const paddingy = compact ? "pt-1 pb-1" : "pt-2 pb-2";
 
@@ -38,7 +38,7 @@ const AccentButton = ({
   } else {
     return (
       <Link href={link}>
-        <a>{button}</a>
+        <a target={target}>{button}</a>
       </Link>
     );
   }

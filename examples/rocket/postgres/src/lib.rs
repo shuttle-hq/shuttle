@@ -11,6 +11,12 @@ extern crate unveil_service;
 
 #[get("/<id>")]
 async fn retrieve(id: i32, state: &State<MyState>) -> Result<Json<Todo>, BadRequest<String>> {
+    println!("in get route");
+    // let pool = sqlx::postgres::PgPoolOptions::new()
+    //     .max_connections(5)
+    //     .connect("postgres://postgres:password@localhost:5432/postgres")
+    //     .await
+    //     .map_err(|e| BadRequest(Some(e.to_string())))?;
     let todo = sqlx::query_as("SELECT * FROM todos WHERE id = $1")
         .bind(id)
         .fetch_one(&state.pool)
@@ -43,12 +49,12 @@ fn rocket() -> Rocket<Build> {
 }
 
 async fn build_state(factory: &dyn Factory) -> MyState {
-    // let pool = sqlx::postgres::PgPoolOptions::new()
-    //     .max_connections(5)
-    //     .connect("postgres:password@localhost:5432/postgres")
-    //     .await
-    //     .unwrap();
-    let pool = factory.get_postgres_connection_pool().await.unwrap();
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(5)
+        .connect("postgres:password@localhost:5432/postgres")
+        .await
+        .unwrap();
+    // let pool = factory.get_postgres_connection_pool().await.unwrap();
     let state = MyState { pool };
 
     state

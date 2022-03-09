@@ -4,12 +4,12 @@ use sqlx::PgPool;
 
 #[async_trait]
 pub trait Factory: Send + Sync {
-    async fn get_postgres_connection_pool(&mut self) -> Result<PgPool, Error>;
+    async fn get_postgres_connection_pool(&self) -> Result<PgPool, Error>;
 }
 
 #[async_trait]
 impl Factory for Box<dyn Factory> {
-    async fn get_postgres_connection_pool(&mut self) -> Result<PgPool, Error> {
-        self.as_mut().get_postgres_connection_pool().await
+    async fn get_postgres_connection_pool(&self) -> Result<PgPool, Error> {
+        self.as_ref().get_postgres_connection_pool().await
     }
 }

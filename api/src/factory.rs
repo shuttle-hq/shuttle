@@ -1,11 +1,14 @@
+use std::sync::Arc;
+
 use crate::database;
 use async_trait::async_trait;
 use lib::project::ProjectConfig;
 use sqlx::{postgres::PgPoolOptions, PgPool};
+use tokio::sync::RwLock;
 use unveil_service::Factory;
 
 pub(crate) struct UnveilFactory<'a> {
-    database: &'a mut database::State,
+    database: Arc<RwLock<&'a mut database::State>>,
     project: ProjectConfig,
     ctx: database::Context,
 }
@@ -17,7 +20,7 @@ impl<'a> UnveilFactory<'a> {
         ctx: database::Context,
     ) -> Self {
         Self {
-            database,
+            database: Arc::new(RwLock::new(database)),
             project,
             ctx,
         }
@@ -27,9 +30,11 @@ impl<'a> UnveilFactory<'a> {
 #[async_trait]
 impl Factory for UnveilFactory<'_> {
     /// Lazily gets a connection pool
-    async fn get_postgres_connection_pool(&mut self) -> Result<PgPool, unveil_service::Error> {
+    async fn get_postgres_connection_pool(&self) -> Result<PgPool, unveil_service::Error> {
         let ready_state = self
             .database
+            .write()
+            .await
             .advance(&self.project.name(), &self.ctx)
             .await
             .map_err(unveil_service::Error::from)?;

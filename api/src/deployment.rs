@@ -136,12 +136,14 @@ impl Deployment {
                     if loaded.service.build(&factory).await.is_err() {
                         DeploymentState::Error
                     } else {
-                        let serve_task = loaded
-                            .service
-                            .bind(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port));
-
+                        println!("before spawn");
                         // TODO: upon resolving this future, change the status of the deployment
-                        let handle = tokio::spawn(serve_task);
+                        let handle = tokio::task::spawn_blocking(move || {
+                            loaded
+                                .service
+                                .bind(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port))
+                        });
+                        println!("after spawn");
 
                         // Remove stale active deployments
                         if let Some(stale_id) = context.router.promote(meta.host, meta.id).await {

@@ -1,4 +1,5 @@
 import ReactTooltip from 'react-tooltip';
+import NoSsr from './NoSsr';
 
 // Todo should rename this to something more descriptive
 
@@ -20,9 +21,11 @@ const Code = ({code, lang}: CodeProps) => {
                         $ {code}
                     </code>
                 </pre>
-                <ReactTooltip id="copiedTip" place="top" effect="float" afterShow={() => copyToClipboard(code)}>
-                    <b>Copied to clipboard!</b>
-                </ReactTooltip>
+                <NoSsr>
+                    <ReactTooltip id="copiedTip" place="top" effect="float" afterShow={() => copyToClipboard(code)}>
+                        <b>Copied to clipboard!</b>
+                    </ReactTooltip>
+                </NoSsr>
         </div>
     );
 }

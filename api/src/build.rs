@@ -142,7 +142,7 @@ fn clear_project_dir(project_path: &Path) -> Result<()> {
     std::fs::read_dir(project_path)?
         .into_iter()
         .map(|dir| dir.unwrap())
-        //.filter(|dir| dir.file_name() != "target") FIXME @christos compilation overwrites target
+        .filter(|dir| dir.file_name() != "target")
         .for_each(|dir| {
             if let Ok(file) = dir.file_type() {
                 log::debug!("{:?}", dir);
@@ -174,6 +174,7 @@ fn extract_tarball(crate_path: &Path, project_path: &Path) -> Result<()> {
         .arg(project_path)
         .arg("--strip-components") // remove top-level directory
         .arg("1")
+        .arg("--touch")
         .output()?;
     Ok(())
 }

@@ -4,7 +4,6 @@ use rocket::data::ByteUnit;
 use rocket::tokio;
 use rocket::Data;
 use std::collections::HashMap;
-use std::error::Error;
 use std::fs::DirEntry;
 use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener};

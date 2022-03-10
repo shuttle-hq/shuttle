@@ -56,7 +56,7 @@ pub enum AuthorizationError {
     #[response(status = 401)]
     Unauthorized(()),
     #[response(status = 409)]
-    AlreadyExists(())
+    AlreadyExists(()),
 }
 
 impl Display for AuthorizationError {
@@ -108,13 +108,14 @@ pub(crate) struct UserDirectory {
 }
 
 impl UserDirectory {
+    /// Validates if a user owns an existing project, if not:
+    /// - first there is a check to see if this project exists globally, if yes
+    /// will return an error since the project does not belong to the current user
+    /// - if not, will create the project for the user
+    /// Finally saves `users` state to `users.toml`.
     pub(crate) fn validate_or_create_project(&self, user: &User, project_name: &String) -> Result<(), DeploymentApiError> {
-        // 1. check if user has project
-        // 2. check if project name is unique
-        // 3. create project for user
-        // 4. save
         if user.projects.contains(project_name) {
-            return Ok(())
+            return Ok(());
         }
 
         let mut users = self.users.write().unwrap();
@@ -133,7 +134,10 @@ impl UserDirectory {
         // and that another user does not have it
         let user = users.values_mut()
             .find(|u| u.name == user.name)
-            .unwrap(); //TODO fixme
+            .ok_or(DeploymentApiError::Internal(
+                "there was an issue getting the user credentials while validating the project".to_string()
+            )
+            )?;
 
         user.projects.push(project_name.clone());
 
@@ -142,12 +146,15 @@ impl UserDirectory {
         Ok(())
     }
 
+    /// Creates a new user and returns the user's corresponding API Key.
+    /// If the user exists, will error.
+    /// Finally saves `users` state to `users.toml`.
     pub(crate) fn create_user(&self, username: String) -> Result<ApiKey, AuthorizationError> {
         let mut users = self.users.write().unwrap();
 
         for user in users.values() {
             if user.name == username {
-                return Err(AuthorizationError::AlreadyExists(()))
+                return Err(AuthorizationError::AlreadyExists(()));
             }
         }
 
@@ -159,7 +166,7 @@ impl UserDirectory {
 
         let user = User {
             name: username,
-            projects: vec![]
+            projects: vec![],
         };
 
         users.insert(api_key.clone(), user);
@@ -169,6 +176,7 @@ impl UserDirectory {
         Ok(ApiKey(api_key))
     }
 
+    /// Overwrites users.toml with a new `HashMap<String, User>`
     fn save(&self, users: &HashMap<String, User>) {
         // Save the config
         let mut users_file = std::fs::OpenOptions::new()
@@ -207,7 +215,7 @@ impl UserDirectory {
             Err(_) => {
                 log::debug!("could not find environment variable `UNVEIL_USERS_TOML`, defaulting to MANIFEST_DIR");
                 let manifest_path: PathBuf = env!("CARGO_MANIFEST_DIR").into();
-                 manifest_path.join("users.toml")
+                manifest_path.join("users.toml")
             }
         }
     }

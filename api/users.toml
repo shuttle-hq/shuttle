@@ -4,11 +4,3 @@ projects = [
     'hello-world-rocket-app',
     'postgres-rocket-app',
 ]
-
-[2bLLfr032C3esRWB]
-name = 'christos'
-projects = []
-
-[fvqBgsk4LWbJPGpx]
-name = 'christos2'
-projects = []

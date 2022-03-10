@@ -58,6 +58,13 @@ pub fn log_lines<R: io::Read, D: std::fmt::Display>(mut reader: R, target: D) {
 
         current_pos = 0;
     }
+
+    // Log last
+    if current_pos != 0 {
+        for line in io::BufReader::new(&buf[..current_pos]).lines() {
+            eprintln!("{} {}", target, line.unwrap());
+        }
+    }
 }
 
 pub fn spawn_and_log<D: std::fmt::Display, C: Into<Color>>(

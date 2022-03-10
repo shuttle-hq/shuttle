@@ -22,11 +22,18 @@ use uuid::Uuid;
 
 
 use crate::args::Args;
-use crate::auth::User;
+use crate::auth::{ApiKey, AuthorizationError, User};
 use crate::build::{BuildSystem, FsBuildSystem};
 use crate::deployment::DeploymentSystem;
 
 type ApiResult<T, E> = Result<Json<T>, E>;
+
+
+/// Status API to be used to check if the service is alive
+#[post("/users/<username>")]
+async fn create_user(username: String) -> Result<ApiKey, AuthorizationError> {
+    auth::create_user(username)
+}
 
 /// Status API to be used to check if the service is alive
 #[get("/status")]
@@ -107,8 +114,8 @@ async fn create_project(
     Ok(Json(deployment))
 }
 
-fn validate_user_for_project(user: &User, project_name: &str) -> Result<(), DeploymentApiError> {
-    if project_name != user.project_name {
+fn validate_user_for_project(user: &User, project_name: &String) -> Result<(), DeploymentApiError> {
+    if !user.projects.contains(project_name) {
         log::warn!(
             "failed to authenticate user {:?} for project `{}`",
             &user,
@@ -127,7 +134,7 @@ fn validate_user_for_deployment(
     user: &User,
     meta: &DeploymentMeta,
 ) -> Result<(), DeploymentApiError> {
-    if meta.config.name() != &user.project_name {
+    if !user.projects.contains(meta.config.name()) {
         log::warn!(
             "failed to authenticate user {:?} for deployment `{}`",
             &user,
@@ -177,6 +184,7 @@ async fn rocket() -> _ {
                 delete_project,
                 create_project,
                 get_project,
+                create_user,
                 status
             ],
         )

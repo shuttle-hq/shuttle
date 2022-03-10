@@ -6,9 +6,12 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
+use std::io::Write;
 use std::path::PathBuf;
+use std::sync::RwLock;
+use rand::Rng;
 
-#[derive(Debug, PartialEq, Hash, Eq, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Hash, Eq, Deserialize, Serialize, Responder)]
 pub struct ApiKey(String);
 
 /// Parses an authorization header string into an ApiKey
@@ -17,19 +20,19 @@ impl TryFrom<Option<&str>> for ApiKey {
 
     fn try_from(s: Option<&str>) -> Result<Self, Self::Error> {
         match s {
-            None => Err(AuthorizationError::Missing),
+            None => Err(AuthorizationError::Missing(())),
             Some(s) => {
                 let parts: Vec<&str> = s.split(' ').collect();
                 if parts.len() != 2 {
-                    return Err(AuthorizationError::Malformed);
+                    return Err(AuthorizationError::Malformed(()));
                 }
                 // unwrap ok because of explicit check above
                 let key = *parts.get(1).unwrap();
                 // comes in base64 encoded
                 let decoded_bytes =
-                    base64::decode(key).map_err(|_| AuthorizationError::Malformed)?;
+                    base64::decode(key).map_err(|_| AuthorizationError::Malformed(()))?;
                 let mut decoded_string =
-                    String::from_utf8(decoded_bytes).map_err(|_| AuthorizationError::Malformed)?;
+                    String::from_utf8(decoded_bytes).map_err(|_| AuthorizationError::Malformed(()))?;
                 // remove colon at the end
                 decoded_string.pop();
                 Ok(ApiKey(decoded_string))
@@ -38,20 +41,29 @@ impl TryFrom<Option<&str>> for ApiKey {
     }
 }
 
-#[derive(Debug)]
+/// A broad class of authorization errors.
+/// The empty tuples here are needed by `Responder`.
+#[derive(Debug, Responder)]
 #[allow(dead_code)]
+#[response(content_type = "json")]
 pub enum AuthorizationError {
-    Missing,
-    Malformed,
-    Unauthorized,
+    #[response(status = 400)]
+    Missing(()),
+    #[response(status = 400)]
+    Malformed(()),
+    #[response(status = 401)]
+    Unauthorized(()),
+    #[response(status = 409)]
+    AlreadyExists(())
 }
 
 impl Display for AuthorizationError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            AuthorizationError::Missing => write!(f, "API key is missing"),
-            AuthorizationError::Malformed => write!(f, "API key is malformed"),
-            AuthorizationError::Unauthorized => write!(f, "API key is unauthorized"),
+            AuthorizationError::Missing(_) => write!(f, "API key is missing"),
+            AuthorizationError::Malformed(_) => write!(f, "API key is malformed"),
+            AuthorizationError::Unauthorized(_) => write!(f, "API key is unauthorized"),
+            AuthorizationError::AlreadyExists(_) => write!(f, "username already exists"),
         }
     }
 }
@@ -71,17 +83,21 @@ impl<'r> FromRequest<'r> for User {
         match USER_DIRECTORY.user_for_api_key(&api_key) {
             None => {
                 log::warn!("authorization failure for api key {:?}", &api_key);
-                Outcome::Failure((Status::Unauthorized, AuthorizationError::Unauthorized))
+                Outcome::Failure((Status::Unauthorized, AuthorizationError::Unauthorized(())))
             }
             Some(user) => Outcome::Success(user),
         }
     }
 }
 
+pub(crate) fn create_user(username: String) -> Result<ApiKey, AuthorizationError> {
+    USER_DIRECTORY.create_user(username)
+}
+
 #[derive(Clone, Deserialize, Serialize, Debug)]
 pub(crate) struct User {
     pub(crate) name: String,
-    pub(crate) project_name: String,
+    pub(crate) projects: Vec<String>,
 }
 
 lazy_static! {
@@ -90,21 +106,58 @@ lazy_static! {
 
 #[derive(Debug)]
 struct UserDirectory {
-    users: HashMap<String, User>,
+    users: RwLock<HashMap<String, User>>,
 }
 
 impl UserDirectory {
+    fn create_user(&self, username: String) -> Result<ApiKey, AuthorizationError> {
+        let mut users = self.users.write().unwrap();
+
+        for user in users.values() {
+            if user.name == username {
+                return Err(AuthorizationError::AlreadyExists(()))
+            }
+        }
+
+        let api_key: String = rand::thread_rng()
+            .sample_iter(&rand::distributions::Alphanumeric)
+            .take(16)
+            .map(char::from)
+            .collect();
+
+        let user = User {
+            name: username,
+            projects: vec![]
+        };
+
+        users.insert(api_key.clone(), user);
+
+        // Save the config
+        let mut users_file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(Self::users_toml_file_path())
+            .unwrap();
+
+        write!(users_file, "{}", toml::to_string_pretty(&*users).unwrap())
+            .expect("could not write contents to users.toml");
+
+        Ok(ApiKey(api_key))
+    }
+
     fn user_for_api_key(&self, api_key: &ApiKey) -> Option<User> {
-        self.users.get(&api_key.0).cloned()
+        self.users.read().unwrap().get(&api_key.0).cloned()
     }
 
     fn from_user_file() -> Self {
         let file_path = Self::users_toml_file_path();
         let file_contents: String = std::fs::read_to_string(&file_path)
             .expect(&format!("this should blow up if the users.toml file is not present at {:?}", &file_path));
+        let users = toml::from_str(&file_contents)
+            .expect("this should blow up if the users.toml file is unparseable");
         let directory = Self {
-            users: toml::from_str(&file_contents)
-                .expect("this should blow up if the users.toml file is unparseable"),
+            users: RwLock::new(users),
         };
 
         log::debug!("initialising user directory: {:#?}", &directory);

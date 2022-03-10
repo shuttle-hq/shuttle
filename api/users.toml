@@ -1,9 +1,14 @@
-# api key / user mapping are defined like this.
-
 [my_api_key]
-name = "test_user"
-project_name = "hello-world-rocket-app"
+name = 'test_user'
+projects = [
+    'hello-world-rocket-app',
+    'postgres-rocket-app',
+]
 
-[ci-test]
-name = "ci"
-project_name = "hello-world-rocket-app"
+[2bLLfr032C3esRWB]
+name = 'christos'
+projects = []
+
+[fvqBgsk4LWbJPGpx]
+name = 'christos2'
+projects = []

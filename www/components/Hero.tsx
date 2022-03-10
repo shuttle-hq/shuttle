@@ -10,11 +10,16 @@ const Hero = () => {
       <div className="xl:px-12 py-5 mx-auto">
         <div className="p-6 sm:py-8">
           <div className="max-w-3xl m-auto text-center flex flex-col gap-8 sm:gap-11">
-            <img
-              className="m-auto h-16"
-              src={`${basePath}/images/logo.png`}
-              alt="Shuttle"
-            />
+            <div className="flex m-auto relative">
+              <img
+                className="h-16"
+                src={`${basePath}/images/logo.png`}
+                alt="Shuttle"
+              />
+              <span className="bg-brand-900 text-white absolute -bottom-4 right-0 text-base px-2 rounded">
+                ALPHA
+              </span>
+            </div>
 
             <div>
               <div className="mb-5 text-4xl sm:text-5xl md:text-6xl font-bold text-gray-200">

@@ -3,7 +3,7 @@ extern crate rocket;
 
 use rocket::{response::status::BadRequest, serde::json::Json, Build, Rocket, State};
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, PgPool};
+use sqlx::{Executor, FromRow, PgPool};
 use unveil_service::Factory;
 
 #[macro_use]
@@ -43,10 +43,13 @@ fn rocket() -> Rocket<Build> {
 }
 
 async fn build_state(factory: &dyn Factory) -> Result<MyState, unveil_service::Error> {
+    let connection_string = factory.get_sql_connection_string().await?;
     let pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(5)
-        .connect(&factory.get_sql_connection_string().await?)
+        .connect(&connection_string)
         .await?;
+
+    pool.execute(include_str!("../schema.sql")).await?;
 
     let state = MyState { pool };
 

@@ -33,7 +33,8 @@ pub trait IntoService {
 
 pub struct RocketService<T: Sized> {
     rocket: Option<Rocket<Build>>,
-    state_builder: Option<fn(&dyn Factory) -> Pin<Box<dyn Future<Output = T> + Send + '_>>>,
+    state_builder:
+        Option<fn(&dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>>,
     runtime: Runtime,
 }
 
@@ -51,7 +52,7 @@ impl IntoService for Rocket<Build> {
 impl<T: Send + Sync + 'static> IntoService
     for (
         Rocket<Build>,
-        fn(&dyn Factory) -> Pin<Box<dyn Future<Output = T> + Send + '_>>,
+        fn(&dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>,
     )
 {
     type Service = RocketService<T>;
@@ -73,7 +74,7 @@ where
     fn build(&mut self, factory: &dyn Factory) -> Result<(), Error> {
         if let Some(state_builder) = self.state_builder.take() {
             // We want to build any sqlx pools on the same runtime the client code will run on. Without this expect to get errors of no tokio reactor being present.
-            let state = self.runtime.block_on(state_builder(factory));
+            let state = self.runtime.block_on(state_builder(factory))?;
 
             if let Some(rocket) = self.rocket.take() {
                 self.rocket.replace(rocket.manage(state));
@@ -121,7 +122,7 @@ macro_rules! declare_service {
             let state_builder: fn(
                 &dyn $crate::Factory,
             ) -> std::pin::Pin<
-                Box<dyn std::future::Future<Output = _> + Send + '_>,
+                Box<dyn std::future::Future<Output = Result<_, $crate::Error>> + Send + '_>,
             > = |factory| Box::pin($state_builder(factory));
 
             let obj = $crate::IntoService::into_service((constructor(), state_builder));

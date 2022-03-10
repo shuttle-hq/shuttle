@@ -142,6 +142,8 @@ impl Deployment {
                         Err(e) => DeploymentState::Error(e.into()),
                         Ok(_) => {
                             // TODO: upon resolving this future, change the status of the deployment
+                            // We cannot use spawn here since that blocks the api completely. We suspect this is because `bind` makes a blocking call,
+                            // however that does not completely makes sense as the blocking call is made on another runtime.
                             let handle = tokio::task::spawn_blocking(move || {
                                 loaded
                                     .service

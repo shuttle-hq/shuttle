@@ -1,4 +1,9 @@
+use crate::build::Build;
+use crate::{BuildSystem, UnveilFactory};
+use anyhow::{anyhow, Context as AnyhowContext};
 use core::default::Default;
+use lib::project::ProjectConfig;
+use lib::{DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, Port};
 use libloading::Library;
 use rocket::data::ByteUnit;
 use rocket::tokio;
@@ -10,13 +15,8 @@ use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use anyhow::{anyhow, Context as AnyhowContext};
-use tokio::task::JoinHandle;
 use tokio::sync::RwLock;
-use crate::build::Build;
-use crate::{BuildSystem, UnveilFactory};
-use lib::{DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, Port};
-use lib::project::ProjectConfig;
+use tokio::task::JoinHandle;
 
 use crate::database;
 use crate::router::Router;
@@ -33,7 +33,7 @@ impl Deployment {
     fn new(meta: DeploymentMeta, state: DeploymentState) -> Self {
         Self {
             meta: Arc::new(RwLock::new(meta)),
-            state: RwLock::new(state)
+            state: RwLock::new(state),
         }
     }
 
@@ -47,13 +47,16 @@ impl Deployment {
     /// Initialise a deployment from a directory
     fn from_directory(dir: DirEntry) -> Result<Self, anyhow::Error> {
         let project_path = dir.path();
-        let project_name = dir.file_name()
+        let project_name = dir
+            .file_name()
             .into_string()
             .map_err(|os_str| anyhow!("could not parse project name `{:?}` to string", os_str))?;
         // find marker which points to so file
         let marker_path = project_path.join(".unveil_marker");
-        let so_path_str = std::fs::read(&marker_path)
-            .context(anyhow!("could not find so marker file at {:?}", marker_path))?;
+        let so_path_str = std::fs::read(&marker_path).context(anyhow!(
+            "could not find so marker file at {:?}",
+            marker_path
+        ))?;
         let so_path: PathBuf = String::from_utf8_lossy(&so_path_str)
             .parse()
             .context("could not parse contents of marker file to a valid path")?;
@@ -76,7 +79,9 @@ impl Deployment {
             DeploymentState::Queued(_) | DeploymentState::Built(_) | DeploymentState::Loaded(_) => {
                 false
             }
-            DeploymentState::Deployed(_) | DeploymentState::Error => true,
+            DeploymentState::Deployed(_) | DeploymentState::Error(_) | DeploymentState::Deleted => {
+                true
+            }
         }
     }
 
@@ -100,8 +105,8 @@ impl Deployment {
                     {
                         Ok(build) => DeploymentState::built(build),
                         Err(e) => {
-                            dbg!("failed to build with error: {}", e);
-                            DeploymentState::Error
+                            dbg!("failed to build with error: {}", &e);
+                            DeploymentState::Error(e)
                         }
                     }
                 }
@@ -114,8 +119,8 @@ impl Deployment {
                     match load_service_from_so_file(&built.build.so_path) {
                         Ok((svc, so)) => DeploymentState::loaded(so, svc),
                         Err(e) => {
-                            log::debug!("failed to load with error: {}", e);
-                            DeploymentState::Error
+                            log::debug!("failed to load with error: {}", &e);
+                            DeploymentState::Error(e)
                         }
                     }
                 }
@@ -133,25 +138,27 @@ impl Deployment {
                     let factory =
                         UnveilFactory::new(&mut db_state, meta.config.clone(), db_context.clone());
 
-                    if loaded.service.build(&factory).await.is_err() {
-                        DeploymentState::Error
-                    } else {
-                        println!("before spawn");
-                        // TODO: upon resolving this future, change the status of the deployment
-                        let handle = tokio::task::spawn_blocking(move || {
-                            loaded
-                                .service
-                                .bind(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port))
-                        });
-                        println!("after spawn");
+                    match loaded.service.build(&factory).await {
+                        Err(e) => DeploymentState::Error(e.into()),
+                        Ok(_) => {
+                            println!("before spawn");
+                            // TODO: upon resolving this future, change the status of the deployment
+                            let handle = tokio::task::spawn_blocking(move || {
+                                loaded
+                                    .service
+                                    .bind(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port))
+                            });
+                            println!("after spawn");
 
-                        // Remove stale active deployments
-                        if let Some(stale_id) = context.router.promote(meta.host, meta.id).await {
-                            log::debug!("removing stale deployment `{}`", &stale_id);
-                            context.deployments.write().await.remove(&stale_id);
+                            // Remove stale active deployments
+                            if let Some(stale_id) = context.router.promote(meta.host, meta.id).await
+                            {
+                                log::debug!("removing stale deployment `{}`", &stale_id);
+                                context.deployments.write().await.remove(&stale_id);
+                            }
+
+                            DeploymentState::deployed(loaded.so, port, handle, db_state)
                         }
-
-                        DeploymentState::deployed(loaded.so, port, handle, db_state)
                     }
                 }
                 deployed_or_error => deployed_or_error, /* nothing to do here */
@@ -250,7 +257,7 @@ type Deployments = HashMap<DeploymentId, Arc<Deployment>>;
 /// The top-level manager for deployments. Is responsible for their creation
 /// and lifecycle.
 pub(crate) struct DeploymentSystem {
-    deployments: RwLock<Deployments>,
+    deployments: Arc<RwLock<Deployments>>,
     job_queue: Arc<JobQueue>,
     router: Arc<Router>,
 }
@@ -325,23 +332,21 @@ impl DeploymentSystem {
     pub(crate) async fn new(build_system: Box<dyn BuildSystem>) -> Self {
         let router: Arc<Router> = Default::default();
 
-        let deployments = Arc::new(
-            RwLock::new(
-                Self::initialise_from_fs(&build_system.fs_root()).await
-            )
-        );
+        let deployments = Arc::new(RwLock::new(
+            Self::initialise_from_fs(&build_system.fs_root()).await,
+        ));
 
         let context = Context {
             router: router.clone(),
             build_system,
-            deployments,
+            deployments: deployments.clone(),
         };
         let db_context = database::Context::new()
             .await
             .expect("failed to create lazy connection to database");
 
         Self {
-            deployments: Default::default(),
+            deployments,
             job_queue: JobQueue::initialise(context, db_context).await,
             router,
         }
@@ -353,7 +358,8 @@ impl DeploymentSystem {
         let mut deployments = HashMap::default();
         for project_dir in std::fs::read_dir(fs_root)
             .unwrap() // safety: api can read the fs root dir
-            .into_iter() {
+            .into_iter()
+        {
             let project_dir = match project_dir {
                 Ok(project_dir) => project_dir,
                 Err(e) => {
@@ -380,7 +386,6 @@ impl DeploymentSystem {
         }
         deployments
     }
-
 
     /// Returns the port for a given host. If the host does not exist, returns
     /// `None`.
@@ -453,7 +458,7 @@ impl DeploymentSystem {
     ) -> Result<DeploymentMeta, DeploymentApiError> {
         match self.deployments.write().await.remove(id) {
             Some(deployment) => {
-                let meta = deployment.meta().await;
+                let mut meta = deployment.meta().await;
 
                 // If the deployment is in the 'deployed' state, kill the Tokio
                 // task in which it is deployed and deallocate the linked
@@ -468,6 +473,8 @@ impl DeploymentSystem {
                 }
 
                 let _ = self.router.remove(&meta.host);
+
+                meta.state = DeploymentStateMeta::Deleted;
 
                 Ok(meta)
             }
@@ -492,7 +499,7 @@ impl DeploymentSystem {
             .to_vec();
 
         let deployment = Arc::new(Deployment::from_bytes(&project_config, crate_bytes));
-      
+
         let info = deployment.meta().await;
 
         self.deployments
@@ -556,12 +563,16 @@ enum DeploymentState {
     Deployed(DeployedState),
     /// A state entered when something unexpected occurs during the deployment
     /// process.
-    Error,
+    Error(anyhow::Error),
+    /// A state indicating that the user has intentionally terminated this
+    /// deployment
+    #[allow(dead_code)]
+    Deleted,
 }
 
 impl DeploymentState {
     fn take(&mut self) -> Self {
-        std::mem::replace(self, DeploymentState::Error)
+        std::mem::replace(self, DeploymentState::Deleted)
     }
 
     fn queued(crate_bytes: Vec<u8>) -> Self {
@@ -576,12 +587,7 @@ impl DeploymentState {
         Self::Loaded(LoadedState { service, so })
     }
 
-    fn deployed(
-        so: Library,
-        port: Port,
-        handle: ServeHandle,
-        db_state: database::State,
-    ) -> Self {
+    fn deployed(so: Library, port: Port, handle: ServeHandle, db_state: database::State) -> Self {
         Self::Deployed(DeployedState {
             so,
             port,
@@ -596,7 +602,8 @@ impl DeploymentState {
             DeploymentState::Built(_) => DeploymentStateMeta::Built,
             DeploymentState::Loaded(_) => DeploymentStateMeta::Loaded,
             DeploymentState::Deployed(_) => DeploymentStateMeta::Deployed,
-            DeploymentState::Error => DeploymentStateMeta::Error,
+            DeploymentState::Error(e) => DeploymentStateMeta::Error(format!("{:#?}", e)),
+            DeploymentState::Deleted => DeploymentStateMeta::Deleted,
         }
     }
 }

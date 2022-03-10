@@ -12,3 +12,5 @@
 
 # VS Code
 .vscode/
+
+**/secret*

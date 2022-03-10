@@ -62,6 +62,14 @@ resource "aws_ecs_task_definition" "api" {
           value = tostring(var.proxy_container_port)
         },
         {
+          name = "PG_PORT",
+          value = tostring(var.postgres_container_port)
+        },
+        {
+          name = "PG_PASSWORD",
+          value = tostring(var.postgres_password)
+        },
+        {
           name = "PG_DATA",
           value = "/opt/unveil/postgres/"
         }
@@ -80,6 +88,10 @@ resource "aws_ecs_task_definition" "api" {
         {
           containerPort = var.proxy_container_port
           hostPort = var.proxy_container_port
+        },
+        {
+          containerPort = var.postgres_container_port
+          hostPort = var.postgres_container_port
         }
       ]
 
@@ -126,5 +138,11 @@ resource "aws_ecs_service" "api" {
     target_group_arn = aws_lb_target_group.user.arn
     container_name = "backend"
     container_port = var.proxy_container_port
+  }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.postgres.arn
+    container_name = "backend"
+    container_port = var.postgres_container_port
   }
 }

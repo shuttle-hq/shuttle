@@ -71,10 +71,11 @@ impl DeploymentMeta {
     }
 }
 
-lazy_static! {
-    static ref PUBLIC_IP: String =
-        std::env::var("PUBLIC_IP").unwrap_or_else(|_| "localhost".to_string());
-}
+#[cfg(debug_assertions)]
+const PUBLIC_IP: &'static str = "localhost";
+
+#[cfg(not(debug_assertions))]
+const PUBLIC_IP: &'static str = "pg.shuttle.rs";
 
 impl Display for DeploymentMeta {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -82,7 +83,7 @@ impl Display for DeploymentMeta {
             if let Some(info) = &self.database_deployment {
                 format!(
                     "\n        Database URI:       {}",
-                    info.connection_string(&*PUBLIC_IP)
+                    info.connection_string(PUBLIC_IP)
                 )
             } else {
                 "".to_string()
@@ -124,23 +125,25 @@ impl DatabaseReadyInfo {
 }
 
 /// A label used to represent the deployment state in `DeploymentMeta`
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DeploymentStateMeta {
     Queued,
     Built,
     Loaded,
     Deployed,
-    Error,
+    Error(String),
+    Deleted,
 }
 
 impl Display for DeploymentStateMeta {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let s = match self {
-            DeploymentStateMeta::Queued => "QUEUED",
-            DeploymentStateMeta::Built => "BUILT",
-            DeploymentStateMeta::Loaded => "LOADED",
-            DeploymentStateMeta::Deployed => "DEPLOYED",
-            DeploymentStateMeta::Error => "ERROR",
+            DeploymentStateMeta::Queued => "QUEUED".to_string(),
+            DeploymentStateMeta::Built => "BUILT".to_string(),
+            DeploymentStateMeta::Loaded => "LOADED".to_string(),
+            DeploymentStateMeta::Deployed => "DEPLOYED".to_string(),
+            DeploymentStateMeta::Error(msg) => format!("ERROR: {}", &msg),
+            DeploymentStateMeta::Deleted => "DELETED".to_string(),
         };
         write!(f, "{}", s)
     }
@@ -148,6 +151,7 @@ impl Display for DeploymentStateMeta {
 
 // TODO: Determine error handling strategy - error types or just use `anyhow`?
 #[derive(Debug, Clone, Serialize, Deserialize, Responder)]
+#[response(content_type = "json")]
 pub enum DeploymentApiError {
     #[response(status = 500)]
     Internal(String),

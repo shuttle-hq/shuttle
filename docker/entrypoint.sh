@@ -17,6 +17,7 @@ if [[ "$(pg_lsclusters -h | wc -l)" -ne "1" ]]; then
     conftool() {
         pg_conftool $PG_VERSION $PG_CLUSTER_NAME set $1 $2
     }
+    conftool listen_addresses \"*\"
     conftool port $PG_PORT
     conftool log_statement all
 

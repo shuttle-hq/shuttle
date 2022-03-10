@@ -72,6 +72,7 @@ where
 {
     fn build(&mut self, factory: &dyn Factory) -> Result<(), Error> {
         if let Some(state_builder) = self.state_builder.take() {
+            // We want to build any sqlx pools on the same runtime the client code will run on. Without this expect to get errors of no tokio reactor being present.
             let state = self.runtime.block_on(state_builder(factory));
 
             if let Some(rocket) = self.rocket.take() {
@@ -92,9 +93,7 @@ where
             ..Default::default()
         };
         let launched = rocket.configure(config).launch();
-        println!("before block_on");
         self.runtime.block_on(launched)?;
-        println!("after block_on");
         Ok(())
     }
 }

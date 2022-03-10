@@ -7,6 +7,7 @@ use rocket::tokio;
 use rocket::tokio::io::AsyncWriteExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use uuid::Uuid;
 
 #[cfg(debug_assertions)]
 pub const DEFAULT_FS_ROOT: &'static str = "/tmp/unveil/crates/";
@@ -100,6 +101,9 @@ impl BuildSystem for FsBuildSystem {
         // run cargo build (--debug for now)
         let so_path = build_crate(&project_path, buf)?;
 
+        // create uniquely named so file to satisfy `libloading`
+        let so_path = create_unique_named_so_file(&project_path, &so_path)?;
+
         // create marker file
         create_so_marker(&project_path, &so_path);
 
@@ -118,6 +122,14 @@ fn create_so_marker(project_path: &Path, so_path: &Path) {
     let marker_path = project_path.join(".unveil_marker");
     // unwraps here are ok since we are writing a valid `Path`
     std::fs::write(&marker_path, so_path.to_str().unwrap()).unwrap();
+}
+
+/// Copies the original `so` file to the project directory with a random name
+/// to appease `libloading`.
+fn create_unique_named_so_file(project_path: &Path, so_path: &Path) -> Result<PathBuf> {
+    let so_unique_path = project_path.join(&format!("{}.so", Uuid::new_v4()));
+    std::fs::copy(so_path, &so_unique_path)?;
+    Ok(so_unique_path)
 }
 
 /// Clear everything which is not the target folder from the project path
@@ -158,6 +170,7 @@ fn extract_tarball(crate_path: &Path, project_path: &Path) -> Result<()> {
         .arg(project_path)
         .arg("--strip-components") // remove top-level directory
         .arg("1")
+        .arg("--touch") // touch to update mtime for cargo
         .output()?;
     Ok(())
 }

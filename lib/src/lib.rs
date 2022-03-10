@@ -8,7 +8,7 @@ use std::fmt::{Display, Formatter};
 use uuid::Uuid;
 use project::ProjectConfig;
 
-pub const UNVEIL_PROJECT_HEADER: &str = "Unveil-Project";
+pub const SHUTTLE_PROJECT_HEADER: &str = "Shuttle-Project";
 
 #[cfg(debug_assertions)]
 pub const API_URL: &str = "http://localhost:8001";
@@ -59,7 +59,7 @@ impl DeploymentMeta {
     }
 
     pub fn create_host(project_config: &ProjectConfig) -> Host {
-        format!("{}.unveil.sh", project_config.name())
+        format!("{}.shuttle.sh", project_config.name())
     }
 }
 

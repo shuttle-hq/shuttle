@@ -22,11 +22,11 @@ fn hello() {
         .spawn()
         .unwrap();
 
-    let unveil_output = Command::new("cargo")
+    let shuttle_output = Command::new("cargo")
         .args([
             "run",
             "--bin",
-            "cargo-unveil",
+            "cargo-shuttle",
             "--manifest-path",
             "../../../Cargo.toml",
             "--",
@@ -36,18 +36,18 @@ fn hello() {
         .output()
         .unwrap();
 
-    let stdout = str::from_utf8(&unveil_output.stdout).unwrap();
+    let stdout = str::from_utf8(&shuttle_output.stdout).unwrap();
     assert!(
         stdout.contains("Finished dev"),
         "output does not contain 'Finished dev':\nstdout = {}\nstderr = {}",
         stdout,
-        str::from_utf8(&unveil_output.stderr).unwrap()
+        str::from_utf8(&shuttle_output.stderr).unwrap()
     );
     assert!(stdout.contains("Deployment Status:  DEPLOYED"));
 
     let request_text = reqwest::blocking::Client::new()
         .get("http://localhost:8000/hello")
-        .header("Host", "hello-world-rocket-app.unveil.sh")
+        .header("Host", "hello-world-rocket-app.shuttle.sh")
         .send()
         .unwrap()
         .text()

@@ -18,7 +18,7 @@ COPY . .
 RUN cargo build --release --bin api
 
 FROM runtime
-COPY --from=builder /app/target/release/api /usr/local/bin/unveil-backend
+COPY --from=builder /app/target/release/api /usr/local/bin/shuttle-backend
 COPY docker/entrypoint.sh /bin/entrypoint.sh
 COPY docker/supervisord.conf /usr/share/supervisord/supervisord.conf
 ENTRYPOINT ["/bin/entrypoint.sh"]

@@ -10,7 +10,7 @@ mod factory;
 mod proxy;
 mod router;
 
-use factory::UnveilFactory;
+use factory::ShuttleFactory;
 use lib::{DeploymentApiError, DeploymentMeta, Port};
 use lib::project::ProjectConfig;
 use rocket::serde::json::{Json};

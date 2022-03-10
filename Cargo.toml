@@ -2,7 +2,7 @@
 members = [
   "api",
   "service",
-  "cargo-unveil",
+  "cargo-shuttle",
   "lib",
   "e2e"
 ]

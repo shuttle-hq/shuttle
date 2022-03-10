@@ -4,7 +4,7 @@ extern crate rocket;
 use rocket::{Rocket, Build};
 
 #[macro_use]
-extern crate unveil_service;
+extern crate shuttle_service;
 
 #[get("/")]
 fn index() -> &'static str {

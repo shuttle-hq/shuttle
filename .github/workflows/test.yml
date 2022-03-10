@@ -23,7 +23,7 @@ jobs:
           toolchain: nightly
           override: true
       - name: Make config file
-        run: mkdir -p ~/.config/unveil/ && echo "api_key = \"ci-test\"" > ~/.config/unveil/config.toml
-      - name: Use local unveil-service
-        run: mkdir -p ~/.cargo && echo -e "[patch.crates-io]\nunveil-service = { path = \"${GITHUB_WORKSPACE}/service\" }" > ~/.cargo/config.toml
+        run: mkdir -p ~/.config/shuttle/ && echo "api_key = \"ci-test\"" > ~/.config/shuttle/config.toml
+      - name: Use local shuttle-service
+        run: mkdir -p ~/.cargo && echo -e "[patch.crates-io]\nshuttle-service = { path = \"${GITHUB_WORKSPACE}/service\" }" > ~/.cargo/config.toml
       - run: cargo test

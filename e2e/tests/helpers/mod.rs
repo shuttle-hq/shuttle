@@ -12,7 +12,6 @@ use std::{
 use colored::*;
 use portpicker::pick_unused_port;
 use reqwest::blocking::RequestBuilder;
-use tempdir::TempDir;
 
 trait EnsureSuccess {
     fn ensure_success<S: AsRef<str>>(self, s: S);
@@ -22,14 +21,17 @@ impl EnsureSuccess for io::Result<ExitStatus> {
     fn ensure_success<S: AsRef<str>>(self, s: S) {
         let exit_status = self.unwrap();
         if !exit_status.success() {
-            panic!("{}: exit code {}", s.as_ref(), exit_status.code().unwrap())
+            panic!(
+                "{}: exit code {}",
+                s.as_ref(),
+                exit_status.code().unwrap_or_default()
+            )
         }
     }
 }
 
-pub enum Server {
-    Process(TempDir, Child),
-    Docker(Child),
+pub struct Server {
+    process: Child,
 }
 
 pub struct Api {
@@ -155,44 +157,7 @@ impl Api {
 
         let child = spawn_and_log(&mut run, api_target, api.color);
 
-        api.server = Some(Server::Docker(child));
-
-        api.wait_ready(Duration::from_secs(120));
-
-        api
-    }
-
-    pub fn new_process<D, C>(target: D, color: C) -> Self
-    where
-        D: std::fmt::Display,
-        C: Into<Color>,
-    {
-        let mut api = Self::new_free(target, color);
-
-        let tmp_dir = TempDir::new("e2e").unwrap();
-
-        let api_target = format!("   {} api", api.target);
-
-        let mut build = Command::new("cargo");
-        build.args(["build", "--bin", "api"]).current_dir("../");
-        spawn_and_log(&mut build, api_target.as_str(), Color::White)
-            .wait()
-            .ensure_success("could not build `api`");
-
-        let mut run = Command::new("target/debug/api");
-        run.args([
-            "--path",
-            tmp_dir.path().to_str().unwrap(),
-            "--api-port",
-            api.api_addr.port().to_string().as_str(),
-            "--proxy-port",
-            api.proxy_addr.port().to_string().as_str(),
-        ])
-        .current_dir("../");
-
-        let process = spawn_and_log(&mut run, api_target, api.color);
-
-        api.server = Some(Server::Process(tmp_dir, process));
+        api.server = Some(Server { process: child });
 
         api.wait_ready(Duration::from_secs(120));
 
@@ -253,9 +218,7 @@ impl Api {
 impl Drop for Api {
     fn drop(&mut self) {
         if let Some(server) = self.server.as_mut() {
-            match server {
-                Server::Process(_, child) | Server::Docker(child) => child.kill().unwrap(),
-            };
+            server.process.kill().unwrap();
         }
     }
 }

@@ -1,5 +1,4 @@
 import { useRouter } from "next/router";
-import AccentButton from "./AccentButton";
 import Code from "./Code";
 import { SITE_DESCRIPTION, SITE_TITLE } from "../lib/constants";
 

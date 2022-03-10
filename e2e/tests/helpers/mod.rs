@@ -21,11 +21,7 @@ impl EnsureSuccess for io::Result<ExitStatus> {
     fn ensure_success<S: AsRef<str>>(self, s: S) {
         let exit_status = self.unwrap();
         if !exit_status.success() {
-            panic!(
-                "{}: exit code {}",
-                s.as_ref(),
-                exit_status.code().unwrap_or_default()
-            )
+            panic!("{}: exit code {}", s.as_ref(), exit_status)
         }
     }
 }

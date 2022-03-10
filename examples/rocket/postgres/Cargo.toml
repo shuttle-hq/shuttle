@@ -12,4 +12,4 @@ crate-type = ["cdylib"]
 rocket = { version = "0.5.0-rc.1", features = ["json"] }
 serde = "1.0"
 sqlx = { version = "0.5", features = ["runtime-tokio-native-tls", "postgres"] }
-unveil-service = "0.1.1"
+unveil-service = "0.2.1"

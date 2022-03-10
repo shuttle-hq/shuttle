@@ -22,7 +22,7 @@ use uuid::Uuid;
 
 
 use crate::args::Args;
-use crate::auth::{ApiKey, AuthorizationError, User};
+use crate::auth::{ApiKey, AuthorizationError, User, USER_DIRECTORY};
 use crate::build::{BuildSystem, FsBuildSystem};
 use crate::deployment::DeploymentSystem;
 
@@ -32,7 +32,7 @@ type ApiResult<T, E> = Result<Json<T>, E>;
 /// Status API to be used to check if the service is alive
 #[post("/users/<username>")]
 async fn create_user(username: String) -> Result<ApiKey, AuthorizationError> {
-    auth::create_user(username)
+    USER_DIRECTORY.create_user(username)
 }
 
 /// Status API to be used to check if the service is alive
@@ -105,7 +105,7 @@ async fn create_project(
     project: ProjectConfig,
     user: User,
 ) -> ApiResult<DeploymentMeta, DeploymentApiError> {
-    validate_user_for_project(&user, project.name())?;
+    USER_DIRECTORY.validate_or_create_project(&user, project.name())?;
 
     let deployment = state
         .deployment_manager

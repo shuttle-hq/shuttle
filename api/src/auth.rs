@@ -10,6 +10,8 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::sync::RwLock;
 use rand::Rng;
+use rocket::form::validate::Contains;
+use lib::DeploymentApiError;
 
 #[derive(Debug, PartialEq, Hash, Eq, Deserialize, Serialize, Responder)]
 pub struct ApiKey(String);
@@ -90,10 +92,6 @@ impl<'r> FromRequest<'r> for User {
     }
 }
 
-pub(crate) fn create_user(username: String) -> Result<ApiKey, AuthorizationError> {
-    USER_DIRECTORY.create_user(username)
-}
-
 #[derive(Clone, Deserialize, Serialize, Debug)]
 pub(crate) struct User {
     pub(crate) name: String,
@@ -101,16 +99,50 @@ pub(crate) struct User {
 }
 
 lazy_static! {
-    static ref USER_DIRECTORY: UserDirectory = UserDirectory::from_user_file();
+    pub(crate) static ref USER_DIRECTORY: UserDirectory = UserDirectory::from_user_file();
 }
 
 #[derive(Debug)]
-struct UserDirectory {
+pub(crate) struct UserDirectory {
     users: RwLock<HashMap<String, User>>,
 }
 
 impl UserDirectory {
-    fn create_user(&self, username: String) -> Result<ApiKey, AuthorizationError> {
+    pub(crate) fn validate_or_create_project(&self, user: &User, project_name: &String) -> Result<(), DeploymentApiError> {
+        // 1. check if user has project
+        // 2. check if project name is unique
+        // 3. create project for user
+        // 4. save
+        if user.projects.contains(project_name) {
+            return Ok(())
+        }
+
+        let mut users = self.users.write().unwrap();
+
+        let project_for_name = users.values()
+            .flat_map(|users| &users.projects)
+            .find(|project| project == &project_name);
+
+        if project_for_name.is_some() {
+            return Err(DeploymentApiError::ProjectAlreadyExists(
+                format!("project with name `{}` already exists", project_name)
+            ));
+        }
+
+        // at this point we know that the user does not have this project
+        // and that another user does not have it
+        let user = users.values_mut()
+            .find(|u| u.name == user.name)
+            .unwrap(); //TODO fixme
+
+        user.projects.push(project_name.clone());
+
+        self.save(&*users);
+
+        Ok(())
+    }
+
+    pub(crate) fn create_user(&self, username: String) -> Result<ApiKey, AuthorizationError> {
         let mut users = self.users.write().unwrap();
 
         for user in users.values() {
@@ -132,6 +164,12 @@ impl UserDirectory {
 
         users.insert(api_key.clone(), user);
 
+        self.save(&*users);
+
+        Ok(ApiKey(api_key))
+    }
+
+    fn save(&self, users: &HashMap<String, User>) {
         // Save the config
         let mut users_file = std::fs::OpenOptions::new()
             .write(true)
@@ -142,8 +180,6 @@ impl UserDirectory {
 
         write!(users_file, "{}", toml::to_string_pretty(&*users).unwrap())
             .expect("could not write contents to users.toml");
-
-        Ok(ApiKey(api_key))
     }
 
     fn user_for_api_key(&self, api_key: &ApiKey) -> Option<User> {

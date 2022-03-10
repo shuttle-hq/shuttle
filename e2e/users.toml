@@ -2,4 +2,4 @@
 
 [ci-test]
 name = "ci"
-project_name = "hello-world-rocket-app"
+projects = ["hello-world-rocket-app", "postgres-rocket-app"]

@@ -9,26 +9,26 @@ const Hero = () => {
     <div className="w-full min-h-screen flex flex-col justify-center bg-dark-700">
       <div className="xl:px-12 py-5 mx-auto">
         <div className="p-6 sm:py-8">
-          <div className="max-w-3xl m-auto text-center">
+          <div className="max-w-3xl m-auto text-center flex flex-col gap-8 sm:gap-11">
             <img
-              className="mb-6 sm:mb-8 m-auto h-16"
+              className="m-auto h-16"
               src={`${basePath}/images/logo.png`}
               alt="Shuttle"
             />
 
-            <div className="text-4xl sm:text-5xl md:text-6xl pb-5 font-bold text-gray-200">
-              {SITE_TITLE}
-            </div>
-            <div className="text-xl pb-5 font-normal text-gray-300 px-10">
-              {SITE_DESCRIPTION}
-            </div>
-            <div className="hidden md:flex flex-col justify-center items-center">
-              <div className="pb-6 flex">
-                <Code code="cargo install shuttle" />
+            <div>
+              <div className="mb-5 text-4xl sm:text-5xl md:text-6xl font-bold text-gray-200">
+                {SITE_TITLE}
+              </div>
+              <div className="text-xl font-normal text-gray-300 px-10">
+                {SITE_DESCRIPTION}
               </div>
             </div>
+            <div className="hidden md:flex flex-col justify-center items-center">
+              <Code code="cargo install shuttle" />
+            </div>
 
-            <div className="pb-6 flex gap-4 justify-center mt-6 sm:mt-8">
+            <div className="flex gap-4 justify-center">
               <a
                 className="text-white font-bold bg-brand-900 hover:bg-brand-700 py-3 px-8 rounded transition"
                 href="https://github.com/getsynth/unveil"

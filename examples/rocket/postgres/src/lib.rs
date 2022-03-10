@@ -51,7 +51,7 @@ fn rocket() -> Rocket<Build> {
 async fn build_state(factory: &dyn Factory) -> MyState {
     let pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(5)
-        .connect("postgres:password@localhost:5432/postgres")
+        .connect(&factory.get_sql_connection_string().await.unwrap())
         .await
         .unwrap();
     // let pool = factory.get_postgres_connection_pool().await.unwrap();

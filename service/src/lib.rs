@@ -19,7 +19,7 @@ pub use factory::Factory;
 
 #[async_trait]
 pub trait Service: Send + Sync {
-    async fn build(&mut self, _: &dyn Factory) -> Result<(), Error> {
+    fn build(&mut self, _: &dyn Factory) -> Result<(), Error> {
         Ok(())
     }
 
@@ -34,6 +34,7 @@ pub trait IntoService {
 pub struct RocketService<T: Sized> {
     rocket: Option<Rocket<Build>>,
     state_builder: Option<fn(&dyn Factory) -> Pin<Box<dyn Future<Output = T> + Send + '_>>>,
+    runtime: Runtime,
 }
 
 impl IntoService for Rocket<Build> {
@@ -42,6 +43,7 @@ impl IntoService for Rocket<Build> {
         RocketService {
             rocket: Some(self),
             state_builder: None,
+            runtime: Runtime::new().unwrap(),
         }
     }
 }
@@ -58,6 +60,7 @@ impl<T: Send + Sync + 'static> IntoService
         RocketService {
             rocket: Some(self.0),
             state_builder: Some(self.1),
+            runtime: Runtime::new().unwrap(),
         }
     }
 }
@@ -67,9 +70,9 @@ impl<T> Service for RocketService<T>
 where
     T: Send + Sync + 'static,
 {
-    async fn build(&mut self, factory: &dyn Factory) -> Result<(), Error> {
+    fn build(&mut self, factory: &dyn Factory) -> Result<(), Error> {
         if let Some(state_builder) = self.state_builder.take() {
-            let state = state_builder(factory).await;
+            let state = self.runtime.block_on(state_builder(factory));
 
             if let Some(rocket) = self.rocket.take() {
                 self.rocket.replace(rocket.manage(state));
@@ -82,7 +85,6 @@ where
     fn bind(&mut self, addr: SocketAddr) -> Result<(), error::Error> {
         let rocket = self.rocket.take().expect("service has already been bound");
 
-        let runtime = Runtime::new()?;
         let config = rocket::Config {
             address: addr.ip(),
             port: addr.port(),
@@ -91,7 +93,7 @@ where
         };
         let launched = rocket.configure(config).launch();
         println!("before block_on");
-        runtime.block_on(launched)?;
+        self.runtime.block_on(launched)?;
         println!("after block_on");
         Ok(())
     }

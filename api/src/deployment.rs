@@ -138,7 +138,7 @@ impl Deployment {
                     let factory =
                         UnveilFactory::new(&mut db_state, meta.config.clone(), db_context.clone());
 
-                    match loaded.service.build(&factory).await {
+                    match loaded.service.build(&factory) {
                         Err(e) => DeploymentState::Error(e.into()),
                         Ok(_) => {
                             println!("before spawn");

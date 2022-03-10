@@ -241,8 +241,12 @@ impl Api {
             .ensure_success("failed to run deploy");
     }
 
-    pub fn request(&self, sub_path: &str) -> RequestBuilder {
+    pub fn get(&self, sub_path: &str) -> RequestBuilder {
         reqwest::blocking::Client::new().get(format!("http://{}/{}", self.proxy_addr, sub_path))
+    }
+
+    pub fn post(&self, sub_path: &str) -> RequestBuilder {
+        reqwest::blocking::Client::new().post(format!("http://{}/{}", self.proxy_addr, sub_path))
     }
 }
 

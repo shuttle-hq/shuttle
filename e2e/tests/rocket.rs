@@ -8,7 +8,7 @@ fn hello_world() {
     client.deploy("../examples/rocket/hello-world");
 
     let request_text = client
-        .request("hello")
+        .get("hello")
         .header("Host", "hello-world-rocket-app.unveil.sh")
         .send()
         .unwrap()
@@ -23,9 +23,8 @@ fn postgres() {
     let client = helpers::Api::new_docker("postgres", Color::Blue);
     client.deploy("../examples/rocket/postgres");
 
-    let client = reqwest::blocking::Client::new();
     let add_response = client
-        .post("http://localhost:8000/todo")
+        .post("todo")
         .body("{\"note\": \"To the stars\"}")
         .header("Host", "postgres-rocket-app.unveil.sh")
         .send()
@@ -36,7 +35,7 @@ fn postgres() {
     assert_eq!(add_response, "{\"id\":1,\"note\":\"To the stars\"}");
 
     let fetch_response: String = client
-        .get("http://localhost:8000/todo/1")
+        .get("todo/1")
         .header("Host", "postgres-rocket-app.unveil.sh")
         .send()
         .unwrap()

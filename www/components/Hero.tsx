@@ -6,7 +6,7 @@ import { SITE_DESCRIPTION, SITE_TITLE } from "../lib/constants";
 const Hero = () => {
   const { basePath } = useRouter();
   return (
-    <div className="w-full bg-dark-700">
+    <div className="w-full min-h-screen flex flex-col justify-center bg-dark-700">
       <div className="xl:px-12 py-5 mx-auto">
         <div className="p-6 sm:py-8">
           <div className="max-w-3xl m-auto text-center">
@@ -16,16 +16,13 @@ const Hero = () => {
               alt="Shuttle"
             />
 
-            <div className="text-4xl sm:text-5xl md:text-6xl pb-5 font-normal text-gray-200">
+            <div className="text-4xl sm:text-5xl md:text-6xl pb-5 font-bold text-gray-200">
               {SITE_TITLE}
             </div>
-            <div className="text-2xl pb-5 font-normal text-gray-200">
+            <div className="text-xl pb-5 font-normal text-gray-300 px-10">
               {SITE_DESCRIPTION}
             </div>
             <div className="hidden md:flex flex-col justify-center items-center">
-              <div className="text-xl pb-5 font-medium text-gray-200 flex">
-                Try it now:
-              </div>
               <div className="pb-6 flex">
                 <Code code="cargo install shuttle" />
               </div>

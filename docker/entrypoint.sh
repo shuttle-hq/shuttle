@@ -24,8 +24,6 @@ if [[ "$(pg_lsclusters -h | wc -l)" -ne "1" ]]; then
     pg_ctlcluster $PG_VERSION $PG_CLUSTER_NAME start
     su postgres -c "psql -c \"ALTER USER postgres PASSWORD '${PG_PASSWORD}'\""
     pg_ctlcluster $PG_VERSION $PG_CLUSTER_NAME stop
-
-    cp -R /etc/postgresql/$PG_VERSION/$PG_CLUSTER_NAME/* $PG_DATA/
     set +e
 fi
 

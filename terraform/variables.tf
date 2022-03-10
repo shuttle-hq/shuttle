@@ -5,12 +5,12 @@ variable "service_cpu" {
 
 variable "service_memory" {
   type = number
-  default = 8192
+  default = 16384
 }
 
 variable "desired_count" {
   type = number
-  default = 1
+  default = 0
 }
 
 variable "api_container_port" {

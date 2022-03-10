@@ -7,28 +7,26 @@ import NoSsr from "./NoSsr";
 
 type CodeProps = {
   code: string;
-  lang?: string;
 };
 
 const copyToClipboard = (code) => {
   navigator.clipboard.writeText(code);
 };
 
-const Code = ({ code, lang }: CodeProps) => {
-  const language = lang ? lang : "language-javascript";
+const Code = ({ code }: CodeProps) => {
   return (
     <div
-      className="flex flex-grow rounded-md cursor-pointer overflow-x-auto"
+      className="cursor-pointer"
       data-tip
       data-for="copiedTip"
       data-event="click"
       data-event-off="click"
       data-delay-hide="2000"
     >
-      <pre className={`rounded-md flex-grow flex justify-between ${lang}`}>
-        <code className={`${language}`}>$ {code}</code>
+      <pre className={`group rounded-md flex gap-4 justify-between bg-gray-500 p-4`}>
+        <code><span className="select-none">$ </span>{code}</code>
         <FontAwesomeIcon
-          className="h-6"
+          className="h-6 opacity-0 group-hover:opacity-100 transition-opacity"
           icon={faClipboard}
         />
       </pre>

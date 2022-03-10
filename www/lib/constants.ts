@@ -1,8 +1,8 @@
 export const APP_NAME = 'Shuttle'
 
-export const SITE_TITLE = 'Deploying lightweight Rust services to AWS'
+export const SITE_TITLE = 'A cargo command for deploying Rust to AWS'
 
-export const SITE_DESCRIPTION = 'A cargo subcommand for deploying lightweight Rust services to AWS in 30 seconds. Even with databases.'
+export const SITE_DESCRIPTION = 'We\'ve built a lightweight cargo subcommand to deploy a Rocket backend to AWS in 30 seconds. Even with databases.'
 
 export const SITE_URL = 'https://shuttle.rs/'
 

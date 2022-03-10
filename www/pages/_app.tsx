@@ -25,7 +25,6 @@ function GetSynthed({ Component, pageProps }: AppProps) {
     <>
       <Head>
         <title>{SITE_TITLE}</title>
-        <link rel="icon" href="/favicon.ico" />
       </Head>
 
       <DefaultSeo

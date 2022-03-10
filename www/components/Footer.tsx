@@ -6,44 +6,42 @@ import {
   faLinkedin,
 } from "@fortawesome/free-brands-svg-icons";
 import Link from "next/link";
-import Logo from "./Logo";
+import { useRouter } from "next/router";
 
 const Footer = () => {
+  const { basePath } = useRouter();
+
   return (
     <div className="relative w-full bg-gray-600">
       <div className="container w-10/12 xl:w-8/12 xl:px-12 py-5 mx-auto">
-        <div className="pt-16 pb-16 grid grid-cols-1 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-          <div className="sm:col-span-1 md:col-span-2 lg:col-span-4">
-            <Logo classNameLarge="h-16" />
+        <div className="pt-16 pb-16 grid grid-cols-1 sm:grid-cols-12">
+          <div className="sm:col-span-6 md:col-span-6 lg:col-span-8">
+            <div className="min-w-max flex-grow">
+              <Link href="/">
+                <img
+                  alt="Shuttle"
+                  src={`${basePath}/images/logo.png`}
+                  className="h-12"
+                />
+              </Link>
+            </div>
             <div className="flex flex-row">
-              <div className="pt-4 pb-3 grid gap-y-4 grid-rows-1 grid-cols-4">
-                <a
-                  target="_blank"
-                  className="pr-4"
-                  href="https://github.com/getsynth/unveil"
-                >
+              <div className="pt-4 pb-3 grid gap-4 grid-cols-4">
+                <a target="_blank" href="https://github.com/getsynth/unveil">
                   <FontAwesomeIcon
-                    className="h-8 hover:text-white transition"
+                    className="m-auto h-8 hover:text-white transition"
                     icon={faGithub}
                   />
                 </a>
-                <a
-                  target="_blank"
-                  className="pr-4"
-                  href="https://twitter.com/getsynth"
-                >
+                <a target="_blank" href="https://twitter.com/getsynth">
                   <FontAwesomeIcon
-                    className="h-8 hover:text-white transition"
+                    className="m-auto h-8 hover:text-white transition"
                     icon={faTwitter}
                   />
                 </a>
-                <a
-                  target="_blank"
-                  className="pr-4"
-                  href="https://discord.gg/H33rRDTm3p"
-                >
+                <a target="_blank" href="https://discord.gg/H33rRDTm3p">
                   <FontAwesomeIcon
-                    className="h-8 hover:text-white transition"
+                    className="m-auto h-8 hover:text-white transition"
                     icon={faDiscord}
                   />
                 </a>
@@ -52,18 +50,16 @@ const Footer = () => {
                   href="https://www.linkedin.com/company/getsynth/"
                 >
                   <FontAwesomeIcon
-                    className="h-8 hover:text-white transition"
+                    className="m-auto h-8 hover:text-white transition"
                     icon={faLinkedin}
                   />
                 </a>
               </div>
             </div>
           </div>
-          <div>
+          <div className="sm:col-span-3 lg:col-span-2">
             <div className="grid text-dark-300 font-medium grid-rows-4 gap-4 py-4">
-              <div className="text-dark-400 font-semibold font-mono uppercase">
-                Learn
-              </div>
+              <div className="text-dark-400 font-semibold uppercase">Learn</div>
               <div>
                 <Link href="https://github.com/getsynth/unveil">
                   Getting Started
@@ -79,9 +75,9 @@ const Footer = () => {
               </div>
             </div>
           </div>
-          <div>
+          <div className="sm:col-span-3 lg:col-span-2">
             <div className="grid text-dark-300 font-medium grid-rows-2 gap-4 py-4">
-              <div className="text-dark-400 font-semibold font-mono uppercase">
+              <div className="text-dark-400 font-semibold uppercase">
                 Community
               </div>
               <div>

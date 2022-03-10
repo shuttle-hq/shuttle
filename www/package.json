@@ -18,7 +18,6 @@
     "next": "^12.1.0",
     "next-seo": "^5.1.0",
     "posthog-js": "^1.13.13",
-    "prismjs": "^1.23.0",
     "react": "^17.0.2",
     "react-dom": "^17.0.2",
     "react-tooltip": "^4.2.21",

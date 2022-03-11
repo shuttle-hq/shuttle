@@ -1,20 +1,14 @@
 import type { NextRouter } from "next/router";
-import * as Fathom from "fathom-client";
-import posthog from "posthog-js";
-import { SITE_DOMAINS, FATHOM_API_KEY, POSTHOG_API_KEY } from "./constants";
+import { MIXPANEL_TOKEN } from "./constants";
+import mixpanel from "mixpanel-browser";
 
-export function setupFathom(router: NextRouter) {
-  if (process.env.NODE_ENV === "development") {
-    console.warn("Fathom telemetry inhibited due to dev environment");
-    return;
-  }
+mixpanel.init(MIXPANEL_TOKEN);
 
-  Fathom.load(FATHOM_API_KEY, {
-    includedDomains: SITE_DOMAINS,
-  });
+export function setupMixpanel(router: NextRouter) {
+  mixpanel.track("Page View");
 
   function onRouteChangeComplete() {
-    Fathom.trackPageview();
+    mixpanel.track("Page View");
   }
 
   router.events.on("routeChangeComplete", onRouteChangeComplete);
@@ -22,15 +16,4 @@ export function setupFathom(router: NextRouter) {
   return () => {
     router.events.off("routeChangeComplete", onRouteChangeComplete);
   };
-}
-
-export function setupPostHog() {
-  posthog.init(POSTHOG_API_KEY, {
-    api_host: "https://app.posthog.com",
-  });
-  if (process.env.NODE_ENV === "development") {
-    console.warn("PostHog capturing inhibited due to dev environment");
-    posthog.debug();
-    posthog.opt_out_capturing();
-  }
 }

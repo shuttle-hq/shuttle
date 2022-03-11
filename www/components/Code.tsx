@@ -2,14 +2,15 @@ import { faClipboard } from "@fortawesome/free-regular-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import ReactTooltip from "react-tooltip";
 import NoSsr from "./NoSsr";
-
-// Todo should rename this to something more descriptive
+import mixpanel from "mixpanel-browser";
 
 type CodeProps = {
   code: string;
 };
 
 const copyToClipboard = (code) => {
+  mixpanel.track("Copied Code");
+
   navigator.clipboard.writeText(code);
 };
 
@@ -23,8 +24,13 @@ const Code = ({ code }: CodeProps) => {
       data-event-off="click"
       data-delay-hide="2000"
     >
-      <pre className={`group rounded-md flex gap-4 justify-between bg-gray-500 p-4`}>
-        <code><span className="select-none">$ </span>{code}</code>
+      <pre
+        className={`group rounded-md flex gap-4 justify-between bg-gray-500 p-4`}
+      >
+        <code>
+          <span className="select-none">$ </span>
+          {code}
+        </code>
         <FontAwesomeIcon
           className="h-6 opacity-0 group-hover:opacity-100 transition-opacity"
           icon={faClipboard}

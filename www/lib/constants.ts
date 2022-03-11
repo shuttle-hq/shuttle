@@ -8,8 +8,4 @@ export const SITE_URL = 'https://shuttle.rs/'
 
 export const TWITTER_HANDLE = '@getsynth'
 
-export const SITE_DOMAINS = ['www.shuttle.rs', 'shuttle.rs']
-
-export const POSTHOG_API_KEY = 'L-AQtrFVtZGL_PjK2FbFLBR3oXNtfv8OrCD8ObyeBQo'
-
-export const FATHOM_API_KEY = 'QRVYRJEG'
+export const MIXPANEL_TOKEN = 'ea13713300ea92e06107f27762512e57'

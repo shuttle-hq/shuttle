@@ -4,7 +4,7 @@ import React, { useEffect } from "react";
 import { useRouter } from "next/router";
 import Head from "next/head";
 import { DefaultSeo } from "next-seo";
-import { setupFathom, setupPostHog } from "../lib/helpers";
+import { setupMixpanel } from "../lib/helpers";
 import {
   APP_NAME,
   SITE_TITLE,
@@ -16,10 +16,7 @@ import Footer from "../components/Footer";
 
 function GetSynthed({ Component, pageProps }: AppProps) {
   const router = useRouter();
-  useEffect(() => setupFathom(router));
-
-  // Disabled because we do not yet need posthog telemetry on website
-  // useEffect(() => setupPostHog());
+  useEffect(() => setupMixpanel(router));
 
   return (
     <>

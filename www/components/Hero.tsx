@@ -1,6 +1,7 @@
 import { useRouter } from "next/router";
 import Code from "./Code";
 import { SITE_DESCRIPTION, SITE_TITLE } from "../lib/constants";
+import mixpanel from "mixpanel-browser";
 
 const Hero = () => {
   const { basePath } = useRouter();
@@ -34,6 +35,7 @@ const Hero = () => {
 
             <div className="flex gap-4 justify-center">
               <a
+                ref={(el) => el && mixpanel.track_links(el, `Clicked Link`)}
                 className="text-white font-bold bg-brand-900 hover:bg-brand-700 py-3 px-8 rounded transition"
                 href="https://github.com/getsynth/unveil"
               >
@@ -41,6 +43,7 @@ const Hero = () => {
               </a>
 
               <a
+                ref={(el) => el && mixpanel.track_links(el, `Clicked Link`)}
                 className="text-white font-bold bg-[#7777DD] hover:brightness-125 py-3 px-8 rounded transition"
                 href="https://discord.gg/H33rRDTm3p"
                 target="_blank"

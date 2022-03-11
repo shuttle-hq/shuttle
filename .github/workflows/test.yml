@@ -28,4 +28,4 @@ jobs:
         run: mkdir -p ~/.cargo && echo -e "[patch.crates-io]\nunveil-service = { path = \"${GITHUB_WORKSPACE}/service\" }" > ~/.cargo/config.toml
       - name: Build docker
         run: docker build -f ./Dockerfile .
-      - run: cargo test
+      - run: cargo test -- --test-threads 1

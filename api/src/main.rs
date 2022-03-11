@@ -29,7 +29,9 @@ use crate::deployment::DeploymentSystem;
 type ApiResult<T, E> = Result<Json<T>, E>;
 
 
-/// Status API to be used to check if the service is alive
+/// Creates a user if the username is available and returns the corresponding
+/// API key.
+/// Returns an error if the user already exists.
 #[post("/users/<username>")]
 async fn create_user(username: String) -> Result<ApiKey, AuthorizationError> {
     USER_DIRECTORY.create_user(username)

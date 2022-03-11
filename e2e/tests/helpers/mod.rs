@@ -39,7 +39,7 @@ pub struct Api {
 }
 
 pub fn log_lines<R: io::Read, D: std::fmt::Display>(mut reader: R, target: D) {
-    let mut buf = [0; 2 << 17];
+    let mut buf = [0; 2 << 17]; // 128kb
     let mut current_pos = 0;
     loop {
         let n = reader.read(&mut buf[current_pos..]).unwrap();
@@ -49,7 +49,6 @@ pub fn log_lines<R: io::Read, D: std::fmt::Display>(mut reader: R, target: D) {
         current_pos += n;
 
         if buf[current_pos - 1] != b'\n' {
-            println!("byte is: {}", buf[current_pos - 1]);
             continue;
         }
 
@@ -155,7 +154,10 @@ impl Api {
             "-e",
             "UNVEIL_USERS_TOML=/config/users.toml",
             "-v",
-            "./users.toml:/config/users.toml",
+            &format!(
+                "{}/users.toml:/config/users.toml",
+                env!("CARGO_MANIFEST_DIR")
+            ),
             image.as_str(),
         ]);
 

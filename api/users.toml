@@ -4,3 +4,9 @@ projects = [
     'hello-world-rocket-app',
     'postgres-rocket-app',
 ]
+
+
+
+[ci-test]
+name = "ci"
+projects = ["hello-world-rocket-app"]

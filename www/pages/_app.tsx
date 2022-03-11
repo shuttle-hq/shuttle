@@ -12,7 +12,8 @@ import {
   SITE_URL,
   TWITTER_HANDLE,
 } from "../lib/constants";
-import Footer from "../components/Footer";
+import AnnouncementBar from "../components/AnnouncementBar";
+// import Footer from "../components/Footer";
 
 function GetSynthed({ Component, pageProps }: AppProps) {
   const router = useRouter();
@@ -40,8 +41,9 @@ function GetSynthed({ Component, pageProps }: AppProps) {
       />
 
       <div className="text-dark-200 full bg-dark-600">
+        <AnnouncementBar />
         <Component {...pageProps} />
-        <Footer />
+        {/* <Footer /> */}
       </div>
     </>
   );

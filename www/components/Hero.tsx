@@ -6,7 +6,7 @@ import mixpanel from "mixpanel-browser";
 const Hero = () => {
   const { basePath } = useRouter();
   return (
-    <div className="w-full min-h-screen flex flex-col justify-center bg-dark-700">
+    <div className="w-full min-h-screen -mt-8 flex flex-col justify-center bg-dark-700">
       <div className="xl:px-12 py-5 mx-auto">
         <div className="p-6 sm:py-8">
           <div className="max-w-3xl m-auto text-center flex flex-col gap-8 sm:gap-11">
@@ -16,7 +16,7 @@ const Hero = () => {
                 src={`${basePath}/images/logo.png`}
                 alt="Shuttle"
               />
-              <span className="bg-brand-900 text-white absolute -bottom-4 right-0 text-base px-2 rounded">
+              <span className="bg-brand-orange1 text-dark-700 font-bold absolute scale-[.8] bottom-[-26px] right-[-5px] text-base px-[10px] py-[2px] rounded">
                 ALPHA
               </span>
             </div>
@@ -44,7 +44,7 @@ const Hero = () => {
 
               <a
                 ref={(el) => el && mixpanel.track_links(el, `Clicked Link`)}
-                className="text-white font-bold bg-[#7777DD] hover:brightness-125 py-3 px-8 rounded transition"
+                className="text-white font-bold bg-brand-purple1 hover:brightness-125 py-3 px-8 rounded transition"
                 href="https://discord.gg/H33rRDTm3p"
                 target="_blank"
               >

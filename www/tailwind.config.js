@@ -5,8 +5,10 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        "accent-1": "#fae15c",
-        "accent-2": "#f25100",
+        "brand-yellow1": "#fae15c",
+        "brand-orange1": "#ff8a3f",
+        "brand-orange2": "#f25100",
+        "brand-purple1": "#7777DD",
         brand: {
           100: "#fae15c",
           200: "#fad149",

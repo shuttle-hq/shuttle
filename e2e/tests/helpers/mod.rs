@@ -39,7 +39,7 @@ pub struct Api {
 }
 
 pub fn log_lines<R: io::Read, D: std::fmt::Display>(mut reader: R, target: D) {
-    let mut buf = [0; 6048];
+    let mut buf = [0; 2 << 17];
     let mut current_pos = 0;
     loop {
         let n = reader.read(&mut buf[current_pos..]).unwrap();
@@ -120,15 +120,15 @@ impl Api {
 
         let api_target = format!("   {} api", api.target);
 
-        // let mut build = Command::new("docker");
+        let mut build = Command::new("docker");
 
-        // build
-        //     .args(["build", "-f", "./Dockerfile", "."])
-        //     .current_dir("../");
+        build
+            .args(["build", "-f", "./Dockerfile", "."])
+            .current_dir("../");
 
-        // spawn_and_log(&mut build, api_target.as_str(), Color::White)
-        //     .wait()
-        //     .ensure_success("failed to build `api` image");
+        spawn_and_log(&mut build, api_target.as_str(), Color::White)
+            .wait()
+            .ensure_success("failed to build `api` image");
 
         let output = Command::new("docker")
             .args(["build", "-q", "-f", "./Dockerfile", "."])

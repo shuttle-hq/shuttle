@@ -49,6 +49,7 @@ pub fn log_lines<R: io::Read, D: std::fmt::Display>(mut reader: R, target: D) {
         current_pos += n;
 
         if buf[current_pos - 1] != b'\n' {
+            println!("byte is: {}", buf[current_pos - 1]);
             continue;
         }
 

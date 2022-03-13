@@ -47,7 +47,7 @@ resource "aws_lb_target_group" "api" {
 
   vpc_id = aws_vpc.backend.id
 
-  target_type = "ip"
+  target_type = "instance"
 }
 
 resource "aws_lb_listener" "api" {
@@ -143,7 +143,7 @@ resource "aws_lb_target_group" "user" {
 
   vpc_id = aws_vpc.backend.id
 
-  target_type = "ip"
+  target_type = "instance"
 }
 
 resource "aws_lb_target_group" "postgres" {
@@ -162,6 +162,5 @@ resource "aws_lb_target_group" "postgres" {
 
   vpc_id = aws_vpc.backend.id
 
-  target_type = "ip"
+  target_type = "instance"
 }
-

@@ -9,7 +9,7 @@ fn hello_world() {
 
     let request_text = client
         .get("hello")
-        .header("Host", "hello-world-rocket-app.unveil.sh")
+        .header("Host", "hello-world-rocket-app.shuttle.sh")
         .send()
         .unwrap()
         .text()
@@ -26,7 +26,7 @@ fn postgres() {
     let add_response = client
         .post("todo")
         .body("{\"note\": \"To the stars\"}")
-        .header("Host", "postgres-rocket-app.unveil.sh")
+        .header("Host", "postgres-rocket-app.shuttle.sh")
         .send()
         .unwrap()
         .text()
@@ -36,7 +36,7 @@ fn postgres() {
 
     let fetch_response: String = client
         .get("todo/1")
-        .header("Host", "postgres-rocket-app.unveil.sh")
+        .header("Host", "postgres-rocket-app.shuttle.sh")
         .send()
         .unwrap()
         .text()

@@ -16,7 +16,7 @@ pub const SHUTTLE_PROJECT_HEADER: &str = "Shuttle-Project";
 #[cfg(debug_assertions)]
 lazy_static! {
     pub static ref API_URL: String =
-        std::env::var("UNVEIL_API").unwrap_or_else(|_| "http://localhost:8001".to_string());
+        std::env::var("SHUTTLE_API").unwrap_or_else(|_| "http://localhost:8001".to_string());
 }
 
 #[cfg(not(debug_assertions))]

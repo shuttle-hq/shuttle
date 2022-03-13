@@ -4,10 +4,10 @@ extern crate rocket;
 use rocket::{response::status::BadRequest, serde::json::Json, Build, Rocket, State};
 use serde::{Deserialize, Serialize};
 use sqlx::{Executor, FromRow, PgPool};
-use unveil_service::Factory;
+use shuttle_service::Factory;
 
 #[macro_use]
-extern crate unveil_service;
+extern crate shuttle_service;
 
 #[get("/<id>")]
 async fn retrieve(id: i32, state: &State<MyState>) -> Result<Json<Todo>, BadRequest<String>> {
@@ -42,7 +42,7 @@ fn rocket() -> Rocket<Build> {
     rocket::build().mount("/todo", routes![retrieve, add])
 }
 
-async fn build_state(factory: &mut dyn Factory) -> Result<MyState, unveil_service::Error> {
+async fn build_state(factory: &mut dyn Factory) -> Result<MyState, shuttle_service::Error> {
     let connection_string = factory.get_sql_connection_string().await?;
     let pool = sqlx::postgres::PgPoolOptions::new()
         .min_connections(1)

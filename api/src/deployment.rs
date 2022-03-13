@@ -137,25 +137,26 @@ impl Deployment {
                     let mut db_state = database::State::new(&meta.config, db_context);
 
                     // Pre-emptively allocate a dabatase to work around a deadlock issue with sqlx connection pools
+                    // When .build is called, the db_context's connection pool and the inner connection pool instantiated
+                    // by the Service seem to collide and lead to a deadlock. I wonder if the problem is that we have, once again,
+                    // futures on one part of the FFI boundary being run by a runtime on the other (in this case, the pool in the db_state
+                    // lives in `api` but are driven in `postgres` by a runtime in `postgres`).
                     db_state.request();
-                    db_state.ensure().await.unwrap();
 
-                    let mut factory = UnveilFactory::new(&mut db_state);
-
-                    match loaded.service.build(&mut factory) {
-                        Err(e) => {
-                            debug!("{}: factory phase FAILED: {:?}", meta.config.name(), e);
-                            DeploymentState::Error(e.into())
-                        },
-                        Ok(_) => {
-                            debug!("{}: factory phase DONE", meta.config.name());
-                            match db_state.ensure().await {
-                                Err(e) => DeploymentState::Error(e.into()),
-                                _ => {
+                    match db_state.ensure().await {
+                        Err(e) => DeploymentState::Error(e.into()),
+                        Ok(()) => {
+                            let mut factory = UnveilFactory::new(&mut db_state);
+                            match loaded.service.build(&mut factory) {
+                                Err(e) => {
+                                    debug!("{}: factory phase FAILED: {:?}", meta.config.name(), e);
+                                    DeploymentState::Error(e.into()) },
+                                Ok(_) => {
+                                    debug!("{}: factory phase DONE", meta.config.name());
                                     // TODO: upon resolving this future, change the status of the deployment
                                     // We cannot use spawn here since that blocks the api completely. We suspect this is because `bind` makes a blocking call,
                                     // however that does not completely makes sense as the blocking call is made on another runtime.
-                                    let handle = tokio::task::spawn_blocking(move || {
+                                    let handle = tokio::task::spawn_blocking(move | | {
                                         loaded
                                             .service
                                             .bind(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port))
@@ -164,8 +165,8 @@ impl Deployment {
                                     // Remove stale active deployments
                                     if let Some(stale_id) = context.router.promote(meta.host, meta.id).await
                                     {
-                                        debug!("removing stale deployment `{}`", &stale_id);
-                                        context.deployments.write().await.remove(&stale_id);
+                                        debug!("removing stale deployment `{}`", & stale_id);
+                                        context.deployments.write().await.remove( & stale_id);
                                     }
 
                                     DeploymentState::deployed(loaded.so, port, handle, db_state)

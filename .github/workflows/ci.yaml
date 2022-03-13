@@ -6,7 +6,7 @@ on:
 
 jobs:
   Build-And-Deploy:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     env:
       CONTAINER_REGISTRY: 506436569174.dkr.ecr.eu-west-2.amazonaws.com/backend
       BACKEND_CLUSTER: unveil-ecs-cluster
@@ -30,4 +30,5 @@ jobs:
         tags: ${{ env.CONTAINER_REGISTRY }}:${{ github.sha }},${{ env.CONTAINER_REGISTRY }}:latest
     - name: Deploy Image
       run: |
-        aws ecs update-service --cluster $BACKEND_CLUSTER --service $BACKEND_SERVICE --force-new-deployment
+        ssh ubuntu@prod sudo systemctl restart unveil-backend.service
+        

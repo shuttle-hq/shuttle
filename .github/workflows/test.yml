@@ -12,10 +12,7 @@ on:
 
 jobs:
   cargo_test:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest]
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
@@ -23,7 +20,16 @@ jobs:
           toolchain: nightly
           override: true
       - name: Make config file
+<<<<<<< HEAD
         run: mkdir -p ~/.config/shuttle/ && echo "api_key = \"ci-test\"" > ~/.config/shuttle/config.toml
       - name: Use local shuttle-service
         run: mkdir -p ~/.cargo && echo -e "[patch.crates-io]\nshuttle-service = { path = \"${GITHUB_WORKSPACE}/service\" }" > ~/.cargo/config.toml
       - run: cargo test
+=======
+        run: mkdir -p ~/.config/unveil/ && echo "api_key = \"ci-test\"" > ~/.config/unveil/config.toml
+      - name: Use local unveil-service
+        run: mkdir -p ~/.cargo && echo -e "[patch.crates-io]\nunveil-service = { path = \"${GITHUB_WORKSPACE}/service\" }" > ~/.cargo/config.toml
+      - name: Build docker
+        run: docker build -f ./Dockerfile .
+      - run: cargo test -- --nocapture
+>>>>>>> main

@@ -1,6 +1,9 @@
 #[macro_use]
 extern crate rocket;
 
+#[macro_use]
+extern crate log;
+
 mod args;
 mod auth;
 mod build;
@@ -22,11 +25,20 @@ use uuid::Uuid;
 
 
 use crate::args::Args;
-use crate::auth::User;
+use crate::auth::{ApiKey, AuthorizationError, User, USER_DIRECTORY};
 use crate::build::{BuildSystem, FsBuildSystem};
 use crate::deployment::DeploymentSystem;
 
 type ApiResult<T, E> = Result<Json<T>, E>;
+
+
+/// Creates a user if the username is available and returns the corresponding
+/// API key.
+/// Returns an error if the user already exists.
+#[post("/users/<username>")]
+async fn create_user(username: String) -> Result<ApiKey, AuthorizationError> {
+    USER_DIRECTORY.create_user(username)
+}
 
 /// Status API to be used to check if the service is alive
 #[get("/status")]
@@ -98,7 +110,7 @@ async fn create_project(
     project: ProjectConfig,
     user: User,
 ) -> ApiResult<DeploymentMeta, DeploymentApiError> {
-    validate_user_for_project(&user, project.name())?;
+    USER_DIRECTORY.validate_or_create_project(&user, project.name())?;
 
     let deployment = state
         .deployment_manager
@@ -107,8 +119,8 @@ async fn create_project(
     Ok(Json(deployment))
 }
 
-fn validate_user_for_project(user: &User, project_name: &str) -> Result<(), DeploymentApiError> {
-    if project_name != user.project_name {
+fn validate_user_for_project(user: &User, project_name: &String) -> Result<(), DeploymentApiError> {
+    if !user.projects.contains(project_name) {
         log::warn!(
             "failed to authenticate user {:?} for project `{}`",
             &user,
@@ -127,7 +139,7 @@ fn validate_user_for_deployment(
     user: &User,
     meta: &DeploymentMeta,
 ) -> Result<(), DeploymentApiError> {
-    if meta.config.name() != &user.project_name {
+    if !user.projects.contains(meta.config.name()) {
         log::warn!(
             "failed to authenticate user {:?} for deployment `{}`",
             &user,
@@ -150,8 +162,8 @@ struct ApiState {
 #[launch]
 async fn rocket() -> _ {
     env_logger::Builder::new()
-        .filter_module("rocket", log::LevelFilter::Info)
-        .filter_module("_", log::LevelFilter::Info)
+        .filter_module("rocket", log::LevelFilter::Warn)
+        .filter_module("_", log::LevelFilter::Warn)
         .filter_module("api", log::LevelFilter::Debug)
         .init();
 
@@ -177,6 +189,7 @@ async fn rocket() -> _ {
                 delete_project,
                 create_project,
                 get_project,
+                create_user,
                 status
             ],
         )

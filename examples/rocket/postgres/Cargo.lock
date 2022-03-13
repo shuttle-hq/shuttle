@@ -569,15 +569,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "hello-world"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "rocket",
- "unveil-service",
-]
-
-[[package]]
 name = "hermit-abi"
 version = "0.1.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1033,6 +1024,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "58893f751c9b0412871a09abd62ecd2a00298c6c83befa223ef98c52aef40cbe"
 
 [[package]]
+name = "postgres"
+version = "0.1.0"
+dependencies = [
+ "rocket",
+ "serde",
+ "sqlx",
+ "unveil-service",
+]
+
+[[package]]
 name = "ppv-lite86"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1204,6 +1205,7 @@ dependencies = [
  "rocket_codegen",
  "rocket_http",
  "serde",
+ "serde_json",
  "state",
  "tempfile",
  "time",
@@ -1965,8 +1967,6 @@ checksum = "39ec24b3121d976906ece63c9daad25b85969647682eee313cb5779fdd69e14e"
 [[package]]
 name = "unveil-service"
 version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "495100ea706c2c53cbd5dc1fb6ef9271cd46650e694763c8e4f7e20d6f586568"
 dependencies = [
  "async-trait",
  "rocket",

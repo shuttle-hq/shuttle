@@ -45,6 +45,7 @@ fn rocket() -> Rocket<Build> {
 async fn build_state(factory: &dyn Factory) -> Result<MyState, unveil_service::Error> {
     let connection_string = factory.get_sql_connection_string().await?;
     let pool = sqlx::postgres::PgPoolOptions::new()
+        .min_connections(1)
         .max_connections(5)
         .connect(&connection_string)
         .await?;

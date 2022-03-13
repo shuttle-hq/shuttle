@@ -23,4 +23,6 @@ jobs:
         run: mkdir -p ~/.config/unveil/ && echo "api_key = \"ci-test\"" > ~/.config/unveil/config.toml
       - name: Use local unveil-service
         run: mkdir -p ~/.cargo && echo -e "[patch.crates-io]\nunveil-service = { path = \"${GITHUB_WORKSPACE}/service\" }" > ~/.cargo/config.toml
-      - run: cargo test
+      - name: Build docker
+        run: docker build -f ./Dockerfile .
+      - run: cargo test -- --nocapture

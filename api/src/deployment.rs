@@ -1,4 +1,9 @@
+use crate::build::Build;
+use crate::{BuildSystem, UnveilFactory};
+use anyhow::{anyhow, Context as AnyhowContext};
 use core::default::Default;
+use lib::project::ProjectConfig;
+use lib::{DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, Port};
 use libloading::Library;
 use rocket::data::ByteUnit;
 use rocket::tokio;
@@ -10,13 +15,8 @@ use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use anyhow::{anyhow, Context as AnyhowContext};
-use tokio::task::JoinHandle;
 use tokio::sync::RwLock;
-use crate::build::Build;
-use crate::{BuildSystem, UnveilFactory};
-use lib::{DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, Port};
-use lib::project::ProjectConfig;
+use tokio::task::JoinHandle;
 
 use crate::database;
 use crate::router::Router;
@@ -33,7 +33,7 @@ impl Deployment {
     fn new(meta: DeploymentMeta, state: DeploymentState) -> Self {
         Self {
             meta: Arc::new(RwLock::new(meta)),
-            state: RwLock::new(state)
+            state: RwLock::new(state),
         }
     }
 
@@ -47,13 +47,16 @@ impl Deployment {
     /// Initialise a deployment from a directory
     fn from_directory(dir: DirEntry) -> Result<Self, anyhow::Error> {
         let project_path = dir.path();
-        let project_name = dir.file_name()
+        let project_name = dir
+            .file_name()
             .into_string()
             .map_err(|os_str| anyhow!("could not parse project name `{:?}` to string", os_str))?;
         // find marker which points to so file
         let marker_path = project_path.join(".unveil_marker");
-        let so_path_str = std::fs::read(&marker_path)
-            .context(anyhow!("could not find so marker file at {:?}", marker_path))?;
+        let so_path_str = std::fs::read(&marker_path).context(anyhow!(
+            "could not find so marker file at {:?}",
+            marker_path
+        ))?;
         let so_path: PathBuf = String::from_utf8_lossy(&so_path_str)
             .parse()
             .context("could not parse contents of marker file to a valid path")?;
@@ -65,7 +68,7 @@ impl Deployment {
 
     /// Gets a `clone`ed copy of the metadata.
     pub(crate) async fn meta(&self) -> DeploymentMeta {
-        log::debug!("trying to get meta");
+        trace!("trying to get meta");
         self.meta.read().await.clone()
     }
 
@@ -76,7 +79,9 @@ impl Deployment {
             DeploymentState::Queued(_) | DeploymentState::Built(_) | DeploymentState::Loaded(_) => {
                 false
             }
-            DeploymentState::Deployed(_) | DeploymentState::Error(_) | DeploymentState::Deleted => true,
+            DeploymentState::Deployed(_) | DeploymentState::Error(_) | DeploymentState::Deleted => {
+                true
+            }
         }
     }
 
@@ -84,13 +89,13 @@ impl Deployment {
     /// is in a terminal state.
     pub(crate) async fn advance(&self, context: &Context, db_context: &database::Context) {
         {
-            log::debug!("waiting to get write on the state");
+            trace!("waiting to get write on the state");
             let meta = self.meta().await;
             let mut state = self.state.write().await;
 
             *state = match state.take() {
                 DeploymentState::Queued(queued) => {
-                    log::debug!("deployment '{}' build starting...", &meta.id);
+                    debug!("deployment '{}' build starting...", &meta.id);
 
                     let console_writer = BuildOutputWriter::new(self.meta.clone());
                     match context
@@ -106,7 +111,7 @@ impl Deployment {
                     }
                 }
                 DeploymentState::Built(built) => {
-                    log::debug!(
+                    debug!(
                         "deployment '{}' loading shared object and service...",
                         &meta.id
                     );
@@ -114,7 +119,7 @@ impl Deployment {
                     match load_service_from_so_file(&built.build.so_path) {
                         Ok((svc, so)) => DeploymentState::loaded(so, svc),
                         Err(e) => {
-                            log::debug!("failed to load with error: {}", &e);
+                            debug!("failed to load with error: {}", &e);
                             DeploymentState::Error(e)
                         }
                     }
@@ -122,35 +127,51 @@ impl Deployment {
                 DeploymentState::Loaded(mut loaded) => {
                     let port = identify_free_port();
 
-                    log::debug!(
+                    debug!(
                         "deployment '{}' getting deployed on port {}...",
                         meta.id,
                         port
                     );
 
-                    let mut db_state = database::State::default();
+                    debug!("{}: factory phase", meta.config.name());
+                    let mut db_state = database::State::new(&meta.config, db_context);
 
-                    let factory =
-                        UnveilFactory::new(&mut db_state, meta.config.clone(), db_context.clone());
+                    // Pre-emptively allocate a dabatase to work around a deadlock issue with sqlx connection pools
+                    // When .build is called, the db_context's connection pool and the inner connection pool instantiated
+                    // by the Service seem to collide and lead to a deadlock. I wonder if the problem is that we have, once again,
+                    // futures on one part of the FFI boundary being run by a runtime on the other (in this case, the pool in the db_state
+                    // lives in `api` but are driven in `postgres` by a runtime in `postgres`).
+                    db_state.request();
 
-                    match loaded.service.build(&factory).await {
+                    match db_state.ensure().await {
                         Err(e) => DeploymentState::Error(e.into()),
-                        Ok(_) => {
-                            let serve_task = loaded
-                                .service
-                                .bind(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port));
+                        Ok(()) => {
+                            let mut factory = UnveilFactory::new(&mut db_state);
+                            match loaded.service.build(&mut factory) {
+                                Err(e) => {
+                                    debug!("{}: factory phase FAILED: {:?}", meta.config.name(), e);
+                                    DeploymentState::Error(e.into()) },
+                                Ok(_) => {
+                                    debug!("{}: factory phase DONE", meta.config.name());
+                                    // TODO: upon resolving this future, change the status of the deployment
+                                    // We cannot use spawn here since that blocks the api completely. We suspect this is because `bind` makes a blocking call,
+                                    // however that does not completely makes sense as the blocking call is made on another runtime.
+                                    let handle = tokio::task::spawn_blocking(move | | {
+                                        loaded
+                                            .service
+                                            .bind(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port))
+                                    });
 
-                            // TODO: upon resolving this future, change the status of the deployment
-                            let handle = tokio::spawn(serve_task);
+                                    // Remove stale active deployments
+                                    if let Some(stale_id) = context.router.promote(meta.host, meta.id).await
+                                    {
+                                        debug!("removing stale deployment `{}`", & stale_id);
+                                        context.deployments.write().await.remove( & stale_id);
+                                    }
 
-                            // Remove stale active deployments
-                            if let Some(stale_id) = context.router.promote(meta.host, meta.id).await {
-                                log::debug!("removing stale deployment `{}`", &stale_id);
-                                context.deployments.write().await.remove(&stale_id);
+                                    DeploymentState::deployed(loaded.so, port, handle, db_state)
+                                }
                             }
-
-                            DeploymentState::deployed(loaded.so, port, handle, db_state)
-
                         }
                     }
                 }
@@ -289,23 +310,23 @@ impl JobQueue {
         db_context: database::Context,
         queue: Arc<JobQueue>,
     ) {
-        log::debug!("loading deployments into job processor");
+        debug!("loading deployments into job processor");
         for deployment in context.deployments.read().await.values() {
             queue.push(deployment.clone());
-            log::debug!("loading deployment: {:?}", deployment.meta);
+            debug!("loading deployment: {:?}", deployment.meta);
         }
-        log::debug!("starting job processor loop");
+        debug!("starting job processor loop");
         loop {
             if let Some(deployment) = queue.pop() {
                 let id = deployment.meta().await.id;
 
-                log::debug!("started deployment job for id: '{}'", id);
+                debug!("started deployment job for id: '{}'", id);
 
                 while !deployment.deployment_finished().await {
                     deployment.advance(&context, &db_context).await;
                 }
 
-                log::debug!("ended deployment job for id: '{}'", id);
+                debug!("ended deployment job for id: '{}'", id);
             } else {
                 tokio::time::sleep(Duration::from_millis(50)).await
             }
@@ -325,11 +346,9 @@ impl DeploymentSystem {
     pub(crate) async fn new(build_system: Box<dyn BuildSystem>) -> Self {
         let router: Arc<Router> = Default::default();
 
-        let deployments = Arc::new(
-            RwLock::new(
-                Self::initialise_from_fs(&build_system.fs_root()).await
-            )
-        );
+        let deployments = Arc::new(RwLock::new(
+            Self::initialise_from_fs(&build_system.fs_root()).await,
+        ));
 
         let context = Context {
             router: router.clone(),
@@ -353,19 +372,20 @@ impl DeploymentSystem {
         let mut deployments = HashMap::default();
         for project_dir in std::fs::read_dir(fs_root)
             .unwrap() // safety: api can read the fs root dir
-            .into_iter() {
+            .into_iter()
+        {
             let project_dir = match project_dir {
                 Ok(project_dir) => project_dir,
                 Err(e) => {
-                    log::warn!("failed to read directory for project with error `{:?}`", e);
-                    log::warn!("skipping...");
+                    warn!("failed to read directory for project with error `{:?}`", e);
+                    warn!("skipping...");
                     continue;
                 }
             };
             let project_name = project_dir.file_name();
             match Deployment::from_directory(project_dir) {
                 Err(e) => {
-                    log::warn!(
+                    warn!(
                         "failed to re-create deployment for project `{:?}` with error: {:?}",
                         project_name,
                         e
@@ -380,7 +400,6 @@ impl DeploymentSystem {
         }
         deployments
     }
-
 
     /// Returns the port for a given host. If the host does not exist, returns
     /// `None`.
@@ -494,7 +513,7 @@ impl DeploymentSystem {
             .to_vec();
 
         let deployment = Arc::new(Deployment::from_bytes(&project_config, crate_bytes));
-      
+
         let info = deployment.meta().await;
 
         self.deployments
@@ -562,7 +581,7 @@ enum DeploymentState {
     /// A state indicating that the user has intentionally terminated this
     /// deployment
     #[allow(dead_code)]
-    Deleted
+    Deleted,
 }
 
 impl DeploymentState {
@@ -582,12 +601,7 @@ impl DeploymentState {
         Self::Loaded(LoadedState { service, so })
     }
 
-    fn deployed(
-        so: Library,
-        port: Port,
-        handle: ServeHandle,
-        db_state: database::State,
-    ) -> Self {
+    fn deployed(so: Library, port: Port, handle: ServeHandle, db_state: database::State) -> Self {
         Self::Deployed(DeployedState {
             so,
             port,
@@ -603,7 +617,7 @@ impl DeploymentState {
             DeploymentState::Loaded(_) => DeploymentStateMeta::Loaded,
             DeploymentState::Deployed(_) => DeploymentStateMeta::Deployed,
             DeploymentState::Error(e) => DeploymentStateMeta::Error(format!("{:#?}", e)),
-            DeploymentState::Deleted => DeploymentStateMeta::Deleted
+            DeploymentState::Deleted => DeploymentStateMeta::Deleted,
         }
     }
 }

@@ -1,4 +1,4 @@
-# api key / user mapping are defined like this.
+# api key / user mappings for tests.
 
 [ci-test]
 name = "ci"

@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate rocket;
 
-use rocket::{Rocket, Build};
+use rocket::{Build, Rocket};
 
 #[macro_use]
 extern crate unveil_service;

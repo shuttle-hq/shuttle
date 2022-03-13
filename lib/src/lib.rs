@@ -1,20 +1,28 @@
 pub mod project;
 
 use chrono::{DateTime, Utc};
+use lazy_static::lazy_static;
+use project::ProjectConfig;
 use rocket::http::Status;
-use rocket::{Responder};
+use rocket::Responder;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use uuid::Uuid;
-use project::ProjectConfig;
+
+extern crate lazy_static;
 
 pub const UNVEIL_PROJECT_HEADER: &str = "Unveil-Project";
 
 #[cfg(debug_assertions)]
-pub const API_URL: &str = "http://localhost:8001";
+lazy_static! {
+    pub static ref API_URL: String =
+        std::env::var("UNVEIL_API").unwrap_or_else(|_| "http://localhost:8001".to_string());
+}
 
 #[cfg(not(debug_assertions))]
-pub const API_URL: &'static str = "https://api.shuttle.rs";
+lazy_static! {
+    pub static ref API_URL: String = "https://api.shuttle.rs".to_string();
+}
 
 pub type ApiKey = String;
 pub type Host = String;
@@ -90,7 +98,12 @@ impl Display for DeploymentMeta {
         Host:               {}
         Created At:         {}{}
         "#,
-            self.config.name(), self.id, self.state, self.host, self.created_at, db
+            self.config.name(),
+            self.id,
+            self.state,
+            self.host,
+            self.created_at,
+            db
         )
     }
 }
@@ -103,6 +116,13 @@ pub struct DatabaseReadyInfo {
 }
 
 impl DatabaseReadyInfo {
+    pub fn new(role_name: String, role_password: String, database_name: String) -> Self {
+        Self {
+            role_name,
+            role_password,
+            database_name
+        }
+    }
     pub fn connection_string(&self, ip: &str) -> String {
         format!(
             "postgres://{}:{}@{}/{}",
@@ -119,7 +139,7 @@ pub enum DeploymentStateMeta {
     Loaded,
     Deployed,
     Error(String),
-    Deleted
+    Deleted,
 }
 
 impl Display for DeploymentStateMeta {
@@ -130,7 +150,7 @@ impl Display for DeploymentStateMeta {
             DeploymentStateMeta::Loaded => "LOADED".to_string(),
             DeploymentStateMeta::Deployed => "DEPLOYED".to_string(),
             DeploymentStateMeta::Error(msg) => format!("ERROR: {}", &msg),
-            DeploymentStateMeta::Deleted => "DELETED".to_string()
+            DeploymentStateMeta::Deleted => "DELETED".to_string(),
         };
         write!(f, "{}", s)
     }

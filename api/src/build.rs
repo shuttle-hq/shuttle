@@ -9,7 +9,6 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use uuid::Uuid;
 
-
 #[cfg(debug_assertions)]
 pub const DEFAULT_FS_ROOT: &'static str = "/tmp/unveil/crates/";
 
@@ -20,7 +19,6 @@ pub const DEFAULT_FS_ROOT: &'static str = "/var/lib/unveil/crates/";
 pub(crate) struct Build {
     pub(crate) so_path: PathBuf,
 }
-
 
 // remove the trait at some point
 #[async_trait]
@@ -82,14 +80,14 @@ impl BuildSystem for FsBuildSystem {
 
         // project path
         let project_path = self.project_path(project_name)?;
-        log::debug!("Project path: {}", project_path.display());
+        debug!("Project path: {}", project_path.display());
 
         // clear directory
         clear_project_dir(&project_path)?;
 
         // crate path
         let crate_path = crate_location(&project_path, project_name);
-        log::debug!("Crate path: {}", crate_path.display());
+        debug!("Crate path: {}", crate_path.display());
 
         // create target file
         let mut target_file = tokio::fs::File::create(&crate_path).await?;
@@ -126,16 +124,13 @@ fn create_so_marker(project_path: &Path, so_path: &Path) {
     std::fs::write(&marker_path, so_path.to_str().unwrap()).unwrap();
 }
 
-
 /// Copies the original `so` file to the project directory with a random name
 /// to appease `libloading`.
 fn create_unique_named_so_file(project_path: &Path, so_path: &Path) -> Result<PathBuf> {
     let so_unique_path = project_path.join(&format!("{}.so", Uuid::new_v4()));
-    std::fs::copy(so_path,&so_unique_path)?;
+    std::fs::copy(so_path, &so_unique_path)?;
     Ok(so_unique_path)
 }
-
-
 
 /// Clear everything which is not the target folder from the project path
 fn clear_project_dir(project_path: &Path) -> Result<()> {
@@ -146,7 +141,7 @@ fn clear_project_dir(project_path: &Path) -> Result<()> {
         .filter(|dir| dir.file_name() != "target")
         .for_each(|dir| {
             if let Ok(file) = dir.file_type() {
-                log::debug!("{:?}", dir);
+                debug!("{:?}", dir);
                 if file.is_dir() {
                     std::fs::remove_dir_all(&dir.path()).unwrap();
                 } else if file.is_file() {
@@ -169,13 +164,13 @@ fn crate_location(project_path: &Path, project_name: &str) -> PathBuf {
 /// into the project_path
 fn extract_tarball(crate_path: &Path, project_path: &Path) -> Result<()> {
     Command::new("tar")
-        .arg("-xzvf")               // extract
+        .arg("-xzvf") // extract
         .arg(crate_path)
-        .arg("-C")                  // target
+        .arg("-C") // target
         .arg(project_path)
-        .arg("--strip-components")  // remove top-level directory
+        .arg("--strip-components") // remove top-level directory
         .arg("1")
-        .arg("--touch")             // touch to update mtime for cargo
+        .arg("--touch") // touch to update mtime for cargo
         .output()?;
     Ok(())
 }

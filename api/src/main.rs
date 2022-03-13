@@ -1,6 +1,9 @@
 #[macro_use]
 extern crate rocket;
 
+#[macro_use]
+extern crate log;
+
 mod args;
 mod auth;
 mod build;
@@ -159,8 +162,8 @@ struct ApiState {
 #[launch]
 async fn rocket() -> _ {
     env_logger::Builder::new()
-        .filter_module("rocket", log::LevelFilter::Info)
-        .filter_module("_", log::LevelFilter::Info)
+        .filter_module("rocket", log::LevelFilter::Warn)
+        .filter_module("_", log::LevelFilter::Warn)
         .filter_module("api", log::LevelFilter::Debug)
         .init();
 

@@ -21,8 +21,8 @@ FROM runtime
 <<<<<<< HEAD
 COPY --from=builder /app/target/release/api /usr/local/bin/shuttle-backend
 =======
-RUN echo "[patch.crates-io]\nunveil-service = { path = \"/app/service\" }" > $CARGO_HOME/config.toml
-COPY --from=builder /app/target/debug/api /usr/local/bin/unveil-backend
+RUN echo "[patch.crates-io]\nshuttle-service = { path = \"/app/service\" }" > $CARGO_HOME/config.toml
+COPY --from=builder /app/target/debug/api /usr/local/bin/shuttle-backend
 COPY --from=builder /app/service /app/service
 >>>>>>> main
 COPY docker/entrypoint.sh /bin/entrypoint.sh

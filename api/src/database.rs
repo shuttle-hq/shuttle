@@ -57,26 +57,10 @@ impl State {
                         .execute(&ctx.sudo_pool)
                         .await?;
 
-                    log::debug!(
+                    debug!(
                         "created new role '{}' in database for project '{}'",
                         role_name,
                         name
-                    );
-
-                    // Create the database (owned by the new role):
-
-                    let create_database_query = format!(
-                        "CREATE DATABASE \"{}\" OWNER '{}'",
-                        database_name, role_name
-                    );
-                    sqlx::query(&create_database_query)
-                        .execute(&ctx.sudo_pool)
-                        .await?;
-
-                    log::debug!(
-                        "created database '{}' belonging to '{}'",
-                        database_name,
-                        role_name
                     );
                 } else {
                     // If the role already exists then change its password:
@@ -89,10 +73,36 @@ impl State {
                         .execute(&ctx.sudo_pool)
                         .await?;
 
-                    log::debug!(
+                    debug!(
                         "role '{}' already exists so updating their password",
                         role_name
                     );
+                }
+
+                // Since user creation is not atomic, need to separately check for DB existence
+                let get_database_query = "SELECT 1 FROM pg_database WHERE datname = $1";
+                let database = sqlx::query(get_database_query)
+                    .bind(&database_name)
+                    .fetch_all(&ctx.sudo_pool)
+                    .await?;
+                if database.is_empty() {
+                    debug!("database '{}' does not exist, creating", database_name);
+                    // Create the database (owned by the new role):
+                    let create_database_query = format!(
+                        "CREATE DATABASE \"{}\" OWNER '{}'",
+                        database_name, role_name
+                    );
+                    sqlx::query(&create_database_query)
+                        .execute(&ctx.sudo_pool)
+                        .await?;
+
+                    debug!(
+                        "created database '{}' belonging to '{}'",
+                        database_name,
+                        role_name
+                    );
+                } else {
+                    debug!("database '{}' already exists, not recreating", database_name);
                 }
 
                 // Transition to the 'ready' state:
@@ -127,7 +137,8 @@ impl Context {
     pub async fn new() -> sqlx::Result<Self> {
         Ok(Context {
             sudo_pool: PgPoolOptions::new()
-                .max_connections(10)
+                .min_connections(4)
+                .max_connections(12)
                 .connect_lazy(&SUDO_POSTGRES_CONNECTION_STRING)?,
         })
     }

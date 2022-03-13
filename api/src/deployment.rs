@@ -68,7 +68,7 @@ impl Deployment {
 
     /// Gets a `clone`ed copy of the metadata.
     pub(crate) async fn meta(&self) -> DeploymentMeta {
-        log::debug!("trying to get meta");
+        trace!("trying to get meta");
         self.meta.read().await.clone()
     }
 
@@ -89,13 +89,13 @@ impl Deployment {
     /// is in a terminal state.
     pub(crate) async fn advance(&self, context: &Context, db_context: &database::Context) {
         {
-            log::debug!("waiting to get write on the state");
+            trace!("waiting to get write on the state");
             let meta = self.meta().await;
             let mut state = self.state.write().await;
 
             *state = match state.take() {
                 DeploymentState::Queued(queued) => {
-                    log::debug!("deployment '{}' build starting...", &meta.id);
+                    debug!("deployment '{}' build starting...", &meta.id);
 
                     let console_writer = BuildOutputWriter::new(self.meta.clone());
                     match context
@@ -111,7 +111,7 @@ impl Deployment {
                     }
                 }
                 DeploymentState::Built(built) => {
-                    log::debug!(
+                    debug!(
                         "deployment '{}' loading shared object and service...",
                         &meta.id
                     );
@@ -119,7 +119,7 @@ impl Deployment {
                     match load_service_from_so_file(&built.build.so_path) {
                         Ok((svc, so)) => DeploymentState::loaded(so, svc),
                         Err(e) => {
-                            log::debug!("failed to load with error: {}", &e);
+                            debug!("failed to load with error: {}", &e);
                             DeploymentState::Error(e)
                         }
                     }
@@ -127,7 +127,7 @@ impl Deployment {
                 DeploymentState::Loaded(mut loaded) => {
                     let port = identify_free_port();
 
-                    log::debug!(
+                    debug!(
                         "deployment '{}' getting deployed on port {}...",
                         meta.id,
                         port
@@ -135,12 +135,14 @@ impl Deployment {
 
                     let mut db_state = database::State::default();
 
+                    debug!("build phase with a factory for {}", meta.config.name());
                     let factory =
                         UnveilFactory::new(&mut db_state, meta.config.clone(), db_context.clone());
 
                     match loaded.service.build(&factory) {
                         Err(e) => DeploymentState::Error(e.into()),
                         Ok(_) => {
+                            debug!(target: meta.config.name(), "build phase done");
                             // TODO: upon resolving this future, change the status of the deployment
                             // We cannot use spawn here since that blocks the api completely. We suspect this is because `bind` makes a blocking call,
                             // however that does not completely makes sense as the blocking call is made on another runtime.
@@ -153,7 +155,7 @@ impl Deployment {
                             // Remove stale active deployments
                             if let Some(stale_id) = context.router.promote(meta.host, meta.id).await
                             {
-                                log::debug!("removing stale deployment `{}`", &stale_id);
+                                debug!("removing stale deployment `{}`", &stale_id);
                                 context.deployments.write().await.remove(&stale_id);
                             }
 
@@ -296,23 +298,23 @@ impl JobQueue {
         db_context: database::Context,
         queue: Arc<JobQueue>,
     ) {
-        log::debug!("loading deployments into job processor");
+        debug!("loading deployments into job processor");
         for deployment in context.deployments.read().await.values() {
             queue.push(deployment.clone());
-            log::debug!("loading deployment: {:?}", deployment.meta);
+            debug!("loading deployment: {:?}", deployment.meta);
         }
-        log::debug!("starting job processor loop");
+        debug!("starting job processor loop");
         loop {
             if let Some(deployment) = queue.pop() {
                 let id = deployment.meta().await.id;
 
-                log::debug!("started deployment job for id: '{}'", id);
+                debug!("started deployment job for id: '{}'", id);
 
                 while !deployment.deployment_finished().await {
                     deployment.advance(&context, &db_context).await;
                 }
 
-                log::debug!("ended deployment job for id: '{}'", id);
+                debug!("ended deployment job for id: '{}'", id);
             } else {
                 tokio::time::sleep(Duration::from_millis(50)).await
             }
@@ -363,15 +365,15 @@ impl DeploymentSystem {
             let project_dir = match project_dir {
                 Ok(project_dir) => project_dir,
                 Err(e) => {
-                    log::warn!("failed to read directory for project with error `{:?}`", e);
-                    log::warn!("skipping...");
+                    warn!("failed to read directory for project with error `{:?}`", e);
+                    warn!("skipping...");
                     continue;
                 }
             };
             let project_name = project_dir.file_name();
             match Deployment::from_directory(project_dir) {
                 Err(e) => {
-                    log::warn!(
+                    warn!(
                         "failed to re-create deployment for project `{:?}` with error: {:?}",
                         project_name,
                         e

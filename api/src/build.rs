@@ -80,14 +80,14 @@ impl BuildSystem for FsBuildSystem {
 
         // project path
         let project_path = self.project_path(project_name)?;
-        log::debug!("Project path: {}", project_path.display());
+        debug!("Project path: {}", project_path.display());
 
         // clear directory
         clear_project_dir(&project_path)?;
 
         // crate path
         let crate_path = crate_location(&project_path, project_name);
-        log::debug!("Crate path: {}", crate_path.display());
+        debug!("Crate path: {}", crate_path.display());
 
         // create target file
         let mut target_file = tokio::fs::File::create(&crate_path).await?;
@@ -141,7 +141,7 @@ fn clear_project_dir(project_path: &Path) -> Result<()> {
         .filter(|dir| dir.file_name() != "target")
         .for_each(|dir| {
             if let Ok(file) = dir.file_type() {
-                log::debug!("{:?}", dir);
+                debug!("{:?}", dir);
                 if file.is_dir() {
                     std::fs::remove_dir_all(&dir.path()).unwrap();
                 } else if file.is_file() {

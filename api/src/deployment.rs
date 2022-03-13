@@ -135,7 +135,13 @@ impl Deployment {
 
                     debug!("{}: factory phase", meta.config.name());
                     let mut db_state = database::State::new(&meta.config, db_context);
+
+                    // Pre-emptively allocate a dabatase to work around a deadlock issue with sqlx connection pools
+                    db_state.request();
+                    db_state.ensure().await.unwrap();
+
                     let mut factory = UnveilFactory::new(&mut db_state);
+
                     match loaded.service.build(&mut factory) {
                         Err(e) => {
                             debug!("{}: factory phase FAILED: {:?}", meta.config.name(), e);

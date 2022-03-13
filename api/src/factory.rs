@@ -28,7 +28,6 @@ impl Factory for UnveilFactory<'_> {
             .request()
             .connection_string("localhost");
         debug!("giving a sql connection string: {}", conn_str);
-        self.database.ensure().await?;
         Ok(conn_str)
     }
 }

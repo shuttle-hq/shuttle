@@ -28,3 +28,7 @@ jobs:
         context: .
         push: true
         tags: ${{ env.CONTAINER_REGISTRY }}:${{ github.sha }},${{ env.CONTAINER_REGISTRY }}:latest
+    - name: Deploy Image
+      run: |
+        ssh ubuntu@prod sudo systemctl restart unveil-backend.service
+        

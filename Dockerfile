@@ -18,13 +18,11 @@ COPY . .
 RUN cargo build --bin api
 
 FROM runtime
-<<<<<<< HEAD
-COPY --from=builder /app/target/release/api /usr/local/bin/shuttle-backend
-=======
+
 RUN echo "[patch.crates-io]\nshuttle-service = { path = \"/app/service\" }" > $CARGO_HOME/config.toml
 COPY --from=builder /app/target/debug/api /usr/local/bin/shuttle-backend
 COPY --from=builder /app/service /app/service
->>>>>>> main
+
 COPY docker/entrypoint.sh /bin/entrypoint.sh
 COPY docker/supervisord.conf /usr/share/supervisord/supervisord.conf
 ENTRYPOINT ["/bin/entrypoint.sh"]

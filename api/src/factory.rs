@@ -7,36 +7,28 @@ use tokio::sync::RwLock;
 use unveil_service::Factory;
 
 pub(crate) struct UnveilFactory<'a> {
-    database: Arc<RwLock<&'a mut database::State>>,
-    project: ProjectConfig,
-    ctx: database::Context,
+    database: &'a mut database::State
 }
 
 impl<'a> UnveilFactory<'a> {
     pub(crate) fn new(
-        database: &'a mut database::State,
-        project: ProjectConfig,
-        ctx: database::Context,
+        database: &'a mut database::State
     ) -> Self {
         Self {
-            database: Arc::new(RwLock::new(database)),
-            project,
-            ctx,
+            database
         }
     }
 }
 
 #[async_trait]
 impl Factory for UnveilFactory<'_> {
-    async fn get_sql_connection_string(&self) -> Result<String, unveil_service::Error> {
-        let ready_state = self
+    async fn get_sql_connection_string(&mut self) -> Result<String, unveil_service::Error> {
+        let conn_str = self
             .database
-            .write()
-            .await
-            .advance(&self.project.name(), &self.ctx)
-            .await
-            .map_err(unveil_service::Error::from)?;
-
-        Ok(ready_state.connection_string("localhost"))
+            .request()
+            .connection_string("localhost");
+        debug!("giving a sql connection string: {}", conn_str);
+        self.database.ensure().await?;
+        Ok(conn_str)
     }
 }

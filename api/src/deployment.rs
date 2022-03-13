@@ -133,33 +133,38 @@ impl Deployment {
                         port
                     );
 
-                    let mut db_state = database::State::default();
-
-                    debug!("build phase with a factory for {}", meta.config.name());
-                    let factory =
-                        UnveilFactory::new(&mut db_state, meta.config.clone(), db_context.clone());
-
-                    match loaded.service.build(&factory) {
-                        Err(e) => DeploymentState::Error(e.into()),
+                    debug!("{}: factory phase", meta.config.name());
+                    let mut db_state = database::State::new(&meta.config, db_context);
+                    let mut factory = UnveilFactory::new(&mut db_state);
+                    match loaded.service.build(&mut factory) {
+                        Err(e) => {
+                            debug!("{}: factory phase FAILED: {:?}", meta.config.name(), e);
+                            DeploymentState::Error(e.into())
+                        },
                         Ok(_) => {
-                            debug!(target: meta.config.name(), "build phase done");
-                            // TODO: upon resolving this future, change the status of the deployment
-                            // We cannot use spawn here since that blocks the api completely. We suspect this is because `bind` makes a blocking call,
-                            // however that does not completely makes sense as the blocking call is made on another runtime.
-                            let handle = tokio::task::spawn_blocking(move || {
-                                loaded
-                                    .service
-                                    .bind(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port))
-                            });
+                            debug!("{}: factory phase DONE", meta.config.name());
+                            match db_state.ensure().await {
+                                Err(e) => DeploymentState::Error(e.into()),
+                                _ => {
+                                    // TODO: upon resolving this future, change the status of the deployment
+                                    // We cannot use spawn here since that blocks the api completely. We suspect this is because `bind` makes a blocking call,
+                                    // however that does not completely makes sense as the blocking call is made on another runtime.
+                                    let handle = tokio::task::spawn_blocking(move || {
+                                        loaded
+                                            .service
+                                            .bind(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port))
+                                    });
 
-                            // Remove stale active deployments
-                            if let Some(stale_id) = context.router.promote(meta.host, meta.id).await
-                            {
-                                debug!("removing stale deployment `{}`", &stale_id);
-                                context.deployments.write().await.remove(&stale_id);
+                                    // Remove stale active deployments
+                                    if let Some(stale_id) = context.router.promote(meta.host, meta.id).await
+                                    {
+                                        debug!("removing stale deployment `{}`", &stale_id);
+                                        context.deployments.write().await.remove(&stale_id);
+                                    }
+
+                                    DeploymentState::deployed(loaded.so, port, handle, db_state)
+                                }
                             }
-
-                            DeploymentState::deployed(loaded.so, port, handle, db_state)
                         }
                     }
                 }

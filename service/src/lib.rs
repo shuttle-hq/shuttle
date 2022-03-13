@@ -19,7 +19,7 @@ pub use factory::Factory;
 
 #[async_trait]
 pub trait Service: Send + Sync {
-    fn build(&mut self, _: &dyn Factory) -> Result<(), Error> {
+    fn build(&mut self, _: &mut dyn Factory) -> Result<(), Error> {
         Ok(())
     }
 
@@ -34,7 +34,7 @@ pub trait IntoService {
 pub struct RocketService<T: Sized> {
     rocket: Option<Rocket<Build>>,
     state_builder:
-        Option<fn(&dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>>,
+        Option<fn(&mut dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>>,
     runtime: Runtime,
 }
 
@@ -52,7 +52,7 @@ impl IntoService for Rocket<Build> {
 impl<T: Send + Sync + 'static> IntoService
     for (
         Rocket<Build>,
-        fn(&dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>,
+        fn(&mut dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>,
     )
 {
     type Service = RocketService<T>;
@@ -71,7 +71,7 @@ impl<T> Service for RocketService<T>
 where
     T: Send + Sync + 'static,
 {
-    fn build(&mut self, factory: &dyn Factory) -> Result<(), Error> {
+    fn build(&mut self, factory: &mut dyn Factory) -> Result<(), Error> {
         if let Some(state_builder) = self.state_builder.take() {
             // We want to build any sqlx pools on the same runtime the client code will run on. Without this expect to get errors of no tokio reactor being present.
             let state = self.runtime.block_on(state_builder(factory))?;
@@ -120,7 +120,7 @@ macro_rules! declare_service {
 
             // Ensure state builder is a function
             let state_builder: fn(
-                &dyn $crate::Factory,
+                &mut dyn $crate::Factory,
             ) -> std::pin::Pin<
                 Box<dyn std::future::Future<Output = Result<_, $crate::Error>> + Send + '_>,
             > = |factory| Box::pin($state_builder(factory));

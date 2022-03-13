@@ -6,7 +6,7 @@ on:
 
 jobs:
   Build-And-Deploy:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     env:
       CONTAINER_REGISTRY: 506436569174.dkr.ecr.eu-west-2.amazonaws.com/backend
       BACKEND_CLUSTER: unveil-ecs-cluster

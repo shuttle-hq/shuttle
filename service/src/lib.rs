@@ -1,7 +1,7 @@
-#![doc(html_logo_url = "https://github.com/getsynth/shuttle/raw/main/resources/logo-square-transparent.png", html_favicon_url = "https://github.com/getsynth/shuttle/raw/main/resources/favicon.ico")]
+#![doc(html_logo_url = "https://raw.githubusercontent.com/getsynth/shuttle/main/resources/logo-square-transparent.png", html_favicon_url = "https://raw.githubusercontent.com/getsynth/shuttle/main/resources/favicon.ico")]
 //! # Shuttle - Deploy Rust apps with a single Cargo subcommand
 //! <div style="display: flex; margin-top: 30px; margin-bottom: 30px;">
-//! <img src="https://github.com/getsynth/shuttle/raw/main/resources/logo-rectangle-transparent.png" width="400px" style="margin-left: auto; margin-right: auto;"/>
+//! <img src="https://raw.githubusercontent.com/getsynth/shuttle/main/resources/logo-rectangle-transparent.png" width="400px" style="margin-left: auto; margin-right: auto;"/>
 //! </div>
 //!
 //! Hello, and welcome to the <span style="font-family: Sans-Serif;"><a href="https://shuttle.rs">shuttle</a></span> API documentation!

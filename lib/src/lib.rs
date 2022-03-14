@@ -67,7 +67,7 @@ impl DeploymentMeta {
     }
 
     pub fn create_host(project_config: &ProjectConfig) -> Host {
-        format!("{}.shuttle.sh", project_config.name())
+        format!("{}.shuttleapp.rs", project_config.name())
     }
 }
 

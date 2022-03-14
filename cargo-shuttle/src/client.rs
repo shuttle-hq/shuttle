@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Context, Result};
-use lib::{API_URL, ApiKey, DeploymentMeta, DeploymentStateMeta, UNVEIL_PROJECT_HEADER};
-use lib::project::ProjectConfig;
+use shuttle_common::{API_URL, ApiKey, DeploymentMeta, DeploymentStateMeta, SHUTTLE_PROJECT_HEADER};
+use shuttle_common::project::ProjectConfig;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
 use std::{fs::File, io::Read, thread::sleep, time::Duration};
@@ -17,7 +17,7 @@ pub(crate) async fn delete(api_key: ApiKey, project: ProjectConfig) -> Result<()
         .basic_auth(api_key, Some(""))
         .send()
         .await
-        .context("failed to delete deployment on the Unveil server")?;
+        .context("failed to delete deployment on the Shuttle server")?;
 
     let deployment_meta = to_api_result(res).await?;
 
@@ -49,7 +49,7 @@ async fn get_deployment_meta(
         .basic_auth(api_key.clone(), Some(""))
         .send()
         .await
-        .context("failed to get deployment from the Unveil server")?;
+        .context("failed to get deployment from the Shuttle server")?;
 
     to_api_result(res).await
 }
@@ -80,11 +80,11 @@ pub(crate) async fn deploy(
     let res: Response = client
         .post(url.clone())
         .body(package_content)
-        .header(UNVEIL_PROJECT_HEADER, serde_json::to_string(&project)?)
+        .header(SHUTTLE_PROJECT_HEADER, serde_json::to_string(&project)?)
         .basic_auth(api_key.clone(), Some(""))
         .send()
         .await
-        .context("failed to send deployment to the Unveil server")?;
+        .context("failed to send deployment to the Shuttle server")?;
 
     let mut deployment_meta = to_api_result(res).await?;
 

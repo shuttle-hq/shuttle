@@ -13,4 +13,7 @@
 # VS Code
 .vscode/
 
+# Terraform
 **/secret*
+**/.terraform*
+

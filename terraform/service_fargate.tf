@@ -64,7 +64,7 @@ resource "aws_ecs_task_definition" "api" {
       environment = [
         {
           name = "CRATES_PATH"
-          value = "/opt/unveil/crates"
+          value = "/opt/shuttle/crates"
         },
         {
           name = "API_PORT",
@@ -79,8 +79,8 @@ resource "aws_ecs_task_definition" "api" {
           value = tostring(var.postgres_container_port)
         },
         {
-          name = "UNVEIL_USERS_TOML",
-          value = "/opt/unveil/users/users.toml"
+          name = "SHUTTLE_USERS_TOML",
+          value = "/opt/shuttle/users/users.toml"
         },
         {
           name = "PG_PASSWORD",
@@ -88,7 +88,7 @@ resource "aws_ecs_task_definition" "api" {
         },
         {
           name = "PG_DATA",
-          value = "/opt/unveil/postgres"
+          value = "/opt/shuttle/postgres"
         }
       ]
 
@@ -124,11 +124,11 @@ resource "aws_ecs_task_definition" "api" {
       mountPoints = [
         {
           sourceVolume = "user-data"
-          containerPath = "/opt/unveil/"
+          containerPath = "/opt/shuttle/"
         },
         {
           sourceVolume = "postgres-conf"
-          containerPath = "/etc/postgresql/11/unveil/"
+          containerPath = "/etc/postgresql/11/shuttle/"
         }
       ]
     }

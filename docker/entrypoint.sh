@@ -2,7 +2,7 @@
 
 export PG_VERSION=${PG_VERSION:-11}
 
-export PG_CLUSTER_NAME=${PG_CLUSTER_NAME:-unveil}
+export PG_CLUSTER_NAME=${PG_CLUSTER_NAME:-shuttle}
 
 export PG_DATA=${PG_DATA:-/var/lib/postgresql/$PG_VERSION/$PG_CLUSTER_NAME}
 
@@ -33,7 +33,7 @@ export PG_HOST=localhost
 
 export PG_URI=postgres://postgres:${PG_PASSWORD}@localhost:${PG_PORT}/postgres
 
-export CRATES_PATH=${CRATES_PATH:-/var/lib/unveil/crates}
+export CRATES_PATH=${CRATES_PATH:-/var/lib/shuttle/crates}
 
 mkdir -p $CRATES_PATH
 

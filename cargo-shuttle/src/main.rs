@@ -8,7 +8,7 @@ use cargo::core::resolver::CliFeatures;
 use cargo::core::Workspace;
 use cargo::ops::{PackageOpts, Packages};
 use cargo_metadata::MetadataCommand;
-use lib::{ApiKey, project::ProjectConfig};
+use shuttle_common::{ApiKey, project::ProjectConfig};
 use std::env;
 use std::fs::File;
 use std::path::Path;
@@ -58,7 +58,7 @@ fn get_api_key_and_project() -> Result<(ApiKey, ProjectConfig)> {
 }
 
 /// Tries to get the project configuration.
-/// Will first check for an Unveil.toml via `config`.
+/// Will first check for an Shuttle.toml via `config`.
 ///
 /// If it cannot find it, it will create one using sensible
 /// default values such as the name of the crate.

@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use std::sync::RwLock;
 use rand::Rng;
 use rocket::form::validate::Contains;
-use lib::DeploymentApiError;
+use shuttle_common::DeploymentApiError;
 
 #[derive(Debug, PartialEq, Hash, Eq, Deserialize, Serialize, Responder)]
 pub struct ApiKey(String);
@@ -210,10 +210,10 @@ impl UserDirectory {
     }
 
     fn users_toml_file_path() -> PathBuf {
-        match std::env::var("UNVEIL_USERS_TOML") {
+        match std::env::var("SHUTTLE_USERS_TOML") {
             Ok(val) => val.into(),
             Err(_) => {
-                log::debug!("could not find environment variable `UNVEIL_USERS_TOML`, defaulting to MANIFEST_DIR");
+                log::debug!("could not find environment variable `SHUTTLE_USERS_TOML`, defaulting to MANIFEST_DIR");
                 let manifest_path: PathBuf = env!("CARGO_MANIFEST_DIR").into();
                 manifest_path.join("users.toml")
             }

@@ -5,7 +5,7 @@ use rocket::request::{FromRequest, Outcome};
 use rocket::Request;
 use serde::{Deserialize, Serialize};
 use serde::de::Error as DeError;
-use crate::{Status, UNVEIL_PROJECT_HEADER};
+use crate::{Status, SHUTTLE_PROJECT_HEADER};
 
 
 /// Project names should conform to valid Host segments (or labels)
@@ -105,7 +105,7 @@ impl<'r> FromRequest<'r> for ProjectConfig {
     type Error = ProjectConfigError;
 
     async fn from_request(req: &'r Request<'_>) -> Outcome<Self, Self::Error> {
-        let config_string = match req.headers().get_one(UNVEIL_PROJECT_HEADER) {
+        let config_string = match req.headers().get_one(SHUTTLE_PROJECT_HEADER) {
             None => return Outcome::Failure((Status::BadRequest, ProjectConfigError::Missing)),
             Some(config_string) => config_string,
         };

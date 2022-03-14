@@ -1,9 +1,9 @@
 use crate::build::Build;
-use crate::{BuildSystem, UnveilFactory};
+use crate::{BuildSystem, ShuttleFactory};
 use anyhow::{anyhow, Context as AnyhowContext};
 use core::default::Default;
-use lib::project::ProjectConfig;
-use lib::{DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, Port};
+use shuttle_common::project::ProjectConfig;
+use shuttle_common::{DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, Port};
 use libloading::Library;
 use rocket::data::ByteUnit;
 use rocket::tokio;
@@ -20,7 +20,7 @@ use tokio::task::JoinHandle;
 
 use crate::database;
 use crate::router::Router;
-use unveil_service::Service;
+use shuttle_service::Service;
 
 /// Inner struct of a deployment which holds the deployment itself
 /// and the some metadata
@@ -52,11 +52,10 @@ impl Deployment {
             .into_string()
             .map_err(|os_str| anyhow!("could not parse project name `{:?}` to string", os_str))?;
         // find marker which points to so file
-        let marker_path = project_path.join(".unveil_marker");
-        let so_path_str = std::fs::read(&marker_path).context(anyhow!(
-            "could not find so marker file at {:?}",
-            marker_path
-        ))?;
+        let marker_path = project_path.join(".shuttle_marker");
+        let so_path_str = std::fs::read(&marker_path)
+            .context(anyhow!("could not find so marker file at {:?}", marker_path))?;
+
         let so_path: PathBuf = String::from_utf8_lossy(&so_path_str)
             .parse()
             .context("could not parse contents of marker file to a valid path")?;
@@ -146,7 +145,7 @@ impl Deployment {
                     match db_state.ensure().await {
                         Err(e) => DeploymentState::Error(e.into()),
                         Ok(()) => {
-                            let mut factory = UnveilFactory::new(&mut db_state);
+                            let mut factory = ShuttleFactory::new(&mut db_state);
                             match loaded.service.build(&mut factory) {
                                 Err(e) => {
                                     debug!("{}: factory phase FAILED: {:?}", meta.config.name(), e);
@@ -533,14 +532,14 @@ impl DeploymentSystem {
 
 const ENTRYPOINT_SYMBOL_NAME: &[u8] = b"_create_service\0";
 
-type ServeHandle = JoinHandle<Result<(), unveil_service::Error>>;
+type ServeHandle = JoinHandle<Result<(), shuttle_service::Error>>;
 
 type CreateService = unsafe extern "C" fn() -> *mut dyn Service;
 
 /// Dynamically load from a `.so` file a value of a type implementing the
 /// [`Service`] trait. Relies on the `.so` library having an ``extern "C"`
 /// function called [`ENTRYPOINT_SYMBOL_NAME`], likely automatically generated
-/// using the [`unveil_service::declare_service`] macro.
+/// using the [`shuttle_service::declare_service`] macro.
 #[allow(clippy::type_complexity)]
 fn load_service_from_so_file(so_path: &Path) -> anyhow::Result<(Box<dyn Service>, Library)> {
     unsafe {
@@ -570,7 +569,7 @@ enum DeploymentState {
     /// Deployment is loaded into the server application as a
     /// dynamically-linked library (`.so` file). The [`libloading`] crate has
     /// been used to achieve this and to obtain this particular deployment's
-    /// implementation of the [`unveil_service::Service`] trait.
+    /// implementation of the [`shuttle_service::Service`] trait.
     Loaded(LoadedState),
     /// Deployment that is actively running inside a Tokio task and listening
     /// for connections on some port indicated in [`DeployedState`].

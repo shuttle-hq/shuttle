@@ -2,7 +2,7 @@ use anyhow::{anyhow, Context, Result};
 use cargo::core::compiler::CompileMode;
 use cargo::core::Workspace;
 use cargo::ops::CompileOptions;
-use lib::project::ProjectConfig;
+use shuttle_common::project::ProjectConfig;
 use rocket::tokio;
 use rocket::tokio::io::AsyncWriteExt;
 use std::path::{Path, PathBuf};
@@ -10,11 +10,11 @@ use std::process::Command;
 use uuid::Uuid;
 
 #[cfg(debug_assertions)]
-pub const DEFAULT_FS_ROOT: &'static str = "/tmp/unveil/crates/";
+pub const DEFAULT_FS_ROOT: &'static str = "/tmp/shuttle/crates/";
 
 #[cfg(not(debug_assertions))]
 // as per: https://stackoverflow.com/questions/1510104/where-to-store-application-data-non-user-specific-on-linux
-pub const DEFAULT_FS_ROOT: &'static str = "/var/lib/unveil/crates/";
+pub const DEFAULT_FS_ROOT: &'static str = "/var/lib/shuttle/crates/";
 
 pub(crate) struct Build {
     pub(crate) so_path: PathBuf,
@@ -119,7 +119,7 @@ impl BuildSystem for FsBuildSystem {
 /// so that we can use it when bootstrapping the deployment
 /// system
 fn create_so_marker(project_path: &Path, so_path: &Path) {
-    let marker_path = project_path.join(".unveil_marker");
+    let marker_path = project_path.join(".shuttle_marker");
     // unwraps here are ok since we are writing a valid `Path`
     std::fs::write(&marker_path, so_path.to_str().unwrap()).unwrap();
 }

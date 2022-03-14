@@ -1,12 +1,12 @@
-use lib::Port;
+use shuttle_common::Port;
 use std::net::IpAddr;
 use std::path::PathBuf;
 use structopt::StructOpt;
 
 #[derive(StructOpt)]
-#[structopt(name = "unveil")]
+#[structopt(name = "shuttle")]
 pub struct Args {
-    #[structopt(long, about = "Override the default root path for unveil")]
+    #[structopt(long, about = "Override the default root path for shuttle")]
     pub(crate) path: Option<PathBuf>,
     #[structopt(
         long,

@@ -10,7 +10,7 @@ cargo-util = "0.1"
 anyhow = "1.0.54"
 libloading = "0.7.3"
 futures = "0.3"
-lib = { path = "../common/" }
+shuttle-common = { path = "../common/" }
 shuttle-service = { path = "../service/" }
 uuid = { version = "0.8.2", features = ["v4"] }
 async-mutex = "1.4.0"

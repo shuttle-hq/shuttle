@@ -2,7 +2,7 @@ use anyhow::{anyhow, Context, Result};
 use cargo::core::compiler::CompileMode;
 use cargo::core::Workspace;
 use cargo::ops::CompileOptions;
-use lib::project::ProjectConfig;
+use shuttle_common::project::ProjectConfig;
 use rocket::tokio;
 use rocket::tokio::io::AsyncWriteExt;
 use std::path::{Path, PathBuf};

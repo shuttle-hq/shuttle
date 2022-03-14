@@ -14,8 +14,8 @@ mod proxy;
 mod router;
 
 use factory::ShuttleFactory;
-use lib::{DeploymentApiError, DeploymentMeta, Port};
-use lib::project::ProjectConfig;
+use shuttle_common::{DeploymentApiError, DeploymentMeta, Port};
+use shuttle_common::project::ProjectConfig;
 use rocket::serde::json::{Json};
 use rocket::{tokio, Data, State};
 use std::net::IpAddr;

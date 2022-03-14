@@ -1,4 +1,4 @@
-use lib::{DeploymentId, Host};
+use shuttle_common::{DeploymentId, Host};
 use rocket::tokio::sync::RwLock;
 use std::collections::HashMap;
 

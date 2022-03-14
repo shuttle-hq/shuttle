@@ -8,7 +8,7 @@ use cargo::core::resolver::CliFeatures;
 use cargo::core::Workspace;
 use cargo::ops::{PackageOpts, Packages};
 use cargo_metadata::MetadataCommand;
-use lib::{ApiKey, project::ProjectConfig};
+use shuttle_common::{ApiKey, project::ProjectConfig};
 use std::env;
 use std::fs::File;
 use std::path::Path;

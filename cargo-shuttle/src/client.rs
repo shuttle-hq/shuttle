@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Context, Result};
-use lib::{API_URL, ApiKey, DeploymentMeta, DeploymentStateMeta, SHUTTLE_PROJECT_HEADER};
-use lib::project::ProjectConfig;
+use shuttle_common::{API_URL, ApiKey, DeploymentMeta, DeploymentStateMeta, SHUTTLE_PROJECT_HEADER};
+use shuttle_common::project::ProjectConfig;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
 use std::{fs::File, io::Read, thread::sleep, time::Duration};

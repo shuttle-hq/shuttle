@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use std::sync::RwLock;
 use rand::Rng;
 use rocket::form::validate::Contains;
-use lib::DeploymentApiError;
+use shuttle_common::DeploymentApiError;
 
 #[derive(Debug, PartialEq, Hash, Eq, Deserialize, Serialize, Responder)]
 pub struct ApiKey(String);

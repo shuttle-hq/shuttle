@@ -2,7 +2,7 @@ use ::hyper::server::{conn::AddrStream, Server};
 use ::hyper::service::{make_service_fn, service_fn};
 use ::hyper::{Body, Request, Response, StatusCode};
 use hyper_reverse_proxy::ProxyError;
-use lib::Port;
+use shuttle_common::Port;
 use std::convert::Infallible;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;

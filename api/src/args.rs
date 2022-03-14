@@ -1,4 +1,4 @@
-use lib::Port;
+use shuttle_common::Port;
 use std::net::IpAddr;
 use std::path::PathBuf;
 use structopt::StructOpt;

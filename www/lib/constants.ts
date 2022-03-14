@@ -1,4 +1,4 @@
-export const APP_NAME = 'Shuttle'
+export const APP_NAME = 'shuttle'
 
 export const SITE_TITLE = 'Deploy Rust apps with a single Cargo command'
 

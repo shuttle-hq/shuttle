@@ -9,6 +9,7 @@ use std::fmt::{Display, Formatter};
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::RwLock;
+use anyhow::{anyhow, Context};
 use rand::Rng;
 use rocket::form::validate::Contains;
 use shuttle_common::DeploymentApiError;
@@ -99,7 +100,12 @@ pub(crate) struct User {
 }
 
 lazy_static! {
-    pub(crate) static ref USER_DIRECTORY: UserDirectory = UserDirectory::from_user_file();
+    pub(crate) static ref USER_DIRECTORY: UserDirectory = UserDirectory::from_user_file()
+        .unwrap_or_else(|e| {
+            log::error!("error initialising user directory: {:#?}", e);
+            log::error!("killing api...");
+            std::process::exit(1);
+        });
 }
 
 #[derive(Debug)]
@@ -194,19 +200,19 @@ impl UserDirectory {
         self.users.read().unwrap().get(&api_key.0).cloned()
     }
 
-    fn from_user_file() -> Self {
+    fn from_user_file() -> Result<Self, anyhow::Error> {
         let file_path = Self::users_toml_file_path();
         let file_contents: String = std::fs::read_to_string(&file_path)
-            .expect(&format!("this should blow up if the users.toml file is not present at {:?}", &file_path));
+            .context(anyhow!("this should blow up if the users.toml file is not present at {:?}", &file_path))?;
         let users = toml::from_str(&file_contents)
-            .expect("this should blow up if the users.toml file is unparseable");
+            .context("this should blow up if the users.toml file is unparseable")?;
         let directory = Self {
             users: RwLock::new(users),
         };
 
         log::debug!("initialising user directory: {:#?}", &directory);
 
-        directory
+        Ok(directory)
     }
 
     fn users_toml_file_path() -> PathBuf {

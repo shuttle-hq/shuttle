@@ -30,7 +30,7 @@ const Hero = () => {
               </div>
             </div>
             <div className="hidden md:flex flex-col justify-center items-center">
-              <Code code="cargo install shuttle" />
+              <Code code="cargo install cargo-shuttle" />
             </div>
 
             <div className="flex gap-4 justify-center">

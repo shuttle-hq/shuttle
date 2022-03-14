@@ -12,6 +12,7 @@ use std::collections::HashMap;
 use std::fs::DirEntry;
 use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener};
+use std::panic;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -546,9 +547,11 @@ fn load_service_from_so_file(so_path: &Path) -> anyhow::Result<(Box<dyn Service>
         let lib = libloading::Library::new(so_path)?;
 
         let entrypoint: libloading::Symbol<CreateService> = lib.get(ENTRYPOINT_SYMBOL_NAME)?;
-        let raw = entrypoint();
 
-        Ok((Box::from_raw(raw), lib))
+        match panic::catch_unwind(|| entrypoint()) {
+            Ok(raw) => Ok((Box::from_raw(raw), lib)),
+            Err(_) => Err(anyhow!("entry point on service paniced")),
+        }
     }
 }
 

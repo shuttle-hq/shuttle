@@ -19,6 +19,24 @@ fn hello_world() {
 }
 
 #[test]
+fn hello_world_panic() {
+    let client = helpers::Api::new_docker("hello-world-panic", Color::Red);
+    client.deploy("../examples/rocket/hello-world");
+    client.deploy("../examples/rocket/hello-world-panic");
+
+    // Hello world should still be responsive
+    let request_text = client
+        .get("hello")
+        .header("Host", "hello-world-rocket-app.shuttleapp.rs")
+        .send()
+        .unwrap()
+        .text()
+        .unwrap();
+
+    assert_eq!(request_text, "Hello, world!");
+}
+
+#[test]
 fn postgres() {
     let client = helpers::Api::new_docker("postgres", Color::Blue);
     client.deploy("../examples/rocket/postgres");

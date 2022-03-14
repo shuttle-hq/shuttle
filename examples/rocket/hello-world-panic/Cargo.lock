@@ -1334,8 +1334,6 @@ dependencies = [
 [[package]]
 name = "shuttle-service"
 version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "426bb1d0e14bf356321b85ad1adadc6209293db6740fce45cbdb9ff8510ef85b"
 dependencies = [
  "async-trait",
  "rocket",
@@ -1997,7 +1995,3 @@ name = "yansi"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9fc79f4a1e39857fc00c3f662cbf2651c771f00e9c15fe2abc341806bd46bd71"
-
-[[patch.unused]]
-name = "unveil-service"
-version = "0.1.0"

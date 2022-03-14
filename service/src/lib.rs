@@ -296,6 +296,9 @@ impl<T> Service for RocketService<T>
 /// If your service does not require a state (like a database connection pool), just pass a type and a constructor function:
 ///
 /// ```rust,no_run
+/// #[macro_use]
+/// extern crate shuttle_service;
+///
 /// use rocket::{Rocket, Build};
 ///
 /// fn rocket() -> Rocket<Build> {
@@ -315,6 +318,8 @@ impl<T> Service for RocketService<T>
 /// use rocket::{Rocket, Build};
 /// use sqlx::PgPool;
 ///
+/// #[macro_use]
+/// extern crate shuttle_service;
 /// use shuttle_service::{Factory, Error};
 ///
 /// struct MyState(PgPool);

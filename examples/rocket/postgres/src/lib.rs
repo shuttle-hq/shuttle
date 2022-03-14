@@ -42,13 +42,8 @@ fn rocket() -> Rocket<Build> {
     rocket::build().mount("/todo", routes![retrieve, add])
 }
 
-async fn build_state(factory: &mut dyn Factory) -> Result<MyState, shuttle_service::Error> {
-    let connection_string = factory.get_sql_connection_string().await?;
-    let pool = sqlx::postgres::PgPoolOptions::new()
-        .min_connections(1)
-        .max_connections(5)
-        .connect(&connection_string)
-        .await?;
+async fn build_state(factory: &mut dyn Factory) -> Result<MyState, unveil_service::Error> {
+    let pool = factory.get_postgres_connection_pool().await?;
 
     pool.execute(include_str!("../schema.sql")).await?;
 

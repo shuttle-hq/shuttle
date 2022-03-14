@@ -321,7 +321,7 @@ dependencies = [
  "reqwest-retry",
  "serde",
  "serde_json",
- "shuttle-common 0.1.0",
+ "shuttle-common 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "structopt",
  "tokio",
  "toml",
@@ -2297,9 +2297,7 @@ checksum = "45bb67a18fa91266cc7807181f62f9178a6873bfad7dc788c42e6430db40184f"
 
 [[package]]
 name = "shuttle-common"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a2a5b59150a6c66a8624c66a5ad98a36dc961227ef2ae16ecea51627da5420db"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2313,6 +2311,8 @@ dependencies = [
 [[package]]
 name = "shuttle-common"
 version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12f2f827e288dd5621dbd00f5f30b7852e10a9af4dbe9be4a9919ca23e4ae8d3"
 dependencies = [
  "anyhow",
  "chrono",

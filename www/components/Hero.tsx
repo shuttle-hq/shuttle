@@ -37,7 +37,7 @@ const Hero = () => {
               <a
                 ref={(el) => el && mixpanel.track_links(el, `Clicked Link`)}
                 className="text-white font-bold bg-brand-900 hover:bg-brand-700 py-3 px-8 rounded transition"
-                href="https://github.com/getsynth/unveil"
+                href="https://github.com/getsynth/shuttle"
               >
                 Get Started
               </a>

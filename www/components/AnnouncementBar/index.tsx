@@ -16,7 +16,7 @@ const AnnouncementBar = () => {
         ⭐️ If you like Shuttle,&nbsp;
         <a
           className={styles.announcement__link}
-          href={"https://github.com/getsynth/unveil"}
+          href={"https://github.com/getsynth/shuttle"}
           rel="noopener noreferrer"
           target="_blank"
         >

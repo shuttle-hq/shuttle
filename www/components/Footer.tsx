@@ -33,7 +33,7 @@ const Footer = () => {
                 <a
                   ref={(el) => el && mixpanel.track_links(el, `Clicked Link`)}
                   target="_blank"
-                  href="https://github.com/getsynth/unveil"
+                  href="https://github.com/getsynth/shuttle"
                 >
                   <FontAwesomeIcon
                     className="m-auto h-8 hover:text-white transition"
@@ -79,7 +79,7 @@ const Footer = () => {
               <div>
                 <a
                   ref={(el) => el && mixpanel.track_links(el, `Clicked Link`)}
-                  href="https://github.com/getsynth/unveil"
+                  href="https://github.com/getsynth/shuttle"
                 >
                   Getting Started
                 </a>
@@ -87,7 +87,7 @@ const Footer = () => {
               <div>
                 <a
                   ref={(el) => el && mixpanel.track_links(el, `Clicked Link`)}
-                  href="https://github.com/getsynth/unveil"
+                  href="https://github.com/getsynth/shuttle"
                 >
                   API Reference
                 </a>
@@ -95,7 +95,7 @@ const Footer = () => {
               <div>
                 <a
                   ref={(el) => el && mixpanel.track_links(el, `Clicked Link`)}
-                  href="https://github.com/getsynth/unveil"
+                  href="https://github.com/getsynth/shuttle"
                 >
                   Examples
                 </a>
@@ -110,7 +110,7 @@ const Footer = () => {
               <div>
                 <a
                   ref={(el) => el && mixpanel.track_links(el, `Clicked Link`)}
-                  href="https://github.com/getsynth/unveil"
+                  href="https://github.com/getsynth/shuttle"
                 >
                   Github
                 </a>

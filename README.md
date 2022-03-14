@@ -10,7 +10,7 @@
     <img alt="language" src="https://img.shields.io/badge/language-Rust-orange.svg">
   </a>
   <a href="https://github.com/getsynth/shuttle/actions">
-    <img alt="build status" src="https://img.shields.io/github/workflow/status/getsynth/shuttle/cargo_test"/>
+    <img alt="build status" src="https://img.shields.io/github/workflow/status/getsynth/shuttle/cargo-test"/>
   </a>
   <a href="https://discord.gg/H33rRDTm3p">
     <img alt="discord" src="https://img.shields.io/discord/803236282088161321?logo=discord"/>
@@ -48,7 +48,5 @@ For full documentation, visit [docs.rs/shuttle-service](https://docs.rs/shuttle-
 - [ ] Public: Production-ready!
 
 We are currently in Alpha. Watch "releases" of this repo to get notified of major updates!
-
-<kbd><img src="https://gitcdn.link/repo/getsynth/shuttle/master/web/static/watch-repo.gif" alt="Watch this repo"/></kbd>
 
 ---

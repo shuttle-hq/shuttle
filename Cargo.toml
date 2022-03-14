@@ -3,7 +3,7 @@ members = [
   "api",
   "service",
   "cargo-shuttle",
-  "lib",
+    "common",
   "e2e"
 ]
 exclude = [

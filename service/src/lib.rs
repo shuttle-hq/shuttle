@@ -1,8 +1,7 @@
-#![doc(html_logo_url = "file:///Users/damien/Repositories/openquery.io/unveil/resources/logo-square-transparent.png", html_favicon_url = "file:///Users/damien/Repositories/openquery.io/unveil/resources/favicon.ico")]
-
+#![doc(html_logo_url = "https://github.com/getsynth/shuttle/raw/main/resources/logo-square-transparent.png", html_favicon_url = "https://github.com/getsynth/shuttle/raw/main/resources/favicon.ico")]
 //! # Shuttle - Deploy Rust apps with a single Cargo subcommand
 //! <div style="display: flex; margin-top: 30px; margin-bottom: 30px;">
-//! <img src="file:///Users/damien/Repositories/openquery.io/unveil/resources/logo-rectangle-transparent.png" width="400px" style="margin-left: auto; margin-right: auto;"/>
+//! <img src="https://github.com/getsynth/shuttle/raw/main/resources/logo-rectangle-transparent.png" width="400px" style="margin-left: auto; margin-right: auto;"/>
 //! </div>
 //!
 //! Hello, and welcome to the <span style="font-family: Sans-Serif;"><a href="https://shuttle.rs">shuttle</a></span> API documentation!
@@ -46,6 +45,8 @@
 //!
 //! declare_service!(Rocket<Build>, init);
 //! ```
+//!
+//! Complete examples can be found [in the repository](https://github.com/getsynth/shuttle/tree/main/examples/rocket).
 //!
 //! ## Deploying
 //!

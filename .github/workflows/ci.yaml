@@ -12,9 +12,9 @@ jobs:
       BACKEND_CLUSTER: unveil-ecs-cluster
       BACKEND_SERVICE: backend
     steps:
-    - uses: actions/checkout@v2
+    - uses: getsynth/checkout@v2
     - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v1
+      uses: getsynth/configure-aws-credentials@v1
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -23,7 +23,7 @@ jobs:
       run: |
         aws ecr get-login-password | docker login --username AWS --password-stdin $CONTAINER_REGISTRY
     - name: Build And Push Image
-      uses: docker/build-push-action@v2
+      uses: getsynth/build-push-action@v2
       with:
         context: .
         push: true

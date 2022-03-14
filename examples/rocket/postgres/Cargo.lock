@@ -1029,8 +1029,8 @@ version = "0.1.0"
 dependencies = [
  "rocket",
  "serde",
+ "shuttle-service",
  "sqlx",
- "unveil-service",
 ]
 
 [[package]]
@@ -1421,6 +1421,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "900fba806f70c630b0a382d0d825e17a0f19fcd059a2ade1ff237bcddf446b31"
 dependencies = [
  "lazy_static",
+]
+
+[[package]]
+name = "shuttle-service"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "526181f69c9b2bdbcb26677e1da295d7eadc99f4bfc209e3a45d0e1fb65ad4ba"
+dependencies = [
+ "async-trait",
+ "rocket",
+ "sqlx",
+ "thiserror",
+ "tokio",
 ]
 
 [[package]]
@@ -1963,17 +1976,6 @@ name = "unicode_categories"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39ec24b3121d976906ece63c9daad25b85969647682eee313cb5779fdd69e14e"
-
-[[package]]
-name = "unveil-service"
-version = "0.2.1"
-dependencies = [
- "async-trait",
- "rocket",
- "sqlx",
- "thiserror",
- "tokio",
-]
 
 [[package]]
 name = "url"

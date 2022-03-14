@@ -310,7 +310,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-shuttle"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "cargo",

@@ -48,5 +48,3 @@ For full documentation, visit [docs.rs/shuttle-service](https://docs.rs/shuttle-
 - [ ] Public: Production-ready!
 
 We are currently in Alpha. Watch "releases" of this repo to get notified of major updates!
-
----

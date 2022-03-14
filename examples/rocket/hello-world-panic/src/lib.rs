@@ -1,19 +1,19 @@
-#[macro_use] extern crate rocket;
+#[macro_use]
+extern crate rocket;
 
-use unveil_service::{Deployment, Service, declare_service};
+use rocket::{Build, Rocket};
+
+#[macro_use]
+extern crate shuttle_service;
 
 #[get("/")]
+#[allow(unused)]
 fn index() -> &'static str {
     "Hello, world!"
 }
 
-#[derive(Default)]
-struct App;
-
-impl Service for App {
-    fn deploy(&self) -> Deployment {
-        panic!()
-    }
+fn rocket() -> Rocket<Build> {
+    panic!()
 }
 
-declare_service!(App, App::default);
+declare_service!(Rocket<Build>, rocket);

@@ -57,4 +57,18 @@ fn postgres() {
         .unwrap();
 
     assert_eq!(fetch_response, "{\"id\":1,\"note\":\"To the stars\"}");
+
+    // Deploy a project which panics in its state function
+    client.deploy("../examples/rocket/postgres-panic");
+
+    // Todo app should still be responsive
+    let fetch_response: String = client
+        .get("todo/1")
+        .header("Host", "postgres-rocket-app.shuttleapp.rs")
+        .send()
+        .unwrap()
+        .text()
+        .unwrap();
+
+    assert_eq!(fetch_response, "{\"id\":1,\"note\":\"To the stars\"}");
 }

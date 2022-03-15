@@ -14,8 +14,8 @@ jobs:
   cargo_test:
     runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - uses: getsynth/checkout@v2
+      - uses: getsynth/toolchain@v1
         with:
           toolchain: nightly
           override: true

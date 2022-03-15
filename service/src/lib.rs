@@ -23,7 +23,7 @@ pub trait Service: Send + Sync {
         Ok(())
     }
 
-    fn bind(&mut self, addr: SocketAddr) -> Result<(), error::Error>;
+    fn bind(&mut self, addr: SocketAddr) -> Result<(), Error>;
 }
 
 pub trait IntoService {

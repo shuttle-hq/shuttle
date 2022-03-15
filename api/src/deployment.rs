@@ -1,4 +1,5 @@
 use crate::build::Build;
+use crate::service::PanicSafeService;
 use crate::{BuildSystem, ShuttleFactory};
 use anyhow::{anyhow, Context as AnyhowContext};
 use core::default::Default;
@@ -124,7 +125,7 @@ impl Deployment {
                         }
                     }
                 }
-                DeploymentState::Loaded(mut loaded) => {
+                DeploymentState::Loaded(loaded) => {
                     let port = identify_free_port();
 
                     debug!(
@@ -147,26 +148,29 @@ impl Deployment {
                         Err(e) => DeploymentState::Error(e.into()),
                         Ok(()) => {
                             let mut factory = ShuttleFactory::new(&mut db_state);
-                            match loaded.service.build(&mut factory) {
+                            let mut service = PanicSafeService::new(loaded.service);
+
+                            match service.build(&mut factory) {
                                 Err(e) => {
                                     debug!("{}: factory phase FAILED: {:?}", meta.config.name(), e);
-                                    DeploymentState::Error(e.into()) },
+                                    DeploymentState::Error(e.into())
+                                }
                                 Ok(_) => {
                                     debug!("{}: factory phase DONE", meta.config.name());
                                     // TODO: upon resolving this future, change the status of the deployment
                                     // We cannot use spawn here since that blocks the api completely. We suspect this is because `bind` makes a blocking call,
                                     // however that does not completely makes sense as the blocking call is made on another runtime.
-                                    let handle = tokio::task::spawn_blocking(move | | {
-                                        loaded
-                                            .service
+                                    let handle = tokio::task::spawn_blocking(move || {
+                                        service
                                             .bind(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port))
                                     });
 
                                     // Remove stale active deployments
-                                    if let Some(stale_id) = context.router.promote(meta.host, meta.id).await
+                                    if let Some(stale_id) =
+                                        context.router.promote(meta.host, meta.id).await
                                     {
-                                        debug!("removing stale deployment `{}`", & stale_id);
-                                        context.deployments.write().await.remove( & stale_id);
+                                        debug!("removing stale deployment `{}`", &stale_id);
+                                        context.deployments.write().await.remove(&stale_id);
                                     }
 
                                     DeploymentState::deployed(loaded.so, port, handle, db_state)

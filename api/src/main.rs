@@ -12,17 +12,17 @@ mod deployment;
 mod factory;
 mod proxy;
 mod router;
+mod service;
 
 use factory::ShuttleFactory;
-use shuttle_common::{DeploymentApiError, DeploymentMeta, Port};
-use shuttle_common::project::ProjectConfig;
-use rocket::serde::json::{Json};
+use rocket::serde::json::Json;
 use rocket::{tokio, Data, State};
+use shuttle_common::project::ProjectConfig;
+use shuttle_common::{DeploymentApiError, DeploymentMeta, Port};
 use std::net::IpAddr;
 use std::sync::Arc;
 use structopt::StructOpt;
 use uuid::Uuid;
-
 
 use crate::args::Args;
 use crate::auth::{ApiKey, AuthorizationError, User, USER_DIRECTORY};

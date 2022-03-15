@@ -4,7 +4,7 @@ extern crate rocket;
 use rocket::{response::status::BadRequest, serde::json::Json, Build, Rocket, State};
 use serde::Serialize;
 use shuttle_service::Factory;
-use sqlx::{Executor, FromRow, PgPool};
+use sqlx::{FromRow, PgPool};
 
 #[macro_use]
 extern crate shuttle_service;
@@ -28,19 +28,8 @@ fn rocket() -> Rocket<Build> {
     rocket::build().mount("/todo", routes![retrieve])
 }
 
-async fn build_state(factory: &mut dyn Factory) -> Result<MyState, shuttle_service::Error> {
-    let connection_string = factory.get_sql_connection_string().await?;
-    let pool = sqlx::postgres::PgPoolOptions::new()
-        .min_connections(1)
-        .max_connections(5)
-        .connect(&connection_string)
-        .await?;
-
-    pool.execute(include_str!("../schema.sql")).await?;
-
-    let state = MyState { pool };
-
-    Ok(state)
+async fn build_state(_factory: &mut dyn Factory) -> Result<MyState, shuttle_service::Error> {
+    panic!("no launch pad");
 }
 
 declare_service!(Rocket<Build>, rocket, build_state);

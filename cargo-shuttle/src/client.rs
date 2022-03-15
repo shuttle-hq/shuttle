@@ -4,8 +4,29 @@ use shuttle_common::project::ProjectConfig;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
 use std::{fs::File, io::Read, thread::sleep, time::Duration};
-use reqwest::Response;
+use reqwest::{Response, StatusCode};
 
+pub(crate) async fn auth(username: String) -> Result<ApiKey> {
+    let client = get_retry_client();
+
+    let mut url = API_URL.to_string();
+    url.push_str(&format!("/users/{}", username));
+
+    let res: Response = client
+        .post(url.clone())
+        .send()
+        .await
+        .context("failed to get API key from Shuttle server")?;
+
+    let response_status = res.status();
+    let response_text = res.text().await?;
+
+    if response_status == StatusCode::OK {
+        return Ok(response_text);
+    }
+
+    Err(anyhow!("{}", response_text))
+}
 
 pub(crate) async fn delete(api_key: ApiKey, project: ProjectConfig) -> Result<()> {
     let client = get_retry_client();

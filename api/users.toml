@@ -1,5 +1,6 @@
-# api key / user mapping are defined like this.
-
 [ci-test]
-name = "ci"
-projects = ["hello-world-rocket-app", "postgres-rocket-app"]
+name = 'ci'
+projects = [
+    'hello-world-rocket-app',
+    'postgres-rocket-app',
+]

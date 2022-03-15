@@ -2,8 +2,8 @@ mod args;
 mod client;
 mod config;
 
-use crate::args::{Args, DeployArgs};
-use anyhow::{anyhow, Context, Result};
+use crate::args::{Args, AuthArgs, DeployArgs};
+use anyhow::{anyhow, bail, Context, Result};
 use cargo::core::resolver::CliFeatures;
 use cargo::core::Workspace;
 use cargo::ops::{PackageOpts, Packages};
@@ -22,7 +22,18 @@ async fn main() -> Result<()> {
         Args::Deploy(deploy_args) => deploy(deploy_args).await,
         Args::Status => status().await,
         Args::Delete => delete().await,
+        Args::Auth(auth_args) => auth(auth_args).await
     }
+}
+
+async fn auth(auth_args: AuthArgs) -> Result<()> {
+    if config::config_file_exists()? {
+        bail!("configuration file already exists")
+    }
+    let api_key = client::auth(auth_args.username)
+        .await
+        .context("failed to retrieve api key")?;
+    config::create_with_api_key(api_key)
 }
 
 async fn delete() -> Result<()> {

@@ -10,4 +10,6 @@ pub enum Error {
     Rocket(#[from] rocket::Error),
     #[error("Build error: {0}")]
     Build(String),
+    #[error("Bind error: {0}")]
+    Bind(String),
 }

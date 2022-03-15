@@ -15,7 +15,16 @@ impl PanicSafeService {
 
 impl Service for PanicSafeService {
     fn bind(&mut self, addr: std::net::SocketAddr) -> Result<(), shuttle_service::Error> {
-        self.service.bind(addr)
+        let mut wrapped_service = panic::AssertUnwindSafe(self.service.as_mut());
+
+        let result = panic::catch_unwind(move || wrapped_service.bind(addr));
+
+        match result {
+            Ok(result) => result,
+            Err(_) => Err(shuttle_service::Error::Bind(
+                "there was a panic inside the service bind".to_string(),
+            )),
+        }
     }
     fn build(
         &mut self,

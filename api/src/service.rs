@@ -28,7 +28,9 @@ impl Service for PanicSafeService {
 
         match result {
             Ok(result) => result,
-            Err(_) => Err(shuttle_service::Error::Build),
+            Err(_) => Err(shuttle_service::Error::Build(
+                "there was a panic inside the service build".to_string(),
+            )),
         }
     }
 }

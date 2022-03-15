@@ -8,6 +8,6 @@ pub enum Error {
     Io(#[from] std::io::Error),
     #[error("Rocket error: {0}")]
     Rocket(#[from] rocket::Error),
-    #[error("build paniced")]
-    Build,
+    #[error("Build error: {0}")]
+    Build(String),
 }

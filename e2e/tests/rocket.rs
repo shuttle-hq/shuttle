@@ -16,12 +16,8 @@ fn hello_world() {
         .unwrap();
 
     assert_eq!(request_text, "Hello, world!");
-}
 
-#[test]
-fn hello_world_panic() {
-    let client = helpers::Api::new_docker("hello-world-panic", Color::Red);
-    client.deploy("../examples/rocket/hello-world");
+    // Deploy a project which panics in its build function
     client.deploy("../examples/rocket/hello-world-panic");
 
     // Hello world should still be responsive

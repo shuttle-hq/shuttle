@@ -550,17 +550,7 @@ fn load_service_from_so_file(so_path: &Path) -> anyhow::Result<(Box<dyn Service>
 
         match panic::catch_unwind(|| entrypoint()) {
             Ok(raw) => Ok((Box::from_raw(raw), lib)),
-            Err(any) => {
-                let extra = if let Some(string) = any.downcast_ref::<String>() {
-                    format!(": {}", string)
-                } else if let Some(_) = any.downcast_ref::<()>() {
-                    String::new()
-                } else {
-                    ": unknown".to_string()
-                };
-
-                Err(anyhow!("entry point on service paniced{}", extra))
-            }
+            Err(_) => Err(anyhow!("entry point on service paniced")),
         }
     }
 }

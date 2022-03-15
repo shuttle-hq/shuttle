@@ -107,7 +107,7 @@ impl BuildSystem for FsBuildSystem {
         let so_path = create_unique_named_so_file(&project_path, &so_path)?;
 
         // create marker file
-        create_so_marker(&project_path, &so_path);
+        create_so_marker(&project_path, &so_path)?;
 
         Ok(Build { so_path })
     }
@@ -123,7 +123,7 @@ impl BuildSystem for FsBuildSystem {
 fn create_so_marker(project_path: &Path, so_path: &Path) -> Result<()> {
     let marker_path = project_path.join(".shuttle_marker");
     // unwraps here are ok since we are writing a valid `Path`
-    Ok(std::fs::write(&marker_path, so_path.to_str()?)?)
+    Ok(std::fs::write(&marker_path, so_path.to_str().unwrap())?)
 }
 
 /// Copies the original `so` file to the project directory with a random name

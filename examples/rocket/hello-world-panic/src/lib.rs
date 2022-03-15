@@ -13,7 +13,7 @@ fn index() -> &'static str {
 }
 
 fn rocket() -> Rocket<Build> {
-    panic!()
+    panic!("no fuel")
 }
 
 declare_service!(Rocket<Build>, rocket);

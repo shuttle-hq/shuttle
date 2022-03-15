@@ -1,3 +1,4 @@
+use std::time::Duration;
 use lazy_static::lazy_static;
 use shuttle_common::DatabaseReadyInfo;
 use rand::Rng;
@@ -144,6 +145,7 @@ impl Context {
             sudo_pool: PgPoolOptions::new()
                 .min_connections(4)
                 .max_connections(12)
+                .connect_timeout(Duration::from_secs(60))
                 .connect_lazy(&SUDO_POSTGRES_CONNECTION_STRING)?,
         })
     }

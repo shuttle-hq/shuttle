@@ -12,7 +12,7 @@ export default function ApiKeyModal() {
   const [open, setOpen] = useApiKeyModalState();
   const { user, error, isLoading } = useUser();
 
-  const api_key = user.api_key as string
+  const api_key = user?.api_key as string | undefined
 
   return (
     <Transition.Root show={open} as={Fragment}>
@@ -64,7 +64,7 @@ export default function ApiKeyModal() {
               <div className="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                 {user && (
                   <>
-                    {user.api_key && (
+                    {api_key && (
                       <div className="sm:flex sm:items-start">
                         <div className="mt-3 text-center sm:mt-0 sm:text-left">
                           <Dialog.Title
@@ -87,7 +87,7 @@ export default function ApiKeyModal() {
                         </div>
                       </div>
                     )}
-                    {!user.api_key && (
+                    {!api_key && (
                       <div className="sm:flex sm:items-start">
                         <div className="mt-3 text-center sm:mt-0 sm:text-left">
                           <Dialog.Title

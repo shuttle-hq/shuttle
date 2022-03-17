@@ -18,6 +18,14 @@ pub enum Args {
     Delete,
     #[structopt(about = "create user credentials for the shuttle platform")]
     Auth(AuthArgs),
+    #[structopt(about = "login to the shuttle platform")]
+    Login(LoginArgs),
+}
+
+#[derive(StructOpt)]
+pub struct LoginArgs {
+    #[structopt(long, about = "api key for the shuttle platform")]
+    pub api_key: Option<String>,
 }
 
 #[derive(StructOpt)]

@@ -14,10 +14,10 @@ const copyToClipboard = (code) => {
   navigator.clipboard.writeText(code);
 };
 
-const Code = ({ code }: CodeProps) => {
+export default function Code ({ code }: CodeProps)  {
   return (
     <div
-      className="cursor-pointer"
+      className="cursor-pointer text-dark-200"
       data-tip
       data-for="copiedTip"
       data-event="click"
@@ -50,4 +50,3 @@ const Code = ({ code }: CodeProps) => {
   );
 };
 
-export default Code;

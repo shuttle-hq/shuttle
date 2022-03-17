@@ -3,7 +3,7 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import React, { useState } from "react";
 import styles from "./styles.module.css";
 
-const AnnouncementBar = () => {
+export default function AnnouncementBar() {
   const [isClosed, setClosed] = useState(false);
 
   if (isClosed) {
@@ -35,6 +35,4 @@ const AnnouncementBar = () => {
       </button>
     </div>
   );
-};
-
-export default AnnouncementBar;
+}

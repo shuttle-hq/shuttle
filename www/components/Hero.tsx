@@ -2,9 +2,15 @@ import { useRouter } from "next/router";
 import Code from "./Code";
 import { SITE_DESCRIPTION, SITE_TITLE } from "../lib/constants";
 import mixpanel from "mixpanel-browser";
+import Link from "next/link";
+import { useApiKeyModalState } from "./ApiKeyModal";
+import { useUser } from "@auth0/nextjs-auth0";
 
-const Hero = () => {
+export default function Hero() {
   const { basePath } = useRouter();
+  const [open, setOpen] = useApiKeyModalState();
+  const {user, error, isLoading} = useUser()
+
   return (
     <div className="w-full min-h-screen -mt-8 flex flex-col justify-center bg-dark-700">
       <div className="xl:px-12 py-5 mx-auto">
@@ -34,6 +40,21 @@ const Hero = () => {
             </div>
 
             <div className="flex gap-4 justify-center">
+              {user && <button
+                className="text-white font-bold bg-brand-900 hover:bg-brand-700 py-3 px-8 rounded transition"
+                onClick={() => setOpen(true)}
+              >
+                View Api Key
+              </button>}
+
+              {!user &&
+              <a
+                className="text-white font-bold bg-brand-900 hover:bg-brand-700 py-3 px-8 rounded transition"
+                href="/api-key"
+              >
+                Get Api Key
+              </a>}
+
               <a
                 ref={(el) => el && mixpanel.track_links(el, `Clicked Link`)}
                 className="text-white font-bold bg-brand-900 hover:bg-brand-700 py-3 px-8 rounded transition"
@@ -56,6 +77,4 @@ const Hero = () => {
       </div>
     </div>
   );
-};
-
-export default Hero;
+}

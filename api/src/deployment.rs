@@ -21,6 +21,14 @@ use crate::database;
 use crate::router::Router;
 use shuttle_service::Service;
 
+// This controls the maximum number of deploys an api instance can run
+// This is mainly needed because tokio::task::spawn_blocking keeps an internal pool for the number of blocking threads
+// and we call this method to run each incoming service. Therefore, this variable directly maps to this maximum pool
+// when the runtime is setup in main()
+// The current tokio default for this pool is 512
+// https://docs.rs/tokio/latest/tokio/runtime/struct.Builder.html#method.max_blocking_threads
+pub const MAX_DEPLOYS: usize = 512;
+
 /// Inner struct of a deployment which holds the deployment itself
 /// and the some metadata
 pub(crate) struct Deployment {
@@ -487,6 +495,12 @@ impl DeploymentSystem {
         crate_file: Data<'_>,
         project_config: &ProjectConfig,
     ) -> Result<DeploymentMeta, DeploymentApiError> {
+        if self.deployments.read().await.len() >= MAX_DEPLOYS {
+            return Err(DeploymentApiError::Unavailable(
+                "this server has reached its maximum number of supported deploys".to_string(),
+            ));
+        };
+
         let crate_bytes = crate_file
             .open(ByteUnit::max_value())
             .into_bytes()

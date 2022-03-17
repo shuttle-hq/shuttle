@@ -15,16 +15,16 @@ mod proxy;
 mod router;
 
 use auth_admin::Admin;
+use deployment::MAX_DEPLOYS;
 use factory::ShuttleFactory;
-use shuttle_common::{DeploymentApiError, DeploymentMeta, Port};
+use rocket::serde::json::Json;
+use rocket::{tokio, Build, Data, Rocket, State};
 use shuttle_common::project::ProjectConfig;
-use rocket::serde::json::{Json};
-use rocket::{tokio, Data, State};
+use shuttle_common::{DeploymentApiError, DeploymentMeta, Port};
 use std::net::IpAddr;
 use std::sync::Arc;
 use structopt::StructOpt;
 use uuid::Uuid;
-
 
 use crate::args::Args;
 use crate::auth::{ApiKey, AuthorizationError, User, USER_DIRECTORY};
@@ -159,9 +159,21 @@ struct ApiState {
     deployment_manager: Arc<DeploymentSystem>,
 }
 
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .max_blocking_threads(MAX_DEPLOYS)
+        .build()
+        .unwrap()
+        .block_on(async {
+            rocket().await.launch().await?;
+
+            Ok(())
+        })
+}
+
 //noinspection ALL
-#[launch]
-async fn rocket() -> _ {
+async fn rocket() -> Rocket<Build> {
     env_logger::Builder::new()
         .filter_module("rocket", log::LevelFilter::Warn)
         .filter_module("_", log::LevelFilter::Warn)

@@ -20,8 +20,8 @@ jobs:
   deploy-vercel:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: amondnet/vercel-action@v20
+      - uses: getsynth/checkout@v2
+      - uses: getsynth/vercel-action@v20
         with:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-args: --prod

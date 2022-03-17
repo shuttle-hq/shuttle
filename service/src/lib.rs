@@ -59,10 +59,12 @@
 //! in a terminal. Once installed, run:
 //!
 //! ```bash
-//! $ cargo shuttle auth {my_name}
+//! $ cargo shuttle login
 //! ```
 //!
-//! which will create and configure an API key. Then deploy the service with:
+//! this will open a browser window and prompt you to connect using your GitHub account.
+//!
+//! Then, deploy the service with:
 //!
 //! ```bash
 //! $ cargo shuttle deploy
@@ -123,10 +125,10 @@
 //! After you've installed the [cargo-shuttle](https://docs.rs/crate/cargo-shuttle/latest) command, run:
 //!
 //! ```bash
-//! $ cargo shuttle auth {my_name}
+//! $ cargo shuttle login
 //! ```
 //!
-//! replacing `{my_name}` by your desired account name.
+//! this will open a browser window and prompt you to connect using your GitHub account.
 //!
 //! ##### Change the name of your service
 //!

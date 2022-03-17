@@ -1,6 +1,6 @@
 [package]
 name = "cargo-shuttle"
-version = "0.2.2"
+version = "0.2.3"
 edition = "2021"
 license = "Apache-2.0"
 description = "A cargo command for the shuttle platform (https://www.shuttle.rs/)"

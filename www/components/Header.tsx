@@ -9,13 +9,13 @@ export default function Header() {
 
 
   return (
-    <div className="p-3 flex justify-end">
+    <div className="p-3 flex justify-end bg-dark-700">
       {user && (
         <button
           className="text-gray-200 hover:text-white border-2 border-current box-border font-bold py-3 px-8 rounded transition"
           onClick={() => setOpen(true)}
         >
-          View Api Key
+          Log In
         </button>
       )}
 

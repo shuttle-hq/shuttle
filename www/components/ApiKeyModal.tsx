@@ -4,6 +4,7 @@ import { XIcon } from "@heroicons/react/outline";
 import { createStateContext } from "react-use";
 import { useUser } from "@auth0/nextjs-auth0";
 import Code from "./Code";
+import mixpanel from "mixpanel-browser";
 
 export const [useApiKeyModalState, ApiKeyModalStateProvider] =
   createStateContext(false);
@@ -12,7 +13,7 @@ export default function ApiKeyModal() {
   const [open, setOpen] = useApiKeyModalState();
   const { user, error, isLoading } = useUser();
 
-  const api_key = user?.api_key as string | undefined
+  const api_key = user?.api_key as string | undefined;
 
   return (
     <Transition.Root show={open} as={Fragment}>
@@ -75,14 +76,17 @@ export default function ApiKeyModal() {
                           </Dialog.Title>
                           <div className="mt-2">
                             <p className="text-xl text-dark-200 mb-2">
-                              copy this api key to "cargo shuttle login" dialog
+                              copy/paste the API key below to the "cargo shuttle
+                              login" dialog:
                             </p>
                             <Code code={api_key} />
 
                             <p className="text-xl text-dark-200 mb-2 mt-2">
-                              alternativly you can execute this command
+                              alternatively, you can execute the command below:
                             </p>
-                            <Code code={`cargo shuttle login --api-key ${api_key}`}/>
+                            <Code
+                              code={`cargo shuttle login --api-key ${api_key}`}
+                            />
                           </div>
                         </div>
                       </div>
@@ -98,7 +102,18 @@ export default function ApiKeyModal() {
                           </Dialog.Title>
                           <div className="mt-2">
                             <p className="text-xl text-dark-200">
-                              Contact us on discord to resolve this issue
+                              {"This shouldn't happen. Please contact us on "}
+                              <a
+                                className="underline hover:brightness-125"
+                                ref={(el) =>
+                                  el && mixpanel.track_links(el, `Clicked Link`)
+                                }
+                                href="https://discord.com/H33rRDTm3p"
+                                target="_blank"
+                              >
+                                Discord
+                              </a>
+                              {" to resolve the issue"}
                             </p>
                           </div>
                         </div>

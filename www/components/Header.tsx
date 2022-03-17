@@ -22,7 +22,7 @@ export default function Header() {
       {!user && (
         <a
           className="text-gray-200 hover:text-white border-2 border-current font-bold py-3 px-8 rounded transition"
-          href="/api-key"
+          href="/login"
         >
           Log In
         </a>

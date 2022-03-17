@@ -31,7 +31,7 @@ async fn main() -> Result<()> {
 
 async fn login(login_args: LoginArgs) -> Result<()> {
     let api_key = login_args.api_key.unwrap_or_else(|| {
-        let url = "https://shuttle.rs/api-key";
+        let url = "https://shuttle.rs/login";
 
         let _ = webbrowser::open(url);
 

@@ -4,7 +4,7 @@ import { useMount } from "react-use";
 import Home from ".";
 import { useApiKeyModalState } from "../components/ApiKeyModal";
 
-export default function ProtectedHome() {
+export default function Login() {
   const [open, setOpen] = useApiKeyModalState();
 
   useMount(() => {

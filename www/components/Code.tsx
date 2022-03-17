@@ -3,6 +3,7 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import ReactTooltip from "react-tooltip";
 import NoSsr from "./NoSsr";
 import mixpanel from "mixpanel-browser";
+import { useId } from "../lib/hooks";
 
 type CodeProps = {
   code: string;
@@ -14,12 +15,14 @@ const copyToClipboard = (code) => {
   navigator.clipboard.writeText(code);
 };
 
-export default function Code ({ code }: CodeProps)  {
+export default function Code({ code }: CodeProps) {
+  const id = useId();
+
   return (
     <div
       className="cursor-pointer text-dark-200"
       data-tip
-      data-for="copiedTip"
+      data-for={id}
       data-event="click"
       data-event-off="click"
       data-delay-hide="2000"
@@ -38,7 +41,7 @@ export default function Code ({ code }: CodeProps)  {
       </pre>
       <NoSsr>
         <ReactTooltip
-          id="copiedTip"
+          id={id}
           place="top"
           effect="float"
           afterShow={() => copyToClipboard(code)}
@@ -48,5 +51,4 @@ export default function Code ({ code }: CodeProps)  {
       </NoSsr>
     </div>
   );
-};
-
+}

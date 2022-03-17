@@ -7,25 +7,31 @@
     "postbuild": "next-sitemap"
   },
   "dependencies": {
-    "@fortawesome/fontawesome-svg-core": "^1.2.34",
-    "@fortawesome/free-brands-svg-icons": "^6.0.0",
-    "@fortawesome/free-regular-svg-icons": "^6.0.0",
-    "@fortawesome/free-solid-svg-icons": "^6.0.0",
+    "@auth0/nextjs-auth0": "^1.7.0",
+    "@fortawesome/fontawesome-svg-core": "^6.1.0",
+    "@fortawesome/free-brands-svg-icons": "^6.1.0",
+    "@fortawesome/free-regular-svg-icons": "^6.1.0",
+    "@fortawesome/free-solid-svg-icons": "^6.1.0",
     "@fortawesome/react-fontawesome": "^0.1.14",
+    "@headlessui/react": "^1.5.0",
+    "@heroicons/react": "^1.0.6",
+    "classnames": "^2.3.1",
     "mixpanel-browser": "^2.45.0",
     "next": "^12.1.0",
     "next-seo": "^5.1.0",
+    "node-fetch": "^3.2.3",
     "react": "^17.0.2",
     "react-dom": "^17.0.2",
     "react-tooltip": "^4.2.21",
+    "react-use": "^17.3.2",
     "sass": "^1.32.8"
   },
   "devDependencies": {
     "@types/node": "^17.0.21",
     "@types/react": "^17.0.2",
-    "autoprefixer": "^10.2.4",
-    "next-sitemap": "^2.5.7",
-    "postcss": "^8.2.6",
+    "autoprefixer": "^10.4.4",
+    "next-sitemap": "^2.5.10",
+    "postcss": "^8.4.12",
     "tailwindcss": "^3.0.23",
     "typescript": "^4.1.5"
   }

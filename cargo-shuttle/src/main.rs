@@ -4,12 +4,14 @@ mod config;
 
 use crate::args::{Args, AuthArgs, DeployArgs};
 use anyhow::{anyhow, bail, Context, Result};
+use args::LoginArgs;
 use cargo::core::resolver::CliFeatures;
 use cargo::core::Workspace;
 use cargo::ops::{PackageOpts, Packages};
 use cargo_metadata::MetadataCommand;
 use shuttle_common::{ApiKey, project::ProjectConfig};
-use std::env;
+use std::io::{Write};
+use std::{env, io};
 use std::fs::File;
 use std::path::Path;
 use std::rc::Rc;
@@ -22,8 +24,30 @@ async fn main() -> Result<()> {
         Args::Deploy(deploy_args) => deploy(deploy_args).await,
         Args::Status => status().await,
         Args::Delete => delete().await,
-        Args::Auth(auth_args) => auth(auth_args).await
+        Args::Auth(auth_args) => auth(auth_args).await,
+        Args::Login(login_args) => login(login_args).await,
     }
+}
+
+async fn login(login_args: LoginArgs) -> Result<()> {
+    let api_key = login_args.api_key.unwrap_or_else(|| {
+        let url = "https://shuttle.rs/login";
+
+        let _ = webbrowser::open(url);
+
+        println!("If your browser did not automatically open, go to {url}");
+        print!("Enter Api Key: ");
+        
+        io::stdout().flush().unwrap();
+
+        let mut input = String::new();
+        
+        io::stdin().read_line(&mut input).unwrap();    
+
+        input
+    });
+
+    config::create_with_api_key(api_key.trim().to_string())
 }
 
 async fn auth(auth_args: AuthArgs) -> Result<()> {

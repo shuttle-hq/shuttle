@@ -9,7 +9,7 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import mixpanel from "mixpanel-browser";
 
-const Footer = () => {
+export default function Footer() {
   const { basePath } = useRouter();
 
   return (
@@ -134,6 +134,4 @@ const Footer = () => {
       </div>
     </div>
   );
-};
-
-export default Footer;
+}

@@ -1,12 +1,24 @@
 import { useRouter } from "next/router";
 import Code from "./Code";
 import { SITE_DESCRIPTION, SITE_TITLE } from "../lib/constants";
+import classnames from "classnames";
+import { useAnnouncementBarIsClosed } from "./AnnouncementBar";
 import mixpanel from "mixpanel-browser";
 
-const Hero = () => {
+export default function Hero() {
   const { basePath } = useRouter();
+  const [announcementBarIsClosed] = useAnnouncementBarIsClosed();
+
   return (
-    <div className="w-full min-h-screen -mt-8 flex flex-col justify-center bg-dark-700">
+    <div
+      className={classnames(
+        "w-full flex flex-col justify-center bg-dark-700",
+        {
+          'min-h-[calc(100vh-107px)]': !announcementBarIsClosed,
+          'min-h-[calc(100vh-75px)]': announcementBarIsClosed
+        }
+      )}
+    >
       <div className="xl:px-12 py-5 mx-auto">
         <div className="p-6 sm:py-8">
           <div className="max-w-3xl m-auto text-center flex flex-col gap-8 sm:gap-11">
@@ -56,6 +68,4 @@ const Hero = () => {
       </div>
     </div>
   );
-};
-
-export default Hero;
+}

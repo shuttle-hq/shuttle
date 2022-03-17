@@ -17,7 +17,7 @@ jobs:
       - uses: getsynth/checkout@v2
       - uses: getsynth/toolchain@v1
         with:
-          toolchain: nightly
+          toolchain: stable
           override: true
       - name: Make config file
         run: mkdir -p ~/.config/shuttle/ && echo "api_key = \"ci-test\"" > ~/.config/shuttle/config.toml

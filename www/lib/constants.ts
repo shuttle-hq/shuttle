@@ -9,3 +9,5 @@ export const SITE_URL = 'https://shuttle.rs/'
 export const TWITTER_HANDLE = '@getsynth'
 
 export const MIXPANEL_TOKEN = 'ea13713300ea92e06107f27762512e57'
+
+export const DISCORD_URL = 'https://discord.gg/H33rRDTm3p'

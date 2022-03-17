@@ -1,6 +1,6 @@
 import { useRouter } from "next/router";
 import Code from "./Code";
-import { SITE_DESCRIPTION, SITE_TITLE } from "../lib/constants";
+import { DISCORD_URL, SITE_DESCRIPTION, SITE_TITLE } from "../lib/constants";
 import classnames from "classnames";
 import { useAnnouncementBarIsClosed } from "./AnnouncementBar";
 import mixpanel from "mixpanel-browser";
@@ -57,7 +57,7 @@ export default function Hero() {
               <a
                 ref={(el) => el && mixpanel.track_links(el, `Clicked Link`)}
                 className="text-white font-bold bg-brand-purple1 hover:brightness-125 py-3 px-8 rounded transition"
-                href="https://discord.gg/H33rRDTm3p"
+                href={DISCORD_URL}
                 target="_blank"
               >
                 Join Discord

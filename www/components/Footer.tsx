@@ -8,6 +8,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/router";
 import mixpanel from "mixpanel-browser";
+import { DISCORD_URL } from "../lib/constants";
 
 export default function Footer() {
   const { basePath } = useRouter();
@@ -53,7 +54,7 @@ export default function Footer() {
                 <a
                   ref={(el) => el && mixpanel.track_links(el, `Clicked Link`)}
                   target="_blank"
-                  href="https://discord.gg/H33rRDTm3p"
+                  href={DISCORD_URL}
                 >
                   <FontAwesomeIcon
                     className="m-auto h-8 hover:text-white transition"
@@ -118,7 +119,7 @@ export default function Footer() {
               <div>
                 <a
                   ref={(el) => el && mixpanel.track_links(el, `Clicked Link`)}
-                  href="https://discord.gg/H33rRDTm3p"
+                  href={DISCORD_URL}
                   target="_blank"
                 >
                   Discord

@@ -5,6 +5,7 @@ import { createStateContext } from "react-use";
 import { useUser } from "@auth0/nextjs-auth0";
 import Code from "./Code";
 import mixpanel from "mixpanel-browser";
+import { DISCORD_URL } from "../lib/constants";
 
 export const [useApiKeyModalState, ApiKeyModalStateProvider] =
   createStateContext(false);
@@ -108,7 +109,7 @@ export default function ApiKeyModal() {
                                 ref={(el) =>
                                   el && mixpanel.track_links(el, `Clicked Link`)
                                 }
-                                href="https://discord.com/H33rRDTm3p"
+                                href={DISCORD_URL}
                                 target="_blank"
                               >
                                 Discord

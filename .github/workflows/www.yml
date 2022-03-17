@@ -8,19 +8,20 @@ on:
       - '.github/workflows/www.yml'
       - 'www/**'
 
-env:
-  AUTH0_SECRET: ${{ secrets.AUTH0_SECRET }}
-  AUTH0_BASE_URL: https://www.shuttle.rs
-  AUTH0_ISSUER_BASE_URL: https://shuttle-prod.eu.auth0.com
-  AUTH0_CLIENT_ID: X77iwzR3Qm60kSIxxDEUVKOMFIQcDodp
-  AUTH0_CLIENT_SECRET: ${{ secrets.AUTH0_CLIENT_SECRET }}
-  SHUTTLE_API_BASE_URL: https://api.shuttle.rs
-
 jobs:
   deploy-vercel:
     runs-on: ubuntu-latest
     steps:
       - uses: getsynth/checkout@v2
+      - uses: getsynth/create-envfile@v1.3
+        with:
+          directory: www
+          envkey_AUTH0_SECRET: ${{ secrets.AUTH0_SECRET }}
+          envkey_AUTH0_BASE_URL: https://www.shuttle.rs
+          envkey_AUTH0_ISSUER_BASE_URL: https://shuttle-prod.eu.auth0.com
+          envkey_AUTH0_CLIENT_ID: X77iwzR3Qm60kSIxxDEUVKOMFIQcDodp
+          envkey_AUTH0_CLIENT_SECRET: ${{ secrets.AUTH0_CLIENT_SECRET }}
+          envkey_SHUTTLE_API_BASE_URL: https://api.shuttle.rs
       - uses: getsynth/vercel-action@v20
         with:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}

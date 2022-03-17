@@ -1,22 +1,17 @@
 import { withPageAuthRequired } from "@auth0/nextjs-auth0";
 import React from "react";
 import { useMount } from "react-use";
-import ApiKeyModal, { useApiKeyModalState } from "../components/ApiKeyModal";
-import Hero from "../components/Hero";
+import Home from ".";
+import { useApiKeyModalState } from "../components/ApiKeyModal";
 
-export default function Home() {
-  const [open, setOpen] = useApiKeyModalState()
+export default function ProtectedHome() {
+  const [open, setOpen] = useApiKeyModalState();
 
   useMount(() => {
-    setOpen(true)
-  })
+    setOpen(true);
+  });
 
-  return (
-    <>
-      <Hero />
-      <ApiKeyModal />
-    </>
-  );
+  return <Home />;
 }
 
 export const getServerSideProps = withPageAuthRequired();

@@ -1,10 +1,15 @@
 import { faTimes } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import React, { useState } from "react";
+import { createStateContext } from "react-use";
 import styles from "./styles.module.css";
 
+export const [useAnnouncementBarIsClosed, AnnouncementBarIsClosedProvider] =
+  createStateContext(false);
+
+
 export default function AnnouncementBar() {
-  const [isClosed, setClosed] = useState(false);
+  const [isClosed, setClosed] = useAnnouncementBarIsClosed();
 
   if (isClosed) {
     return null;

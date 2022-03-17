@@ -1,18 +1,24 @@
 import { useRouter } from "next/router";
 import Code from "./Code";
 import { SITE_DESCRIPTION, SITE_TITLE } from "../lib/constants";
+import classnames from "classnames";
+import { useAnnouncementBarIsClosed } from "./AnnouncementBar";
 import mixpanel from "mixpanel-browser";
-import Link from "next/link";
-import { useApiKeyModalState } from "./ApiKeyModal";
-import { useUser } from "@auth0/nextjs-auth0";
 
 export default function Hero() {
   const { basePath } = useRouter();
-  const [open, setOpen] = useApiKeyModalState();
-  const {user, error, isLoading} = useUser()
+  const [announcementBarIsClosed] = useAnnouncementBarIsClosed();
 
   return (
-    <div className="w-full min-h-screen -mt-8 flex flex-col justify-center bg-dark-700">
+    <div
+      className={classnames(
+        "w-full flex flex-col justify-center bg-dark-700",
+        {
+          'min-h-[calc(100vh-107px)]': !announcementBarIsClosed,
+          'min-h-[calc(100vh-75px)]': announcementBarIsClosed
+        }
+      )}
+    >
       <div className="xl:px-12 py-5 mx-auto">
         <div className="p-6 sm:py-8">
           <div className="max-w-3xl m-auto text-center flex flex-col gap-8 sm:gap-11">
@@ -40,21 +46,6 @@ export default function Hero() {
             </div>
 
             <div className="flex gap-4 justify-center">
-              {user && <button
-                className="text-white font-bold bg-brand-900 hover:bg-brand-700 py-3 px-8 rounded transition"
-                onClick={() => setOpen(true)}
-              >
-                View Api Key
-              </button>}
-
-              {!user &&
-              <a
-                className="text-white font-bold bg-brand-900 hover:bg-brand-700 py-3 px-8 rounded transition"
-                href="/api-key"
-              >
-                Get Api Key
-              </a>}
-
               <a
                 ref={(el) => el && mixpanel.track_links(el, `Clicked Link`)}
                 className="text-white font-bold bg-brand-900 hover:bg-brand-700 py-3 px-8 rounded transition"

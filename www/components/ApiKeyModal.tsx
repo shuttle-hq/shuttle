@@ -12,6 +12,8 @@ export default function ApiKeyModal() {
   const [open, setOpen] = useApiKeyModalState();
   const { user, error, isLoading } = useUser();
 
+  const api_key = user.api_key as string
+
   return (
     <Transition.Root show={open} as={Fragment}>
       <Dialog
@@ -48,7 +50,7 @@ export default function ApiKeyModal() {
             leaveFrom="opacity-100 translate-y-0 sm:scale-100"
             leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
           >
-            <div className="relative inline-block align-bottom bg-dark-600 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+            <div className="relative inline-block align-bottom bg-dark-600 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
               <div className="hidden sm:block absolute top-0 right-0 pt-4 pr-4">
                 <button
                   type="button"
@@ -67,12 +69,20 @@ export default function ApiKeyModal() {
                         <div className="mt-3 text-center sm:mt-0 sm:text-left">
                           <Dialog.Title
                             as="h3"
-                            className="text-lg leading-6 font-medium text-dark-200"
+                            className="text-2xl leading-6 font-medium text-dark-200"
                           >
                             Api key
                           </Dialog.Title>
                           <div className="mt-2">
-                            <Code code={user.api_key as string} />
+                            <p className="text-xl text-dark-200 mb-2">
+                              copy this api key to "cargo shuttle login" dialog
+                            </p>
+                            <Code code={api_key} />
+
+                            <p className="text-xl text-dark-200 mb-2 mt-2">
+                              alternativly you can execute this command
+                            </p>
+                            <Code code={`cargo shuttle login --api-key ${api_key}`}/>
                           </div>
                         </div>
                       </div>
@@ -82,12 +92,12 @@ export default function ApiKeyModal() {
                         <div className="mt-3 text-center sm:mt-0 sm:text-left">
                           <Dialog.Title
                             as="h3"
-                            className="text-lg leading-6 font-medium text-dark-200"
+                            className="text-2xl leading-6 font-medium text-dark-200"
                           >
                             Api key not found!
                           </Dialog.Title>
                           <div className="mt-2">
-                            <p className="text-sm text-dark-200">
+                            <p className="text-xl text-dark-200">
                               Contact us on discord to resolve this issue
                             </p>
                           </div>

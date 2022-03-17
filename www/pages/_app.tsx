@@ -12,7 +12,9 @@ import {
   SITE_URL,
   TWITTER_HANDLE,
 } from "../lib/constants";
-import AnnouncementBar from "../components/AnnouncementBar";
+import AnnouncementBar, {
+  AnnouncementBarIsClosedProvider,
+} from "../components/AnnouncementBar";
 import { UserProvider } from "@auth0/nextjs-auth0";
 import { ApiKeyModalStateProvider } from "../components/ApiKeyModal";
 // import Footer from "../components/Footer";
@@ -25,30 +27,32 @@ export default function App({ Component, pageProps }: AppProps) {
   return (
     <UserProvider user={user}>
       <ApiKeyModalStateProvider>
-        <Head>
-          <title>{SITE_TITLE}</title>
-        </Head>
+        <AnnouncementBarIsClosedProvider>
+          <Head>
+            <title>{SITE_TITLE}</title>
+          </Head>
 
-        <DefaultSeo
-          title={APP_NAME}
-          description={SITE_DESCRIPTION}
-          openGraph={{
-            type: "website",
-            url: SITE_URL,
-            site_name: APP_NAME,
-          }}
-          twitter={{
-            handle: TWITTER_HANDLE,
-            site: TWITTER_HANDLE,
-            cardType: "summary_large_image",
-          }}
-        />
+          <DefaultSeo
+            title={APP_NAME}
+            description={SITE_DESCRIPTION}
+            openGraph={{
+              type: "website",
+              url: SITE_URL,
+              site_name: APP_NAME,
+            }}
+            twitter={{
+              handle: TWITTER_HANDLE,
+              site: TWITTER_HANDLE,
+              cardType: "summary_large_image",
+            }}
+          />
 
-        <div className="text-dark-200 full bg-dark-600">
-          <AnnouncementBar />
-          <Component {...pageProps} />
-          {/* <Footer /> */}
-        </div>
+          <div className="text-dark-200 full bg-dark-600">
+            <AnnouncementBar />
+            <Component {...pageProps} />
+            {/* <Footer /> */}
+          </div>
+        </AnnouncementBarIsClosedProvider>
       </ApiKeyModalStateProvider>
     </UserProvider>
   );

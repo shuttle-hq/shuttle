@@ -140,7 +140,7 @@ impl Deployment {
                     // by the Service seem to collide and lead to a deadlock. I wonder if the problem is that we have, once again,
                     // futures on one part of the FFI boundary being run by a runtime on the other (in this case, the pool in the db_state
                     // lives in `api` but are driven in `postgres` by a runtime in `postgres`).
-                    db_state.request();
+                    self.meta.write().await.database_deployment = Some(db_state.request());
 
                     match db_state.ensure().await {
                         Err(e) => DeploymentState::Error(e.into()),

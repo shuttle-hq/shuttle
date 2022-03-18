@@ -165,6 +165,8 @@ use rocket::{Build, Rocket};
 
 use tokio::runtime::Runtime;
 
+use sqlx::PgPool;
+
 use std::net::SocketAddr;
 use std::pin::Pin;
 
@@ -182,6 +184,17 @@ pub trait Factory: Send + Sync {
     ///
     /// Returns the connection string to the provisioned database.
     async fn get_sql_connection_string(&mut self) -> Result<String, crate::Error>;
+
+    async fn get_postgres_connection_pool(&mut self) -> Result<PgPool, crate::Error> {
+        let connection_string = self.get_sql_connection_string().await?;
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .min_connections(1)
+            .max_connections(5)
+            .connect(&connection_string)
+            .await?;
+
+        Ok(pool)
+    }
 }
 
 /// The core trait of the shuttle platform. Every crate deployed to shuttle needs to implement this trait.

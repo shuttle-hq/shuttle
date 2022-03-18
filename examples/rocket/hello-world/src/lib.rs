@@ -10,9 +10,16 @@ extern crate shuttle_service;
 fn index() -> &'static str {
     "Hello, world!"
 }
-
-fn rocket() -> Rocket<Build> {
-    rocket::build().mount("/hello", routes![index])
+async fn wrapper(
+    _factory: &mut dyn shuttle_service::Factory,
+) -> Result<Rocket<Build>, shuttle_service::Error> {
+    rocket().await
 }
 
-declare_service!(Rocket<Build>, rocket);
+declare_service!(wrapper);
+
+async fn rocket() -> Result<Rocket<Build>, shuttle_service::Error> {
+    let rocket = rocket::build().mount("/hello", routes![index]);
+
+    Ok(rocket)
+}

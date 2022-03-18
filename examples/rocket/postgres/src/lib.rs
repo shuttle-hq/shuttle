@@ -38,7 +38,7 @@ struct MyState {
     pool: PgPool,
 }
 
-async fn rocket(factory: &mut dyn Factory) -> Result<Rocket<Build>, shuttle_service::Error> {
+async fn wrapper(factory: &mut dyn Factory) -> Result<Rocket<Build>, shuttle_service::Error> {
     let connection_string = factory.get_sql_connection_string().await?;
     let pool = sqlx::postgres::PgPoolOptions::new()
         .min_connections(1)
@@ -46,6 +46,12 @@ async fn rocket(factory: &mut dyn Factory) -> Result<Rocket<Build>, shuttle_serv
         .connect(&connection_string)
         .await?;
 
+    rocket(pool).await?;
+}
+
+declare_service!(wrapper);
+
+async fn rocket(pool: PgPool) -> Result<Rocket<Build>, shuttle_service::Error> {
     pool.execute(include_str!("../schema.sql")).await?;
 
     let state = MyState { pool };
@@ -55,8 +61,6 @@ async fn rocket(factory: &mut dyn Factory) -> Result<Rocket<Build>, shuttle_serv
 
     Ok(rocket)
 }
-
-declare_service!(rocket);
 
 #[derive(Deserialize)]
 struct TodoNew {

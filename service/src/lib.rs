@@ -289,46 +289,43 @@ impl<T> Service for RocketService<T>
     }
 }
 
-pub struct SimpleRocketService {
-    rocket: Option<Rocket<Build>>,
-    builder: Option<
-        fn(
-            &mut dyn Factory,
-        ) -> Pin<Box<dyn Future<Output = Result<Rocket<Build>, Error>> + Send + '_>>,
-    >,
+pub struct SimpleService<T> {
+    service: Option<T>,
+    builder:
+        Option<fn(&mut dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>>,
     runtime: Runtime,
 }
 
-impl IntoService
-    for fn(
-        &mut dyn Factory,
-    ) -> Pin<Box<dyn Future<Output = Result<Rocket<Build>, Error>> + Send + '_>>
+impl<T> IntoService
+    for fn(&mut dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>
+where
+    SimpleService<T>: Service,
 {
-    type Service = SimpleRocketService;
+    type Service = SimpleService<T>;
 
     fn into_service(self) -> Self::Service {
-        SimpleRocketService {
-            rocket: None,
+        SimpleService {
+            service: None,
             builder: Some(self),
             runtime: Runtime::new().unwrap(),
         }
     }
 }
 
-impl Service for SimpleRocketService {
+impl Service for SimpleService<Rocket<Build>> {
     fn build(&mut self, factory: &mut dyn Factory) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
             // We want to build any sqlx pools on the same runtime the client code will run on. Without this expect to get errors of no tokio reactor being present.
             let rocket = self.runtime.block_on(builder(factory))?;
 
-            self.rocket = Some(rocket);
+            self.service = Some(rocket);
         }
 
         Ok(())
     }
 
     fn bind(&mut self, addr: SocketAddr) -> Result<(), error::Error> {
-        let rocket = self.rocket.take().expect("service has already been bound");
+        let rocket = self.service.take().expect("service has already been bound");
 
         let config = rocket::Config {
             address: addr.ip(),

@@ -1,6 +1,7 @@
 use ::hyper::server::{conn::AddrStream, Server};
 use ::hyper::service::{make_service_fn, service_fn};
 use ::hyper::{Body, Request, Response, StatusCode};
+use hyper::header::{HeaderValue, SERVER};
 use hyper_reverse_proxy::ProxyError;
 use shuttle_common::Port;
 use std::convert::Infallible;
@@ -8,6 +9,11 @@ use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 
 use crate::DeploymentSystem;
+use lazy_static::lazy_static;
+
+lazy_static! {
+    static ref HEADER_SERVER: HeaderValue = "shuttle.rs".parse().unwrap();
+}
 
 pub(crate) async fn start(
     bind_addr: IpAddr,
@@ -98,5 +104,9 @@ async fn reverse_proxy(
     req: Request<Body>,
 ) -> Result<Response<Body>, ProxyError> {
     let forward_uri = format!("http://127.0.0.1:{}", port);
-    hyper_reverse_proxy::call(ip, &forward_uri, req).await
+    let mut response = hyper_reverse_proxy::call(ip, &forward_uri, req).await?;
+
+    response.headers_mut().insert(SERVER, HEADER_SERVER.clone());
+
+    Ok(response)
 }

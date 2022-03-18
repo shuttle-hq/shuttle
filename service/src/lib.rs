@@ -171,6 +171,9 @@ use std::pin::Pin;
 pub mod error;
 pub use error::Error;
 
+extern crate shuttle_codegen;
+pub use shuttle_codegen::main;
+
 /// Factories can be used to request the provisioning of additional resources (like databases).
 ///
 /// An instance of factory is passed by the deployer as an argument to [Service::build][Service::build] in the initial phase of deployment.

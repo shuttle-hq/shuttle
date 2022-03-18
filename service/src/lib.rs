@@ -289,6 +289,59 @@ impl<T> Service for RocketService<T>
     }
 }
 
+pub struct SimpleRocketService {
+    rocket: Option<Rocket<Build>>,
+    builder: Option<
+        fn(
+            &mut dyn Factory,
+        ) -> Pin<Box<dyn Future<Output = Result<Rocket<Build>, Error>> + Send + '_>>,
+    >,
+    runtime: Runtime,
+}
+
+impl IntoService
+    for fn(
+        &mut dyn Factory,
+    ) -> Pin<Box<dyn Future<Output = Result<Rocket<Build>, Error>> + Send + '_>>
+{
+    type Service = SimpleRocketService;
+
+    fn into_service(self) -> Self::Service {
+        SimpleRocketService {
+            rocket: None,
+            builder: Some(self),
+            runtime: Runtime::new().unwrap(),
+        }
+    }
+}
+
+impl Service for SimpleRocketService {
+    fn build(&mut self, factory: &mut dyn Factory) -> Result<(), Error> {
+        if let Some(builder) = self.builder.take() {
+            // We want to build any sqlx pools on the same runtime the client code will run on. Without this expect to get errors of no tokio reactor being present.
+            let rocket = self.runtime.block_on(builder(factory))?;
+
+            self.rocket = Some(rocket);
+        }
+
+        Ok(())
+    }
+
+    fn bind(&mut self, addr: SocketAddr) -> Result<(), error::Error> {
+        let rocket = self.rocket.take().expect("service has already been bound");
+
+        let config = rocket::Config {
+            address: addr.ip(),
+            port: addr.port(),
+            log_level: rocket::config::LogLevel::Normal,
+            ..Default::default()
+        };
+        let launched = rocket.configure(config).launch();
+        self.runtime.block_on(launched)?;
+        Ok(())
+    }
+}
+
 /// Helper macro that generates the entrypoint required of any service. Likely the only macro you need in this crate.
 ///
 /// Can be used in one of two ways:
@@ -369,6 +422,21 @@ macro_rules! declare_service {
             > = |factory| Box::pin($state_builder(factory));
 
             let obj = $crate::IntoService::into_service((constructor(), state_builder));
+            let boxed: Box<dyn $crate::Service> = Box::new(obj);
+            Box::into_raw(boxed)
+        }
+    };
+    ($constructor:path) => {
+        #[no_mangle]
+        pub extern "C" fn _create_service() -> *mut dyn $crate::Service {
+            // Ensure constructor returns concrete type.
+            let constructor: fn(
+                &mut dyn $crate::Factory,
+            ) -> std::pin::Pin<
+                Box<dyn std::future::Future<Output = Result<_, $crate::Error>> + Send + '_>,
+            > = |factory| Box::pin($constructor(factory));
+
+            let obj = $crate::IntoService::into_service((constructor));
             let boxed: Box<dyn $crate::Service> = Box::new(obj);
             Box::into_raw(boxed)
         }

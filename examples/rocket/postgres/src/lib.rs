@@ -3,8 +3,8 @@ extern crate rocket;
 
 use rocket::{response::status::BadRequest, serde::json::Json, Build, Rocket, State};
 use serde::{Deserialize, Serialize};
-use sqlx::{Executor, FromRow, PgPool};
 use shuttle_service::Factory;
+use sqlx::{Executor, FromRow, PgPool};
 
 #[macro_use]
 extern crate shuttle_service;
@@ -38,11 +38,7 @@ struct MyState {
     pool: PgPool,
 }
 
-fn rocket() -> Rocket<Build> {
-    rocket::build().mount("/todo", routes![retrieve, add])
-}
-
-async fn build_state(factory: &mut dyn Factory) -> Result<MyState, shuttle_service::Error> {
+async fn rocket(factory: &mut dyn Factory) -> Result<Rocket<Build>, shuttle_service::Error> {
     let connection_string = factory.get_sql_connection_string().await?;
     let pool = sqlx::postgres::PgPoolOptions::new()
         .min_connections(1)
@@ -53,11 +49,14 @@ async fn build_state(factory: &mut dyn Factory) -> Result<MyState, shuttle_servi
     pool.execute(include_str!("../schema.sql")).await?;
 
     let state = MyState { pool };
+    let rocket = rocket::build()
+        .mount("/todo", routes![retrieve, add])
+        .manage(state);
 
-    Ok(state)
+    Ok(rocket)
 }
 
-declare_service!(Rocket<Build>, rocket, build_state);
+declare_service!(rocket);
 
 #[derive(Deserialize)]
 struct TodoNew {

@@ -1,10 +1,11 @@
 use anyhow::{anyhow, Context, Result};
-use shuttle_common::{API_URL, ApiKey, DeploymentMeta, DeploymentStateMeta, SHUTTLE_PROJECT_HEADER};
 use shuttle_common::project::ProjectConfig;
+use shuttle_common::{ApiKey, DeploymentMeta, DeploymentStateMeta, API_URL, SHUTTLE_PROJECT_HEADER};
+use reqwest::{Response, StatusCode};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
-use std::{fs::File, io::Read, thread::sleep, time::Duration};
-use reqwest::{Response, StatusCode};
+use std::{fs::File, io::Read, time::Duration};
+use tokio::time::sleep;
 
 pub(crate) async fn auth(username: String) -> Result<ApiKey> {
     let client = get_retry_client();
@@ -117,7 +118,7 @@ pub(crate) async fn deploy(
     ) {
         print_log(&deployment_meta.build_logs, &mut log_pos);
 
-        sleep(Duration::from_millis(350));
+        sleep(Duration::from_millis(350)).await;
 
         deployment_meta = get_deployment_meta(&api_key, &project, &client).await?;
     }

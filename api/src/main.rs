@@ -6,6 +6,7 @@ extern crate log;
 
 mod args;
 mod auth;
+mod auth_admin;
 mod build;
 mod database;
 mod deployment;
@@ -13,6 +14,7 @@ mod factory;
 mod proxy;
 mod router;
 
+use auth_admin::Admin;
 use factory::ShuttleFactory;
 use shuttle_common::{DeploymentApiError, DeploymentMeta, Port};
 use shuttle_common::project::ProjectConfig;
@@ -31,12 +33,11 @@ use crate::deployment::DeploymentSystem;
 
 type ApiResult<T, E> = Result<Json<T>, E>;
 
-
-/// Creates a user if the username is available and returns the corresponding
-/// API key.
-/// Returns an error if the user already exists.
+/// Find user by username and return it's API Key.
+/// if user does not exist create it and update `users` state to `users.toml`.
+/// Finally return user's API Key.
 #[post("/users/<username>")]
-async fn create_user(username: String) -> Result<ApiKey, AuthorizationError> {
+async fn create_user(username: String, _admin: Admin) -> Result<ApiKey, AuthorizationError> {
     USER_DIRECTORY.create_user(username)
 }
 

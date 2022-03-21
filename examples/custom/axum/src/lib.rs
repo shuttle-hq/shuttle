@@ -38,10 +38,9 @@ struct CustomService {
 #[async_trait]
 impl Service for CustomService {
     fn bind(&mut self, addr: std::net::SocketAddr) -> Result<(), shuttle_service::Error> {
-        let (path, handler) = self.router.take().expect("service has already been bound");
-        let app = Router::new().route(&path, get(handler));
+        let router = self.router.take().expect("service has already been bound");
 
-        let launched = axum::Server::bind(&addr).serve(app.into_make_service());
+        let launched = axum::Server::bind(&addr).serve(router.into_make_service());
         self.runtime.block_on(launched).unwrap();
 
         Ok(())

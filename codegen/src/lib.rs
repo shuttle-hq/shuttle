@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::{quote, ToTokens};
-use syn::{parse_macro_input, Ident, ItemFn, ReturnType};
+use syn::{parse_macro_input, parse_quote, FnArg, Ident, ItemFn, Pat, ReturnType};
 
 #[proc_macro_attribute]
 pub fn main(_attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -19,13 +19,30 @@ pub fn main(_attr: TokenStream, item: TokenStream) -> TokenStream {
 struct Wrapper {
     fn_ident: Ident,
     fn_output: ReturnType,
+    fn_inputs: Vec<Ident>,
 }
 
 impl Wrapper {
     fn from_item_fn(item_fn: &ItemFn) -> Self {
+        let inputs: Vec<_> = item_fn
+            .sig
+            .inputs
+            .iter()
+            .filter_map(|input| match input {
+                FnArg::Receiver(_) => None,
+                FnArg::Typed(typed) => Some(typed),
+            })
+            .filter_map(|typed| match typed.pat.as_ref() {
+                Pat::Ident(ident) => Some(ident),
+                _ => None,
+            })
+            .map(|pat_ident| pat_ident.ident.clone())
+            .collect();
+
         Self {
             fn_ident: item_fn.sig.ident.clone(),
             fn_output: item_fn.sig.output.clone(),
+            fn_inputs: inputs,
         }
     }
 }
@@ -34,12 +51,20 @@ impl ToTokens for Wrapper {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let fn_output = &self.fn_output;
         let fn_ident = &self.fn_ident;
+        let fn_inputs = &self.fn_inputs;
+
+        let factory_ident: Ident = if self.fn_inputs.is_empty() {
+            parse_quote!(_factory)
+        } else {
+            parse_quote!(factory)
+        };
 
         let wrapper = quote! {
             async fn wrapper(
-                _factory: &mut dyn shuttle_service::Factory,
+                #factory_ident: &mut dyn shuttle_service::Factory,
             ) #fn_output {
-                #fn_ident().await
+                #(let #fn_inputs = #factory_ident.get_resource();)*
+                #fn_ident(#(#fn_inputs),*).await
             }
 
             shuttle_service::declare_service!(wrapper);
@@ -68,6 +93,7 @@ mod tests {
 
         assert_eq!(actual.fn_ident, expected_ident);
         assert_eq!(actual.fn_output, ReturnType::Default);
+        assert_eq!(actual.fn_inputs, Vec::<Ident>::new());
     }
 
     #[test]
@@ -75,6 +101,7 @@ mod tests {
         let input = Wrapper {
             fn_ident: parse_quote!(simple),
             fn_output: ReturnType::Default,
+            fn_inputs: Vec::new(),
         };
 
         let actual = quote!(#input);
@@ -103,6 +130,7 @@ mod tests {
 
         assert_eq!(actual.fn_ident, expected_ident);
         assert_eq!(actual.fn_output, expected_output);
+        assert_eq!(actual.fn_inputs, Vec::<Ident>::new());
     }
 
     #[test]
@@ -110,6 +138,7 @@ mod tests {
         let input = Wrapper {
             fn_ident: parse_quote!(complex),
             fn_output: parse_quote!(-> Result<(), Box<dyn std::error::Error>>),
+            fn_inputs: Vec::new(),
         };
 
         let actual = quote!(#input);
@@ -118,6 +147,46 @@ mod tests {
                 _factory: &mut dyn shuttle_service::Factory,
             ) -> Result<(), Box<dyn std::error::Error> > {
                 complex().await
+            }
+
+            shuttle_service::declare_service!(wrapper);
+        };
+
+        assert_eq!(actual.to_string(), expected.to_string());
+    }
+
+    #[test]
+    fn from_with_inputs() {
+        let input = parse_quote!(
+            async fn complex(pool: PgPool) -> Result<(), Box<dyn std::error::Error>> {}
+        );
+
+        let actual = Wrapper::from_item_fn(&input);
+        let expected_ident: Ident = parse_quote!(complex);
+        let expected_output: ReturnType = parse_quote!(-> Result<(), Box<dyn std::error::Error>>);
+        let expected_inputs: Vec<Ident> = vec![parse_quote!(pool)];
+
+        assert_eq!(actual.fn_ident, expected_ident);
+        assert_eq!(actual.fn_output, expected_output);
+        assert_eq!(actual.fn_inputs, expected_inputs);
+    }
+
+    #[test]
+    fn output_with_inputs() {
+        let input = Wrapper {
+            fn_ident: parse_quote!(complex),
+            fn_output: parse_quote!(-> Result<(), Box<dyn std::error::Error>>),
+            fn_inputs: vec![parse_quote!(pool), parse_quote!(redis)],
+        };
+
+        let actual = quote!(#input);
+        let expected = quote! {
+            async fn wrapper(
+                factory: &mut dyn shuttle_service::Factory,
+            ) -> Result<(), Box<dyn std::error::Error> > {
+                let pool = factory.get_resource();
+                let redis = factory.get_resource();
+                complex(pool, redis).await
             }
 
             shuttle_service::declare_service!(wrapper);

@@ -3,11 +3,7 @@ extern crate rocket;
 
 use rocket::{response::status::BadRequest, serde::json::Json, Build, Rocket, State};
 use serde::{Deserialize, Serialize};
-use shuttle_service::Factory;
 use sqlx::{Executor, FromRow, PgPool};
-
-#[macro_use]
-extern crate shuttle_service;
 
 #[get("/<id>")]
 async fn retrieve(id: i32, state: &State<MyState>) -> Result<Json<Todo>, BadRequest<String>> {
@@ -38,19 +34,7 @@ struct MyState {
     pool: PgPool,
 }
 
-async fn wrapper(factory: &mut dyn Factory) -> Result<Rocket<Build>, shuttle_service::Error> {
-    let connection_string = factory.get_sql_connection_string().await?;
-    let pool = sqlx::postgres::PgPoolOptions::new()
-        .min_connections(1)
-        .max_connections(5)
-        .connect(&connection_string)
-        .await?;
-
-    rocket(pool).await?;
-}
-
-declare_service!(wrapper);
-
+#[shuttle_service::main]
 async fn rocket(pool: PgPool) -> Result<Rocket<Build>, shuttle_service::Error> {
     pool.execute(include_str!("../schema.sql")).await?;
 

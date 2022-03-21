@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::{quote, ToTokens};
-use syn::{parse_macro_input, parse_quote, FnArg, Ident, ItemFn, Pat, ReturnType};
+use syn::{parse_macro_input, parse_quote, FnArg, Ident, ItemFn, Pat, ReturnType, Stmt};
 
 #[proc_macro_attribute]
 pub fn main(_attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -59,11 +59,20 @@ impl ToTokens for Wrapper {
             parse_quote!(factory)
         };
 
+        let extra_imports: Option<Stmt> = if self.fn_inputs.is_empty() {
+            None
+        } else {
+            Some(parse_quote!(
+                use shuttle_service::GetResource;
+            ))
+        };
+
         let wrapper = quote! {
             async fn wrapper(
                 #factory_ident: &mut dyn shuttle_service::Factory,
             ) #fn_output {
-                #(let #fn_inputs = #factory_ident.get_resource();)*
+                #extra_imports
+                #(let #fn_inputs = #factory_ident.get_resource().await?;)*
                 #fn_ident(#(#fn_inputs),*).await
             }
 
@@ -184,8 +193,9 @@ mod tests {
             async fn wrapper(
                 factory: &mut dyn shuttle_service::Factory,
             ) -> Result<(), Box<dyn std::error::Error> > {
-                let pool = factory.get_resource();
-                let redis = factory.get_resource();
+                use shuttle_service::GetResource;
+                let pool = factory.get_resource().await?;
+                let redis = factory.get_resource().await?;
                 complex(pool, redis).await
             }
 

@@ -158,6 +158,7 @@
 //!
 
 use async_trait::async_trait;
+use sqlx::PgPool;
 use std::future::Future;
 
 pub use rocket;
@@ -185,6 +186,28 @@ pub trait Factory: Send + Sync {
     ///
     /// Returns the connection string to the provisioned database.
     async fn get_sql_connection_string(&mut self) -> Result<String, crate::Error>;
+}
+
+/// Used to get resources of type `T` from factories with easy. This is mainly meant for consumption by our code generator.
+#[async_trait]
+pub trait GetResource<T> {
+    async fn get_resource(self) -> Result<T, crate::Error>;
+}
+
+/// Get an `sqlx::PgPool` from any factory
+#[async_trait]
+impl GetResource<PgPool> for &mut dyn Factory {
+    async fn get_resource(self) -> Result<PgPool, crate::Error> {
+        let connection_string = self.get_sql_connection_string().await?;
+
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .min_connections(1)
+            .max_connections(5)
+            .connect(&connection_string)
+            .await?;
+
+        Ok(pool)
+    }
 }
 
 /// The core trait of the shuttle platform. Every crate deployed to shuttle needs to implement this trait.

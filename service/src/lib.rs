@@ -449,19 +449,4 @@ macro_rules! declare_service {
             Box::into_raw(boxed)
         }
     };
-    ($constructor:path) => {
-        #[no_mangle]
-        pub extern "C" fn _create_service() -> *mut dyn $crate::Service {
-            // Ensure constructor returns concrete type.
-            let constructor: fn(
-                &mut dyn $crate::Factory,
-            ) -> std::pin::Pin<
-                Box<dyn std::future::Future<Output = Result<_, $crate::Error>> + Send + '_>,
-            > = |factory| Box::pin($constructor(factory));
-
-            let obj = $crate::IntoService::into_service((constructor));
-            let boxed: Box<dyn $crate::Service> = Box::new(obj);
-            Box::into_raw(boxed)
-        }
-    };
 }

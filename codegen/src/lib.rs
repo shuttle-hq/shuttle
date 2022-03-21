@@ -11,6 +11,20 @@ pub fn main(_attr: TokenStream, item: TokenStream) -> TokenStream {
         #wrapper
 
         #fn_decl
+
+        #[no_mangle]
+        pub extern "C" fn _create_service() -> *mut dyn shuttle_service::Service {
+            // Ensure constructor returns concrete type.
+            let constructor: fn(
+                &mut dyn shuttle_service::Factory,
+            ) -> std::pin::Pin<
+                Box<dyn std::future::Future<Output = Result<_, shuttle_service::Error>> + Send + '_>,
+            > = |factory| Box::pin(wrapper(factory));
+
+            let obj = shuttle_service::IntoService::into_service((constructor));
+            let boxed: Box<dyn shuttle_service::Service> = Box::new(obj);
+            Box::into_raw(boxed)
+        }
     };
 
     expanded.into()
@@ -75,8 +89,6 @@ impl ToTokens for Wrapper {
                 #(let #fn_inputs = #factory_ident.get_resource().await?;)*
                 #fn_ident(#(#fn_inputs),*).await
             }
-
-            shuttle_service::declare_service!(wrapper);
         };
 
         wrapper.to_tokens(tokens);
@@ -120,8 +132,6 @@ mod tests {
             ) {
                 simple().await
             }
-
-            shuttle_service::declare_service!(wrapper);
         };
 
         assert_eq!(actual.to_string(), expected.to_string());
@@ -157,8 +167,6 @@ mod tests {
             ) -> Result<(), Box<dyn std::error::Error> > {
                 complex().await
             }
-
-            shuttle_service::declare_service!(wrapper);
         };
 
         assert_eq!(actual.to_string(), expected.to_string());
@@ -198,8 +206,6 @@ mod tests {
                 let redis = factory.get_resource().await?;
                 complex(pool, redis).await
             }
-
-            shuttle_service::declare_service!(wrapper);
         };
 
         assert_eq!(actual.to_string(), expected.to_string());

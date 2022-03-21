@@ -173,7 +173,9 @@ use std::pin::Pin;
 pub mod error;
 pub use error::Error;
 
+#[cfg(feature = "codegen")]
 extern crate shuttle_codegen;
+#[cfg(feature = "codegen")]
 pub use shuttle_codegen::main;
 
 /// Factories can be used to request the provisioning of additional resources (like databases).

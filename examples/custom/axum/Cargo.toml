@@ -3,8 +3,8 @@ name = "hello-world"
 version = "0.1.0"
 edition = "2021"
 
-# [lib]
-# crate-type = ["cdylib"]
+[lib]
+crate-type = ["cdylib"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -12,3 +12,4 @@ edition = "2021"
 async-trait = "0.1"
 axum = "0.4"
 shuttle-service = "0.2.1"
+sync_wrapper = "0.1"

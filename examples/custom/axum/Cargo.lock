@@ -583,6 +583,7 @@ dependencies = [
  "async-trait",
  "axum",
  "shuttle-service",
+ "sync_wrapper",
 ]
 
 [[package]]

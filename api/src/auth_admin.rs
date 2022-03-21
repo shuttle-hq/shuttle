@@ -1,9 +1,14 @@
+use crate::auth::AuthorizationError;
+use lazy_static::lazy_static;
 use rocket::http::Status;
 use rocket::request::{FromRequest, Outcome};
 use rocket::Request;
 use serde::{Deserialize, Serialize};
 
-use crate::auth::AuthorizationError;
+lazy_static! {
+    static ref SHUTTLE_ADMIN_SECRET: String =
+        std::env::var("SHUTTLE_ADMIN_SECRET").expect("SHUTTLE_ADMIN_SECRET env var not found!");
+}
 
 #[derive(Debug, PartialEq, Hash, Eq, Deserialize, Serialize, Responder)]
 pub struct AdminSecret(String);
@@ -17,7 +22,7 @@ impl TryFrom<Option<&str>> for AdminSecret {
             None => Err(AuthorizationError::Missing(())),
             Some(s) => {
                 let parts: Vec<&str> = s.split(' ').collect();
-                
+
                 if parts.len() != 2 {
                     return Err(AuthorizationError::Malformed(()));
                 }
@@ -39,12 +44,9 @@ impl<'r> FromRequest<'r> for Admin {
             Ok(admin_secret) => admin_secret,
             Err(e) => return Outcome::Failure((Status::BadRequest, e)),
         };
-        let shuttle_admin_secret = std::env::var("SHUTTLE_ADMIN_SECRET").expect(
-            "SHUTTLE_ADMIN_SECRET env var not found!"
-        );
 
-        if admin_secret.0 == shuttle_admin_secret {
-            Outcome::Success(Admin{})
+        if admin_secret.0 == *SHUTTLE_ADMIN_SECRET {
+            Outcome::Success(Admin {})
         } else {
             log::warn!("authorization failure for admin secret {:?}", &admin_secret);
 

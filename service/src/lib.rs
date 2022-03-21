@@ -319,6 +319,8 @@ impl<T> Service for RocketService<T>
     }
 }
 
+/// A wrapper that takes a user's future, gives the future a factory, and takes the returned service from the future
+/// The returned service will be deployed by shuttle
 pub struct SimpleService<T> {
     service: Option<T>,
     builder:

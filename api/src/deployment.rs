@@ -497,7 +497,7 @@ impl DeploymentSystem {
     ) -> Result<DeploymentMeta, DeploymentApiError> {
         if self.deployments.read().await.len() >= MAX_DEPLOYS {
             return Err(DeploymentApiError::Unavailable(
-                "this server has reached its maximum number of supported deploys".to_string(),
+                "this instance has reached its maximum number of supported deployments".to_string(),
             ));
         };
 

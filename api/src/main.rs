@@ -37,8 +37,8 @@ type ApiResult<T, E> = Result<Json<T>, E>;
 /// if user does not exist create it and update `users` state to `users.toml`.
 /// Finally return user's API Key.
 #[post("/users/<username>")]
-async fn create_user(username: String, _admin: Admin) -> Result<ApiKey, AuthorizationError> {
-    USER_DIRECTORY.create_user(username)
+async fn get_or_create_user(username: String, _admin: Admin) -> Result<ApiKey, AuthorizationError> {
+    USER_DIRECTORY.get_or_create(username)
 }
 
 /// Status API to be used to check if the service is alive
@@ -190,7 +190,7 @@ async fn rocket() -> _ {
                 delete_project,
                 create_project,
                 get_project,
-                create_user,
+                get_or_create_user,
                 status
             ],
         )

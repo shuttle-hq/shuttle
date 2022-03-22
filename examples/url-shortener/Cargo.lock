@@ -1033,17 +1033,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "58893f751c9b0412871a09abd62ecd2a00298c6c83befa223ef98c52aef40cbe"
 
 [[package]]
-name = "postgres"
-version = "0.1.0"
-dependencies = [
- "nanoid",
- "rocket",
- "serde",
- "shuttle-service",
- "sqlx",
-]
-
-[[package]]
 name = "ppv-lite86"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1998,6 +1987,17 @@ dependencies = [
  "idna",
  "matches",
  "percent-encoding",
+]
+
+[[package]]
+name = "url-shortener"
+version = "0.1.0"
+dependencies = [
+ "nanoid",
+ "rocket",
+ "serde",
+ "shuttle-service",
+ "sqlx",
 ]
 
 [[package]]

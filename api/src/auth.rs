@@ -1,11 +1,14 @@
 use anyhow::{anyhow, Context};
-use lazy_static::lazy_static;
 use rand::Rng;
 use rocket::form::validate::Contains;
 use rocket::http::Status;
+use rocket::outcome::try_outcome;
 use rocket::request::{FromRequest, Outcome};
 use rocket::Request;
+use rocket::State;
 use serde::{Deserialize, Serialize};
+
+use shuttle_common::project::ProjectName;
 use shuttle_common::DeploymentApiError;
 use std::collections::HashMap;
 use std::error::Error;
@@ -14,33 +17,37 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::sync::RwLock;
 
-#[derive(Debug, PartialEq, Hash, Eq, Deserialize, Serialize, Responder)]
+#[derive(Clone, Debug, PartialEq, Hash, Eq, Serialize, Deserialize, Responder)]
+#[serde(transparent)]
 pub struct ApiKey(String);
 
-/// Parses an authorization header string into an ApiKey
-impl TryFrom<Option<&str>> for ApiKey {
-    type Error = AuthorizationError;
-
-    fn try_from(s: Option<&str>) -> Result<Self, Self::Error> {
-        match s {
-            None => Err(AuthorizationError::Missing(())),
-            Some(s) => {
-                let parts: Vec<&str> = s.split(' ').collect();
-                if parts.len() != 2 {
-                    return Err(AuthorizationError::Malformed(()));
-                }
-                // unwrap ok because of explicit check above
-                let key = *parts.get(1).unwrap();
-                // comes in base64 encoded
-                let decoded_bytes =
-                    base64::decode(key).map_err(|_| AuthorizationError::Malformed(()))?;
-                let mut decoded_string = String::from_utf8(decoded_bytes)
-                    .map_err(|_| AuthorizationError::Malformed(()))?;
-                // remove colon at the end
-                decoded_string.pop();
-                Ok(ApiKey(decoded_string))
-            }
+impl ApiKey {
+    /// Parses an authorization header string into an ApiKey
+    pub fn from_authorization_header<S: AsRef<str>>(header: S) -> Result<Self, AuthorizationError> {
+        let s = header.as_ref();
+        let parts: Vec<&str> = s.split(' ').collect();
+        if parts.len() != 2 {
+            return Err(AuthorizationError::Malformed(()));
         }
+        // unwrap ok because of explicit check above
+        let key = *parts.get(1).unwrap();
+        // comes in base64 encoded
+        let decoded_bytes = base64::decode(key).map_err(|_| AuthorizationError::Malformed(()))?;
+        let mut decoded_string =
+            String::from_utf8(decoded_bytes).map_err(|_| AuthorizationError::Malformed(()))?;
+        // remove colon at the end
+        decoded_string.pop();
+        Ok(ApiKey(decoded_string))
+    }
+
+    pub fn new_random() -> Self {
+        Self(
+            rand::thread_rng()
+                .sample_iter(&rand::distributions::Alphanumeric)
+                .take(16)
+                .map(char::from)
+                .collect::<String>(),
+        )
     }
 }
 
@@ -58,6 +65,10 @@ pub enum AuthorizationError {
     Unauthorized(()),
     #[response(status = 409)]
     AlreadyExists(()),
+    #[response(status = 500)]
+    Internal(()),
+    #[response(status = 404)]
+    NotFound(()),
 }
 
 impl Display for AuthorizationError {
@@ -67,131 +78,201 @@ impl Display for AuthorizationError {
             AuthorizationError::Malformed(_) => write!(f, "API key is malformed"),
             AuthorizationError::Unauthorized(_) => write!(f, "API key is unauthorized"),
             AuthorizationError::AlreadyExists(_) => write!(f, "username already exists"),
+            AuthorizationError::Internal(_) => write!(f, "internal server error"),
+            AuthorizationError::NotFound(_) => write!(f, "required resource was not found"),
         }
     }
 }
 
 impl Error for AuthorizationError {}
 
-#[rocket::async_trait]
+/// A wrapper for a Rocket guard that verifies an API key is associated with a
+/// valid user.
+///
+/// The `FromRequest` impl consumes the API key and verifies it is valid for the
+/// a user. Generally you want to use [`ScopedUser`] instead to ensure the request
+/// is valid against the user's owned resources.
+#[derive(Clone, Deserialize, Serialize, Debug)]
+pub(crate) struct User {
+    pub(crate) name: String,
+    pub(crate) projects: Vec<ProjectName>,
+}
+
+#[async_trait]
 impl<'r> FromRequest<'r> for User {
     type Error = AuthorizationError;
 
-    async fn from_request(req: &'r Request<'_>) -> Outcome<Self, Self::Error> {
-        let api_key = match ApiKey::try_from(req.headers().get_one("Authorization")) {
-            Ok(api_key) => api_key,
-            Err(e) => return Outcome::Failure((Status::BadRequest, e)),
-        };
-        match USER_DIRECTORY.user_for_api_key(&api_key) {
-            None => {
-                log::warn!("authorization failure for api key {:?}", &api_key);
-                Outcome::Failure((Status::Unauthorized, AuthorizationError::Unauthorized(())))
+    async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
+        if let Some(authorization) = request.headers().get_one("Authorization") {
+            match ApiKey::from_authorization_header(authorization) {
+                Ok(api_key) => {
+                    let authorizer: &'r State<UserDirectory> =
+                        try_outcome!(request.guard().await.map_failure(|(status, ())| {
+                            (status, AuthorizationError::Internal(()))
+                        }));
+                    if let Some(user) = authorizer.user_for_api_key(&api_key) {
+                        Outcome::Success(user)
+                    } else {
+                        Outcome::Failure((
+                            Status::Unauthorized,
+                            AuthorizationError::Unauthorized(()),
+                        ))
+                    }
+                }
+                Err(err) => Outcome::Failure((Status::Unauthorized, err)),
             }
-            Some(user) => Outcome::Success(user),
+        } else {
+            Outcome::Failure((Status::Unauthorized, AuthorizationError::Malformed(())))
         }
     }
 }
 
-#[derive(Clone, Deserialize, Serialize, Debug)]
-pub(crate) struct User {
-    pub(crate) name: String,
-    pub(crate) projects: Vec<String>,
+/// A wrapper for a Rocket guard that validates a user's API key *and*
+/// scopes the request to a project they own.
+///
+/// It is guaranteed that [`ScopedUser::scope`] exists and is owned
+/// by [`ScopedUser::name`].
+pub(crate) struct ScopedUser {
+    #[allow(dead_code)]
+    user: User,
+    scope: ProjectName,
 }
 
-lazy_static! {
-    pub(crate) static ref USER_DIRECTORY: UserDirectory = UserDirectory::from_user_file()
-        .unwrap_or_else(|e| {
-            log::error!("error initialising user directory: {:#?}", e);
-            log::error!("killing api...");
-            std::process::exit(1);
-        });
+impl ScopedUser {
+    #[allow(dead_code)]
+    pub(crate) fn name(&self) -> &str {
+        &self.user.name
+    }
+
+    pub(crate) fn scope(&self) -> &ProjectName {
+        &self.scope
+    }
+}
+
+#[async_trait]
+impl<'r> FromRequest<'r> for ScopedUser {
+    type Error = AuthorizationError;
+
+    async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
+        let user = try_outcome!(User::from_request(request).await);
+        let route = request
+            .route()
+            .expect("`User` can only be used in requests");
+        if route.uri.base().starts_with("/projects") {
+            match request.param::<ProjectName>(0) {
+                Some(Ok(scope)) => {
+                    if user.projects.contains(&scope) {
+                        Outcome::Success(Self { user, scope })
+                    } else {
+                        Outcome::Failure((
+                            Status::Unauthorized,
+                            AuthorizationError::Unauthorized(()),
+                        ))
+                    }
+                }
+                Some(Err(_)) => {
+                    Outcome::Failure((Status::NotFound, AuthorizationError::NotFound(())))
+                }
+                None => {
+                    Outcome::Failure((Status::Unauthorized, AuthorizationError::Unauthorized(())))
+                }
+            }
+        } else {
+            panic!("`ScopedUser` can only be used in routes with a /projects/<project_name> scope")
+        }
+    }
 }
 
 #[derive(Debug)]
 pub(crate) struct UserDirectory {
-    users: RwLock<HashMap<String, User>>,
+    users: RwLock<HashMap<ApiKey, User>>,
 }
 
 impl UserDirectory {
-    /// Validates if a user owns an existing project, if not:
+    /// Creates a project if it does not already exist
     /// - first there is a check to see if this project exists globally, if yes
-    /// will return an error since the project does not belong to the current user
+    /// will return an error since the project already exists
     /// - if not, will create the project for the user
     /// Finally saves `users` state to `users.toml`.
-    pub(crate) fn validate_or_create_project(
+    pub(crate) fn create_project_if_not_exists(
         &self,
-        user: &User,
-        project_name: &str,
+        username: &str,
+        project_name: &ProjectName,
     ) -> Result<(), DeploymentApiError> {
-        if user.projects.contains(project_name.to_string()) {
-            return Ok(());
-        }
+        {
+            let mut users = self.users.write().unwrap();
 
-        let mut users = self.users.write().unwrap();
+            let project_for_name = users
+                .values()
+                .flat_map(|users| &users.projects)
+                .find(|project| project == &project_name);
 
-        let project_for_name = users
-            .values()
-            .flat_map(|users| &users.projects)
-            .find(|project| project == &project_name);
+            if project_for_name.is_some() {
+                return Err(DeploymentApiError::ProjectAlreadyExists(format!(
+                    "project with name `{}` already exists",
+                    project_name
+                )));
+            }
 
-        if project_for_name.is_some() {
-            return Err(DeploymentApiError::ProjectAlreadyExists(format!(
-                "project with name `{}` already exists",
-                project_name
-            )));
-        }
-
-        // at this point we know that the user does not have this project
-        // and that another user does not have it
-        let user = users
-            .values_mut()
-            .find(|u| u.name == user.name)
-            .ok_or_else(|| {
-                DeploymentApiError::Internal(
+            // at this point we know that the user does not have this project
+            // and that another user does not have it
+            let user = users
+                .values_mut()
+                .find(|u| u.name == username)
+                .ok_or_else(|| {
+                    DeploymentApiError::Internal(
                     "there was an issue getting the user credentials while validating the project"
                         .to_string(),
                 )
-            })?;
+                })?;
 
-        user.projects.push(project_name.to_string());
-
-        self.save(&*users);
+            user.projects.push(project_name.clone());
+        }
+        self.save();
 
         Ok(())
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn authorize(&self, key: &ApiKey, project_name: &ProjectName) -> Option<User> {
+        let user = self.user_for_api_key(key)?;
+        if user.projects.contains(project_name) {
+            Some(user)
+        } else {
+            None
+        }
     }
 
     /// Find user by username and return it's API Key.
     /// if user does not exist create it and update `users` state to `users.toml`.
     /// Finally return user's API Key.
     pub(crate) fn get_or_create(&self, username: String) -> Result<ApiKey, AuthorizationError> {
-        let mut users = self.users.write().unwrap();
+        let api_key = {
+            let mut users = self.users.write().unwrap();
 
-        for (api_key, user) in users.iter() {
-            if user.name == username {
-                return Ok(ApiKey(api_key.to_string()));
+            if let Some((api_key, _)) = users.iter().find(|(_, user)| user.name == username) {
+                api_key.clone()
+            } else {
+                let api_key = ApiKey::new_random();
+
+                let user = User {
+                    name: username,
+                    projects: vec![],
+                };
+
+                users.insert(api_key.clone(), user);
+
+                api_key
             }
-        }
-
-        let api_key: String = rand::thread_rng()
-            .sample_iter(&rand::distributions::Alphanumeric)
-            .take(16)
-            .map(char::from)
-            .collect();
-
-        let user = User {
-            name: username,
-            projects: vec![],
         };
 
-        users.insert(api_key.clone(), user);
+        self.save();
 
-        self.save(&*users);
-
-        Ok(ApiKey(api_key))
+        Ok(api_key)
     }
 
-    /// Overwrites users.toml with a new `HashMap<String, User>`
-    fn save(&self, users: &HashMap<String, User>) {
+    /// Overwrites users.toml with the latest users' field data
+    fn save(&self) {
         // Save the config
         let mut users_file = std::fs::OpenOptions::new()
             .write(true)
@@ -200,15 +281,17 @@ impl UserDirectory {
             .open(Self::users_toml_file_path())
             .unwrap();
 
+        let users = self.users.read().unwrap();
+
         write!(users_file, "{}", toml::to_string_pretty(&*users).unwrap())
             .expect("could not write contents to users.toml");
     }
 
     fn user_for_api_key(&self, api_key: &ApiKey) -> Option<User> {
-        self.users.read().unwrap().get(&api_key.0).cloned()
+        self.users.read().unwrap().get(api_key).cloned()
     }
 
-    fn from_user_file() -> Result<Self, anyhow::Error> {
+    pub(crate) fn from_user_file() -> Result<Self, anyhow::Error> {
         let file_path = Self::users_toml_file_path();
         let file_contents: String = std::fs::read_to_string(&file_path).context(anyhow!(
             "this should blow up if the users.toml file is not present at {:?}",
@@ -243,7 +326,7 @@ pub mod tests {
 
     #[test]
     pub fn test_api_key_parsing() {
-        let api_key: ApiKey = Some("Basic bXlfYXBpX2tleTo=").try_into().unwrap();
+        let api_key = ApiKey::from_authorization_header("Basic bXlfYXBpX2tleTo=").unwrap();
         assert_eq!(api_key, ApiKey("my_api_key".to_string()))
     }
 }

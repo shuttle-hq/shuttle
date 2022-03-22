@@ -4,7 +4,6 @@ use cargo::core::Workspace;
 use cargo::ops::CompileOptions;
 use rocket::tokio;
 use rocket::tokio::io::AsyncWriteExt;
-use shuttle_common::project::ProjectConfig;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -27,7 +26,7 @@ pub(crate) trait BuildSystem: Send + Sync {
     async fn build(
         &self,
         crate_bytes: &[u8],
-        project_config: &ProjectConfig,
+        project: &str,
         buf: Box<dyn std::io::Write + Send>,
     ) -> Result<Build>;
 
@@ -74,11 +73,9 @@ impl BuildSystem for FsBuildSystem {
     async fn build(
         &self,
         crate_bytes: &[u8],
-        project_config: &ProjectConfig,
+        project_name: &str,
         buf: Box<dyn std::io::Write + Send>,
     ) -> Result<Build> {
-        let project_name = project_config.name();
-
         // project path
         let project_path = self.project_path(project_name)?;
         debug!("Project path: {}", project_path.display());
@@ -176,7 +173,7 @@ fn crate_location(project_path: &Path, project_name: &str) -> PathBuf {
 /// Given a .crate file (which is a gzipped tarball), extracts the contents
 /// into the project_path
 fn extract_tarball(crate_path: &Path, project_path: &Path) -> Result<()> {
-    Command::new("tar")
+    let output = Command::new("tar")
         .arg("-xzvf") // extract
         .arg(crate_path)
         .arg("-C") // target
@@ -185,7 +182,12 @@ fn extract_tarball(crate_path: &Path, project_path: &Path) -> Result<()> {
         .arg("1")
         .arg("--touch") // touch to update mtime for cargo
         .output()?;
-    Ok(())
+    if !output.status.success() {
+        let err = String::from_utf8(output.stderr).unwrap_or_default();
+        Err(anyhow::Error::msg(err).context(anyhow!("failed to unpack cargo archive")))
+    } else {
+        Ok(())
+    }
 }
 
 /// Given a project directory path, builds the crate

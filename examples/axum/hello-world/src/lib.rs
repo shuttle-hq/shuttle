@@ -36,7 +36,6 @@ struct CustomService {
     runtime: Runtime,
 }
 
-#[async_trait]
 impl Service for CustomService {
     fn bind(&mut self, addr: std::net::SocketAddr) -> Result<(), shuttle_service::Error> {
         let router = self

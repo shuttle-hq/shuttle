@@ -3,6 +3,9 @@ name = "authentication"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+crate-type = ["cdylib"]
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
@@ -11,3 +14,4 @@ jsonwebtoken = {version = "8", default-features = false }
 lazy_static = "1.4"
 rocket = {version = "0.5.0-rc.1", features = ["json"] }
 serde = {version = "1.0", features = ["derive"] }
+shuttle-service = "0.2.4"

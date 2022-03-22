@@ -131,7 +131,7 @@ impl Api {
             .ensure_success("failed to build `api` image");
 
         let output = Command::new("docker")
-            .args(["build", "-q", "-f", "./Dockerfile", "."])
+            .args(["build", "-q", "-f", "./Dockerfile.dev", "."])
             .current_dir("../")
             .output()
             .unwrap();

@@ -46,9 +46,14 @@ struct LoginRequest {
     password: String,
 }
 
+#[derive(Serialize)]
+struct LoginResponse {
+    token: String,
+}
+
 /// Tries to authenticate a user. Successful authentications get a JWT token
 #[post("/login", data = "<login>")]
-fn login(login: Json<LoginRequest>) -> Result<String, Custom<String>> {
+fn login(login: Json<LoginRequest>) -> Result<Json<LoginResponse>, Custom<String>> {
     // This should be real user validation code, but is left simple for this example
     if login.username != "username" || login.password != "password" {
         return Err(Custom(
@@ -58,8 +63,11 @@ fn login(login: Json<LoginRequest>) -> Result<String, Custom<String>> {
     }
 
     let claim = Claims::from_name(&login.username);
+    let response = LoginResponse {
+        token: claim.to_token()?,
+    };
 
-    claim.to_token()
+    Ok(Json(response))
 }
 
 fn rocket() -> Rocket<Build> {

@@ -18,6 +18,14 @@ curl -X POST -d 'https://docs.rs/shuttle-service/latest/shuttle_service/' https:
 
 and you will get shortened url back (something like this `https://s.shuttleapp.rs/RvpVU_`)
 
+## Project structure
+
+project consists of following files
+
+- `Shuttle.toml` contains name of the app (if name is `s` domain will be `s.shuttleapp.rs`)
+- `schema.sql` is sql script to that will setup database for the app
+- `src/lib.rs` is where all the magic happens it creates shuttle service with two endpoints one for creating new short urls and on for handling shortened urls
+
 ## How to deploy
 
 To deploy this app, check out the repository locally

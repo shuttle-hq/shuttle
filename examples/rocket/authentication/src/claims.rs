@@ -12,12 +12,16 @@ use serde::{Deserialize, Serialize};
 
 const BEARER: &str = "Bearer ";
 const AUTHORIZATION: &str = "Authorization";
+
+/// Key used for symmetric token encoding
 const SECRET: &str = "secret";
 
 lazy_static! {
+    /// Time before token expires (aka exp claim)
     static ref TOKEN_EXPIRATION: Duration = Duration::minutes(5);
 }
 
+// Used when decoding a token to `Claims`
 #[derive(Debug)]
 pub(crate) enum AuthenticationError {
     Missing,
@@ -25,6 +29,8 @@ pub(crate) enum AuthenticationError {
     Expired,
 }
 
+// Basic claim object. Only the `exp` claim (field) is required. Consult the `jsonwebtoken` documentation for other claims that can be validated.
+// The `name` is a custom claim for this API
 #[derive(Serialize, Deserialize)]
 pub(crate) struct Claims {
     pub(crate) name: String,
@@ -54,6 +60,8 @@ impl Claims {
             exp: 0,
         }
     }
+
+    /// Create a `Claims` from a 'Bearer <token>' value
     fn from_authorization(value: &str) -> Result<Self, AuthenticationError> {
         let token = value.strip_prefix(BEARER);
 
@@ -79,6 +87,7 @@ impl Claims {
         Ok(token.claims)
     }
 
+    /// Converts this claims into a token string
     pub(crate) fn to_token(mut self) -> Result<String, Custom<String>> {
         let expiration = Utc::now()
             .checked_add_signed(*TOKEN_EXPIRATION)

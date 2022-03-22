@@ -26,10 +26,13 @@ struct PrivateResponse {
     user: String,
 }
 
+// More details on Rocket request guards can be found here
+// https://rocket.rs/v0.5-rc/guide/requests/#request-guards
 #[get("/private")]
 fn private(user: Claims) -> Json<PrivateResponse> {
     Json(PrivateResponse {
-        message: "The request guard ensures only valid JWTs can access this endpoint".to_string(),
+        message: "The `Claims` request guard ensures only valid JWTs can access this endpoint"
+            .to_string(),
         user: user.name,
     })
 }

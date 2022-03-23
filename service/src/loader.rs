@@ -1,9 +1,10 @@
-use std::ffi::OsStr;
+use std::{ffi::OsStr, net::SocketAddr};
 
 use libloading::{Library, Symbol};
 use thiserror::Error;
+use tokio::task::JoinHandle;
 
-use crate::Service;
+use crate::{Error, Factory, Service};
 
 const ENTRYPOINT_SYMBOL_NAME: &[u8] = b"_create_service\0";
 
@@ -41,6 +42,22 @@ impl Loader {
                 so: lib,
             })
         }
+    }
+
+    pub fn load(
+        self,
+        factory: &mut dyn Factory,
+        addr: SocketAddr,
+    ) -> Result<JoinHandle<Result<(), Error>>, Error> {
+        let mut service = self.service;
+
+        service.build(factory)?;
+
+        // We cannot use spawn here since that blocks the api completely. We suspect this is because `bind` makes a blocking call,
+        // however that does not completely makes sense as the blocking call is made on another runtime.
+        let handle = tokio::task::spawn_blocking(move || service.bind(addr));
+
+        Ok(handle)
     }
 }
 

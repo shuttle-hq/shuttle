@@ -1,0 +1,13 @@
+version: "3"
+services:
+  app:
+    build: .
+    ports:
+      - "8001:8001"
+      - "8000:8000"
+    volumes:
+      - ./api/users.toml:/config/users.toml
+      - /tmp/shuttle/crates:/var/lib/shuttle/crates
+    environment:
+      - SHUTTLE_USERS_TOML=/config/users.toml
+      - SHUTTLE_ADMIN_SECRET=admin-pass

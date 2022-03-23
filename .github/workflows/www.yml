@@ -22,6 +22,7 @@ jobs:
           envkey_AUTH0_CLIENT_ID: X77iwzR3Qm60kSIxxDEUVKOMFIQcDodp
           envkey_AUTH0_CLIENT_SECRET: ${{ secrets.AUTH0_CLIENT_SECRET }}
           envkey_SHUTTLE_API_BASE_URL: https://api.shuttle.rs
+          envkey_SHUTTLE_ADMIN_SECRET: ${{ secrets.SHUTTLE_ADMIN_SECRET }}
       - uses: getsynth/vercel-action@v20
         with:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}

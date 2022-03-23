@@ -22,6 +22,7 @@ FROM runtime
 RUN echo "[patch.crates-io]\nshuttle-service = { path = \"/app/service\" }" > $CARGO_HOME/config.toml
 COPY --from=builder /app/target/debug/api /usr/local/bin/shuttle-backend
 COPY --from=builder /app/service /app/service
+COPY --from=builder /app/codegen /app/codegen
 
 COPY docker/entrypoint.sh /bin/entrypoint.sh
 COPY docker/supervisord.conf /usr/share/supervisord/supervisord.conf

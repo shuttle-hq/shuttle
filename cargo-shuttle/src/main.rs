@@ -44,10 +44,16 @@ async fn login(login_args: LoginArgs) -> Result<()> {
         
         io::stdin().read_line(&mut input).unwrap();    
 
+        // read_line preserves CR/LF that need to be trimmed
+        let input = input.trim().to_string();
+        println!(
+            "Store the key in a safe location for future use with `cargo shuttle deploy --api-key {input}`"
+        );
+
         input
     });
 
-    config::create_with_api_key(api_key.trim().to_string())
+    config::create_with_api_key(api_key)
 }
 
 async fn auth(auth_args: AuthArgs) -> Result<()> {

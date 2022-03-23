@@ -2493,6 +2493,7 @@ name = "shuttle-service"
 version = "0.2.4"
 dependencies = [
  "async-trait",
+ "libloading",
  "rocket",
  "sqlx",
  "thiserror",

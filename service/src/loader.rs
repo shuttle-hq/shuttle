@@ -10,6 +10,8 @@ const ENTRYPOINT_SYMBOL_NAME: &[u8] = b"_create_service\0";
 
 type CreateService = unsafe extern "C" fn() -> *mut dyn Service;
 
+pub type ServeHandle = JoinHandle<Result<(), Error>>;
+
 #[derive(Debug, Error)]
 pub enum LoaderError {
     #[error("failed to load library")]
@@ -48,7 +50,7 @@ impl Loader {
         self,
         factory: &mut dyn Factory,
         addr: SocketAddr,
-    ) -> Result<JoinHandle<Result<(), Error>>, Error> {
+    ) -> Result<(ServeHandle, Library), Error> {
         let mut service = self.service;
 
         service.build(factory)?;
@@ -57,7 +59,7 @@ impl Loader {
         // however that does not completely makes sense as the blocking call is made on another runtime.
         let handle = tokio::task::spawn_blocking(move || service.bind(addr));
 
-        Ok(handle)
+        Ok((handle, self.so))
     }
 }
 

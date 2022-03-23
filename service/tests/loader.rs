@@ -30,7 +30,7 @@ async fn sleep_async() {
 
     let mut factory = DummyFactory {};
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
-    let handler = loader.load(&mut factory, addr).unwrap();
+    let (handler, _) = loader.load(&mut factory, addr).unwrap();
 
     handler.await.unwrap().unwrap();
 }
@@ -50,7 +50,7 @@ async fn sqlx_pool() {
 
     let mut factory = DummyFactory {};
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
-    let handler = loader.load(&mut factory, addr).unwrap();
+    let (handler, _) = loader.load(&mut factory, addr).unwrap();
 
     handler.await.unwrap().unwrap();
 }

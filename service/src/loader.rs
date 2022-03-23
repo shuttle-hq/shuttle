@@ -80,11 +80,5 @@ mod tests {
 
             assert!(matches!(result, Err(LoaderError::GetEntrypoint(_))));
         }
-
-        // This '.so' is a copy of the rocket/hello-world example
-        #[test]
-        fn valid() {
-            Loader::from_so_file("tests/resources/hello_world.so").unwrap();
-        }
     }
 }

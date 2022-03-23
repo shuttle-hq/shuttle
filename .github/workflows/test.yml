@@ -24,5 +24,5 @@ jobs:
       - name: Use local shuttle-service
         run: mkdir -p ~/.cargo && echo -e "[patch.crates-io]\nshuttle-service = { path = \"${GITHUB_WORKSPACE}/service\" }" > ~/.cargo/config.toml
       - name: Build docker
-        run: docker build -f ./Dockerfile .
+        run: docker build -f ./Dockerfile.dev .
       - run: cargo test -- --nocapture

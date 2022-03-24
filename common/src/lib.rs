@@ -162,21 +162,24 @@ impl Display for DeploymentStateMeta {
 pub enum DeploymentApiError {
     #[response(status = 500)]
     Internal(String),
+    #[response(status = 503)]
+    Unavailable(String),
     #[response(status = 404)]
     NotFound(String),
     #[response(status = 400)]
     BadRequest(String),
     #[response(status = 409)]
-    ProjectAlreadyExists(String)
+    ProjectAlreadyExists(String),
 }
 
 impl Display for DeploymentApiError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             DeploymentApiError::Internal(s) => write!(f, "internal: {}", s),
+            DeploymentApiError::Unavailable(s) => write!(f, "unavailable: {}", s),
             DeploymentApiError::NotFound(s) => write!(f, "not found: {}", s),
             DeploymentApiError::BadRequest(s) => write!(f, "bad request: {}", s),
-            DeploymentApiError::ProjectAlreadyExists(s) => write!(f, "conflict: {}", s)
+            DeploymentApiError::ProjectAlreadyExists(s) => write!(f, "conflict: {}", s),
         }
     }
 }

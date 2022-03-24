@@ -24,7 +24,7 @@ The project consists of the following files
 
 - `Shuttle.toml` contains the name of the app (if name is `s` domain will be `s.shuttleapp.rs`)
 - `schema.sql` is sql script to that will setup database for the app
-- `src/lib.rs` is where all the magic happens it creates shuttle service with two endpoints one for creating new short urls and on for handling shortened urls
+- `src/lib.rs` is where all the magic happens - it creates a shuttle service with two endpoints: one for creating new short URLs and one for handling shortened URLs.
 
 ## How to deploy
 

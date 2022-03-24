@@ -16,7 +16,7 @@ like this
 curl -X POST -d 'https://docs.rs/shuttle-service/latest/shuttle_service/' https://s.shuttleapp.rs
 ```
 
-and you will get shortened url back (something like this `https://s.shuttleapp.rs/RvpVU_`)
+you will get the shortened URL back (something like this `https://s.shuttleapp.rs/RvpVU_`)
 
 ## Project structure
 

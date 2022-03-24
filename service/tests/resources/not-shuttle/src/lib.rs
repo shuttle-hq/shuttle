@@ -1,4 +1,4 @@
-/// This service cannot be hosted on shuttle since it is missing the entrypoint the shutlle macros would have added!
+/// This service cannot be hosted on shuttle since it is missing the entrypoint the shutlle macros would have added!!!
 use std::time::Duration;
 
 use shuttle_service::{IntoService, Service};

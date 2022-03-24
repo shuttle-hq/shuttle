@@ -20,7 +20,7 @@ and you will get shortened url back (something like this `https://s.shuttleapp.r
 
 ## Project structure
 
-project consists of following files
+The project consists of the following files
 
 - `Shuttle.toml` contains name of the app (if name is `s` domain will be `s.shuttleapp.rs`)
 - `schema.sql` is sql script to that will setup database for the app

@@ -26,8 +26,8 @@ export default function CodeSnippets() {
 
   return (
     <div className="relative bg-dark-700 pt-16 pb-20 px-4 sm:px-6 lg:pt-24 lg:pb-28 lg:px-8">
-      <div className="relative max-w-7xl mx-auto flex lg:flex-row flex-col w-full gap-4">
-        <div className="mb-4 lg:w-1/2 grow-0 shrink-0">
+      <div className="relative max-w-6xl mx-auto grid lg:grid-cols-12 grid-cols-1 w-full gap-4">
+        <div className="mb-4 lg:col-span-5">
           <h2 className="text-3xl tracking-tight font-extrabold text-gray-200 sm:text-4xl">
             From the blog
           </h2>
@@ -36,7 +36,7 @@ export default function CodeSnippets() {
             libero labore natus atque, ducimus sed.
           </p>
         </div>
-        <div className="lg:w-1/2 grow-0 shrink-0">
+        <div className="lg:col-span-7">
           <div className="mb-4">
             <div className="sm:hidden">
               <label htmlFor="tabs" className="sr-only">
@@ -62,7 +62,7 @@ export default function CodeSnippets() {
                     key={index}
                     onClick={() => void setActiveTab(index)}
                     className={classnames(
-                      "px-3 py-2 font-medium text-sm rounded cursor-pointer shadow-md z-10",
+                      "px-3 py-2 font-medium text-sm rounded cursor-pointer z-10 hover:shadow-md",
                       {
                         "bg-brand-orange2 text-white": activeTab === index,
                         "text-gray-300 hover:text-gray-200 hover:bg-gray-600":

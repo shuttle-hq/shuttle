@@ -11,7 +11,7 @@ export default function Home() {
     <>
       <Header />
       <Hero />
-      <Cards />
+      {/* <Cards /> */}
       <Cards2 />
       <CodeSnippets />
       <ApiKeyModal />

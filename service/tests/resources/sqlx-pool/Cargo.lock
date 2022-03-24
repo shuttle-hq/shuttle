@@ -725,16 +725,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ad5c14e80759d0939d013e6ca49930e59fc53dd8e5009132f76240c179380c09"
 
 [[package]]
-name = "libloading"
-version = "0.7.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "efbc0f03f9a775e9f6aed295c6a1ba2253c5757a9e03d55c6caa46a681abcddd"
-dependencies = [
- "cfg-if",
- "winapi",
-]
-
-[[package]]
 name = "lock_api"
 version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1425,10 +1415,9 @@ dependencies = [
 
 [[package]]
 name = "shuttle-service"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "async-trait",
- "libloading",
  "rocket",
  "sqlx",
  "thiserror",
@@ -2138,7 +2127,3 @@ name = "yansi"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9fc79f4a1e39857fc00c3f662cbf2651c771f00e9c15fe2abc341806bd46bd71"
-
-[[patch.unused]]
-name = "shuttle-service"
-version = "0.2.4"

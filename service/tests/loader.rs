@@ -40,7 +40,7 @@ impl Factory for DummyFactory {
 #[tokio::test]
 async fn sleep_async() {
     Command::new("cargo")
-        .args(["build"])
+        .args(["build", "--release"])
         .current_dir("tests/resources/sleep-async")
         .spawn()
         .unwrap()
@@ -60,7 +60,7 @@ async fn sleep_async() {
 #[tokio::test]
 async fn sqlx_pool() {
     Command::new("cargo")
-        .args(["build"])
+        .args(["build", "--release"])
         .current_dir("tests/resources/sqlx-pool")
         .spawn()
         .unwrap()

@@ -19,6 +19,8 @@ RUN cargo build --bin api
 
 FROM runtime
 COPY --from=builder /app/target/debug/api /usr/local/bin/shuttle-backend
+
 COPY docker/entrypoint.sh /bin/entrypoint.sh
+COPY docker/wait-for-pg-then /usr/bin/wait-for-pg-then
 COPY docker/supervisord.conf /usr/share/supervisord/supervisord.conf
 ENTRYPOINT ["/bin/entrypoint.sh"]

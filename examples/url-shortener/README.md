@@ -4,7 +4,7 @@ A URL shortener that you can use from your terminal - built with shuttle, rocket
 
 ## How to use it
 
-you can use this url shortener from terminal. just copy this command to your terminal and replace `<URL>` with url that you want to shorten
+You can use this URL shortener directly from your terminal. Just copy and paste this command to your terminal and replace `<URL>` with the URL that you want to shorten
 
 ```bash
 curl -X POST -d '<URL>' https://s.shuttleapp.rs

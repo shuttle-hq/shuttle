@@ -55,4 +55,4 @@ $ curl --header "Authorization: Bearer <token>" https://<host>/private
 ```
 
 The token is set to expire in 5 minutus, so wait a while and try to access the private endpoint again. Once the token has expired, a user will need to get a new token from login.
-But token usually have a longer than 5 minutes expiration time, so we can create a `/refresh` endpoint which takes an active token and returns a new token with a refreshed expiration time.
+Since tokens usually have a longer than 5 minutes expiration time, we can create a `/refresh` endpoint that takes an active token and returns a new token with a refreshed expiration time.

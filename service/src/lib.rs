@@ -176,6 +176,7 @@ use std::pin::Pin;
 pub mod error;
 pub use error::Error;
 
+#[cfg(feature = "loader")]
 pub mod loader;
 
 /// Factories can be used to request the provisioning of additional resources (like databases).

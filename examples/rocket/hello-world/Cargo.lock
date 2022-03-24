@@ -572,7 +572,6 @@ dependencies = [
 name = "hello-world"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "rocket",
  "shuttle-service",
 ]

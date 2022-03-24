@@ -1,6 +1,7 @@
 use crate::{build::Build, BuildSystem, ShuttleFactory};
 use anyhow::{anyhow, Context as AnyhowContext};
 use core::default::Default;
+use futures::prelude::*;
 use libloading::Library;
 use rocket::data::ByteUnit;
 use rocket::tokio;
@@ -21,6 +22,14 @@ use tokio::sync::RwLock;
 
 use crate::database;
 use crate::router::Router;
+
+// This controls the maximum number of deploys an api instance can run
+// This is mainly needed because tokio::task::spawn_blocking keeps an internal pool for the number of blocking threads
+// and we call this method to run each incoming service. Therefore, this variable directly maps to this maximum pool
+// when the runtime is setup in main()
+// The current tokio default for this pool is 512
+// https://docs.rs/tokio/latest/tokio/runtime/struct.Builder.html#method.max_blocking_threads
+pub const MAX_DEPLOYS: usize = 512;
 
 /// Inner struct of a deployment which holds the deployment itself
 /// and the some metadata
@@ -71,6 +80,10 @@ impl Deployment {
     pub(crate) async fn meta(&self) -> DeploymentMeta {
         trace!("trying to get meta");
         self.meta.read().await.clone()
+    }
+
+    pub(crate) async fn deployment_active(&self) -> bool {
+        matches!(*self.state.read().await, DeploymentState::Deployed(_))
     }
 
     /// Evaluates if the deployment can be advanced. If the deployment
@@ -476,6 +489,22 @@ impl DeploymentSystem {
         }
     }
 
+    pub(crate) async fn num_active(&self) -> usize {
+        let deployments = self
+            .deployments
+            .read()
+            .await
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+        stream::unfold(deployments, |mut deployments| async move {
+            Some((deployments.pop()?.deployment_active().await, deployments))
+        })
+        .filter(|is_active| future::ready(*is_active))
+        .count()
+        .await
+    }
+
     /// Main way to interface with the deployment manager.
     /// Will take a crate through the whole lifecycle.
     pub(crate) async fn deploy(
@@ -483,6 +512,13 @@ impl DeploymentSystem {
         crate_file: Data<'_>,
         project_config: &ProjectConfig,
     ) -> Result<DeploymentMeta, DeploymentApiError> {
+        // Assumes that only `::Deployed` deployments are blocking a thread.
+        if self.num_active().await >= MAX_DEPLOYS {
+            return Err(DeploymentApiError::Unavailable(
+                "this instance has reached its maximum number of supported deployments".to_string(),
+            ));
+        };
+
         let crate_bytes = crate_file
             .open(ByteUnit::max_value())
             .into_bytes()

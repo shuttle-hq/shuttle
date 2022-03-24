@@ -206,7 +206,6 @@ pub trait Factory: Send + Sync {
 /// The core trait of the shuttle platform. Every crate deployed to shuttle needs to implement this trait.
 ///
 /// Use the [declare_service!][crate::declare_service] macro to expose your implementation to the deployment backend.
-#[async_trait]
 pub trait Service: Send + Sync {
     /// This function is run exactly once on each instance of a deployment, prior to calling [bind][Service::bind].
     ///
@@ -275,7 +274,6 @@ impl<T: Send + Sync + 'static> IntoService
     }
 }
 
-#[async_trait]
 impl<T> Service for RocketService<T>
 where
     T: Send + Sync + 'static,

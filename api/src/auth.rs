@@ -152,15 +152,15 @@ impl UserDirectory {
         Ok(())
     }
 
-    /// Creates a new user and returns the user's corresponding API Key.
-    /// If the user exists, will error.
-    /// Finally saves `users` state to `users.toml`.
-    pub(crate) fn create_user(&self, username: String) -> Result<ApiKey, AuthorizationError> {
+    /// Find user by username and return it's API Key.
+    /// if user does not exist create it and update `users` state to `users.toml`.
+    /// Finally return user's API Key.
+    pub(crate) fn get_or_create(&self, username: String) -> Result<ApiKey, AuthorizationError> {
         let mut users = self.users.write().unwrap();
 
-        for user in users.values() {
+        for (api_key, user) in users.iter() {
             if user.name == username {
-                return Err(AuthorizationError::AlreadyExists(()));
+                return Ok(ApiKey(api_key.to_string()));
             }
         }
 

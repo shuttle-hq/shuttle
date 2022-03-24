@@ -123,7 +123,7 @@ impl Api {
         let mut build = Command::new("docker");
 
         build
-            .args(["build", "-f", "./Dockerfile", "."])
+            .args(["build", "-f", "./Dockerfile.dev", "."])
             .current_dir("../");
 
         spawn_and_log(&mut build, api_target.as_str(), Color::White)
@@ -131,7 +131,7 @@ impl Api {
             .ensure_success("failed to build `api` image");
 
         let output = Command::new("docker")
-            .args(["build", "-q", "-f", "./Dockerfile", "."])
+            .args(["build", "-q", "-f", "./Dockerfile.dev", "."])
             .current_dir("../")
             .output()
             .unwrap();

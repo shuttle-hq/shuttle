@@ -66,8 +66,6 @@ impl Loader {
 #[cfg(test)]
 mod tests {
     mod from_so_file {
-        use std::path::Path;
-
         use crate::loader::{Loader, LoaderError};
 
         #[test]
@@ -77,14 +75,10 @@ mod tests {
             assert!(matches!(result, Err(LoaderError::Load(_))));
         }
 
-        // This '.so' is a copy of the rocket/hello-world example with the shuttle macro removed
+        // This '.so' is a copy of the service/tests/resources/sleep-async with the shuttle macro removed
         #[test]
         fn not_shuttle() {
-            let so_path = Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("tests")
-                .join("resources")
-                .join("not_shuttle.so");
-            let result = Loader::from_so_file(so_path);
+            let result = Loader::from_so_file("tests/resources/not_shuttle.so");
 
             assert!(matches!(result, Err(LoaderError::GetEntrypoint(_))));
         }

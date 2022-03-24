@@ -1,6 +1,6 @@
 # Url Shortener
 
-A URL shortener built with shuttle, rocket and postgres/sqlx. you can use it from your terminal.
+A URL shortener that you can use from your terminal - built with shuttle, rocket and postgres/sqlx.
 
 ## How to use it
 

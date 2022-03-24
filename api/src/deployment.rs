@@ -1,5 +1,4 @@
-use crate::build::Build;
-use crate::{BuildSystem, ShuttleFactory};
+use crate::{build::Build, BuildSystem, ShuttleFactory};
 use anyhow::{anyhow, Context as AnyhowContext};
 use core::default::Default;
 use libloading::Library;
@@ -16,8 +15,8 @@ use std::fs::DirEntry;
 use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::sync::Arc;
+use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 
 use crate::database;
@@ -40,7 +39,7 @@ impl Deployment {
 
     fn from_bytes(config: &ProjectConfig, crate_bytes: Vec<u8>) -> Self {
         Self {
-            meta: Arc::new(RwLock::new(DeploymentMeta::queued(&config))),
+            meta: Arc::new(RwLock::new(DeploymentMeta::queued(config))),
             state: RwLock::new(DeploymentState::queued(crate_bytes)),
         }
     }
@@ -54,8 +53,10 @@ impl Deployment {
             .map_err(|os_str| anyhow!("could not parse project name `{:?}` to string", os_str))?;
         // find marker which points to so file
         let marker_path = project_path.join(".shuttle_marker");
-        let so_path_str = std::fs::read(&marker_path)
-            .context(anyhow!("could not find so marker file at {:?}", marker_path))?;
+        let so_path_str = std::fs::read(&marker_path).context(anyhow!(
+            "could not find so marker file at {:?}",
+            marker_path
+        ))?;
 
         let so_path: PathBuf = String::from_utf8_lossy(&so_path_str)
             .parse()
@@ -129,8 +130,7 @@ impl Deployment {
 
                     debug!(
                         "deployment '{}' getting deployed on port {}...",
-                        meta.id,
-                        port
+                        meta.id, port
                     );
 
                     debug!("{}: factory phase", meta.config.name());
@@ -266,66 +266,46 @@ type Deployments = HashMap<DeploymentId, Arc<Deployment>>;
 /// The top-level manager for deployments. Is responsible for their creation
 /// and lifecycle.
 pub(crate) struct DeploymentSystem {
-    deployments: Arc<RwLock<Deployments>>,
-    job_queue: Arc<JobQueue>,
+    deployments: RwLock<Deployments>,
+    job_queue: JobQueue,
     router: Arc<Router>,
 }
 
-#[derive(Default)]
+const JOB_QUEUE_SIZE: usize = 200;
+
 struct JobQueue {
-    queue: Arc<Mutex<Vec<Arc<Deployment>>>>,
+    send: mpsc::Sender<Arc<Deployment>>,
 }
 
 impl JobQueue {
-    fn push(&self, deployment: Arc<Deployment>) {
-        self.queue.lock().unwrap().push(deployment)
-    }
+    async fn new(context: Context, db_context: database::Context) -> Self {
+        let (send, mut recv) = mpsc::channel::<Arc<Deployment>>(JOB_QUEUE_SIZE);
 
-    fn pop(&self) -> Option<Arc<Deployment>> {
-        self.queue.lock().unwrap().pop()
-    }
-
-    /// Returns a JobQueue with the job processor already running
-    async fn initialise(context: Context, db_context: database::Context) -> Arc<Self> {
-        let job_queue = Arc::new(JobQueue::default());
-
-        let queue_ref = job_queue.clone();
-
-        tokio::spawn(
-            async move { Self::start_job_processor(context, db_context, queue_ref).await },
-        );
-
-        job_queue
-    }
-
-    /// Starts the job processor. Before it begins, it will add all projects
-    /// from the deployment service into the queue.
-    async fn start_job_processor(
-        context: Context,
-        db_context: database::Context,
-        queue: Arc<JobQueue>,
-    ) {
-        debug!("loading deployments into job processor");
-        for deployment in context.deployments.read().await.values() {
-            queue.push(deployment.clone());
-            debug!("loading deployment: {:?}", deployment.meta);
-        }
-        debug!("starting job processor loop");
-        loop {
-            if let Some(deployment) = queue.pop() {
+        log::debug!("starting job processor task");
+        tokio::spawn(async move {
+            while let Some(deployment) = recv.recv().await {
                 let id = deployment.meta().await.id;
 
-                debug!("started deployment job for id: '{}'", id);
+                log::debug!("started deployment job for deployment '{}'", id);
 
                 while !deployment.deployment_finished().await {
                     deployment.advance(&context, &db_context).await;
                 }
 
                 debug!("ended deployment job for id: '{}'", id);
-            } else {
-                tokio::time::sleep(Duration::from_millis(50)).await
             }
-        }
+
+            log::debug!("job processor task ended");
+        });
+
+        Self { send }
+    }
+
+    async fn push(&self, deployment: Arc<Deployment>) {
+        self.send
+            .send(deployment)
+            .await
+            .unwrap_or_else(|_| panic!("deployment job queue unexpectedly closed"));
     }
 }
 
@@ -350,13 +330,22 @@ impl DeploymentSystem {
             build_system,
             deployments: deployments.clone(),
         };
+
         let db_context = database::Context::new()
             .await
             .expect("failed to create lazy connection to database");
 
+        let job_queue = JobQueue::new(context, db_context).await;
+
+        debug!("loading deployments into job processor");
+        for deployment in deployments.read().await.values() {
+            debug!("loading deployment: {:?}", deployment.meta);
+            job_queue.push(deployment.clone()).await;
+        }
+
         Self {
-            deployments,
-            job_queue: JobQueue::initialise(context, db_context).await,
+            deployments: Default::default(),
+            job_queue,
             router,
         }
     }
@@ -365,10 +354,7 @@ impl DeploymentSystem {
     /// If a project could not be re-created, this will get logged and skipped.
     async fn initialise_from_fs(fs_root: &Path) -> Deployments {
         let mut deployments = HashMap::default();
-        for project_dir in std::fs::read_dir(fs_root)
-            .unwrap() // safety: api can read the fs root dir
-            .into_iter()
-        {
+        for project_dir in std::fs::read_dir(fs_root).unwrap() {
             let project_dir = match project_dir {
                 Ok(project_dir) => project_dir,
                 Err(e) => {
@@ -382,14 +368,13 @@ impl DeploymentSystem {
                 Err(e) => {
                     warn!(
                         "failed to re-create deployment for project `{:?}` with error: {:?}",
-                        project_name,
-                        e
+                        project_name, e
                     );
                 }
                 Ok(deployment) => {
                     let deployment = Arc::new(deployment);
                     let info = deployment.meta().await;
-                    deployments.insert(info.id.clone(), deployment.clone());
+                    deployments.insert(info.id, deployment.clone());
                 }
             }
         }
@@ -507,7 +492,7 @@ impl DeploymentSystem {
             })?
             .to_vec();
 
-        let deployment = Arc::new(Deployment::from_bytes(&project_config, crate_bytes));
+        let deployment = Arc::new(Deployment::from_bytes(project_config, crate_bytes));
 
         let info = deployment.meta().await;
 
@@ -516,13 +501,9 @@ impl DeploymentSystem {
             .await
             .insert(info.id, deployment.clone());
 
-        self.add_to_job_queue(deployment);
+        self.job_queue.push(deployment).await;
 
         Ok(info)
-    }
-
-    fn add_to_job_queue(&self, deployment: Arc<Deployment>) {
-        self.job_queue.push(deployment)
     }
 }
 

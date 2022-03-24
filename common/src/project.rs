@@ -29,9 +29,9 @@ fn deserialize_project_name<'de, D>(deserializer: D) -> Result<ProjectName, D::E
 impl ProjectName {
     pub fn is_valid(hostname: &str) -> bool {
         fn is_valid_char(byte: u8) -> bool {
-            (byte >= b'a' && byte <= b'z')
-                || (byte >= b'A' && byte <= b'Z')
-                || (byte >= b'0' && byte <= b'9')
+            (b'a'..=b'z').contains(&byte)
+                || (b'A'..=b'Z').contains(&byte)
+                || (b'0'..=b'9').contains(&byte)
                 || byte == b'-'
         }
 

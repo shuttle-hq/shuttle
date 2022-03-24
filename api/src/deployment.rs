@@ -16,6 +16,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tokio::sync::{mpsc};
+use futures::prelude::*;
 
 use crate::database;
 use crate::router::Router;
@@ -76,6 +77,10 @@ impl Deployment {
     pub(crate) async fn meta(&self) -> DeploymentMeta {
         trace!("trying to get meta");
         self.meta.read().await.clone()
+    }
+
+    pub(crate) async fn deployment_active(&self) -> bool {
+        matches!(*self.state.read().await, DeploymentState::Deployed(_))
     }
 
     /// Evaluates if the deployment can be advanced. If the deployment
@@ -488,6 +493,23 @@ impl DeploymentSystem {
         }
     }
 
+    pub(crate) async fn num_active(&self) -> usize {
+        let deployments = self.deployments
+            .read()
+            .await
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+        stream::unfold(
+            deployments,
+            |mut deployments| async move {
+                Some((deployments.pop()?.deployment_active().await, deployments))
+            })
+            .filter(|is_active| future::ready(*is_active))
+            .count()
+            .await
+    }
+
     /// Main way to interface with the deployment manager.
     /// Will take a crate through the whole lifecycle.
     pub(crate) async fn deploy(
@@ -495,7 +517,8 @@ impl DeploymentSystem {
         crate_file: Data<'_>,
         project_config: &ProjectConfig,
     ) -> Result<DeploymentMeta, DeploymentApiError> {
-        if self.deployments.read().await.len() >= MAX_DEPLOYS {
+        // Assumes that only `::Deployed` deployments are blocking a thread.
+        if self.num_active().await >= MAX_DEPLOYS {
             return Err(DeploymentApiError::Unavailable(
                 "this instance has reached its maximum number of supported deployments".to_string(),
             ));

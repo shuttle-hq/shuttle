@@ -22,7 +22,7 @@ and you will get shortened url back (something like this `https://s.shuttleapp.r
 
 The project consists of the following files
 
-- `Shuttle.toml` contains name of the app (if name is `s` domain will be `s.shuttleapp.rs`)
+- `Shuttle.toml` contains the name of the app (if name is `s` domain will be `s.shuttleapp.rs`)
 - `schema.sql` is sql script to that will setup database for the app
 - `src/lib.rs` is where all the magic happens it creates shuttle service with two endpoints one for creating new short urls and on for handling shortened urls
 

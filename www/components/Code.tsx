@@ -26,7 +26,7 @@ export default function Code({ code, id }: CodeProps) {
       data-delay-hide="2000"
     >
       <pre
-        className={`group rounded-md flex gap-4 justify-between bg-gray-500 p-4`}
+        className={`group rounded flex gap-4 justify-between bg-gray-500 p-4`}
       >
         <code>
           <span className="select-none">$ </span>

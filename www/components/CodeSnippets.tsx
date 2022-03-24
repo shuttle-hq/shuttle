@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { PrismLight as SyntaxHighlighter } from "react-syntax-highlighter";
 import rust from "react-syntax-highlighter/dist/cjs/languages/prism/rust";
 import oneDark from "react-syntax-highlighter/dist/cjs/styles/prism/one-dark";
-import { useCopyToClipboard } from "react-use";
+import { useCopyToClipboard, useWindowSize } from "react-use";
 
 SyntaxHighlighter.registerLanguage("rust", rust);
 
@@ -12,6 +12,7 @@ export default function CodeSnippets() {
   const [activeTab, setActiveTab] = useState(0);
   const [copyToClipboardState, copyToClipboard] = useCopyToClipboard();
   const [copied, setCopied] = useState(false);
+  useWindowSize()
 
   useEffect(() => {
     if (false) return undefined;
@@ -25,8 +26,8 @@ export default function CodeSnippets() {
 
   return (
     <div className="relative bg-dark-700 pt-16 pb-20 px-4 sm:px-6 lg:pt-24 lg:pb-28 lg:px-8">
-      <div className="relative max-w-7xl mx-auto grid md:grid-cols-2">
-        <div className="">
+      <div className="relative max-w-7xl mx-auto flex lg:flex-row flex-col w-full gap-4">
+        <div className="mb-4 lg:w-1/2 grow-0 shrink-0">
           <h2 className="text-3xl tracking-tight font-extrabold text-gray-200 sm:text-4xl">
             From the blog
           </h2>
@@ -35,8 +36,8 @@ export default function CodeSnippets() {
             libero labore natus atque, ducimus sed.
           </p>
         </div>
-        <div className="">
-          <div>
+        <div className="lg:w-1/2 grow-0 shrink-0">
+          <div className="mb-4">
             <div className="sm:hidden">
               <label htmlFor="tabs" className="sr-only">
                 Select a tab
@@ -45,11 +46,12 @@ export default function CodeSnippets() {
               <select
                 id="tabs"
                 name="tabs"
-                className="block w-full focus:ring-indigo-500 focus:border-indigo-500 border-gray-300 rounded-md"
+                className="block w-full bg-gray-600 text-gray-300 rounded"
                 defaultValue={tabs[activeTab].name}
+                onChange={e => void setActiveTab(parseInt(e.target.value))}
               >
                 {tabs.map((tab, index) => (
-                  <option key={index}>{tab.name}</option>
+                  <option key={index} value={index}>{tab.name}</option>
                 ))}
               </select>
             </div>
@@ -60,7 +62,7 @@ export default function CodeSnippets() {
                     key={index}
                     onClick={() => void setActiveTab(index)}
                     className={classnames(
-                      "px-3 py-2 font-medium text-sm rounded-md cursor-pointer",
+                      "px-3 py-2 font-medium text-sm rounded cursor-pointer shadow-md z-10",
                       {
                         "bg-brand-orange2 text-white": activeTab === index,
                         "text-gray-300 hover:text-gray-200 hover:bg-gray-600":
@@ -75,10 +77,10 @@ export default function CodeSnippets() {
               </nav>
             </div>
           </div>
-          <div className="bg-[#282C34] p-4 my-2 rounded relative">
+          <div className="bg-[#282C34] p-4 my-2 rounded relative shadow-lg">
             <button
               type="button"
-              className="absolute right-2 top-2 inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-md text-white bg-dark-800 hover:bg-dark-700"
+              className="absolute right-2 top-2 inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm leading-4 font-medium rounded text-white bg-dark-800 hover:bg-dark-700"
               onClick={() => {
                 copyToClipboard(tabs[activeTab].code)
                 setCopied(true)

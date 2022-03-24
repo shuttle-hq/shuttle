@@ -56,7 +56,7 @@ export default function ApiKeyModal() {
               <div className="hidden sm:block absolute top-0 right-0 pt-4 pr-4">
                 <button
                   type="button"
-                  className="border-dark-700 bg-dark-600  text-dark-200 hover:brightness-125 rounded-md "
+                  className="border-dark-700 bg-dark-600  text-dark-200 hover:brightness-125 rounded"
                   onClick={() => setOpen(false)}
                 >
                   <span className="sr-only">Close</span>
@@ -127,7 +127,7 @@ export default function ApiKeyModal() {
               <div className="bg-dark-500/40 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
                 <button
                   type="button"
-                  className="mt-3 w-full inline-flex justify-center rounded-md border border-dark-700 shadow-sm px-4 py-2 bg-dark-600 text-base font-medium text-dark-200 hover:brightness-125 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                  className="mt-3 w-full inline-flex justify-center rounded border border-dark-700 shadow-sm px-4 py-2 bg-dark-600 text-base font-medium text-dark-200 hover:brightness-125 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
                   onClick={() => setOpen(false)}
                 >
                   Close

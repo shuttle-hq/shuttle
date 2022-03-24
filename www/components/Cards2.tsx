@@ -40,7 +40,7 @@ const cards: Card[] = [
 ]
 
 
-export default function Cards() {
+export default function Cards2() {
   const { basePath } = useRouter();
 
   return (
@@ -52,11 +52,11 @@ export default function Cards() {
             Lorem ipsum dolor sit amet consectetur, adipisicing elit. Ipsa libero labore natus atque, ducimus sed.
           </p>
         </div>
-        <div className="mt-12  mx-auto grid gap-5 md:grid-cols-2 xl:grid-cols-4 w-fit">
+        <div className="mt-12  mx-auto grid gap-5 md:grid-cols-2 w-fit">
           {cards.map((card, index) => (
-            <a href={card.link} key={index} className="flex flex-col rounded-lg shadow-lg overflow-hidden max-w-xs hover:brightness-125">
-              <div className="flex-shrink-0 bg-dark-800 h-48">
-                <img className="w-full h-full object-contain p-8" src={card.icon} role="presentation" />
+            <a href={card.link} key={index} className="flex flex-col rounded-lg shadow-lg overflow-hidden  hover:brightness-125">
+              <div className="flex-shrink-0 bg-dark-800">
+                <img className="w-full object-contain p-8 md:p-14 lg:p-20 aspect-video" src={card.icon} role="presentation" />
               </div>
               <div className="flex-1 bg-gray-500 p-6 flex flex-col justify-between">
                 <div className="flex-1">

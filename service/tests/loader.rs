@@ -3,15 +3,37 @@ use std::{
     process::Command,
 };
 
+mod helpers;
+
 use async_trait::async_trait;
+use helpers::PostgresInstance;
 use shuttle_service::{loader::Loader, Error, Factory};
 
-struct DummyFactory {}
+struct DummyFactory {
+    postgres_instance: Option<PostgresInstance>,
+}
+
+impl DummyFactory {
+    fn new() -> Self {
+        Self {
+            postgres_instance: None,
+        }
+    }
+}
 
 #[async_trait]
 impl Factory for DummyFactory {
     async fn get_sql_connection_string(&mut self) -> Result<String, Error> {
-        Ok("postgres://postgres:password@localhost".to_string())
+        let uri = if let Some(postgres_instance) = &self.postgres_instance {
+            postgres_instance.get_uri()
+        } else {
+            let postgres_instance = PostgresInstance::new();
+            let uri = postgres_instance.get_uri();
+            self.postgres_instance = Some(postgres_instance);
+            uri
+        };
+
+        Ok(uri)
     }
 }
 
@@ -28,7 +50,7 @@ async fn sleep_async() {
     let loader =
         Loader::from_so_file("tests/resources/sleep-async/target/debug/libsleep_async.so").unwrap();
 
-    let mut factory = DummyFactory {};
+    let mut factory = DummyFactory::new();
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
     let (handler, _) = loader.load(&mut factory, addr).unwrap();
 
@@ -48,7 +70,7 @@ async fn sqlx_pool() {
     let loader =
         Loader::from_so_file("tests/resources/sqlx-pool/target/debug/libsqlx_pool.so").unwrap();
 
-    let mut factory = DummyFactory {};
+    let mut factory = DummyFactory::new();
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
     let (handler, _) = loader.load(&mut factory, addr).unwrap();
 

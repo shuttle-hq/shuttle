@@ -74,13 +74,5 @@ mod tests {
 
             assert!(matches!(result, Err(LoaderError::Load(_))));
         }
-
-        // This '.so' is a copy of the service/tests/resources/sleep-async with the shuttle macro removed
-        #[test]
-        fn not_shuttle() {
-            let result = Loader::from_so_file("tests/resources/not_shuttle.so");
-
-            assert!(matches!(result, Err(LoaderError::GetEntrypoint(_))));
-        }
     }
 }

@@ -7,7 +7,10 @@ mod helpers;
 
 use async_trait::async_trait;
 use helpers::PostgresInstance;
-use shuttle_service::{loader::Loader, Error, Factory};
+use shuttle_service::{
+    loader::{Loader, LoaderError},
+    Error, Factory,
+};
 
 struct DummyFactory {
     postgres_instance: Option<PostgresInstance>,
@@ -37,6 +40,22 @@ impl Factory for DummyFactory {
     }
 }
 
+#[test]
+fn not_shuttle() {
+    Command::new("cargo")
+        .args(["build", "--release"])
+        .current_dir("tests/resources/not-shuttle")
+        .spawn()
+        .unwrap()
+        .wait()
+        .unwrap();
+
+    let result =
+        Loader::from_so_file("tests/resources/not-shuttle/target/release/libnot_shuttle.so");
+
+    assert!(matches!(result, Err(LoaderError::GetEntrypoint(_))));
+}
+
 #[tokio::test]
 async fn sleep_async() {
     Command::new("cargo")
@@ -48,7 +67,8 @@ async fn sleep_async() {
         .unwrap();
 
     let loader =
-        Loader::from_so_file("tests/resources/sleep-async/target/debug/libsleep_async.so").unwrap();
+        Loader::from_so_file("tests/resources/sleep-async/target/release/libsleep_async.so")
+            .unwrap();
 
     let mut factory = DummyFactory::new();
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
@@ -68,7 +88,7 @@ async fn sqlx_pool() {
         .unwrap();
 
     let loader =
-        Loader::from_so_file("tests/resources/sqlx-pool/target/debug/libsqlx_pool.so").unwrap();
+        Loader::from_so_file("tests/resources/sqlx-pool/target/release/libsqlx_pool.so").unwrap();
 
     let mut factory = DummyFactory::new();
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);

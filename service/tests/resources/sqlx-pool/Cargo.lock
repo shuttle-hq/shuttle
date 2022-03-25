@@ -1419,9 +1419,19 @@ version = "0.2.5"
 dependencies = [
  "async-trait",
  "rocket",
+ "shuttle_codegen",
  "sqlx",
  "thiserror",
  "tokio",
+]
+
+[[package]]
+name = "shuttle_codegen"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

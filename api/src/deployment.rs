@@ -1,26 +1,27 @@
 use crate::{build::Build, BuildSystem, ShuttleFactory};
 use anyhow::{anyhow, Context as AnyhowContext};
 use core::default::Default;
-use shuttle_common::project::ProjectConfig;
-use shuttle_common::{DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, Port};
+use futures::prelude::*;
 use libloading::Library;
 use rocket::data::ByteUnit;
 use rocket::tokio;
 use rocket::Data;
+use shuttle_common::project::ProjectConfig;
+use shuttle_common::{
+    DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, Port,
+};
+use shuttle_service::loader::{Loader, ServeHandle};
 use std::collections::HashMap;
 use std::fs::DirEntry;
 use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use tokio::sync::mpsc;
 use tokio::sync::RwLock;
-use tokio::task::JoinHandle;
-use tokio::sync::{mpsc};
-use futures::prelude::*;
 
 use crate::database;
 use crate::router::Router;
-use shuttle_service::Service;
 
 // This controls the maximum number of deploys an api instance can run
 // This is mainly needed because tokio::task::spawn_blocking keeps an internal pool for the number of blocking threads
@@ -61,8 +62,10 @@ impl Deployment {
             .map_err(|os_str| anyhow!("could not parse project name `{:?}` to string", os_str))?;
         // find marker which points to so file
         let marker_path = project_path.join(".shuttle_marker");
-        let so_path_str = std::fs::read(&marker_path)
-            .context(anyhow!("could not find so marker file at {:?}", marker_path))?;
+        let so_path_str = std::fs::read(&marker_path).context(anyhow!(
+            "could not find so marker file at {:?}",
+            marker_path
+        ))?;
 
         let so_path: PathBuf = String::from_utf8_lossy(&so_path_str)
             .parse()
@@ -127,21 +130,20 @@ impl Deployment {
                         &meta.id
                     );
 
-                    match load_service_from_so_file(&built.build.so_path) {
-                        Ok((svc, so)) => DeploymentState::loaded(so, svc),
+                    match Loader::from_so_file(&built.build.so_path) {
+                        Ok(loader) => DeploymentState::loaded(loader),
                         Err(e) => {
                             debug!("failed to load with error: {}", &e);
-                            DeploymentState::Error(e)
+                            DeploymentState::Error(e.into())
                         }
                     }
                 }
-                DeploymentState::Loaded(mut loaded) => {
+                DeploymentState::Loaded(loader) => {
                     let port = identify_free_port();
 
                     debug!(
                         "deployment '{}' getting deployed on port {}...",
-                        meta.id,
-                        port
+                        meta.id, port
                     );
 
                     debug!("{}: factory phase", meta.config.name());
@@ -158,29 +160,24 @@ impl Deployment {
                         Err(e) => DeploymentState::Error(e.into()),
                         Ok(()) => {
                             let mut factory = ShuttleFactory::new(&mut db_state);
-                            match loaded.service.build(&mut factory) {
+                            let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
+                            match loader.load(&mut factory, addr) {
                                 Err(e) => {
                                     debug!("{}: factory phase FAILED: {:?}", meta.config.name(), e);
-                                    DeploymentState::Error(e.into()) },
-                                Ok(_) => {
+                                    DeploymentState::Error(e.into())
+                                }
+                                Ok((handle, so)) => {
                                     debug!("{}: factory phase DONE", meta.config.name());
-                                    // TODO: upon resolving this future, change the status of the deployment
-                                    // We cannot use spawn here since that blocks the api completely. We suspect this is because `bind` makes a blocking call,
-                                    // however that does not completely makes sense as the blocking call is made on another runtime.
-                                    let handle = tokio::task::spawn_blocking(move | | {
-                                        loaded
-                                            .service
-                                            .bind(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port))
-                                    });
 
                                     // Remove stale active deployments
-                                    if let Some(stale_id) = context.router.promote(meta.host, meta.id).await
+                                    if let Some(stale_id) =
+                                        context.router.promote(meta.host, meta.id).await
                                     {
-                                        debug!("removing stale deployment `{}`", & stale_id);
-                                        context.deployments.write().await.remove( & stale_id);
+                                        debug!("removing stale deployment `{}`", &stale_id);
+                                        context.deployments.write().await.remove(&stale_id);
                                     }
 
-                                    DeploymentState::deployed(loaded.so, port, handle, db_state)
+                                    DeploymentState::deployed(so, port, handle, db_state)
                                 }
                             }
                         }
@@ -294,10 +291,7 @@ struct JobQueue {
 }
 
 impl JobQueue {
-    async fn new(
-        context: Context,
-        db_context: database::Context,
-    ) -> Self {
+    async fn new(context: Context, db_context: database::Context) -> Self {
         let (send, mut recv) = mpsc::channel::<Arc<Deployment>>(JOB_QUEUE_SIZE);
 
         log::debug!("starting job processor task");
@@ -321,7 +315,10 @@ impl JobQueue {
     }
 
     async fn push(&self, deployment: Arc<Deployment>) {
-        self.send.send(deployment).await.unwrap_or_else(|_| panic!("deployment job queue unexpectedly closed"));
+        self.send
+            .send(deployment)
+            .await
+            .unwrap_or_else(|_| panic!("deployment job queue unexpectedly closed"));
     }
 }
 
@@ -384,8 +381,7 @@ impl DeploymentSystem {
                 Err(e) => {
                     warn!(
                         "failed to re-create deployment for project `{:?}` with error: {:?}",
-                        project_name,
-                        e
+                        project_name, e
                     );
                 }
                 Ok(deployment) => {
@@ -494,20 +490,19 @@ impl DeploymentSystem {
     }
 
     pub(crate) async fn num_active(&self) -> usize {
-        let deployments = self.deployments
+        let deployments = self
+            .deployments
             .read()
             .await
             .values()
             .cloned()
             .collect::<Vec<_>>();
-        stream::unfold(
-            deployments,
-            |mut deployments| async move {
-                Some((deployments.pop()?.deployment_active().await, deployments))
-            })
-            .filter(|is_active| future::ready(*is_active))
-            .count()
-            .await
+        stream::unfold(deployments, |mut deployments| async move {
+            Some((deployments.pop()?.deployment_active().await, deployments))
+        })
+        .filter(|is_active| future::ready(*is_active))
+        .count()
+        .await
     }
 
     /// Main way to interface with the deployment manager.
@@ -548,28 +543,6 @@ impl DeploymentSystem {
     }
 }
 
-const ENTRYPOINT_SYMBOL_NAME: &[u8] = b"_create_service\0";
-
-type ServeHandle = JoinHandle<Result<(), shuttle_service::Error>>;
-
-type CreateService = unsafe extern "C" fn() -> *mut dyn Service;
-
-/// Dynamically load from a `.so` file a value of a type implementing the
-/// [`Service`] trait. Relies on the `.so` library having an ``extern "C"`
-/// function called [`ENTRYPOINT_SYMBOL_NAME`], likely automatically generated
-/// using the [`shuttle_service::declare_service`] macro.
-#[allow(clippy::type_complexity)]
-fn load_service_from_so_file(so_path: &Path) -> anyhow::Result<(Box<dyn Service>, Library)> {
-    unsafe {
-        let lib = libloading::Library::new(so_path)?;
-
-        let entrypoint: libloading::Symbol<CreateService> = lib.get(ENTRYPOINT_SYMBOL_NAME)?;
-        let raw = entrypoint();
-
-        Ok((Box::from_raw(raw), lib))
-    }
-}
-
 /// Call on the operating system to identify an available port on which a
 /// deployment may then be hosted.
 fn identify_free_port() -> u16 {
@@ -588,7 +561,7 @@ enum DeploymentState {
     /// dynamically-linked library (`.so` file). The [`libloading`] crate has
     /// been used to achieve this and to obtain this particular deployment's
     /// implementation of the [`shuttle_service::Service`] trait.
-    Loaded(LoadedState),
+    Loaded(Loader),
     /// Deployment that is actively running inside a Tokio task and listening
     /// for connections on some port indicated in [`DeployedState`].
     Deployed(DeployedState),
@@ -614,8 +587,8 @@ impl DeploymentState {
         Self::Built(BuiltState { build })
     }
 
-    fn loaded(so: Library, service: Box<dyn Service>) -> Self {
-        Self::Loaded(LoadedState { service, so })
+    fn loaded(loader: Loader) -> Self {
+        Self::Loaded(loader)
     }
 
     fn deployed(so: Library, port: Port, handle: ServeHandle, db_state: database::State) -> Self {
@@ -645,11 +618,6 @@ struct QueuedState {
 
 struct BuiltState {
     build: Build,
-}
-
-struct LoadedState {
-    service: Box<dyn Service>,
-    so: Library,
 }
 
 #[allow(dead_code)]

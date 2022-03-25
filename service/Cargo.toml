@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-service"
-version = "0.2.4"
+version = "0.2.5"
 edition = "2021"
 license = "Apache-2.0"
 description = "Service traits and macros to deploy on the shuttle platform (https://www.shuttle.rs/)"
@@ -10,7 +10,14 @@ doctest = false
 
 [dependencies]
 async-trait = "0.1"
+libloading = { version = "0.7.3", optional = true }
 rocket = "0.5.0-rc.1"
 sqlx = { version = "0.5", features = ["runtime-tokio-native-tls", "postgres"] }
 tokio = { version = "1.0", features = ["rt"] }
 thiserror = "1.0"
+
+[dev-dependencies]
+portpicker = "0.1.1"
+
+[features]
+loader = ["libloading"]

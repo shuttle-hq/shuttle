@@ -1,5 +1,5 @@
 [package]
-name = "hello-world"
+name = "sqlx-pool"
 version = "0.1.0"
 edition = "2021"
 
@@ -8,6 +8,9 @@ crate-type = ["cdylib"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[workspace]
+
 [dependencies]
-rocket = "0.5.0-rc.1"
-shuttle-service = "0.2"
+tokio = "1.0"
+shuttle-service = { path = "../../../" }
+sqlx = { version = "0.5", features = [ "runtime-tokio-native-tls" ] }

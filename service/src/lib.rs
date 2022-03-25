@@ -1,4 +1,7 @@
-#![doc(html_logo_url = "https://raw.githubusercontent.com/getsynth/shuttle/main/resources/logo-square-transparent.png", html_favicon_url = "https://raw.githubusercontent.com/getsynth/shuttle/main/resources/favicon.ico")]
+#![doc(
+    html_logo_url = "https://raw.githubusercontent.com/getsynth/shuttle/main/resources/logo-square-transparent.png",
+    html_favicon_url = "https://raw.githubusercontent.com/getsynth/shuttle/main/resources/favicon.ico"
+)]
 //! # Shuttle - Deploy Rust apps with a single Cargo subcommand
 //! <div style="display: flex; margin-top: 30px; margin-bottom: 30px;">
 //! <img src="https://raw.githubusercontent.com/getsynth/shuttle/main/resources/logo-rectangle-transparent.png" width="400px" style="margin-left: auto; margin-right: auto;"/>
@@ -178,6 +181,9 @@ extern crate shuttle_codegen;
 #[cfg(feature = "codegen")]
 pub use shuttle_codegen::main;
 
+#[cfg(feature = "loader")]
+pub mod loader;
+
 /// Factories can be used to request the provisioning of additional resources (like databases).
 ///
 /// An instance of factory is passed by the deployer as an argument to [Service::build][Service::build] in the initial phase of deployment.
@@ -217,7 +223,6 @@ impl GetResource<PgPool> for &mut dyn Factory {
 /// The core trait of the shuttle platform. Every crate deployed to shuttle needs to implement this trait.
 ///
 /// Use the [declare_service!][crate::declare_service] macro to expose your implementation to the deployment backend.
-#[async_trait]
 pub trait Service: Send + Sync {
     /// This function is run exactly once on each instance of a deployment, prior to calling [bind][Service::bind].
     ///
@@ -254,7 +259,7 @@ pub trait IntoService {
 pub struct RocketService<T: Sized> {
     rocket: Option<Rocket<Build>>,
     state_builder:
-    Option<fn(&mut dyn Factory) -> Pin<Box<dyn Future<Output=Result<T, Error>> + Send + '_>>>,
+        Option<fn(&mut dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>>,
     runtime: Runtime,
 }
 
@@ -270,10 +275,10 @@ impl IntoService for Rocket<Build> {
 }
 
 impl<T: Send + Sync + 'static> IntoService
-for (
-    Rocket<Build>,
-    fn(&mut dyn Factory) -> Pin<Box<dyn Future<Output=Result<T, Error>> + Send + '_>>,
-)
+    for (
+        Rocket<Build>,
+        fn(&mut dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>,
+    )
 {
     type Service = RocketService<T>;
 
@@ -286,10 +291,9 @@ for (
     }
 }
 
-#[async_trait]
 impl<T> Service for RocketService<T>
-    where
-        T: Send + Sync + 'static,
+where
+    T: Send + Sync + 'static,
 {
     fn build(&mut self, factory: &mut dyn Factory) -> Result<(), Error> {
         if let Some(state_builder) = self.state_builder.take() {

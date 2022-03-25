@@ -359,7 +359,6 @@ checksum = "ab5ef0d4909ef3724cc8cce6ccc8572c5c817592e9285f5464f8e86f8bd3726e"
 name = "hello-world"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "rocket",
  "shuttle-service",
 ]

@@ -10,14 +10,19 @@ doctest = false
 
 [dependencies]
 async-trait = "0.1"
+libloading = { version = "0.7.3", optional = true }
 rocket = "0.5.0-rc.1"
 shuttle_codegen = { path = "../codegen", optional = true }
 sqlx = { version = "0.5", features = ["runtime-tokio-native-tls"], optional = true }
 tokio = { version = "1.0", features = ["rt"] }
 thiserror = "1.0"
 
+[dev-dependencies]
+portpicker = "0.1.1"
+
 [features]
 default = ["codegen"]
 codegen = ["shuttle_codegen"]
+loader = ["libloading"]
 sqlx-integration = ["sqlx"]
 sqlx-postgres = ["sqlx-integration", "sqlx/postgres"]

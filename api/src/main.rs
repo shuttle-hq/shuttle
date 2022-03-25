@@ -6,6 +6,7 @@ extern crate log;
 
 mod args;
 mod auth;
+mod auth_admin;
 mod build;
 mod database;
 mod deployment;
@@ -13,16 +14,17 @@ mod factory;
 mod proxy;
 mod router;
 
+use auth_admin::Admin;
+use deployment::MAX_DEPLOYS;
 use factory::ShuttleFactory;
-use shuttle_common::{DeploymentApiError, DeploymentMeta, Port};
+use rocket::serde::json::Json;
+use rocket::{tokio, Build, Data, Rocket, State};
 use shuttle_common::project::ProjectConfig;
-use rocket::serde::json::{Json};
-use rocket::{tokio, Data, State};
+use shuttle_common::{DeploymentApiError, DeploymentMeta, Port};
 use std::net::IpAddr;
 use std::sync::Arc;
 use structopt::StructOpt;
 use uuid::Uuid;
-
 
 use crate::args::Args;
 use crate::auth::{ApiKey, AuthorizationError, User, USER_DIRECTORY};
@@ -31,13 +33,12 @@ use crate::deployment::DeploymentSystem;
 
 type ApiResult<T, E> = Result<Json<T>, E>;
 
-
-/// Creates a user if the username is available and returns the corresponding
-/// API key.
-/// Returns an error if the user already exists.
+/// Find user by username and return it's API Key.
+/// if user does not exist create it and update `users` state to `users.toml`.
+/// Finally return user's API Key.
 #[post("/users/<username>")]
-async fn create_user(username: String) -> Result<ApiKey, AuthorizationError> {
-    USER_DIRECTORY.create_user(username)
+async fn get_or_create_user(username: String, _admin: Admin) -> Result<ApiKey, AuthorizationError> {
+    USER_DIRECTORY.get_or_create(username)
 }
 
 /// Status API to be used to check if the service is alive
@@ -158,9 +159,21 @@ struct ApiState {
     deployment_manager: Arc<DeploymentSystem>,
 }
 
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .max_blocking_threads(MAX_DEPLOYS)
+        .build()
+        .unwrap()
+        .block_on(async {
+            rocket().await.launch().await?;
+
+            Ok(())
+        })
+}
+
 //noinspection ALL
-#[launch]
-async fn rocket() -> _ {
+async fn rocket() -> Rocket<Build> {
     env_logger::Builder::new()
         .filter_module("rocket", log::LevelFilter::Warn)
         .filter_module("_", log::LevelFilter::Warn)
@@ -189,7 +202,7 @@ async fn rocket() -> _ {
                 delete_project,
                 create_project,
                 get_project,
-                create_user,
+                get_or_create_user,
                 status
             ],
         )

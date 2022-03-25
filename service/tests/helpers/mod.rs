@@ -1,7 +1,4 @@
-use std::{
-    io::{BufRead, BufReader, Read},
-    process::{Command, Stdio},
-};
+use std::{process::Command, thread::sleep, time::Duration};
 
 use portpicker::pick_unused_port;
 
@@ -17,19 +14,21 @@ impl PostgresInstance {
         let container = "postgres-shuttle-service-integration-test".to_string();
         let password = "password".to_string();
 
-        let mut command = Command::new("docker");
-        command.args([
-            "run",
-            "--name",
-            &container,
-            "-e",
-            &format!("POSTGRES_PASSWORD={}", password),
-            "-p",
-            &format!("{}:5432", port),
-            "postgres:11", // Our Dockerfile image is based on buster which has postgres version 11
-        ]);
+        Command::new("docker")
+            .args([
+                "run",
+                "--name",
+                &container,
+                "-e",
+                &format!("POSTGRES_PASSWORD={}", password),
+                "-p",
+                &format!("{}:5432", port),
+                "postgres:11", // Our Dockerfile image is based on buster which has postgres version 11
+            ])
+            .spawn()
+            .expect("failed to start a postgres instance");
 
-        Self::wait_for_up(&mut command);
+        Self::wait_for_up(&container);
 
         Self {
             port,
@@ -45,45 +44,24 @@ impl PostgresInstance {
         )
     }
 
-    fn wait_for_up(command: &mut Command) {
-        let mut child = command
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .expect("failed to spawn a postgres container");
-        let mut stdout = child
-            .stdout
-            .take()
-            .expect("failed to get stdout of container");
+    fn wait_for_up(container: &str) {
+        let mut timeout = 20 * 10;
 
-        let mut buf = [0; 2 << 12];
-        let mut current_pos = 0;
+        while timeout > 0 {
+            timeout -= 1;
 
-        'wait: while let Ok(len) = stdout.read(&mut buf[current_pos..]) {
-            if len == 0 {
+            let status = Command::new("docker")
+                .args(["exec", container, "pg_isready"])
+                .output()
+                .expect("failed to get postgres ready status")
+                .status;
+
+            if status.success() {
                 break;
             }
 
-            current_pos += len;
-
-            if buf[current_pos - 1] != b'\n' {
-                continue;
-            }
-
-            for line in BufReader::new(&buf[..current_pos]).lines() {
-                let line = line.unwrap();
-                println!("{}", line);
-
-                if line.contains("PostgreSQL init process complete") {
-                    break 'wait;
-                }
-            }
-
-            current_pos = 0;
+            sleep(Duration::from_millis(100));
         }
-
-        // Rust is just a little too fast for the docker runtime :(
-        std::thread::sleep(std::time::Duration::from_millis(100));
     }
 }
 

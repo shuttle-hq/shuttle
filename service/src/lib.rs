@@ -231,6 +231,9 @@ pub trait IntoService {
     fn into_service(self) -> Self::Service;
 }
 
+pub type StateBuilder<T> =
+    fn(&mut dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>;
+
 /// A convenience struct for building a [Service][Service] from a [Rocket<Build>][Rocket] instance.
 ///
 /// To construct, use [into_service][IntoService::into_service].
@@ -241,8 +244,7 @@ pub trait IntoService {
 /// Also see the [declare_service!][declare_service] macro.
 pub struct RocketService<T: Sized> {
     rocket: Option<Rocket<Build>>,
-    state_builder:
-        Option<fn(&mut dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>>,
+    state_builder: Option<StateBuilder<T>>,
     runtime: Runtime,
 }
 

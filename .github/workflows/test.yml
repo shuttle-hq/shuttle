@@ -25,28 +25,6 @@ jobs:
           override: true
       - name: Make config file
         run: mkdir -p ~/.config/shuttle/ && echo "api_key = \"ci-test\"" > ~/.config/shuttle/config.toml
-      - name: Use local shuttle-service
-        run: mkdir -p ~/.cargo && echo -e "[patch.crates-io]\nshuttle-service = { path = \"${GITHUB_WORKSPACE}/service\" }" > ~/.cargo/config.toml
       - name: Build docker
         run: docker build -f ./Dockerfile.dev .
       - run: cargo test -- --nocapture
-  fmt_test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-          components: rustfmt
-      - run: cargo fmt --all -- --check
-  clippy_test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-          components: clippy
-      - run: cargo clippy --tests --all-targets -- --D warnings

@@ -9,12 +9,12 @@ use cargo::core::resolver::CliFeatures;
 use cargo::core::Workspace;
 use cargo::ops::{PackageOpts, Packages};
 use cargo_metadata::MetadataCommand;
-use shuttle_common::{ApiKey, project::ProjectConfig};
-use std::io::{Write};
-use std::{env, io};
+use shuttle_common::{project::ProjectConfig, ApiKey};
 use std::fs::File;
+use std::io::Write;
 use std::path::Path;
 use std::rc::Rc;
+use std::{env, io};
 use structopt::StructOpt;
 
 #[tokio::main]
@@ -37,12 +37,12 @@ async fn login(login_args: LoginArgs) -> Result<()> {
 
         println!("If your browser did not automatically open, go to {url}");
         print!("Enter Api Key: ");
-        
+
         io::stdout().flush().unwrap();
 
         let mut input = String::new();
-        
-        io::stdin().read_line(&mut input).unwrap();    
+
+        io::stdin().read_line(&mut input).unwrap();
 
         input
     });
@@ -142,4 +142,3 @@ fn run_cargo_package(working_directory: &Path, allow_dirty: bool) -> Result<File
     let owned = locks.get(0).unwrap().file().try_clone()?;
     Ok(owned)
 }
-

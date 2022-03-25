@@ -46,7 +46,7 @@ impl PostgresInstance {
 
     fn wait_for_up(container: &str) {
         // Docker needs a quick warmup time, else we will catch a ready state prematurely
-        sleep(Duration::from_millis(300));
+        sleep(Duration::from_millis(350));
 
         let mut timeout = 20 * 10;
 

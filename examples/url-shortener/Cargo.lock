@@ -1998,6 +1998,7 @@ dependencies = [
  "serde",
  "shuttle-service",
  "sqlx",
+ "url",
 ]
 
 [[package]]

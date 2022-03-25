@@ -14,3 +14,4 @@ serde = "1.0"
 sqlx = { version = "0.5", features = ["runtime-tokio-native-tls", "postgres"] }
 shuttle-service = "0.2"
 nanoid = "0.4"
+url ="2.2"

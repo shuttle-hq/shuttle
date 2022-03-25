@@ -2530,6 +2530,7 @@ dependencies = [
 name = "shuttle-service"
 version = "0.2.5"
 dependencies = [
+ "anyhow",
  "async-trait",
  "libloading",
  "portpicker",

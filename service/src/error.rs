@@ -12,4 +12,4 @@ pub enum Error {
     Custom(#[from] CustomError)
 }
 
-type CustomError = anyhow::Error;
+pub type CustomError = anyhow::Error;

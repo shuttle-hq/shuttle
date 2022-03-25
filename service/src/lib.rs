@@ -208,13 +208,16 @@ pub trait GetResource<T> {
 #[async_trait]
 impl GetResource<PgPool> for &mut dyn Factory {
     async fn get_resource(self) -> Result<PgPool, crate::Error> {
+        use error::CustomError;
+
         let connection_string = self.get_sql_connection_string().await?;
 
         let pool = sqlx::postgres::PgPoolOptions::new()
             .min_connections(1)
             .max_connections(5)
             .connect(&connection_string)
-            .await?;
+            .await
+            .map_err(CustomError::new)?;
 
         Ok(pool)
     }

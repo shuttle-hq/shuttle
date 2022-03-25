@@ -25,5 +25,5 @@ portpicker = "0.1.1"
 default = ["codegen"]
 codegen = ["shuttle_codegen"]
 loader = ["libloading"]
-sqlx-integration = ["sqlx"]
+sqlx-integration = ["sqlx/runtime-tokio-native-tls"]
 sqlx-postgres = ["sqlx-integration", "sqlx/postgres"]

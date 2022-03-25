@@ -11,5 +11,3 @@ crate-type = ["cdylib"]
 [workspace]
 
 [dependencies]
-tokio = "1.0"
-shuttle-service = { path = "../../../" }

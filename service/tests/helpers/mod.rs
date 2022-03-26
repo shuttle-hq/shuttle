@@ -1,6 +1,8 @@
 use std::{process::Command, thread::sleep, time::Duration};
 
 use portpicker::pick_unused_port;
+use sqlx::Connection;
+use std::future::Future;
 
 pub struct PostgresInstance {
     port: u16,
@@ -9,6 +11,10 @@ pub struct PostgresInstance {
 }
 
 impl PostgresInstance {
+    /// Creates a new [`PostgresInstance`] using the official postgres:11 docker image
+    ///
+    /// Does not wait for the container to be ready. Use [`PostgresInstance::wait_for_ready`] and
+    /// [`PostgresInstance::wait_for_connectable`] for that.
     pub fn new() -> Self {
         let port = pick_unused_port().expect("could not find a free port for postgres");
         let container = "postgres-shuttle-service-integration-test".to_string();
@@ -28,8 +34,6 @@ impl PostgresInstance {
             .spawn()
             .expect("failed to start a postgres instance");
 
-        Self::wait_for_up(&container);
-
         Self {
             port,
             container,
@@ -44,27 +48,62 @@ impl PostgresInstance {
         )
     }
 
-    fn wait_for_up(container: &str) {
-        // Docker needs a quick warmup time, else we will catch a ready state prematurely
-        sleep(Duration::from_millis(350));
+    pub fn wait_for_connectable(&self) -> impl Future<Output = ()> + '_ {
+        self.async_wait_for(|instance| {
+            let uri = instance.get_uri().as_str().to_string();
+            async move { sqlx::PgConnection::connect(uri.as_str()).await.is_ok() }
+        })
+    }
 
+    pub async fn async_wait_for<F, Fut>(&self, f: F)
+    where
+        F: Fn(&Self) -> Fut,
+        Fut: Future<Output = bool>,
+    {
         let mut timeout = 20 * 10;
 
         while timeout > 0 {
             timeout -= 1;
 
-            let status = Command::new("docker")
-                .args(["exec", container, "pg_isready"])
-                .output()
-                .expect("failed to get postgres ready status")
-                .status;
-
-            if status.success() {
-                break;
+            if f(self).await {
+                return;
             }
 
             sleep(Duration::from_millis(100));
         }
+
+        panic!("timed out waiting for PostgresInstance");
+    }
+
+    pub fn wait_for_ready(&self) {
+        self.wait_for(|instance| {
+            let status = Command::new("docker")
+                .args(["exec", &instance.container, "pg_isready"])
+                .output()
+                .expect("failed to get postgres ready status")
+                .status;
+
+            status.success()
+        })
+    }
+
+    pub fn wait_for<F>(&self, f: F)
+    where
+        F: Fn(&Self) -> bool,
+    {
+        let mut timeout = 20 * 10;
+
+        while timeout > 0 {
+            timeout -= 1;
+
+            if f(self) {
+                return;
+            }
+
+            sleep(Duration::from_millis(100));
+        }
+
+        panic!("timed out waiting for PostgresInstance");
     }
 }
 

@@ -22,6 +22,12 @@ impl DummyFactory {
             postgres_instance: None,
         }
     }
+
+    fn new_with_postgres() -> Self {
+        Self {
+            postgres_instance: Some(PostgresInstance::new()),
+        }
+    }
 }
 
 #[async_trait]
@@ -90,7 +96,14 @@ async fn sqlx_pool() {
     let loader =
         Loader::from_so_file("tests/resources/sqlx-pool/target/release/libsqlx_pool.so").unwrap();
 
-    let mut factory = DummyFactory::new();
+    // Initialise a Factory with a pre-existing PostgresInstance.
+    // There is a need to wait for the instance to be reachable through the assigned port, which requires
+    // asynchronous code. This must happen in this tokio::Runtime and not in the inner one.
+    let mut factory = DummyFactory::new_with_postgres();
+    let instance = factory.postgres_instance.as_ref().unwrap();
+    instance.wait_for_ready();
+    instance.wait_for_connectable().await;
+
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
     let (handler, _) = loader.load(&mut factory, addr).unwrap();
 

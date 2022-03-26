@@ -32,13 +32,13 @@ For now deployment is manual using the `vercel` CLI tool.
 Running just:
 
 ```bash
-$ vercel
+vercel
 ```
 
 in the root `www` folder will deploy to a test deployment, and:
 
 ```bash
-$ vercel --prod
+vercel --prod
 ```
 
 will deploy to production and override the current `shuttle.rs` page.

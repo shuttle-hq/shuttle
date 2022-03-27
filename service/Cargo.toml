@@ -3,6 +3,11 @@ name = "shuttle-service"
 version = "0.2.5"
 edition = "2021"
 license = "Apache-2.0"
+repository = "https://github.com/getsynth/shuttle"
+homepage = "https://www.shuttle.rs"
+documentation = "https://docs.rs/shuttle-service"
+keywords = ["deployment", "deploy", "devops"]
+categories = ["development-tools::cargo-plugins"]
 description = "Service traits and macros to deploy on the shuttle platform (https://www.shuttle.rs/)"
 
 [lib]

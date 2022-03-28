@@ -1,9 +1,9 @@
 # Issue and verify JWT for authentication
-This example shows how to use [Rocket request guards](https://rocket.rs/v0.5-rc/guide/requests/#request-guards) for authentication with [JWTs](https://jwt.io/).
-The idea is that all requests authenticate first at https://authentication-rocket-app.shuttleapp.rs/login to get a JWT token.
-Then the JWT token is sent with all requests requiring authentication using the HTTP header `Authorization: Bearer <token>`.
+This example shows how to use [Rocket request guards](https://rocket.rs/v0.5-rc/guide/requests/#request-guards) for authentication with [JSON Web Tokens](https://jwt.io/) (JWT for short).
+The idea is that all requests authenticate first at https://authentication-rocket-app.shuttleapp.rs/login to get a JWT.
+Then the JWT is sent with all requests requiring authentication using the HTTP header `Authorization: Bearer <token>`.
 
-This example uses the [`jsonwebtoken`](https://github.com/Keats/jsonwebtoken) which supports symmetric and asymmtric secret encoding, build in validations, and most JWT algorithms.
+This example uses the [`jsonwebtoken`](https://github.com/Keats/jsonwebtoken) which supports symmetric and asymmetric secret encoding, built-in validations, and most JWT algorithms.
 However, this example only makes use of symmetric encoding and validation on the expiration claim.
 
 ## Structure
@@ -41,7 +41,7 @@ But trying to access the private endpoint will fail with a 403 forbidden:
 $ curl https://<host>/private
 ```
 
-So let's get a JWT token from the login route first:
+So let's get a JWT from the login route first:
 
 
 ```sh

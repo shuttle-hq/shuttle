@@ -51,7 +51,7 @@ struct LoginResponse {
     token: String,
 }
 
-/// Tries to authenticate a user. Successful authentications get a JWT token
+/// Tries to authenticate a user. Successful authentications get a JWT
 #[post("/login", data = "<login>")]
 fn login(login: Json<LoginRequest>) -> Result<Json<LoginResponse>, Custom<String>> {
     // This should be real user validation code, but is left simple for this example

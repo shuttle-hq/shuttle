@@ -12,8 +12,8 @@ This example has two files to register routes and handle JWT claims.
 ### src/main.rs
 Three Rocker routes are registered in this file:
 1. `/public`: a route that can be called without needing any authentication.
-1. `/login`: a route for posting a JSON object with a username and password to get a JWT token.
-1. `/private`: a route that can only be accessed with a valid JWT token.
+1. `/login`: a route for posting a JSON object with a username and password to get a JWT.
+1. `/private`: a route that can only be accessed with a valid JWT.
 
 ### src/claims.rs
 The bulk of this example is in this file. Most of the code can be transferred to other frameworks except for the `FromRequest` implementation, which is Rocket specific.

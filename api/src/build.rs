@@ -143,14 +143,14 @@ fn clear_project_dir(project_path: &Path) -> Result<()> {
         .filter_map(|dir| dir.ok())
         .filter(|dir| {
             if dir.file_name() == "target" {
-                return false
+                return false;
             }
 
             if let Some(Some("so")) = dir.path().extension().map(|f| f.to_str()) {
-                return false
+                return false;
             }
 
-            return true
+            return true;
         })
         .try_for_each::<_, Result<_, io::Error>>(|dir| {
             if let Ok(file) = dir.file_type() {

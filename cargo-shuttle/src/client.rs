@@ -1,9 +1,11 @@
 use anyhow::{anyhow, Context, Result};
-use shuttle_common::project::ProjectConfig;
-use shuttle_common::{ApiKey, DeploymentMeta, DeploymentStateMeta, API_URL, SHUTTLE_PROJECT_HEADER};
 use reqwest::{Response, StatusCode};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
+use shuttle_common::project::ProjectConfig;
+use shuttle_common::{
+    ApiKey, DeploymentMeta, DeploymentStateMeta, API_URL, SHUTTLE_PROJECT_HEADER,
+};
 use std::{fs::File, io::Read, time::Duration};
 use tokio::time::sleep;
 
@@ -145,6 +147,6 @@ async fn to_api_result(res: Response) -> Result<DeploymentMeta> {
     let text = res.text().await?;
     match serde_json::from_str::<DeploymentMeta>(&text) {
         Ok(meta) => Ok(meta),
-        Err(_) => Err(anyhow!("{}", text))
+        Err(_) => Err(anyhow!("{}", text)),
     }
 }

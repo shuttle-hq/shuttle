@@ -23,4 +23,4 @@ jobs:
         with:
           toolchain: stable
           override: true
-      - run: cargo test -- --nocapture
+      - run: cargo test --all-features -- --nocapture

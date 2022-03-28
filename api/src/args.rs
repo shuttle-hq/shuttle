@@ -1,6 +1,7 @@
-use shuttle_common::Port;
 use std::net::IpAddr;
 use std::path::PathBuf;
+
+use shuttle_common::Port;
 use structopt::StructOpt;
 
 #[derive(StructOpt)]
@@ -25,5 +26,5 @@ pub struct Args {
         about = "Override the default bind address",
         default_value = "127.0.0.1"
     )]
-    pub(crate) bind_addr: IpAddr,
+    pub(crate) bind_addr: IpAddr
 }

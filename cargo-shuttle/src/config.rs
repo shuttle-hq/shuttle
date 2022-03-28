@@ -1,5 +1,5 @@
-use shuttle_common::ApiKey;
 use serde::{Deserialize, Serialize};
+use shuttle_common::ApiKey;
 use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
 
@@ -23,9 +23,7 @@ pub(crate) fn create_with_api_key(api_key: String) -> Result<()> {
         .truncate(true)
         .open(file_path)?;
 
-    let config = Config {
-        api_key
-    };
+    let config = Config { api_key };
 
     Ok(write!(config_file, "{}", toml::to_string_pretty(&config)?)?)
 }

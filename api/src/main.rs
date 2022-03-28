@@ -120,8 +120,8 @@ async fn create_project(
     Ok(Json(deployment))
 }
 
-fn validate_user_for_project(user: &User, project_name: &String) -> Result<(), DeploymentApiError> {
-    if !user.projects.contains(project_name) {
+fn validate_user_for_project(user: &User, project_name: &str) -> Result<(), DeploymentApiError> {
+    if !user.projects.contains(&project_name.to_string()) {
         log::warn!(
             "failed to authenticate user {:?} for project `{}`",
             &user,

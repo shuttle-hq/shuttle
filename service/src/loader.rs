@@ -32,11 +32,11 @@ impl Loader {
     /// using the [`shuttle_service::declare_service`] macro.
     pub fn from_so_file<P: AsRef<OsStr>>(so_path: P) -> Result<Self, LoaderError> {
         unsafe {
-            let lib = Library::new(so_path).map_err(|e| LoaderError::Load(e))?;
+            let lib = Library::new(so_path).map_err(LoaderError::Load)?;
 
             let entrypoint: Symbol<CreateService> = lib
                 .get(ENTRYPOINT_SYMBOL_NAME)
-                .map_err(|e| LoaderError::GetEntrypoint(e))?;
+                .map_err(LoaderError::GetEntrypoint)?;
             let raw = entrypoint();
 
             Ok(Self {

@@ -150,7 +150,7 @@ fn clear_project_dir(project_path: &Path) -> Result<()> {
                 return false;
             }
 
-            return true;
+            true
         })
         .try_for_each::<_, Result<_, io::Error>>(|dir| {
             if let Ok(file) = dir.file_type() {

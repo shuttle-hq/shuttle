@@ -26,12 +26,9 @@
 //! crate-type = ["cdylib"]
 //! ```
 //!
-//! See the [declare_service!][declare_service] macro for more information on how to implement a service. Here's a simple example using [rocket][rocket] to get you started:
+//! See the [shuttle_service::main][main] macro for more information on how to implement a service. Here's a simple example using [rocket][rocket] to get you started:
 //!
 //! ```rust,no_run
-//! #[macro_use]
-//! extern crate shuttle_service;
-//!
 //! #[macro_use]
 //! extern crate rocket;
 //!
@@ -42,11 +39,12 @@
 //!     "Hello, world!"
 //! }
 //!
-//! fn init() -> Rocket<Build> {
-//!     rocket::build().mount("/", routes![hello])
-//! }
+//! #[shuttle_service::main]
+//! async fn init() -> Result<Rocket<Build>, shuttle_service::Error> {
+//!     let rocket = rocket::build().mount("/", routes![hello]);
 //!
-//! declare_service!(Rocket<Build>, init);
+//!     Ok(rocket)
+//! }
 //! ```
 //!
 //! Complete examples can be found [in the repository](https://github.com/getsynth/shuttle/tree/main/examples/rocket).
@@ -82,17 +80,13 @@
 //!
 //! ## Using `sqlx`
 //!
-//! Here is a quick example to deploy a service which uses a postgres database and [sqlx][sqlx]:
+//! Here is a quick example to deploy a service which uses a postgres database and [sqlx](http://docs.rs/sqlx):
 //!
 //! ```rust,no_run
 //! #[macro_use]
-//! extern crate shuttle_service;
-//! use shuttle_service::{Factory, Error};
-//!
-//! #[macro_use]
 //! extern crate rocket;
-//! use rocket::{Rocket, Build, State};
 //!
+//! use rocket::{Build, Rocket};
 //! use sqlx::PgPool;
 //!
 //! struct MyState(PgPool);
@@ -103,21 +97,16 @@
 //!     "Hello, Postgres!"
 //! }
 //!
-//! async fn state(factory: &mut dyn Factory) -> Result<MyState, shuttle_service::Error> {
-//!    let pool = sqlx::postgres::PgPoolOptions::new()
-//!        .connect(&factory.get_sql_connection_string().await?)
-//!        .await?;
-//!    Ok(MyState(pool))
-//! }
+//! #[shuttle_service::main]
+//! async fn rocket(pool: PgPool) -> Result<Rocket<Build>, shuttle_service::Error> {
+//!     let state = MyState(pool);
+//!     let rocket = rocket::build().manage(state).mount("/", routes![hello]);
 //!
-//! fn rocket() -> Rocket<Build> {
-//!     rocket::build().mount("/", routes![hello])
+//!     Ok(rocket)
 //! }
-//!
-//! declare_service!(Rocket<Build>, rocket, state);
 //! ```
 //!
-//! To learn more about how to build services with states, and services that require additional resources, see [Factory][Factory].
+//! To learn more about shuttle managed services, see [shuttle_service::main][main#getting-shuttle-managed-services].
 //!
 //! ## Configuration
 //!
@@ -160,18 +149,19 @@
 //! You can also [open an issue or a discussion on GitHub](https://github.com/getsynth/shuttle).
 //!
 
-use async_trait::async_trait;
-#[cfg(feature = "sqlx-postgres")]
-use sqlx::PgPool;
 use std::future::Future;
-
-pub use rocket;
-use rocket::{Build, Rocket};
-
-use tokio::runtime::Runtime;
-
 use std::net::SocketAddr;
 use std::pin::Pin;
+
+use async_trait::async_trait;
+pub use rocket;
+use rocket::{
+    Build,
+    Rocket
+};
+#[cfg(feature = "sqlx-postgres")]
+use sqlx::PgPool;
+use tokio::runtime::Runtime;
 
 pub mod error;
 pub use error::Error;
@@ -179,6 +169,52 @@ pub use error::Error;
 #[cfg(feature = "codegen")]
 extern crate shuttle_codegen;
 #[cfg(feature = "codegen")]
+/// Helper macro that generates the entrypoint required by any service - likely the only macro you need in this crate.
+///
+/// # Without shuttle managed services
+/// The simplest usage is when your service does not require any shuttle managed resources, so you only need to return a shuttle supported service:
+///
+/// ```rust,no_run
+/// use rocket::{Build, Rocket};
+///
+/// #[shuttle_service::main]
+/// async fn rocket() -> Result<Rocket<Build>, shuttle_service::Error> {
+///     let rocket = rocket::build();
+///
+///     Ok(rocket)
+/// }
+/// ```
+///
+/// ## shuttle supported services
+/// The following type can take the place of the `Ok` type and enjoy first class service support in shuttle.
+///
+/// | Ok type         | Service          |
+/// | --------------- | ---------------- |
+/// | `Rocket<Build>` | [Rocket](Rocket) |
+///
+/// # Getting shuttle managed services
+/// The shuttle is able to manage service dependencies for you. These services are passed in as inputs to your main function:
+/// ```rust,no_run
+/// use rocket::{Build, Rocket};
+/// use sqlx::PgPool;
+///
+/// struct MyState(PgPool);
+///
+/// #[shuttle_service::main]
+/// async fn rocket(pool: PgPool) -> Result<Rocket<Build>, shuttle_service::Error> {
+///     let state = MyState(pool);
+///     let rocket = rocket::build().manage(state);
+///
+///     Ok(rocket)
+/// }
+/// ```
+///
+/// ## shuttle managed dependencies
+/// The following dependencies can be managed by shuttle:
+///
+/// | Argument type | Dependency                                         |
+/// | ------------- | -------------------------------------------------- |
+/// | `PgPool`      | A PostgresSql instance accessed using [sqlx](https://docs.rs/sqlx) |
 pub use shuttle_codegen::main;
 
 #[cfg(feature = "loader")]
@@ -263,7 +299,7 @@ pub struct RocketService<T: Sized> {
     rocket: Option<Rocket<Build>>,
     state_builder:
         Option<fn(&mut dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>>,
-    runtime: Runtime,
+    runtime: Runtime
 }
 
 impl IntoService for Rocket<Build> {
@@ -272,7 +308,7 @@ impl IntoService for Rocket<Build> {
         RocketService {
             rocket: Some(self),
             state_builder: None,
-            runtime: Runtime::new().unwrap(),
+            runtime: Runtime::new().unwrap()
         }
     }
 }
@@ -280,7 +316,7 @@ impl IntoService for Rocket<Build> {
 impl<T: Send + Sync + 'static> IntoService
     for (
         Rocket<Build>,
-        fn(&mut dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>,
+        fn(&mut dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>
     )
 {
     type Service = RocketService<T>;
@@ -289,14 +325,14 @@ impl<T: Send + Sync + 'static> IntoService
         RocketService {
             rocket: Some(self.0),
             state_builder: Some(self.1),
-            runtime: Runtime::new().unwrap(),
+            runtime: Runtime::new().unwrap()
         }
     }
 }
 
 impl<T> Service for RocketService<T>
 where
-    T: Send + Sync + 'static,
+    T: Send + Sync + 'static
 {
     fn build(&mut self, factory: &mut dyn Factory) -> Result<(), Error> {
         if let Some(state_builder) = self.state_builder.take() {
@@ -332,13 +368,13 @@ pub struct SimpleService<T> {
     service: Option<T>,
     builder:
         Option<fn(&mut dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>>,
-    runtime: Runtime,
+    runtime: Runtime
 }
 
 impl<T> IntoService
     for fn(&mut dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>
 where
-    SimpleService<T>: Service,
+    SimpleService<T>: Service
 {
     type Service = SimpleService<T>;
 
@@ -346,7 +382,7 @@ where
         SimpleService {
             service: None,
             builder: Some(self),
-            runtime: Runtime::new().unwrap(),
+            runtime: Runtime::new().unwrap()
         }
     }
 }
@@ -378,7 +414,7 @@ impl Service for SimpleService<Rocket<Build>> {
     }
 }
 
-/// Helper macro that generates the entrypoint required of any service. Likely the only macro you need in this crate.
+/// Helper macro that generates the entrypoint required of any service.
 ///
 /// Can be used in one of two ways:
 ///
@@ -452,9 +488,9 @@ macro_rules! declare_service {
 
             // Ensure state builder is a function
             let state_builder: fn(
-                &mut dyn $crate::Factory,
+                &mut dyn $crate::Factory
             ) -> std::pin::Pin<
-                Box<dyn std::future::Future<Output = Result<_, $crate::Error>> + Send + '_>,
+                Box<dyn std::future::Future<Output = Result<_, $crate::Error>> + Send + '_>
             > = |factory| Box::pin($state_builder(factory));
 
             let obj = $crate::IntoService::into_service((constructor(), state_builder));

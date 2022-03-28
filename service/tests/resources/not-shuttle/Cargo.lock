@@ -3,5 +3,9 @@
 version = 3
 
 [[package]]
-name = "service"
+name = "not-shuttle"
 version = "0.1.0"
+
+[[patch.unused]]
+name = "shuttle-service"
+version = "0.2.5"

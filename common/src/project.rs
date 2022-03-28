@@ -1,12 +1,11 @@
+use crate::{Status, SHUTTLE_PROJECT_HEADER};
+use rocket::request::{FromRequest, Outcome};
+use rocket::Request;
+use serde::de::Error as DeError;
+use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
-use rocket::request::{FromRequest, Outcome};
-use rocket::Request;
-use serde::{Deserialize, Serialize};
-use serde::de::Error as DeError;
-use crate::{Status, SHUTTLE_PROJECT_HEADER};
-
 
 /// Project names should conform to valid Host segments (or labels)
 /// as per [IETF RFC 1123](https://datatracker.ietf.org/doc/html/rfc1123).
@@ -18,20 +17,20 @@ use crate::{Status, SHUTTLE_PROJECT_HEADER};
 struct ProjectName(String);
 
 fn deserialize_project_name<'de, D>(deserializer: D) -> Result<ProjectName, D::Error>
-    where
-        D: serde::Deserializer<'de> {
+where
+    D: serde::Deserializer<'de>,
+{
     let s: String = String::deserialize(deserializer)?;
 
     s.parse().map_err(DeError::custom)
 }
 
-
 impl ProjectName {
     pub fn is_valid(hostname: &str) -> bool {
         fn is_valid_char(byte: u8) -> bool {
-            (byte >= b'a' && byte <= b'z')
-                || (byte >= b'A' && byte <= b'Z')
-                || (byte >= b'0' && byte <= b'9')
+            (b'a'..=b'z').contains(&byte)
+                || (b'A'..=b'Z').contains(&byte)
+                || (b'0'..=b'9').contains(&byte)
                 || byte == b'-'
         }
 
@@ -48,7 +47,7 @@ impl FromStr for ProjectName {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match ProjectName::is_valid(s) {
             true => Ok(ProjectName(s.to_string())),
-            false => Err(ProjectConfigError::InvalidName(s.to_string()))
+            false => Err(ProjectConfigError::InvalidName(s.to_string())),
         }
     }
 }
@@ -62,7 +61,7 @@ pub struct ProjectConfig {
 impl ProjectConfig {
     pub fn new(name: String) -> Result<Self, ProjectConfigError> {
         Ok(Self {
-            name: (&name).parse()?
+            name: (&name).parse()?,
         })
     }
 
@@ -89,11 +88,15 @@ impl Display for ProjectConfigError {
         match self {
             ProjectConfigError::Missing => write!(f, "missing"),
             ProjectConfigError::Malformed(msg) => write!(f, "malformed: {}", msg),
-            ProjectConfigError::InvalidName(name) => write!(f, r#"
+            ProjectConfigError::InvalidName(name) => write!(
+                f,
+                r#"
 `{}` is an invalid project name. project name must
 1. not start or end with `-`.
 2. not contain any characters outside of the alphanumeric range, except for `-`.
-3. not be empty."#, name),
+3. not be empty."#,
+                name
+            ),
         }
     }
 }
@@ -112,7 +115,10 @@ impl<'r> FromRequest<'r> for ProjectConfig {
 
         match serde_json::from_str::<ProjectConfig>(config_string) {
             Ok(config) => Outcome::Success(config),
-            Err(_) => Outcome::Failure((Status::BadRequest, ProjectConfigError::malformed("could not parse project config from json"))),
+            Err(_) => Outcome::Failure((
+                Status::BadRequest,
+                ProjectConfigError::malformed("could not parse project config from json"),
+            )),
         }
     }
 }
@@ -125,13 +131,7 @@ pub mod tests {
 
     #[test]
     fn valid_hostnames() {
-        for hostname in [
-            "VaLiD-HoStNaMe",
-            "50-name",
-            "235235",
-            "VaLid",
-            "123",
-        ] {
+        for hostname in ["VaLiD-HoStNaMe", "50-name", "235235", "VaLid", "123"] {
             let project_name = ProjectName::from_str(hostname);
             assert!(project_name.is_ok(), "{:?} was err", hostname);
         }

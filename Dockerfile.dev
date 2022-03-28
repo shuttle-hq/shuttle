@@ -1,8 +1,12 @@
-FROM rust:buster as chef
-RUN cargo install cargo-chef
+FROM rust:buster AS common
 WORKDIR app
+COPY ./service /app/service
+RUN echo "[patch.crates-io]\nshuttle-service = { path = \"/app/service\" }" > $CARGO_HOME/config.toml
 
-FROM rust:buster AS runtime
+FROM common AS chef
+RUN cargo install cargo-chef
+
+FROM common AS runtime
 RUN apt-get update &&\
     apt-get install -y curl postgresql supervisor
 RUN pg_dropcluster $(pg_lsclusters -h | cut -d' ' -f-2 | head -n1)
@@ -18,6 +22,7 @@ COPY . .
 RUN cargo build --bin api
 
 FROM runtime
+WORKDIR /
 COPY --from=builder /app/target/debug/api /usr/local/bin/shuttle-backend
 
 COPY docker/entrypoint.sh /bin/entrypoint.sh

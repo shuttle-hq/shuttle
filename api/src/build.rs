@@ -1,21 +1,21 @@
-use std::io;
 use anyhow::{anyhow, Context, Result};
 use cargo::core::compiler::CompileMode;
 use cargo::core::Workspace;
 use cargo::ops::CompileOptions;
-use shuttle_common::project::ProjectConfig;
 use rocket::tokio;
 use rocket::tokio::io::AsyncWriteExt;
+use shuttle_common::project::ProjectConfig;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use uuid::Uuid;
 
 #[cfg(debug_assertions)]
-pub const DEFAULT_FS_ROOT: &'static str = "/tmp/shuttle/crates/";
+pub const DEFAULT_FS_ROOT: &str = "/tmp/shuttle/crates/";
 
 #[cfg(not(debug_assertions))]
 // as per: https://stackoverflow.com/questions/1510104/where-to-store-application-data-non-user-specific-on-linux
-pub const DEFAULT_FS_ROOT: &'static str = "/var/lib/shuttle/crates/";
+pub const DEFAULT_FS_ROOT: &str = "/var/lib/shuttle/crates/";
 
 pub(crate) struct Build {
     pub(crate) so_path: PathBuf,
@@ -84,8 +84,9 @@ impl BuildSystem for FsBuildSystem {
         debug!("Project path: {}", project_path.display());
 
         // clear directory
-        clear_project_dir(&project_path)
-            .context("there was an issue cleaning the project directory. Please try again in a bit.")?;
+        clear_project_dir(&project_path).context(
+            "there was an issue cleaning the project directory. Please try again in a bit.",
+        )?;
 
         // crate path
         let crate_path = crate_location(&project_path, project_name);
@@ -151,9 +152,8 @@ fn clear_project_dir(project_path: &Path) -> Result<()> {
 
             return true
         })
-        .map(|dir| {
+        .try_for_each::<_, Result<_, io::Error>>(|dir| {
             if let Ok(file) = dir.file_type() {
-                debug!("{:?}", dir);
                 if file.is_dir() {
                     std::fs::remove_dir_all(&dir.path())?;
                 } else if file.is_file() {
@@ -164,8 +164,7 @@ fn clear_project_dir(project_path: &Path) -> Result<()> {
                 }
             }
             Ok(())
-        })
-        .collect::<Result<(),io::Error>>()?;
+        })?;
     Ok(())
 }
 

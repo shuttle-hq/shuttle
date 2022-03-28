@@ -1,8 +1,8 @@
-use std::time::Duration;
 use lazy_static::lazy_static;
-use shuttle_common::DatabaseReadyInfo;
 use rand::Rng;
+use shuttle_common::DatabaseReadyInfo;
 use sqlx::postgres::{PgPool, PgPoolOptions};
+use std::time::Duration;
 
 use shuttle_common::project::ProjectConfig;
 
@@ -27,7 +27,7 @@ pub(crate) struct State {
     project: ProjectConfig,
     context: Context,
     is_guaranteed: bool,
-    info: Option<DatabaseReadyInfo>
+    info: Option<DatabaseReadyInfo>,
 }
 
 impl State {
@@ -36,7 +36,7 @@ impl State {
             project: project.clone(),
             context: context.clone(),
             is_guaranteed: false,
-            info: None
+            info: None,
         }
     }
 
@@ -55,10 +55,14 @@ impl State {
 
     pub(crate) async fn ensure(&mut self) -> sqlx::Result<()> {
         if self.info.is_none() || self.is_guaranteed {
-            return Ok(())
+            return Ok(());
         }
 
-        let DatabaseReadyInfo { role_name, role_password, database_name } = self.info.clone().unwrap();
+        let DatabaseReadyInfo {
+            role_name,
+            role_password,
+            database_name,
+        } = self.info.clone().unwrap();
 
         let pool = &self.context.sudo_pool;
 
@@ -76,14 +80,11 @@ impl State {
                 "CREATE ROLE \"{}\" PASSWORD '{}' LOGIN",
                 role_name, role_password
             );
-            sqlx::query(&create_role_query)
-                .execute(pool)
-                .await?;
+            sqlx::query(&create_role_query).execute(pool).await?;
 
             debug!(
                 "created new role '{}' in database for project '{}'",
-                role_name,
-                database_name
+                role_name, database_name
             );
         } else {
             // If the role already exists then change its password:
@@ -91,9 +92,7 @@ impl State {
                 "ALTER ROLE \"{}\" WITH PASSWORD '{}'",
                 role_name, role_password
             );
-            sqlx::query(&alter_password_query)
-                .execute(pool)
-                .await?;
+            sqlx::query(&alter_password_query).execute(pool).await?;
 
             debug!(
                 "role '{}' already exists so updating their password",
@@ -114,17 +113,17 @@ impl State {
                 "CREATE DATABASE \"{}\" OWNER '{}'",
                 database_name, role_name
             );
-            sqlx::query(&create_database_query)
-                .execute(pool)
-                .await?;
+            sqlx::query(&create_database_query).execute(pool).await?;
 
             debug!(
                 "created database '{}' belonging to '{}'",
-                database_name,
-                role_name
+                database_name, role_name
             );
         } else {
-            debug!("database '{}' already exists, not recreating", database_name);
+            debug!(
+                "database '{}' already exists, not recreating",
+                database_name
+            );
         }
 
         self.is_guaranteed = true;
@@ -132,7 +131,6 @@ impl State {
         Ok(())
     }
 }
-
 
 #[derive(Clone)]
 pub struct Context {

@@ -9,5 +9,11 @@ pub enum Error {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
     #[error("Rocket error: {0}")]
-    Rocket(#[from] rocket::Error)
+    Rocket(#[from] Box<rocket::Error>),
+}
+
+impl From<rocket::Error> for Error {
+    fn from(error: rocket::Error) -> Self {
+        Self::from(Box::new(error))
+    }
 }

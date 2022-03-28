@@ -83,7 +83,7 @@ pub fn spawn_and_log<D: std::fmt::Display, C: Into<Color>>(
     let color = color.into();
     let mut stdout = child.stdout.take().unwrap();
     let mut stderr = child.stderr.take().unwrap();
-    let stdout_target = format!("{} >>>", target).color(color.clone());
+    let stdout_target = format!("{} >>>", target).color(color);
     let stderr_target = format!("{} >>>", target).bold().color(color);
     std::thread::spawn(move || log_lines(&mut stdout, stdout_target));
     std::thread::spawn(move || log_lines(&mut stderr, stderr_target));

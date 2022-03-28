@@ -72,7 +72,7 @@ impl DeploymentMeta {
 }
 
 #[cfg(debug_assertions)]
-const PUBLIC_IP: &'static str = "localhost";
+const PUBLIC_IP: &str = "localhost";
 
 #[cfg(not(debug_assertions))]
 const PUBLIC_IP: &'static str = "pg.shuttle.rs";
@@ -120,7 +120,7 @@ impl DatabaseReadyInfo {
         Self {
             role_name,
             role_password,
-            database_name
+            database_name,
         }
     }
     pub fn connection_string(&self, ip: &str) -> String {

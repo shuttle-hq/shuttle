@@ -1,18 +1,18 @@
+use anyhow::{anyhow, Context};
 use lazy_static::lazy_static;
+use rand::Rng;
+use rocket::form::validate::Contains;
 use rocket::http::Status;
 use rocket::request::{FromRequest, Outcome};
 use rocket::Request;
 use serde::{Deserialize, Serialize};
+use shuttle_common::DeploymentApiError;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::RwLock;
-use anyhow::{anyhow, Context};
-use rand::Rng;
-use rocket::form::validate::Contains;
-use shuttle_common::DeploymentApiError;
 
 #[derive(Debug, PartialEq, Hash, Eq, Deserialize, Serialize, Responder)]
 pub struct ApiKey(String);
@@ -34,8 +34,8 @@ impl TryFrom<Option<&str>> for ApiKey {
                 // comes in base64 encoded
                 let decoded_bytes =
                     base64::decode(key).map_err(|_| AuthorizationError::Malformed(()))?;
-                let mut decoded_string =
-                    String::from_utf8(decoded_bytes).map_err(|_| AuthorizationError::Malformed(()))?;
+                let mut decoded_string = String::from_utf8(decoded_bytes)
+                    .map_err(|_| AuthorizationError::Malformed(()))?;
                 // remove colon at the end
                 decoded_string.pop();
                 Ok(ApiKey(decoded_string))
@@ -70,7 +70,6 @@ impl Display for AuthorizationError {
         }
     }
 }
-
 
 impl Error for AuthorizationError {}
 
@@ -119,33 +118,42 @@ impl UserDirectory {
     /// will return an error since the project does not belong to the current user
     /// - if not, will create the project for the user
     /// Finally saves `users` state to `users.toml`.
-    pub(crate) fn validate_or_create_project(&self, user: &User, project_name: &String) -> Result<(), DeploymentApiError> {
-        if user.projects.contains(project_name) {
+    pub(crate) fn validate_or_create_project(
+        &self,
+        user: &User,
+        project_name: &str,
+    ) -> Result<(), DeploymentApiError> {
+        if user.projects.contains(project_name.to_string()) {
             return Ok(());
         }
 
         let mut users = self.users.write().unwrap();
 
-        let project_for_name = users.values()
+        let project_for_name = users
+            .values()
             .flat_map(|users| &users.projects)
             .find(|project| project == &project_name);
 
         if project_for_name.is_some() {
-            return Err(DeploymentApiError::ProjectAlreadyExists(
-                format!("project with name `{}` already exists", project_name)
-            ));
+            return Err(DeploymentApiError::ProjectAlreadyExists(format!(
+                "project with name `{}` already exists",
+                project_name
+            )));
         }
 
         // at this point we know that the user does not have this project
         // and that another user does not have it
-        let user = users.values_mut()
+        let user = users
+            .values_mut()
             .find(|u| u.name == user.name)
-            .ok_or(DeploymentApiError::Internal(
-                "there was an issue getting the user credentials while validating the project".to_string()
-            )
-            )?;
+            .ok_or_else(|| {
+                DeploymentApiError::Internal(
+                    "there was an issue getting the user credentials while validating the project"
+                        .to_string(),
+                )
+            })?;
 
-        user.projects.push(project_name.clone());
+        user.projects.push(project_name.to_string());
 
         self.save(&*users);
 
@@ -202,8 +210,10 @@ impl UserDirectory {
 
     fn from_user_file() -> Result<Self, anyhow::Error> {
         let file_path = Self::users_toml_file_path();
-        let file_contents: String = std::fs::read_to_string(&file_path)
-            .context(anyhow!("this should blow up if the users.toml file is not present at {:?}", &file_path))?;
+        let file_contents: String = std::fs::read_to_string(&file_path).context(anyhow!(
+            "this should blow up if the users.toml file is not present at {:?}",
+            &file_path
+        ))?;
         let users = toml::from_str(&file_contents)
             .context("this should blow up if the users.toml file is unparseable")?;
         let directory = Self {

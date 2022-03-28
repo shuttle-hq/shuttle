@@ -9,7 +9,7 @@ pub enum Error {
     #[error("Rocket error: {0}")]
     Rocket(#[from] Box<rocket::Error>),
     #[error("Custom error: {0}")]
-    Custom(#[from] CustomError)
+    Custom(#[from] CustomError),
 }
 
 impl From<rocket::Error> for Error {

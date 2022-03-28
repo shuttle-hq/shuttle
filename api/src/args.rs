@@ -26,5 +26,5 @@ pub struct Args {
         about = "Override the default bind address",
         default_value = "127.0.0.1"
     )]
-    pub(crate) bind_addr: IpAddr
+    pub(crate) bind_addr: IpAddr,
 }

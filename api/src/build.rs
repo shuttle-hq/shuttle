@@ -140,7 +140,17 @@ fn clear_project_dir(project_path: &Path) -> Result<()> {
     std::fs::read_dir(project_path)?
         .into_iter()
         .filter_map(|dir| dir.ok())
-        .filter(|dir| dir.file_name() != "target")
+        .filter(|dir| {
+            if dir.file_name() == "target" {
+                return false
+            }
+
+            if let Some(Some("so")) = dir.path().extension().map(|f| f.to_str()) {
+                return false
+            }
+
+            return true
+        })
         .map(|dir| {
             if let Ok(file) = dir.file_type() {
                 debug!("{:?}", dir);

@@ -2500,6 +2500,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "45bb67a18fa91266cc7807181f62f9178a6873bfad7dc788c42e6430db40184f"
 
 [[package]]
+name = "shuttle-codegen"
+version = "0.1.0"
+dependencies = [
+ "pretty_assertions",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "shuttle-common"
 version = "0.1.1"
 dependencies = [
@@ -2521,20 +2531,10 @@ dependencies = [
  "libloading",
  "portpicker",
  "rocket",
- "shuttle_codegen",
+ "shuttle-codegen",
  "sqlx",
  "thiserror",
  "tokio",
-]
-
-[[package]]
-name = "shuttle_codegen"
-version = "0.1.0"
-dependencies = [
- "pretty_assertions",
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]

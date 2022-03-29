@@ -104,7 +104,7 @@ async fn create_project(
     project_name: ProjectName,
     user: User,
 ) -> ApiResult<DeploymentMeta, DeploymentApiError> {
-    if ! user
+    if !user
         .projects
         .iter()
         .any(|my_project| *my_project == project_name)

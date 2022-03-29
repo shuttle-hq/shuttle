@@ -1,10 +1,9 @@
 use lazy_static::lazy_static;
 use rand::Rng;
-use shuttle_common::DatabaseReadyInfo;
+
+use shuttle_common::{project::ProjectName, DatabaseReadyInfo};
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use std::time::Duration;
-
-use shuttle_common::project::ProjectConfig;
 
 lazy_static! {
     static ref SUDO_POSTGRES_CONNECTION_STRING: String = format!(
@@ -24,14 +23,14 @@ fn generate_role_password() -> String {
 }
 
 pub(crate) struct State {
-    project: ProjectConfig,
+    project: ProjectName,
     context: Context,
     is_guaranteed: bool,
     info: Option<DatabaseReadyInfo>,
 }
 
 impl State {
-    pub(crate) fn new(project: &ProjectConfig, context: &Context) -> Self {
+    pub(crate) fn new(project: &ProjectName, context: &Context) -> Self {
         Self {
             project: project.clone(),
             context: context.clone(),
@@ -42,9 +41,9 @@ impl State {
 
     pub(crate) fn request(&mut self) -> DatabaseReadyInfo {
         if self.info.is_none() {
-            let role_name = format!("user-{}", self.project.name());
+            let role_name = format!("user-{}", self.project);
             let role_password = generate_role_password();
-            let database_name = format!("db-{}", self.project.name());
+            let database_name = format!("db-{}", self.project);
             let info = DatabaseReadyInfo::new(role_name, role_password, database_name);
             self.info = Some(info.clone());
             info

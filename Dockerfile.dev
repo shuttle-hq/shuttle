@@ -1,7 +1,7 @@
 FROM rust:buster AS common
 WORKDIR app
 COPY ./service /app/service
-RUN echo "[patch.crates-io]\nshuttle-service = { path = \"/app/service\" }" > $CARGO_HOME/config.toml
+COPY ./docker/config.toml $CARGO_HOME/config.toml
 
 FROM common AS chef
 RUN cargo install cargo-chef

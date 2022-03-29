@@ -185,9 +185,9 @@ extern crate shuttle_codegen;
 /// ## shuttle supported services
 /// The following type can take the place of the `Ok` type and enjoy first class service support in shuttle.
 ///
-/// | Ok type         | Service          |
-/// | --------------- | ---------------- |
-/// | `Rocket<Build>` | [Rocket](Rocket) |
+/// | Ok type           | Service  |
+/// | ----------------- | -------- |
+/// | [`Rocket<Build>`] | [rocket] |
 ///
 /// # Getting shuttle managed services
 /// The shuttle is able to manage service dependencies for you. These services are passed in as inputs to your main function:
@@ -209,9 +209,9 @@ extern crate shuttle_codegen;
 /// ## shuttle managed dependencies
 /// The following dependencies can be managed by shuttle:
 ///
-/// | Argument type | Dependency                                         |
-/// | ------------- | -------------------------------------------------- |
-/// | `PgPool`      | A PostgresSql instance accessed using [sqlx](https://docs.rs/sqlx) |
+/// | Argument type      | Dependency                                                         |
+/// | ------------------ | ------------------------------------------------------------------ |
+/// | [`PgPool`](https://docs.rs/sqlx/latest/sqlx/type.PgPool.html) | A PostgresSql instance accessed using [sqlx](https://docs.rs/sqlx) |
 pub use shuttle_codegen::main;
 
 #[cfg(feature = "loader")]
@@ -230,8 +230,8 @@ pub trait Factory: Send + Sync {
     async fn get_sql_connection_string(&mut self) -> Result<String, crate::Error>;
 }
 
-/// Used to get resources of type `T` from factories. 
-/// 
+/// Used to get resources of type `T` from factories.
+///
 /// This is mainly meant for consumption by our code generator and should generally not be implemented by users.
 #[async_trait]
 pub trait GetResource<T> {

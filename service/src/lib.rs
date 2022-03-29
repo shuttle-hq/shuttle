@@ -230,7 +230,9 @@ pub trait Factory: Send + Sync {
     async fn get_sql_connection_string(&mut self) -> Result<String, crate::Error>;
 }
 
-/// Used to get resources of type `T` from factories with easy. This is mainly meant for consumption by our code generator.
+/// Used to get resources of type `T` from factories. 
+/// 
+/// This is mainly meant for consumption by our code generator and should generally not be implemented by users.
 #[async_trait]
 pub trait GetResource<T> {
     async fn get_resource(self) -> Result<T, crate::Error>;

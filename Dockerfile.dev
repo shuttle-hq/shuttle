@@ -1,6 +1,7 @@
 FROM rust:buster AS common
 WORKDIR app
 COPY ./service /app/service
+COPY ./codegen /app/codegen
 RUN echo "[patch.crates-io]\nshuttle-service = { path = \"/app/service\" }" > $CARGO_HOME/config.toml
 
 FROM common AS chef
@@ -24,8 +25,6 @@ RUN cargo build --bin api
 FROM runtime
 WORKDIR /
 COPY --from=builder /app/target/debug/api /usr/local/bin/shuttle-backend
-COPY --from=builder /app/service /app/service
-COPY --from=builder /app/codegen /app/codegen
 
 COPY docker/entrypoint.sh /bin/entrypoint.sh
 COPY docker/wait-for-pg-then /usr/bin/wait-for-pg-then

@@ -223,6 +223,7 @@ impl Api {
         reqwest::blocking::Client::new().get(format!("http://{}/{}", self.proxy_addr, sub_path))
     }
 
+    #[allow(dead_code)]
     pub fn post(&self, sub_path: &str) -> RequestBuilder {
         reqwest::blocking::Client::new().post(format!("http://{}/{}", self.proxy_addr, sub_path))
     }

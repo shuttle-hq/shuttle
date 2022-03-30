@@ -14,7 +14,7 @@ pub enum Error {
 
 impl From<rocket::Error> for Error {
     fn from(error: rocket::Error) -> Self {
-        Self::from(Box::new(error))
+        Box::new(error).into()
     }
 }
 

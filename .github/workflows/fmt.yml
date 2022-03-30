@@ -27,4 +27,4 @@ jobs:
           toolchain: stable
           override: true
           components: clippy
-      - run: cargo clippy --tests --all-targets -- --D warnings
+      - run: cargo clippy --tests --all-targets --all-features -- --D warnings

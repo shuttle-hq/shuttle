@@ -1,13 +1,12 @@
 #[macro_use]
 extern crate rocket;
 
-use rocket::{response::status::BadRequest, serde::json::Json, Build, Rocket, State};
+use rocket::response::status::BadRequest;
+use rocket::serde::json::Json;
+use rocket::{Build, Rocket, State};
 use serde::{Deserialize, Serialize};
+use shuttle_service::error::CustomError;
 use sqlx::{Executor, FromRow, PgPool};
-use shuttle_service::Factory;
-
-#[macro_use]
-extern crate shuttle_service;
 
 #[get("/<id>")]
 async fn retrieve(id: i32, state: &State<MyState>) -> Result<Json<Todo>, BadRequest<String>> {
@@ -38,21 +37,19 @@ struct MyState {
     pool: PgPool,
 }
 
-fn rocket() -> Rocket<Build> {
-    rocket::build().mount("/todo", routes![retrieve, add])
-}
-
-async fn build_state(factory: &mut dyn Factory) -> Result<MyState, shuttle_service::Error> {
-    let pool = factory.get_postgres_connection_pool().await?;
-
-    pool.execute(include_str!("../schema.sql")).await?;
+#[shuttle_service::main]
+async fn rocket(pool: PgPool) -> Result<Rocket<Build>, shuttle_service::Error> {
+    pool.execute(include_str!("../schema.sql"))
+        .await
+        .map_err(CustomError::new)?;
 
     let state = MyState { pool };
+    let rocket = rocket::build()
+        .mount("/todo", routes![retrieve, add])
+        .manage(state);
 
-    Ok(state)
+    Ok(rocket)
 }
-
-declare_service!(Rocket<Build>, rocket, build_state);
 
 #[derive(Deserialize)]
 struct TodoNew {

@@ -4,12 +4,12 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("Database resource error: {0}")]
-    Database(#[from] sqlx::Error),
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
     #[error("Rocket error: {0}")]
     Rocket(#[from] Box<rocket::Error>),
+    #[error("Custom error: {0}")]
+    Custom(#[from] CustomError),
 }
 
 impl From<rocket::Error> for Error {
@@ -17,3 +17,5 @@ impl From<rocket::Error> for Error {
         Box::new(error).into()
     }
 }
+
+pub type CustomError = anyhow::Error;

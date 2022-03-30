@@ -1,6 +1,7 @@
-use shuttle_common::Port;
 use std::net::IpAddr;
 use std::path::PathBuf;
+
+use shuttle_common::Port;
 use structopt::StructOpt;
 
 #[derive(StructOpt)]

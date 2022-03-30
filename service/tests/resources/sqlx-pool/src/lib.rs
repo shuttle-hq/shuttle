@@ -1,3 +1,4 @@
+use shuttle_service::error::CustomError;
 use shuttle_service::{Factory, IntoService, Service};
 use sqlx::PgPool;
 use tokio::runtime::Runtime;
@@ -32,7 +33,8 @@ impl PoolService {
         if let Some(pool) = &self.pool {
             let (rec,): (String,) = sqlx::query_as("SELECT 'Hello world'")
                 .fetch_one(pool)
-                .await?;
+                .await
+                .map_err(CustomError::new)?;
 
             assert_eq!(rec, "Hello world");
         } else {
@@ -72,7 +74,8 @@ async fn get_postgres_connection_pool(
         .min_connections(1)
         .max_connections(5)
         .connect(&connection_string)
-        .await?;
+        .await
+        .map_err(CustomError::new)?;
 
     Ok(pool)
 }

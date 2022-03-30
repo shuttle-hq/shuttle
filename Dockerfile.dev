@@ -1,6 +1,7 @@
 FROM rust:buster AS common
 WORKDIR app
 COPY ./service /app/service
+COPY ./codegen /app/codegen
 COPY ./docker/config.toml $CARGO_HOME/config.toml
 
 FROM common AS chef

@@ -154,6 +154,7 @@ use std::net::SocketAddr;
 use std::pin::Pin;
 
 use async_trait::async_trait;
+use error::CustomError;
 pub use rocket;
 use rocket::{Build, Rocket};
 #[cfg(feature = "sqlx-postgres")]
@@ -410,6 +411,37 @@ impl Service for SimpleService<Rocket<Build>> {
         };
         let launched = rocket.configure(config).launch();
         self.runtime.block_on(launched)?;
+        Ok(())
+    }
+}
+
+impl Service for SimpleService<sync_wrapper::SyncWrapper<axum::Router>> {
+    fn build(&mut self, factory: &mut dyn Factory) -> Result<(), Error> {
+        if let Some(builder) = self.builder.take() {
+            // We want to build any sqlx pools on the same runtime the client code will run on. Without this expect to get errors of no tokio reactor being present.
+            let axum = self.runtime.block_on(builder(factory))?;
+
+            self.service = Some(axum);
+        }
+
+        Ok(())
+    }
+
+    fn bind(&mut self, addr: SocketAddr) -> Result<(), error::Error> {
+        let axum = self
+            .service
+            .take()
+            .expect("service has already been bound")
+            .into_inner();
+
+        self.runtime
+            .block_on(async {
+                axum::Server::bind(&addr)
+                    .serve(axum.into_make_service())
+                    .await
+            })
+            .map_err(CustomError::new)?;
+
         Ok(())
     }
 }

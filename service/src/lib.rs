@@ -154,9 +154,6 @@ use std::net::SocketAddr;
 use std::pin::Pin;
 
 use async_trait::async_trait;
-
-#[cfg(feature = "sqlx-postgres")]
-use sqlx::PgPool;
 use tokio::runtime::Runtime;
 
 pub mod error;
@@ -240,8 +237,8 @@ pub trait GetResource<T> {
 /// Get an `sqlx::PgPool` from any factory
 #[cfg(feature = "sqlx-postgres")]
 #[async_trait]
-impl GetResource<PgPool> for &mut dyn Factory {
-    async fn get_resource(self) -> Result<PgPool, crate::Error> {
+impl GetResource<sqlx::PgPool> for &mut dyn Factory {
+    async fn get_resource(self) -> Result<sqlx::PgPool, crate::Error> {
         use error::CustomError;
 
         let connection_string = self.get_sql_connection_string().await?;

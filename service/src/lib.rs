@@ -154,7 +154,6 @@ use std::net::SocketAddr;
 use std::pin::Pin;
 
 use async_trait::async_trait;
-use error::CustomError;
 pub use rocket;
 use rocket::{Build, Rocket};
 #[cfg(feature = "sqlx-postgres")]
@@ -415,6 +414,7 @@ impl Service for SimpleService<Rocket<Build>> {
     }
 }
 
+#[cfg(feature = "web-axum")]
 impl Service for SimpleService<sync_wrapper::SyncWrapper<axum::Router>> {
     fn build(&mut self, factory: &mut dyn Factory) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
@@ -440,7 +440,7 @@ impl Service for SimpleService<sync_wrapper::SyncWrapper<axum::Router>> {
                     .serve(axum.into_make_service())
                     .await
             })
-            .map_err(CustomError::new)?;
+            .map_err(error::CustomError::new)?;
 
         Ok(())
     }

@@ -1,5 +1,5 @@
 [package]
-name = "sleep-async"
+name = "hello-world"
 version = "0.1.0"
 edition = "2021"
 
@@ -8,8 +8,7 @@ crate-type = ["cdylib"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[workspace]
-
 [dependencies]
-tokio = { version = "1.0", features = ["time"]}
-shuttle-service = { path = "../../../" }
+axum = "0.4"
+shuttle-service = { version = "0.2", features = ["web-axum"] }
+sync_wrapper = "0.1"

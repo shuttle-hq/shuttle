@@ -154,10 +154,6 @@ use std::net::SocketAddr;
 use std::pin::Pin;
 
 use async_trait::async_trait;
-pub use rocket;
-use rocket::{Build, Rocket};
-#[cfg(feature = "sqlx-postgres")]
-use sqlx::PgPool;
 use tokio::runtime::Runtime;
 
 pub mod error;
@@ -241,8 +237,8 @@ pub trait GetResource<T> {
 /// Get an `sqlx::PgPool` from any factory
 #[cfg(feature = "sqlx-postgres")]
 #[async_trait]
-impl GetResource<PgPool> for &mut dyn Factory {
-    async fn get_resource(self) -> Result<PgPool, crate::Error> {
+impl GetResource<sqlx::PgPool> for &mut dyn Factory {
+    async fn get_resource(self) -> Result<sqlx::PgPool, crate::Error> {
         use error::CustomError;
 
         let connection_string = self.get_sql_connection_string().await?;
@@ -289,6 +285,7 @@ pub trait IntoService {
 pub type StateBuilder<T> =
     fn(&mut dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>;
 
+#[cfg(feature = "web-rocket")]
 /// A convenience struct for building a [Service][Service] from a [Rocket<Build>][Rocket] instance.
 ///
 /// To construct, use [into_service][IntoService::into_service].
@@ -298,12 +295,13 @@ pub type StateBuilder<T> =
 ///
 /// Also see the [declare_service!][declare_service] macro.
 pub struct RocketService<T: Sized> {
-    rocket: Option<Rocket<Build>>,
+    rocket: Option<rocket::Rocket<rocket::Build>>,
     state_builder: Option<StateBuilder<T>>,
     runtime: Runtime,
 }
 
-impl IntoService for Rocket<Build> {
+#[cfg(feature = "web-rocket")]
+impl IntoService for rocket::Rocket<rocket::Build> {
     type Service = RocketService<()>;
     fn into_service(self) -> Self::Service {
         RocketService {
@@ -314,9 +312,10 @@ impl IntoService for Rocket<Build> {
     }
 }
 
+#[cfg(feature = "web-rocket")]
 impl<T: Send + Sync + 'static> IntoService
     for (
-        Rocket<Build>,
+        rocket::Rocket<rocket::Build>,
         fn(&mut dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>,
     )
 {
@@ -331,6 +330,7 @@ impl<T: Send + Sync + 'static> IntoService
     }
 }
 
+#[cfg(feature = "web-rocket")]
 impl<T> Service for RocketService<T>
 where
     T: Send + Sync + 'static,
@@ -358,7 +358,9 @@ where
             ..Default::default()
         };
         let launched = rocket.configure(config).launch();
-        self.runtime.block_on(launched)?;
+        self.runtime
+            .block_on(launched)
+            .map_err(error::CustomError::new)?;
         Ok(())
     }
 }
@@ -387,7 +389,8 @@ where
     }
 }
 
-impl Service for SimpleService<Rocket<Build>> {
+#[cfg(feature = "web-rocket")]
+impl Service for SimpleService<rocket::Rocket<rocket::Build>> {
     fn build(&mut self, factory: &mut dyn Factory) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
             // We want to build any sqlx pools on the same runtime the client code will run on. Without this expect to get errors of no tokio reactor being present.
@@ -409,7 +412,41 @@ impl Service for SimpleService<Rocket<Build>> {
             ..Default::default()
         };
         let launched = rocket.configure(config).launch();
-        self.runtime.block_on(launched)?;
+        self.runtime
+            .block_on(launched)
+            .map_err(error::CustomError::new)?;
+        Ok(())
+    }
+}
+
+#[cfg(feature = "web-axum")]
+impl Service for SimpleService<sync_wrapper::SyncWrapper<axum::Router>> {
+    fn build(&mut self, factory: &mut dyn Factory) -> Result<(), Error> {
+        if let Some(builder) = self.builder.take() {
+            // We want to build any sqlx pools on the same runtime the client code will run on. Without this expect to get errors of no tokio reactor being present.
+            let axum = self.runtime.block_on(builder(factory))?;
+
+            self.service = Some(axum);
+        }
+
+        Ok(())
+    }
+
+    fn bind(&mut self, addr: SocketAddr) -> Result<(), error::Error> {
+        let axum = self
+            .service
+            .take()
+            .expect("service has already been bound")
+            .into_inner();
+
+        self.runtime
+            .block_on(async {
+                axum::Server::bind(&addr)
+                    .serve(axum.into_make_service())
+                    .await
+            })
+            .map_err(error::CustomError::new)?;
+
         Ok(())
     }
 }

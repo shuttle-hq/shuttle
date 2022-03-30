@@ -19,7 +19,7 @@ pub fn main(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 &mut dyn shuttle_service::Factory,
             ) -> std::pin::Pin<
                 Box<dyn std::future::Future<Output = Result<_, shuttle_service::Error>> + Send + '_>,
-            > = |factory| Box::pin(wrapper(factory));
+            > = |factory| Box::pin(__shuttle_wrapper(factory));
 
             let obj = shuttle_service::IntoService::into_service((constructor));
             let boxed: Box<dyn shuttle_service::Service> = Box::new(obj);
@@ -82,7 +82,7 @@ impl ToTokens for Wrapper {
         };
 
         let wrapper = quote! {
-            async fn wrapper(
+            async fn __shuttle_wrapper(
                 #factory_ident: &mut dyn shuttle_service::Factory,
             ) #fn_output {
                 #extra_imports
@@ -127,7 +127,7 @@ mod tests {
 
         let actual = quote!(#input);
         let expected = quote! {
-            async fn wrapper(
+            async fn __shuttle_wrapper(
                 _factory: &mut dyn shuttle_service::Factory,
             ) {
                 simple().await
@@ -162,7 +162,7 @@ mod tests {
 
         let actual = quote!(#input);
         let expected = quote! {
-            async fn wrapper(
+            async fn __shuttle_wrapper(
                 _factory: &mut dyn shuttle_service::Factory,
             ) -> Result<(), Box<dyn std::error::Error> > {
                 complex().await
@@ -198,7 +198,7 @@ mod tests {
 
         let actual = quote!(#input);
         let expected = quote! {
-            async fn wrapper(
+            async fn __shuttle_wrapper(
                 factory: &mut dyn shuttle_service::Factory,
             ) -> Result<(), Box<dyn std::error::Error> > {
                 use shuttle_service::GetResource;

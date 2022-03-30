@@ -27,5 +27,5 @@ toml = "0.5.8"
 base64 = "0.13.0"
 rand = "0.8.5"
 
-shuttle-common = { version = "0.1.1", path = "../common" }
+shuttle-common = { version = "0.2.5", path = "../common" }
 shuttle-service = { version = "0.2.5", path = "../service", features = [ "loader" ] }

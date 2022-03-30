@@ -1431,25 +1431,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "shuttle-codegen"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "shuttle-service"
 version = "0.2.5"
 dependencies = [
  "anyhow",
  "async-trait",
  "rocket",
- "shuttle_codegen",
+ "shuttle-codegen",
  "sqlx",
  "thiserror",
  "tokio",
-]
-
-[[package]]
-name = "shuttle_codegen"
-version = "0.1.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]

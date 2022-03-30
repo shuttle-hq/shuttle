@@ -3,21 +3,10 @@ extern crate rocket;
 
 use rocket::response::status::BadRequest;
 use rocket::serde::json::Json;
-use rocket::{
-    Build,
-    Rocket,
-    State
-};
-use serde::{
-    Deserialize,
-    Serialize
-};
+use rocket::{Build, Rocket, State};
+use serde::{Deserialize, Serialize};
 use shuttle_service::error::CustomError;
-use sqlx::{
-    Executor,
-    FromRow,
-    PgPool
-};
+use sqlx::{Executor, FromRow, PgPool};
 
 #[get("/<id>")]
 async fn retrieve(id: i32, state: &State<MyState>) -> Result<Json<Todo>, BadRequest<String>> {
@@ -33,7 +22,7 @@ async fn retrieve(id: i32, state: &State<MyState>) -> Result<Json<Todo>, BadRequ
 #[post("/", data = "<data>")]
 async fn add(
     data: Json<TodoNew>,
-    state: &State<MyState>
+    state: &State<MyState>,
 ) -> Result<Json<Todo>, BadRequest<String>> {
     let todo = sqlx::query_as("INSERT INTO todos(note) VALUES ($1) RETURNING id, note")
         .bind(&data.note)
@@ -45,7 +34,7 @@ async fn add(
 }
 
 struct MyState {
-    pool: PgPool
+    pool: PgPool,
 }
 
 #[shuttle_service::main]
@@ -64,11 +53,11 @@ async fn rocket(pool: PgPool) -> Result<Rocket<Build>, shuttle_service::Error> {
 
 #[derive(Deserialize)]
 struct TodoNew {
-    pub note: String
+    pub note: String,
 }
 
 #[derive(Serialize, FromRow)]
 struct Todo {
     pub id: i32,
-    pub note: String
+    pub note: String,
 }

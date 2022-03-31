@@ -1,5 +1,5 @@
 [package]
-name = "postgres"
+name = "url-shortener"
 version = "0.1.0"
 edition = "2021"
 
@@ -12,4 +12,6 @@ crate-type = ["cdylib"]
 rocket = { version = "0.5.0-rc.1", features = ["json"] }
 serde = "1.0"
 sqlx = { version = "0.5", features = ["runtime-tokio-native-tls", "postgres"] }
-shuttle-service = { version = "0.2", features = ["sqlx-postgres", "web-rocket"] }
+shuttle-service = "0.2"
+nanoid = "0.4"
+url ="2.2"

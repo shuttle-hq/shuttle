@@ -1,0 +1,19 @@
+[package]
+name = "shuttle-codegen"
+version = "0.2.5"
+edition = "2021"
+license = "Apache-2.0"
+description = "Proc-macro code generator for the shuttle.rs service"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1.0.36"
+quote = "1.0.17"
+syn = { version = "1.0.90", features = ["full"] }
+
+[dev-dependencies]
+pretty_assertions = "1.2"

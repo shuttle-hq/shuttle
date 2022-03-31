@@ -1,7 +1,7 @@
 use std::{ffi::OsStr, net::SocketAddr};
 
 use libloading::{Library, Symbol};
-use thiserror::Error;
+use thiserror::Error as ThisError;
 use tokio::task::JoinHandle;
 
 use crate::{Error, Factory, Service};
@@ -12,7 +12,7 @@ type CreateService = unsafe extern "C" fn() -> *mut dyn Service;
 
 pub type ServeHandle = JoinHandle<Result<(), Error>>;
 
-#[derive(Debug, Error)]
+#[derive(Debug, ThisError)]
 pub enum LoaderError {
     #[error("failed to load library")]
     Load(libloading::Error),

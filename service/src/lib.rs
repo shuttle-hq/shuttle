@@ -26,12 +26,9 @@
 //! crate-type = ["cdylib"]
 //! ```
 //!
-//! See the [declare_service!][declare_service] macro for more information on how to implement a service. Here's a simple example using [rocket][rocket] to get you started:
+//! See the [shuttle_service::main][main] macro for more information on how to implement a service. Here's a simple example using [rocket][rocket] to get you started:
 //!
 //! ```rust,no_run
-//! #[macro_use]
-//! extern crate shuttle_service;
-//!
 //! #[macro_use]
 //! extern crate rocket;
 //!
@@ -42,11 +39,12 @@
 //!     "Hello, world!"
 //! }
 //!
-//! fn init() -> Rocket<Build> {
-//!     rocket::build().mount("/", routes![hello])
-//! }
+//! #[shuttle_service::main]
+//! async fn init() -> Result<Rocket<Build>, shuttle_service::Error> {
+//!     let rocket = rocket::build().mount("/", routes![hello]);
 //!
-//! declare_service!(Rocket<Build>, init);
+//!     Ok(rocket)
+//! }
 //! ```
 //!
 //! Complete examples can be found [in the repository](https://github.com/getsynth/shuttle/tree/main/examples/rocket).
@@ -82,17 +80,13 @@
 //!
 //! ## Using `sqlx`
 //!
-//! Here is a quick example to deploy a service which uses a postgres database and [sqlx][sqlx]:
+//! Here is a quick example to deploy a service which uses a postgres database and [sqlx](http://docs.rs/sqlx):
 //!
 //! ```rust,no_run
 //! #[macro_use]
-//! extern crate shuttle_service;
-//! use shuttle_service::{Factory, Error};
-//!
-//! #[macro_use]
 //! extern crate rocket;
-//! use rocket::{Rocket, Build, State};
 //!
+//! use rocket::{Build, Rocket};
 //! use sqlx::PgPool;
 //!
 //! struct MyState(PgPool);
@@ -103,21 +97,16 @@
 //!     "Hello, Postgres!"
 //! }
 //!
-//! async fn state(factory: &mut dyn Factory) -> Result<MyState, shuttle_service::Error> {
-//!    let pool = sqlx::postgres::PgPoolOptions::new()
-//!        .connect(&factory.get_sql_connection_string().await?)
-//!        .await?;
-//!    Ok(MyState(pool))
-//! }
+//! #[shuttle_service::main]
+//! async fn rocket(pool: PgPool) -> Result<Rocket<Build>, shuttle_service::Error> {
+//!     let state = MyState(pool);
+//!     let rocket = rocket::build().manage(state).mount("/", routes![hello]);
 //!
-//! fn rocket() -> Rocket<Build> {
-//!     rocket::build().mount("/", routes![hello])
+//!     Ok(rocket)
 //! }
-//!
-//! declare_service!(Rocket<Build>, rocket, state);
 //! ```
 //!
-//! To learn more about how to build services with states, and services that require additional resources, see [Factory][Factory].
+//! To learn more about shuttle managed services, see [shuttle_service::main][main#getting-shuttle-managed-services].
 //!
 //! ## Configuration
 //!
@@ -160,21 +149,66 @@
 //! You can also [open an issue or a discussion on GitHub](https://github.com/getsynth/shuttle).
 //!
 
-use async_trait::async_trait;
 use std::future::Future;
-
-pub use rocket;
-use rocket::{Build, Rocket};
-
-use tokio::runtime::Runtime;
-
-use sqlx::PgPool;
-
 use std::net::SocketAddr;
 use std::pin::Pin;
 
+use async_trait::async_trait;
+use tokio::runtime::Runtime;
+
 pub mod error;
 pub use error::Error;
+
+#[cfg(feature = "codegen")]
+extern crate shuttle_codegen;
+#[cfg(feature = "codegen")]
+/// Helper macro that generates the entrypoint required by any service - likely the only macro you need in this crate.
+///
+/// # Without shuttle managed services
+/// The simplest usage is when your service does not require any shuttle managed resources, so you only need to return a shuttle supported service:
+///
+/// ```rust,no_run
+/// use rocket::{Build, Rocket};
+///
+/// #[shuttle_service::main]
+/// async fn rocket() -> Result<Rocket<Build>, shuttle_service::Error> {
+///     let rocket = rocket::build();
+///
+///     Ok(rocket)
+/// }
+/// ```
+///
+/// ## shuttle supported services
+/// The following type can take the place of the `Ok` type and enjoy first class service support in shuttle.
+///
+/// | Ok type           | Service  |
+/// | ----------------- | -------- |
+/// | [`Rocket<Build>`] | [rocket] |
+///
+/// # Getting shuttle managed services
+/// The shuttle is able to manage service dependencies for you. These services are passed in as inputs to your main function:
+/// ```rust,no_run
+/// use rocket::{Build, Rocket};
+/// use sqlx::PgPool;
+///
+/// struct MyState(PgPool);
+///
+/// #[shuttle_service::main]
+/// async fn rocket(pool: PgPool) -> Result<Rocket<Build>, shuttle_service::Error> {
+///     let state = MyState(pool);
+///     let rocket = rocket::build().manage(state);
+///
+///     Ok(rocket)
+/// }
+/// ```
+///
+/// ## shuttle managed dependencies
+/// The following dependencies can be managed by shuttle:
+///
+/// | Argument type      | Dependency                                                         |
+/// | ------------------ | ------------------------------------------------------------------ |
+/// | [`PgPool`](https://docs.rs/sqlx/latest/sqlx/type.PgPool.html) | A PostgresSql instance accessed using [sqlx](https://docs.rs/sqlx) |
+pub use shuttle_codegen::main;
 
 #[cfg(feature = "loader")]
 pub mod loader;
@@ -190,14 +224,31 @@ pub trait Factory: Send + Sync {
     ///
     /// Returns the connection string to the provisioned database.
     async fn get_sql_connection_string(&mut self) -> Result<String, crate::Error>;
+}
 
-    async fn get_postgres_connection_pool(&mut self) -> Result<PgPool, crate::Error> {
+/// Used to get resources of type `T` from factories.
+///
+/// This is mainly meant for consumption by our code generator and should generally not be implemented by users.
+#[async_trait]
+pub trait GetResource<T> {
+    async fn get_resource(self) -> Result<T, crate::Error>;
+}
+
+/// Get an `sqlx::PgPool` from any factory
+#[cfg(feature = "sqlx-postgres")]
+#[async_trait]
+impl GetResource<sqlx::PgPool> for &mut dyn Factory {
+    async fn get_resource(self) -> Result<sqlx::PgPool, crate::Error> {
+        use error::CustomError;
+
         let connection_string = self.get_sql_connection_string().await?;
+
         let pool = sqlx::postgres::PgPoolOptions::new()
             .min_connections(1)
             .max_connections(5)
             .connect(&connection_string)
-            .await?;
+            .await
+            .map_err(CustomError::new)?;
 
         Ok(pool)
     }
@@ -234,6 +285,7 @@ pub trait IntoService {
 pub type StateBuilder<T> =
     fn(&mut dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>;
 
+#[cfg(feature = "web-rocket")]
 /// A convenience struct for building a [Service][Service] from a [Rocket<Build>][Rocket] instance.
 ///
 /// To construct, use [into_service][IntoService::into_service].
@@ -243,12 +295,13 @@ pub type StateBuilder<T> =
 ///
 /// Also see the [declare_service!][declare_service] macro.
 pub struct RocketService<T: Sized> {
-    rocket: Option<Rocket<Build>>,
+    rocket: Option<rocket::Rocket<rocket::Build>>,
     state_builder: Option<StateBuilder<T>>,
     runtime: Runtime,
 }
 
-impl IntoService for Rocket<Build> {
+#[cfg(feature = "web-rocket")]
+impl IntoService for rocket::Rocket<rocket::Build> {
     type Service = RocketService<()>;
     fn into_service(self) -> Self::Service {
         RocketService {
@@ -259,9 +312,10 @@ impl IntoService for Rocket<Build> {
     }
 }
 
+#[cfg(feature = "web-rocket")]
 impl<T: Send + Sync + 'static> IntoService
     for (
-        Rocket<Build>,
+        rocket::Rocket<rocket::Build>,
         fn(&mut dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>,
     )
 {
@@ -276,6 +330,7 @@ impl<T: Send + Sync + 'static> IntoService
     }
 }
 
+#[cfg(feature = "web-rocket")]
 impl<T> Service for RocketService<T>
 where
     T: Send + Sync + 'static,
@@ -303,12 +358,100 @@ where
             ..Default::default()
         };
         let launched = rocket.configure(config).launch();
-        self.runtime.block_on(launched)?;
+        self.runtime
+            .block_on(launched)
+            .map_err(error::CustomError::new)?;
         Ok(())
     }
 }
 
-/// Helper macro that generates the entrypoint required of any service. Likely the only macro you need in this crate.
+/// A wrapper that takes a user's future, gives the future a factory, and takes the returned service from the future
+/// The returned service will be deployed by shuttle
+pub struct SimpleService<T> {
+    service: Option<T>,
+    builder: Option<StateBuilder<T>>,
+    runtime: Runtime,
+}
+
+impl<T> IntoService
+    for fn(&mut dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>
+where
+    SimpleService<T>: Service,
+{
+    type Service = SimpleService<T>;
+
+    fn into_service(self) -> Self::Service {
+        SimpleService {
+            service: None,
+            builder: Some(self),
+            runtime: Runtime::new().unwrap(),
+        }
+    }
+}
+
+#[cfg(feature = "web-rocket")]
+impl Service for SimpleService<rocket::Rocket<rocket::Build>> {
+    fn build(&mut self, factory: &mut dyn Factory) -> Result<(), Error> {
+        if let Some(builder) = self.builder.take() {
+            // We want to build any sqlx pools on the same runtime the client code will run on. Without this expect to get errors of no tokio reactor being present.
+            let rocket = self.runtime.block_on(builder(factory))?;
+
+            self.service = Some(rocket);
+        }
+
+        Ok(())
+    }
+
+    fn bind(&mut self, addr: SocketAddr) -> Result<(), error::Error> {
+        let rocket = self.service.take().expect("service has already been bound");
+
+        let config = rocket::Config {
+            address: addr.ip(),
+            port: addr.port(),
+            log_level: rocket::config::LogLevel::Normal,
+            ..Default::default()
+        };
+        let launched = rocket.configure(config).launch();
+        self.runtime
+            .block_on(launched)
+            .map_err(error::CustomError::new)?;
+        Ok(())
+    }
+}
+
+#[cfg(feature = "web-axum")]
+impl Service for SimpleService<sync_wrapper::SyncWrapper<axum::Router>> {
+    fn build(&mut self, factory: &mut dyn Factory) -> Result<(), Error> {
+        if let Some(builder) = self.builder.take() {
+            // We want to build any sqlx pools on the same runtime the client code will run on. Without this expect to get errors of no tokio reactor being present.
+            let axum = self.runtime.block_on(builder(factory))?;
+
+            self.service = Some(axum);
+        }
+
+        Ok(())
+    }
+
+    fn bind(&mut self, addr: SocketAddr) -> Result<(), error::Error> {
+        let axum = self
+            .service
+            .take()
+            .expect("service has already been bound")
+            .into_inner();
+
+        self.runtime
+            .block_on(async {
+                axum::Server::bind(&addr)
+                    .serve(axum.into_make_service())
+                    .await
+            })
+            .map_err(error::CustomError::new)?;
+
+        Ok(())
+    }
+}
+
+/// Helper macro that generates the entrypoint required of any service.
 ///
 /// Can be used in one of two ways:
 ///

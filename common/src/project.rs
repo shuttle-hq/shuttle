@@ -1,8 +1,6 @@
-use crate::{Status, SHUTTLE_PROJECT_HEADER};
-use rocket::request::{FromRequest, Outcome};
-use rocket::Request;
+use rocket::request::FromParam;
 use serde::de::Error as DeError;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
@@ -13,16 +11,31 @@ use std::str::FromStr;
 /// - It does not start or end with `-`.
 /// - It does not contain any characters outside of the alphanumeric range, except for `-`.
 /// - It is not empty.
-#[derive(Clone, Serialize, Debug)]
-struct ProjectName(String);
+#[derive(Clone, Serialize, Debug, Eq, PartialEq)]
+pub struct ProjectName(String);
 
-fn deserialize_project_name<'de, D>(deserializer: D) -> Result<ProjectName, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let s: String = String::deserialize(deserializer)?;
+impl<'de> Deserialize<'de> for ProjectName {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s: String = String::deserialize(deserializer)?;
+        s.parse().map_err(DeError::custom)
+    }
+}
 
-    s.parse().map_err(DeError::custom)
+impl<'a> FromParam<'a> for ProjectName {
+    type Error = ProjectNameError;
+
+    fn from_param(param: &'a str) -> Result<Self, Self::Error> {
+        param.parse()
+    }
+}
+
+impl std::fmt::Display for ProjectName {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
 }
 
 impl ProjectName {
@@ -39,56 +52,38 @@ impl ProjectName {
             || hostname.starts_with('-')
             || hostname.is_empty())
     }
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl AsRef<String> for ProjectName {
+    fn as_ref(&self) -> &String {
+        &self.0
+    }
 }
 
 impl FromStr for ProjectName {
-    type Err = ProjectConfigError;
+    type Err = ProjectNameError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match ProjectName::is_valid(s) {
             true => Ok(ProjectName(s.to_string())),
-            false => Err(ProjectConfigError::InvalidName(s.to_string())),
+            false => Err(ProjectNameError::InvalidName(s.to_string())),
         }
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct ProjectConfig {
-    #[serde(deserialize_with = "deserialize_project_name")]
-    name: ProjectName,
-}
-
-impl ProjectConfig {
-    pub fn new(name: String) -> Result<Self, ProjectConfigError> {
-        Ok(Self {
-            name: (&name).parse()?,
-        })
-    }
-
-    pub fn name(&self) -> &String {
-        &self.name.0
-    }
-}
-
 #[derive(Debug)]
-pub enum ProjectConfigError {
-    Missing,
-    Malformed(String),
+pub enum ProjectNameError {
     InvalidName(String),
 }
 
-impl ProjectConfigError {
-    fn malformed(msg: &str) -> Self {
-        Self::Malformed(msg.to_string())
-    }
-}
-
-impl Display for ProjectConfigError {
+impl Display for ProjectNameError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            ProjectConfigError::Missing => write!(f, "missing"),
-            ProjectConfigError::Malformed(msg) => write!(f, "malformed: {}", msg),
-            ProjectConfigError::InvalidName(name) => write!(
+            ProjectNameError::InvalidName(name) => write!(
                 f,
                 r#"
 `{}` is an invalid project name. project name must
@@ -101,27 +96,7 @@ impl Display for ProjectConfigError {
     }
 }
 
-impl Error for ProjectConfigError {}
-
-#[rocket::async_trait]
-impl<'r> FromRequest<'r> for ProjectConfig {
-    type Error = ProjectConfigError;
-
-    async fn from_request(req: &'r Request<'_>) -> Outcome<Self, Self::Error> {
-        let config_string = match req.headers().get_one(SHUTTLE_PROJECT_HEADER) {
-            None => return Outcome::Failure((Status::BadRequest, ProjectConfigError::Missing)),
-            Some(config_string) => config_string,
-        };
-
-        match serde_json::from_str::<ProjectConfig>(config_string) {
-            Ok(config) => Outcome::Success(config),
-            Err(_) => Outcome::Failure((
-                Status::BadRequest,
-                ProjectConfigError::malformed("could not parse project config from json"),
-            )),
-        }
-    }
-}
+impl Error for ProjectNameError {}
 
 /// Test examples taken from a [Pop-OS project](https://github.com/pop-os/hostname-validator/blob/master/src/lib.rs)
 /// and modified to our use case

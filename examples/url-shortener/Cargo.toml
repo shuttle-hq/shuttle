@@ -12,6 +12,6 @@ crate-type = ["cdylib"]
 rocket = { version = "0.5.0-rc.1", features = ["json"] }
 serde = "1.0"
 sqlx = { version = "0.5", features = ["runtime-tokio-native-tls", "postgres"] }
-shuttle-service = "0.2"
+shuttle-service = { version = "0.2", features = ["sqlx-postgres", "web-rocket"] }
 nanoid = "0.4"
 url ="2.2"

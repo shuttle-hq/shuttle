@@ -6,6 +6,7 @@ import { useUser } from "@auth0/nextjs-auth0";
 import Code from "./Code";
 import mixpanel from "mixpanel-browser";
 import { DISCORD_URL } from "../lib/constants";
+import ExternalLink from "./ExternalLink";
 
 export const [useApiKeyModalState, ApiKeyModalStateProvider] =
   createStateContext(false);
@@ -20,7 +21,7 @@ export default function ApiKeyModal() {
     <Transition.Root show={open} as={Fragment}>
       <Dialog
         as="div"
-        className="fixed z-10 inset-0 overflow-y-auto text-dark-200"
+        className="fixed z-40 inset-0 overflow-y-auto text-dark-200"
         onClose={setOpen}
       >
         <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
@@ -85,7 +86,8 @@ export default function ApiKeyModal() {
                             <p className="text-xl text-dark-200 mb-2 mt-2">
                               alternatively, you can execute the command below:
                             </p>
-                            <Code id="cargo-shuttle-login-api-key"
+                            <Code
+                              id="cargo-shuttle-login-api-key"
                               code={`cargo shuttle login --api-key ${api_key}`}
                             />
                           </div>
@@ -104,16 +106,12 @@ export default function ApiKeyModal() {
                           <div className="mt-2">
                             <p className="text-xl text-dark-200">
                               {"This shouldn't happen. Please contact us on "}
-                              <a
+                              <ExternalLink
                                 className="underline hover:brightness-125"
-                                ref={(el) =>
-                                  el && mixpanel.track_links(el, `Clicked Link`)
-                                }
                                 href={DISCORD_URL}
-                                target="_blank"
                               >
                                 Discord
-                              </a>
+                              </ExternalLink>
                               {" to resolve the issue"}
                             </p>
                           </div>

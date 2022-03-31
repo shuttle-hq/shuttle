@@ -23,7 +23,7 @@ you will get the shortened URL back (something like this `https://s.shuttleapp.r
 The project consists of the following files
 
 - `Shuttle.toml` contains the name of the app (if name is `s` domain will be `s.shuttleapp.rs`)
-- `schema.sql` is sql script to that will setup database for the app
+- `migrations` folder is for DB migration files created by [sqlx-cli](https://github.com/launchbadge/sqlx/tree/master/sqlx-cli)
 - `src/lib.rs` is where all the magic happens - it creates a shuttle service with two endpoints: one for creating new short URLs and one for handling shortened URLs.
 
 ## How to deploy

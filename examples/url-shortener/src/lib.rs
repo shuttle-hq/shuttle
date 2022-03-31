@@ -6,14 +6,11 @@ use rocket::{
     response::{status, Redirect},
     routes, Build, Rocket, State,
 };
-use serde::Serialize;
-use shuttle_service::Factory;
+use serde::{Serialize};
+use shuttle_service::error::CustomError;
 use sqlx::migrate::Migrator;
 use sqlx::{FromRow, PgPool};
 use url::Url;
-
-#[macro_use]
-extern crate shuttle_service;
 
 struct AppState {
     pool: PgPool,
@@ -71,23 +68,16 @@ async fn shorten(url: String, state: &State<AppState>) -> Result<String, status:
     Ok(format!("https://s.shuttleapp.rs/{id}"))
 }
 
-fn rocket() -> Rocket<Build> {
-    rocket::build().mount("/", routes![redirect, shorten])
-}
-
 static MIGRATOR: Migrator = sqlx::migrate!();
 
-async fn build_state(factory: &mut dyn Factory) -> Result<AppState, shuttle_service::Error> {
-    let pool = sqlx::postgres::PgPoolOptions::new()
-        .connect(&factory.get_sql_connection_string().await?)
-        .await?;
+#[shuttle_service::main]
+async fn rocket(pool: PgPool) -> Result<Rocket<Build>, shuttle_service::Error> {
+    MIGRATOR.run(&pool).await.map_err(CustomError::new)?;
 
-    MIGRATOR
-        .run(&pool)
-        .await
-        .map_err(|err| shuttle_service::Error::Database(sqlx::Error::Migrate(Box::new(err))))?;
+    let state = AppState { pool };
+    let rocket = rocket::build()
+        .mount("/", routes![redirect, shorten])
+        .manage(state);
 
-    Ok(AppState { pool })
+    Ok(rocket)
 }
-
-declare_service!(Rocket<Build>, rocket, build_state);

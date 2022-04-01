@@ -22,27 +22,27 @@ const communities = [
     icon: faGithub,
   },
   {
-    href: TWITTER_URL,
-    name: "Twitter",
-    icon: faTwitter,
-  },
-  {
     href: DISCORD_URL,
     name: "Discord",
     icon: faDiscord,
+  },
+  {
+    href: TWITTER_URL,
+    name: "Twitter",
+    icon: faTwitter,
   },
 ];
 
 export default function Footer() {
   return (
     <>
-      <div className="fixed right-[27px] bottom-[100px] rounded bg-dark-500 flex flex-col shadow-lg">
+      <div className="fixed right-8 bottom-16 rounded-full bg-[#252738] flex flex-col shadow-xl">
         {communities.map((community, index) => (
           <ExternalLink
             key={index}
             href={community.href}
             title={community.name}
-            className="text-center px-2 py-[10px] opacity-75 hover:opacity-100"
+            className="text-center w-10 h-10 flex justify-center items-center opacity-75 hover:opacity-100"
           >
             <FontAwesomeIcon icon={community.icon} className="text-[20px]" />
           </ExternalLink>
@@ -54,7 +54,7 @@ export default function Footer() {
             <span className="block">Join a community of developers</span>
           </h2>
           <p className="mt-4 text-lg leading-6 text-gray-300">
-            Stay up to date with Shuttle on GitHub, Discord, and Twitter.
+            Stay up to date with shuttle on GitHub, Discord, and Twitter.
           </p>
           <div className="mt-8 flex justify-center gap-3">
             {communities.map((community, index) => (
@@ -101,7 +101,7 @@ export default function Footer() {
       <footer className="bg-dark-700">
         <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
           <div className="mt-8 flex gap-2 flex-col sm:flex-row">
-            <p className="text-base text-gray-300">&copy; 2022 Shuttle Inc.</p>
+            <p className="text-base text-gray-300">&copy; 2022 shuttle</p>
             <p className="flex gap-2">
               {navigation.map((link, index) => (
                 <InternalLink

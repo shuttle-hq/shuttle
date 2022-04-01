@@ -12,7 +12,7 @@ export default function CodeSnippets() {
   const [activeTab, setActiveTab] = useState(0);
   const [copyToClipboardState, copyToClipboard] = useCopyToClipboard();
   const [copied, setCopied] = useState(false);
-  useWindowSize()
+  useWindowSize();
 
   useEffect(() => {
     if (false) return undefined;
@@ -25,10 +25,10 @@ export default function CodeSnippets() {
   }, [copied]);
 
   return (
-    <div className="relative bg-dark-700 pt-16 pb-20 px-4 sm:px-6 lg:pt-24 lg:pb-28 lg:px-8">
-      <div className="relative max-w-6xl mx-auto grid lg:grid-cols-12 grid-cols-1 w-full gap-4">
+    <div className="mx-auto max-w-6xl px-4 pt-16 pb-20 sm:px-6 lg:px-8 lg:pt-24 lg:pb-28">
+      <div className="grid w-full grid-cols-1 gap-4 lg:grid-cols-12">
         <div className="mb-4 lg:col-span-5">
-          <h2 className="text-3xl tracking-tight font-extrabold text-gray-200 sm:text-4xl">
+          <h2 className="text-3xl font-extrabold tracking-tight text-gray-200 sm:text-4xl">
             From the blog
           </h2>
           <p className="mt-3 max-w-2xl text-xl text-gray-300 sm:mt-4">
@@ -46,12 +46,14 @@ export default function CodeSnippets() {
               <select
                 id="tabs"
                 name="tabs"
-                className="block w-full bg-gray-600 text-gray-300 rounded"
+                className="block w-full rounded bg-gray-600 text-gray-300"
                 defaultValue={tabs[activeTab].name}
-                onChange={e => void setActiveTab(parseInt(e.target.value))}
+                onChange={(e) => void setActiveTab(parseInt(e.target.value))}
               >
                 {tabs.map((tab, index) => (
-                  <option key={index} value={index}>{tab.name}</option>
+                  <option key={index} value={index}>
+                    {tab.name}
+                  </option>
                 ))}
               </select>
             </div>
@@ -62,10 +64,10 @@ export default function CodeSnippets() {
                     key={index}
                     onClick={() => void setActiveTab(index)}
                     className={classnames(
-                      "px-3 py-2 font-medium text-sm rounded cursor-pointer z-10 hover:shadow-md",
+                      "z-10 cursor-pointer rounded px-3 py-2 text-sm font-medium hover:shadow-md",
                       {
                         "bg-brand-orange2 text-white": activeTab === index,
-                        "text-gray-300 hover:text-gray-200 hover:bg-gray-600":
+                        "text-gray-300 hover:bg-gray-600 hover:text-gray-200":
                           activeTab !== index,
                       }
                     )}
@@ -77,13 +79,13 @@ export default function CodeSnippets() {
               </nav>
             </div>
           </div>
-          <div className="bg-[#282C34] p-4 my-2 rounded relative shadow-lg">
+          <div className="relative my-2 rounded bg-[#282C34] p-4 shadow-lg">
             <button
               type="button"
-              className="absolute right-2 top-2 inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm leading-4 font-medium rounded text-white bg-dark-800 hover:bg-dark-700"
+              className="absolute right-2 top-2 inline-flex items-center rounded border border-transparent bg-dark-800 px-3 py-2 text-sm font-medium leading-4 text-white shadow-sm hover:bg-dark-700"
               onClick={() => {
-                copyToClipboard(tabs[activeTab].code)
-                setCopied(true)
+                copyToClipboard(tabs[activeTab].code);
+                setCopied(true);
               }}
             >
               {copied ? (
@@ -105,7 +107,7 @@ export default function CodeSnippets() {
               )}
             </button>
             <SyntaxHighlighter
-              className="!p-0 !m-0 h-[450px] overflow-scroll"
+              className="!m-0 h-[450px] overflow-scroll !p-0"
               language="rust"
               style={oneDark}
               showLineNumbers

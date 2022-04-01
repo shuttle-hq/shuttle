@@ -8,7 +8,6 @@ import styles from "./styles.module.css";
 export const [useAnnouncementBarIsClosed, AnnouncementBarIsClosedProvider] =
   createStateContext(false);
 
-
 export default function AnnouncementBar() {
   const [isClosed, setClosed] = useAnnouncementBarIsClosed();
 

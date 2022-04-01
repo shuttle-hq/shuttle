@@ -17,25 +17,25 @@ export default function Header() {
   const { user, error, isLoading } = useUser();
 
   return (
-    <header className="bg-dark-700 sticky top-0 z-20 border-b border-gray-400">
-      <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8" aria-label="Top">
-        <div className="w-full py-3 flex items-center justify-between">
+    <header className="sticky top-0 z-20 border-b border-gray-400 bg-dark-700">
+      <nav className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8" aria-label="Top">
+        <div className="flex w-full items-center justify-between py-3">
           <div className="flex items-center">
             <Link href="/">
               <a>
-                <div className="flex m-auto relative">
+                <div className="relative m-auto flex">
                   <img
                     className="h-8 w-auto"
                     src={`${basePath}/images/logo.png`}
                     alt="Shuttle"
                   />
-                  <span className="bg-brand-orange1 text-dark-700 font-bold absolute scale-[.45] top-[-18px] right-[-19px] text-base px-[10px] py-[2px] rounded">
+                  <span className="absolute top-[-18px] right-[-19px] scale-[.45] rounded bg-brand-orange1 px-[10px] py-[2px] text-base font-bold text-dark-700">
                     ALPHA
                   </span>
                 </div>
               </a>
             </Link>
-            <div className="hidden ml-10 space-x-8 lg:block">
+            <div className="ml-10 hidden space-x-8 lg:block">
               {navigation.map((link) => (
                 <InternalLink
                   key={link.name}
@@ -50,7 +50,7 @@ export default function Header() {
           <div className="ml-10 space-x-4">
             {user && (
               <button
-                className="text-gray-200 hover:text-white inline-block py-2 px-4 border border-current rounded text-base font-medium "
+                className="inline-block rounded border border-current py-2 px-4 text-base font-medium text-gray-200 hover:text-white "
                 onClick={() => setOpen(true)}
               >
                 Log In
@@ -59,7 +59,7 @@ export default function Header() {
 
             {!user && (
               <a
-                className="text-gray-200 hover:text-white inline-block py-2 px-4 border border-current rounded text-base font-medium "
+                className="inline-block rounded border border-current py-2 px-4 text-base font-medium text-gray-200 hover:text-white "
                 href="/login"
               >
                 Log In
@@ -67,7 +67,7 @@ export default function Header() {
             )}
           </div>
         </div>
-        <div className="py-4 flex flex-wrap justify-center space-x-6 lg:hidden">
+        <div className="flex flex-wrap justify-center space-x-6 py-4 lg:hidden">
           {navigation.map((link) => (
             <InternalLink
               key={link.name}

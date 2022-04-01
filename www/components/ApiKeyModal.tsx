@@ -21,10 +21,10 @@ export default function ApiKeyModal() {
     <Transition.Root show={open} as={Fragment}>
       <Dialog
         as="div"
-        className="fixed z-40 inset-0 overflow-y-auto text-dark-200"
+        className="fixed inset-0 z-40 overflow-y-auto text-dark-200"
         onClose={setOpen}
       >
-        <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+        <div className="flex min-h-screen items-end justify-center px-4 pt-4 pb-20 text-center sm:block sm:p-0">
           <Transition.Child
             as={Fragment}
             enter="ease-out duration-300"
@@ -39,7 +39,7 @@ export default function ApiKeyModal() {
 
           {/* This element is to trick the browser into centering the modal contents. */}
           <span
-            className="hidden sm:inline-block sm:align-middle sm:h-screen"
+            className="hidden sm:inline-block sm:h-screen sm:align-middle"
             aria-hidden="true"
           >
             &#8203;
@@ -53,11 +53,11 @@ export default function ApiKeyModal() {
             leaveFrom="opacity-100 translate-y-0 sm:scale-100"
             leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
           >
-            <div className="relative inline-block align-bottom bg-dark-600 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
-              <div className="hidden sm:block absolute top-0 right-0 pt-4 pr-4">
+            <div className="relative inline-block transform overflow-hidden rounded-lg bg-dark-600 text-left align-bottom shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-2xl sm:align-middle">
+              <div className="absolute top-0 right-0 hidden pt-4 pr-4 sm:block">
                 <button
                   type="button"
-                  className="border-dark-700 bg-dark-600  text-dark-200 hover:brightness-125 rounded"
+                  className="rounded border-dark-700  bg-dark-600 text-dark-200 hover:brightness-125"
                   onClick={() => setOpen(false)}
                 >
                   <span className="sr-only">Close</span>
@@ -72,18 +72,18 @@ export default function ApiKeyModal() {
                         <div className="mt-3 text-center sm:mt-0 sm:text-left">
                           <Dialog.Title
                             as="h3"
-                            className="text-2xl leading-6 font-medium text-dark-200"
+                            className="text-2xl font-medium leading-6 text-dark-200"
                           >
                             Api key
                           </Dialog.Title>
                           <div className="mt-2">
-                            <p className="text-xl text-dark-200 mb-2">
+                            <p className="mb-2 text-xl text-dark-200">
                               copy/paste the API key below to the "cargo shuttle
                               login" dialog:
                             </p>
                             <Code id="api-key" code={api_key} />
 
-                            <p className="text-xl text-dark-200 mb-2 mt-2">
+                            <p className="mb-2 mt-2 text-xl text-dark-200">
                               alternatively, you can execute the command below:
                             </p>
                             <Code
@@ -99,7 +99,7 @@ export default function ApiKeyModal() {
                         <div className="mt-3 text-center sm:mt-0 sm:text-left">
                           <Dialog.Title
                             as="h3"
-                            className="text-2xl leading-6 font-medium text-dark-200"
+                            className="text-2xl font-medium leading-6 text-dark-200"
                           >
                             Api key not found!
                           </Dialog.Title>
@@ -122,10 +122,10 @@ export default function ApiKeyModal() {
                 )}
               </div>
 
-              <div className="bg-dark-500/40 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+              <div className="bg-dark-500/40 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
                 <button
                   type="button"
-                  className="mt-3 w-full inline-flex justify-center rounded border border-dark-700 shadow-sm px-4 py-2 bg-dark-600 text-base font-medium text-dark-200 hover:brightness-125 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                  className="mt-3 inline-flex w-full justify-center rounded border border-dark-700 bg-dark-600 px-4 py-2 text-base font-medium text-dark-200 shadow-sm hover:brightness-125 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
                   onClick={() => setOpen(false)}
                 >
                   Close

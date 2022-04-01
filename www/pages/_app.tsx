@@ -47,7 +47,7 @@ export default function App({ Component, pageProps }: AppProps) {
             }}
           />
 
-          <div className="text-dark-200 min-h-screen bg-dark-700">
+          <div className="min-h-screen bg-dark-700 text-dark-200">
             <AnnouncementBar />
             <Component {...pageProps} />
             <Footer />

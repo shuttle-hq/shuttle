@@ -1,4 +1,3 @@
-import mixpanel from "mixpanel-browser";
 import Link, { LinkProps } from "next/link";
 
 export default function InternalLink({

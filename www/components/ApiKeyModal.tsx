@@ -80,12 +80,12 @@ export default function ApiKeyModal() {
                               copy/paste the API key below to the "cargo shuttle
                               login" dialog:
                             </p>
-                            <Code code={api_key} />
+                            <Code id="api-key" code={api_key} />
 
                             <p className="text-xl text-dark-200 mb-2 mt-2">
                               alternatively, you can execute the command below:
                             </p>
-                            <Code
+                            <Code id="cargo-shuttle-login-api-key"
                               code={`cargo shuttle login --api-key ${api_key}`}
                             />
                           </div>

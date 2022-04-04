@@ -1,9 +1,8 @@
 pub mod project;
 
+use crate::project::ProjectName;
 use chrono::{DateTime, Utc};
 use lazy_static::lazy_static;
-use project::ProjectConfig;
-use rocket::http::Status;
 use rocket::Responder;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
@@ -35,7 +34,7 @@ pub type Port = u16;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeploymentMeta {
     pub id: DeploymentId,
-    pub config: ProjectConfig,
+    pub project: ProjectName,
     pub state: DeploymentStateMeta,
     pub host: String,
     pub build_logs: Option<String>,
@@ -45,20 +44,21 @@ pub struct DeploymentMeta {
 }
 
 impl DeploymentMeta {
-    pub fn queued(config: &ProjectConfig) -> Self {
-        Self::new(config, DeploymentStateMeta::Queued)
+    pub fn queued(project: ProjectName) -> Self {
+        Self::new(project, DeploymentStateMeta::Queued)
     }
 
-    pub fn built(config: &ProjectConfig) -> Self {
-        Self::new(config, DeploymentStateMeta::Built)
+    pub fn built(project: ProjectName) -> Self {
+        Self::new(project, DeploymentStateMeta::Built)
     }
 
-    fn new(config: &ProjectConfig, state: DeploymentStateMeta) -> Self {
+    fn new(project: ProjectName, state: DeploymentStateMeta) -> Self {
+        let host = Self::create_host(&project);
         Self {
             id: Uuid::new_v4(),
-            config: config.clone(),
+            project,
             state,
-            host: Self::create_host(config),
+            host,
             build_logs: None,
             runtime_logs: None,
             database_deployment: None,
@@ -66,13 +66,13 @@ impl DeploymentMeta {
         }
     }
 
-    pub fn create_host(project_config: &ProjectConfig) -> Host {
-        format!("{}.shuttleapp.rs", project_config.name())
+    pub fn create_host(project_name: &ProjectName) -> Host {
+        format!("{}.shuttleapp.rs", project_name)
     }
 }
 
 #[cfg(debug_assertions)]
-const PUBLIC_IP: &'static str = "localhost";
+const PUBLIC_IP: &str = "localhost";
 
 #[cfg(not(debug_assertions))]
 const PUBLIC_IP: &'static str = "pg.shuttle.rs";
@@ -98,12 +98,7 @@ impl Display for DeploymentMeta {
         Host:               {}
         Created At:         {}{}
         "#,
-            self.config.name(),
-            self.id,
-            self.state,
-            self.host,
-            self.created_at,
-            db
+            self.project, self.id, self.state, self.host, self.created_at, db
         )
     }
 }
@@ -120,7 +115,7 @@ impl DatabaseReadyInfo {
         Self {
             role_name,
             role_password,
-            database_name
+            database_name,
         }
     }
     pub fn connection_string(&self, ip: &str) -> String {
@@ -162,21 +157,24 @@ impl Display for DeploymentStateMeta {
 pub enum DeploymentApiError {
     #[response(status = 500)]
     Internal(String),
+    #[response(status = 503)]
+    Unavailable(String),
     #[response(status = 404)]
     NotFound(String),
     #[response(status = 400)]
     BadRequest(String),
     #[response(status = 409)]
-    ProjectAlreadyExists(String)
+    ProjectAlreadyExists(String),
 }
 
 impl Display for DeploymentApiError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             DeploymentApiError::Internal(s) => write!(f, "internal: {}", s),
+            DeploymentApiError::Unavailable(s) => write!(f, "unavailable: {}", s),
             DeploymentApiError::NotFound(s) => write!(f, "not found: {}", s),
             DeploymentApiError::BadRequest(s) => write!(f, "bad request: {}", s),
-            DeploymentApiError::ProjectAlreadyExists(s) => write!(f, "conflict: {}", s)
+            DeploymentApiError::ProjectAlreadyExists(s) => write!(f, "conflict: {}", s),
         }
     }
 }

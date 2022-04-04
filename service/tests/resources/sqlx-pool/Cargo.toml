@@ -1,0 +1,16 @@
+[package]
+name = "sqlx-pool"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[workspace]
+
+[dependencies]
+tokio = "1.0"
+shuttle-service = { path = "../../../", features = ["sqlx-postgres"] }
+sqlx = { version = "0.5", features = [ "runtime-tokio-native-tls" ] }

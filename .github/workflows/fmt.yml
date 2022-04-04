@@ -1,0 +1,30 @@
+name: cargo-fmt
+
+on:
+  pull_request:
+    branches: [main]
+    paths: ["**/*.rs"]
+
+  workflow_dispatch:
+
+jobs:
+  fmt_test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: getsynth/checkout@v2
+      - uses: getsynth/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          components: rustfmt
+      - run: cargo fmt --all -- --check
+  clippy_test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: getsynth/checkout@v2
+      - uses: getsynth/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          components: clippy
+      - run: cargo clippy --tests --all-targets --all-features -- --D warnings

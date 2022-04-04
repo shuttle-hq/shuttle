@@ -1,26 +1,35 @@
-use crate::build::Build;
-use crate::{BuildSystem, ShuttleFactory};
+use crate::{build::Build, BuildSystem, ShuttleFactory};
 use anyhow::{anyhow, Context as AnyhowContext};
 use core::default::Default;
-use shuttle_common::project::ProjectConfig;
-use shuttle_common::{DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, Port};
+use futures::prelude::*;
 use libloading::Library;
 use rocket::data::ByteUnit;
 use rocket::tokio;
 use rocket::Data;
+use shuttle_common::{
+    project::ProjectName, DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta,
+    Host, Port,
+};
+use shuttle_service::loader::{Loader, ServeHandle};
 use std::collections::HashMap;
 use std::fs::DirEntry;
 use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::sync::Arc;
+use tokio::sync::mpsc;
 use tokio::sync::RwLock;
-use tokio::task::JoinHandle;
 
 use crate::database;
 use crate::router::Router;
-use shuttle_service::Service;
+
+// This controls the maximum number of deploys an api instance can run
+// This is mainly needed because tokio::task::spawn_blocking keeps an internal pool for the number of blocking threads
+// and we call this method to run each incoming service. Therefore, this variable directly maps to this maximum pool
+// when the runtime is setup in main()
+// The current tokio default for this pool is 512
+// https://docs.rs/tokio/latest/tokio/runtime/struct.Builder.html#method.max_blocking_threads
+pub const MAX_DEPLOYS: usize = 512;
 
 /// Inner struct of a deployment which holds the deployment itself
 /// and the some metadata
@@ -37,9 +46,9 @@ impl Deployment {
         }
     }
 
-    fn from_bytes(config: &ProjectConfig, crate_bytes: Vec<u8>) -> Self {
+    fn from_bytes(project: ProjectName, crate_bytes: Vec<u8>) -> Self {
         Self {
-            meta: Arc::new(RwLock::new(DeploymentMeta::queued(&config))),
+            meta: Arc::new(RwLock::new(DeploymentMeta::queued(project))),
             state: RwLock::new(DeploymentState::queued(crate_bytes)),
         }
     }
@@ -50,17 +59,20 @@ impl Deployment {
         let project_name = dir
             .file_name()
             .into_string()
-            .map_err(|os_str| anyhow!("could not parse project name `{:?}` to string", os_str))?;
+            .map_err(|err| anyhow!("invalid project name: {:?}", err))
+            .and_then(|name| name.parse::<ProjectName>().map_err(|err| err.into()))?;
         // find marker which points to so file
         let marker_path = project_path.join(".shuttle_marker");
-        let so_path_str = std::fs::read(&marker_path)
-            .context(anyhow!("could not find so marker file at {:?}", marker_path))?;
+        let so_path_str = std::fs::read(&marker_path).context(anyhow!(
+            "could not find so marker file at {:?}",
+            marker_path
+        ))?;
 
         let so_path: PathBuf = String::from_utf8_lossy(&so_path_str)
             .parse()
             .context("could not parse contents of marker file to a valid path")?;
 
-        let meta = DeploymentMeta::built(&ProjectConfig::new(project_name)?);
+        let meta = DeploymentMeta::built(project_name);
         let state = DeploymentState::built(Build { so_path });
         Ok(Self::new(meta, state))
     }
@@ -69,6 +81,10 @@ impl Deployment {
     pub(crate) async fn meta(&self) -> DeploymentMeta {
         trace!("trying to get meta");
         self.meta.read().await.clone()
+    }
+
+    pub(crate) async fn deployment_active(&self) -> bool {
+        matches!(*self.state.read().await, DeploymentState::Deployed(_))
     }
 
     /// Evaluates if the deployment can be advanced. If the deployment
@@ -99,7 +115,11 @@ impl Deployment {
                     let console_writer = BuildOutputWriter::new(self.meta.clone());
                     match context
                         .build_system
-                        .build(&queued.crate_bytes, &meta.config, Box::new(console_writer))
+                        .build(
+                            &queued.crate_bytes,
+                            meta.project.as_str(),
+                            Box::new(console_writer),
+                        )
                         .await
                     {
                         Ok(build) => DeploymentState::built(build),
@@ -115,25 +135,24 @@ impl Deployment {
                         &meta.id
                     );
 
-                    match load_service_from_so_file(&built.build.so_path) {
-                        Ok((svc, so)) => DeploymentState::loaded(so, svc),
+                    match Loader::from_so_file(&built.build.so_path) {
+                        Ok(loader) => DeploymentState::loaded(loader),
                         Err(e) => {
                             debug!("failed to load with error: {}", &e);
-                            DeploymentState::Error(e)
+                            DeploymentState::Error(e.into())
                         }
                     }
                 }
-                DeploymentState::Loaded(mut loaded) => {
+                DeploymentState::Loaded(loader) => {
                     let port = identify_free_port();
 
                     debug!(
                         "deployment '{}' getting deployed on port {}...",
-                        meta.id,
-                        port
+                        meta.id, port
                     );
 
-                    debug!("{}: factory phase", meta.config.name());
-                    let mut db_state = database::State::new(&meta.config, db_context);
+                    debug!("{}: factory phase", meta.project);
+                    let mut db_state = database::State::new(&meta.project, db_context);
 
                     // Pre-emptively allocate a dabatase to work around a deadlock issue with sqlx connection pools
                     // When .build is called, the db_context's connection pool and the inner connection pool instantiated
@@ -143,32 +162,32 @@ impl Deployment {
                     self.meta.write().await.database_deployment = Some(db_state.request());
 
                     match db_state.ensure().await {
-                        Err(e) => DeploymentState::Error(e.into()),
+                        Err(e) => {
+                            debug!("{}: db state failed: {:?}", meta.project, e);
+                            let err: anyhow::Error = e.into();
+                            DeploymentState::Error(
+                                err.context(anyhow!("failed to attach database")),
+                            )
+                        }
                         Ok(()) => {
                             let mut factory = ShuttleFactory::new(&mut db_state);
-                            match loaded.service.build(&mut factory) {
+                            let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
+                            match loader.load(&mut factory, addr) {
                                 Err(e) => {
-                                    debug!("{}: factory phase FAILED: {:?}", meta.config.name(), e);
-                                    DeploymentState::Error(e.into()) },
-                                Ok(_) => {
-                                    debug!("{}: factory phase DONE", meta.config.name());
-                                    // TODO: upon resolving this future, change the status of the deployment
-                                    // We cannot use spawn here since that blocks the api completely. We suspect this is because `bind` makes a blocking call,
-                                    // however that does not completely makes sense as the blocking call is made on another runtime.
-                                    let handle = tokio::task::spawn_blocking(move | | {
-                                        loaded
-                                            .service
-                                            .bind(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port))
-                                    });
-
+                                    debug!("{}: factory phase FAILED: {:?}", meta.project, e);
+                                    DeploymentState::Error(e.into())
+                                }
+                                Ok((handle, so)) => {
+                                    debug!("{}: factory phase DONE", meta.project);
                                     // Remove stale active deployments
-                                    if let Some(stale_id) = context.router.promote(meta.host, meta.id).await
+                                    if let Some(stale_id) =
+                                        context.router.promote(meta.host, meta.id).await
                                     {
-                                        debug!("removing stale deployment `{}`", & stale_id);
-                                        context.deployments.write().await.remove( & stale_id);
+                                        debug!("removing stale deployment `{}`", &stale_id);
+                                        context.deployments.write().await.remove(&stale_id);
                                     }
 
-                                    DeploymentState::deployed(loaded.so, port, handle, db_state)
+                                    DeploymentState::deployed(so, port, handle, db_state)
                                 }
                             }
                         }
@@ -270,66 +289,46 @@ type Deployments = HashMap<DeploymentId, Arc<Deployment>>;
 /// The top-level manager for deployments. Is responsible for their creation
 /// and lifecycle.
 pub(crate) struct DeploymentSystem {
-    deployments: Arc<RwLock<Deployments>>,
-    job_queue: Arc<JobQueue>,
+    deployments: RwLock<Deployments>,
+    job_queue: JobQueue,
     router: Arc<Router>,
 }
 
-#[derive(Default)]
+const JOB_QUEUE_SIZE: usize = 200;
+
 struct JobQueue {
-    queue: Arc<Mutex<Vec<Arc<Deployment>>>>,
+    send: mpsc::Sender<Arc<Deployment>>,
 }
 
 impl JobQueue {
-    fn push(&self, deployment: Arc<Deployment>) {
-        self.queue.lock().unwrap().push(deployment)
-    }
+    async fn new(context: Context, db_context: database::Context) -> Self {
+        let (send, mut recv) = mpsc::channel::<Arc<Deployment>>(JOB_QUEUE_SIZE);
 
-    fn pop(&self) -> Option<Arc<Deployment>> {
-        self.queue.lock().unwrap().pop()
-    }
-
-    /// Returns a JobQueue with the job processor already running
-    async fn initialise(context: Context, db_context: database::Context) -> Arc<Self> {
-        let job_queue = Arc::new(JobQueue::default());
-
-        let queue_ref = job_queue.clone();
-
-        tokio::spawn(
-            async move { Self::start_job_processor(context, db_context, queue_ref).await },
-        );
-
-        job_queue
-    }
-
-    /// Starts the job processor. Before it begins, it will add all projects
-    /// from the deployment service into the queue.
-    async fn start_job_processor(
-        context: Context,
-        db_context: database::Context,
-        queue: Arc<JobQueue>,
-    ) {
-        debug!("loading deployments into job processor");
-        for deployment in context.deployments.read().await.values() {
-            queue.push(deployment.clone());
-            debug!("loading deployment: {:?}", deployment.meta);
-        }
-        debug!("starting job processor loop");
-        loop {
-            if let Some(deployment) = queue.pop() {
+        log::debug!("starting job processor task");
+        tokio::spawn(async move {
+            while let Some(deployment) = recv.recv().await {
                 let id = deployment.meta().await.id;
 
-                debug!("started deployment job for id: '{}'", id);
+                log::debug!("started deployment job for deployment '{}'", id);
 
                 while !deployment.deployment_finished().await {
                     deployment.advance(&context, &db_context).await;
                 }
 
                 debug!("ended deployment job for id: '{}'", id);
-            } else {
-                tokio::time::sleep(Duration::from_millis(50)).await
             }
-        }
+
+            log::debug!("job processor task ended");
+        });
+
+        Self { send }
+    }
+
+    async fn push(&self, deployment: Arc<Deployment>) {
+        self.send
+            .send(deployment)
+            .await
+            .unwrap_or_else(|_| panic!("deployment job queue unexpectedly closed"));
     }
 }
 
@@ -354,13 +353,22 @@ impl DeploymentSystem {
             build_system,
             deployments: deployments.clone(),
         };
+
         let db_context = database::Context::new()
             .await
             .expect("failed to create lazy connection to database");
 
+        let job_queue = JobQueue::new(context, db_context).await;
+
+        debug!("loading deployments into job processor");
+        for deployment in deployments.read().await.values() {
+            debug!("loading deployment: {:?}", deployment.meta);
+            job_queue.push(deployment.clone()).await;
+        }
+
         Self {
-            deployments,
-            job_queue: JobQueue::initialise(context, db_context).await,
+            deployments: Default::default(),
+            job_queue,
             router,
         }
     }
@@ -369,10 +377,7 @@ impl DeploymentSystem {
     /// If a project could not be re-created, this will get logged and skipped.
     async fn initialise_from_fs(fs_root: &Path) -> Deployments {
         let mut deployments = HashMap::default();
-        for project_dir in std::fs::read_dir(fs_root)
-            .unwrap() // safety: api can read the fs root dir
-            .into_iter()
-        {
+        for project_dir in std::fs::read_dir(fs_root).unwrap() {
             let project_dir = match project_dir {
                 Ok(project_dir) => project_dir,
                 Err(e) => {
@@ -386,14 +391,13 @@ impl DeploymentSystem {
                 Err(e) => {
                     warn!(
                         "failed to re-create deployment for project `{:?}` with error: {:?}",
-                        project_name,
-                        e
+                        project_name, e
                     );
                 }
                 Ok(deployment) => {
                     let deployment = Arc::new(deployment);
                     let info = deployment.meta().await;
-                    deployments.insert(info.id.clone(), deployment.clone());
+                    deployments.insert(info.id, deployment.clone());
                 }
             }
         }
@@ -431,12 +435,12 @@ impl DeploymentSystem {
     /// for a given project, will return the latest.
     pub(crate) async fn get_deployment_for_project(
         &self,
-        project_name: &str,
+        project_name: &ProjectName,
     ) -> Result<DeploymentMeta, DeploymentApiError> {
         let mut candidates = Vec::new();
 
         for deployment in self.deployments.read().await.values() {
-            if deployment.meta.read().await.config.name() == project_name {
+            if deployment.meta.read().await.project == *project_name {
                 candidates.push(deployment.meta().await);
             }
         }
@@ -456,7 +460,7 @@ impl DeploymentSystem {
 
     pub(crate) async fn kill_deployment_for_project(
         &self,
-        project_name: &str,
+        project_name: &ProjectName,
     ) -> Result<DeploymentMeta, DeploymentApiError> {
         let id = self.get_deployment_for_project(project_name).await?.id;
         self.kill_deployment(&id).await
@@ -495,13 +499,36 @@ impl DeploymentSystem {
         }
     }
 
+    pub(crate) async fn num_active(&self) -> usize {
+        let deployments = self
+            .deployments
+            .read()
+            .await
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+        stream::unfold(deployments, |mut deployments| async move {
+            Some((deployments.pop()?.deployment_active().await, deployments))
+        })
+        .filter(|is_active| future::ready(*is_active))
+        .count()
+        .await
+    }
+
     /// Main way to interface with the deployment manager.
     /// Will take a crate through the whole lifecycle.
     pub(crate) async fn deploy(
         &self,
         crate_file: Data<'_>,
-        project_config: &ProjectConfig,
+        project: ProjectName,
     ) -> Result<DeploymentMeta, DeploymentApiError> {
+        // Assumes that only `::Deployed` deployments are blocking a thread.
+        if self.num_active().await >= MAX_DEPLOYS {
+            return Err(DeploymentApiError::Unavailable(
+                "this instance has reached its maximum number of supported deployments".to_string(),
+            ));
+        };
+
         let crate_bytes = crate_file
             .open(ByteUnit::max_value())
             .into_bytes()
@@ -511,7 +538,7 @@ impl DeploymentSystem {
             })?
             .to_vec();
 
-        let deployment = Arc::new(Deployment::from_bytes(&project_config, crate_bytes));
+        let deployment = Arc::new(Deployment::from_bytes(project, crate_bytes));
 
         let info = deployment.meta().await;
 
@@ -520,35 +547,9 @@ impl DeploymentSystem {
             .await
             .insert(info.id, deployment.clone());
 
-        self.add_to_job_queue(deployment);
+        self.job_queue.push(deployment).await;
 
         Ok(info)
-    }
-
-    fn add_to_job_queue(&self, deployment: Arc<Deployment>) {
-        self.job_queue.push(deployment)
-    }
-}
-
-const ENTRYPOINT_SYMBOL_NAME: &[u8] = b"_create_service\0";
-
-type ServeHandle = JoinHandle<Result<(), shuttle_service::Error>>;
-
-type CreateService = unsafe extern "C" fn() -> *mut dyn Service;
-
-/// Dynamically load from a `.so` file a value of a type implementing the
-/// [`Service`] trait. Relies on the `.so` library having an ``extern "C"`
-/// function called [`ENTRYPOINT_SYMBOL_NAME`], likely automatically generated
-/// using the [`shuttle_service::declare_service`] macro.
-#[allow(clippy::type_complexity)]
-fn load_service_from_so_file(so_path: &Path) -> anyhow::Result<(Box<dyn Service>, Library)> {
-    unsafe {
-        let lib = libloading::Library::new(so_path)?;
-
-        let entrypoint: libloading::Symbol<CreateService> = lib.get(ENTRYPOINT_SYMBOL_NAME)?;
-        let raw = entrypoint();
-
-        Ok((Box::from_raw(raw), lib))
     }
 }
 
@@ -570,7 +571,7 @@ enum DeploymentState {
     /// dynamically-linked library (`.so` file). The [`libloading`] crate has
     /// been used to achieve this and to obtain this particular deployment's
     /// implementation of the [`shuttle_service::Service`] trait.
-    Loaded(LoadedState),
+    Loaded(Loader),
     /// Deployment that is actively running inside a Tokio task and listening
     /// for connections on some port indicated in [`DeployedState`].
     Deployed(DeployedState),
@@ -596,8 +597,8 @@ impl DeploymentState {
         Self::Built(BuiltState { build })
     }
 
-    fn loaded(so: Library, service: Box<dyn Service>) -> Self {
-        Self::Loaded(LoadedState { service, so })
+    fn loaded(loader: Loader) -> Self {
+        Self::Loaded(loader)
     }
 
     fn deployed(so: Library, port: Port, handle: ServeHandle, db_state: database::State) -> Self {
@@ -627,11 +628,6 @@ struct QueuedState {
 
 struct BuiltState {
     build: Build,
-}
-
-struct LoadedState {
-    service: Box<dyn Service>,
-    so: Library,
 }
 
 #[allow(dead_code)]

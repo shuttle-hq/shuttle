@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+TIMEOUT=15
+SLEPT=0
+
+while ! pg_isready -q; do
+  echo waiting for postgres
+  sleep 1
+  SLEPT+=1
+  if [[ $SLEPT -ge $TIMEOUT ]]; then
+    echo postgres did not start in time
+    exit 1
+  fi
+done
+
+exec "$@"

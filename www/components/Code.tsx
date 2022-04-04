@@ -3,10 +3,10 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import ReactTooltip from "react-tooltip";
 import NoSsr from "./NoSsr";
 import mixpanel from "mixpanel-browser";
-import { useId } from "../lib/hooks";
 
 type CodeProps = {
-  code: string;
+  readonly id: string;
+  readonly code: string;
 };
 
 const copyToClipboard = (code) => {
@@ -15,9 +15,7 @@ const copyToClipboard = (code) => {
   navigator.clipboard.writeText(code);
 };
 
-export default function Code({ code }: CodeProps) {
-  const id = useId();
-
+export default function Code({ code, id }: CodeProps) {
   return (
     <div
       className="cursor-pointer text-dark-200"

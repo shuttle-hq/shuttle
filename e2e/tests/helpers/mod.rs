@@ -11,7 +11,11 @@ use std::{
 
 use colored::*;
 use portpicker::pick_unused_port;
+use rand::Rng;
 use reqwest::blocking::RequestBuilder;
+
+const ID_CHARSET: &[u8] = b"0123456789abcdef";
+const ID_LEN: u8 = 8;
 
 trait EnsureSuccess {
     fn ensure_success<S: AsRef<str>>(self, s: S);
@@ -26,14 +30,12 @@ impl EnsureSuccess for io::Result<ExitStatus> {
     }
 }
 
-pub struct Server {
-    process: Child,
-}
-
 pub struct Api {
-    server: Option<Server>,
+    id: String,
     api_addr: SocketAddr,
     proxy_addr: SocketAddr,
+    image: Option<String>,
+    container: Option<String>,
     target: String,
     color: Color,
 }
@@ -81,7 +83,7 @@ pub fn spawn_and_log<D: std::fmt::Display, C: Into<Color>>(
     let color = color.into();
     let mut stdout = child.stdout.take().unwrap();
     let mut stderr = child.stderr.take().unwrap();
-    let stdout_target = format!("{} >>>", target).color(color.clone());
+    let stdout_target = format!("{} >>>", target).color(color);
     let stderr_target = format!("{} >>>", target).bold().color(color);
     std::thread::spawn(move || log_lines(&mut stdout, stdout_target));
     std::thread::spawn(move || log_lines(&mut stderr, stderr_target));
@@ -94,6 +96,14 @@ impl Api {
         D: std::fmt::Display,
         C: Into<Color>,
     {
+        let mut rng = rand::thread_rng();
+        let id: String = (0..ID_LEN)
+            .map(|_| {
+                let idx = rng.gen_range(0..ID_CHARSET.len());
+                ID_CHARSET[idx] as char
+            })
+            .collect();
+
         let api_port = pick_unused_port().expect("could not find a free port for API");
 
         let api_addr = SocketAddrV4::new(Ipv4Addr::LOCALHOST, api_port).into();
@@ -103,9 +113,11 @@ impl Api {
         let proxy_addr = SocketAddrV4::new(Ipv4Addr::LOCALHOST, proxy_port).into();
 
         Self {
-            server: None,
+            id,
             api_addr,
             proxy_addr,
+            image: None,
+            container: None,
             target: target.to_string(),
             color: color.into(),
         }
@@ -119,30 +131,24 @@ impl Api {
         let mut api = Self::new_free(target, color);
 
         let api_target = format!("   {} api", api.target);
+        let image = format!("unveil_{}_{}", api.target, api.id);
 
         let mut build = Command::new("docker");
 
         build
-            .args(["build", "-f", "./Dockerfile", "."])
+            .args(["build", "-f", "./Dockerfile.dev", "-t", &image, "."])
             .current_dir("../");
 
         spawn_and_log(&mut build, api_target.as_str(), Color::White)
             .wait()
             .ensure_success("failed to build `api` image");
 
-        let output = Command::new("docker")
-            .args(["build", "-q", "-f", "./Dockerfile", "."])
-            .current_dir("../")
-            .output()
-            .unwrap();
-
-        let image = String::from_utf8(output.stdout).unwrap().trim().to_owned();
-
+        let container = format!("unveil_api_{}_{}", api.target, api.id);
         let mut run = Command::new("docker");
         run.args([
             "run",
-            "-i",
-            "--rm",
+            "--name",
+            &container,
             "-p",
             format!("{}:{}", api.proxy_addr.port(), 8000).as_str(),
             "-p",
@@ -158,12 +164,13 @@ impl Api {
                 "{}/users.toml:/config/users.toml",
                 env!("CARGO_MANIFEST_DIR")
             ),
-            image.as_str(),
+            &image,
         ]);
 
-        let child = spawn_and_log(&mut run, api_target, api.color);
+        spawn_and_log(&mut run, api_target, api.color);
 
-        api.server = Some(Server { process: child });
+        api.image = Some(image);
+        api.container = Some(container);
 
         api.wait_ready(Duration::from_secs(120));
 
@@ -216,6 +223,7 @@ impl Api {
         reqwest::blocking::Client::new().get(format!("http://{}/{}", self.proxy_addr, sub_path))
     }
 
+    #[allow(dead_code)]
     pub fn post(&self, sub_path: &str) -> RequestBuilder {
         reqwest::blocking::Client::new().post(format!("http://{}/{}", self.proxy_addr, sub_path))
     }
@@ -223,8 +231,22 @@ impl Api {
 
 impl Drop for Api {
     fn drop(&mut self) {
-        if let Some(server) = self.server.as_mut() {
-            server.process.kill().unwrap();
+        if let Some(container) = &self.container {
+            Command::new("docker")
+                .args(["stop", container])
+                .output()
+                .expect("failed to stop api container");
+            Command::new("docker")
+                .args(["rm", container])
+                .output()
+                .expect("failed to remove api container");
+        }
+
+        if let Some(image) = &self.image {
+            Command::new("docker")
+                .args(["rmi", image])
+                .output()
+                .expect("failed to remove api image");
         }
     }
 }

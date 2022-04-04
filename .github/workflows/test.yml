@@ -3,12 +3,16 @@ name: cargo-test
 on:
   push:
     branches: [main]
-    paths: ["**/*.rs"]
+    paths: ["**/*.rs", "**/Cargo.toml"]
   pull_request:
     branches: [main]
-    paths: ["**/*.rs"]
+    paths: ["**/*.rs", "**/Cargo.toml"]
 
   workflow_dispatch:
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   cargo_test:
@@ -19,10 +23,4 @@ jobs:
         with:
           toolchain: stable
           override: true
-      - name: Make config file
-        run: mkdir -p ~/.config/shuttle/ && echo "api_key = \"ci-test\"" > ~/.config/shuttle/config.toml
-      - name: Use local shuttle-service
-        run: mkdir -p ~/.cargo && echo -e "[patch.crates-io]\nshuttle-service = { path = \"${GITHUB_WORKSPACE}/service\" }" > ~/.cargo/config.toml
-      - name: Build docker
-        run: docker build -f ./Dockerfile .
-      - run: cargo test -- --nocapture
+      - run: cargo test --all-features -- --nocapture

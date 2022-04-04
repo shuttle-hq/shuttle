@@ -16,7 +16,7 @@
 //! Depend on `shuttle-service` in `Cargo.toml`:
 //!
 //! ```toml
-//! shuttle-service = "0.2"
+//! shuttle-service = { version = "0.2", features = ["web-rocket"] }
 //! ```
 //!
 //! and make sure your crate has a `cdylib` output target:
@@ -26,7 +26,7 @@
 //! crate-type = ["cdylib"]
 //! ```
 //!
-//! See the [shuttle_service::main][main] macro for more information on how to implement a service. Here's a simple example using [rocket][rocket] to get you started:
+//! See the [shuttle_service::main][main] macro for more information on supported services. Here's a simple example using [rocket](https://docs.rs/rocket) to get you started:
 //!
 //! ```rust,no_run
 //! #[macro_use]
@@ -81,6 +81,12 @@
 //! ## Using `sqlx`
 //!
 //! Here is a quick example to deploy a service which uses a postgres database and [sqlx](http://docs.rs/sqlx):
+//!
+//! Depend on `shuttle-service` in `Cargo.toml`:
+//!
+//! ```toml
+//! shuttle-service = { version = "0.2", features = ["web-rocket", "sqlx-postgres"] }
+//! ```
 //!
 //! ```rust,no_run
 //! #[macro_use]
@@ -179,11 +185,13 @@ extern crate shuttle_codegen;
 /// ```
 ///
 /// ## shuttle supported services
-/// The following type can take the place of the `Ok` type and enjoy first class service support in shuttle.
+/// The following type can take the place of the `Ok` type and enjoy first class service support in shuttle. Be sure to also enable the feature on
+/// `shuttle-service` in `Cargo.toml` for the type to be recognized.
 ///
-/// | Ok type           | Service  |
-/// | ----------------- | -------- |
-/// | [`Rocket<Build>`] | [rocket] |
+/// | Ok type                                                                      | Feature flag | Service                          |
+/// | ---------------------------------------------------------------------------- | ------------ | -------------------------------- |
+/// | [`Rocket<Build>`](https://docs.rs/rocket/latest/rocket/struct.Rocket.html)   | web-rocket   | [rocket](https://docs.rs/rocket) |
+/// | [`SyncWrapper<Router>`](https://docs.rs/axum/latest/axum/struct.Router.html) | web-axum     | [axum](https://docs.rs/axum)     |
 ///
 /// # Getting shuttle managed services
 /// The shuttle is able to manage service dependencies for you. These services are passed in as inputs to your main function:
@@ -203,11 +211,11 @@ extern crate shuttle_codegen;
 /// ```
 ///
 /// ## shuttle managed dependencies
-/// The following dependencies can be managed by shuttle:
+/// The following dependencies can be managed by shuttle - remember to enable their feature flags for the `shuttle-service` dependency in `Cargo.toml`:
 ///
-/// | Argument type      | Dependency                                                         |
-/// | ------------------ | ------------------------------------------------------------------ |
-/// | [`PgPool`](https://docs.rs/sqlx/latest/sqlx/type.PgPool.html) | A PostgresSql instance accessed using [sqlx](https://docs.rs/sqlx) |
+/// | Argument type                                                 | Feature flag  | Dependency                                                         |
+/// | ------------------------------------------------------------- | ------------- | ------------------------------------------------------------------ |
+/// | [`PgPool`](https://docs.rs/sqlx/latest/sqlx/type.PgPool.html) | sqlx-postgres | A PostgresSql instance accessed using [sqlx](https://docs.rs/sqlx) |
 pub use shuttle_codegen::main;
 
 #[cfg(feature = "loader")]

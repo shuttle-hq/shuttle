@@ -48,3 +48,18 @@ For full documentation, visit [docs.rs/shuttle-service](https://docs.rs/shuttle-
 - [ ] Public: Production-ready!
 
 We are currently in Alpha. Watch "releases" of this repo to get notified of major updates!
+
+## Contributing
+
+```shell
+git clone https://github.com/getsynth/shuttle
+cd shuttle
+docker-compose up --wait
+cargo run --bin cargo-shuttle -- login --api-key "ci-test"
+cd examples/rocket/hello-world/
+cargo run --bin cargo-shuttle --manifest-path ../../../Cargo.toml -- deploy 
+curl --header "Host: hello-world-rocket-app.shuttleapp.rs" localhost:8000/hello 
+docker-compose down
+```
+
+

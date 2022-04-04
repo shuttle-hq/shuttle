@@ -26,7 +26,7 @@
 //! crate-type = ["cdylib"]
 //! ```
 //!
-//! See the [shuttle_service::main][main] macro for more information on supported services. Here's a simple example using [rocket](https://docs.rs/rocket) to get you started:
+//! See the [shuttle_service::main][main] macro for more information on supported services - like Axum. Here's a simple example using [rocket](https://docs.rs/rocket) to get you started:
 //!
 //! ```rust,no_run
 //! #[macro_use]
@@ -188,10 +188,10 @@ extern crate shuttle_codegen;
 /// The following type can take the place of the `Ok` type and enjoy first class service support in shuttle. Be sure to also enable the feature on
 /// `shuttle-service` in `Cargo.toml` for the type to be recognized.
 ///
-/// | Ok type                                                                      | Feature flag | Service                          |
-/// | ---------------------------------------------------------------------------- | ------------ | -------------------------------- |
-/// | [`Rocket<Build>`](https://docs.rs/rocket/latest/rocket/struct.Rocket.html)   | web-rocket   | [rocket](https://docs.rs/rocket) |
-/// | [`SyncWrapper<Router>`](https://docs.rs/axum/latest/axum/struct.Router.html) | web-axum     | [axum](https://docs.rs/axum)     |
+/// | Ok type                                                                      | Feature flag | Service                          | Example                                                                             |
+/// | ---------------------------------------------------------------------------- | ------------ | -------------------------------- | ----------------------------------------------------------------------------------- |
+/// | [`Rocket<Build>`](https://docs.rs/rocket/latest/rocket/struct.Rocket.html)   | web-rocket   | [rocket](https://docs.rs/rocket) | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/rocket/hello-world) |
+/// | [`SyncWrapper<Router>`](https://docs.rs/axum/latest/axum/struct.Router.html) | web-axum     | [axum](https://docs.rs/axum)     | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/axum/hello-world)   |
 ///
 /// # Getting shuttle managed services
 /// The shuttle is able to manage service dependencies for you. These services are passed in as inputs to your main function:
@@ -213,9 +213,9 @@ extern crate shuttle_codegen;
 /// ## shuttle managed dependencies
 /// The following dependencies can be managed by shuttle - remember to enable their feature flags for the `shuttle-service` dependency in `Cargo.toml`:
 ///
-/// | Argument type                                                 | Feature flag  | Dependency                                                         |
-/// | ------------------------------------------------------------- | ------------- | ------------------------------------------------------------------ |
-/// | [`PgPool`](https://docs.rs/sqlx/latest/sqlx/type.PgPool.html) | sqlx-postgres | A PostgresSql instance accessed using [sqlx](https://docs.rs/sqlx) |
+/// | Argument type                                                 | Feature flag  | Dependency                                                         | Example                                                                          |
+/// | ------------------------------------------------------------- | ------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
+/// | [`PgPool`](https://docs.rs/sqlx/latest/sqlx/type.PgPool.html) | sqlx-postgres | A PostgresSql instance accessed using [sqlx](https://docs.rs/sqlx) | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/rocket/postgres) |
 pub use shuttle_codegen::main;
 
 #[cfg(feature = "loader")]

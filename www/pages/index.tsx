@@ -1,6 +1,6 @@
 import React from "react";
 import ApiKeyModal from "../components/ApiKeyModal";
-import Cards from "../components/Cards";
+import Examples from "../components/Examples";
 import CodeSnippets from "../components/CodeSnippets";
 import Features from "../components/Features";
 import Header from "../components/Header";
@@ -12,7 +12,7 @@ export default function Home() {
       <Header />
       <Hero />
       <Features />
-      <Cards />
+      <Examples />
       <CodeSnippets />
       <ApiKeyModal />
     </>

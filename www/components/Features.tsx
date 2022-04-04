@@ -2,34 +2,44 @@ import { CheckIcon } from "@heroicons/react/outline";
 
 const features = [
   {
-    name: "Invite team members",
+    name: "Infrastructure from Rust",
     description:
-      "Tempor tellus in aliquet eu et sit nulla tellus. Suspendisse est, molestie blandit quis ac. Lacus.",
+      "Traits and annotations define all your infrastructure from your service code",
   },
   {
-    name: "Notifications",
+    name: "Serverless",
     description:
-      "Ornare donec rhoncus vitae nisl velit, neque, mauris dictum duis. Nibh urna non parturient.",
+      "All the infrastructure and wiring you need is handled by the deployer runtime. No VMs or containers",
   },
   {
-    name: "List view",
+    name: "Databases",
     description:
-      "Etiam cras augue ornare pretium sit malesuada morbi orci, venenatis. Dictum lacus.",
+      "Wiring up a service to a persistent database is as easy as deriving a trait",
   },
   {
-    name: "Boards",
+    name: "Entirely open-source",
     description:
-      "Interdum quam pulvinar turpis tortor, egestas quis diam amet, natoque. Mauris sagittis.",
+      "A completely free and open-source project, with no vendor lock-in or hidden code",
   },
   {
-    name: "Keyboard shortcuts",
+    name: "Self-hosting friendly",
     description:
-      "Ullamcorper in ipsum ac feugiat. Senectus at aliquam vulputate mollis nec. In at risus odio.",
+      "Deploy the entire platform under your own AWS account for extra security and isolation",
   },
   {
-    name: "Reporting",
+    name: "Fits in a cargo subcommand",
     description:
-      "Magna a vel sagittis aliquam eu amet. Et lorem auctor quam nunc odio. Sed bibendum.",
+      "Projects and deployments are all controlled by a simple `cargo shuttle` subcommand",
+  },
+  {
+    name: "Fast deploy times",
+    description:
+      "Deploy new versions as quickly as running an incremental build, all with zero downtime",
+  },
+  {
+    name: "Backed by an OSS company",
+    description:
+      "An open-source project by a company that is passionate about Rust",
   },
 ];
 
@@ -38,11 +48,11 @@ export default function Features() {
     <div className="mx-auto max-w-6xl py-16 px-4 sm:px-6 lg:py-24 lg:px-8">
       <div className="mx-auto max-w-3xl text-center">
         <h2 className="text-3xl font-extrabold text-gray-200">
-          All-in-one platform
+          Serverless for Rust
         </h2>
         <p className="mt-4 text-lg text-gray-300">
-          Ac euismod vel sit maecenas id pellentesque eu sed consectetur.
-          Malesuada adipiscing sagittis vel nulla nec.
+          The only serverless platform that lets you control your infrastructure
+          from Rust code as easily as deriving a trait.
         </p>
       </div>
       <dl className="mt-12 space-y-10 sm:grid sm:grid-cols-2 sm:gap-x-6 sm:gap-y-12 sm:space-y-0 lg:grid-cols-3 lg:gap-x-8">

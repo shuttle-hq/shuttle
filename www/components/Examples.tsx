@@ -9,38 +9,38 @@ interface Card {
 
 const cards: Card[] = [
   {
-    title: "Url Shortener",
+    title: "Persist with Postgres",
     description:
-      "A URL shortener built with shuttle, rocket and postgres/sqlx. you can use it from your terminal.",
-    link: "https://github.com/getsynth/shuttle/pull/94/files",
+      "Build any web service with a fully managed database using Rocket and sqlx",
+    link: "https://github.com/getsynth/shuttle/tree/main/examples/rocket/postgres",
     icon: "/images/icon1.svg",
   },
   {
     title: "Url Shortener",
     description:
-      "A URL shortener built with shuttle, rocket and postgres/sqlx. you can use it from your terminal.",
-    link: "https://github.com/getsynth/shuttle/pull/94/files",
+      "A URL shortener that you can use from your terminal - built with shuttle, rocket and postgres/sqlx.",
+    link: "https://github.com/getsynth/shuttle/tree/main/examples/url-shortener",
     icon: "/images/icon2.svg",
   },
   {
-    title: "Url Shortener",
+    title: "JWT authentication",
     description:
-      "A URL shortener built with shuttle, rocket and postgres/sqlx. you can use it from your terminal.",
-    link: "https://github.com/getsynth/shuttle/pull/94/files",
+      "Guard endpoints using self-issued JWT tokens while keeping public endpoint open",
+    link: "https://github.com/getsynth/shuttle/tree/main/examples/rocket/authentication",
     icon: "/images/icon3.svg",
   },
 ];
 
-export default function Cards() {
+export default function Examples() {
   return (
     <div className="mx-auto max-w-6xl px-4 pt-16 pb-20 sm:px-6 lg:px-8 lg:pt-24 lg:pb-28">
       <div className="text-center">
         <h2 className="text-3xl font-extrabold tracking-tight text-gray-200 sm:text-4xl">
-          From the blog
+          From code to cloud in a minute
         </h2>
         <p className="mx-auto mt-3 max-w-2xl text-xl text-gray-300 sm:mt-4">
-          Lorem ipsum dolor sit amet consectetur, adipisicing elit. Ipsa libero
-          labore natus atque, ducimus sed.
+          Take your code to full-featured cloud infrastructure in under a
+          minute. Don't take our word for it, see it for yourself.
         </p>
       </div>
       <div className="mx-auto  mt-12 grid w-fit gap-5 lg:grid-cols-3">

@@ -29,7 +29,7 @@ export default function CodeSnippets() {
       <div className="grid w-full grid-cols-1 gap-4 lg:grid-cols-12">
         <div className="mb-4 lg:col-span-5">
           <h2 className="text-3xl font-extrabold tracking-tight text-gray-200 sm:text-4xl">
-            From the blog
+            How it works
           </h2>
           <p className="mt-3 max-w-2xl text-xl text-gray-300 sm:mt-4">
             Lorem ipsum dolor sit amet consectetur, adipisicing elit. Ipsa
@@ -127,36 +127,38 @@ export default function CodeSnippets() {
   );
 }
 
-const DECLARE_SERVICE = `
-#[macro_use]
-extern crate shuttle_service;
+const CARGO_DEPLOYS = `
+$ cargo shuttle deploy
+   Packaging url-shortener v0.1.0 (/private/shuttle/examples/url-shortener)
+   Archiving Cargo.toml
+   Archiving Cargo.toml.orig
+   Archiving README.md
+   Archiving Shuttle.toml
+   Archiving migrations/20220324143837_urls.sql
+   Archiving src/lib.rs
+   Compiling tracing-attributes v0.1.20
+   Compiling tokio-util v0.6.9
+   Compiling multer v2.0.2
+   Compiling hyper v0.14.18
+   Compiling rocket_http v0.5.0-rc.1
+   Compiling rocket_codegen v0.5.0-rc.1
+   Compiling rocket v0.5.0-rc.1
+   Compiling shuttle-service v0.2.5
+   Compiling url-shortener v0.1.0 (/opt/unveil/crates/s-2)
+    Finished dev [unoptimized + debuginfo] target(s) in 1m 01s
 
-#[macro_use]
-extern crate rocket;
+        Project:            url-shortener
+        Deployment Id:      3d08ac34-ad63-41c1-836b-99afdc90af9f
+        Deployment Status:  DEPLOYED
+        Host:               url-shortener.shuttleapp.rs
+        Created At:         2022-04-01 08:32:34.412602556 UTC
+        Database URI:       postgres://***:***@pg.shuttle.rs/db-url-shortener
 
-use rocket::{Build, Rocket};
-
-#[get("/hello")]
-fn hello() -> &'static str {
-    "Hello, world!"
-}
-
-fn init() -> Rocket<Build> {
-    rocket::build().mount("/", routes![hello])
-}
-
-declare_service!(Rocket<Build>, init);
+❯
 `.trim();
 
-const SQLX = `
-#[macro_use]
-extern crate shuttle_service;
-use shuttle_service::{Factory, Error};
-
-#[macro_use]
-extern crate rocket;
-use rocket::{Rocket, Build, State};
-
+const USING_SQLX = `
+use rocket::{Build, Rocket};
 use sqlx::PgPool;
 
 struct MyState(PgPool);
@@ -167,25 +169,51 @@ fn hello(state: &State<MyState>) -> &'static str {
     "Hello, Postgres!"
 }
 
-async fn state(factory: &mut dyn Factory) -> Result<MyState, shuttle_service::Error> {
-   let pool = sqlx::postgres::PgPoolOptions::new()
-       .connect(&factory.get_sql_connection_string().await?)
-       .await?;
-   Ok(MyState(pool))
+#[shuttle_service::main]
+async fn rocket(
+    pool: PgPool
+) -> Result<Rocket<Build>, shuttle_service::Error> {
+    let state = MyState(pool);
+    Ok(rocket::build().manage(state).mount("/", routes![hello]))
+}
+`.trim();
+
+const HELLO_CLOUD = `
+use rocket::{Build, Rocket};
+
+#[get("/hello")]
+fn hello() -> &'static str {
+    "Hello, world!"
 }
 
-fn rocket() -> Rocket<Build> {
-    rocket::build().mount("/", routes![hello])
+#[shuttle_service::main]
+async fn init() -> Result<Rocket<Build>, shuttle_service::Error> {
+    Ok(rocket::build().mount("/", rocket::routes![hello]))
+}
+`.trim();
+
+const USING_AXUM = `
+use axum::{routing::get, Router};
+use sync_wrapper::SyncWrapper;
+
+async fn hello_world() -> &'static str {
+    "Hello, world!"
 }
 
-declare_service!(Rocket<Build>, rocket, state);
+#[shuttle_service::main]
+async fn axum() -> Result<SyncWrapper<Router>, shuttle_service::Error> {
+    let router = Router::new().route("/hello", get(hello_world));
+    let sync_wrapper = SyncWrapper::new(router);
+
+    Ok(sync_wrapper)
+}
 `.trim();
 
 const tabs = [
-  { name: "Declare Service", code: DECLARE_SERVICE },
-  { name: "Using Sqlx", code: SQLX },
-  { name: "Declare Service", code: DECLARE_SERVICE },
-  { name: "Using Sqlx", code: SQLX },
+  { name: "Cargo Deploys", code: CARGO_DEPLOYS },
+  { name: "Hello Cloud", code: HELLO_CLOUD },
+  { name: "Using Sqlx", code: USING_SQLX },
+  { name: "Using Axum", code: USING_AXUM },
 ];
 
 function classNames(...classes) {

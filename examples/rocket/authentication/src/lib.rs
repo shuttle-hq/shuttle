@@ -1,12 +1,12 @@
-use rocket::{http::Status, response::status::Custom, serde::json::Json, Build, Rocket};
+use rocket::http::Status;
+use rocket::response::status::Custom;
+use rocket::serde::json::Json;
+use rocket::{Build, Rocket};
 use serde::{Deserialize, Serialize};
 
 mod claims;
 
 use claims::Claims;
-
-#[macro_use]
-extern crate shuttle_service;
 
 #[macro_use]
 extern crate rocket;
@@ -70,8 +70,9 @@ fn login(login: Json<LoginRequest>) -> Result<Json<LoginResponse>, Custom<String
     Ok(Json(response))
 }
 
-fn rocket() -> Rocket<Build> {
-    rocket::build().mount("/", routes![public, private, login])
-}
+#[shuttle_service::main]
+async fn rocket() -> Result<Rocket<Build>, shuttle_service::Error> {
+    let rocket = rocket::build().mount("/", routes![public, private, login]);
 
-declare_service!(Rocket<Build>, rocket);
+    Ok(rocket)
+}

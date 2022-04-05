@@ -35,34 +35,39 @@ const features = [
 
 export default function Features() {
   return (
-    <div id="features" className="mx-auto max-w-6xl py-16 px-4 sm:px-6 lg:py-24 lg:px-8">
-      <div className="mx-auto max-w-3xl text-center">
-        <h2 className="text-3xl font-extrabold text-gray-200">
-          Serverless for Rust
-        </h2>
-        <p className="mt-4 text-lg text-gray-300">
-          The only serverless platform that lets you control your infrastructure
-          from Rust code as easily as deriving a trait.
-        </p>
+    <div
+      id="features"
+      className="-mt-[122px] pt-[122px] lg:-mt-[66px] lg:pt-[66px]"
+    >
+      <div className="mx-auto max-w-6xl py-16 px-4 sm:px-6 lg:py-24 lg:px-8">
+        <div className="mx-auto max-w-3xl text-center">
+          <h2 className="text-3xl font-extrabold text-gray-200">
+            Serverless for Rust
+          </h2>
+          <p className="mt-4 text-lg text-gray-300">
+            The only serverless platform that lets you control your
+            infrastructure from Rust code as easily as deriving a trait.
+          </p>
+        </div>
+        <dl className="mt-12 space-y-10 sm:grid sm:grid-cols-2 sm:gap-x-6 sm:gap-y-12 sm:space-y-0 lg:grid-cols-3 lg:gap-x-8">
+          {features.map((feature) => (
+            <div key={feature.name} className="relative">
+              <dt>
+                <CheckIcon
+                  className="absolute h-6 w-6 text-green-500"
+                  aria-hidden="true"
+                />
+                <p className="ml-9 text-lg font-medium leading-6 text-gray-200">
+                  {feature.name}
+                </p>
+              </dt>
+              <dd className="mt-2 ml-9 text-base text-gray-300">
+                {feature.description}
+              </dd>
+            </div>
+          ))}
+        </dl>
       </div>
-      <dl className="mt-12 space-y-10 sm:grid sm:grid-cols-2 sm:gap-x-6 sm:gap-y-12 sm:space-y-0 lg:grid-cols-3 lg:gap-x-8">
-        {features.map((feature) => (
-          <div key={feature.name} className="relative">
-            <dt>
-              <CheckIcon
-                className="absolute h-6 w-6 text-green-500"
-                aria-hidden="true"
-              />
-              <p className="ml-9 text-lg font-medium leading-6 text-gray-200">
-                {feature.name}
-              </p>
-            </dt>
-            <dd className="mt-2 ml-9 text-base text-gray-300">
-              {feature.description}
-            </dd>
-          </div>
-        ))}
-      </dl>
     </div>
   );
 }

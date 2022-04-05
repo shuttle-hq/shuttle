@@ -188,10 +188,10 @@ extern crate shuttle_codegen;
 /// The following type can take the place of the `Ok` type and enjoy first class service support in shuttle. Be sure to also enable the feature on
 /// `shuttle-service` in `Cargo.toml` for the type to be recognized.
 ///
-/// | Ok type                                                                      | Feature flag | Service                          | Example                                                                             |
-/// | ---------------------------------------------------------------------------- | ------------ | -------------------------------- | ----------------------------------------------------------------------------------- |
-/// | [`Rocket<Build>`](https://docs.rs/rocket/latest/rocket/struct.Rocket.html)   | web-rocket   | [rocket](https://docs.rs/rocket) | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/rocket/hello-world) |
-/// | [`SyncWrapper<Router>`](https://docs.rs/axum/latest/axum/struct.Router.html) | web-axum     | [axum](https://docs.rs/axum)     | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/axum/hello-world)   |
+/// | Ok type                                                                        | Feature flag | Service                                     | Version    | Example                                                                             |
+/// | ------------------------------------------------------------------------------ | ------------ | ------------------------------------------- | ---------- | ----------------------------------------------------------------------------------- |
+/// | [`Rocket<Build>`](https://docs.rs/rocket/0.5.0-rc.1/rocket/struct.Rocket.html) | web-rocket   | [rocket](https://docs.rs/rocket/0.5.0-rc.1) | 0.5.0-rc.1 | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/rocket/hello-world) |
+/// | [`SyncWrapper<Router>`](https://docs.rs/axum/0.5/axum/struct.Router.html)      | web-axum     | [axum](https://docs.rs/axum/0.5)            | 0.5        | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/axum/hello-world)   |
 ///
 /// # Getting shuttle managed services
 /// The shuttle is able to manage service dependencies for you. These services are passed in as inputs to your main function:

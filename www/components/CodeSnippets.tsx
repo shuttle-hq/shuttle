@@ -9,6 +9,17 @@ import HeightMagic from "./HeightMagic";
 
 SyntaxHighlighter.registerLanguage("rust", rust);
 
+cargo.displayName = "cargo";
+cargo.aliases = [];
+
+function cargo(Prism: any) {
+  Prism.languages.cargo = {
+    builtin: /\b(?:Packaging|Archiving|Compiling|Finished)\b/,
+  };
+}
+
+SyntaxHighlighter.registerLanguage("cargo", cargo);
+
 export default function CodeSnippets() {
   const [activeTab, setActiveTab] = useState(0);
   const [copyToClipboardState, copyToClipboard] = useCopyToClipboard();
@@ -243,7 +254,7 @@ const tabs = [
     name: "Cargo Deploys",
     code: CARGO_DEPLOYS,
     showLineNumbers: false,
-    language: void 0,
+    language: "cargo",
   },
   {
     name: "Hello Cloud",

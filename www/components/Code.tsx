@@ -26,14 +26,14 @@ export default function Code({ code, id }: CodeProps) {
       data-delay-hide="2000"
     >
       <pre
-        className={`group rounded-md flex gap-4 justify-between bg-gray-500 p-4`}
+        className={`group flex justify-between gap-4 rounded bg-gray-500 p-4`}
       >
         <code>
           <span className="select-none">$ </span>
           {code}
         </code>
         <FontAwesomeIcon
-          className="h-6 opacity-0 group-hover:opacity-100 transition-opacity"
+          className="h-6 opacity-0 transition-opacity group-hover:opacity-100"
           icon={faClipboard}
         />
       </pre>

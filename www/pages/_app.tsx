@@ -17,7 +17,7 @@ import AnnouncementBar, {
 } from "../components/AnnouncementBar";
 import { UserProvider } from "@auth0/nextjs-auth0";
 import { ApiKeyModalStateProvider } from "../components/ApiKeyModal";
-// import Footer from "../components/Footer";
+import Footer from "../components/Footer";
 
 export default function App({ Component, pageProps }: AppProps) {
   const router = useRouter();
@@ -47,10 +47,10 @@ export default function App({ Component, pageProps }: AppProps) {
             }}
           />
 
-          <div className="text-dark-200 full bg-dark-600">
+          <div className="min-h-screen bg-dark-700 text-dark-200">
             <AnnouncementBar />
             <Component {...pageProps} />
-            {/* <Footer /> */}
+            <Footer />
           </div>
         </AnnouncementBarIsClosedProvider>
       </ApiKeyModalStateProvider>

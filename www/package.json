@@ -4,6 +4,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "fmt": "prettier --write *.yaml *.ts *.js *.json *.md {styles,pages,lib,components}/**",
     "postbuild": "next-sitemap"
   },
   "dependencies": {
@@ -15,6 +16,8 @@
     "@fortawesome/react-fontawesome": "^0.1.14",
     "@headlessui/react": "^1.5.0",
     "@heroicons/react": "^1.0.6",
+    "@tailwindcss/forms": "^0.5.0",
+    "@types/react-syntax-highlighter": "^13.5.2",
     "classnames": "^2.3.1",
     "mixpanel-browser": "^2.45.0",
     "next": "^12.1.0",
@@ -22,6 +25,7 @@
     "node-fetch": "^3.2.3",
     "react": "^17.0.2",
     "react-dom": "^17.0.2",
+    "react-syntax-highlighter": "^15.5.0",
     "react-tooltip": "^4.2.21",
     "react-use": "^17.3.2",
     "sass": "^1.32.8"
@@ -32,6 +36,8 @@
     "autoprefixer": "^10.4.4",
     "next-sitemap": "^2.5.10",
     "postcss": "^8.4.12",
+    "prettier": "^2.6.1",
+    "prettier-plugin-tailwindcss": "^0.1.8",
     "tailwindcss": "^3.0.23",
     "typescript": "^4.1.5"
   }

@@ -2,11 +2,11 @@ import { faTimes } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import React, { useState } from "react";
 import { createStateContext } from "react-use";
+import ExternalLink from "../ExternalLink";
 import styles from "./styles.module.css";
 
 export const [useAnnouncementBarIsClosed, AnnouncementBarIsClosedProvider] =
   createStateContext(false);
-
 
 export default function AnnouncementBar() {
   const [isClosed, setClosed] = useAnnouncementBarIsClosed();
@@ -19,14 +19,12 @@ export default function AnnouncementBar() {
     <div className={styles.announcement} role="banner">
       <p className={styles.announcement__content}>
         ⭐️ If you like Shuttle,&nbsp;
-        <a
+        <ExternalLink
           className={styles.announcement__link}
           href={"https://github.com/getsynth/shuttle"}
-          rel="noopener noreferrer"
-          target="_blank"
         >
           give it a star on GitHub
-        </a>
+        </ExternalLink>
         !
       </p>
 

@@ -31,8 +31,23 @@ export default function CodeSnippets() {
             How it works
           </h2>
           <p className="mt-3 max-w-2xl text-xl text-gray-300 sm:mt-4">
-            Lorem ipsum dolor sit amet consectetur, adipisicing elit. Ipsa
-            libero labore natus atque, ducimus sed.
+            <b>shuttle</b> is built for Rust.
+          </p>
+
+          <p className="mt-3 max-w-2xl text-xl text-gray-300 sm:mt-4">
+            A simple cargo command packages up your application, ships it to the{" "}
+            <b>shuttle</b> build cluster where it's incrementally compiled and
+            automatically served on a unique subdomain.
+          </p>
+
+          <p className="mt-3 max-w-2xl text-xl text-gray-300 sm:mt-4">
+            <b>shuttle</b> uses simple but powerful annotations to understand
+            your dependencies. Infrastructure dependencies like databases or
+            key-value stores are spun up for you and everything is automatically
+            wired together from the get-go.
+          </p>
+          <p className="mt-3 max-w-2xl text-xl text-gray-300 sm:mt-4">
+            It feels a little magical.
           </p>
         </div>
         <div className="lg:col-span-7">

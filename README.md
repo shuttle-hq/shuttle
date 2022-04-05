@@ -50,7 +50,7 @@ For full documentation, visit [docs.rs/shuttle-service](https://docs.rs/shuttle-
 We are currently in Alpha. Watch "releases" of this repo to get notified of major updates!
 
 ## Contributing
-
+### Getting started
 ```shell
 git clone https://github.com/getsynth/shuttle
 cd shuttle
@@ -61,5 +61,5 @@ cargo run --bin cargo-shuttle --manifest-path ../../../Cargo.toml -- deploy
 curl --header "Host: hello-world-rocket-app.shuttleapp.rs" localhost:8000/hello 
 docker-compose down
 ```
-
+### How it works
 

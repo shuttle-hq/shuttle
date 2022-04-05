@@ -50,10 +50,10 @@ export default function Footer() {
       </div>
 
       <div className="mx-auto max-w-2xl py-20 px-4 text-center sm:py-28 sm:px-6 lg:px-8">
-        <h2 className="text-3xl font-extrabold text-gray-200 sm:text-4xl">
-          <span className="block">Join a community of developers</span>
+        <h2 className="text-3xl font-extrabold tracking-tight text-gray-200 sm:text-4xl">
+          Join a community of developers
         </h2>
-        <p className="mt-4 text-lg leading-6 text-gray-300">
+        <p className="mt-4 text-xl text-gray-300">
           Stay up to date with shuttle on GitHub, Discord, and Twitter.
         </p>
         <div className="mt-8 flex justify-center gap-3">

@@ -41,23 +41,23 @@ export default function CodeSnippets() {
           <h2 className="text-3xl font-extrabold tracking-tight text-gray-200 sm:text-4xl">
             How it works
           </h2>
-          <p className="mt-3 max-w-2xl text-xl text-gray-300 sm:mt-4">
-            <b>shuttle</b> is built for Rust.
+          <p className="mt-3 text-lg text-gray-300 sm:mt-4">
+            Shuttle is built for Rust.
           </p>
 
-          <p className="mt-3 max-w-2xl text-xl text-gray-300 sm:mt-4">
-            A simple cargo command packages up your application, ships it to the{" "}
-            <b>shuttle</b> build cluster where it's incrementally compiled and
+          <p className="mt-3 text-lg text-gray-300 sm:mt-4">
+            A simple cargo command packages up your application, ships it to the
+            shuttle build cluster where it's incrementally compiled and
             automatically served on a unique subdomain.
           </p>
 
-          <p className="mt-3 max-w-2xl text-xl text-gray-300 sm:mt-4">
-            <b>shuttle</b> uses simple but powerful annotations to understand
-            your dependencies. Infrastructure dependencies like databases or
+          <p className="mt-3 text-lg text-gray-300 sm:mt-4">
+            Shuttle uses simple but powerful annotations to understand your
+            dependencies. Infrastructure dependencies like databases or
             key-value stores are spun up for you and everything is automatically
             wired together from the get-go.
           </p>
-          <p className="mt-3 max-w-2xl text-xl text-gray-300 sm:mt-4">
+          <p className="mt-3 text-lg text-gray-300 sm:mt-4">
             It feels a little magical.
           </p>
         </div>

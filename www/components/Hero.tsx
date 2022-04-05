@@ -40,7 +40,7 @@ export default function Hero() {
               <div className="mb-5 text-4xl font-bold text-gray-200 sm:text-5xl md:text-6xl">
                 {SITE_TITLE}
               </div>
-              <div className="px-10 text-xl font-normal text-gray-300">
+              <div className="px-10 text-xl text-gray-300">
                 {SITE_DESCRIPTION}
               </div>
             </div>

@@ -27,25 +27,15 @@ const features = [
       "Deploy the entire platform under your own AWS account for extra security and isolation",
   },
   {
-    name: "Fits in a cargo subcommand",
-    description:
-      "Projects and deployments are all controlled by a simple `cargo shuttle` subcommand",
-  },
-  {
     name: "Fast deploy times",
     description:
       "Deploy new versions as quickly as running an incremental build, all with zero downtime",
-  },
-  {
-    name: "Backed by an OSS company",
-    description:
-      "An open-source project by a company that is passionate about Rust",
   },
 ];
 
 export default function Features() {
   return (
-    <div className="mx-auto max-w-6xl py-16 px-4 sm:px-6 lg:py-24 lg:px-8">
+    <div id="features" className="mx-auto max-w-6xl py-16 px-4 sm:px-6 lg:py-24 lg:px-8">
       <div className="mx-auto max-w-3xl text-center">
         <h2 className="text-3xl font-extrabold text-gray-200">
           Serverless for Rust

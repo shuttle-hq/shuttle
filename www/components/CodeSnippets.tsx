@@ -5,6 +5,7 @@ import { PrismLight as SyntaxHighlighter } from "react-syntax-highlighter";
 import rust from "react-syntax-highlighter/dist/cjs/languages/prism/rust";
 import oneDark from "react-syntax-highlighter/dist/cjs/styles/prism/one-dark";
 import { useCopyToClipboard, useWindowSize } from "react-use";
+import HeightMagic from "./HeightMagic";
 
 SyntaxHighlighter.registerLanguage("rust", rust);
 
@@ -15,8 +16,6 @@ export default function CodeSnippets() {
   useWindowSize();
 
   useEffect(() => {
-    if (false) return undefined;
-
     let timeout = setTimeout(() => {
       setCopied(false);
     }, 1500);
@@ -106,20 +105,22 @@ export default function CodeSnippets() {
                 </>
               )}
             </button>
-            <SyntaxHighlighter
-              className="!m-0 h-[450px] overflow-scroll !p-0"
-              language="rust"
-              style={oneDark}
-              showLineNumbers
-              lineNumberStyle={{
-                width: "3.25em",
-                position: "sticky",
-                left: 0,
-                background: "#282C34",
-              }}
-            >
-              {tabs[activeTab].code}
-            </SyntaxHighlighter>
+            <HeightMagic>
+              <SyntaxHighlighter
+                className="!m-0 overflow-scroll !p-0"
+                language={tabs[activeTab].language}
+                style={oneDark}
+                showLineNumbers={tabs[activeTab].showLineNumbers}
+                lineNumberStyle={{
+                  width: "3.25em",
+                  position: "sticky",
+                  left: 0,
+                  background: "#282C34",
+                }}
+              >
+                {tabs[activeTab].code}
+              </SyntaxHighlighter>
+            </HeightMagic>
           </div>
         </div>
       </div>
@@ -158,7 +159,8 @@ $ cargo shuttle deploy
 `.trim();
 
 const USING_SQLX = `
-use rocket::{Build, Rocket};
+use rocket::{get, routes, Build, Rocket, State};
+use shuttle_service::Error;
 use sqlx::PgPool;
 
 struct MyState(PgPool);
@@ -172,14 +174,21 @@ fn hello(state: &State<MyState>) -> &'static str {
 #[shuttle_service::main]
 async fn rocket(
     pool: PgPool
-) -> Result<Rocket<Build>, shuttle_service::Error> {
+) -> Result<Rocket<Build>, Error> {
     let state = MyState(pool);
-    Ok(rocket::build().manage(state).mount("/", routes![hello]))
+
+    Ok(
+        rocket::build()
+            .manage(state)
+            .mount("/", routes![hello])
+    )
 }
+
 `.trim();
 
 const HELLO_CLOUD = `
-use rocket::{Build, Rocket};
+use rocket::{get, routes, Build, Rocket};
+use shuttle_service::Error;
 
 #[get("/hello")]
 fn hello() -> &'static str {
@@ -187,22 +196,27 @@ fn hello() -> &'static str {
 }
 
 #[shuttle_service::main]
-async fn init() -> Result<Rocket<Build>, shuttle_service::Error> {
-    Ok(rocket::build().mount("/", rocket::routes![hello]))
+async fn init() -> Result<Rocket<Build>, Error> {
+    Ok(
+        rocket::build()
+            .mount("/", routes![hello])
+    )
 }
 `.trim();
 
 const USING_AXUM = `
 use axum::{routing::get, Router};
 use sync_wrapper::SyncWrapper;
+use shuttle_service::Error;
 
 async fn hello_world() -> &'static str {
     "Hello, world!"
 }
 
 #[shuttle_service::main]
-async fn axum() -> Result<SyncWrapper<Router>, shuttle_service::Error> {
-    let router = Router::new().route("/hello", get(hello_world));
+async fn axum() -> Result<SyncWrapper<Router>, Error> {
+    let router = Router::new()
+        .route("/hello", get(hello_world));
     let sync_wrapper = SyncWrapper::new(router);
 
     Ok(sync_wrapper)
@@ -210,12 +224,28 @@ async fn axum() -> Result<SyncWrapper<Router>, shuttle_service::Error> {
 `.trim();
 
 const tabs = [
-  { name: "Cargo Deploys", code: CARGO_DEPLOYS },
-  { name: "Hello Cloud", code: HELLO_CLOUD },
-  { name: "Using Sqlx", code: USING_SQLX },
-  { name: "Using Axum", code: USING_AXUM },
+  {
+    name: "Cargo Deploys",
+    code: CARGO_DEPLOYS,
+    showLineNumbers: false,
+    language: void 0,
+  },
+  {
+    name: "Hello Cloud",
+    code: HELLO_CLOUD,
+    showLineNumbers: true,
+    language: "rust",
+  },
+  {
+    name: "Using Sqlx",
+    code: USING_SQLX,
+    showLineNumbers: true,
+    language: "rust",
+  },
+  {
+    name: "Using Axum",
+    code: USING_AXUM,
+    showLineNumbers: true,
+    language: "rust",
+  },
 ];
-
-function classNames(...classes) {
-  return classes.filter(Boolean).join(" ");
-}

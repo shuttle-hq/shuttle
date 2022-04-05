@@ -33,7 +33,7 @@ const cards: Card[] = [
 
 export default function Examples() {
   return (
-    <div className="mx-auto max-w-6xl px-4 pt-16 pb-20 sm:px-6 lg:px-8 lg:pt-24 lg:pb-28">
+    <div id="examples" className="mx-auto max-w-6xl px-4 pt-16 pb-20 sm:px-6 lg:px-8 lg:pt-24 lg:pb-28">
       <div className="text-center">
         <h2 className="text-3xl font-extrabold tracking-tight text-gray-200 sm:text-4xl">
           From code to cloud in a minute

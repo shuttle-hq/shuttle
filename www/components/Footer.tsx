@@ -8,12 +8,12 @@ import { DISCORD_URL, GITHUB_URL, TWITTER_URL } from "../lib/constants";
 import ExternalLink from "./ExternalLink";
 import InternalLink from "./InternalLink";
 
-const navigation = [
-  { name: "Solutions", href: "#" },
-  // { name: "Pricing", href: "#" },
-  { name: "Docs", href: "#" },
-  { name: "Company", href: "#" },
-];
+// const navigation = [
+//   { name: "Solutions", href: "#" },
+//   { name: "Pricing", href: "#" },
+//   { name: "Docs", href: "#" },
+//   { name: "Company", href: "#" },
+// ];
 
 const communities = [
   {
@@ -100,7 +100,7 @@ export default function Footer() {
       <footer className="mx-auto max-w-6xl py-12 px-4 sm:px-6 lg:px-8 ">
         <div className="mt-8 flex flex-col gap-2 sm:flex-row">
           <p className="text-base text-gray-300">&copy; 2022 shuttle</p>
-          <p className="flex gap-2">
+          {/* <p className="flex gap-2">
             {navigation.map((link, index) => (
               <InternalLink
                 key={index}
@@ -110,7 +110,7 @@ export default function Footer() {
                 {link.name}
               </InternalLink>
             ))}
-          </p>
+          </p> */}
           <p className="text-gray-300 sm:ml-auto">
             Backed by
             <span className="relative -bottom-1 mx-2 inline-block text-[20px] leading-none text-white">

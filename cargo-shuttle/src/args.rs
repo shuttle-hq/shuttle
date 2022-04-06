@@ -1,3 +1,9 @@
+use std::{
+    ffi::{OsStr, OsString},
+    fs::canonicalize,
+    path::PathBuf,
+};
+
 use structopt::StructOpt;
 
 #[derive(StructOpt)]
@@ -17,6 +23,8 @@ pub struct Args {
     )]
     /// Run this command against the api at the supplied url
     pub api_url: Option<String>,
+    #[structopt(flatten)]
+    pub project_args: ProjectArgs,
     #[structopt(subcommand)]
     pub cmd: Command,
 }
@@ -51,4 +59,22 @@ pub struct AuthArgs {
 pub struct DeployArgs {
     #[structopt(long, about = "allow dirty working directories to be packaged")]
     pub allow_dirty: bool,
+}
+
+fn parse_working_directory(working_directory: &OsStr) -> Result<PathBuf, OsString> {
+    canonicalize(working_directory)
+        .map_err(|e| format!("could not turn {working_directory:?} into a real path: {e}").into())
+}
+
+// Common args for subcommands that deal with projects.
+#[derive(StructOpt)]
+pub struct ProjectArgs {
+    #[structopt(
+        global = true,
+        long,
+        parse(try_from_os_str = parse_working_directory),
+        default_value = ".",
+        about = "specify the working directory"
+    )]
+    pub working_directory: PathBuf,
 }

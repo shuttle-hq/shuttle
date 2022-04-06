@@ -8,6 +8,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{anyhow, Context, Result};
 use shuttle_common::project::ProjectName;
 
+use crate::args::ProjectArgs;
+
 /// Helper trait for dispatching fs ops for different config files
 pub trait ConfigManager: Sized {
     fn directory(&self) -> PathBuf;
@@ -261,8 +263,8 @@ impl RequestContext {
     ///
     /// Ensures that if either the project file does not exist, or it has not set the `name` key
     /// then the `ProjectConfig` instance has `ProjectConfig.name = Some("crate-name")`.
-    pub fn load_local<P: AsRef<Path>>(&mut self, working_directory: P) -> Result<()> {
-        let local_manager = LocalConfigManager::new(working_directory.as_ref());
+    pub fn load_local(&mut self, project_args: &ProjectArgs) -> Result<()> {
+        let local_manager = LocalConfigManager::new(&project_args.working_directory);
         let mut project = Config::new(local_manager);
         if !project.exists() {
             project.replace(ProjectConfig::default());
@@ -273,7 +275,7 @@ impl RequestContext {
         // Ensure that if name key is not in project config, then we infer from crate name
         let project_name = project.as_mut().unwrap();
         if project_name.name.is_none() {
-            project_name.name = Some(find_crate_name(working_directory)?);
+            project_name.name = Some(find_crate_name(&project_args.working_directory)?);
         }
 
         self.project = Some(project);

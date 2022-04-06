@@ -1,3 +1,9 @@
+use std::{
+    ffi::{OsStr, OsString},
+    fs::canonicalize,
+    path::PathBuf,
+};
+
 use structopt::StructOpt;
 
 #[derive(StructOpt)]
@@ -13,9 +19,9 @@ pub enum Args {
     #[structopt(about = "deploy an shuttle project")]
     Deploy(DeployArgs),
     #[structopt(about = "view the status of an shuttle project")]
-    Status,
+    Status(ProjectArgs),
     #[structopt(about = "delete the latest deployment for a shuttle project")]
-    Delete,
+    Delete(ProjectArgs),
     #[structopt(about = "create user credentials for the shuttle platform")]
     Auth(AuthArgs),
     #[structopt(about = "login to the shuttle platform")]
@@ -38,4 +44,23 @@ pub struct AuthArgs {
 pub struct DeployArgs {
     #[structopt(long, about = "allow dirty working directories to be packaged")]
     pub allow_dirty: bool,
+    #[structopt(flatten)]
+    pub project_args: ProjectArgs,
+}
+
+fn parse_working_directory(working_directory: &OsStr) -> Result<PathBuf, OsString> {
+    canonicalize(working_directory)
+        .map_err(|e| format!("could not turn {working_directory:?} into a real path: {e}").into())
+}
+
+// Common args for subcommands that deal with projects.
+#[derive(StructOpt)]
+pub struct ProjectArgs {
+    #[structopt(
+        long,
+        parse(try_from_os_str = parse_working_directory),
+        default_value = ".",
+        about = "specify the working directory"
+    )]
+    pub working_directory: PathBuf,
 }

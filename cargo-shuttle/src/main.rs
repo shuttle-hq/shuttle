@@ -5,15 +5,15 @@ mod config;
 use crate::args::{Args, AuthArgs, DeployArgs};
 use crate::config::RequestContext;
 use anyhow::{Context, Result};
-use args::LoginArgs;
+use args::{LoginArgs, ProjectArgs};
 use cargo::core::resolver::CliFeatures;
 use cargo::core::Workspace;
 use cargo::ops::{PackageOpts, Packages};
 
 use std::fs::File;
+use std::io;
 use std::io::Write;
 use std::rc::Rc;
-use std::{env, io};
 use structopt::StructOpt;
 
 #[tokio::main]
@@ -38,22 +38,26 @@ impl Shuttle {
     }
 
     pub async fn run(mut self, args: Args) -> Result<()> {
-        if matches!(args, Args::Deploy(..) | Args::Delete | Args::Status) {
-            self.load_project()?;
-        }
-
         match args {
-            Args::Deploy(deploy_args) => self.deploy(deploy_args).await,
-            Args::Status => self.status().await,
-            Args::Delete => self.delete().await,
+            Args::Deploy(deploy_args) => {
+                self.load_project(&deploy_args.project_args)?;
+                self.deploy(deploy_args).await
+            }
+            Args::Status(project_args) => {
+                self.load_project(&project_args)?;
+                self.status().await
+            }
+            Args::Delete(project_args) => {
+                self.load_project(&project_args)?;
+                self.delete().await
+            }
             Args::Auth(auth_args) => self.auth(auth_args).await,
             Args::Login(login_args) => self.login(login_args).await,
         }
     }
 
-    pub fn load_project(&mut self) -> Result<()> {
-        let working_directory = env::current_dir()?;
-        self.ctx.load_local(working_directory)
+    pub fn load_project(&mut self, project_args: &ProjectArgs) -> Result<()> {
+        self.ctx.load_local(project_args)
     }
 
     async fn login(&mut self, login_args: LoginArgs) -> Result<()> {

@@ -261,8 +261,9 @@ impl RequestContext {
 
     /// Load the project configuration at the given `working_directory`
     ///
-    /// Ensures that if either the project file does not exist, or it has not set the `name` key
-    /// then the `ProjectConfig` instance has `ProjectConfig.name = Some("crate-name")`.
+    /// Ensures that if `--name` is not specified on the command-line, and either the project
+    /// file does not exist, or it has not set the `name` key then the `ProjectConfig` instance
+    /// has `ProjectConfig.name = Some("crate-name")`.
     pub fn load_local(&mut self, project_args: &ProjectArgs) -> Result<()> {
         let local_manager = LocalConfigManager::new(&project_args.working_directory);
         let mut project = Config::new(local_manager);
@@ -272,11 +273,15 @@ impl RequestContext {
             project.open()?;
         };
 
-        // Ensure that if name key is not in project config, then we infer from crate name
-        let project_name = project.as_mut().unwrap();
-        if project_name.name.is_none() {
-            project_name.name = Some(find_crate_name(&project_args.working_directory)?);
-        }
+        let config = project.as_mut().unwrap();
+        match (&project_args.name, &config.name) {
+            // Command-line name parameter trumps everything
+            (Some(name_from_args), _) => config.name = Some(name_from_args.clone()),
+            // If key exists in config then keep it as it is
+            (None, Some(_)) => {}
+            // If name key is not in project config, then we infer from crate name
+            (None, None) => config.name = Some(find_crate_name(&project_args.working_directory)?),
+        };
 
         self.project = Some(project);
 

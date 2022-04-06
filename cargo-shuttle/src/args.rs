@@ -4,6 +4,7 @@ use std::{
     path::PathBuf,
 };
 
+use shuttle_common::project::ProjectName;
 use structopt::StructOpt;
 
 #[derive(StructOpt)]
@@ -63,4 +64,6 @@ pub struct ProjectArgs {
         about = "specify the working directory"
     )]
     pub working_directory: PathBuf,
+    #[structopt(long, about = "specify the name of the project (overrides crate name)")]
+    pub name: Option<ProjectName>,
 }

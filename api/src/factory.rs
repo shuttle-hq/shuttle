@@ -19,4 +19,8 @@ impl Factory for ShuttleFactory<'_> {
         debug!("giving a sql connection string: {}", conn_str);
         Ok(conn_str)
     }
+
+    fn get_secret(&self, _key: &str) -> Result<String, shuttle_service::Error> {
+        unimplemented!()
+    }
 }

@@ -495,9 +495,15 @@ impl DeploymentSystem {
                     ..
                 }) = lock.take()
                 {
+                    if let Some(f) = *shutdown_handle {
+                        // TODO: ideally it would receive feedback regarding shutdown
+                        // finalization, and only then we'd move to aborting the thread
+                        // TODO: error handling
+                        f.send(true).ok();
+                    }
+                    // QUESTION: why abort thread instead of stopping the runtime?
                     handle.abort();
                     tokio::spawn(async move {
-                        shutdown_handle();
                         so.close().unwrap();
                     });
                 }
@@ -619,7 +625,7 @@ impl DeploymentState {
         port: Port,
         handle: ServeHandle,
         db_state: database::State,
-        shutdown_handle: fn(),
+        shutdown_handle: Box<Option<tokio::sync::oneshot::Sender<bool>>>,
     ) -> Self {
         Self::Deployed(DeployedState {
             so,
@@ -656,5 +662,5 @@ struct DeployedState {
     port: Port,
     handle: ServeHandle,
     db_state: database::State,
-    shutdown_handle: fn(),
+    shutdown_handle: Box<Option<tokio::sync::oneshot::Sender<bool>>>,
 }

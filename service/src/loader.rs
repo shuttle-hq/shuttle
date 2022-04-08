@@ -25,6 +25,8 @@ pub struct Loader {
     so: Library,
 }
 
+type ShutdownHandle = Box<Option<tokio::sync::oneshot::Sender<bool>>>;
+
 impl Loader {
     /// Dynamically load from a `.so` file a value of a type implementing the
     /// [`Service`] trait. Relies on the `.so` library having an ``extern "C"`
@@ -50,8 +52,9 @@ impl Loader {
         self,
         factory: &mut dyn Factory,
         addr: SocketAddr,
-    ) -> Result<(ServeHandle, Library, fn()), Error> {
+    ) -> Result<(ServeHandle, Library, ShutdownHandle), Error> {
         let mut service = self.service;
+        let shutdown_handle = service.shutdown_handle();
 
         service.build(factory)?;
 
@@ -60,9 +63,8 @@ impl Loader {
         let handle = tokio::task::spawn_blocking(move || service.bind(addr));
 
         // i want this
-        // let shutdown_handle = || service.shutdown();
         // this is just a mock
-        let shutdown_handle = || {};
+        // let shutdown_handle = || {};
 
         Ok((handle, self.so, shutdown_handle))
     }

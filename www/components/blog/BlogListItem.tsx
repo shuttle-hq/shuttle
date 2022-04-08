@@ -18,7 +18,7 @@ export default function BlogListItem({ post }: Props): JSX.Element {
           <div className="flex flex-col space-y-6">
             <div className="flex flex-col space-y-3">
               <div
-                className={`relative mb-4 h-60 w-full overflow-auto rounded shadow-md`}
+                className={`relative mb-4 aspect-[4/3] w-full overflow-auto rounded shadow-md`}
               >
                 <Image
                   layout="fill"

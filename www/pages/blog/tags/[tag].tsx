@@ -50,7 +50,7 @@ export default function TagBlogsPage(props: Props) {
         description="Latest news from the shuttle team."
       />
 
-      <div className="container mx-auto px-8 py-16 sm:px-16 xl:px-20">
+      <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 lg:px-8">
         <div className="flex space-x-1">
           <p className="cursor-pointer">
             <InternalLink href="/blog">Blog</InternalLink>

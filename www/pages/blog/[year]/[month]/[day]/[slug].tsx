@@ -186,7 +186,7 @@ export default function BlogPostPage(props: Props) {
                               <div className="w-10">
                                 <Image
                                   src={author.author_image_url}
-                                  className="dark:border-dark rounded-full border"
+                                  className="rounded-full border"
                                   width="100%"
                                   height="100%"
                                   layout="responsive"
@@ -213,7 +213,7 @@ export default function BlogPostPage(props: Props) {
               {/* Content */}
               <div className="col-span-12 lg:col-span-7 xl:col-span-7">
                 {props.blog.thumb && (
-                  <div className="relative mb-8 h-96 w-full overflow-auto rounded">
+                  <div className="relative mb-8 aspect-[4/3] overflow-auto rounded">
                     <Image
                       src={"/images/blog/" + props.blog.thumb}
                       layout="fill"
@@ -302,31 +302,33 @@ export default function BlogPostPage(props: Props) {
                       </div>
                     </div>
                   </div>
-                  <div>
-                    <div className="mb-4 text-gray-200">Related articles</div>
+                  {props.relatedPosts.length > 0 ? (
+                    <div>
+                      <div className="mb-4 text-gray-200">Related articles</div>
 
-                    <div className="flex flex-col gap-2 space-y-3">
-                      {props.relatedPosts.map((post, index) => (
-                        <InternalLink
-                          href={`/blog/${post.url}`}
-                          key={index}
-                          className="flex gap-2 text-sm text-gray-300 hover:text-gray-200"
-                        >
-                          <DocumentTextIcon className="mt-[2px] h-4 w-4 flex-shrink-0" />
+                      <div className="flex flex-col gap-2 space-y-3">
+                        {props.relatedPosts.map((post, index) => (
+                          <InternalLink
+                            href={`/blog/${post.url}`}
+                            key={index}
+                            className="flex gap-2 text-sm text-gray-300 hover:text-gray-200"
+                          >
+                            <DocumentTextIcon className="mt-[2px] h-4 w-4 flex-shrink-0" />
 
-                          <span>{post.title}</span>
-                        </InternalLink>
-                      ))}
-                      <div className="mt-2">
-                        <InternalLink
-                          href={`/blog`}
-                          className="cursor-pointer text-sm text-gray-300 hover:text-gray-200"
-                        >
-                          View all posts
-                        </InternalLink>
+                            <span>{post.title}</span>
+                          </InternalLink>
+                        ))}
+                        <div className="mt-2">
+                          <InternalLink
+                            href={`/blog`}
+                            className="cursor-pointer text-sm text-gray-300 hover:text-gray-200"
+                          >
+                            View all posts
+                          </InternalLink>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -347,7 +349,7 @@ export default function BlogPostPage(props: Props) {
 //   return (
 //     <InternalLink href={`/blog/${post.url}`}>
 //       <div className={className}>
-//         <div className="border-scale-500 hover:bg-scale-100 dark:hover:bg-scale-300 cursor-pointer rounded border p-6 transition">
+//         <div className="border-scale-500 hover:bg-scale-100 cursor-pointer rounded border p-6 transition">
 //           <div className="space-y-4">
 //             <div>
 //               <p className="text-scale-900 text-sm">{label}</p>

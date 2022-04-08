@@ -158,7 +158,7 @@ function FeaturedThumb({ post }: FeaturedThumbProps) {
         href={`/blog/${post.url}`}
         className="grid gap-8 lg:grid-cols-2 lg:gap-16"
       >
-        <div className="relative h-96 w-full overflow-auto rounded">
+        <div className="relative aspect-[4/3] w-full overflow-auto rounded">
           <Image
             src={`/images/blog/` + (post.thumb ?? post.image)}
             layout="fill"

@@ -4,8 +4,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "fmt": "prettier --write *.yaml *.ts *.js *.json *.md {styles,pages,lib,components,_blog}/**",
-    "postbuild": "next-sitemap"
+    "fmt": "prettier --write *.{yaml,js,json,md} {styles,pages,lib,components,_blog}/**",
+    "make": "yarn make:sitemap; yarn make:rss",
+    "make:rss": "ts-node --skipProject --transpileOnly --esm lib/make-rss.ts",
+    "make:sitemap": "next-sitemap",
+    "postbuild": "yarn make"
   },
   "dependencies": {
     "@auth0/nextjs-auth0": "^1.7.0",
@@ -37,7 +40,8 @@
     "react-use": "^17.3.2",
     "rehype-slug": "^5.0.1",
     "remark-gfm": "^3.0.1",
-    "sass": "^1.32.8"
+    "sass": "^1.32.8",
+    "ts-node": "^10.7.0"
   },
   "devDependencies": {
     "@types/node": "^17.0.21",

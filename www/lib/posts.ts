@@ -3,7 +3,6 @@ import path from "path";
 import matter from "gray-matter";
 import { generateReadingTime } from "./helpers";
 import { MDXRemoteSerializeResult } from "next-mdx-remote";
-import authors, { Author } from "./authors";
 
 // substring amount for file names
 // based on YYYY-MM-DD format
@@ -14,7 +13,7 @@ const POST_DIRECTORY = path.join(process.cwd(), "_blog");
 export interface Post {
   readonly slug?: string;
   readonly title: string;
-  readonly date?: string;
+  readonly date: string;
   readonly coverImage?: string;
   readonly author?: string;
   readonly author_url?: string;

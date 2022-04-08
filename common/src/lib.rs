@@ -14,16 +14,17 @@ pub const SHUTTLE_PROJECT_HEADER: &str = "Shuttle-Project";
 
 #[cfg(debug_assertions)]
 lazy_static! {
-    pub static ref API_URL: String =
+    pub static ref API_URL_DEFAULT: String =
         std::env::var("SHUTTLE_API").unwrap_or_else(|_| "http://localhost:8001".to_string());
 }
 
 #[cfg(not(debug_assertions))]
 lazy_static! {
-    pub static ref API_URL: String = "https://api.shuttle.rs".to_string();
+    pub static ref API_URL_DEFAULT: String = "https://api.shuttle.rs".to_string();
 }
 
 pub type ApiKey = String;
+pub type ApiUrl = String;
 pub type Host = String;
 pub type DeploymentId = Uuid;
 pub type Port = u16;

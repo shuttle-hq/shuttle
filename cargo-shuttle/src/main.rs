@@ -82,7 +82,7 @@ impl Shuttle {
     }
 
     async fn auth(&mut self, auth_args: AuthArgs) -> Result<()> {
-        let api_key = client::auth(auth_args.username)
+        let api_key = client::auth(self.ctx.api_url(), auth_args.username)
             .await
             .context("failed to retrieve api key")?;
         self.ctx.set_api_key(api_key)?;
@@ -90,24 +90,37 @@ impl Shuttle {
     }
 
     async fn delete(&self) -> Result<()> {
-        client::delete(self.ctx.api_key()?, self.ctx.project_name())
-            .await
-            .context("failed to delete deployment")
+        client::delete(
+            self.ctx.api_url(),
+            self.ctx.api_key()?,
+            self.ctx.project_name(),
+        )
+        .await
+        .context("failed to delete deployment")
     }
 
     async fn status(&self) -> Result<()> {
-        client::status(self.ctx.api_key()?, self.ctx.project_name())
-            .await
-            .context("failed to get status of deployment")
+        client::status(
+            self.ctx.api_url(),
+            self.ctx.api_key()?,
+            self.ctx.project_name(),
+        )
+        .await
+        .context("failed to get status of deployment")
     }
 
     async fn deploy(&self, args: DeployArgs) -> Result<()> {
         let package_file = self
             .run_cargo_package(args.allow_dirty)
             .context("failed to package cargo project")?;
-        client::deploy(package_file, self.ctx.api_key()?, self.ctx.project_name())
-            .await
-            .context("failed to deploy cargo project")
+        client::deploy(
+            package_file,
+            self.ctx.api_url(),
+            self.ctx.api_key()?,
+            self.ctx.project_name(),
+        )
+        .await
+        .context("failed to deploy cargo project")
     }
 
     // Packages the cargo project and returns a File to that file

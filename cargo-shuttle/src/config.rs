@@ -1,6 +1,6 @@
 use cargo_metadata::MetadataCommand;
 use serde::{Deserialize, Serialize};
-use shuttle_common::ApiKey;
+use shuttle_common::{ApiKey, ApiUrl, API_URL_DEFAULT};
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -117,6 +117,7 @@ impl ConfigManager for LocalConfigManager {
 #[derive(Deserialize, Serialize, Default)]
 pub struct GlobalConfig {
     pub api_key: Option<ApiKey>,
+    pub api_url: Option<ApiUrl>,
 }
 
 impl GlobalConfig {
@@ -126,6 +127,10 @@ impl GlobalConfig {
 
     pub fn set_api_key(&mut self, api_key: ApiKey) -> Option<ApiKey> {
         self.api_key.replace(api_key)
+    }
+
+    pub fn api_url(&self) -> Option<ApiKey> {
+        self.api_url.clone()
     }
 }
 
@@ -272,6 +277,14 @@ impl RequestContext {
         self.project = Some(project);
 
         Ok(())
+    }
+
+    pub fn api_url(&self) -> ApiUrl {
+        if let Some(api_url) = self.global.as_ref().unwrap().api_url() {
+            api_url
+        } else {
+            API_URL_DEFAULT.to_string()
+        }
     }
 
     /// Get the API key from the global configuration. Returns an error if API key not set in there.

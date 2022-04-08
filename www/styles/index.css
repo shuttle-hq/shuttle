@@ -1,3 +1,6 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@import "prism-themes/themes/prism-one-dark.css";
+@import "@fortawesome/fontawesome-svg-core/styles.css";

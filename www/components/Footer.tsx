@@ -97,7 +97,7 @@ export default function Footer() {
         </div>
       </div> */}
 
-      <footer className="mx-auto max-w-6xl py-12 px-4 sm:px-6 lg:px-8 ">
+      <footer className="mx-auto max-w-6xl py-12 px-4 sm:px-6 lg:px-8">
         <div className="mt-8 flex flex-col gap-2 sm:flex-row">
           <p className="text-base text-gray-300">&copy; 2022 shuttle</p>
           {/* <p className="flex gap-2">

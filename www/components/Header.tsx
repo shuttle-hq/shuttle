@@ -1,7 +1,6 @@
 import { useRouter } from "next/router";
 import { useApiKeyModalState } from "./ApiKeyModal";
 import { useUser } from "@auth0/nextjs-auth0";
-import Link from "next/link";
 import InternalLink from "./InternalLink";
 import { SHUTTLE_DOCS_URL } from "../lib/constants";
 import ExternalLink from "./ExternalLink";
@@ -10,6 +9,7 @@ const navigation = [
   { name: "Features", href: "#features", internal: true },
   { name: "Examples", href: "#examples", internal: true },
   { name: "Docs", href: SHUTTLE_DOCS_URL, internal: false },
+  { name: "Blog", href: "/blog", internal: true },
 ];
 
 export default function Header() {

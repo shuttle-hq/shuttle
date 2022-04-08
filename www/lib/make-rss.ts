@@ -20,7 +20,7 @@ const rssXML = (posts: readonly Post[]): string => `
     <description>Latest news from ${APP_NAME}</description>
     <language>en</language>
     <lastBuildDate>${new Date(posts[0].date).toUTCString()}</lastBuildDate>
-    <atom:link href="${SITE_URL}blog/rss.xml" rel="self" type="application/rss+xml"/>
+    <atom:link href="${SITE_URL}/rss.xml" rel="self" type="application/rss+xml"/>
     ${posts.map(postXML).join("")}
   </channel>
 </rss>

@@ -45,16 +45,16 @@ pub struct DeploymentMeta {
 }
 
 impl DeploymentMeta {
-    pub fn queued(project: ProjectName) -> Self {
-        Self::new(project, DeploymentStateMeta::Queued)
+    pub fn queued(fqdn: &str, project: ProjectName) -> Self {
+        Self::new(fqdn, project, DeploymentStateMeta::Queued)
     }
 
-    pub fn built(project: ProjectName) -> Self {
-        Self::new(project, DeploymentStateMeta::Built)
+    pub fn built(fqdn: &str, project: ProjectName) -> Self {
+        Self::new(fqdn, project, DeploymentStateMeta::Built)
     }
 
-    fn new(project: ProjectName, state: DeploymentStateMeta) -> Self {
-        let host = Self::create_host(&project);
+    fn new(fqdn: &str, project: ProjectName, state: DeploymentStateMeta) -> Self {
+        let host = Self::create_host(fqdn, &project);
         Self {
             id: Uuid::new_v4(),
             project,
@@ -67,8 +67,8 @@ impl DeploymentMeta {
         }
     }
 
-    pub fn create_host(project_name: &ProjectName) -> Host {
-        format!("{}.shuttleapp.rs", project_name)
+    pub fn create_host(fqdn: &str, project_name: &ProjectName) -> Host {
+        format!("{}.{}", project_name, fqdn)
     }
 }
 

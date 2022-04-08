@@ -3,7 +3,7 @@ title: Building a startup with Rust
 description: This blog post is a compilation of thoughts around building a company with Rust
 author: christoshadjiaslanis
 tags: [rust, startup]
-thumb: rust.jpeg
+thumb: ferris.png
 date: "2022-04-08T14:30:00"
 ---
 
@@ -34,9 +34,9 @@ server costs, ecosystem, tooling, support, licenses etc. You can assign weights
 to what is most important for your business, but at the end of the day the
 decision is inevitably qualitative.
 
-At Synth, we're working on building the best data generator in the world. We
-made a conscious decision to use Rust for our main line of products. After more
-than a year of building I've had the opportunity to see Rust at its best and
+At `shuttle`, we're building a serverless platform for Rust. We
+made a conscious decision to write the platform itself in Rust as well. After more
+than a two years of building I've had the opportunity to see Rust at its best and
 worst in the context of starting a company - this post is a compilation of
 these (at times cynical) thoughts.
 
@@ -99,13 +99,6 @@ C++. They want to work with Rust because it's great.
 
 ## Open Source
 
-At Synth, we've chosen to adopt an open-core business model. The idea behind an
-open-core business is you develop and open source product with a permissive
-license which solves a real _technical_ problem. You work on building a user
-base, a community and a great product all out in the open. You then structure
-your business model around solving the corresponding _organisational_ problem -
-and that's how you make money.
-
 We've been really lucky to have a really active set of contributors - giving
 ideas, reporting bugs and contributing (at times very significant) code. It is
 hard to know for sure, but we have a strong hunch that a lot of the contributors
@@ -124,8 +117,8 @@ Rust has an ecosystem of incredibly high quality libraries. The Rust core team
 has led by example and focused on a high quality and tight standard
 library. The result of a highly focused standard library is (unfortunately) a
 lack of canonical libraries for doing things outside the standard library. So
-you want a webserver, pick from one of the 100s available. You want a crate (
-Rust lingo for library) for working with JWT tokens? Here's 9, pick one. I mean,
+you want a webserver, pick from one of the 100s available. You want a crate
+(Rust lingo for library) for working with JWT tokens? Here's 9, pick one. I mean,
 even something as fundamental as an asynchronous runtime is split
 between `tokio` and `async-std` and others. As a young rustacean this can
 be overwhelming.
@@ -156,6 +149,6 @@ make rapid iterations is so important for an early stage startup that it
 outweighs a lot of the benefits that Rust brings to the table.
 
 If your company is later stage, and you now understand exactly what you should
-be building (assuming this is every the case) then I would say yes. The
+be building (assuming this is ever the case) then I would say yes. The
 'correctness' of Rust programs and the propensity of Rust to attract great
 engineers can help in building a great engineering culture and a great company.

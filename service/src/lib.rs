@@ -271,6 +271,9 @@ pub trait Service: Send + Sync {
     ///
     /// The deployer expects this instance of [Service][Service] to bind to the passed [SocketAddr][SocketAddr].
     fn bind(&mut self, addr: SocketAddr) -> Result<(), error::Error>;
+    fn shutdown(&mut self) -> Result<(), error::Error> {
+        Ok(())
+    }
 }
 
 /// A convenience trait for handling out of the box conversions into [Service][Service] instances.
@@ -371,6 +374,7 @@ pub struct SimpleService<T> {
     service: Option<T>,
     builder: Option<StateBuilder<T>>,
     runtime: Runtime,
+    shutdown_handler: Option<tokio::sync::oneshot::Sender<bool>>,
 }
 
 impl<T> IntoService
@@ -385,6 +389,7 @@ where
             service: None,
             builder: Some(self),
             runtime: Runtime::new().unwrap(),
+            shutdown_handler: None,
         }
     }
 }
@@ -403,7 +408,9 @@ impl Service for SimpleService<rocket::Rocket<rocket::Build>> {
     }
 
     fn bind(&mut self, addr: SocketAddr) -> Result<(), error::Error> {
-        let rocket = self.service.take().expect("service has already been bound");
+        let mut rocket = self.service.take().expect("service has already been bound");
+        let (tx, rx) = tokio::sync::oneshot::channel::<bool>();
+        self.shutdown_handler = Some(tx);
 
         let config = rocket::Config {
             address: addr.ip(),
@@ -411,11 +418,36 @@ impl Service for SimpleService<rocket::Rocket<rocket::Build>> {
             log_level: rocket::config::LogLevel::Normal,
             ..Default::default()
         };
+        rocket = rocket.attach(rocket::fairing::AdHoc::on_liftoff("Shutdown", |rocket| {
+            Box::pin(async move {
+                let shutdown = rocket.shutdown();
+                tokio::spawn(async move {
+                    if let Ok(_v) = rx.await {
+                        shutdown.notify();
+                    }
+                });
+            })
+        }));
+
         let launched = rocket.configure(config).launch();
         self.runtime
             .block_on(launched)
             .map_err(error::CustomError::new)?;
         Ok(())
+    }
+
+    fn shutdown(&mut self) -> Result<(), Error> {
+        let handler = self.shutdown_handler.take();
+        match handler {
+            Some(sender) => {
+                if let Ok(_) = sender.send(true) {
+                    return Ok(());
+                } else {
+                    return Ok(());
+                }
+            }
+            None => Ok(()),
+        }
     }
 }
 

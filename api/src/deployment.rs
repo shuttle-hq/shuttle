@@ -177,7 +177,7 @@ impl Deployment {
                                     debug!("{}: factory phase FAILED: {:?}", meta.project, e);
                                     DeploymentState::Error(e.into())
                                 }
-                                Ok((handle, so)) => {
+                                Ok((handle, so, shutdown_handle)) => {
                                     debug!("{}: factory phase DONE", meta.project);
                                     // Remove stale active deployments
                                     if let Some(stale_id) =
@@ -187,7 +187,13 @@ impl Deployment {
                                         context.deployments.write().await.remove(&stale_id);
                                     }
 
-                                    DeploymentState::deployed(so, port, handle, db_state)
+                                    DeploymentState::deployed(
+                                        so,
+                                        port,
+                                        handle,
+                                        db_state,
+                                        shutdown_handle,
+                                    )
                                 }
                             }
                         }
@@ -482,9 +488,16 @@ impl DeploymentSystem {
                 // library when the runtime gets around to it.
 
                 let mut lock = deployment.state.write().await;
-                if let DeploymentState::Deployed(DeployedState { so, handle, .. }) = lock.take() {
+                if let DeploymentState::Deployed(DeployedState {
+                    so,
+                    handle,
+                    shutdown_handle,
+                    ..
+                }) = lock.take()
+                {
                     handle.abort();
                     tokio::spawn(async move {
+                        shutdown_handle();
                         so.close().unwrap();
                     });
                 }
@@ -601,12 +614,19 @@ impl DeploymentState {
         Self::Loaded(loader)
     }
 
-    fn deployed(so: Library, port: Port, handle: ServeHandle, db_state: database::State) -> Self {
+    fn deployed(
+        so: Library,
+        port: Port,
+        handle: ServeHandle,
+        db_state: database::State,
+        shutdown_handle: fn(),
+    ) -> Self {
         Self::Deployed(DeployedState {
             so,
             port,
             handle,
             db_state,
+            shutdown_handle,
         })
     }
 
@@ -636,4 +656,5 @@ struct DeployedState {
     port: Port,
     handle: ServeHandle,
     db_state: database::State,
+    shutdown_handle: fn(),
 }

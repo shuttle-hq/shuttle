@@ -50,7 +50,7 @@ impl Loader {
         self,
         factory: &mut dyn Factory,
         addr: SocketAddr,
-    ) -> Result<(ServeHandle, Library), Error> {
+    ) -> Result<(ServeHandle, Library, fn()), Error> {
         let mut service = self.service;
 
         service.build(factory)?;
@@ -59,7 +59,12 @@ impl Loader {
         // however that does not completely makes sense as the blocking call is made on another runtime.
         let handle = tokio::task::spawn_blocking(move || service.bind(addr));
 
-        Ok((handle, self.so))
+        // i want this
+        // let shutdown_handle = || service.shutdown();
+        // this is just a mock
+        let shutdown_handle = || {};
+
+        Ok((handle, self.so, shutdown_handle))
     }
 }
 

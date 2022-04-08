@@ -36,7 +36,7 @@ const communities = [
 export default function Footer() {
   return (
     <>
-      <div className="hidden fixed right-8 bottom-16 md:flex flex-col rounded-full bg-[#252738] shadow-xl">
+      <div className="fixed right-8 bottom-16 hidden flex-col rounded-full bg-[#252738] shadow-xl md:flex">
         {communities.map((community, index) => (
           <ExternalLink
             key={index}

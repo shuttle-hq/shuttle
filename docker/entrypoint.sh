@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 
+if [ -z $API_FQDN ]
+then
+    echo "The variable 'API_FQDN' is missing"
+    exit 1
+fi
+
 export PG_VERSION=${PG_VERSION:-11}
 
 export PG_CLUSTER_NAME=${PG_CLUSTER_NAME:-shuttle}

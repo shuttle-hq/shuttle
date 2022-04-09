@@ -17,6 +17,7 @@ jobs:
           toolchain: stable
           override: true
           components: rustfmt
+      - uses: Swatinem/rust-cache@v1
       - run: cargo fmt --all -- --check
   clippy_test:
     runs-on: ubuntu-latest
@@ -27,4 +28,5 @@ jobs:
           toolchain: stable
           override: true
           components: clippy
+      - uses: Swatinem/rust-cache@v1
       - run: cargo clippy --tests --all-targets --all-features -- --D warnings

@@ -23,4 +23,5 @@ jobs:
         with:
           toolchain: stable
           override: true
+      - uses: Swatinem/rust-cache@v1
       - run: cargo test --all-features -- --nocapture

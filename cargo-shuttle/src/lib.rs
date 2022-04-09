@@ -1,4 +1,4 @@
-mod args;
+pub mod args;
 mod client;
 pub mod config;
 

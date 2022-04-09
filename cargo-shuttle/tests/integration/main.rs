@@ -1,3 +1,5 @@
+mod config;
+
 use assert_cmd::Command;
 
 /// creates a `cargo-shuttle` Command instance with some reasonable defaults set.

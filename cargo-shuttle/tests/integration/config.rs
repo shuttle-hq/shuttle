@@ -1,9 +1,6 @@
 use std::{path::PathBuf, str::FromStr};
 
-use cargo_shuttle::{
-    args::ProjectArgs,
-    config::{Config, LocalConfigManager, ProjectConfig, RequestContext},
-};
+use cargo_shuttle::{args::ProjectArgs, config::RequestContext};
 use shuttle_common::project::ProjectName;
 
 fn path_from_workspace_root(path: &str) -> PathBuf {

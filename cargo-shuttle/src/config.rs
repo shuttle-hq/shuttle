@@ -142,6 +142,7 @@ pub struct ProjectConfig {
 ///
 /// # Usage
 /// ```rust,no_run
+///# use cargo_shuttle::config::{Config, GlobalConfigManager, GlobalConfig};
 /// let mut config = Config::new(GlobalConfigManager);
 /// config.open().unwrap();
 /// let content: &GlobalConfig = config.as_ref().unwrap();

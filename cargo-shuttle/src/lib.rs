@@ -1,6 +1,6 @@
 mod args;
 mod client;
-mod config;
+pub mod config;
 
 use crate::args::{AuthArgs, DeployArgs};
 use crate::config::RequestContext;

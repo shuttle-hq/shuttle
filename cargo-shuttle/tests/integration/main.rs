@@ -32,3 +32,25 @@ fn network_support_is_intentionally_broken_in_tests() {
         "builder error: relative URL without a base",
     ));
 }
+
+#[test]
+fn fails_if_working_directory_does_not_exist() {
+    let mut cmd = cargo_shuttle_command();
+    cmd.arg("status")
+        .arg("--working-directory=/path_that_does_not_exist")
+        .assert()
+        .stderr(
+            predicates::str::contains(r#"error: Invalid value for '--working-directory <working-directory>': could not turn "/path_that_does_not_exist" into a real path: No such file or directory (os error 2)"#),
+        );
+}
+
+#[test]
+fn fails_if_working_directory_not_part_of_cargo_workspace() {
+    let mut cmd = cargo_shuttle_command();
+    cmd.arg("status")
+        .arg("--working-directory=/")
+        .assert()
+        .stderr(predicates::str::contains(
+            r#"error: could not find `Cargo.toml` in `/` or any parent directory"#,
+        ));
+}

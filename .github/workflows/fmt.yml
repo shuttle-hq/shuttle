@@ -2,7 +2,7 @@ name: cargo-fmt
 
 on:
   pull_request:
-    branches: [main]
+    branches: ["*"]
     paths: ["**/*.rs"]
 
   workflow_dispatch:

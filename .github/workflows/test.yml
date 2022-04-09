@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths: ["**/*.rs", "**/Cargo.toml"]
   pull_request:
-    branches: [main]
+    branches: ["*"]
     paths: ["**/*.rs", "**/Cargo.toml"]
 
   workflow_dispatch:

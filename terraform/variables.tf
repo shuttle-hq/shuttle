@@ -31,5 +31,4 @@ variable "proxy_container_port" {
 variable "proxy_fqdn" {
   type = string
   description = "The top level domain where deployed service can be reached at"
-  nullable = false
 }

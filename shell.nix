@@ -6,7 +6,6 @@ in
   stdenv.mkDerivation {
     name = "moz_overlay_shell";
     nativeBuildInputs = with nixpkgs; [
-      latest.rustChannels.stable.rust
       openssl
       pkg-config
     ];
@@ -14,5 +13,7 @@ in
       latest.rustChannels.stable.rust
       rust-analyzer
       cargo-watch
+      terraform
+      awscli2
     ];
   }

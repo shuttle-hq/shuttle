@@ -158,7 +158,7 @@ impl Api {
             "-e",
             "API_PORT=8001",
             "-e",
-            "API_FQDN=shutlleapp.test",
+            "PROXY_FQDN=shutlleapp.test",
             "-e",
             "SHUTTLE_USERS_TOML=/config/users.toml",
             "-v",

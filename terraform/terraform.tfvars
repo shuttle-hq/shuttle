@@ -1,1 +1,1 @@
-api_fqdn = "shuttleapp.rs"
+proxy_fqdn = "shuttleapp.rs"

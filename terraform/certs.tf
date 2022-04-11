@@ -1,12 +1,12 @@
 data "aws_route53_zone" "user" {
-  name = "${var.api_fqdn}."
+  name = "${var.proxy_fqdn}."
 }
 
 resource "aws_acm_certificate" "user" {
-  domain_name = var.api_fqdn
+  domain_name = var.proxy_fqdn
 
   subject_alternative_names = [
-    "*.${var.api_fqdn}"
+    "*.${var.proxy_fqdn}"
   ]
 
   validation_method = "DNS"

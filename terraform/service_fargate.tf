@@ -75,8 +75,8 @@ resource "aws_ecs_task_definition" "api" {
           value = tostring(var.proxy_container_port)
         },
         {
-          name = "API_FQDN",
-          value = var.api_fqdn
+          name = "PROXY_FQDN",
+          value = var.proxy_fqdn
         },
         {
           name = "PG_PORT",

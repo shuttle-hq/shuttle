@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
-if [ -z $API_FQDN ]
+if [ -z $PROXY_FQDN ]
 then
-    echo "The variable 'API_FQDN' is missing"
+    echo "The variable 'PROXY_FQDN' is missing"
     exit 1
 fi
 

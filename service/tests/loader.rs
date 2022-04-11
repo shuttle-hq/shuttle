@@ -78,9 +78,9 @@ async fn sleep_async() {
 
     let mut factory = DummyFactory::new();
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
-    let (handler, _) = loader.load(&mut factory, addr).unwrap();
+    let Loader { thread_handle, .. } = loader.load(&mut factory, addr).unwrap();
 
-    handler.await.unwrap().unwrap();
+    thread_handle.unwrap().await.unwrap().unwrap();
 }
 
 #[tokio::test]
@@ -105,7 +105,7 @@ async fn sqlx_pool() {
     instance.wait_for_connectable().await;
 
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
-    let (handler, _) = loader.load(&mut factory, addr).unwrap();
+    let Loader { thread_handle, .. } = loader.load(&mut factory, addr).unwrap();
 
-    handler.await.unwrap().unwrap();
+    thread_handle.unwrap().await.unwrap().unwrap();
 }

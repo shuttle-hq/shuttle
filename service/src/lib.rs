@@ -149,11 +149,10 @@
 //! You can also [open an issue or a discussion on GitHub](https://github.com/getsynth/shuttle).
 //!
 
-use std::future::Future;
 use std::net::SocketAddr;
-use std::pin::Pin;
 
 use async_trait::async_trait;
+use futures::future::BoxFuture;
 use tokio::runtime::Runtime;
 
 pub mod error;
@@ -270,10 +269,13 @@ pub trait Service: Send + Sync {
     /// This function is run exactly once on each instance of a deployment.
     ///
     /// The deployer expects this instance of [Service][Service] to bind to the passed [SocketAddr][SocketAddr].
-    fn bind(&mut self, addr: SocketAddr) -> Result<(), error::Error>;
-    fn shutdown_handle(&mut self) -> Box<Option<tokio::sync::oneshot::Sender<bool>>> {
+    fn bind(&mut self, addr: SocketAddr) -> Result<(), Error>;
+    fn shutdown(&mut self) -> Result<(), error::Error> {
         // TODO: get rid of the default
-        Box::new(Some(tokio::sync::oneshot::channel::<bool>().0))
+        Ok(())
+    }
+    fn get_runtime(&mut self) -> Option<tokio::runtime::Runtime> {
+        None
     }
 }
 
@@ -286,8 +288,7 @@ pub trait IntoService {
     fn into_service(self) -> Self::Service;
 }
 
-pub type StateBuilder<T> =
-    fn(&mut dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>;
+pub type StateBuilder<T> = fn(&mut dyn Factory) -> BoxFuture<Result<T, Error>>;
 
 #[cfg(feature = "web-rocket")]
 /// A convenience struct for building a [Service][Service] from a [Rocket<Build>][Rocket] instance.
@@ -320,7 +321,7 @@ impl IntoService for rocket::Rocket<rocket::Build> {
 impl<T: Send + Sync + 'static> IntoService
     for (
         rocket::Rocket<rocket::Build>,
-        fn(&mut dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>,
+        fn(&mut dyn Factory) -> BoxFuture<Result<T, Error>>,
     )
 {
     type Service = RocketService<T>;
@@ -352,7 +353,7 @@ where
         Ok(())
     }
 
-    fn bind(&mut self, addr: SocketAddr) -> Result<(), error::Error> {
+    fn bind(&mut self, addr: SocketAddr) -> Result<(), Error> {
         let rocket = self.rocket.take().expect("service has already been bound");
 
         let config = rocket::Config {
@@ -365,8 +366,12 @@ where
         self.runtime
             .block_on(launched)
             .map_err(error::CustomError::new)?;
+
         Ok(())
     }
+    // fn get_runtime(&mut self) -> Option<tokio::runtime::Runtime> {
+    //     Some(self.runtime)
+    // }
 }
 
 /// A wrapper that takes a user's future, gives the future a factory, and takes the returned service from the future
@@ -375,11 +380,12 @@ pub struct SimpleService<T> {
     service: Option<T>,
     builder: Option<StateBuilder<T>>,
     runtime: Runtime,
+    // TODO: name shutdown_handle ?
+    #[allow(dead_code)]
     shutdown_handler: Option<tokio::sync::oneshot::Sender<bool>>,
 }
 
-impl<T> IntoService
-    for fn(&mut dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>
+impl<T> IntoService for fn(&mut dyn Factory) -> BoxFuture<Result<T, Error>>
 where
     SimpleService<T>: Service,
 {
@@ -408,7 +414,7 @@ impl Service for SimpleService<rocket::Rocket<rocket::Build>> {
         Ok(())
     }
 
-    fn bind(&mut self, addr: SocketAddr) -> Result<(), error::Error> {
+    fn bind(&mut self, addr: SocketAddr) -> Result<(), Error> {
         let (tx, rx) = tokio::sync::oneshot::channel::<bool>();
         self.shutdown_handler = Some(tx);
         let rocket = self
@@ -440,9 +446,17 @@ impl Service for SimpleService<rocket::Rocket<rocket::Build>> {
         Ok(())
     }
 
-    fn shutdown_handle(&mut self) -> Box<Option<tokio::sync::oneshot::Sender<bool>>> {
-        Box::new(self.shutdown_handler.take())
+    fn shutdown(&mut self) -> Result<(), Error> {
+        let s = self.shutdown_handler.take().unwrap();
+        match s.send(true) {
+            Ok(_) => Ok(()),
+            Err(_) => Ok(()), // Err(e) => Err("toodoo".to_string()),
+        }
     }
+
+    // fn get_runtime(&mut self) -> Option<tokio::runtime::Runtime> {
+    //     Some(self.runtime)
+    // }
 }
 
 #[cfg(feature = "web-axum")]
@@ -474,6 +488,10 @@ impl Service for SimpleService<sync_wrapper::SyncWrapper<axum::Router>> {
             .map_err(error::CustomError::new)?;
 
         Ok(())
+    }
+
+    fn shutdown(&mut self) -> Result<(), Error> {
+        todo!()
     }
 }
 

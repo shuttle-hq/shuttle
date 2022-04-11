@@ -22,7 +22,9 @@ use tokio::sync::RwLock;
 
 use crate::database;
 use crate::router::Router;
+use shuttle_service::Service;
 
+type BoxService = std::sync::Arc<std::sync::Mutex<Box<dyn Service>>>;
 // This controls the maximum number of deploys an api instance can run
 // This is mainly needed because tokio::task::spawn_blocking keeps an internal pool for the number of blocking threads
 // and we call this method to run each incoming service. Therefore, this variable directly maps to this maximum pool
@@ -177,7 +179,11 @@ impl Deployment {
                                     debug!("{}: factory phase FAILED: {:?}", meta.project, e);
                                     DeploymentState::Error(e.into())
                                 }
-                                Ok((handle, so, shutdown_handle)) => {
+                                Ok(Loader {
+                                    service,
+                                    so,
+                                    thread_handle,
+                                }) => {
                                     debug!("{}: factory phase DONE", meta.project);
                                     // Remove stale active deployments
                                     if let Some(stale_id) =
@@ -190,9 +196,9 @@ impl Deployment {
                                     DeploymentState::deployed(
                                         so,
                                         port,
-                                        handle,
+                                        thread_handle,
                                         db_state,
-                                        shutdown_handle,
+                                        service,
                                     )
                                 }
                             }
@@ -490,19 +496,20 @@ impl DeploymentSystem {
                 let mut lock = deployment.state.write().await;
                 if let DeploymentState::Deployed(DeployedState {
                     so,
-                    handle,
-                    shutdown_handle,
+                    thread_handle,
+                    service,
                     ..
                 }) = lock.take()
                 {
-                    if let Some(f) = *shutdown_handle {
-                        // TODO: ideally it would receive feedback regarding shutdown
-                        // finalization, and only then we'd move to aborting the thread
-                        // TODO: error handling
-                        f.send(true).ok();
-                    }
-                    // QUESTION: why abort thread instead of stopping the runtime?
-                    handle.abort();
+                    // TODO: error handling
+                    let mut service = service.lock().unwrap();
+                    // TODO: ideally it would receive feedback regarding shutdown
+                    // finalization, and only then we'd move to aborting the thread
+                    service.shutdown().unwrap();
+                    // if let Some(rt) = service.get_runtime() {
+                    //     rt.shutdown_background();
+                    // }
+                    thread_handle.map(|t| t.abort());
                     tokio::spawn(async move {
                         so.close().unwrap();
                     });
@@ -623,16 +630,16 @@ impl DeploymentState {
     fn deployed(
         so: Library,
         port: Port,
-        handle: ServeHandle,
+        thread_handle: Option<ServeHandle>,
         db_state: database::State,
-        shutdown_handle: Box<Option<tokio::sync::oneshot::Sender<bool>>>,
+        service: BoxService,
     ) -> Self {
         Self::Deployed(DeployedState {
             so,
             port,
-            handle,
+            thread_handle,
             db_state,
-            shutdown_handle,
+            service,
         })
     }
 
@@ -660,7 +667,8 @@ struct BuiltState {
 struct DeployedState {
     so: Library,
     port: Port,
-    handle: ServeHandle,
+    // TODO: unwrap?
+    thread_handle: Option<ServeHandle>,
     db_state: database::State,
-    shutdown_handle: Box<Option<tokio::sync::oneshot::Sender<bool>>>,
+    service: BoxService,
 }

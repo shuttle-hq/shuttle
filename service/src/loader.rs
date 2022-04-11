@@ -1,4 +1,4 @@
-use std::{ffi::OsStr, net::SocketAddr};
+use std::{ffi::OsStr, net::SocketAddr, sync::Arc};
 
 use libloading::{Library, Symbol};
 use thiserror::Error as ThisError;
@@ -21,11 +21,10 @@ pub enum LoaderError {
 }
 
 pub struct Loader {
-    service: Box<dyn Service>,
-    so: Library,
+    pub service: Arc<std::sync::Mutex<Box<dyn Service>>>,
+    pub so: Library,
+    pub thread_handle: Option<ServeHandle>,
 }
-
-type ShutdownHandle = Box<Option<tokio::sync::oneshot::Sender<bool>>>;
 
 impl Loader {
     /// Dynamically load from a `.so` file a value of a type implementing the
@@ -42,31 +41,28 @@ impl Loader {
             let raw = entrypoint();
 
             Ok(Self {
-                service: Box::from_raw(raw),
+                service: Arc::new(std::sync::Mutex::new(Box::from_raw(raw))),
                 so: lib,
+                thread_handle: None,
             })
         }
     }
 
-    pub fn load(
-        self,
-        factory: &mut dyn Factory,
-        addr: SocketAddr,
-    ) -> Result<(ServeHandle, Library, ShutdownHandle), Error> {
-        let mut service = self.service;
-        let shutdown_handle = service.shutdown_handle();
+    pub fn load(mut self, factory: &mut dyn Factory, addr: SocketAddr) -> Result<Self, Error> {
+        // let mut service = self.service;
 
-        service.build(factory)?;
+        self.service.lock().unwrap().build(factory)?;
+
+        let service = Arc::clone(&self.service);
 
         // We cannot use spawn here since that blocks the api completely. We suspect this is because `bind` makes a blocking call,
         // however that does not completely makes sense as the blocking call is made on another runtime.
-        let handle = tokio::task::spawn_blocking(move || service.bind(addr));
+        let thread_handle = Some(tokio::task::spawn_blocking(move || {
+            service.lock().unwrap().bind(addr)
+        }));
+        self.thread_handle = thread_handle;
 
-        // i want this
-        // this is just a mock
-        // let shutdown_handle = || {};
-
-        Ok((handle, self.so, shutdown_handle))
+        Ok(self)
     }
 }
 

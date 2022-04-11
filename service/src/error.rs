@@ -8,8 +8,6 @@ pub enum Error {
     Io(#[from] std::io::Error),
     #[error("Custom error: {0}")]
     Custom(#[from] CustomError),
-    #[error("Rocket error: {0}")]
-    Rocket(#[from] rocket::Error),
 }
 
 pub type CustomError = anyhow::Error;

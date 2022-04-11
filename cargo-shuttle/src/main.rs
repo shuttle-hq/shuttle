@@ -2,7 +2,7 @@ mod args;
 mod client;
 mod config;
 
-use crate::args::{Args, AuthArgs, DeployArgs};
+use crate::args::{Args, AuthArgs, Command, DeployArgs};
 use crate::config::RequestContext;
 use anyhow::{Context, Result};
 use args::LoginArgs;
@@ -38,16 +38,21 @@ impl Shuttle {
     }
 
     pub async fn run(mut self, args: Args) -> Result<()> {
-        if matches!(args, Args::Deploy(..) | Args::Delete | Args::Status) {
+        if matches!(
+            args.cmd,
+            Command::Deploy(..) | Command::Delete | Command::Status
+        ) {
             self.load_project()?;
         }
 
-        match args {
-            Args::Deploy(deploy_args) => self.deploy(deploy_args).await,
-            Args::Status => self.status().await,
-            Args::Delete => self.delete().await,
-            Args::Auth(auth_args) => self.auth(auth_args).await,
-            Args::Login(login_args) => self.login(login_args).await,
+        self.ctx.set_api_url(args.api_url);
+
+        match args.cmd {
+            Command::Deploy(deploy_args) => self.deploy(deploy_args).await,
+            Command::Status => self.status().await,
+            Command::Delete => self.delete().await,
+            Command::Auth(auth_args) => self.auth(auth_args).await,
+            Command::Login(login_args) => self.login(login_args).await,
         }
     }
 

@@ -220,6 +220,7 @@ where
 pub struct RequestContext {
     global: Config<GlobalConfigManager, GlobalConfig>,
     project: Option<Config<LocalConfigManager, ProjectConfig>>,
+    api_url: Option<String>,
 }
 
 fn find_crate_name<P: AsRef<Path>>(working_directory: P) -> Result<ProjectName> {
@@ -252,6 +253,7 @@ impl RequestContext {
         Ok(Self {
             global,
             project: None,
+            api_url: None,
         })
     }
 
@@ -279,8 +281,14 @@ impl RequestContext {
         Ok(())
     }
 
+    pub fn set_api_url(&mut self, api_url: Option<String>) {
+        self.api_url = api_url;
+    }
+
     pub fn api_url(&self) -> ApiUrl {
-        if let Some(api_url) = self.global.as_ref().unwrap().api_url() {
+        if let Some(api_url) = self.api_url.clone() {
+            api_url
+        } else if let Some(api_url) = self.global.as_ref().unwrap().api_url() {
             api_url
         } else {
             API_URL_DEFAULT.to_string()

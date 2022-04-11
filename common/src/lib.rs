@@ -2,7 +2,6 @@ pub mod project;
 
 use crate::project::ProjectName;
 use chrono::{DateTime, Utc};
-use lazy_static::lazy_static;
 use rocket::Responder;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
@@ -13,15 +12,10 @@ extern crate lazy_static;
 pub const SHUTTLE_PROJECT_HEADER: &str = "Shuttle-Project";
 
 #[cfg(debug_assertions)]
-lazy_static! {
-    pub static ref API_URL_DEFAULT: String =
-        std::env::var("SHUTTLE_API").unwrap_or_else(|_| "http://localhost:8001".to_string());
-}
+pub const API_URL_DEFAULT: &str = "http://localhost:8001";
 
 #[cfg(not(debug_assertions))]
-lazy_static! {
-    pub static ref API_URL_DEFAULT: String = "https://api.shuttle.rs".to_string();
-}
+pub const API_URL_DEFAULT: &str = "https://api.shuttle.rs";
 
 pub type ApiKey = String;
 pub type ApiUrl = String;

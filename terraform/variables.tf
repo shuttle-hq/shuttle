@@ -27,3 +27,11 @@ variable "proxy_container_port" {
   type = number
   default = 8000
 }
+
+resource "random_string" "initial_key" {
+  length  = 16
+  special = false
+  lower   = true
+  number  = true
+  upper   = true
+}

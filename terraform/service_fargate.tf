@@ -89,6 +89,10 @@ resource "aws_ecs_task_definition" "api" {
         {
           name = "PG_DATA",
           value = "/opt/shuttle/postgres"
+        },
+        {
+          name  = "SHUTTLE_INITIAL_KEY",
+          value = random_string.initial_key.result
         }
       ]
 

@@ -10,7 +10,7 @@ use shuttle_common::{
     project::ProjectName, DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta,
     Host, Port,
 };
-use shuttle_service::loader::{Loader, ServeHandle};
+use shuttle_service::loader::Loader;
 use std::collections::HashMap;
 use std::fs::DirEntry;
 use std::io::Write;
@@ -179,11 +179,7 @@ impl Deployment {
                                     debug!("{}: factory phase FAILED: {:?}", meta.project, e);
                                     DeploymentState::Error(e.into())
                                 }
-                                Ok(Loader {
-                                    service,
-                                    so,
-                                    thread_handle,
-                                }) => {
+                                Ok(Loader { service, so }) => {
                                     debug!("{}: factory phase DONE", meta.project);
                                     // Remove stale active deployments
                                     if let Some(stale_id) =
@@ -193,13 +189,7 @@ impl Deployment {
                                         context.deployments.write().await.remove(&stale_id);
                                     }
 
-                                    DeploymentState::deployed(
-                                        so,
-                                        port,
-                                        thread_handle,
-                                        db_state,
-                                        service,
-                                    )
+                                    DeploymentState::deployed(so, port, db_state, service)
                                 }
                             }
                         }
@@ -494,13 +484,7 @@ impl DeploymentSystem {
                 // library when the runtime gets around to it.
 
                 let mut lock = deployment.state.write().await;
-                if let DeploymentState::Deployed(DeployedState {
-                    so,
-                    thread_handle,
-                    service,
-                    ..
-                }) = lock.take()
-                {
+                if let DeploymentState::Deployed(DeployedState { so, service, .. }) = lock.take() {
                     // TODO: error handling
                     let mut service = service.lock().unwrap();
                     // TODO: ideally it would receive feedback regarding shutdown
@@ -509,7 +493,6 @@ impl DeploymentSystem {
                     // if let Some(rt) = service.get_runtime() {
                     //     rt.shutdown_background();
                     // }
-                    thread_handle.map(|t| t.abort());
                     tokio::spawn(async move {
                         so.close().unwrap();
                     });
@@ -627,17 +610,10 @@ impl DeploymentState {
         Self::Loaded(loader)
     }
 
-    fn deployed(
-        so: Library,
-        port: Port,
-        thread_handle: Option<ServeHandle>,
-        db_state: database::State,
-        service: BoxService,
-    ) -> Self {
+    fn deployed(so: Library, port: Port, db_state: database::State, service: BoxService) -> Self {
         Self::Deployed(DeployedState {
             so,
             port,
-            thread_handle,
             db_state,
             service,
         })
@@ -667,8 +643,6 @@ struct BuiltState {
 struct DeployedState {
     so: Library,
     port: Port,
-    // TODO: unwrap?
-    thread_handle: Option<ServeHandle>,
     db_state: database::State,
     service: BoxService,
 }

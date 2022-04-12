@@ -1,4 +1,8 @@
-use std::{ffi::OsStr, net::SocketAddr, sync::Arc};
+use std::{
+    ffi::OsStr,
+    net::SocketAddr,
+    sync::{Arc, Mutex},
+};
 
 use libloading::{Library, Symbol};
 use thiserror::Error as ThisError;
@@ -10,8 +14,6 @@ const ENTRYPOINT_SYMBOL_NAME: &[u8] = b"_create_service\0";
 
 type CreateService = unsafe extern "C" fn() -> *mut dyn Service;
 
-pub type ServeHandle = JoinHandle<Result<(), Error>>;
-
 #[derive(Debug, ThisError)]
 pub enum LoaderError {
     #[error("failed to load library")]
@@ -21,9 +23,8 @@ pub enum LoaderError {
 }
 
 pub struct Loader {
-    pub service: Arc<std::sync::Mutex<Box<dyn Service>>>,
+    pub service: Arc<Mutex<Box<dyn Service>>>,
     pub so: Library,
-    pub thread_handle: Option<ServeHandle>,
 }
 
 impl Loader {
@@ -41,26 +42,22 @@ impl Loader {
             let raw = entrypoint();
 
             Ok(Self {
-                service: Arc::new(std::sync::Mutex::new(Box::from_raw(raw))),
+                service: Arc::new(Mutex::new(Box::from_raw(raw))),
                 so: lib,
-                thread_handle: None,
             })
         }
     }
 
     pub fn load(mut self, factory: &mut dyn Factory, addr: SocketAddr) -> Result<Self, Error> {
-        // let mut service = self.service;
-
-        self.service.lock().unwrap().build(factory)?;
+        if let Ok(mut svc) = self.service.lock() {
+            svc.build(factory)?
+        }
 
         let service = Arc::clone(&self.service);
 
         // We cannot use spawn here since that blocks the api completely. We suspect this is because `bind` makes a blocking call,
         // however that does not completely makes sense as the blocking call is made on another runtime.
-        let thread_handle = Some(tokio::task::spawn_blocking(move || {
-            service.lock().unwrap().bind(addr)
-        }));
-        self.thread_handle = thread_handle;
+        tokio::task::spawn_blocking(move || service.lock().unwrap().bind(addr));
 
         Ok(self)
     }

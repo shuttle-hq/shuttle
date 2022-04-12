@@ -9,11 +9,11 @@ resource "aws_cloudwatch_log_group" "backend" {
 resource "aws_ecs_task_definition" "api" {
   family = "backend"
 
-  requires_compatibilities = [ "FARGATE" ]
+  requires_compatibilities = ["FARGATE"]
 
   network_mode = "awsvpc"
 
-  cpu = var.service_cpu
+  cpu    = var.service_cpu
   memory = var.service_memory
 
   execution_role_arn = aws_iam_role.backend.arn
@@ -25,11 +25,11 @@ resource "aws_ecs_task_definition" "api" {
     name = "user-data"
 
     efs_volume_configuration {
-      file_system_id          = aws_efs_file_system.user_data.id
-      root_directory          = "/user-data"
-      transit_encryption      = "DISABLED"
+      file_system_id     = aws_efs_file_system.user_data.id
+      root_directory     = "/user-data"
+      transit_encryption = "DISABLED"
       authorization_config {
-        iam             = "DISABLED"
+        iam = "DISABLED"
       }
     }
   }
@@ -38,11 +38,11 @@ resource "aws_ecs_task_definition" "api" {
     name = "postgres-conf"
 
     efs_volume_configuration {
-      file_system_id          = aws_efs_file_system.user_data.id
-      root_directory          = "/conf/postgres"
-      transit_encryption      = "DISABLED"
+      file_system_id     = aws_efs_file_system.user_data.id
+      root_directory     = "/conf/postgres"
+      transit_encryption = "DISABLED"
       authorization_config {
-        iam             = "DISABLED"
+        iam = "DISABLED"
       }
     }
   }
@@ -63,31 +63,31 @@ resource "aws_ecs_task_definition" "api" {
 
       environment = [
         {
-          name = "CRATES_PATH"
+          name  = "CRATES_PATH"
           value = "/opt/shuttle/crates"
         },
         {
-          name = "API_PORT",
+          name  = "API_PORT",
           value = tostring(var.api_container_port)
         },
         {
-          name = "PROXY_PORT",
+          name  = "PROXY_PORT",
           value = tostring(var.proxy_container_port)
         },
         {
-          name = "PG_PORT",
+          name  = "PG_PORT",
           value = tostring(var.postgres_container_port)
         },
         {
-          name = "SHUTTLE_USERS_TOML",
+          name  = "SHUTTLE_USERS_TOML",
           value = "/opt/shuttle/users/users.toml"
         },
         {
-          name = "PG_PASSWORD",
+          name  = "PG_PASSWORD",
           value = tostring(var.postgres_password)
         },
         {
-          name = "PG_DATA",
+          name  = "PG_DATA",
           value = "/opt/shuttle/postgres"
         },
         {
@@ -104,34 +104,34 @@ resource "aws_ecs_task_definition" "api" {
       portMappings = [
         {
           containerPort = var.api_container_port
-          hostPort = var.api_container_port
+          hostPort      = var.api_container_port
         },
         {
           containerPort = var.proxy_container_port
-          hostPort = var.proxy_container_port
+          hostPort      = var.proxy_container_port
         },
         {
           containerPort = var.postgres_container_port
-          hostPort = var.postgres_container_port
+          hostPort      = var.postgres_container_port
         }
       ]
 
       logConfiguration = {
         logDriver = "awslogs"
         options = {
-          awslogs-group = aws_cloudwatch_log_group.backend.name
+          awslogs-group         = aws_cloudwatch_log_group.backend.name
           awslogs-stream-prefix = "awslogs-backend-container"
-          awslogs-region = "eu-west-2"
+          awslogs-region        = "eu-west-2"
         }
       }
 
       mountPoints = [
         {
-          sourceVolume = "user-data"
+          sourceVolume  = "user-data"
           containerPath = "/opt/shuttle/"
         },
         {
-          sourceVolume = "postgres-conf"
+          sourceVolume  = "postgres-conf"
           containerPath = "/etc/postgresql/11/shuttle/"
         }
       ]
@@ -140,16 +140,16 @@ resource "aws_ecs_task_definition" "api" {
 }
 
 resource "aws_ecs_service" "api" {
-  name = "backend"
-  cluster = aws_ecs_cluster.backend.id
+  name            = "backend"
+  cluster         = aws_ecs_cluster.backend.id
   task_definition = aws_ecs_task_definition.api.arn
-  desired_count = var.desired_count
+  desired_count   = var.desired_count
 
   launch_type = "FARGATE"
 
   network_configuration {
-    subnets = [aws_subnet.backend_a.id, aws_subnet.backend_b.id]
-    security_groups = [aws_security_group.unreasonable.id]
+    subnets          = [aws_subnet.backend_a.id, aws_subnet.backend_b.id]
+    security_groups  = [aws_security_group.unreasonable.id]
     assign_public_ip = true
   }
 

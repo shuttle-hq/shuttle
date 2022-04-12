@@ -27,11 +27,11 @@ resource "aws_iam_role" "backend" {
     name = "backend-scheduler-policy"
 
     policy = jsonencode({
-      "Version": "2012-10-17",
-      "Statement": [
+      "Version" : "2012-10-17",
+      "Statement" : [
         {
-          "Effect": "Allow",
-          "Action": [
+          "Effect" : "Allow",
+          "Action" : [
             "elasticfilesystem:ClientMount",
             "elasticfilesystem:ClientWrite",
             "ecr:BatchCheckLayerAvailability",
@@ -43,7 +43,7 @@ resource "aws_iam_role" "backend" {
             "logs:PutLogEvents",
             "logs:DescribeLogStreams"
           ],
-          "Resource": "*"
+          "Resource" : "*"
         }
       ]
     })

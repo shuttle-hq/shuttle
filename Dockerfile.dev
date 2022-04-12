@@ -2,6 +2,7 @@ FROM rust:buster as runtime
 RUN apt-get update &&\
     apt-get install -y curl postgresql supervisor
 RUN pg_dropcluster $(pg_lsclusters -h | cut -d' ' -f-2 | head -n1)
+RUN rustup component add rust-src
 
 FROM rust:buster AS chef
 WORKDIR app

@@ -1,7 +1,0 @@
-[ci-test]
-name = 'ci'
-projects = [
-    'hello-world-rocket-app',
-    'postgres-rocket-app',
-    'hello-world-axum-app',
-]

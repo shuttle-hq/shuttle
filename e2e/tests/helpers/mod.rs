@@ -159,6 +159,8 @@ impl Api {
             "API_PORT=8001",
             "-e",
             "SHUTTLE_USERS_TOML=/config/users.toml",
+            "-e",
+            "SHUTTLE_INITIAL_KEY=ci-test",
             "-v",
             &format!(
                 "{}/users.toml:/config/users.toml",

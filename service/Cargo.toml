@@ -25,7 +25,7 @@ shuttle-codegen = { version = "0.2.5", path = "../codegen", optional = true }
 portpicker = "0.1.1"
 
 [features]
-default = ["codegen"]
+default = ["codegen", "web-axum"]
 codegen = ["shuttle-codegen"]
 loader = ["libloading"]
 

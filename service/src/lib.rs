@@ -420,7 +420,9 @@ impl Service for SimpleService<rocket::Rocket<rocket::Build>> {
 }
 
 #[cfg(feature = "web-axum")]
-impl Service for SimpleService<sync_wrapper::SyncWrapper<axum::Router>> {
+impl Service
+    for SimpleService<sync_wrapper::SyncWrapper<axum::routing::IntoMakeService<axum::Router>>>
+{
     fn build(&mut self, factory: &mut dyn Factory) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
             // We want to build any sqlx pools on the same runtime the client code will run on. Without this expect to get errors of no tokio reactor being present.
@@ -440,11 +442,7 @@ impl Service for SimpleService<sync_wrapper::SyncWrapper<axum::Router>> {
             .into_inner();
 
         self.runtime
-            .block_on(async {
-                axum::Server::bind(&addr)
-                    .serve(axum.into_make_service())
-                    .await
-            })
+            .block_on(async { axum::Server::bind(&addr).serve(axum).await })
             .map_err(error::CustomError::new)?;
 
         Ok(())

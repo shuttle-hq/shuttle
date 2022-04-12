@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths: ["**/*.rs", "**/Cargo.toml"]
   pull_request:
-    branches: ["*"]
+    branches: [main]
     paths: ["**/*.rs", "**/Cargo.toml"]
 
   workflow_dispatch:
@@ -23,5 +23,4 @@ jobs:
         with:
           toolchain: stable
           override: true
-      - uses: Swatinem/rust-cache@v1
       - run: cargo test --all-features -- --nocapture

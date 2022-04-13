@@ -36,7 +36,7 @@ resource "aws_lb_target_group_attachment" "postgres" {
 }
 
 resource "aws_instance" "backend" {
-  ami           = "ami-09f17957a215f09e2"  # unveil-backend-ami-20220313
+  ami           = "ami-072db068702487a87"  # unveil-backend-ami-20220313
   instance_type = "c6g.4xlarge"
 
   monitoring = true

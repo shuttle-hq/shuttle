@@ -4,6 +4,8 @@ import { useUser } from "@auth0/nextjs-auth0";
 import InternalLink from "./InternalLink";
 import { SHUTTLE_DOCS_URL } from "../lib/constants";
 import ExternalLink from "./ExternalLink";
+import ThemeSwitch from "./ThemeSwitch";
+import NoSsr from "./NoSsr";
 
 const navigation = [
   { name: "Features", href: "#features", internal: true },
@@ -40,7 +42,7 @@ export default function Header() {
                   <InternalLink
                     key={link.name}
                     href={link.href}
-                    className="text-base font-medium text-white hover:text-indigo-50"
+                    className="text-base font-medium text-gray-200 hover:text-white"
                   >
                     {link.name}
                   </InternalLink>
@@ -48,7 +50,7 @@ export default function Header() {
                   <ExternalLink
                     key={link.name}
                     href={link.href}
-                    className="text-base font-medium text-white hover:text-indigo-50"
+                    className="text-base font-medium text-gray-200 hover:text-white"
                   >
                     {link.name}
                   </ExternalLink>
@@ -56,7 +58,11 @@ export default function Header() {
               )}
             </div>
           </div>
-          <div className="ml-10 space-x-4">
+          <div className="ml-10 space-x-4 flex items-center">
+            <NoSsr>
+              <ThemeSwitch />
+            </NoSsr>
+
             {user && (
               <button
                 className="inline-block rounded border border-current py-2 px-4 text-base font-medium text-gray-200 hover:text-white "
@@ -78,13 +84,23 @@ export default function Header() {
         </div>
         <div className="flex flex-wrap justify-center space-x-6 py-4 lg:hidden">
           {navigation.map((link) => (
-            <InternalLink
-              key={link.name}
-              href={link.href}
-              className="text-base font-medium text-white hover:text-indigo-50"
-            >
-              {link.name}
-            </InternalLink>
+            link.internal ? (
+              <InternalLink
+                key={link.name}
+                href={link.href}
+                className="text-base font-medium text-gray-200 hover:text-white"
+              >
+                {link.name}
+              </InternalLink>
+            ) : (
+              <ExternalLink
+                key={link.name}
+                href={link.href}
+                className="text-base font-medium text-gray-200 hover:text-white"
+              >
+                {link.name}
+              </ExternalLink>
+            )
           ))}
         </div>
       </nav>

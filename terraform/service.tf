@@ -66,7 +66,7 @@ data "cloudinit_config" "backend" {
         data_dir = local.data_dir
       }
     )
-    filename = "/lib/systemd/system/opt-unveil.mount"
+    filename = "/lib/systemd/system/opt-shuttle.mount"
   }
   part {
     content = templatefile(
@@ -78,6 +78,6 @@ data "cloudinit_config" "backend" {
         shuttle_admin_secret = var.shuttle_admin_secret
       }
     )
-    filename = "/lib/systemd/system/unveil-backend.service"
+    filename = "/lib/systemd/system/shuttle-backend.service"
   }
 }

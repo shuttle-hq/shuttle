@@ -21,7 +21,7 @@ function cargo(Prism: any) {
 SyntaxHighlighter.registerLanguage("cargo", cargo);
 
 export default function CodeSnippets() {
-  const [activeTab, setActiveTab] = useState(0);
+  const [activeTab, setActiveTab] = useState(1);
   const [copyToClipboardState, copyToClipboard] = useCopyToClipboard();
   const [copied, setCopied] = useState(false);
   useWindowSize();

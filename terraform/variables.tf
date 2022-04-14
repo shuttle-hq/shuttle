@@ -23,7 +23,17 @@ variable "postgres_container_port" {
   default = 5432
 }
 
+variable "postgres_password" {
+  type        = string
+  description = "Root password for postgres instance"
+}
+
 variable "proxy_container_port" {
   type = number
   default = 8000
+}
+
+variable "shuttle_admin_secret" {
+  type        = string
+  description = "Secret for the shuttle admin user"
 }

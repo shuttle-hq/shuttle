@@ -49,4 +49,35 @@ resource "aws_instance" "backend" {
     network_interface_id = aws_network_interface.backend.id
     device_index         = 0
   }
+
+  user_data                   = data.cloudinit_config.backend.rendered
+  user_data_replace_on_change = false
+}
+
+data "cloudinit_config" "backend" {
+  gzip          = false
+  base64_encode = false
+
+  part {
+    content = templatefile(
+      "${path.module}/systemd/system/opt-shuttle.mount.tftpl",
+      {
+        dns_name = aws_efs_file_system.user_data.dns_name,
+        data_dir = local.data_dir
+      }
+    )
+    filename = "/lib/systemd/system/opt-unveil.mount"
+  }
+  part {
+    content = templatefile(
+      "${path.module}/systemd/system/shuttle-backend.service.tftpl",
+      {
+        data_dir             = local.data_dir,
+        docker_image         = local.docker_image,
+        pg_password          = var.postgres_password,
+        shuttle_admin_secret = var.shuttle_admin_secret
+      }
+    )
+    filename = "/lib/systemd/system/unveil-backend.service"
+  }
 }

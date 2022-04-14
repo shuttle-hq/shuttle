@@ -8,7 +8,18 @@ terraform {
   required_providers {
     aws = {
       source = "hashicorp/aws"
-      version = "~> 3.0"
+      version = "~> 4.0"
+    }
+    cloudinit = {
+      source = "hashicorp/cloudinit"
+      version = "~> 2.0"
     }
   }
+
+  required_version = ">= 0.14.9"
+}
+
+provider "aws" {
+  profile = "default"
+  region  = "eu-west-2"
 }

@@ -178,7 +178,7 @@ export default function BlogPostPage(props: Props) {
                     return (
                       <div className="mt-6 mb-8 mr-4 w-max lg:mb-0" key={index}>
                         <InternalLink
-                          className="cursor-pointer"
+                          className={author.author_url ? "cursor-pointer" : ""}
                           href={author.author_url}
                         >
                           <div className="flex items-center gap-3">

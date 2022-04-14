@@ -1,0 +1,265 @@
+---
+title: Building a URL shortener with Rust in 10 minutes or less
+description: Terrence hacks together a URL shortener way past midnight
+author: terrencewaters
+tags: [rust]
+thumb: 0959.png
+date: "2022-04-13T18:18:00"
+---
+
+I was trying to get to sleep on a Wednesday night - I check my phone, it's 2:54 AM. A feeling of dread comes over me as I realise I'm not going to be able to get more than 5 hours of sleep - again.
+
+I've been a software developer for close to 10 years now. How did it get to this?
+
+My deployment broke production at 10pm (because I never learn) and I had to deal with our infrastructure coupled with acute stress for the next 3 hours. As I sat there contemplating my life choices, I had an idea. Can we do better?
+
+I don't want to have to deal with Terraform and Kubernetes at midnight. I want to write scalable code and just get it deployed. I want my dependencies generated and managed for me. I want to be able to sleep at night.
+
+It's 2022. **Surely** we can do better. As I stared blankly at my white ceiling, I decided to see if it was possible.
+
+I suddenly sat up in bed. Can I create a useful app, with some sort of database state, a custom subdomain, focus *only* on my application code without needing to worry about infrastructure *and* get it done in 10 minutes or less? I'll write a URL shortener or something. I'll write in Rust. I'll write it tonight.
+
+## Design
+
+I got out of bed and turned on the lights in my office. I sat down on my ergonomic chair and power up a comically large curved monitor. Arch boots up. I quickly message a friend of mine on Signal to remind them that I use Arch. Now I'm ready to code. Let's build this thing.
+
+The API is going to be simple. No reason for GUIs or anything like that - I am engineer, therefore I've convinced myself that UI's peaked with the 1970's teletype.
+
+Life's short so I'm going to build a REST API. The simplest thing I can come up with.
+
+You can shorten URLs like this:
+
+```bash
+curl -X POST -d 'https://www.google.com' https://myapp.com
+https://myapp.com/uvAivJ
+```
+And you get redirected like this:
+
+```bash
+curl https://myapp.com/uvAivJ
+< HTTP/2 301
+...
+```
+
+Yeah that'll work.
+
+Next I'll need some sort of database to store the urls. I briefly considered using a bijective compression scheme without needing database state, but let's face it I'm not really sure what a bijection is and it's already 3:02 AM.
+
+I'll just get a Postgres instance with a basic schema:
+```sql
+CREATE TABLE urls (
+  id VARCHAR(6) PRIMARY KEY,
+  url VARCHAR NOT NULL
+);
+```
+Genius.
+
+I'll add an index or something so that I don't have to do a linear search every time. No one is really going to use this - but I can already feel the judgement of anyone who happens to glance over my source code. I need to be able to explain to people that you can search for urls in constant time, implying I understand complexity theory.
+
+Ok I'm ready. It's 3:05 AM. I have 10 minutes. I pick up my black vape and take a large hit. Smoke fills up the room and I can't see the screen any more. Whatever. I try to crack my fingers and neck for some dramatic flair, fail, and open a terminal.
+
+## Building the Barebones - 09:59 minutes remaining
+
+I'm gonna be using [shuttle](https://shuttle.rs) for this project. It's a serverless platform built for Rust and I don't have to deal with provisioning databases, or subdomains or any of that gunk. I already have the CLI [installed](https://docs.rs/shuttle-service/0.2.5/shuttle_service/#deploying) and an [account](https://www.shuttle.rs/) so I simply:
+
+```bash
+mkdir -p ~/projects/url-shortener && cd ~/projects/url-shortener && cargo init --lib
+```
+
+Ok we have our `cargo` project. I stop and think for a little bit - which web framework do I want to use? I think I'm going to go with [Rocket](https://rocket.rs/). It's pretty much production ready with a sweet API and I'm reasonably proficient with it.
+
+I open up `src/lib.rs` and overwrite it with the `shuttle` entrypoint code:
+```rust
+#[macro_use]
+extern crate rocket;
+
+use rocket::{Build, Rocket};
+
+#[get("/hello")]
+fn hello() -> &'static str {
+    "Hello, world!"
+}
+
+#[shuttle_service::main]
+async fn init() -> Result<Rocket<Build>, shuttle_service::Error> {
+    let rocket = rocket::build().mount("/", routes![hello]);
+
+    Ok(rocket)
+}
+```
+
+My IDE violently lights up with red syntax highlighting as I realise I haven't imported anything. The realities of software engineering hit me as I eye the bottle of whiskey next to me. 18 year old scotch. It turns out I'm grossly overpaid for the value I offer society. I grab a coffee mug and pour myself a small shot - liquid courage.
+
+Next I import all of the dependencies to get shuttle to work with Rocket - pretty simple. I open up `Cargo.toml` add a couple of lines:
+
+```
+[package]
+name = "url-shortener"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+rocket = { version = "0.5.0-rc.1", features = ["json"] }
+shuttle-service = { version = "0.2", features = ["sqlx-postgres", "web-rocket"] }
+```
+
+My IDE quietens down as dependencies are resolved and a wave of relief washes over me. Let's deploy this thing.
+
+```bash
+$ cargo shuttle deploy
+   Packaging url-shortener v0.1.0 (/private/shuttle/examples/url-shortener)
+   Archiving Cargo.toml
+   Archiving Cargo.toml.orig
+   Archiving src/lib.rs
+   Compiling tracing-attributes v0.1.20
+   Compiling tokio-util v0.6.9
+   Compiling multer v2.0.2
+   Compiling hyper v0.14.18
+   Compiling rocket_http v0.5.0-rc.1
+   Compiling rocket_codegen v0.5.0-rc.1
+   Compiling rocket v0.5.0-rc.1
+   Compiling shuttle-service v0.2.5
+   Compiling url-shortener v0.1.0 (/opt/shuttle/crates/url-shortener)
+    Finished dev [unoptimized + debuginfo] target(s) in 1m 01s
+
+        Project:            url-shortener
+        Deployment Id:      3d08ac34-ad63-41c1-836b-99afdc90af9f
+        Deployment Status:  DEPLOYED
+        Host:               url-shortener.shuttleapp.rs
+        Created At:         2022-04-13 03:07:34.412602556 UTC
+```
+Ok... this seemed a little too easy, let's see if it works.
+```
+$ curl -X https://url-shortener.shuttleapp.rs/hello
+Hello, world!
+```
+
+Hm, not bad. I pour myself another shot...
+
+## Adding Postgres - 07:03 minutes remaining
+
+This is the part of my journey where I usually get a little flustered. I've set up databases before but it's always a pain. You need to provision a VM, make sure storage isn't ephemeral, install and spin up the database, create an account with the correct privileges and secure password, store the password in some sort of secrets manager in CI, add your IP address and your VM's IP address to the list of acceptable hosts etc etc etc. Oof that sounds like a lot of work.
+
+`shuttle` does a lot of this stuff for you - I just didn't remember how. I quickly head over to the [shuttle / sqlx](https://docs.rs/shuttle-service/0.2.5/shuttle_service/#using-sqlx) section in the docs. I added the `sqlx` dependency to `Cargo.toml` and change *one line* in `lib.rs`:
+
+```rust
+#[shuttle_service::main]
+async fn rocket(pool: PgPool) -> Result<Rocket<Build>, shuttle_service::Error> {
+```
+
+By adding a parameter to the main `rocket` function, `shuttle` will automatically provision a Postgres database for you, create an account and hand you back an authenticated connection pool which is usable from your application code.
+
+Let's deploy it and see what happens:
+
+```bash
+$ cargo shuttle deploy
+...
+    Finished dev [unoptimized + debuginfo] target(s) in 19.50s
+
+        Project:            url-shortener
+        Deployment Id:      538e41cf-44a9-4158-94f1-3760b42619a3
+        Deployment Status:  DEPLOYED
+        Host:               url-shortener.shuttleapp.rs
+        Created At:         2022-04-13 03:08:30.412602556 UTC
+        Database URI:       postgres://***:***@pg.shuttle.rs/db-url-shortener
+```
+
+I have a database! I couldn't help but chuckle a little bit. This is what software development should be like.
+
+## Setting up the Schema - 06:30 minutes remaining
+
+The database provisioned by `shuttle` is completely empty - I'm going to need to either connect to Postgres and create the schema myself, or write some sort of code to automatically perform the migration. As I start to ponder this seemingly existential question I decide not to overthink it. I'm just going to go with whatever is easiest.
+
+I connect to the database provisioned by shuttle using [pgAdmin](https://www.pgadmin.org/) using the provided database URI and run the following script:
+
+```sql
+CREATE TABLE urls (
+  id VARCHAR(6) PRIMARY KEY,
+  url VARCHAR NOT NULL
+);
+```
+
+As I was ready to Google 'how to create index postgres' I realised that since the `id` used for the url lookup is a primary key, which is implicitly a 'unique' constraint, Postgres would create the index for me. Cool.
+
+## Writing the Endpoints - 05:17 remaining
+
+The app's going to need two endpoints - one to `shorten` URLs and one to retrieve URLs and `redirect` user.
+
+I quickly created two stubs for the endpoints while I thought about the actual implementation:
+
+```rust
+#[get("/<id>")]
+async fn redirect(id: String, pool: &State<PgPool>) -> Result<Redirect, Status> {
+    unimplemented!()
+}
+
+#[post("/", data = "<url>")]
+async fn shorten(url: String, pool: &State<PgPool>) -> Result<String, Status> {
+    unimplemented!()
+}
+```
+
+I decided to start with the shorten method. The simplest implementation I could think of is to generate a unique id on the fly using the [`nanoid`](https://crates.io/crates/nanoid) crate just performing an insert. Hm - what about duplicates? I decided not to overthink it
+🤷.
+
+```rust
+#[post("/", data = "<url>")]
+async fn shorten(url: String, pool: &State<PgPool>) -> Result<String, Status> {
+    let id = &nanoid::nanoid!(6);
+    let p_url = Url::parse(&url).map_err(|_| Status::UnprocessableEntity)?;
+    sqlx::query("INSERT INTO urls(id, url) VALUES ($1, $2)")
+        .bind(id)
+        .bind(p_url.as_str())
+        .execute(&**pool)
+        .await
+        .map_err(|_| Status::InternalServerError)?;
+    Ok(format!("https://url-shortener.shuttleapp.rs/{id}"))
+}
+```
+
+Next I implemented the `redirect` method in a similar spirit. At this point I started to panic as it was really getting close to the 10 minute mark:
+
+```rust
+#[get("/<id>")]
+async fn redirect(id: String, pool: &State<PgPool>) -> Result<Redirect, Status> {
+    let url: (String,) = sqlx::query_as("SELECT url FRMO urls WHERE id = $1")
+        .bind(id)
+        .fetch_one(&**pool)
+        .await
+        .map_err(|e| match e {
+            Error::RowNotFound => Status::NotFound,
+            _ => Status::InternalServerError
+        })?;
+    Ok(Redirect::to(url.0))
+}
+```
+
+Whoops there's a typo in the SQL query.
+
+After I fixed my typo and sorted out the various unresolved dependencies by letting my IDE do the heavy lifting for me, I deployed to shuttle for the last time.
+
+## Moment of truth - 00:25 minutes remaining
+
+Feeling like an off-brand Tom Cruise in mission impossible I stared intently at the clock counting down as shuttle deployed my url-shortener. 19.3 seconds and we're live. As soon as the `DEPLOYED` dialog came up, I instantly tested it out:
+
+```bash
+$ curl -X POST -d "https://google.com" https://url-shortener.shuttleapp.rs
+https://s.shuttleapp.rs/XDlrTB⏎
+```
+
+I then copy/pasted the shortened URL to my browser and, lo an behold, was redirected to Google.
+
+I did it.
+
+## Retrospective - 00:00 minutes remaining
+
+With a sigh of relief I pushed myself back from my desk. I refilled my mug, picked it up and headed to my derelict balcony. As I slid open the the double glazed windows and the cold air flowed into my apartment, I took two steps forward to rest my elbows and mug on the railing.
+
+I sat there for a while reflecting on what had just happened. I *had* succeeded. I'd successfully built a somewhat trivial app quickly without needing to worry about provisioning databases or networking or any of that jazz.
+
+But how would this measure up in the real world? Real software engineering is complex, involving collaboration across different teams with different skill-sets. The entire world of software is barely keeping it together. Is it really feasible to replace our existing, tried and tested cloud paradigms with a new paradigm of not having to deal with infrastructure at all? What I knew for sure is I wasn't going to get to the bottom of this one tonight.
+
+As I went back to my bedroom and laid once more in bed, I noticed a faint smile on my face. There's a chance we really can do better. Maybe we're not exactly there yet, but my experience tonight had given me a certain optimism that we aren't as far as I once thought. With the promise of a brighter tomorrow, I fell blissfully asleep.

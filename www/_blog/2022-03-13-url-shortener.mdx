@@ -1,5 +1,5 @@
 ---
-title: Building a URL shortener with Rust in 10 minutes or less
+title: Building and Deploying a URL shortener with Rust in 10 minutes or less
 description: Terrence hacks together a URL shortener way past midnight
 author: terrencewaters
 tags: [rust]
@@ -25,7 +25,7 @@ I got out of bed and turned on the lights in my office. I sat down on my ergonom
 
 The API is going to be simple. No reason for GUIs or anything like that - I am engineer, therefore I've convinced myself that UI's peaked with the 1970's teletype.
 
-Life's short so I'm going to build a REST API. The simplest thing I can come up with.
+Life's short so I'm going to build an HTTP API. The simplest thing I can come up with.
 
 You can shorten URLs like this:
 
@@ -54,13 +54,13 @@ CREATE TABLE urls (
 ```
 Genius.
 
-I'll add an index or something so that I don't have to do a linear search every time. No one is really going to use this - but I can already feel the judgement of anyone who happens to glance over my source code. I need to be able to explain to people that you can search for urls in constant time, implying I understand complexity theory.
+I'll add an index or something so that the database doesn't do a linear search on every request. No one is really going to use this - but I can already feel the judgement of anyone who happens to glance over my source code. I need to be able to explain to people that you can search for urls in constant time, implying I understand complexity theory.
 
 Ok I'm ready. It's 3:05 AM. I have 10 minutes. I pick up my black vape and take a large hit. Smoke fills up the room and I can't see the screen any more. Whatever. I try to crack my fingers and neck for some dramatic flair, fail, and open a terminal.
 
 ## Building the Barebones - 09:59 minutes remaining
 
-I'm gonna be using [shuttle](https://shuttle.rs) for this project. It's a serverless platform built for Rust and I don't have to deal with provisioning databases, or subdomains or any of that gunk. I already have the CLI [installed](https://docs.rs/shuttle-service/0.2.5/shuttle_service/#deploying) and an [account](https://www.shuttle.rs/) so I simply:
+I'm using [shuttle](https://shuttle.rs) for this project. It's a serverless platform built for Rust and I don't have to deal with provisioning databases, or subdomains or any of that gunk. I already have the CLI [installed](https://docs.rs/shuttle-service/0.2.5/shuttle_service/#deploying) and an [account](https://www.shuttle.rs/) so I simply:
 
 ```bash
 mkdir -p ~/projects/url-shortener && cd ~/projects/url-shortener && cargo init --lib
@@ -167,7 +167,7 @@ $ cargo shuttle deploy
         Database URI:       postgres://***:***@pg.shuttle.rs/db-url-shortener
 ```
 
-I have a database! I couldn't help but chuckle a little bit. This is what software development should be like.
+I have a database! I couldn't help but chuckle a little bit. So far so good.
 
 ## Setting up the Schema - 06:30 minutes remaining
 
@@ -186,7 +186,7 @@ As I was ready to Google 'how to create index postgres' I realised that since th
 
 ## Writing the Endpoints - 05:17 remaining
 
-The app's going to need two endpoints - one to `shorten` URLs and one to retrieve URLs and `redirect` user.
+The app's going to need two endpoints - one to `shorten` URLs and one to retrieve URLs and `redirect` the user.
 
 I quickly created two stubs for the endpoints while I thought about the actual implementation:
 
@@ -202,7 +202,7 @@ async fn shorten(url: String, pool: &State<PgPool>) -> Result<String, Status> {
 }
 ```
 
-I decided to start with the shorten method. The simplest implementation I could think of is to generate a unique id on the fly using the [`nanoid`](https://crates.io/crates/nanoid) crate just performing an insert. Hm - what about duplicates? I decided not to overthink it
+I decided to start with the shorten method. The simplest implementation I could think of is to generate a unique id on the fly using the [`nanoid`](https://crates.io/crates/nanoid) crate and then running an `INSERT` statement. Hm - what about duplicates? I decided not to overthink it
 🤷.
 
 ```rust
@@ -220,7 +220,7 @@ async fn shorten(url: String, pool: &State<PgPool>) -> Result<String, Status> {
 }
 ```
 
-Next I implemented the `redirect` method in a similar spirit. At this point I started to panic as it was really getting close to the 10 minute mark:
+Next I implemented the `redirect` method in a similar spirit. At this point I started to panic as it was really getting close to the 10 minute mark. I'll do a `SELECT *` and pull the first url that matches with the query id. If the id does not exist, you get back a `404`:
 
 ```rust
 #[get("/<id>")]
@@ -256,10 +256,10 @@ I did it.
 
 ## Retrospective - 00:00 minutes remaining
 
-With a sigh of relief I pushed myself back from my desk. I refilled my mug, picked it up and headed to my derelict balcony. As I slid open the the double glazed windows and the cold air flowed into my apartment, I took two steps forward to rest my elbows and mug on the railing.
+With a sigh of relief I pushed myself back from my desk. I refilled my mug, picked it up and headed to my derelict balcony. As I slid open the the windows and the cold air flowed into my apartment, I took two steps forward to rest my elbows and mug on the railing.
 
 I sat there for a while reflecting on what had just happened. I *had* succeeded. I'd successfully built a somewhat trivial app quickly without needing to worry about provisioning databases or networking or any of that jazz.
 
 But how would this measure up in the real world? Real software engineering is complex, involving collaboration across different teams with different skill-sets. The entire world of software is barely keeping it together. Is it really feasible to replace our existing, tried and tested cloud paradigms with a new paradigm of not having to deal with infrastructure at all? What I knew for sure is I wasn't going to get to the bottom of this one tonight.
 
-As I went back to my bedroom and laid once more in bed, I noticed a faint smile on my face. There's a chance we really can do better. Maybe we're not exactly there yet, but my experience tonight had given me a certain optimism that we aren't as far as I once thought. With the promise of a brighter tomorrow, I fell blissfully asleep.
+As I went back to my bedroom and laid once more in bed, I noticed I was grinning. There's a chance we really can do better. Maybe we're not exactly there yet, but my experience tonight had given me a certain optimism that we aren't as far as I once thought. With the promise of a brighter tomorrow, I turned on my side and fell asleep.

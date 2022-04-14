@@ -18,6 +18,11 @@ variable "api_container_port" {
   default = 8001
 }
 
+variable "api_fqdn" {
+  type = string
+  description = "Fully qualified domain name where the api will be reachable at"
+}
+
 variable "postgres_container_port" {
   type = number
   default = 5432

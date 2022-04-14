@@ -80,4 +80,11 @@ data "cloudinit_config" "backend" {
     )
     filename = "/lib/systemd/system/shuttle-backend.service"
   }
+  part {
+    content_type = "text/x-shellscript"
+    content      = <<-EOL
+      systemctl enable opt-shuttle
+      systemctl enable shuttle-backend
+    EOL
+  }
 }

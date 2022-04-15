@@ -15,9 +15,7 @@ export default function InternalLink({
   const router = useRouter();
 
   if (!href) {
-    return (
-      <span {...props}/>
-    )
+    return <span {...props} />;
   }
 
   return (

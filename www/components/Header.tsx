@@ -20,7 +20,7 @@ export default function Header() {
   const { user, error, isLoading } = useUser();
 
   return (
-    <header className="sticky top-0 z-20 border-b border-gray-400 bg-dark-700">
+    <header className="sticky top-0 z-20 border-b border-slate-500 bg-slate-100 dark:border-gray-400 dark:bg-dark-700">
       <nav className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8" aria-label="Top">
         <div className="flex w-full items-center justify-between py-3">
           <div className="flex items-center">
@@ -42,7 +42,7 @@ export default function Header() {
                   <InternalLink
                     key={link.name}
                     href={link.href}
-                    className="text-base font-medium text-gray-200 hover:text-white"
+                    className="text-base font-medium text-slate-600 hover:text-slate-900 dark:text-gray-200 hover:dark:text-white"
                   >
                     {link.name}
                   </InternalLink>
@@ -50,7 +50,7 @@ export default function Header() {
                   <ExternalLink
                     key={link.name}
                     href={link.href}
-                    className="text-base font-medium text-gray-200 hover:text-white"
+                    className="text-base font-medium text-slate-600 hover:text-slate-900 dark:text-gray-200 hover:dark:text-white"
                   >
                     {link.name}
                   </ExternalLink>
@@ -58,14 +58,14 @@ export default function Header() {
               )}
             </div>
           </div>
-          <div className="ml-10 space-x-4 flex items-center">
+          <div className="ml-10 flex items-center space-x-4">
             <NoSsr>
               <ThemeSwitch />
             </NoSsr>
 
             {user && (
               <button
-                className="inline-block rounded border border-current py-2 px-4 text-base font-medium text-gray-200 hover:text-white "
+                className="inline-block rounded border border-current py-2 px-4 text-base font-medium text-slate-600 hover:text-slate-900 dark:text-gray-200 hover:dark:text-white"
                 onClick={() => setOpen(true)}
               >
                 Log In
@@ -74,7 +74,7 @@ export default function Header() {
 
             {!user && (
               <a
-                className="inline-block rounded border border-current py-2 px-4 text-base font-medium text-gray-200 hover:text-white "
+                className="inline-block rounded border border-current py-2 px-4 text-base font-medium text-slate-600 hover:text-slate-900 dark:text-gray-200 hover:dark:text-white"
                 href="/login"
               >
                 Log In
@@ -83,12 +83,12 @@ export default function Header() {
           </div>
         </div>
         <div className="flex flex-wrap justify-center space-x-6 py-4 lg:hidden">
-          {navigation.map((link) => (
+          {navigation.map((link) =>
             link.internal ? (
               <InternalLink
                 key={link.name}
                 href={link.href}
-                className="text-base font-medium text-gray-200 hover:text-white"
+                className="text-base font-medium dark:text-gray-200 hover:dark:text-white"
               >
                 {link.name}
               </InternalLink>
@@ -96,12 +96,12 @@ export default function Header() {
               <ExternalLink
                 key={link.name}
                 href={link.href}
-                className="text-base font-medium text-gray-200 hover:text-white"
+                className="text-base font-medium dark:text-gray-200 hover:dark:text-white"
               >
                 {link.name}
               </ExternalLink>
             )
-          ))}
+          )}
         </div>
       </nav>
     </header>

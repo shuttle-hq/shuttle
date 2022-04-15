@@ -38,26 +38,26 @@ export default function CodeSnippets() {
     <div className="mx-auto max-w-6xl px-4 pt-16 pb-20 sm:px-6 lg:px-8 lg:pt-24 lg:pb-28">
       <div className="grid w-full grid-cols-1 gap-4 lg:grid-cols-12">
         <div className="mb-4 lg:col-span-5">
-          <h2 className="text-3xl font-extrabold tracking-tight text-gray-200 sm:text-4xl">
+          <h2 className="text-3xl font-extrabold tracking-tight dark:text-gray-200 sm:text-4xl">
             How it works
           </h2>
-          <p className="mt-3 text-lg text-gray-300 sm:mt-4">
+          <p className="mt-3 text-lg text-slate-500 dark:text-gray-300 sm:mt-4">
             Shuttle is built for Rust.
           </p>
 
-          <p className="mt-3 text-lg text-gray-300 sm:mt-4">
+          <p className="mt-3 text-lg text-slate-500 dark:text-gray-300 sm:mt-4">
             A simple cargo command packages up your application, ships it to the
             shuttle build cluster where it's incrementally compiled and
             automatically served on a unique subdomain.
           </p>
 
-          <p className="mt-3 text-lg text-gray-300 sm:mt-4">
+          <p className="mt-3 text-lg text-slate-500 dark:text-gray-300 sm:mt-4">
             Shuttle uses simple but powerful annotations to understand your
             dependencies. Infrastructure dependencies like databases or
             key-value stores are spun up for you and everything is automatically
             wired together from the get-go.
           </p>
-          <p className="mt-3 text-lg text-gray-300 sm:mt-4">
+          <p className="mt-3 text-lg text-slate-500 dark:text-gray-300 sm:mt-4">
             It feels a little magical.
           </p>
         </div>
@@ -71,7 +71,7 @@ export default function CodeSnippets() {
               <select
                 id="tabs"
                 name="tabs"
-                className="block w-full rounded bg-gray-600 text-gray-300"
+                className="block w-full rounded text-slate-500  dark:bg-gray-600 dark:text-gray-300"
                 defaultValue={tabs[activeTab].name}
                 onChange={(e) => void setActiveTab(parseInt(e.target.value))}
               >
@@ -92,7 +92,7 @@ export default function CodeSnippets() {
                       "z-10 cursor-pointer rounded px-3 py-2 text-sm font-medium hover:shadow-md",
                       {
                         "bg-brand-orange2 text-white": activeTab === index,
-                        "text-gray-300 hover:bg-gray-600 hover:text-gray-200":
+                        "text-slate-700 hover:bg-slate-200 hover:text-slate-700 dark:text-gray-300 hover:dark:bg-gray-600 hover:dark:text-gray-200":
                           activeTab !== index,
                       }
                     )}

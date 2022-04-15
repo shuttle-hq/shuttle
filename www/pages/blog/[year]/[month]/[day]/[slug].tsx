@@ -157,7 +157,7 @@ export default function BlogPostPage(props: Props) {
           <div className="col-span-12 mb-2 lg:col-span-2">
             <InternalLink
               href={"/blog"}
-              className="flex items-center text-sm text-gray-300 hover:text-gray-200"
+              className="flex items-center text-sm text-slate-500 hover:text-slate-900 dark:text-gray-300 hover:dark:text-gray-200"
             >
               <ChevronLeftIcon className="h-4 w-4" />
               Back
@@ -166,9 +166,9 @@ export default function BlogPostPage(props: Props) {
           <div className="col-span-12 lg:col-span-12 xl:col-span-10">
             <div className="mb-16 max-w-5xl space-y-8">
               <div className="space-y-4">
-                <p className="text-brand-900">Blog post</p>
+                <p className="dark:text-brand-900">Blog post</p>
                 <h1 className="text-4xl">{props.blog.title}</h1>
-                <div className="flex space-x-3 text-sm text-gray-400">
+                <div className="flex space-x-3 text-sm text-slate-500 dark:text-gray-400">
                   <p>{props.blog.date}</p>
                   <p>•</p>
                   <p>{props.blog.readingTime}</p>
@@ -194,10 +194,10 @@ export default function BlogPostPage(props: Props) {
                               </div>
                             )}
                             <div className="flex flex-col">
-                              <span className="mb-0 text-sm text-gray-200">
+                              <span className="mb-0 text-sm dark:text-gray-200">
                                 {author.author}
                               </span>
-                              <span className="mb-0 text-xs text-gray-400">
+                              <span className="mb-0 text-xs text-slate-500 dark:text-gray-400">
                                 {author.position}
                               </span>
                             </div>
@@ -223,7 +223,7 @@ export default function BlogPostPage(props: Props) {
                 )}
                 <article
                   className={classNames(
-                    "prose prose-invert",
+                    "prose dark:prose-invert",
                     "prose-headings:before:block",
                     "prose-headings:before:-mt-36",
                     "prose-headings:before:pt-36",
@@ -237,20 +237,20 @@ export default function BlogPostPage(props: Props) {
                   />
                 </article>
                 <div className="mt-16">
-                  <div className="text-sm text-gray-400">
+                  <div className="text-sm dark:text-gray-400">
                     Share this article
                   </div>
                   <div className="mt-4 flex items-center space-x-4">
                     <ExternalLink
                       href={`https://twitter.com/share?text=${props.blog.title}&url=${SITE_URL}blog/${props.blog.slug}`}
-                      className="text-gray-400 hover:text-gray-200"
+                      className="text-slate-600 hover:text-slate-900 dark:text-gray-400 hover:dark:text-gray-200"
                     >
                       <FontAwesomeIcon icon={faTwitter} className="text-xl" />
                     </ExternalLink>
 
                     <ExternalLink
                       href={`https://www.linkedin.com/shareArticle?url=${SITE_URL}blog/${props.blog.slug}&title=${props.blog.title}`}
-                      className="text-gray-400 hover:text-gray-200"
+                      className="text-slate-600 hover:text-slate-900 dark:text-gray-400 hover:dark:text-gray-200"
                     >
                       <FontAwesomeIcon icon={faLinkedin} className="text-xl" />
                     </ExternalLink>
@@ -283,7 +283,7 @@ export default function BlogPostPage(props: Props) {
                           return (
                             <InternalLink
                               key={tag}
-                              className="z-10 flex-shrink-0 cursor-pointer rounded px-3 py-2 text-sm font-medium text-gray-300 hover:bg-gray-600 hover:text-gray-200 hover:shadow-md"
+                              className="z-10 flex-shrink-0 cursor-pointer rounded px-3 py-2 text-sm font-medium dark:text-gray-300 hover:dark:bg-gray-600 hover:dark:text-gray-200 hover:shadow-md"
                               href={`/blog/tags/${tag}`}
                             >
                               {tag}
@@ -292,9 +292,11 @@ export default function BlogPostPage(props: Props) {
                         })}
                       </div> */}
 
-                      <div className="mb-4 text-gray-200">On this page</div>
+                      <div className="mb-4 dark:text-gray-200">
+                        On this page
+                      </div>
 
-                      <div className="prose prose-toc !mt-0">
+                      <div className="prose prose-toc !mt-0 dark:prose-dark-toc">
                         <MDXRemote
                           {...props.blog.toc}
                           components={mdxComponents}
@@ -304,14 +306,16 @@ export default function BlogPostPage(props: Props) {
                   </div>
                   {props.relatedPosts.length > 0 ? (
                     <div>
-                      <div className="mb-4 text-gray-200">Related articles</div>
+                      <div className="mb-4 dark:text-gray-200">
+                        Related articles
+                      </div>
 
                       <div className="flex flex-col gap-2 space-y-3">
                         {props.relatedPosts.map((post, index) => (
                           <InternalLink
                             href={`/blog/${post.url}`}
                             key={index}
-                            className="flex gap-2 text-sm text-gray-300 hover:text-gray-200"
+                            className="flex gap-2 text-sm text-slate-500 hover:text-slate-900 dark:text-gray-300 hover:dark:text-gray-200"
                           >
                             <DocumentTextIcon className="mt-[2px] h-4 w-4 flex-shrink-0" />
 
@@ -321,7 +325,7 @@ export default function BlogPostPage(props: Props) {
                         <div className="mt-2">
                           <InternalLink
                             href={`/blog`}
-                            className="cursor-pointer text-sm text-gray-300 hover:text-gray-200"
+                            className="cursor-pointer text-sm text-slate-500 hover:text-slate-900 dark:text-gray-300 hover:dark:text-gray-200"
                           >
                             View all posts
                           </InternalLink>
@@ -355,7 +359,7 @@ export default function BlogPostPage(props: Props) {
 //               <p className="text-scale-900 text-sm">{label}</p>
 //             </div>
 //             <div>
-//               <h4 className="text-lg text-gray-200">{post.title}</h4>
+//               <h4 className="text-lg dark:text-gray-200">{post.title}</h4>
 //               <p className="small">{post.date}</p>
 //             </div>
 //           </div>

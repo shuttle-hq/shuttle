@@ -39,10 +39,10 @@ export default function Examples() {
     >
       <div className="mx-auto max-w-6xl px-4 pt-16 pb-20 sm:px-6 lg:px-8 lg:pt-24 lg:pb-28">
         <div className="text-center">
-          <h2 className="text-3xl font-extrabold tracking-tight text-gray-200 sm:text-4xl">
+          <h2 className="text-3xl font-extrabold tracking-tight dark:text-gray-200 sm:text-4xl">
             From code to cloud in a minute
           </h2>
-          <p className="mx-auto mt-3 max-w-2xl text-xl text-gray-300 sm:mt-4">
+          <p className="mx-auto mt-3 max-w-2xl text-xl text-slate-500 dark:text-gray-300 sm:mt-4">
             Take your code to full-featured cloud infrastructure in under a
             minute. Don't take our word for it, see it for yourself.
           </p>
@@ -54,20 +54,20 @@ export default function Examples() {
               key={index}
               className="flex max-w-sm flex-col overflow-hidden rounded-lg transition hover:-translate-y-2 hover:shadow-2xl "
             >
-              <div className="flex-shrink-0 bg-dark-800">
+              <div className="flex-shrink-0 bg-white/50 dark:bg-dark-800">
                 <img
                   className="aspect-[4/3] w-full object-contain p-14"
                   src={card.icon}
                   role="presentation"
                 />
               </div>
-              <div className="flex flex-1 flex-col justify-between bg-gray-500 p-6">
+              <div className="flex flex-1 flex-col justify-between bg-slate-200 p-6 dark:bg-gray-500">
                 <div className="flex-1">
                   <div className="mt-2 block">
-                    <p className="text-xl font-semibold text-gray-200">
+                    <p className="text-xl font-semibold dark:text-gray-200">
                       {card.title}
                     </p>
-                    <p className="mt-3 text-base text-gray-300">
+                    <p className="mt-3 text-base text-slate-500 dark:text-gray-300">
                       {card.description}
                     </p>
                   </div>

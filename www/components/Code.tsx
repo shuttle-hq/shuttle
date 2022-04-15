@@ -18,7 +18,7 @@ const copyToClipboard = (code) => {
 export default function Code({ code, id }: CodeProps) {
   return (
     <div
-      className="cursor-pointer text-dark-200"
+      className="cursor-pointer text-slate-700 dark:text-dark-200"
       data-tip
       data-for={id}
       data-event="click"
@@ -26,7 +26,7 @@ export default function Code({ code, id }: CodeProps) {
       data-delay-hide="2000"
     >
       <pre
-        className={`group flex justify-between gap-4 rounded bg-gray-500 p-4`}
+        className={`group flex justify-between gap-4 rounded bg-slate-300 p-4 dark:bg-gray-500`}
       >
         <code>
           <span className="select-none">$ </span>

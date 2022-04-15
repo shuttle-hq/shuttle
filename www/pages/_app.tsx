@@ -53,7 +53,7 @@ export default function App({ Component, pageProps }: AppProps) {
             }}
           />
 
-          <div className="min-h-screen bg-dark-700 text-dark-200">
+          <div className="min-h-screen bg-slate-100 text-slate-800 dark:bg-dark-700 dark:text-dark-200">
             <AnnouncementBar />
             <Header />
             <Component {...pageProps} />

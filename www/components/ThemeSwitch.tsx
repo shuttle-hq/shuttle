@@ -20,11 +20,11 @@ export default function ThemeSwitch() {
 
   useEffect(() => {
     if (isDarkTheme) {
-      document.body.classList.add('dark')
+      document.body.classList.add("dark");
     } else {
-      document.body.classList.remove('dark')
+      document.body.classList.remove("dark");
     }
-  }, [isDarkTheme])
+  }, [isDarkTheme]);
 
   return (
     <Switch
@@ -32,25 +32,20 @@ export default function ThemeSwitch() {
       onChange={() => {
         updateTheme(theme === "dark" ? "light" : "dark");
       }}
-      className={classnames(
-        isDarkTheme ? "bg-indigo-600" : "bg-gray-200",
-        "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-      )}
+      className={
+        "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-slate-300 transition-colors duration-200 ease-in-out dark:bg-gray-500"
+      }
     >
       <span className="sr-only">Use setting</span>
       <span
-        className={classnames(
-          isDarkTheme ? "translate-x-5" : "translate-x-0",
-          "pointer-events-none relative inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-        )}
+        className={
+          "pointer-events-none relative inline-block h-5 w-5 translate-x-0 transform rounded-full bg-slate-200 text-slate-700 shadow ring-0 transition duration-200 ease-in-out dark:translate-x-5 dark:bg-dark-700 dark:text-dark-300"
+        }
       >
         <span
-          className={classnames(
-            isDarkTheme
-              ? "opacity-0 duration-100 ease-out"
-              : "opacity-100 duration-200 ease-in",
-            "absolute inset-0 flex h-full w-full items-center justify-center transition-opacity"
-          )}
+          className={
+            "absolute inset-0 flex h-full w-full items-center justify-center opacity-100 transition-opacity duration-200 ease-in dark:opacity-0 dark:duration-100 dark:ease-out"
+          }
           aria-hidden="true"
         >
           <svg
@@ -69,12 +64,9 @@ export default function ThemeSwitch() {
           </svg>
         </span>
         <span
-          className={classnames(
-            isDarkTheme
-              ? "opacity-100 duration-200 ease-in"
-              : "opacity-0 duration-100 ease-out",
-            "absolute inset-0 flex h-full w-full items-center justify-center transition-opacity"
-          )}
+          className={
+            "absolute inset-0 flex h-full w-full items-center justify-center opacity-0 transition-opacity duration-100 ease-out dark:opacity-100 dark:duration-200 dark:ease-in"
+          }
           aria-hidden="true"
         >
           <svg

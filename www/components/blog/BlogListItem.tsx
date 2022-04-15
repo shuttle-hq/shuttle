@@ -31,11 +31,15 @@ export default function BlogListItem({ post }: Props): JSX.Element {
                 />
               </div>
 
-              <h3 className="max-w-sm text-xl text-gray-200">{post.title}</h3>
+              <h3 className="max-w-sm text-xl dark:text-gray-200">
+                {post.title}
+              </h3>
               {post.date && (
-                <p className="text-xs text-gray-300">{post.date}</p>
+                <p className="text-xs text-slate-500 dark:text-gray-300">
+                  {post.date}
+                </p>
               )}
-              <p className="max-w-sm text-base text-gray-300">
+              <p className="max-w-sm text-base text-slate-600 dark:text-gray-300">
                 {post.description}
               </p>
             </div>
@@ -43,7 +47,7 @@ export default function BlogListItem({ post }: Props): JSX.Element {
               {author.map((author, index) => {
                 return (
                   <div
-                    className="z-0 w-10 overflow-hidden rounded-full border-2 border-gray-500"
+                    className="z-0 w-10 overflow-hidden rounded-full border-2 border-slate-800 dark:border-gray-500"
                     key={index}
                   >
                     {author.author_image_url && (

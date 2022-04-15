@@ -42,7 +42,7 @@ export default function Footer() {
             key={index}
             href={community.href}
             title={community.name}
-            className="flex h-10 w-10 items-center justify-center text-center opacity-75 hover:opacity-100"
+            className="flex h-10 w-10 items-center justify-center text-center text-dark-200 opacity-75 hover:opacity-100"
           >
             <FontAwesomeIcon icon={community.icon} className="text-[20px]" />
           </ExternalLink>
@@ -50,10 +50,10 @@ export default function Footer() {
       </div>
 
       <div className="mx-auto max-w-2xl py-20 px-4 text-center sm:py-28 sm:px-6 lg:px-8">
-        <h2 className="text-3xl font-extrabold tracking-tight text-gray-200 sm:text-4xl">
+        <h2 className="text-3xl font-extrabold tracking-tight dark:text-gray-200 sm:text-4xl">
           Let's make Rust the next language of cloud-native
         </h2>
-        <p className="mt-4 text-xl text-gray-300">
+        <p className="mt-4 text-xl dark:text-gray-300">
           We love you Go, but Rust is just better.
         </p>
         <div className="mt-8 flex justify-center gap-3">
@@ -61,10 +61,10 @@ export default function Footer() {
             <ExternalLink
               key={index}
               href={community.href}
-              className="inline-block rounded border border-current py-3 px-5 text-base font-medium text-gray-200 hover:text-white"
+              className="inline-block rounded border border-current py-3 px-5 text-base font-medium text-slate-600 hover:text-slate-900 dark:text-gray-200 hover:dark:text-white"
             >
               <FontAwesomeIcon
-                className="-ml-1 mr-3 transition hover:text-white"
+                className="-ml-1 mr-3 text-current transition"
                 icon={community.icon}
               />
               {community.name}
@@ -74,22 +74,22 @@ export default function Footer() {
       </div>
 
       {/* <div className="mx-auto max-w-6xl py-12 px-4 sm:px-6 md:py-16 lg:px-8 lg:py-20">
-        <h2 className="text-3xl font-extrabold tracking-tight text-gray-200 sm:text-4xl">
+        <h2 className="text-3xl font-extrabold tracking-tight dark:text-gray-200 sm:text-4xl">
           <span className="block">Ready to dive in?</span>
-          <span className="block text-gray-300">
+          <span className="block dark:text-gray-300">
             Start your free trial today.
           </span>
         </h2>
         <div className="mt-8 flex justify-start gap-4">
           <ExternalLink
-            className="rounded bg-brand-900 py-3 px-8 font-bold text-white transition hover:bg-brand-700"
+            className="rounded dark:bg-brand-900 py-3 px-8 font-bold dark:text-white transition hover:dark:bg-brand-700"
             href={SHUTTLE_DOCS_URL}
           >
             Get Started
           </ExternalLink>
 
           <ExternalLink
-            className="rounded bg-brand-purple1 py-3 px-8 font-bold text-white transition hover:brightness-125"
+            className="rounded dark:bg-brand-purple1 py-3 px-8 font-bold dark:text-white transition hover:brightness-125"
             href={DISCORD_URL}
           >
             Join Discord
@@ -99,21 +99,21 @@ export default function Footer() {
 
       <footer className="mx-auto max-w-6xl py-12 px-4 sm:px-6 lg:px-8">
         <div className="mt-8 flex flex-col gap-2 sm:flex-row">
-          <p className="text-base text-gray-300">&copy; 2022 shuttle</p>
+          <p className="text-base dark:text-gray-300">&copy; 2022 shuttle</p>
           {/* <p className="flex gap-2">
             {navigation.map((link, index) => (
               <InternalLink
                 key={index}
                 href={link.href}
-                className="text-base text-gray-300 hover:brightness-125"
+                className="text-base dark:text-gray-300 hover:brightness-125"
               >
                 {link.name}
               </InternalLink>
             ))}
           </p> */}
-          <p className="text-gray-300 sm:ml-auto">
+          <p className="dark:text-gray-300 sm:ml-auto">
             Backed by
-            <span className="relative -bottom-1 mx-2 inline-block text-[20px] leading-none text-white">
+            <span className="relative -bottom-1 mx-2 inline-block text-[20px] leading-none dark:text-white">
               <span className="sr-only">Y</span>
               <svg
                 width="1em"

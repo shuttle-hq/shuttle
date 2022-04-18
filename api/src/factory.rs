@@ -20,7 +20,10 @@ impl Factory for ShuttleFactory<'_> {
         Ok(conn_str)
     }
 
-    fn get_secret(&self, _key: &str) -> Result<String, shuttle_service::Error> {
-        unimplemented!()
+    async fn get_secret(&mut self, key: &str) -> Result<String, shuttle_service::Error> {
+        // TODO: need a connection pool
+        let row: (String,) = sqlx::query("SELECT value FROM secrets WHERE key = $1")
+            .bind(key).fetch_one().await?;
+        Ok(row.0)
     }
 }

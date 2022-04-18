@@ -2,7 +2,8 @@ use lazy_static::lazy_static;
 use rand::Rng;
 
 use shuttle_common::{project::ProjectName, DatabaseReadyInfo};
-use sqlx::postgres::{PgPool, PgPoolOptions};
+use sqlx::postgres::{PgPool, PgPoolOptions, PgConnection};
+use sqlx::Connection;
 use std::time::Duration;
 
 lazy_static! {
@@ -126,6 +127,17 @@ impl State {
         }
 
         self.is_guaranteed = true;
+
+        // Create table for sorting secrets:
+
+        let my_conn_str = self.request().connection_string("localhost");
+        let mut my_conn = PgConnection::connect(&my_conn_str).await?;
+        let create_secrets_query = "CREATE TABLE IF NOT EXISTS secrets (
+            key TEXT UNIQUE NOT NULL,
+            value TEXT NOT NULL,
+            PRIMARY KEY (key)
+        );";
+        sqlx::query(&create_secrets_query).execute(&mut my_conn).await?;
 
         Ok(())
     }

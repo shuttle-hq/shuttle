@@ -225,9 +225,9 @@ pub trait Factory: Send + Sync {
     /// Returns the connection string to the provisioned database.
     async fn get_sql_connection_string(&mut self) -> Result<String, crate::Error>;
 
-    /// Fetch a 'secret' (e.g. third-party API key, custom private keys, etc.) with the given key defined in
-    /// `Shuttle.toml`.
-    fn get_secret(&self, key: &str) -> Result<String, crate::Error>;
+    /// Fetch a 'secret' (e.g. third-party API key, custom private keys, etc.) with the given key
+    /// stored in the Postgres database's 'secretes' table.
+    async fn get_secret(&mut self, key: &str) -> Result<String, crate::Error>;
 }
 
 /// Used to get resources of type `T` from factories.

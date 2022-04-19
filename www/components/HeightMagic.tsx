@@ -1,6 +1,4 @@
-import { ClipboardCheckIcon, ClipboardIcon } from "@heroicons/react/outline";
-import classnames from "classnames";
-import { Children, ReactNode, useEffect, useState } from "react";
+import { ReactNode, useState } from "react";
 
 interface Props {
   readonly children?: ReactNode | undefined;

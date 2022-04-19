@@ -48,10 +48,52 @@ module.exports = {
         sans: ["Ubuntu", ...defaultTheme.fontFamily.sans],
         mono: ["Source Code Pro", "Menlo", "monospace"],
       },
+      typography: ({ theme }) => ({
+        toc: {
+          css: {
+            ul: {
+              "list-style-type": "none",
+              "padding-left": 0,
+              margin: 0,
+              li: {
+                "padding-left": 0,
+              },
+              a: {
+                display: "block",
+                "text-decoration": "none",
+                fontSize: "0.8rem",
+                fontWeight: "200",
+                color: theme("colors.gray[300]"),
+                "&:hover": {
+                  color: theme("colors.gray[200]"),
+                },
+                "font-weight": "400",
+              },
+              // margin: 0,
+              ul: {
+                "list-style-type": "none",
+                li: {
+                  marginTop: "0.2rem",
+                  marginBottom: "0.2rem",
+                  "padding-left": "0 !important",
+                  "margin-left": "0.5rem",
+                },
+                a: {
+                  fontWeight: "200",
+                  color: theme("colors.scale[400]"),
+                  "&:hover": {
+                    color: theme("colors.scale[200]"),
+                  },
+                },
+              },
+            },
+          },
+        },
+      }),
     },
   },
   plugins: [
-    // require('@tailwindcss/typography'),
+    require("@tailwindcss/typography"),
     require("@tailwindcss/forms"),
     // require('@tailwindcss/line-clamp'),
     // require('@tailwindcss/aspect-ratio'),

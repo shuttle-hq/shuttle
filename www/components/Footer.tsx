@@ -36,7 +36,7 @@ const communities = [
 export default function Footer() {
   return (
     <>
-      <div className="fixed right-8 bottom-16 flex flex-col rounded-full bg-[#252738] shadow-xl">
+      <div className="fixed right-8 bottom-16 hidden flex-col rounded-full bg-[#252738] shadow-xl md:flex">
         {communities.map((community, index) => (
           <ExternalLink
             key={index}
@@ -51,10 +51,10 @@ export default function Footer() {
 
       <div className="mx-auto max-w-2xl py-20 px-4 text-center sm:py-28 sm:px-6 lg:px-8">
         <h2 className="text-3xl font-extrabold tracking-tight text-gray-200 sm:text-4xl">
-          Join a community of developers
+          Let's make Rust the next language of cloud-native
         </h2>
         <p className="mt-4 text-xl text-gray-300">
-          Stay up to date with shuttle on GitHub, Discord, and Twitter.
+          We love you Go, but Rust is just better.
         </p>
         <div className="mt-8 flex justify-center gap-3">
           {communities.map((community, index) => (
@@ -97,7 +97,7 @@ export default function Footer() {
         </div>
       </div> */}
 
-      <footer className="mx-auto max-w-6xl py-12 px-4 sm:px-6 lg:px-8 ">
+      <footer className="mx-auto max-w-6xl py-12 px-4 sm:px-6 lg:px-8">
         <div className="mt-8 flex flex-col gap-2 sm:flex-row">
           <p className="text-base text-gray-300">&copy; 2022 shuttle</p>
           {/* <p className="flex gap-2">

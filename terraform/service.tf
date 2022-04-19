@@ -54,37 +54,38 @@ resource "aws_instance" "backend" {
   user_data_replace_on_change = false
 }
 
+locals {
+  opt_shuttle_content = templatefile(
+    "${path.module}/systemd/system/opt-shuttle.mount.tftpl",
+    {
+      dns_name = aws_efs_file_system.user_data.dns_name,
+      data_dir = local.data_dir
+    }
+  )
+  shuttle_backend_content = templatefile(
+    "${path.module}/systemd/system/shuttle-backend.service.tftpl",
+    {
+      data_dir             = local.data_dir,
+      docker_image         = local.docker_image,
+      pg_password          = var.postgres_password,
+      shuttle_admin_secret = var.shuttle_admin_secret
+    }
+  )
+}
+
 data "cloudinit_config" "backend" {
   gzip          = false
   base64_encode = false
 
   part {
+    content_type = "text/cloud-config"
     content = templatefile(
-      "${path.module}/systemd/system/opt-shuttle.mount.tftpl",
+      "${path.module}/misc/cloud-config.yaml",
       {
-        dns_name = aws_efs_file_system.user_data.dns_name,
-        data_dir = local.data_dir
+        opt_shuttle_content     = base64encode(local.opt_shuttle_content),
+        shuttle_backend_content = base64encode(local.shuttle_backend_content)
       }
     )
-    filename = "/lib/systemd/system/opt-shuttle.mount"
-  }
-  part {
-    content = templatefile(
-      "${path.module}/systemd/system/shuttle-backend.service.tftpl",
-      {
-        data_dir             = local.data_dir,
-        docker_image         = local.docker_image,
-        pg_password          = var.postgres_password,
-        shuttle_admin_secret = var.shuttle_admin_secret
-      }
-    )
-    filename = "/lib/systemd/system/shuttle-backend.service"
-  }
-  part {
-    content_type = "text/x-shellscript"
-    content      = <<-EOL
-      systemctl enable opt-shuttle
-      systemctl enable shuttle-backend
-    EOL
+    filename = "cloud-config.yaml"
   }
 }

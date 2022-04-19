@@ -9,8 +9,6 @@ jobs:
     runs-on: self-hosted
     env:
       CONTAINER_REGISTRY: public.ecr.aws/shuttle/backend
-      BACKEND_CLUSTER: unveil-ecs-cluster
-      BACKEND_SERVICE: backend
     steps:
     - uses: getsynth/checkout@v2
     - name: Configure AWS Credentials

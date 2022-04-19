@@ -22,7 +22,7 @@ import { GetStaticPropsContext, GetStaticPropsResult } from "next";
 import { ParsedUrlQuery } from "querystring";
 import InternalLink from "../../../../../components/InternalLink";
 import ExternalLink from "../../../../../components/ExternalLink";
-import classNames from "classnames";
+import classnames from "classnames";
 import { ChevronLeftIcon, DocumentTextIcon } from "@heroicons/react/outline";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faLinkedin, faTwitter } from "@fortawesome/free-brands-svg-icons";
@@ -79,14 +79,13 @@ export async function getStaticProps({
     })
     .indexOf(filePath);
 
-  const nextPost = allPosts[currentIndex + 1];
-  const prevPost = allPosts[currentIndex - 1];
+  const nextPost = allPosts[currentIndex + 1] ?? null;
+  const prevPost = allPosts[currentIndex - 1] ?? null;
 
   return {
     props: {
-      prevPost: currentIndex === 0 ? null : prevPost ? prevPost : null,
-      nextPost:
-        currentIndex === allPosts.length ? null : nextPost ? nextPost : null,
+      prevPost,
+      nextPost,
       relatedPosts,
       blog: {
         slug: `${params.year}/${params.month}/${params.day}/${params.slug}`,
@@ -220,7 +219,7 @@ export default function BlogPostPage(props: Props) {
               </div>
             )}
             <article
-              className={classNames(
+              className={classnames(
                 "prose dark:prose-invert",
                 "max-w-none",
                 "prose-headings:before:block",
@@ -252,22 +251,22 @@ export default function BlogPostPage(props: Props) {
                 </ExternalLink>
               </div>
             </div>
-            {/* <div className="grid gap-8 py-8 lg:grid-cols-1">
-                  <div>
-                    {props.prevPost && (
-                      <NextCard post={props.prevPost} label="Last post" />
-                    )}
-                  </div>
-                  <div>
-                    {props.nextPost && (
-                      <NextCard
-                        post={props.nextPost}
-                        label="Next post"
-                        className="text-right"
-                      />
-                    )}
-                  </div>
-                </div> */}
+            <div className="grid gap-8 py-8 lg:grid-cols-1">
+              <div>
+                {props.prevPost && (
+                  <NextCard post={props.prevPost} label="Last post" />
+                )}
+              </div>
+              <div>
+                {props.nextPost && (
+                  <NextCard
+                    post={props.nextPost}
+                    label="Next post"
+                    className="text-right"
+                  />
+                )}
+              </div>
+            </div>
           </div>
           {/* Sidebar */}
           <div className="flex-shrink-0 space-y-8 lg:w-64">
@@ -332,28 +331,29 @@ export default function BlogPostPage(props: Props) {
   );
 }
 
-// interface NextCardProps {
-//   readonly post: Post;
-//   readonly label: string;
-//   readonly className?: string;
-// }
+interface NextCardProps {
+  readonly post: Post;
+  readonly label: string;
+  readonly className?: string;
+}
 
-// function NextCard({ post, label, className }: NextCardProps) {
-//   return (
-//     <InternalLink href={`/blog/${post.url}`}>
-//       <div className={className}>
-//         <div className="border-scale-500 hover:bg-scale-100 cursor-pointer rounded border p-6 transition">
-//           <div className="space-y-4">
-//             <div>
-//               <p className="text-scale-900 text-sm">{label}</p>
-//             </div>
-//             <div>
-//               <h4 className="text-lg dark:text-gray-200">{post.title}</h4>
-//               <p className="small">{post.date}</p>
-//             </div>
-//           </div>
-//         </div>
-//       </div>
-//     </InternalLink>
-//   );
-// }
+function NextCard({ post, label, className }: NextCardProps) {
+  return (
+    <InternalLink
+      href={`/blog/${post.url}`}
+      className={classnames(
+        className,
+        "block cursor-pointer rounded border border-slate-400 p-6 transition hover:bg-slate-200 dark:border-dark-500 dark:hover:bg-dark-600"
+      )}
+    >
+      <div className="text-sm text-slate-500 dark:text-gray-400">{label}</div>
+
+      <div className="mt-4 text-lg text-slate-800 dark:text-gray-200">
+        {post.title}
+      </div>
+      <div className="text-xs text-slate-500 dark:text-gray-400">
+        {post.date}
+      </div>
+    </InternalLink>
+  );
+}

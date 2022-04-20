@@ -49,4 +49,11 @@ resource "aws_instance" "backend" {
     network_interface_id = aws_network_interface.backend.id
     device_index         = 0
   }
+
+  root_block_device {
+    delete_on_termination = true
+    encrypted             = false
+    volume_size           = 64
+    volume_type           = "gp2"
+  }
 }

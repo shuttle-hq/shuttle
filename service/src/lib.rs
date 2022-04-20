@@ -164,7 +164,6 @@ use tokio::runtime::Runtime;
 
 pub mod error;
 pub use error::Error;
-
 #[cfg(feature = "sqlx-postgres")]
 use sqlx::Row;
 
@@ -237,9 +236,18 @@ pub trait Factory: Send + Sync {
     async fn get_sql_connection_string(&mut self) -> Result<String, crate::Error>;
 }
 
+/// Abstraction over a simple key/value 'secret' store. This may be used for any number of
+/// purposes, such as storing API keys. Note that secrets are not encrypted and are stored directly
+/// in a table in the database (meaning they can be accessed via SQL rather than this abstraction
+/// should you prefer).
 #[async_trait]
 pub trait SecretStore {
-    async fn get_secret(&self, key: &str) -> String;
+    /// Read the secret with the given key from the database. Will return `None` if a secret with
+    /// the given key does not exist or otherwise could not be accessed.
+    async fn get_secret(&self, key: &str) -> Option<String>;
+
+    /// Create (or overwrite if already present) a key/value secret in the database. Will panic if
+    /// the database could not be accessed or execution of the query otherwise failed.
     async fn set_secret(&self, key: &str, val: &str);
 }
 
@@ -274,21 +282,24 @@ impl GetResource<sqlx::PgPool> for &mut dyn Factory {
 #[cfg(feature = "sqlx-postgres")]
 #[async_trait]
 impl SecretStore for sqlx::PgPool {
-    async fn get_secret(&self, key: &str) -> String {
-        let row = sqlx::query("SELECT value FROM secrets WHERE key = $1")
+    async fn get_secret(&self, key: &str) -> Option<String> {
+        sqlx::query("SELECT value FROM secrets WHERE key = $1")
             .bind(key)
             .fetch_one(self)
-            .await.unwrap();
-
-        row.get(0)
+            .await
+            .map(|row| row.get(0))
+            .ok()
     }
     async fn set_secret(&self, key: &str, val: &str) {
-        sqlx::query("INSERT INTO secrets (key, value) VALUES ($1, $2)
-                    ON CONFLICT (key) DO UPDATE SET value = $2")
-            .bind(key)
-            .bind(val)
-            .execute(self)
-            .await.unwrap();
+        sqlx::query(
+            "INSERT INTO secrets (key, value) VALUES ($1, $2)
+                    ON CONFLICT (key) DO UPDATE SET value = $2"
+        )
+        .bind(key)
+        .bind(val)
+        .execute(self)
+        .await
+        .unwrap();
     }
 }
 
@@ -335,7 +346,7 @@ pub type StateBuilder<T> =
 pub struct RocketService<T: Sized> {
     rocket: Option<rocket::Rocket<rocket::Build>>,
     state_builder: Option<StateBuilder<T>>,
-    runtime: Runtime,
+    runtime: Runtime
 }
 
 #[cfg(feature = "web-rocket")]
@@ -345,7 +356,7 @@ impl IntoService for rocket::Rocket<rocket::Build> {
         RocketService {
             rocket: Some(self),
             state_builder: None,
-            runtime: Runtime::new().unwrap(),
+            runtime: Runtime::new().unwrap()
         }
     }
 }
@@ -354,7 +365,7 @@ impl IntoService for rocket::Rocket<rocket::Build> {
 impl<T: Send + Sync + 'static> IntoService
     for (
         rocket::Rocket<rocket::Build>,
-        fn(&mut dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>,
+        fn(&mut dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>
     )
 {
     type Service = RocketService<T>;
@@ -363,7 +374,7 @@ impl<T: Send + Sync + 'static> IntoService
         RocketService {
             rocket: Some(self.0),
             state_builder: Some(self.1),
-            runtime: Runtime::new().unwrap(),
+            runtime: Runtime::new().unwrap()
         }
     }
 }
@@ -371,7 +382,7 @@ impl<T: Send + Sync + 'static> IntoService
 #[cfg(feature = "web-rocket")]
 impl<T> Service for RocketService<T>
 where
-    T: Send + Sync + 'static,
+    T: Send + Sync + 'static
 {
     fn build(&mut self, factory: &mut dyn Factory) -> Result<(), Error> {
         if let Some(state_builder) = self.state_builder.take() {
@@ -408,13 +419,13 @@ where
 pub struct SimpleService<T> {
     service: Option<T>,
     builder: Option<StateBuilder<T>>,
-    runtime: Runtime,
+    runtime: Runtime
 }
 
 impl<T> IntoService
     for fn(&mut dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>
 where
-    SimpleService<T>: Service,
+    SimpleService<T>: Service
 {
     type Service = SimpleService<T>;
 
@@ -422,7 +433,7 @@ where
         SimpleService {
             service: None,
             builder: Some(self),
-            runtime: Runtime::new().unwrap(),
+            runtime: Runtime::new().unwrap()
         }
     }
 }
@@ -563,9 +574,9 @@ macro_rules! declare_service {
 
             // Ensure state builder is a function
             let state_builder: fn(
-                &mut dyn $crate::Factory,
+                &mut dyn $crate::Factory
             ) -> std::pin::Pin<
-                Box<dyn std::future::Future<Output = Result<_, $crate::Error>> + Send + '_>,
+                Box<dyn std::future::Future<Output = Result<_, $crate::Error>> + Send + '_>
             > = |factory| Box::pin($state_builder(factory));
 
             let obj = $crate::IntoService::into_service((constructor(), state_builder));

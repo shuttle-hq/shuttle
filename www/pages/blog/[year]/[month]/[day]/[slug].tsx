@@ -197,7 +197,7 @@ export default function BlogPostPage(props: Props) {
             </div>
           </div>
         </div>
-        <div className="gap-4 lg:flex">
+        <div className="gap-6 lg:flex">
           {/* Content */}
           <div className="flex-grow">
             {props.blog.thumb && (

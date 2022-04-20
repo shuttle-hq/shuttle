@@ -13,6 +13,13 @@ export default function InternalLink({
   ...props
 }: JSX.IntrinsicElements["a"] & LinkProps): JSX.Element {
   const router = useRouter();
+
+  if (!href) {
+    return (
+      <span {...props}/>
+    )
+  }
+
   return (
     <Link
       href={href}

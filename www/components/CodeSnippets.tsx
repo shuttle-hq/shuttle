@@ -1,38 +1,9 @@
-import { ClipboardCheckIcon, ClipboardIcon } from "@heroicons/react/outline";
 import classnames from "classnames";
-import { useEffect, useState } from "react";
-import { PrismLight as SyntaxHighlighter } from "react-syntax-highlighter";
-import rust from "react-syntax-highlighter/dist/cjs/languages/prism/rust";
-import oneDark from "react-syntax-highlighter/dist/cjs/styles/prism/one-dark";
-import { useCopyToClipboard, useWindowSize } from "react-use";
-import HeightMagic from "./HeightMagic";
-
-SyntaxHighlighter.registerLanguage("rust", rust);
-
-cargo.displayName = "cargo";
-cargo.aliases = [];
-
-function cargo(Prism: any) {
-  Prism.languages.cargo = {
-    builtin: /\b(?:Packaging|Archiving|Compiling|Finished)\b/,
-  };
-}
-
-SyntaxHighlighter.registerLanguage("cargo", cargo);
+import { useState } from "react";
+import CodeBlock from "./CodeBlock";
 
 export default function CodeSnippets() {
   const [activeTab, setActiveTab] = useState(1);
-  const [copyToClipboardState, copyToClipboard] = useCopyToClipboard();
-  const [copied, setCopied] = useState(false);
-  useWindowSize();
-
-  useEffect(() => {
-    let timeout = setTimeout(() => {
-      setCopied(false);
-    }, 1500);
-
-    return () => void clearTimeout(timeout);
-  }, [copied]);
 
   return (
     <div className="mx-auto max-w-6xl px-4 pt-16 pb-20 sm:px-6 lg:px-8 lg:pt-24 lg:pb-28">
@@ -104,50 +75,11 @@ export default function CodeSnippets() {
               </nav>
             </div>
           </div>
-          <div className="relative my-2 rounded bg-[#282C34] p-4 shadow-lg">
-            <button
-              type="button"
-              className="absolute right-2 top-2 inline-flex items-center rounded border border-transparent bg-dark-800 px-3 py-2 text-sm font-medium leading-4 text-white shadow-sm hover:bg-dark-700"
-              onClick={() => {
-                copyToClipboard(tabs[activeTab].code);
-                setCopied(true);
-              }}
-            >
-              {copied ? (
-                <>
-                  <ClipboardCheckIcon
-                    className="-ml-0.5 mr-2 h-4 w-4"
-                    aria-hidden="true"
-                  />
-                  Copied
-                </>
-              ) : (
-                <>
-                  <ClipboardIcon
-                    className="-ml-0.5 mr-2 h-4 w-4"
-                    aria-hidden="true"
-                  />
-                  Copy
-                </>
-              )}
-            </button>
-            <HeightMagic>
-              <SyntaxHighlighter
-                className="!m-0 overflow-scroll !p-0"
-                language={tabs[activeTab].language}
-                style={oneDark}
-                showLineNumbers={tabs[activeTab].showLineNumbers}
-                lineNumberStyle={{
-                  width: "3.25em",
-                  position: "sticky",
-                  left: 0,
-                  background: "#282C34",
-                }}
-              >
-                {tabs[activeTab].code}
-              </SyntaxHighlighter>
-            </HeightMagic>
-          </div>
+          <CodeBlock
+            language={tabs[activeTab].language}
+            showLineNumbers={tabs[activeTab].showLineNumbers}
+            code={tabs[activeTab].code}
+          />
         </div>
       </div>
     </div>

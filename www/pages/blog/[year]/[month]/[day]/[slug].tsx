@@ -26,6 +26,7 @@ import classnames from "classnames";
 import { DocumentTextIcon } from "@heroicons/react/outline";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faLinkedin, faTwitter } from "@fortawesome/free-brands-svg-icons";
+import Copy from "../../../../../components/Copy";
 
 export async function getStaticPaths() {
   const paths = getAllPostSlugs();
@@ -98,6 +99,65 @@ export async function getStaticProps({
   };
 }
 
+const Pre = ({ children, ...props }: any) => {
+  let line = 1;
+
+  const code = React.useMemo(() => {
+    return [children.props.children]
+      .flat()
+      .flatMap((child) => {
+        if (typeof child !== "string") {
+          return child.props.children;
+        } else {
+          return child;
+        }
+      })
+      .join("");
+  }, [children]);
+
+  return (
+    <div className="relative">
+      <Copy code={code}></Copy>
+
+      <pre {...props} className={props.className ?? "language-"}>
+        {{
+          ...children,
+          props: {
+            ...children.props,
+            className: children.props.className ?? "language-",
+            children: [
+              <span className="mr-4 inline-block w-4 select-none text-right italic text-[rgb(92,99,112)] last:hidden">
+                {line}
+              </span>,
+              ...[children.props.children].flat().flatMap((child) => {
+                if (typeof child === "string") {
+                  const [head, ...tail] = child.split("\n");
+                  return [
+                    head,
+                    ...tail.flatMap((child) => {
+                      line++;
+
+                      return [
+                        "\n",
+                        <span className="mr-4 inline-block w-4 select-none text-right italic text-[rgb(92,99,112)] last:hidden">
+                          {line}
+                        </span>,
+                        child,
+                      ];
+                    }),
+                  ];
+                } else {
+                  return child;
+                }
+              }),
+            ],
+          },
+        }}
+      </pre>
+    </div>
+  );
+};
+
 const mdxComponents: MDXRemoteProps["components"] = {
   a(props) {
     if (props.href.match(/^https?:\/\//)) {
@@ -105,6 +165,9 @@ const mdxComponents: MDXRemoteProps["components"] = {
     }
 
     return <InternalLink {...(props as any)}></InternalLink>;
+  },
+  pre: (props: any) => {
+    return <Pre {...props} />;
   },
 };
 

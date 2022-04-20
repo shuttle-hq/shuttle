@@ -1,0 +1,32 @@
+#cloud-config
+
+packages:
+  - docker.io
+  - nfs-common
+
+# create the docker group
+groups:
+  - docker
+
+# Add default auto created user to docker group
+system_info:
+  default_user:
+    groups: [docker]
+
+write_files:
+  - encoding: b64
+    content: ${opt_shuttle_content}
+    path: /lib/systemd/system/opt-shuttle.mount
+    owner: root:root
+    permissions: "0644"
+  - encoding: b64
+    content: ${shuttle_backend_content}
+    path: /lib/systemd/system/shuttle-backend.service
+    owner: root:root
+    permissions: "0644"
+runcmd:
+  - [systemctl, enable, "opt-shuttle.mount"]
+  - [systemctl, enable, "shuttle-backend.service"]
+  - [systemctl, start, "opt-shuttle.mount"]
+  - [systemctl, start, "shuttle-backend.service"]
+output : { all : '| tee -a /var/log/cloud-init-output.log' }

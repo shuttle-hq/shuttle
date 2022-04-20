@@ -165,6 +165,9 @@ use tokio::runtime::Runtime;
 pub mod error;
 pub use error::Error;
 
+#[cfg(feature = "sqlx-postgres")]
+use sqlx::Row;
+
 #[cfg(feature = "codegen")]
 extern crate shuttle_codegen;
 #[cfg(feature = "codegen")]
@@ -232,10 +235,12 @@ pub trait Factory: Send + Sync {
     ///
     /// Returns the connection string to the provisioned database.
     async fn get_sql_connection_string(&mut self) -> Result<String, crate::Error>;
+}
 
-    /// Fetch a 'secret' (e.g. third-party API key, custom private keys, etc.) with the given key
-    /// stored in the Postgres database's 'secretes' table.
-    async fn get_secret(&mut self, key: &str) -> Result<String, crate::Error>;
+#[async_trait]
+pub trait SecretStore {
+    async fn get_secret(&self, key: &str) -> String;
+    async fn set_secret(&self, key: &str, val: &str);
 }
 
 /// Used to get resources of type `T` from factories.
@@ -263,6 +268,27 @@ impl GetResource<sqlx::PgPool> for &mut dyn Factory {
             .map_err(CustomError::new)?;
 
         Ok(pool)
+    }
+}
+
+#[cfg(feature = "sqlx-postgres")]
+#[async_trait]
+impl SecretStore for sqlx::PgPool {
+    async fn get_secret(&self, key: &str) -> String {
+        let row = sqlx::query("SELECT value FROM secrets WHERE key = $1")
+            .bind(key)
+            .fetch_one(self)
+            .await.unwrap();
+
+        row.get(0)
+    }
+    async fn set_secret(&self, key: &str, val: &str) {
+        sqlx::query("INSERT INTO secrets (key, value) VALUES ($1, $2)
+                    ON CONFLICT (key) DO UPDATE SET value = $2")
+            .bind(key)
+            .bind(val)
+            .execute(self)
+            .await.unwrap();
     }
 }
 

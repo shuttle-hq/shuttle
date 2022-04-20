@@ -23,7 +23,7 @@ import { ParsedUrlQuery } from "querystring";
 import InternalLink from "../../../../../components/InternalLink";
 import ExternalLink from "../../../../../components/ExternalLink";
 import classnames from "classnames";
-import { ChevronLeftIcon, DocumentTextIcon } from "@heroicons/react/outline";
+import { DocumentTextIcon } from "@heroicons/react/outline";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faLinkedin, faTwitter } from "@fortawesome/free-brands-svg-icons";
 
@@ -152,15 +152,6 @@ export default function BlogPostPage(props: Props) {
         }}
       />
       <div className="mx-auto max-w-6xl px-4 pt-16 pb-20 sm:px-6 lg:px-8 lg:pt-24 lg:pb-28">
-        <div className="mb-5">
-          <InternalLink
-            href={"/blog"}
-            className="flex items-center text-sm text-slate-500 hover:text-slate-900 dark:text-gray-300 hover:dark:text-gray-200"
-          >
-            <ChevronLeftIcon className="h-4 w-4" />
-            Back
-          </InternalLink>
-        </div>
         <div className="mb-16 max-w-5xl space-y-8">
           <div className="space-y-4">
             <p className="dark:text-brand-900">Blog post</p>

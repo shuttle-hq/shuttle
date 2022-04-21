@@ -8,9 +8,7 @@ jobs:
   Build-And-Deploy:
     runs-on: self-hosted
     env:
-      CONTAINER_REGISTRY: 506436569174.dkr.ecr.eu-west-2.amazonaws.com/backend
-      BACKEND_CLUSTER: unveil-ecs-cluster
-      BACKEND_SERVICE: backend
+      CONTAINER_REGISTRY: public.ecr.aws/d7w6e9t1/backend
     steps:
     - uses: getsynth/checkout@v2
     - name: Configure AWS Credentials
@@ -21,7 +19,7 @@ jobs:
         aws-region: eu-west-2
     - name: Docker Login
       run: |
-        aws ecr get-login-password | docker login --username AWS --password-stdin $CONTAINER_REGISTRY
+        aws ecr-public get-login-password | docker login --username AWS --password-stdin $CONTAINER_REGISTRY
     - name: Build And Push Image
       uses: getsynth/build-push-action@v2
       with:

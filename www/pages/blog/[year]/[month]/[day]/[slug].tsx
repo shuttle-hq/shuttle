@@ -22,10 +22,11 @@ import { GetStaticPropsContext, GetStaticPropsResult } from "next";
 import { ParsedUrlQuery } from "querystring";
 import InternalLink from "../../../../../components/InternalLink";
 import ExternalLink from "../../../../../components/ExternalLink";
-import classNames from "classnames";
-import { ChevronLeftIcon, DocumentTextIcon } from "@heroicons/react/outline";
+import classnames from "classnames";
+import { DocumentTextIcon } from "@heroicons/react/outline";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faLinkedin, faTwitter } from "@fortawesome/free-brands-svg-icons";
+import Copy from "../../../../../components/Copy";
 
 export async function getStaticPaths() {
   const paths = getAllPostSlugs();
@@ -79,14 +80,13 @@ export async function getStaticProps({
     })
     .indexOf(filePath);
 
-  const nextPost = allPosts[currentIndex + 1];
-  const prevPost = allPosts[currentIndex - 1];
+  const nextPost = allPosts[currentIndex + 1] ?? null;
+  const prevPost = allPosts[currentIndex - 1] ?? null;
 
   return {
     props: {
-      prevPost: currentIndex === 0 ? null : prevPost ? prevPost : null,
-      nextPost:
-        currentIndex === allPosts.length ? null : nextPost ? nextPost : null,
+      prevPost,
+      nextPost,
       relatedPosts,
       blog: {
         slug: `${params.year}/${params.month}/${params.day}/${params.slug}`,
@@ -99,6 +99,65 @@ export async function getStaticProps({
   };
 }
 
+const Pre = ({ children, ...props }: any) => {
+  let line = 1;
+
+  const code = React.useMemo(() => {
+    return [children.props.children]
+      .flat()
+      .flatMap((child) => {
+        if (typeof child !== "string") {
+          return child.props.children;
+        } else {
+          return child;
+        }
+      })
+      .join("");
+  }, [children]);
+
+  return (
+    <div className="relative">
+      <Copy code={code}></Copy>
+
+      <pre {...props} className={props.className ?? "language-"}>
+        {{
+          ...children,
+          props: {
+            ...children.props,
+            className: children.props.className ?? "language-",
+            children: [
+              <span className="mr-4 inline-block w-4 select-none text-right italic text-[rgb(92,99,112)] last:hidden">
+                {line}
+              </span>,
+              ...[children.props.children].flat().flatMap((child) => {
+                if (typeof child === "string") {
+                  const [head, ...tail] = child.split("\n");
+                  return [
+                    head,
+                    ...tail.flatMap((child) => {
+                      line++;
+
+                      return [
+                        "\n",
+                        <span className="mr-4 inline-block w-4 select-none text-right italic text-[rgb(92,99,112)] last:hidden">
+                          {line}
+                        </span>,
+                        child,
+                      ];
+                    }),
+                  ];
+                } else {
+                  return child;
+                }
+              }),
+            ],
+          },
+        }}
+      </pre>
+    </div>
+  );
+};
+
 const mdxComponents: MDXRemoteProps["components"] = {
   a(props) {
     if (props.href.match(/^https?:\/\//)) {
@@ -106,6 +165,9 @@ const mdxComponents: MDXRemoteProps["components"] = {
     }
 
     return <InternalLink {...(props as any)}></InternalLink>;
+  },
+  pre: (props: any) => {
+    return <Pre {...props} />;
   },
 };
 
@@ -152,185 +214,169 @@ export default function BlogPostPage(props: Props) {
           ],
         }}
       />
-      <div className="container mx-auto px-8 py-16 sm:px-16 xl:px-20">
-        <div className="grid grid-cols-12 gap-4">
-          <div className="col-span-12 mb-2 lg:col-span-2">
-            <InternalLink
-              href={"/blog"}
-              className="flex items-center text-sm text-gray-300 hover:text-gray-200"
-            >
-              <ChevronLeftIcon className="h-4 w-4" />
-              Back
-            </InternalLink>
-          </div>
-          <div className="col-span-12 lg:col-span-12 xl:col-span-10">
-            <div className="mb-16 max-w-5xl space-y-8">
-              <div className="space-y-4">
-                <p className="text-brand-900">Blog post</p>
-                <h1 className="text-4xl">{props.blog.title}</h1>
-                <div className="flex space-x-3 text-sm text-gray-400">
-                  <p>{props.blog.date}</p>
-                  <p>•</p>
-                  <p>{props.blog.readingTime}</p>
-                </div>
-                <div className="flex gap-3">
-                  {author.map((author, index) => {
-                    return (
-                      <div className="mt-6 mb-8 mr-4 w-max lg:mb-0" key={index}>
-                        <InternalLink
-                          className={author.author_url ? "cursor-pointer" : ""}
-                          href={author.author_url}
-                        >
-                          <div className="flex items-center gap-3">
-                            {author.author_image_url && (
-                              <div className="w-10">
-                                <Image
-                                  src={author.author_image_url}
-                                  className="rounded-full border"
-                                  width="100%"
-                                  height="100%"
-                                  layout="responsive"
-                                />
-                              </div>
-                            )}
-                            <div className="flex flex-col">
-                              <span className="mb-0 text-sm text-gray-200">
-                                {author.author}
-                              </span>
-                              <span className="mb-0 text-xs text-gray-400">
-                                {author.position}
-                              </span>
-                            </div>
-                          </div>
-                        </InternalLink>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+      <div className="mx-auto max-w-6xl p-4 sm:p-6 lg:p-8">
+        <div className="mb-16 max-w-5xl space-y-8">
+          <div className="space-y-4">
+            <p className="text-brand-900">Blog post</p>
+            <h1 className="text-4xl">{props.blog.title}</h1>
+            <div className="flex space-x-3 text-sm text-slate-500 dark:text-gray-400">
+              <p>{props.blog.date}</p>
+              <p>•</p>
+              <p>{props.blog.readingTime}</p>
             </div>
-            <div className="grid grid-cols-12 lg:gap-16 xl:gap-8">
-              {/* Content */}
-              <div className="col-span-12 lg:col-span-7 xl:col-span-7">
-                {props.blog.thumb && (
-                  <div className="relative mb-8 aspect-[4/3] overflow-auto rounded">
-                    <Image
-                      src={"/images/blog/" + props.blog.thumb}
-                      layout="fill"
-                      objectFit="cover"
-                    />
-                  </div>
-                )}
-                <article
-                  className={classNames(
-                    "prose prose-invert",
-                    "prose-headings:before:block",
-                    "prose-headings:before:-mt-36",
-                    "prose-headings:before:pt-36",
-                    "prose-headings:lg:before:-mt-20",
-                    "prose-headings:before:lg:pt-20"
-                  )}
-                >
-                  <MDXRemote
-                    {...props.blog.content}
-                    components={mdxComponents}
-                  />
-                </article>
-                <div className="mt-16">
-                  <div className="text-sm text-gray-400">
-                    Share this article
-                  </div>
-                  <div className="mt-4 flex items-center space-x-4">
-                    <ExternalLink
-                      href={`https://twitter.com/share?text=${props.blog.title}&url=${SITE_URL}blog/${props.blog.slug}`}
-                      className="text-gray-400 hover:text-gray-200"
+            <div className="flex gap-3">
+              {author.map((author, index) => {
+                return (
+                  <div className="mt-6 mb-8 mr-4 w-max lg:mb-0" key={index}>
+                    <InternalLink
+                      className={author.author_url ? "cursor-pointer" : ""}
+                      href={author.author_url}
                     >
-                      <FontAwesomeIcon icon={faTwitter} className="text-xl" />
-                    </ExternalLink>
-
-                    <ExternalLink
-                      href={`https://www.linkedin.com/shareArticle?url=${SITE_URL}blog/${props.blog.slug}&title=${props.blog.title}`}
-                      className="text-gray-400 hover:text-gray-200"
-                    >
-                      <FontAwesomeIcon icon={faLinkedin} className="text-xl" />
-                    </ExternalLink>
-                  </div>
-                </div>
-                {/* <div className="grid gap-8 py-8 lg:grid-cols-1">
-                  <div>
-                    {props.prevPost && (
-                      <NextCard post={props.prevPost} label="Last post" />
-                    )}
-                  </div>
-                  <div>
-                    {props.nextPost && (
-                      <NextCard
-                        post={props.nextPost}
-                        label="Next post"
-                        className="text-right"
-                      />
-                    )}
-                  </div>
-                </div> */}
-              </div>
-              {/* Sidebar */}
-              <div className="col-span-12 space-y-8 lg:col-span-5 xl:col-span-3 xl:col-start-9">
-                <div className="space-y-8 lg:sticky lg:top-20">
-                  <div className="hidden lg:block">
-                    <div className="space-y-8 py-8 lg:py-0">
-                      {/* <div className="space-x-2">
-                        {props.blog.tags.map((tag: string) => {
-                          return (
-                            <InternalLink
-                              key={tag}
-                              className="z-10 flex-shrink-0 cursor-pointer rounded px-3 py-2 text-sm font-medium text-gray-300 hover:bg-gray-600 hover:text-gray-200 hover:shadow-md"
-                              href={`/blog/tags/${tag}`}
-                            >
-                              {tag}
-                            </InternalLink>
-                          );
-                        })}
-                      </div> */}
-
-                      <div className="mb-4 text-gray-200">On this page</div>
-
-                      <div className="prose prose-toc !mt-0">
-                        <MDXRemote
-                          {...props.blog.toc}
-                          components={mdxComponents}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  {props.relatedPosts.length > 0 ? (
-                    <div>
-                      <div className="mb-4 text-gray-200">Related articles</div>
-
-                      <div className="flex flex-col gap-2 space-y-3">
-                        {props.relatedPosts.map((post, index) => (
-                          <InternalLink
-                            href={`/blog/${post.url}`}
-                            key={index}
-                            className="flex gap-2 text-sm text-gray-300 hover:text-gray-200"
-                          >
-                            <DocumentTextIcon className="mt-[2px] h-4 w-4 flex-shrink-0" />
-
-                            <span>{post.title}</span>
-                          </InternalLink>
-                        ))}
-                        <div className="mt-2">
-                          <InternalLink
-                            href={`/blog`}
-                            className="cursor-pointer text-sm text-gray-300 hover:text-gray-200"
-                          >
-                            View all posts
-                          </InternalLink>
+                      <div className="flex items-center gap-3">
+                        {author.author_image_url && (
+                          <div className="w-10">
+                            <Image
+                              src={author.author_image_url}
+                              className="rounded-full border"
+                              width="100%"
+                              height="100%"
+                              layout="responsive"
+                            />
+                          </div>
+                        )}
+                        <div className="flex flex-col">
+                          <span className="mb-0 text-sm dark:text-gray-200">
+                            {author.author}
+                          </span>
+                          <span className="mb-0 text-xs text-slate-500 dark:text-gray-400">
+                            {author.position}
+                          </span>
                         </div>
                       </div>
-                    </div>
-                  ) : null}
+                    </InternalLink>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+        <div className="gap-6 lg:flex">
+          {/* Content */}
+          <div className="flex-grow">
+            {props.blog.thumb && (
+              <div className="relative mb-8 aspect-[4/3] overflow-auto rounded">
+                <Image
+                  src={"/images/blog/" + props.blog.thumb}
+                  layout="fill"
+                  objectFit="cover"
+                />
+              </div>
+            )}
+            <article
+              className={classnames(
+                "prose dark:prose-invert",
+                "max-w-none",
+                "prose-headings:before:block",
+                "prose-headings:before:-mt-36",
+                "prose-headings:before:pt-36",
+                "prose-headings:lg:before:-mt-20",
+                "prose-headings:before:lg:pt-20"
+              )}
+            >
+              <MDXRemote {...props.blog.content} components={mdxComponents} />
+            </article>
+            <div className="mt-16">
+              <div className="text-sm dark:text-gray-400">
+                Share this article
+              </div>
+              <div className="mt-4 flex items-center space-x-4">
+                <ExternalLink
+                  href={`https://twitter.com/share?text=${props.blog.title}&url=${SITE_URL}blog/${props.blog.slug}`}
+                  className="text-slate-600 hover:text-slate-900 dark:text-gray-400 hover:dark:text-gray-200"
+                >
+                  <FontAwesomeIcon icon={faTwitter} className="text-xl" />
+                </ExternalLink>
+
+                <ExternalLink
+                  href={`https://www.linkedin.com/shareArticle?url=${SITE_URL}blog/${props.blog.slug}&title=${props.blog.title}`}
+                  className="text-slate-600 hover:text-slate-900 dark:text-gray-400 hover:dark:text-gray-200"
+                >
+                  <FontAwesomeIcon icon={faLinkedin} className="text-xl" />
+                </ExternalLink>
+              </div>
+            </div>
+            <div className="grid gap-8 py-8 lg:grid-cols-1">
+              <div>
+                {props.prevPost && (
+                  <NextCard post={props.prevPost} label="Last post" />
+                )}
+              </div>
+              <div>
+                {props.nextPost && (
+                  <NextCard
+                    post={props.nextPost}
+                    label="Next post"
+                    className="text-right"
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+          {/* Sidebar */}
+          <div className="flex-shrink-0 space-y-8 lg:w-64">
+            <div className="space-y-8 lg:sticky lg:top-20">
+              <div className="hidden lg:block">
+                <div className="space-y-8 py-8 lg:py-0">
+                  <div className="space-x-2">
+                    {props.blog.tags.map((tag: string) => {
+                      return (
+                        <InternalLink
+                          key={tag}
+                          className="flex-shrink-0 cursor-pointer rounded-full border border-green-400 bg-green-400/10 px-2 py-1 text-xs font-medium text-green-500 hover:bg-green-400/20 dark:text-green-400"
+                          href={`/blog/tags/${tag}`}
+                        >
+                          {tag}
+                        </InternalLink>
+                      );
+                    })}
+                  </div>
+
+                  <div className="mb-4 dark:text-gray-200">On this page</div>
+
+                  <div className="prose prose-toc !mt-0 dark:prose-dark-toc">
+                    <MDXRemote {...props.blog.toc} components={mdxComponents} />
+                  </div>
                 </div>
               </div>
+              {props.relatedPosts.length > 0 ? (
+                <div>
+                  <div className="mb-4 dark:text-gray-200">
+                    Related articles
+                  </div>
+
+                  <div className="flex flex-col gap-2 space-y-3">
+                    {props.relatedPosts.map((post, index) => (
+                      <InternalLink
+                        href={`/blog/${post.url}`}
+                        key={index}
+                        className="flex gap-2 text-sm text-slate-500 hover:text-slate-900 dark:text-gray-300 hover:dark:text-gray-200"
+                      >
+                        <DocumentTextIcon className="mt-[2px] h-4 w-4 flex-shrink-0" />
+
+                        <span>{post.title}</span>
+                      </InternalLink>
+                    ))}
+                    <div className="mt-2">
+                      <InternalLink
+                        href={`/blog`}
+                        className="cursor-pointer text-sm text-slate-500 hover:text-slate-900 dark:text-gray-300 hover:dark:text-gray-200"
+                      >
+                        View all posts
+                      </InternalLink>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
@@ -339,28 +385,29 @@ export default function BlogPostPage(props: Props) {
   );
 }
 
-// interface NextCardProps {
-//   readonly post: Post;
-//   readonly label: string;
-//   readonly className?: string;
-// }
+interface NextCardProps {
+  readonly post: Post;
+  readonly label: string;
+  readonly className?: string;
+}
 
-// function NextCard({ post, label, className }: NextCardProps) {
-//   return (
-//     <InternalLink href={`/blog/${post.url}`}>
-//       <div className={className}>
-//         <div className="border-scale-500 hover:bg-scale-100 cursor-pointer rounded border p-6 transition">
-//           <div className="space-y-4">
-//             <div>
-//               <p className="text-scale-900 text-sm">{label}</p>
-//             </div>
-//             <div>
-//               <h4 className="text-lg text-gray-200">{post.title}</h4>
-//               <p className="small">{post.date}</p>
-//             </div>
-//           </div>
-//         </div>
-//       </div>
-//     </InternalLink>
-//   );
-// }
+function NextCard({ post, label, className }: NextCardProps) {
+  return (
+    <InternalLink
+      href={`/blog/${post.url}`}
+      className={classnames(
+        className,
+        "block cursor-pointer rounded border border-slate-400 p-6 transition hover:bg-slate-200 dark:border-dark-500 dark:hover:bg-dark-600"
+      )}
+    >
+      <div className="text-sm text-slate-500 dark:text-gray-400">{label}</div>
+
+      <div className="mt-4 text-lg text-slate-800 dark:text-gray-200">
+        {post.title}
+      </div>
+      <div className="text-xs text-slate-500 dark:text-gray-400">
+        {post.date}
+      </div>
+    </InternalLink>
+  );
+}

@@ -2,28 +2,21 @@ pub mod project;
 
 use crate::project::ProjectName;
 use chrono::{DateTime, Utc};
-use lazy_static::lazy_static;
 use rocket::Responder;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use uuid::Uuid;
 
-extern crate lazy_static;
-
 pub const SHUTTLE_PROJECT_HEADER: &str = "Shuttle-Project";
 
 #[cfg(debug_assertions)]
-lazy_static! {
-    pub static ref API_URL: String =
-        std::env::var("SHUTTLE_API").unwrap_or_else(|_| "http://localhost:8001".to_string());
-}
+pub const API_URL_DEFAULT: &str = "http://localhost:8001";
 
 #[cfg(not(debug_assertions))]
-lazy_static! {
-    pub static ref API_URL: String = "https://api.shuttle.rs".to_string();
-}
+pub const API_URL_DEFAULT: &str = "https://api.shuttle.rs";
 
 pub type ApiKey = String;
+pub type ApiUrl = String;
 pub type Host = String;
 pub type DeploymentId = Uuid;
 pub type Port = u16;
@@ -44,16 +37,16 @@ pub struct DeploymentMeta {
 }
 
 impl DeploymentMeta {
-    pub fn queued(project: ProjectName) -> Self {
-        Self::new(project, DeploymentStateMeta::Queued)
+    pub fn queued(fqdn: &str, project: ProjectName) -> Self {
+        Self::new(fqdn, project, DeploymentStateMeta::Queued)
     }
 
-    pub fn built(project: ProjectName) -> Self {
-        Self::new(project, DeploymentStateMeta::Built)
+    pub fn built(fqdn: &str, project: ProjectName) -> Self {
+        Self::new(fqdn, project, DeploymentStateMeta::Built)
     }
 
-    fn new(project: ProjectName, state: DeploymentStateMeta) -> Self {
-        let host = Self::create_host(&project);
+    fn new(fqdn: &str, project: ProjectName, state: DeploymentStateMeta) -> Self {
+        let host = Self::create_host(fqdn, &project);
         Self {
             id: Uuid::new_v4(),
             project,
@@ -66,8 +59,8 @@ impl DeploymentMeta {
         }
     }
 
-    pub fn create_host(project_name: &ProjectName) -> Host {
-        format!("{}.shuttleapp.rs", project_name)
+    pub fn create_host(fqdn: &str, project_name: &ProjectName) -> Host {
+        format!("{}.{}", project_name, fqdn)
     }
 }
 

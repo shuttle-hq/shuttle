@@ -37,7 +37,7 @@ const authors: readonly Author[] = [
     position: "Software Engineer",
     author_url: "",
     author_image_url: "",
-  }
+  },
 ];
 
 export default authors;

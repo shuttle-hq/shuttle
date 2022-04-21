@@ -80,7 +80,7 @@ async fn handle(
         Ok(response) => {
             info!("[PROXY, {}]", &host);
             Ok(response)
-        },
+        }
         Err(error) => {
             match error {
                 ProxyError::InvalidUri(e) => {

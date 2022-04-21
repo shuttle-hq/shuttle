@@ -355,7 +355,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-shuttle"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "anyhow",
  "cargo",
@@ -2578,7 +2578,7 @@ checksum = "45bb67a18fa91266cc7807181f62f9178a6873bfad7dc788c42e6430db40184f"
 
 [[package]]
 name = "shuttle-codegen"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "pretty_assertions",
  "proc-macro2",
@@ -2588,7 +2588,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-common"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2601,7 +2601,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-service"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "anyhow",
  "async-trait",

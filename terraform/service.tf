@@ -50,6 +50,13 @@ resource "aws_instance" "backend" {
     device_index         = 0
   }
 
+  root_block_device {
+    delete_on_termination = true
+    encrypted             = false
+    volume_size           = 64
+    volume_type           = "gp2"
+  }
+
   user_data                   = data.cloudinit_config.backend.rendered
   user_data_replace_on_change = false
 }

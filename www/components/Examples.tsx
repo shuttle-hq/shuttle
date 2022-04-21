@@ -47,7 +47,7 @@ export default function Examples() {
             minute. Don't take our word for it, see it for yourself.
           </p>
         </div>
-        <div className="mx-auto  mt-12 grid w-fit gap-5 lg:grid-cols-3">
+        <div className="mx-auto mt-12 grid w-fit scale-[.86] gap-7 lg:grid-cols-3">
           {cards.map((card, index) => (
             <ExternalLink
               href={card.link}

@@ -153,7 +153,8 @@ async fn rocket() -> Rocket<Build> {
 
     let args: Args = Args::from_args();
     let build_system = FsBuildSystem::initialise(args.path).unwrap();
-    let deployment_manager = Arc::new(DeploymentSystem::new(Box::new(build_system)).await);
+    let deployment_manager =
+        Arc::new(DeploymentSystem::new(Box::new(build_system), args.proxy_fqdn.to_string()).await);
 
     start_proxy(args.bind_addr, args.proxy_port, deployment_manager.clone()).await;
 

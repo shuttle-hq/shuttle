@@ -54,6 +54,7 @@ dependencies = [
  "cargo",
  "cargo-util",
  "env_logger",
+ "fqdn",
  "futures",
  "hyper",
  "hyper-reverse-proxy",
@@ -897,6 +898,12 @@ dependencies = [
  "matches",
  "percent-encoding",
 ]
+
+[[package]]
+name = "fqdn"
+version = "0.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e6d13224e56390ed1c582c513492b8b4acc7865034a7f4a2077e52585175ea8"
 
 [[package]]
 name = "futures"

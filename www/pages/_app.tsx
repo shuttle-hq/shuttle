@@ -22,6 +22,7 @@ import ApiKeyModal, {
 import Footer from "../components/Footer";
 import Header from "../components/Header";
 import { config } from "@fortawesome/fontawesome-svg-core";
+import Script from "next/script";
 
 config.autoAddCss = false;
 
@@ -37,7 +38,23 @@ export default function App({ Component, pageProps }: AppProps) {
           <Head>
             <title>{SITE_TITLE}</title>
           </Head>
+          <Script
+            strategy="afterInteractive"
+            dangerouslySetInnerHTML={{
+              __html: `
+                (function(d, w) {
+                  w.MissiveChatConfig = {
+                    "id": "35790ffd-9049-42c8-a9d4-e0865535419c"
+                  };
 
+                  var s = d.createElement('script');
+                  s.async = true;
+                  s.src = 'https://webchat.missiveapp.com/' + w.MissiveChatConfig.id + '/missive.js';
+                  if (d.head) d.head.appendChild(s);
+                })(document, window);
+              `,
+            }}
+          />
           <DefaultSeo
             title={APP_NAME}
             description={SITE_DESCRIPTION}
@@ -53,7 +70,7 @@ export default function App({ Component, pageProps }: AppProps) {
             }}
           />
 
-          <div className="min-h-screen bg-dark-700 text-dark-200">
+          <div className="min-h-screen bg-slate-100 text-slate-800 dark:bg-dark-700 dark:text-dark-200">
             <AnnouncementBar />
             <Header />
             <Component {...pageProps} />

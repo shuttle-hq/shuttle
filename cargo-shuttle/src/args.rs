@@ -9,7 +9,20 @@ use structopt::StructOpt;
         .required(false)
         .hidden(true))
 )]
-pub enum Args {
+pub struct Args {
+    #[structopt(
+        long,
+        about = "allows targeting a custom deloyed instance for this command only",
+        env = "SHUTTLE_API"
+    )]
+    /// Run this command against the api at the supplied url
+    pub api_url: Option<String>,
+    #[structopt(subcommand)]
+    pub cmd: Command,
+}
+
+#[derive(StructOpt)]
+pub enum Command {
     #[structopt(about = "deploy an shuttle project")]
     Deploy(DeployArgs),
     #[structopt(about = "view the status of an shuttle project")]

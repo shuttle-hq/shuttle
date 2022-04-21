@@ -1,12 +1,12 @@
 data "aws_route53_zone" "user" {
-  name = "shuttleapp.rs."
+  name = "${var.proxy_fqdn}."
 }
 
 resource "aws_acm_certificate" "user" {
-  domain_name = "shuttleapp.rs"
+  domain_name = var.proxy_fqdn
 
   subject_alternative_names = [
-    "*.shuttleapp.rs"
+    "*.${var.proxy_fqdn}"
   ]
 
   validation_method = "DNS"

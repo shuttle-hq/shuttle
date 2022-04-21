@@ -17,7 +17,7 @@ I don't want to have to deal with Terraform and Kubernetes at midnight. I want t
 
 It's 2022. **Surely** we can do better. As I stared blankly at my white ceiling, I decided to see if it was possible.
 
-I suddenly sat up in bed. Can I create a useful app, with some sort of database state, a custom subdomain, focus *only* on my application code without needing to worry about infrastructure *and* get it done in 10 minutes or less? I'll write a URL shortener or something. I'll write in Rust. I'll write it tonight.
+I suddenly sat up in bed. Can I create a useful app, with some sort of database state, a custom subdomain, focus _only_ on my application code without needing to worry about infrastructure _and_ get it done in 10 minutes or less? I'll write a URL shortener or something. I'll write in Rust. I'll write it tonight.
 
 ## Design
 
@@ -33,6 +33,7 @@ You can shorten URLs like this:
 curl -X POST -d 'https://www.google.com' https://myapp.com
 https://myapp.com/uvAivJ
 ```
+
 And you get redirected like this:
 
 ```bash
@@ -46,12 +47,14 @@ Yeah that'll work.
 Next I'll need some sort of database to store the urls. I briefly considered using a bijective compression scheme without needing database state, but let's face it I'm not really sure what a bijection is and it's already 3:02 AM.
 
 I'll just get a Postgres instance with a basic schema:
+
 ```sql
 CREATE TABLE urls (
   id VARCHAR(6) PRIMARY KEY,
   url VARCHAR NOT NULL
 );
 ```
+
 Genius.
 
 I'll add an index or something so that the database doesn't do a linear search on every request. No one is really going to use this - but I can already feel the judgement of anyone who happens to glance over my source code. I need to be able to explain to people that you can search for urls in constant time, implying I understand complexity theory.
@@ -69,6 +72,7 @@ mkdir -p ~/projects/url-shortener && cd ~/projects/url-shortener && cargo init -
 Ok we have our `cargo` project. I stop and think for a little bit - which web framework do I want to use? I think I'm going to go with [Rocket](https://rocket.rs/). It's pretty much production ready with a sweet API and I'm reasonably proficient with it.
 
 I open up `src/lib.rs` and overwrite it with the `shuttle` entrypoint code:
+
 ```rust
 #[macro_use]
 extern crate rocket;
@@ -92,7 +96,7 @@ My IDE violently lights up with red syntax highlighting as I realise I haven't i
 
 Next I import all of the dependencies to get shuttle to work with Rocket - pretty simple. I open up `Cargo.toml` add a couple of lines:
 
-```
+```toml
 [package]
 name = "url-shortener"
 version = "0.1.0"
@@ -131,7 +135,9 @@ $ cargo shuttle deploy
         Host:               url-shortener.shuttleapp.rs
         Created At:         2022-04-13 03:07:34.412602556 UTC
 ```
+
 Ok... this seemed a little too easy, let's see if it works.
+
 ```
 $ curl -X https://url-shortener.shuttleapp.rs/hello
 Hello, world!
@@ -143,7 +149,7 @@ Hm, not bad. I pour myself another shot...
 
 This is the part of my journey where I usually get a little flustered. I've set up databases before but it's always a pain. You need to provision a VM, make sure storage isn't ephemeral, install and spin up the database, create an account with the correct privileges and secure password, store the password in some sort of secrets manager in CI, add your IP address and your VM's IP address to the list of acceptable hosts etc etc etc. Oof that sounds like a lot of work.
 
-`shuttle` does a lot of this stuff for you - I just didn't remember how. I quickly head over to the [shuttle / sqlx](https://docs.rs/shuttle-service/0.2.5/shuttle_service/#using-sqlx) section in the docs. I added the `sqlx` dependency to `Cargo.toml` and change *one line* in `lib.rs`:
+`shuttle` does a lot of this stuff for you - I just didn't remember how. I quickly head over to the [shuttle / sqlx](https://docs.rs/shuttle-service/0.2.5/shuttle_service/#using-sqlx) section in the docs. I added the `sqlx` dependency to `Cargo.toml` and change _one line_ in `lib.rs`:
 
 ```rust
 #[shuttle_service::main]
@@ -225,7 +231,7 @@ Next I implemented the `redirect` method in a similar spirit. At this point I st
 ```rust
 #[get("/<id>")]
 async fn redirect(id: String, pool: &State<PgPool>) -> Result<Redirect, Status> {
-    let url: (String,) = sqlx::query_as("SELECT url FRMO urls WHERE id = $1")
+    let url: (String,) = sqlx::query_as("SELECT url FROM urls WHERE id = $1")
         .bind(id)
         .fetch_one(&**pool)
         .await
@@ -258,7 +264,7 @@ I did it.
 
 With a sigh of relief I pushed myself back from my desk. I refilled my mug, picked it up and headed to my derelict balcony. As I slid open the the windows and the cold air flowed into my apartment, I took two steps forward to rest my elbows and mug on the railing.
 
-I sat there for a while reflecting on what had just happened. I *had* succeeded. I'd successfully built a somewhat trivial app quickly without needing to worry about provisioning databases or networking or any of that jazz.
+I sat there for a while reflecting on what had just happened. I _had_ succeeded. I'd successfully built a somewhat trivial app quickly without needing to worry about provisioning databases or networking or any of that jazz.
 
 But how would this measure up in the real world? Real software engineering is complex, involving collaboration across different teams with different skill-sets. The entire world of software is barely keeping it together. Is it really feasible to replace our existing, tried and tested cloud paradigms with a new paradigm of not having to deal with infrastructure at all? What I knew for sure is I wasn't going to get to the bottom of this one tonight.
 

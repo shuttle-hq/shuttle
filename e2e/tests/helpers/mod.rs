@@ -162,6 +162,8 @@ impl Api {
             "-e",
             "API_PORT=8001",
             "-e",
+            "PROXY_FQDN=shuttleapp.test",
+            "-e",
             "SHUTTLE_USERS_TOML=/config/users.toml",
             "-e",
             "SHUTTLE_INITIAL_KEY=ci-test",

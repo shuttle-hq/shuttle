@@ -17,6 +17,7 @@ ExecStart=/usr/bin/docker run --rm \
 			      -p 8001:8001 \
 			      -e PG_PORT=5432 \
 			      -p 5432:5432 \
+			      -e PROXY_FQDN=${proxy_fqdn} \
 			      -e SHUTTLE_USERS_TOML=/opt/shuttle/users/users.toml \
 			      -e PG_PASSWORD=${pg_password} \
 			      -e SHUTTLE_ADMIN_SECRET=${shuttle_admin_secret} \

@@ -55,6 +55,7 @@ async fn get_deployment(
     id: Uuid,
     _user: ScopedUser,
 ) -> ApiResult<DeploymentMeta, DeploymentApiError> {
+    info!("[GET_DEPLOYMENT, {}, {}]", _user.name(), _user.scope());
     let deployment = state.deployment_manager.get_deployment(&id).await?;
     Ok(Json(deployment))
 }
@@ -65,6 +66,7 @@ async fn delete_deployment(
     id: Uuid,
     _user: ScopedUser,
 ) -> ApiResult<DeploymentMeta, DeploymentApiError> {
+    info!("[DELETE_DEPLOYMENT, {}, {}]", _user.name(), _user.scope());
     // TODO why twice?
     let _deployment = state.deployment_manager.get_deployment(&id).await?;
     let deployment = state.deployment_manager.kill_deployment(&id).await?;
@@ -76,6 +78,8 @@ async fn get_project(
     state: &State<ApiState>,
     user: ScopedUser,
 ) -> ApiResult<DeploymentMeta, DeploymentApiError> {
+    info!("[GET_PROJECT, {}, {}]", user.name(), user.scope());
+
     let deployment = state
         .deployment_manager
         .get_deployment_for_project(user.scope())
@@ -89,6 +93,8 @@ async fn delete_project(
     state: &State<ApiState>,
     user: ScopedUser,
 ) -> ApiResult<DeploymentMeta, DeploymentApiError> {
+    info!("[DELETE_PROJECT, {}, {}]", user.name(), user.scope());
+
     let deployment = state
         .deployment_manager
         .kill_deployment_for_project(user.scope())
@@ -104,6 +110,8 @@ async fn create_project(
     project_name: ProjectName,
     user: User,
 ) -> ApiResult<DeploymentMeta, DeploymentApiError> {
+    info!("[CREATE_PROJECT, {}, {}]", &user.name, &project_name);
+
     if !user
         .projects
         .iter()
@@ -145,7 +153,8 @@ async fn rocket() -> Rocket<Build> {
 
     let args: Args = Args::from_args();
     let build_system = FsBuildSystem::initialise(args.path).unwrap();
-    let deployment_manager = Arc::new(DeploymentSystem::new(Box::new(build_system)).await);
+    let deployment_manager =
+        Arc::new(DeploymentSystem::new(Box::new(build_system), args.proxy_fqdn.to_string()).await);
 
     start_proxy(args.bind_addr, args.proxy_port, deployment_manager.clone()).await;
 

@@ -41,10 +41,10 @@ export default function Features() {
     >
       <div className="mx-auto max-w-6xl py-16 px-4 sm:px-6 lg:py-24 lg:px-8">
         <div className="mx-auto max-w-3xl text-center">
-          <h2 className="text-3xl font-extrabold tracking-tight text-gray-200 sm:text-4xl">
+          <h2 className="text-3xl font-extrabold tracking-tight dark:text-gray-200 sm:text-4xl">
             Serverless for Rust
           </h2>
-          <p className="mt-4 text-xl text-gray-300">
+          <p className="mt-4 text-xl text-slate-500 dark:text-gray-300">
             The only serverless platform that lets you control your
             infrastructure from Rust code as easily as deriving a trait.
           </p>
@@ -57,11 +57,11 @@ export default function Features() {
                   className="absolute h-6 w-6 text-green-500"
                   aria-hidden="true"
                 />
-                <p className="ml-9 text-lg font-medium leading-6 text-gray-200">
+                <p className="ml-9 text-lg font-medium leading-6 dark:text-gray-200">
                   {feature.name}
                 </p>
               </dt>
-              <dd className="mt-2 ml-9 text-base text-gray-300">
+              <dd className="mt-2 ml-9 text-base text-slate-500 dark:text-gray-300">
                 {feature.description}
               </dd>
             </div>

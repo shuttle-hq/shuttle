@@ -69,6 +69,7 @@ locals {
       docker_image         = local.docker_image,
       pg_password          = var.postgres_password,
       shuttle_admin_secret = var.shuttle_admin_secret,
+      proxy_fqdn           = var.proxy_fqdn,
       shuttle_initial_key  = random_string.initial_key.result
     }
   )

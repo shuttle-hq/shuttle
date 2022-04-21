@@ -1,0 +1,30 @@
+[Unit]
+Description=maintains the shuttle Backend API
+After=docker.socket
+After=opt-shuttle.mount
+
+[Service]
+Type=simple
+User=ubuntu
+RestartSec=30
+Restart=always
+ExecStartPre=/usr/bin/docker pull ${docker_image}:latest
+ExecStart=/usr/bin/docker run --rm \
+			      -e CRATES_PATH=/opt/shuttle/crates \
+			      -e PROXY_PORT=8000 \
+			      -p 8000:8000 \
+			      -e API_PORT=8001 \
+			      -p 8001:8001 \
+			      -e PG_PORT=5432 \
+			      -p 5432:5432 \
+			      -e PROXY_FQDN=${proxy_fqdn} \
+			      -e SHUTTLE_USERS_TOML=/opt/shuttle/users/users.toml \
+			      -e PG_PASSWORD=${pg_password} \
+			      -e SHUTTLE_ADMIN_SECRET=${shuttle_admin_secret} \
+			      -e PG_DATA=/opt/shuttle/postgres \
+			      -v ${data_dir}/user-data:/opt/shuttle:rw \
+			      -v ${data_dir}/conf/postgres:/etc/postgresql/11/shuttle:rw \
+			      ${docker_image}:latest
+
+[Install]
+WantedBy=multi-user.target

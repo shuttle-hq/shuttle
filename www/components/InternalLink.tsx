@@ -13,6 +13,11 @@ export default function InternalLink({
   ...props
 }: JSX.IntrinsicElements["a"] & LinkProps): JSX.Element {
   const router = useRouter();
+
+  if (!href) {
+    return <span {...props} />;
+  }
+
   return (
     <Link
       href={href}
@@ -37,12 +42,14 @@ export default function InternalLink({
             setTimeout(() => {
               router.replace(href);
             }, 350);
-          } else if (href.startsWith("#")) {
+          } else if (href.startsWith(router.pathname + "#")) {
             e.preventDefault();
 
-            document.querySelector(href).scrollIntoView({
-              behavior: "smooth",
-            });
+            document
+              .querySelector(href.slice(router.pathname.length))
+              .scrollIntoView({
+                behavior: "smooth",
+              });
 
             setTimeout(() => {
               router.replace(href);

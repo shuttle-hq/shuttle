@@ -5,7 +5,7 @@ resource "aws_apigatewayv2_api" "backend" {
 }
 
 resource "aws_apigatewayv2_domain_name" "backend" {
-  domain_name = "api.shuttle.rs"
+  domain_name = aws_acm_certificate.api.domain_name
 
   domain_name_configuration {
     certificate_arn = aws_acm_certificate.api.arn

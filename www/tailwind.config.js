@@ -48,10 +48,82 @@ module.exports = {
         sans: ["Ubuntu", ...defaultTheme.fontFamily.sans],
         mono: ["Source Code Pro", "Menlo", "monospace"],
       },
+      typography: ({ theme }) => {
+        const tocCSS = {
+          ul: {
+            "list-style-type": "none",
+            "padding-left": 0,
+            margin: 0,
+            li: {
+              "padding-left": 0,
+            },
+            a: {
+              display: "block",
+              "text-decoration": "none",
+              fontSize: "0.8rem",
+              fontWeight: "200",
+              color: theme("colors.slate[500]"),
+              "&:hover": {
+                color: theme("colors.slate[900]"),
+              },
+              "font-weight": "400",
+            },
+            ul: {
+              "list-style-type": "none",
+              li: {
+                marginTop: "0.2rem",
+                marginBottom: "0.2rem",
+                "padding-left": "0 !important",
+                "margin-left": "0.5rem",
+              },
+              a: {
+                fontWeight: "200",
+                color: theme("colors.slate[600]"),
+                "&:hover": {
+                  color: theme("colors.slate[900]"),
+                },
+              },
+            },
+          },
+        };
+
+        return {
+          toc: {
+            css: tocCSS,
+          },
+          "dark-toc": {
+            css: {
+              ...tocCSS,
+              ul: {
+                ...tocCSS.ul,
+                a: {
+                  ...tocCSS.ul.a,
+                  color: theme("colors.gray[300]"),
+                  "&:hover": {
+                    ...tocCSS.ul.a["&:hover"],
+                    color: theme("colors.gray[200]"),
+                  },
+                },
+                ul: {
+                  ...tocCSS.ul.ul,
+                  a: {
+                    ...tocCSS.ul.ul.a,
+                    color: theme("colors.scale[400]"),
+                    "&:hover": {
+                      ...tocCSS.ul.ul.a["&:hover"],
+                      color: theme("colors.gray[200]"),
+                    },
+                  },
+                },
+              },
+            },
+          },
+        };
+      },
     },
   },
   plugins: [
-    // require('@tailwindcss/typography'),
+    require("@tailwindcss/typography"),
     require("@tailwindcss/forms"),
     // require('@tailwindcss/line-clamp'),
     // require('@tailwindcss/aspect-ratio'),

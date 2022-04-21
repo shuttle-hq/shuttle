@@ -44,7 +44,7 @@ data "aws_route53_zone" "root" {
 }
 
 resource "aws_acm_certificate" "api" {
-  domain_name = "api.shuttle.rs"
+  domain_name = var.api_fqdn
 
   validation_method = "DNS"
 

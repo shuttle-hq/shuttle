@@ -4,3 +4,7 @@
 
 @import "prism-themes/themes/prism-one-dark.css";
 @import "@fortawesome/fontawesome-svg-core/styles.css";
+
+pre[class*="language-"] span.token {
+  display: inline !important;
+}

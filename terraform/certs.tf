@@ -35,7 +35,7 @@ resource "aws_route53_record" "user" {
 }
 
 resource "aws_acm_certificate_validation" "user" {
-  certificate_arn = aws_acm_certificate.user.arn
+  certificate_arn         = aws_acm_certificate.user.arn
   validation_record_fqdns = [for record in aws_route53_record.user : record.fqdn]
 }
 
@@ -72,6 +72,6 @@ resource "aws_route53_record" "api" {
 }
 
 resource "aws_acm_certificate_validation" "api" {
-  certificate_arn = aws_acm_certificate.api.arn
+  certificate_arn         = aws_acm_certificate.api.arn
   validation_record_fqdns = [for record in aws_route53_record.api : record.fqdn]
 }

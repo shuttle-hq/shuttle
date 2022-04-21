@@ -1,14 +1,14 @@
 resource "aws_network_interface" "backend" {
-  subnet_id   = aws_subnet.backend_b.id
+  subnet_id = aws_subnet.backend_b.id
 }
 
 resource "aws_eip" "backend" {
-  vpc = true
+  vpc               = true
   network_interface = aws_network_interface.backend.id
 }
 
 resource "aws_network_interface_sg_attachment" "backend" {
-  security_group_id = aws_security_group.unreasonable.id
+  security_group_id    = aws_security_group.unreasonable.id
   network_interface_id = aws_network_interface.backend.id
 }
 
@@ -36,7 +36,7 @@ resource "aws_lb_target_group_attachment" "postgres" {
 }
 
 resource "aws_instance" "backend" {
-  ami           = "ami-072db068702487a87"  # unveil-backend-ami-20220313
+  ami           = "ami-072db068702487a87" # unveil-backend-ami-20220313
   instance_type = "c6g.4xlarge"
 
   monitoring = true
@@ -68,8 +68,9 @@ locals {
       data_dir             = local.data_dir,
       docker_image         = local.docker_image,
       pg_password          = var.postgres_password,
+      shuttle_admin_secret = var.shuttle_admin_secret,
       proxy_fqdn           = var.proxy_fqdn,
-      shuttle_admin_secret = var.shuttle_admin_secret
+      shuttle_initial_key  = random_string.initial_key.result
     }
   )
 }

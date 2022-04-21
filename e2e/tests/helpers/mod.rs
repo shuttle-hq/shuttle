@@ -1,3 +1,4 @@
+use std::fs::File;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::process::{ExitStatus, Stdio};
 use std::thread::sleep;
@@ -129,6 +130,7 @@ impl Api {
         C: Into<Color>,
     {
         let mut api = Self::new_free(target, color);
+        let users_toml_file = format!("{}/users.toml", env!("CARGO_MANIFEST_DIR"));
 
         let api_target = format!("   {} api", api.target);
         let image = format!("unveil_{}_{}", api.target, api.id);
@@ -142,6 +144,8 @@ impl Api {
         spawn_and_log(&mut build, api_target.as_str(), Color::White)
             .wait()
             .ensure_success("failed to build `api` image");
+
+        File::create(&users_toml_file).unwrap();
 
         let container = format!("unveil_api_{}_{}", api.target, api.id);
         let mut run = Command::new("docker");
@@ -161,11 +165,10 @@ impl Api {
             "PROXY_FQDN=shuttleapp.test",
             "-e",
             "SHUTTLE_USERS_TOML=/config/users.toml",
+            "-e",
+            "SHUTTLE_INITIAL_KEY=ci-test",
             "-v",
-            &format!(
-                "{}/users.toml:/config/users.toml",
-                env!("CARGO_MANIFEST_DIR")
-            ),
+            &format!("{}:/config/users.toml", users_toml_file),
             &image,
         ]);
 

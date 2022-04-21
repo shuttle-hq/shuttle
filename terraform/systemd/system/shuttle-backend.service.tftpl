@@ -21,6 +21,7 @@ ExecStart=/usr/bin/docker run --rm \
 			      -e SHUTTLE_USERS_TOML=/opt/shuttle/users/users.toml \
 			      -e PG_PASSWORD=${pg_password} \
 			      -e SHUTTLE_ADMIN_SECRET=${shuttle_admin_secret} \
+			      -e SHUTTLE_INITIAL_KEY=${shuttle_initial_key} \
 			      -e PG_DATA=/opt/shuttle/postgres \
 			      -v ${data_dir}/user-data:/opt/shuttle:rw \
 			      -v ${data_dir}/conf/postgres:/etc/postgresql/11/shuttle:rw \

@@ -8,8 +8,8 @@ import ThemeSwitch from "./ThemeSwitch";
 import NoSsr from "./NoSsr";
 
 const navigation = [
-  { name: "Features", href: "#features", internal: true },
-  { name: "Examples", href: "#examples", internal: true },
+  { name: "Features", href: "/#features", internal: true },
+  { name: "Examples", href: "/#examples", internal: true },
   { name: "Docs", href: SHUTTLE_DOCS_URL, internal: false },
   { name: "Blog", href: "/blog", internal: true },
 ];

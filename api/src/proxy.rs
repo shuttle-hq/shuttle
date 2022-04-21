@@ -77,7 +77,10 @@ async fn handle(
     };
 
     match reverse_proxy(remote_addr.ip(), port, req).await {
-        Ok(response) => Ok(response),
+        Ok(response) => {
+            info!("[PROXY, {}]", &host);
+            Ok(response)
+        }
         Err(error) => {
             match error {
                 ProxyError::InvalidUri(e) => {

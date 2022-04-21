@@ -160,13 +160,14 @@ use std::net::SocketAddr;
 use std::pin::Pin;
 
 use async_trait::async_trait;
-use tokio::runtime::Runtime;
-
 use lazy_static::lazy_static;
 use regex::Regex;
+use tokio::runtime::Runtime;
 
 pub mod error;
 pub use error::Error;
+#[cfg(feature = "sqlx-postgres")]
+use sqlx::Executor;
 #[cfg(feature = "sqlx-postgres")]
 use sqlx::Row;
 
@@ -251,7 +252,14 @@ fn check_and_lower_secret_key(key: &str) -> Option<String> {
 /// in a table in the database (meaning they can be accessed via SQL rather than this abstraction
 /// should you prefer).
 #[async_trait]
-pub trait SecretStore where &Self: sqlx::Executor<'_> {
+pub trait SecretStore<DB>
+where
+    for<'c> &'c Self: sqlx::Executor<'c, Database = DB>,
+    DB: sqlx::Database,
+    for<'c> <DB as sqlx::database::HasArguments<'c>>::Arguments: sqlx::IntoArguments<'c, DB>,
+    for<'c> String: sqlx::Decode<'c, DB> + sqlx::Type<DB>,
+    for<'c> usize: sqlx::ColumnIndex<<DB as sqlx::Database>::Row>
+{
     const GET_QUERY: &'static str;
     const SET_QUERY: &'static str;
 
@@ -260,24 +268,17 @@ pub trait SecretStore where &Self: sqlx::Executor<'_> {
     async fn get_secret(&self, key: &str) -> Option<String> {
         let key = check_and_lower_secret_key(key)?;
 
-        sqlx::query(Self::GET_QUERY)
-            .bind(key)
-            .fetch_one(*self)
-            .await
-            .map(|row| row.get(0))
-            .ok()
+        let query = sqlx::query(Self::GET_QUERY).bind(key);
+
+        self.fetch_one(query).await.map(|row| row.get(0)).ok()
     }
 
     /// Create (or overwrite if already present) a key/value secret in the database. Will panic if
     /// the database could not be accessed or execution of the query otherwise failed.
     async fn set_secret(&self, key: &str, val: &str) {
         if let Some(key) = check_and_lower_secret_key(key) {
-            sqlx::query(Self::SET_QUERY)
-                .bind(key)
-                .bind(val)
-                .execute(*self)
-                .await
-                .unwrap();
+            let query = sqlx::query(Self::SET_QUERY).bind(key).bind(val);
+            self.execute(query).await.unwrap();
         }
     }
 }
@@ -312,7 +313,7 @@ impl GetResource<sqlx::PgPool> for &mut dyn Factory {
 
 #[cfg(feature = "sqlx-postgres")]
 #[async_trait]
-impl SecretStore<'_, '_> for sqlx::PgPool {
+impl SecretStore<sqlx::Postgres> for sqlx::PgPool {
     const GET_QUERY: &'static str = "SELECT value FROM secrets WHERE key = $1";
     const SET_QUERY: &'static str = "INSERT INTO secrets (key, value) VALUES ($1, $2)
                              ON CONFLICT (key) DO UPDATE SET value = $2";

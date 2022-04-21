@@ -24,11 +24,7 @@ interface Props {
   readonly showLineNumbers?: boolean;
 }
 
-export default function CodeBlock({
-  code,
-  language,
-  showLineNumbers,
-}: Props) {
+export default function CodeBlock({ code, language, showLineNumbers }: Props) {
   useWindowSize();
 
   return (

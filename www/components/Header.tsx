@@ -31,7 +31,7 @@ export default function Header() {
                   src={`${basePath}/images/logo.png`}
                   alt="Shuttle"
                 />
-                <span className="absolute top-[-18px] right-[-19px] scale-[.45] rounded bg-brand-orange1 px-[10px] py-[2px] text-base font-bold dark:text-dark-700 text-slate-100">
+                <span className="absolute top-[-18px] right-[-19px] scale-[.45] rounded bg-brand-orange1 px-[10px] py-[2px] text-base font-bold text-slate-100 dark:text-dark-700">
                   ALPHA
                 </span>
               </div>

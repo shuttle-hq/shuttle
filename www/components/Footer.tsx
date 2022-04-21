@@ -36,13 +36,13 @@ const communities = [
 export default function Footer() {
   return (
     <>
-      <div className="fixed right-8 bottom-28 hidden flex-col rounded-full bg-slate-300 dark:bg-[#252738] shadow-xl md:flex">
+      <div className="fixed right-8 bottom-28 hidden flex-col rounded-full bg-slate-300 shadow-xl dark:bg-[#252738] md:flex">
         {communities.map((community, index) => (
           <ExternalLink
             key={index}
             href={community.href}
             title={community.name}
-            className="flex h-10 w-10 items-center justify-center text-center text-slate-700 dark:text-dark-200 opacity-75 hover:opacity-100"
+            className="flex h-10 w-10 items-center justify-center text-center text-slate-700 opacity-75 hover:opacity-100 dark:text-dark-200"
           >
             <FontAwesomeIcon icon={community.icon} className="text-[20px]" />
           </ExternalLink>

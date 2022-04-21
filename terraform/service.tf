@@ -36,7 +36,7 @@ resource "aws_lb_target_group_attachment" "postgres" {
 }
 
 resource "aws_instance" "backend" {
-  ami           = "ami-09f17957a215f09e2" # unveil-backend-ami-20220313
+  ami           = "ami-072db068702487a87" # unveil-backend-ami-20220313
   instance_type = "c6g.4xlarge"
 
   monitoring = true
@@ -48,5 +48,45 @@ resource "aws_instance" "backend" {
   network_interface {
     network_interface_id = aws_network_interface.backend.id
     device_index         = 0
+  }
+
+  user_data                   = data.cloudinit_config.backend.rendered
+  user_data_replace_on_change = false
+}
+
+locals {
+  opt_shuttle_content = templatefile(
+    "${path.module}/systemd/system/opt-shuttle.mount.tftpl",
+    {
+      dns_name = aws_efs_file_system.user_data.dns_name,
+      data_dir = local.data_dir
+    }
+  )
+  shuttle_backend_content = templatefile(
+    "${path.module}/systemd/system/shuttle-backend.service.tftpl",
+    {
+      data_dir             = local.data_dir,
+      docker_image         = local.docker_image,
+      pg_password          = var.postgres_password,
+      shuttle_admin_secret = var.shuttle_admin_secret,
+      shuttle_initial_key  = random_string.initial_key.result
+    }
+  )
+}
+
+data "cloudinit_config" "backend" {
+  gzip          = false
+  base64_encode = false
+
+  part {
+    content_type = "text/cloud-config"
+    content = templatefile(
+      "${path.module}/misc/cloud-config.yaml",
+      {
+        opt_shuttle_content     = base64encode(local.opt_shuttle_content),
+        shuttle_backend_content = base64encode(local.shuttle_backend_content)
+      }
+    )
+    filename = "cloud-config.yaml"
   }
 }

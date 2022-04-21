@@ -3,7 +3,8 @@ output "container_repository_url" {
 }
 
 output "api_url" {
-  value = aws_apigatewayv2_stage.alpha.invoke_url
+  value = aws_apigatewayv2_domain_name.backend.id
+  description = "URL to connect to the api"
 }
 
 output "user_content_host" {

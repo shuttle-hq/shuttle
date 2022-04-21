@@ -214,10 +214,10 @@ export default function BlogPostPage(props: Props) {
           ],
         }}
       />
-      <div className="mx-auto max-w-6xl px-4 pt-16 pb-20 sm:px-6 lg:px-8 lg:pt-24 lg:pb-28">
+      <div className="mx-auto max-w-6xl p-4 sm:p-6 lg:p-8">
         <div className="mb-16 max-w-5xl space-y-8">
           <div className="space-y-4">
-            <p className="dark:text-brand-900">Blog post</p>
+            <p className="text-brand-900">Blog post</p>
             <h1 className="text-4xl">{props.blog.title}</h1>
             <div className="flex space-x-3 text-sm text-slate-500 dark:text-gray-400">
               <p>{props.blog.date}</p>
@@ -327,19 +327,19 @@ export default function BlogPostPage(props: Props) {
             <div className="space-y-8 lg:sticky lg:top-20">
               <div className="hidden lg:block">
                 <div className="space-y-8 py-8 lg:py-0">
-                  {/* <div className="space-x-2">
-                        {props.blog.tags.map((tag: string) => {
-                          return (
-                            <InternalLink
-                              key={tag}
-                              className="z-10 flex-shrink-0 cursor-pointer rounded px-3 py-2 text-sm font-medium dark:text-gray-300 hover:dark:bg-gray-600 hover:dark:text-gray-200 hover:shadow-md"
-                              href={`/blog/tags/${tag}`}
-                            >
-                              {tag}
-                            </InternalLink>
-                          );
-                        })}
-                      </div> */}
+                  <div className="space-x-2">
+                    {props.blog.tags.map((tag: string) => {
+                      return (
+                        <InternalLink
+                          key={tag}
+                          className="flex-shrink-0 cursor-pointer rounded-full border border-green-400 bg-green-400/10 px-2 py-1 text-xs font-medium text-green-500 hover:bg-green-400/20 dark:text-green-400"
+                          href={`/blog/tags/${tag}`}
+                        >
+                          {tag}
+                        </InternalLink>
+                      );
+                    })}
+                  </div>
 
                   <div className="mb-4 dark:text-gray-200">On this page</div>
 

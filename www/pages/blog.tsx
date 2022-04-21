@@ -8,6 +8,7 @@ import BlogListItem from "../components/blog/BlogListItem";
 import { SITE_URL } from "../lib/constants";
 import { GetStaticPropsResult } from "next";
 import InternalLink from "../components/InternalLink";
+import classnames from "classnames";
 
 export async function getStaticProps(): Promise<GetStaticPropsResult<Props>> {
   const allPostsData = getSortedPosts();
@@ -40,7 +41,7 @@ export default function Blog(props: Props): JSX.Element {
   const blogs = useMemo(() => {
     if (activeTag === "all") return tailPosts;
 
-    return props.blogs.filter((post) => post.tags.includes(activeTag));
+    return tailPosts.filter((post) => post.tags.includes(activeTag));
   }, [tailPosts, activeTag]);
 
   const meta_title = "Shuttle Blog";
@@ -80,7 +81,7 @@ export default function Blog(props: Props): JSX.Element {
 
       <div className="border-t dark:border-gray-400">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-          {/* <div className="mx-auto ">
+          <div className="mx-auto ">
             <div className="grid grid-cols-12">
               <div className="col-span-12 lg:col-span-12">
                 <div className="mb-4">
@@ -103,17 +104,17 @@ export default function Blog(props: Props): JSX.Element {
                       ))}
                     </select>
                   </div>
-                  <div className="hidden overflow-x-scroll pb-2 sm:block">
+                  <div className="hidden overflow-x-scroll py-2 sm:block">
                     <nav className="flex space-x-4" aria-label="Tabs">
                       {tags.map((tag, index) => (
                         <button
                           key={index}
                           onClick={() => void setActiveTag(tag)}
                           className={classnames(
-                            "z-10 flex-shrink-0 cursor-pointer rounded px-3 py-2 text-sm font-medium hover:shadow-md",
+                            "z-10 cursor-pointer rounded px-3 py-2 text-sm font-medium hover:shadow-md",
                             {
-                              "dark:bg-brand-orange2 dark:text-white": activeTag === tag,
-                              "dark:text-gray-300 hover:dark:bg-gray-600 hover:dark:text-gray-200":
+                              "bg-brand-orange2 text-white": activeTag === tag,
+                              "text-slate-700 hover:bg-slate-200 hover:text-slate-700 dark:text-gray-300 hover:dark:bg-gray-600 hover:dark:text-gray-200":
                                 activeTag !== tag,
                             }
                           )}
@@ -127,7 +128,7 @@ export default function Blog(props: Props): JSX.Element {
                 </div>
               </div>
             </div>
-          </div> */}
+          </div>
 
           <ol className="grid grid-cols-12 py-16 lg:gap-16">
             {blogs.map((blog, index) => (

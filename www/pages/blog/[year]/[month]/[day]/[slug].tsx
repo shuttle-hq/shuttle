@@ -262,7 +262,7 @@ export default function BlogPostPage(props: Props) {
         </div>
         <div className="gap-6 lg:flex">
           {/* Content */}
-          <div className="flex-grow">
+          <div className="flex-1 overflow-hidden">
             {props.blog.thumb && (
               <div className="relative mb-8 aspect-[4/3] overflow-auto rounded">
                 <Image
@@ -323,7 +323,7 @@ export default function BlogPostPage(props: Props) {
             </div>
           </div>
           {/* Sidebar */}
-          <div className="flex-shrink-0 space-y-8 lg:w-64">
+          <div className="flex-none space-y-8 lg:w-64">
             <div className="space-y-8 lg:sticky lg:top-20">
               <div className="hidden lg:block">
                 <div className="space-y-8 py-8 lg:py-0">

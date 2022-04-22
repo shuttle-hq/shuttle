@@ -1,6 +1,8 @@
 use std::net::IpAddr;
 use std::path::PathBuf;
+use std::str::FromStr;
 
+use fqdn::FQDN;
 use shuttle_common::Port;
 use structopt::StructOpt;
 
@@ -27,4 +29,10 @@ pub struct Args {
         default_value = "127.0.0.1"
     )]
     pub(crate) bind_addr: IpAddr,
+    #[structopt(long, about = "Fully qualified domain name deployed services are reachable at", parse(try_from_str = parse_fqdn))]
+    pub(crate) proxy_fqdn: FQDN,
+}
+
+fn parse_fqdn(src: &str) -> Result<FQDN, String> {
+    FQDN::from_str(src).map_err(|e| format!("{e:?}"))
 }

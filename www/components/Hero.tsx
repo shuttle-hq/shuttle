@@ -17,10 +17,13 @@ export default function Hero() {
 
   return (
     <div
-      className={classnames("flex w-full flex-col justify-center bg-dark-700", {
-        "min-h-[calc(100vh-107px)]": !announcementBarIsClosed,
-        "min-h-[calc(100vh-75px)]": announcementBarIsClosed,
-      })}
+      className={classnames(
+        "flex w-full flex-col justify-center dark:bg-dark-700",
+        {
+          "min-h-[calc(100vh-107px)]": !announcementBarIsClosed,
+          "min-h-[calc(100vh-75px)]": announcementBarIsClosed,
+        }
+      )}
     >
       <div className="mx-auto py-5 xl:px-12">
         <div className="p-6 sm:py-8">
@@ -31,16 +34,16 @@ export default function Hero() {
                 src={`${basePath}/images/logo.png`}
                 alt="Shuttle"
               />
-              <span className="bg-brand-orange1 text-dark-700 font-bold absolute scale-[.8] bottom-[-26px] right-[-5px] text-base px-[10px] py-[2px] rounded">
+              <span className="dark:bg-brand-orange1 dark:text-dark-700 font-bold absolute scale-[.8] bottom-[-26px] right-[-5px] text-base px-[10px] py-[2px] rounded">
                 ALPHA
               </span>
             </div> */}
 
             <div>
-              <div className="mb-5 text-4xl font-bold text-gray-200 sm:text-5xl md:text-6xl">
+              <div className="mb-5 text-4xl font-bold dark:text-gray-200 sm:text-5xl md:text-6xl">
                 {SITE_TITLE}
               </div>
-              <div className="px-10 text-xl text-gray-300">
+              <div className="px-10 text-xl text-slate-500 dark:text-gray-300 ">
                 {SITE_DESCRIPTION}
               </div>
             </div>

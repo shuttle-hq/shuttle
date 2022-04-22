@@ -54,6 +54,7 @@ dependencies = [
  "cargo",
  "cargo-util",
  "env_logger",
+ "fqdn",
  "futures",
  "hyper",
  "hyper-reverse-proxy",
@@ -355,7 +356,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-shuttle"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "anyhow",
  "cargo",
@@ -897,6 +898,12 @@ dependencies = [
  "matches",
  "percent-encoding",
 ]
+
+[[package]]
+name = "fqdn"
+version = "0.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e6d13224e56390ed1c582c513492b8b4acc7865034a7f4a2077e52585175ea8"
 
 [[package]]
 name = "futures"
@@ -2578,7 +2585,7 @@ checksum = "45bb67a18fa91266cc7807181f62f9178a6873bfad7dc788c42e6430db40184f"
 
 [[package]]
 name = "shuttle-codegen"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "pretty_assertions",
  "proc-macro2",
@@ -2588,7 +2595,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-common"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2601,7 +2608,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-service"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "anyhow",
  "async-trait",

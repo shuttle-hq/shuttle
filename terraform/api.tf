@@ -1,5 +1,5 @@
 resource "aws_apigatewayv2_api" "backend" {
-  name                         = "unveil-api-gateway"
+  name                         = "shuttle-api-gateway"
   protocol_type                = "HTTP"
   disable_execute_api_endpoint = true
 }
@@ -26,7 +26,7 @@ resource "aws_api_gateway_account" "backend" {
 }
 
 resource "aws_apigatewayv2_vpc_link" "private" {
-  name = "unveil-api-gateway-vpc-link"
+  name = "shuttle-api-gateway-vpc-link"
 
   security_group_ids = [aws_security_group.unreasonable.id]
   subnet_ids         = [aws_subnet.backend_a.id, aws_subnet.backend_b.id]
@@ -69,5 +69,5 @@ resource "aws_apigatewayv2_route" "default" {
 }
 
 resource "aws_cloudwatch_log_group" "api_gateway" {
-  name = "unveil-apigateway"
+  name = "shuttle-apigateway"
 }

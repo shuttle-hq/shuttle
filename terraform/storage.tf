@@ -1,5 +1,5 @@
 resource "aws_s3_bucket" "logs" {
-  bucket = "unveil-logs"
+  bucket = "shuttle-logs"
 }
 
 resource "aws_s3_bucket_policy" "allow_load_balancer_to_log" {
@@ -43,7 +43,7 @@ POLICY
 }
 
 resource "aws_efs_file_system" "user_data" {
-  creation_token = "unveil-user-data"
+  creation_token = "shuttle-user-data"
 }
 
 resource "aws_efs_mount_target" "user_data_a" {

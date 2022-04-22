@@ -207,9 +207,7 @@ export default function BlogPostPage(props: Props) {
           },
           images: [
             {
-              url: `${SITE_URL}${basePath}/images/blog/${
-                props.blog.image ?? props.blog.thumb
-              }`,
+              url: `${SITE_URL}${basePath}/images/blog/${props.blog.thumb}`,
             },
           ],
         }}
@@ -263,10 +261,15 @@ export default function BlogPostPage(props: Props) {
         <div className="gap-6 lg:flex">
           {/* Content */}
           <div className="flex-1 overflow-hidden">
-            {props.blog.thumb && (
-              <div className="relative mb-8 aspect-[4/3] overflow-auto rounded">
+            {(props.blog.thumb ?? props.blog.cover) && (
+              <div
+                className="relative mb-8 aspect-[4/3] overflow-auto rounded"
+                style={{
+                  aspectRatio: props.blog.coverAspectRatio,
+                }}
+              >
                 <Image
-                  src={"/images/blog/" + props.blog.thumb}
+                  src={"/images/blog/" + (props.blog.cover ?? props.blog.thumb)}
                   layout="fill"
                   objectFit="cover"
                 />

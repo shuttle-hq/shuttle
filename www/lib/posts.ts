@@ -14,7 +14,8 @@ export interface Post {
   readonly slug?: string;
   readonly title: string;
   readonly date: string;
-  readonly coverImage?: string;
+  readonly cover?: string;
+  readonly coverAspectRatio?: string;
   readonly author?: string;
   readonly author_url?: string;
   readonly excerpt?: string;

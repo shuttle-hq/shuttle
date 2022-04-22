@@ -128,17 +128,6 @@ impl State {
 
         self.is_guaranteed = true;
 
-        // Create table for sorting secrets:
-
-        let my_conn_str = self.request().connection_string("localhost");
-        let mut my_conn = PgConnection::connect(&my_conn_str).await?;
-        let create_secrets_query = "CREATE TABLE IF NOT EXISTS secrets (
-            key TEXT UNIQUE NOT NULL,
-            value TEXT NOT NULL,
-            PRIMARY KEY (key)
-        );";
-        sqlx::query(&create_secrets_query).execute(&mut my_conn).await?;
-
         Ok(())
     }
 }

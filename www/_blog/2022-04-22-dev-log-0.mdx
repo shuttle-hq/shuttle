@@ -1,0 +1,77 @@
+---
+title: "DevLog[0]: Building a serverless platform for Rust in 4 weeks"
+description: DevLog[0] is the first in a series of posts about how we built the shuttle MVP
+author: christoshadjiaslanis
+tags: [rust, startup, devlog]
+thumb: shuttle-logo-square-rocket.png
+cover: shuttle-logo-rectangle.png
+coverAspectRatio: 2624/832
+date: "2022-04-22T15:00:00"
+---
+
+Put yourself in this situation. Your startup company has come across a pretty obvious gap in the market. It's ambitious, maybe even a little crazy. You're going to toe-to-toe with AWS, Heroku, Google etc. You have 4 weeks to prove the concept. Go.
+
+In January we spent countless hours interviewing software engineers. A striking pattern emerged - no one liked dealing with the cloud. It is of course, much better than having physical servers in your basement or driving 45 minutes to your local datacenter to patch a service. But since AWS came along c. 2007, there was a longing for things to be done better. Most engineers (myself included) don't want to deal with infrastructure, we just want to write code that scales and focus on product. Infrastructure is a pre-requisite but not sufficient to build a great product. The folks at Heroku had this insight and essentially developed PaaS along with the beginnings of containerisation tech. Then Hashicorp built declarative abstractions to make the business of managing your infrastructure less of a headache. Then the serverless movement promised to be the final chapter of this saga; devs could wrap their business logic in neat functions which would scale for you. Yet here we are again, in the winter of our discontent.
+
+At shuttle we think there is a better paradigm for building applications. We call it Infrastructure From Code (IFC).
+
+IFC uses application code as the source of truth for provisioning infrastructure. No longer are your applications and servers decoupled, the two go hand in hand. Our plan was to achieve this by doing static analysis of user code and generating the corresponding infrastructure in real time. A bit like this:
+
+```rust
+#[get("/hello")]
+fn index() -> &'static str {
+    "Hello, world!"
+}
+
+#[shuttle_service::main]
+async fn rocket(
+    pool: PgPool,           // This will spin up a Postgres database, create an account and hand you an authenticated connection pool
+    redis: redis::Client    // This will spin up a Redis instance and hand you back a client
+) -> Result<...> {
+    // Application Code
+}
+
+```
+
+This is going to be everyone's cup of tea and this paradigm is probably not sufficient for every use-case. However we believe there exists a large class of products and teams which will benefit substantially from IFC.
+
+We have 4 weeks to prove the concept, let's get started.
+
+## Developer Experience
+
+Our primary focus with the MVP was to provide the best possible developer experience. We wanted the end user experience to be as simple as possible.
+1. A single annotation can transform your web app into a shuttle app: `#[shuttle_service::main]`
+2. You can get started with a single cargo command: `$ cargo shuttle deploy`
+3. Your shuttle app is automatically provisioned a subdomain `my-app.shuttleapp.rs`
+
+## Engineering Design
+
+Our primary focus was simplicity - we didn't want anything too complicated to start with. For example, we decided to ditch Kubernetes for our API and deployment servers. We simply didn't need that scale until we proved the concept and the complexity overhead would have been detrimental to development velocity.
+
+The deployment process is the core piece of engineering we spent the most time on. It looks something like this:
+1. `$ cargo shuttle deploy` runs a `cargo package` under the hood, zipping up the current cargo project into a tarball and shipping it to our API under the `/deploy` endpoint with a bearer token for authentication
+2. The API receives the tarball and holds it in memory. The build is added to a job processor which acts as a build queue.
+3. The job processor unpacks the tarball and writes it to disk, say under `/projets/my-app`. The build system is triggered to compile the unpacked cargo project
+4. The output of the build process is a shared object file ('.so') which is then dynamically loaded by the API with its own runtime. The newly born web-server is assigned a free port which is not exposed to the outside world.
+5. We update the routing table of our reverse proxy such that requests coming in with the host `my-app.shuttleapp.rs` are forwarded to the aforementioned port.
+
+And that's it! It turns out there are more than a few devils in the details here - but that was our plan in all it's glory.
+
+## $ cargo shuttle deploy
+
+The cargo subcommand [`cargo shuttle`](https://github.com/getsynth/shuttle/tree/main/cargo-shuttle) seemed like the obvious place to start.
+
+ To create a third-party cargo subcommand, the binary needs to be named `cargo-${command}` and it needs to be stored in `~./.cargo/bin`. The easiest way to do this is to create a binary called `cargo-shuttle` and publish it to `crates.io`. Then,  `cargo install cargo-shuttle` will place it in `~./.cargo/bin`. Pretty simple.
+
+`cargo-shuttle` also needs an HTTP client to make requests against the API, as well as some config logic to hold API keys. Finally, `cargo-shuttle` needs to use the `cargo` crate to programmatically run cargo commands like `cargo package`.
+
+We had underestimated how easy this would be - it turns out even though the `cargo` binary has world-class documentation, the same is not true for the crate.
+
+After a day of grappling and digging into the `cargo` source code, `cargo-shuttle` was happily packaging up cargo projects and serializing them nicely into the body of a POST request.
+
+We had built the bare bones of our client, next up was build system.
+
+## Next Steps
+
+In the next devlog we'll be exploring how we hacked together a build system to compile `cdylib`s for them to be dynamically linked to the API runtime. In the meantime, if you want to try out shuttle head over to the [getting started](https://docs.rs/shuttle-service/0.2.6/shuttle_service/) section! It's completely free while shuttle is still in Alpha.
+

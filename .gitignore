@@ -18,3 +18,4 @@ Cargo.lock
 **/secret*
 **/.terraform*
 
+e2e/users.toml

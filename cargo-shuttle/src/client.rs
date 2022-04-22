@@ -4,20 +4,18 @@ use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
 
 use shuttle_common::project::ProjectName;
-use shuttle_common::{
-    ApiKey, DeploymentMeta, DeploymentStateMeta, API_URL, SHUTTLE_PROJECT_HEADER,
-};
+use shuttle_common::{ApiKey, ApiUrl, DeploymentMeta, DeploymentStateMeta, SHUTTLE_PROJECT_HEADER};
 use std::{fs::File, io::Read, time::Duration};
 use tokio::time::sleep;
 
-pub(crate) async fn auth(username: String) -> Result<ApiKey> {
+pub(crate) async fn auth(api_url: ApiUrl, username: String) -> Result<ApiKey> {
     let client = get_retry_client();
+    let mut api_url = api_url;
 
-    let mut url = API_URL.to_string();
-    url.push_str(&format!("/users/{}", username));
+    api_url.push_str(&format!("/users/{}", username));
 
     let res: Response = client
-        .post(url.clone())
+        .post(api_url)
         .send()
         .await
         .context("failed to get API key from Shuttle server")?;
@@ -36,13 +34,13 @@ pub(crate) async fn auth(username: String) -> Result<ApiKey> {
     ))
 }
 
-pub(crate) async fn delete(api_key: &ApiKey, project: &ProjectName) -> Result<()> {
+pub(crate) async fn delete(api_url: ApiUrl, api_key: &ApiKey, project: &ProjectName) -> Result<()> {
     let client = get_retry_client();
+    let mut api_url = api_url;
 
-    let mut url = API_URL.to_string();
-    url.push_str(&format!("/projects/{}", project));
+    api_url.push_str(&format!("/projects/{}", project));
     let res: Response = client
-        .delete(url.clone())
+        .delete(api_url)
         .basic_auth(api_key, Some(""))
         .send()
         .await
@@ -55,10 +53,10 @@ pub(crate) async fn delete(api_key: &ApiKey, project: &ProjectName) -> Result<()
     Ok(())
 }
 
-pub(crate) async fn status(api_key: &ApiKey, project: &ProjectName) -> Result<()> {
+pub(crate) async fn status(api_url: ApiUrl, api_key: &ApiKey, project: &ProjectName) -> Result<()> {
     let client = get_retry_client();
 
-    let deployment_meta = get_deployment_meta(api_key, project, &client).await?;
+    let deployment_meta = get_deployment_meta(api_url, api_key, project, &client).await?;
 
     println!("{}", deployment_meta);
 
@@ -66,15 +64,16 @@ pub(crate) async fn status(api_key: &ApiKey, project: &ProjectName) -> Result<()
 }
 
 async fn get_deployment_meta(
+    api_url: ApiUrl,
     api_key: &ApiKey,
     project: &ProjectName,
     client: &ClientWithMiddleware,
 ) -> Result<DeploymentMeta> {
-    let mut url = API_URL.to_string();
-    url.push_str(&format!("/projects/{}", project));
+    let mut api_url = api_url;
+    api_url.push_str(&format!("/projects/{}", project));
 
     let res: Response = client
-        .get(url.clone())
+        .get(api_url)
         .basic_auth(api_key.clone(), Some(""))
         .send()
         .await
@@ -92,10 +91,11 @@ fn get_retry_client() -> ClientWithMiddleware {
 
 pub(crate) async fn deploy(
     package_file: File,
+    api_url: ApiUrl,
     api_key: &ApiKey,
     project: &ProjectName,
 ) -> Result<()> {
-    let mut url = API_URL.to_string();
+    let mut url = api_url.clone();
     url.push_str("/projects/");
     url.push_str(project.as_str());
 
@@ -108,7 +108,7 @@ pub(crate) async fn deploy(
         .context("failed to convert package content to buf")?;
 
     let res: Response = client
-        .post(url.clone())
+        .post(url)
         .body(package_content)
         .header(SHUTTLE_PROJECT_HEADER, serde_json::to_string(&project)?)
         .basic_auth(api_key.clone(), Some(""))
@@ -128,7 +128,7 @@ pub(crate) async fn deploy(
 
         sleep(Duration::from_millis(350)).await;
 
-        deployment_meta = get_deployment_meta(api_key, project, &client).await?;
+        deployment_meta = get_deployment_meta(api_url.clone(), api_key, project, &client).await?;
     }
 
     print_log(&deployment_meta.build_logs, &mut log_pos);

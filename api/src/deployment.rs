@@ -46,15 +46,15 @@ impl Deployment {
         }
     }
 
-    fn from_bytes(project: ProjectName, crate_bytes: Vec<u8>) -> Self {
+    fn from_bytes(fqdn: &str, project: ProjectName, crate_bytes: Vec<u8>) -> Self {
         Self {
-            meta: Arc::new(RwLock::new(DeploymentMeta::queued(project))),
+            meta: Arc::new(RwLock::new(DeploymentMeta::queued(fqdn, project))),
             state: RwLock::new(DeploymentState::queued(crate_bytes)),
         }
     }
 
     /// Initialise a deployment from a directory
-    fn from_directory(dir: DirEntry) -> Result<Self, anyhow::Error> {
+    fn from_directory(fqdn: &str, dir: DirEntry) -> Result<Self, anyhow::Error> {
         let project_path = dir.path();
         let project_name = dir
             .file_name()
@@ -72,7 +72,7 @@ impl Deployment {
             .parse()
             .context("could not parse contents of marker file to a valid path")?;
 
-        let meta = DeploymentMeta::built(project_name);
+        let meta = DeploymentMeta::built(fqdn, project_name);
         let state = DeploymentState::built(Build { so_path });
         Ok(Self::new(meta, state))
     }
@@ -292,6 +292,7 @@ pub(crate) struct DeploymentSystem {
     deployments: RwLock<Deployments>,
     job_queue: JobQueue,
     router: Arc<Router>,
+    fqdn: String,
 }
 
 const JOB_QUEUE_SIZE: usize = 200;
@@ -341,11 +342,11 @@ pub(crate) struct Context {
 }
 
 impl DeploymentSystem {
-    pub(crate) async fn new(build_system: Box<dyn BuildSystem>) -> Self {
+    pub(crate) async fn new(build_system: Box<dyn BuildSystem>, fqdn: String) -> Self {
         let router: Arc<Router> = Default::default();
 
         let deployments = Arc::new(RwLock::new(
-            Self::initialise_from_fs(&build_system.fs_root()).await,
+            Self::initialise_from_fs(&build_system.fs_root(), &fqdn).await,
         ));
 
         let context = Context {
@@ -370,12 +371,13 @@ impl DeploymentSystem {
             deployments: Default::default(),
             job_queue,
             router,
+            fqdn,
         }
     }
 
     /// Traverse the build directory re-create deployments.
     /// If a project could not be re-created, this will get logged and skipped.
-    async fn initialise_from_fs(fs_root: &Path) -> Deployments {
+    async fn initialise_from_fs(fs_root: &Path, fqdn: &str) -> Deployments {
         let mut deployments = HashMap::default();
         for project_dir in std::fs::read_dir(fs_root).unwrap() {
             let project_dir = match project_dir {
@@ -387,7 +389,7 @@ impl DeploymentSystem {
                 }
             };
             let project_name = project_dir.file_name();
-            match Deployment::from_directory(project_dir) {
+            match Deployment::from_directory(fqdn, project_dir) {
                 Err(e) => {
                     warn!(
                         "failed to re-create deployment for project `{:?}` with error: {:?}",
@@ -538,7 +540,7 @@ impl DeploymentSystem {
             })?
             .to_vec();
 
-        let deployment = Arc::new(Deployment::from_bytes(project, crate_bytes));
+        let deployment = Arc::new(Deployment::from_bytes(&self.fqdn, project, crate_bytes));
 
         let info = deployment.meta().await;
 

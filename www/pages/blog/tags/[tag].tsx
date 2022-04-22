@@ -14,12 +14,6 @@ export async function getStaticProps({
 }: GetStaticPropsContext<Params>): Promise<GetStaticPropsResult<Props>> {
   const posts = getSortedPosts(0, [params.tag]);
 
-  if (process.env.NODE_ENV === "production") {
-    return {
-      notFound: true,
-    };
-  }
-
   return {
     props: {
       tag: params.tag,
@@ -50,7 +44,7 @@ export default function TagBlogsPage(props: Props) {
         description="Latest news from the shuttle team."
       />
 
-      <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-6xl p-4 sm:p-6 lg:p-8">
         <div className="flex space-x-1">
           <p className="cursor-pointer">
             <InternalLink href="/blog">Blog</InternalLink>

@@ -10,6 +10,7 @@ cargo-util = "0.1"
 anyhow = "1.0.54"
 libloading = "0.7.3"
 futures = "0.3"
+fqdn = "0.1"
 uuid = { version = "0.8.2", features = ["v4"] }
 async-mutex = "1.4.0"
 serde = "1.0.136"
@@ -27,5 +28,5 @@ toml = "0.5.8"
 base64 = "0.13.0"
 rand = "0.8.5"
 
-shuttle-common = { version = "0.2.5", path = "../common" }
-shuttle-service = { version = "0.2.5", path = "../service", features = [ "loader" ] }
+shuttle-common = { version = "0.2.6", path = "../common" }
+shuttle-service = { version = "0.2.6", path = "../service", features = [ "loader" ] }

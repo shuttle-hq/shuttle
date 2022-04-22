@@ -9,7 +9,7 @@ fn hello_world() {
 
     let request_text = client
         .get("hello")
-        .header("Host", "hello-world-axum-app.shuttleapp.rs")
+        .header("Host", "hello-world-axum-app.shuttleapp.test")
         .send()
         .unwrap()
         .text()

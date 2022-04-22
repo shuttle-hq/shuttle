@@ -89,28 +89,30 @@ function classNames(...classes) {
 
 export default function Example() {
   return (
-    <div className="bg-dark-700 text-gray-200">
+    <div className="dark:bg-dark-700 dark:text-gray-200">
       <div className="mx-auto max-w-7xl py-16 sm:py-24 sm:px-6 lg:px-8">
         {/* xs to lg */}
         <div className="mx-auto max-w-2xl space-y-16 lg:hidden">
           {tiers.map((tier, tierIdx) => (
             <section key={tier.name}>
               <div className="mb-8 px-4">
-                <h2 className="text-lg font-medium leading-6 text-gray-200">
+                <h2 className="text-lg font-medium leading-6 dark:text-gray-200">
                   {tier.name}
                 </h2>
                 <p className="mt-4">
-                  <span className="text-4xl font-extrabold text-gray-200">
+                  <span className="text-4xl font-extrabold dark:text-gray-200">
                     ${tier.priceMonthly}
                   </span>{" "}
-                  <span className="text-base font-medium text-gray-300">
+                  <span className="text-base font-medium dark:text-gray-300">
                     /mo
                   </span>
                 </p>
-                <p className="mt-4 text-sm text-gray-300">{tier.description}</p>
+                <p className="mt-4 text-sm dark:text-gray-300">
+                  {tier.description}
+                </p>
                 <a
                   href={tier.href}
-                  className="mt-6 block w-full rounded-md border border-gray-800 bg-gray-800 py-2 text-center text-sm font-semibold text-white hover:bg-gray-900"
+                  className="mt-6 block w-full rounded-md border py-2 text-center text-sm font-semibold dark:border-gray-800 dark:bg-gray-800 dark:text-white hover:dark:bg-gray-900"
                 >
                   Buy {tier.name}
                 </a>
@@ -118,7 +120,7 @@ export default function Example() {
 
               {sections.map((section) => (
                 <table key={section.name} className="w-full">
-                  <caption className="border-t border-dark-500 bg-dark-600 py-3 px-4 text-left text-sm font-medium text-gray-200">
+                  <caption className="border-t py-3 px-4 text-left text-sm font-medium dark:border-dark-500 dark:bg-dark-600 dark:text-gray-200">
                     {section.name}
                   </caption>
                   <thead>
@@ -135,17 +137,17 @@ export default function Example() {
                     {section.features.map((feature) => (
                       <tr
                         key={feature.name}
-                        className="border-t border-dark-500"
+                        className="border-t dark:border-dark-500"
                       >
                         <th
-                          className="py-5 px-4 text-left text-sm font-normal text-gray-300"
+                          className="py-5 px-4 text-left text-sm font-normal dark:text-gray-300"
                           scope="row"
                         >
                           {feature.name}
                         </th>
                         <td className="py-5 pr-4">
                           {typeof feature.tiers[tier.name] === "string" ? (
-                            <span className="block text-right text-sm text-gray-700">
+                            <span className="block text-right text-sm dark:text-gray-700">
                               {feature.tiers[tier.name]}
                             </span>
                           ) : (
@@ -157,7 +159,7 @@ export default function Example() {
                                 />
                               ) : (
                                 <MinusIcon
-                                  className="ml-auto h-5 w-5 text-gray-400"
+                                  className="ml-auto h-5 w-5 dark:text-gray-400"
                                   aria-hidden="true"
                                 />
                               )}
@@ -179,12 +181,12 @@ export default function Example() {
               <div
                 className={classNames(
                   tierIdx < tiers.length - 1 ? "border-b py-5" : "pt-5",
-                  "border-t border-dark-500 px-4"
+                  "border-t px-4 dark:border-dark-500"
                 )}
               >
                 <a
                   href={tier.href}
-                  className="block w-full rounded-md border border-gray-800 bg-gray-800 py-2 text-center text-sm font-semibold text-white hover:bg-gray-900"
+                  className="block w-full rounded-md border py-2 text-center text-sm font-semibold dark:border-gray-800 dark:bg-gray-800 dark:text-white hover:dark:bg-gray-900"
                 >
                   Buy {tier.name}
                 </a>
@@ -200,7 +202,7 @@ export default function Example() {
             <thead>
               <tr>
                 <th
-                  className="px-6 pb-4 text-left text-sm font-medium text-gray-200"
+                  className="px-6 pb-4 text-left text-sm font-medium dark:text-gray-200"
                   scope="col"
                 >
                   <span className="sr-only">Feature by</span>
@@ -209,7 +211,7 @@ export default function Example() {
                 {tiers.map((tier) => (
                   <th
                     key={tier.name}
-                    className="w-1/4 px-6 pb-4 text-left text-lg font-medium leading-6 text-gray-200"
+                    className="w-1/4 px-6 pb-4 text-left text-lg font-medium leading-6 dark:text-gray-200"
                     scope="col"
                   >
                     {tier.name}
@@ -217,10 +219,10 @@ export default function Example() {
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-dark-500 border-t border-dark-500">
+            <tbody className="divide-y divide-dark-500 border-t dark:border-dark-500">
               <tr>
                 <th
-                  className="py-8 px-6 text-left align-top text-sm font-medium text-gray-200"
+                  className="py-8 px-6 text-left align-top text-sm font-medium dark:text-gray-200"
                   scope="row"
                 >
                   Pricing
@@ -229,19 +231,19 @@ export default function Example() {
                   <td key={tier.name} className="h-full py-8 px-6 align-top">
                     <div className="relative table h-full">
                       <p>
-                        <span className="text-4xl font-extrabold text-gray-200">
+                        <span className="text-4xl font-extrabold dark:text-gray-200">
                           ${tier.priceMonthly}
                         </span>{" "}
-                        <span className="text-base font-medium text-gray-300">
+                        <span className="text-base font-medium dark:text-gray-300">
                           /mo
                         </span>
                       </p>
-                      <p className="mt-4 mb-16 text-sm text-gray-300">
+                      <p className="mt-4 mb-16 text-sm dark:text-gray-300">
                         {tier.description}
                       </p>
                       <a
                         href={tier.href}
-                        className="5 absolute bottom-0 block w-full flex-grow rounded-md border border-gray-800 bg-gray-800 py-2 text-center text-sm font-semibold text-white hover:bg-gray-900"
+                        className="5 absolute bottom-0 block w-full flex-grow rounded-md border py-2 text-center text-sm font-semibold dark:border-gray-800 dark:bg-gray-800 dark:text-white hover:dark:bg-gray-900"
                       >
                         Buy {tier.name}
                       </a>
@@ -253,7 +255,7 @@ export default function Example() {
                 <Fragment key={section.name}>
                   <tr>
                     <th
-                      className="bg-dark-600 py-3 pl-6 text-left text-sm font-medium text-gray-200"
+                      className="py-3 pl-6 text-left text-sm font-medium dark:bg-dark-600 dark:text-gray-200"
                       colSpan={4}
                       scope="colgroup"
                     >
@@ -263,7 +265,7 @@ export default function Example() {
                   {section.features.map((feature) => (
                     <tr key={feature.name}>
                       <th
-                        className="py-5 px-6 text-left text-sm font-normal text-gray-300"
+                        className="py-5 px-6 text-left text-sm font-normal dark:text-gray-300"
                         scope="row"
                       >
                         {feature.name}
@@ -271,7 +273,7 @@ export default function Example() {
                       {tiers.map((tier) => (
                         <td key={tier.name} className="py-5 px-6">
                           {typeof feature.tiers[tier.name] === "string" ? (
-                            <span className="block text-sm text-gray-700">
+                            <span className="block text-sm dark:text-gray-700">
                               {feature.tiers[tier.name]}
                             </span>
                           ) : (
@@ -283,7 +285,7 @@ export default function Example() {
                                 />
                               ) : (
                                 <MinusIcon
-                                  className="h-5 w-5 text-gray-400"
+                                  className="h-5 w-5 dark:text-gray-400"
                                   aria-hidden="true"
                                 />
                               )}
@@ -304,7 +306,7 @@ export default function Example() {
               ))}
             </tbody>
             <tfoot>
-              <tr className="border-t border-dark-500">
+              <tr className="border-t dark:border-dark-500">
                 <th className="sr-only" scope="row">
                   Choose your plan
                 </th>
@@ -312,7 +314,7 @@ export default function Example() {
                   <td key={tier.name} className="px-6 pt-5">
                     <a
                       href={tier.href}
-                      className="block w-full rounded-md border border-gray-800 bg-gray-800 py-2 text-center text-sm font-semibold text-white hover:bg-gray-900"
+                      className="block w-full rounded-md border py-2 text-center text-sm font-semibold dark:border-gray-800 dark:bg-gray-800 dark:text-white hover:dark:bg-gray-900"
                     >
                       Buy {tier.name}
                     </a>

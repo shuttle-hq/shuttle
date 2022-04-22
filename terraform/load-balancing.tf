@@ -6,11 +6,11 @@ resource "aws_lb" "api" {
   load_balancer_type = "application"
 
   security_groups = [aws_security_group.unreasonable.id]
-  subnets = [aws_subnet.backend_a.id, aws_subnet.backend_b.id]
+  subnets         = [aws_subnet.backend_a.id, aws_subnet.backend_b.id]
 
   access_logs {
-    bucket = aws_s3_bucket.logs.bucket
-    prefix = "unveil-lb"
+    bucket  = aws_s3_bucket.logs.bucket
+    prefix  = "unveil-lb"
     enabled = true
   }
 }
@@ -26,8 +26,8 @@ resource "aws_lb" "db" {
   subnets = [aws_subnet.backend_a.id, aws_subnet.backend_b.id]
 
   access_logs {
-    bucket = aws_s3_bucket.logs.bucket
-    prefix = "db-lb"
+    bucket  = aws_s3_bucket.logs.bucket
+    prefix  = "db-lb"
     enabled = true
   }
 }
@@ -37,8 +37,8 @@ resource "aws_lb_target_group" "api" {
 
   health_check {
     enabled = true
-    path = "/status"
-    port = var.api_container_port
+    path    = "/status"
+    port    = var.api_container_port
   }
 
   port = var.api_container_port
@@ -58,7 +58,7 @@ resource "aws_lb_listener" "api" {
   protocol = "HTTP"
 
   default_action {
-    type = "forward"
+    type             = "forward"
     target_group_arn = aws_lb_target_group.api.arn
   }
 }
@@ -71,7 +71,7 @@ resource "aws_lb_listener" "postgres" {
   protocol = "TCP"
 
   default_action {
-    type = "forward"
+    type             = "forward"
     target_group_arn = aws_lb_target_group.postgres.arn
   }
 }
@@ -85,11 +85,11 @@ resource "aws_lb" "user" {
   load_balancer_type = "application"
 
   security_groups = [aws_security_group.unreasonable.id]
-  subnets = [aws_subnet.backend_a.id, aws_subnet.backend_b.id]
+  subnets         = [aws_subnet.backend_a.id, aws_subnet.backend_b.id]
 
   access_logs {
-    bucket = aws_s3_bucket.logs.bucket
-    prefix = "unveil-user-lb"
+    bucket  = aws_s3_bucket.logs.bucket
+    prefix  = "unveil-user-lb"
     enabled = true
   }
 }
@@ -106,8 +106,8 @@ resource "aws_lb_listener" "user" {
 
     redirect {
       status_code = "HTTP_301"
-      port = "443"
-      protocol = "HTTPS"
+      port        = "443"
+      protocol    = "HTTPS"
     }
   }
 }
@@ -119,11 +119,11 @@ resource "aws_lb_listener" "user_tls" {
 
   protocol = "HTTPS"
 
-  ssl_policy = "ELBSecurityPolicy-2016-08"
+  ssl_policy      = "ELBSecurityPolicy-2016-08"
   certificate_arn = aws_acm_certificate.user.arn
 
   default_action {
-    type = "forward"
+    type             = "forward"
     target_group_arn = aws_lb_target_group.user.arn
   }
 }
@@ -133,8 +133,8 @@ resource "aws_lb_target_group" "user" {
 
   health_check {
     enabled = true
-    path = "/status"
-    port = var.api_container_port
+    path    = "/status"
+    port    = var.api_container_port
   }
 
   port = var.proxy_container_port
@@ -152,8 +152,8 @@ resource "aws_lb_target_group" "postgres" {
   // TODO: change me
   health_check {
     enabled = true
-    path = "/status"
-    port = var.api_container_port
+    path    = "/status"
+    port    = var.api_container_port
   }
 
   port = var.postgres_container_port

@@ -2,7 +2,7 @@ mod args;
 mod client;
 mod config;
 
-use crate::args::{Args, AuthArgs, DeployArgs};
+use crate::args::{Args, AuthArgs, Command, DeployArgs};
 use crate::config::RequestContext;
 use anyhow::{Context, Result};
 use args::LoginArgs;
@@ -38,16 +38,21 @@ impl Shuttle {
     }
 
     pub async fn run(mut self, args: Args) -> Result<()> {
-        if matches!(args, Args::Deploy(..) | Args::Delete | Args::Status) {
+        if matches!(
+            args.cmd,
+            Command::Deploy(..) | Command::Delete | Command::Status
+        ) {
             self.load_project()?;
         }
 
-        match args {
-            Args::Deploy(deploy_args) => self.deploy(deploy_args).await,
-            Args::Status => self.status().await,
-            Args::Delete => self.delete().await,
-            Args::Auth(auth_args) => self.auth(auth_args).await,
-            Args::Login(login_args) => self.login(login_args).await,
+        self.ctx.set_api_url(args.api_url);
+
+        match args.cmd {
+            Command::Deploy(deploy_args) => self.deploy(deploy_args).await,
+            Command::Status => self.status().await,
+            Command::Delete => self.delete().await,
+            Command::Auth(auth_args) => self.auth(auth_args).await,
+            Command::Login(login_args) => self.login(login_args).await,
         }
     }
 
@@ -82,7 +87,7 @@ impl Shuttle {
     }
 
     async fn auth(&mut self, auth_args: AuthArgs) -> Result<()> {
-        let api_key = client::auth(auth_args.username)
+        let api_key = client::auth(self.ctx.api_url(), auth_args.username)
             .await
             .context("failed to retrieve api key")?;
         self.ctx.set_api_key(api_key)?;
@@ -90,24 +95,37 @@ impl Shuttle {
     }
 
     async fn delete(&self) -> Result<()> {
-        client::delete(self.ctx.api_key()?, self.ctx.project_name())
-            .await
-            .context("failed to delete deployment")
+        client::delete(
+            self.ctx.api_url(),
+            self.ctx.api_key()?,
+            self.ctx.project_name(),
+        )
+        .await
+        .context("failed to delete deployment")
     }
 
     async fn status(&self) -> Result<()> {
-        client::status(self.ctx.api_key()?, self.ctx.project_name())
-            .await
-            .context("failed to get status of deployment")
+        client::status(
+            self.ctx.api_url(),
+            self.ctx.api_key()?,
+            self.ctx.project_name(),
+        )
+        .await
+        .context("failed to get status of deployment")
     }
 
     async fn deploy(&self, args: DeployArgs) -> Result<()> {
         let package_file = self
             .run_cargo_package(args.allow_dirty)
             .context("failed to package cargo project")?;
-        client::deploy(package_file, self.ctx.api_key()?, self.ctx.project_name())
-            .await
-            .context("failed to deploy cargo project")
+        client::deploy(
+            package_file,
+            self.ctx.api_url(),
+            self.ctx.api_key()?,
+            self.ctx.project_name(),
+        )
+        .await
+        .context("failed to deploy cargo project")
     }
 
     // Packages the cargo project and returns a File to that file

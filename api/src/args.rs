@@ -30,7 +30,7 @@ pub struct Args {
     )]
     pub(crate) bind_addr: IpAddr,
     #[structopt(long, about = "Fully qualified domain name deployed services are reachable at", parse(try_from_str = parse_fqdn))]
-    pub(crate) proxy_fqdn: FQDN,
+    pub(crate) proxy_fqdn: FQDN
 }
 
 fn parse_fqdn(src: &str) -> Result<FQDN, String> {

@@ -1,21 +1,35 @@
-use anyhow::{anyhow, Context};
+use std::collections::HashMap;
+use std::error::Error;
+use std::fmt::{
+    Display,
+    Formatter
+};
+use std::io::Write;
+use std::path::PathBuf;
+use std::sync::RwLock;
+
+use anyhow::{
+    anyhow,
+    Context
+};
 use rand::Rng;
 use rocket::form::validate::Contains;
 use rocket::http::Status;
 use rocket::outcome::try_outcome;
-use rocket::request::{FromRequest, Outcome};
-use rocket::Request;
-use rocket::State;
-use serde::{Deserialize, Serialize};
-
+use rocket::request::{
+    FromRequest,
+    Outcome
+};
+use rocket::{
+    Request,
+    State
+};
+use serde::{
+    Deserialize,
+    Serialize
+};
 use shuttle_common::project::ProjectName;
 use shuttle_common::DeploymentApiError;
-use std::collections::HashMap;
-use std::error::Error;
-use std::fmt::{Display, Formatter};
-use std::io::Write;
-use std::path::PathBuf;
-use std::sync::RwLock;
 
 #[derive(Clone, Debug, PartialEq, Hash, Eq, Serialize, Deserialize, Responder)]
 #[serde(transparent)]
@@ -46,7 +60,7 @@ impl ApiKey {
                 .sample_iter(&rand::distributions::Alphanumeric)
                 .take(16)
                 .map(char::from)
-                .collect::<String>(),
+                .collect::<String>()
         )
     }
 }
@@ -68,7 +82,7 @@ pub enum AuthorizationError {
     #[response(status = 500)]
     Internal(()),
     #[response(status = 404)]
-    NotFound(()),
+    NotFound(())
 }
 
 impl Display for AuthorizationError {
@@ -79,7 +93,7 @@ impl Display for AuthorizationError {
             AuthorizationError::Unauthorized(_) => write!(f, "API key is unauthorized"),
             AuthorizationError::AlreadyExists(_) => write!(f, "username already exists"),
             AuthorizationError::Internal(_) => write!(f, "internal server error"),
-            AuthorizationError::NotFound(_) => write!(f, "required resource was not found"),
+            AuthorizationError::NotFound(_) => write!(f, "required resource was not found")
         }
     }
 }
@@ -95,7 +109,7 @@ impl Error for AuthorizationError {}
 #[derive(Clone, Deserialize, Serialize, Debug)]
 pub(crate) struct User {
     pub(crate) name: String,
-    pub(crate) projects: Vec<ProjectName>,
+    pub(crate) projects: Vec<ProjectName>
 }
 
 #[async_trait]
@@ -115,11 +129,11 @@ impl<'r> FromRequest<'r> for User {
                     } else {
                         Outcome::Failure((
                             Status::Unauthorized,
-                            AuthorizationError::Unauthorized(()),
+                            AuthorizationError::Unauthorized(())
                         ))
                     }
                 }
-                Err(err) => Outcome::Failure((Status::Unauthorized, err)),
+                Err(err) => Outcome::Failure((Status::Unauthorized, err))
             }
         } else {
             Outcome::Failure((Status::Unauthorized, AuthorizationError::Malformed(())))
@@ -135,7 +149,7 @@ impl<'r> FromRequest<'r> for User {
 pub(crate) struct ScopedUser {
     #[allow(dead_code)]
     user: User,
-    scope: ProjectName,
+    scope: ProjectName
 }
 
 impl ScopedUser {
@@ -166,7 +180,7 @@ impl<'r> FromRequest<'r> for ScopedUser {
                     } else {
                         Outcome::Failure((
                             Status::Unauthorized,
-                            AuthorizationError::Unauthorized(()),
+                            AuthorizationError::Unauthorized(())
                         ))
                     }
                 }
@@ -185,7 +199,7 @@ impl<'r> FromRequest<'r> for ScopedUser {
 
 #[derive(Debug)]
 pub(crate) struct UserDirectory {
-    users: RwLock<HashMap<ApiKey, User>>,
+    users: RwLock<HashMap<ApiKey, User>>
 }
 
 impl UserDirectory {
@@ -197,7 +211,7 @@ impl UserDirectory {
     pub(crate) fn create_project_if_not_exists(
         &self,
         username: &str,
-        project_name: &ProjectName,
+        project_name: &ProjectName
     ) -> Result<(), DeploymentApiError> {
         {
             let mut users = self.users.write().unwrap();
@@ -257,7 +271,7 @@ impl UserDirectory {
 
                 let user = User {
                     name: username,
-                    projects: vec![],
+                    projects: vec![]
                 };
 
                 users.insert(api_key.clone(), user);
@@ -300,7 +314,7 @@ impl UserDirectory {
         let users = toml::from_str(&file_contents)
             .context("this should blow up if the users.toml file is unparseable")?;
         let directory = Self {
-            users: RwLock::new(users),
+            users: RwLock::new(users)
         };
 
         log::debug!("initialising user directory: {:#?}", &directory);

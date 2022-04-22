@@ -1,7 +1,8 @@
 //! Types representing various errors that can occur in the process of building and deploying a service.
 
-use thiserror::Error;
 use std::convert::From;
+
+use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum Error {

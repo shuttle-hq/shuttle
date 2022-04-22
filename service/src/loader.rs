@@ -1,10 +1,18 @@
-use std::{ffi::OsStr, net::SocketAddr};
+use std::ffi::OsStr;
+use std::net::SocketAddr;
 
-use libloading::{Library, Symbol};
+use libloading::{
+    Library,
+    Symbol
+};
 use thiserror::Error as ThisError;
 use tokio::task::JoinHandle;
 
-use crate::{Error, Factory, Service};
+use crate::{
+    Error,
+    Factory,
+    Service
+};
 
 const ENTRYPOINT_SYMBOL_NAME: &[u8] = b"_create_service\0";
 
@@ -17,12 +25,12 @@ pub enum LoaderError {
     #[error("failed to load library")]
     Load(libloading::Error),
     #[error("failed to find the shuttle entrypoint. Did you use the provided shuttle macros?")]
-    GetEntrypoint(libloading::Error),
+    GetEntrypoint(libloading::Error)
 }
 
 pub struct Loader {
     service: Box<dyn Service>,
-    so: Library,
+    so: Library
 }
 
 impl Loader {
@@ -41,7 +49,7 @@ impl Loader {
 
             Ok(Self {
                 service: Box::from_raw(raw),
-                so: lib,
+                so: lib
             })
         }
     }
@@ -49,7 +57,7 @@ impl Loader {
     pub fn load(
         self,
         factory: &mut dyn Factory,
-        addr: SocketAddr,
+        addr: SocketAddr
     ) -> Result<(ServeHandle, Library), Error> {
         let mut service = self.service;
 
@@ -66,7 +74,10 @@ impl Loader {
 #[cfg(test)]
 mod tests {
     mod from_so_file {
-        use crate::loader::{Loader, LoaderError};
+        use crate::loader::{
+            Loader,
+            LoaderError
+        };
 
         #[test]
         fn invalid() {

@@ -1,12 +1,20 @@
-use anyhow::{anyhow, Context, Result};
+use std::io;
+use std::path::{
+    Path,
+    PathBuf
+};
+use std::process::Command;
+
+use anyhow::{
+    anyhow,
+    Context,
+    Result
+};
 use cargo::core::compiler::CompileMode;
 use cargo::core::Workspace;
 use cargo::ops::CompileOptions;
 use rocket::tokio;
 use rocket::tokio::io::AsyncWriteExt;
-use std::io;
-use std::path::{Path, PathBuf};
-use std::process::Command;
 use uuid::Uuid;
 
 #[cfg(debug_assertions)]
@@ -17,7 +25,7 @@ pub const DEFAULT_FS_ROOT: &str = "/tmp/shuttle/crates/";
 pub const DEFAULT_FS_ROOT: &str = "/var/lib/shuttle/crates/";
 
 pub(crate) struct Build {
-    pub(crate) so_path: PathBuf,
+    pub(crate) so_path: PathBuf
 }
 
 // remove the trait at some point
@@ -27,7 +35,7 @@ pub(crate) trait BuildSystem: Send + Sync {
         &self,
         crate_bytes: &[u8],
         project: &str,
-        buf: Box<dyn std::io::Write + Send>,
+        buf: Box<dyn std::io::Write + Send>
     ) -> Result<Build>;
 
     fn fs_root(&self) -> PathBuf;
@@ -35,7 +43,7 @@ pub(crate) trait BuildSystem: Send + Sync {
 
 /// A basic build system that uses the file system for caching and storage
 pub(crate) struct FsBuildSystem {
-    fs_root: PathBuf,
+    fs_root: PathBuf
 }
 
 impl FsBuildSystem {
@@ -74,7 +82,7 @@ impl BuildSystem for FsBuildSystem {
         &self,
         crate_bytes: &[u8],
         project_name: &str,
-        buf: Box<dyn std::io::Write + Send>,
+        buf: Box<dyn std::io::Write + Send>
     ) -> Result<Build> {
         // project path
         let project_path = self.project_path(project_name)?;
@@ -82,7 +90,7 @@ impl BuildSystem for FsBuildSystem {
 
         // clear directory
         clear_project_dir(&project_path).context(
-            "there was an issue cleaning the project directory. Please try again in a bit.",
+            "there was an issue cleaning the project directory. Please try again in a bit."
         )?;
 
         // crate path

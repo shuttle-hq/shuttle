@@ -1,27 +1,55 @@
-use crate::{build::Build, BuildSystem, ShuttleFactory};
-use anyhow::{anyhow, Context as AnyhowContext};
 use core::default::Default;
-use futures::prelude::*;
-use libloading::Library;
-use rocket::data::ByteUnit;
-use rocket::tokio;
-use rocket::Data;
-use shuttle_common::{
-    project::ProjectName, DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta,
-    Host, Port,
-};
-use shuttle_service::loader::{Loader, ServeHandle};
 use std::collections::HashMap;
 use std::fs::DirEntry;
 use std::io::Write;
-use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener};
-use std::path::{Path, PathBuf};
+use std::net::{
+    Ipv4Addr,
+    SocketAddr,
+    SocketAddrV4,
+    TcpListener
+};
+use std::path::{
+    Path,
+    PathBuf
+};
 use std::sync::Arc;
-use tokio::sync::mpsc;
-use tokio::sync::RwLock;
 
-use crate::database;
+use anyhow::{
+    anyhow,
+    Context as AnyhowContext
+};
+use futures::prelude::*;
+use libloading::Library;
+use rocket::data::ByteUnit;
+use rocket::{
+    tokio,
+    Data
+};
+use shuttle_common::project::ProjectName;
+use shuttle_common::{
+    DeploymentApiError,
+    DeploymentId,
+    DeploymentMeta,
+    DeploymentStateMeta,
+    Host,
+    Port
+};
+use shuttle_service::loader::{
+    Loader,
+    ServeHandle
+};
+use tokio::sync::{
+    mpsc,
+    RwLock
+};
+
+use crate::build::Build;
 use crate::router::Router;
+use crate::{
+    database,
+    BuildSystem,
+    ShuttleFactory
+};
 
 // This controls the maximum number of deploys an api instance can run
 // This is mainly needed because tokio::task::spawn_blocking keeps an internal pool for the number of blocking threads
@@ -35,21 +63,21 @@ pub const MAX_DEPLOYS: usize = 512;
 /// and the some metadata
 pub(crate) struct Deployment {
     meta: Arc<RwLock<DeploymentMeta>>,
-    state: RwLock<DeploymentState>,
+    state: RwLock<DeploymentState>
 }
 
 impl Deployment {
     fn new(meta: DeploymentMeta, state: DeploymentState) -> Self {
         Self {
             meta: Arc::new(RwLock::new(meta)),
-            state: RwLock::new(state),
+            state: RwLock::new(state)
         }
     }
 
     fn from_bytes(fqdn: &str, project: ProjectName, crate_bytes: Vec<u8>) -> Self {
         Self {
             meta: Arc::new(RwLock::new(DeploymentMeta::queued(fqdn, project))),
-            state: RwLock::new(DeploymentState::queued(crate_bytes)),
+            state: RwLock::new(DeploymentState::queued(crate_bytes))
         }
     }
 
@@ -118,7 +146,7 @@ impl Deployment {
                         .build(
                             &queued.crate_bytes,
                             meta.project.as_str(),
-                            Box::new(console_writer),
+                            Box::new(console_writer)
                         )
                         .await
                     {
@@ -166,7 +194,7 @@ impl Deployment {
                             debug!("{}: db state failed: {:?}", meta.project, e);
                             let err: anyhow::Error = e.into();
                             DeploymentState::Error(
-                                err.context(anyhow!("failed to attach database")),
+                                err.context(anyhow!("failed to attach database"))
                             )
                         }
                         Ok(()) => {
@@ -193,7 +221,7 @@ impl Deployment {
                         }
                     }
                 }
-                deployed_or_error => deployed_or_error, /* nothing to do here */
+                deployed_or_error => deployed_or_error /* nothing to do here */
             };
         }
 
@@ -209,7 +237,7 @@ impl Deployment {
     async fn port(&self) -> Option<Port> {
         match &*self.state.read().await {
             DeploymentState::Deployed(deployed) => Some(deployed.port),
-            _ => None,
+            _ => None
         }
     }
 }
@@ -218,14 +246,14 @@ impl Deployment {
 /// is written into our build logs using this wrapper.
 struct BuildOutputWriter {
     meta: Arc<RwLock<DeploymentMeta>>,
-    buf: String,
+    buf: String
 }
 
 impl BuildOutputWriter {
     pub fn new(meta: Arc<RwLock<DeploymentMeta>>) -> Self {
         Self {
             meta,
-            buf: String::new(),
+            buf: String::new()
         }
     }
 }
@@ -292,13 +320,13 @@ pub(crate) struct DeploymentSystem {
     deployments: RwLock<Deployments>,
     job_queue: JobQueue,
     router: Arc<Router>,
-    fqdn: String,
+    fqdn: String
 }
 
 const JOB_QUEUE_SIZE: usize = 200;
 
 struct JobQueue {
-    send: mpsc::Sender<Arc<Deployment>>,
+    send: mpsc::Sender<Arc<Deployment>>
 }
 
 impl JobQueue {
@@ -338,7 +366,7 @@ impl JobQueue {
 pub(crate) struct Context {
     router: Arc<Router>,
     build_system: Box<dyn BuildSystem>,
-    deployments: Arc<RwLock<Deployments>>,
+    deployments: Arc<RwLock<Deployments>>
 }
 
 impl DeploymentSystem {
@@ -346,13 +374,13 @@ impl DeploymentSystem {
         let router: Arc<Router> = Default::default();
 
         let deployments = Arc::new(RwLock::new(
-            Self::initialise_from_fs(&build_system.fs_root(), &fqdn).await,
+            Self::initialise_from_fs(&build_system.fs_root(), &fqdn).await
         ));
 
         let context = Context {
             router: router.clone(),
             build_system,
-            deployments: deployments.clone(),
+            deployments: deployments.clone()
         };
 
         let db_context = database::Context::new()
@@ -371,7 +399,7 @@ impl DeploymentSystem {
             deployments: Default::default(),
             job_queue,
             router,
-            fqdn,
+            fqdn
         }
     }
 
@@ -421,14 +449,14 @@ impl DeploymentSystem {
     /// Retrieves a clone of the deployment information
     pub(crate) async fn get_deployment(
         &self,
-        id: &DeploymentId,
+        id: &DeploymentId
     ) -> Result<DeploymentMeta, DeploymentApiError> {
         match self.deployments.read().await.get(id) {
             Some(deployment) => Ok(deployment.meta().await),
             None => Err(DeploymentApiError::NotFound(format!(
                 "could not find deployment for id '{}'",
                 &id
-            ))),
+            )))
         }
     }
 
@@ -437,7 +465,7 @@ impl DeploymentSystem {
     /// for a given project, will return the latest.
     pub(crate) async fn get_deployment_for_project(
         &self,
-        project_name: &ProjectName,
+        project_name: &ProjectName
     ) -> Result<DeploymentMeta, DeploymentApiError> {
         let mut candidates = Vec::new();
 
@@ -456,13 +484,13 @@ impl DeploymentSystem {
             None => Err(DeploymentApiError::NotFound(format!(
                 "could not find deployment for project '{}'",
                 &project_name
-            ))),
+            )))
         }
     }
 
     pub(crate) async fn kill_deployment_for_project(
         &self,
-        project_name: &ProjectName,
+        project_name: &ProjectName
     ) -> Result<DeploymentMeta, DeploymentApiError> {
         let id = self.get_deployment_for_project(project_name).await?.id;
         self.kill_deployment(&id).await
@@ -473,7 +501,7 @@ impl DeploymentSystem {
     /// and deallocate the linked library.
     pub(crate) async fn kill_deployment(
         &self,
-        id: &DeploymentId,
+        id: &DeploymentId
     ) -> Result<DeploymentMeta, DeploymentApiError> {
         match self.deployments.write().await.remove(id) {
             Some(deployment) => {
@@ -497,7 +525,7 @@ impl DeploymentSystem {
 
                 Ok(meta)
             }
-            None => Err(DeploymentApiError::NotFound(String::new())),
+            None => Err(DeploymentApiError::NotFound(String::new()))
         }
     }
 
@@ -522,12 +550,12 @@ impl DeploymentSystem {
     pub(crate) async fn deploy(
         &self,
         crate_file: Data<'_>,
-        project: ProjectName,
+        project: ProjectName
     ) -> Result<DeploymentMeta, DeploymentApiError> {
         // Assumes that only `::Deployed` deployments are blocking a thread.
         if self.num_active().await >= MAX_DEPLOYS {
             return Err(DeploymentApiError::Unavailable(
-                "this instance has reached its maximum number of supported deployments".to_string(),
+                "this instance has reached its maximum number of supported deployments".to_string()
             ));
         };
 
@@ -583,7 +611,7 @@ enum DeploymentState {
     /// A state indicating that the user has intentionally terminated this
     /// deployment
     #[allow(dead_code)]
-    Deleted,
+    Deleted
 }
 
 impl DeploymentState {
@@ -608,7 +636,7 @@ impl DeploymentState {
             so,
             port,
             handle,
-            db_state,
+            db_state
         })
     }
 
@@ -619,17 +647,17 @@ impl DeploymentState {
             DeploymentState::Loaded(_) => DeploymentStateMeta::Loaded,
             DeploymentState::Deployed(_) => DeploymentStateMeta::Deployed,
             DeploymentState::Error(e) => DeploymentStateMeta::Error(format!("{:#?}", e)),
-            DeploymentState::Deleted => DeploymentStateMeta::Deleted,
+            DeploymentState::Deleted => DeploymentStateMeta::Deleted
         }
     }
 }
 
 struct QueuedState {
-    crate_bytes: Vec<u8>,
+    crate_bytes: Vec<u8>
 }
 
 struct BuiltState {
-    build: Build,
+    build: Build
 }
 
 #[allow(dead_code)]
@@ -637,5 +665,5 @@ struct DeployedState {
     so: Library,
     port: Port,
     handle: ServeHandle,
-    db_state: database::State,
+    db_state: database::State
 }

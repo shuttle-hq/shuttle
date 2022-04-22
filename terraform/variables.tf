@@ -1,6 +1,7 @@
 variable "api_container_port" {
-  type    = number
-  default = 8001
+  type        = number
+  description = "Port API will be reachable at"
+  default     = 8001
 }
 
 variable "api_fqdn" {
@@ -9,8 +10,9 @@ variable "api_fqdn" {
 }
 
 variable "postgres_container_port" {
-  type    = number
-  default = 5432
+  type        = number
+  description = "Port Postgres will be reachable at"
+  default     = 5432
 }
 
 variable "postgres_password" {
@@ -19,8 +21,9 @@ variable "postgres_password" {
 }
 
 variable "proxy_container_port" {
-  type    = number
-  default = 8000
+  type        = number
+  description = "Port reverse proxy will be reachable at"
+  default     = 8000
 }
 
 variable "proxy_fqdn" {

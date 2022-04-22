@@ -254,12 +254,16 @@ fn check_and_lower_secret_key(key: &str) -> Option<String> {
 #[async_trait]
 pub trait SecretStore<DB>
 where
-    for<'c> &'c Self: sqlx::Executor<'c, Database = DB>,
     DB: sqlx::Database,
+    for<'c> &'c Self: sqlx::Executor<'c, Database = DB>,
     for<'c> <DB as sqlx::database::HasArguments<'c>>::Arguments: sqlx::IntoArguments<'c, DB>,
     for<'c> String: sqlx::Decode<'c, DB> + sqlx::Type<DB>,
-    for<'c> usize: sqlx::ColumnIndex<<DB as sqlx::Database>::Row>
+    for<'c> usize: sqlx::ColumnIndex<<DB as sqlx::Database>::Row>,
+    for<'c> sqlx::query::Query<'c, sqlx::Postgres, sqlx::postgres::PgArguments>:
+        sqlx::Execute<'c, DB>
 {
+    // TODO: Don't restrict to Postgres types above.
+
     const GET_QUERY: &'static str;
     const SET_QUERY: &'static str;
 

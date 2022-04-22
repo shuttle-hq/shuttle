@@ -60,13 +60,13 @@ resource "aws_default_route_table" "backend" {
 resource "aws_subnet" "backend_a" {
   vpc_id = aws_vpc.backend.id
 
-  availability_zone = "eu-west-2a"
+  availability_zone = var.availability_zone_1
   cidr_block        = "10.0.10.0/24"
 }
 
 resource "aws_subnet" "backend_b" {
   vpc_id = aws_vpc.backend.id
 
-  availability_zone = "eu-west-2b"
+  availability_zone = var.availability_zone_2
   cidr_block        = "10.0.20.0/24"
 }

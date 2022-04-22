@@ -41,7 +41,7 @@ resource "aws_instance" "backend" {
 
   monitoring = true
 
-  availability_zone = "eu-west-2b"
+  availability_zone = var.availability_zone_2
 
   iam_instance_profile = aws_iam_instance_profile.backend.id
 

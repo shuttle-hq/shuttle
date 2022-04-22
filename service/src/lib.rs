@@ -165,7 +165,6 @@ use tokio::runtime::Runtime;
 pub mod error;
 pub use error::Error;
 
-
 #[cfg(feature = "sqlx-postgres")]
 pub mod secrets;
 #[cfg(feature = "sqlx-postgres")]

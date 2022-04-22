@@ -2,7 +2,6 @@ use anyhow::anyhow;
 use async_trait::async_trait;
 use lazy_static::lazy_static;
 use regex::Regex;
-use sqlx::database::HasArguments;
 use sqlx::postgres::PgArguments;
 use sqlx::query::Query;
 use sqlx::{
@@ -11,7 +10,6 @@ use sqlx::{
     Decode,
     Execute,
     Executor,
-    IntoArguments,
     Postgres,
     Row,
     Type
@@ -38,7 +36,6 @@ pub trait SecretStore<DB>
 where
     DB: Database,
     for<'c> &'c Self: Executor<'c, Database = DB>,
-    for<'c> <DB as HasArguments<'c>>::Arguments: IntoArguments<'c, DB>,
     for<'c> String: Decode<'c, DB> + Type<DB>,
     for<'c> usize: ColumnIndex<<DB as Database>::Row>,
     for<'c> Query<'c, Postgres, PgArguments>: Execute<'c, DB>

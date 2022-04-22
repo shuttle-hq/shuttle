@@ -1,5 +1,5 @@
-data "aws_route53_zone" "user" {
-  name = "${var.proxy_fqdn}."
+resource "aws_route53_zone" "user" {
+  name = var.proxy_fqdn
 }
 
 resource "aws_acm_certificate" "user" {
@@ -22,7 +22,7 @@ resource "aws_route53_record" "user" {
       name    = dvo.resource_record_name
       record  = dvo.resource_record_value
       type    = dvo.resource_record_type
-      zone_id = data.aws_route53_zone.user.zone_id
+      zone_id = aws_route53_zone.user.zone_id
     }
   }
 
@@ -39,8 +39,8 @@ resource "aws_acm_certificate_validation" "user" {
   validation_record_fqdns = [for record in aws_route53_record.user : record.fqdn]
 }
 
-data "aws_route53_zone" "root" {
-  name = "shuttle.rs."
+resource "aws_route53_zone" "api" {
+  name = var.api_fqdn
 }
 
 resource "aws_acm_certificate" "api" {
@@ -59,7 +59,7 @@ resource "aws_route53_record" "api" {
       name    = dvo.resource_record_name
       record  = dvo.resource_record_value
       type    = dvo.resource_record_type
-      zone_id = data.aws_route53_zone.root.zone_id
+      zone_id = aws_route53_zone.api.zone_id
     }
   }
 

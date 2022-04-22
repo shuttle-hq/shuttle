@@ -160,16 +160,16 @@ use std::net::SocketAddr;
 use std::pin::Pin;
 
 use async_trait::async_trait;
-use lazy_static::lazy_static;
-use regex::Regex;
 use tokio::runtime::Runtime;
 
 pub mod error;
 pub use error::Error;
+
+
 #[cfg(feature = "sqlx-postgres")]
-use sqlx::Executor;
+pub mod secrets;
 #[cfg(feature = "sqlx-postgres")]
-use sqlx::Row;
+pub use secrets::SecretStore;
 
 #[cfg(feature = "codegen")]
 extern crate shuttle_codegen;
@@ -240,53 +240,6 @@ pub trait Factory: Send + Sync {
     async fn get_sql_connection_string(&mut self) -> Result<String, crate::Error>;
 }
 
-fn check_and_lower_secret_key(key: &str) -> Option<String> {
-    lazy_static! {
-        static ref VALID_KEY: Regex = Regex::new(r"[_a-zA-Z][_a-zA-Z0-9]*").unwrap();
-    }
-    VALID_KEY.is_match(key).then(|| key.to_lowercase())
-}
-
-/// Abstraction over a simple key/value 'secret' store. This may be used for any number of
-/// purposes, such as storing API keys. Note that secrets are not encrypted and are stored directly
-/// in a table in the database (meaning they can be accessed via SQL rather than this abstraction
-/// should you prefer).
-#[async_trait]
-pub trait SecretStore<DB>
-where
-    DB: sqlx::Database,
-    for<'c> &'c Self: sqlx::Executor<'c, Database = DB>,
-    for<'c> <DB as sqlx::database::HasArguments<'c>>::Arguments: sqlx::IntoArguments<'c, DB>,
-    for<'c> String: sqlx::Decode<'c, DB> + sqlx::Type<DB>,
-    for<'c> usize: sqlx::ColumnIndex<<DB as sqlx::Database>::Row>,
-    for<'c> sqlx::query::Query<'c, sqlx::Postgres, sqlx::postgres::PgArguments>:
-        sqlx::Execute<'c, DB>
-{
-    // TODO: Don't restrict to Postgres types above.
-
-    const GET_QUERY: &'static str;
-    const SET_QUERY: &'static str;
-
-    /// Read the secret with the given key from the database. Will return `None` if a secret with
-    /// the given key does not exist or otherwise could not be accessed.
-    async fn get_secret(&self, key: &str) -> Option<String> {
-        let key = check_and_lower_secret_key(key)?;
-
-        let query = sqlx::query(Self::GET_QUERY).bind(key);
-
-        self.fetch_one(query).await.map(|row| row.get(0)).ok()
-    }
-
-    /// Create (or overwrite if already present) a key/value secret in the database. Will panic if
-    /// the database could not be accessed or execution of the query otherwise failed.
-    async fn set_secret(&self, key: &str, val: &str) {
-        if let Some(key) = check_and_lower_secret_key(key) {
-            let query = sqlx::query(Self::SET_QUERY).bind(key).bind(val);
-            self.execute(query).await.unwrap();
-        }
-    }
-}
-
 /// Used to get resources of type `T` from factories.
 ///
 /// This is mainly meant for consumption by our code generator and should generally not be implemented by users.
@@ -313,14 +266,6 @@ impl GetResource<sqlx::PgPool> for &mut dyn Factory {
 
         Ok(pool)
     }
-}
-
-#[cfg(feature = "sqlx-postgres")]
-#[async_trait]
-impl SecretStore<sqlx::Postgres> for sqlx::PgPool {
-    const GET_QUERY: &'static str = "SELECT value FROM secrets WHERE key = $1";
-    const SET_QUERY: &'static str = "INSERT INTO secrets (key, value) VALUES ($1, $2)
-                             ON CONFLICT (key) DO UPDATE SET value = $2";
 }
 
 /// The core trait of the shuttle platform. Every crate deployed to shuttle needs to implement this trait.

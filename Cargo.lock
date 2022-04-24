@@ -362,6 +362,7 @@ dependencies = [
  "cargo",
  "cargo_metadata",
  "dirs",
+ "futures",
  "reqwest",
  "reqwest-middleware",
  "reqwest-retry",

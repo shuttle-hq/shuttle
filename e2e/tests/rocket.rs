@@ -45,7 +45,7 @@ fn postgres() {
     assert_eq!(fetch_response, "{\"id\":1,\"note\":\"To the stars\"}");
 
     let secret_response: String = client
-        .get("todo/secret")
+        .get("secret")
         .header("Host", "postgres-rocket-app.shuttleapp.test")
         .send()
         .unwrap()

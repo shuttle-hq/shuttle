@@ -36,6 +36,7 @@ async fn add(
 
 #[get("/secret")]
 async fn secret(state: &State<MyState>) -> Result<String, BadRequest<String>> {
+    // get secret defined in `Secrets.toml` file.
     state.pool.get_secret("MY_API_KEY").await.map_err(|e| BadRequest(Some(e.to_string())))
 }
 
@@ -49,11 +50,10 @@ async fn rocket(pool: PgPool) -> Result<Rocket<Build>, shuttle_service::Error> {
         .await
         .map_err(CustomError::new)?;
 
-    pool.set_secret("MY_API_KEY", "foobar").await;
-
     let state = MyState { pool };
     let rocket = rocket::build()
-        .mount("/todo", routes![retrieve, add, secret])
+        .mount("/", routes![secret])
+        .mount("/todo", routes![retrieve, add])
         .manage(state);
 
     Ok(rocket)

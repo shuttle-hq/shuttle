@@ -1,4 +1,5 @@
 use std::fs::File;
+use std::collections::HashMap;
 use std::io::{
     Read,
     Write
@@ -109,13 +110,15 @@ impl ConfigManager for GlobalConfigManager {
 
 /// An impl of [`ConfigManager`] which is localised to a working directory
 pub struct LocalConfigManager {
-    working_directory: PathBuf
+    working_directory: PathBuf,
+    file_name: String
 }
 
 impl LocalConfigManager {
-    pub fn new<P: AsRef<Path>>(working_directory: P) -> Self {
+    pub fn new<P: AsRef<Path>>(working_directory: P, file_name: String) -> Self {
         Self {
-            working_directory: working_directory.as_ref().to_path_buf()
+            working_directory: working_directory.as_ref().to_path_buf(),
+            file_name
         }
     }
 }
@@ -126,7 +129,7 @@ impl ConfigManager for LocalConfigManager {
     }
 
     fn file(&self) -> PathBuf {
-        PathBuf::from("Shuttle.toml")
+        PathBuf::from(&self.file_name)
     }
 }
 
@@ -154,7 +157,12 @@ impl GlobalConfig {
 /// Project-local config for things like customizing project name
 #[derive(Deserialize, Serialize, Default)]
 pub struct ProjectConfig {
-    pub name: Option<ProjectName>
+    pub name: Option<ProjectName>,
+}
+
+#[derive(Deserialize, Serialize, Default)]
+pub struct SecretsConfig {
+    pub secrets: HashMap<String, String>
 }
 
 /// A handler for configuration files. The type parameter `M` is the [`ConfigManager`] which handles
@@ -237,6 +245,7 @@ where
 pub struct RequestContext {
     global: Config<GlobalConfigManager, GlobalConfig>,
     project: Option<Config<LocalConfigManager, ProjectConfig>>,
+    secrets: Option<Config<LocalConfigManager, SecretsConfig>>,
     api_url: Option<String>
 }
 
@@ -270,6 +279,7 @@ impl RequestContext {
         Ok(Self {
             global,
             project: None,
+            secrets: None,
             api_url: None
         })
     }
@@ -279,13 +289,26 @@ impl RequestContext {
     /// Ensures that if either the project file does not exist, or it has not set the `name` key
     /// then the `ProjectConfig` instance has `ProjectConfig.name = Some("crate-name")`.
     pub fn load_local<P: AsRef<Path>>(&mut self, working_directory: P) -> Result<()> {
-        let local_manager = LocalConfigManager::new(working_directory.as_ref());
+        // Secrets.toml
+
+        let secrets_manager = LocalConfigManager::new(working_directory.as_ref(), "Secrets.toml".to_string());
+        let mut secrets = Config::new(secrets_manager);
+
+        if secrets.exists() {
+            secrets.open()?;
+            self.secrets = Some(secrets);
+        }
+
+        // Shuttle.toml
+
+        let local_manager = LocalConfigManager::new(working_directory.as_ref(), "Shuttle.toml".to_string());
         let mut project = Config::new(local_manager);
+
         if !project.exists() {
             project.replace(ProjectConfig::default());
         } else {
             project.open()?;
-        };
+        }
 
         // Ensure that if name key is not in project config, then we infer from crate name
         let project_name = project.as_mut().unwrap();
@@ -356,5 +379,9 @@ impl RequestContext {
             .name
             .as_ref()
             .unwrap()
+    }
+
+    pub fn secrets(&self) -> &HashMap<String, String> {
+        &self.secrets.as_ref().unwrap().as_ref().unwrap().secrets
     }
 }

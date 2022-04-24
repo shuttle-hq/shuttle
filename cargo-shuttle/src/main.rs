@@ -30,6 +30,7 @@ use crate::args::{
     DeployArgs
 };
 use crate::config::RequestContext;
+use futures::future::TryFutureExt;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -133,11 +134,17 @@ impl Shuttle {
         let package_file = self
             .run_cargo_package(args.allow_dirty)
             .context("failed to package cargo project")?;
+
+        let key = self.ctx.api_key()?;
+
         client::deploy(
             package_file,
             self.ctx.api_url(),
-            self.ctx.api_key()?,
+            key,
             self.ctx.project_name()
+        )
+        .and_then(|_|
+            client::secrets(self.ctx.api_url(), key, self.ctx.project_name(), self.ctx.secrets())
         )
         .await
         .context("failed to deploy cargo project")

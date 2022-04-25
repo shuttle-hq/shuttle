@@ -14,7 +14,7 @@ shuttle has reasonable test coverage - and we are working on improving this
 every day. We encourage PRs to come with tests. If you're not sure about
 what a test should look like, feel free to get in touch.
 
-To run the test suite - just run `cargo test` at the root of the repository.
+To run the test suite - just run `cargo test --all-features -- --nocapture` at the root of the repository.
 
 ## Committing
 
@@ -23,6 +23,3 @@ We use the [Angular Commit Guidelines](https://github.com/angular/angular/blob/m
 Furthermore, commits should be squashed before being merged to master.
 
 Also, make sure your commits don't trigger any warnings from Clippy by running: `cargo clippy --tests --all-targets --all-features`. If you have a good reason to contradict Clippy, insert an #allow[] macro, so that it won't complain.
-
-Plus, make sure your commits are properly formatted. You can automate this
-process by copying over the `pre-commit` file in `tools/hooks/pre-commit` to `.git/hooks/pre-commit` which will make git automatically format your code before committing them.

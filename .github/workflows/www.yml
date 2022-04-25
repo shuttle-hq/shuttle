@@ -12,8 +12,8 @@ jobs:
   deploy-vercel:
     runs-on: ubuntu-latest
     steps:
-      - uses: getsynth/checkout@v2
-      - uses: getsynth/create-envfile@v1.3
+      - uses: shuttle-hq/checkout@v2
+      - uses: shuttle-hq/create-envfile@v1.3
         with:
           directory: www
           envkey_AUTH0_SECRET: ${{ secrets.AUTH0_SECRET }}
@@ -23,7 +23,7 @@ jobs:
           envkey_AUTH0_CLIENT_SECRET: ${{ secrets.AUTH0_CLIENT_SECRET }}
           envkey_SHUTTLE_API_BASE_URL: https://api.shuttle.rs
           envkey_SHUTTLE_ADMIN_SECRET: ${{ secrets.SHUTTLE_ADMIN_SECRET }}
-      - uses: getsynth/vercel-action@v20
+      - uses: shuttle-hq/vercel-action@v20
         with:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-args: --prod

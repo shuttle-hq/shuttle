@@ -17,19 +17,61 @@ import InternalLink from "./InternalLink";
 
 const communities = [
   {
-    href: GITHUB_URL,
     name: "Github",
+    href: GITHUB_URL,
     icon: faGithub,
   },
   {
-    href: DISCORD_URL,
     name: "Discord",
+    href: DISCORD_URL,
     icon: faDiscord,
   },
   {
-    href: TWITTER_URL,
     name: "Twitter",
+    href: TWITTER_URL,
     icon: faTwitter,
+  },
+];
+
+const navigation = [
+  {
+    title: "Product",
+    links: [
+      { name: "Features", href: "/#features" },
+      { name: "Examples", href: "/#examples" },
+      { name: "Code Snippets", href: "/#code-snippets" },
+    ],
+  },
+  {
+    title: "Company",
+    links: [
+      { name: "Blog", href: "/blog" },
+      {
+        name: "Careers",
+        href: "https://www.workatastartup.com/companies/shuttle",
+      },
+    ],
+  },
+  {
+    title: "Developers",
+    links: [
+      {
+        name: "Documentation",
+        href: "https://docs.rs/shuttle-service/latest/shuttle_service/",
+      },
+      {
+        name: "Examples",
+        href: "https://github.com/shuttle-hq/shuttle/tree/main/examples",
+      },
+      {
+        name: "Forum",
+        href: "https://github.com/shuttle-hq/shuttle/discussions",
+      },
+    ],
+  },
+  {
+    title: "Community",
+    links: [...communities.map(({ name, href }) => ({ name, href }))],
   },
 ];
 
@@ -98,6 +140,37 @@ export default function Footer() {
       </div> */}
 
       <footer className="mx-auto max-w-6xl py-12 px-4 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-2 gap-8 pb-8 md:grid-cols-4">
+          {navigation.map((col) => (
+            <div className="">
+              <h3 className="text-sm font-medium uppercase tracking-wider text-gray-400">
+                {col.title}
+              </h3>
+              <ul role="list" className="mt-4 space-y-4">
+                {col.links.map((link) => (
+                  <li key={link.name}>
+                    {link.href.startsWith("/") ? (
+                      <InternalLink
+                        href={link.href}
+                        className="text-base text-slate-600 hover:text-slate-900 dark:text-gray-300 hover:dark:text-white"
+                      >
+                        {link.name}
+                      </InternalLink>
+                    ) : (
+                      <ExternalLink
+                        href={link.href}
+                        className="text-base text-slate-600 hover:text-slate-900 dark:text-gray-300 hover:dark:text-white"
+                      >
+                        {link.name}
+                      </ExternalLink>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+
         <div className="mt-8 flex flex-col gap-2 sm:flex-row">
           <p className="text-base dark:text-gray-300">&copy; 2022 shuttle</p>
           {/* <p className="flex gap-2">

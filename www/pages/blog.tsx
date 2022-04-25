@@ -161,7 +161,7 @@ function FeaturedThumb({ post }: FeaturedThumbProps) {
       >
         <div className="relative aspect-[4/3] w-full overflow-auto rounded">
           <Image
-            src={`/images/blog/` + (post.thumb ?? post.image)}
+            src={`/images/blog/` + post.thumb}
             layout="fill"
             objectFit="cover"
           />

@@ -1,5 +1,5 @@
 resource "aws_s3_bucket" "logs" {
-  bucket = "shuttle-logs"
+  bucket_prefix = "shuttle-logs"
 }
 
 resource "aws_s3_bucket_policy" "allow_load_balancer_to_log" {

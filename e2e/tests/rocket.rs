@@ -15,7 +15,7 @@ fn hello_world() {
         .text()
         .unwrap();
 
-    assert_eq!(request_text, "Hello, world!");
+    assert_eq!(request_text, "the contents of my API key");
 }
 
 #[test]

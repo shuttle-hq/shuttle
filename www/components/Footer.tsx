@@ -60,12 +60,12 @@ const navigation = [
         href: "https://docs.rs/shuttle-service/latest/shuttle_service/",
       },
       {
-        name: "Examples",
+        name: "Guides",
         href: "https://github.com/shuttle-hq/shuttle/tree/main/examples",
       },
       {
-        name: "Forum",
-        href: "https://github.com/shuttle-hq/shuttle/discussions",
+        name: "Contributors",
+        href: "https://github.com/shuttle-hq/shuttle/graphs/contributors",
       },
     ],
   },
@@ -143,23 +143,23 @@ export default function Footer() {
         <div className="grid grid-cols-2 gap-8 pb-8 md:grid-cols-4">
           {navigation.map((col) => (
             <div className="">
-              <h3 className="text-sm font-medium uppercase tracking-wider text-gray-400">
+              <h3 className="text-lg font-medium tracking-wider text-slate-700 dark:text-gray-300">
                 {col.title}
               </h3>
               <ul role="list" className="mt-4 space-y-4">
-                {col.links.map((link) => (
-                  <li key={link.name}>
+                {col.links.map((link, index) => (
+                  <li key={index}>
                     {link.href.startsWith("/") ? (
                       <InternalLink
                         href={link.href}
-                        className="text-base text-slate-600 hover:text-slate-900 dark:text-gray-300 hover:dark:text-white"
+                        className="text-base text-slate-500 hover:text-slate-900 dark:text-gray-400 hover:dark:text-gray-300"
                       >
                         {link.name}
                       </InternalLink>
                     ) : (
                       <ExternalLink
                         href={link.href}
-                        className="text-base text-slate-600 hover:text-slate-900 dark:text-gray-300 hover:dark:text-white"
+                        className="text-base text-slate-500 hover:text-slate-900 dark:text-gray-400 hover:dark:text-gray-300"
                       >
                         {link.name}
                       </ExternalLink>

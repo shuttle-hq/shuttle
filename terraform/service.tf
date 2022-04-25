@@ -57,8 +57,24 @@ resource "aws_lb_target_group_attachment" "postgres" {
   port             = var.postgres_container_port
 }
 
+data "aws_ami" "ubuntu" {
+  most_recent = true
+
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server-*"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+
+  owners = ["099720109477"] # Canonical
+}
+
 resource "aws_instance" "backend" {
-  ami           = "ami-072db068702487a87" # unveil-backend-ami-20220313
+  ami = data.aws_ami.ubuntu.id
   instance_type = "c6g.4xlarge"
 
   monitoring = true

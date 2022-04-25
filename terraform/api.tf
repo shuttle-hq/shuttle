@@ -20,11 +20,6 @@ resource "aws_apigatewayv2_api_mapping" "backend" {
   stage       = aws_apigatewayv2_stage.alpha.id
 }
 
-resource "aws_api_gateway_account" "backend" {
-  // TODO
-  cloudwatch_role_arn = "arn:aws:iam::506436569174:role/apigateway-logs"
-}
-
 resource "aws_apigatewayv2_vpc_link" "private" {
   name = "shuttle-api-gateway-vpc-link"
 

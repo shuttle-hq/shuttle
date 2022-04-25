@@ -143,7 +143,7 @@ export default function Footer() {
         <div className="-m-4 flex flex-wrap justify-between pb-8">
           {navigation.map((col, index) => (
             <div className="basis-2/4 p-4 md:basis-1" key={index}>
-              <h3 className="text-lg font-medium tracking-wider text-slate-700 dark:text-gray-300">
+              <h3 className="text-lg font-medium tracking-wider text-slate-800 dark:text-gray-200">
                 {col.title}
               </h3>
               <ul role="list" className="mt-4 space-y-4">
@@ -152,14 +152,14 @@ export default function Footer() {
                     {link.href.startsWith("/") ? (
                       <InternalLink
                         href={link.href}
-                        className="text-base text-slate-500 hover:text-slate-900 dark:text-gray-400 hover:dark:text-gray-300"
+                        className="whitespace-nowrap text-base text-slate-500 hover:text-slate-900 dark:text-gray-400 hover:dark:text-gray-300"
                       >
                         {link.name}
                       </InternalLink>
                     ) : (
                       <ExternalLink
                         href={link.href}
-                        className="text-base text-slate-500 hover:text-slate-900 dark:text-gray-400 hover:dark:text-gray-300"
+                        className="whitespace-nowrap text-base text-slate-500 hover:text-slate-900 dark:text-gray-400 hover:dark:text-gray-300"
                       >
                         {link.name}
                       </ExternalLink>

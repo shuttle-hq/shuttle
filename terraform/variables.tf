@@ -35,13 +35,3 @@ variable "shuttle_admin_secret" {
   type        = string
   description = "Secret for the shuttle admin user"
 }
-
-variable "availability_zone_1" {
-  type        = string
-  description = "First availability zone for load balancer"
-}
-
-variable "availability_zone_2" {
-  type        = string
-  description = "Second availability zone for load balancer"
-}

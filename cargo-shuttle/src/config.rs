@@ -160,10 +160,7 @@ pub struct ProjectConfig {
     pub name: Option<ProjectName>,
 }
 
-#[derive(Deserialize, Serialize, Default)]
-pub struct SecretsConfig {
-    pub secrets: HashMap<String, String>
-}
+pub type SecretsConfig = HashMap<String, String>;
 
 /// A handler for configuration files. The type parameter `M` is the [`ConfigManager`] which handles
 /// indirection around file location and serde. The type parameter `C` is the configuration content.
@@ -382,6 +379,6 @@ impl RequestContext {
     }
 
     pub fn secrets(&self) -> &HashMap<String, String> {
-        &self.secrets.as_ref().unwrap().as_ref().unwrap().secrets
+        &self.secrets.as_ref().unwrap().as_ref().unwrap()
     }
 }

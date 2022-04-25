@@ -378,7 +378,7 @@ impl RequestContext {
             .unwrap()
     }
 
-    pub fn secrets(&self) -> &HashMap<String, String> {
-        &self.secrets.as_ref().unwrap().as_ref().unwrap()
+    pub fn secrets(&self) -> HashMap<String, String> {
+        self.secrets.as_ref().and_then(|secrets| secrets.as_ref().cloned()).unwrap_or_default()
     }
 }

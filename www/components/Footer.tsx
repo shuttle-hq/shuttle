@@ -140,9 +140,9 @@ export default function Footer() {
       </div> */}
 
       <footer className="mx-auto max-w-6xl py-12 px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-2 gap-8 pb-8 md:grid-cols-4">
-          {navigation.map((col) => (
-            <div className="">
+        <div className="-m-4 flex flex-wrap justify-between pb-8">
+          {navigation.map((col, index) => (
+            <div className="basis-2/4 p-4 md:basis-1" key={index}>
               <h3 className="text-lg font-medium tracking-wider text-slate-700 dark:text-gray-300">
                 {col.title}
               </h3>

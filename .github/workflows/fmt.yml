@@ -11,8 +11,8 @@ jobs:
   fmt_test:
     runs-on: ubuntu-latest
     steps:
-      - uses: getsynth/checkout@v2
-      - uses: getsynth/toolchain@v1
+      - uses: shuttle-hq/checkout@v2
+      - uses: shuttle-hq/toolchain@v1
         with:
           toolchain: stable
           override: true
@@ -21,8 +21,8 @@ jobs:
   clippy_test:
     runs-on: ubuntu-latest
     steps:
-      - uses: getsynth/checkout@v2
-      - uses: getsynth/toolchain@v1
+      - uses: shuttle-hq/checkout@v2
+      - uses: shuttle-hq/toolchain@v1
         with:
           toolchain: stable
           override: true

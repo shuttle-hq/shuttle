@@ -14,7 +14,29 @@ resource "aws_network_interface_sg_attachment" "backend" {
 
 resource "aws_iam_instance_profile" "backend" {
   name = "backend-profile"
-  role = "BackendAPIRole"
+  role = aws_iam_role.backend.name
+}
+
+resource "aws_iam_role" "backend" {
+  name        = "BackendAPIRole"
+  path        = "/"
+  description = "Allows EC2 instances to call AWS services on your behalf."
+
+  assume_role_policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Action": "sts:AssumeRole",
+            "Principal": {
+               "Service": "ec2.amazonaws.com"
+            },
+            "Effect": "Allow",
+            "Sid": ""
+        }
+    ]
+}
+EOF
 }
 
 resource "aws_lb_target_group_attachment" "api" {

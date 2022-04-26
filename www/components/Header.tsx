@@ -65,7 +65,7 @@ export default function Header() {
 
             {user && (
               <button
-                className="inline-block rounded border border-current py-1.5 px-3 text-base font-medium text-slate-600 hover:text-slate-900 dark:text-gray-200 hover:dark:text-white"
+                className="inline-block rounded border border-slate-900 bg-slate-800 py-1 px-3 text-base font-medium text-slate-100 transition-colors hover:!bg-transparent hover:text-slate-900 dark:border-white dark:bg-white dark:text-dark-700 hover:dark:text-white"
                 onClick={() => setOpen(true)}
               >
                 Log In
@@ -74,7 +74,7 @@ export default function Header() {
 
             {!user && (
               <a
-                className="inline-block rounded border border-current py-1.5 px-3 text-base font-medium text-slate-600 hover:text-slate-900 dark:text-gray-200 hover:dark:text-white"
+                className="inline-block rounded border border-slate-900 bg-slate-800 py-1 px-3 text-base font-medium text-slate-100 transition-colors hover:!bg-transparent hover:text-slate-900 dark:border-white dark:bg-white dark:text-dark-700 hover:dark:text-white"
                 href="/login"
               >
                 Log In

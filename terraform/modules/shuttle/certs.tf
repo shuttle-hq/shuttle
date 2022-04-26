@@ -49,6 +49,10 @@ resource "aws_route53_record" "user_alias" {
 resource "aws_acm_certificate_validation" "user" {
   certificate_arn         = aws_acm_certificate.user.arn
   validation_record_fqdns = [for record in aws_route53_record.user : record.fqdn]
+
+  timeouts {
+    create = "2m"
+  }
 }
 
 resource "aws_route53_zone" "api" {
@@ -89,7 +93,7 @@ resource "aws_route53_record" "api_alias" {
   type    = "A"
 
   alias {
-    name                   = aws_lb.api.dns_name
+    name                   = aws_apigatewayv2_api.backend.api_endpoint
     zone_id                = aws_lb.api.zone_id
     evaluate_target_health = true
   }
@@ -98,4 +102,8 @@ resource "aws_route53_record" "api_alias" {
 resource "aws_acm_certificate_validation" "api" {
   certificate_arn         = aws_acm_certificate.api.arn
   validation_record_fqdns = [for record in aws_route53_record.api : record.fqdn]
+
+  timeouts {
+    create = "2m"
+  }
 }

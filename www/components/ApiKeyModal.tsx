@@ -15,7 +15,7 @@ export default function ApiKeyModal() {
   const [open, setOpen] = useApiKeyModalState();
   const { user, error, isLoading } = useUser();
 
-  const api_key = (user?.api_key as string | undefined) ?? "dsds";
+  const api_key = user?.api_key as string | undefined;
 
   return (
     <Transition.Root show={open} as={Fragment}>

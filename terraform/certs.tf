@@ -34,6 +34,18 @@ resource "aws_route53_record" "user" {
   zone_id         = each.value.zone_id
 }
 
+resource "aws_route53_record" "user_alias" {
+  zone_id = aws_route53_zone.user.zone_id
+  name    = "*.${var.proxy_fqdn}"
+  type    = "A"
+
+  alias {
+    name                   = aws_lb.user.dns_name
+    zone_id                = aws_lb.user.zone_id
+    evaluate_target_health = true
+  }
+}
+
 resource "aws_acm_certificate_validation" "user" {
   certificate_arn         = aws_acm_certificate.user.arn
   validation_record_fqdns = [for record in aws_route53_record.user : record.fqdn]
@@ -69,6 +81,18 @@ resource "aws_route53_record" "api" {
   ttl             = 60
   type            = each.value.type
   zone_id         = each.value.zone_id
+}
+
+resource "aws_route53_record" "api_alias" {
+  zone_id = aws_route53_zone.api.zone_id
+  name    = var.api_fqdn
+  type    = "A"
+
+  alias {
+    name                   = aws_lb.api.dns_name
+    zone_id                = aws_lb.api.zone_id
+    evaluate_target_health = true
+  }
 }
 
 resource "aws_acm_certificate_validation" "api" {

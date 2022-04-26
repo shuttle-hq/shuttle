@@ -40,6 +40,10 @@ const navigation = [
       { name: "Features", href: "/#features" },
       { name: "Examples", href: "/#examples" },
       { name: "Code Snippets", href: "/#code-snippets" },
+      {
+        name: "Roadmap",
+        href: "https://github.com/orgs/shuttle-hq/projects/4/views/2",
+      },
     ],
   },
   {
@@ -71,7 +75,13 @@ const navigation = [
   },
   {
     title: "Community",
-    links: [...communities.map(({ name, href }) => ({ name, href }))],
+    links: [
+      ...communities.map(({ name, href }) => ({ name, href })),
+      {
+        name: "Linkedin",
+        href: "https://www.linkedin.com/company/shuttle-yc/",
+      },
+    ],
   },
 ];
 

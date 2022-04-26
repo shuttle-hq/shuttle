@@ -6,7 +6,29 @@ Raising [issues](https://github.com/shuttle-hq/shuttle/issues) is encouraged. We
 
 ## Running Locally
 
-To compile from source, see the `Compiling from source` tab in the [docs](https://www.getsynth.com/docs/getting_started/installation).
+```bash
+# clone the repo
+git clone git@github.com:shuttle-hq/shuttle.git
+
+# cd into the repo
+cd shuttle
+
+# start shuttle service in the background
+docker-compose up -d
+
+# login to shuttle service
+cargo run --bin cargo-shuttle -- login --api-key "ci-test"
+
+# cd into one of the examples
+cd examples/rocket/hello-world/
+
+# run deploy the example
+cargo run --bin cargo-shuttle --manifest-path ../../../Cargo.toml -- deploy 
+
+# test if example is working
+# (use Host header to specify domain of the service)
+curl --header "Host: hello-world-rocket-app.shuttleapp.rs" localhost:8000/hello 
+```
 
 ## Running Tests
 

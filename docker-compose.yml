@@ -11,3 +11,5 @@ services:
     environment:
       - SHUTTLE_USERS_TOML=/config/users.toml
       - SHUTTLE_ADMIN_SECRET=admin-pass
+      - API_FQDN=api.shuttle.rs
+      - PROXY_FQDN=shuttleapp.rs

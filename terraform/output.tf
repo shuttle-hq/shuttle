@@ -4,11 +4,13 @@ output "api_url" {
 }
 
 output "api_content_host" {
-  value = aws_lb.api.dns_name
+  value       = aws_lb.api.dns_name
+  description = "URL for api load balancer"
 }
 
 output "user_content_host" {
-  value = aws_lb.user.dns_name
+  value       = aws_lb.user.dns_name
+  description = "URL for user proxy load balancer"
 }
 
 output "initial_user_key" {

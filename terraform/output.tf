@@ -3,6 +3,10 @@ output "api_url" {
   description = "URL to connect to the api"
 }
 
+output "api_content_host" {
+  value = aws_lb.api.dns_name
+}
+
 output "user_content_host" {
   value = aws_lb.user.dns_name
 }

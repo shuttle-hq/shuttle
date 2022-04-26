@@ -1,7 +1,7 @@
 resource "aws_lb" "api" {
   name = "shuttle"
 
-  internal = true
+  internal = false
 
   load_balancer_type = "application"
 

@@ -1,37 +1,31 @@
-use tower::Service;
-use http::{Request, Response, StatusCode};
-use std::task::{Context, Poll};
-use std::pin::Pin;
-use std::future::Future;
+#[macro_use]
+extern crate tower_web;
+use tower_web::{ServiceBuilder, response::DefaultSerializer, error::DefaultCatch, middleware::Identity};
 
-struct App;
+#[derive(Clone, Debug)]
+struct HelloWorld;
 
-impl Service<Request<Vec<u8>>> for App {
-    type Response = Response<Vec<u8>>;
-    type Error = http::Error;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>>>>;
+#[derive(Response)]
+struct HelloResponse {
+    message: &'static str,
+}
 
-    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
+impl_web! {
+    impl HelloWorld {
+        #[get("/")]
+        #[content_type("json")]
+        fn hello_world(&self) -> Result<HelloResponse, ()> {
+            Ok(HelloResponse {
+                message: "hello world",
+            })
+        }
     }
+}
 
-    fn call(&mut self, req: Request<Vec<u8>>) -> Self::Future {
-        // create the body
-        let body: Vec<u8> = "hello, world!\n"
-            .as_bytes()
-            .to_owned();
-        // Create the HTTP response
-        let resp = Response::builder()
-            .status(StatusCode::OK)
-            .body(body)
-            .expect("Unable to create `http::Response`");
+#[shuttle_service::main]
+async fn tower() -> Result<ServiceBuilder<HelloWorld, DefaultSerializer, DefaultCatch, Identity>, shuttle_service::Error> {
+    let service = ServiceBuilder::new()
+        .resource(HelloWorld);
 
-        // create a response in a future.
-        let fut = async {
-            Ok(resp)
-        };
-
-        // Return the response as an immediate future
-        Box::pin(fut)
-    }
+    Ok(service)
 }

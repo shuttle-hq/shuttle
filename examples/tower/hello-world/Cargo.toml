@@ -9,6 +9,7 @@ crate-type = ["cdylib"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tower = { version = "0.4", features = ["full"] }
 shuttle-service = { version = "0.2", features = ["web-axum"] }
-http = "0.2"
+tower-web = "0.3"
+tokio = "0.1"
+serde = { version = "1.0", features = ["derive"] }

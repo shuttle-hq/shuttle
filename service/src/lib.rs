@@ -459,6 +459,17 @@ impl Service for SimpleService<sync_wrapper::SyncWrapper<axum::Router>> {
     }
 }
 
+#[cfg(feature = "web-tower")]
+impl<T, S, C, M> IntoService for SimpleService<tower_web::ServiceBuilder<T, S, C, M>> {
+    fn build(&mut self, factory: &mut dyn Factory) -> Result<(), Error> {
+        Ok(())
+    }
+
+    fn bind(&mut self, addr: SocketAddr) -> Result<(), error::Error> {
+        Ok(())
+    }
+}
+
 /// Helper macro that generates the entrypoint required of any service.
 ///
 /// Can be used in one of two ways:

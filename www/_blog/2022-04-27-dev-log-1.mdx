@@ -63,7 +63,7 @@ enum DeploymentState {
 
 Which corresponds to:
 
-![Deployment State Machine](state-machine.png)
+![alt text](/images/blog/state-machine.png)
 
 Even though we have a nice representation of our states - these states don't actually hold any data yet. We would like the `DeploymentState` to own all the data that corresponds to the specific stage in it's deployment. We'll create some structs to hold the data required for each stage.
 

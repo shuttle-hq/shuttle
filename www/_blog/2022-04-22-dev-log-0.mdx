@@ -53,7 +53,7 @@ The deployment process is the core piece of engineering we spent the most time o
 
 1. `$ cargo shuttle deploy` runs a `cargo package` under the hood, zipping up the current cargo project into a tarball and shipping it to our API under the `/deploy` endpoint with a bearer token for authentication
 2. The API receives the tarball and holds it in memory. The build is added to a job processor which acts as a build queue.
-3. The job processor unpacks the tarball and writes it to disk, say under `/projets/my-app`. The build system is triggered to compile the unpacked cargo project
+3. The job processor unpacks the tarball and writes it to disk, say under `/projects/my-app`. The build system is triggered to compile the unpacked cargo project
 4. The output of the build process is a shared object file ('.so') which is then dynamically loaded by the API with its own runtime. The newly born web-server is assigned a free port which is not exposed to the outside world.
 5. We update the routing table of our reverse proxy such that requests coming in with the host `my-app.shuttleapp.rs` are forwarded to the aforementioned port.
 

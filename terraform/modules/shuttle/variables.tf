@@ -9,6 +9,12 @@ variable "api_fqdn" {
   description = "Fully qualified domain name where the api will be reachable at"
 }
 
+variable "instance_type" {
+  type        = string
+  description = "EC2 instance type to provision"
+  default     = "c6i.4xlarge"
+}
+
 variable "postgres_container_port" {
   type        = number
   description = "Port Postgres will be reachable at"

@@ -319,7 +319,7 @@ impl JobQueue {
                 debug!("ended deployment job for id: '{}'", id);
             }
 
-            log::debug!("job processor tvalueask ended");
+            log::debug!("job processor task ended");
         });
 
         Self { send }

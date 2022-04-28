@@ -289,7 +289,7 @@ type Deployments = HashMap<DeploymentId, Arc<Deployment>>;
 /// The top-level manager for deployments. Is responsible for their creation
 /// and lifecycle.
 pub(crate) struct DeploymentSystem {
-    deployments: RwLock<Deployments>,
+    deployments: Arc<RwLock<Deployments>>,
     job_queue: JobQueue,
     router: Arc<Router>,
     fqdn: String,
@@ -319,7 +319,7 @@ impl JobQueue {
                 debug!("ended deployment job for id: '{}'", id);
             }
 
-            log::debug!("job processor task ended");
+            log::debug!("job processor tvalueask ended");
         });
 
         Self { send }
@@ -368,7 +368,7 @@ impl DeploymentSystem {
         }
 
         Self {
-            deployments: Default::default(),
+            deployments,
             job_queue,
             router,
             fqdn,

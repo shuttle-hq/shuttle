@@ -1,6 +1,6 @@
 ---
 title: "DevLog[1]: Building a serverless platform for Rust in 4 weeks - part deux"
-description: DevLog[1] covers how we designed and built a deployment system
+description: Designing and building a deployment system as a state machine
 author: christoshadjiaslanis
 tags: [rust, startup, devlog]
 thumb: shuttle-logo-square-rocket.png
@@ -38,7 +38,7 @@ Then life happens so you need a couple more states:
 
 Which corresponds to:
 
-![State Machine](/images/blog/state-machine.png)
+![State Machine](/images/blog/state-machine.jpeg)
 
 All this can be expressed nicely in an enum since all these states are mutually exclusive:
 

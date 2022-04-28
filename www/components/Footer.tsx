@@ -49,11 +49,14 @@ const navigation = [
   {
     title: "Company",
     links: [
+      { name: "About Us", href: "/company" },
       { name: "Blog", href: "/blog" },
       {
         name: "Careers",
         href: "https://www.workatastartup.com/companies/shuttle",
       },
+      { name: "Privacy Policy", href: "/privacy-policy" },
+      { name: "Terms of Service", href: "/terms-of-service" },
     ],
   },
   {

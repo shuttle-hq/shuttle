@@ -1,5 +1,6 @@
 use crate::{build::Build, BuildSystem, ShuttleFactory};
 use anyhow::{anyhow, Context as AnyhowContext};
+use chrono::{DateTime, Utc};
 use core::default::Default;
 use futures::prelude::*;
 use libloading::Library;
@@ -220,8 +221,8 @@ impl Deployment {
         }
     }
 
-    async fn add_runtime_log(&self, log: LogItem) {
-        self.meta.write().await.runtime_logs.push(log);
+    async fn add_runtime_log(&self, datetime: DateTime<Utc>, log: LogItem) {
+        self.meta.write().await.runtime_logs.insert(datetime, log);
     }
 }
 
@@ -377,7 +378,7 @@ impl DeploymentSystem {
                 if let Ok(log) = res {
                     let mut deployments_log = deployments_log.write().await;
                     if let Some(deployment) = deployments_log.get_mut(&log.deployment_id) {
-                        deployment.add_runtime_log(log.item).await;
+                        deployment.add_runtime_log(log.datetime, log.item).await;
                     }
                 } else {
                     break;

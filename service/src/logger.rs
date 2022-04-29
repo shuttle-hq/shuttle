@@ -1,9 +1,11 @@
+use chrono::{DateTime, Utc};
 use shuttle_common::{DeploymentId, LogItem};
 use std::sync::mpsc::SyncSender;
 
 #[derive(Debug)]
 pub struct Log {
     pub deployment_id: DeploymentId,
+    pub datetime: DateTime<Utc>,
     pub item: LogItem,
 }
 
@@ -34,6 +36,7 @@ impl log::Log for Logger {
             self.tx
                 .send(Log {
                     item,
+                    datetime: Utc::now(),
                     deployment_id: self.deployment_id.clone(),
                 })
                 .expect("sending log should succeed");

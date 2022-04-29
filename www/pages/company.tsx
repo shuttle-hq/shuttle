@@ -100,7 +100,7 @@ export default function company() {
         </div>
       </div>
 
-      <div className="mx-auto max-w-6xl px-4 pt-16 pb-20 sm:px-6 lg:px-8 lg:pt-24 lg:pb-28">
+      <div className="mx-auto max-w-6xl px-4 pt-16 pb-32 sm:px-6 lg:px-8 lg:pt-24 lg:pb-40">
         <div className="text-center">
           <p className="mt-2 text-3xl font-extrabold tracking-tight dark:text-gray-200  sm:text-4xl">
             Company Values
@@ -152,6 +152,19 @@ export default function company() {
             numquam sunt architecto eaque.
           </p>
         </div>
+      </div>
+
+      <div className="mx-auto max-w-6xl px-4 pt-16 pb-20 sm:px-6 lg:px-8 lg:pt-24">
+        <div className="text-center">
+          <p className="mt-2 text-3xl font-extrabold tracking-tight dark:text-gray-200  sm:text-4xl">
+            It's time to build, join us!
+          </p>
+          <p className="mx-auto mt-5 max-w-prose text-xl dark:text-gray-300">
+            Interested? We're hiring! Check out our live roles below:
+          </p>
+        </div>
+      </div>
+      <div className="mx-auto max-w-3xl px-4 pb-20 sm:px-6 lg:px-8 lg:pb-28">
         <div className="overflow-hidden bg-slate-200 shadow dark:bg-gray-600 sm:rounded-md">
           <ul
             role="list"
@@ -161,24 +174,18 @@ export default function company() {
               <li key={position.id}>
                 <a href="#" className="block hover:bg-black/5">
                   <div className="py-4 px-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="truncate text-sm font-medium dark:text-gray-200">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex w-full flex-col justify-between gap-2 sm:flex-row">
+                        <p className="truncate text-base font-medium dark:text-gray-200">
                           {position.title}
                         </p>
 
-                        <div className="mt-2 flex items-center gap-2">
-                          <div className="text-sm dark:text-gray-300">
-                            {position.type}
-                          </div>
-                          <div className="h-2 w-2 bg-current"></div>
-                          <div className="text-sm dark:text-gray-300">
-                            {position.location}
-                          </div>
-                          <div className="h-2 w-2 bg-current"></div>
-                          <div className="text-sm dark:text-gray-300">
-                            {position.experience}
-                          </div>
+                        <div className="flex items-center gap-2 text-base dark:text-gray-300">
+                          <div>{position.type}</div>
+                          <div>|</div>
+                          <div>{position.location}</div>
+                          <div>|</div>
+                          <div>{position.experience}</div>
                         </div>
                       </div>
                       <div>

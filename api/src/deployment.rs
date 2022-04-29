@@ -371,10 +371,16 @@ impl DeploymentSystem {
         let deployments_log = deployments.clone();
 
         tokio::spawn(async move {
-            while let Ok(log) = rx.recv() {
-                let deployments_log = deployments_log.write().await;
-                if let Some(deployment) = deployments_log.get_mut(&log.deployment_id) {
-                    deployment.add_runtime_log(log.message).await;
+            loop {
+                let res = rx.recv();
+
+                if let Ok(log) = res {
+                    let mut deployments_log = deployments_log.write().await;
+                    if let Some(deployment) = deployments_log.get_mut(&log.deployment_id) {
+                        deployment.add_runtime_log(log.message).await;
+                    }
+                } else {
+                    break;
                 }
             }
         });

@@ -5,7 +5,10 @@ use shuttle_common::DeploymentId;
 use thiserror::Error as ThisError;
 use tokio::task::JoinHandle;
 
-use crate::{logger::Log, Error, Factory, Service};
+use crate::{
+    logger::{Log, Logger},
+    Error, Factory, Service,
+};
 
 const ENTRYPOINT_SYMBOL_NAME: &[u8] = b"_create_service\0";
 
@@ -55,8 +58,9 @@ impl Loader {
         deployment_id: DeploymentId,
     ) -> Result<(ServeHandle, Library), Error> {
         let mut service = self.service;
+        let logger = Logger::new(tx, deployment_id);
 
-        service.build(factory, tx, deployment_id)?;
+        service.build(factory, logger)?;
 
         // We cannot use spawn here since that blocks the api completely. We suspect this is because `bind` makes a blocking call,
         // however that does not completely makes sense as the blocking call is made on another runtime.

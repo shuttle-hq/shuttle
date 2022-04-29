@@ -1,5 +1,3 @@
-import classnames from "classnames";
-import { Switch } from "@headlessui/react";
 import { useLocalStorage, useMedia } from "react-use";
 import { useEffect } from "react";
 import { MoonIcon, SunIcon } from "@heroicons/react/solid";

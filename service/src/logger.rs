@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use log::{Level, Metadata, Record};
 use shuttle_common::{DeploymentId, LogItem};
 use std::sync::mpsc::SyncSender;
 
@@ -21,11 +22,11 @@ impl Logger {
 }
 
 impl log::Log for Logger {
-    fn enabled(&self, metadata: &log::Metadata) -> bool {
-        true
+    fn enabled(&self, metadata: &Metadata) -> bool {
+        metadata.level() <= Level::Info
     }
 
-    fn log(&self, record: &log::Record) {
+    fn log(&self, record: &Record) {
         if self.enabled(record.metadata()) {
             let item = LogItem {
                 body: format!("{}", record.args()),

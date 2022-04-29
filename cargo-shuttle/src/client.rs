@@ -63,6 +63,18 @@ pub(crate) async fn status(api_url: ApiUrl, api_key: &ApiKey, project: &ProjectN
     Ok(())
 }
 
+pub(crate) async fn logs(api_url: ApiUrl, api_key: &ApiKey, project: &ProjectName) -> Result<()> {
+    let client = get_retry_client();
+
+    let deployment_meta = get_deployment_meta(api_url, api_key, project, &client).await?;
+
+    for log in deployment_meta.runtime_logs {
+        println!("{}", log);
+    }
+
+    Ok(())
+}
+
 async fn get_deployment_meta(
     api_url: ApiUrl,
     api_key: &ApiKey,

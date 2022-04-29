@@ -27,6 +27,8 @@ pub enum Command {
     Deploy(DeployArgs),
     #[structopt(about = "view the status of an shuttle project")]
     Status,
+    #[structopt(about = "view the logs of your shuttle project")]
+    Logs,
     #[structopt(about = "delete the latest deployment for a shuttle project")]
     Delete,
     #[structopt(about = "create user credentials for the shuttle platform")]

@@ -26,6 +26,7 @@ shuttle-common = { version = "0.2.6", path = "../common" }
 
 [dev-dependencies]
 portpicker = "0.1.1"
+uuid = "0.8.2"
 
 [features]
 default = ["codegen"]

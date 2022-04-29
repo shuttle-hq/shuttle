@@ -28,6 +28,7 @@ impl log::Log for Logger {
 
     fn log(&self, record: &Record) {
         if self.enabled(record.metadata()) {
+            let datetime = Utc::now();
             let item = LogItem {
                 body: format!("{}", record.args()),
                 level: record.level(),
@@ -37,7 +38,7 @@ impl log::Log for Logger {
             self.tx
                 .send(Log {
                     item,
-                    datetime: Utc::now(),
+                    datetime,
                     deployment_id: self.deployment_id.clone(),
                 })
                 .expect("sending log should succeed");

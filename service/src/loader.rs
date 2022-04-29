@@ -1,10 +1,11 @@
-use std::{ffi::OsStr, net::SocketAddr};
+use std::{ffi::OsStr, net::SocketAddr, sync::mpsc::SyncSender};
 
 use libloading::{Library, Symbol};
+use shuttle_common::DeploymentId;
 use thiserror::Error as ThisError;
 use tokio::task::JoinHandle;
 
-use crate::{Error, Factory, Service};
+use crate::{logger::Log, Error, Factory, Service};
 
 const ENTRYPOINT_SYMBOL_NAME: &[u8] = b"_create_service\0";
 
@@ -50,10 +51,12 @@ impl Loader {
         self,
         factory: &mut dyn Factory,
         addr: SocketAddr,
+        tx: SyncSender<Log>,
+        deployment_id: DeploymentId,
     ) -> Result<(ServeHandle, Library), Error> {
         let mut service = self.service;
 
-        service.build(factory)?;
+        service.build(factory, tx, deployment_id)?;
 
         // We cannot use spawn here since that blocks the api completely. We suspect this is because `bind` makes a blocking call,
         // however that does not completely makes sense as the blocking call is made on another runtime.

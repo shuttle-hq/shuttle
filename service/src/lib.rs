@@ -158,12 +158,17 @@
 use std::future::Future;
 use std::net::SocketAddr;
 use std::pin::Pin;
+use std::sync::mpsc::SyncSender;
 
 use async_trait::async_trait;
+use logger::Log;
+use shuttle_common::DeploymentId;
 use tokio::runtime::Runtime;
 
 pub mod error;
 pub use error::Error;
+
+pub mod logger;
 
 #[cfg(feature = "codegen")]
 extern crate shuttle_codegen;
@@ -269,9 +274,15 @@ pub trait Service: Send + Sync {
     /// This function is run exactly once on each instance of a deployment, prior to calling [bind][Service::bind].
     ///
     /// The passed [Factory][Factory] can be used to configure additional resources (like databases).
+    /// And the Sender is a channel for sending runtime logs of the deployment
     ///
     /// The default is a noop that returns `Ok(())`.
-    fn build(&mut self, _: &mut dyn Factory) -> Result<(), Error> {
+    fn build(
+        &mut self,
+        _: &mut dyn Factory,
+        _: SyncSender<Log>,
+        _deployment_id: DeploymentId,
+    ) -> Result<(), Error> {
         Ok(())
     }
 
@@ -399,10 +410,21 @@ where
 
 #[cfg(feature = "web-rocket")]
 impl Service for SimpleService<rocket::Rocket<rocket::Build>> {
-    fn build(&mut self, factory: &mut dyn Factory) -> Result<(), Error> {
+    fn build(
+        &mut self,
+        factory: &mut dyn Factory,
+        tx: SyncSender<Log>,
+        deployment_id: DeploymentId,
+    ) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
             // We want to build any sqlx pools on the same runtime the client code will run on. Without this expect to get errors of no tokio reactor being present.
-            let rocket = self.runtime.block_on(builder(factory))?;
+            let rocket = self.runtime.block_on(async {
+                log::set_boxed_logger(Box::new(logger::Logger::new(tx, deployment_id)))
+                    .map(|()| log::set_max_level(log::LevelFilter::Trace))
+                    .expect("logger set should succeed");
+
+                builder(factory).await
+            })?;
 
             self.service = Some(rocket);
         }
@@ -416,7 +438,7 @@ impl Service for SimpleService<rocket::Rocket<rocket::Build>> {
         let config = rocket::Config {
             address: addr.ip(),
             port: addr.port(),
-            log_level: rocket::config::LogLevel::Normal,
+            log_level: rocket::config::LogLevel::Off,
             ..Default::default()
         };
         let launched = rocket.configure(config).launch();
@@ -429,7 +451,12 @@ impl Service for SimpleService<rocket::Rocket<rocket::Build>> {
 
 #[cfg(feature = "web-axum")]
 impl Service for SimpleService<sync_wrapper::SyncWrapper<axum::Router>> {
-    fn build(&mut self, factory: &mut dyn Factory) -> Result<(), Error> {
+    fn build(
+        &mut self,
+        factory: &mut dyn Factory,
+        tx: SyncSender<Log>,
+        deployment_id: DeploymentId,
+    ) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
             // We want to build any sqlx pools on the same runtime the client code will run on. Without this expect to get errors of no tokio reactor being present.
             let axum = self.runtime.block_on(builder(factory))?;

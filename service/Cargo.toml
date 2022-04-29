@@ -20,6 +20,7 @@ tokio = { version = "1.0", features = ["rt", "rt-multi-thread"] }
 thiserror = "1.0"
 
 shuttle-codegen = { version = "0.2.6", path = "../codegen", optional = true }
+shuttle-common = { version = "0.2.6", path = "../common" }
 
 [dev-dependencies]
 portpicker = "0.1.1"

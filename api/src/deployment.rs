@@ -219,6 +219,10 @@ impl Deployment {
             _ => None,
         }
     }
+
+    async fn add_runtime_log(&self, log: String) {
+        self.meta.write().await.runtime_logs.push(log);
+    }
 }
 
 /// Provides a `Write` wrapper around the build logs - i.e., the build output
@@ -360,15 +364,20 @@ impl DeploymentSystem {
         let router: Arc<Router> = Default::default();
         let (tx, rx) = std::sync::mpsc::sync_channel::<Log>(64);
 
-        tokio::spawn(async move {
-            while let Ok(log) = rx.recv() {
-                println!("from {} {}", log.deployment_id, log.message);
-            }
-        });
-
         let deployments = Arc::new(RwLock::new(
             Self::initialise_from_fs(&build_system.fs_root(), &fqdn).await,
         ));
+
+        let deployments_log = deployments.clone();
+
+        tokio::spawn(async move {
+            while let Ok(log) = rx.recv() {
+                let deployments_log = deployments_log.write().await;
+                if let Some(deployment) = deployments_log.get_mut(&log.deployment_id) {
+                    deployment.add_runtime_log(log.message).await;
+                }
+            }
+        });
 
         let context = Context {
             router: router.clone(),

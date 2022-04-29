@@ -31,7 +31,7 @@ pub struct DeploymentMeta {
     pub state: DeploymentStateMeta,
     pub host: String,
     pub build_logs: Option<String>,
-    pub runtime_logs: Option<String>,
+    pub runtime_logs: Vec<String>,
     pub database_deployment: Option<DatabaseReadyInfo>,
     pub created_at: DateTime<Utc>,
 }
@@ -53,7 +53,7 @@ impl DeploymentMeta {
             state,
             host,
             build_logs: None,
-            runtime_logs: None,
+            runtime_logs: Vec::new(),
             database_deployment: None,
             created_at: Utc::now(),
         }

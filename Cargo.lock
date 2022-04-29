@@ -1502,6 +1502,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6389c490849ff5bc16be905ae24bc913a9c8892e19b2341dbc175e14c341c2b8"
 dependencies = [
  "cfg-if",
+ "serde",
 ]
 
 [[package]]
@@ -2599,7 +2600,9 @@ version = "0.2.6"
 dependencies = [
  "anyhow",
  "chrono",
+ "colored",
  "lazy_static",
+ "log",
  "rocket",
  "serde",
  "serde_json",

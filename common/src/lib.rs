@@ -2,6 +2,8 @@ pub mod project;
 
 use crate::project::ProjectName;
 use chrono::{DateTime, Utc};
+use colored::{ColoredString, Colorize};
+use log::Level;
 use rocket::Responder;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
@@ -31,7 +33,7 @@ pub struct DeploymentMeta {
     pub state: DeploymentStateMeta,
     pub host: String,
     pub build_logs: Option<String>,
-    pub runtime_logs: Vec<String>,
+    pub runtime_logs: Vec<LogItem>,
     pub database_deployment: Option<DatabaseReadyInfo>,
     pub created_at: DateTime<Utc>,
 }
@@ -173,3 +175,34 @@ impl Display for DeploymentApiError {
 }
 
 impl std::error::Error for DeploymentApiError {}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct LogItem {
+    pub body: String,
+    pub level: Level,
+    pub target: String,
+}
+
+impl Display for LogItem {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}{:<5} {}{} {}",
+            "[".bright_black(),
+            get_colored_level(&self.level),
+            self.target,
+            "]".bright_black(),
+            self.body
+        )
+    }
+}
+
+fn get_colored_level(level: &Level) -> ColoredString {
+    match level {
+        Level::Trace => level.to_string().bright_black(),
+        Level::Debug => level.to_string().blue(),
+        Level::Info => level.to_string().green(),
+        Level::Warn => level.to_string().yellow(),
+        Level::Error => level.to_string().red(),
+    }
+}

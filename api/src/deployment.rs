@@ -8,7 +8,7 @@ use rocket::tokio;
 use rocket::Data;
 use shuttle_common::{
     project::ProjectName, DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta,
-    Host, Port,
+    Host, LogItem, Port,
 };
 use shuttle_service::loader::{Loader, ServeHandle};
 use shuttle_service::logger::Log;
@@ -220,7 +220,7 @@ impl Deployment {
         }
     }
 
-    async fn add_runtime_log(&self, log: String) {
+    async fn add_runtime_log(&self, log: LogItem) {
         self.meta.write().await.runtime_logs.push(log);
     }
 }
@@ -377,7 +377,7 @@ impl DeploymentSystem {
                 if let Ok(log) = res {
                     let mut deployments_log = deployments_log.write().await;
                     if let Some(deployment) = deployments_log.get_mut(&log.deployment_id) {
-                        deployment.add_runtime_log(log.message).await;
+                        deployment.add_runtime_log(log.item).await;
                     }
                 } else {
                     break;

@@ -16,6 +16,8 @@ import {
   TerminalIcon,
   UsersIcon,
 } from "@heroicons/react/solid";
+import { motion, useViewportScroll, useTransform } from "framer-motion";
+import FadeIn from "../components/FadeIn";
 
 const positions = [
   {
@@ -77,7 +79,7 @@ const features = [
   },
 ];
 
-export default function PrivacyPolicy() {
+export default function company() {
   return (
     <>
       <div className="mx-auto max-w-6xl px-4 pt-16 pb-20 sm:px-6 lg:px-8 lg:pt-24 lg:pb-28">
@@ -112,8 +114,8 @@ export default function PrivacyPolicy() {
           <div className="mt-12">
             <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
               {features.map((feature) => (
-                <div key={feature.name} className="pt-6">
-                  <div className="flow-root h-full rounded-lg bg-slate-200 px-6 pb-8 dark:bg-gray-600">
+                <FadeIn key={feature.name} className="pt-6">
+                  <div className="flow-root h-full rounded-lg bg-slate-200 px-6 pb-8 transition hover:-translate-y-2 hover:shadow-2xl dark:bg-gray-600">
                     <div className="-mt-6">
                       <div>
                         <span className="inline-flex items-center justify-center rounded-md bg-brand-orange1 p-3 shadow-lg">
@@ -131,7 +133,7 @@ export default function PrivacyPolicy() {
                       </p>
                     </div>
                   </div>
-                </div>
+                </FadeIn>
               ))}
             </div>
           </div>

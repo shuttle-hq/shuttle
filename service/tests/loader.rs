@@ -117,7 +117,11 @@ async fn sqlx_pool() {
 
     let log = rx.recv().unwrap();
     assert_eq!(log.deployment_id, deployment_id);
-    assert!(log.item.body.starts_with("/* SQLx ping */; rows: 0"));
+    assert!(
+        log.item.body.starts_with("/* SQLx ping */; rows: 0"),
+        "got: {}",
+        log.item.body
+    );
     assert_eq!(log.item.target, "sqlx::query");
     assert_eq!(log.item.level, log::Level::Info);
 }

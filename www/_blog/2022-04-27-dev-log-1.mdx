@@ -17,7 +17,7 @@ IFC uses application code as the source of truth for provisioning infrastructure
   <img align="center" src="/images/blog/infrastructure-from-code.png" height="600px" width="600px"/>
 </p>
 
-In the [previous DevLog](http://localhost:3000/blog/2022/04/22/dev-log-0) we started the journey of building the shuttle MVP. We went over the design and implementation of the `cargo` subcommand which deploys cargo projects to shuttle. This has been a race against the clock, so corners were cut and tradeoffs were made. A similar theme emerges in this DevLog which covers the **deployment state machine**. We're going to think about compiling and deploying user code, while also covering one of my favourite design patterns in Rust.
+In the [previous DevLog](https://www.shuttle.rs/blog/2022/04/22/dev-log-0) we started the journey of building the shuttle MVP. We went over the design and implementation of the `cargo` subcommand which deploys cargo projects to shuttle. This has been a race against the clock, so corners were cut and tradeoffs were made. A similar theme emerges in this DevLog which covers the **deployment state machine**. We're going to think about compiling and deploying user code, while also covering one of my favourite design patterns in Rust.
 
 ## Deployment State
 

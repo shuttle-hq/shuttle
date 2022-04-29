@@ -39,7 +39,7 @@ impl log::Log for Logger {
                 .send(Log {
                     item,
                     datetime,
-                    deployment_id: self.deployment_id.clone(),
+                    deployment_id: self.deployment_id,
                 })
                 .expect("sending log should succeed");
         }

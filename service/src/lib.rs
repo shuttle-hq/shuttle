@@ -379,7 +379,13 @@ impl Service for SimpleService<sync_wrapper::SyncWrapper<axum::Router>> {
     ) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
             // We want to build any sqlx pools on the same runtime the client code will run on. Without this expect to get errors of no tokio reactor being present.
-            let axum = self.runtime.block_on(builder(factory))?;
+            let axum = self.runtime.block_on(async {
+                log::set_boxed_logger(Box::new(logger::Logger::new(tx, deployment_id)))
+                    .map(|()| log::set_max_level(log::LevelFilter::Trace))
+                    .expect("logger set should succeed");
+
+                builder(factory).await
+            })?;
 
             self.service = Some(axum);
         }

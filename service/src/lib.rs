@@ -460,7 +460,8 @@ impl Service for SimpleService<sync_wrapper::SyncWrapper<axum::Router>> {
 }
 
 #[cfg(feature = "web-tower")]
-impl<T, S, C, M> IntoService for SimpleService<tower_web::ServiceBuilder<T, S, C, M>> {
+impl<T, S, C, M> Service for SimpleService<tower_web::ServiceBuilder<T, S, C, M>>
+where T: Send + Sync, S: Send + Sync, C: Send + Sync, M: Send + Sync {
     fn build(&mut self, factory: &mut dyn Factory) -> Result<(), Error> {
         Ok(())
     }

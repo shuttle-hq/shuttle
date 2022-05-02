@@ -24,7 +24,7 @@ struct State {
     rx: watch::Receiver<Message>,
 }
 
-const PAUSE_SECS: u64 = 5;
+const PAUSE_SECS: u64 = 15;
 const STATUS_URI: &str = "https://api.shuttle.rs/status";
 
 #[derive(Serialize)]

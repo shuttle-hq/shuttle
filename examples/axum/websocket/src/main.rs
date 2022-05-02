@@ -132,5 +132,5 @@ async fn websocket(stream: WebSocket, state: Arc<Mutex<State>>) {
 }
 
 async fn index() -> Html<&'static str> {
-    Html("<html></html>")
+    Html(include_str!("../index.html"))
 }

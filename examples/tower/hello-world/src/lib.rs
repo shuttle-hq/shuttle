@@ -1,14 +1,15 @@
 use tower::Service;
 use std::task::{Context, Poll};
 use std::future::Future;
+use std::collections::VecDeque;
 use std::pin::Pin;
-use http::{Request, Response, StatusCode};
+use hyper::{Request};
 
 struct HelloWorld;
 
-type T = Request<Vec<u8>>;
-type R = Response<Vec<u8>>;
-type E = http::Error;
+type T = http_body::Full<VecDeque<u8>>;
+type R = http_body::Full<VecDeque<u8>>;
+type E = Box<dyn std::error::Error>;
 type F = Pin<Box<dyn Future<Output = Result<R, E>>>>;
 
 impl Service<T> for HelloWorld {
@@ -20,15 +21,10 @@ impl Service<T> for HelloWorld {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, req: Request<Vec<u8>>) -> Self::Future {
-        let body: Vec<u8> = "hello, world!\n"
-            .as_bytes()
-            .to_owned();
+    fn call(&mut self, req: T) -> Self::Future {
+        let body = VecDeque::from("hello, world!\n".to_string().into_bytes());
 
-        let resp = Response::builder()
-            .status(StatusCode::OK)
-            .body(body)
-            .expect("Unable to create response object");
+        let resp = http_body::Full::new(body);
 
         let future = async {
             Ok(resp)

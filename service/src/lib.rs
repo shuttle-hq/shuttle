@@ -460,7 +460,9 @@ impl Service for SimpleService<sync_wrapper::SyncWrapper<axum::Router>> {
 }
 
 #[cfg(feature = "web-tower")]
-impl<M, S, Target, Request> Service for SimpleService<M> where M: tower::Service<Target, Response = S>, S: tower::Service<Request> {
+impl<Req, Res, E, F> Service for SimpleService<Box<dyn tower::Service<Req, Response = Res, Error = E, Future = F> + Send + Sync>>
+    where Res: hyper::body::HttpBody,
+          Error: std::convert::Into<Box<dyn std::error::Error + Send + Sync>> {
     fn build(&mut self, factory: &mut dyn Factory) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
             // We want to build any sqlx pools on the same runtime the client code will run on. Without this expect to get errors of no tokio reactor being present.
@@ -473,12 +475,10 @@ impl<M, S, Target, Request> Service for SimpleService<M> where M: tower::Service
     }
 
     fn bind(&mut self, addr: SocketAddr) -> Result<(), error::Error> {
-        /*
         let service = self.service.take().expect("service has already been bound");
         let future = hyper::Server::bind(&addr).serve(service);
 
-        self.runtime.block_on(future).map_err(error::CustomError::new)?;
-        */
+        //self.runtime.block_on(future).map_err(error::CustomError::new)?;
 
         Ok(())
     }

@@ -1,40 +1,36 @@
-use tower::Service;
 use std::task::{Context, Poll};
 use std::future::Future;
-use std::collections::VecDeque;
 use std::pin::Pin;
-use hyper::{Request};
+use std::convert::Infallible;
 
+#[derive(Clone)]
 struct HelloWorld;
 
-type T = http_body::Full<VecDeque<u8>>;
-type R = http_body::Full<VecDeque<u8>>;
-type E = Box<dyn std::error::Error>;
-type F = Pin<Box<dyn Future<Output = Result<R, E>>>>;
+impl tower::Service<hyper::Request<hyper::Body>> for HelloWorld {
+    type Response = hyper::Response<hyper::Body>;
+    type Error = Infallible;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + Sync>>;
 
-impl Service<T> for HelloWorld {
-    type Response = R;
-    type Error = E;
-    type Future = F;
-
-    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, req: T) -> Self::Future {
-        let body = VecDeque::from("hello, world!\n".to_string().into_bytes());
+    fn call(&mut self, req: hyper::Request<hyper::Body>) -> Self::Future {
+        let body = hyper::Body::from("hello, world!\n");
+        let resp = hyper::Response::builder()
+            .status(200)
+            .body(body)
+            .expect("Unable to create `hyper::Response` object");
 
-        let resp = http_body::Full::new(body);
-
-        let future = async {
+        let fut = async {
             Ok(resp)
         };
 
-        Box::pin(future)
+        Box::pin(fut)
     }
 }
 
 #[shuttle_service::main]
-async fn tower() -> Result<Box<dyn Service<T, Response = R, Error = E, Future = F> + Send + Sync>, shuttle_service::Error> {
-    Ok(Box::new(HelloWorld))
+async fn tower() -> Result<HelloWorld, shuttle_service::Error> {
+    Ok(HelloWorld)
 }

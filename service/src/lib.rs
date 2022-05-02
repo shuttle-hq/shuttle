@@ -460,9 +460,10 @@ impl Service for SimpleService<sync_wrapper::SyncWrapper<axum::Router>> {
 }
 
 #[cfg(feature = "web-tower")]
-impl<Req, Res, E, F> Service for SimpleService<Box<dyn tower::Service<Req, Response = Res, Error = E, Future = F> + Send + Sync>>
-    where Res: hyper::body::HttpBody,
-          Error: std::convert::Into<Box<dyn std::error::Error + Send + Sync>> {
+impl<T> Service for SimpleService<T>
+where T: tower::Service<hyper::Request<hyper::Body>, Response = hyper::Response<hyper::Body>> + Clone + Send + Sync + 'static,
+      T::Error: std::error::Error + Send + Sync,
+      T::Future: std::future::Future + Send + Sync {
     fn build(&mut self, factory: &mut dyn Factory) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
             // We want to build any sqlx pools on the same runtime the client code will run on. Without this expect to get errors of no tokio reactor being present.
@@ -476,9 +477,13 @@ impl<Req, Res, E, F> Service for SimpleService<Box<dyn tower::Service<Req, Respo
 
     fn bind(&mut self, addr: SocketAddr) -> Result<(), error::Error> {
         let service = self.service.take().expect("service has already been bound");
-        let future = hyper::Server::bind(&addr).serve(service);
 
-        //self.runtime.block_on(future).map_err(error::CustomError::new)?;
+        let future = async {
+            let shared = tower::make::Shared::new(service);
+            hyper::Server::bind(&addr).serve(shared).await
+        };
+
+        self.runtime.block_on(future).map_err(error::CustomError::new)?;
 
         Ok(())
     }

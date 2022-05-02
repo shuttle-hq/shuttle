@@ -20,13 +20,16 @@ use tokio::{
 };
 
 struct State {
-    count: usize,
+    clients_count: usize,
     rx: watch::Receiver<Message>,
 }
 
+const PAUSE_SECS: u64 = 5;
+const STATUS_URI: &str = "https://api.shuttle.rs/status";
+
 #[derive(Serialize)]
 struct Response {
-    count: usize,
+    clients_count: usize,
     datetime: DateTime<Utc>,
     is_up: bool,
 }
@@ -35,22 +38,25 @@ struct Response {
 async fn main() {
     let (tx, rx) = watch::channel(Message::Text("{}".to_string()));
 
-    let state = Arc::new(Mutex::new(State { count: 0, rx }));
+    let state = Arc::new(Mutex::new(State {
+        clients_count: 0,
+        rx,
+    }));
 
     // Spawn a thread to continually chech the status of the api
     let state_send = state.clone();
     tokio::spawn(async move {
-        let duration = Duration::from_secs(5);
+        let duration = Duration::from_secs(PAUSE_SECS);
         let https = HttpsConnector::new();
         let client = Client::builder().build::<_, hyper::Body>(https);
-        let uri: Uri = "https://api.shuttle.rs/status".parse().unwrap();
+        let uri: Uri = STATUS_URI.parse().unwrap();
 
         loop {
             let is_up = client.get(uri.clone()).await;
             let is_up = is_up.is_ok();
 
             let response = Response {
-                count: state_send.lock().await.count,
+                clients_count: state_send.lock().await.clients_count,
                 datetime: Utc::now(),
                 is_up,
             };
@@ -90,7 +96,7 @@ async fn websocket(stream: WebSocket, state: Arc<Mutex<State>>) {
 
     let mut rx = {
         let mut state = state.lock().await;
-        state.count += 1;
+        state.clients_count += 1;
         state.rx.clone()
     };
 
@@ -111,7 +117,7 @@ async fn websocket(stream: WebSocket, state: Arc<Mutex<State>>) {
     // This task will receive messages from this client.
     let mut recv_task = tokio::spawn(async move {
         while let Some(Ok(Message::Text(text))) = receiver.next().await {
-            println!("this example does not read any messages, but got: {msg}");
+            println!("this example does not read any messages, but got: {text}");
         }
     });
 
@@ -122,7 +128,7 @@ async fn websocket(stream: WebSocket, state: Arc<Mutex<State>>) {
     };
 
     // This client disconnected
-    state.lock().await.count -= 1;
+    state.lock().await.clients_count -= 1;
 }
 
 async fn index() -> Html<&'static str> {

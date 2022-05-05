@@ -41,13 +41,13 @@
              websocket.onopen = () => {
                  console.log("connection opened");
                  document.querySelectorAll("body > div").forEach(e => e.classList.remove("blur-md"));
-                 document.querySelector("body > button").classList.add("opacity-0");
+                 document.querySelector("body > button").classList.add("hidden");
              }
 
              websocket.onclose = () => {
                  console.log("connection closed");
                  document.querySelectorAll("body > div").forEach(e => e.classList.add("blur-md"));
-                 document.querySelector("body > button").classList.remove("opacity-0");
+                 document.querySelector("body > button").classList.remove("hidden");
              }
 
              websocket.onmessage = (e) => {

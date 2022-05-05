@@ -1,6 +1,7 @@
 use std::{
     net::{Ipv4Addr, SocketAddr},
-    process::Command,
+    process::{exit, Command},
+    time::Duration,
 };
 
 mod helpers;
@@ -80,7 +81,42 @@ async fn sleep_async() {
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
     let (handler, _) = loader.load(&mut factory, addr).unwrap();
 
-    handler.await.unwrap().unwrap();
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    tokio::spawn(async {
+        tokio::time::sleep(Duration::from_secs(5)).await;
+        println!("Test failed as async service was not aborted");
+        exit(1);
+    });
+
+    handler.abort();
+    assert!(handler.await.unwrap_err().is_cancelled());
+}
+
+#[tokio::test]
+async fn sleep() {
+    Command::new("cargo")
+        .args(["build", "--release"])
+        .current_dir("tests/resources/sleep")
+        .spawn()
+        .unwrap()
+        .wait()
+        .unwrap();
+
+    let loader = Loader::from_so_file("tests/resources/sleep/target/release/libsleep.so").unwrap();
+
+    let mut factory = DummyFactory::new();
+    let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
+    let (handler, _) = loader.load(&mut factory, addr).unwrap();
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    tokio::spawn(async {
+        tokio::time::sleep(Duration::from_secs(5)).await;
+        println!("Test failed as blocking service was not aborted");
+        exit(1);
+    });
+
+    handler.abort();
+    assert!(handler.await.unwrap_err().is_cancelled());
 }
 
 #[tokio::test]

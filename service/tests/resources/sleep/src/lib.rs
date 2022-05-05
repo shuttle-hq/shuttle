@@ -1,7 +1,7 @@
-use std::time::Duration;
+use std::{thread::sleep, time::Duration};
 
 use shuttle_service::{IntoService, Service};
-use tokio::{runtime::Runtime, time::sleep};
+use tokio::runtime::Runtime;
 
 #[macro_use]
 extern crate shuttle_service;
@@ -31,7 +31,7 @@ impl IntoService for Wait {
 impl Service for SleepService {
     fn bind(&mut self, _: std::net::SocketAddr) -> Result<(), shuttle_service::error::Error> {
         self.runtime
-            .block_on(async { sleep(Duration::from_secs(self.duration * 60)).await });
+            .block_on(async { sleep(Duration::from_secs(self.duration * 60)) });
 
         Ok(())
     }

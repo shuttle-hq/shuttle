@@ -81,8 +81,11 @@ async fn sleep_async() {
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
     let (handler, _) = loader.load(&mut factory, addr).unwrap();
 
+    // Give service some time to start up
     tokio::time::sleep(Duration::from_secs(1)).await;
+
     tokio::spawn(async {
+        // Time is less than sleep in service
         tokio::time::sleep(Duration::from_secs(5)).await;
         println!("Test failed as async service was not aborted");
         exit(1);
@@ -108,8 +111,11 @@ async fn sleep() {
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
     let (handler, _) = loader.load(&mut factory, addr).unwrap();
 
+    // Give service some time to start up
     tokio::time::sleep(Duration::from_secs(1)).await;
+
     tokio::spawn(async {
+        // Time is less than sleep in service
         tokio::time::sleep(Duration::from_secs(5)).await;
         println!("Test failed as blocking service was not aborted");
         exit(1);

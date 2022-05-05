@@ -217,6 +217,7 @@ extern crate shuttle_codegen;
 /// | ------------------------------------------------------------- | ------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
 /// | [`PgPool`](https://docs.rs/sqlx/latest/sqlx/type.PgPool.html) | sqlx-postgres | A PostgresSql instance accessed using [sqlx](https://docs.rs/sqlx) | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/rocket/postgres) |
 pub use shuttle_codegen::main;
+use tokio::task::JoinHandle;
 
 #[cfg(feature = "loader")]
 pub mod loader;
@@ -262,6 +263,9 @@ impl GetResource<sqlx::PgPool> for &mut dyn Factory {
     }
 }
 
+/// A tokio handle the service was started on
+pub type ServeHandle = JoinHandle<Result<(), anyhow::Error>>;
+
 /// The core trait of the shuttle platform. Every crate deployed to shuttle needs to implement this trait.
 ///
 /// Use the [declare_service!][crate::declare_service] macro to expose your implementation to the deployment backend.
@@ -278,7 +282,7 @@ pub trait Service: Send + Sync {
     /// This function is run exactly once on each instance of a deployment.
     ///
     /// The deployer expects this instance of [Service][Service] to bind to the passed [SocketAddr][SocketAddr].
-    fn bind(&mut self, addr: SocketAddr) -> Result<(), error::Error>;
+    fn bind(&mut self, addr: SocketAddr) -> Result<ServeHandle, error::Error>;
 }
 
 /// A convenience trait for handling out of the box conversions into [Service][Service] instances.
@@ -410,7 +414,7 @@ impl Service for SimpleService<rocket::Rocket<rocket::Build>> {
         Ok(())
     }
 
-    fn bind(&mut self, addr: SocketAddr) -> Result<(), error::Error> {
+    fn bind(&mut self, addr: SocketAddr) -> Result<ServeHandle, error::Error> {
         let rocket = self.service.take().expect("service has already been bound");
 
         let config = rocket::Config {
@@ -420,10 +424,10 @@ impl Service for SimpleService<rocket::Rocket<rocket::Build>> {
             ..Default::default()
         };
         let launched = rocket.configure(config).launch();
-        self.runtime
-            .block_on(launched)
-            .map_err(error::CustomError::new)?;
-        Ok(())
+        let handle = self
+            .runtime
+            .spawn(async { launched.await.map_err(error::CustomError::new) });
+        Ok(handle)
     }
 }
 
@@ -440,22 +444,21 @@ impl Service for SimpleService<sync_wrapper::SyncWrapper<axum::Router>> {
         Ok(())
     }
 
-    fn bind(&mut self, addr: SocketAddr) -> Result<(), error::Error> {
+    fn bind(&mut self, addr: SocketAddr) -> Result<ServeHandle, error::Error> {
         let axum = self
             .service
             .take()
             .expect("service has already been bound")
             .into_inner();
 
-        self.runtime
-            .block_on(async {
-                axum::Server::bind(&addr)
-                    .serve(axum.into_make_service())
-                    .await
-            })
-            .map_err(error::CustomError::new)?;
+        let handle = self.runtime.spawn(async move {
+            axum::Server::bind(&addr)
+                .serve(axum.into_make_service())
+                .await
+                .map_err(error::CustomError::new)
+        });
 
-        Ok(())
+        Ok(handle)
     }
 }
 

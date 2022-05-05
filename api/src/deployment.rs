@@ -10,7 +10,7 @@ use shuttle_common::{
     project::ProjectName, DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta,
     Host, Port,
 };
-use shuttle_service::loader::{Loader, ServeHandle};
+use shuttle_service::{loader::Loader, ServeHandle};
 use std::collections::HashMap;
 use std::fs::DirEntry;
 use std::io::Write;
@@ -486,6 +486,10 @@ impl DeploymentSystem {
                 let mut lock = deployment.state.write().await;
                 if let DeploymentState::Deployed(DeployedState { so, handle, .. }) = lock.take() {
                     handle.abort();
+                    handle
+                        .await
+                        .map_err(|e| DeploymentApiError::Internal(e.to_string()))?
+                        .map_err(|e| DeploymentApiError::Internal(e.to_string()))?;
                     tokio::spawn(async move {
                         so.close().unwrap();
                     });

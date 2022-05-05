@@ -1,5 +1,5 @@
 use shuttle_service::error::CustomError;
-use shuttle_service::{Factory, IntoService, Service};
+use shuttle_service::{Factory, IntoService, ServeHandle, Service};
 use sqlx::PgPool;
 use tokio::runtime::Runtime;
 
@@ -28,28 +28,26 @@ impl IntoService for Args {
     }
 }
 
-impl PoolService {
-    async fn start(&self) -> Result<(), shuttle_service::error::Error> {
-        if let Some(pool) = &self.pool {
-            let (rec,): (String,) = sqlx::query_as("SELECT 'Hello world'")
-                .fetch_one(pool)
-                .await
-                .map_err(CustomError::new)?;
+async fn start(pool: PgPool) -> Result<(), shuttle_service::error::CustomError> {
+    let (rec,): (String,) = sqlx::query_as("SELECT 'Hello world'")
+        .fetch_one(&pool)
+        .await
+        .map_err(CustomError::new)?;
 
-            assert_eq!(rec, "Hello world");
-        } else {
-            panic!("we should have an active pool");
-        }
+    assert_eq!(rec, "Hello world");
 
-        Ok(())
-    }
+    Ok(())
 }
 
 impl Service for PoolService {
-    fn bind(&mut self, _: std::net::SocketAddr) -> Result<(), shuttle_service::error::Error> {
-        self.runtime.block_on(self.start())?;
+    fn bind(
+        &mut self,
+        _: std::net::SocketAddr,
+    ) -> Result<ServeHandle, shuttle_service::error::Error> {
+        let launch = start(self.pool.take().expect("we should have an active pool"));
+        let handle = self.runtime.spawn(launch);
 
-        Ok(())
+        Ok(handle)
     }
 
     fn build(

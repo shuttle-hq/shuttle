@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use shuttle_service::{IntoService, Service};
+use shuttle_service::{IntoService, ServeHandle, Service};
 use tokio::{runtime::Runtime, time::sleep};
 
 #[macro_use]
@@ -14,7 +14,7 @@ struct SleepService {
 }
 
 fn simple() -> Wait {
-    Wait(2)
+    Wait(10)
 }
 
 impl IntoService for Wait {
@@ -29,11 +29,17 @@ impl IntoService for Wait {
 }
 
 impl Service for SleepService {
-    fn bind(&mut self, _: std::net::SocketAddr) -> Result<(), shuttle_service::error::Error> {
-        self.runtime
-            .block_on(async { sleep(Duration::from_secs(self.duration * 60)).await });
+    fn bind(
+        &mut self,
+        _: std::net::SocketAddr,
+    ) -> Result<ServeHandle, shuttle_service::error::Error> {
+        let duration = Duration::from_secs(self.duration);
+        let handle = self.runtime.spawn(async move {
+            sleep(duration).await;
+            Ok(())
+        });
 
-        Ok(())
+        Ok(handle)
     }
 }
 

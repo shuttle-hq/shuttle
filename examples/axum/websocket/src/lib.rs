@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use axum::{
     extract::{
@@ -11,9 +11,10 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use futures::{SinkExt, StreamExt};
-use hyper::{Client, Uri};
+use hyper::{Client, HeaderMap, Uri};
 use hyper_tls::HttpsConnector;
 use serde::Serialize;
+use sync_wrapper::SyncWrapper;
 use tokio::{
     sync::{watch, Mutex},
     time::sleep,
@@ -34,8 +35,8 @@ struct Response {
     is_up: bool,
 }
 
-#[tokio::main]
-async fn main() {
+#[shuttle_service::main]
+async fn main() -> Result<SyncWrapper<Router>, shuttle_service::Error> {
     let (tx, rx) = watch::channel(Message::Text("{}".to_string()));
 
     let state = Arc::new(Mutex::new(State {
@@ -70,17 +71,14 @@ async fn main() {
         }
     });
 
-    let app = Router::new()
+    let router = Router::new()
         .route("/", get(index))
         .route("/websocket", get(websocket_handler))
         .layer(Extension(state));
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+    let sync_wrapper = SyncWrapper::new(router);
 
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
+    Ok(sync_wrapper)
 }
 
 async fn websocket_handler(

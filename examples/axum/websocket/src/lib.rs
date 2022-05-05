@@ -100,15 +100,12 @@ async fn websocket(stream: WebSocket, state: Arc<Mutex<State>>) {
 
     // This task will receive watch messages and forward it to this connected client.
     let mut send_task = tokio::spawn(async move {
-        let duration = Duration::from_secs(5);
         while let Ok(()) = rx.changed().await {
             let msg = rx.borrow().clone();
 
             if sender.send(msg).await.is_err() {
                 break;
             }
-
-            sleep(duration).await;
         }
     });
 

@@ -11,7 +11,7 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use futures::{SinkExt, StreamExt};
-use hyper::{Client, HeaderMap, Uri};
+use hyper::{Client, Uri};
 use hyper_tls::HttpsConnector;
 use serde::Serialize;
 use sync_wrapper::SyncWrapper;

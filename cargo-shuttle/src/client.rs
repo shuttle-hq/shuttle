@@ -1,7 +1,7 @@
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 use std::time::Duration;
-use std::collections::HashMap;
 
 use anyhow::{
     anyhow,
@@ -165,8 +165,7 @@ pub(crate) async fn secrets(
 ) -> Result<()> {
     if secrets.is_empty() {
         Ok(())
-    }
-    else {
+    } else {
         let mut url = api_url.clone();
         url.push_str(&format!("/projects/{}/secrets/", project.as_str()));
 

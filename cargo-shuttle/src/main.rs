@@ -21,6 +21,7 @@ use cargo::ops::{
     PackageOpts,
     Packages
 };
+use futures::future::TryFutureExt;
 use structopt::StructOpt;
 
 use crate::args::{
@@ -30,7 +31,6 @@ use crate::args::{
     DeployArgs
 };
 use crate::config::RequestContext;
-use futures::future::TryFutureExt;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -143,9 +143,14 @@ impl Shuttle {
             key,
             self.ctx.project_name()
         )
-        .and_then(|_|
-            client::secrets(self.ctx.api_url(), key, self.ctx.project_name(), self.ctx.secrets())
-        )
+        .and_then(|_| {
+            client::secrets(
+                self.ctx.api_url(),
+                key,
+                self.ctx.project_name(),
+                self.ctx.secrets()
+            )
+        })
         .await
         .context("failed to deploy cargo project")
     }

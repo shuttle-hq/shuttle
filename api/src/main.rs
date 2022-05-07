@@ -14,9 +14,9 @@ mod factory;
 mod proxy;
 mod router;
 
+use std::collections::HashMap;
 use std::net::IpAddr;
 use std::sync::Arc;
-use std::collections::HashMap;
 
 use auth_admin::Admin;
 use deployment::MAX_DEPLOYS;
@@ -35,6 +35,8 @@ use shuttle_common::{
     DeploymentMeta,
     Port
 };
+use shuttle_service::SecretStore;
+use sqlx::Connection;
 use structopt::StructOpt;
 use uuid::Uuid;
 
@@ -51,8 +53,6 @@ use crate::build::{
     FsBuildSystem
 };
 use crate::deployment::DeploymentSystem;
-use sqlx::Connection;
-use shuttle_service::SecretStore;
 
 type ApiResult<T, E> = Result<Json<T>, E>;
 
@@ -166,11 +166,15 @@ async fn project_secrets(
 
     if let Some(database_deployment) = &deployment.database_deployment {
         let conn_str = database_deployment.connection_string("localhost");
-        let conn = sqlx::PgPool::connect(&conn_str).await.map_err(|e| DeploymentApiError::Internal(e.to_string()))?;
+        let conn = sqlx::PgPool::connect(&conn_str)
+            .await
+            .map_err(|e| DeploymentApiError::Internal(e.to_string()))?;
 
         let map = secrets.into_inner();
         for (key, value) in map.iter() {
-            conn.set_secret(key, value).await.map_err(|e| DeploymentApiError::BadRequest(e.to_string()))?;
+            conn.set_secret(key, value)
+                .await
+                .map_err(|e| DeploymentApiError::BadRequest(e.to_string()))?;
         }
     }
 

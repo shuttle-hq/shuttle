@@ -1,5 +1,5 @@
-use std::fs::File;
 use std::collections::HashMap;
+use std::fs::File;
 use std::io::{
     Read,
     Write
@@ -157,7 +157,7 @@ impl GlobalConfig {
 /// Project-local config for things like customizing project name
 #[derive(Deserialize, Serialize, Default)]
 pub struct ProjectConfig {
-    pub name: Option<ProjectName>,
+    pub name: Option<ProjectName>
 }
 
 pub type SecretsConfig = HashMap<String, String>;
@@ -288,7 +288,8 @@ impl RequestContext {
     pub fn load_local<P: AsRef<Path>>(&mut self, working_directory: P) -> Result<()> {
         // Secrets.toml
 
-        let secrets_manager = LocalConfigManager::new(working_directory.as_ref(), "Secrets.toml".to_string());
+        let secrets_manager =
+            LocalConfigManager::new(working_directory.as_ref(), "Secrets.toml".to_string());
         let mut secrets = Config::new(secrets_manager);
 
         if secrets.exists() {
@@ -298,7 +299,8 @@ impl RequestContext {
 
         // Shuttle.toml
 
-        let local_manager = LocalConfigManager::new(working_directory.as_ref(), "Shuttle.toml".to_string());
+        let local_manager =
+            LocalConfigManager::new(working_directory.as_ref(), "Shuttle.toml".to_string());
         let mut project = Config::new(local_manager);
 
         if !project.exists() {
@@ -379,6 +381,9 @@ impl RequestContext {
     }
 
     pub fn secrets(&self) -> HashMap<String, String> {
-        self.secrets.as_ref().and_then(|secrets| secrets.as_ref().cloned()).unwrap_or_default()
+        self.secrets
+            .as_ref()
+            .and_then(|secrets| secrets.as_ref().cloned())
+            .unwrap_or_default()
     }
 }

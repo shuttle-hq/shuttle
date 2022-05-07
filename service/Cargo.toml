@@ -34,5 +34,7 @@ loader = ["libloading"]
 sqlx-integration = ["sqlx/runtime-tokio-native-tls"]
 sqlx-postgres = ["sqlx-integration", "sqlx/postgres"]
 
+secrets = ["sqlx-postgres"]
+
 web-axum = ["axum", "sync_wrapper"]
 web-rocket = ["rocket"]

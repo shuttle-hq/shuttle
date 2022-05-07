@@ -18,7 +18,7 @@ pub struct Args {
     /// Run this command against the api at the supplied url
     pub api_url: Option<String>,
     #[structopt(subcommand)]
-    pub cmd: Command,
+    pub cmd: Command
 }
 
 #[derive(StructOpt)]
@@ -32,23 +32,23 @@ pub enum Command {
     #[structopt(about = "create user credentials for the shuttle platform")]
     Auth(AuthArgs),
     #[structopt(about = "login to the shuttle platform")]
-    Login(LoginArgs),
+    Login(LoginArgs)
 }
 
 #[derive(StructOpt)]
 pub struct LoginArgs {
     #[structopt(long, about = "api key for the shuttle platform")]
-    pub api_key: Option<String>,
+    pub api_key: Option<String>
 }
 
 #[derive(StructOpt)]
 pub struct AuthArgs {
     #[structopt(about = "the desired username for the shuttle platform")]
-    pub username: String,
+    pub username: String
 }
 
 #[derive(StructOpt)]
 pub struct DeployArgs {
     #[structopt(long, about = "allow dirty working directories to be packaged")]
-    pub allow_dirty: bool,
+    pub allow_dirty: bool
 }

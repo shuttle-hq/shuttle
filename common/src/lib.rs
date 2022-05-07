@@ -1,11 +1,22 @@
 pub mod project;
 
-use crate::project::ProjectName;
-use chrono::{DateTime, Utc};
+use std::fmt::{
+    Display,
+    Formatter
+};
+
+use chrono::{
+    DateTime,
+    Utc
+};
 use rocket::Responder;
-use serde::{Deserialize, Serialize};
-use std::fmt::{Display, Formatter};
+use serde::{
+    Deserialize,
+    Serialize
+};
 use uuid::Uuid;
+
+use crate::project::ProjectName;
 
 pub const SHUTTLE_PROJECT_HEADER: &str = "Shuttle-Project";
 
@@ -33,7 +44,7 @@ pub struct DeploymentMeta {
     pub build_logs: Option<String>,
     pub runtime_logs: Option<String>,
     pub database_deployment: Option<DatabaseReadyInfo>,
-    pub created_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>
 }
 
 impl DeploymentMeta {
@@ -55,7 +66,7 @@ impl DeploymentMeta {
             build_logs: None,
             runtime_logs: None,
             database_deployment: None,
-            created_at: Utc::now(),
+            created_at: Utc::now()
         }
     }
 
@@ -100,7 +111,7 @@ impl Display for DeploymentMeta {
 pub struct DatabaseReadyInfo {
     pub role_name: String,
     pub role_password: String,
-    pub database_name: String,
+    pub database_name: String
 }
 
 impl DatabaseReadyInfo {
@@ -108,7 +119,7 @@ impl DatabaseReadyInfo {
         Self {
             role_name,
             role_password,
-            database_name,
+            database_name
         }
     }
     pub fn connection_string(&self, ip: &str) -> String {
@@ -127,7 +138,7 @@ pub enum DeploymentStateMeta {
     Loaded,
     Deployed,
     Error(String),
-    Deleted,
+    Deleted
 }
 
 impl Display for DeploymentStateMeta {
@@ -138,7 +149,7 @@ impl Display for DeploymentStateMeta {
             DeploymentStateMeta::Loaded => "LOADED".to_string(),
             DeploymentStateMeta::Deployed => "DEPLOYED".to_string(),
             DeploymentStateMeta::Error(msg) => format!("ERROR: {}", &msg),
-            DeploymentStateMeta::Deleted => "DELETED".to_string(),
+            DeploymentStateMeta::Deleted => "DELETED".to_string()
         };
         write!(f, "{}", s)
     }
@@ -157,7 +168,7 @@ pub enum DeploymentApiError {
     #[response(status = 400)]
     BadRequest(String),
     #[response(status = 409)]
-    ProjectAlreadyExists(String),
+    ProjectAlreadyExists(String)
 }
 
 impl Display for DeploymentApiError {
@@ -167,7 +178,7 @@ impl Display for DeploymentApiError {
             DeploymentApiError::Unavailable(s) => write!(f, "unavailable: {}", s),
             DeploymentApiError::NotFound(s) => write!(f, "not found: {}", s),
             DeploymentApiError::BadRequest(s) => write!(f, "bad request: {}", s),
-            DeploymentApiError::ProjectAlreadyExists(s) => write!(f, "conflict: {}", s),
+            DeploymentApiError::ProjectAlreadyExists(s) => write!(f, "conflict: {}", s)
         }
     }
 }

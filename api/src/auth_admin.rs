@@ -1,9 +1,16 @@
-use crate::auth::AuthorizationError;
 use lazy_static::lazy_static;
 use rocket::http::Status;
-use rocket::request::{FromRequest, Outcome};
+use rocket::request::{
+    FromRequest,
+    Outcome
+};
 use rocket::Request;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize
+};
+
+use crate::auth::AuthorizationError;
 
 lazy_static! {
     static ref SHUTTLE_ADMIN_SECRET: String =
@@ -42,7 +49,7 @@ impl<'r> FromRequest<'r> for Admin {
     async fn from_request(req: &'r Request<'_>) -> Outcome<Self, Self::Error> {
         let admin_secret = match AdminSecret::try_from(req.headers().get_one("Authorization")) {
             Ok(admin_secret) => admin_secret,
-            Err(e) => return Outcome::Failure((Status::BadRequest, e)),
+            Err(e) => return Outcome::Failure((Status::BadRequest, e))
         };
 
         if admin_secret.0 == *SHUTTLE_ADMIN_SECRET {

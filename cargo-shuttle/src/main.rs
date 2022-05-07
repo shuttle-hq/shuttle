@@ -2,19 +2,34 @@ mod args;
 mod client;
 mod config;
 
-use crate::args::{Args, AuthArgs, Command, DeployArgs};
-use crate::config::RequestContext;
-use anyhow::{Context, Result};
-use args::LoginArgs;
-use cargo::core::resolver::CliFeatures;
-use cargo::core::Workspace;
-use cargo::ops::{PackageOpts, Packages};
-
 use std::fs::File;
 use std::io::Write;
 use std::rc::Rc;
-use std::{env, io};
+use std::{
+    env,
+    io
+};
+
+use anyhow::{
+    Context,
+    Result
+};
+use args::LoginArgs;
+use cargo::core::resolver::CliFeatures;
+use cargo::core::Workspace;
+use cargo::ops::{
+    PackageOpts,
+    Packages
+};
 use structopt::StructOpt;
+
+use crate::args::{
+    Args,
+    AuthArgs,
+    Command,
+    DeployArgs
+};
+use crate::config::RequestContext;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -22,7 +37,7 @@ async fn main() -> Result<()> {
 }
 
 pub struct Shuttle {
-    ctx: RequestContext,
+    ctx: RequestContext
 }
 
 impl Default for Shuttle {
@@ -52,7 +67,7 @@ impl Shuttle {
             Command::Status => self.status().await,
             Command::Delete => self.delete().await,
             Command::Auth(auth_args) => self.auth(auth_args).await,
-            Command::Login(login_args) => self.login(login_args).await,
+            Command::Login(login_args) => self.login(login_args).await
         }
     }
 
@@ -98,7 +113,7 @@ impl Shuttle {
         client::delete(
             self.ctx.api_url(),
             self.ctx.api_key()?,
-            self.ctx.project_name(),
+            self.ctx.project_name()
         )
         .await
         .context("failed to delete deployment")
@@ -108,7 +123,7 @@ impl Shuttle {
         client::status(
             self.ctx.api_url(),
             self.ctx.api_key()?,
-            self.ctx.project_name(),
+            self.ctx.project_name()
         )
         .await
         .context("failed to get status of deployment")
@@ -122,7 +137,7 @@ impl Shuttle {
             package_file,
             self.ctx.api_url(),
             self.ctx.api_key()?,
-            self.ctx.project_name(),
+            self.ctx.project_name()
         )
         .await
         .context("failed to deploy cargo project")
@@ -148,8 +163,8 @@ impl Shuttle {
             cli_features: CliFeatures {
                 features: Rc::new(Default::default()),
                 all_features: false,
-                uses_default_features: true,
-            },
+                uses_default_features: true
+            }
         };
 
         let locks = cargo::ops::package(&ws, &opts)?.expect("unwrap ok here");

@@ -14,7 +14,7 @@ jobs:
       - uses: shuttle-hq/checkout@v2
       - uses: shuttle-hq/toolchain@v1
         with:
-          toolchain: stable
+          toolchain: nightly
           override: true
           components: rustfmt
       - run: cargo fmt --all -- --check

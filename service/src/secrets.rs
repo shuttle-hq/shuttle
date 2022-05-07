@@ -47,7 +47,7 @@ where
     const SET_QUERY: &'static str;
     const CREATE_TABLE_QUERY: &'static str;
 
-    /// Read the secret with the given key from the database. Will an error if a secret with the
+    /// Read the secret with the given key from the database. Will error if a secret with the
     /// given key does not exist or otherwise could not be accessed.
     async fn get_secret(&self, key: &str) -> Result<String, Error> {
         self.execute(sqlx::query(Self::CREATE_TABLE_QUERY)).await?;

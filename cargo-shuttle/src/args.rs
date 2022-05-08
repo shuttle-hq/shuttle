@@ -38,14 +38,11 @@ pub struct ProjectArgs {
         long,
         parse(try_from_os_str = parse_working_directory),
         default_value = ".",
-        about = "specify the working directory"
     )]
+    /// Specify the working directory
     pub working_directory: PathBuf,
-    #[structopt(
-        global = true,
-        long,
-        about = "specify the name of the project (overrides crate name)"
-    )]
+    #[structopt(global = true, long)]
+    /// Specify the name of the project (overrides crate name)
     pub name: Option<ProjectName>,
 }
 

@@ -30,6 +30,26 @@ pub struct Args {
     pub cmd: Command,
 }
 
+// Common args for subcommands that deal with projects.
+#[derive(StructOpt)]
+pub struct ProjectArgs {
+    #[structopt(
+        global = true,
+        long,
+        parse(try_from_os_str = parse_working_directory),
+        default_value = ".",
+        about = "specify the working directory"
+    )]
+    pub working_directory: PathBuf,
+    #[structopt(long, about = "specify the name of the project (overrides crate name)")]
+    pub name: Option<ProjectName>,
+}
+
+fn parse_working_directory(working_directory: &OsStr) -> Result<PathBuf, OsString> {
+    canonicalize(working_directory)
+        .map_err(|e| format!("could not turn {working_directory:?} into a real path: {e}").into())
+}
+
 #[derive(StructOpt)]
 pub enum Command {
     #[structopt(about = "deploy an shuttle project")]
@@ -60,24 +80,4 @@ pub struct AuthArgs {
 pub struct DeployArgs {
     #[structopt(long, about = "allow dirty working directories to be packaged")]
     pub allow_dirty: bool,
-}
-
-fn parse_working_directory(working_directory: &OsStr) -> Result<PathBuf, OsString> {
-    canonicalize(working_directory)
-        .map_err(|e| format!("could not turn {working_directory:?} into a real path: {e}").into())
-}
-
-// Common args for subcommands that deal with projects.
-#[derive(StructOpt)]
-pub struct ProjectArgs {
-    #[structopt(
-        global = true,
-        long,
-        parse(try_from_os_str = parse_working_directory),
-        default_value = ".",
-        about = "specify the working directory"
-    )]
-    pub working_directory: PathBuf,
-    #[structopt(long, about = "specify the name of the project (overrides crate name)")]
-    pub name: Option<ProjectName>,
 }

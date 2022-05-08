@@ -41,7 +41,11 @@ pub struct ProjectArgs {
         about = "specify the working directory"
     )]
     pub working_directory: PathBuf,
-    #[structopt(long, about = "specify the name of the project (overrides crate name)")]
+    #[structopt(
+        global = true,
+        long,
+        about = "specify the name of the project (overrides crate name)"
+    )]
     pub name: Option<ProjectName>,
 }
 

@@ -20,7 +20,7 @@ export default function Header() {
   const { user, error, isLoading } = useUser();
 
   return (
-    <header className="sticky top-0 z-20 border-b border-slate-500 bg-slate-100 dark:border-gray-400 dark:bg-dark-700">
+    <header className="sticky top-0 z-20 bg-slate-100 !bg-opacity-70 dark:bg-dark-700">
       <nav className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8" aria-label="Top">
         <div className="flex w-full items-center justify-between py-3">
           <div className="flex items-center">
@@ -65,7 +65,7 @@ export default function Header() {
 
             {user && (
               <button
-                className="inline-block rounded border border-current py-2 px-4 text-base font-medium text-slate-600 hover:text-slate-900 dark:text-gray-200 hover:dark:text-white"
+                className="inline-block rounded border border-slate-900 bg-transparent py-1 px-4 text-base font-medium text-slate-900 transition-colors hover:bg-slate-800 hover:text-slate-100 dark:border-white dark:text-white hover:dark:bg-white hover:dark:text-dark-700"
                 onClick={() => setOpen(true)}
               >
                 Log In
@@ -74,7 +74,7 @@ export default function Header() {
 
             {!user && (
               <a
-                className="inline-block rounded border border-current py-2 px-4 text-base font-medium text-slate-600 hover:text-slate-900 dark:text-gray-200 hover:dark:text-white"
+                className="inline-block rounded border border-slate-900 bg-transparent py-1 px-4 text-base font-medium text-slate-900 transition-colors hover:bg-slate-800 hover:text-slate-100 dark:border-white dark:text-white hover:dark:bg-white hover:dark:text-dark-700"
                 href="/login"
               >
                 Log In

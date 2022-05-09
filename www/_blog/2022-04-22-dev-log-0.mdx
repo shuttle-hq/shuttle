@@ -40,6 +40,7 @@ We have 4 weeks to prove the concept, let's get started.
 ## Developer Experience
 
 Our primary focus with the MVP was to provide the best possible developer experience. We wanted the end user experience to be as simple as possible.
+
 1. A single annotation can transform your web app into a shuttle app: `#[shuttle_service::main]`
 2. You can get started with a single cargo command: `$ cargo shuttle deploy`
 3. Your shuttle app is automatically provisioned a subdomain `my-app.shuttleapp.rs`
@@ -49,9 +50,10 @@ Our primary focus with the MVP was to provide the best possible developer experi
 Our primary focus was simplicity - we didn't want anything too complicated to start with. For example, we decided to ditch Kubernetes for our API and deployment servers. We simply didn't need that scale until we proved the concept and the complexity overhead would have been detrimental to development velocity.
 
 The deployment process is the core piece of engineering we spent the most time on. It looks something like this:
+
 1. `$ cargo shuttle deploy` runs a `cargo package` under the hood, zipping up the current cargo project into a tarball and shipping it to our API under the `/deploy` endpoint with a bearer token for authentication
 2. The API receives the tarball and holds it in memory. The build is added to a job processor which acts as a build queue.
-3. The job processor unpacks the tarball and writes it to disk, say under `/projets/my-app`. The build system is triggered to compile the unpacked cargo project
+3. The job processor unpacks the tarball and writes it to disk, say under `/projects/my-app`. The build system is triggered to compile the unpacked cargo project
 4. The output of the build process is a shared object file ('.so') which is then dynamically loaded by the API with its own runtime. The newly born web-server is assigned a free port which is not exposed to the outside world.
 5. We update the routing table of our reverse proxy such that requests coming in with the host `my-app.shuttleapp.rs` are forwarded to the aforementioned port.
 
@@ -61,7 +63,7 @@ And that's it! It turns out there are more than a few devils in the details here
 
 The cargo subcommand [`cargo shuttle`](https://github.com/getsynth/shuttle/tree/main/cargo-shuttle) seemed like the obvious place to start.
 
- To create a third-party cargo subcommand, the binary needs to be named `cargo-${command}` and it needs to be stored in `~./.cargo/bin`. The easiest way to do this is to create a binary called `cargo-shuttle` and publish it to `crates.io`. Then,  `cargo install cargo-shuttle` will place it in `~./.cargo/bin`. Pretty simple.
+To create a third-party cargo subcommand, the binary needs to be named `cargo-${command}` and it needs to be stored in `~./.cargo/bin`. The easiest way to do this is to create a binary called `cargo-shuttle` and publish it to `crates.io`. Then, `cargo install cargo-shuttle` will place it in `~./.cargo/bin`. Pretty simple.
 
 `cargo-shuttle` also needs an HTTP client to make requests against the API, as well as some config logic to hold API keys. Finally, `cargo-shuttle` needs to use the `cargo` crate to programmatically run cargo commands like `cargo package`.
 
@@ -74,4 +76,3 @@ We had built the bare bones of our client, next up was build system.
 ## Next Steps
 
 In the next devlog we'll be exploring how we hacked together a build system to compile `cdylib`s for them to be dynamically linked to the API runtime. In the meantime, if you want to try out shuttle head over to the [getting started](https://docs.rs/shuttle-service/0.2.6/shuttle_service/) section! It's completely free while shuttle is still in Alpha.
-

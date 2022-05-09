@@ -2,7 +2,7 @@
 title: Infrastructure From Code
 description: A new paradigm for building on the cloud
 author: nodar
-tags: [rust, startup]
+tags: [infra-from-code, rust, startup]
 thumb: infrastructure-from-code-trans.png
 cover: infrastructure-from-code-trans.png
 date: "2022-05-09T15:00:00"
@@ -19,16 +19,16 @@ Furthermore, infrastructure is still treated separately from code - the two worl
 
 ### The Serverless Conundrum
 
-We need to talk about serverless. Serverless (think AWS Lambda) was a new cloud computing execution model where machine allocation happens on-demand and the user is primarily abstracted away from the underlying servers. With it came a familiar promise - abstracting infrastructure away - so that developers don’t need to think about it at all. Despite its somewhat counterintuitive name (because, of course, there are always servers running somewhere), serverless sounds like a great ideal to strive towards. This is simple, developers want to spend as much time as possible on delivering business value by writing code, while companies would like to avoid spending fortunes on DevOps. This seems to be the holy grail, but there’s a catch. You might ask, “if you say serverless is so great, why have we all not switched yet”?
+We need to talk about serverless. Serverless (think AWS Lambda) was a new cloud computing execution model where machine allocation happens on-demand and the user is primarily abstracted away from the underlying servers. With it came a familiar promise - developers not needing to think about infrastructure at all. Despite its somewhat counterintuitive name (because, of course, there are always servers running somewhere), serverless sounds like a great ideal to strive towards. This is simple, developers want to spend as much time as possible on delivering business value by writing code, while companies would like to avoid spending fortunes on DevOps. This seems to be the holy grail, but there’s a catch. You might ask, “if you say serverless is so great, why have we all not switched yet”?
 
 
 Well, serverless forces you to write application business logic as functions, rather than the more traditional idiom of stateful processes. To reap the benefits of serverless, you have to build your application as a multitude of stateless request or event handlers, often requiring a bottoms-up redesign of your system. For some use-cases the serverless paradigm works, but in many cases breaking things into discrete, decoupled functions may not be optimal or even feasible. The next question is, can we have our cake and eat it too? Can we maintain the paradigm of stateful processes and abstract away the underlying infrastructure and orchestration?
 
 ### Infrastructure from Code
 
-Our team at shuttle is extremely passionate about leverage through software. We want to empower engineers by creating the best possible developer experience.
+At shuttle we want to empower engineers by creating the best possible developer experience.
 
-We've already developed and deployed an annotation based system that enables Rust apps to be deployed with a one-liner, as well as dependencies like databases being provisioned through static analysis in real-time.
+We've already developed an annotation based system that enables Rust apps to be deployed with a one-liner, as well as dependencies like databases being provisioned through static analysis in real-time.
 
 ```rust
 #[shuttle_service::main]

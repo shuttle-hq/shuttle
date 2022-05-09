@@ -364,10 +364,16 @@ mod tests {
 
     use crate::{args::ProjectArgs, config::RequestContext};
 
+    use super::{Config, LocalConfigManager, ProjectConfig};
+
     fn path_from_workspace_root(path: &str) -> PathBuf {
         PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
             .join("..")
             .join(path)
+    }
+
+    fn unwrap_project_name(config: &Config<LocalConfigManager, ProjectConfig>) -> String {
+        config.as_ref().unwrap().name.as_ref().unwrap().to_string()
     }
 
     #[test]
@@ -379,15 +385,7 @@ mod tests {
 
         let local_config = RequestContext::get_local_config(&project_args).unwrap();
 
-        // FIXME: make a helper for this?
-        let name = local_config
-            .as_ref()
-            .unwrap()
-            .name
-            .as_ref()
-            .unwrap()
-            .to_string();
-        assert_eq!(name, "hello-world-axum-app");
+        assert_eq!(unwrap_project_name(&local_config), "hello-world-axum-app");
     }
 
     #[test]
@@ -399,18 +397,9 @@ mod tests {
 
         let local_config = RequestContext::get_local_config(&project_args).unwrap();
 
-        // FIXME: make a helper for this?
-        let name = local_config
-            .as_ref()
-            .unwrap()
-            .name
-            .as_ref()
-            .unwrap()
-            .to_string();
-
         // FIXME: this is not the intended behaviour. We should fix this.
         // This should really be "hello-world-axum-app", as above.
-        assert_eq!(name, "hello-world");
+        assert_eq!(unwrap_project_name(&local_config), "hello-world");
     }
 
     #[test]
@@ -422,14 +411,6 @@ mod tests {
 
         let local_config = RequestContext::get_local_config(&project_args).unwrap();
 
-        // FIXME: make a helper for this?
-        let name = local_config
-            .as_ref()
-            .unwrap()
-            .name
-            .as_ref()
-            .unwrap()
-            .to_string();
-        assert_eq!(name, "my-fancy-project-name");
+        assert_eq!(unwrap_project_name(&local_config), "my-fancy-project-name");
     }
 }

@@ -1,25 +1,10 @@
 use std::fs::File;
-use std::io::{
-    self,
-    BufRead
-};
-use std::net::{
-    Ipv4Addr,
-    SocketAddr,
-    SocketAddrV4
-};
-use std::process::{
-    Child,
-    Command,
-    ExitStatus,
-    Stdio
-};
+use std::io::{self, BufRead};
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::str;
 use std::thread::sleep;
-use std::time::{
-    Duration,
-    SystemTime
-};
+use std::time::{Duration, SystemTime};
 
 use colored::*;
 use portpicker::pick_unused_port;
@@ -49,7 +34,7 @@ pub struct Api {
     image: Option<String>,
     container: Option<String>,
     target: String,
-    color: Color
+    color: Color,
 }
 
 pub fn log_lines<R: io::Read, D: std::fmt::Display>(mut reader: R, target: D) {
@@ -84,7 +69,7 @@ pub fn log_lines<R: io::Read, D: std::fmt::Display>(mut reader: R, target: D) {
 pub fn spawn_and_log<D: std::fmt::Display, C: Into<Color>>(
     cmd: &mut Command,
     target: D,
-    color: C
+    color: C,
 ) -> Child {
     let mut child = cmd
         .stdout(Stdio::piped())
@@ -106,7 +91,7 @@ impl Api {
     fn new_free<D, C>(target: D, color: C) -> Self
     where
         D: std::fmt::Display,
-        C: Into<Color>
+        C: Into<Color>,
     {
         let mut rng = rand::thread_rng();
         let id: String = (0..ID_LEN)
@@ -131,14 +116,14 @@ impl Api {
             image: None,
             container: None,
             target: target.to_string(),
-            color: color.into()
+            color: color.into(),
         }
     }
 
     pub fn new_docker<D, C>(target: D, color: C) -> Self
     where
         D: std::fmt::Display,
-        C: Into<Color>
+        C: Into<Color>,
     {
         let mut api = Self::new_free(target, color);
         let users_toml_file = format!("{}/users.toml", env!("CARGO_MANIFEST_DIR"));
@@ -180,7 +165,7 @@ impl Api {
             "SHUTTLE_INITIAL_KEY=ci-test",
             "-v",
             &format!("{}:/config/users.toml", users_toml_file),
-            &image
+            &image,
         ]);
 
         spawn_and_log(&mut run, api_target, api.color);
@@ -198,7 +183,7 @@ impl Api {
         while !timeout.is_zero() {
             match reqwest::blocking::get(format!("http://{}/status", self.api_addr)) {
                 Ok(resp) if resp.status().is_success() => return,
-                _ => sleep(Duration::from_secs(1))
+                _ => sleep(Duration::from_secs(1)),
             }
             timeout = timeout
                 .checked_sub(now.elapsed().unwrap())
@@ -210,7 +195,7 @@ impl Api {
 
     pub fn run_client<'s, I>(&self, args: I, path: &str) -> Child
     where
-        I: IntoIterator<Item = &'s str>
+        I: IntoIterator<Item = &'s str>,
     {
         let client_target = format!("{} client", self.target);
 

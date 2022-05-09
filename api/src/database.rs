@@ -4,10 +4,7 @@ use lazy_static::lazy_static;
 use rand::Rng;
 use shuttle_common::project::ProjectName;
 use shuttle_common::DatabaseReadyInfo;
-use sqlx::postgres::{
-    PgPool,
-    PgPoolOptions
-};
+use sqlx::postgres::{PgPool, PgPoolOptions};
 
 lazy_static! {
     static ref SUDO_POSTGRES_CONNECTION_STRING: String = format!(
@@ -30,7 +27,7 @@ pub(crate) struct State {
     project: ProjectName,
     context: Context,
     is_guaranteed: bool,
-    info: Option<DatabaseReadyInfo>
+    info: Option<DatabaseReadyInfo>,
 }
 
 impl State {
@@ -39,7 +36,7 @@ impl State {
             project: project.clone(),
             context: context.clone(),
             is_guaranteed: false,
-            info: None
+            info: None,
         }
     }
 
@@ -64,7 +61,7 @@ impl State {
         let DatabaseReadyInfo {
             role_name,
             role_password,
-            database_name
+            database_name,
         } = self.info.clone().unwrap();
 
         let pool = &self.context.sudo_pool;
@@ -137,7 +134,7 @@ impl State {
 
 #[derive(Clone)]
 pub struct Context {
-    sudo_pool: PgPool
+    sudo_pool: PgPool,
 }
 
 impl Context {
@@ -147,7 +144,7 @@ impl Context {
                 .min_connections(4)
                 .max_connections(12)
                 .connect_timeout(Duration::from_secs(60))
-                .connect_lazy(&SUDO_POSTGRES_CONNECTION_STRING)?
+                .connect_lazy(&SUDO_POSTGRES_CONNECTION_STRING)?,
         })
     }
 }

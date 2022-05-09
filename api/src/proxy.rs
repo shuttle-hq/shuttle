@@ -1,26 +1,12 @@
 use std::convert::Infallible;
-use std::net::{
-    IpAddr,
-    SocketAddr
-};
+use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 
 use ::hyper::server::conn::AddrStream;
 use ::hyper::server::Server;
-use ::hyper::service::{
-    make_service_fn,
-    service_fn
-};
-use ::hyper::{
-    Body,
-    Request,
-    Response,
-    StatusCode
-};
-use hyper::header::{
-    HeaderValue,
-    SERVER
-};
+use ::hyper::service::{make_service_fn, service_fn};
+use ::hyper::{Body, Request, Response, StatusCode};
+use hyper::header::{HeaderValue, SERVER};
 use hyper_reverse_proxy::ProxyError;
 use lazy_static::lazy_static;
 use shuttle_common::Port;
@@ -34,7 +20,7 @@ lazy_static! {
 pub(crate) async fn start(
     bind_addr: IpAddr,
     proxy_port: Port,
-    deployment_manager: Arc<DeploymentSystem>
+    deployment_manager: Arc<DeploymentSystem>,
 ) {
     let socket_address = (bind_addr, proxy_port).into();
 
@@ -63,7 +49,7 @@ pub(crate) async fn start(
 async fn handle(
     remote_addr: SocketAddr,
     req: Request<Body>,
-    deployment_manager: Arc<DeploymentSystem>
+    deployment_manager: Arc<DeploymentSystem>,
 ) -> Result<Response<Body>, Infallible> {
     // if no `Host:` or invalid value, return 400
     let host = match req.headers().get("Host") {
@@ -89,7 +75,7 @@ async fn handle(
                 .body(response_body.into())
                 .unwrap());
         }
-        Some(port) => port
+        Some(port) => port,
     };
 
     match reverse_proxy(remote_addr.ip(), port, req).await {
@@ -120,7 +106,7 @@ async fn handle(
 async fn reverse_proxy(
     ip: IpAddr,
     port: Port,
-    req: Request<Body>
+    req: Request<Body>,
 ) -> Result<Response<Body>, ProxyError> {
     let forward_uri = format!("http://127.0.0.1:{}", port);
     let mut response = hyper_reverse_proxy::call(ip, &forward_uri, req).await?;

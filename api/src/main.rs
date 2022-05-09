@@ -21,34 +21,15 @@ use auth_admin::Admin;
 use deployment::MAX_DEPLOYS;
 use factory::ShuttleFactory;
 use rocket::serde::json::Json;
-use rocket::{
-    tokio,
-    Build,
-    Data,
-    Rocket,
-    State
-};
+use rocket::{tokio, Build, Data, Rocket, State};
 use shuttle_common::project::ProjectName;
-use shuttle_common::{
-    DeploymentApiError,
-    DeploymentMeta,
-    Port
-};
+use shuttle_common::{DeploymentApiError, DeploymentMeta, Port};
 use structopt::StructOpt;
 use uuid::Uuid;
 
 use crate::args::Args;
-use crate::auth::{
-    ApiKey,
-    AuthorizationError,
-    ScopedUser,
-    User,
-    UserDirectory
-};
-use crate::build::{
-    BuildSystem,
-    FsBuildSystem
-};
+use crate::auth::{ApiKey, AuthorizationError, ScopedUser, User, UserDirectory};
+use crate::build::{BuildSystem, FsBuildSystem};
 use crate::deployment::DeploymentSystem;
 
 type ApiResult<T, E> = Result<Json<T>, E>;
@@ -60,7 +41,7 @@ type ApiResult<T, E> = Result<Json<T>, E>;
 async fn get_or_create_user(
     user_directory: &State<UserDirectory>,
     username: String,
-    _admin: Admin
+    _admin: Admin,
 ) -> Result<ApiKey, AuthorizationError> {
     user_directory.get_or_create(username)
 }
@@ -73,7 +54,7 @@ async fn status() {}
 async fn get_deployment(
     state: &State<ApiState>,
     id: Uuid,
-    _user: ScopedUser
+    _user: ScopedUser,
 ) -> ApiResult<DeploymentMeta, DeploymentApiError> {
     info!("[GET_DEPLOYMENT, {}, {}]", _user.name(), _user.scope());
     let deployment = state.deployment_manager.get_deployment(&id).await?;
@@ -84,7 +65,7 @@ async fn get_deployment(
 async fn delete_deployment(
     state: &State<ApiState>,
     id: Uuid,
-    _user: ScopedUser
+    _user: ScopedUser,
 ) -> ApiResult<DeploymentMeta, DeploymentApiError> {
     info!("[DELETE_DEPLOYMENT, {}, {}]", _user.name(), _user.scope());
     // TODO why twice?
@@ -96,7 +77,7 @@ async fn delete_deployment(
 #[get("/<_>")]
 async fn get_project(
     state: &State<ApiState>,
-    user: ScopedUser
+    user: ScopedUser,
 ) -> ApiResult<DeploymentMeta, DeploymentApiError> {
     info!("[GET_PROJECT, {}, {}]", user.name(), user.scope());
 
@@ -111,7 +92,7 @@ async fn get_project(
 #[delete("/<_>")]
 async fn delete_project(
     state: &State<ApiState>,
-    user: ScopedUser
+    user: ScopedUser,
 ) -> ApiResult<DeploymentMeta, DeploymentApiError> {
     info!("[DELETE_PROJECT, {}, {}]", user.name(), user.scope());
 
@@ -128,7 +109,7 @@ async fn create_project(
     user_directory: &State<UserDirectory>,
     crate_file: Data<'_>,
     project_name: ProjectName,
-    user: User
+    user: User,
 ) -> ApiResult<DeploymentMeta, DeploymentApiError> {
     info!("[CREATE_PROJECT, {}, {}]", &user.name, &project_name);
 
@@ -147,7 +128,7 @@ async fn create_project(
 }
 
 struct ApiState {
-    deployment_manager: Arc<DeploymentSystem>
+    deployment_manager: Arc<DeploymentSystem>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -197,7 +178,7 @@ async fn rocket() -> Rocket<Build> {
                 delete_project,
                 create_project,
                 get_project,
-            ]
+            ],
         )
         .mount("/", routes![get_or_create_user, status])
         .manage(state)
@@ -207,7 +188,7 @@ async fn rocket() -> Rocket<Build> {
 async fn start_proxy(
     bind_addr: IpAddr,
     proxy_port: Port,
-    deployment_manager: Arc<DeploymentSystem>
+    deployment_manager: Arc<DeploymentSystem>,
 ) {
     tokio::spawn(async move { proxy::start(bind_addr, proxy_port, deployment_manager).await });
 }

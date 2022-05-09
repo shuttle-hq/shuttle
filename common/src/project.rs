@@ -1,17 +1,10 @@
 use std::error::Error;
-use std::fmt::{
-    Display,
-    Formatter
-};
+use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
 use rocket::request::FromParam;
 use serde::de::Error as DeError;
-use serde::{
-    Deserialize,
-    Deserializer,
-    Serialize
-};
+use serde::{Deserialize, Deserializer, Serialize};
 
 /// Project names should conform to valid Host segments (or labels)
 /// as per [IETF RFC 1123](https://datatracker.ietf.org/doc/html/rfc1123).
@@ -25,7 +18,7 @@ pub struct ProjectName(String);
 impl<'de> Deserialize<'de> for ProjectName {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: Deserializer<'de>
+        D: Deserializer<'de>,
     {
         let s: String = String::deserialize(deserializer)?;
         s.parse().map_err(DeError::custom)
@@ -78,14 +71,14 @@ impl FromStr for ProjectName {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match ProjectName::is_valid(s) {
             true => Ok(ProjectName(s.to_string())),
-            false => Err(ProjectNameError::InvalidName(s.to_string()))
+            false => Err(ProjectNameError::InvalidName(s.to_string())),
         }
     }
 }
 
 #[derive(Debug)]
 pub enum ProjectNameError {
-    InvalidName(String)
+    InvalidName(String),
 }
 
 impl Display for ProjectNameError {
@@ -99,7 +92,7 @@ impl Display for ProjectNameError {
 2. not contain any characters outside of the alphanumeric range, except for `-`.
 3. not be empty."#,
                 name
-            )
+            ),
         }
     }
 }
@@ -130,7 +123,7 @@ pub mod tests {
             "asd f@",
             ".invalid",
             "invalid.name",
-            "invalid.name."
+            "invalid.name.",
         ] {
             let project_name = ProjectName::from_str(hostname);
             assert!(project_name.is_err(), "{:?} was ok", hostname);

@@ -9,7 +9,7 @@ use sqlx::Connection;
 pub struct PostgresInstance {
     port: u16,
     container: String,
-    password: String
+    password: String,
 }
 
 impl PostgresInstance {
@@ -31,7 +31,7 @@ impl PostgresInstance {
                 &format!("POSTGRES_PASSWORD={}", password),
                 "-p",
                 &format!("{}:5432", port),
-                "postgres:11" // Our Dockerfile image is based on buster which has postgres version 11
+                "postgres:11", // Our Dockerfile image is based on buster which has postgres version 11
             ])
             .spawn()
             .expect("failed to start a postgres instance");
@@ -39,7 +39,7 @@ impl PostgresInstance {
         Self {
             port,
             container,
-            password
+            password,
         }
     }
 
@@ -60,7 +60,7 @@ impl PostgresInstance {
     pub async fn async_wait_for<F, Fut>(&self, f: F)
     where
         F: Fn(&Self) -> Fut,
-        Fut: Future<Output = bool>
+        Fut: Future<Output = bool>,
     {
         let mut timeout = 20 * 10;
 
@@ -91,7 +91,7 @@ impl PostgresInstance {
 
     pub fn wait_for<F>(&self, f: F)
     where
-        F: Fn(&Self) -> bool
+        F: Fn(&Self) -> bool,
     {
         let mut timeout = 20 * 10;
 

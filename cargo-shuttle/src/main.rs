@@ -22,7 +22,7 @@ use shuttle_common::DeploymentStateMeta;
 async fn main() -> Result<()> {
     let result = Shuttle::new().run(Args::from_args()).await;
 
-    if let Ok(Some(DeploymentStateMeta::Error(_))) = result {
+    if let Ok(DeploymentStateMeta::Error(_)) = result {
         // Deployment failure results in a shell error exit code being returned (this allows
         // chaining of commands with `&&` for example to fail at the first deployment failure).
         std::process::exit(1); // TODO: use `std::process::ExitCode::FAILURE` once stable.
@@ -47,7 +47,7 @@ impl Shuttle {
         Self { ctx }
     }
 
-    pub async fn run(mut self, args: Args) -> Result<Option<DeploymentStateMeta>> {
+    pub async fn run(mut self, args: Args) -> Result<DeploymentStateMeta> {
         if matches!(
             args.cmd,
             Command::Deploy(..) | Command::Delete | Command::Status
@@ -58,15 +58,12 @@ impl Shuttle {
         self.ctx.set_api_url(args.api_url);
 
         match args.cmd {
-            Command::Deploy(deploy_args) => {
-                return self.deploy(deploy_args).await.map(|x| Some(x))
-            }
+            Command::Deploy(deploy_args) => self.deploy(deploy_args).await,
             Command::Status => self.status().await,
             Command::Delete => self.delete().await,
-            Command::Auth(auth_args) => self.auth(auth_args).await,
-            Command::Login(login_args) => self.login(login_args).await,
+            Command::Auth(auth_args) => self.auth(auth_args).await.map(|_| DeploymentStateMeta::Deployed),
+            Command::Login(login_args) => self.login(login_args).await.map(|_| DeploymentStateMeta::Deployed),
         }
-        .map(|_| None)
     }
 
     pub fn load_project(&mut self) -> Result<()> {
@@ -107,7 +104,7 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn delete(&self) -> Result<()> {
+    async fn delete(&self) -> Result<DeploymentStateMeta> {
         client::delete(
             self.ctx.api_url(),
             self.ctx.api_key()?,
@@ -117,7 +114,7 @@ impl Shuttle {
         .context("failed to delete deployment")
     }
 
-    async fn status(&self) -> Result<()> {
+    async fn status(&self) -> Result<DeploymentStateMeta> {
         client::status(
             self.ctx.api_url(),
             self.ctx.api_key()?,

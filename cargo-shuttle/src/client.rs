@@ -34,7 +34,7 @@ pub(crate) async fn auth(api_url: ApiUrl, username: String) -> Result<ApiKey> {
     ))
 }
 
-pub(crate) async fn delete(api_url: ApiUrl, api_key: &ApiKey, project: &ProjectName) -> Result<()> {
+pub(crate) async fn delete(api_url: ApiUrl, api_key: &ApiKey, project: &ProjectName) -> Result<DeploymentStateMeta> {
     let client = get_retry_client();
     let mut api_url = api_url;
 
@@ -50,17 +50,17 @@ pub(crate) async fn delete(api_url: ApiUrl, api_key: &ApiKey, project: &ProjectN
 
     println!("{}", deployment_meta);
 
-    Ok(())
+    Ok(deployment_meta.state)
 }
 
-pub(crate) async fn status(api_url: ApiUrl, api_key: &ApiKey, project: &ProjectName) -> Result<()> {
+pub(crate) async fn status(api_url: ApiUrl, api_key: &ApiKey, project: &ProjectName) -> Result<DeploymentStateMeta> {
     let client = get_retry_client();
 
     let deployment_meta = get_deployment_meta(api_url, api_key, project, &client).await?;
 
     println!("{}", deployment_meta);
 
-    Ok(())
+    Ok(deployment_meta.state)
 }
 
 async fn get_deployment_meta(

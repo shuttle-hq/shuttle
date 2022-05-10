@@ -27,7 +27,10 @@ write_files:
     owner: root:root
     permissions: "0644"
 
+power_state:
+  mode: reboot
+
 # Up services on every boot
-bootcmd:
-  - [systemctl, start, "opt-shuttle.mount"]
-  - [systemctl, start, "shuttle-backend.service"]
+runcmd:
+  - [systemctl, enable, "opt-shuttle.mount"]
+  - [systemctl, enable, "shuttle-backend.service"]

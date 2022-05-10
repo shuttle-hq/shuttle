@@ -94,7 +94,7 @@ pub(crate) async fn deploy(
     api_url: ApiUrl,
     api_key: &ApiKey,
     project: &ProjectName,
-) -> Result<()> {
+) -> Result<DeploymentStateMeta> {
     let mut url = api_url.clone();
     url.push_str("/projects/");
     url.push_str(project.as_str());
@@ -135,7 +135,7 @@ pub(crate) async fn deploy(
 
     println!("{}", &deployment_meta);
 
-    Ok(())
+    Ok(deployment_meta.state)
 }
 
 fn print_log(logs: &Option<String>, log_pos: &mut usize) {

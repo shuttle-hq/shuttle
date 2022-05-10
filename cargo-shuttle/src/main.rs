@@ -16,9 +16,19 @@ use std::rc::Rc;
 use std::{env, io};
 use structopt::StructOpt;
 
+use shuttle_common::DeploymentStateMeta;
+
 #[tokio::main]
 async fn main() -> Result<()> {
-    Shuttle::new().run(Args::from_args()).await
+    let result = Shuttle::new().run(Args::from_args()).await;
+
+    if let Ok(Some(DeploymentStateMeta::Error(_))) = result {
+        // Deployment failure results in a shell error exit code being returned (this allows
+        // chaining of commands with `&&` for example to fail at the first deployment failure).
+        std::process::exit(1); // TODO: use `std::process::ExitCode::FAILURE` once stable.
+    }
+
+    result.map(|_| ())
 }
 
 pub struct Shuttle {
@@ -37,7 +47,7 @@ impl Shuttle {
         Self { ctx }
     }
 
-    pub async fn run(mut self, args: Args) -> Result<()> {
+    pub async fn run(mut self, args: Args) -> Result<Option<DeploymentStateMeta>> {
         if matches!(
             args.cmd,
             Command::Deploy(..) | Command::Delete | Command::Status
@@ -48,12 +58,15 @@ impl Shuttle {
         self.ctx.set_api_url(args.api_url);
 
         match args.cmd {
-            Command::Deploy(deploy_args) => self.deploy(deploy_args).await,
+            Command::Deploy(deploy_args) => {
+                return self.deploy(deploy_args).await.map(|x| Some(x))
+            }
             Command::Status => self.status().await,
             Command::Delete => self.delete().await,
             Command::Auth(auth_args) => self.auth(auth_args).await,
             Command::Login(login_args) => self.login(login_args).await,
         }
+        .map(|_| None)
     }
 
     pub fn load_project(&mut self) -> Result<()> {
@@ -114,7 +127,7 @@ impl Shuttle {
         .context("failed to get status of deployment")
     }
 
-    async fn deploy(&self, args: DeployArgs) -> Result<()> {
+    async fn deploy(&self, args: DeployArgs) -> Result<DeploymentStateMeta> {
         let package_file = self
             .run_cargo_package(args.allow_dirty)
             .context("failed to package cargo project")?;

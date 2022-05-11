@@ -424,9 +424,10 @@ impl Service for SimpleService<rocket::Rocket<rocket::Build>> {
             ..Default::default()
         };
         let launched = rocket.configure(config).launch();
-        let handle = self
-            .runtime
-            .spawn(async { launched.await.map_err(error::CustomError::new) });
+        let handle = self.runtime.spawn(async {
+            let _rocket = launched.await.map_err(error::CustomError::new)?;
+            Ok(())
+        });
         Ok(handle)
     }
 }

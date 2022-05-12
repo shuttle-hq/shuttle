@@ -1,5 +1,5 @@
 use shuttle_service::error::CustomError;
-use shuttle_service::{Factory, IntoService, ServeHandle, Service};
+use shuttle_service::{GetResource, IntoService, ServeHandle, Service};
 use sqlx::PgPool;
 use tokio::runtime::Runtime;
 
@@ -39,6 +39,7 @@ async fn start(pool: PgPool) -> Result<(), shuttle_service::error::CustomError> 
     Ok(())
 }
 
+#[async_trait]
 impl Service for PoolService {
     fn bind(
         &mut self,
@@ -50,32 +51,16 @@ impl Service for PoolService {
         Ok(handle)
     }
 
-    fn build(
+    async fn build(
         &mut self,
         factory: &mut dyn shuttle_service::Factory,
     ) -> Result<(), shuttle_service::Error> {
-        let pool = self
-            .runtime
-            .block_on(get_postgres_connection_pool(factory))?;
+        let pool = factory.get_resource(&self.runtime).await?;
 
         self.pool = Some(pool);
 
         Ok(())
     }
-}
-
-async fn get_postgres_connection_pool(
-    factory: &mut dyn Factory,
-) -> Result<PgPool, shuttle_service::error::Error> {
-    let connection_string = factory.get_sql_connection_string().await?;
-    let pool = sqlx::postgres::PgPoolOptions::new()
-        .min_connections(1)
-        .max_connections(5)
-        .connect(&connection_string)
-        .await
-        .map_err(CustomError::new)?;
-
-    Ok(pool)
 }
 
 declare_service!(Args, init);

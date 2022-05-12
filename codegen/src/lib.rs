@@ -15,11 +15,12 @@ pub fn main(_attr: TokenStream, item: TokenStream) -> TokenStream {
         #[no_mangle]
         pub extern "C" fn _create_service() -> *mut dyn shuttle_service::Service {
             // Ensure constructor returns concrete type.
-            let constructor: fn(
-                &mut dyn shuttle_service::Factory,
+            let constructor: for <'a> fn(
+                &'a mut dyn shuttle_service::Factory,
+                &'a tokio::runtime::Runtime,
             ) -> std::pin::Pin<
-                Box<dyn std::future::Future<Output = Result<_, shuttle_service::Error>> + Send + '_>,
-            > = |factory| Box::pin(__shuttle_wrapper(factory));
+                Box<dyn std::future::Future<Output = Result<_, shuttle_service::Error>> + Send + 'a>,
+            > = |factory, runtime| Box::pin(__shuttle_wrapper(factory, runtime));
 
             let obj = shuttle_service::IntoService::into_service((constructor));
             let boxed: Box<dyn shuttle_service::Service> = Box::new(obj);
@@ -84,10 +85,12 @@ impl ToTokens for Wrapper {
         let wrapper = quote! {
             async fn __shuttle_wrapper(
                 #factory_ident: &mut dyn shuttle_service::Factory,
+                runtime: &tokio::runtime::Runtime,
             ) #fn_output {
                 #extra_imports
-                #(let #fn_inputs = #factory_ident.get_resource().await?;)*
-                #fn_ident(#(#fn_inputs),*).await
+                #(let #fn_inputs = #factory_ident.get_resource(runtime).await?;)*
+
+                runtime.spawn(#fn_ident(#(#fn_inputs),*)).await.unwrap()
             }
         };
 
@@ -129,8 +132,9 @@ mod tests {
         let expected = quote! {
             async fn __shuttle_wrapper(
                 _factory: &mut dyn shuttle_service::Factory,
+                runtime: &tokio::runtime::Runtime,
             ) {
-                simple().await
+                runtime.spawn(simple()).await.unwrap()
             }
         };
 
@@ -164,8 +168,9 @@ mod tests {
         let expected = quote! {
             async fn __shuttle_wrapper(
                 _factory: &mut dyn shuttle_service::Factory,
+                runtime: &tokio::runtime::Runtime,
             ) -> Result<(), Box<dyn std::error::Error> > {
-                complex().await
+                runtime.spawn(complex()).await.unwrap()
             }
         };
 
@@ -200,11 +205,13 @@ mod tests {
         let expected = quote! {
             async fn __shuttle_wrapper(
                 factory: &mut dyn shuttle_service::Factory,
+                runtime: &tokio::runtime::Runtime,
             ) -> Result<(), Box<dyn std::error::Error> > {
                 use shuttle_service::GetResource;
-                let pool = factory.get_resource().await?;
-                let redis = factory.get_resource().await?;
-                complex(pool, redis).await
+                let pool = factory.get_resource(runtime).await?;
+                let redis = factory.get_resource(runtime).await?;
+
+                runtime.spawn(complex(pool, redis)).await.unwrap()
             }
         };
 

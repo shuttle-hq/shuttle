@@ -238,25 +238,33 @@ pub trait Factory: Send + Sync {
 /// Used to get resources of type `T` from factories.
 ///
 /// This is mainly meant for consumption by our code generator and should generally not be implemented by users.
+/// Some resources cannot cross the boundary between the api runtime and the runtime of services. These resources
+/// should be created on the passed in runtime.
 #[async_trait]
 pub trait GetResource<T> {
-    async fn get_resource(self) -> Result<T, crate::Error>;
+    async fn get_resource(self, runtime: &Runtime) -> Result<T, crate::Error>;
 }
 
 /// Get an `sqlx::PgPool` from any factory
 #[cfg(feature = "sqlx-postgres")]
 #[async_trait]
 impl GetResource<sqlx::PgPool> for &mut dyn Factory {
-    async fn get_resource(self) -> Result<sqlx::PgPool, crate::Error> {
+    async fn get_resource(self, runtime: &Runtime) -> Result<sqlx::PgPool, crate::Error> {
         use error::CustomError;
 
         let connection_string = self.get_sql_connection_string().await?;
 
-        let pool = sqlx::postgres::PgPoolOptions::new()
-            .min_connections(1)
-            .max_connections(5)
-            .connect(&connection_string)
+        // A sqlx Pool cannot cross runtime boundaries, so make sure to create the Pool on the service end
+        let pool = runtime
+            .spawn(async move {
+                sqlx::postgres::PgPoolOptions::new()
+                    .min_connections(1)
+                    .max_connections(5)
+                    .connect(&connection_string)
+                    .await
+            })
             .await
+            .map_err(CustomError::new)?
             .map_err(CustomError::new)?;
 
         Ok(pool)
@@ -269,13 +277,14 @@ pub type ServeHandle = JoinHandle<Result<(), anyhow::Error>>;
 /// The core trait of the shuttle platform. Every crate deployed to shuttle needs to implement this trait.
 ///
 /// Use the [declare_service!][crate::declare_service] macro to expose your implementation to the deployment backend.
+#[async_trait]
 pub trait Service: Send + Sync {
     /// This function is run exactly once on each instance of a deployment, prior to calling [bind][Service::bind].
     ///
     /// The passed [Factory][Factory] can be used to configure additional resources (like databases).
     ///
     /// The default is a noop that returns `Ok(())`.
-    fn build(&mut self, _: &mut dyn Factory) -> Result<(), Error> {
+    async fn build(&mut self, _: &mut dyn Factory) -> Result<(), Error> {
         Ok(())
     }
 
@@ -295,7 +304,10 @@ pub trait IntoService {
 }
 
 pub type StateBuilder<T> =
-    fn(&mut dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>;
+    for<'a> fn(
+        &'a mut dyn Factory,
+        &'a Runtime,
+    ) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + 'a>>;
 
 #[cfg(feature = "web-rocket")]
 /// A convenience struct for building a [Service][Service] from a [Rocket<Build>][Rocket] instance.
@@ -386,7 +398,10 @@ pub struct SimpleService<T> {
 }
 
 impl<T> IntoService
-    for fn(&mut dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>
+    for for<'a> fn(
+        &'a mut dyn Factory,
+        &'a Runtime,
+    ) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + 'a>>
 where
     SimpleService<T>: Service,
 {
@@ -402,11 +417,11 @@ where
 }
 
 #[cfg(feature = "web-rocket")]
+#[async_trait]
 impl Service for SimpleService<rocket::Rocket<rocket::Build>> {
-    fn build(&mut self, factory: &mut dyn Factory) -> Result<(), Error> {
+    async fn build(&mut self, factory: &mut dyn Factory) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
-            // We want to build any sqlx pools on the same runtime the client code will run on. Without this expect to get errors of no tokio reactor being present.
-            let rocket = self.runtime.block_on(builder(factory))?;
+            let rocket = builder(factory, &self.runtime).await?;
 
             self.service = Some(rocket);
         }
@@ -424,20 +439,22 @@ impl Service for SimpleService<rocket::Rocket<rocket::Build>> {
             ..Default::default()
         };
         let launched = rocket.configure(config).launch();
+
         let handle = self.runtime.spawn(async {
             let _rocket = launched.await.map_err(error::CustomError::new)?;
             Ok(())
         });
+
         Ok(handle)
     }
 }
 
 #[cfg(feature = "web-axum")]
+#[async_trait]
 impl Service for SimpleService<sync_wrapper::SyncWrapper<axum::Router>> {
-    fn build(&mut self, factory: &mut dyn Factory) -> Result<(), Error> {
+    async fn build(&mut self, factory: &mut dyn Factory) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
-            // We want to build any sqlx pools on the same runtime the client code will run on. Without this expect to get errors of no tokio reactor being present.
-            let axum = self.runtime.block_on(builder(factory))?;
+            let axum = builder(factory, &self.runtime).await?;
 
             self.service = Some(axum);
         }

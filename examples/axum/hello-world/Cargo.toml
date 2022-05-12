@@ -12,3 +12,4 @@ crate-type = ["cdylib"]
 axum = "0.5"
 shuttle-service = { version = "0.2", features = ["web-axum"] }
 sync_wrapper = "0.1"
+tokio = { version = "1.0", features = ["rt"] }

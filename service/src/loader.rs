@@ -43,14 +43,14 @@ impl Loader {
         }
     }
 
-    pub fn load(
+    pub async fn load(
         self,
         factory: &mut dyn Factory,
         addr: SocketAddr,
     ) -> Result<(ServeHandle, Library), Error> {
         let mut service = self.service;
 
-        service.build(factory)?;
+        service.build(factory).await?;
 
         // Start service on this side of the FFI
         let handle = tokio::task::spawn(async move { service.bind(addr)?.await? });

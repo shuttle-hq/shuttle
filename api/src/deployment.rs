@@ -156,7 +156,7 @@ impl Deployment {
 
                     let mut factory = ShuttleFactory::new(db_state);
                     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
-                    match loader.load(&mut factory, addr) {
+                    match loader.load(&mut factory, addr).await {
                         Err(e) => {
                             debug!("{}: factory phase FAILED: {:?}", meta.project, e);
                             DeploymentState::Error(e.into())

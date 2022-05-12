@@ -13,10 +13,11 @@
 //!
 //! ## Usage
 //!
-//! Depend on `shuttle-service` in `Cargo.toml`:
+//! Depend on `shuttle-service` and `tokio` in `Cargo.toml`:
 //!
 //! ```toml
 //! shuttle-service = { version = "0.2", features = ["web-rocket"] }
+//! tokio = { version = "1.0", features = ["rt"] }
 //! ```
 //!
 //! and make sure your crate has a `cdylib` output target:
@@ -82,10 +83,11 @@
 //!
 //! Here is a quick example to deploy a service which uses a postgres database and [sqlx](http://docs.rs/sqlx):
 //!
-//! Depend on `shuttle-service` in `Cargo.toml`:
+//! Depend on `shuttle-service` and `tokio` in `Cargo.toml`:
 //!
 //! ```toml
 //! shuttle-service = { version = "0.2", features = ["web-rocket", "sqlx-postgres"] }
+//! tokio = { version = "1.0", features = ["rt"] }
 //! ```
 //!
 //! ```rust,no_run

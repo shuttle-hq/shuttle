@@ -15,3 +15,4 @@ lazy_static = "1.4"
 rocket = {version = "0.5.0-rc.1", features = ["json"] }
 serde = {version = "1.0", features = ["derive"] }
 shuttle-service = { version = "0.2", features = ["web-rocket"] }
+tokio = { version = "1.0", features = ["rt"] }

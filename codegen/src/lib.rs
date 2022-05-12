@@ -1,4 +1,3 @@
-use std::panic::{UnwindSafe, AssertUnwindSafe};
 use proc_macro::TokenStream;
 use quote::{quote, ToTokens};
 use syn::{parse_macro_input, parse_quote, FnArg, Ident, ItemFn, Pat, ReturnType, Stmt};

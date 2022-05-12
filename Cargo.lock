@@ -2613,6 +2613,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "axum",
+ "futures",
  "libloading",
  "portpicker",
  "rocket",

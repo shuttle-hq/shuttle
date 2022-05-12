@@ -157,11 +157,11 @@
 
 use std::future::Future;
 use std::net::SocketAddr;
-use std::pin::Pin;
 use std::panic::AssertUnwindSafe;
+use std::pin::Pin;
 
-use futures::FutureExt;
 use async_trait::async_trait;
+use futures::FutureExt;
 use tokio::runtime::Runtime;
 
 pub mod error;
@@ -404,7 +404,12 @@ impl Service for SimpleService<rocket::Rocket<rocket::Build>> {
     fn build(&mut self, factory: &mut dyn Factory) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
             // We want to build any sqlx pools on the same runtime the client code will run on. Without this expect to get errors of no tokio reactor being present.
-            let rocket = self.runtime.block_on(AssertUnwindSafe(builder(factory)).catch_unwind()).map_err(|_| anyhow::anyhow!("Panic occurred in `shuttle_service::main` function"))??;
+            let rocket = self
+                .runtime
+                .block_on(AssertUnwindSafe(builder(factory)).catch_unwind())
+                .map_err(|_| {
+                    anyhow::anyhow!("Panic occurred in `shuttle_service::main` function")
+                })??;
 
             self.service = Some(rocket);
         }

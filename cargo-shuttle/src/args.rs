@@ -1,3 +1,10 @@
+use std::{
+    ffi::{OsStr, OsString},
+    fs::canonicalize,
+    path::PathBuf,
+};
+
+use shuttle_common::project::ProjectName;
 use structopt::StructOpt;
 
 #[derive(StructOpt)]
@@ -17,8 +24,31 @@ pub struct Args {
     )]
     /// Run this command against the api at the supplied url
     pub api_url: Option<String>,
+    #[structopt(flatten)]
+    pub project_args: ProjectArgs,
     #[structopt(subcommand)]
     pub cmd: Command,
+}
+
+// Common args for subcommands that deal with projects.
+#[derive(StructOpt)]
+pub struct ProjectArgs {
+    #[structopt(
+        global = true,
+        long,
+        parse(try_from_os_str = parse_working_directory),
+        default_value = ".",
+    )]
+    /// Specify the working directory
+    pub working_directory: PathBuf,
+    #[structopt(global = true, long)]
+    /// Specify the name of the project (overrides crate name)
+    pub name: Option<ProjectName>,
+}
+
+fn parse_working_directory(working_directory: &OsStr) -> Result<PathBuf, OsString> {
+    canonicalize(working_directory)
+        .map_err(|e| format!("could not turn {working_directory:?} into a real path: {e}").into())
 }
 
 #[derive(StructOpt)]

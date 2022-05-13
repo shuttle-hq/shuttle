@@ -5,6 +5,9 @@ edition = "2021"
 
 [dependencies]
 rocket = { version = "0.5.0-rc.1", features = ["uuid", "serde_json", "json"] }
+aws-config = "0.11"
+aws-sdk-rds = "0.11"
+aws-smithy-types = "0.41"
 cargo = "0.59.0"
 cargo-util = "0.1"
 chrono = "0.4"

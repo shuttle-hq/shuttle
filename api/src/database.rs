@@ -10,6 +10,12 @@ use sqlx::postgres::{PgPool, PgPoolOptions};
 use std::time::Duration;
 use tokio::time::sleep;
 
+#[cfg(debug_assertions)]
+const PUBLIC_PG_IP: &str = "localhost";
+
+#[cfg(not(debug_assertions))]
+const PUBLIC_PG_IP: &'static str = "pg.shuttle.rs";
+
 lazy_static! {
     static ref SUDO_POSTGRES_CONNECTION_STRING: String = format!(
         "postgres://postgres:{}@localhost",
@@ -44,6 +50,7 @@ impl State {
 
     pub(crate) async fn request(&mut self) -> sqlx::Result<DatabaseReadyInfo> {
         if self.info.is_some() {
+            // Safe to unwrap since we just confirmed it is `Some`
             return Ok(self.info.clone().unwrap());
         }
 
@@ -113,7 +120,13 @@ impl State {
             );
         }
 
-        let info = DatabaseReadyInfo::new(role_name, role_password, database_name);
+        let info = DatabaseReadyInfo::new(
+            role_name,
+            role_password,
+            database_name,
+            "localhost".to_string(),
+            PUBLIC_PG_IP.to_string(),
+        );
         self.info = Some(info.clone());
         Ok(info)
     }
@@ -122,7 +135,12 @@ impl State {
         self.info.clone()
     }
 
-    pub(crate) async fn aws_rds(&self) -> Result<String, shuttle_service::Error> {
+    pub(crate) async fn aws_rds(&mut self) -> Result<DatabaseReadyInfo, shuttle_service::Error> {
+        if self.info.is_some() {
+            // Safe to unwrap since we just confirmed it is `Some`
+            return Ok(self.info.clone().unwrap());
+        }
+
         let client = &self.context.rds_client;
 
         let username = self.project.to_string().replace("-", "_");
@@ -132,7 +150,7 @@ impl State {
         let instance_name = format!("{}-{}", self.project, engine);
         let db_name = "postgres";
 
-        let instances = client
+        let instance = client
             .modify_db_instance()
             .db_instance_identifier(&instance_name)
             .master_user_password(&password)
@@ -140,8 +158,11 @@ impl State {
             .await;
         debug!("got describe response");
 
-        let mut instance = match instances {
-            Ok(instances) => instances.db_instance.unwrap().clone(),
+        let mut instance = match instance {
+            Ok(instance) => instance
+                .db_instance
+                .expect("aws response should contain an instance")
+                .clone(),
             Err(SdkError::ServiceError { err, .. }) => {
                 if let ModifyDBInstanceErrorKind::DbInstanceNotFoundFault(_) = err.kind {
                     debug!("creating new");
@@ -161,7 +182,7 @@ impl State {
                         .await
                         .map_err(shuttle_service::error::CustomError::new)?
                         .db_instance
-                        .unwrap()
+                        .expect("to be able to create instance")
                 } else {
                     return Err(shuttle_service::Error::Custom(anyhow!(
                         "got unexpected error from AWS: {}",
@@ -188,31 +209,45 @@ impl State {
                 .await
                 .map_err(CustomError::new)?
                 .db_instances
-                .unwrap()
+                .expect("aws to return instances")
                 .get(0)
-                .unwrap()
+                .expect("to find the instance just created or modified")
                 .clone();
 
-            let status = instance.db_instance_status.as_ref().unwrap().clone();
+            let status = instance
+                .db_instance_status
+                .as_ref()
+                .expect("instance to have a status")
+                .clone();
 
-            debug!("status: {status}");
             if status == "available" {
                 break;
             }
+
             sleep(Duration::from_secs(1)).await;
         }
 
-        println!("{instance:#?}");
-        // let info = DatabaseReadyInfo::new(role_name, role_password, database_name);
-        let conn_string = format!(
-            "postgres://{}:{}@{}/{}",
-            instance.master_username.unwrap(),
+        let address = instance
+            .endpoint
+            .expect("instance to have an endpoint")
+            .address
+            .expect("endpoint to have an address");
+
+        let info = DatabaseReadyInfo::new(
+            instance
+                .master_username
+                .expect("instance to have a username"),
             password,
-            instance.endpoint.unwrap().address.unwrap(),
-            db_name
+            instance
+                .db_name
+                .expect("instance to have a default database"),
+            address.clone(),
+            address,
         );
 
-        Ok(conn_string)
+        self.info = Some(info.clone());
+
+        Ok(info)
     }
 }
 

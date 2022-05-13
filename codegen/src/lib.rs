@@ -50,6 +50,18 @@ impl Wrapper {
             })
             .filter_map(|typed| match typed.pat.as_ref() {
                 Pat::Ident(ident) => Some(ident),
+                Pat::TupleStruct(ident) => {
+                    match ident
+                        .pat
+                        .elems
+                        .first()
+                        .as_ref()
+                        .expect("a single pattern item")
+                    {
+                        Pat::Ident(ident) => Some(ident),
+                        _ => None,
+                    }
+                }
                 _ => None,
             })
             .map(|pat_ident| pat_ident.ident.clone())
@@ -248,5 +260,21 @@ mod tests {
         };
 
         assert_eq!(actual.to_string(), expected.to_string());
+    }
+
+    #[test]
+    fn from_tuple_input() {
+        let input = parse_quote!(
+            async fn tuple(Postgres(pool): Postgres) -> Result<(), Box<dyn std::error::Error>> {}
+        );
+
+        let actual = Wrapper::from_item_fn(&input);
+        let expected_ident: Ident = parse_quote!(tuple);
+        let expected_output: ReturnType = parse_quote!(-> Result<(), Box<dyn std::error::Error>>);
+        let expected_inputs: Vec<Ident> = vec![parse_quote!(pool)];
+
+        assert_eq!(actual.fn_ident, expected_ident);
+        assert_eq!(actual.fn_output, expected_output);
+        assert_eq!(actual.fn_inputs, expected_inputs);
     }
 }

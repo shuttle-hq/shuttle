@@ -173,6 +173,8 @@ pub use log;
 pub use logger::Logger;
 pub use tokio::runtime::Runtime;
 
+pub mod database;
+
 pub mod error;
 pub use error::Error;
 
@@ -251,7 +253,10 @@ pub trait Factory: Send + Sync {
     /// Declare that the [Service][Service] requires a Postgres database.
     ///
     /// Returns the connection string to the provisioned database.
-    async fn get_sql_connection_string(&mut self) -> Result<String, crate::Error>;
+    async fn get_sql_connection_string(
+        &mut self,
+        db_type: database::Type,
+    ) -> Result<String, crate::Error>;
 }
 
 /// Used to get resources of type `T` from factories.
@@ -271,7 +276,9 @@ impl GetResource<sqlx::PgPool> for &mut dyn Factory {
     async fn get_resource(self, runtime: &Runtime) -> Result<sqlx::PgPool, crate::Error> {
         use error::CustomError;
 
-        let connection_string = self.get_sql_connection_string().await?;
+        let connection_string = self
+            .get_sql_connection_string(database::Type::Shared)
+            .await?;
 
         // A sqlx Pool cannot cross runtime boundaries, so make sure to create the Pool on the service end
         let pool = runtime

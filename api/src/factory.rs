@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use shuttle_common::DatabaseReadyInfo;
-use shuttle_service::Factory;
+use shuttle_service::{database::Type, Factory};
 
 use crate::database;
 
@@ -22,13 +22,21 @@ impl ShuttleFactory {
 
 #[async_trait]
 impl Factory for ShuttleFactory {
-    async fn get_sql_connection_string(&mut self) -> Result<String, shuttle_service::Error> {
-        let conn_str = self
-            .database
-            .request()
-            .await
-            .map_err(shuttle_service::error::CustomError::new)?
-            .connection_string_private();
+    async fn get_sql_connection_string(
+        &mut self,
+        db_type: Type,
+    ) -> Result<String, shuttle_service::Error> {
+        let db_info = match db_type {
+            Type::Shared => self
+                .database
+                .request()
+                .await
+                .map_err(shuttle_service::error::CustomError::new)?,
+            Type::AwsRdsPostgres => self.database.aws_rds().await?,
+        };
+
+        let conn_str = db_info.connection_string_private();
+
         debug!("giving a sql connection string: {}", conn_str);
         Ok(conn_str)
     }

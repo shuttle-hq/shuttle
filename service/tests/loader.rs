@@ -8,7 +8,7 @@ mod helpers;
 use async_trait::async_trait;
 use helpers::PostgresInstance;
 use shuttle_service::loader::{Loader, LoaderError};
-use shuttle_service::{Error, Factory};
+use shuttle_service::{database, Error, Factory};
 use uuid::Uuid;
 
 struct DummyFactory {
@@ -25,7 +25,7 @@ impl DummyFactory {
 
 #[async_trait]
 impl Factory for DummyFactory {
-    async fn get_sql_connection_string(&mut self) -> Result<String, Error> {
+    async fn get_sql_connection_string(&mut self, _: database::Type) -> Result<String, Error> {
         let uri = if let Some(postgres_instance) = &self.postgres_instance {
             postgres_instance.get_uri()
         } else {

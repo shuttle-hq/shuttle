@@ -11,7 +11,7 @@ pub enum Error {
     #[error("Database error: {0}")]
     Database(String),
     #[error("Custom error: {0}")]
-    Custom(#[from] CustomError)
+    Custom(#[from] CustomError),
 }
 
 pub type CustomError = anyhow::Error;

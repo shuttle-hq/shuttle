@@ -1,18 +1,6 @@
 use proc_macro::TokenStream;
-use quote::{
-    quote,
-    ToTokens
-};
-use syn::{
-    parse_macro_input,
-    parse_quote,
-    FnArg,
-    Ident,
-    ItemFn,
-    Pat,
-    ReturnType,
-    Stmt
-};
+use quote::{quote, ToTokens};
+use syn::{parse_macro_input, parse_quote, FnArg, Ident, ItemFn, Pat, ReturnType, Stmt};
 
 #[proc_macro_attribute]
 pub fn main(_attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -45,7 +33,7 @@ pub fn main(_attr: TokenStream, item: TokenStream) -> TokenStream {
 struct Wrapper {
     fn_ident: Ident,
     fn_output: ReturnType,
-    fn_inputs: Vec<Ident>
+    fn_inputs: Vec<Ident>,
 }
 
 impl Wrapper {
@@ -56,11 +44,11 @@ impl Wrapper {
             .iter()
             .filter_map(|input| match input {
                 FnArg::Receiver(_) => None,
-                FnArg::Typed(typed) => Some(typed)
+                FnArg::Typed(typed) => Some(typed),
             })
             .filter_map(|typed| match typed.pat.as_ref() {
                 Pat::Ident(ident) => Some(ident),
-                _ => None
+                _ => None,
             })
             .map(|pat_ident| pat_ident.ident.clone())
             .collect();
@@ -68,7 +56,7 @@ impl Wrapper {
         Self {
             fn_ident: item_fn.sig.ident.clone(),
             fn_output: item_fn.sig.output.clone(),
-            fn_inputs: inputs
+            fn_inputs: inputs,
         }
     }
 }
@@ -111,11 +99,7 @@ impl ToTokens for Wrapper {
 mod tests {
     use pretty_assertions::assert_eq;
     use quote::quote;
-    use syn::{
-        parse_quote,
-        Ident,
-        ReturnType
-    };
+    use syn::{parse_quote, Ident, ReturnType};
 
     use crate::Wrapper;
 
@@ -138,7 +122,7 @@ mod tests {
         let input = Wrapper {
             fn_ident: parse_quote!(simple),
             fn_output: ReturnType::Default,
-            fn_inputs: Vec::new()
+            fn_inputs: Vec::new(),
         };
 
         let actual = quote!(#input);
@@ -173,7 +157,7 @@ mod tests {
         let input = Wrapper {
             fn_ident: parse_quote!(complex),
             fn_output: parse_quote!(-> Result<(), Box<dyn std::error::Error>>),
-            fn_inputs: Vec::new()
+            fn_inputs: Vec::new(),
         };
 
         let actual = quote!(#input);
@@ -209,7 +193,7 @@ mod tests {
         let input = Wrapper {
             fn_ident: parse_quote!(complex),
             fn_output: parse_quote!(-> Result<(), Box<dyn std::error::Error>>),
-            fn_inputs: vec![parse_quote!(pool), parse_quote!(redis)]
+            fn_inputs: vec![parse_quote!(pool), parse_quote!(redis)],
         };
 
         let actual = quote!(#input);

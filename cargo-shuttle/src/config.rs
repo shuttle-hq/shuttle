@@ -1,30 +1,13 @@
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{
-    Read,
-    Write
-};
-use std::path::{
-    Path,
-    PathBuf
-};
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
 
-use anyhow::{
-    anyhow,
-    Context,
-    Result
-};
+use anyhow::{anyhow, Context, Result};
 use cargo_metadata::MetadataCommand;
-use serde::{
-    Deserialize,
-    Serialize
-};
+use serde::{Deserialize, Serialize};
 use shuttle_common::project::ProjectName;
-use shuttle_common::{
-    ApiKey,
-    ApiUrl,
-    API_URL_DEFAULT
-};
+use shuttle_common::{ApiKey, ApiUrl, API_URL_DEFAULT};
 
 /// Helper trait for dispatching fs ops for different config files
 pub trait ConfigManager: Sized {
@@ -42,7 +25,7 @@ pub trait ConfigManager: Sized {
 
     fn create<C>(&self) -> Result<()>
     where
-        C: Serialize + Default
+        C: Serialize + Default,
     {
         if self.exists() {
             return Ok(());
@@ -53,7 +36,7 @@ pub trait ConfigManager: Sized {
 
     fn open<C>(&self) -> Result<C>
     where
-        C: for<'de> Deserialize<'de>
+        C: for<'de> Deserialize<'de>,
     {
         let path = self.path();
         let config_bytes = File::open(&path).and_then(|mut f| {
@@ -67,7 +50,7 @@ pub trait ConfigManager: Sized {
 
     fn save<C>(&self, config: &C) -> Result<()>
     where
-        C: Serialize
+        C: Serialize,
     {
         let path = self.path();
         std::fs::create_dir_all(path.parent().unwrap())?;
@@ -111,14 +94,14 @@ impl ConfigManager for GlobalConfigManager {
 /// An impl of [`ConfigManager`] which is localised to a working directory
 pub struct LocalConfigManager {
     working_directory: PathBuf,
-    file_name: String
+    file_name: String,
 }
 
 impl LocalConfigManager {
     pub fn new<P: AsRef<Path>>(working_directory: P, file_name: String) -> Self {
         Self {
             working_directory: working_directory.as_ref().to_path_buf(),
-            file_name
+            file_name,
         }
     }
 }
@@ -137,7 +120,7 @@ impl ConfigManager for LocalConfigManager {
 #[derive(Deserialize, Serialize, Default)]
 pub struct GlobalConfig {
     pub api_key: Option<ApiKey>,
-    pub api_url: Option<ApiUrl>
+    pub api_url: Option<ApiUrl>,
 }
 
 impl GlobalConfig {
@@ -157,7 +140,7 @@ impl GlobalConfig {
 /// Project-local config for things like customizing project name
 #[derive(Deserialize, Serialize, Default)]
 pub struct ProjectConfig {
-    pub name: Option<ProjectName>
+    pub name: Option<ProjectName>,
 }
 
 pub type SecretsConfig = HashMap<String, String>;
@@ -173,19 +156,19 @@ pub type SecretsConfig = HashMap<String, String>;
 /// ```
 pub struct Config<M, C> {
     pub manager: M,
-    config: Option<C>
+    config: Option<C>,
 }
 
 impl<M, C> Config<M, C>
 where
     M: ConfigManager,
-    C: Serialize + for<'de> Deserialize<'de>
+    C: Serialize + for<'de> Deserialize<'de>,
 {
     /// Creates a new [`Config`] instance, without opening the underlying file
     pub fn new(manager: M) -> Self {
         Self {
             manager,
-            config: None
+            config: None,
         }
     }
 
@@ -230,7 +213,7 @@ where
     /// If the file already exists, is a no-op.
     pub fn create(&self) -> Result<()>
     where
-        C: Default
+        C: Default,
     {
         self.manager.create::<C>()
     }
@@ -243,7 +226,7 @@ pub struct RequestContext {
     global: Config<GlobalConfigManager, GlobalConfig>,
     project: Option<Config<LocalConfigManager, ProjectConfig>>,
     secrets: Option<Config<LocalConfigManager, SecretsConfig>>,
-    api_url: Option<String>
+    api_url: Option<String>,
 }
 
 fn find_crate_name<P: AsRef<Path>>(working_directory: P) -> Result<ProjectName> {
@@ -277,7 +260,7 @@ impl RequestContext {
             global,
             project: None,
             secrets: None,
-            api_url: None
+            api_url: None,
         })
     }
 

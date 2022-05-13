@@ -310,7 +310,7 @@ pub type StateBuilder<T> =
 pub struct RocketService<T: Sized> {
     rocket: Option<rocket::Rocket<rocket::Build>>,
     state_builder: Option<StateBuilder<T>>,
-    runtime: Runtime
+    runtime: Runtime,
 }
 
 #[cfg(feature = "web-rocket")]
@@ -320,7 +320,7 @@ impl IntoService for rocket::Rocket<rocket::Build> {
         RocketService {
             rocket: Some(self),
             state_builder: None,
-            runtime: Runtime::new().unwrap()
+            runtime: Runtime::new().unwrap(),
         }
     }
 }
@@ -329,7 +329,7 @@ impl IntoService for rocket::Rocket<rocket::Build> {
 impl<T: Send + Sync + 'static> IntoService
     for (
         rocket::Rocket<rocket::Build>,
-        fn(&mut dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>
+        fn(&mut dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>,
     )
 {
     type Service = RocketService<T>;
@@ -338,7 +338,7 @@ impl<T: Send + Sync + 'static> IntoService
         RocketService {
             rocket: Some(self.0),
             state_builder: Some(self.1),
-            runtime: Runtime::new().unwrap()
+            runtime: Runtime::new().unwrap(),
         }
     }
 }
@@ -346,7 +346,7 @@ impl<T: Send + Sync + 'static> IntoService
 #[cfg(feature = "web-rocket")]
 impl<T> Service for RocketService<T>
 where
-    T: Send + Sync + 'static
+    T: Send + Sync + 'static,
 {
     fn build(&mut self, factory: &mut dyn Factory) -> Result<(), Error> {
         if let Some(state_builder) = self.state_builder.take() {
@@ -383,13 +383,13 @@ where
 pub struct SimpleService<T> {
     service: Option<T>,
     builder: Option<StateBuilder<T>>,
-    runtime: Runtime
+    runtime: Runtime,
 }
 
 impl<T> IntoService
     for fn(&mut dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>
 where
-    SimpleService<T>: Service
+    SimpleService<T>: Service,
 {
     type Service = SimpleService<T>;
 
@@ -397,7 +397,7 @@ where
         SimpleService {
             service: None,
             builder: Some(self),
-            runtime: Runtime::new().unwrap()
+            runtime: Runtime::new().unwrap(),
         }
     }
 }
@@ -538,9 +538,9 @@ macro_rules! declare_service {
 
             // Ensure state builder is a function
             let state_builder: fn(
-                &mut dyn $crate::Factory
+                &mut dyn $crate::Factory,
             ) -> std::pin::Pin<
-                Box<dyn std::future::Future<Output = Result<_, $crate::Error>> + Send + '_>
+                Box<dyn std::future::Future<Output = Result<_, $crate::Error>> + Send + '_>,
             > = |factory| Box::pin($state_builder(factory));
 
             let obj = $crate::IntoService::into_service((constructor(), state_builder));

@@ -3,29 +3,13 @@ use std::fs::File;
 use std::io::Read;
 use std::time::Duration;
 
-use anyhow::{
-    anyhow,
-    Context,
-    Result
-};
-use reqwest::{
-    Response,
-    StatusCode
-};
-use reqwest_middleware::{
-    ClientBuilder,
-    ClientWithMiddleware
-};
+use anyhow::{anyhow, Context, Result};
+use reqwest::{Response, StatusCode};
+use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use shuttle_common::project::ProjectName;
-use shuttle_common::{
-    ApiKey,
-    ApiUrl,
-    DeploymentMeta,
-    DeploymentStateMeta,
-    SHUTTLE_PROJECT_HEADER
-};
+use shuttle_common::{ApiKey, ApiUrl, DeploymentMeta, DeploymentStateMeta, SHUTTLE_PROJECT_HEADER};
 use tokio::time::sleep;
 
 pub(crate) async fn auth(api_url: ApiUrl, username: String) -> Result<ApiKey> {
@@ -87,7 +71,7 @@ async fn get_deployment_meta(
     api_url: ApiUrl,
     api_key: &ApiKey,
     project: &ProjectName,
-    client: &ClientWithMiddleware
+    client: &ClientWithMiddleware,
 ) -> Result<DeploymentMeta> {
     let mut url = api_url;
     url.push_str(&format!("/projects/{}", project));
@@ -113,7 +97,7 @@ pub(crate) async fn deploy(
     package_file: File,
     api_url: ApiUrl,
     api_key: &ApiKey,
-    project: &ProjectName
+    project: &ProjectName,
 ) -> Result<()> {
     let mut url = api_url.clone();
     url.push_str(&format!("/projects/{}", project.as_str()));
@@ -161,7 +145,7 @@ pub(crate) async fn secrets(
     api_url: ApiUrl,
     api_key: &ApiKey,
     project: &ProjectName,
-    secrets: HashMap<String, String>
+    secrets: HashMap<String, String>,
 ) -> Result<()> {
     if secrets.is_empty() {
         return Ok(());
@@ -198,6 +182,6 @@ async fn to_api_result(res: Response) -> Result<DeploymentMeta> {
     let text = res.text().await?;
     match serde_json::from_str::<DeploymentMeta>(&text) {
         Ok(meta) => Ok(meta),
-        Err(_) => Err(anyhow!("{}", text))
+        Err(_) => Err(anyhow!("{}", text)),
     }
 }

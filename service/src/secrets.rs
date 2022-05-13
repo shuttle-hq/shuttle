@@ -4,16 +4,7 @@ use lazy_static::lazy_static;
 use regex::Regex;
 use sqlx::postgres::PgArguments;
 use sqlx::query::Query;
-use sqlx::{
-    ColumnIndex,
-    Database,
-    Decode,
-    Execute,
-    Executor,
-    Postgres,
-    Row,
-    Type
-};
+use sqlx::{ColumnIndex, Database, Decode, Execute, Executor, Postgres, Row, Type};
 
 use crate::error::Error;
 
@@ -39,7 +30,7 @@ where
     for<'c> &'c Self: Executor<'c, Database = DB>,
     for<'c> String: Decode<'c, DB> + Type<DB>,
     for<'c> usize: ColumnIndex<<DB as Database>::Row>,
-    for<'c> Query<'c, Postgres, PgArguments>: Execute<'c, DB>
+    for<'c> Query<'c, Postgres, PgArguments>: Execute<'c, DB>,
 {
     // TODO: Don't restrict to Postgres types above.
 

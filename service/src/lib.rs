@@ -192,6 +192,7 @@ extern crate shuttle_codegen;
 /// | ------------------------------------------------------------------------------ | ------------ | ------------------------------------------- | ---------- | ----------------------------------------------------------------------------------- |
 /// | [`Rocket<Build>`](https://docs.rs/rocket/0.5.0-rc.1/rocket/struct.Rocket.html) | web-rocket   | [rocket](https://docs.rs/rocket/0.5.0-rc.1) | 0.5.0-rc.1 | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/rocket/hello-world) |
 /// | [`SyncWrapper<Router>`](https://docs.rs/axum/0.5/axum/struct.Router.html)      | web-axum     | [axum](https://docs.rs/axum/0.5)            | 0.5        | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/axum/hello-world)   |
+/// | [`SyncWrapper<Server>`](https://docs.rs/tide/latest/tide/struct.Server.html)   | web-tide     | [tide](https://docs.rs/tide/0.16.0)         | 0.16.0     | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/tide/hello-world)   |
 ///
 /// # Getting shuttle managed services
 /// The shuttle is able to manage service dependencies for you. These services are passed in as inputs to your main function:
@@ -452,6 +453,39 @@ impl Service for SimpleService<sync_wrapper::SyncWrapper<axum::Router>> {
                 axum::Server::bind(&addr)
                     .serve(axum.into_make_service())
                     .await
+            })
+            .map_err(error::CustomError::new)?;
+
+        Ok(())
+    }
+}
+
+#[cfg(feature = "web-tide")]
+impl Service for SimpleService<sync_wrapper::SyncWrapper<tide::Server<()>>> {
+    fn build(&mut self, factory: &mut dyn Factory) -> Result<(), Error> {
+        if let Some(builder) = self.builder.take() {
+            // We want to build any sqlx pools on the same runtime the client code will run on.
+            // Without this expect to get errors of no tokio reactor being present.
+            let tide = self.runtime.block_on(builder(factory))?;
+
+            self.service = Some(tide);
+        }
+
+        Ok(())
+    }
+
+    fn bind(&mut self, addr: SocketAddr) -> Result<(), error::Error> {
+        let tide = self
+            .service
+            .take()
+            .expect("service has already been bound")
+            .into_inner();
+
+        self.runtime
+            .block_on(async {
+                let mut app = tide::new();
+                app.at("/").nest(tide);
+                app.listen(addr).await
             })
             .map_err(error::CustomError::new)?;
 

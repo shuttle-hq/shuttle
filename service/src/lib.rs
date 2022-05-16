@@ -483,9 +483,7 @@ impl Service for SimpleService<sync_wrapper::SyncWrapper<tide::Server<()>>> {
 
         self.runtime
             .block_on(async {
-                let mut app = tide::new();
-                app.at("/").nest(tide);
-                app.listen(addr).await
+                tide.listen(addr).await
             })
             .map_err(error::CustomError::new)?;
 

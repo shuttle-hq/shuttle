@@ -1,6 +1,6 @@
 locals {
   data_dir     = "/opt/shuttle"
-  docker_image = "public.ecr.aws/d7w6e9t1/backend"
+  docker_image = "public.ecr.aws/shuttle/backend"
 }
 
 resource "random_string" "initial_key" {

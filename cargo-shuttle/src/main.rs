@@ -2,19 +2,21 @@ mod args;
 mod client;
 mod config;
 
-use crate::args::{Args, AuthArgs, Command, DeployArgs};
-use crate::config::RequestContext;
+use std::fs::File;
+use std::io;
+use std::io::Write;
+use std::rc::Rc;
+
 use anyhow::{Context, Result};
-use args::LoginArgs;
+use args::{LoginArgs, ProjectArgs};
 use cargo::core::resolver::CliFeatures;
 use cargo::core::Workspace;
 use cargo::ops::{PackageOpts, Packages};
-
-use std::fs::File;
-use std::io::Write;
-use std::rc::Rc;
-use std::{env, io};
+use futures::future::TryFutureExt;
 use structopt::StructOpt;
+
+use crate::args::{Args, AuthArgs, Command, DeployArgs};
+use crate::config::RequestContext;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -42,7 +44,7 @@ impl Shuttle {
             args.cmd,
             Command::Deploy(..) | Command::Delete | Command::Status
         ) {
-            self.load_project()?;
+            self.load_project(&args.project_args)?;
         }
 
         self.ctx.set_api_url(args.api_url);
@@ -56,9 +58,8 @@ impl Shuttle {
         }
     }
 
-    pub fn load_project(&mut self) -> Result<()> {
-        let working_directory = env::current_dir()?;
-        self.ctx.load_local(working_directory)
+    pub fn load_project(&mut self, project_args: &ProjectArgs) -> Result<()> {
+        self.ctx.load_local(project_args)
     }
 
     async fn login(&mut self, login_args: LoginArgs) -> Result<()> {
@@ -118,12 +119,23 @@ impl Shuttle {
         let package_file = self
             .run_cargo_package(args.allow_dirty)
             .context("failed to package cargo project")?;
+
+        let key = self.ctx.api_key()?;
+
         client::deploy(
             package_file,
             self.ctx.api_url(),
-            self.ctx.api_key()?,
+            key,
             self.ctx.project_name(),
         )
+        .and_then(|_| {
+            client::secrets(
+                self.ctx.api_url(),
+                key,
+                self.ctx.project_name(),
+                self.ctx.secrets(),
+            )
+        })
         .await
         .context("failed to deploy cargo project")
     }

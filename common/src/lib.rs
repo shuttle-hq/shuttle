@@ -1,11 +1,13 @@
 pub mod project;
 
-use crate::project::ProjectName;
+use std::fmt::{Display, Formatter};
+
 use chrono::{DateTime, Utc};
 use rocket::Responder;
 use serde::{Deserialize, Serialize};
-use std::fmt::{Display, Formatter};
 use uuid::Uuid;
+
+use crate::project::ProjectName;
 
 pub const SHUTTLE_PROJECT_HEADER: &str = "Shuttle-Project";
 

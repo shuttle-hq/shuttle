@@ -1,8 +1,10 @@
-use std::{process::Command, thread::sleep, time::Duration};
+use std::future::Future;
+use std::process::Command;
+use std::thread::sleep;
+use std::time::Duration;
 
 use portpicker::pick_unused_port;
 use sqlx::Connection;
-use std::future::Future;
 
 pub struct PostgresInstance {
     port: u16,

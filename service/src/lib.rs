@@ -138,6 +138,12 @@
 //!
 //! If the `name` key is not specified, the service's name will be the same as the crate's name.
 //!
+//! Alternatively, you can override the project name on the command-line, by passing the --name argument:
+//!
+//! ```bash
+//! cargo shuttle deploy --name=$PROJECT_NAME
+//! ```
+//!
 //! ## We're in alpha 🤗
 //!
 //! Thanks for using shuttle! We're very happy to have you with us!
@@ -164,6 +170,11 @@ use tokio::runtime::Runtime;
 
 pub mod error;
 pub use error::Error;
+
+#[cfg(feature = "secrets")]
+pub mod secrets;
+#[cfg(feature = "secrets")]
+pub use secrets::SecretStore;
 
 #[cfg(feature = "codegen")]
 extern crate shuttle_codegen;
@@ -229,7 +240,7 @@ pub mod loader;
 /// Also see the [declare_service!][declare_service] macro.
 #[async_trait]
 pub trait Factory: Send + Sync {
-    /// Declare that the [Service][Service] requires a postgres database.
+    /// Declare that the [Service][Service] requires a Postgres database.
     ///
     /// Returns the connection string to the provisioned database.
     async fn get_sql_connection_string(&mut self) -> Result<String, crate::Error>;

@@ -1,6 +1,7 @@
-use crate::database;
 use async_trait::async_trait;
 use shuttle_service::Factory;
+
+use crate::database;
 
 pub(crate) struct ShuttleFactory<'a> {
     database: &'a mut database::State,

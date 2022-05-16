@@ -1,4 +1,5 @@
-use std::{ffi::OsStr, net::SocketAddr};
+use std::ffi::OsStr;
+use std::net::SocketAddr;
 
 use libloading::{Library, Symbol};
 use thiserror::Error as ThisError;

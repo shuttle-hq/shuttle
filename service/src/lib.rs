@@ -469,8 +469,8 @@ pub struct TideService<T: Sized> {
 
 #[cfg(feature = "web-tide")]
 impl<T> IntoService for tide::Server<T>
-    where
-        T: Clone + Send + Sync + 'static,
+where
+    T: Clone + Send + Sync + 'static,
 {
     type Service = TideService<T>;
     fn into_service(self) -> Self::Service {
@@ -484,12 +484,12 @@ impl<T> IntoService for tide::Server<T>
 
 #[cfg(feature = "web-tide")]
 impl<T> IntoService
-for (
-    tide::Server<T>,
-    fn(&mut dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>,
-)
-    where
-        T: Clone + Send + Sync + 'static,
+    for (
+        tide::Server<T>,
+        fn(&mut dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>,
+    )
+where
+    T: Clone + Send + Sync + 'static,
 {
     type Service = TideService<T>;
 
@@ -504,8 +504,8 @@ for (
 
 #[cfg(feature = "web-tide")]
 impl<T> Service for TideService<T>
-    where
-        T: Clone + Send + Sync + 'static,
+where
+    T: Clone + Send + Sync + 'static,
 {
     fn build(&mut self, factory: &mut dyn Factory) -> Result<(), Error> {
         if let Some(state_builder) = self.state_builder.take() {
@@ -522,10 +522,7 @@ impl<T> Service for TideService<T>
     }
 
     fn bind(&mut self, addr: SocketAddr) -> Result<(), error::Error> {
-        let tide = self
-            .tide
-            .take()
-            .expect("service has already been bound");
+        let tide = self.tide.take().expect("service has already been bound");
 
         self.runtime
             .block_on(async { tide.listen(addr).await })
@@ -537,8 +534,8 @@ impl<T> Service for TideService<T>
 
 #[cfg(feature = "web-tide")]
 impl<T> Service for SimpleService<tide::Server<T>>
-    where
-        T: Clone + Send + Sync + 'static,
+where
+    T: Clone + Send + Sync + 'static,
 {
     fn build(&mut self, factory: &mut dyn Factory) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
@@ -552,10 +549,7 @@ impl<T> Service for SimpleService<tide::Server<T>>
     }
 
     fn bind(&mut self, addr: SocketAddr) -> Result<(), error::Error> {
-        let tide = self
-            .service
-            .take()
-            .expect("service has already been bound");
+        let tide = self.service.take().expect("service has already been bound");
 
         self.runtime
             .block_on(async { tide.listen(addr).await })

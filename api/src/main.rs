@@ -132,7 +132,6 @@ async fn create_project(
 #[post("/<project_name>/secrets", data = "<secrets>")]
 async fn project_secrets(
     state: &State<ApiState>,
-    user_directory: &State<UserDirectory>,
     secrets: Json<HashMap<String, String>>,
     project_name: ProjectName,
     user: ScopedUser,

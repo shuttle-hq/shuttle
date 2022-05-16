@@ -12,6 +12,7 @@ use args::{LoginArgs, ProjectArgs};
 use cargo::core::resolver::CliFeatures;
 use cargo::core::Workspace;
 use cargo::ops::{PackageOpts, Packages};
+use futures::future::TryFutureExt;
 use structopt::StructOpt;
 
 use crate::args::{Args, AuthArgs, Command, DeployArgs};
@@ -118,12 +119,23 @@ impl Shuttle {
         let package_file = self
             .run_cargo_package(args.allow_dirty)
             .context("failed to package cargo project")?;
+
+        let key = self.ctx.api_key()?;
+
         client::deploy(
             package_file,
             self.ctx.api_url(),
-            self.ctx.api_key()?,
+            key,
             self.ctx.project_name(),
         )
+        .and_then(|_| {
+            client::secrets(
+                self.ctx.api_url(),
+                key,
+                self.ctx.project_name(),
+                self.ctx.secrets(),
+            )
+        })
         .await
         .context("failed to deploy cargo project")
     }

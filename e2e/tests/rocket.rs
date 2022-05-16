@@ -43,4 +43,14 @@ fn postgres() {
         .unwrap();
 
     assert_eq!(fetch_response, "{\"id\":1,\"note\":\"To the stars\"}");
+
+    let secret_response: String = client
+        .get("secret")
+        .header("Host", "postgres-rocket-app.shuttleapp.test")
+        .send()
+        .unwrap()
+        .text()
+        .unwrap();
+
+    assert_eq!(secret_response, "the contents of my API key");
 }

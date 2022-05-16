@@ -171,6 +171,11 @@ use tokio::runtime::Runtime;
 pub mod error;
 pub use error::Error;
 
+#[cfg(feature = "secrets")]
+pub mod secrets;
+#[cfg(feature = "secrets")]
+pub use secrets::SecretStore;
+
 #[cfg(feature = "codegen")]
 extern crate shuttle_codegen;
 #[cfg(feature = "codegen")]
@@ -234,7 +239,7 @@ pub mod loader;
 /// Also see the [declare_service!][declare_service] macro.
 #[async_trait]
 pub trait Factory: Send + Sync {
-    /// Declare that the [Service][Service] requires a postgres database.
+    /// Declare that the [Service][Service] requires a Postgres database.
     ///
     /// Returns the connection string to the provisioned database.
     async fn get_sql_connection_string(&mut self) -> Result<String, crate::Error>;

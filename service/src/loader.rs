@@ -1,4 +1,5 @@
-use std::{ffi::OsStr, net::SocketAddr, sync::mpsc::SyncSender};
+use std::net::SocketAddr;
+use std::{ffi::OsStr, sync::mpsc::SyncSender};
 
 use libloading::{Library, Symbol};
 use shuttle_common::DeploymentId;

@@ -1,15 +1,17 @@
 pub mod project;
 
-use crate::project::ProjectName;
-use chrono::{DateTime, Utc};
-use log::Level;
-use rocket::Responder;
-use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
     fmt::{Display, Formatter},
 };
+
+use chrono::{DateTime, Utc};
+use log::Level;
+use rocket::Responder;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+
+use crate::project::ProjectName;
 
 pub const SHUTTLE_PROJECT_HEADER: &str = "Shuttle-Project";
 

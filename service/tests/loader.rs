@@ -1,17 +1,13 @@
-use std::{
-    net::{Ipv4Addr, SocketAddr},
-    process::Command,
-    sync::mpsc,
-};
+use std::net::{Ipv4Addr, SocketAddr};
+use std::process::Command;
+use std::sync::mpsc;
 
 mod helpers;
 
 use async_trait::async_trait;
 use helpers::PostgresInstance;
-use shuttle_service::{
-    loader::{Loader, LoaderError},
-    Error, Factory,
-};
+use shuttle_service::loader::{Loader, LoaderError};
+use shuttle_service::{Error, Factory};
 use uuid::Uuid;
 
 struct DummyFactory {

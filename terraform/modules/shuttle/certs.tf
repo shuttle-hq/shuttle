@@ -1,5 +1,5 @@
-data "aws_route53_zone" "user" {
-  name = "${var.proxy_fqdn}."
+resource "aws_route53_zone" "user" {
+  name = var.proxy_fqdn
 }
 
 resource "aws_acm_certificate" "user" {
@@ -22,7 +22,7 @@ resource "aws_route53_record" "user" {
       name    = dvo.resource_record_name
       record  = dvo.resource_record_value
       type    = dvo.resource_record_type
-      zone_id = data.aws_route53_zone.user.zone_id
+      zone_id = aws_route53_zone.user.zone_id
     }
   }
 
@@ -34,13 +34,25 @@ resource "aws_route53_record" "user" {
   zone_id         = each.value.zone_id
 }
 
+resource "aws_route53_record" "user_alias" {
+  zone_id = aws_route53_zone.user.zone_id
+  name    = "*.${var.proxy_fqdn}"
+  type    = "A"
+
+  alias {
+    name                   = aws_lb.user.dns_name
+    zone_id                = aws_lb.user.zone_id
+    evaluate_target_health = true
+  }
+}
+
 resource "aws_acm_certificate_validation" "user" {
   certificate_arn         = aws_acm_certificate.user.arn
   validation_record_fqdns = [for record in aws_route53_record.user : record.fqdn]
 }
 
-data "aws_route53_zone" "root" {
-  name = "shuttle.rs."
+resource "aws_route53_zone" "api" {
+  name = var.api_fqdn
 }
 
 resource "aws_acm_certificate" "api" {
@@ -59,7 +71,7 @@ resource "aws_route53_record" "api" {
       name    = dvo.resource_record_name
       record  = dvo.resource_record_value
       type    = dvo.resource_record_type
-      zone_id = data.aws_route53_zone.root.zone_id
+      zone_id = aws_route53_zone.api.zone_id
     }
   }
 
@@ -69,6 +81,18 @@ resource "aws_route53_record" "api" {
   ttl             = 60
   type            = each.value.type
   zone_id         = each.value.zone_id
+}
+
+resource "aws_route53_record" "api_alias" {
+  zone_id = aws_route53_zone.api.zone_id
+  name    = aws_apigatewayv2_domain_name.backend.domain_name
+  type    = "A"
+
+  alias {
+    name                   = aws_apigatewayv2_domain_name.backend.domain_name_configuration[0].target_domain_name
+    zone_id                = aws_apigatewayv2_domain_name.backend.domain_name_configuration[0].hosted_zone_id
+    evaluate_target_health = true
+  }
 }
 
 resource "aws_acm_certificate_validation" "api" {

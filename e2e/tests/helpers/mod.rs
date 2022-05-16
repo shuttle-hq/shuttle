@@ -1,14 +1,10 @@
 use std::fs::File;
+use std::io::{self, BufRead};
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
-use std::process::{ExitStatus, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
+use std::str;
 use std::thread::sleep;
-use std::{
-    io::{self, BufRead},
-    process::{Child, Command},
-    str,
-    time::Duration,
-    time::SystemTime,
-};
+use std::time::{Duration, SystemTime};
 
 use colored::*;
 use portpicker::pick_unused_port;

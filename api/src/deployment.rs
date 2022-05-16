@@ -1,18 +1,4 @@
-use crate::{build::Build, BuildSystem, ShuttleFactory};
-use anyhow::{anyhow, Context as AnyhowContext};
-use chrono::{DateTime, Utc};
 use core::default::Default;
-use futures::prelude::*;
-use libloading::Library;
-use rocket::data::ByteUnit;
-use rocket::tokio;
-use rocket::Data;
-use shuttle_common::{
-    project::ProjectName, DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta,
-    Host, LogItem, Port,
-};
-use shuttle_service::loader::{Loader, ServeHandle};
-use shuttle_service::logger::Log;
 use std::collections::HashMap;
 use std::fs::DirEntry;
 use std::io::Write;
@@ -20,11 +6,24 @@ use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::SyncSender;
 use std::sync::Arc;
-use tokio::sync::mpsc;
-use tokio::sync::RwLock;
 
-use crate::database;
+use anyhow::{anyhow, Context as AnyhowContext};
+use chrono::{DateTime, Utc};
+use futures::prelude::*;
+use libloading::Library;
+use rocket::data::ByteUnit;
+use rocket::{tokio, Data};
+use shuttle_common::project::ProjectName;
+use shuttle_common::{
+    DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, LogItem, Port,
+};
+use shuttle_service::loader::{Loader, ServeHandle};
+use shuttle_service::logger::Log;
+use tokio::sync::{mpsc, RwLock};
+
+use crate::build::Build;
 use crate::router::Router;
+use crate::{database, BuildSystem, ShuttleFactory};
 
 // This controls the maximum number of deploys an api instance can run
 // This is mainly needed because tokio::task::spawn_blocking keeps an internal pool for the number of blocking threads

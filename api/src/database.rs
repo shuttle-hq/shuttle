@@ -123,6 +123,7 @@ impl State {
         }
 
         let info = DatabaseReadyInfo::new(
+            "postgres".to_string(),
             role_name,
             role_password,
             database_name,
@@ -235,6 +236,7 @@ impl State {
             .expect("endpoint to have an address");
 
         let info = DatabaseReadyInfo::new(
+            engine.to_string(),
             instance
                 .master_username
                 .expect("instance to have a username"),

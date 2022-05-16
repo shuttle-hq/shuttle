@@ -98,6 +98,7 @@ impl Display for DeploymentMeta {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatabaseReadyInfo {
+    engine: String,
     role_name: String,
     role_password: String,
     database_name: String,
@@ -107,6 +108,7 @@ pub struct DatabaseReadyInfo {
 
 impl DatabaseReadyInfo {
     pub fn new(
+        engine: String,
         role_name: String,
         role_password: String,
         database_name: String,
@@ -114,6 +116,7 @@ impl DatabaseReadyInfo {
         address_public: String,
     ) -> Self {
         Self {
+            engine,
             role_name,
             role_password,
             database_name,
@@ -123,14 +126,22 @@ impl DatabaseReadyInfo {
     }
     pub fn connection_string_private(&self) -> String {
         format!(
-            "postgres://{}:{}@{}/{}",
-            self.role_name, self.role_password, self.address_private, self.database_name
+            "{}://{}:{}@{}/{}",
+            self.engine,
+            self.role_name,
+            self.role_password,
+            self.address_private,
+            self.database_name
         )
     }
     pub fn connection_string_public(&self) -> String {
         format!(
-            "postgres://{}:{}@{}/{}",
-            self.role_name, self.role_password, self.address_public, self.database_name
+            "{}://{}:{}@{}/{}",
+            self.engine,
+            self.role_name,
+            self.role_password,
+            self.address_public,
+            self.database_name
         )
     }
 }

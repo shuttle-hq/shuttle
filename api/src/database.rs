@@ -17,6 +17,7 @@ const PUBLIC_PG_IP: &str = "localhost";
 const PUBLIC_PG_IP: &'static str = "pg.shuttle.rs";
 
 const AWS_RDS_CLASS: &str = "db.t4g.micro";
+const MASTER_USERNAME: &str = "master";
 
 lazy_static! {
     static ref SUDO_POSTGRES_CONNECTION_STRING: String = format!(
@@ -149,7 +150,6 @@ impl State {
 
         let client = &self.context.rds_client;
 
-        let username = self.project.to_string().replace("-", "_");
         let password = generate_role_password();
         let instance_name = format!("{}-{}", self.project, engine);
 
@@ -172,7 +172,7 @@ impl State {
                     client
                         .create_db_instance()
                         .db_instance_identifier(&instance_name)
-                        .master_username(username)
+                        .master_username(MASTER_USERNAME)
                         .master_user_password(&password)
                         .engine(engine.to_string())
                         .db_instance_class(AWS_RDS_CLASS)

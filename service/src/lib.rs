@@ -461,14 +461,61 @@ impl Service for SimpleService<sync_wrapper::SyncWrapper<axum::Router>> {
 }
 
 #[cfg(feature = "web-tide")]
-impl Service for SimpleService<sync_wrapper::SyncWrapper<tide::Server<()>>> {
-    fn build(&mut self, factory: &mut dyn Factory) -> Result<(), Error> {
-        if let Some(builder) = self.builder.take() {
-            // We want to build any sqlx pools on the same runtime the client code will run on.
-            // Without this expect to get errors of no tokio reactor being present.
-            let tide = self.runtime.block_on(builder(factory))?;
+pub struct TideService<T: Sized> {
+    tide: Option<tide::Server<T>>,
+    state_builder: Option<StateBuilder<T>>,
+    runtime: Runtime,
+}
 
-            self.service = Some(tide);
+#[cfg(feature = "web-tide")]
+impl<T> IntoService for tide::Server<T>
+    where
+        T: Clone + Send + Sync + 'static,
+{
+    type Service = TideService<T>;
+    fn into_service(self) -> Self::Service {
+        TideService {
+            tide: Some(self),
+            state_builder: None,
+            runtime: Runtime::new().unwrap(),
+        }
+    }
+}
+
+#[cfg(feature = "web-tide")]
+impl<T> IntoService
+for (
+    tide::Server<T>,
+    fn(&mut dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>,
+)
+    where
+        T: Clone + Send + Sync + 'static,
+{
+    type Service = TideService<T>;
+
+    fn into_service(self) -> Self::Service {
+        TideService {
+            tide: Some(self.0),
+            state_builder: Some(self.1),
+            runtime: Runtime::new().unwrap(),
+        }
+    }
+}
+
+#[cfg(feature = "web-tide")]
+impl<T> Service for TideService<T>
+    where
+        T: Clone + Send + Sync + 'static,
+{
+    fn build(&mut self, factory: &mut dyn Factory) -> Result<(), Error> {
+        if let Some(state_builder) = self.state_builder.take() {
+            // We want to build any sqlx pools on the same runtime the client code will run on. Without this expect to get errors of no tokio reactor being present.
+            // let state = self.runtime.block_on(state_builder(factory))?;
+            // TODO(marioidival): how to insert the state within tide?
+
+            if let Some(rocket) = self.tide.take() {
+                self.tide.replace(rocket);
+            }
         }
 
         Ok(())
@@ -476,10 +523,9 @@ impl Service for SimpleService<sync_wrapper::SyncWrapper<tide::Server<()>>> {
 
     fn bind(&mut self, addr: SocketAddr) -> Result<(), error::Error> {
         let tide = self
-            .service
+            .tide
             .take()
-            .expect("service has already been bound")
-            .into_inner();
+            .expect("service has already been bound");
 
         self.runtime
             .block_on(async { tide.listen(addr).await })
@@ -489,6 +535,35 @@ impl Service for SimpleService<sync_wrapper::SyncWrapper<tide::Server<()>>> {
     }
 }
 
+#[cfg(feature = "web-tide")]
+impl<T> Service for SimpleService<tide::Server<T>>
+    where
+        T: Clone + Send + Sync + 'static,
+{
+    fn build(&mut self, factory: &mut dyn Factory) -> Result<(), Error> {
+        if let Some(builder) = self.builder.take() {
+            // We want to build any sqlx pools on the same runtime the client code will run on. Without this expect to get errors of no tokio reactor being present.
+            let rocket = self.runtime.block_on(builder(factory))?;
+
+            self.service = Some(rocket);
+        }
+
+        Ok(())
+    }
+
+    fn bind(&mut self, addr: SocketAddr) -> Result<(), error::Error> {
+        let tide = self
+            .service
+            .take()
+            .expect("service has already been bound");
+
+        self.runtime
+            .block_on(async { tide.listen(addr).await })
+            .map_err(error::CustomError::new)?;
+
+        Ok(())
+    }
+}
 /// Helper macro that generates the entrypoint required of any service.
 ///
 /// Can be used in one of two ways:

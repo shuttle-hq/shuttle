@@ -10,5 +10,4 @@ crate-type = ["cdylib"]
 
 [dependencies]
 tide = "0.16.0"
-sync_wrapper = "0.1"
 shuttle-service = { version = "0.2.7", features = ["web-tide"] }

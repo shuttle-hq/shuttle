@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 use shuttle_common::project::ProjectName;
 use shuttle_common::{ApiKey, ApiUrl, API_URL_DEFAULT};
 
+use crate::args::ProjectArgs;
+
 /// Helper trait for dispatching fs ops for different config files
 pub trait ConfigManager: Sized {
     fn directory(&self) -> PathBuf;
@@ -266,13 +268,13 @@ impl RequestContext {
 
     /// Load the project configuration at the given `working_directory`
     ///
-    /// Ensures that if either the project file does not exist, or it has not set the `name` key
-    /// then the `ProjectConfig` instance has `ProjectConfig.name = Some("crate-name")`.
-    pub fn load_local<P: AsRef<Path>>(&mut self, working_directory: P) -> Result<()> {
+    /// Ensures that if `--name` is not specified on the command-line, and either the project
+    /// file does not exist, or it has not set the `name` key then the `ProjectConfig` instance
+    /// has `ProjectConfig.name = Some("crate-name")`.
+    pub fn load_local(&mut self, project_args: &ProjectArgs) -> Result<()> {
         // Secrets.toml
-
         let secrets_manager =
-            LocalConfigManager::new(working_directory.as_ref(), "Secrets.toml".to_string());
+            LocalConfigManager::new(&project_args.working_directory, "Secrets.toml".to_string());
         let mut secrets = Config::new(secrets_manager);
 
         if secrets.exists() {
@@ -281,9 +283,18 @@ impl RequestContext {
         }
 
         // Shuttle.toml
+        let project = Self::get_local_config(project_args)?;
 
+        self.project = Some(project);
+
+        Ok(())
+    }
+
+    pub fn get_local_config(
+        project_args: &ProjectArgs,
+    ) -> Result<Config<LocalConfigManager, ProjectConfig>> {
         let local_manager =
-            LocalConfigManager::new(working_directory.as_ref(), "Shuttle.toml".to_string());
+            LocalConfigManager::new(&project_args.working_directory, "Shuttle.toml".to_string());
         let mut project = Config::new(local_manager);
 
         if !project.exists() {
@@ -292,15 +303,16 @@ impl RequestContext {
             project.open()?;
         }
 
-        // Ensure that if name key is not in project config, then we infer from crate name
-        let project_name = project.as_mut().unwrap();
-        if project_name.name.is_none() {
-            project_name.name = Some(find_crate_name(working_directory)?);
-        }
-
-        self.project = Some(project);
-
-        Ok(())
+        let config = project.as_mut().unwrap();
+        match (&project_args.name, &config.name) {
+            // Command-line name parameter trumps everything
+            (Some(name_from_args), _) => config.name = Some(name_from_args.clone()),
+            // If key exists in config then keep it as it is
+            (None, Some(_)) => {}
+            // If name key is not in project config, then we infer from crate name
+            (None, None) => config.name = Some(find_crate_name(&project_args.working_directory)?),
+        };
+        Ok(project)
     }
 
     pub fn set_api_url(&mut self, api_url: Option<String>) {
@@ -368,5 +380,64 @@ impl RequestContext {
             .as_ref()
             .and_then(|secrets| secrets.as_ref().cloned())
             .unwrap_or_default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{path::PathBuf, str::FromStr};
+
+    use shuttle_common::project::ProjectName;
+
+    use crate::{args::ProjectArgs, config::RequestContext};
+
+    use super::{Config, LocalConfigManager, ProjectConfig};
+
+    fn path_from_workspace_root(path: &str) -> PathBuf {
+        PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
+            .join("..")
+            .join(path)
+    }
+
+    fn unwrap_project_name(config: &Config<LocalConfigManager, ProjectConfig>) -> String {
+        config.as_ref().unwrap().name.as_ref().unwrap().to_string()
+    }
+
+    #[test]
+    fn get_local_config_finds_name_in_shuttle_toml() {
+        let project_args = ProjectArgs {
+            working_directory: path_from_workspace_root("examples/axum/hello-world/"),
+            name: None,
+        };
+
+        let local_config = RequestContext::get_local_config(&project_args).unwrap();
+
+        assert_eq!(unwrap_project_name(&local_config), "hello-world-axum-app");
+    }
+
+    #[test]
+    fn fixme_running_in_src_subdir_finds_crate_but_fails_to_find_config() {
+        let project_args = ProjectArgs {
+            working_directory: path_from_workspace_root("examples/axum/hello-world/src"),
+            name: None,
+        };
+
+        let local_config = RequestContext::get_local_config(&project_args).unwrap();
+
+        // FIXME: this is not the intended behaviour. We should fix this.
+        // This should really be "hello-world-axum-app", as above.
+        assert_eq!(unwrap_project_name(&local_config), "hello-world");
+    }
+
+    #[test]
+    fn setting_name_overrides_name_in_config() {
+        let project_args = ProjectArgs {
+            working_directory: path_from_workspace_root("examples/axum/hello-world/"),
+            name: Some(ProjectName::from_str("my-fancy-project-name").unwrap()),
+        };
+
+        let local_config = RequestContext::get_local_config(&project_args).unwrap();
+
+        assert_eq!(unwrap_project_name(&local_config), "my-fancy-project-name");
     }
 }

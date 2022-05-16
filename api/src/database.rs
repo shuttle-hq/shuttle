@@ -4,8 +4,7 @@ use lazy_static::lazy_static;
 use rand::Rng;
 use shuttle_common::project::ProjectName;
 use shuttle_common::DatabaseReadyInfo;
-use sqlx::postgres::{PgConnection, PgPool, PgPoolOptions};
-use sqlx::Connection;
+use sqlx::postgres::{PgPool, PgPoolOptions};
 
 lazy_static! {
     static ref SUDO_POSTGRES_CONNECTION_STRING: String = format!(

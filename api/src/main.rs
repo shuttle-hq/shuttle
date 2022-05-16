@@ -26,7 +26,6 @@ use rocket::{tokio, Build, Data, Rocket, State};
 use shuttle_common::project::ProjectName;
 use shuttle_common::{DeploymentApiError, DeploymentMeta, Port};
 use shuttle_service::SecretStore;
-use sqlx::Connection;
 use structopt::StructOpt;
 use uuid::Uuid;
 

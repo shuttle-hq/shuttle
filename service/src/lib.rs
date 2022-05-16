@@ -138,6 +138,12 @@
 //!
 //! If the `name` key is not specified, the service's name will be the same as the crate's name.
 //!
+//! Alternatively, you can override the project name on the command-line, by passing the --name argument:
+//!
+//! ```bash
+//! cargo shuttle deploy --name=$PROJECT_NAME
+//! ```
+//!
 //! ## We're in alpha 🤗
 //!
 //! Thanks for using shuttle! We're very happy to have you with us!

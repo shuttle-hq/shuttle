@@ -1,16 +1,12 @@
-use std::{
-    net::{Ipv4Addr, SocketAddr},
-    process::Command,
-};
+use std::net::{Ipv4Addr, SocketAddr};
+use std::process::Command;
 
 mod helpers;
 
 use async_trait::async_trait;
 use helpers::PostgresInstance;
-use shuttle_service::{
-    loader::{Loader, LoaderError},
-    Error, Factory,
-};
+use shuttle_service::loader::{Loader, LoaderError};
+use shuttle_service::{Error, Factory};
 
 struct DummyFactory {
     postgres_instance: Option<PostgresInstance>,

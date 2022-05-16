@@ -14,6 +14,9 @@ mod factory;
 mod proxy;
 mod router;
 
+use std::net::IpAddr;
+use std::sync::Arc;
+
 use auth_admin::Admin;
 use deployment::MAX_DEPLOYS;
 use factory::ShuttleFactory;
@@ -21,8 +24,6 @@ use rocket::serde::json::Json;
 use rocket::{tokio, Build, Data, Rocket, State};
 use shuttle_common::project::ProjectName;
 use shuttle_common::{DeploymentApiError, DeploymentMeta, Port};
-use std::net::IpAddr;
-use std::sync::Arc;
 use structopt::StructOpt;
 use uuid::Uuid;
 

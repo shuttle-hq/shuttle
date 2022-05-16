@@ -2,19 +2,20 @@ mod args;
 mod client;
 mod config;
 
-use crate::args::{Args, AuthArgs, Command, DeployArgs};
-use crate::config::RequestContext;
+use std::fs::File;
+use std::io;
+use std::io::Write;
+use std::rc::Rc;
+
 use anyhow::{Context, Result};
 use args::{LoginArgs, ProjectArgs};
 use cargo::core::resolver::CliFeatures;
 use cargo::core::Workspace;
 use cargo::ops::{PackageOpts, Packages};
-
-use std::fs::File;
-use std::io;
-use std::io::Write;
-use std::rc::Rc;
 use structopt::StructOpt;
+
+use crate::args::{Args, AuthArgs, Command, DeployArgs};
+use crate::config::RequestContext;
 
 #[tokio::main]
 async fn main() -> Result<()> {

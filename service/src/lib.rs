@@ -482,9 +482,7 @@ impl Service for SimpleService<sync_wrapper::SyncWrapper<tide::Server<()>>> {
             .into_inner();
 
         self.runtime
-            .block_on(async {
-                tide.listen(addr).await
-            })
+            .block_on(async { tide.listen(addr).await })
             .map_err(error::CustomError::new)?;
 
         Ok(())

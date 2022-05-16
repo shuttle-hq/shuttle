@@ -23,11 +23,11 @@ pub struct Args {
 
 #[derive(StructOpt)]
 pub enum Command {
-    #[structopt(about = "deploy an shuttle project")]
+    #[structopt(about = "deploy a shuttle project")]
     Deploy(DeployArgs),
-    #[structopt(about = "view the status of an shuttle project")]
+    #[structopt(about = "view the status of a shuttle project")]
     Status,
-    #[structopt(about = "view the logs of your shuttle project")]
+    #[structopt(about = "view the logs of a shuttle project")]
     Logs,
     #[structopt(about = "delete the latest deployment for a shuttle project")]
     Delete,

@@ -1,11 +1,18 @@
+use std::collections::HashMap;
+use std::fs::File;
+use std::io::Read;
+use std::time::Duration;
+
 use anyhow::{anyhow, Context, Result};
+use chrono::{DateTime, Local};
+use colored::{ColoredString, Colorize};
+use log::Level;
 use reqwest::{Response, StatusCode};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
-use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
-
+use reqwest_retry::policies::ExponentialBackoff;
+use reqwest_retry::RetryTransientMiddleware;
 use shuttle_common::project::ProjectName;
 use shuttle_common::{ApiKey, ApiUrl, DeploymentMeta, DeploymentStateMeta, SHUTTLE_PROJECT_HEADER};
-use std::{fs::File, io::Read, time::Duration};
 use tokio::time::sleep;
 
 pub(crate) async fn auth(api_url: ApiUrl, username: String) -> Result<ApiKey> {
@@ -63,17 +70,48 @@ pub(crate) async fn status(api_url: ApiUrl, api_key: &ApiKey, project: &ProjectN
     Ok(())
 }
 
+pub(crate) async fn logs(api_url: ApiUrl, api_key: &ApiKey, project: &ProjectName) -> Result<()> {
+    let client = get_retry_client();
+
+    let deployment_meta = get_deployment_meta(api_url, api_key, project, &client).await?;
+
+    for (datetime, log) in deployment_meta.runtime_logs {
+        let datetime: DateTime<Local> = DateTime::from(datetime);
+        println!(
+            "{}{} {:<5} {}{} {}",
+            "[".bright_black(),
+            datetime.format("%Y-%m-%dT%H:%M:%SZ"),
+            get_colored_level(&log.level),
+            log.target,
+            "]".bright_black(),
+            log.body
+        );
+    }
+
+    Ok(())
+}
+
+fn get_colored_level(level: &Level) -> ColoredString {
+    match level {
+        Level::Trace => level.to_string().bright_black(),
+        Level::Debug => level.to_string().blue(),
+        Level::Info => level.to_string().green(),
+        Level::Warn => level.to_string().yellow(),
+        Level::Error => level.to_string().red(),
+    }
+}
+
 async fn get_deployment_meta(
     api_url: ApiUrl,
     api_key: &ApiKey,
     project: &ProjectName,
     client: &ClientWithMiddleware,
 ) -> Result<DeploymentMeta> {
-    let mut api_url = api_url;
-    api_url.push_str(&format!("/projects/{}", project));
+    let mut url = api_url;
+    url.push_str(&format!("/projects/{}", project));
 
     let res: Response = client
-        .get(api_url)
+        .get(url)
         .basic_auth(api_key.clone(), Some(""))
         .send()
         .await
@@ -96,8 +134,7 @@ pub(crate) async fn deploy(
     project: &ProjectName,
 ) -> Result<()> {
     let mut url = api_url.clone();
-    url.push_str("/projects/");
-    url.push_str(project.as_str());
+    url.push_str(&format!("/projects/{}", project.as_str()));
 
     let client = get_retry_client();
 
@@ -136,6 +173,32 @@ pub(crate) async fn deploy(
     println!("{}", &deployment_meta);
 
     Ok(())
+}
+
+pub(crate) async fn secrets(
+    api_url: ApiUrl,
+    api_key: &ApiKey,
+    project: &ProjectName,
+    secrets: HashMap<String, String>,
+) -> Result<()> {
+    if secrets.is_empty() {
+        return Ok(());
+    }
+
+    let mut url = api_url.clone();
+    url.push_str(&format!("/projects/{}/secrets/", project.as_str()));
+
+    let client = get_retry_client();
+
+    client
+        .post(url)
+        .body(serde_json::to_string(&secrets)?)
+        .header(SHUTTLE_PROJECT_HEADER, serde_json::to_string(&project)?)
+        .basic_auth(api_key.clone(), Some(""))
+        .send()
+        .await
+        .context("failed to send deployment's secrets to the Shuttle server")
+        .map(|_| ())
 }
 
 fn print_log(logs: &Option<String>, log_pos: &mut usize) {

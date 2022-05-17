@@ -1,9 +1,10 @@
+use std::time::Duration;
+
 use lazy_static::lazy_static;
 use rand::Rng;
-
-use shuttle_common::{project::ProjectName, DatabaseReadyInfo};
+use shuttle_common::project::ProjectName;
+use shuttle_common::DatabaseReadyInfo;
 use sqlx::postgres::{PgPool, PgPoolOptions};
-use std::time::Duration;
 
 lazy_static! {
     static ref SUDO_POSTGRES_CONNECTION_STRING: String = format!(

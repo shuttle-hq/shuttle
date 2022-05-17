@@ -14,7 +14,29 @@ resource "aws_network_interface_sg_attachment" "backend" {
 
 resource "aws_iam_instance_profile" "backend" {
   name = "backend-profile"
-  role = "BackendAPIRole"
+  role = aws_iam_role.backend.name
+}
+
+resource "aws_iam_role" "backend" {
+  name        = "BackendAPIRole"
+  path        = "/"
+  description = "Allows EC2 instances to call AWS services on your behalf."
+
+  assume_role_policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Action": "sts:AssumeRole",
+            "Principal": {
+               "Service": "ec2.amazonaws.com"
+            },
+            "Effect": "Allow",
+            "Sid": ""
+        }
+    ]
+}
+EOF
 }
 
 resource "aws_lb_target_group_attachment" "api" {
@@ -35,9 +57,25 @@ resource "aws_lb_target_group_attachment" "postgres" {
   port             = var.postgres_container_port
 }
 
+data "aws_ami" "ubuntu" {
+  most_recent = true
+
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd/ubuntu-focal-20.04-arm64-server-*"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+
+  owners = ["099720109477"] # Canonical
+}
+
 resource "aws_instance" "backend" {
-  ami           = "ami-072db068702487a87" # unveil-backend-ami-20220313
-  instance_type = "c6g.4xlarge"
+  ami           = data.aws_ami.ubuntu.id
+  instance_type = var.instance_type
 
   monitoring = true
 

@@ -1,4 +1,3 @@
-use crate::database;
 use async_trait::async_trait;
 use shuttle_common::DatabaseReadyInfo;
 use shuttle_service::Factory;

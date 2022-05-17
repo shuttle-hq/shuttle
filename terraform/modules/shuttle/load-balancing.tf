@@ -10,7 +10,7 @@ resource "aws_lb" "api" {
 
   access_logs {
     bucket  = aws_s3_bucket.logs.bucket
-    prefix  = "unveil-lb"
+    prefix  = "shuttle-lb"
     enabled = true
   }
 }
@@ -33,7 +33,7 @@ resource "aws_lb" "db" {
 }
 
 resource "aws_lb_target_group" "api" {
-  name = "unveil-lb-tg-http"
+  name = "shuttle-lb-tg-http"
 
   health_check {
     enabled = true
@@ -89,7 +89,7 @@ resource "aws_lb" "user" {
 
   access_logs {
     bucket  = aws_s3_bucket.logs.bucket
-    prefix  = "unveil-user-lb"
+    prefix  = "shuttle-user-lb"
     enabled = true
   }
 }
@@ -129,7 +129,7 @@ resource "aws_lb_listener" "user_tls" {
 }
 
 resource "aws_lb_target_group" "user" {
-  name = "unveil-user-lb-tg-http"
+  name = "shuttle-user-lb-tg-http"
 
   health_check {
     enabled = true
@@ -147,7 +147,7 @@ resource "aws_lb_target_group" "user" {
 }
 
 resource "aws_lb_target_group" "postgres" {
-  name = "unveil-db-lb-tg-tcp"
+  name = "shuttle-db-lb-tg-tcp"
 
   // TODO: change me
   health_check {

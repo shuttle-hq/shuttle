@@ -1,12 +1,13 @@
+use std::io;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
 use anyhow::{anyhow, Context, Result};
 use cargo::core::compiler::CompileMode;
 use cargo::core::Workspace;
 use cargo::ops::CompileOptions;
 use rocket::tokio;
 use rocket::tokio::io::AsyncWriteExt;
-use std::io;
-use std::path::{Path, PathBuf};
-use std::process::Command;
 use uuid::Uuid;
 
 #[cfg(debug_assertions)]

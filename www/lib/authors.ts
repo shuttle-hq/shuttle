@@ -32,6 +32,13 @@ const authors: readonly Author[] = [
     author_image_url: "https://github.com/brokad.png",
   },
   {
+    author_id: "nodar",
+    author: "Nodar Daneliya",
+    position: "Founder",
+    author_url: "https://github.com/NodarD",
+    author_image_url: "https://github.com/nodard.png",
+  },
+  {
     author_id: "terrencewaters",
     author: "Terrence Waters",
     position: "Software Engineer",

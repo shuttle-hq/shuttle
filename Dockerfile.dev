@@ -23,6 +23,7 @@ FROM runtime
 WORKDIR /
 COPY --from=builder /app/target/debug/api /usr/local/bin/shuttle-backend
 COPY --from=builder /app/service /app/service
+COPY --from=builder /app/common /app/common
 COPY --from=builder /app/codegen /app/codegen
 
 COPY docker/config.toml $CARGO_HOME/config.toml

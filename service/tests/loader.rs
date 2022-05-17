@@ -1,17 +1,15 @@
-use std::{
-    net::{Ipv4Addr, SocketAddr},
-    process::{exit, Command},
-    time::Duration,
-};
+use std::net::{Ipv4Addr, SocketAddr};
+use std::process::{exit, Command};
+use std::sync::mpsc;
+use std::time::Duration;
 
 mod helpers;
 
 use async_trait::async_trait;
 use helpers::PostgresInstance;
-use shuttle_service::{
-    loader::{Loader, LoaderError},
-    Error, Factory,
-};
+use shuttle_service::loader::{Loader, LoaderError};
+use shuttle_service::{Error, Factory};
+use uuid::Uuid;
 
 struct DummyFactory {
     postgres_instance: Option<PostgresInstance>,
@@ -75,7 +73,12 @@ async fn sleep_async() {
 
     let mut factory = DummyFactory::new();
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
-    let (handler, _) = loader.load(&mut factory, addr).await.unwrap();
+    let deployment_id = Uuid::new_v4();
+    let (tx, _rx) = mpsc::sync_channel(1);
+    let (handler, _) = loader
+        .load(&mut factory, addr, tx, deployment_id)
+        .await
+        .unwrap();
 
     // Give service some time to start up
     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -105,7 +108,12 @@ async fn sleep() {
 
     let mut factory = DummyFactory::new();
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
-    let (handler, _) = loader.load(&mut factory, addr).await.unwrap();
+    let deployment_id = Uuid::new_v4();
+    let (tx, _rx) = mpsc::sync_channel(1);
+    let (handler, _) = loader
+        .load(&mut factory, addr, tx, deployment_id)
+        .await
+        .unwrap();
 
     // Give service some time to start up
     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -141,7 +149,22 @@ async fn sqlx_pool() {
     let mut factory = DummyFactory::new();
 
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
-    let (handler, _) = loader.load(&mut factory, addr).await.unwrap();
+    let deployment_id = Uuid::new_v4();
+    let (tx, rx) = mpsc::sync_channel(32);
+    let (handler, _) = loader
+        .load(&mut factory, addr, tx, deployment_id)
+        .await
+        .unwrap();
 
     handler.await.unwrap().unwrap();
+
+    let log = rx.recv().unwrap();
+    assert_eq!(log.deployment_id, deployment_id);
+    assert!(
+        log.item.body.starts_with("/* SQLx ping */"),
+        "got: {}",
+        log.item.body
+    );
+    assert_eq!(log.item.target, "sqlx::query");
+    assert_eq!(log.item.level, log::Level::Info);
 }

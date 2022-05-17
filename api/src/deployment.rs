@@ -17,8 +17,9 @@ use shuttle_common::project::ProjectName;
 use shuttle_common::{
     DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, LogItem, Port,
 };
-use shuttle_service::loader::{Loader, ServeHandle};
+use shuttle_service::loader::Loader;
 use shuttle_service::logger::Log;
+use shuttle_service::ServeHandle;
 use tokio::sync::{mpsc, RwLock};
 
 use crate::build::Build;

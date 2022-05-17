@@ -42,7 +42,7 @@ impl Shuttle {
     pub async fn run(mut self, args: Args) -> Result<()> {
         if matches!(
             args.cmd,
-            Command::Deploy(..) | Command::Delete | Command::Status
+            Command::Deploy(..) | Command::Delete | Command::Status | Command::Logs
         ) {
             self.load_project(&args.project_args)?;
         }
@@ -52,6 +52,7 @@ impl Shuttle {
         match args.cmd {
             Command::Deploy(deploy_args) => self.deploy(deploy_args).await,
             Command::Status => self.status().await,
+            Command::Logs => self.logs().await,
             Command::Delete => self.delete().await,
             Command::Auth(auth_args) => self.auth(auth_args).await,
             Command::Login(login_args) => self.login(login_args).await,
@@ -113,6 +114,16 @@ impl Shuttle {
         )
         .await
         .context("failed to get status of deployment")
+    }
+
+    async fn logs(&self) -> Result<()> {
+        client::logs(
+            self.ctx.api_url(),
+            self.ctx.api_key()?,
+            self.ctx.project_name(),
+        )
+        .await
+        .context("failed to get logs of deployment")
     }
 
     async fn deploy(&self, args: DeployArgs) -> Result<()> {

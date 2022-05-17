@@ -53,6 +53,7 @@ dependencies = [
  "base64",
  "cargo",
  "cargo-util",
+ "chrono",
  "env_logger",
  "fqdn",
  "futures",
@@ -376,8 +377,11 @@ dependencies = [
  "assert_cmd",
  "cargo",
  "cargo_metadata",
+ "chrono",
+ "colored",
  "dirs",
  "futures",
+ "log",
  "predicates",
  "reqwest",
  "reqwest-middleware",
@@ -1540,6 +1544,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6389c490849ff5bc16be905ae24bc913a9c8892e19b2341dbc175e14c341c2b8"
 dependencies = [
  "cfg-if",
+ "serde",
 ]
 
 [[package]]
@@ -2674,6 +2679,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "lazy_static",
+ "log",
  "rocket",
  "serde",
  "serde_json",
@@ -2687,16 +2693,20 @@ dependencies = [
  "anyhow",
  "async-trait",
  "axum",
+ "chrono",
  "lazy_static",
  "libloading",
+ "log",
  "portpicker",
  "regex",
  "rocket",
  "shuttle-codegen",
+ "shuttle-common",
  "sqlx",
  "sync_wrapper",
  "thiserror",
  "tokio",
+ "uuid",
 ]
 
 [[package]]

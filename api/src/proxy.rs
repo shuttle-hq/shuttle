@@ -1,15 +1,17 @@
-use ::hyper::server::{conn::AddrStream, Server};
-use ::hyper::service::{make_service_fn, service_fn};
-use ::hyper::{Body, Request, Response, StatusCode};
-use hyper::header::{HeaderValue, SERVER};
-use hyper_reverse_proxy::ProxyError;
-use shuttle_common::Port;
 use std::convert::Infallible;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 
-use crate::DeploymentSystem;
+use ::hyper::server::conn::AddrStream;
+use ::hyper::server::Server;
+use ::hyper::service::{make_service_fn, service_fn};
+use ::hyper::{Body, Request, Response, StatusCode};
+use hyper::header::{HeaderValue, SERVER};
+use hyper_reverse_proxy::ProxyError;
 use lazy_static::lazy_static;
+use shuttle_common::Port;
+
+use crate::DeploymentSystem;
 
 lazy_static! {
     static ref HEADER_SERVER: HeaderValue = "shuttle.rs".parse().unwrap();

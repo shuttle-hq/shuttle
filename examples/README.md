@@ -16,9 +16,9 @@ navigate to an example root folder
 $ cd examples/rocket/hello-world
 ```
 
-open up the `Shuttle.toml` file and change the project name to something 
-unique - in shuttle, projects are globally unique. Then run
+Pick a project name that is something unique - in shuttle,
+projects are globally unique. Then run
 
 ```bash
-$ cargo shuttle deploy
+$ cargo shuttle deploy --name=$PROJECT_NAME
 ```

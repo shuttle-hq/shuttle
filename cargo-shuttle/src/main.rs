@@ -2,19 +2,21 @@ mod args;
 mod client;
 mod config;
 
-use crate::args::{Args, AuthArgs, Command, DeployArgs};
-use crate::config::RequestContext;
+use std::fs::File;
+use std::io;
+use std::io::Write;
+use std::rc::Rc;
+
 use anyhow::{Context, Result};
-use args::LoginArgs;
+use args::{LoginArgs, ProjectArgs};
 use cargo::core::resolver::CliFeatures;
 use cargo::core::Workspace;
 use cargo::ops::{PackageOpts, Packages};
-
-use std::fs::File;
-use std::io::Write;
-use std::rc::Rc;
-use std::{env, io};
+use futures::future::TryFutureExt;
 use structopt::StructOpt;
+
+use crate::args::{Args, AuthArgs, Command, DeployArgs};
+use crate::config::RequestContext;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -40,9 +42,9 @@ impl Shuttle {
     pub async fn run(mut self, args: Args) -> Result<()> {
         if matches!(
             args.cmd,
-            Command::Deploy(..) | Command::Delete | Command::Status
+            Command::Deploy(..) | Command::Delete | Command::Status | Command::Logs
         ) {
-            self.load_project()?;
+            self.load_project(&args.project_args)?;
         }
 
         self.ctx.set_api_url(args.api_url);
@@ -50,15 +52,15 @@ impl Shuttle {
         match args.cmd {
             Command::Deploy(deploy_args) => self.deploy(deploy_args).await,
             Command::Status => self.status().await,
+            Command::Logs => self.logs().await,
             Command::Delete => self.delete().await,
             Command::Auth(auth_args) => self.auth(auth_args).await,
             Command::Login(login_args) => self.login(login_args).await,
         }
     }
 
-    pub fn load_project(&mut self) -> Result<()> {
-        let working_directory = env::current_dir()?;
-        self.ctx.load_local(working_directory)
+    pub fn load_project(&mut self, project_args: &ProjectArgs) -> Result<()> {
+        self.ctx.load_local(project_args)
     }
 
     async fn login(&mut self, login_args: LoginArgs) -> Result<()> {
@@ -114,16 +116,37 @@ impl Shuttle {
         .context("failed to get status of deployment")
     }
 
-    async fn deploy(&self, args: DeployArgs) -> Result<()> {
-        let package_file = self
-            .run_cargo_package(args.allow_dirty)
-            .context("failed to package cargo project")?;
-        client::deploy(
-            package_file,
+    async fn logs(&self) -> Result<()> {
+        client::logs(
             self.ctx.api_url(),
             self.ctx.api_key()?,
             self.ctx.project_name(),
         )
+        .await
+        .context("failed to get logs of deployment")
+    }
+
+    async fn deploy(&self, args: DeployArgs) -> Result<()> {
+        let package_file = self
+            .run_cargo_package(args.allow_dirty)
+            .context("failed to package cargo project")?;
+
+        let key = self.ctx.api_key()?;
+
+        client::deploy(
+            package_file,
+            self.ctx.api_url(),
+            key,
+            self.ctx.project_name(),
+        )
+        .and_then(|_| {
+            client::secrets(
+                self.ctx.api_url(),
+                key,
+                self.ctx.project_name(),
+                self.ctx.secrets(),
+            )
+        })
         .await
         .context("failed to deploy cargo project")
     }

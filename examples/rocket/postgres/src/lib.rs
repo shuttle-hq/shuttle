@@ -1,11 +1,12 @@
 #[macro_use]
 extern crate rocket;
 
+use shuttle_service::SecretStore;
+use shuttle_service::error::CustomError;
 use rocket::response::status::BadRequest;
 use rocket::serde::json::Json;
 use rocket::{Build, Rocket, State};
 use serde::{Deserialize, Serialize};
-use shuttle_service::error::CustomError;
 use sqlx::{Executor, FromRow, PgPool};
 
 #[get("/<id>")]
@@ -33,6 +34,12 @@ async fn add(
     Ok(Json(todo))
 }
 
+#[get("/secret")]
+async fn secret(state: &State<MyState>) -> Result<String, BadRequest<String>> {
+    // get secret defined in `Secrets.toml` file.
+    state.pool.get_secret("MY_API_KEY").await.map_err(|e| BadRequest(Some(e.to_string())))
+}
+
 struct MyState {
     pool: PgPool,
 }
@@ -45,6 +52,7 @@ async fn rocket(pool: PgPool) -> Result<Rocket<Build>, shuttle_service::Error> {
 
     let state = MyState { pool };
     let rocket = rocket::build()
+        .mount("/", routes![secret])
         .mount("/todo", routes![retrieve, add])
         .manage(state);
 

@@ -1,27 +1,29 @@
-use crate::{build::Build, BuildSystem, ShuttleFactory};
-use anyhow::{anyhow, Context as AnyhowContext};
 use core::default::Default;
-use futures::prelude::*;
-use libloading::Library;
-use rocket::data::ByteUnit;
-use rocket::tokio;
-use rocket::Data;
-use shuttle_common::{
-    project::ProjectName, DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta,
-    Host, Port,
-};
-use shuttle_service::loader::{Loader, ServeHandle};
 use std::collections::HashMap;
 use std::fs::DirEntry;
 use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener};
 use std::path::{Path, PathBuf};
+use std::sync::mpsc::SyncSender;
 use std::sync::Arc;
-use tokio::sync::mpsc;
-use tokio::sync::RwLock;
 
-use crate::database;
+use anyhow::{anyhow, Context as AnyhowContext};
+use chrono::{DateTime, Utc};
+use futures::prelude::*;
+use libloading::Library;
+use rocket::data::ByteUnit;
+use rocket::{tokio, Data};
+use shuttle_common::project::ProjectName;
+use shuttle_common::{
+    DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, LogItem, Port,
+};
+use shuttle_service::loader::{Loader, ServeHandle};
+use shuttle_service::logger::Log;
+use tokio::sync::{mpsc, RwLock};
+
+use crate::build::Build;
 use crate::router::Router;
+use crate::{database, BuildSystem, ShuttleFactory};
 
 // This controls the maximum number of deploys an api instance can run
 // This is mainly needed because tokio::task::spawn_blocking keeps an internal pool for the number of blocking threads
@@ -102,7 +104,12 @@ impl Deployment {
 
     /// Tries to advance the deployment one stage. Does nothing if the deployment
     /// is in a terminal state.
-    pub(crate) async fn advance(&self, context: &Context, db_context: &database::Context) {
+    pub(crate) async fn advance(
+        &self,
+        context: &Context,
+        db_context: &database::Context,
+        run_logs_tx: SyncSender<Log>,
+    ) {
         {
             trace!("waiting to get write on the state");
             let meta = self.meta().await;
@@ -172,7 +179,7 @@ impl Deployment {
                         Ok(()) => {
                             let mut factory = ShuttleFactory::new(&mut db_state);
                             let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
-                            match loader.load(&mut factory, addr) {
+                            match loader.load(&mut factory, addr, run_logs_tx, meta.id) {
                                 Err(e) => {
                                     debug!("{}: factory phase FAILED: {:?}", meta.project, e);
                                     DeploymentState::Error(e.into())
@@ -211,6 +218,10 @@ impl Deployment {
             DeploymentState::Deployed(deployed) => Some(deployed.port),
             _ => None,
         }
+    }
+
+    async fn add_runtime_log(&self, datetime: DateTime<Utc>, log: LogItem) {
+        self.meta.write().await.runtime_logs.insert(datetime, log);
     }
 }
 
@@ -302,10 +313,15 @@ struct JobQueue {
 }
 
 impl JobQueue {
-    async fn new(context: Context, db_context: database::Context) -> Self {
+    async fn new(
+        context: Context,
+        db_context: database::Context,
+        run_logs_tx: SyncSender<Log>,
+    ) -> Self {
         let (send, mut recv) = mpsc::channel::<Arc<Deployment>>(JOB_QUEUE_SIZE);
 
         log::debug!("starting job processor task");
+
         tokio::spawn(async move {
             while let Some(deployment) = recv.recv().await {
                 let id = deployment.meta().await.id;
@@ -313,7 +329,9 @@ impl JobQueue {
                 log::debug!("started deployment job for deployment '{}'", id);
 
                 while !deployment.deployment_finished().await {
-                    deployment.advance(&context, &db_context).await;
+                    let run_logs_tx = run_logs_tx.clone();
+
+                    deployment.advance(&context, &db_context, run_logs_tx).await;
                 }
 
                 debug!("ended deployment job for id: '{}'", id);
@@ -344,10 +362,28 @@ pub(crate) struct Context {
 impl DeploymentSystem {
     pub(crate) async fn new(build_system: Box<dyn BuildSystem>, fqdn: String) -> Self {
         let router: Arc<Router> = Default::default();
+        let (tx, rx) = std::sync::mpsc::sync_channel::<Log>(64);
 
         let deployments = Arc::new(RwLock::new(
             Self::initialise_from_fs(&build_system.fs_root(), &fqdn).await,
         ));
+
+        let deployments_log = deployments.clone();
+
+        tokio::spawn(async move {
+            loop {
+                let res = rx.recv();
+
+                if let Ok(log) = res {
+                    let mut deployments_log = deployments_log.write().await;
+                    if let Some(deployment) = deployments_log.get_mut(&log.deployment_id) {
+                        deployment.add_runtime_log(log.datetime, log.item).await;
+                    }
+                } else {
+                    break;
+                }
+            }
+        });
 
         let context = Context {
             router: router.clone(),
@@ -359,7 +395,7 @@ impl DeploymentSystem {
             .await
             .expect("failed to create lazy connection to database");
 
-        let job_queue = JobQueue::new(context, db_context).await;
+        let job_queue = JobQueue::new(context, db_context, tx).await;
 
         debug!("loading deployments into job processor");
         for deployment in deployments.read().await.values() {

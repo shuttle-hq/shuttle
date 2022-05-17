@@ -35,4 +35,4 @@ sqlx-postgres = ["sqlx-integration", "sqlx/postgres"]
 
 web-axum = ["axum", "sync_wrapper"]
 web-rocket = ["rocket"]
-web-tide = ["tide", "sync_wrapper"]
+web-tide = ["tide"]

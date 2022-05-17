@@ -1,6 +1,7 @@
 use std::net::{Ipv4Addr, SocketAddr};
-use std::process::Command;
+use std::process::{exit, Command};
 use std::sync::mpsc;
+use std::time::Duration;
 
 mod helpers;
 
@@ -80,7 +81,50 @@ async fn sleep_async() {
     let (tx, _rx) = mpsc::sync_channel(1);
     let (handler, _) = loader.load(&mut factory, addr, tx, deployment_id).unwrap();
 
-    handler.await.unwrap().unwrap();
+    // Give service some time to start up
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    tokio::spawn(async {
+        // Time is less than sleep in service
+        tokio::time::sleep(Duration::from_secs(5)).await;
+        println!("Test failed as async service was not aborted");
+        exit(1);
+    });
+
+    handler.abort();
+    assert!(handler.await.unwrap_err().is_cancelled());
+}
+
+#[tokio::test]
+async fn sleep() {
+    Command::new("cargo")
+        .args(["build", "--release"])
+        .current_dir("tests/resources/sleep")
+        .spawn()
+        .unwrap()
+        .wait()
+        .unwrap();
+
+    let loader = Loader::from_so_file("tests/resources/sleep/target/release/libsleep.so").unwrap();
+
+    let mut factory = DummyFactory::new();
+    let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
+    let deployment_id = Uuid::new_v4();
+    let (tx, _rx) = mpsc::sync_channel(1);
+    let (handler, _) = loader.load(&mut factory, addr, tx, deployment_id).unwrap();
+
+    // Give service some time to start up
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    tokio::spawn(async {
+        // Time is less than sleep in service
+        tokio::time::sleep(Duration::from_secs(5)).await;
+        println!("Test failed as blocking service was not aborted");
+        exit(1);
+    });
+
+    handler.abort();
+    assert!(handler.await.unwrap_err().is_cancelled());
 }
 
 #[tokio::test]

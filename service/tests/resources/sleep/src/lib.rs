@@ -1,7 +1,7 @@
-use std::time::Duration;
+use std::{thread::sleep, time::Duration};
 
 use shuttle_service::{IntoService, ServeHandle, Service};
-use tokio::{runtime::Runtime, time::sleep};
+use tokio::runtime::Runtime;
 
 #[macro_use]
 extern crate shuttle_service;
@@ -35,7 +35,7 @@ impl Service for SleepService {
     ) -> Result<ServeHandle, shuttle_service::error::Error> {
         let duration = Duration::from_secs(self.duration);
         let handle = self.runtime.spawn(async move {
-            sleep(duration).await;
+            sleep(duration);
             Ok(())
         });
 

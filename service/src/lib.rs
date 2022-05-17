@@ -206,6 +206,7 @@ extern crate shuttle_codegen;
 /// | ------------------------------------------------------------------------------ | ------------ | ------------------------------------------- | ---------- | ----------------------------------------------------------------------------------- |
 /// | [`Rocket<Build>`](https://docs.rs/rocket/0.5.0-rc.1/rocket/struct.Rocket.html) | web-rocket   | [rocket](https://docs.rs/rocket/0.5.0-rc.1) | 0.5.0-rc.1 | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/rocket/hello-world) |
 /// | [`SyncWrapper<Router>`](https://docs.rs/axum/0.5/axum/struct.Router.html)      | web-axum     | [axum](https://docs.rs/axum/0.5)            | 0.5        | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/axum/hello-world)   |
+/// | [`Server<T>`](https://docs.rs/tide/latest/tide/struct.Server.html)             | web-tide     | [tide](https://docs.rs/tide/0.16.0)         | 0.16.0     | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/tide/hello-world)   |
 ///
 /// # Getting shuttle managed services
 /// The shuttle is able to manage service dependencies for you. These services are passed in as inputs to your main function:
@@ -406,6 +407,38 @@ impl Service for SimpleService<sync_wrapper::SyncWrapper<axum::Router>> {
     }
 }
 
+#[cfg(feature = "web-tide")]
+impl<T> Service for SimpleService<tide::Server<T>>
+where
+    T: Clone + Send + Sync + 'static,
+{
+    fn build(&mut self, factory: &mut dyn Factory, logger: logger::Logger) -> Result<(), Error> {
+        if let Some(builder) = self.builder.take() {
+            // We want to build any sqlx pools on the same runtime the client code will run on. Without this expect to get errors of no tokio reactor being present.
+            let tide = self.runtime.block_on(async {
+                log::set_boxed_logger(Box::new(logger))
+                    .map(|()| log::set_max_level(log::LevelFilter::Info))
+                    .expect("logger set should succeed");
+
+                builder(factory).await
+            })?;
+
+            self.service = Some(tide);
+        }
+
+        Ok(())
+    }
+
+    fn bind(&mut self, addr: SocketAddr) -> Result<(), error::Error> {
+        let tide = self.service.take().expect("service has already been bound");
+
+        self.runtime
+            .block_on(async { tide.listen(addr).await })
+            .map_err(error::CustomError::new)?;
+
+        Ok(())
+    }
+}
 /// Helper macro that generates the entrypoint required of any service.
 ///
 /// Can be used in one of two ways:

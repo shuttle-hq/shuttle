@@ -523,13 +523,17 @@ impl DeploymentSystem {
                 let mut lock = deployment.state.write().await;
                 if let DeploymentState::Deployed(DeployedState { so, handle, .. }) = lock.take() {
                     handle.abort();
-                    handle
-                        .await
-                        .map_err(|e| DeploymentApiError::Internal(e.to_string()))?
-                        .map_err(|e| DeploymentApiError::Internal(e.to_string()))?;
+
                     tokio::spawn(async move {
                         so.close().unwrap();
                     });
+
+                    match handle.await {
+                        Err(err) if err.is_cancelled() => {}
+                        other => other
+                            .map_err(|e| DeploymentApiError::Internal(e.to_string()))?
+                            .map_err(|e| DeploymentApiError::Internal(e.to_string()))?,
+                    };
                 }
 
                 let _ = self.router.remove(&meta.host);

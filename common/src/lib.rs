@@ -1,8 +1,12 @@
 pub mod project;
 
-use std::fmt::{Display, Formatter};
+use std::{
+    collections::BTreeMap,
+    fmt::{Display, Formatter},
+};
 
 use chrono::{DateTime, Utc};
+use log::Level;
 use rocket::Responder;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -33,7 +37,7 @@ pub struct DeploymentMeta {
     pub state: DeploymentStateMeta,
     pub host: String,
     pub build_logs: Option<String>,
-    pub runtime_logs: Option<String>,
+    pub runtime_logs: BTreeMap<DateTime<Utc>, LogItem>,
     pub database_deployment: Option<DatabaseReadyInfo>,
     pub created_at: DateTime<Utc>,
 }
@@ -55,7 +59,7 @@ impl DeploymentMeta {
             state,
             host,
             build_logs: None,
-            runtime_logs: None,
+            runtime_logs: BTreeMap::new(),
             database_deployment: None,
             created_at: Utc::now(),
         }
@@ -175,3 +179,10 @@ impl Display for DeploymentApiError {
 }
 
 impl std::error::Error for DeploymentApiError {}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct LogItem {
+    pub body: String,
+    pub level: Level,
+    pub target: String,
+}

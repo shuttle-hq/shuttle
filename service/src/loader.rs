@@ -1,10 +1,14 @@
-use std::ffi::OsStr;
 use std::net::SocketAddr;
+use std::{ffi::OsStr, sync::mpsc::SyncSender};
 
 use libloading::{Library, Symbol};
+use shuttle_common::DeploymentId;
 use thiserror::Error as ThisError;
 
-use crate::{Error, Factory, ServeHandle, Service};
+use crate::{
+    logger::{Log, Logger},
+    Error, Factory, ServeHandle, Service,
+};
 
 const ENTRYPOINT_SYMBOL_NAME: &[u8] = b"_create_service\0";
 
@@ -48,10 +52,13 @@ impl Loader {
         self,
         factory: &mut dyn Factory,
         addr: SocketAddr,
+        tx: SyncSender<Log>,
+        deployment_id: DeploymentId,
     ) -> Result<(ServeHandle, Library), Error> {
         let mut service = self.service;
+        let logger = Logger::new(tx, deployment_id);
 
-        service.build(factory)?;
+        service.build(factory, logger)?;
 
         // Start service on this side of the FFI
         let handle = tokio::task::spawn(async move { service.bind(addr)?.await? });

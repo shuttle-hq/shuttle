@@ -420,7 +420,7 @@ where
                     .map(|()| log::set_max_level(log::LevelFilter::Info))
                     .expect("logger set should succeed");
 
-                builder(factory).await;
+                builder(factory).await
             })?;
 
             self.service = Some(tide);

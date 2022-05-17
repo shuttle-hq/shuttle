@@ -412,10 +412,16 @@ impl<T> Service for SimpleService<tide::Server<T>>
 where
     T: Clone + Send + Sync + 'static,
 {
-    fn build(&mut self, factory: &mut dyn Factory) -> Result<(), Error> {
+    fn build(&mut self, factory: &mut dyn Factory, logger: logger::Logger) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
             // We want to build any sqlx pools on the same runtime the client code will run on. Without this expect to get errors of no tokio reactor being present.
-            let tide = self.runtime.block_on(builder(factory))?;
+            let tide = self.runtime.block_on(async {
+                log::set_boxed_logger(Box::new(logger))
+                    .map(|()| log::set_max_level(log::LevelFilter::Info))
+                    .expect("logger set should succeed");
+
+                builder(factory).await;
+            })?;
 
             self.service = Some(tide);
         }

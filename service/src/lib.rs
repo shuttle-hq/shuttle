@@ -447,9 +447,15 @@ where
 
 #[cfg(feature = "web-tower")]
 impl<T> Service for SimpleService<T>
-where T: tower::Service<hyper::Request<hyper::Body>, Response = hyper::Response<hyper::Body>> + Clone + Send + Sync + 'static,
-      T::Error: std::error::Error + Send + Sync,
-      T::Future: std::future::Future + Send + Sync {
+where
+    T: tower::Service<hyper::Request<hyper::Body>, Response = hyper::Response<hyper::Body>>
+        + Clone
+        + Send
+        + Sync
+        + 'static,
+    T::Error: std::error::Error + Send + Sync,
+    T::Future: std::future::Future + Send + Sync,
+{
     fn build(&mut self, factory: &mut dyn Factory, logger: logger::Logger) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
             // We want to build any sqlx pools on the same runtime the client code will run on. Without this expect to get errors of no tokio reactor being present.

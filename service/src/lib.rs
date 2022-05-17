@@ -434,14 +434,14 @@ where
         Ok(())
     }
 
-    fn bind(&mut self, addr: SocketAddr) -> Result<(), error::Error> {
+    fn bind(&mut self, addr: SocketAddr) -> Result<ServeHandle, error::Error> {
         let tide = self.service.take().expect("service has already been bound");
 
-        self.runtime
-            .block_on(async { tide.listen(addr).await })
-            .map_err(error::CustomError::new)?;
+        let handle = self
+            .runtime
+            .spawn(async move { tide.listen(addr).await.map_err(error::CustomError::new) });
 
-        Ok(())
+        Ok(handle)
     }
 }
 /// Helper macro that generates the entrypoint required of any service.

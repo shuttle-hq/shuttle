@@ -15,8 +15,8 @@ impl tower::Service<hyper::Request<hyper::Body>> for HelloWorld {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, req: hyper::Request<hyper::Body>) -> Self::Future {
-        let body = hyper::Body::from("hello, world!\n");
+    fn call(&mut self, _req: hyper::Request<hyper::Body>) -> Self::Future {
+        let body = hyper::Body::from("Hello, world!\n");
         let resp = hyper::Response::builder()
             .status(200)
             .body(body)

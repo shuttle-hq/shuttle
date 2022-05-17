@@ -450,10 +450,16 @@ impl<T> Service for SimpleService<T>
 where T: tower::Service<hyper::Request<hyper::Body>, Response = hyper::Response<hyper::Body>> + Clone + Send + Sync + 'static,
       T::Error: std::error::Error + Send + Sync,
       T::Future: std::future::Future + Send + Sync {
-    fn build(&mut self, factory: &mut dyn Factory) -> Result<(), Error> {
+    fn build(&mut self, factory: &mut dyn Factory, logger: logger::Logger) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
             // We want to build any sqlx pools on the same runtime the client code will run on. Without this expect to get errors of no tokio reactor being present.
-            let tower = self.runtime.block_on(builder(factory))?;
+            let tower = self.runtime.block_on(async {
+                log::set_boxed_logger(Box::new(logger))
+                    .map(|()| log::set_max_level(log::LevelFilter::Info))
+                    .expect("logger set should succeed");
+
+                builder(factory).await
+            })?;
 
             self.service = Some(tower);
         }
@@ -461,17 +467,21 @@ where T: tower::Service<hyper::Request<hyper::Body>, Response = hyper::Response<
         Ok(())
     }
 
-    fn bind(&mut self, addr: SocketAddr) -> Result<(), error::Error> {
+    fn bind(&mut self, addr: SocketAddr) -> Result<ServeHandle, error::Error> {
         let service = self.service.take().expect("service has already been bound");
 
-        let future = async {
+        let future = async move {
             let shared = tower::make::Shared::new(service);
             hyper::Server::bind(&addr).serve(shared).await
         };
 
-        self.runtime.block_on(future).map_err(error::CustomError::new)?;
+        let handle = self.runtime.spawn(async {
+            let _tower = future.await.map_err(error::CustomError::new)?;
 
-        Ok(())
+            Ok(())
+        });
+
+        Ok(handle)
     }
 }
 

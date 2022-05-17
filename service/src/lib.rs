@@ -325,6 +325,7 @@ pub type StateBuilder<T> =
     for<'a> fn(
         &'a mut dyn Factory,
         &'a Runtime,
+        logger::Logger,
     ) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + 'a>>;
 
 /// A wrapper that takes a user's future, gives the future a factory, and takes the returned service from the future
@@ -339,6 +340,7 @@ impl<T> IntoService
     for for<'a> fn(
         &'a mut dyn Factory,
         &'a Runtime,
+        logger::Logger,
     ) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + 'a>>
 where
     SimpleService<T>: Service,
@@ -426,6 +428,7 @@ impl Service for SimpleService<sync_wrapper::SyncWrapper<axum::Router>> {
 }
 
 #[cfg(feature = "web-tide")]
+#[async_trait]
 impl<T> Service for SimpleService<tide::Server<T>>
 where
     T: Clone + Send + Sync + 'static,

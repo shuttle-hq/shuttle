@@ -2,6 +2,8 @@ use async_trait::async_trait;
 use shuttle_common::DatabaseReadyInfo;
 use shuttle_service::Factory;
 
+use crate::database;
+
 pub(crate) struct ShuttleFactory {
     database: database::State,
 }

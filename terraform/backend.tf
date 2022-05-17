@@ -28,7 +28,7 @@ provider "aws" {
 }
 
 module "shuttle" {
-  source = "modules/shuttle"
+  source = "./modules/shuttle"
 
   api_fqdn             = "api.shuttle.rs"
   proxy_fqdn           = "shuttleapp.rs"

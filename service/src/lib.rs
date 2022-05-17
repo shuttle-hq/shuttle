@@ -192,7 +192,7 @@ extern crate shuttle_codegen;
 /// | ------------------------------------------------------------------------------ | ------------ | ------------------------------------------- | ---------- | ----------------------------------------------------------------------------------- |
 /// | [`Rocket<Build>`](https://docs.rs/rocket/0.5.0-rc.1/rocket/struct.Rocket.html) | web-rocket   | [rocket](https://docs.rs/rocket/0.5.0-rc.1) | 0.5.0-rc.1 | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/rocket/hello-world) |
 /// | [`SyncWrapper<Router>`](https://docs.rs/axum/0.5/axum/struct.Router.html)      | web-axum     | [axum](https://docs.rs/axum/0.5)            | 0.5        | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/axum/hello-world)   |
-/// | [`SyncWrapper<Server>`](https://docs.rs/tide/latest/tide/struct.Server.html)   | web-tide     | [tide](https://docs.rs/tide/0.16.0)         | 0.16.0     | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/tide/hello-world)   |
+/// | [`Server<T>`](https://docs.rs/tide/latest/tide/struct.Server.html)             | web-tide     | [tide](https://docs.rs/tide/0.16.0)         | 0.16.0     | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/tide/hello-world)   |
 ///
 /// # Getting shuttle managed services
 /// The shuttle is able to manage service dependencies for you. These services are passed in as inputs to your main function:
@@ -461,78 +461,6 @@ impl Service for SimpleService<sync_wrapper::SyncWrapper<axum::Router>> {
 }
 
 #[cfg(feature = "web-tide")]
-pub struct TideService<T: Sized> {
-    tide: Option<tide::Server<T>>,
-    state_builder: Option<StateBuilder<T>>,
-    runtime: Runtime,
-}
-
-#[cfg(feature = "web-tide")]
-impl<T> IntoService for tide::Server<T>
-where
-    T: Clone + Send + Sync + 'static,
-{
-    type Service = TideService<T>;
-    fn into_service(self) -> Self::Service {
-        TideService {
-            tide: Some(self),
-            state_builder: None,
-            runtime: Runtime::new().unwrap(),
-        }
-    }
-}
-
-#[cfg(feature = "web-tide")]
-impl<T> IntoService
-    for (
-        tide::Server<T>,
-        fn(&mut dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>,
-    )
-where
-    T: Clone + Send + Sync + 'static,
-{
-    type Service = TideService<T>;
-
-    fn into_service(self) -> Self::Service {
-        TideService {
-            tide: Some(self.0),
-            state_builder: Some(self.1),
-            runtime: Runtime::new().unwrap(),
-        }
-    }
-}
-
-#[cfg(feature = "web-tide")]
-impl<T> Service for TideService<T>
-where
-    T: Clone + Send + Sync + 'static,
-{
-    fn build(&mut self, factory: &mut dyn Factory) -> Result<(), Error> {
-        if let Some(state_builder) = self.state_builder.take() {
-            // We want to build any sqlx pools on the same runtime the client code will run on. Without this expect to get errors of no tokio reactor being present.
-            // let state = self.runtime.block_on(state_builder(factory))?;
-            // TODO(marioidival): how to insert the state within tide?
-
-            if let Some(rocket) = self.tide.take() {
-                self.tide.replace(rocket);
-            }
-        }
-
-        Ok(())
-    }
-
-    fn bind(&mut self, addr: SocketAddr) -> Result<(), error::Error> {
-        let tide = self.tide.take().expect("service has already been bound");
-
-        self.runtime
-            .block_on(async { tide.listen(addr).await })
-            .map_err(error::CustomError::new)?;
-
-        Ok(())
-    }
-}
-
-#[cfg(feature = "web-tide")]
 impl<T> Service for SimpleService<tide::Server<T>>
 where
     T: Clone + Send + Sync + 'static,
@@ -540,9 +468,9 @@ where
     fn build(&mut self, factory: &mut dyn Factory) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
             // We want to build any sqlx pools on the same runtime the client code will run on. Without this expect to get errors of no tokio reactor being present.
-            let rocket = self.runtime.block_on(builder(factory))?;
+            let tide = self.runtime.block_on(builder(factory))?;
 
-            self.service = Some(rocket);
+            self.service = Some(tide);
         }
 
         Ok(())

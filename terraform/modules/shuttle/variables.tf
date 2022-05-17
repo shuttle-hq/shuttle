@@ -12,7 +12,7 @@ variable "api_fqdn" {
 variable "instance_type" {
   type        = string
   description = "EC2 instance type to provision"
-  default     = "c6i.4xlarge"
+  default     = "c6g.large"
 }
 
 variable "postgres_container_port" {

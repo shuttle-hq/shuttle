@@ -1,8 +1,6 @@
 use shuttle_service::error::CustomError;
-use shuttle_service::logger::Logger;
-use shuttle_service::{GetResource, IntoService, ServeHandle, Service};
+use shuttle_service::{GetResource, IntoService, Logger, Runtime, ServeHandle, Service};
 use sqlx::PgPool;
-use tokio::runtime::Runtime;
 
 #[macro_use]
 extern crate shuttle_service;
@@ -59,11 +57,14 @@ impl Service for PoolService {
     ) -> Result<(), shuttle_service::Error> {
         self.runtime
             .spawn_blocking(move || {
-                log::set_boxed_logger(Box::new(logger))
-                    .map(|()| log::set_max_level(log::LevelFilter::Info))
+                shuttle_service::log::set_boxed_logger(Box::new(logger))
+                    .map(|()| {
+                        shuttle_service::log::set_max_level(shuttle_service::log::LevelFilter::Info)
+                    })
                     .expect("logger set should succeed");
             })
-            .await;
+            .await
+            .unwrap();
 
         let pool = factory.get_resource(&self.runtime).await?;
 

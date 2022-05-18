@@ -13,11 +13,10 @@
 //!
 //! ## Usage
 //!
-//! Depend on `shuttle-service` and `tokio` in `Cargo.toml`:
+//! Depend on `shuttle-service` in `Cargo.toml`:
 //!
 //! ```toml
 //! shuttle-service = { version = "0.2", features = ["web-rocket"] }
-//! tokio = { version = "1.0", features = ["rt"] }
 //! ```
 //!
 //! and make sure your crate has a `cdylib` output target:
@@ -83,11 +82,10 @@
 //!
 //! Here is a quick example to deploy a service which uses a postgres database and [sqlx](http://docs.rs/sqlx):
 //!
-//! Depend on `shuttle-service` and `tokio` in `Cargo.toml`:
+//! Depend on `shuttle-service` in `Cargo.toml`:
 //!
 //! ```toml
 //! shuttle-service = { version = "0.2", features = ["web-rocket", "sqlx-postgres"] }
-//! tokio = { version = "1.0", features = ["rt"] }
 //! ```
 //!
 //! ```rust,no_run
@@ -168,8 +166,11 @@ use std::net::SocketAddr;
 use std::pin::Pin;
 
 use async_trait::async_trait;
-use logger::Logger;
-use tokio::runtime::Runtime;
+
+// Pub uses by `codegen`
+pub use log;
+pub use logger::Logger;
+pub use tokio::runtime::Runtime;
 
 pub mod error;
 pub use error::Error;
@@ -325,7 +326,7 @@ pub type StateBuilder<T> =
     for<'a> fn(
         &'a mut dyn Factory,
         &'a Runtime,
-        logger::Logger,
+        Logger,
     ) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + 'a>>;
 
 /// A wrapper that takes a user's future, gives the future a factory, and takes the returned service from the future
@@ -340,7 +341,7 @@ impl<T> IntoService
     for for<'a> fn(
         &'a mut dyn Factory,
         &'a Runtime,
-        logger::Logger,
+        Logger,
     ) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + 'a>>
 where
     SimpleService<T>: Service,
@@ -359,11 +360,7 @@ where
 #[cfg(feature = "web-rocket")]
 #[async_trait]
 impl Service for SimpleService<rocket::Rocket<rocket::Build>> {
-    async fn build(
-        &mut self,
-        factory: &mut dyn Factory,
-        logger: logger::Logger,
-    ) -> Result<(), Error> {
+    async fn build(&mut self, factory: &mut dyn Factory, logger: Logger) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
             let rocket = builder(factory, &self.runtime, logger).await?;
 
@@ -395,11 +392,7 @@ impl Service for SimpleService<rocket::Rocket<rocket::Build>> {
 #[cfg(feature = "web-axum")]
 #[async_trait]
 impl Service for SimpleService<sync_wrapper::SyncWrapper<axum::Router>> {
-    async fn build(
-        &mut self,
-        factory: &mut dyn Factory,
-        logger: logger::Logger,
-    ) -> Result<(), Error> {
+    async fn build(&mut self, factory: &mut dyn Factory, logger: Logger) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
             let axum = builder(factory, &self.runtime, logger).await?;
 
@@ -433,11 +426,7 @@ impl<T> Service for SimpleService<tide::Server<T>>
 where
     T: Clone + Send + Sync + 'static,
 {
-    async fn build(
-        &mut self,
-        factory: &mut dyn Factory,
-        logger: logger::Logger,
-    ) -> Result<(), Error> {
+    async fn build(&mut self, factory: &mut dyn Factory, logger: Logger) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
             let tide = builder(factory, &self.runtime, logger).await?;
 

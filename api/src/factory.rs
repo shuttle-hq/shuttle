@@ -15,7 +15,7 @@ impl ShuttleFactory {
 }
 
 impl ShuttleFactory {
-    pub(crate) fn to_database_info(self) -> Option<DatabaseReadyInfo> {
+    pub(crate) fn to_database_info(&self) -> Option<DatabaseReadyInfo> {
         self.database.to_info()
     }
 }

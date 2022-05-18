@@ -114,8 +114,8 @@ impl State {
         Ok(info)
     }
 
-    pub(crate) fn to_info(self) -> Option<DatabaseReadyInfo> {
-        self.info
+    pub(crate) fn to_info(&self) -> Option<DatabaseReadyInfo> {
+        self.info.clone()
     }
 }
 

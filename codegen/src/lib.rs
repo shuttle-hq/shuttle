@@ -18,9 +18,10 @@ pub fn main(_attr: TokenStream, item: TokenStream) -> TokenStream {
             let constructor: for <'a> fn(
                 &'a mut dyn shuttle_service::Factory,
                 &'a tokio::runtime::Runtime,
+                shuttle_service::logger::Logger,
             ) -> std::pin::Pin<
                 Box<dyn std::future::Future<Output = Result<_, shuttle_service::Error>> + Send + 'a>,
-            > = |factory, runtime| Box::pin(__shuttle_wrapper(factory, runtime));
+            > = |factory, runtime, logger| Box::pin(__shuttle_wrapper(factory, runtime, logger));
 
             let obj = shuttle_service::IntoService::into_service((constructor));
             let boxed: Box<dyn shuttle_service::Service> = Box::new(obj);
@@ -86,8 +87,17 @@ impl ToTokens for Wrapper {
             async fn __shuttle_wrapper(
                 #factory_ident: &mut dyn shuttle_service::Factory,
                 runtime: &tokio::runtime::Runtime,
+                logger: shuttle_service::logger::Logger,
             ) #fn_output {
                 #extra_imports
+
+                runtime.spawn(async {
+                    log::set_boxed_logger(Box::new(logger))
+                        .map(|()| log::set_max_level(log::LevelFilter::Info))
+                        .expect("logger set should succeed");
+                }).await.unwrap();
+
+
                 #(let #fn_inputs = #factory_ident.get_resource(runtime).await?;)*
 
                 runtime.spawn(#fn_ident(#(#fn_inputs),*)).await.unwrap()
@@ -133,7 +143,14 @@ mod tests {
             async fn __shuttle_wrapper(
                 _factory: &mut dyn shuttle_service::Factory,
                 runtime: &tokio::runtime::Runtime,
+                logger: shuttle_service::logger::Logger,
             ) {
+                runtime.spawn(async {
+                    log::set_boxed_logger(Box::new(logger))
+                        .map(|()| log::set_max_level(log::LevelFilter::Info))
+                        .expect("logger set should succeed");
+                }).await.unwrap();
+
                 runtime.spawn(simple()).await.unwrap()
             }
         };
@@ -169,7 +186,14 @@ mod tests {
             async fn __shuttle_wrapper(
                 _factory: &mut dyn shuttle_service::Factory,
                 runtime: &tokio::runtime::Runtime,
+                logger: shuttle_service::logger::Logger,
             ) -> Result<(), Box<dyn std::error::Error> > {
+                runtime.spawn(async {
+                    log::set_boxed_logger(Box::new(logger))
+                        .map(|()| log::set_max_level(log::LevelFilter::Info))
+                        .expect("logger set should succeed");
+                }).await.unwrap();
+
                 runtime.spawn(complex()).await.unwrap()
             }
         };
@@ -206,8 +230,16 @@ mod tests {
             async fn __shuttle_wrapper(
                 factory: &mut dyn shuttle_service::Factory,
                 runtime: &tokio::runtime::Runtime,
+                logger: shuttle_service::logger::Logger,
             ) -> Result<(), Box<dyn std::error::Error> > {
                 use shuttle_service::GetResource;
+
+                runtime.spawn(async {
+                    log::set_boxed_logger(Box::new(logger))
+                        .map(|()| log::set_max_level(log::LevelFilter::Info))
+                        .expect("logger set should succeed");
+                }).await.unwrap();
+
                 let pool = factory.get_resource(runtime).await?;
                 let redis = factory.get_resource(runtime).await?;
 

@@ -23,4 +23,7 @@ jobs:
         with:
           toolchain: stable
           override: true
-      - run: cargo test --all-features -- --nocapture
+      - run: cargo test --features=web-axum -- --nocapture
+      - run: cargo test --features=web-rocket -- --nocapture
+      - run: cargo test --features=web-tide -- --nocapture
+      - run: cargo test --features=web-tower -- --nocapture

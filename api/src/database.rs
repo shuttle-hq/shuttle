@@ -5,7 +5,7 @@ use aws_smithy_types::tristate::TriState;
 use lazy_static::lazy_static;
 use rand::Rng;
 use shuttle_common::{project::ProjectName, DatabaseReadyInfo};
-use shuttle_service::error::CustomError;
+use shuttle_service::{database::AwsRdsEngine, error::CustomError};
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use std::time::Duration;
 use tokio::time::sleep;
@@ -15,6 +15,8 @@ const PUBLIC_PG_IP: &str = "localhost";
 
 #[cfg(not(debug_assertions))]
 const PUBLIC_PG_IP: &'static str = "pg.shuttle.rs";
+
+const AWS_RDS_CLASS: &str = "db.t4g.micro";
 
 lazy_static! {
     static ref SUDO_POSTGRES_CONNECTION_STRING: String = format!(
@@ -135,7 +137,10 @@ impl State {
         self.info.clone()
     }
 
-    pub(crate) async fn aws_rds(&mut self) -> Result<DatabaseReadyInfo, shuttle_service::Error> {
+    pub(crate) async fn aws_rds(
+        &mut self,
+        engine: AwsRdsEngine,
+    ) -> Result<DatabaseReadyInfo, shuttle_service::Error> {
         if self.info.is_some() {
             // Safe to unwrap since we just confirmed it is `Some`
             return Ok(self.info.clone().unwrap());
@@ -145,10 +150,7 @@ impl State {
 
         let username = self.project.to_string().replace("-", "_");
         let password = generate_role_password();
-        let engine = "postgres";
-        let class = "db.t3.micro";
         let instance_name = format!("{}-{}", self.project, engine);
-        let db_name = "postgres";
 
         let instance = client
             .modify_db_instance()
@@ -156,7 +158,6 @@ impl State {
             .master_user_password(&password)
             .send()
             .await;
-        debug!("got describe response");
 
         let mut instance = match instance {
             Ok(instance) => instance
@@ -165,19 +166,19 @@ impl State {
                 .clone(),
             Err(SdkError::ServiceError { err, .. }) => {
                 if let ModifyDBInstanceErrorKind::DbInstanceNotFoundFault(_) = err.kind {
-                    debug!("creating new");
+                    debug!("creating new AWS RDS for {}", self.project);
 
                     client
                         .create_db_instance()
                         .db_instance_identifier(&instance_name)
                         .master_username(username)
                         .master_user_password(&password)
-                        .engine(engine)
-                        .db_instance_class(class)
+                        .engine(engine.to_string())
+                        .db_instance_class(AWS_RDS_CLASS)
                         .allocated_storage(20)
                         .backup_retention_period(0)
                         .publicly_accessible(true)
-                        .db_name(db_name)
+                        .db_name(engine.to_string())
                         .send()
                         .await
                         .map_err(shuttle_service::error::CustomError::new)?

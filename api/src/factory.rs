@@ -32,7 +32,7 @@ impl Factory for ShuttleFactory {
                 .request()
                 .await
                 .map_err(shuttle_service::error::CustomError::new)?,
-            Type::AwsRdsPostgres => self.database.aws_rds().await?,
+            Type::AwsRds(engine) => self.database.aws_rds(engine).await?,
         };
 
         let conn_str = db_info.connection_string_private();

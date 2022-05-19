@@ -1,6 +1,8 @@
 use anyhow::anyhow;
 use aws_config::{
-    default_provider::credentials::DefaultCredentialsChain, meta::region::RegionProviderChain,
+    environment::EnvironmentVariableCredentialsProvider,
+    imds,
+    meta::{credentials::CredentialsProviderChain, region::RegionProviderChain},
     timeout,
 };
 use aws_sdk_rds::{error::ModifyDBInstanceErrorKind, types::SdkError};
@@ -282,15 +284,18 @@ impl Context {
         let timeout_config = timeout::Config::new().with_api_timeouts(api_timeout_config);
         let region_provider = RegionProviderChain::default_provider().or_else("eu-west-2");
 
-        let credentials_provider = DefaultCredentialsChain::builder()
-            .profile_name("BackendAPIRole")
-            .build()
-            .await;
+        let env_provider = EnvironmentVariableCredentialsProvider::new();
+        let imds_provider = imds::credentials::Builder::default()
+            .profile("BackendAPIRole")
+            .build();
+
+        let chained_provider = CredentialsProviderChain::first_try("Environment", env_provider)
+            .or_else("Ec2InstanceMetadata", imds_provider);
 
         let aws_config = aws_config::from_env()
             .timeout_config(timeout_config)
             .region(region_provider)
-            .credentials_provider(credentials_provider)
+            .credentials_provider(chained_provider)
             .load()
             .await;
 

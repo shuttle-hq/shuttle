@@ -27,6 +27,5 @@ jobs:
         with:
           toolchain: stable
           override: true
-      - name:
       - name: Run integrated test with ${{ matrix.features}}
         run: cargo test --features=${{ matrix.features }} -- --nocapture

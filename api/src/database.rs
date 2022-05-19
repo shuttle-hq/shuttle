@@ -143,16 +143,19 @@ impl State {
         &mut self,
         engine: AwsRdsEngine,
     ) -> Result<DatabaseReadyInfo, shuttle_service::Error> {
+        println!("getting rds");
         if self.info.is_some() {
             // Safe to unwrap since we just confirmed it is `Some`
             return Ok(self.info.clone().unwrap());
         }
 
+        println!("getting client");
         let client = &self.context.rds_client;
 
         let password = generate_role_password();
         let instance_name = format!("{}-{}", self.project, engine);
 
+        println!("getting modified instance");
         let instance = client
             .modify_db_instance()
             .db_instance_identifier(&instance_name)
@@ -160,6 +163,7 @@ impl State {
             .send()
             .await;
 
+        println!("checking status");
         let mut instance = match instance {
             Ok(instance) => instance
                 .db_instance
@@ -187,14 +191,14 @@ impl State {
                         .expect("to be able to create instance")
                 } else {
                     return Err(shuttle_service::Error::Custom(anyhow!(
-                        "got unexpected error from AWS: {}",
+                        "got unexpected error from AWS RDS service: {}",
                         err
                     )));
                 }
             }
             Err(unexpected) => {
                 return Err(shuttle_service::Error::Custom(anyhow!(
-                    "got unexpected error from AWS: {}",
+                    "got unexpected error from AWS during API call: {}",
                     unexpected
                 )))
             }

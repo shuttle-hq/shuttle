@@ -16,10 +16,6 @@ concurrency:
 
 jobs:
   cargo_test:
-    strategy:
-      fail-fast: true
-      matrix:
-        features: ["web-axum", "web-rocket", "web-tide", "web-tower"]
     runs-on: self-hosted
     steps:
       - uses: shuttle-hq/checkout@v2
@@ -27,5 +23,4 @@ jobs:
         with:
           toolchain: stable
           override: true
-      - name: Run integrated test with ${{ matrix.features}}
-        run: cargo test --features=${{ matrix.features }} -- --nocapture
+      - run: cargo test --all-features -- --nocapture

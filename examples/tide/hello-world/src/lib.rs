@@ -1,4 +1,3 @@
-
 #[shuttle_service::main]
 async fn tide() -> Result<tide::Server<()>, shuttle_service::Error> {
     let mut app = tide::new();

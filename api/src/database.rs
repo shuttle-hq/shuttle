@@ -285,8 +285,14 @@ impl Context {
         let region_provider = RegionProviderChain::default_provider().or_else("eu-west-2");
 
         let env_provider = EnvironmentVariableCredentialsProvider::new();
+        let imds_client = imds::client::Builder::default()
+            .connect_timeout(Duration::from_secs(30))
+            .build()
+            .await
+            .unwrap();
         let imds_provider = imds::credentials::Builder::default()
             .profile("BackendAPIRole")
+            .imds_client(imds_client)
             .build();
 
         let chained_provider = CredentialsProviderChain::first_try("Environment", env_provider)

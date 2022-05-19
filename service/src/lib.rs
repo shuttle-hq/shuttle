@@ -459,7 +459,8 @@ where
 {
     fn build(&mut self, factory: &mut dyn Factory, logger: logger::Logger) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
-            // We want to build any sqlx pools on the same runtime the client code will run on. Without this expect to get errors of no tokio reactor being present.
+            // We want to build any sqlx pools on the same runtime the client code will run on.
+            // Without this expect to get errors of no tokio reactor being present.
             let tower = self.runtime.block_on(async {
                 log::set_boxed_logger(Box::new(logger))
                     .map(|()| log::set_max_level(log::LevelFilter::Info))

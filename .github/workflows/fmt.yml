@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        features = ["web-axum", "web-rocket", "web-tide", "web-tower"]
+        features: ["web-axum", "web-rocket", "web-tide", "web-tower"]
     runs-on: ubuntu-latest
     steps:
       - uses: shuttle-hq/checkout@v2

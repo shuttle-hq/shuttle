@@ -3,12 +3,24 @@ RUN apt-get update &&\
     apt-get install -y curl postgresql supervisor
 RUN pg_dropcluster $(pg_lsclusters -h | cut -d' ' -f-2 | head -n1)
 
+WORKDIR /opt
+ENV LIBTORCH_URL=https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-1.11.0%2Bcpu.zip
+RUN curl -fsSL --insecure -o libtorch.zip  $LIBTORCH_URL \
+    && unzip -q libtorch.zip \
+    && rm libtorch.zip
+
+ENV TORCH_HOME=/opt/libtorch
+
 FROM rust:buster as builder
 WORKDIR app
 COPY . .
 RUN cargo build --release --bin api
 
 FROM runtime
+
+ENV LIBTORCH=${TORCH_HOME}
+ENV LD_LIBRARY_PATH=${LIBTORCH}/lib:$LD_LIBRARY_PATH
+
 COPY --from=builder /app/target/release/api /usr/local/bin/unveil-backend
 COPY docker/entrypoint.sh /bin/entrypoint.sh
 COPY docker/supervisord.conf /usr/share/supervisord/supervisord.conf

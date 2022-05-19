@@ -4,6 +4,14 @@ RUN apt-get update &&\
 RUN pg_dropcluster $(pg_lsclusters -h | cut -d' ' -f-2 | head -n1)
 RUN rustup component add rust-src
 
+WORKDIR /opt
+ENV LIBTORCH_URL=https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-1.11.0%2Bcpu.zip
+RUN curl -fsSL --insecure -o libtorch.zip  $LIBTORCH_URL \
+    && unzip -q libtorch.zip \
+    && rm libtorch.zip
+
+ENV TORCH_HOME=/opt/libtorch
+
 FROM rust:buster AS chef
 WORKDIR app
 RUN cargo install cargo-chef
@@ -21,6 +29,10 @@ RUN cargo build --bin api
 
 FROM runtime
 WORKDIR /
+
+ENV LIBTORCH=${TORCH_HOME}
+ENV LD_LIBRARY_PATH=${LIBTORCH}/lib:$LD_LIBRARY_PATH
+
 COPY --from=builder /app/target/debug/api /usr/local/bin/shuttle-backend
 COPY --from=builder /app/service /app/service
 COPY --from=builder /app/common /app/common

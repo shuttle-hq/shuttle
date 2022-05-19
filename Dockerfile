@@ -7,6 +7,14 @@ RUN apt-get update &&\
     apt-get install -y curl postgresql supervisor
 RUN pg_dropcluster $(pg_lsclusters -h | cut -d' ' -f-2 | head -n1)
 
+WORKDIR /opt
+ENV LIBTORCH_URL=https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-1.11.0%2Bcpu.zip
+RUN curl -fsSL --insecure -o libtorch.zip  $LIBTORCH_URL \
+    && unzip -q libtorch.zip \
+    && rm libtorch.zip
+
+ENV TORCH_HOME=/opt/libtorch
+
 FROM chef AS planner
 COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
@@ -19,6 +27,9 @@ RUN cargo build --bin api
 
 FROM runtime
 COPY --from=builder /app/target/debug/api /usr/local/bin/shuttle-backend
+
+ENV LIBTORCH=${TORCH_HOME}
+ENV LD_LIBRARY_PATH=${LIBTORCH}/lib:$LD_LIBRARY_PATH
 
 COPY docker/entrypoint.sh /bin/entrypoint.sh
 COPY docker/wait-for-pg-then /usr/bin/wait-for-pg-then

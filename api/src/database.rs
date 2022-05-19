@@ -1,5 +1,5 @@
 use anyhow::anyhow;
-use aws_config::timeout;
+use aws_config::{meta::region::RegionProviderChain, timeout};
 use aws_sdk_rds::{error::ModifyDBInstanceErrorKind, types::SdkError};
 use aws_smithy_types::tristate::TriState;
 use lazy_static::lazy_static;
@@ -275,8 +275,10 @@ impl Context {
         let api_timeout_config =
             timeout::Api::new().with_call_timeout(TriState::Set(Duration::from_secs(5)));
         let timeout_config = timeout::Config::new().with_api_timeouts(api_timeout_config);
+        let region_provider = RegionProviderChain::default_provider().or_else("eu-west-2");
         let aws_config = aws_config::from_env()
             .timeout_config(timeout_config)
+            .region(region_provider)
             .load()
             .await;
 

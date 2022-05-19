@@ -150,6 +150,7 @@ impl State {
         }
 
         println!("getting client");
+        error!("getting client");
         let client = &self.context.rds_client;
 
         let password = generate_role_password();

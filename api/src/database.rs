@@ -7,6 +7,7 @@ use aws_config::{
 };
 use aws_sdk_rds::{error::ModifyDBInstanceErrorKind, types::SdkError};
 use aws_smithy_types::tristate::TriState;
+use hyper::Uri;
 use lazy_static::lazy_static;
 use rand::Rng;
 use shuttle_common::{project::ProjectName, DatabaseReadyInfo};
@@ -288,6 +289,7 @@ impl Context {
         let imds_client = imds::client::Builder::default()
             .connect_timeout(Duration::from_secs(30))
             .read_timeout(Duration::from_secs(30))
+            .endpoint(Uri::from_static("http://169.254.169.254"))
             .build()
             .await
             .unwrap();

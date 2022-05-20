@@ -181,7 +181,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 async fn rocket() -> Rocket<Build> {
     env_logger::Builder::new()
         .filter_module("rocket", log::LevelFilter::Warn)
-        .filter_module("aws_config", log::LevelFilter::Trace)
         .filter_module("_", log::LevelFilter::Warn)
         .filter_module("api", log::LevelFilter::Debug)
         .init();

@@ -24,6 +24,7 @@ const PUBLIC_PG_IP: &'static str = "pg.shuttle.rs";
 
 const AWS_RDS_CLASS: &str = "db.t4g.micro";
 const MASTER_USERNAME: &str = "master";
+const RDS_SUBNET_GROUP: &str = "shuttle_rds";
 
 lazy_static! {
     static ref SUDO_POSTGRES_CONNECTION_STRING: String = format!(
@@ -149,20 +150,17 @@ impl State {
         &mut self,
         engine: AwsRdsEngine,
     ) -> Result<DatabaseReadyInfo, shuttle_service::Error> {
-        println!("getting rds");
         if self.info.is_some() {
             // Safe to unwrap since we just confirmed it is `Some`
             return Ok(self.info.clone().unwrap());
         }
 
-        println!("getting client");
-        error!("getting client");
         let client = &self.context.rds_client;
 
         let password = generate_role_password();
         let instance_name = format!("{}-{}", self.project, engine);
 
-        println!("getting modified instance");
+        debug!("trying to get AWS RDS instance: {instance_name}");
         let instance = client
             .modify_db_instance()
             .db_instance_identifier(&instance_name)
@@ -170,7 +168,6 @@ impl State {
             .send()
             .await;
 
-        println!("checking status");
         let mut instance = match instance {
             Ok(instance) => instance
                 .db_instance
@@ -178,7 +175,7 @@ impl State {
                 .clone(),
             Err(SdkError::ServiceError { err, .. }) => {
                 if let ModifyDBInstanceErrorKind::DbInstanceNotFoundFault(_) = err.kind {
-                    debug!("creating new AWS RDS for {}", self.project);
+                    debug!("creating new AWS RDS {instance_name}");
 
                     client
                         .create_db_instance()
@@ -188,10 +185,10 @@ impl State {
                         .engine(engine.to_string())
                         .db_instance_class(AWS_RDS_CLASS)
                         .allocated_storage(20)
-                        .backup_retention_period(0)
+                        .backup_retention_period(0) // Disable backups
                         .publicly_accessible(true)
                         .db_name(engine.to_string())
-                        .set_db_subnet_group_name(Some("shuttle_rds".to_string()))
+                        .set_db_subnet_group_name(Some(RDS_SUBNET_GROUP.to_string()))
                         .send()
                         .await
                         .map_err(shuttle_service::error::CustomError::new)?
@@ -213,7 +210,7 @@ impl State {
         };
 
         // Wait for up
-        debug!("waiting for password update");
+        debug!("waiting for AWS RDS instance to be available");
         sleep(Duration::from_secs(30)).await;
         loop {
             instance = client
@@ -280,6 +277,7 @@ impl Context {
             .connect_timeout(Duration::from_secs(60))
             .connect_lazy(&SUDO_POSTGRES_CONNECTION_STRING)?;
 
+        // Default timeout is too long so lowering it
         let api_timeout_config = timeout::Api::new()
             .with_call_timeout(TriState::Set(Duration::from_secs(120)))
             .with_call_attempt_timeout(TriState::Set(Duration::from_secs(120)));

@@ -287,6 +287,7 @@ impl Context {
         let env_provider = EnvironmentVariableCredentialsProvider::new();
         let imds_client = imds::client::Builder::default()
             .connect_timeout(Duration::from_secs(30))
+            .read_timeout(Duration::from_secs(30))
             .build()
             .await
             .unwrap();

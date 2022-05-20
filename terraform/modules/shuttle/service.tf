@@ -46,10 +46,14 @@ EOF
           {
             Action = [
               "rds:CreateDBInstance",
+              "rds:DescribeDBInstances",
               "rds:ModifyDBInstance",
             ]
-            Effect   = "Allow"
-            Resource = "arn:aws:rds:*:833239102462:db:*"
+            Effect = "Allow"
+            Resource = [
+              "arn:aws:rds:*:833239102462:db:*",
+              "arn:aws:rds:*:833239102462:subgrp:shuttle_rds",
+            ]
           },
         ]
         Version = "2012-10-17"

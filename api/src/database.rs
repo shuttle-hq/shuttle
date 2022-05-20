@@ -191,6 +191,7 @@ impl State {
                         .backup_retention_period(0)
                         .publicly_accessible(true)
                         .db_name(engine.to_string())
+                        .set_db_subnet_group_name(Some("shuttle_rds".to_string()))
                         .send()
                         .await
                         .map_err(shuttle_service::error::CustomError::new)?

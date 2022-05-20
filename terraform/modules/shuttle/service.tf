@@ -83,6 +83,14 @@ resource "aws_instance" "backend" {
 
   iam_instance_profile = aws_iam_instance_profile.backend.id
 
+  metadata_options {
+    http_endpoint = "enabled"
+    # Our api runs in a container and therefore has an extra hop limit
+    # https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instancedata-data-retrieval.html#imds-considerations
+    http_put_response_hop_limit = 2
+    http_tokens                 = "required"
+  }
+
   network_interface {
     network_interface_id = aws_network_interface.backend.id
     device_index         = 0

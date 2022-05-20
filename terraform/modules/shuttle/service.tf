@@ -37,6 +37,25 @@ resource "aws_iam_role" "backend" {
     ]
 }
 EOF
+
+  inline_policy {
+    name = "Handle_RDS"
+    policy = jsonencode(
+      {
+        Statement = [
+          {
+            Action = [
+              "rds:CreateDBInstance",
+              "rds:ModifyDBInstance",
+            ]
+            Effect   = "Allow"
+            Resource = "arn:aws:rds:*:833239102462:db:*"
+          },
+        ]
+        Version = "2012-10-17"
+      }
+    )
+  }
 }
 
 resource "aws_lb_target_group_attachment" "api" {

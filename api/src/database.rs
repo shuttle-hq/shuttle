@@ -285,26 +285,9 @@ impl Context {
         let timeout_config = timeout::Config::new().with_api_timeouts(api_timeout_config);
         let region_provider = RegionProviderChain::default_provider().or_else("eu-west-2");
 
-        let env_provider = EnvironmentVariableCredentialsProvider::new();
-        let imds_client = imds::client::Builder::default()
-            .connect_timeout(Duration::from_secs(30))
-            .read_timeout(Duration::from_secs(30))
-            .endpoint(Uri::from_static("http://169.254.169.254"))
-            .build()
-            .await
-            .unwrap();
-        let imds_provider = imds::credentials::Builder::default()
-            .profile("BackendAPIRole")
-            .imds_client(imds_client)
-            .build();
-
-        let chained_provider = CredentialsProviderChain::first_try("Environment", env_provider)
-            .or_else("Ec2InstanceMetadata", imds_provider);
-
         let aws_config = aws_config::from_env()
             .timeout_config(timeout_config)
             .region(region_provider)
-            .credentials_provider(chained_provider)
             .load()
             .await;
 

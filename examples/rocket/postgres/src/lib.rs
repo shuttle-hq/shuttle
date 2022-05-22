@@ -45,7 +45,7 @@ struct MyState {
 }
 
 #[shuttle_service::main]
-async fn rocket(pool: PgPool) -> Result<Rocket<Build>, shuttle_service::Error> {
+async fn rocket(pool: PgPool) -> shuttle_service::ShuttleRocket {
     pool.execute(include_str!("../schema.sql"))
         .await
         .map_err(CustomError::new)?;

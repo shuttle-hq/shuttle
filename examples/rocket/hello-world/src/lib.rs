@@ -1,8 +1,6 @@
 #[macro_use]
 extern crate rocket;
 
-use rocket::{Build, Rocket};
-
 #[get("/")]
 fn index() -> &'static str {
     "Hello, world!"

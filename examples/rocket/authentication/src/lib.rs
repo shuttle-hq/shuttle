@@ -1,7 +1,6 @@
 use rocket::http::Status;
 use rocket::response::status::Custom;
 use rocket::serde::json::Json;
-use rocket::{Build, Rocket};
 use serde::{Deserialize, Serialize};
 
 mod claims;

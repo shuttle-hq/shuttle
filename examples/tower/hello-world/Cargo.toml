@@ -10,10 +10,5 @@ crate-type = ["cdylib"]
 
 [dependencies]
 shuttle-service = { version = "0.2", features = ["web-tower"] }
-tokio = "0.1"
-serde = { version = "1.0", features = ["derive"] }
-hyper = { version = "0.14", features = ["server"] }
-tower = { version = "0.4", features = ["make", "util"] }
-http = "0.2"
-http-body = "0.4"
-tower-http = { version = "0.3", features = ["trace", "compression-gzip"] }
+tower = { version = "0.4", features = ["full"] }
+hyper = { version = "0.14", features = ["full"] }

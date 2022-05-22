@@ -1,7 +1,7 @@
-use std::task::{Context, Poll};
+use std::convert::Infallible;
 use std::future::Future;
 use std::pin::Pin;
-use std::convert::Infallible;
+use std::task::{Context, Poll};
 
 #[derive(Clone)]
 struct HelloWorld;
@@ -22,9 +22,7 @@ impl tower::Service<hyper::Request<hyper::Body>> for HelloWorld {
             .body(body)
             .expect("Unable to create `hyper::Response` object");
 
-        let fut = async {
-            Ok(resp)
-        };
+        let fut = async { Ok(resp) };
 
         Box::pin(fut)
     }

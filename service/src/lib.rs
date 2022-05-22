@@ -375,6 +375,9 @@ impl Service for SimpleService<rocket::Rocket<rocket::Build>> {
     }
 }
 
+#[cfg(feature = "web-rocket")]
+type ShuttleRocket = Result<rocket::Rocket<rocket::Build>, Error>;
+
 #[cfg(feature = "web-axum")]
 impl Service for SimpleService<sync_wrapper::SyncWrapper<axum::Router>> {
     fn build(&mut self, factory: &mut dyn Factory, logger: logger::Logger) -> Result<(), Error> {
@@ -412,6 +415,9 @@ impl Service for SimpleService<sync_wrapper::SyncWrapper<axum::Router>> {
     }
 }
 
+#[cfg(feature = "web-axum")]
+type ShuttleAxum = Result<sync_wrapper::SyncWrapper<axum::Router>, Error>;
+
 #[cfg(feature = "web-tide")]
 impl<T> Service for SimpleService<tide::Server<T>>
 where
@@ -444,6 +450,9 @@ where
         Ok(handle)
     }
 }
+
+#[cfg(feature = "web-tide")]
+type ShuttleTide = Result<tide::Server<T>, Error>;
 /// Helper macro that generates the entrypoint required of any service.
 ///
 /// Can be used in one of two ways:

@@ -452,7 +452,7 @@ where
 }
 
 #[cfg(feature = "web-tide")]
-type ShuttleTide = Result<tide::Server<T>, Error>;
+type ShuttleTide<T> = Result<tide::Server<T>, Error>;
 /// Helper macro that generates the entrypoint required of any service.
 ///
 /// Can be used in one of two ways:

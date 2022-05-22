@@ -480,13 +480,12 @@ where
     fn bind(&mut self, addr: SocketAddr) -> Result<ServeHandle, error::Error> {
         let service = self.service.take().expect("service has already been bound");
 
-        let future = async move {
+        let handle = self.runtime.spawn(async move {
             let shared = tower::make::Shared::new(service);
-            hyper::Server::bind(&addr).serve(shared).await
-        };
-
-        let handle = self.runtime.spawn(async {
-            let _tower = future.await.map_err(error::CustomError::new)?;
+            hyper::Server::bind(&addr)
+                .serve(shared)
+                .await
+                .map_err(error::CustomError::new)?;
 
             Ok(())
         });

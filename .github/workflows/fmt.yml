@@ -32,4 +32,4 @@ jobs:
           override: true
           components: clippy
       - name: Run test with ${{ matrix.features}}
-        run: cargo clippy --tests --all-targets --features=${{ matrix.features }} -- --D warnings --no-deps
+        run: cargo clippy --tests --all-targets --features=${{ matrix.features }} --no-deps -- --D warnings

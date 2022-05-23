@@ -26,14 +26,18 @@ macro_rules! aws_engine {
         paste! {
             #[cfg(feature = $feature)]
             #[doc = "A resource connected to an AWS RDS " $struct_ident " instance"]
-            pub struct $struct_ident(pub $pool_path);
+            pub struct $struct_ident;
 
             #[cfg(feature = $feature)]
             #[doc = "Gets a `sqlx::Pool` connected to an AWS RDS " $struct_ident " instance"]
             #[async_trait]
-            impl GetResource<$struct_ident> for &mut dyn Factory {
-                async fn get_resource(self, runtime: &Runtime) -> Result<$struct_ident, crate::Error> {
-                    let connection_string = self
+            impl ResourceBuilder<$pool_path> for $struct_ident {
+                fn new() -> Self {
+                    Self {}
+                }
+
+                async fn build(self, factory: &mut dyn Factory, runtime: &Runtime) -> Result<$pool_path, crate::Error> {
+                    let connection_string = factory
                         .get_sql_connection_string(Type::AwsRds(AwsRdsEngine::$struct_ident))
                         .await?;
 
@@ -50,7 +54,7 @@ macro_rules! aws_engine {
                         .map_err(CustomError::new)?
                         .map_err(CustomError::new)?;
 
-                    Ok($struct_ident(pool))
+                    Ok(pool)
                 }
             }
         }
@@ -59,7 +63,7 @@ macro_rules! aws_engine {
 
 pub mod aws_rds {
     use super::{AwsRdsEngine, Type};
-    use crate::{error::CustomError, Factory, GetResource};
+    use crate::{error::CustomError, Factory, ResourceBuilder};
     use async_trait::async_trait;
     use paste::paste;
     use tokio::runtime::Runtime;

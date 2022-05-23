@@ -185,6 +185,13 @@ pub mod secrets;
 #[cfg(feature = "secrets")]
 pub use secrets::SecretStore;
 
+#[cfg(any(
+    feature = "sqlx-aws-mariadb",
+    feature = "sqlx-aws-mysql",
+    feature = "sqlx-aws-postgres"
+))]
+pub mod aws;
+
 #[cfg(feature = "codegen")]
 extern crate shuttle_codegen;
 #[cfg(feature = "codegen")]

@@ -12,6 +12,7 @@ module "shuttle" {
   source = "github.com/shuttle-hq/shuttle/terraform/modules/shuttle"
 
   api_fqdn             = "api.test.shuttle.rs"
+  pg_fqdn              = "pg.test.shuttle.rs"
   proxy_fqdn           = "test.shuttleapp.rs"
   postgres_password    = "password"
   shuttle_admin_secret = "12345"
@@ -19,6 +20,10 @@ module "shuttle" {
 
 output "api_name_servers" {
   value = module.shuttle.api_name_servers
+}
+
+output "pg_name_servers" {
+  value = module.shuttle.pg_name_servers
 }
 
 output "user_name_servers" {
@@ -36,10 +41,10 @@ The shuttle api will be reachable at `api_fqdn` while hosted services will be su
 Just running `terraform apply` for the first time will fail since SSl certificates will be created for the api and proxy domains which will be verified. This verification will fail since it uses DNS that will be missing on first setup. So for first setups rather run the following:
 
 ``` sh
-terraform apply --target module.shuttle.aws_route53_zone.user --target module.shuttle.aws_route53_zone.api
+terraform apply --target module.shuttle.aws_route53_zone.user --target module.shuttle.aws_route53_zone.api --target module.shuttle.aws_route53_zone.pg
 ```
 
-This command will create just the DNS zones needed for the api and proxy. Now use the `api_name_servers` and `user_name_servers` outputs from this module to manually add NS records for `api_fqdn` and `proxy_fqdn` in your DNS provider respectively.
+This command will create just the DNS zones needed for the api and proxy. Now use the `api_name_servers`, `pg_name_servers` and `user_name_servers` outputs from this module to manually add NS records for `api_fqdn`, `pg_fqdn` and `proxy_fqdn` in your DNS provider respectively.
 
 Once these records have propagated, a `terraform apply` command will succeed.
 

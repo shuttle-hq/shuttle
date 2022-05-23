@@ -32,4 +32,4 @@ jobs:
           override: true
           components: clippy
       - name: Run test with ${{ matrix.features}}
-        run: cargo clippy --tests --all-targets --features=${{ matrix.features }} --no-deps -- --D warnings
+        run: cargo clippy --tests --all-targets --features="codegen,loader,sqlx-integration,sqlx-postgres,secrets,${{ matrix.features }}" --no-deps -- --D warnings

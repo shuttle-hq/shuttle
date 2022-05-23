@@ -20,7 +20,7 @@ impl tower::Service<hyper::Request<hyper::Body>> for HelloWorld {
         let resp = hyper::Response::builder()
             .status(200)
             .body(body)
-            .expect("Unable to create `hyper::Response` object");
+            .expect("Unable to create the `hyper::Response` object");
 
         let fut = async { Ok(resp) };
 

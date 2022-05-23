@@ -48,3 +48,20 @@ This command will create just the DNS zones needed for the api and proxy. Now us
 
 Once these records have propagated, a `terraform apply` command will succeed.
 
+## Allowing outside connections to the shared PostgresDB instance
+Currently, the shared DB is started within a Docker container with a default configuration. This configuration does not allow external connections. Therefore you will need to manually whitelist external IP addresses which should be allowed to connect to the instance.
+
+First login to the VM instance, then edit the file at `/opt/shuttle/conf/postgres/pg_hba.conf` by adding a line similar to the following.
+
+```
+host    all             all             0.0.0.0/0               md5
+```
+
+The `0.0.0.0/0` address can be replaced with a more target IP subset.
+
+Finally, restart the shuttle service using
+
+``` sh
+sudo systemctl status shuttle-backend.service
+```
+

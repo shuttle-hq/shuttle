@@ -83,4 +83,6 @@ pub struct AuthArgs {
 pub struct DeployArgs {
     #[structopt(long, about = "allow dirty working directories to be packaged")]
     pub allow_dirty: bool,
+    #[structopt(long, about = "allows pre-deploy tests to be skipped")]
+    pub no_test: bool,
 }

@@ -4,7 +4,7 @@ use sqlx::{Executor, FromRow, PgPool};
 use tide::{Body, Request};
 
 async fn retrieve(req: Request<MyState>) -> tide::Result {
-    let id = req.param("id")?;
+    let id: i32 = req.param("id")?.parse()?;
     let todo: Todo = sqlx::query_as("SELECT * FROM todos WHERE id = $1")
         .bind(id)
         .fetch_one(&req.state().pool)
@@ -40,8 +40,8 @@ async fn tide(
     let mut app = tide::with_state(state);
 
     app.with(tide::log::LogMiddleware::new());
-    app.at("/todo/:id").get(retrieve);
     app.at("/todo").post(add);
+    app.at("/todo/:id").get(retrieve);
 
     Ok(app)
 }

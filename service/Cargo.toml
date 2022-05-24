@@ -51,3 +51,9 @@ web-axum = ["axum", "sync_wrapper"]
 web-rocket = ["rocket"]
 web-tide = ["tide"]
 web-tower = ["tower", "hyper"]
+
+# Tide does not have tokio support. So make sure async-std is compatible with tokio
+# https://github.com/http-rs/tide/issues/791
+[dependencies.async-std]
+version = "1"
+features = ["tokio1"]

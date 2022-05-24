@@ -7,4 +7,5 @@ projects = [
     'authentication-rocket-app',
     'hello-world-tide-app',
     'hello-world-tower-app',
+    'postgres-tide-app',
 ]

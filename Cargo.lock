@@ -241,6 +241,7 @@ dependencies = [
  "futures-lite",
  "num_cpus",
  "once_cell",
+ "tokio",
 ]
 
 [[package]]
@@ -3967,6 +3968,7 @@ name = "shuttle-service"
 version = "0.3.1"
 dependencies = [
  "anyhow",
+ "async-std",
  "async-trait",
  "axum",
  "chrono",

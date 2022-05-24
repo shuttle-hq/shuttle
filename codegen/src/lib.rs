@@ -8,7 +8,11 @@ use syn::{
 pub fn main(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut fn_decl = parse_macro_input!(item as ItemFn);
 
-    let wrapper = Wrapper::from_item_fn(&mut fn_decl);
+    let wrapper = match Wrapper::from_item_fn(&mut fn_decl) {
+        Ok(wrapper) => wrapper,
+        Err(error) => return error.into_compile_error().into(),
+    };
+
     let expanded = quote! {
         #wrapper
 
@@ -42,12 +46,15 @@ struct Wrapper {
 
 #[derive(Debug, PartialEq)]
 struct Input {
+    /// The identifier for a resource input
     ident: Ident,
-    builder: Option<Path>,
+
+    /// The shuttle_service path to the builder for this resource
+    builder: Path,
 }
 
 impl Wrapper {
-    fn from_item_fn(item_fn: &mut ItemFn) -> Self {
+    fn from_item_fn(item_fn: &mut ItemFn) -> syn::Result<Self> {
         let inputs: Vec<_> = item_fn
             .sig
             .inputs
@@ -60,28 +67,31 @@ impl Wrapper {
                 Pat::Ident(ident) => Some((ident, typed.attrs.drain(..).collect())),
                 _ => None,
             })
-            .map(|(pat_ident, attrs)| Input {
-                ident: pat_ident.ident.clone(),
-                builder: attribute_to_string(attrs),
+            .map(|(pat_ident, attrs)| {
+                Ok(Input {
+                    ident: pat_ident.ident.clone(),
+                    builder: attribute_to_path(attrs)
+                        .map_err(|err| syn::Error::new_spanned(pat_ident, err))?,
+                })
             })
-            .collect();
+            .collect::<syn::Result<Vec<_>>>()?;
 
-        Self {
+        Ok(Self {
             fn_ident: item_fn.sig.ident.clone(),
             fn_output: item_fn.sig.output.clone(),
             fn_inputs: inputs,
-        }
+        })
     }
 }
 
-fn attribute_to_string(attrs: Vec<Attribute>) -> Option<Path> {
+fn attribute_to_path(attrs: Vec<Attribute>) -> Result<Path, String> {
     if attrs.is_empty() {
-        return None;
+        return Err("resource needs an attribute configuration".to_string());
     }
 
     let builder = attrs[0].path.clone();
 
-    Some(builder)
+    Ok(builder)
 }
 
 impl ToTokens for Wrapper {
@@ -144,7 +154,7 @@ mod tests {
             async fn simple() {}
         );
 
-        let actual = Wrapper::from_item_fn(&mut input);
+        let actual = Wrapper::from_item_fn(&mut input).unwrap();
         let expected_ident: Ident = parse_quote!(simple);
 
         assert_eq!(actual.fn_ident, expected_ident);
@@ -186,7 +196,7 @@ mod tests {
             async fn complex() -> Result<(), Box<dyn std::error::Error>> {}
         );
 
-        let actual = Wrapper::from_item_fn(&mut input);
+        let actual = Wrapper::from_item_fn(&mut input).unwrap();
         let expected_ident: Ident = parse_quote!(complex);
         let expected_output: ReturnType = parse_quote!(-> Result<(), Box<dyn std::error::Error>>);
 
@@ -226,76 +236,18 @@ mod tests {
     #[test]
     fn from_with_inputs() {
         let mut input = parse_quote!(
-            async fn complex(pool: PgPool) -> Result<(), Box<dyn std::error::Error>> {}
+            async fn complex(
+                #[shared::Postgres] pool: PgPool,
+            ) -> Result<(), Box<dyn std::error::Error>> {
+            }
         );
 
-        let actual = Wrapper::from_item_fn(&mut input);
+        let actual = Wrapper::from_item_fn(&mut input).unwrap();
         let expected_ident: Ident = parse_quote!(complex);
         let expected_output: ReturnType = parse_quote!(-> Result<(), Box<dyn std::error::Error>>);
         let expected_inputs: Vec<Input> = vec![Input {
             ident: parse_quote!(pool),
-            builder: None,
-        }];
-
-        assert_eq!(actual.fn_ident, expected_ident);
-        assert_eq!(actual.fn_output, expected_output);
-        assert_eq!(actual.fn_inputs, expected_inputs);
-    }
-
-    #[test]
-    fn output_with_inputs() {
-        let input = Wrapper {
-            fn_ident: parse_quote!(complex),
-            fn_output: parse_quote!(-> Result<(), Box<dyn std::error::Error>>),
-            fn_inputs: vec![
-                Input {
-                    ident: parse_quote!(pool),
-                    builder: None,
-                },
-                Input {
-                    ident: parse_quote!(redis),
-                    builder: None,
-                },
-            ],
-        };
-
-        let actual = quote!(#input);
-        let expected = quote! {
-            async fn __shuttle_wrapper(
-                factory: &mut dyn shuttle_service::Factory,
-                runtime: &shuttle_service::Runtime,
-                logger: shuttle_service::Logger,
-            ) -> Result<(), Box<dyn std::error::Error> > {
-                use shuttle_service::ResourceBuilder;
-
-                runtime.spawn_blocking(move || {
-                    shuttle_service::log::set_boxed_logger(Box::new(logger))
-                        .map(|()| shuttle_service::log::set_max_level(shuttle_service::log::LevelFilter::Info))
-                        .expect("logger set should succeed");
-                }).await.unwrap();
-
-                let pool = factory.get_resource(runtime).await?;
-                let redis = factory.get_resource(runtime).await?;
-
-                runtime.spawn(complex(pool, redis)).await.unwrap()
-            }
-        };
-
-        assert_eq!(actual.to_string(), expected.to_string());
-    }
-
-    #[test]
-    fn from_input_attribute() {
-        let mut input = parse_quote!(
-            async fn meta(#[aws::rds] pool: PgPool) -> Result<(), Box<dyn std::error::Error>> {}
-        );
-
-        let actual = Wrapper::from_item_fn(&mut input);
-        let expected_ident: Ident = parse_quote!(meta);
-        let expected_output: ReturnType = parse_quote!(-> Result<(), Box<dyn std::error::Error>>);
-        let expected_inputs: Vec<Input> = vec![Input {
-            ident: parse_quote!(pool),
-            builder: Some(parse_quote!(aws::rds)),
+            builder: parse_quote!(shared::Postgres),
         }];
 
         assert_eq!(actual.fn_ident, expected_ident);
@@ -315,14 +267,20 @@ mod tests {
     }
 
     #[test]
-    fn output_with_input_attributes() {
+    fn output_with_inputs() {
         let input = Wrapper {
             fn_ident: parse_quote!(complex),
             fn_output: parse_quote!(-> Result<(), Box<dyn std::error::Error>>),
-            fn_inputs: vec![Input {
-                ident: parse_quote!(pool),
-                builder: Some(parse_quote!(aws::rds)),
-            }],
+            fn_inputs: vec![
+                Input {
+                    ident: parse_quote!(pool),
+                    builder: parse_quote!(shared::Postgres),
+                },
+                Input {
+                    ident: parse_quote!(redis),
+                    builder: parse_quote!(shared::Redis),
+                },
+            ],
         };
 
         let actual = quote!(#input);
@@ -340,12 +298,23 @@ mod tests {
                         .expect("logger set should succeed");
                 }).await.unwrap();
 
-                let pool = shuttle_service::aws::rds::new().build(factory, runtime).await?;
+                let pool = shuttle_service::shared::Postgres::new().build(factory, runtime).await?;
+                let redis = shuttle_service::shared::Redis::new().build(factory, runtime).await?;
 
-                runtime.spawn(complex(pool)).await.unwrap()
+                runtime.spawn(complex(pool, redis)).await.unwrap()
             }
         };
 
         assert_eq!(actual.to_string(), expected.to_string());
+    }
+
+    #[test]
+    #[should_panic(expected = "resource needs an attribute configuration")]
+    fn from_with_inputs_missing_attribute() {
+        let mut input = parse_quote!(
+            async fn complex(pool: PgPool) {}
+        );
+
+        Wrapper::from_item_fn(&mut input).unwrap();
     }
 }

@@ -164,7 +164,7 @@ impl State {
 
         match instance {
             Ok(_) => {
-                wait_for_instance(client, &&instance_name, "resetting-master-credentials").await?;
+                wait_for_instance(client, &instance_name, "resetting-master-credentials").await?;
             }
             Err(SdkError::ServiceError { err, .. }) => {
                 if let ModifyDBInstanceErrorKind::DbInstanceNotFoundFault(_) = err.kind {
@@ -188,7 +188,7 @@ impl State {
                         .db_instance
                         .expect("to be able to create instance");
 
-                    wait_for_instance(client, &&instance_name, "creating").await?;
+                    wait_for_instance(client, &instance_name, "creating").await?;
                 } else {
                     return Err(shuttle_service::Error::Custom(anyhow!(
                         "got unexpected error from AWS RDS service: {}",
@@ -205,7 +205,7 @@ impl State {
         };
 
         // Wait for up
-        let instance = wait_for_instance(client, &&instance_name, "available").await?;
+        let instance = wait_for_instance(client, &instance_name, "available").await?;
 
         let address = instance
             .endpoint

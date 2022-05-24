@@ -32,7 +32,7 @@ shuttle-common = { version = "0.3.0", path = "../common" }
 
 [dev-dependencies]
 portpicker = "0.1.1"
-uuid = { version = "0.8.2", features = ["v4"] }
+uuid = { version = "1.0.0", features = ["v4"] }
 
 [features]
 default = ["codegen"]

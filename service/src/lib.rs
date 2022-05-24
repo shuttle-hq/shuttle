@@ -105,7 +105,7 @@
 //! }
 //!
 //! #[shuttle_service::main]
-//! async fn rocket(pool: PgPool) -> ShuttleRocket {
+//! async fn rocket(#[shared::Postgres] pool: PgPool) -> ShuttleRocket {
 //!     let state = MyState(pool);
 //!     let rocket = rocket::build().manage(state).mount("/", routes![hello]);
 //!
@@ -225,7 +225,7 @@ extern crate shuttle_codegen;
 /// | [`Server<T>`](https://docs.rs/tide/latest/tide/struct.Server.html)             | web-tide     | [tide](https://docs.rs/tide/0.16.0)         | 0.16.0     | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/tide/hello-world)   |
 ///
 /// # Getting shuttle managed services
-/// The shuttle is able to manage service dependencies for you. These services are passed in as inputs to your main function:
+/// The shuttle is able to manage service dependencies for you. These services are passed in as inputs to your main function and are configured using attributes:
 /// ```rust,no_run
 /// use sqlx::PgPool;
 /// use shuttle_service::ShuttleRocket;
@@ -233,7 +233,7 @@ extern crate shuttle_codegen;
 /// struct MyState(PgPool);
 ///
 /// #[shuttle_service::main]
-/// async fn rocket(pool: PgPool) -> ShuttleRocket {
+/// async fn rocket(#[shared::Postgres] pool: PgPool) -> ShuttleRocket {
 ///     let state = MyState(pool);
 ///     let rocket = rocket::build().manage(state);
 ///
@@ -242,11 +242,14 @@ extern crate shuttle_codegen;
 /// ```
 ///
 /// ## shuttle managed dependencies
-/// The following dependencies can be managed by shuttle - remember to enable their feature flags for the `shuttle-service` dependency in `Cargo.toml`:
+/// The following dependencies can be managed by shuttle - remember to enable their feature flags for the `shuttle-service` dependency in `Cargo.toml` and configure them using an attribute annotation:
 ///
-/// | Argument type                                                 | Feature flag  | Dependency                                                         | Example                                                                          |
-/// | ------------------------------------------------------------- | ------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
-/// | [`PgPool`](https://docs.rs/sqlx/latest/sqlx/type.PgPool.html) | sqlx-postgres | A PostgresSql instance accessed using [sqlx](https://docs.rs/sqlx) | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/rocket/postgres) |
+/// | Argument type                                                       | Feature flag      | Attribute            | Dependency                                                                                         | Example                                                                          |
+/// | ------------------------------------------------------------------- | ----------------- | -------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+/// | [`PgPool`](https://docs.rs/sqlx/latest/sqlx/type.PgPool.html)       | sqlx-postgres     | `shared::Postgres`   | A shared PostgresSql instance accessed using [sqlx](https://docs.rs/sqlx)                          | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/rocket/postgres) |
+/// | [`MySqlPool`](https://docs.rs/sqlx/latest/sqlx/type.MySqlPool.html) | sqlx-aws-mariadb  | `aws::rds::MariaDB`  | An AWS RDS MariaDB instance tied to your instance and accessed using [sqlx](https://docs.rs/sqlx)  |                                                                                  |
+/// | [`MySqlPool`](https://docs.rs/sqlx/latest/sqlx/type.MySqlPool.html) | sqlx-aws-mysql    | `aws::rds::MySql`    | An AWS RDS MySql instance tied to your instance and accessed using [sqlx](https://docs.rs/sqlx)    |                                                                                  |
+/// | [`PgPool`](https://docs.rs/sqlx/latest/sqlx/type.PgPool.html)       | sqlx-aws-postgres | `aws::rds::Postgres` | An AWS RDS Postgres instance tied to your instance and accessed using [sqlx](https://docs.rs/sqlx) | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/tide/postgres)   |
 pub use shuttle_codegen::main;
 use tokio::task::JoinHandle;
 

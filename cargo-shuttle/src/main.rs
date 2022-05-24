@@ -184,22 +184,26 @@ impl Shuttle {
     }
 
     fn run_tests(&self, no_test: bool) -> Result<()> {
+        if no_test {
+            return Ok(());
+        }
+
         let config = cargo::util::config::Config::default()?;
         let working_directory = self.ctx.working_directory();
         let path = working_directory.join("Cargo.toml");
 
         let compile_options = CompileOptions::new(&config, CompileMode::Test).unwrap();
         let ws = Workspace::new(&path, &config)?;
-
         let opts = TestOptions {
             compile_opts: compile_options,
             no_run: false,
             no_fail_fast: false,
         };
+
         let err = cargo::ops::run_tests(&ws, &opts, &[])?;
         match err {
             None => Ok(()),
-            Some(e) => Err(anyhow!(e.to_string())),
+            Some(_) => Err(anyhow!("To ignore all tests, pass the `--no_test` flag")),
         }
     }
 }

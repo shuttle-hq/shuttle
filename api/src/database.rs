@@ -1,13 +1,7 @@
 use anyhow::anyhow;
-use aws_config::{
-    environment::EnvironmentVariableCredentialsProvider,
-    imds,
-    meta::{credentials::CredentialsProviderChain, region::RegionProviderChain},
-    timeout,
-};
-use aws_sdk_rds::{error::ModifyDBInstanceErrorKind, types::SdkError};
+use aws_config::timeout;
+use aws_sdk_rds::{error::ModifyDBInstanceErrorKind, model::DbInstance, types::SdkError, Client};
 use aws_smithy_types::tristate::TriState;
-use hyper::Uri;
 use lazy_static::lazy_static;
 use rand::Rng;
 use shuttle_common::{project::ProjectName, DatabaseReadyInfo};
@@ -168,11 +162,10 @@ impl State {
             .send()
             .await;
 
-        let mut instance = match instance {
-            Ok(instance) => instance
-                .db_instance
-                .expect("aws response should contain an instance")
-                .clone(),
+        match instance {
+            Ok(_) => {
+                wait_for_instance(client, &&instance_name, "resetting-master-credentials").await?;
+            }
             Err(SdkError::ServiceError { err, .. }) => {
                 if let ModifyDBInstanceErrorKind::DbInstanceNotFoundFault(_) = err.kind {
                     debug!("creating new AWS RDS {instance_name}");
@@ -193,7 +186,9 @@ impl State {
                         .await
                         .map_err(shuttle_service::error::CustomError::new)?
                         .db_instance
-                        .expect("to be able to create instance")
+                        .expect("to be able to create instance");
+
+                    wait_for_instance(client, &&instance_name, "creating").await?;
                 } else {
                     return Err(shuttle_service::Error::Custom(anyhow!(
                         "got unexpected error from AWS RDS service: {}",
@@ -210,33 +205,7 @@ impl State {
         };
 
         // Wait for up
-        debug!("waiting for AWS RDS instance to be available");
-        sleep(Duration::from_secs(30)).await;
-        loop {
-            instance = client
-                .describe_db_instances()
-                .db_instance_identifier(&instance_name)
-                .send()
-                .await
-                .map_err(CustomError::new)?
-                .db_instances
-                .expect("aws to return instances")
-                .get(0)
-                .expect("to find the instance just created or modified")
-                .clone();
-
-            let status = instance
-                .db_instance_status
-                .as_ref()
-                .expect("instance to have a status")
-                .clone();
-
-            if status == "available" {
-                break;
-            }
-
-            sleep(Duration::from_secs(1)).await;
-        }
+        let instance = wait_for_instance(client, &&instance_name, "available").await?;
 
         let address = instance
             .endpoint
@@ -260,6 +229,39 @@ impl State {
         self.info = Some(info.clone());
 
         Ok(info)
+    }
+}
+
+async fn wait_for_instance(
+    client: &Client,
+    name: &str,
+    wait_for: &str,
+) -> Result<DbInstance, shuttle_service::Error> {
+    debug!("waiting for {name} to enter {wait_for} state");
+    loop {
+        let instance = client
+            .describe_db_instances()
+            .db_instance_identifier(name)
+            .send()
+            .await
+            .map_err(CustomError::new)?
+            .db_instances
+            .expect("aws to return instances")
+            .get(0)
+            .expect("to find the instance just created or modified")
+            .clone();
+
+        let status = instance
+            .db_instance_status
+            .as_ref()
+            .expect("instance to have a status")
+            .clone();
+
+        if status == wait_for {
+            return Ok(instance);
+        }
+
+        sleep(Duration::from_secs(1)).await;
     }
 }
 

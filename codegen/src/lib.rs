@@ -86,7 +86,10 @@ impl Wrapper {
 
 fn attribute_to_path(attrs: Vec<Attribute>) -> Result<Path, String> {
     if attrs.is_empty() {
-        return Err("resource needs an attribute configuration".to_string());
+        return Err(
+            "resource needs an attribute configuration\nTry adding `#[shared::Postgres]`"
+                .to_string(),
+        );
     }
 
     let builder = attrs[0].path.clone();

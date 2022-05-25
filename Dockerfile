@@ -10,7 +10,7 @@ RUN pg_dropcluster $(pg_lsclusters -h | cut -d' ' -f-2 | head -n1)
 WORKDIR /opt
 
 RUN pip3 install numpy
-RUN pip3 install torch==1.10.1 torchvision==0.11.2 torchaudio==0.10.1 -f https://download.pytorch.org/whl/torch_stable.html
+RUN pip3 install torch==1.11.0 torchvision==0.11.2 torchaudio==0.10.1
 
 FROM chef AS planner
 COPY . .

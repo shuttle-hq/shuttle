@@ -4,24 +4,10 @@ WORKDIR app
 
 FROM rust:buster AS runtime
 RUN apt-get update &&\
-    apt-get install -y curl postgresql supervisor
+    apt-get install -y curl postgresql supervisor python3-pip
 RUN pg_dropcluster $(pg_lsclusters -h | cut -d' ' -f-2 | head -n1)
 
-WORKDIR /opt
-ENV CONDA_DIR /opt/conda
-RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-aarch64.sh -O ~/miniconda.sh && \
-     /bin/bash ~/miniconda.sh -b -p /opt/conda
-
-ENV PATH=$CONDA_DIR/bin:$PATH
-
-RUN conda install astunparse numpy ninja pyyaml setuptools cmake cffi typing_extensions future six requests dataclasses
-RUN git clone --recursive https://github.com/pytorch/pytorch
-
-ENV USE_CUDA 0
-RUN cd pytorch
-RUN export CMAKE_PREFIX_PATH=${CONDA_PREFIX:-"$(dirname $(which conda))/../"}
-RUN python setup.py install
-
+RUN pip3 install torch -f https://torch.kmtea.eu/whl/stable.html -f https://ext.kmtea.eu/whl/stable.html
 
 FROM chef AS planner
 COPY . .

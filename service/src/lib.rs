@@ -372,11 +372,14 @@ impl Service for SimpleService<rocket::Rocket<rocket::Build>> {
 
     fn bind(&mut self, addr: SocketAddr) -> Result<ServeHandle, error::Error> {
         let rocket = self.service.take().expect("service has already been bound");
+        let mut shutdown = rocket::config::Shutdown::default();
+        shutdown.ctrlc = false;
 
         let config = rocket::Config {
             address: addr.ip(),
             port: addr.port(),
             log_level: rocket::config::LogLevel::Off,
+            shutdown,
             ..Default::default()
         };
         let launched = rocket.configure(config).launch();

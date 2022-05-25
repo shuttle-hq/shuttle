@@ -65,6 +65,8 @@ pub enum Command {
     Auth(AuthArgs),
     #[structopt(about = "login to the shuttle platform")]
     Login(LoginArgs),
+    #[structopt(about = "run a shuttle project locally")]
+    Run,
 }
 
 #[derive(StructOpt)]

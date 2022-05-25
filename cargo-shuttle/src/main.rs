@@ -5,17 +5,26 @@ mod config;
 use std::fs::File;
 use std::io;
 use std::io::Write;
+use std::net::{Ipv4Addr, SocketAddr};
 use std::rc::Rc;
+use std::sync::mpsc;
 
 use anyhow::{Context, Result};
 use args::{LoginArgs, ProjectArgs};
 use cargo::core::resolver::CliFeatures;
 use cargo::core::Workspace;
 use cargo::ops::{PackageOpts, Packages};
+use chrono::{DateTime, Local};
+use colored::Colorize;
 use futures::future::TryFutureExt;
+use shuttle_service::loader::Loader;
+use shuttle_service::Factory;
 use structopt::StructOpt;
+use tokio::task::spawn_blocking;
+use uuid::Uuid;
 
 use crate::args::{Args, AuthArgs, Command, DeployArgs};
+use crate::client::get_colored_level;
 use crate::config::RequestContext;
 
 #[tokio::main]
@@ -56,6 +65,7 @@ impl Shuttle {
             Command::Delete => self.delete().await,
             Command::Auth(auth_args) => self.auth(auth_args).await,
             Command::Login(login_args) => self.login(login_args).await,
+            Command::Run => self.local_run().await,
         }
     }
 
@@ -124,6 +134,55 @@ impl Shuttle {
         )
         .await
         .context("failed to get logs of deployment")
+    }
+
+    async fn local_run(&self) -> Result<()> {
+        use async_trait::async_trait;
+
+        let loader = Loader::from_so_file("target/debug/libhello_world.so")?;
+
+        struct DummyFactory {}
+
+        #[async_trait]
+        impl Factory for DummyFactory {
+            async fn get_sql_connection_string(
+                &mut self,
+            ) -> Result<String, shuttle_service::Error> {
+                todo!()
+            }
+        }
+
+        let mut factory = DummyFactory {};
+        let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8000);
+        let deployment_id = Uuid::new_v4();
+        let (tx, rx) = mpsc::sync_channel(100);
+
+        let (handle, so) = loader.load(&mut factory, addr, tx, deployment_id)?;
+
+        let logs = spawn_blocking(move || loop {
+            while let Ok(log) = rx.recv() {
+                let datetime: DateTime<Local> = DateTime::from(log.datetime);
+                println!(
+                    "{}{} {:<5} {}{} {}",
+                    "[".bright_black(),
+                    datetime.format("%Y-%m-%dT%H:%M:%SZ"),
+                    get_colored_level(&log.item.level),
+                    log.item.target,
+                    "]".bright_black(),
+                    log.item.body
+                );
+            }
+        });
+
+        handle.await??;
+
+        tokio::spawn(async move {
+            so.close().unwrap();
+        });
+
+        logs.await?;
+
+        Ok(())
     }
 
     async fn deploy(&self, args: DeployArgs) -> Result<()> {

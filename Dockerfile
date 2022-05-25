@@ -4,13 +4,18 @@ WORKDIR app
 
 FROM rust:buster AS runtime
 RUN apt-get update &&\
-    apt-get install -y curl postgresql supervisor python3-pip
+    apt-get install -y curl postgresql supervisor
 RUN pg_dropcluster $(pg_lsclusters -h | cut -d' ' -f-2 | head -n1)
 
 WORKDIR /opt
+ENV CONDA_DIR /opt/conda
+RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh && \
+     /bin/bash ~/miniconda.sh -b -p /opt/conda
 
-RUN pip3 install numpy
-RUN pip3 install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
+ENV PATH=$CONDA_DIR/bin:$PATH
+
+RUN conda install pytorch torchvision torchaudio cpuonly -c pytorch
+
 
 FROM chef AS planner
 COPY . .

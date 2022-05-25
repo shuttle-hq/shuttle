@@ -15,7 +15,6 @@ RUN git clone --recursive https://github.com/pytorch/pytorch
 
 ENV USE_CUDA 0
 RUN cd pytorch
-RUN git submodule sync
 RUN git submodule update --init --recursive --jobs 0
 RUN export CMAKE_PREFIX_PATH=${CONDA_PREFIX:-"$(dirname $(which conda))/../"}
 RUN python setup.py install

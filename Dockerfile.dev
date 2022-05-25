@@ -1,16 +1,11 @@
 FROM rust:buster as runtime
 RUN apt-get update &&\
-    apt-get install -y curl postgresql supervisor
+    apt-get install -y curl postgresql supervisor python3-pip
 RUN pg_dropcluster $(pg_lsclusters -h | cut -d' ' -f-2 | head -n1)
 RUN rustup component add rust-src
 
-WORKDIR /opt
-ENV LIBTORCH_URL=https://download.pytorch.org/libtorch/nightly/cpu/libtorch-cxx11-abi-shared-with-deps-latest.zip
-RUN curl -fsSL --insecure -o libtorch.zip  $LIBTORCH_URL \
-    && unzip -q libtorch.zip \
-    && rm libtorch.zip
-
-ENV TORCH_HOME=/opt/libtorch
+RUN pip3 install numpy
+RUN pip3 install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html
 
 FROM rust:buster AS chef
 WORKDIR app

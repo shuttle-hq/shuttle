@@ -1,6 +1,7 @@
 mod args;
 mod client;
 mod config;
+mod factory;
 
 use std::fs::File;
 use std::io;
@@ -16,9 +17,9 @@ use cargo::core::Workspace;
 use cargo::ops::{PackageOpts, Packages};
 use chrono::{DateTime, Local};
 use colored::Colorize;
+use factory::LocalFactory;
 use futures::future::TryFutureExt;
 use shuttle_service::loader::Loader;
-use shuttle_service::Factory;
 use structopt::StructOpt;
 use tokio::task::spawn_blocking;
 use uuid::Uuid;
@@ -137,22 +138,9 @@ impl Shuttle {
     }
 
     async fn local_run(&self) -> Result<()> {
-        use async_trait::async_trait;
-
         let loader = Loader::from_so_file("target/debug/libhello_world.so")?;
 
-        struct DummyFactory {}
-
-        #[async_trait]
-        impl Factory for DummyFactory {
-            async fn get_sql_connection_string(
-                &mut self,
-            ) -> Result<String, shuttle_service::Error> {
-                todo!()
-            }
-        }
-
-        let mut factory = DummyFactory {};
+        let mut factory = LocalFactory {};
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8000);
         let deployment_id = Uuid::new_v4();
         let (tx, rx) = mpsc::sync_channel(100);

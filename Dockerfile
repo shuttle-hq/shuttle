@@ -8,7 +8,7 @@ RUN apt-get update &&\
 RUN pg_dropcluster $(pg_lsclusters -h | cut -d' ' -f-2 | head -n1)
 
 WORKDIR /opt
-ENV LIBTORCH_URL=https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-1.11.0%2Bcpu.zip
+ENV LIBTORCH_URL=https://download.pytorch.org/libtorch/nightly/cpu/libtorch-cxx11-abi-shared-with-deps-latest.zip
 RUN curl -fsSL --insecure -o libtorch.zip  $LIBTORCH_URL \
     && unzip -q libtorch.zip \
     && rm libtorch.zip

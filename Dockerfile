@@ -4,16 +4,13 @@ WORKDIR app
 
 FROM rust:buster AS runtime
 RUN apt-get update &&\
-    apt-get install -y curl postgresql supervisor
+    apt-get install -y curl postgresql supervisor python3-pip
 RUN pg_dropcluster $(pg_lsclusters -h | cut -d' ' -f-2 | head -n1)
 
 WORKDIR /opt
-ENV LIBTORCH_URL=https://download.pytorch.org/libtorch/nightly/cpu/libtorch-cxx11-abi-shared-with-deps-latest.zip
-RUN curl -fsSL --insecure -o libtorch.zip  $LIBTORCH_URL \
-    && unzip -q libtorch.zip \
-    && rm libtorch.zip
 
-ENV TORCH_HOME=/opt/libtorch
+RUN pip3 install numpy
+RUN pip3 install torch==1.10.1+rocm4.2 torchvision==0.11.2+rocm4.2 torchaudio==0.10.1 -f https://download.pytorch.org/whl/torch_stable.html
 
 FROM chef AS planner
 COPY . .

@@ -2,6 +2,7 @@ mod args;
 mod client;
 mod config;
 mod factory;
+mod print;
 
 use std::fs::File;
 use std::io;
@@ -15,8 +16,6 @@ use args::{LoginArgs, ProjectArgs};
 use cargo::core::resolver::CliFeatures;
 use cargo::core::Workspace;
 use cargo::ops::{PackageOpts, Packages};
-use chrono::{DateTime, Local};
-use colored::Colorize;
 use factory::LocalFactory;
 use futures::future::TryFutureExt;
 use shuttle_service::loader::Loader;
@@ -25,7 +24,6 @@ use tokio::task::spawn_blocking;
 use uuid::Uuid;
 
 use crate::args::{Args, AuthArgs, Command, DeployArgs};
-use crate::client::get_colored_level;
 use crate::config::RequestContext;
 
 #[tokio::main]
@@ -149,16 +147,7 @@ impl Shuttle {
 
         let logs = spawn_blocking(move || loop {
             while let Ok(log) = rx.recv() {
-                let datetime: DateTime<Local> = DateTime::from(log.datetime);
-                println!(
-                    "{}{} {:<5} {}{} {}",
-                    "[".bright_black(),
-                    datetime.format("%Y-%m-%dT%H:%M:%SZ"),
-                    get_colored_level(&log.item.level),
-                    log.item.target,
-                    "]".bright_black(),
-                    log.item.body
-                );
+                print::log(log.datetime, log.item);
             }
         });
 

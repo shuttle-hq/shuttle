@@ -1,12 +1,8 @@
 FROM rust:buster AS runtime
 RUN apt-get update &&\
-    apt-get install -y curl postgresql supervisor
-RUN pg_dropcluster $(pg_lsclusters -h | cut -d' ' -f-2 | head -n1)
-
-WORKDIR /opt
-RUN apt-get update &&\
     apt-get install -y curl postgresql supervisor python3-pip
 RUN pg_dropcluster $(pg_lsclusters -h | cut -d' ' -f-2 | head -n1)
+RUN rustup component add rust-src
 
 RUN pip3 install torch -f https://torch.kmtea.eu/whl/stable.html -f https://ext.kmtea.eu/whl/stable.html
 

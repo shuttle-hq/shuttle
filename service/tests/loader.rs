@@ -21,12 +21,6 @@ impl DummyFactory {
             postgres_instance: None,
         }
     }
-
-    fn new_with_postgres() -> Self {
-        Self {
-            postgres_instance: Some(PostgresInstance::new()),
-        }
-    }
 }
 
 #[async_trait]
@@ -36,6 +30,8 @@ impl Factory for DummyFactory {
             postgres_instance.get_uri()
         } else {
             let postgres_instance = PostgresInstance::new();
+            postgres_instance.wait_for_ready();
+            postgres_instance.wait_for_connectable().await;
             let uri = postgres_instance.get_uri();
             self.postgres_instance = Some(postgres_instance);
             uri
@@ -79,7 +75,10 @@ async fn sleep_async() {
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
     let deployment_id = Uuid::new_v4();
     let (tx, _rx) = mpsc::sync_channel(1);
-    let (handler, _) = loader.load(&mut factory, addr, tx, deployment_id).unwrap();
+    let (handler, _) = loader
+        .load(&mut factory, addr, tx, deployment_id)
+        .await
+        .unwrap();
 
     // Give service some time to start up
     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -111,7 +110,10 @@ async fn sleep() {
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
     let deployment_id = Uuid::new_v4();
     let (tx, _rx) = mpsc::sync_channel(1);
-    let (handler, _) = loader.load(&mut factory, addr, tx, deployment_id).unwrap();
+    let (handler, _) = loader
+        .load(&mut factory, addr, tx, deployment_id)
+        .await
+        .unwrap();
 
     // Give service some time to start up
     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -140,18 +142,19 @@ async fn sqlx_pool() {
     let loader =
         Loader::from_so_file("tests/resources/sqlx-pool/target/release/libsqlx_pool.so").unwrap();
 
-    // Initialise a Factory with a pre-existing PostgresInstance.
-    // There is a need to wait for the instance to be reachable through the assigned port, which requires
-    // asynchronous code. This must happen in this tokio::Runtime and not in the inner one.
-    let mut factory = DummyFactory::new_with_postgres();
-    let instance = factory.postgres_instance.as_ref().unwrap();
-    instance.wait_for_ready();
-    instance.wait_for_connectable().await;
+    // Don't initialize a pre-existing PostgresInstance here because the `PostgresInstance::wait_for_connectable()`
+    // code has `awaits` and we want to make sure they do not block inside `Service::build()`.
+    // At the same time we also want to test the PgPool is created on the correct runtime (ie does not cause a
+    // "has to run on a tokio runtime" error)
+    let mut factory = DummyFactory::new();
 
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
     let deployment_id = Uuid::new_v4();
     let (tx, rx) = mpsc::sync_channel(32);
-    let (handler, _) = loader.load(&mut factory, addr, tx, deployment_id).unwrap();
+    let (handler, _) = loader
+        .load(&mut factory, addr, tx, deployment_id)
+        .await
+        .unwrap();
 
     handler.await.unwrap().unwrap();
 

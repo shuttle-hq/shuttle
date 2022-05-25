@@ -672,6 +672,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
+ "async-trait",
  "cargo",
  "cargo_metadata",
  "chrono",
@@ -686,9 +687,11 @@ dependencies = [
  "serde",
  "serde_json",
  "shuttle-common",
+ "shuttle-service",
  "structopt",
  "tokio",
  "toml",
+ "uuid",
  "webbrowser",
 ]
 
@@ -3322,6 +3325,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "axum",
+ "cargo",
  "chrono",
  "hyper",
  "lazy_static",

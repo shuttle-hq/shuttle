@@ -7,7 +7,8 @@ description = "A cargo command for the shuttle platform (https://www.shuttle.rs/
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.53"
+anyhow = "1.0.54"
+async-trait = "0.1.52"
 chrono = "0.4"
 colored = "2.0"
 dirs = "4.0.0"
@@ -24,8 +25,10 @@ toml = "0.5.8"
 structopt = "0.3.26"
 cargo_metadata = "0.14.2"
 webbrowser = "0.6"
+uuid = { version = "0.8.2", features = ["v4"] }
 
 shuttle-common = { version = "0.3.0", path = "../common" }
+shuttle-service = { version = "0.3.0", path = "../service", features = [ "loader" ] }
 
 [dev-dependencies]
 assert_cmd = "2.0.4"

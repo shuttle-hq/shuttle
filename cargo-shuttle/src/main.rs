@@ -5,8 +5,8 @@ mod factory;
 mod print;
 
 use std::fs::File;
-use std::io;
 use std::io::Write;
+use std::io::{self, stdout};
 use std::net::{Ipv4Addr, SocketAddr};
 use std::rc::Rc;
 use std::sync::mpsc;
@@ -18,7 +18,7 @@ use cargo::core::Workspace;
 use cargo::ops::{PackageOpts, Packages};
 use factory::LocalFactory;
 use futures::future::TryFutureExt;
-use shuttle_service::loader::Loader;
+use shuttle_service::loader::{build_crate, Loader};
 use structopt::StructOpt;
 use tokio::task::spawn_blocking;
 use uuid::Uuid;
@@ -50,7 +50,7 @@ impl Shuttle {
     pub async fn run(mut self, args: Args) -> Result<()> {
         if matches!(
             args.cmd,
-            Command::Deploy(..) | Command::Delete | Command::Status | Command::Logs
+            Command::Deploy(..) | Command::Delete | Command::Status | Command::Logs | Command::Run
         ) {
             self.load_project(&args.project_args)?;
         }
@@ -136,7 +136,10 @@ impl Shuttle {
     }
 
     async fn local_run(&self) -> Result<()> {
-        let loader = Loader::from_so_file("target/debug/libhello_world.so")?;
+        let buf = Box::new(stdout());
+        let working_directory = self.ctx.working_directory();
+        let so_path = build_crate(working_directory, buf)?;
+        let loader = Loader::from_so_file(so_path)?;
 
         let mut factory = LocalFactory {};
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8000);

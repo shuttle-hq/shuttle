@@ -1,6 +1,13 @@
 use std::net::SocketAddr;
+use std::path::{Path, PathBuf};
 use std::{ffi::OsStr, sync::mpsc::SyncSender};
 
+use anyhow::{anyhow, Context};
+use cargo::core::compiler::CompileMode;
+use cargo::core::{Shell, Verbosity, Workspace};
+use cargo::ops::{compile, CompileOptions};
+use cargo::util::homedir;
+use cargo::Config;
 use libloading::{Library, Symbol};
 use shuttle_common::DeploymentId;
 use thiserror::Error as ThisError;
@@ -65,6 +72,34 @@ impl Loader {
 
         Ok((handle, self.so))
     }
+}
+
+/// Given a project directory path, builds the crate
+pub fn build_crate(project_path: &Path, buf: Box<dyn std::io::Write>) -> anyhow::Result<PathBuf> {
+    let mut shell = Shell::from_write(buf);
+    shell.set_verbosity(Verbosity::Normal);
+
+    let cwd = std::env::current_dir()
+        .with_context(|| "couldn't get the current directory of the process")?;
+    let homedir = homedir(&cwd).ok_or_else(|| {
+        anyhow!(
+            "Cargo couldn't find your home directory. \
+                 This probably means that $HOME was not set."
+        )
+    })?;
+
+    let config = Config::new(shell, cwd, homedir);
+    let manifest_path = project_path.join("Cargo.toml");
+
+    let ws = Workspace::new(&manifest_path, &config)?;
+    let opts = CompileOptions::new(&config, CompileMode::Build)?;
+    let compilation = compile(&ws, &opts)?;
+
+    if compilation.cdylibs.is_empty() {
+        return Err(anyhow!("a cdylib was not created"));
+    }
+
+    Ok(compilation.cdylibs[0].path.clone())
 }
 
 #[cfg(test)]

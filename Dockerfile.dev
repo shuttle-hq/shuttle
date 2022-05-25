@@ -11,8 +11,10 @@ RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-aar
 
 ENV PATH=$CONDA_DIR/bin:$PATH
 
-RUN conda install astunparse numpy ninja pyyaml mkl mkl-include setuptools cmake cffi typing_extensions future six requests dataclasses
+RUN conda install astunparse numpy ninja pyyaml setuptools cmake cffi typing_extensions future six requests dataclasses
 RUN git clone --recursive https://github.com/pytorch/pytorch
+
+ENV USE_CUDA 0
 RUN cd pytorch
 RUN git submodule sync
 RUN git submodule update --init --recursive --jobs 0

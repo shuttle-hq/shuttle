@@ -1,7 +1,6 @@
 use std::{thread::sleep, time::Duration};
 
-use shuttle_service::{IntoService, ServeHandle, Service};
-use tokio::runtime::Runtime;
+use shuttle_service::{IntoService, Runtime, ServeHandle, Service};
 
 #[macro_use]
 extern crate shuttle_service;

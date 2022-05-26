@@ -48,7 +48,7 @@ impl Loader {
         }
     }
 
-    pub fn load(
+    pub async fn load(
         self,
         factory: &mut dyn Factory,
         addr: SocketAddr,
@@ -58,7 +58,7 @@ impl Loader {
         let mut service = self.service;
         let logger = Logger::new(tx, deployment_id);
 
-        service.build(factory, logger)?;
+        service.build(factory, logger).await?;
 
         // Start service on this side of the FFI
         let handle = tokio::task::spawn(async move { service.bind(addr)?.await? });

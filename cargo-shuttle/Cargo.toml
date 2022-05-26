@@ -9,6 +9,7 @@ description = "A cargo command for the shuttle platform (https://www.shuttle.rs/
 [dependencies]
 anyhow = "1.0.54"
 async-trait = "0.1.52"
+bollard = "0.12"
 chrono = "0.4"
 colored = "2.0"
 dirs = "4.0.0"

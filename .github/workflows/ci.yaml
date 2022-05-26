@@ -8,7 +8,7 @@ jobs:
   Build-And-Deploy:
     runs-on: self-hosted
     env:
-      CONTAINER_REGISTRY: public.ecr.aws/d7w6e9t1/backend
+      CONTAINER_REGISTRY: public.ecr.aws/shuttle/backend
     steps:
     - uses: shuttle-hq/checkout@v2
     - name: Configure AWS Credentials

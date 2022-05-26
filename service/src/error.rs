@@ -1,7 +1,5 @@
 //! Types representing various errors that can occur in the process of building and deploying a service.
 
-use std::convert::From;
-
 use thiserror::Error;
 
 #[derive(Debug, Error)]

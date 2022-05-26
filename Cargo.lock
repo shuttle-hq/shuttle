@@ -3317,12 +3317,13 @@ dependencies = [
 
 [[package]]
 name = "shuttle-service"
-version = "0.2.7"
+version = "0.2.6"
 dependencies = [
  "anyhow",
  "async-trait",
  "axum",
  "chrono",
+ "hyper",
  "lazy_static",
  "libloading",
  "log",
@@ -3336,6 +3337,7 @@ dependencies = [
  "thiserror",
  "tide",
  "tokio",
+ "tower",
  "uuid",
 ]
 

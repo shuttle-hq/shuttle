@@ -447,6 +447,45 @@ where
     }
 }
 
+#[cfg(feature = "web-tower")]
+#[async_trait]
+impl<T> Service for SimpleService<T>
+where
+    T: tower::Service<hyper::Request<hyper::Body>, Response = hyper::Response<hyper::Body>>
+        + Clone
+        + Send
+        + Sync
+        + 'static,
+    T::Error: std::error::Error + Send + Sync,
+    T::Future: std::future::Future + Send + Sync,
+{
+    async fn build(&mut self, factory: &mut dyn Factory, logger: logger::Logger) -> Result<(), Error> {
+        if let Some(builder) = self.builder.take() {
+            let tower = builder(factory, &self.runtime, logger).await?;
+
+            self.service = Some(tower);
+        }
+
+        Ok(())
+    }
+
+    fn bind(&mut self, addr: SocketAddr) -> Result<ServeHandle, error::Error> {
+        let service = self.service.take().expect("service has already been bound");
+
+        let handle = self.runtime.spawn(async move {
+            let shared = tower::make::Shared::new(service);
+            hyper::Server::bind(&addr)
+                .serve(shared)
+                .await
+                .map_err(error::CustomError::new)?;
+
+            Ok(())
+        });
+
+        Ok(handle)
+    }
+}
+
 /// Helper macro that generates the entrypoint required of any service.
 ///
 /// Can be used in one of two ways:

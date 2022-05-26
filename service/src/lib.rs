@@ -389,6 +389,10 @@ impl Service for SimpleService<rocket::Rocket<rocket::Build>> {
     }
 }
 
+#[allow(dead_code)]
+#[cfg(feature = "web-rocket")]
+pub type ShuttleRocket = Result<rocket::Rocket<rocket::Build>, Error>;
+
 #[cfg(feature = "web-axum")]
 #[async_trait]
 impl Service for SimpleService<sync_wrapper::SyncWrapper<axum::Router>> {
@@ -420,6 +424,10 @@ impl Service for SimpleService<sync_wrapper::SyncWrapper<axum::Router>> {
     }
 }
 
+#[allow(dead_code)]
+#[cfg(feature = "web-axum")]
+pub type ShuttleAxum = Result<sync_wrapper::SyncWrapper<axum::Router>, Error>;
+
 #[cfg(feature = "web-tide")]
 #[async_trait]
 impl<T> Service for SimpleService<tide::Server<T>>
@@ -446,6 +454,10 @@ where
         Ok(handle)
     }
 }
+
+#[allow(dead_code)]
+#[cfg(feature = "web-tide")]
+pub type ShuttleTide<T> = Result<tide::Server<T>, Error>;
 
 #[cfg(feature = "web-tower")]
 #[async_trait]

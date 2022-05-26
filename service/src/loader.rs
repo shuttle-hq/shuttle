@@ -96,7 +96,7 @@ pub fn build_crate(project_path: &Path, buf: Box<dyn std::io::Write>) -> anyhow:
     let compilation = compile(&ws, &opts)?;
 
     if compilation.cdylibs.is_empty() {
-        return Err(anyhow!("a cdylib was not created"));
+        return Err(anyhow!("a cdylib was not created. Try adding the following to the Cargo.toml of the service:\n[lib]\ncrate-type = [\"cdylib\"]\n"));
     }
 
     Ok(compilation.cdylibs[0].path.clone())

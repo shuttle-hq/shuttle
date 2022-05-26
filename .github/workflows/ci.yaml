@@ -8,7 +8,7 @@ jobs:
   Build-And-Deploy:
     runs-on: self-hosted
     env:
-      CONTAINER_REGISTRY: public.ecr.aws/d7w6e9t1/backend
+      CONTAINER_REGISTRY: public.ecr.aws/shuttle/backend
     steps:
     - uses: shuttle-hq/checkout@v2
     - name: Configure AWS Credentials
@@ -16,7 +16,7 @@ jobs:
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: eu-west-2
+        aws-region: us-east-1
     - name: Docker Login
       run: |
         aws ecr-public get-login-password | docker login --username AWS --password-stdin $CONTAINER_REGISTRY

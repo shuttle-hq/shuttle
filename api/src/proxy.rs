@@ -1,4 +1,9 @@
-use ::hyper::server::{conn::AddrStream, Server};
+use std::convert::Infallible;
+use std::net::{IpAddr, SocketAddr};
+use std::sync::Arc;
+
+use ::hyper::server::conn::AddrStream;
+use ::hyper::server::Server;
 use ::hyper::service::{make_service_fn, service_fn};
 use ::hyper::{Body, Request, Response, StatusCode};
 use hyper::client::connect::dns::GaiResolver;
@@ -6,13 +11,10 @@ use hyper::client::HttpConnector;
 use hyper::header::{HeaderValue, SERVER};
 use hyper::Client;
 use hyper_reverse_proxy::{ProxyError, ReverseProxy};
+use lazy_static::lazy_static;
 use shuttle_common::Port;
-use std::convert::Infallible;
-use std::net::{IpAddr, SocketAddr};
-use std::sync::Arc;
 
 use crate::DeploymentSystem;
-use lazy_static::lazy_static;
 
 lazy_static! {
     static ref HEADER_SERVER: HeaderValue = "shuttle.rs".parse().unwrap();

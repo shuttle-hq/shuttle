@@ -26,3 +26,14 @@ terraform {
 provider "aws" {
   region = "eu-west-2"
 }
+
+module "shuttle" {
+  source = "./modules/shuttle"
+
+  api_fqdn             = "api.shuttle.rs"
+  pg_fqdn              = "pg.shuttle.rs"
+  proxy_fqdn           = "shuttleapp.rs"
+  postgres_password    = var.postgres_password
+  shuttle_admin_secret = var.shuttle_admin_secret
+  instance_type        = "c6g.4xlarge"
+}

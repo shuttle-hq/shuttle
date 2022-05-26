@@ -1,16 +1,18 @@
-use std::{ffi::OsStr, net::SocketAddr};
+use std::net::SocketAddr;
+use std::{ffi::OsStr, sync::mpsc::SyncSender};
 
 use libloading::{Library, Symbol};
+use shuttle_common::DeploymentId;
 use thiserror::Error as ThisError;
-use tokio::task::JoinHandle;
 
-use crate::{Error, Factory, Service};
+use crate::{
+    logger::{Log, Logger},
+    Error, Factory, ServeHandle, Service,
+};
 
 const ENTRYPOINT_SYMBOL_NAME: &[u8] = b"_create_service\0";
 
 type CreateService = unsafe extern "C" fn() -> *mut dyn Service;
-
-pub type ServeHandle = JoinHandle<Result<(), Error>>;
 
 #[derive(Debug, ThisError)]
 pub enum LoaderError {
@@ -46,18 +48,20 @@ impl Loader {
         }
     }
 
-    pub fn load(
+    pub async fn load(
         self,
         factory: &mut dyn Factory,
         addr: SocketAddr,
+        tx: SyncSender<Log>,
+        deployment_id: DeploymentId,
     ) -> Result<(ServeHandle, Library), Error> {
         let mut service = self.service;
+        let logger = Logger::new(tx, deployment_id);
 
-        service.build(factory)?;
+        service.build(factory, logger).await?;
 
-        // We cannot use spawn here since that blocks the api completely. We suspect this is because `bind` makes a blocking call,
-        // however that does not completely makes sense as the blocking call is made on another runtime.
-        let handle = tokio::task::spawn_blocking(move || service.bind(addr));
+        // Start service on this side of the FFI
+        let handle = tokio::task::spawn(async move { service.bind(addr)?.await? });
 
         Ok((handle, self.so))
     }

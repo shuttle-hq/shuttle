@@ -471,7 +471,11 @@ where
     T::Error: std::error::Error + Send + Sync,
     T::Future: std::future::Future + Send + Sync,
 {
-    async fn build(&mut self, factory: &mut dyn Factory, logger: logger::Logger) -> Result<(), Error> {
+    async fn build(
+        &mut self,
+        factory: &mut dyn Factory,
+        logger: logger::Logger,
+    ) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
             let tower = builder(factory, &self.runtime, logger).await?;
 

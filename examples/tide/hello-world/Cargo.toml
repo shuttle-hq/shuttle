@@ -10,4 +10,4 @@ crate-type = ["cdylib"]
 
 [dependencies]
 tide = "0.16.0"
-shuttle-service = { version = "0.2.7", features = ["web-tide"] }
+shuttle-service = { version = "0.3", features = ["web-tide"] }

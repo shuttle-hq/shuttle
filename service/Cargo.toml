@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-service"
-version = "0.2.6"
+version = "0.3.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Service traits and macros to deploy on the shuttle platform (https://www.shuttle.rs/)"
@@ -26,8 +26,8 @@ thiserror = "1.0"
 lazy_static = "1.4"
 regex = "1.5"
 
-shuttle-codegen = { version = "0.2.6", path = "../codegen", optional = true }
-shuttle-common = { version = "0.2.6", path = "../common" }
+shuttle-codegen = { version = "0.3.0", path = "../codegen", optional = true }
+shuttle-common = { version = "0.3.0", path = "../common" }
 
 [dev-dependencies]
 portpicker = "0.1.1"

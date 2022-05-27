@@ -50,12 +50,13 @@ impl Shuttle {
         self.ctx.set_api_url(args.api_url);
 
         match args.cmd {
-            Command::Deploy(deploy_args) => self.deploy(deploy_args).await,
-            Command::Status => self.status().await,
-            Command::Logs => self.logs().await,
-            Command::Delete => self.delete().await,
             Command::Auth(auth_args) => self.auth(auth_args).await,
+            Command::Delete => self.delete().await,
+            Command::Deploy(deploy_args) => self.deploy(deploy_args).await,
+            Command::Init => self.init().await,
             Command::Login(login_args) => self.login(login_args).await,
+            Command::Logs => self.logs().await,
+            Command::Status => self.status().await,
         }
     }
 
@@ -104,6 +105,11 @@ impl Shuttle {
         )
         .await
         .context("failed to delete deployment")
+    }
+
+    async fn init(&self) -> Result<()> {
+        println!("Init called :))");
+        Ok(())
     }
 
     async fn status(&self) -> Result<()> {

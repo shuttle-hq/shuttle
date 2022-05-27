@@ -53,18 +53,20 @@ fn parse_working_directory(working_directory: &OsStr) -> Result<PathBuf, OsStrin
 
 #[derive(StructOpt)]
 pub enum Command {
-    #[structopt(about = "deploy a shuttle project")]
-    Deploy(DeployArgs),
-    #[structopt(about = "view the status of a shuttle project")]
-    Status,
-    #[structopt(about = "view the logs of a shuttle project")]
-    Logs,
-    #[structopt(about = "delete the latest deployment for a shuttle project")]
-    Delete,
     #[structopt(about = "create user credentials for the shuttle platform")]
     Auth(AuthArgs),
+    #[structopt(about = "deploy a shuttle project")]
+    Deploy(DeployArgs),
+    #[structopt(about = "delete the latest deployment for a shuttle project")]
+    Delete,
+    #[structopt(about = "create a new shuttle project in an existing directory")]
+    Init,
     #[structopt(about = "login to the shuttle platform")]
     Login(LoginArgs),
+    #[structopt(about = "view the logs of a shuttle project")]
+    Logs,
+    #[structopt(about = "view the status of a shuttle project")]
+    Status,
 }
 
 #[derive(StructOpt)]

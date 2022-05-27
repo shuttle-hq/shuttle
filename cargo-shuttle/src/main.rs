@@ -5,6 +5,7 @@ mod config;
 use std::fs::File;
 use std::io;
 use std::io::Write;
+use std::process;
 use std::rc::Rc;
 
 use anyhow::{Context, Result};
@@ -15,7 +16,7 @@ use cargo::ops::{PackageOpts, Packages};
 use futures::future::TryFutureExt;
 use structopt::StructOpt;
 
-use crate::args::{Args, AuthArgs, Command, DeployArgs};
+use crate::args::{Args, AuthArgs, Command, DeployArgs, InitArgs};
 use crate::config::RequestContext;
 
 #[tokio::main]
@@ -53,7 +54,7 @@ impl Shuttle {
             Command::Auth(auth_args) => self.auth(auth_args).await,
             Command::Delete => self.delete().await,
             Command::Deploy(deploy_args) => self.deploy(deploy_args).await,
-            Command::Init => self.init().await,
+            Command::Init(init_args) => self.init(init_args).await,
             Command::Login(login_args) => self.login(login_args).await,
             Command::Logs => self.logs().await,
             Command::Status => self.status().await,
@@ -107,8 +108,10 @@ impl Shuttle {
         .context("failed to delete deployment")
     }
 
-    async fn init(&self) -> Result<()> {
-        println!("Init called :))");
+    async fn init(&self, args: InitArgs) -> Result<()> {
+        let path = args.path.to_str().unwrap();
+        println!("Path is => {path}");
+        process::Command::new("cargo").args(["init", "--lib", path]).spawn()?.wait()?;
         Ok(())
     }
 

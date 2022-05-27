@@ -1,6 +1,6 @@
 mod args;
 mod client;
-mod config;
+pub mod config;
 mod factory;
 mod print;
 

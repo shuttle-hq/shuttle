@@ -1,6 +1,6 @@
 use std::{
     ffi::{OsStr, OsString},
-    fs::canonicalize,
+    fs::{create_dir_all, canonicalize},
     path::PathBuf,
 };
 
@@ -86,7 +86,7 @@ pub struct DeployArgs {
 pub struct InitArgs {
     #[structopt(
         about = "the path to initialize",
-        parse(try_from_os_str = parse_path),
+        parse(try_from_os_str = parse_init_path),
         default_value = ".",
     )]
     pub path: PathBuf,
@@ -96,4 +96,12 @@ pub struct InitArgs {
 fn parse_path(path: &OsStr) -> Result<PathBuf, OsString> {
     canonicalize(path)
         .map_err(|e| format!("could not turn {path:?} into a real path: {e}").into())
+}
+
+// Helper function to parse, create if not exists, and return the absolute path
+fn parse_init_path(path: &OsStr) -> Result<PathBuf, OsString> {
+    // Create the directory if does not exist
+    create_dir_all(path).expect("could not find or create a directory with the given path");
+
+    parse_path(path)
 }

@@ -117,7 +117,6 @@ impl Shuttle {
             .spawn()?
             .wait()?;
 
-        // Read and parse the existing Cargo.toml into a `Document`
         let cargo_path = args.path.join("Cargo.toml");
         let mut cargo_doc = read_to_string(cargo_path.clone())
             .expect(&format!(

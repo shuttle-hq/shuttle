@@ -2,7 +2,7 @@ mod args;
 mod client;
 mod config;
 
-use std::fs::File;
+use std::fs::{read_to_string, File};
 use std::io;
 use std::io::Write;
 use std::process;
@@ -15,6 +15,7 @@ use cargo::core::Workspace;
 use cargo::ops::{PackageOpts, Packages};
 use futures::future::TryFutureExt;
 use structopt::StructOpt;
+use toml_edit::{value, Array, Document, Item, Table, Value};
 
 use crate::args::{Args, AuthArgs, Command, DeployArgs, InitArgs};
 use crate::config::RequestContext;
@@ -109,9 +110,39 @@ impl Shuttle {
     }
 
     async fn init(&self, args: InitArgs) -> Result<()> {
+        // Call `cargo init --lib` to generate files
         let path = args.path.to_str().unwrap();
-        println!("Path is => {path}");
-        process::Command::new("cargo").args(["init", "--lib", path]).spawn()?.wait()?;
+        process::Command::new("cargo")
+            .args(["init", "--lib", path])
+            .spawn()?
+            .wait()?;
+
+        // Read and parse the existing Cargo.toml into a `Document`
+        let cargo_path = args.path.join("Cargo.toml");
+        let mut cargo_doc = read_to_string(cargo_path.clone())
+            .expect(&format!(
+                "Cannot read Cargo.toml in the present path {path:?}"
+            ))
+            .parse::<Document>()?;
+
+        // Remove empty dependencies table to re-insert after the lib table is inserted
+        cargo_doc.remove("dependencies");
+
+        // Insert `crate-type = ["cdylib"]` array into `[lib]` table
+        let crate_type_array = Array::from_iter(["cdylib"].into_iter());
+        let mut lib_table = Table::new();
+        lib_table["crate-type"] = Item::Value(Value::Array(crate_type_array));
+        cargo_doc["lib"] = Item::Table(lib_table);
+
+        // Insert shuttle-service to `[dependencies]` table
+        let mut dep_table = Table::new();
+        dep_table["shuttle-service"]["version"] = value(env!("CARGO_PKG_VERSION"));
+        cargo_doc["dependencies"] = Item::Table(dep_table);
+
+        // Truncate Cargo.toml and write the updated `Document` to it
+        let mut cargo_toml = File::create(cargo_path)?;
+        cargo_toml.write(cargo_doc.to_string().as_bytes())?;
+
         Ok(())
     }
 

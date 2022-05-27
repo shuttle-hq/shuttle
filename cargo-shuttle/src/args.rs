@@ -89,7 +89,7 @@ pub struct InitArgs {
         parse(try_from_os_str = parse_path),
         default_value = ".",
     )]
-    pub path: PathBuf
+    pub path: PathBuf,
 }
 
 // Helper function to parse and return the absolute path

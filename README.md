@@ -21,8 +21,6 @@
 
 # shuttle
 
----
-
 shuttle is a platform for easily deploying and hosting serverless Rust apps.
 
 shuttle is built for productivity, reliability and performance:

@@ -21,9 +21,10 @@
 
 # shuttle
 
-shuttle is a platform for easily deploying and hosting serverless Rust apps.
+[Shuttle](https://www.shuttle.rs/) is a serverless platform for Rust which makes it really easy to 
+deploy your web-apps.
 
-shuttle is built for productivity, reliability and performance:
+Shuttle is built for productivity, reliability and performance:
 - Zero-Configuration support for Rust using annotations
 - Automatic resource provisioning (databases, caches, subdomains, etc.) via [Infrastructure-From-Code](https://www.shuttle.rs/blog/2022/05/09/ifc)
 - First-class support for popular Rust frameworks (Rocket, Axum)
@@ -32,7 +33,7 @@ shuttle is built for productivity, reliability and performance:
 
 ## Getting Started
 
-First download the shuttle cargo extention and login:
+First download the shuttle cargo extension and login:
 
 ```bash
 $ cargo install cargo-shuttle

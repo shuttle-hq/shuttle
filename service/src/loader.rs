@@ -1,6 +1,6 @@
+use std::ffi::OsStr;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
-use std::{ffi::OsStr, sync::mpsc::SyncSender};
 
 use anyhow::{anyhow, Context};
 use cargo::core::compiler::CompileMode;
@@ -11,6 +11,7 @@ use cargo::Config;
 use libloading::{Library, Symbol};
 use shuttle_common::DeploymentId;
 use thiserror::Error as ThisError;
+use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{
     logger::{Log, Logger},
@@ -59,7 +60,7 @@ impl Loader {
         self,
         factory: &mut dyn Factory,
         addr: SocketAddr,
-        tx: SyncSender<Log>,
+        tx: UnboundedSender<Log>,
         deployment_id: DeploymentId,
     ) -> Result<(ServeHandle, Library), Error> {
         let mut service = self.service;
@@ -68,7 +69,7 @@ impl Loader {
         service.build(factory, logger).await?;
 
         // Start service on this side of the FFI
-        let handle = tokio::task::spawn(async move { service.bind(addr)?.await? });
+        let handle = tokio::spawn(async move { service.bind(addr)?.await? });
 
         Ok((handle, self.so))
     }

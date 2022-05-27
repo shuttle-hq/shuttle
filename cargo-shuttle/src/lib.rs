@@ -9,7 +9,6 @@ use std::io::Write;
 use std::io::{self, stdout};
 use std::net::{Ipv4Addr, SocketAddr};
 use std::rc::Rc;
-use std::sync::mpsc;
 
 use anyhow::{Context, Result};
 pub use args::{Args, Command, ProjectArgs};
@@ -21,6 +20,7 @@ use config::RequestContext;
 use factory::LocalFactory;
 use futures::future::TryFutureExt;
 use shuttle_service::loader::{build_crate, Loader};
+use tokio::sync::mpsc;
 use uuid::Uuid;
 
 pub struct Shuttle {
@@ -136,17 +136,16 @@ impl Shuttle {
         let mut factory = LocalFactory {};
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8000);
         let deployment_id = Uuid::new_v4();
-        let (tx, rx) = mpsc::sync_channel(100);
+        let (tx, mut rx) = mpsc::unbounded_channel();
 
         let (handle, so) = loader.load(&mut factory, addr, tx, deployment_id)?;
 
-        // let logs = std::thread::spawn(move || {
-        //     tokio_handle.spawn_blocking(move || {
-        //         while let Ok(log) = rx.recv() {
-        //             print::log(log.datetime, log.item);
-        //         }
-        //     });
-        // });
+        tokio::spawn(async move {
+            while let Some(log) = rx.recv().await {
+                print::log(log.datetime, log.item);
+            }
+        });
+
         handle.await??;
 
         tokio::spawn(async move {

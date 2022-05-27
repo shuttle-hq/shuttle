@@ -16,7 +16,7 @@
 //! Depend on `shuttle-service` in `Cargo.toml`:
 //!
 //! ```toml
-//! shuttle-service = { version = "0.2", features = ["web-rocket"] }
+//! shuttle-service = { version = "0.3", features = ["web-rocket"] }
 //! ```
 //!
 //! and make sure your crate has a `cdylib` output target:
@@ -85,7 +85,7 @@
 //! Depend on `shuttle-service` in `Cargo.toml`:
 //!
 //! ```toml
-//! shuttle-service = { version = "0.2", features = ["web-rocket", "sqlx-postgres"] }
+//! shuttle-service = { version = "0.3", features = ["web-rocket", "sqlx-postgres"] }
 //! ```
 //!
 //! ```rust,no_run

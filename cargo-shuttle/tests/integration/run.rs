@@ -29,10 +29,11 @@ async fn cargo_shuttle_run(working_directory: &str) -> u16 {
     tokio::spawn(runner);
 
     // Wait for service to be responsive
-    while let Err(_) = reqwest::Client::new()
+    while (reqwest::Client::new()
         .get(format!("http://localhost:{port}"))
         .send()
-        .await
+        .await)
+        .is_err()
     {
         sleep(Duration::from_millis(350)).await;
     }

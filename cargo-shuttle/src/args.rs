@@ -36,7 +36,7 @@ pub struct ProjectArgs {
     #[structopt(
         global = true,
         long,
-        parse(try_from_os_str = parse_working_directory),
+        parse(try_from_os_str = parse_path),
         default_value = ".",
     )]
     /// Specify the working directory
@@ -44,11 +44,6 @@ pub struct ProjectArgs {
     #[structopt(global = true, long)]
     /// Specify the name of the project (overrides crate name)
     pub name: Option<ProjectName>,
-}
-
-fn parse_working_directory(working_directory: &OsStr) -> Result<PathBuf, OsString> {
-    canonicalize(working_directory)
-        .map_err(|e| format!("could not turn {working_directory:?} into a real path: {e}").into())
 }
 
 #[derive(StructOpt)]
@@ -60,7 +55,7 @@ pub enum Command {
     #[structopt(about = "delete the latest deployment for a shuttle project")]
     Delete,
     #[structopt(about = "create a new shuttle project in an existing directory")]
-    Init,
+    Init(InitArgs),
     #[structopt(about = "login to the shuttle platform")]
     Login(LoginArgs),
     #[structopt(about = "view the logs of a shuttle project")]
@@ -85,4 +80,20 @@ pub struct AuthArgs {
 pub struct DeployArgs {
     #[structopt(long, about = "allow dirty working directories to be packaged")]
     pub allow_dirty: bool,
+}
+
+#[derive(StructOpt)]
+pub struct InitArgs {
+    #[structopt(
+        about = "the path to initialize",
+        parse(try_from_os_str = parse_path),
+        default_value = ".",
+    )]
+    pub path: PathBuf
+}
+
+// Helper function to parse and return the absolute path
+fn parse_path(path: &OsStr) -> Result<PathBuf, OsString> {
+    canonicalize(path)
+        .map_err(|e| format!("could not turn {path:?} into a real path: {e}").into())
 }

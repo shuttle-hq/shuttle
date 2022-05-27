@@ -11,7 +11,7 @@ use std::net::{Ipv4Addr, SocketAddr};
 use std::rc::Rc;
 
 use anyhow::{Context, Result};
-pub use args::{Args, Command, ProjectArgs};
+pub use args::{Args, Command, ProjectArgs, RunArgs};
 use args::{AuthArgs, DeployArgs, LoginArgs};
 use cargo::core::resolver::CliFeatures;
 use cargo::core::Workspace;
@@ -42,7 +42,11 @@ impl Shuttle {
     pub async fn run(mut self, args: Args) -> Result<()> {
         if matches!(
             args.cmd,
-            Command::Deploy(..) | Command::Delete | Command::Status | Command::Logs | Command::Run
+            Command::Deploy(..)
+                | Command::Delete
+                | Command::Status
+                | Command::Logs
+                | Command::Run(..)
         ) {
             self.load_project(&args.project_args)?;
         }
@@ -56,7 +60,7 @@ impl Shuttle {
             Command::Delete => self.delete().await,
             Command::Auth(auth_args) => self.auth(auth_args).await,
             Command::Login(login_args) => self.login(login_args).await,
-            Command::Run => self.local_run().await,
+            Command::Run(run_args) => self.local_run(run_args).await,
         }
     }
 
@@ -127,14 +131,14 @@ impl Shuttle {
         .context("failed to get logs of deployment")
     }
 
-    async fn local_run(&self) -> Result<()> {
+    async fn local_run(&self, run_args: RunArgs) -> Result<()> {
         let buf = Box::new(stdout());
         let working_directory = self.ctx.working_directory();
         let so_path = build_crate(working_directory, buf)?;
         let loader = Loader::from_so_file(so_path)?;
 
         let mut factory = LocalFactory {};
-        let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8000);
+        let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), run_args.port);
         let deployment_id = Uuid::new_v4();
         let (tx, mut rx) = mpsc::unbounded_channel();
 

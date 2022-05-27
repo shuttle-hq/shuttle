@@ -1,12 +1,15 @@
-use cargo_shuttle::{Args, Command, ProjectArgs, Shuttle};
+use cargo_shuttle::{Args, Command, ProjectArgs, RunArgs, Shuttle};
 use core::panic;
+use portpicker::pick_unused_port;
 use reqwest::StatusCode;
 use std::{fs::canonicalize, time::Duration};
 use tokio::time::sleep;
 
 /// creates a `cargo-shuttle` run instance with some reasonable defaults set.
-async fn cargo_shuttle_run(working_directory: &str) {
+async fn cargo_shuttle_run(working_directory: &str) -> u16 {
     let working_directory = canonicalize(working_directory).unwrap();
+    let port = pick_unused_port().unwrap();
+    let run_args = RunArgs { port };
 
     let runner = Shuttle::new().run(Args {
         api_url: Some("network support is intentionally broken in tests".to_string()),
@@ -14,7 +17,7 @@ async fn cargo_shuttle_run(working_directory: &str) {
             working_directory,
             name: None,
         },
-        cmd: Command::Run,
+        cmd: Command::Run(run_args),
     });
 
     tokio::spawn(async {
@@ -27,20 +30,22 @@ async fn cargo_shuttle_run(working_directory: &str) {
 
     // Wait for service to be responsive
     while let Err(_) = reqwest::Client::new()
-        .get("http://localhost:8000")
+        .get(format!("http://localhost:{port}"))
         .send()
         .await
     {
         sleep(Duration::from_millis(350)).await;
     }
+
+    port
 }
 
 #[tokio::test]
 async fn rocket_hello_world() {
-    cargo_shuttle_run("../examples/rocket/hello-world").await;
+    let port = cargo_shuttle_run("../examples/rocket/hello-world").await;
 
     let request_text = reqwest::Client::new()
-        .get("http://localhost:8000/hello")
+        .get(format!("http://localhost:{port}/hello"))
         .send()
         .await
         .unwrap()
@@ -53,11 +58,11 @@ async fn rocket_hello_world() {
 
 #[tokio::test]
 async fn rocket_authentication() {
-    cargo_shuttle_run("../examples/rocket/authentication").await;
+    let port = cargo_shuttle_run("../examples/rocket/authentication").await;
     let client = reqwest::Client::new();
 
     let public_text = client
-        .get("http://localhost:8000/public")
+        .get(format!("http://localhost:{port}/public"))
         .send()
         .await
         .unwrap()
@@ -71,7 +76,7 @@ async fn rocket_authentication() {
     );
 
     let private_status = client
-        .get("http://localhost:8000/private")
+        .get(format!("http://localhost:{port}/private"))
         .send()
         .await
         .unwrap()
@@ -80,7 +85,7 @@ async fn rocket_authentication() {
     assert_eq!(private_status, StatusCode::FORBIDDEN);
 
     let body = client
-        .post("http://localhost:8000/login")
+        .post(format!("http://localhost:{port}/login"))
         .body("{\"username\": \"username\", \"password\": \"password\"}")
         .send()
         .await
@@ -92,7 +97,7 @@ async fn rocket_authentication() {
     let token = format!("Bearer {}", json["token"].as_str().unwrap());
 
     let private_text = client
-        .get("http://localhost:8000/private")
+        .get(format!("http://localhost:{port}/private"))
         .header("Authorization", token)
         .send()
         .await
@@ -109,10 +114,10 @@ async fn rocket_authentication() {
 
 #[tokio::test]
 async fn axum_hello_world() {
-    cargo_shuttle_run("../examples/axum/hello-world").await;
+    let port = cargo_shuttle_run("../examples/axum/hello-world").await;
 
     let request_text = reqwest::Client::new()
-        .get("http://localhost:8000/hello")
+        .get(format!("http://localhost:{port}/hello"))
         .send()
         .await
         .unwrap()
@@ -125,10 +130,10 @@ async fn axum_hello_world() {
 
 #[tokio::test]
 async fn tide_hello_world() {
-    cargo_shuttle_run("../examples/tide/hello-world").await;
+    let port = cargo_shuttle_run("../examples/tide/hello-world").await;
 
     let request_text = reqwest::Client::new()
-        .get("http://localhost:8000/hello")
+        .get(format!("http://localhost:{port}/hello"))
         .send()
         .await
         .unwrap()

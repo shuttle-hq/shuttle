@@ -29,3 +29,6 @@ uuid = { version = "0.8.2", features = ["v4"] }
 
 shuttle-common = { version = "0.3.0", path = "../common" }
 shuttle-service = { version = "0.3.0", path = "../service", features = [ "loader" ] }
+
+[dev-dependencies]
+portpicker = "0.1.1"

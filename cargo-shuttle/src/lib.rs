@@ -21,7 +21,6 @@ use config::RequestContext;
 use factory::LocalFactory;
 use futures::future::TryFutureExt;
 use shuttle_service::loader::{build_crate, Loader};
-use tokio::task::spawn_blocking;
 use uuid::Uuid;
 
 pub struct Shuttle {
@@ -141,19 +140,18 @@ impl Shuttle {
 
         let (handle, so) = loader.load(&mut factory, addr, tx, deployment_id)?;
 
-        let logs = spawn_blocking(move || loop {
-            while let Ok(log) = rx.recv() {
-                print::log(log.datetime, log.item);
-            }
-        });
-
+        // let logs = std::thread::spawn(move || {
+        //     tokio_handle.spawn_blocking(move || {
+        //         while let Ok(log) = rx.recv() {
+        //             print::log(log.datetime, log.item);
+        //         }
+        //     });
+        // });
         handle.await??;
 
         tokio::spawn(async move {
             so.close().unwrap();
         });
-
-        logs.await?;
 
         Ok(())
     }

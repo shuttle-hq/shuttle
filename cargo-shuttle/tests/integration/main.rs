@@ -1,9 +1,9 @@
-use std::path::Path;
+mod run;
 
 use cargo_shuttle::{Args, Command, ProjectArgs, Shuttle};
-use std::future::Future;
+use std::{future::Future, path::Path};
 
-/// creates a `cargo-shuttle` Command instance with some reasonable defaults set.
+/// creates a `cargo-shuttle` run instance with some reasonable defaults set.
 fn cargo_shuttle_command(
     cmd: Command,
     working_directory: &str,

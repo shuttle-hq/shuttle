@@ -64,7 +64,7 @@ impl Loader {
         deployment_id: DeploymentId,
     ) -> Result<(ServeHandle, Library), Error> {
         let mut service = self.service;
-        let logger = Logger::new(tx, deployment_id);
+        let logger = Box::new(Logger::new(tx, deployment_id));
 
         service.build(factory, logger).await?;
 

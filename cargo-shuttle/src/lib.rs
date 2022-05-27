@@ -138,7 +138,7 @@ impl Shuttle {
         let deployment_id = Uuid::new_v4();
         let (tx, mut rx) = mpsc::unbounded_channel();
 
-        let (handle, so) = loader.load(&mut factory, addr, tx, deployment_id)?;
+        let (handle, so) = loader.load(&mut factory, addr, tx, deployment_id).await?;
 
         tokio::spawn(async move {
             while let Some(log) = rx.recv().await {

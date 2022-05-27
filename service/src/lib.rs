@@ -169,7 +169,6 @@ use async_trait::async_trait;
 
 // Pub uses by `codegen`
 pub use log;
-pub use logger::Logger;
 pub use tokio::runtime::Runtime;
 
 pub mod error;
@@ -303,7 +302,11 @@ pub trait Service: Send + Sync {
     /// And the logger is for logging all runtime events
     ///
     /// The default is a noop that returns `Ok(())`.
-    async fn build(&mut self, _: &mut dyn Factory, _logger: Logger) -> Result<(), Error> {
+    async fn build(
+        &mut self,
+        _: &mut dyn Factory,
+        _logger: Box<dyn log::Log>,
+    ) -> Result<(), Error> {
         Ok(())
     }
 
@@ -326,7 +329,7 @@ pub type StateBuilder<T> =
     for<'a> fn(
         &'a mut dyn Factory,
         &'a Runtime,
-        Logger,
+        Box<dyn log::Log>,
     ) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + 'a>>;
 
 /// A wrapper that takes a user's future, gives the future a factory, and takes the returned service from the future
@@ -341,7 +344,7 @@ impl<T> IntoService
     for for<'a> fn(
         &'a mut dyn Factory,
         &'a Runtime,
-        Logger,
+        Box<dyn log::Log>,
     ) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + 'a>>
 where
     SimpleService<T>: Service,
@@ -360,7 +363,11 @@ where
 #[cfg(feature = "web-rocket")]
 #[async_trait]
 impl Service for SimpleService<rocket::Rocket<rocket::Build>> {
-    async fn build(&mut self, factory: &mut dyn Factory, logger: Logger) -> Result<(), Error> {
+    async fn build(
+        &mut self,
+        factory: &mut dyn Factory,
+        logger: Box<dyn log::Log>,
+    ) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
             let rocket = builder(factory, &self.runtime, logger).await?;
 
@@ -401,7 +408,11 @@ pub type ShuttleRocket = Result<rocket::Rocket<rocket::Build>, Error>;
 #[cfg(feature = "web-axum")]
 #[async_trait]
 impl Service for SimpleService<sync_wrapper::SyncWrapper<axum::Router>> {
-    async fn build(&mut self, factory: &mut dyn Factory, logger: Logger) -> Result<(), Error> {
+    async fn build(
+        &mut self,
+        factory: &mut dyn Factory,
+        logger: Box<dyn log::Log>,
+    ) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
             let axum = builder(factory, &self.runtime, logger).await?;
 
@@ -439,7 +450,11 @@ impl<T> Service for SimpleService<tide::Server<T>>
 where
     T: Clone + Send + Sync + 'static,
 {
-    async fn build(&mut self, factory: &mut dyn Factory, logger: Logger) -> Result<(), Error> {
+    async fn build(
+        &mut self,
+        factory: &mut dyn Factory,
+        logger: Box<dyn log::Log>,
+    ) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
             let tide = builder(factory, &self.runtime, logger).await?;
 
@@ -479,7 +494,7 @@ where
     async fn build(
         &mut self,
         factory: &mut dyn Factory,
-        logger: logger::Logger,
+        logger: Box<dyn log::Log>,
     ) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
             let tower = builder(factory, &self.runtime, logger).await?;

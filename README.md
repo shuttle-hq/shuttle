@@ -33,7 +33,7 @@ Shuttle is built for productivity, reliability and performance:
 
 ## Getting Started
 
-First download the shuttle cargo extension and login:
+First download the Shuttle cargo extension and login:
 
 ```bash
 $ cargo install cargo-shuttle
@@ -41,7 +41,7 @@ $ cargo shuttle login
 $ cargo init --lib hello-world
 ```
 
-Update your Cargo.toml:
+Update your `Cargo.toml`:
 
 ```toml
 [package]
@@ -58,7 +58,7 @@ shuttle-service = { version = "0.2", features = ["web-rocket"] }
 ```
 
 
-Create your first shuttle app:
+Create your first shuttle app in `lib.rs`:
 
 ```rust
 #[macro_use]
@@ -110,11 +110,13 @@ If you have any requests or suggestions feel free to open an issue.
 
 ## Status
 
-- [x] Alpha: We are testing shuttle, API and deployments may be unstable
-- [ ] Public Alpha: Anyone can sign up (link is coming). But go easy on us, there are a few kinks
+- [x] Alpha: We are testing Shuttle, API and deployments may be unstable
+- [x] Public Alpha: Anyone can sign up, but go easy on us, 
+  there are a few kinks
 - [ ] Public Beta: Stable enough for most non-enterprise use-cases
 - [ ] Public: Production-ready!
 
-We are currently in Alpha. Watch "releases" of this repo to get notified of major updates!
+We are currently in Public Alpha. Watch "releases" of this repo to get 
+notified of major updates!
 
 

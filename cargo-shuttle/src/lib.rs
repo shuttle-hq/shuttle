@@ -12,8 +12,8 @@ use std::rc::Rc;
 use std::sync::mpsc;
 
 use anyhow::{Context, Result};
-pub use args::Args;
-use args::{AuthArgs, Command, DeployArgs, LoginArgs, ProjectArgs};
+pub use args::{Args, Command, ProjectArgs};
+use args::{AuthArgs, DeployArgs, LoginArgs};
 use cargo::core::resolver::CliFeatures;
 use cargo::core::Workspace;
 use cargo::ops::{PackageOpts, Packages};

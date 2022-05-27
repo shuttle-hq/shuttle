@@ -29,7 +29,3 @@ uuid = { version = "0.8.2", features = ["v4"] }
 
 shuttle-common = { version = "0.3.0", path = "../common" }
 shuttle-service = { version = "0.3.0", path = "../service", features = [ "loader" ] }
-
-[dev-dependencies]
-assert_cmd = "2.0.4"
-predicates = "2.1.1"

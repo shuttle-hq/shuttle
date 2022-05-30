@@ -44,7 +44,7 @@ async fn main() -> Result<SyncWrapper<Router>, shuttle_service::Error> {
         rx,
     }));
 
-    // Spawn a thread to continually chech the status of the api
+    // Spawn a thread to continually check the status of the api
     let state_send = state.clone();
     tokio::spawn(async move {
         let duration = Duration::from_secs(PAUSE_SECS);

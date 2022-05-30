@@ -118,11 +118,7 @@ impl Shuttle {
             .wait()?;
 
         let cargo_path = args.path.join("Cargo.toml");
-        let mut cargo_doc = read_to_string(cargo_path.clone())
-            .expect(&format!(
-                "Cannot read Cargo.toml in the present path {path:?}"
-            ))
-            .parse::<Document>()?;
+        let mut cargo_doc = read_to_string(cargo_path.clone())?.parse::<Document>()?;
 
         // Remove empty dependencies table to re-insert after the lib table is inserted
         cargo_doc.remove("dependencies");
@@ -140,7 +136,7 @@ impl Shuttle {
 
         // Truncate Cargo.toml and write the updated `Document` to it
         let mut cargo_toml = File::create(cargo_path)?;
-        cargo_toml.write(cargo_doc.to_string().as_bytes())?;
+        cargo_toml.write_all(cargo_doc.to_string().as_bytes())?;
 
         Ok(())
     }

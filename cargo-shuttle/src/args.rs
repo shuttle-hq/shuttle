@@ -1,6 +1,6 @@
 use std::{
     ffi::{OsStr, OsString},
-    fs::{create_dir_all, canonicalize},
+    fs::{canonicalize, create_dir_all},
     path::PathBuf,
 };
 
@@ -94,8 +94,7 @@ pub struct InitArgs {
 
 // Helper function to parse and return the absolute path
 fn parse_path(path: &OsStr) -> Result<PathBuf, OsString> {
-    canonicalize(path)
-        .map_err(|e| format!("could not turn {path:?} into a real path: {e}").into())
+    canonicalize(path).map_err(|e| format!("could not turn {path:?} into a real path: {e}").into())
 }
 
 // Helper function to parse, create if not exists, and return the absolute path

@@ -49,15 +49,31 @@
 //!
 //! Complete examples can be found [in the repository](https://github.com/getsynth/shuttle/tree/main/examples/rocket).
 //!
-//! ## Deploying
-//!
-//! You can deploy your service with the [`cargo shuttle`](https://docs.rs/crate/cargo-shuttle/latest) subcommand. To install run:
+//! ## Running locally
+//! To test your app locally before deploying, use the [`cargo shuttle`](https://docs.rs/crate/cargo-shuttle/latest) subcommand.
+//! To install shuttle, run the following in a terminal:
 //!
 //! ```bash
 //! $ cargo install cargo-shuttle
 //! ```
 //!
-//! in a terminal. Once installed, run:
+//! After the install, run the following to run your app locally:
+//!
+//! ```bash
+//! $ cargo shuttle run
+//! ```
+//!
+//! You should see your app build and start on the default port 8000. You can test this using;
+//!
+//! ```bash
+//! $ curl http://localhost:8000/hello
+//! Hello, world!
+//! ```
+//!
+//! ## Deploying
+//!
+//! You can deploy your service with the [`cargo shuttle`](https://docs.rs/crate/cargo-shuttle/latest) subcommand.
+//! Once installed, you will need to authenticate with the shuttle service first using:
 //!
 //! ```bash
 //! $ cargo shuttle login
@@ -74,7 +90,7 @@
 //! Your service will immediately be available at `{crate_name}.shuttleapp.rs`. For example:
 //!
 //! ```bash
-//! $ curl https://hello-world-rocket-app.shuttleapp.rs
+//! $ curl https://hello-world-rocket-app.shuttleapp.rs/hello
 //! Hello, world!
 //! ```
 //!

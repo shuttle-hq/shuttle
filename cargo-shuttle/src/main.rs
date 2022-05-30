@@ -200,10 +200,10 @@ impl Shuttle {
             no_fail_fast: false,
         };
 
-        let err = cargo::ops::run_tests(&ws, &opts, &[])?;
-        match err {
+        let test_failures = cargo::ops::run_tests(&ws, &opts, &[])?;
+        match test_failures {
             None => Ok(()),
-            Some(_) => Err(anyhow!("To ignore all tests, pass the `--no-test` flag")),
+            Some(_) => Err(anyhow!("Some tests failed. To ignore all tests, pass the `--no-test` flag")),
         }
     }
 }

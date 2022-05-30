@@ -104,7 +104,7 @@ impl ToTokens for Wrapper {
         let fn_output = &self.fn_output;
         let fn_ident = &self.fn_ident;
         let fn_inputs: Vec<_> = self.fn_inputs.iter().map(|i| i.ident.clone()).collect();
-        let fn_inputs_attrs: Vec<_> = self.fn_inputs.iter().map(|i| i.builder.clone()).collect();
+        let fn_inputs_builder: Vec<_> = self.fn_inputs.iter().map(|i| i.builder.clone()).collect();
 
         let factory_ident: Ident = if self.fn_inputs.is_empty() {
             parse_quote!(_factory)
@@ -135,7 +135,7 @@ impl ToTokens for Wrapper {
                 }).await.unwrap();
 
 
-                #(let #fn_inputs = shuttle_service::#fn_inputs_attrs::new().build(#factory_ident, runtime).await?;)*
+                #(let #fn_inputs = shuttle_service::#fn_inputs_builder::new().build(#factory_ident, runtime).await?;)*
 
                 runtime.spawn(#fn_ident(#(#fn_inputs),*)).await.unwrap()
             }

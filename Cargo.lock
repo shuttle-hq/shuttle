@@ -3944,6 +3944,7 @@ name = "shuttle-codegen"
 version = "0.3.0"
 dependencies = [
  "pretty_assertions",
+ "proc-macro-error",
  "proc-macro2",
  "quote",
  "syn",

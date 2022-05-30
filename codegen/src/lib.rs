@@ -1,17 +1,17 @@
 use proc_macro::TokenStream;
+use proc_macro_error::{emit_error, proc_macro_error};
 use quote::{quote, ToTokens};
 use syn::{
-    parse_macro_input, parse_quote, Attribute, FnArg, Ident, ItemFn, Pat, Path, ReturnType, Stmt,
+    parse_macro_input, parse_quote, spanned::Spanned, Attribute, FnArg, Ident, ItemFn, Pat, Path,
+    ReturnType, Stmt,
 };
 
+#[proc_macro_error]
 #[proc_macro_attribute]
 pub fn main(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut fn_decl = parse_macro_input!(item as ItemFn);
 
-    let wrapper = match Wrapper::from_item_fn(&mut fn_decl) {
-        Ok(wrapper) => wrapper,
-        Err(error) => return error.into_compile_error().into(),
-    };
+    let wrapper = Wrapper::from_item_fn(&mut fn_decl);
 
     let expanded = quote! {
         #wrapper
@@ -54,7 +54,7 @@ struct Input {
 }
 
 impl Wrapper {
-    fn from_item_fn(item_fn: &mut ItemFn) -> syn::Result<Self> {
+    fn from_item_fn(item_fn: &mut ItemFn) -> Self {
         let inputs: Vec<_> = item_fn
             .sig
             .inputs
@@ -67,29 +67,31 @@ impl Wrapper {
                 Pat::Ident(ident) => Some((ident, typed.attrs.drain(..).collect())),
                 _ => None,
             })
-            .map(|(pat_ident, attrs)| {
-                Ok(Input {
-                    ident: pat_ident.ident.clone(),
-                    builder: attribute_to_path(attrs)
-                        .map_err(|err| syn::Error::new_spanned(pat_ident, err))?,
-                })
+            .filter_map(|(pat_ident, attrs)| {
+                match attribute_to_path(attrs) {
+                    Ok(builder) => Some(Input {
+                        ident: pat_ident.ident.clone(),
+                        builder,
+                    }),
+                    Err(err) => {
+                        emit_error!(pat_ident, err; hint = pat_ident.span() => "Try adding a config like `#[shared::Postgres]`");
+                        None
+                    }
+                }
             })
-            .collect::<syn::Result<Vec<_>>>()?;
+            .collect();
 
-        Ok(Self {
+        Self {
             fn_ident: item_fn.sig.ident.clone(),
             fn_output: item_fn.sig.output.clone(),
             fn_inputs: inputs,
-        })
+        }
     }
 }
 
 fn attribute_to_path(attrs: Vec<Attribute>) -> Result<Path, String> {
     if attrs.is_empty() {
-        return Err(
-            "resource needs an attribute configuration\nTry adding `#[shared::Postgres]`"
-                .to_string(),
-        );
+        return Err("resource needs an attribute configuration".to_string());
     }
 
     let builder = attrs[0].path.clone();
@@ -157,7 +159,7 @@ mod tests {
             async fn simple() {}
         );
 
-        let actual = Wrapper::from_item_fn(&mut input).unwrap();
+        let actual = Wrapper::from_item_fn(&mut input);
         let expected_ident: Ident = parse_quote!(simple);
 
         assert_eq!(actual.fn_ident, expected_ident);
@@ -199,7 +201,7 @@ mod tests {
             async fn complex() -> Result<(), Box<dyn std::error::Error>> {}
         );
 
-        let actual = Wrapper::from_item_fn(&mut input).unwrap();
+        let actual = Wrapper::from_item_fn(&mut input);
         let expected_ident: Ident = parse_quote!(complex);
         let expected_output: ReturnType = parse_quote!(-> Result<(), Box<dyn std::error::Error>>);
 
@@ -245,7 +247,7 @@ mod tests {
             }
         );
 
-        let actual = Wrapper::from_item_fn(&mut input).unwrap();
+        let actual = Wrapper::from_item_fn(&mut input);
         let expected_ident: Ident = parse_quote!(complex);
         let expected_output: ReturnType = parse_quote!(-> Result<(), Box<dyn std::error::Error>>);
         let expected_inputs: Vec<Input> = vec![Input {
@@ -309,16 +311,6 @@ mod tests {
         };
 
         assert_eq!(actual.to_string(), expected.to_string());
-    }
-
-    #[test]
-    #[should_panic(expected = "resource needs an attribute configuration")]
-    fn from_with_inputs_missing_attribute() {
-        let mut input = parse_quote!(
-            async fn complex(pool: PgPool) {}
-        );
-
-        Wrapper::from_item_fn(&mut input).unwrap();
     }
 
     #[test]

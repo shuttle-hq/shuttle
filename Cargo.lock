@@ -1812,7 +1812,7 @@ dependencies = [
 [[package]]
 name = "hyper-reverse-proxy"
 version = "0.5.2-dev"
-source = "git+https://github.com/chesedo/hyper-reverse-proxy?branch=feat/ws#e179a10e980e142a22b12c67953f8d568bc4a98a"
+source = "git+https://github.com/chesedo/hyper-reverse-proxy?branch=master#a4deffef77685b37fda7224ae678d3d9f00d391e"
 dependencies = [
  "hyper",
  "lazy_static",

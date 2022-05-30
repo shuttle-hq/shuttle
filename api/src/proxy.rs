@@ -99,6 +99,10 @@ async fn handle(
                 ProxyError::ForwardHeaderError => {
                     log::warn!("error while handling request in reverse proxy: 'fwd header error'");
                 }
+                ProxyError::UpgradeError(e) => log::warn!(
+                    "error while handling request needing upgrade in reverse proxy: {}",
+                    e
+                ),
             };
             Ok(Response::builder()
                 .status(StatusCode::INTERNAL_SERVER_ERROR)

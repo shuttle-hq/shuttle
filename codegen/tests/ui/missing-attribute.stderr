@@ -1,0 +1,12 @@
+error: resource needs an attribute configuration
+       Try adding `#[shared::Postgres]`
+ --> tests/ui/missing-attribute.rs:2:27
+  |
+2 | async fn missing_attriute(pool: PgPool) {}
+  |                           ^^^^
+
+error[E0601]: `main` function not found in crate `$CRATE`
+ --> tests/ui/missing-attribute.rs:2:43
+  |
+2 | async fn missing_attriute(pool: PgPool) {}
+  |                                           ^ consider adding a `main` function to `$DIR/tests/ui/missing-attribute.rs`

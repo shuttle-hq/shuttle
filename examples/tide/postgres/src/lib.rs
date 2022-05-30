@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use shuttle_service::error::CustomError;
+use shuttle_service::{error::CustomError, ShuttleTide};
 use sqlx::{Executor, FromRow, PgPool};
 use tide::{Body, Request};
 
@@ -29,9 +29,7 @@ struct MyState {
 }
 
 #[shuttle_service::main]
-async fn tide(
-    #[aws::rds::Postgres] pool: PgPool,
-) -> Result<tide::Server<MyState>, shuttle_service::Error> {
+async fn tide(#[aws::rds::Postgres] pool: PgPool) -> ShuttleTide<MyState> {
     pool.execute(include_str!("../schema.sql"))
         .await
         .map_err(CustomError::new)?;

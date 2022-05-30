@@ -32,10 +32,14 @@ impl Factory for LocalFactory {
         let container_name = format!("shuttle_{}_postgres", self.project);
 
         let container = match self.docker.inspect_container(&container_name, None).await {
-            Ok(container) => container,
+            Ok(container) => {
+                trace!("found DB container {container_name}");
+                container
+            }
             Err(bollard::errors::Error::DockerResponseServerError { status_code, .. })
                 if status_code == 404 =>
             {
+                trace!("will create DB container {container_name}");
                 let options = Some(CreateContainerOptions {
                     name: container_name.clone(),
                 });
@@ -70,6 +74,7 @@ impl Factory for LocalFactory {
         };
 
         if !container.state.unwrap().running.unwrap() {
+            trace!("DB container '{container_name}' not running, so starting it");
             self.docker
                 .start_container(&container_name, None::<StartContainerOptions<String>>)
                 .await
@@ -86,7 +91,11 @@ impl Factory for LocalFactory {
 
         let conn_str = db_info.connection_string("localhost");
 
-        println!("{:>12}: {}\n", "DB URI".bold().cyan(), conn_str);
+        println!(
+            "{:>12} can be reached at {}\n",
+            "DB ready".bold().cyan(),
+            conn_str
+        );
 
         Ok(conn_str)
     }
@@ -95,6 +104,8 @@ impl Factory for LocalFactory {
 impl LocalFactory {
     async fn wait_for_ready(&self, container_name: &str) -> Result<(), shuttle_service::Error> {
         loop {
+            trace!("waiting for '{container_name}' to be ready for connections");
+
             let config = CreateExecOptions {
                 cmd: Some(vec!["pg_isready"]),
                 attach_stdout: Some(true),

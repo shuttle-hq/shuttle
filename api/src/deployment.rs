@@ -160,44 +160,28 @@ impl Deployment {
                     );
 
                     debug!("{}: factory phase", meta.project);
-                    let mut db_state = database::State::new(&meta.project, db_context);
+                    let db_state = database::State::new(&meta.project, db_context);
 
-                    // Pre-emptively allocate a dabatase to work around a deadlock issue with sqlx connection pools
-                    // When .build is called, the db_context's connection pool and the inner connection pool instantiated
-                    // by the Service seem to collide and lead to a deadlock. I wonder if the problem is that we have, once again,
-                    // futures on one part of the FFI boundary being run by a runtime on the other (in this case, the pool in the db_state
-                    // lives in `api` but are driven in `postgres` by a runtime in `postgres`).
-                    self.meta.write().await.database_deployment = Some(db_state.request());
-
-                    match db_state.ensure().await {
+                    let mut factory = ShuttleFactory::new(db_state);
+                    let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
+                    match loader.load(&mut factory, addr, run_logs_tx, meta.id).await {
                         Err(e) => {
-                            debug!("{}: db state failed: {:?}", meta.project, e);
-                            let err: anyhow::Error = e.into();
-                            DeploymentState::Error(
-                                err.context(anyhow!("failed to attach database")),
-                            )
+                            debug!("{}: factory phase FAILED: {:?}", meta.project, e);
+                            DeploymentState::Error(e.into())
                         }
-                        Ok(()) => {
-                            let mut factory = ShuttleFactory::new(&mut db_state);
-                            let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
-                            match loader.load(&mut factory, addr, run_logs_tx, meta.id) {
-                                Err(e) => {
-                                    debug!("{}: factory phase FAILED: {:?}", meta.project, e);
-                                    DeploymentState::Error(e.into())
-                                }
-                                Ok((handle, so)) => {
-                                    debug!("{}: factory phase DONE", meta.project);
-                                    // Remove stale active deployments
-                                    if let Some(stale_id) =
-                                        context.router.promote(meta.host, meta.id).await
-                                    {
-                                        debug!("removing stale deployment `{}`", &stale_id);
-                                        context.deployments.write().await.remove(&stale_id);
-                                    }
+                        Ok((handle, so)) => {
+                            debug!("{}: factory phase DONE", meta.project);
+                            self.meta.write().await.database_deployment =
+                                factory.to_database_info();
 
-                                    DeploymentState::deployed(so, port, handle, db_state)
-                                }
+                            // Remove stale active deployments
+                            if let Some(stale_id) = context.router.promote(meta.host, meta.id).await
+                            {
+                                debug!("removing stale deployment `{}`", &stale_id);
+                                context.deployments.write().await.remove(&stale_id);
                             }
+
+                            DeploymentState::deployed(so, port, handle)
                         }
                     }
                 }
@@ -648,13 +632,8 @@ impl DeploymentState {
         Self::Loaded(loader)
     }
 
-    fn deployed(so: Library, port: Port, handle: ServeHandle, db_state: database::State) -> Self {
-        Self::Deployed(DeployedState {
-            so,
-            port,
-            handle,
-            db_state,
-        })
+    fn deployed(so: Library, port: Port, handle: ServeHandle) -> Self {
+        Self::Deployed(DeployedState { so, port, handle })
     }
 
     fn meta(&self) -> DeploymentStateMeta {
@@ -682,5 +661,4 @@ struct DeployedState {
     so: Library,
     port: Port,
     handle: ServeHandle,
-    db_state: database::State,
 }

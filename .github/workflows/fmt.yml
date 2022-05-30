@@ -19,6 +19,10 @@ jobs:
           components: rustfmt
       - run: cargo fmt --all -- --check
   clippy_test:
+    strategy:
+      fail-fast: true
+      matrix:
+        features: ["web-axum", "web-rocket", "web-tide", "web-tower"]
     runs-on: ubuntu-latest
     steps:
       - uses: shuttle-hq/checkout@v2
@@ -27,4 +31,5 @@ jobs:
           toolchain: stable
           override: true
           components: clippy
-      - run: cargo clippy --tests --all-targets --all-features -- --D warnings
+      - name: Run test with ${{ matrix.features}}
+        run: cargo clippy --tests --all-targets --features="codegen,loader,sqlx-integration,sqlx-postgres,secrets,${{ matrix.features }}" --no-deps -- --D warnings

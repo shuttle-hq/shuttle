@@ -6,4 +6,5 @@ projects = [
     'hello-world-axum-app',
     'authentication-rocket-app',
     'hello-world-tide-app',
+    'hello-world-tower-app',
 ]

@@ -1,6 +1,7 @@
 let
   moz_overlay = import (builtins.fetchTarball https://github.com/mozilla/nixpkgs-mozilla/archive/master.tar.gz);
-  nixpkgs = import (fetchTarball "https://github.com/NixOS/nixpkgs/archive/e7d63bd0d50df412f5a1d8acfa3caae75522e347.tar.gz") { overlays = [ moz_overlay ]; };
+  # Pin to stable from https://status.nixos.org/
+  nixpkgs = import (fetchTarball "https://github.com/NixOS/nixpkgs/archive/9bc0e974545d5bc4c24e1ed047be0dc4e30e494b.tar.gz") { overlays = [ moz_overlay ]; };
 in
   with nixpkgs;
   stdenv.mkDerivation {

@@ -8,6 +8,11 @@ output "api_name_servers" {
   description = "Name servers (NS) for api zone"
 }
 
+output "pg_name_servers" {
+  value       = aws_route53_zone.pg.name_servers
+  description = "Name servers (NS) for pg zone"
+}
+
 output "user_name_servers" {
   value       = aws_route53_zone.user.name_servers
   description = "Name servers (NS) for proxy zone"

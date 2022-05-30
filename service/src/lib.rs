@@ -16,7 +16,7 @@
 //! Depend on `shuttle-service` in `Cargo.toml`:
 //!
 //! ```toml
-//! shuttle-service = { version = "0.2", features = ["web-rocket"] }
+//! shuttle-service = { version = "0.3", features = ["web-rocket"] }
 //! ```
 //!
 //! and make sure your crate has a `cdylib` output target:
@@ -32,7 +32,7 @@
 //! #[macro_use]
 //! extern crate rocket;
 //!
-//! use rocket::{Build, Rocket};
+//! use shuttle_service::ShuttleRocket;
 //!
 //! #[get("/hello")]
 //! fn hello() -> &'static str {
@@ -40,7 +40,7 @@
 //! }
 //!
 //! #[shuttle_service::main]
-//! async fn init() -> Result<Rocket<Build>, shuttle_service::Error> {
+//! async fn init() -> ShuttleRocket {
 //!     let rocket = rocket::build().mount("/", routes![hello]);
 //!
 //!     Ok(rocket)
@@ -85,15 +85,16 @@
 //! Depend on `shuttle-service` in `Cargo.toml`:
 //!
 //! ```toml
-//! shuttle-service = { version = "0.2", features = ["web-rocket", "sqlx-postgres"] }
+//! shuttle-service = { version = "0.3", features = ["web-rocket", "sqlx-postgres"] }
 //! ```
 //!
 //! ```rust,no_run
 //! #[macro_use]
 //! extern crate rocket;
 //!
-//! use rocket::{Build, Rocket};
+//! use rocket::State;
 //! use sqlx::PgPool;
+//! use shuttle_service::ShuttleRocket;
 //!
 //! struct MyState(PgPool);
 //!
@@ -104,7 +105,7 @@
 //! }
 //!
 //! #[shuttle_service::main]
-//! async fn rocket(pool: PgPool) -> Result<Rocket<Build>, shuttle_service::Error> {
+//! async fn rocket(pool: PgPool) -> ShuttleRocket {
 //!     let state = MyState(pool);
 //!     let rocket = rocket::build().manage(state).mount("/", routes![hello]);
 //!
@@ -190,10 +191,10 @@ extern crate shuttle_codegen;
 /// The simplest usage is when your service does not require any shuttle managed resources, so you only need to return a shuttle supported service:
 ///
 /// ```rust,no_run
-/// use rocket::{Build, Rocket};
+/// use shuttle_service::ShuttleRocket;
 ///
 /// #[shuttle_service::main]
-/// async fn rocket() -> Result<Rocket<Build>, shuttle_service::Error> {
+/// async fn rocket() -> ShuttleRocket {
 ///     let rocket = rocket::build();
 ///
 ///     Ok(rocket)
@@ -213,13 +214,13 @@ extern crate shuttle_codegen;
 /// # Getting shuttle managed services
 /// The shuttle is able to manage service dependencies for you. These services are passed in as inputs to your main function:
 /// ```rust,no_run
-/// use rocket::{Build, Rocket};
 /// use sqlx::PgPool;
+/// use shuttle_service::ShuttleRocket;
 ///
 /// struct MyState(PgPool);
 ///
 /// #[shuttle_service::main]
-/// async fn rocket(pool: PgPool) -> Result<Rocket<Build>, shuttle_service::Error> {
+/// async fn rocket(pool: PgPool) -> ShuttleRocket {
 ///     let state = MyState(pool);
 ///     let rocket = rocket::build().manage(state);
 ///

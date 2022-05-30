@@ -51,8 +51,8 @@ EOF
             ]
             Effect = "Allow"
             Resource = [
-              "arn:aws:rds:*:833239102462:db:*",
-              "arn:aws:rds:*:833239102462:subgrp:shuttle_rds",
+              "arn:aws:rds:*:${local.account_id}:db:*",
+              "arn:aws:rds:*:${local.account_id}:subgrp:shuttle_rds",
             ]
           },
         ]

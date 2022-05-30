@@ -16,12 +16,16 @@ use args::{AuthArgs, DeployArgs, LoginArgs};
 use cargo::core::resolver::CliFeatures;
 use cargo::core::Workspace;
 use cargo::ops::{PackageOpts, Packages};
+use colored::Colorize;
 use config::RequestContext;
 use factory::LocalFactory;
 use futures::future::TryFutureExt;
 use shuttle_service::loader::{build_crate, Loader};
 use tokio::sync::mpsc;
 use uuid::Uuid;
+
+#[macro_use]
+extern crate log;
 
 pub struct Shuttle {
     ctx: RequestContext,
@@ -40,6 +44,7 @@ impl Shuttle {
     }
 
     pub async fn run(mut self, args: Args) -> Result<()> {
+        trace!("running local client");
         if matches!(
             args.cmd,
             Command::Deploy(..)
@@ -65,6 +70,7 @@ impl Shuttle {
     }
 
     pub fn load_project(&mut self, project_args: &ProjectArgs) -> Result<()> {
+        trace!("loading project arguments: {project_args:?}");
         self.ctx.load_local(project_args)
     }
 
@@ -132,8 +138,17 @@ impl Shuttle {
     }
 
     async fn local_run(&self, run_args: RunArgs) -> Result<()> {
+        trace!("starting a local run for a service: {run_args:?}");
+
         let buf = Box::new(stdout());
         let working_directory = self.ctx.working_directory();
+
+        trace!("building project");
+        println!(
+            "{:>12} {}",
+            "Building".bold().green(),
+            working_directory.display()
+        );
         let so_path = build_crate(working_directory, buf)?;
         let loader = Loader::from_so_file(so_path)?;
 
@@ -142,6 +157,13 @@ impl Shuttle {
         let deployment_id = Uuid::new_v4();
         let (tx, mut rx) = mpsc::unbounded_channel();
 
+        trace!("loading project");
+        println!(
+            "\n{:>12} {} on http://{}",
+            "Starting".bold().green(),
+            self.ctx.project_name(),
+            addr
+        );
         let (handle, so) = loader.load(&mut factory, addr, tx, deployment_id).await?;
 
         tokio::spawn(async move {
@@ -153,6 +175,7 @@ impl Shuttle {
         handle.await??;
 
         tokio::spawn(async move {
+            trace!("closing so file");
             so.close().unwrap();
         });
 

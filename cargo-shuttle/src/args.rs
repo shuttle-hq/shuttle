@@ -31,7 +31,7 @@ pub struct Args {
 }
 
 // Common args for subcommands that deal with projects.
-#[derive(StructOpt)]
+#[derive(StructOpt, Debug)]
 pub struct ProjectArgs {
     #[structopt(
         global = true,
@@ -87,7 +87,7 @@ pub struct DeployArgs {
     pub allow_dirty: bool,
 }
 
-#[derive(StructOpt)]
+#[derive(StructOpt, Debug)]
 pub struct RunArgs {
     #[structopt(long, about = "port to start service on", default_value = "8000")]
     pub port: u16,

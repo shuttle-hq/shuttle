@@ -14,7 +14,7 @@ use crossterm::{
 };
 use futures::StreamExt;
 use shuttle_common::{project::ProjectName, DatabaseReadyInfo};
-use shuttle_service::Factory;
+use shuttle_service::{error::CustomError, Factory};
 use std::{collections::HashMap, io::stdout, time::Duration};
 use tokio::time::sleep;
 
@@ -86,7 +86,7 @@ impl Factory for LocalFactory {
                     .await
                     .expect("container to be created")
             }
-            error => todo!("unexpected error: {error:?}"),
+            Err(error) => return Err(shuttle_service::Error::Custom(CustomError::new(error))),
         };
 
         if !container

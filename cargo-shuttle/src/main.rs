@@ -12,6 +12,7 @@ use args::{LoginArgs, ProjectArgs};
 use cargo::core::resolver::CliFeatures;
 use cargo::core::Workspace;
 use cargo::ops::{NewOptions, PackageOpts, Packages};
+use cargo_edit::{find, get_latest_dependency, registry_url};
 use futures::future::TryFutureExt;
 use structopt::StructOpt;
 use toml_edit::{value, Array, Document, Item, Table, Value};
@@ -111,19 +112,20 @@ impl Shuttle {
     async fn init(&self, args: InitArgs) -> Result<()> {
         // Interface with cargo to initialize new lib package for shuttle
         let opts = NewOptions::new(None, false, true, args.path.clone(), None, None, None)?;
-        let config = cargo::util::config::Config::default()?;
-        let init_result = cargo::ops::init(&opts, &config);
+        let cargo_config = cargo::util::config::Config::default()?;
+        let init_result = cargo::ops::init(&opts, &cargo_config);
 
+        // Mimick `cargo init` behavior and log status or error to shell
         match init_result {
             Ok(project_kind) => {
-                // Log status to shell (mimicking `cargo init` behavior)
-                config
+                cargo_config
                     .shell()
-                    .status("Created", format!("{} package", project_kind))?;
+                    .status("Created", format!("{} (shuttle) package", project_kind))?;
             }
             Err(e) => return Err(e),
         }
 
+        // Read Cargo.toml into a `Document`
         let cargo_path = args.path.join("Cargo.toml");
         let mut cargo_doc = read_to_string(cargo_path.clone())?.parse::<Document>()?;
 
@@ -136,9 +138,15 @@ impl Shuttle {
         lib_table["crate-type"] = Item::Value(Value::Array(crate_type_array));
         cargo_doc["lib"] = Item::Table(lib_table);
 
+        // Fetch the latest shuttle-service version from crates.io
+        let manifest_path = find(&Some(args.path.clone())).unwrap();
+        let url = registry_url(manifest_path.as_path(), None).expect("Could not find registry URL");
+        let latest_shuttle_service = get_latest_dependency("shuttle-service", false, &manifest_path, &Some(url)).expect("Could not query the latest version of shuttle-service");
+        let shuttle_version = latest_shuttle_service.version().expect("No latest shuttle-service version available");
+
         // Insert shuttle-service to `[dependencies]` table
         let mut dep_table = Table::new();
-        dep_table["shuttle-service"]["version"] = value(env!("CARGO_PKG_VERSION"));
+        dep_table["shuttle-service"]["version"] = value(shuttle_version);
         cargo_doc["dependencies"] = Item::Table(dep_table);
 
         // Truncate Cargo.toml and write the updated `Document` to it

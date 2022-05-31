@@ -5,14 +5,13 @@ mod config;
 use std::fs::{read_to_string, File};
 use std::io;
 use std::io::Write;
-use std::process;
 use std::rc::Rc;
 
 use anyhow::{Context, Result};
 use args::{LoginArgs, ProjectArgs};
 use cargo::core::resolver::CliFeatures;
 use cargo::core::Workspace;
-use cargo::ops::{PackageOpts, Packages};
+use cargo::ops::{NewOptions, PackageOpts, Packages};
 use futures::future::TryFutureExt;
 use structopt::StructOpt;
 use toml_edit::{value, Array, Document, Item, Table, Value};
@@ -110,12 +109,20 @@ impl Shuttle {
     }
 
     async fn init(&self, args: InitArgs) -> Result<()> {
-        // Call `cargo init --lib` to generate files
-        let path = args.path.to_str().unwrap();
-        process::Command::new("cargo")
-            .args(["init", "--lib", path])
-            .spawn()?
-            .wait()?;
+        // Interface with cargo to initialize new lib package for shuttle
+        let opts = NewOptions::new(None, false, true, args.path.clone(), None, None, None)?;
+        let config = cargo::util::config::Config::default()?;
+        let init_result = cargo::ops::init(&opts, &config);
+
+        match init_result {
+            Ok(project_kind) => {
+                // Log status to shell (mimicking `cargo init` behavior)
+                config
+                    .shell()
+                    .status("Created", format!("{} package", project_kind))?;
+            }
+            Err(e) => return Err(e),
+        }
 
         let cargo_path = args.path.join("Cargo.toml");
         let mut cargo_doc = read_to_string(cargo_path.clone())?.parse::<Document>()?;

@@ -2,14 +2,20 @@ use async_trait::async_trait;
 use bollard::{
     container::{Config, CreateContainerOptions, StartContainerOptions},
     exec::{CreateExecOptions, CreateExecResults},
-    models::{HostConfig, PortBinding},
+    image::CreateImageOptions,
+    models::{CreateImageInfo, HostConfig, PortBinding, ProgressDetail},
     Docker,
 };
 use colored::Colorize;
+use crossterm::{
+    cursor::MoveUp,
+    terminal::{Clear, ClearType},
+    QueueableCommand,
+};
 use futures::StreamExt;
 use shuttle_common::{project::ProjectName, DatabaseReadyInfo};
 use shuttle_service::Factory;
-use std::{collections::HashMap, time::Duration};
+use std::{collections::HashMap, io::stdout, time::Duration};
 use tokio::time::sleep;
 
 pub struct LocalFactory {
@@ -27,6 +33,7 @@ impl LocalFactory {
 }
 
 const PG_PASSWORD: &str = "password";
+const PG_IMAGE: &str = "postgres:11";
 
 #[async_trait]
 impl Factory for LocalFactory {
@@ -41,6 +48,9 @@ impl Factory for LocalFactory {
             Err(bollard::errors::Error::DockerResponseServerError { status_code, .. })
                 if status_code == 404 =>
             {
+                self.pull_image(PG_IMAGE)
+                    .await
+                    .expect("failed to pull image");
                 trace!("will create DB container {container_name}");
                 let options = Some(CreateContainerOptions {
                     name: container_name.clone(),
@@ -60,7 +70,7 @@ impl Factory for LocalFactory {
 
                 let password_env = format!("POSTGRES_PASSWORD={PG_PASSWORD}");
                 let config = Config {
-                    image: Some("postgres:11"),
+                    image: Some(PG_IMAGE),
                     env: Some(vec![&password_env]),
                     host_config: Some(host_config),
                     ..Default::default()
@@ -150,4 +160,58 @@ impl LocalFactory {
             sleep(Duration::from_millis(500)).await;
         }
     }
+
+    async fn pull_image(&self, image: &str) -> Result<(), String> {
+        trace!("pulling latest image for '{image}'");
+        let mut layers = HashMap::new();
+
+        let create_image_options = Some(CreateImageOptions {
+            from_image: image,
+            ..Default::default()
+        });
+        let mut output = self.docker.create_image(create_image_options, None, None);
+
+        while let Some(line) = output.next().await {
+            let info = line.expect("failed to create image");
+
+            layers.insert(
+                info.id.as_ref().expect("image info to have an id").clone(),
+                info,
+            );
+
+            print_layers(&layers);
+        }
+
+        Ok(())
+    }
+}
+
+fn print_layers(layers: &HashMap<String, CreateImageInfo>) {
+    for (id, info) in layers {
+        stdout()
+            .queue(Clear(ClearType::CurrentLine))
+            .expect("to be able to clear line");
+        let text = match (info.status.as_deref(), info.progress_detail.as_ref()) {
+            (
+                Some("Downloading"),
+                Some(ProgressDetail {
+                    current: Some(c),
+                    total: Some(t),
+                }),
+            ) => {
+                let percent = *c as f64 / *t as f64 * 100.0;
+                let progress = (percent as i64 / 10) as usize;
+                let remaining = 10 - progress;
+                format!("{:=<progress$}>{:remaining$}   {percent:.0}%", "", "")
+            }
+            (Some(status), _) => status.to_string(),
+            _ => "Unknown".to_string(),
+        };
+        println!("[{id} {}]", text);
+    }
+    stdout()
+        .queue(MoveUp(
+            layers.len().try_into().expect("to convert usize to u16"),
+        ))
+        .expect("to reset cursor position");
 }

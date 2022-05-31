@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use log::{Level, Metadata, Record};
 use shuttle_common::{DeploymentId, LogItem};
-use std::sync::mpsc::SyncSender;
+use tokio::sync::mpsc::UnboundedSender;
 
 #[derive(Debug)]
 pub struct Log {
@@ -12,11 +12,11 @@ pub struct Log {
 
 pub struct Logger {
     deployment_id: DeploymentId,
-    tx: SyncSender<Log>,
+    tx: UnboundedSender<Log>,
 }
 
 impl Logger {
-    pub fn new(tx: SyncSender<Log>, deployment_id: DeploymentId) -> Self {
+    pub fn new(tx: UnboundedSender<Log>, deployment_id: DeploymentId) -> Self {
         Self { tx, deployment_id }
     }
 }

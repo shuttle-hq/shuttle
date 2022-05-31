@@ -4,7 +4,6 @@ use std::fs::DirEntry;
 use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener};
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::SyncSender;
 use std::sync::Arc;
 
 use anyhow::{anyhow, Context as AnyhowContext};
@@ -20,6 +19,7 @@ use shuttle_common::{
 use shuttle_service::loader::Loader;
 use shuttle_service::logger::Log;
 use shuttle_service::ServeHandle;
+use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::{mpsc, RwLock};
 
 use crate::build::Build;
@@ -109,7 +109,7 @@ impl Deployment {
         &self,
         context: &Context,
         db_context: &database::Context,
-        run_logs_tx: SyncSender<Log>,
+        run_logs_tx: UnboundedSender<Log>,
     ) {
         {
             trace!("waiting to get write on the state");
@@ -301,7 +301,7 @@ impl JobQueue {
     async fn new(
         context: Context,
         db_context: database::Context,
-        run_logs_tx: SyncSender<Log>,
+        run_logs_tx: UnboundedSender<Log>,
     ) -> Self {
         let (send, mut recv) = mpsc::channel::<Arc<Deployment>>(JOB_QUEUE_SIZE);
 
@@ -347,7 +347,7 @@ pub(crate) struct Context {
 impl DeploymentSystem {
     pub(crate) async fn new(build_system: Box<dyn BuildSystem>, fqdn: String) -> Self {
         let router: Arc<Router> = Default::default();
-        let (tx, rx) = std::sync::mpsc::sync_channel::<Log>(64);
+        let (tx, mut rx) = mpsc::unbounded_channel::<Log>();
 
         let deployments = Arc::new(RwLock::new(
             Self::initialise_from_fs(&build_system.fs_root(), &fqdn).await,
@@ -356,16 +356,11 @@ impl DeploymentSystem {
         let deployments_log = deployments.clone();
 
         tokio::spawn(async move {
-            loop {
-                let res = rx.recv();
+            while let Some(log) = rx.recv().await {
+                let mut deployments_log = deployments_log.write().await;
 
-                if let Ok(log) = res {
-                    let mut deployments_log = deployments_log.write().await;
-                    if let Some(deployment) = deployments_log.get_mut(&log.deployment_id) {
-                        deployment.add_runtime_log(log.datetime, log.item).await;
-                    }
-                } else {
-                    break;
+                if let Some(deployment) = deployments_log.get_mut(&log.deployment_id) {
+                    deployment.add_runtime_log(log.datetime, log.item).await;
                 }
             }
         });

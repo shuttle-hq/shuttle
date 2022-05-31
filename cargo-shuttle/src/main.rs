@@ -52,13 +52,13 @@ impl Shuttle {
         self.ctx.set_api_url(args.api_url);
 
         match args.cmd {
-            Command::Auth(auth_args) => self.auth(auth_args).await,
-            Command::Delete => self.delete().await,
             Command::Deploy(deploy_args) => self.deploy(deploy_args).await,
             Command::Init(init_args) => self.init(init_args).await,
-            Command::Login(login_args) => self.login(login_args).await,
-            Command::Logs => self.logs().await,
             Command::Status => self.status().await,
+            Command::Logs => self.logs().await,
+            Command::Delete => self.delete().await,
+            Command::Auth(auth_args) => self.auth(auth_args).await,
+            Command::Login(login_args) => self.login(login_args).await,
         }
     }
 

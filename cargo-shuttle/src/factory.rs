@@ -20,11 +20,13 @@ pub struct LocalFactory {
 impl LocalFactory {
     pub fn new(project: ProjectName) -> Self {
         Self {
-            docker: Docker::connect_with_local_defaults().unwrap(),
+            docker: Docker::connect_with_local_defaults().expect("to be able to connect to docker"),
             project,
         }
     }
 }
+
+const PG_PASSWORD: &str = "password";
 
 #[async_trait]
 impl Factory for LocalFactory {
@@ -56,14 +58,18 @@ impl Factory for LocalFactory {
                     ..Default::default()
                 };
 
+                let password_env = format!("POSTGRES_PASSWORD={PG_PASSWORD}");
                 let config = Config {
                     image: Some("postgres:11"),
-                    env: Some(vec!["POSTGRES_PASSWORD=password"]),
+                    env: Some(vec![&password_env]),
                     host_config: Some(host_config),
                     ..Default::default()
                 };
 
-                self.docker.create_container(options, config).await.unwrap();
+                self.docker
+                    .create_container(options, config)
+                    .await
+                    .expect("to be able to create container");
 
                 self.docker
                     .inspect_container(&container_name, None)
@@ -73,7 +79,12 @@ impl Factory for LocalFactory {
             error => todo!("unexpected error: {error:?}"),
         };
 
-        if !container.state.unwrap().running.unwrap() {
+        if !container
+            .state
+            .expect("container to have a state")
+            .running
+            .expect("state to have a running key")
+        {
             trace!("DB container '{container_name}' not running, so starting it");
             self.docker
                 .start_container(&container_name, None::<StartContainerOptions<String>>)
@@ -86,7 +97,7 @@ impl Factory for LocalFactory {
         let db_info = DatabaseReadyInfo {
             database_name: "postgres".to_string(),
             role_name: "postgres".to_string(),
-            role_password: "password".to_string(),
+            role_password: PG_PASSWORD.to_string(),
         };
 
         let conn_str = db_info.connection_string("localhost");
@@ -124,17 +135,16 @@ impl LocalFactory {
                 .await
                 .expect("failed to execute ready command");
 
-            match ready_result {
-                bollard::exec::StartExecResults::Attached { mut output, .. } => {
-                    while let Some(line) = output.next().await {
-                        if let bollard::container::LogOutput::StdOut { message } = line.unwrap() {
-                            if message.ends_with(b"accepting connections\n") {
-                                return Ok(());
-                            }
+            if let bollard::exec::StartExecResults::Attached { mut output, .. } = ready_result {
+                while let Some(line) = output.next().await {
+                    if let bollard::container::LogOutput::StdOut { message } =
+                        line.expect("output to have a log line")
+                    {
+                        if message.ends_with(b"accepting connections\n") {
+                            return Ok(());
                         }
                     }
                 }
-                bollard::exec::StartExecResults::Detached => todo!(),
             }
 
             sleep(Duration::from_millis(500)).await;

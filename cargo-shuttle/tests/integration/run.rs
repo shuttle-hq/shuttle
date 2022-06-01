@@ -174,3 +174,19 @@ async fn tide_hello_world() {
 
     assert_eq!(request_text, "Hello, world!");
 }
+
+#[tokio::test]
+async fn tower_hello_world() {
+    let port = cargo_shuttle_run("../examples/tower/hello-world").await;
+
+    let request_text = reqwest::Client::new()
+        .get(format!("http://localhost:{port}/hello"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+
+    assert_eq!(request_text, "Hello, world!");
+}

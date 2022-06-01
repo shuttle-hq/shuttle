@@ -57,6 +57,36 @@ async fn rocket_hello_world() {
     assert_eq!(request_text, "Hello, world!");
 }
 
+// This example uses a shared Postgres. Thus local runs should create a docker container for it.
+#[tokio::test]
+async fn rocket_postgres() {
+    let port = cargo_shuttle_run("../examples/rocket/postgres").await;
+    let client = reqwest::Client::new();
+
+    let post_text = client
+        .post(format!("http://localhost:{port}/todo"))
+        .body("{\"note\": \"Deploy to shuttle\"}")
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+
+    assert_eq!(post_text, "{\"id\":1,\"note\":\"Deploy to shuttle\"}");
+
+    let request_text = client
+        .get(format!("http://localhost:{port}/todo/1"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+
+    assert_eq!(request_text, "{\"id\":1,\"note\":\"Deploy to shuttle\"}");
+}
+
 #[tokio::test]
 async fn rocket_authentication() {
     let port = cargo_shuttle_run("../examples/rocket/authentication").await;

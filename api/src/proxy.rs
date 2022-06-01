@@ -6,8 +6,11 @@ use ::hyper::server::conn::AddrStream;
 use ::hyper::server::Server;
 use ::hyper::service::{make_service_fn, service_fn};
 use ::hyper::{Body, Request, Response, StatusCode};
+use hyper::client::connect::dns::GaiResolver;
+use hyper::client::HttpConnector;
 use hyper::header::{HeaderValue, SERVER};
-use hyper_reverse_proxy::ProxyError;
+use hyper::Client;
+use hyper_reverse_proxy::{ProxyError, ReverseProxy};
 use lazy_static::lazy_static;
 use shuttle_common::Port;
 
@@ -15,6 +18,8 @@ use crate::DeploymentSystem;
 
 lazy_static! {
     static ref HEADER_SERVER: HeaderValue = "shuttle.rs".parse().unwrap();
+    static ref PROXY_CLIENT: ReverseProxy<HttpConnector<GaiResolver>> =
+        ReverseProxy::new(Client::new());
 }
 
 pub(crate) async fn start(
@@ -94,6 +99,10 @@ async fn handle(
                 ProxyError::ForwardHeaderError => {
                     log::warn!("error while handling request in reverse proxy: 'fwd header error'");
                 }
+                ProxyError::UpgradeError(e) => log::warn!(
+                    "error while handling request needing upgrade in reverse proxy: {}",
+                    e
+                ),
             };
             Ok(Response::builder()
                 .status(StatusCode::INTERNAL_SERVER_ERROR)
@@ -109,7 +118,7 @@ async fn reverse_proxy(
     req: Request<Body>,
 ) -> Result<Response<Body>, ProxyError> {
     let forward_uri = format!("http://127.0.0.1:{}", port);
-    let mut response = hyper_reverse_proxy::call(ip, &forward_uri, req).await?;
+    let mut response = PROXY_CLIENT.call(ip, &forward_uri, req).await?;
 
     response.headers_mut().insert(SERVER, HEADER_SERVER.clone());
 

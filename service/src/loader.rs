@@ -1,9 +1,17 @@
+use std::ffi::OsStr;
 use std::net::SocketAddr;
-use std::{ffi::OsStr, sync::mpsc::SyncSender};
+use std::path::{Path, PathBuf};
 
+use anyhow::{anyhow, Context};
+use cargo::core::compiler::CompileMode;
+use cargo::core::{Shell, Verbosity, Workspace};
+use cargo::ops::{compile, CompileOptions};
+use cargo::util::homedir;
+use cargo::Config;
 use libloading::{Library, Symbol};
 use shuttle_common::DeploymentId;
 use thiserror::Error as ThisError;
+use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{
     logger::{Log, Logger},
@@ -52,19 +60,47 @@ impl Loader {
         self,
         factory: &mut dyn Factory,
         addr: SocketAddr,
-        tx: SyncSender<Log>,
+        tx: UnboundedSender<Log>,
         deployment_id: DeploymentId,
     ) -> Result<(ServeHandle, Library), Error> {
         let mut service = self.service;
-        let logger = Logger::new(tx, deployment_id);
+        let logger = Box::new(Logger::new(tx, deployment_id));
 
         service.build(factory, logger).await?;
 
         // Start service on this side of the FFI
-        let handle = tokio::task::spawn(async move { service.bind(addr)?.await? });
+        let handle = tokio::spawn(async move { service.bind(addr)?.await? });
 
         Ok((handle, self.so))
     }
+}
+
+/// Given a project directory path, builds the crate
+pub fn build_crate(project_path: &Path, buf: Box<dyn std::io::Write>) -> anyhow::Result<PathBuf> {
+    let mut shell = Shell::from_write(buf);
+    shell.set_verbosity(Verbosity::Normal);
+
+    let cwd = std::env::current_dir()
+        .with_context(|| "couldn't get the current directory of the process")?;
+    let homedir = homedir(&cwd).ok_or_else(|| {
+        anyhow!(
+            "Cargo couldn't find your home directory. \
+                 This probably means that $HOME was not set."
+        )
+    })?;
+
+    let config = Config::new(shell, cwd, homedir);
+    let manifest_path = project_path.join("Cargo.toml");
+
+    let ws = Workspace::new(&manifest_path, &config)?;
+    let opts = CompileOptions::new(&config, CompileMode::Build)?;
+    let compilation = compile(&ws, &opts)?;
+
+    if compilation.cdylibs.is_empty() {
+        return Err(anyhow!("a cdylib was not created. Try adding the following to the Cargo.toml of the service:\n[lib]\ncrate-type = [\"cdylib\"]\n"));
+    }
+
+    Ok(compilation.cdylibs[0].path.clone())
 }
 
 #[cfg(test)]

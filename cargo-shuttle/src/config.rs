@@ -152,6 +152,8 @@ pub type SecretsConfig = HashMap<String, String>;
 ///
 /// # Usage
 /// ```rust,no_run
+/// # use cargo_shuttle::config::{Config, GlobalConfig, GlobalConfigManager};
+/// #
 /// let mut config = Config::new(GlobalConfigManager);
 /// config.open().unwrap();
 /// let content: &GlobalConfig = config.as_ref().unwrap();
@@ -278,6 +280,7 @@ impl RequestContext {
         let mut secrets = Config::new(secrets_manager);
 
         if secrets.exists() {
+            trace!("found secrets");
             secrets.open()?;
             self.secrets = Some(secrets);
         }
@@ -300,17 +303,26 @@ impl RequestContext {
         if !project.exists() {
             project.replace(ProjectConfig::default());
         } else {
+            trace!("found a local Shuttle.toml");
             project.open()?;
         }
 
         let config = project.as_mut().unwrap();
         match (&project_args.name, &config.name) {
             // Command-line name parameter trumps everything
-            (Some(name_from_args), _) => config.name = Some(name_from_args.clone()),
+            (Some(name_from_args), _) => {
+                trace!("using command-line project name");
+                config.name = Some(name_from_args.clone());
+            }
             // If key exists in config then keep it as it is
-            (None, Some(_)) => {}
+            (None, Some(_)) => {
+                trace!("using Shuttle.toml project name");
+            }
             // If name key is not in project config, then we infer from crate name
-            (None, None) => config.name = Some(find_crate_name(&project_args.working_directory)?),
+            (None, None) => {
+                trace!("using crate name as project name");
+                config.name = Some(find_crate_name(&project_args.working_directory)?);
+            }
         };
         Ok(project)
     }

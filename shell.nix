@@ -16,5 +16,6 @@ in
       cargo-watch
       terraform
       awscli2
+      websocat
     ];
   }

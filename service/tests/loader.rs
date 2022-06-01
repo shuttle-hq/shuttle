@@ -1,6 +1,5 @@
 use std::net::{Ipv4Addr, SocketAddr};
 use std::process::{exit, Command};
-use std::sync::mpsc;
 use std::time::Duration;
 
 mod helpers;
@@ -9,6 +8,7 @@ use async_trait::async_trait;
 use helpers::PostgresInstance;
 use shuttle_service::loader::{Loader, LoaderError};
 use shuttle_service::{Error, Factory};
+use tokio::sync::mpsc;
 use uuid::Uuid;
 
 struct DummyFactory {
@@ -74,7 +74,7 @@ async fn sleep_async() {
     let mut factory = DummyFactory::new();
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
     let deployment_id = Uuid::new_v4();
-    let (tx, _rx) = mpsc::sync_channel(1);
+    let (tx, _rx) = mpsc::unbounded_channel();
     let (handler, _) = loader
         .load(&mut factory, addr, tx, deployment_id)
         .await
@@ -109,7 +109,7 @@ async fn sleep() {
     let mut factory = DummyFactory::new();
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
     let deployment_id = Uuid::new_v4();
-    let (tx, _rx) = mpsc::sync_channel(1);
+    let (tx, _rx) = mpsc::unbounded_channel();
     let (handler, _) = loader
         .load(&mut factory, addr, tx, deployment_id)
         .await
@@ -150,7 +150,7 @@ async fn sqlx_pool() {
 
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
     let deployment_id = Uuid::new_v4();
-    let (tx, rx) = mpsc::sync_channel(32);
+    let (tx, mut rx) = mpsc::unbounded_channel();
     let (handler, _) = loader
         .load(&mut factory, addr, tx, deployment_id)
         .await
@@ -158,7 +158,7 @@ async fn sqlx_pool() {
 
     handler.await.unwrap().unwrap();
 
-    let log = rx.recv().unwrap();
+    let log = rx.recv().await.unwrap();
     assert_eq!(log.deployment_id, deployment_id);
     assert!(
         log.item.body.starts_with("/* SQLx ping */"),

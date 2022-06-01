@@ -1,8 +1,7 @@
 use cargo_shuttle::{Args, Command, ProjectArgs, RunArgs, Shuttle};
-use core::panic;
 use portpicker::pick_unused_port;
 use reqwest::StatusCode;
-use std::{fs::canonicalize, time::Duration};
+use std::{fs::canonicalize, process::exit, time::Duration};
 use tokio::time::sleep;
 
 /// creates a `cargo-shuttle` run instance with some reasonable defaults set.
@@ -14,16 +13,20 @@ async fn cargo_shuttle_run(working_directory: &str) -> u16 {
     let runner = Shuttle::new().run(Args {
         api_url: Some("network support is intentionally broken in tests".to_string()),
         project_args: ProjectArgs {
-            working_directory,
+            working_directory: working_directory.clone(),
             name: None,
         },
         cmd: Command::Run(run_args),
     });
 
-    tokio::spawn(async {
-        sleep(Duration::from_secs(120)).await;
+    tokio::spawn(async move {
+        sleep(Duration::from_secs(180)).await;
 
-        panic!("run test took too long. Did it fail to shutdown?");
+        println!(
+            "run test for '{}' took too long. Did it fail to shutdown?",
+            working_directory.display()
+        );
+        exit(1);
     });
 
     tokio::spawn(runner);

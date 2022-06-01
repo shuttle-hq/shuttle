@@ -14,22 +14,22 @@ const tiers = [
       "The perfect confluence of features to run your hobby-projects for free - forever.",
   },
   {
-    name: "Startup",
+    name: "Pro",
     BuyButton() {
-      const label = "Buy Now";
+      const label = "Contact Us";
 
       return (
-        <button
-          className="w-full rounded border border-slate-900 bg-transparent py-1 px-4 text-base font-medium text-slate-900 opacity-75 transition-colors dark:border-white dark:text-white"
-          disabled
+        <ExternalLink
+          className="inline-block w-full rounded border border-slate-900 bg-transparent py-1 px-4 text-center text-base font-medium text-slate-900 transition-colors hover:bg-slate-800 hover:text-slate-100 dark:border-white dark:text-white hover:dark:bg-white hover:dark:text-dark-700"
+          href="mailto:sales@shuttle.rs"
         >
           {label}
-        </button>
+        </ExternalLink>
       );
     },
     priceMonthly: 25,
     description:
-      "Build your company on infrastructure that scales to meet your growing business.",
+      "Build on production quality infrastructure which scales to your needs.",
   },
 ];
 
@@ -39,35 +39,35 @@ const sections = [
     features: [
       {
         name: "Team Size",
-        tiers: { Hobby: 1, Startup: 5 },
+        tiers: { Hobby: 1, Pro: 5 },
       },
       {
         name: "Deployments",
-        tiers: { Hobby: "Unlimited", Startup: "Unlimited" },
+        tiers: { Hobby: "Unlimited", Pro: "Unlimited" },
       },
       {
         name: "Number of Projects",
-        tiers: { Hobby: 5, Startup: 10 },
+        tiers: { Hobby: 5, Pro: 10 },
       },
       {
         name: "Requests",
-        tiers: { Hobby: "150K/mo", Startup: "1.5M/mo" },
+        tiers: { Hobby: "150K/mo", Pro: "1.5M/mo" },
       },
       {
         name: "Workers",
-        tiers: { Hobby: 1, Startup: 10 },
+        tiers: { Hobby: 1, Pro: 10 },
       },
       {
         name: "Data Storage",
-        tiers: { Hobby: "500 MB", Startup: "20 GB" },
+        tiers: { Hobby: "500 MB", Pro: "20 GB" },
       },
       {
         name: "Subdomains",
-        tiers: { Hobby: "1 Per Project", Startup: "1 Per Project" },
+        tiers: { Hobby: "1 Per Project", Pro: "1 Per Project" },
       },
       {
         name: "Custom Domains",
-        tiers: { Hobby: "N/A", Startup: "1 Per Project" },
+        tiers: { Hobby: "N/A", Pro: "1 Per Project" },
       },
     ],
   },
@@ -85,7 +85,7 @@ const sections = [
               Discord
             </ExternalLink>
           ),
-          Startup: (
+          Pro: (
             <ExternalLink
               href={DISCORD_URL}
               className="text-slate-600 underline hover:text-slate-900 dark:text-gray-200 hover:dark:text-white"
@@ -97,11 +97,11 @@ const sections = [
       },
       {
         name: "Support Availability",
-        tiers: { Hobby: "N/A", Startup: "09:00 - 19:00 UTC" },
+        tiers: { Hobby: "N/A", Pro: "09:00 - 19:00 UTC" },
       },
       {
         name: "Request Turnaround",
-        tiers: { Hobby: "N/A", Startup: "24 hr" },
+        tiers: { Hobby: "N/A", Pro: "24 hr" },
       },
     ],
   },

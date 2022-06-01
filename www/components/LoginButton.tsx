@@ -8,7 +8,7 @@ export default function LoginButton() {
 
   const label = "Log In";
   const className =
-    "w-full inline-block text-center rounded border border-slate-900 bg-transparent py-1 px-4 text-base font-medium text-slate-900 transition-colors hover:bg-slate-800 hover:text-slate-100 dark:border-white dark:text-white hover:dark:bg-white hover:dark:text-dark-700";
+    "inline-block w-full rounded border border-slate-900 bg-transparent py-1 px-4 text-center text-base font-medium text-slate-900 transition-colors hover:bg-slate-800 hover:text-slate-100 dark:border-white dark:text-white hover:dark:bg-white hover:dark:text-dark-700";
 
   if (user) {
     return (

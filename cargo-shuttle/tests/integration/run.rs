@@ -95,7 +95,7 @@ async fn rocket_authentication() {
         .await
         .unwrap();
     let json: serde_json::Value = serde_json::from_str(&body).unwrap();
-    let token = format!("Bearer {}", json["token"].as_str().unwrap());
+    let token = format!("Bearer  {}", json["token"].as_str().unwrap());
 
     let private_text = client
         .get(format!("http://localhost:{port}/private"))

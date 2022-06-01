@@ -10,12 +10,13 @@ use std::io::{self, stdout};
 use std::net::{Ipv4Addr, SocketAddr};
 use std::rc::Rc;
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 pub use args::{Args, Command, ProjectArgs, RunArgs};
 use args::{AuthArgs, DeployArgs, LoginArgs};
+use cargo::core::compiler::CompileMode;
 use cargo::core::resolver::CliFeatures;
 use cargo::core::Workspace;
-use cargo::ops::{PackageOpts, Packages};
+use cargo::ops::{CompileOptions, PackageOpts, Packages, TestOptions};
 use colored::Colorize;
 use config::RequestContext;
 use factory::LocalFactory;
@@ -183,6 +184,8 @@ impl Shuttle {
     }
 
     async fn deploy(&self, args: DeployArgs) -> Result<()> {
+        self.run_tests(args.no_test)?;
+
         let package_file = self
             .run_cargo_package(args.allow_dirty)
             .context("failed to package cargo project")?;
@@ -234,5 +237,31 @@ impl Shuttle {
         let locks = cargo::ops::package(&ws, &opts)?.expect("unwrap ok here");
         let owned = locks.get(0).unwrap().file().try_clone()?;
         Ok(owned)
+    }
+
+    fn run_tests(&self, no_test: bool) -> Result<()> {
+        if no_test {
+            return Ok(());
+        }
+
+        let config = cargo::util::config::Config::default()?;
+        let working_directory = self.ctx.working_directory();
+        let path = working_directory.join("Cargo.toml");
+
+        let compile_options = CompileOptions::new(&config, CompileMode::Test).unwrap();
+        let ws = Workspace::new(&path, &config)?;
+        let opts = TestOptions {
+            compile_opts: compile_options,
+            no_run: false,
+            no_fail_fast: false,
+        };
+
+        let test_failures = cargo::ops::run_tests(&ws, &opts, &[])?;
+        match test_failures {
+            None => Ok(()),
+            Some(_) => Err(anyhow!(
+                "Some tests failed. To ignore all tests, pass the `--no-test` flag"
+            )),
+        }
     }
 }

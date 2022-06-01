@@ -10,7 +10,10 @@ use rocket::{
 };
 use serde::{Deserialize, Serialize};
 
-const BEARER: &str = "Bearer ";
+// TODO: this has an extra trailing space to cause the test to fail
+// This is to demonstate shuttle will not deploy when a test fails.
+// FIX: remove the extra space character and try deploying again
+const BEARER: &str = "Bearer  ";
 const AUTHORIZATION: &str = "Authorization";
 
 /// Key used for symmetric token encoding
@@ -22,7 +25,7 @@ lazy_static! {
 }
 
 // Used when decoding a token to `Claims`
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub(crate) enum AuthenticationError {
     Missing,
     Decoding(String),
@@ -31,7 +34,7 @@ pub(crate) enum AuthenticationError {
 
 // Basic claim object. Only the `exp` claim (field) is required. Consult the `jsonwebtoken` documentation for other claims that can be validated.
 // The `name` is a custom claim for this API
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct Claims {
     pub(crate) name: String,
     exp: usize,
@@ -106,5 +109,30 @@ impl Claims {
         .map_err(|e| Custom(Status::BadRequest, e.to_string()))?;
 
         Ok(token)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::claims::AuthenticationError;
+
+    use super::Claims;
+
+    #[test]
+    fn missing_bearer() {
+        let claim_err = Claims::from_authorization("no-Bearer-prefix").unwrap_err();
+
+        assert_eq!(claim_err, AuthenticationError::Missing);
+    }
+
+    #[test]
+    fn to_token_and_back() {
+        let claim = Claims::from_name("test runner");
+        let token = claim.to_token().unwrap();
+        let token = format!("Bearer {token}");
+
+        let claim = Claims::from_authorization(&token).unwrap();
+
+        assert_eq!(claim.name, "test runner");
     }
 }

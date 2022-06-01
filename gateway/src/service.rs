@@ -1,7 +1,8 @@
 use std::net::IpAddr;
-use std::path::Path as StdPath;
+use std::path::{Path as StdPath, PathBuf};
 use std::sync::Arc;
 
+use rand::distributions::{Alphanumeric, DistString};
 use serde::{Serialize, Deserialize};
 
 use axum::body::Body;
@@ -36,7 +37,7 @@ use crate::project::{
 };
 use crate::{
     Refresh,
-    State
+    State, ErrorKind
 };
 
 pub struct Work {
@@ -49,7 +50,8 @@ pub struct GatewayService {
     docker: Docker,
     hyper: HyperClient<HttpConnector, Body>,
     db: SqlitePool,
-    work: Sender<Work>
+    work: Sender<Work>,
+    prefix: String
 }
 
 const DB_PATH: &'static str = "gateway.sqlite";
@@ -59,7 +61,12 @@ use crate::{auth::Key, AccountName};
 use crate::auth::User;
 
 impl GatewayService {
-    pub async fn init() -> Arc<Self> {
+    /// Initialize `GatewayService` and its required dependencies.
+    ///
+    /// * `prefix` - An optional string prefix to add to all named
+    /// resources (defaults to "shuttle_prod_").
+    pub async fn init(prefix: Option<&str>) -> Arc<Self> {
+        info!("docker host: tcp://127.0.0.1:2735");
         let docker = Docker::connect_with_http_defaults().unwrap();
 
         let hyper = HyperClient::new();
@@ -67,9 +74,10 @@ impl GatewayService {
             Sqlite::create_database(DB_PATH).await.unwrap();
         }
 
+        info!("state db: {}", std::fs::canonicalize(DB_PATH).unwrap().to_string_lossy());
         let db = SqlitePool::connect(DB_PATH).await.unwrap();
 
-        query("CREATE TABLE IF NOT EXISTS projects (project_name TEXT PRIMARY KEY, account_name TEXT NOT NULL, project_state JSON NOT NULL)")
+        query("CREATE TABLE IF NOT EXISTS projects (project_name TEXT PRIMARY KEY, account_name TEXT NOT NULL, initial_key TEXT NOT NULL, project_state JSON NOT NULL)")
             .execute(&db)
             .await
             .unwrap();
@@ -81,15 +89,23 @@ impl GatewayService {
 
         let (work, mut queue) = channel(256);
 
+        let prefix = prefix
+            .unwrap_or("shuttle_prod_")
+            .to_string();
+
+        info!("prefix: {}", prefix);
+
         let service = Arc::new(Self {
             docker,
             hyper,
             db,
-            work: work.clone()
+            work: work.clone(),
+            prefix
         });
 
         let worker = Arc::clone(&service);
 
+        // TODO: get this out of here, handle error fall back
         tokio::spawn(async move {
             while let Some(Work {
                 project_name,
@@ -242,7 +258,9 @@ impl GatewayService {
             .await
             .unwrap()
             .map(|row| row.try_get("account_name").unwrap())
-            .unwrap();  // TODO: user not found
+            .ok_or_else(|| {
+                Error::from(ErrorKind::UserNotFound)
+            })?;
         Ok(name)
     }
 
@@ -310,13 +328,16 @@ impl GatewayService {
     }
 
     pub async fn create_project(&self, project_name: ProjectName, account_name: AccountName) -> Result<Project, Error> {
+        let initial_key = Alphanumeric.sample_string(&mut rand::thread_rng(), 32);
         let project = SqlxJson(Project::Creating(project::ProjectCreating::new(
-            project_name.clone()
+            project_name.clone(),
+            self.prefix.clone(),
+            initial_key.clone(),
         )));
-        // TODO
-        query("INSERT INTO projects (project_name, account_name, project_state) VALUES (?1, ?2, ?3)")
+        query("INSERT INTO projects (project_name, account_name, initial_key, project_state) VALUES (?1, ?2, ?3, ?4)")
             .bind(&project_name)
             .bind(&account_name)
+            .bind(&initial_key)
             .bind(&project)
             .execute(&self.db)
             .await

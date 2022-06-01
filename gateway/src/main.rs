@@ -9,6 +9,8 @@
 // TODO: move common things to the common crate
 // TODO: AccountName and ProjectName validation logic?
 
+#![allow(warnings)]
+
 #[macro_use]
 extern crate async_trait;
 
@@ -56,6 +58,7 @@ pub enum ErrorKind {
     BadHost,
     Malformed,
     Unauthorized,
+    UserNotFound,
     Internal
 }
 
@@ -90,19 +93,25 @@ impl From<ErrorKind> for Error {
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
         let (status, error_message) = match self.kind {
-            ErrorKind::Internal => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error"),
-            ErrorKind::Missing => (StatusCode::BAD_REQUEST, "Missing an API key"),
-            ErrorKind::BadHost => (StatusCode::BAD_REQUEST, "Bad Host header"),
-            ErrorKind::Malformed => (StatusCode::BAD_REQUEST, "Invalid API key"),
-            ErrorKind::Unauthorized => (StatusCode::UNAUTHORIZED, "Unauthorized"),
+            ErrorKind::Internal => (StatusCode::INTERNAL_SERVER_ERROR, "internal server error"),
+            ErrorKind::Missing => (StatusCode::BAD_REQUEST, "request is missing a key"),
+            ErrorKind::BadHost => (StatusCode::BAD_REQUEST, "the 'Host' header is invalid"),
+            ErrorKind::Malformed => (StatusCode::BAD_REQUEST, "request has an invalid key"),
+            ErrorKind::UserNotFound => (StatusCode::NOT_FOUND, "user not found"),
+            ErrorKind::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
         };
         (status, Json(json!({ "error": error_message }))).into_response()
     }
 }
 
 impl std::fmt::Display for Error {
-    fn fmt(&self, _f: &mut Formatter<'_>) -> std::fmt::Result {
-        todo!()
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.kind)?;
+        if let Some(source) = self.source.as_ref() {
+            write!(f, ": ")?;
+            source.fmt(f)?;
+        }
+        Ok(())
     }
 }
 
@@ -198,7 +207,7 @@ pub trait Refresh: Sized {
 async fn main() -> io::Result<()> {
     env_logger::init();
 
-    let gateway = GatewayService::init().await;
+    let gateway = GatewayService::init(None).await;
 
     let api = make_api(Arc::clone(&gateway));
 

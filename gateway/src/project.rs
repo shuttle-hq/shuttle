@@ -14,6 +14,7 @@ use bollard::models::{
     MountTypeEnum
 };
 use futures::prelude::*;
+use rand::distributions::{Alphanumeric, DistString};
 use serde::{
     Deserialize,
     Serialize
@@ -27,7 +28,7 @@ use super::{
     State
 };
 
-const DEFAULT_IMAGE: &'static str = "506436569174.dkr.ecr.eu-west-2.amazonaws.com/backend";
+const DEFAULT_IMAGE: &'static str = "public.ecr.aws/d7w6e9t1/backend:latest";
 
 #[async_trait]
 impl Refresh for ContainerInspectResponse {
@@ -162,18 +163,6 @@ impl Refresh for Project {
                             _ => todo!()
                         }
                     }
-                    Err(err) if matches!(err, DockerError::DockerResponseNotFoundError { .. }) => {
-                        let project_name = container_name
-                            // assuming a container in the state was creating by us
-                            .strip_suffix("_run")
-                            .unwrap()
-                            // container name always prefixed by `/` when coming back from docker api
-                            .strip_prefix("/")
-                            .unwrap()
-                            .parse()
-                            .unwrap();
-                        Self::Creating(ProjectCreating { project_name })
-                    }
                     Err(_err) => todo!()
                 }
             }
@@ -184,12 +173,18 @@ impl Refresh for Project {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ProjectCreating {
-    project_name: ProjectName
+    project_name: ProjectName,
+    prefix: String,
+    initial_key: String,
 }
 
 impl ProjectCreating {
-    pub fn new(name: ProjectName) -> Self {
-        Self { project_name: name }
+    pub fn new(project_name: ProjectName, prefix: String, initial_key: String) -> Self {
+        Self {
+            project_name,
+            prefix,
+            initial_key
+        }
     }
 }
 
@@ -199,8 +194,13 @@ impl<'c> State<'c> for ProjectCreating {
     type Error = Error;
 
     async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error> {
-        let volume_name = format!("{}_vol", self.project_name);
-        let container_name = format!("{}_run", self.project_name);
+        let pg_password = Alphanumeric.sample_string(&mut rand::thread_rng(), 12);
+        let pg_password_env = format!("PG_PASSWORD={}", pg_password);
+
+        let initial_key_env = format!("SHUTTLE_INITIAL_KEY={}", self.initial_key);
+
+        let volume_name = format!("{}{}_vol", self.prefix, self.project_name);
+        let container_name = format!("{}{}_run", self.prefix, self.project_name);
         let container = ctx
             .docker()
             .inspect_container(&container_name.clone(), None)
@@ -211,6 +211,19 @@ impl<'c> State<'c> for ProjectCreating {
                     };
                     let config = Config {
                         image: Some(DEFAULT_IMAGE),
+                        env: Some(vec![
+                            "PROXY_PORT=8000",
+                            "API_PORT=8001",
+                            "PG_PORT=5432",
+                            "PG_DATA=/opt/shuttle/postgres",
+                            &pg_password_env,
+                            &initial_key_env,
+                            "COPY_PG_CONF=/opt/shuttle/conf/postgres",
+                            "PROXY_FQDN=shuttleapp.rs"
+                        ]),
+                        labels: Some(vec![
+                            ("shuttle_prefix", self.prefix.as_str())
+                        ].into_iter().collect()),
                         host_config: Some(HostConfig {
                             mounts: Some(vec![Mount {
                                 target: Some("/opt/shuttle".to_string()),

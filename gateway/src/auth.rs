@@ -45,11 +45,7 @@ impl FromStr for Key {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        base64::decode(s)
-            .ok()
-            .and_then(|decoded| String::from_utf8(decoded).ok())
-            .ok_or_else(|| Error::from(ErrorKind::Malformed))
-            .and_then(|as_str| Self::from_str(&as_str))
+        Ok(Self(s.to_string()))
     }
 }
 
@@ -90,7 +86,13 @@ where
         let Extension(service) = Extension::<Arc<GatewayService>>::from_request(req)
             .await
             .unwrap();
-        Ok(service.user_from_key(key).await?)
+        let user = service.user_from_key(key)
+            .await
+            // Absord any error into `Unauthorized`
+            .map_err(|_| {
+                Error::kind(ErrorKind::Unauthorized)
+            })?;
+        Ok(user)
     }
 }
 

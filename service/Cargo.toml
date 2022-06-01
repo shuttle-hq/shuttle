@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-service"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2021"
 license = "Apache-2.0"
 description = "Service traits and macros to deploy on the shuttle platform (https://www.shuttle.rs/)"
@@ -11,6 +11,7 @@ doctest = false
 [dependencies]
 anyhow = "1.0"
 async-trait = "0.1"
+cargo = { version = "0.59.0", optional = true }
 chrono = "0.4"
 libloading = { version = "0.7.3", optional = true }
 log = "0.4"
@@ -36,7 +37,7 @@ uuid = "0.8.2"
 [features]
 default = ["codegen"]
 codegen = ["shuttle-codegen"]
-loader = ["libloading"]
+loader = ["cargo", "libloading"]
 
 sqlx-integration = ["sqlx/runtime-tokio-native-tls"]
 sqlx-postgres = ["sqlx-integration", "sqlx/postgres"]

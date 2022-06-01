@@ -114,6 +114,7 @@ export default function Footer() {
               key={index}
               href={community.href}
               className="inline-block rounded border border-current py-3 px-5 text-base font-medium text-slate-600 hover:text-slate-900 dark:text-gray-200 hover:dark:text-white"
+              mixpanelEvent={community.name}
             >
               <FontAwesomeIcon
                 className="-ml-1 mr-3 text-current transition"

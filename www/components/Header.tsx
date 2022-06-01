@@ -6,6 +6,7 @@ import { SHUTTLE_DOCS_URL } from "../lib/constants";
 import ExternalLink from "./ExternalLink";
 import ThemeSwitch from "./ThemeSwitch";
 import NoSsr from "./NoSsr";
+import mixpanel from "mixpanel-browser";
 
 const navigation = [
   { name: "Features", href: "/#features", internal: true },
@@ -24,7 +25,7 @@ export default function Header() {
       <nav className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8" aria-label="Top">
         <div className="flex w-full items-center justify-between py-3">
           <div className="flex items-center">
-            <InternalLink href="/">
+            <InternalLink href="/" mixpanelEvent="Shuttle Home">
               <div className="relative m-auto flex">
                 <img
                   className="h-8 w-auto"
@@ -43,6 +44,7 @@ export default function Header() {
                     key={link.name}
                     href={link.href}
                     className="text-base font-medium text-slate-600 hover:text-slate-900 dark:text-gray-200 hover:dark:text-white"
+                    mixpanelEvent={link.name}
                   >
                     {link.name}
                   </InternalLink>
@@ -51,6 +53,7 @@ export default function Header() {
                     key={link.name}
                     href={link.href}
                     className="text-base font-medium text-slate-600 hover:text-slate-900 dark:text-gray-200 hover:dark:text-white"
+                    mixpanelEvent={link.name}
                   >
                     {link.name}
                   </ExternalLink>
@@ -66,7 +69,11 @@ export default function Header() {
             {user && (
               <button
                 className="inline-block rounded border border-slate-900 bg-transparent py-1 px-4 text-base font-medium text-slate-900 transition-colors hover:bg-slate-800 hover:text-slate-100 dark:border-white dark:text-white hover:dark:bg-white hover:dark:text-dark-700"
-                onClick={() => setOpen(true)}
+                onClick={() => {
+                  mixpanel.track("Log In");
+
+                  setOpen(true);
+                }}
               >
                 Log In
               </button>
@@ -76,6 +83,9 @@ export default function Header() {
               <a
                 className="inline-block rounded border border-slate-900 bg-transparent py-1 px-4 text-base font-medium text-slate-900 transition-colors hover:bg-slate-800 hover:text-slate-100 dark:border-white dark:text-white hover:dark:bg-white hover:dark:text-dark-700"
                 href="/login"
+                ref={(el) => {
+                  el && mixpanel.track_links(el, `Log In`);
+                }}
               >
                 Log In
               </a>
@@ -89,6 +99,8 @@ export default function Header() {
                 key={link.name}
                 href={link.href}
                 className="text-base font-medium dark:text-gray-200 hover:dark:text-white"
+                onClick={() => void mixpanel.track(link.name)}
+                mixpanelEvent={link.name}
               >
                 {link.name}
               </InternalLink>
@@ -97,6 +109,7 @@ export default function Header() {
                 key={link.name}
                 href={link.href}
                 className="text-base font-medium dark:text-gray-200 hover:dark:text-white"
+                mixpanelEvent={link.name}
               >
                 {link.name}
               </ExternalLink>

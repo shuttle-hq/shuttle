@@ -31,7 +31,7 @@ pub struct Args {
 }
 
 // Common args for subcommands that deal with projects.
-#[derive(StructOpt)]
+#[derive(StructOpt, Debug)]
 pub struct ProjectArgs {
     #[structopt(
         global = true,
@@ -62,6 +62,8 @@ pub enum Command {
     Auth(AuthArgs),
     #[structopt(about = "login to the shuttle platform")]
     Login(LoginArgs),
+    #[structopt(about = "run a shuttle project locally")]
+    Run(RunArgs),
 }
 
 #[derive(StructOpt)]
@@ -80,6 +82,14 @@ pub struct AuthArgs {
 pub struct DeployArgs {
     #[structopt(long, about = "allow dirty working directories to be packaged")]
     pub allow_dirty: bool,
+    #[structopt(long, about = "allows pre-deploy tests to be skipped")]
+    pub no_test: bool,
+}
+
+#[derive(StructOpt, Debug)]
+pub struct RunArgs {
+    #[structopt(long, about = "port to start service on", default_value = "8000")]
+    pub port: u16,
 }
 
 #[derive(StructOpt)]

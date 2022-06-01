@@ -4,14 +4,14 @@ pub mod config;
 mod factory;
 mod print;
 
-use std::fs::File;
+use std::fs::{read_to_string, File};
 use std::io::Write;
 use std::io::{self, stdout};
 use std::net::{Ipv4Addr, SocketAddr};
 use std::rc::Rc;
 
 use anyhow::{anyhow, Context, Result};
-pub use args::{Args, Command, ProjectArgs, RunArgs};
+pub use args::{Args, Command, InitArgs, ProjectArgs, RunArgs};
 use args::{AuthArgs, DeployArgs, LoginArgs};
 use cargo::core::compiler::CompileMode;
 use cargo::core::resolver::CliFeatures;
@@ -63,6 +63,7 @@ impl Shuttle {
 
         match args.cmd {
             Command::Deploy(deploy_args) => self.deploy(deploy_args).await,
+            Command::Init(init_args) => self.init(init_args).await,
             Command::Status => self.status().await,
             Command::Logs => self.logs().await,
             Command::Delete => self.delete().await,

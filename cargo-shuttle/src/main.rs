@@ -1,4 +1,3 @@
-
 use anyhow::Result;
 use cargo_shuttle::{Args, Shuttle};
 use structopt::StructOpt;

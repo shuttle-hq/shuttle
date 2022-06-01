@@ -66,7 +66,7 @@ impl Claims {
 
     /// Create a `Claims` from a 'Bearer <token>' value
     fn from_authorization(value: &str) -> Result<Self, AuthenticationError> {
-        let token = value.strip_prefix(BEARER);
+        let token = value.strip_prefix(BEARER).map(str::trim);
 
         if token.is_none() {
             return Err(AuthenticationError::Missing);

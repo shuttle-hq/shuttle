@@ -113,17 +113,11 @@ impl Shuttle {
         // Interface with cargo to initialize new lib package for shuttle
         let opts = NewOptions::new(None, false, true, args.path.clone(), None, None, None)?;
         let cargo_config = cargo::util::config::Config::default()?;
-        let init_result = cargo::ops::init(&opts, &cargo_config);
-
+        let init_result = cargo::ops::init(&opts, &cargo_config)?;
         // Mimick `cargo init` behavior and log status or error to shell
-        match init_result {
-            Ok(project_kind) => {
-                cargo_config
-                    .shell()
-                    .status("Created", format!("{} (shuttle) package", project_kind))?;
-            }
-            Err(e) => return Err(e),
-        }
+        cargo_config
+            .shell()
+            .status("Created", format!("{} (shuttle) package", init_result))?;
 
         // Read Cargo.toml into a `Document`
         let cargo_path = args.path.join("Cargo.toml");

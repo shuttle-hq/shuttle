@@ -133,10 +133,14 @@ impl Shuttle {
         cargo_doc["lib"] = Item::Table(lib_table);
 
         // Fetch the latest shuttle-service version from crates.io
-        let manifest_path = find(&Some(args.path.clone())).unwrap();
+        let manifest_path = find(&Some(args.path)).unwrap();
         let url = registry_url(manifest_path.as_path(), None).expect("Could not find registry URL");
-        let latest_shuttle_service = get_latest_dependency("shuttle-service", false, &manifest_path, &Some(url)).expect("Could not query the latest version of shuttle-service");
-        let shuttle_version = latest_shuttle_service.version().expect("No latest shuttle-service version available");
+        let latest_shuttle_service =
+            get_latest_dependency("shuttle-service", false, &manifest_path, &Some(url))
+                .expect("Could not query the latest version of shuttle-service");
+        let shuttle_version = latest_shuttle_service
+            .version()
+            .expect("No latest shuttle-service version available");
 
         // Insert shuttle-service to `[dependencies]` table
         let mut dep_table = Table::new();

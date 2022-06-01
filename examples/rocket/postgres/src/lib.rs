@@ -46,6 +46,8 @@ struct MyState {
 
 #[shuttle_service::main]
 async fn rocket(pool: PgPool) -> shuttle_service::ShuttleRocket {
+    pool.get_secret("MY_API_KEY").await.unwrap();
+
     pool.execute(include_str!("../schema.sql"))
         .await
         .map_err(CustomError::new)?;

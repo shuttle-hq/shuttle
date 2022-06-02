@@ -163,7 +163,7 @@ impl LocalFactory {
 
     async fn pull_image(&self, image: &str) -> Result<(), String> {
         trace!("pulling latest image for '{image}'");
-        let mut layers = HashMap::new();
+        let mut layers = Vec::new();
 
         let create_image_options = Some(CreateImageOptions {
             from_image: image,
@@ -175,9 +175,14 @@ impl LocalFactory {
             let info = line.expect("failed to create image");
 
             if let Some(id) = info.id.as_ref() {
-                layers.insert(id.clone(), info);
+                match layers.iter_mut().find(|item: &&mut CreateImageInfo| {
+                    item.id.is_some() && item.id.as_deref().unwrap() == id
+                }) {
+                    Some(item) => *item = info,
+                    None => layers.push(info),
+                }
             } else {
-                println!("{}", info.status.expect("image info to have a status"))
+                layers.push(info);
             }
 
             print_layers(&layers);
@@ -187,28 +192,36 @@ impl LocalFactory {
     }
 }
 
-fn print_layers(layers: &HashMap<String, CreateImageInfo>) {
-    for (id, info) in layers {
+fn print_layers(layers: &Vec<CreateImageInfo>) {
+    for info in layers {
         stdout()
             .queue(Clear(ClearType::CurrentLine))
             .expect("to be able to clear line");
-        let text = match (info.status.as_deref(), info.progress_detail.as_ref()) {
-            (
-                Some("Downloading"),
-                Some(ProgressDetail {
-                    current: Some(c),
-                    total: Some(t),
-                }),
-            ) => {
-                let percent = *c as f64 / *t as f64 * 100.0;
-                let progress = (percent as i64 / 10) as usize;
-                let remaining = 10 - progress;
-                format!("{:=<progress$}>{:remaining$}   {percent:.0}%", "", "")
-            }
-            (Some(status), _) => status.to_string(),
-            _ => "Unknown".to_string(),
-        };
-        println!("[{id} {}]", text);
+
+        if let Some(id) = info.id.as_ref() {
+            let text = match (info.status.as_deref(), info.progress_detail.as_ref()) {
+                (
+                    Some("Downloading"),
+                    Some(ProgressDetail {
+                        current: Some(c),
+                        total: Some(t),
+                    }),
+                ) => {
+                    let percent = *c as f64 / *t as f64 * 100.0;
+                    let progress = (percent as i64 / 10) as usize;
+                    let remaining = 10 - progress;
+                    format!("{:=<progress$}>{:remaining$}   {percent:.0}%", "", "")
+                }
+                (Some(status), _) => status.to_string(),
+                _ => "Unknown".to_string(),
+            };
+            println!("[{id} {}]", text);
+        } else {
+            println!(
+                "{}",
+                info.status.as_ref().expect("image info to have a status")
+            )
+        }
     }
     stdout()
         .queue(MoveUp(

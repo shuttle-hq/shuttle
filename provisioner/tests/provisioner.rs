@@ -147,3 +147,25 @@ async fn shared_db_missing() {
         "db-missing"
     );
 }
+
+#[tokio::test]
+async fn shared_db_filled() {
+    let provisioner = MyProvisioner::new(PG_URI).unwrap();
+
+    exec("CREATE ROLE \"user-filled\" WITH LOGIN PASSWORD 'temp'");
+    exec("CREATE DATABASE \"db-filled\" OWNER 'user-filled'");
+    assert_eq!(
+        exec("SELECT datname FROM pg_database WHERE datname = 'db-filled'"),
+        "db-filled"
+    );
+
+    provisioner
+        .request_shared_db("filled".to_string())
+        .await
+        .unwrap();
+
+    assert_eq!(
+        exec("SELECT datname FROM pg_database WHERE datname = 'db-filled'"),
+        "db-filled"
+    );
+}

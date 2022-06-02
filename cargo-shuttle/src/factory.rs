@@ -174,10 +174,11 @@ impl LocalFactory {
         while let Some(line) = output.next().await {
             let info = line.expect("failed to create image");
 
-            layers.insert(
-                info.id.as_ref().expect("image info to have an id").clone(),
-                info,
-            );
+            if let Some(id) = info.id.as_ref() {
+                layers.insert(id.clone(), info);
+            } else {
+                println!("{}", info.status.expect("image info to have a status"))
+            }
 
             print_layers(&layers);
         }

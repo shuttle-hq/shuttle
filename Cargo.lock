@@ -2759,6 +2759,7 @@ name = "provisioner"
 version = "0.1.0"
 dependencies = [
  "prost",
+ "sqlx",
  "tokio",
  "tonic",
  "tonic-build",

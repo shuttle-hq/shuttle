@@ -1,10 +1,13 @@
 use std::time::Duration;
 
+pub use error::Error;
 use provisioner::provisioner_server::Provisioner;
 pub use provisioner::provisioner_server::ProvisionerServer;
 use provisioner::{DatabaseRequest, DatabaseResponse};
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use tonic::{Request, Response, Status};
+
+mod error;
 
 pub mod provisioner {
     tonic::include_proto!("provisioner");
@@ -15,7 +18,7 @@ pub struct MyProvisioner {
 }
 
 impl MyProvisioner {
-    pub fn new(uri: String) -> sqlx::Result<Self> {
+    pub fn new(uri: &str) -> sqlx::Result<Self> {
         Ok(Self {
             pool: PgPoolOptions::new()
                 .min_connections(4)
@@ -25,21 +28,23 @@ impl MyProvisioner {
         })
     }
 
-    pub async fn request_shared_db(&self, project_name: String) -> DatabaseResponse {
+    pub async fn request_shared_db(&self, project_name: String) -> Result<DatabaseResponse, Error> {
+        // Binding does not work for identifiers
+        // https://stackoverflow.com/questions/63723236/sql-statement-to-create-role-fails-on-postgres-12-using-dapper
         let create_role_query = format!(
-            "CREATE ROLE \"{}\" PASSWORD '{}' LOGIN",
+            "CREATE ROLE \"{}\" WITH LOGIN PASSWORD '{}'",
             project_name, "test"
         );
         sqlx::query(&create_role_query)
             .execute(&self.pool)
             .await
-            .unwrap();
+            .map_err(|e| Error::CreateRole(e.to_string()))?;
 
-        DatabaseResponse {
+        Ok(DatabaseResponse {
             username: project_name,
             password: "test".to_string(),
             database_name: "".to_string(),
-        }
+        })
     }
 }
 

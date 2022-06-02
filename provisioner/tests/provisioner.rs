@@ -1,112 +1,107 @@
-use std::{process::Command, time::Duration};
+use std::{process::Command, thread::sleep, time::Duration};
 
+use ctor::{ctor, dtor};
 use provisioner::MyProvisioner;
-use tokio::time::sleep;
 
 const CONTAINER_NAME: &str = "shuttle_provisioner_it";
+const PG_URI: &str = "postgres://postgres:password@localhost";
 
-struct DockerDB {
-    uri: Option<String>,
-}
+#[ctor]
+fn setup() {
+    Command::new("docker")
+        .args([
+            "run",
+            "--rm",
+            "--name",
+            CONTAINER_NAME,
+            "-e",
+            "POSTGRES_PASSWORD=password",
+            "-p",
+            "5432:5432",
+            "postgres:11",
+        ])
+        .spawn()
+        .unwrap();
 
-impl DockerDB {
-    fn new() -> Self {
-        Self { uri: None }
-    }
-
-    async fn get_uri(&mut self) -> String {
-        if let Some(uri) = self.uri.as_ref() {
-            return uri.clone();
-        }
-
-        Command::new("docker")
-            .args([
-                "run",
-                "--rm",
-                "--name",
-                CONTAINER_NAME,
-                "-e",
-                "POSTGRES_PASSWORD=password",
-                "-p",
-                "5432:5432",
-                "postgres:11",
-            ])
-            .spawn()
-            .unwrap();
-
-        // Wait for it to come up
-        loop {
-            let status = Command::new("docker")
-                .args(["exec", CONTAINER_NAME, "pg_isready"])
-                .output()
-                .unwrap()
-                .status;
-
-            if status.success() {
-                break;
-            }
-
-            sleep(Duration::from_millis(350)).await;
-        }
-
-        let uri = "postgres://postgres:password@localhost".to_string();
-        self.uri = Some(uri.clone());
-
-        uri
-    }
-
-    fn exec(&self, query: &str) -> String {
-        let output = Command::new("docker")
-            .args([
-                "exec",
-                CONTAINER_NAME,
-                "psql",
-                "--username",
-                "postgres",
-                "--tuples-only",
-                "--no-align",
-                "--field-separator",
-                ",",
-                "--command",
-                query,
-            ])
+    // Wait for it to come up
+    loop {
+        let status = Command::new("docker")
+            .args(["exec", CONTAINER_NAME, "pg_isready"])
             .output()
             .unwrap()
-            .stdout;
+            .status;
 
-        String::from_utf8(output).unwrap().trim().to_string()
+        if status.success() {
+            break;
+        }
+
+        sleep(Duration::from_millis(350));
     }
 }
 
-impl Drop for DockerDB {
-    fn drop(&mut self) {
-        if self.uri.is_some() {
-            Command::new("docker")
-                .args(["stop", CONTAINER_NAME])
-                .output()
-                .expect("failed to stop provisioner test DB container");
-            Command::new("docker")
-                .args(["rm", CONTAINER_NAME])
-                .output()
-                .expect("failed to remove provisioner test DB container");
-        }
-    }
+#[dtor]
+fn cleanup() {
+    Command::new("docker")
+        .args(["stop", CONTAINER_NAME])
+        .output()
+        .expect("failed to stop provisioner test DB container");
+    Command::new("docker")
+        .args(["rm", CONTAINER_NAME])
+        .output()
+        .expect("failed to remove provisioner test DB container");
+}
+
+fn exec(query: &str) -> String {
+    let output = Command::new("docker")
+        .args([
+            "exec",
+            CONTAINER_NAME,
+            "psql",
+            "--username",
+            "postgres",
+            "--tuples-only",
+            "--no-align",
+            "--field-separator",
+            ",",
+            "--command",
+            query,
+        ])
+        .output()
+        .unwrap()
+        .stdout;
+
+    String::from_utf8(output).unwrap().trim().to_string()
 }
 
 #[tokio::test]
 async fn shared_db_does_not_exist() {
-    let mut db = DockerDB::new();
-    let provisioner = MyProvisioner::new(db.get_uri().await).unwrap();
+    let provisioner = MyProvisioner::new(PG_URI).unwrap();
 
     assert_eq!(
-        db.exec("SELECT rolname FROM pg_roles WHERE rolname = 'not_exist'"),
+        exec("SELECT rolname FROM pg_roles WHERE rolname = 'not_exist'"),
         ""
     );
 
-    provisioner.request_shared_db("not_exist".to_string()).await;
+    provisioner
+        .request_shared_db("not_exist".to_string())
+        .await
+        .unwrap();
 
     assert_eq!(
-        db.exec("SELECT rolname FROM pg_roles WHERE rolname = 'not_exist'"),
+        exec("SELECT rolname FROM pg_roles WHERE rolname = 'not_exist'"),
         "not_exist"
     );
+}
+
+#[tokio::test]
+#[should_panic(
+    expected = "CreateRole(\"error returned from database: cannot insert multiple commands into a prepared statement\""
+)]
+async fn injection_safe() {
+    let provisioner = MyProvisioner::new(PG_URI).unwrap();
+
+    provisioner
+        .request_shared_db("new\"; CREATE ROLE \"injected".to_string())
+        .await
+        .unwrap();
 }

@@ -2758,8 +2758,10 @@ dependencies = [
 name = "provisioner"
 version = "0.1.0"
 dependencies = [
+ "ctor",
  "prost",
  "sqlx",
+ "thiserror",
  "tokio",
  "tonic",
  "tonic-build",

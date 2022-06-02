@@ -4,6 +4,7 @@ pub use error::Error;
 use provisioner::provisioner_server::Provisioner;
 pub use provisioner::provisioner_server::ProvisionerServer;
 use provisioner::{DatabaseRequest, DatabaseResponse};
+use rand::Rng;
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use tonic::{Request, Response, Status};
 
@@ -29,7 +30,18 @@ impl MyProvisioner {
     }
 
     pub async fn request_shared_db(&self, project_name: String) -> Result<DatabaseResponse, Error> {
+        let (username, password) = self.shared_role(&project_name).await?;
+
+        Ok(DatabaseResponse {
+            username,
+            password,
+            database_name: "".to_string(),
+        })
+    }
+
+    async fn shared_role(&self, project_name: &str) -> Result<(String, String), Error> {
         let username = format!("user-{project_name}");
+        let password = generate_password();
 
         let matching_user = sqlx::query("SELECT rolname FROM pg_roles WHERE rolname = $1")
             .bind(&username)
@@ -39,10 +51,8 @@ impl MyProvisioner {
         if matching_user.is_none() {
             // Binding does not work for identifiers
             // https://stackoverflow.com/questions/63723236/sql-statement-to-create-role-fails-on-postgres-12-using-dapper
-            let create_role_query = format!(
-                "CREATE ROLE \"{}\" WITH LOGIN PASSWORD '{}'",
-                username, "test"
-            );
+            let create_role_query =
+                format!("CREATE ROLE \"{username}\" WITH LOGIN PASSWORD '{password}'");
             sqlx::query(&create_role_query)
                 .execute(&self.pool)
                 .await
@@ -50,21 +60,15 @@ impl MyProvisioner {
         } else {
             // Binding does not work for identifiers
             // https://stackoverflow.com/questions/63723236/sql-statement-to-create-role-fails-on-postgres-12-using-dapper
-            let update_role_query = format!(
-                "ALTER ROLE \"{}\" WITH LOGIN PASSWORD '{}'",
-                username, "test"
-            );
+            let update_role_query =
+                format!("ALTER ROLE \"{username}\" WITH LOGIN PASSWORD '{password}'");
             sqlx::query(&update_role_query)
                 .execute(&self.pool)
                 .await
                 .map_err(|e| Error::UpdateRole(e.to_string()))?;
         }
 
-        Ok(DatabaseResponse {
-            username,
-            password: "test".to_string(),
-            database_name: "".to_string(),
-        })
+        Ok((username, password))
     }
 }
 
@@ -84,4 +88,12 @@ impl Provisioner for MyProvisioner {
 
         Ok(Response::new(reply))
     }
+}
+
+fn generate_password() -> String {
+    rand::thread_rng()
+        .sample_iter(&rand::distributions::Alphanumeric)
+        .take(12)
+        .map(char::from)
+        .collect()
 }

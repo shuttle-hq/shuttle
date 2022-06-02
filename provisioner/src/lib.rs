@@ -31,11 +31,11 @@ impl MyProvisioner {
 
     pub async fn request_shared_db(&self, project_name: String) -> Result<DatabaseResponse, Error> {
         let (username, password) = self.shared_role(&project_name).await?;
-
+        let database_name = self.shared_db(&project_name, &username).await?;
         Ok(DatabaseResponse {
             username,
             password,
-            database_name: "".to_string(),
+            database_name,
         })
     }
 
@@ -69,6 +69,20 @@ impl MyProvisioner {
         }
 
         Ok((username, password))
+    }
+
+    async fn shared_db(&self, project_name: &str, username: &str) -> Result<String, Error> {
+        let database_name = format!("db-{project_name}");
+
+        // Binding does not work for identifiers
+        // https://stackoverflow.com/questions/63723236/sql-statement-to-create-role-fails-on-postgres-12-using-dapper
+        let create_db_query = format!("CREATE DATABASE \"{database_name}\" OWNER '{username}'");
+        sqlx::query(&create_db_query)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| Error::CreateDB(e.to_string()))?;
+
+        Ok(database_name)
     }
 }
 

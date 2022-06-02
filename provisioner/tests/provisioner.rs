@@ -127,3 +127,23 @@ async fn injection_safe() {
         .await
         .unwrap();
 }
+
+#[tokio::test]
+async fn shared_db_missing() {
+    let provisioner = MyProvisioner::new(PG_URI).unwrap();
+
+    assert_eq!(
+        exec("SELECT datname FROM pg_database WHERE datname = 'db-missing'"),
+        ""
+    );
+
+    provisioner
+        .request_shared_db("missing".to_string())
+        .await
+        .unwrap();
+
+    assert_eq!(
+        exec("SELECT datname FROM pg_database WHERE datname = 'db-missing'"),
+        "db-missing"
+    );
+}

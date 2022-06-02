@@ -1,10 +1,14 @@
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
+use std::collections::HashMap;
 
-use rocket::request::FromParam;
+use rocket::http::Status;
+use rocket::request::{FromParam, FromRequest, Request, Outcome};
 use serde::de::Error as DeError;
 use serde::{Deserialize, Deserializer, Serialize};
+
+use crate::INITIAL_SECRETS_HEADER;
 
 /// Project names should conform to valid Host segments (or labels)
 /// as per [IETF RFC 1123](https://datatracker.ietf.org/doc/html/rfc1123).
@@ -98,6 +102,29 @@ impl Display for ProjectNameError {
 }
 
 impl Error for ProjectNameError {}
+
+#[derive(Deserialize)]
+#[serde(transparent)]
+pub struct InitialSecrets(pub HashMap<String, String>);
+
+#[rocket::async_trait]
+impl<'r> FromRequest<'r> for InitialSecrets {
+    type Error = ();
+
+    async fn from_request(req: &'r Request<'_>) -> Outcome<Self, Self::Error> {
+        if let Some(json) = req.headers().get_one(INITIAL_SECRETS_HEADER) {
+            if let Ok(secrets) = serde_json::from_str(json) {
+                Outcome::Success(secrets)
+            }
+            else {
+                Outcome::Failure((Status::BadRequest, ()))
+            }
+        }
+        else {
+            Outcome::Success(InitialSecrets(HashMap::new()))
+        }
+    }
+}
 
 /// Test examples taken from a [Pop-OS project](https://github.com/pop-os/hostname-validator/blob/master/src/lib.rs)
 /// and modified to our use case

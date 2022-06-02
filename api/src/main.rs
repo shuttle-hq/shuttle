@@ -23,7 +23,7 @@ use deployment::MAX_DEPLOYS;
 use factory::ShuttleFactory;
 use rocket::serde::json::Json;
 use rocket::{tokio, Build, Data, Rocket, State};
-use shuttle_common::project::ProjectName;
+use shuttle_common::project::{ProjectName, InitialSecrets};
 use shuttle_common::{DeploymentApiError, DeploymentMeta, Port};
 use shuttle_service::SecretStore;
 use structopt::StructOpt;
@@ -111,8 +111,10 @@ async fn create_project(
     user_directory: &State<UserDirectory>,
     crate_file: Data<'_>,
     project_name: ProjectName,
+    initial_secrets: InitialSecrets,
     user: User,
 ) -> ApiResult<DeploymentMeta, DeploymentApiError> {
+    println!("{:?}", initial_secrets.0);
     info!("[CREATE_PROJECT, {}, {}]", &user.name, &project_name);
 
     if !user

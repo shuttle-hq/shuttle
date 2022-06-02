@@ -14,6 +14,7 @@ use uuid::Uuid;
 use crate::project::ProjectName;
 
 pub const SHUTTLE_PROJECT_HEADER: &str = "Shuttle-Project";
+pub const INITIAL_SECRETS_HEADER: &str = "Initial-Secrets";
 
 #[cfg(debug_assertions)]
 pub const API_URL_DEFAULT: &str = "http://localhost:8001";

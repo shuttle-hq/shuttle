@@ -9,7 +9,7 @@ use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use shuttle_common::project::ProjectName;
-use shuttle_common::{ApiKey, ApiUrl, DeploymentMeta, DeploymentStateMeta, SHUTTLE_PROJECT_HEADER};
+use shuttle_common::{ApiKey, ApiUrl, DeploymentMeta, DeploymentStateMeta, SHUTTLE_PROJECT_HEADER, INITIAL_SECRETS_HEADER};
 use tokio::time::sleep;
 
 use crate::print;
@@ -112,6 +112,7 @@ pub(crate) async fn deploy(
     api_url: ApiUrl,
     api_key: &ApiKey,
     project: &ProjectName,
+    initial_secrets: HashMap<String, String>,
 ) -> Result<()> {
     let mut url = api_url.clone();
     url.push_str(&format!("/projects/{}", project.as_str()));
@@ -128,6 +129,7 @@ pub(crate) async fn deploy(
         .post(url)
         .body(package_content)
         .header(SHUTTLE_PROJECT_HEADER, serde_json::to_string(&project)?)
+        .header(INITIAL_SECRETS_HEADER, serde_json::to_string(&initial_secrets)?)
         .basic_auth(api_key.clone(), Some(""))
         .send()
         .await

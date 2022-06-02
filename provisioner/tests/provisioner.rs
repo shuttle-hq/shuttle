@@ -74,11 +74,11 @@ fn exec(query: &str) -> String {
 }
 
 #[tokio::test]
-async fn shared_db_does_not_exist() {
+async fn shared_db_role_does_not_exist() {
     let provisioner = MyProvisioner::new(PG_URI).unwrap();
 
     assert_eq!(
-        exec("SELECT rolname FROM pg_roles WHERE rolname = 'not_exist'"),
+        exec("SELECT rolname FROM pg_roles WHERE rolname = 'user-not_exist'"),
         ""
     );
 
@@ -88,8 +88,30 @@ async fn shared_db_does_not_exist() {
         .unwrap();
 
     assert_eq!(
-        exec("SELECT rolname FROM pg_roles WHERE rolname = 'not_exist'"),
-        "not_exist"
+        exec("SELECT rolname FROM pg_roles WHERE rolname = 'user-not_exist'"),
+        "user-not_exist"
+    );
+}
+
+#[tokio::test]
+async fn shared_db_role_does_exist() {
+    let provisioner = MyProvisioner::new(PG_URI).unwrap();
+
+    exec("CREATE ROLE \"user-exist\" WITH LOGIN PASSWORD 'temp'");
+    assert_eq!(
+        exec("SELECT passwd FROM pg_shadow WHERE usename = 'user-exist'"),
+        "md5d44ae85dd21bda2a4f9946217adea2cc"
+    );
+
+    provisioner
+        .request_shared_db("exist".to_string())
+        .await
+        .unwrap();
+
+    // Make sure password got cycled
+    assert_ne!(
+        exec("SELECT passwd FROM pg_shadow WHERE usename = 'user-exist'"),
+        "md5d44ae85dd21bda2a4f9946217adea2cc"
     );
 }
 

@@ -57,7 +57,7 @@ impl Factory for LocalFactory {
                 });
                 let mut port_bindings = HashMap::new();
                 port_bindings.insert(
-                    "5432".to_string(),
+                    "5432/tcp".to_string(),
                     Some(vec![PortBinding {
                         host_port: Some("5432".to_string()),
                         ..Default::default()

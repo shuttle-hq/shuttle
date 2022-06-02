@@ -9,7 +9,12 @@ const tiers = [
   {
     name: "Hobby",
     BuyButton: LoginButton,
-    priceMonthly: 0,
+    price: (
+      <>
+        <span className="text-4xl font-extrabold dark:text-gray-200">$0</span>{" "}
+        <span className="text-base font-medium dark:text-gray-300">/mo</span>
+      </>
+    ),
     description:
       "The perfect confluence of features to run your hobby-projects for free - forever.",
   },
@@ -21,13 +26,17 @@ const tiers = [
       return (
         <ExternalLink
           className="inline-block w-full rounded border border-slate-900 bg-transparent py-1 px-4 text-center text-base font-medium text-slate-900 transition-colors hover:bg-slate-800 hover:text-slate-100 dark:border-white dark:text-white hover:dark:bg-white hover:dark:text-dark-700"
-          href="mailto:sales@shuttle.rs"
+          href="mailto:hello@shuttle.rs"
         >
           {label}
         </ExternalLink>
       );
     },
-    priceMonthly: 25,
+    price: (
+      <span className="text-4xl font-extrabold dark:text-gray-200">
+        Contact Us
+      </span>
+    ),
     description:
       "Build on production quality infrastructure which scales to your needs.",
   },
@@ -39,7 +48,7 @@ const sections = [
     features: [
       {
         name: "Team Size",
-        tiers: { Hobby: 1, Pro: 5 },
+        tiers: { Hobby: 1, Pro: "Get in touch" },
       },
       {
         name: "Deployments",
@@ -47,19 +56,19 @@ const sections = [
       },
       {
         name: "Number of Projects",
-        tiers: { Hobby: 5, Pro: 10 },
+        tiers: { Hobby: 5, Pro: "Get in touch" },
       },
       {
         name: "Requests",
-        tiers: { Hobby: "150K/mo", Pro: "1.5M/mo" },
+        tiers: { Hobby: "150K/mo", Pro: "Get in touch" },
       },
       {
         name: "Workers",
-        tiers: { Hobby: 1, Pro: 10 },
+        tiers: { Hobby: 1, Pro: "Get in touch" },
       },
       {
-        name: "Data Storage",
-        tiers: { Hobby: "500 MB", Pro: "20 GB" },
+        name: "Database Storage",
+        tiers: { Hobby: "500 MB", Pro: "Get in touch" },
       },
       {
         name: "Subdomains",
@@ -119,14 +128,7 @@ export default function Pricing() {
                 <h2 className="text-lg font-medium leading-6 dark:text-gray-200">
                   {tier.name}
                 </h2>
-                <p className="mt-4">
-                  <span className="text-4xl font-extrabold dark:text-gray-200">
-                    ${tier.priceMonthly}
-                  </span>{" "}
-                  <span className="text-base font-medium dark:text-gray-300">
-                    /mo
-                  </span>
-                </p>
+                <p className="mt-4">{tier.price}</p>
                 <p className="mt-4 mb-4 text-sm dark:text-gray-300">
                   {tier.description}
                 </p>
@@ -222,14 +224,7 @@ export default function Pricing() {
                 {tiers.map((tier) => (
                   <td key={tier.name} className="h-full py-8 px-6 align-top">
                     <div className="relative table h-full">
-                      <p>
-                        <span className="text-4xl font-extrabold dark:text-gray-200">
-                          ${tier.priceMonthly}
-                        </span>{" "}
-                        <span className="text-base font-medium dark:text-gray-300">
-                          /mo
-                        </span>
-                      </p>
+                      <p>{tier.price}</p>
                       <p className="mt-4 mb-4 text-sm dark:text-gray-300">
                         {tier.description}
                       </p>

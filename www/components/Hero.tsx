@@ -10,6 +10,7 @@ import classnames from "classnames";
 import { useAnnouncementBarIsClosed } from "./AnnouncementBar";
 import mixpanel from "mixpanel-browser";
 import ExternalLink from "./ExternalLink";
+import InternalLink from "./InternalLink";
 
 export default function Hero() {
   const { basePath } = useRouter();
@@ -44,7 +45,16 @@ export default function Hero() {
                 {SITE_TITLE}
               </div>
               <div className="px-10 text-xl text-slate-500 dark:text-gray-300 ">
-                {SITE_DESCRIPTION}
+                Shuttle is built for productivity, reliability and performance.
+                Zero-Configuration support for Rust using annotation and
+                automatic infrastructure provisioning with{" "}
+                <InternalLink
+                  href="/blog/2022/05/09/ifc"
+                  className="text-slate-600 underline dark:text-gray-200"
+                >
+                  Infrastructure From Code
+                </InternalLink>
+                .
               </div>
             </div>
             <div className="hidden flex-col items-center justify-center md:flex">

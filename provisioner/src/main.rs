@@ -1,16 +1,23 @@
-use provisioner::{MyProvisioner, ProvisionerServer};
+use std::net::SocketAddr;
+
+use clap::Parser;
+use provisioner::{Args, MyProvisioner, ProvisionerServer};
 use tonic::transport::Server;
-use tracing::info;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 
-    let addr = "0.0.0.0:5001".parse()?;
-    info!("starting provisioner on {}", addr);
+    let Args {
+        ip,
+        port,
+        shared_pg_uri,
+    } = Args::parse();
+    let addr = SocketAddr::new(ip, port);
 
-    let provisioner = MyProvisioner::new("postgres://postgres:password@localhost").unwrap();
+    let provisioner = MyProvisioner::new(&shared_pg_uri).unwrap();
 
+    println!("starting provisioner on {}", addr);
     Server::builder()
         .add_service(ProvisionerServer::new(provisioner))
         .serve(addr)

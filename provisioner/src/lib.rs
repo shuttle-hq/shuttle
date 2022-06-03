@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+pub use args::Args;
 pub use error::Error;
 use provisioner::provisioner_server::Provisioner;
 pub use provisioner::provisioner_server::ProvisionerServer;
@@ -9,6 +10,7 @@ use sqlx::{postgres::PgPoolOptions, PgPool};
 use tonic::{Request, Response, Status};
 use tracing::info;
 
+mod args;
 mod error;
 
 pub mod provisioner {

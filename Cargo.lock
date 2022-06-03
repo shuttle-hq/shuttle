@@ -116,6 +116,7 @@ dependencies = [
  "lazy_static",
  "libloading",
  "log",
+ "proto",
  "rand 0.8.5",
  "rocket",
  "serde",
@@ -125,6 +126,7 @@ dependencies = [
  "structopt",
  "tokio",
  "toml",
+ "tonic",
  "uuid",
 ]
 
@@ -2804,6 +2806,7 @@ name = "proto"
 version = "0.1.0"
 dependencies = [
  "prost",
+ "shuttle-common",
  "tonic",
  "tonic-build",
 ]

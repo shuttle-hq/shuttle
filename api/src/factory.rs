@@ -1,34 +1,54 @@
 use async_trait::async_trait;
-use shuttle_common::DatabaseReadyInfo;
+use proto::provisioner::{provisioner_client::ProvisionerClient, DatabaseRequest};
+use shuttle_common::{project::ProjectName, DatabaseReadyInfo};
 use shuttle_service::Factory;
-
-use crate::database;
+use tonic::{transport::Channel, Request};
 
 pub(crate) struct ShuttleFactory {
-    database: database::State,
+    project_name: ProjectName,
+    provisioner_client: ProvisionerClient<Channel>,
+    info: Option<DatabaseReadyInfo>,
 }
 
 impl ShuttleFactory {
-    pub(crate) fn new(database: database::State) -> Self {
-        Self { database }
+    pub(crate) fn new(
+        provisioner_client: ProvisionerClient<Channel>,
+        project_name: ProjectName,
+    ) -> Self {
+        Self {
+            provisioner_client,
+            project_name,
+            info: None,
+        }
     }
-}
 
-impl ShuttleFactory {
-    pub(crate) fn to_database_info(&self) -> Option<DatabaseReadyInfo> {
-        self.database.to_info()
+    pub(crate) fn to_database_info(self) -> Option<DatabaseReadyInfo> {
+        self.info
     }
 }
 
 #[async_trait]
 impl Factory for ShuttleFactory {
     async fn get_sql_connection_string(&mut self) -> Result<String, shuttle_service::Error> {
-        let conn_str = self
-            .database
-            .request()
+        if let Some(ref info) = self.info {
+            return Ok(info.connection_string("localhost"));
+        }
+
+        let request = Request::new(DatabaseRequest {
+            project_name: self.project_name.to_string(),
+        });
+
+        let response = self
+            .provisioner_client
+            .provision_database(request)
             .await
             .map_err(shuttle_service::error::CustomError::new)?
-            .connection_string("localhost");
+            .into_inner();
+
+        let info: DatabaseReadyInfo = response.into();
+        let conn_str = info.connection_string("localhost");
+        self.info = Some(info);
+
         debug!("giving a sql connection string: {}", conn_str);
         Ok(conn_str)
     }

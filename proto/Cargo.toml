@@ -9,5 +9,7 @@ edition = "2021"
 prost = "0.10"
 tonic = "0.7"
 
+shuttle-common = { path = "../common" }
+
 [build-dependencies]
 tonic-build = "0.7"

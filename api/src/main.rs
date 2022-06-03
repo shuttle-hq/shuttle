@@ -8,7 +8,6 @@ mod args;
 mod auth;
 mod auth_admin;
 mod build;
-mod database;
 mod deployment;
 mod factory;
 mod proxy;

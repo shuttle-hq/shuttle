@@ -7,6 +7,7 @@ use provisioner::{DatabaseRequest, DatabaseResponse};
 use rand::Rng;
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use tonic::{Request, Response, Status};
+use tracing::info;
 
 mod error;
 
@@ -50,6 +51,8 @@ impl MyProvisioner {
             .await?;
 
         if matching_user.is_none() {
+            info!("creating new user");
+
             // Binding does not work for identifiers
             // https://stackoverflow.com/questions/63723236/sql-statement-to-create-role-fails-on-postgres-12-using-dapper
             let create_role_query =
@@ -59,6 +62,8 @@ impl MyProvisioner {
                 .await
                 .map_err(|e| Error::CreateRole(e.to_string()))?;
         } else {
+            info!("cycling password of user");
+
             // Binding does not work for identifiers
             // https://stackoverflow.com/questions/63723236/sql-statement-to-create-role-fails-on-postgres-12-using-dapper
             let update_role_query =
@@ -81,6 +86,8 @@ impl MyProvisioner {
             .await?;
 
         if matching_db.is_none() {
+            info!("creating database");
+
             // Binding does not work for identifiers
             // https://stackoverflow.com/questions/63723236/sql-statement-to-create-role-fails-on-postgres-12-using-dapper
             let create_db_query = format!("CREATE DATABASE \"{database_name}\" OWNER '{username}'");
@@ -96,6 +103,7 @@ impl MyProvisioner {
 
 #[tonic::async_trait]
 impl Provisioner for MyProvisioner {
+    #[tracing::instrument(skip(self))]
     async fn provision_database(
         &self,
         request: Request<DatabaseRequest>,

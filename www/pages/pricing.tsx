@@ -34,7 +34,7 @@ const tiers = [
     },
     price: (
       <span className="text-4xl font-extrabold dark:text-gray-200">
-        Contact Us
+        Let's Talk
       </span>
     ),
     description:
@@ -103,10 +103,6 @@ const sections = [
             </ExternalLink>
           ),
         },
-      },
-      {
-        name: "Support Availability",
-        tiers: { Hobby: "N/A", Pro: "09:00 - 19:00 UTC" },
       },
       {
         name: "Request Turnaround",

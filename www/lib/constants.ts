@@ -1,9 +1,9 @@
 export const APP_NAME = "shuttle";
 
-export const SITE_TITLE = "The Serverless Platform for Rust";
+export const SITE_TITLE = "Stateful Serverless for Rust";
 
 export const SITE_DESCRIPTION =
-  "Shuttle is built for productivity, reliability and performance. Zero-Configuration support for Rust using annotation and automatic infrastructure provisioning with Infrastructure From Code.";
+  "Shuttle is a web application platform that uses traits and annotations to configure your backend deployment - including databases.";
 
 export const SITE_URL = "https://shuttle.rs/";
 

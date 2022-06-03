@@ -2800,12 +2800,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "proto"
+version = "0.1.0"
+dependencies = [
+ "prost",
+ "tonic",
+ "tonic-build",
+]
+
+[[package]]
 name = "provisioner"
 version = "0.1.0"
 dependencies = [
  "clap 3.1.18",
  "ctor",
  "prost",
+ "proto",
  "rand 0.8.5",
  "sqlx",
  "thiserror",

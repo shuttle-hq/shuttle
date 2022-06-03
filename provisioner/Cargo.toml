@@ -17,6 +17,8 @@ tonic = "0.7"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 
+proto = { path = "../proto" }
+
 [dev-dependencies]
 ctor = "0.1"
 

@@ -2,9 +2,9 @@ use std::time::Duration;
 
 pub use args::Args;
 pub use error::Error;
-use provisioner::provisioner_server::Provisioner;
-pub use provisioner::provisioner_server::ProvisionerServer;
-use provisioner::{DatabaseRequest, DatabaseResponse};
+use proto::provisioner::provisioner_server::Provisioner;
+pub use proto::provisioner::provisioner_server::ProvisionerServer;
+use proto::provisioner::{DatabaseRequest, DatabaseResponse};
 use rand::Rng;
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use tonic::{Request, Response, Status};
@@ -12,10 +12,6 @@ use tracing::info;
 
 mod args;
 mod error;
-
-pub mod provisioner {
-    tonic::include_proto!("provisioner");
-}
 
 pub struct MyProvisioner {
     pool: PgPool,

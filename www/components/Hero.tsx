@@ -26,7 +26,7 @@ export default function Hero() {
     >
       <div className="mx-auto py-5 xl:px-12">
         <div className="p-6 sm:py-8">
-          <div className="m-auto flex max-w-3xl flex-col gap-8 text-center sm:gap-11">
+          <div className="m-auto flex max-w-5xl flex-col gap-8 text-center sm:gap-11">
             {/* <div className="flex m-auto relative">
               <img
                 className="h-16"

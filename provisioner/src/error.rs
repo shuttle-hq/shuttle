@@ -1,4 +1,5 @@
 use thiserror::Error;
+use tonic::Status;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -13,4 +14,10 @@ pub enum Error {
 
     #[error("unexpected error '{0}")]
     Unexpected(#[from] sqlx::Error),
+}
+
+impl From<Error> for Status {
+    fn from(_: Error) -> Self {
+        Status::internal("failed to provision a database")
+    }
 }

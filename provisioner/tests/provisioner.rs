@@ -82,10 +82,7 @@ async fn shared_db_role_does_not_exist() {
         ""
     );
 
-    provisioner
-        .request_shared_db("not_exist".to_string())
-        .await
-        .unwrap();
+    provisioner.request_shared_db("not_exist").await.unwrap();
 
     assert_eq!(
         exec("SELECT rolname FROM pg_roles WHERE rolname = 'user-not_exist'"),
@@ -103,10 +100,7 @@ async fn shared_db_role_does_exist() {
         "md5d44ae85dd21bda2a4f9946217adea2cc"
     );
 
-    provisioner
-        .request_shared_db("exist".to_string())
-        .await
-        .unwrap();
+    provisioner.request_shared_db("exist").await.unwrap();
 
     // Make sure password got cycled
     assert_ne!(
@@ -123,7 +117,7 @@ async fn injection_safe() {
     let provisioner = MyProvisioner::new(PG_URI).unwrap();
 
     provisioner
-        .request_shared_db("new\"; CREATE ROLE \"injected".to_string())
+        .request_shared_db("new\"; CREATE ROLE \"injected")
         .await
         .unwrap();
 }
@@ -137,10 +131,7 @@ async fn shared_db_missing() {
         ""
     );
 
-    provisioner
-        .request_shared_db("missing".to_string())
-        .await
-        .unwrap();
+    provisioner.request_shared_db("missing").await.unwrap();
 
     assert_eq!(
         exec("SELECT datname FROM pg_database WHERE datname = 'db-missing'"),
@@ -159,10 +150,7 @@ async fn shared_db_filled() {
         "db-filled"
     );
 
-    provisioner
-        .request_shared_db("filled".to_string())
-        .await
-        .unwrap();
+    provisioner.request_shared_db("filled").await.unwrap();
 
     assert_eq!(
         exec("SELECT datname FROM pg_database WHERE datname = 'db-filled'"),

@@ -29,9 +29,10 @@ impl MyProvisioner {
         })
     }
 
-    pub async fn request_shared_db(&self, project_name: String) -> Result<DatabaseResponse, Error> {
-        let (username, password) = self.shared_role(&project_name).await?;
-        let database_name = self.shared_db(&project_name, &username).await?;
+    pub async fn request_shared_db(&self, project_name: &str) -> Result<DatabaseResponse, Error> {
+        let (username, password) = self.shared_role(project_name).await?;
+        let database_name = self.shared_db(project_name, &username).await?;
+
         Ok(DatabaseResponse {
             username,
             password,
@@ -99,13 +100,9 @@ impl Provisioner for MyProvisioner {
         &self,
         request: Request<DatabaseRequest>,
     ) -> Result<Response<DatabaseResponse>, Status> {
-        println!("request: {:?}", request.into_inner());
-
-        let reply = DatabaseResponse {
-            username: "postgres".to_string(),
-            password: "tmp".to_string(),
-            database_name: "postgres".to_string(),
-        };
+        let reply = self
+            .request_shared_db(&request.into_inner().project_name)
+            .await?;
 
         Ok(Response::new(reply))
     }

@@ -9,7 +9,10 @@ use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use shuttle_common::project::ProjectName;
-use shuttle_common::{ApiKey, ApiUrl, DeploymentMeta, DeploymentStateMeta, SHUTTLE_PROJECT_HEADER, INITIAL_SECRETS_HEADER};
+use shuttle_common::{
+    ApiKey, ApiUrl, DeploymentMeta, DeploymentStateMeta, INITIAL_SECRETS_HEADER,
+    SHUTTLE_PROJECT_HEADER,
+};
 use tokio::time::sleep;
 
 use crate::print;
@@ -129,7 +132,10 @@ pub(crate) async fn deploy(
         .post(url)
         .body(package_content)
         .header(SHUTTLE_PROJECT_HEADER, serde_json::to_string(&project)?)
-        .header(INITIAL_SECRETS_HEADER, serde_json::to_string(&initial_secrets)?)
+        .header(
+            INITIAL_SECRETS_HEADER,
+            serde_json::to_string(&initial_secrets)?,
+        )
         .basic_auth(api_key.clone(), Some(""))
         .send()
         .await

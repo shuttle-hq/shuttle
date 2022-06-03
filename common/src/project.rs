@@ -1,10 +1,10 @@
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
-use std::collections::HashMap;
 
 use rocket::http::Status;
-use rocket::request::{FromParam, FromRequest, Request, Outcome};
+use rocket::request::{FromParam, FromRequest, Outcome, Request};
 use serde::de::Error as DeError;
 use serde::{Deserialize, Deserializer, Serialize};
 
@@ -115,12 +115,10 @@ impl<'r> FromRequest<'r> for InitialSecrets {
         if let Some(json) = req.headers().get_one(INITIAL_SECRETS_HEADER) {
             if let Ok(secrets) = serde_json::from_str(json) {
                 Outcome::Success(secrets)
-            }
-            else {
+            } else {
                 Outcome::Failure((Status::BadRequest, ()))
             }
-        }
-        else {
+        } else {
             Outcome::Success(InitialSecrets(HashMap::new()))
         }
     }
@@ -131,7 +129,7 @@ impl InitialSecrets {
         self.0.is_empty()
     }
 
-    pub fn iter(&self) -> impl Iterator<Item=(&String, &String)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&String, &String)> {
         self.0.iter()
     }
 }

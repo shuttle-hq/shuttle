@@ -186,8 +186,8 @@ use async_trait::async_trait;
 
 // Pub uses by `codegen`
 pub use log;
-pub use tokio::runtime::Runtime;
 pub use shuttle_common::project::InitialSecrets;
+pub use tokio::runtime::Runtime;
 
 pub mod error;
 pub use error::Error;

@@ -164,7 +164,9 @@ impl Shuttle {
             self.ctx.project_name(),
             addr
         );
-        let (handle, so) = loader.load(&mut factory, addr, tx, deployment_id, Default::default()).await?; // TODO: Secrets.toml
+        let (handle, so) = loader
+            .load(&mut factory, addr, tx, deployment_id, Default::default())
+            .await?; // TODO: Secrets.toml
 
         tokio::spawn(async move {
             while let Some(log) = rx.recv().await {

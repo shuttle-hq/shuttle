@@ -9,8 +9,8 @@ use cargo::ops::{compile, CompileOptions};
 use cargo::util::homedir;
 use cargo::Config;
 use libloading::{Library, Symbol};
-use shuttle_common::DeploymentId;
 use shuttle_common::project::InitialSecrets;
+use shuttle_common::DeploymentId;
 use thiserror::Error as ThisError;
 use tokio::sync::mpsc::UnboundedSender;
 

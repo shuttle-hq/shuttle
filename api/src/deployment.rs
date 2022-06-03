@@ -12,7 +12,7 @@ use futures::prelude::*;
 use libloading::Library;
 use rocket::data::ByteUnit;
 use rocket::{tokio, Data};
-use shuttle_common::project::{ProjectName, InitialSecrets};
+use shuttle_common::project::{InitialSecrets, ProjectName};
 use shuttle_common::{
     DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, LogItem, Port,
 };
@@ -22,8 +22,8 @@ use shuttle_service::ServeHandle;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::{mpsc, RwLock};
 
-use sqlx::postgres::PgPoolOptions;
 use shuttle_service::SecretStore;
+use sqlx::postgres::PgPoolOptions;
 
 use crate::build::Build;
 use crate::router::Router;
@@ -52,7 +52,12 @@ impl Deployment {
         }
     }
 
-    fn from_bytes(fqdn: &str, project: ProjectName, crate_bytes: Vec<u8>, initial_secrets: InitialSecrets) -> Self {
+    fn from_bytes(
+        fqdn: &str,
+        project: ProjectName,
+        crate_bytes: Vec<u8>,
+        initial_secrets: InitialSecrets,
+    ) -> Self {
         Self {
             meta: Arc::new(RwLock::new(DeploymentMeta::queued(fqdn, project))),
             state: RwLock::new(DeploymentState::queued(crate_bytes, initial_secrets)),
@@ -168,7 +173,17 @@ impl Deployment {
                     let mut factory = ShuttleFactory::new(db_state);
                     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
 
-                    match loaded.loader.load(&mut factory, addr, run_logs_tx, meta.id, loaded.initial_secrets).await {
+                    match loaded
+                        .loader
+                        .load(
+                            &mut factory,
+                            addr,
+                            run_logs_tx,
+                            meta.id,
+                            loaded.initial_secrets,
+                        )
+                        .await
+                    {
                         Err(e) => {
                             debug!("{}: factory phase FAILED: {:?}", meta.project, e);
                             DeploymentState::Error(e.into())
@@ -569,7 +584,12 @@ impl DeploymentSystem {
             })?
             .to_vec();
 
-        let deployment = Arc::new(Deployment::from_bytes(&self.fqdn, project, crate_bytes, initial_secrets));
+        let deployment = Arc::new(Deployment::from_bytes(
+            &self.fqdn,
+            project,
+            crate_bytes,
+            initial_secrets,
+        ));
 
         let info = deployment.meta().await;
 
@@ -621,15 +641,24 @@ impl DeploymentState {
     }
 
     fn queued(crate_bytes: Vec<u8>, initial_secrets: InitialSecrets) -> Self {
-        Self::Queued(QueuedState { crate_bytes, initial_secrets })
+        Self::Queued(QueuedState {
+            crate_bytes,
+            initial_secrets,
+        })
     }
 
     fn built(build: Build, initial_secrets: InitialSecrets) -> Self {
-        Self::Built(BuiltState { build, initial_secrets })
+        Self::Built(BuiltState {
+            build,
+            initial_secrets,
+        })
     }
 
     fn loaded(loader: Loader, initial_secrets: InitialSecrets) -> Self {
-        Self::Loaded(LoadedState { loader, initial_secrets })
+        Self::Loaded(LoadedState {
+            loader,
+            initial_secrets,
+        })
     }
 
     fn deployed(so: Library, port: Port, handle: ServeHandle) -> Self {

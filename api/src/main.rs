@@ -126,7 +126,7 @@ async fn create_project(
     }
     let deployment = state
         .deployment_manager
-        .deploy(crate_file, project_name)
+        .deploy(crate_file, project_name, initial_secrets)
         .await?;
     Ok(Json(deployment))
 }

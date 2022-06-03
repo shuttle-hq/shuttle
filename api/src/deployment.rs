@@ -12,7 +12,7 @@ use futures::prelude::*;
 use libloading::Library;
 use rocket::data::ByteUnit;
 use rocket::{tokio, Data};
-use shuttle_common::project::ProjectName;
+use shuttle_common::project::{ProjectName, InitialSecrets};
 use shuttle_common::{
     DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, LogItem, Port,
 };
@@ -21,6 +21,9 @@ use shuttle_service::logger::Log;
 use shuttle_service::ServeHandle;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::{mpsc, RwLock};
+
+use sqlx::postgres::PgPoolOptions;
+use shuttle_service::SecretStore;
 
 use crate::build::Build;
 use crate::router::Router;
@@ -49,10 +52,10 @@ impl Deployment {
         }
     }
 
-    fn from_bytes(fqdn: &str, project: ProjectName, crate_bytes: Vec<u8>) -> Self {
+    fn from_bytes(fqdn: &str, project: ProjectName, crate_bytes: Vec<u8>, initial_secrets: InitialSecrets) -> Self {
         Self {
             meta: Arc::new(RwLock::new(DeploymentMeta::queued(fqdn, project))),
-            state: RwLock::new(DeploymentState::queued(crate_bytes)),
+            state: RwLock::new(DeploymentState::queued(crate_bytes, initial_secrets)),
         }
     }
 
@@ -76,7 +79,7 @@ impl Deployment {
             .context("could not parse contents of marker file to a valid path")?;
 
         let meta = DeploymentMeta::built(fqdn, project_name);
-        let state = DeploymentState::built(Build { so_path });
+        let state = DeploymentState::built(Build { so_path }, InitialSecrets::default());
         Ok(Self::new(meta, state))
     }
 
@@ -130,7 +133,7 @@ impl Deployment {
                         )
                         .await
                     {
-                        Ok(build) => DeploymentState::built(build),
+                        Ok(build) => DeploymentState::built(build, queued.initial_secrets),
                         Err(e) => {
                             dbg!("failed to build with error: {}", &e);
                             DeploymentState::Error(e)
@@ -144,14 +147,14 @@ impl Deployment {
                     );
 
                     match Loader::from_so_file(&built.build.so_path) {
-                        Ok(loader) => DeploymentState::loaded(loader),
+                        Ok(loader) => DeploymentState::loaded(loader, built.initial_secrets),
                         Err(e) => {
                             debug!("failed to load with error: {}", &e);
                             DeploymentState::Error(e.into())
                         }
                     }
                 }
-                DeploymentState::Loaded(loader) => {
+                DeploymentState::Loaded(loaded) => {
                     let port = identify_free_port();
 
                     debug!(
@@ -164,7 +167,8 @@ impl Deployment {
 
                     let mut factory = ShuttleFactory::new(db_state);
                     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
-                    match loader.load(&mut factory, addr, run_logs_tx, meta.id).await {
+
+                    match loaded.loader.load(&mut factory, addr, run_logs_tx, meta.id, loaded.initial_secrets).await {
                         Err(e) => {
                             debug!("{}: factory phase FAILED: {:?}", meta.project, e);
                             DeploymentState::Error(e.into())
@@ -547,6 +551,7 @@ impl DeploymentSystem {
         &self,
         crate_file: Data<'_>,
         project: ProjectName,
+        initial_secrets: InitialSecrets,
     ) -> Result<DeploymentMeta, DeploymentApiError> {
         // Assumes that only `::Deployed` deployments are blocking a thread.
         if self.num_active().await >= MAX_DEPLOYS {
@@ -564,7 +569,7 @@ impl DeploymentSystem {
             })?
             .to_vec();
 
-        let deployment = Arc::new(Deployment::from_bytes(&self.fqdn, project, crate_bytes));
+        let deployment = Arc::new(Deployment::from_bytes(&self.fqdn, project, crate_bytes, initial_secrets));
 
         let info = deployment.meta().await;
 
@@ -597,7 +602,7 @@ enum DeploymentState {
     /// dynamically-linked library (`.so` file). The [`libloading`] crate has
     /// been used to achieve this and to obtain this particular deployment's
     /// implementation of the [`shuttle_service::Service`] trait.
-    Loaded(Loader),
+    Loaded(LoadedState),
     /// Deployment that is actively running inside a Tokio task and listening
     /// for connections on some port indicated in [`DeployedState`].
     Deployed(DeployedState),
@@ -615,16 +620,16 @@ impl DeploymentState {
         std::mem::replace(self, DeploymentState::Deleted)
     }
 
-    fn queued(crate_bytes: Vec<u8>) -> Self {
-        Self::Queued(QueuedState { crate_bytes })
+    fn queued(crate_bytes: Vec<u8>, initial_secrets: InitialSecrets) -> Self {
+        Self::Queued(QueuedState { crate_bytes, initial_secrets })
     }
 
-    fn built(build: Build) -> Self {
-        Self::Built(BuiltState { build })
+    fn built(build: Build, initial_secrets: InitialSecrets) -> Self {
+        Self::Built(BuiltState { build, initial_secrets })
     }
 
-    fn loaded(loader: Loader) -> Self {
-        Self::Loaded(loader)
+    fn loaded(loader: Loader, initial_secrets: InitialSecrets) -> Self {
+        Self::Loaded(LoadedState { loader, initial_secrets })
     }
 
     fn deployed(so: Library, port: Port, handle: ServeHandle) -> Self {
@@ -645,10 +650,17 @@ impl DeploymentState {
 
 struct QueuedState {
     crate_bytes: Vec<u8>,
+    initial_secrets: InitialSecrets,
 }
 
 struct BuiltState {
     build: Build,
+    initial_secrets: InitialSecrets,
+}
+
+struct LoadedState {
+    loader: Loader,
+    initial_secrets: InitialSecrets,
 }
 
 #[allow(dead_code)]

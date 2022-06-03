@@ -103,7 +103,7 @@ impl Display for ProjectNameError {
 
 impl Error for ProjectNameError {}
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Default)]
 #[serde(transparent)]
 pub struct InitialSecrets(pub HashMap<String, String>);
 
@@ -123,6 +123,16 @@ impl<'r> FromRequest<'r> for InitialSecrets {
         else {
             Outcome::Success(InitialSecrets(HashMap::new()))
         }
+    }
+}
+
+impl InitialSecrets {
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item=(&String, &String)> {
+        self.0.iter()
     }
 }
 

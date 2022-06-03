@@ -187,6 +187,7 @@ use async_trait::async_trait;
 // Pub uses by `codegen`
 pub use log;
 pub use tokio::runtime::Runtime;
+pub use shuttle_common::project::InitialSecrets;
 
 pub mod error;
 pub use error::Error;
@@ -323,6 +324,7 @@ pub trait Service: Send + Sync {
         &mut self,
         _: &mut dyn Factory,
         _logger: Box<dyn log::Log>,
+        _initial_secrets: InitialSecrets,
     ) -> Result<(), Error> {
         Ok(())
     }
@@ -347,6 +349,7 @@ pub type StateBuilder<T> =
         &'a mut dyn Factory,
         &'a Runtime,
         Box<dyn log::Log>,
+        InitialSecrets,
     ) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + 'a>>;
 
 /// A wrapper that takes a user's future, gives the future a factory, and takes the returned service from the future
@@ -362,6 +365,7 @@ impl<T> IntoService
         &'a mut dyn Factory,
         &'a Runtime,
         Box<dyn log::Log>,
+        InitialSecrets,
     ) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + 'a>>
 where
     SimpleService<T>: Service,
@@ -384,9 +388,10 @@ impl Service for SimpleService<rocket::Rocket<rocket::Build>> {
         &mut self,
         factory: &mut dyn Factory,
         logger: Box<dyn log::Log>,
+        initial_secrets: InitialSecrets,
     ) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
-            let rocket = builder(factory, &self.runtime, logger).await?;
+            let rocket = builder(factory, &self.runtime, logger, initial_secrets).await?;
 
             self.service = Some(rocket);
         }
@@ -429,9 +434,10 @@ impl Service for SimpleService<sync_wrapper::SyncWrapper<axum::Router>> {
         &mut self,
         factory: &mut dyn Factory,
         logger: Box<dyn log::Log>,
+        initial_secrets: InitialSecrets,
     ) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
-            let axum = builder(factory, &self.runtime, logger).await?;
+            let axum = builder(factory, &self.runtime, logger, initial_secrets).await?;
 
             self.service = Some(axum);
         }
@@ -471,9 +477,10 @@ where
         &mut self,
         factory: &mut dyn Factory,
         logger: Box<dyn log::Log>,
+        initial_secrets: InitialSecrets,
     ) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
-            let tide = builder(factory, &self.runtime, logger).await?;
+            let tide = builder(factory, &self.runtime, logger, initial_secrets).await?;
 
             self.service = Some(tide);
         }
@@ -512,9 +519,10 @@ where
         &mut self,
         factory: &mut dyn Factory,
         logger: Box<dyn log::Log>,
+        initial_secrets: InitialSecrets,
     ) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
-            let tower = builder(factory, &self.runtime, logger).await?;
+            let tower = builder(factory, &self.runtime, logger, initial_secrets).await?;
 
             self.service = Some(tower);
         }

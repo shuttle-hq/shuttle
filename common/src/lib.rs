@@ -118,7 +118,7 @@ impl DatabaseReadyInfo {
             database_name,
         }
     }
-    pub fn connection_string(&self, ip: &str) -> String {
+    pub fn connection_string(&self, ip: impl std::fmt::Display) -> String {
         format!(
             "postgres://{}:{}@{}/{}",
             self.role_name, self.role_password, ip, self.database_name

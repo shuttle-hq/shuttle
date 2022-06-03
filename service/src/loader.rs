@@ -10,6 +10,7 @@ use cargo::util::homedir;
 use cargo::Config;
 use libloading::{Library, Symbol};
 use shuttle_common::DeploymentId;
+use shuttle_common::project::InitialSecrets;
 use thiserror::Error as ThisError;
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -62,11 +63,12 @@ impl Loader {
         addr: SocketAddr,
         tx: UnboundedSender<Log>,
         deployment_id: DeploymentId,
+        initial_secrets: InitialSecrets,
     ) -> Result<(ServeHandle, Library), Error> {
         let mut service = self.service;
         let logger = Box::new(Logger::new(tx, deployment_id));
 
-        service.build(factory, logger).await?;
+        service.build(factory, logger, initial_secrets).await?;
 
         // Start service on this side of the FFI
         let handle = tokio::spawn(async move { service.bind(addr)?.await? });

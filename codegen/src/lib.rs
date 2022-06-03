@@ -19,9 +19,10 @@ pub fn main(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 &'a mut dyn shuttle_service::Factory,
                 &'a shuttle_service::Runtime,
                 Box<dyn shuttle_service::log::Log>,
+                shuttle_service::InitialSecrets,
             ) -> std::pin::Pin<
                 Box<dyn std::future::Future<Output = Result<_, shuttle_service::Error>> + Send + 'a>,
-            > = |factory, runtime, logger| Box::pin(__shuttle_wrapper(factory, runtime, logger));
+            > = |factory, runtime, logger, initial_secrets| Box::pin(__shuttle_wrapper(factory, runtime, logger, initial_secrets));
 
             let obj = shuttle_service::IntoService::into_service((constructor));
             let boxed: Box<dyn shuttle_service::Service> = Box::new(obj);
@@ -88,6 +89,7 @@ impl ToTokens for Wrapper {
                 #factory_ident: &mut dyn shuttle_service::Factory,
                 runtime: &shuttle_service::Runtime,
                 logger: Box<dyn shuttle_service::log::Log>,
+                initial_secrets: shuttle_service::InitialSecrets,
             ) #fn_output {
                 #extra_imports
 
@@ -97,8 +99,17 @@ impl ToTokens for Wrapper {
                         .expect("logger set should succeed");
                 }).await.unwrap();
 
-
                 #(let #fn_inputs = #factory_ident.get_resource(runtime).await?;)*
+
+                if !initial_secrets.is_empty() {
+                    let db_pool = pool.clone(); // TODO: #factory_ident.get_resource(runtime).await?;
+
+                    runtime.spawn(async move {
+                        for (key, value) in initial_secrets.iter() {
+                            db_pool.set_secret(key, value).await.unwrap();
+                        }
+                    }).await.unwrap();
+                }
 
                 runtime.spawn(#fn_ident(#(#fn_inputs),*)).await.unwrap()
             }
@@ -144,6 +155,7 @@ mod tests {
                 _factory: &mut dyn shuttle_service::Factory,
                 runtime: &shuttle_service::Runtime,
                 logger: Box<dyn shuttle_service::log::Log>,
+                initial_secrets: shuttle_service::InitialSecrets,
             ) {
                 runtime.spawn_blocking(move || {
                     shuttle_service::log::set_boxed_logger(logger)
@@ -187,6 +199,7 @@ mod tests {
                 _factory: &mut dyn shuttle_service::Factory,
                 runtime: &shuttle_service::Runtime,
                 logger: Box<dyn shuttle_service::log::Log>,
+                initial_secrets: shuttle_service::InitialSecrets,
             ) -> Result<(), Box<dyn std::error::Error> > {
                 runtime.spawn_blocking(move || {
                     shuttle_service::log::set_boxed_logger(logger)
@@ -231,6 +244,7 @@ mod tests {
                 factory: &mut dyn shuttle_service::Factory,
                 runtime: &shuttle_service::Runtime,
                 logger: Box<dyn shuttle_service::log::Log>,
+                initial_secrets: shuttle_service::InitialSecrets,
             ) -> Result<(), Box<dyn std::error::Error> > {
                 use shuttle_service::GetResource;
 

@@ -86,7 +86,7 @@ pub enum ProjectNameError {
 }
 
 impl Display for ProjectNameError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
             ProjectNameError::InvalidName(name) => write!(
                 f,
@@ -109,14 +109,16 @@ pub struct InitialSecrets(HashMap<String, String>);
 
 #[rocket::async_trait]
 impl<'r> FromRequest<'r> for InitialSecrets {
-    type Error = ();
+    type Error = InitialSecretsError;
 
     async fn from_request(req: &'r Request<'_>) -> Outcome<Self, Self::Error> {
         if let Some(json) = req.headers().get_one(INITIAL_SECRETS_HEADER) {
-            if let Ok(secrets) = serde_json::from_str(json) {
-                Outcome::Success(secrets)
-            } else {
-                Outcome::Failure((Status::BadRequest, ()))
+            match serde_json::from_str(json) {
+                Ok(secrets) => Outcome::Success(secrets),
+                Err(err) => Outcome::Failure((
+                    Status::BadRequest,
+                    InitialSecretsError::Decoding(err.to_string()),
+                )),
             }
         } else {
             Outcome::Success(InitialSecrets(HashMap::new()))
@@ -131,6 +133,23 @@ impl InitialSecrets {
 
     pub fn iter(&self) -> impl Iterator<Item = (&String, &String)> {
         self.0.iter()
+    }
+}
+
+#[derive(Debug)]
+pub enum InitialSecretsError {
+    Decoding(String),
+}
+
+impl Display for InitialSecretsError {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match self {
+            InitialSecretsError::Decoding(err) => write!(
+                f,
+                "The initial set of secrets sent in header {} could not be decoded: {}",
+                INITIAL_SECRETS_HEADER, err
+            ),
+        }
     }
 }
 

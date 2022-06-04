@@ -163,32 +163,6 @@ pub(crate) async fn deploy(
     Ok(())
 }
 
-pub(crate) async fn secrets(
-    api_url: ApiUrl,
-    api_key: &ApiKey,
-    project: &ProjectName,
-    secrets: HashMap<String, String>,
-) -> Result<()> {
-    if secrets.is_empty() {
-        return Ok(());
-    }
-
-    let mut url = api_url.clone();
-    url.push_str(&format!("/projects/{}/secrets/", project.as_str()));
-
-    let client = get_retry_client();
-
-    client
-        .post(url)
-        .body(serde_json::to_string(&secrets)?)
-        .header(SHUTTLE_PROJECT_HEADER, serde_json::to_string(&project)?)
-        .basic_auth(api_key.clone(), Some(""))
-        .send()
-        .await
-        .context("failed to send deployment's secrets to the Shuttle server")
-        .map(|_| ())
-}
-
 fn print_log(logs: &Option<String>, log_pos: &mut usize) {
     if let Some(logs) = logs {
         let new = &logs[*log_pos..];

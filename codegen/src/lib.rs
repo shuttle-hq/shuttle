@@ -265,6 +265,16 @@ mod tests {
                 let pool = factory.get_resource(runtime).await?;
                 let redis = factory.get_resource(runtime).await?;
 
+                if !initial_secrets.is_empty() {
+                    let db_pool = factory.get_resource(runtime).await?;
+
+                    runtime.spawn(async move {
+                        for (key, value) in initial_secrets.iter() {
+                            db_pool.set_secret(key, value).await.unwrap();
+                        }
+                    }).await.unwrap();
+                }
+
                 runtime.spawn(complex(pool, redis)).await.unwrap()
             }
         };

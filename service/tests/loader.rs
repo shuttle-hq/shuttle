@@ -76,7 +76,7 @@ async fn sleep_async() {
     let deployment_id = Uuid::new_v4();
     let (tx, _rx) = mpsc::unbounded_channel();
     let (handler, _) = loader
-        .load(&mut factory, addr, tx, deployment_id)
+        .load(&mut factory, addr, tx, deployment_id, Default::default())
         .await
         .unwrap();
 
@@ -111,7 +111,7 @@ async fn sleep() {
     let deployment_id = Uuid::new_v4();
     let (tx, _rx) = mpsc::unbounded_channel();
     let (handler, _) = loader
-        .load(&mut factory, addr, tx, deployment_id)
+        .load(&mut factory, addr, tx, deployment_id, Default::default())
         .await
         .unwrap();
 
@@ -152,7 +152,7 @@ async fn sqlx_pool() {
     let deployment_id = Uuid::new_v4();
     let (tx, mut rx) = mpsc::unbounded_channel();
     let (handler, _) = loader
-        .load(&mut factory, addr, tx, deployment_id)
+        .load(&mut factory, addr, tx, deployment_id, Default::default())
         .await
         .unwrap();
 

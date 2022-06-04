@@ -84,6 +84,22 @@ impl ToTokens for Wrapper {
             ))
         };
 
+        let load_initial_secrets: Option<Stmt> = if self.fn_inputs.is_empty() {
+            None
+        } else {
+            Some(parse_quote!(
+                if !initial_secrets.is_empty() {
+                    let db_pool = #factory_ident.get_resource(runtime).await?;
+
+                    runtime.spawn(async move {
+                        for (key, value) in initial_secrets.iter() {
+                            db_pool.set_secret(key, value).await.unwrap();
+                        }
+                    }).await.unwrap();
+                }
+            ))
+        };
+
         let wrapper = quote! {
             async fn __shuttle_wrapper(
                 #factory_ident: &mut dyn shuttle_service::Factory,
@@ -101,15 +117,7 @@ impl ToTokens for Wrapper {
 
                 #(let #fn_inputs = #factory_ident.get_resource(runtime).await?;)*
 
-                if !initial_secrets.is_empty() {
-                    let db_pool = #factory_ident.get_resource(runtime).await?;
-
-                    runtime.spawn(async move {
-                        for (key, value) in initial_secrets.iter() {
-                            db_pool.set_secret(key, value).await.unwrap();
-                        }
-                    }).await.unwrap();
-                }
+                #load_initial_secrets
 
                 runtime.spawn(#fn_ident(#(#fn_inputs),*)).await.unwrap()
             }

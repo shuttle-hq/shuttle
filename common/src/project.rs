@@ -105,7 +105,7 @@ impl Error for ProjectNameError {}
 
 #[derive(Deserialize, Default)]
 #[serde(transparent)]
-pub struct InitialSecrets(pub HashMap<String, String>);
+pub struct InitialSecrets(HashMap<String, String>);
 
 #[rocket::async_trait]
 impl<'r> FromRequest<'r> for InitialSecrets {

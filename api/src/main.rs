@@ -114,7 +114,6 @@ async fn create_project(
     initial_secrets: InitialSecrets,
     user: User,
 ) -> ApiResult<DeploymentMeta, DeploymentApiError> {
-    println!("{:?}", initial_secrets.0);
     info!("[CREATE_PROJECT, {}, {}]", &user.name, &project_name);
 
     if !user

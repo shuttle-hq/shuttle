@@ -19,7 +19,6 @@ use cargo::ops::{PackageOpts, Packages};
 use colored::Colorize;
 use config::RequestContext;
 use factory::LocalFactory;
-use futures::future::TryFutureExt;
 use shuttle_service::loader::{build_crate, Loader};
 use tokio::sync::mpsc;
 use uuid::Uuid;

@@ -22,9 +22,6 @@ use shuttle_service::ServeHandle;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::{mpsc, RwLock};
 
-use shuttle_service::SecretStore;
-use sqlx::postgres::PgPoolOptions;
-
 use crate::build::Build;
 use crate::router::Router;
 use crate::{database, BuildSystem, ShuttleFactory};

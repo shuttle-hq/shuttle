@@ -1,5 +1,5 @@
 use shuttle_service::error::CustomError;
-use shuttle_service::{log, GetResource, IntoService, Runtime, ServeHandle, Service};
+use shuttle_service::{log, GetResource, IntoService, Runtime, ServeHandle, Service, InitialSecrets};
 use sqlx::PgPool;
 
 #[macro_use]
@@ -54,6 +54,7 @@ impl Service for PoolService {
         &mut self,
         factory: &mut dyn shuttle_service::Factory,
         logger: Box<dyn log::Log>,
+        _: InitialSecrets,
     ) -> Result<(), shuttle_service::Error> {
         self.runtime
             .spawn_blocking(move || {

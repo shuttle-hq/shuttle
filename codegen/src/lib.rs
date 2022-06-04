@@ -102,7 +102,7 @@ impl ToTokens for Wrapper {
                 #(let #fn_inputs = #factory_ident.get_resource(runtime).await?;)*
 
                 if !initial_secrets.is_empty() {
-                    let db_pool = pool.clone(); // TODO: #factory_ident.get_resource(runtime).await?;
+                    let db_pool = #factory_ident.get_resource(runtime).await?;
 
                     runtime.spawn(async move {
                         for (key, value) in initial_secrets.iter() {

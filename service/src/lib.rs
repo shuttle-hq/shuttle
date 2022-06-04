@@ -277,14 +277,14 @@ pub trait Factory: Send + Sync {
 /// should be created on the passed in runtime.
 #[async_trait]
 pub trait GetResource<T> {
-    async fn get_resource(self, runtime: &Runtime) -> Result<T, crate::Error>;
+    async fn get_resource(&mut self, runtime: &Runtime) -> Result<T, crate::Error>;
 }
 
 /// Get an `sqlx::PgPool` from any factory
 #[cfg(feature = "sqlx-postgres")]
 #[async_trait]
-impl GetResource<sqlx::PgPool> for &mut dyn Factory {
-    async fn get_resource(self, runtime: &Runtime) -> Result<sqlx::PgPool, crate::Error> {
+impl GetResource<sqlx::PgPool> for dyn Factory + '_ {
+    async fn get_resource(&mut self, runtime: &Runtime) -> Result<sqlx::PgPool, crate::Error> {
         use error::CustomError;
 
         let connection_string = self.get_sql_connection_string().await?;

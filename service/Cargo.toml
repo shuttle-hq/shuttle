@@ -11,7 +11,7 @@ doctest = false
 [dependencies]
 anyhow = "1.0"
 async-trait = "0.1"
-cargo = { version = "0.62.0", optional = true }
+cargo = { version = "0.59.0", optional = true }
 chrono = "0.4"
 libloading = { version = "0.7.3", optional = true }
 log = "0.4"
@@ -32,7 +32,7 @@ shuttle-common = { version = "0.3.0", path = "../common" }
 
 [dev-dependencies]
 portpicker = "0.1.1"
-uuid = "1.1"
+uuid = "0.8.2"
 
 [features]
 default = ["codegen"]

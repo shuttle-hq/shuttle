@@ -351,7 +351,6 @@ pub type StateBuilder<T> =
 
 /// A wrapper that takes a user's future, gives the future a factory, and takes the returned service from the future
 /// The returned service will be deployed by shuttle
-#[allow(dead_code)]
 pub struct SimpleService<T> {
     service: Option<T>,
     builder: Option<StateBuilder<T>>,

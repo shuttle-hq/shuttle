@@ -20,15 +20,15 @@ toml_edit = "0.14.4"
 reqwest = { version = "0.11.9", features = ["json"] }
 reqwest-middleware = "0.1"
 reqwest-retry = "0.1"
-cargo = "0.62.0"
-cargo-edit = { version = "0.9.1", features = ["cli"] }
+cargo = "0.59.0"
+cargo-edit = { version = "0.8.0", features = ["cli"] }
 tokio = "1.0"
 futures = "0.3"
 toml = "0.5.8"
 structopt = "0.3.26"
 cargo_metadata = "0.14.2"
 webbrowser = "0.6"
-uuid = { version = "1.1", features = ["v4"] }
+uuid = { version = "0.8.2", features = ["v4"] }
 
 shuttle-common = { version = "0.3.0", path = "../common" }
 shuttle-service = { version = "0.3.0", path = "../service", features = [ "loader" ] }

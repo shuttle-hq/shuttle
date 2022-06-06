@@ -72,12 +72,12 @@ impl Loader {
         AssertUnwindSafe(service.build(factory, logger))
             .catch_unwind()
             .await
-            .unwrap_or(Err(Error::PanicInMain))?;
+            .unwrap_or(Err(Error::BuildPanic))?;
 
         // Start service on this side of the FFI
         let handle = tokio::spawn(async move {
             std::panic::catch_unwind(AssertUnwindSafe(move || service.bind(addr)))
-                .unwrap_or(Err(Error::PanicInMain))?
+                .unwrap_or(Err(Error::BindPanic))?
                 .await?
         });
 

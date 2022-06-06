@@ -1,12 +1,15 @@
-use cargo_metadata::MetadataCommand;
-use serde::{Deserialize, Serialize};
-use shuttle_common::{ApiKey, ApiUrl, API_URL_DEFAULT};
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
+use cargo_metadata::MetadataCommand;
+use serde::{Deserialize, Serialize};
 use shuttle_common::project::ProjectName;
+use shuttle_common::{ApiKey, ApiUrl, API_URL_DEFAULT};
+
+use crate::args::ProjectArgs;
 
 /// Helper trait for dispatching fs ops for different config files
 pub trait ConfigManager: Sized {
@@ -93,12 +96,14 @@ impl ConfigManager for GlobalConfigManager {
 /// An impl of [`ConfigManager`] which is localised to a working directory
 pub struct LocalConfigManager {
     working_directory: PathBuf,
+    file_name: String,
 }
 
 impl LocalConfigManager {
-    pub fn new<P: AsRef<Path>>(working_directory: P) -> Self {
+    pub fn new<P: AsRef<Path>>(working_directory: P, file_name: String) -> Self {
         Self {
             working_directory: working_directory.as_ref().to_path_buf(),
+            file_name,
         }
     }
 }
@@ -109,7 +114,7 @@ impl ConfigManager for LocalConfigManager {
     }
 
     fn file(&self) -> PathBuf {
-        PathBuf::from("Shuttle.toml")
+        PathBuf::from(&self.file_name)
     }
 }
 
@@ -140,11 +145,15 @@ pub struct ProjectConfig {
     pub name: Option<ProjectName>,
 }
 
+pub type SecretsConfig = HashMap<String, String>;
+
 /// A handler for configuration files. The type parameter `M` is the [`ConfigManager`] which handles
 /// indirection around file location and serde. The type parameter `C` is the configuration content.
 ///
 /// # Usage
 /// ```rust,no_run
+/// # use cargo_shuttle::config::{Config, GlobalConfig, GlobalConfigManager};
+/// #
 /// let mut config = Config::new(GlobalConfigManager);
 /// config.open().unwrap();
 /// let content: &GlobalConfig = config.as_ref().unwrap();
@@ -220,6 +229,7 @@ where
 pub struct RequestContext {
     global: Config<GlobalConfigManager, GlobalConfig>,
     project: Option<Config<LocalConfigManager, ProjectConfig>>,
+    secrets: Option<Config<LocalConfigManager, SecretsConfig>>,
     api_url: Option<String>,
 }
 
@@ -253,32 +263,68 @@ impl RequestContext {
         Ok(Self {
             global,
             project: None,
+            secrets: None,
             api_url: None,
         })
     }
 
     /// Load the project configuration at the given `working_directory`
     ///
-    /// Ensures that if either the project file does not exist, or it has not set the `name` key
-    /// then the `ProjectConfig` instance has `ProjectConfig.name = Some("crate-name")`.
-    pub fn load_local<P: AsRef<Path>>(&mut self, working_directory: P) -> Result<()> {
-        let local_manager = LocalConfigManager::new(working_directory.as_ref());
-        let mut project = Config::new(local_manager);
-        if !project.exists() {
-            project.replace(ProjectConfig::default());
-        } else {
-            project.open()?;
-        };
+    /// Ensures that if `--name` is not specified on the command-line, and either the project
+    /// file does not exist, or it has not set the `name` key then the `ProjectConfig` instance
+    /// has `ProjectConfig.name = Some("crate-name")`.
+    pub fn load_local(&mut self, project_args: &ProjectArgs) -> Result<()> {
+        // Secrets.toml
+        let secrets_manager =
+            LocalConfigManager::new(&project_args.working_directory, "Secrets.toml".to_string());
+        let mut secrets = Config::new(secrets_manager);
 
-        // Ensure that if name key is not in project config, then we infer from crate name
-        let project_name = project.as_mut().unwrap();
-        if project_name.name.is_none() {
-            project_name.name = Some(find_crate_name(working_directory)?);
+        if secrets.exists() {
+            trace!("found secrets");
+            secrets.open()?;
+            self.secrets = Some(secrets);
         }
+
+        // Shuttle.toml
+        let project = Self::get_local_config(project_args)?;
 
         self.project = Some(project);
 
         Ok(())
+    }
+
+    pub fn get_local_config(
+        project_args: &ProjectArgs,
+    ) -> Result<Config<LocalConfigManager, ProjectConfig>> {
+        let local_manager =
+            LocalConfigManager::new(&project_args.working_directory, "Shuttle.toml".to_string());
+        let mut project = Config::new(local_manager);
+
+        if !project.exists() {
+            project.replace(ProjectConfig::default());
+        } else {
+            trace!("found a local Shuttle.toml");
+            project.open()?;
+        }
+
+        let config = project.as_mut().unwrap();
+        match (&project_args.name, &config.name) {
+            // Command-line name parameter trumps everything
+            (Some(name_from_args), _) => {
+                trace!("using command-line project name");
+                config.name = Some(name_from_args.clone());
+            }
+            // If key exists in config then keep it as it is
+            (None, Some(_)) => {
+                trace!("using Shuttle.toml project name");
+            }
+            // If name key is not in project config, then we infer from crate name
+            (None, None) => {
+                trace!("using crate name as project name");
+                config.name = Some(find_crate_name(&project_args.working_directory)?);
+            }
+        };
+        Ok(project)
     }
 
     pub fn set_api_url(&mut self, api_url: Option<String>) {
@@ -339,5 +385,71 @@ impl RequestContext {
             .name
             .as_ref()
             .unwrap()
+    }
+
+    pub fn secrets(&self) -> HashMap<String, String> {
+        self.secrets
+            .as_ref()
+            .and_then(|secrets| secrets.as_ref().cloned())
+            .unwrap_or_default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{path::PathBuf, str::FromStr};
+
+    use shuttle_common::project::ProjectName;
+
+    use crate::{args::ProjectArgs, config::RequestContext};
+
+    use super::{Config, LocalConfigManager, ProjectConfig};
+
+    fn path_from_workspace_root(path: &str) -> PathBuf {
+        PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
+            .join("..")
+            .join(path)
+    }
+
+    fn unwrap_project_name(config: &Config<LocalConfigManager, ProjectConfig>) -> String {
+        config.as_ref().unwrap().name.as_ref().unwrap().to_string()
+    }
+
+    #[test]
+    fn get_local_config_finds_name_in_shuttle_toml() {
+        let project_args = ProjectArgs {
+            working_directory: path_from_workspace_root("examples/axum/hello-world/"),
+            name: None,
+        };
+
+        let local_config = RequestContext::get_local_config(&project_args).unwrap();
+
+        assert_eq!(unwrap_project_name(&local_config), "hello-world-axum-app");
+    }
+
+    #[test]
+    fn fixme_running_in_src_subdir_finds_crate_but_fails_to_find_config() {
+        let project_args = ProjectArgs {
+            working_directory: path_from_workspace_root("examples/axum/hello-world/src"),
+            name: None,
+        };
+
+        let local_config = RequestContext::get_local_config(&project_args).unwrap();
+
+        // FIXME: this is not the intended behaviour. We should fix this.
+        // This should really be "hello-world-axum-app", as above.
+        assert_eq!(unwrap_project_name(&local_config), "hello-world");
+    }
+
+    #[test]
+    fn setting_name_overrides_name_in_config() {
+        let project_args = ProjectArgs {
+            working_directory: path_from_workspace_root("examples/axum/hello-world/"),
+            name: Some(ProjectName::from_str("my-fancy-project-name").unwrap()),
+        };
+
+        let local_config = RequestContext::get_local_config(&project_args).unwrap();
+
+        assert_eq!(unwrap_project_name(&local_config), "my-fancy-project-name");
     }
 }

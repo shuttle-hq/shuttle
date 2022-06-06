@@ -16,7 +16,7 @@
 //! Depend on `shuttle-service` in `Cargo.toml`:
 //!
 //! ```toml
-//! shuttle-service = { version = "0.2", features = ["web-rocket"] }
+//! shuttle-service = { version = "0.3", features = ["web-rocket"] }
 //! ```
 //!
 //! and make sure your crate has a `cdylib` output target:
@@ -32,7 +32,7 @@
 //! #[macro_use]
 //! extern crate rocket;
 //!
-//! use rocket::{Build, Rocket};
+//! use shuttle_service::ShuttleRocket;
 //!
 //! #[get("/hello")]
 //! fn hello() -> &'static str {
@@ -40,7 +40,7 @@
 //! }
 //!
 //! #[shuttle_service::main]
-//! async fn init() -> Result<Rocket<Build>, shuttle_service::Error> {
+//! async fn init() -> ShuttleRocket {
 //!     let rocket = rocket::build().mount("/", routes![hello]);
 //!
 //!     Ok(rocket)
@@ -49,15 +49,31 @@
 //!
 //! Complete examples can be found [in the repository](https://github.com/getsynth/shuttle/tree/main/examples/rocket).
 //!
-//! ## Deploying
-//!
-//! You can deploy your service with the [`cargo shuttle`](https://docs.rs/crate/cargo-shuttle/latest) subcommand. To install run:
+//! ## Running locally
+//! To test your app locally before deploying, use the [`cargo shuttle`](https://docs.rs/crate/cargo-shuttle/latest) subcommand.
+//! To install shuttle, run the following in a terminal:
 //!
 //! ```bash
 //! $ cargo install cargo-shuttle
 //! ```
 //!
-//! in a terminal. Once installed, run:
+//! After the install, run the following to run your app locally:
+//!
+//! ```bash
+//! $ cargo shuttle run
+//! ```
+//!
+//! You should see your app build and start on the default port 8000. You can test this using;
+//!
+//! ```bash
+//! $ curl http://localhost:8000/hello
+//! Hello, world!
+//! ```
+//!
+//! ## Deploying
+//!
+//! You can deploy your service with the [`cargo shuttle`](https://docs.rs/crate/cargo-shuttle/latest) subcommand.
+//! Once installed, you will need to authenticate with the shuttle service first using:
 //!
 //! ```bash
 //! $ cargo shuttle login
@@ -74,7 +90,7 @@
 //! Your service will immediately be available at `{crate_name}.shuttleapp.rs`. For example:
 //!
 //! ```bash
-//! $ curl https://hello-world-rocket-app.shuttleapp.rs
+//! $ curl https://hello-world-rocket-app.shuttleapp.rs/hello
 //! Hello, world!
 //! ```
 //!
@@ -85,15 +101,16 @@
 //! Depend on `shuttle-service` in `Cargo.toml`:
 //!
 //! ```toml
-//! shuttle-service = { version = "0.2", features = ["web-rocket", "sqlx-postgres"] }
+//! shuttle-service = { version = "0.3", features = ["web-rocket", "sqlx-postgres"] }
 //! ```
 //!
 //! ```rust,no_run
 //! #[macro_use]
 //! extern crate rocket;
 //!
-//! use rocket::{Build, Rocket};
+//! use rocket::State;
 //! use sqlx::PgPool;
+//! use shuttle_service::ShuttleRocket;
 //!
 //! struct MyState(PgPool);
 //!
@@ -104,7 +121,7 @@
 //! }
 //!
 //! #[shuttle_service::main]
-//! async fn rocket(pool: PgPool) -> Result<Rocket<Build>, shuttle_service::Error> {
+//! async fn rocket(pool: PgPool) -> ShuttleRocket {
 //!     let state = MyState(pool);
 //!     let rocket = rocket::build().manage(state).mount("/", routes![hello]);
 //!
@@ -138,6 +155,12 @@
 //!
 //! If the `name` key is not specified, the service's name will be the same as the crate's name.
 //!
+//! Alternatively, you can override the project name on the command-line, by passing the --name argument:
+//!
+//! ```bash
+//! cargo shuttle deploy --name=$PROJECT_NAME
+//! ```
+//!
 //! ## We're in alpha 🤗
 //!
 //! Thanks for using shuttle! We're very happy to have you with us!
@@ -164,8 +187,19 @@ use async_trait::async_trait;
 use futures::FutureExt;
 use tokio::runtime::Runtime;
 
+// Pub uses by `codegen`
+pub use log;
+pub use tokio::runtime::Runtime;
+
 pub mod error;
 pub use error::Error;
+
+pub mod logger;
+
+#[cfg(feature = "secrets")]
+pub mod secrets;
+#[cfg(feature = "secrets")]
+pub use secrets::SecretStore;
 
 #[cfg(feature = "codegen")]
 extern crate shuttle_codegen;
@@ -176,10 +210,10 @@ extern crate shuttle_codegen;
 /// The simplest usage is when your service does not require any shuttle managed resources, so you only need to return a shuttle supported service:
 ///
 /// ```rust,no_run
-/// use rocket::{Build, Rocket};
+/// use shuttle_service::ShuttleRocket;
 ///
 /// #[shuttle_service::main]
-/// async fn rocket() -> Result<Rocket<Build>, shuttle_service::Error> {
+/// async fn rocket() -> ShuttleRocket {
 ///     let rocket = rocket::build();
 ///
 ///     Ok(rocket)
@@ -194,17 +228,18 @@ extern crate shuttle_codegen;
 /// | ------------------------------------------------------------------------------ | ------------ | ------------------------------------------- | ---------- | ----------------------------------------------------------------------------------- |
 /// | [`Rocket<Build>`](https://docs.rs/rocket/0.5.0-rc.1/rocket/struct.Rocket.html) | web-rocket   | [rocket](https://docs.rs/rocket/0.5.0-rc.1) | 0.5.0-rc.1 | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/rocket/hello-world) |
 /// | [`SyncWrapper<Router>`](https://docs.rs/axum/0.5/axum/struct.Router.html)      | web-axum     | [axum](https://docs.rs/axum/0.5)            | 0.5        | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/axum/hello-world)   |
+/// | [`Server<T>`](https://docs.rs/tide/latest/tide/struct.Server.html)             | web-tide     | [tide](https://docs.rs/tide/0.16.0)         | 0.16.0     | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/tide/hello-world)   |
 ///
 /// # Getting shuttle managed services
 /// The shuttle is able to manage service dependencies for you. These services are passed in as inputs to your main function:
 /// ```rust,no_run
-/// use rocket::{Build, Rocket};
 /// use sqlx::PgPool;
+/// use shuttle_service::ShuttleRocket;
 ///
 /// struct MyState(PgPool);
 ///
 /// #[shuttle_service::main]
-/// async fn rocket(pool: PgPool) -> Result<Rocket<Build>, shuttle_service::Error> {
+/// async fn rocket(pool: PgPool) -> ShuttleRocket {
 ///     let state = MyState(pool);
 ///     let rocket = rocket::build().manage(state);
 ///
@@ -219,6 +254,7 @@ extern crate shuttle_codegen;
 /// | ------------------------------------------------------------- | ------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
 /// | [`PgPool`](https://docs.rs/sqlx/latest/sqlx/type.PgPool.html) | sqlx-postgres | A PostgresSql instance accessed using [sqlx](https://docs.rs/sqlx) | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/rocket/postgres) |
 pub use shuttle_codegen::main;
+use tokio::task::JoinHandle;
 
 #[cfg(feature = "loader")]
 pub mod loader;
@@ -230,7 +266,7 @@ pub mod loader;
 /// Also see the [declare_service!][declare_service] macro.
 #[async_trait]
 pub trait Factory: Send + Sync {
-    /// Declare that the [Service][Service] requires a postgres database.
+    /// Declare that the [Service][Service] requires a Postgres database.
     ///
     /// Returns the connection string to the provisioned database.
     async fn get_sql_connection_string(&mut self) -> Result<String, crate::Error>;
@@ -239,48 +275,65 @@ pub trait Factory: Send + Sync {
 /// Used to get resources of type `T` from factories.
 ///
 /// This is mainly meant for consumption by our code generator and should generally not be implemented by users.
+/// Some resources cannot cross the boundary between the api runtime and the runtime of services. These resources
+/// should be created on the passed in runtime.
 #[async_trait]
 pub trait GetResource<T> {
-    async fn get_resource(self) -> Result<T, crate::Error>;
+    async fn get_resource(self, runtime: &Runtime) -> Result<T, crate::Error>;
 }
 
 /// Get an `sqlx::PgPool` from any factory
 #[cfg(feature = "sqlx-postgres")]
 #[async_trait]
 impl GetResource<sqlx::PgPool> for &mut dyn Factory {
-    async fn get_resource(self) -> Result<sqlx::PgPool, crate::Error> {
+    async fn get_resource(self, runtime: &Runtime) -> Result<sqlx::PgPool, crate::Error> {
         use error::CustomError;
 
         let connection_string = self.get_sql_connection_string().await?;
 
-        let pool = sqlx::postgres::PgPoolOptions::new()
-            .min_connections(1)
-            .max_connections(5)
-            .connect(&connection_string)
+        // A sqlx Pool cannot cross runtime boundaries, so make sure to create the Pool on the service end
+        let pool = runtime
+            .spawn(async move {
+                sqlx::postgres::PgPoolOptions::new()
+                    .min_connections(1)
+                    .max_connections(5)
+                    .connect(&connection_string)
+                    .await
+            })
             .await
+            .map_err(CustomError::new)?
             .map_err(CustomError::new)?;
 
         Ok(pool)
     }
 }
 
+/// A tokio handle the service was started on
+pub type ServeHandle = JoinHandle<Result<(), anyhow::Error>>;
+
 /// The core trait of the shuttle platform. Every crate deployed to shuttle needs to implement this trait.
 ///
 /// Use the [declare_service!][crate::declare_service] macro to expose your implementation to the deployment backend.
+#[async_trait]
 pub trait Service: Send + Sync {
     /// This function is run exactly once on each instance of a deployment, prior to calling [bind][Service::bind].
     ///
     /// The passed [Factory][Factory] can be used to configure additional resources (like databases).
+    /// And the logger is for logging all runtime events
     ///
     /// The default is a noop that returns `Ok(())`.
-    fn build(&mut self, _: &mut dyn Factory) -> Result<(), Error> {
+    async fn build(
+        &mut self,
+        _: &mut dyn Factory,
+        _logger: Box<dyn log::Log>,
+    ) -> Result<(), Error> {
         Ok(())
     }
 
     /// This function is run exactly once on each instance of a deployment.
     ///
     /// The deployer expects this instance of [Service][Service] to bind to the passed [SocketAddr][SocketAddr].
-    fn bind(&mut self, addr: SocketAddr) -> Result<(), error::Error>;
+    fn bind(&mut self, addr: SocketAddr) -> Result<ServeHandle, error::Error>;
 }
 
 /// A convenience trait for handling out of the box conversions into [Service][Service] instances.
@@ -293,87 +346,11 @@ pub trait IntoService {
 }
 
 pub type StateBuilder<T> =
-    fn(&mut dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>;
-
-#[cfg(feature = "web-rocket")]
-/// A convenience struct for building a [Service][Service] from a [Rocket<Build>][Rocket] instance.
-///
-/// To construct, use [into_service][IntoService::into_service].
-///
-/// If you have a state of type `T` you wish to load rocket with, use [into_service][IntoService::into_service] on a pair
-/// `(Rocket<Build>, async fn (&mut dyn Factory) -> Result<T, Error>)`.
-///
-/// Also see the [declare_service!][declare_service] macro.
-pub struct RocketService<T: Sized> {
-    rocket: Option<rocket::Rocket<rocket::Build>>,
-    state_builder: Option<StateBuilder<T>>,
-    runtime: Runtime,
-}
-
-#[cfg(feature = "web-rocket")]
-impl IntoService for rocket::Rocket<rocket::Build> {
-    type Service = RocketService<()>;
-    fn into_service(self) -> Self::Service {
-        RocketService {
-            rocket: Some(self),
-            state_builder: None,
-            runtime: Runtime::new().unwrap(),
-        }
-    }
-}
-
-#[cfg(feature = "web-rocket")]
-impl<T: Send + Sync + 'static> IntoService
-    for (
-        rocket::Rocket<rocket::Build>,
-        fn(&mut dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>,
-    )
-{
-    type Service = RocketService<T>;
-
-    fn into_service(self) -> Self::Service {
-        RocketService {
-            rocket: Some(self.0),
-            state_builder: Some(self.1),
-            runtime: Runtime::new().unwrap(),
-        }
-    }
-}
-
-#[cfg(feature = "web-rocket")]
-impl<T> Service for RocketService<T>
-where
-    T: Send + Sync + 'static,
-{
-    fn build(&mut self, factory: &mut dyn Factory) -> Result<(), Error> {
-        if let Some(state_builder) = self.state_builder.take() {
-            // We want to build any sqlx pools on the same runtime the client code will run on. Without this expect to get errors of no tokio reactor being present.
-            let state = self.runtime.block_on(state_builder(factory))?;
-
-            if let Some(rocket) = self.rocket.take() {
-                self.rocket.replace(rocket.manage(state));
-            }
-        }
-
-        Ok(())
-    }
-
-    fn bind(&mut self, addr: SocketAddr) -> Result<(), error::Error> {
-        let rocket = self.rocket.take().expect("service has already been bound");
-
-        let config = rocket::Config {
-            address: addr.ip(),
-            port: addr.port(),
-            log_level: rocket::config::LogLevel::Normal,
-            ..Default::default()
-        };
-        let launched = rocket.configure(config).launch();
-        self.runtime
-            .block_on(launched)
-            .map_err(error::CustomError::new)?;
-        Ok(())
-    }
-}
+    for<'a> fn(
+        &'a mut dyn Factory,
+        &'a Runtime,
+        Box<dyn log::Log>,
+    ) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + 'a>>;
 
 /// A wrapper that takes a user's future, gives the future a factory, and takes the returned service from the future
 /// The returned service will be deployed by shuttle
@@ -384,7 +361,11 @@ pub struct SimpleService<T> {
 }
 
 impl<T> IntoService
-    for fn(&mut dyn Factory) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + '_>>
+    for for<'a> fn(
+        &'a mut dyn Factory,
+        &'a Runtime,
+        Box<dyn log::Log>,
+    ) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + 'a>>
 where
     SimpleService<T>: Service,
 {
@@ -400,10 +381,14 @@ where
 }
 
 #[cfg(feature = "web-rocket")]
+#[async_trait]
 impl Service for SimpleService<rocket::Rocket<rocket::Build>> {
-    fn build(&mut self, factory: &mut dyn Factory) -> Result<(), Error> {
+    async fn build(
+        &mut self,
+        factory: &mut dyn Factory,
+        logger: Box<dyn log::Log>,
+    ) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
-            // We want to build any sqlx pools on the same runtime the client code will run on. Without this expect to get errors of no tokio reactor being present.
             let rocket = self
                 .runtime
                 .block_on(AssertUnwindSafe(builder(factory)).catch_unwind())
@@ -417,29 +402,44 @@ impl Service for SimpleService<rocket::Rocket<rocket::Build>> {
         Ok(())
     }
 
-    fn bind(&mut self, addr: SocketAddr) -> Result<(), error::Error> {
+    fn bind(&mut self, addr: SocketAddr) -> Result<ServeHandle, error::Error> {
         let rocket = self.service.take().expect("service has already been bound");
+        let shutdown = rocket::config::Shutdown {
+            ctrlc: false,
+            ..rocket::config::Shutdown::default()
+        };
 
         let config = rocket::Config {
             address: addr.ip(),
             port: addr.port(),
-            log_level: rocket::config::LogLevel::Normal,
+            log_level: rocket::config::LogLevel::Off,
+            shutdown,
             ..Default::default()
         };
         let launched = rocket.configure(config).launch();
-        self.runtime
-            .block_on(launched)
-            .map_err(error::CustomError::new)?;
-        Ok(())
+        let handle = self.runtime.spawn(async {
+            let _rocket = launched.await.map_err(error::CustomError::new)?;
+
+            Ok(())
+        });
+        Ok(handle)
     }
 }
 
+#[allow(dead_code)]
+#[cfg(feature = "web-rocket")]
+pub type ShuttleRocket = Result<rocket::Rocket<rocket::Build>, Error>;
+
 #[cfg(feature = "web-axum")]
+#[async_trait]
 impl Service for SimpleService<sync_wrapper::SyncWrapper<axum::Router>> {
-    fn build(&mut self, factory: &mut dyn Factory) -> Result<(), Error> {
+    async fn build(
+        &mut self,
+        factory: &mut dyn Factory,
+        logger: Box<dyn log::Log>,
+    ) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
-            // We want to build any sqlx pools on the same runtime the client code will run on. Without this expect to get errors of no tokio reactor being present.
-            let axum = self.runtime.block_on(builder(factory))?;
+            let axum = builder(factory, &self.runtime, logger).await?;
 
             self.service = Some(axum);
         }
@@ -447,22 +447,103 @@ impl Service for SimpleService<sync_wrapper::SyncWrapper<axum::Router>> {
         Ok(())
     }
 
-    fn bind(&mut self, addr: SocketAddr) -> Result<(), error::Error> {
+    fn bind(&mut self, addr: SocketAddr) -> Result<ServeHandle, error::Error> {
         let axum = self
             .service
             .take()
             .expect("service has already been bound")
             .into_inner();
 
-        self.runtime
-            .block_on(async {
-                axum::Server::bind(&addr)
-                    .serve(axum.into_make_service())
-                    .await
-            })
-            .map_err(error::CustomError::new)?;
+        let handle = self.runtime.spawn(async move {
+            axum::Server::bind(&addr)
+                .serve(axum.into_make_service())
+                .await
+                .map_err(error::CustomError::new)
+        });
+
+        Ok(handle)
+    }
+}
+
+#[allow(dead_code)]
+#[cfg(feature = "web-axum")]
+pub type ShuttleAxum = Result<sync_wrapper::SyncWrapper<axum::Router>, Error>;
+
+#[cfg(feature = "web-tide")]
+#[async_trait]
+impl<T> Service for SimpleService<tide::Server<T>>
+where
+    T: Clone + Send + Sync + 'static,
+{
+    async fn build(
+        &mut self,
+        factory: &mut dyn Factory,
+        logger: Box<dyn log::Log>,
+    ) -> Result<(), Error> {
+        if let Some(builder) = self.builder.take() {
+            let tide = builder(factory, &self.runtime, logger).await?;
+
+            self.service = Some(tide);
+        }
 
         Ok(())
+    }
+
+    fn bind(&mut self, addr: SocketAddr) -> Result<ServeHandle, error::Error> {
+        let tide = self.service.take().expect("service has already been bound");
+
+        let handle = self
+            .runtime
+            .spawn(async move { tide.listen(addr).await.map_err(error::CustomError::new) });
+
+        Ok(handle)
+    }
+}
+
+#[allow(dead_code)]
+#[cfg(feature = "web-tide")]
+pub type ShuttleTide<T> = Result<tide::Server<T>, Error>;
+
+#[cfg(feature = "web-tower")]
+#[async_trait]
+impl<T> Service for SimpleService<T>
+where
+    T: tower::Service<hyper::Request<hyper::Body>, Response = hyper::Response<hyper::Body>>
+        + Clone
+        + Send
+        + Sync
+        + 'static,
+    T::Error: std::error::Error + Send + Sync,
+    T::Future: std::future::Future + Send + Sync,
+{
+    async fn build(
+        &mut self,
+        factory: &mut dyn Factory,
+        logger: Box<dyn log::Log>,
+    ) -> Result<(), Error> {
+        if let Some(builder) = self.builder.take() {
+            let tower = builder(factory, &self.runtime, logger).await?;
+
+            self.service = Some(tower);
+        }
+
+        Ok(())
+    }
+
+    fn bind(&mut self, addr: SocketAddr) -> Result<ServeHandle, error::Error> {
+        let service = self.service.take().expect("service has already been bound");
+
+        let handle = self.runtime.spawn(async move {
+            let shared = tower::make::Shared::new(service);
+            hyper::Server::bind(&addr)
+                .serve(shared)
+                .await
+                .map_err(error::CustomError::new)?;
+
+            Ok(())
+        });
+
+        Ok(handle)
     }
 }
 

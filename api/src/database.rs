@@ -1,9 +1,10 @@
+use std::time::Duration;
+
 use lazy_static::lazy_static;
 use rand::Rng;
-
-use shuttle_common::{project::ProjectName, DatabaseReadyInfo};
+use shuttle_common::project::ProjectName;
+use shuttle_common::DatabaseReadyInfo;
 use sqlx::postgres::{PgPool, PgPoolOptions};
-use std::time::Duration;
 
 lazy_static! {
     static ref SUDO_POSTGRES_CONNECTION_STRING: String = format!(
@@ -25,7 +26,6 @@ fn generate_role_password() -> String {
 pub(crate) struct State {
     project: ProjectName,
     context: Context,
-    is_guaranteed: bool,
     info: Option<DatabaseReadyInfo>,
 }
 
@@ -34,34 +34,18 @@ impl State {
         Self {
             project: project.clone(),
             context: context.clone(),
-            is_guaranteed: false,
             info: None,
         }
     }
 
-    pub(crate) fn request(&mut self) -> DatabaseReadyInfo {
-        if self.info.is_none() {
-            let role_name = format!("user-{}", self.project);
-            let role_password = generate_role_password();
-            let database_name = format!("db-{}", self.project);
-            let info = DatabaseReadyInfo::new(role_name, role_password, database_name);
-            self.info = Some(info.clone());
-            info
-        } else {
-            self.info.clone().unwrap()
-        }
-    }
-
-    pub(crate) async fn ensure(&mut self) -> sqlx::Result<()> {
-        if self.info.is_none() || self.is_guaranteed {
-            return Ok(());
+    pub(crate) async fn request(&mut self) -> sqlx::Result<DatabaseReadyInfo> {
+        if self.info.is_some() {
+            return Ok(self.info.clone().unwrap());
         }
 
-        let DatabaseReadyInfo {
-            role_name,
-            role_password,
-            database_name,
-        } = self.info.clone().unwrap();
+        let role_name = format!("user-{}", self.project);
+        let role_password = generate_role_password();
+        let database_name = format!("db-{}", self.project);
 
         let pool = &self.context.sudo_pool;
 
@@ -125,9 +109,13 @@ impl State {
             );
         }
 
-        self.is_guaranteed = true;
+        let info = DatabaseReadyInfo::new(role_name, role_password, database_name);
+        self.info = Some(info.clone());
+        Ok(info)
+    }
 
-        Ok(())
+    pub(crate) fn to_info(&self) -> Option<DatabaseReadyInfo> {
+        self.info.clone()
     }
 }
 

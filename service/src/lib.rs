@@ -432,8 +432,7 @@ impl Service for SimpleService<sync_wrapper::SyncWrapper<axum::Router>> {
         logger: Box<dyn log::Log>,
     ) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
-            let axum = builder(factory, &self.runtime, logger).await?;
-
+            let axum = execute_builder_with_panic_catch(builder, factory, &self.runtime, logger)?;
             self.service = Some(axum);
         }
 
@@ -474,8 +473,7 @@ where
         logger: Box<dyn log::Log>,
     ) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
-            let tide = builder(factory, &self.runtime, logger).await?;
-
+            let tide = execute_builder_with_panic_catch(builder, factory, &self.runtime, logger)?;
             self.service = Some(tide);
         }
 
@@ -515,8 +513,7 @@ where
         logger: Box<dyn log::Log>,
     ) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
-            let tower = builder(factory, &self.runtime, logger).await?;
-
+            let tower = execute_builder_with_panic_catch(builder, factory, &self.runtime, logger)?;
             self.service = Some(tower);
         }
 
@@ -540,16 +537,16 @@ where
     }
 }
 
+#[allow(dead_code)]
 fn execute_builder_with_panic_catch<T>(
     builder: StateBuilder<T>,
     factory: &mut dyn Factory,
     runtime: &Runtime,
     logger: Box<dyn log::Log>,
 ) -> Result<T, Error> {
-    match runtime.block_on(AssertUnwindSafe(builder(factory, runtime, logger)).catch_unwind()) {
-        Ok(builder_result) => builder_result,
-        Err(_) => Err(anyhow::anyhow!("Panic occurred in `shuttle_service::main` function").into()),
-    }
+    runtime
+        .block_on(AssertUnwindSafe(builder(factory, runtime, logger)).catch_unwind())
+        .unwrap_or_else(|_| Err(Error::PanicInMain))
 }
 
 /// Helper macro that generates the entrypoint required of any service.

@@ -8,6 +8,8 @@ pub enum Error {
     Io(#[from] std::io::Error),
     #[error("Database error: {0}")]
     Database(String),
+    #[error("Panic occurred in `shuttle_service::main` function")]
+    PanicInMain,
     #[error("Custom error: {0}")]
     Custom(#[from] CustomError),
 }

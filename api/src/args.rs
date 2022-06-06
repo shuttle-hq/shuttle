@@ -5,6 +5,7 @@ use std::str::FromStr;
 use fqdn::FQDN;
 use shuttle_common::Port;
 use structopt::StructOpt;
+use tonic::transport::Endpoint;
 
 #[derive(StructOpt)]
 #[structopt(name = "shuttle")]
@@ -31,6 +32,8 @@ pub struct Args {
     pub(crate) bind_addr: IpAddr,
     #[structopt(long, about = "Fully qualified domain name deployed services are reachable at", parse(try_from_str = parse_fqdn))]
     pub(crate) proxy_fqdn: FQDN,
+    #[structopt(long, about = "URI to connect to the provisioning service")]
+    pub(crate) provisioner_uri: Endpoint,
 }
 
 fn parse_fqdn(src: &str) -> Result<FQDN, String> {

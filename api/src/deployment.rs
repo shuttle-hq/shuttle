@@ -22,7 +22,7 @@ use shuttle_service::logger::Log;
 use shuttle_service::ServeHandle;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::{mpsc, RwLock};
-use tonic::transport::Channel;
+use tonic::transport::{Channel, Endpoint};
 
 use crate::build::Build;
 use crate::router::Router;
@@ -341,7 +341,11 @@ pub(crate) struct Context {
 }
 
 impl DeploymentSystem {
-    pub(crate) async fn new(build_system: Box<dyn BuildSystem>, fqdn: String) -> Self {
+    pub(crate) async fn new(
+        build_system: Box<dyn BuildSystem>,
+        fqdn: String,
+        provisioner_uri: Endpoint,
+    ) -> Self {
         let router: Arc<Router> = Default::default();
         let (tx, mut rx) = mpsc::unbounded_channel::<Log>();
 
@@ -361,7 +365,7 @@ impl DeploymentSystem {
             }
         });
 
-        let provisioner_client = ProvisionerClient::connect("http://localhost:5001")
+        let provisioner_client = ProvisionerClient::connect(provisioner_uri)
             .await
             .expect("failed to connect to provisioner");
 

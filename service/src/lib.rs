@@ -546,7 +546,7 @@ fn execute_builder_with_panic_catch<T>(
 ) -> Result<T, Error> {
     runtime
         .block_on(AssertUnwindSafe(builder(factory, runtime, logger)).catch_unwind())
-        .unwrap_or_else(|_| Err(Error::PanicInMain))
+        .unwrap_or(Err(Error::PanicInMain))
 }
 
 /// Helper macro that generates the entrypoint required of any service.

@@ -160,6 +160,7 @@ impl Deployment {
 
                     let mut factory = ShuttleFactory::new(
                         context.provisioner_client.clone(),
+                        context.provisioner_address.clone(),
                         meta.project.clone(),
                     );
                     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
@@ -338,13 +339,15 @@ pub(crate) struct Context {
     build_system: Box<dyn BuildSystem>,
     deployments: Arc<RwLock<Deployments>>,
     provisioner_client: ProvisionerClient<Channel>,
+    provisioner_address: String,
 }
 
 impl DeploymentSystem {
     pub(crate) async fn new(
         build_system: Box<dyn BuildSystem>,
         fqdn: String,
-        provisioner_uri: Endpoint,
+        provisioner_address: String,
+        provisioner_port: Port,
     ) -> Self {
         let router: Arc<Router> = Default::default();
         let (tx, mut rx) = mpsc::unbounded_channel::<Log>();
@@ -365,6 +368,12 @@ impl DeploymentSystem {
             }
         });
 
+        let provisioner_uri = Endpoint::try_from(format!(
+            "http://{}:{}",
+            provisioner_address, provisioner_port
+        ))
+        .expect("provisioner uri to be valid");
+
         let provisioner_client = ProvisionerClient::connect(provisioner_uri)
             .await
             .expect("failed to connect to provisioner");
@@ -374,6 +383,7 @@ impl DeploymentSystem {
             build_system,
             deployments: deployments.clone(),
             provisioner_client,
+            provisioner_address,
         };
 
         let job_queue = JobQueue::new(context, tx).await;

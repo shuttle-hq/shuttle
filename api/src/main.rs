@@ -190,7 +190,8 @@ async fn rocket() -> Rocket<Build> {
         DeploymentSystem::new(
             Box::new(build_system),
             args.proxy_fqdn.to_string(),
-            args.provisioner_uri,
+            args.provisioner_address,
+            args.provisioner_port,
         )
         .await,
     );

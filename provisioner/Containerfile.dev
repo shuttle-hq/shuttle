@@ -1,6 +1,7 @@
 FROM rust:buster as runtime
 RUN apt-get update &&\
-    apt-get install -y supervisor
+    apt-get install -y curl postgresql supervisor
+RUN pg_dropcluster $(pg_lsclusters -h | cut -d' ' -f-2 | head -n1)
 RUN rustup component add rust-src
 
 FROM rust:buster AS chef
@@ -18,16 +19,13 @@ FROM chef AS builder
 COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --recipe-path recipe.json
 COPY . .
-RUN cargo build --bin api
+RUN cargo build --bin provisioner
 
 FROM runtime
 WORKDIR /
-COPY --from=builder /app/target/debug/api /usr/local/bin/shuttle-backend
-COPY --from=builder /app/service /app/service
-COPY --from=builder /app/common /app/common
-COPY --from=builder /app/codegen /app/codegen
+COPY --from=builder /app/target/debug/provisioner /usr/local/bin/shuttle-provisioner
 
-COPY docker/config.toml $CARGO_HOME/config.toml
-COPY docker/entrypoint.sh /bin/entrypoint.sh
-COPY docker/supervisord.conf /usr/share/supervisord/supervisord.conf
+COPY provisioner/docker/entrypoint.sh /bin/entrypoint.sh
+COPY provisioner/docker/wait-for-pg-then /usr/bin/wait-for-pg-then
+COPY provisioner/docker/supervisord.conf /usr/share/supervisord/supervisord.conf
 ENTRYPOINT ["/bin/entrypoint.sh"]

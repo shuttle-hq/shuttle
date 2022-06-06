@@ -14,3 +14,10 @@ services:
       - SHUTTLE_USERS_TOML=/config/users.toml
       - SHUTTLE_ADMIN_SECRET=admin-pass
       - PROXY_FQDN=teste.rs
+      - PROVISIONER_ADDRESS=provisioner
+  provisioner:
+    build:
+      context: .
+      dockerfile: provisioner/Containerfile.dev
+    environment:
+      - PORT=5001

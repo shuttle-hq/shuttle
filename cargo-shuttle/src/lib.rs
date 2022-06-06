@@ -4,7 +4,7 @@ pub mod config;
 mod factory;
 mod print;
 
-use std::fs::{File, read_to_string};
+use std::fs::{read_to_string, File};
 use std::io::Write;
 use std::io::{self, stdout};
 use std::net::{Ipv4Addr, SocketAddr};
@@ -65,7 +65,7 @@ impl Shuttle {
             Command::Deploy(deploy_args) => {
                 self.check_lib_version(args.project_args).await?;
                 self.deploy(deploy_args).await
-            },
+            }
             Command::Status => self.status().await,
             Command::Logs => self.logs().await,
             Command::Delete => self.delete().await,

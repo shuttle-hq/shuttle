@@ -53,7 +53,9 @@ async fn get_or_create_user(
 async fn status() {}
 
 #[get("/version")]
-async fn version() -> String { String::from(shuttle_service::VERSION) }
+async fn version() -> String {
+    String::from(shuttle_service::VERSION)
+}
 
 #[get("/<_>/deployments/<id>")]
 async fn get_deployment(
@@ -195,9 +197,7 @@ async fn rocket() -> Rocket<Build> {
 
     start_proxy(args.bind_addr, args.proxy_port, deployment_manager.clone()).await;
 
-    let state = ApiState {
-        deployment_manager,
-    };
+    let state = ApiState { deployment_manager };
 
     let user_directory =
         UserDirectory::from_user_file().expect("could not initialise user directory");

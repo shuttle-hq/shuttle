@@ -16,7 +16,6 @@ mod router;
 
 use std::collections::HashMap;
 use std::net::IpAddr;
-use std::process::Command as PCmd;
 use std::sync::Arc;
 
 use auth_admin::Admin;
@@ -54,9 +53,7 @@ async fn get_or_create_user(
 async fn status() {}
 
 #[get("/version")]
-async fn version(state: &State<ApiState>) -> String {
-    String::from(&state.shuttle_version)
-}
+async fn version() -> String { String::from(shuttle_service::VERSION) }
 
 #[get("/<_>/deployments/<id>")]
 async fn get_deployment(
@@ -168,7 +165,6 @@ async fn project_secrets(
 
 struct ApiState {
     deployment_manager: Arc<DeploymentSystem>,
-    shuttle_version: String,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -199,38 +195,8 @@ async fn rocket() -> Rocket<Build> {
 
     start_proxy(args.bind_addr, args.proxy_port, deployment_manager.clone()).await;
 
-    let cargo_tree = PCmd::new("cargo")
-        .args(["tree", "--prefix", "none"])
-        .output()
-        .map_err(|err| match err.kind() {
-            // Just says 'program not found' otherwise
-            std::io::ErrorKind::NotFound => {
-                std::io::Error::new(std::io::ErrorKind::NotFound, "Cargo not found")
-            }
-            _ => err,
-        })
-        .unwrap();
-
-    let stdout = String::from_utf8_lossy(&cargo_tree.stdout);
-    let mut shuttle_version = String::new();
-
-    stdout
-        .as_ref()
-        .lines()
-        // Strips out trailing things like "(*)"
-        .map(|line| match line.find('(') {
-            Some(index) => &line[..index - 1],
-            None => line,
-        })
-        .filter(|line| line.contains("shuttle-service"))
-        .for_each(|dep| {
-            shuttle_version = dep.split_whitespace().skip(1).take(1).collect();
-            shuttle_version = shuttle_version.replace("v", "");
-        });
-
     let state = ApiState {
         deployment_manager,
-        shuttle_version,
     };
 
     let user_directory =

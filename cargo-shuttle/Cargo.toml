@@ -28,6 +28,7 @@ cargo_metadata = "0.14.2"
 webbrowser = "0.6"
 uuid = { version = "0.8.2", features = ["v4"] }
 semver = { version = "1.0.9" }
+toml_edit = { version = "0.14.4" }
 
 shuttle-common = { version = "0.3.0", path = "../common" }
 shuttle-service = { version = "0.3.0", path = "../service", features = [ "loader" ] }

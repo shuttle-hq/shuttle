@@ -539,6 +539,8 @@ where
     }
 }
 
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 /// Helper macro that generates the entrypoint required of any service.
 ///
 /// Can be used in one of two ways:

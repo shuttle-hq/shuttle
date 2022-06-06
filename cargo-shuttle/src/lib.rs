@@ -4,11 +4,10 @@ pub mod config;
 mod factory;
 mod print;
 
-use std::fs::File;
+use std::fs::{File, read_to_string};
 use std::io::Write;
 use std::io::{self, stdout};
 use std::net::{Ipv4Addr, SocketAddr};
-use std::process::Command as PCmd;
 use std::rc::Rc;
 
 use anyhow::{anyhow, Context, Result};
@@ -22,9 +21,10 @@ use colored::Colorize;
 use config::RequestContext;
 use factory::LocalFactory;
 use futures::future::TryFutureExt;
-use semver::Version;
+use semver::{Version, VersionReq};
 use shuttle_service::loader::{build_crate, Loader};
 use tokio::sync::mpsc;
+use toml_edit::Document;
 use uuid::Uuid;
 
 #[macro_use]
@@ -62,7 +62,10 @@ impl Shuttle {
         self.ctx.set_api_url(args.api_url);
 
         match args.cmd {
-            Command::Deploy(deploy_args) => self.deploy(deploy_args).await,
+            Command::Deploy(deploy_args) => {
+                self.check_lib_version(args.project_args).await?;
+                self.deploy(deploy_args).await
+            },
             Command::Status => self.status().await,
             Command::Logs => self.logs().await,
             Command::Delete => self.delete().await,
@@ -187,7 +190,6 @@ impl Shuttle {
 
     async fn deploy(&self, args: DeployArgs) -> Result<()> {
         self.run_tests(args.no_test)?;
-        self.check_lib_version().await?;
 
         let package_file = self
             .run_cargo_package(args.allow_dirty)
@@ -213,45 +215,20 @@ impl Shuttle {
         .context("failed to deploy cargo project")
     }
 
-    async fn check_lib_version(&self) -> Result<()> {
-        let cargo_tree = PCmd::new("cargo")
-            .args(["tree", "--prefix", "none"])
-            .output()
-            .map_err(|err| match err.kind() {
-                // Just says 'program not found' otherwise
-                io::ErrorKind::NotFound => {
-                    io::Error::new(io::ErrorKind::NotFound, "Cargo not found")
-                }
-                _ => err,
-            })?;
-
-        let stdout = String::from_utf8_lossy(&cargo_tree.stdout);
-        let mut service_version = String::new();
-
-        stdout
-            .as_ref()
-            .lines()
-            // Strips out trailing things like "(*)"
-            .map(|line| match line.find('(') {
-                Some(index) => &line[..index - 1],
-                None => line,
-            })
-            .filter(|line| line.contains("shuttle-service"))
-            .for_each(|dep| {
-                service_version = dep.split_whitespace().skip(1).take(1).collect();
-                service_version = service_version.replace("v", "");
-            });
-
-        let service_semver = Version::parse(&service_version)?;
+    async fn check_lib_version(&self, project_args: ProjectArgs) -> Result<()> {
+        let cargo_path = project_args.working_directory.join("Cargo.toml");
+        let cargo_doc = read_to_string(cargo_path.clone())?.parse::<Document>()?;
+        let current_shuttle_version = &cargo_doc["dependencies"]["shuttle-service"]["version"];
+        let service_semver = Version::parse(&current_shuttle_version.as_str().unwrap())?;
         let mut server_version = String::new();
 
-        client::version(self.ctx.api_url())
+        client::shuttle_version(self.ctx.api_url())
             .await
             .map(|response| server_version = response)?;
 
-        let server_semver = Version::parse(&server_version)?;
+        let server_semver = VersionReq::parse(&server_version)?;
 
-        if service_semver.minor < server_semver.minor {
+        if !server_semver.matches(&service_semver) {
             return Err(anyhow!(
                 "Update your shuttle-version to {}",
                 &server_version,

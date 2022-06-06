@@ -185,7 +185,6 @@ use std::pin::Pin;
 
 use async_trait::async_trait;
 use futures::FutureExt;
-use tokio::runtime::Runtime;
 
 // Pub uses by `codegen`
 pub use log;
@@ -391,7 +390,7 @@ impl Service for SimpleService<rocket::Rocket<rocket::Build>> {
         if let Some(builder) = self.builder.take() {
             let rocket = self
                 .runtime
-                .block_on(AssertUnwindSafe(builder(factory)).catch_unwind())
+                .block_on(AssertUnwindSafe(builder(factory, &self.runtime, logger)).catch_unwind())
                 .map_err(|_| {
                     anyhow::anyhow!("Panic occurred in `shuttle_service::main` function")
                 })??;

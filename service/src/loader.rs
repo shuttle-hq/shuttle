@@ -93,6 +93,15 @@ pub fn build_crate(project_path: &Path, buf: Box<dyn std::io::Write>) -> anyhow:
     let manifest_path = project_path.join("Cargo.toml");
 
     let ws = Workspace::new(&manifest_path, &config)?;
+
+    if let Some(profiles) = ws.profiles() {
+        for profile in profiles.get_all().values() {
+            if profile.panic == Some("abort".to_string()) {
+                return Err(anyhow!("a Shuttle project cannot have panics that abort. Please ensure your Cargo.toml does not contain `panic = \"abort\"` for any profiles"));
+            }
+        }
+    }
+
     let opts = CompileOptions::new(&config, CompileMode::Build)?;
     let compilation = compile(&ws, &opts)?;
 

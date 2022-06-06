@@ -386,9 +386,7 @@ impl Service for SimpleService<rocket::Rocket<rocket::Build>> {
         logger: Box<dyn log::Log>,
     ) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
-            let rocket = self
-                .runtime
-                .block_on(builder(factory, &self.runtime, logger))?;
+            let rocket = builder(factory, &self.runtime, logger).await?;
             self.service = Some(rocket);
         }
 
@@ -432,9 +430,7 @@ impl Service for SimpleService<sync_wrapper::SyncWrapper<axum::Router>> {
         logger: Box<dyn log::Log>,
     ) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
-            let axum = self
-                .runtime
-                .block_on(builder(factory, &self.runtime, logger))?;
+            let axum = builder(factory, &self.runtime, logger).await?;
             self.service = Some(axum);
         }
 
@@ -475,9 +471,7 @@ where
         logger: Box<dyn log::Log>,
     ) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
-            let tide = self
-                .runtime
-                .block_on(builder(factory, &self.runtime, logger))?;
+            let tide = builder(factory, &self.runtime, logger).await?;
             self.service = Some(tide);
         }
 
@@ -517,9 +511,7 @@ where
         logger: Box<dyn log::Log>,
     ) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
-            let tower = self
-                .runtime
-                .block_on(builder(factory, &self.runtime, logger))?;
+            let tower = builder(factory, &self.runtime, logger).await?;
             self.service = Some(tower);
         }
 

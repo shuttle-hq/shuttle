@@ -232,7 +232,8 @@ impl Shuttle {
             Ok(())
         } else {
             Err(anyhow!(
-                "Update your shuttle-version to {}", &server_version,
+                "Update your shuttle-version to {}",
+                &server_version,
             ))
         }
     }

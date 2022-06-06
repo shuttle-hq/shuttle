@@ -180,11 +180,9 @@
 
 use std::future::Future;
 use std::net::SocketAddr;
-use std::panic::AssertUnwindSafe;
 use std::pin::Pin;
 
 use async_trait::async_trait;
-use futures::FutureExt;
 
 // Pub uses by `codegen`
 pub use log;
@@ -388,7 +386,9 @@ impl Service for SimpleService<rocket::Rocket<rocket::Build>> {
         logger: Box<dyn log::Log>,
     ) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
-            let rocket = execute_builder_with_panic_catch(builder, factory, &self.runtime, logger)?;
+            let rocket = self
+                .runtime
+                .block_on(builder(factory, &self.runtime, logger))?;
             self.service = Some(rocket);
         }
 
@@ -432,7 +432,9 @@ impl Service for SimpleService<sync_wrapper::SyncWrapper<axum::Router>> {
         logger: Box<dyn log::Log>,
     ) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
-            let axum = execute_builder_with_panic_catch(builder, factory, &self.runtime, logger)?;
+            let axum = self
+                .runtime
+                .block_on(builder(factory, &self.runtime, logger))?;
             self.service = Some(axum);
         }
 
@@ -473,7 +475,9 @@ where
         logger: Box<dyn log::Log>,
     ) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
-            let tide = execute_builder_with_panic_catch(builder, factory, &self.runtime, logger)?;
+            let tide = self
+                .runtime
+                .block_on(builder(factory, &self.runtime, logger))?;
             self.service = Some(tide);
         }
 
@@ -513,7 +517,9 @@ where
         logger: Box<dyn log::Log>,
     ) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
-            let tower = execute_builder_with_panic_catch(builder, factory, &self.runtime, logger)?;
+            let tower = self
+                .runtime
+                .block_on(builder(factory, &self.runtime, logger))?;
             self.service = Some(tower);
         }
 
@@ -535,18 +541,6 @@ where
 
         Ok(handle)
     }
-}
-
-#[allow(dead_code)]
-fn execute_builder_with_panic_catch<T>(
-    builder: StateBuilder<T>,
-    factory: &mut dyn Factory,
-    runtime: &Runtime,
-    logger: Box<dyn log::Log>,
-) -> Result<T, Error> {
-    runtime
-        .block_on(AssertUnwindSafe(builder(factory, runtime, logger)).catch_unwind())
-        .unwrap_or(Err(Error::PanicInMain))
 }
 
 /// Helper macro that generates the entrypoint required of any service.

@@ -1,5 +1,6 @@
 use std::ffi::OsStr;
 use std::net::SocketAddr;
+use std::panic::AssertUnwindSafe;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context};
@@ -12,6 +13,8 @@ use libloading::{Library, Symbol};
 use shuttle_common::DeploymentId;
 use thiserror::Error as ThisError;
 use tokio::sync::mpsc::UnboundedSender;
+
+use futures::FutureExt;
 
 use crate::{
     logger::{Log, Logger},
@@ -66,10 +69,17 @@ impl Loader {
         let mut service = self.service;
         let logger = Box::new(Logger::new(tx, deployment_id));
 
-        service.build(factory, logger).await?;
+        AssertUnwindSafe(service.build(factory, logger))
+            .catch_unwind()
+            .await
+            .unwrap_or(Err(Error::PanicInMain))?;
 
         // Start service on this side of the FFI
-        let handle = tokio::spawn(async move { service.bind(addr)?.await? });
+        let handle = tokio::spawn(async move {
+            std::panic::catch_unwind(AssertUnwindSafe(move || service.bind(addr)))
+                .unwrap_or(Err(Error::PanicInMain))?
+                .await?
+        });
 
         Ok((handle, self.so))
     }

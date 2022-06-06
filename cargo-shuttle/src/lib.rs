@@ -219,7 +219,7 @@ impl Shuttle {
         let cargo_path = project_args.working_directory.join("Cargo.toml");
         let cargo_doc = read_to_string(cargo_path.clone())?.parse::<Document>()?;
         let current_shuttle_version = &cargo_doc["dependencies"]["shuttle-service"]["version"];
-        let service_semver = Version::parse(&current_shuttle_version.as_str().unwrap())?;
+        let service_semver = Version::parse(current_shuttle_version.as_str().unwrap())?;
         let mut server_version = String::new();
 
         client::shuttle_version(self.ctx.api_url())
@@ -228,13 +228,13 @@ impl Shuttle {
 
         let server_semver = VersionReq::parse(&server_version)?;
 
-        if !server_semver.matches(&service_semver) {
-            return Err(anyhow!(
-                "Update your shuttle-version to {}",
-                &server_version,
-            ));
+        if server_semver.matches(&service_semver) {
+            Ok(())
+        } else {
+            Err(anyhow!(
+                "Update your shuttle-version to {}", &server_version,
+            ))
         }
-        return Ok(());
     }
 
     // Packages the cargo project and returns a File to that file

@@ -5,14 +5,14 @@ edition = "2021"
 
 [dependencies]
 rocket = { version = "0.5.0-rc.1", features = ["uuid", "serde_json", "json"] }
-cargo = "0.59.0"
+cargo = "0.62.0"
 cargo-util = "0.1"
 chrono = "0.4"
 anyhow = "1.0.54"
 libloading = "0.7.3"
 futures = "0.3"
 fqdn = "0.1"
-uuid = { version = "0.8.2", features = ["v4"] }
+uuid = { version = "1.1", features = ["v4"] }
 async-mutex = "1.4.0"
 serde = "1.0.136"
 structopt = "0.3.26"

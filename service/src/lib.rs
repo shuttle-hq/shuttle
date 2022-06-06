@@ -388,13 +388,7 @@ impl Service for SimpleService<rocket::Rocket<rocket::Build>> {
         logger: Box<dyn log::Log>,
     ) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
-            let rocket = self
-                .runtime
-                .block_on(AssertUnwindSafe(builder(factory, &self.runtime, logger)).catch_unwind())
-                .map_err(|_| {
-                    anyhow::anyhow!("Panic occurred in `shuttle_service::main` function")
-                })??;
-
+            let rocket = execute_builder_with_panic_catch(builder, factory, &self.runtime, logger)?;
             self.service = Some(rocket);
         }
 
@@ -543,6 +537,18 @@ where
         });
 
         Ok(handle)
+    }
+}
+
+fn execute_builder_with_panic_catch<T>(
+    builder: StateBuilder<T>,
+    factory: &mut dyn Factory,
+    runtime: &Runtime,
+    logger: Box<dyn log::Log>,
+) -> Result<T, Error> {
+    match runtime.block_on(AssertUnwindSafe(builder(factory, runtime, logger)).catch_unwind()) {
+        Ok(builder_result) => builder_result,
+        Err(_) => Err(anyhow::anyhow!("Panic occurred in `shuttle_service::main` function").into()),
     }
 }
 

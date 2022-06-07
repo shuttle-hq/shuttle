@@ -1,7 +1,7 @@
-use std::{io, fs};
-use std::path::{Path, PathBuf};
 use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::{fs, io};
 
 use anyhow::{anyhow, Context, Result};
 use rocket::tokio;
@@ -111,7 +111,10 @@ impl BuildSystem for FsBuildSystem {
         // create marker file
         create_so_marker(&project_path, &so_path)?;
 
-        Ok(Build { so_path, initial_secrets })
+        Ok(Build {
+            so_path,
+            initial_secrets,
+        })
     }
 
     fn fs_root(&self) -> PathBuf {
@@ -198,7 +201,11 @@ fn read_initial_secrets(crate_path: &Path) -> Result<BTreeMap<String, String>> {
     let secrets_toml_path = crate_path.join("Secrets.toml");
 
     if let Ok(secrets_toml) = fs::read_to_string(&secrets_toml_path) {
-        secrets_toml.parse::<toml::Value>().and_then(toml::Value::try_into).map_err(|e| anyhow!("unable to parse Secrets.toml file: {e}"))
+        secrets_toml
+            .parse::<toml::Value>()
+            .and_then(toml::Value::try_into)
+            .map_err(|e| anyhow!("unable to parse Secrets.toml file: {e}"))
+    } else {
+        Ok(BTreeMap::new())
     }
-    else { Ok(BTreeMap::new()) }
 }

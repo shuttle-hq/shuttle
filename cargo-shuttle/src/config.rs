@@ -299,6 +299,7 @@ impl RequestContext {
     ) -> Result<Config<LocalConfigManager, ProjectConfig>> {
         let root_directory_path = find_root_directory(&project_args.working_directory);
 
+        // Iterates through the directories until it finds the Cargo.toml file (project root) and returns the path
         pub fn find_root_directory(dir: &Path) -> Option<PathBuf> {
             for ancestor in dir.ancestors() {
                 if ancestor.join("Cargo.toml").exists() {

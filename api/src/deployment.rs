@@ -76,7 +76,7 @@ impl Deployment {
             .context("could not parse contents of marker file to a valid path")?;
 
         let meta = DeploymentMeta::built(fqdn, project_name);
-        let state = DeploymentState::built(Build { so_path });
+        let state = DeploymentState::built(Build { so_path, initial_secrets: Default::default() }); // TODO
         Ok(Self::new(meta, state))
     }
 

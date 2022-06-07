@@ -47,7 +47,7 @@ impl Shuttle {
         Self { ctx }
     }
 
-    pub async fn run(mut self, args: Args) -> Result<()> {
+    pub async fn run(mut self, mut args: Args) -> Result<()> {
         trace!("running local client");
         if matches!(
             args.cmd,
@@ -57,7 +57,7 @@ impl Shuttle {
                 | Command::Logs
                 | Command::Run(..)
         ) {
-            self.load_project(&args.project_args)?;
+            self.load_project(&mut args.project_args)?;
         }
 
         self.ctx.set_api_url(args.api_url);
@@ -122,7 +122,7 @@ impl Shuttle {
         Ok(())
     }
 
-    pub fn load_project(&mut self, project_args: &ProjectArgs) -> Result<()> {
+    pub fn load_project(&mut self, project_args: &mut ProjectArgs) -> Result<()> {
         trace!("loading project arguments: {project_args:?}");
         self.ctx.load_local(project_args)
     }

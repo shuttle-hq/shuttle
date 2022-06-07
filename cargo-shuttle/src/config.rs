@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::env::current_dir;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -141,10 +140,10 @@ impl GlobalConfig {
 }
 
 /// Project-local config for things like customizing project name
-#[derive(Deserialize, Serialize, Default)]
+#[derive(Deserialize, Serialize, Default, Debug)]
 pub struct ProjectConfig {
     pub name: Option<ProjectName>,
-    pub working_directory: PathBuf,
+    // pub working_directory: PathBuf,
 }
 
 pub type SecretsConfig = HashMap<String, String>;
@@ -275,7 +274,7 @@ impl RequestContext {
     /// Ensures that if `--name` is not specified on the command-line, and either the project
     /// file does not exist, or it has not set the `name` key then the `ProjectConfig` instance
     /// has `ProjectConfig.name = Some("crate-name")`.
-    pub fn load_local(&mut self, project_args: &ProjectArgs) -> Result<()> {
+    pub fn load_local(&mut self, project_args: &mut ProjectArgs) -> Result<()> {
         // Secrets.toml
         let secrets_manager =
             LocalConfigManager::new(&project_args.working_directory, "Secrets.toml".to_string());
@@ -296,18 +295,9 @@ impl RequestContext {
     }
 
     pub fn get_local_config(
-        project_args: &ProjectArgs
+        project_args: &mut ProjectArgs
     ) -> Result<Config<LocalConfigManager, ProjectConfig>> {
-        let local_manager =
-            LocalConfigManager::new(&project_args.working_directory, "Shuttle.toml".to_string());
-        let mut project = Config::new(local_manager);
-
-        if !project.exists() {
-            project.replace(ProjectConfig::default());
-        } else {
-            trace!("found a local Shuttle.toml");
-            project.open()?;
-        }
+        let root_directory_path = find_root_directory(&project_args.working_directory);
 
         pub fn find_root_directory(dir: &Path) -> Option<PathBuf> {
             for ancestor in dir.ancestors() {
@@ -318,14 +308,24 @@ impl RequestContext {
             None
         }
 
-        let config = project.as_mut().unwrap();
-        let possible_root_directory_path = find_root_directory(&current_dir().unwrap());
-
-        if possible_root_directory_path == None {
+        if let Some(working_directory) = root_directory_path {
+            project_args.working_directory = working_directory;
+        } else {
             panic!("Shuttle.toml not found.");
-        } else if possible_root_directory_path.is_some() {
-            config.working_directory = possible_root_directory_path.unwrap();
         }
+
+        let local_manager =
+            LocalConfigManager::new(&project_args.working_directory, "Shuttle.toml".to_string());
+        let mut project = Config::new(local_manager);
+
+        if !project.exists() {
+            project.replace(ProjectConfig::default());
+        } else {
+            println!("found a local Shuttle.toml");
+            project.open()?;
+        }
+
+        let config = project.as_mut().unwrap();
         
         match (&project_args.name, &config.name) {
             // Command-line name parameter trumps everything
@@ -343,6 +343,7 @@ impl RequestContext {
                 config.name = Some(find_crate_name(&project_args.working_directory)?);
             }
         };
+        println!("{:#?}", config);
         Ok(project)
     }
 
@@ -435,38 +436,36 @@ mod tests {
 
     #[test]
     fn get_local_config_finds_name_in_shuttle_toml() {
-        let project_args = ProjectArgs {
+        let mut project_args = ProjectArgs {
             working_directory: path_from_workspace_root("examples/axum/hello-world/"),
             name: None,
         };
 
-        let local_config = RequestContext::get_local_config(&project_args).unwrap();
+        let local_config = RequestContext::get_local_config(&mut project_args).unwrap();
 
         assert_eq!(unwrap_project_name(&local_config), "hello-world-axum-app");
     }
 
     #[test]
     fn fixme_running_in_src_subdir_finds_crate_but_fails_to_find_config() {
-        let project_args = ProjectArgs {
+        let mut project_args = ProjectArgs {
             working_directory: path_from_workspace_root("examples/axum/hello-world/src"),
             name: None,
         };
 
-        let local_config = RequestContext::get_local_config(&project_args).unwrap();
+        let local_config = RequestContext::get_local_config(&mut project_args).unwrap();
 
-        // FIXME: this is not the intended behaviour. We should fix this.
-        // This should really be "hello-world-axum-app", as above.
-        assert_eq!(unwrap_project_name(&local_config), "hello-world");
+        assert_eq!(unwrap_project_name(&local_config), "hello-world-axum-app");
     }
 
     #[test]
     fn setting_name_overrides_name_in_config() {
-        let project_args = ProjectArgs {
+        let mut project_args = ProjectArgs {
             working_directory: path_from_workspace_root("examples/axum/hello-world/"),
             name: Some(ProjectName::from_str("my-fancy-project-name").unwrap()),
         };
 
-        let local_config = RequestContext::get_local_config(&project_args).unwrap();
+        let local_config = RequestContext::get_local_config(&mut project_args).unwrap();
 
         assert_eq!(unwrap_project_name(&local_config), "my-fancy-project-name");
     }

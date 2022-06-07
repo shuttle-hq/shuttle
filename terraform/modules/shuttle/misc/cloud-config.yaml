@@ -26,11 +26,18 @@ write_files:
     path: /lib/systemd/system/shuttle-backend.service
     owner: root:root
     permissions: "0644"
+  - encoding: b64
+    content: ${shuttle_provisioner_content}
+    path: /lib/systemd/system/shuttle-provisioner.service
+    owner: root:root
+    permissions: "0644"
 
 power_state:
   mode: reboot
 
 # Up services on every boot
 runcmd:
+  - [docker, network, create, --driver, bridge, shuttle-net]
   - [systemctl, enable, "opt-shuttle.mount"]
   - [systemctl, enable, "shuttle-backend.service"]
+  - [systemctl, enable, "shuttle-provisioner.service"]

@@ -51,6 +51,11 @@ async fn get_or_create_user(
 #[get("/status")]
 async fn status() {}
 
+#[get("/version")]
+async fn version() -> String {
+    String::from(shuttle_service::VERSION)
+}
+
 #[get("/<_>/deployments/<id>")]
 async fn get_deployment(
     state: &State<ApiState>,
@@ -221,7 +226,7 @@ async fn rocket() -> Rocket<Build> {
                 project_secrets
             ],
         )
-        .mount("/", routes![get_or_create_user, status])
+        .mount("/", routes![get_or_create_user, status, version])
         .manage(state)
         .manage(user_directory)
 }

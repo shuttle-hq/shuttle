@@ -289,6 +289,7 @@ pub(crate) struct DeploymentSystem {
     job_queue: JobQueue,
     router: Arc<Router>,
     fqdn: String,
+    pub(crate) provisioner_address: String,
 }
 
 const JOB_QUEUE_SIZE: usize = 200;
@@ -383,7 +384,7 @@ impl DeploymentSystem {
             build_system,
             deployments: deployments.clone(),
             provisioner_client,
-            provisioner_address,
+            provisioner_address: provisioner_address.clone(),
         };
 
         let job_queue = JobQueue::new(context, tx).await;
@@ -399,6 +400,7 @@ impl DeploymentSystem {
             job_queue,
             router,
             fqdn,
+            provisioner_address,
         }
     }
 

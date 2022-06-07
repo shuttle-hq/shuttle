@@ -3,34 +3,40 @@ title: Hyper vs Rocket - Low Level vs Batteries included
 description: A comparison of using the low-level HTTP framework 'hyper' vs a batteries included framework like 'Rocket'
 author: ben
 tags: [rust, rocket, hyper, comparison]
-thumb: infrastructure-from-code-trans.png
-cover: infrastructure-from-code-trans.png
+thumb: hyper-vs-rocket.png
+cover: hyper-vs-rocket.png
 date: "2022-05-09T15:00:00"
 ---
 
-In this post we're going to be comparing popular Rust libraries used for building web applications.
+In this post we're going to be comparing two popular Rust libraries used for building web applications. We'll be writing an example in each and compare their ergonomics and how they perform.
 
-We'll be comparing an example in each, their ergonomics and how they perform. This post gives an overview of developing Rust web applications in a hand written way vs a declarative and managed way.
-
-[Hyper](https://github.com/hyperium/hyper) is a low level HTTP library vs [Rocket](https://rocket.rs/) which is more batteries included.
+The first library [Hyper](https://github.com/hyperium/hyper) is a low level HTTP library which contains the primitives for building server applications. The second library [Rocket](https://rocket.rs/) comes with more "batteries included" and provides a more declarative approach to building web applications.
 
 ## The Demo
 
-We're going to build a simple site to showcase how to implement:
+We're going to build a simple site to showcase how each libraries implements:
 
-- **Routing**
-    - What to respond for a given URL
-- **Shared state**
-    - A central state for the application
-    - Central site visitor counter
+### Routing
 
-The rules for this demonstration is to only use the specific library and any of its re-exported dependencies. So no additional libraries (except in the hyper example we need a `tokio::main` :)).
+Routing decides what to respond for a given URL. Some paths are fixed, in our example we will have a fixed route `/` which returns `Hello World`. Some paths are dynamic and can have parameters. In the example we will have `/hello/*name*` which will response `Hello *name*` which will have *name* substituted in each response.
+
+### Shared state
+
+We want to have a central state for the application.
+
+In this demo we will have central site visitor counter which counts the number of requests. This number can be viewed as JSON on the `/counter.json` route. In this example we will be storing the counter in application memory. However if you were storing it in a database the shared state would be a database client.
+
+The are lots of other functionality necessary for a site such as handling HTTP methods, receiving data, rendering templates and error handling. But for the scope of this post and example we will only be comparing these two features.
+
+### The rules
+
+The rules for this demonstration is to only use the specific library and any of its re-exported dependencies. So no additional libraries (except in the hyper example we need a `tokio::main`).
 
 ## Hyper
 
 Hyper's readme describes hyper as a "A fast and correct HTTP implementation for Rust with client and server APIs". For this demo we will be using the server side of the library. It has **9.7k** stars on GitHub and **48M** crates downloads. It is used as a often a dependency and many other libraries such as [reqwest and tonic](https://crates.io/crates/hyper/reverse_dependencies) build on top of it.
 
-In this example we see how far we can get with just using the library. Below is the full code for the site:
+In this example we see how far we can get with just using the library. This demo uses Hyper 0.14[^hyper-deps]. Below is the full code for the site:
 
 ```rust
 use hyper::server::conn::AddrStream;
@@ -58,9 +64,10 @@ async fn handle(context: AppContext, req: Request<Body>) -> Result<Response<Body
     let response = if path == "/" {
         Response::new(Body::from("Hello World"))
     } else if path == "/counter.json" {
+        let data = format!("{{\"counter\":{}}}", new_count);
         Response::builder()
             .header("Content-Type", "application/json")
-            .body(Body::from(format!("{{\"counter\":{}}}", new_count)))
+            .body(Body::from(data))
 	        .unwrap()
     } else if let Some(name) = path.strip_prefix("/hello/") {
         Response::new(Body::from(format!("Hello, {}!", name)))
@@ -105,23 +112,23 @@ start with the prefix or `Some` if the path starts with the prefix along with a 
 
 The function has a early return for requests with a method other than GET because there are no POST routes or others for this example. If the site accepted different requests types and had to add additional guards then we could additional clauses to the if statement. Although you could see how expand on the if chain would get more complex and verbose.
 
-To return a response, Hyper re-exports [`Response`](https://docs.rs/hyper/0.14.19/hyper/struct.Response.html) (from the http crate). It has a nice simple builder pattern for building the responses. Of course we could import serde but that's against the rules.
+To return a response, Hyper re-exports [`Response`](https://docs.rs/hyper/0.14.19/hyper/struct.Response.html) (from the [http crate](https://docs.rs/http/latest/http/)). It has a nice simple builder pattern for building the responses. The serialization code is hand written using `format!`. Of course we could import serde but that's against the rules.
 
-The counter is done by creating a struct in the initializing code. Without going into the details it uses `Arc<AtomicUsize>` instead of a `usize` as the atomic variant has special properties for when multiple handlers are using and mutating it. It runs visitor counter incremented before anything else in the handler function so that a visit is recorded for all requests.
+The counter is done by creating a struct in the initializing code and cloning it on every request to send to the handler function. Without going into the details it uses `Arc<AtomicUsize>` instead of a `usize` as the atomic variant has special properties for when multiple handlers are using and mutating it. The code increments the visitor counter before anything else in the handler function so that a visit is recorded for all requests.
 
 ### Hyper Verdict
 
-In terms of development, a debug build (without any of the build artifacts) takes **79.0s**. After the initial compilation, incremental compilation takes only **1.9s**. For building a `release` build with further optimizations (on top of the debug build artifacts) it takes **32.5s**.
+In terms of development (on a low end machine we used for profiling[^profile-machine]), a debug build (without any of the build artifacts) takes **79.0s**. After the initial compilation, incremental compilation takes only **1.9s**. For building a `release` build with further optimizations (on top of the debug build artifacts) it takes **32.5s**.
 
-The initialization code was take from [Hyper's server docs](https://docs.rs/hyper/latest/hyper/server/index.html) and is quite verbose and out of the box for Hyper there are no logs.
+The initialization code was take from [Hyper's server docs](https://docs.rs/hyper/latest/hyper/server/index.html) and is quite verbose and out of the box for Hyper there are no logs or server information.
 
-In terms of runtime performance (with **2 cores and 7 GB RAM**) over three 30 second connections hyper responded to on average **74,563** requests per second on the index route on the above code. Which is incredible quick!
+In terms of runtime performance over three 30 second connections Hyper responded to on average **74,563** requests per second on the index route on the above code. Which is incredible quick!
 
 ## Rocket
 
 Rocket is a "web framework for Rust with a focus on ease-of-use, expressibility, and speed". It has **17.4k** github stars and **1.7M** crates downloads. Rocket internally uses Hyper.
 
-For this demo we are using the `0.5.0-rc2` version which builds on Rust stable.
+For this demo we are using the `0.5.0-rc2` version of Rocket[^rocket-deps] which builds on Rust stable.
 
 ```rust
 use rocket::{
@@ -132,7 +139,7 @@ use rocket::{
 };
 use std::sync::atomic::AtomicUsize;
 
-#[derive(Serialize)]
+#[derive(Serialize, Default)]
 #[serde(crate = "rocket::serde")]
 struct AppContext {
     pub counter: AtomicUsize,
@@ -145,13 +152,9 @@ fn rocket() -> _ {
         ..Config::debug_default()
     };
 
-    let context = AppContext {
-        counter: AtomicUsize::new(0),
-    };
-
     rocket::custom(&config)
         .attach(CounterFairing)
-        .manage(context)
+        .manage(AppContext::default())
         .mount("/", routes![hello1, hello2, counter])
 }
 
@@ -192,23 +195,23 @@ fn counter(state: &State<AppContext>) -> Json<&AppContext> {
 }
 ```
 
-In Rocket we describe each endpoint using a function. The `get` macro attribute handles path routing and http method constraint. No need to add early returns for methods and dealing with raw string slices. It takes the declarative approach, `#[get("/hello/<name>")]` is more descriptive than `if let Some(name) = path.strip_prefix("/hello/")`. The functions are attached to the application using `.mount("/", routes![hello1, hello2, counter])`.
+In Rocket we describe each endpoint using a function. The `get` macro attribute handles path routing and http method constraint. No need to add early returns for methods and dealing with raw string slices. It takes the declarative approach, `#[get("/hello/<name>")]` is more descriptive and less verbose than `if let Some(name) = path.strip_prefix("/hello/")`. The functions are registered using `.mount("/", routes![hello1, hello2, counter])`.
 
-The application can have a state defined here:
+The application has a state defined here:
 
 ```rust
-#[derive(Serialize)]
+#[derive(Serialize, Default)]
 #[serde(crate = "rocket::serde")]
 struct AppContext {
     pub counter: AtomicUsize,
 }
 ```
 
-And it can be registered using `.manage(context)`. Rocket re-exports the serialization library serde so using `#[derive(Serialize)]` generates automatic serialization for the counter state, so no hand writing the serialization code unlike first method
+And it is created and registered using `.manage(AppContext::default())`. Rocket re-exports the serialization library serde so we can use `#[derive(Serialize)]` to generate serialization logic for the counter state, so no hand writing the serialization code unlike first method.
 
-The functions can just return `String`s or `str` slices and Rocket handles it automatically. Rocket also comes with a Json return type and reusing the fact that `AppContext` implements `Serialize` we can freely build a Json response from it. The `Json` return handles the `Content-Type` header automatically for us.
+In Rocket endpoint functions can just return `String` or `str` slices and Rocket handles it automatically. Rocket also comes with a `Json` return type and reusing the fact that `AppContext` implements `Serialize` we can freely build a `Json` response from it. The `Json` structure handles setting the `Content-Type` header automatically for us.
 
-Rocket has a middleware implementation which it calls "fairings". In the example a it defines a `CounterFairing` which on every request modifies the counter state. The initialization code is really slim with some definitions and a returning a Rocket application from the main function annotated with `#[launch]`. Rocket also has really nice built in logs which are great for development.
+Rocket has a middleware implementation which it calls ["fairings"](https://rocket.rs/v0.5-rc/guide/fairings/#fairings). In the example it defines a `CounterFairing` which on every request modifies the counter state. The initialization code is really slim, it sets up a config and a Rocket structure is created using a builder pattern. Annotating the main function with `#[launch]` helps Rocket find the entry point and abstracts how the server is span up. Rocket also has really nice built in logs which are great for development.
 
 <p align="center">
   <img
@@ -221,11 +224,15 @@ Rocket has a middleware implementation which it calls "fairings". In the example
 
 ### Rocket Verdict
 
-Since Rocket has more dependencies, requires more macro expansion and needs to pull in all the routes it takes a bit longer build with **141.9s** (2m 21.9s) on cold start with release builds taking **147.0s** (2m 27.0s). Incremental builds are still fast taking **3.3s**.
+Since Rocket has more dependencies and requires more macro expansion it takes a bit longer build taking **141.9s** (2m 21.9s) on a cold start to compile. A release builds on top of debug artefact takes **147.0s** (2m 27.0s) to compile. Incremental builds are still fast taking **3.3s** to compile after a small change to the response of a endpoint.
 
-Using the same benchmark as hyper, on average Rocket returned **43,899** requests per second in a release build with the logging disabled - about **60%** of hyper's throughput.
+Using the same benchmark as Hyper, on average Rocket returned **43,899** requests per second in a release build with the logging disabled - roughly **60%** of Hyper's throughput.
 
 ## Conclusion
+
+Writing both of theses examples were fun to build and there weren't any frustrations or problems using them. Both are plenty fast for performance to be a concern.
+
+Rockets documentation is very good and explanatory. All of Hyper's api is well documented on its [docs.rs page](https://docs.rs/hyper/latest/hyper/). Both libraries are actively developed with many commits and pull requests made in the last month.
 
 Do you prefer the control and speed of Hyper or prefer the expressiveness of Rocket?
 
@@ -234,3 +241,11 @@ Do you prefer the control and speed of Hyper or prefer the expressiveness of Roc
 Deploying and managing your Rust web apps can be an expensive, anxious and time consuming process.
 
 If you want a batteries included and ops-free experience, [try out Shuttle](https://docs.rs/shuttle-service/latest/shuttle_service/).
+
+<hr styles="margin-top: 10px"/>
+
+[^profile-machine]: The build and request profile machine is a vm with 2 cores and 7 GB RAM. Take the numbers with a grain of salt
+
+[^hyper-deps]: The dependencies for building the project `hyper = { version = "0.14", features = ["server", "tcp", "http1"] }` and `tokio = { version = "1.18.2", features = ["rt", "macros", "rt-multi-thread"] }`
+
+[^rocket-deps]: The dependencies for building the project `rocket = { version = "0.5.0-rc.2", features = ["json"] }`

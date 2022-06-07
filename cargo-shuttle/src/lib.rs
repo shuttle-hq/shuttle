@@ -220,7 +220,8 @@ impl Shuttle {
         let cargo_doc = read_to_string(cargo_path.clone())?.parse::<Document>()?;
         let current_shuttle_version = &cargo_doc["dependencies"]["shuttle-service"]["version"];
         let service_semver = Version::parse(current_shuttle_version.as_str().unwrap())?;
-        let server_semver = VersionReq::parse(&client::shuttle_version(self.ctx.api_url()).await?)?;
+        let server_version = client::shuttle_version(self.ctx.api_url()).await?;
+        let server_semver = VersionReq::parse(&server_version)?;
 
         if server_semver.matches(&service_semver) {
             Ok(())

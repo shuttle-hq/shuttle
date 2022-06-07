@@ -3,7 +3,7 @@ services:
   app:
     build:
       context: .
-      dockerfile: Dockerfile.dev
+      dockerfile: api/Containerfile.dev
     ports:
       - "8001:8001"
       - "8000:8000"

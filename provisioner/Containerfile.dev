@@ -12,7 +12,6 @@ RUN cargo install cargo-chef
 
 FROM chef AS planner
 COPY . .
-COPY ./docker/config.toml $CARGO_HOME/config.toml
 RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS builder

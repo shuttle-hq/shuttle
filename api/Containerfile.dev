@@ -11,7 +11,7 @@ RUN cargo install cargo-chef
 
 FROM chef AS planner
 COPY . .
-COPY ./docker/config.toml $CARGO_HOME/config.toml
+COPY ./api/docker/config.toml $CARGO_HOME/config.toml
 RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS builder
@@ -27,7 +27,7 @@ COPY --from=builder /app/service /app/service
 COPY --from=builder /app/common /app/common
 COPY --from=builder /app/codegen /app/codegen
 
-COPY docker/config.toml $CARGO_HOME/config.toml
-COPY docker/entrypoint.sh /bin/entrypoint.sh
-COPY docker/supervisord.conf /usr/share/supervisord/supervisord.conf
+COPY api/docker/config.toml $CARGO_HOME/config.toml
+COPY api/docker/entrypoint.sh /bin/entrypoint.sh
+COPY api/docker/supervisord.conf /usr/share/supervisord/supervisord.conf
 ENTRYPOINT ["/bin/entrypoint.sh"]

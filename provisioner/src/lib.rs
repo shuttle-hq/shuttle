@@ -24,7 +24,7 @@ impl MyProvisioner {
                 .min_connections(4)
                 .max_connections(12)
                 .connect_timeout(Duration::from_secs(60))
-                .connect_lazy(&uri)?,
+                .connect_lazy(uri)?,
         })
     }
 

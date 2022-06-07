@@ -172,7 +172,7 @@ impl Deployment {
                         Ok((handle, so)) => {
                             debug!("{}: factory phase DONE", meta.project);
                             self.meta.write().await.database_deployment =
-                                factory.to_database_info();
+                                factory.into_database_info();
 
                             // Remove stale active deployments
                             if let Some(stale_id) = context.router.promote(meta.host, meta.id).await

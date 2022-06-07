@@ -220,19 +220,13 @@ impl Shuttle {
         let cargo_doc = read_to_string(cargo_path.clone())?.parse::<Document>()?;
         let current_shuttle_version = &cargo_doc["dependencies"]["shuttle-service"]["version"];
         let service_semver = Version::parse(current_shuttle_version.as_str().unwrap())?;
-        let mut server_version = String::new();
-
-        client::shuttle_version(self.ctx.api_url())
-            .await
-            .map(|response| server_version = response)?;
-
-        let server_semver = VersionReq::parse(&server_version)?;
+        let server_semver = VersionReq::parse(&client::shuttle_version(self.ctx.api_url()).await?)?;
 
         if server_semver.matches(&service_semver) {
             Ok(())
         } else {
             Err(anyhow!(
-                "Update your shuttle-version to {}",
+                "Your shuttle_service version is outdated. Update your shuttle_service version to {} and try to deploy again",
                 &server_version,
             ))
         }

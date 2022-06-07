@@ -140,10 +140,9 @@ impl GlobalConfig {
 }
 
 /// Project-local config for things like customizing project name
-#[derive(Deserialize, Serialize, Default, Debug)]
+#[derive(Deserialize, Serialize, Default)]
 pub struct ProjectConfig {
     pub name: Option<ProjectName>,
-    // pub working_directory: PathBuf,
 }
 
 pub type SecretsConfig = HashMap<String, String>;
@@ -322,7 +321,7 @@ impl RequestContext {
         if !project.exists() {
             project.replace(ProjectConfig::default());
         } else {
-            println!("found a local Shuttle.toml");
+            trace!("found a local Shuttle.toml");
             project.open()?;
         }
 
@@ -344,7 +343,6 @@ impl RequestContext {
                 config.name = Some(find_crate_name(&project_args.working_directory)?);
             }
         };
-        println!("{:#?}", config);
         Ok(project)
     }
 

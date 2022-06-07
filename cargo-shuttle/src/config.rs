@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::env::current_dir;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -143,6 +144,7 @@ impl GlobalConfig {
 #[derive(Deserialize, Serialize, Default)]
 pub struct ProjectConfig {
     pub name: Option<ProjectName>,
+    pub working_directory: PathBuf,
 }
 
 pub type SecretsConfig = HashMap<String, String>;
@@ -294,7 +296,7 @@ impl RequestContext {
     }
 
     pub fn get_local_config(
-        project_args: &ProjectArgs,
+        project_args: &ProjectArgs
     ) -> Result<Config<LocalConfigManager, ProjectConfig>> {
         let local_manager =
             LocalConfigManager::new(&project_args.working_directory, "Shuttle.toml".to_string());
@@ -307,7 +309,24 @@ impl RequestContext {
             project.open()?;
         }
 
+        pub fn find_root_directory(dir: &Path) -> Option<PathBuf> {
+            for ancestor in dir.ancestors() {
+                if ancestor.join("Cargo.toml").exists() {
+                    return Some(ancestor.to_path_buf());
+                }
+            }
+            None
+        }
+
         let config = project.as_mut().unwrap();
+        let possible_root_directory_path = find_root_directory(&current_dir().unwrap());
+
+        if possible_root_directory_path == None {
+            panic!("Shuttle.toml not found.");
+        } else if possible_root_directory_path.is_some() {
+            config.working_directory = possible_root_directory_path.unwrap();
+        }
+        
         match (&project_args.name, &config.name) {
             // Command-line name parameter trumps everything
             (Some(name_from_args), _) => {
@@ -394,7 +413,6 @@ impl RequestContext {
             .unwrap_or_default()
     }
 }
-
 #[cfg(test)]
 mod tests {
     use std::{path::PathBuf, str::FromStr};

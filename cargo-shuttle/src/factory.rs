@@ -176,7 +176,7 @@ impl LocalFactory {
 
             if let Some(id) = info.id.as_ref() {
                 match layers.iter_mut().find(|item: &&mut CreateImageInfo| {
-                    item.id.is_some() && item.id.as_deref().unwrap() == id
+                    item.id.as_deref() == Some(id)
                 }) {
                     Some(item) => *item = info,
                     None => layers.push(info),

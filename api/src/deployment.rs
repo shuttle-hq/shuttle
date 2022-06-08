@@ -10,6 +10,7 @@ use anyhow::{anyhow, Context as AnyhowContext};
 use chrono::{DateTime, Utc};
 use futures::prelude::*;
 use libloading::Library;
+use proto::provisioner::provisioner_client::ProvisionerClient;
 use rocket::data::ByteUnit;
 use rocket::{tokio, Data};
 use shuttle_common::project::ProjectName;
@@ -21,10 +22,11 @@ use shuttle_service::logger::Log;
 use shuttle_service::ServeHandle;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::{mpsc, RwLock};
+use tonic::transport::{Channel, Endpoint};
 
 use crate::build::Build;
 use crate::router::Router;
-use crate::{database, BuildSystem, ShuttleFactory};
+use crate::{BuildSystem, ShuttleFactory};
 
 // This controls the maximum number of deploys an api instance can run
 // This is mainly needed because tokio::task::spawn_blocking keeps an internal pool for the number of blocking threads
@@ -105,12 +107,7 @@ impl Deployment {
 
     /// Tries to advance the deployment one stage. Does nothing if the deployment
     /// is in a terminal state.
-    pub(crate) async fn advance(
-        &self,
-        context: &Context,
-        db_context: &database::Context,
-        run_logs_tx: UnboundedSender<Log>,
-    ) {
+    pub(crate) async fn advance(&self, context: &Context, run_logs_tx: UnboundedSender<Log>) {
         {
             trace!("waiting to get write on the state");
             let meta = self.meta().await;
@@ -160,9 +157,12 @@ impl Deployment {
                     );
 
                     debug!("{}: factory phase", meta.project);
-                    let db_state = database::State::new(&meta.project, db_context);
 
-                    let mut factory = ShuttleFactory::new(db_state);
+                    let mut factory = ShuttleFactory::new(
+                        context.provisioner_client.clone(),
+                        context.provisioner_address.clone(),
+                        meta.project.clone(),
+                    );
                     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
                     match loader.load(&mut factory, addr, run_logs_tx, meta.id).await {
                         Err(e) => {
@@ -172,7 +172,7 @@ impl Deployment {
                         Ok((handle, so)) => {
                             debug!("{}: factory phase DONE", meta.project);
                             self.meta.write().await.database_deployment =
-                                factory.to_database_info();
+                                factory.into_database_info();
 
                             // Remove stale active deployments
                             if let Some(stale_id) = context.router.promote(meta.host, meta.id).await
@@ -289,6 +289,7 @@ pub(crate) struct DeploymentSystem {
     job_queue: JobQueue,
     router: Arc<Router>,
     fqdn: String,
+    pub(crate) provisioner_address: String,
 }
 
 const JOB_QUEUE_SIZE: usize = 200;
@@ -298,11 +299,7 @@ struct JobQueue {
 }
 
 impl JobQueue {
-    async fn new(
-        context: Context,
-        db_context: database::Context,
-        run_logs_tx: UnboundedSender<Log>,
-    ) -> Self {
+    async fn new(context: Context, run_logs_tx: UnboundedSender<Log>) -> Self {
         let (send, mut recv) = mpsc::channel::<Arc<Deployment>>(JOB_QUEUE_SIZE);
 
         log::debug!("starting job processor task");
@@ -316,7 +313,7 @@ impl JobQueue {
                 while !deployment.deployment_finished().await {
                     let run_logs_tx = run_logs_tx.clone();
 
-                    deployment.advance(&context, &db_context, run_logs_tx).await;
+                    deployment.advance(&context, run_logs_tx).await;
                 }
 
                 debug!("ended deployment job for id: '{}'", id);
@@ -342,10 +339,17 @@ pub(crate) struct Context {
     router: Arc<Router>,
     build_system: Box<dyn BuildSystem>,
     deployments: Arc<RwLock<Deployments>>,
+    provisioner_client: ProvisionerClient<Channel>,
+    provisioner_address: String,
 }
 
 impl DeploymentSystem {
-    pub(crate) async fn new(build_system: Box<dyn BuildSystem>, fqdn: String) -> Self {
+    pub(crate) async fn new(
+        build_system: Box<dyn BuildSystem>,
+        fqdn: String,
+        provisioner_address: String,
+        provisioner_port: Port,
+    ) -> Self {
         let router: Arc<Router> = Default::default();
         let (tx, mut rx) = mpsc::unbounded_channel::<Log>();
 
@@ -365,17 +369,25 @@ impl DeploymentSystem {
             }
         });
 
+        let provisioner_uri = Endpoint::try_from(format!(
+            "http://{}:{}",
+            provisioner_address, provisioner_port
+        ))
+        .expect("provisioner uri to be valid");
+
+        let provisioner_client = ProvisionerClient::connect(provisioner_uri)
+            .await
+            .expect("failed to connect to provisioner");
+
         let context = Context {
             router: router.clone(),
             build_system,
             deployments: deployments.clone(),
+            provisioner_client,
+            provisioner_address: provisioner_address.clone(),
         };
 
-        let db_context = database::Context::new()
-            .await
-            .expect("failed to create lazy connection to database");
-
-        let job_queue = JobQueue::new(context, db_context, tx).await;
+        let job_queue = JobQueue::new(context, tx).await;
 
         debug!("loading deployments into job processor");
         for deployment in deployments.read().await.values() {
@@ -388,6 +400,7 @@ impl DeploymentSystem {
             job_queue,
             router,
             fqdn,
+            provisioner_address,
         }
     }
 

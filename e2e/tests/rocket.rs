@@ -4,7 +4,7 @@ mod helpers;
 
 #[test]
 fn hello_world() {
-    let client = helpers::Api::new_docker("hello-world", Color::Green);
+    let client = helpers::Services::new_docker("hello-world", Color::Green);
     client.deploy("../examples/rocket/hello-world");
 
     let request_text = client
@@ -20,7 +20,7 @@ fn hello_world() {
 
 #[test]
 fn postgres() {
-    let client = helpers::Api::new_docker("postgres", Color::Blue);
+    let client = helpers::Services::new_docker("postgres", Color::Blue);
     client.deploy("../examples/rocket/postgres");
 
     let add_response = client

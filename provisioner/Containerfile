@@ -1,4 +1,6 @@
 FROM rust:buster as chef
+RUN apt-get update &&\
+    apt-get install -y protobuf-compiler
 RUN cargo install cargo-chef
 WORKDIR app
 
@@ -15,12 +17,12 @@ FROM chef AS builder
 COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --recipe-path recipe.json
 COPY . .
-RUN cargo build --bin api
+RUN cargo build --bin provisioner
 
 FROM runtime
-COPY --from=builder /app/target/debug/api /usr/local/bin/shuttle-backend
+COPY --from=builder /app/target/debug/provisioner /usr/local/bin/shuttle-provisioner
 
-COPY docker/entrypoint.sh /bin/entrypoint.sh
-COPY docker/wait-for-pg-then /usr/bin/wait-for-pg-then
-COPY docker/supervisord.conf /usr/share/supervisord/supervisord.conf
+COPY provisioner/docker/entrypoint.sh /bin/entrypoint.sh
+COPY provisioner/docker/wait-for-pg-then /usr/bin/wait-for-pg-then
+COPY provisioner/docker/supervisord.conf /usr/share/supervisord/supervisord.conf
 ENTRYPOINT ["/bin/entrypoint.sh"]

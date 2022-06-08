@@ -84,8 +84,8 @@ impl Deployment {
         let meta = DeploymentMeta::built(fqdn, project_name);
         let state = DeploymentState::built(Build {
             so_path,
-            initial_secrets: Default::default(),
-        }); // TODO
+            initial_secrets: BTreeMap::new(),
+        });
         Ok(Self::new(meta, state))
     }
 

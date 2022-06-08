@@ -15,13 +15,16 @@ use hyper::Client as HyperClient;
 use sqlx::migrate::MigrateDatabase;
 use sqlx::sqlite::{Sqlite, SqlitePool};
 use sqlx::types::Json as SqlxJson;
-use sqlx::{query, Row, Error as SqlxError};
-use tokio::sync::{Mutex, mpsc::{channel, Receiver, Sender}};
+use sqlx::{query, Error as SqlxError, Row};
+use tokio::sync::{
+    mpsc::{channel, Receiver, Sender},
+    Mutex,
+};
 
 use super::{Context, Error, ProjectName};
-use crate::project::{self, Project};
-use crate::{ErrorKind, Refresh, State, EndState, Service};
 use crate::args::Args;
+use crate::project::{self, Project};
+use crate::{EndState, ErrorKind, Refresh, Service, State};
 
 impl From<SqlxError> for Error {
     fn from(err: SqlxError) -> Self {
@@ -40,7 +43,7 @@ pub struct Work<W = Project> {
 #[async_trait]
 impl<'c, W> State<'c> for Work<W>
 where
-    W: State<'c>
+    W: State<'c>,
 {
     type Next = Work<W::Next>;
 
@@ -50,14 +53,14 @@ where
         Ok(Work::<W::Next> {
             project_name: self.project_name,
             account_name: self.account_name,
-            work: self.work.next(ctx).await?
+            work: self.work.next(ctx).await?,
         })
     }
 }
 
 impl<'c, W> EndState<'c> for Work<W>
 where
-    W: EndState<'c>
+    W: EndState<'c>,
 {
     fn is_done(&self) -> bool {
         self.work.is_done()
@@ -72,11 +75,15 @@ pub struct Worker<Svc, W> {
 
 impl<Svc, W> Worker<Svc, W>
 where
-    W: Send
+    W: Send,
 {
     pub fn new(service: Svc) -> Self {
         let (send, recv) = channel(256);
-        Self { service, send, recv }
+        Self {
+            service,
+            send,
+            recv,
+        }
     }
 }
 
@@ -89,7 +96,7 @@ impl<Svc, W> Worker<Svc, W> {
 impl<Svc, W> Worker<Svc, W>
 where
     Svc: for<'c> Service<'c, State = W, Error = Error>,
-    W: Debug + Send + for<'c> EndState<'c>
+    W: Debug + Send + for<'c> EndState<'c>,
 {
     pub async fn start(mut self) -> Result<(), Error> {
         while let Some(work) = self.recv.recv().await {
@@ -99,11 +106,11 @@ where
             let next = work.next(&context).await.unwrap();
 
             match self.service.update(&next).await {
-                Ok(_) => {},
+                Ok(_) => {}
                 Err(err) => info!("failed to update a state: {}\nstate: {:?}", err, next),
             };
 
-            if ! next.is_done() {
+            if !next.is_done() {
                 // Safety: Should only panic if `self.recv` has
                 // hanged, which at this point can't happen
                 self.send.send(next).await.unwrap();
@@ -118,7 +125,7 @@ pub struct GatewayService {
     hyper: HyperClient<HttpConnector, Body>,
     db: SqlitePool,
     sender: Mutex<Option<Sender<Work>>>,
-    args: Args
+    args: Args,
 }
 
 const DB_PATH: &'static str = "gateway.sqlite";
@@ -161,7 +168,7 @@ impl GatewayService {
             hyper,
             db,
             sender: Mutex::new(None),
-            args
+            args,
         });
 
         let worker = Worker::new(Arc::clone(&service));
@@ -185,16 +192,17 @@ impl GatewayService {
             work,
         } in service.iter_projects().await
         {
-            let work = work.refresh(&service.context()).await.unwrap();
-            service
-                .send(Work {
-                    project_name,
-                    work,
-                    account_name,
-                })
-                .await
-                .ok()
-                .expect("failed to queue work");
+            match work.refresh(&service.context()).await {
+                Ok(work) => service
+                    .send(Work {
+                        project_name,
+                        work,
+                        account_name,
+                    })
+                    .await
+                    .expect("failed to queue work at startup"),
+                Err(err) => error!("could not refresh state for user=`{account_name}` project=`{project_name}`: {}. Skipping it for now.", err)
+            }
         }
 
         service
@@ -207,7 +215,10 @@ impl GatewayService {
 
     pub async fn send(&self, work: Work) -> Result<(), Error> {
         if let Some(sender) = self.sender.lock().await.as_ref() {
-            Ok(sender.send(work).await.or_else(|_| Err(ErrorKind::Internal))?)
+            Ok(sender
+                .send(work)
+                .await
+                .or_else(|_| Err(ErrorKind::Internal))?)
         } else {
             Err(Error::kind(ErrorKind::Internal))
         }
@@ -219,11 +230,7 @@ impl GatewayService {
         route: String,
         req: Request<Body>,
     ) -> Result<Response<Body>, Error> {
-        let target_ip = self
-            .find_project(project_name)
-            .await?
-            .target_ip()?
-            .unwrap(); // TODO handle
+        let target_ip = self.find_project(project_name).await?.target_ip()?.unwrap(); // TODO handle
         let resp = hyper_reverse_proxy::call(
             "127.0.0.1".parse().unwrap(),
             &format!("http://{}:{}/{}", target_ip, 8001, route),
@@ -400,11 +407,16 @@ impl<'c> Service<'c> for Arc<GatewayService> {
         GatewayContext {
             docker: &self.docker,
             hyper: &self.hyper,
-            args: &self.args
+            args: &self.args,
         }
     }
 
-    async fn update(&self, Work { project_name, work, .. }: &Self::State) -> Result<(), Self::Error> {
+    async fn update(
+        &self,
+        Work {
+            project_name, work, ..
+        }: &Self::State,
+    ) -> Result<(), Self::Error> {
         self.update_project(project_name, work).await
     }
 }
@@ -412,7 +424,7 @@ impl<'c> Service<'c> for Arc<GatewayService> {
 pub struct GatewayContext<'c> {
     docker: &'c Docker,
     hyper: &'c HyperClient<HttpConnector, Body>,
-    args: &'c Args
+    args: &'c Args,
 }
 
 impl<'c> Context<'c> for GatewayContext<'c> {

@@ -6,6 +6,7 @@ use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use lazy_static::lazy_static;
 use anyhow::{anyhow, Context as AnyhowContext};
 use chrono::{DateTime, Utc};
 use futures::prelude::*;
@@ -19,6 +20,7 @@ use shuttle_common::{
 use shuttle_service::loader::Loader;
 use shuttle_service::logger::Log;
 use shuttle_service::{ServeHandle, GetResource, Factory, SecretStore};
+use tokio::runtime::Runtime;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::{mpsc, RwLock};
 
@@ -34,12 +36,15 @@ use crate::{database, BuildSystem, ShuttleFactory};
 // https://docs.rs/tokio/latest/tokio/runtime/struct.Builder.html#method.max_blocking_threads
 pub const MAX_DEPLOYS: usize = 512;
 
+lazy_static! {
+    static ref DB_ACCESS_RUNTIME: Arc<Runtime> = Arc::new(Runtime::new().unwrap());
+}
+
 /// Inner struct of a deployment which holds the deployment itself
 /// and the some metadata
 pub(crate) struct Deployment {
     meta: Arc<RwLock<DeploymentMeta>>,
     state: RwLock<DeploymentState>,
-    runtime: tokio::runtime::Runtime,
 }
 
 impl Deployment {
@@ -47,7 +52,6 @@ impl Deployment {
         Self {
             meta: Arc::new(RwLock::new(meta)),
             state: RwLock::new(state),
-            runtime: tokio::runtime::Runtime::new().unwrap(),
         }
     }
 
@@ -55,7 +59,6 @@ impl Deployment {
         Self {
             meta: Arc::new(RwLock::new(DeploymentMeta::queued(fqdn, project))),
             state: RwLock::new(DeploymentState::queued(crate_bytes)),
-            runtime: tokio::runtime::Runtime::new().unwrap(),
         }
     }
 
@@ -171,7 +174,7 @@ impl Deployment {
                     let mut factory = ShuttleFactory::new(db_state);
 
                     if !loaded.initial_secrets.is_empty() {
-                        let db_pool = (&mut factory as &mut dyn Factory).get_resource(&self.runtime).await.unwrap(); // TODO
+                        let db_pool = (&mut factory as &mut dyn Factory).get_resource(&DB_ACCESS_RUNTIME).await.unwrap(); // TODO
 
                         for (key, value) in loaded.initial_secrets.iter() {
                             db_pool.set_secret(key, value).await.unwrap();

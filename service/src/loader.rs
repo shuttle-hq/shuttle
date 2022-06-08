@@ -74,11 +74,27 @@ impl Loader {
             .await
             .unwrap_or(Err(Error::BuildPanic))?;
 
-        // Start service on this side of the FFI
-        // Tokio tasks provide natural `panic` protection so no need for `catch_unwind`
-        let handle = tokio::spawn(async move { service.bind(addr)?.await? });
+        let (send, recv) = tokio::sync::oneshot::channel();
 
-        Ok((handle, self.so))
+        // Start service on this side of the FFI
+        let handle = tokio::spawn(async move {
+            let bound = AssertUnwindSafe(async { service.bind(addr) })
+                .catch_unwind()
+                .await;
+            send.send(bound.is_ok()).unwrap();
+
+            if let Ok(b) = bound {
+                b?.await?
+            } else {
+                Err(anyhow!("panic in `Service::bound`"))
+            }
+        });
+
+        if matches!(recv.await, Ok(true)) {
+            Ok((handle, self.so))
+        } else {
+            Err(Error::BindPanic)
+        }
     }
 }
 

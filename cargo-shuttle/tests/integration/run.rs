@@ -6,6 +6,10 @@ use tokio::time::sleep;
 
 /// creates a `cargo-shuttle` run instance with some reasonable defaults set.
 async fn cargo_shuttle_run(working_directory: &str) -> u16 {
+    let _ = env_logger::builder()
+        .filter_module("cargo_shuttle", log::LevelFilter::Trace)
+        .is_test(true)
+        .try_init();
     let working_directory = canonicalize(working_directory).unwrap();
     let port = pick_unused_port().unwrap();
     let run_args = RunArgs { port };

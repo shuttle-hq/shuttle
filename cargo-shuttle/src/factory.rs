@@ -1,3 +1,4 @@
+use anyhow::Result;
 use async_trait::async_trait;
 use bollard::{
     container::{Config, CreateContainerOptions, StartContainerOptions},
@@ -25,11 +26,11 @@ pub struct LocalFactory {
 }
 
 impl LocalFactory {
-    pub fn new(project: ProjectName) -> Self {
-        Self {
-            docker: Docker::connect_with_local_defaults().expect("to be able to connect to docker"),
+    pub fn new(project: ProjectName) -> Result<Self> {
+        Ok(Self {
+            docker: Docker::connect_with_local_defaults()?,
             project,
-        }
+        })
     }
 }
 
@@ -39,6 +40,7 @@ const PG_IMAGE: &str = "postgres:11";
 #[async_trait]
 impl Factory for LocalFactory {
     async fn get_sql_connection_string(&mut self) -> Result<String, shuttle_service::Error> {
+        trace!("getting sql string for project '{}'", self.project);
         let container_name = format!("shuttle_{}_postgres", self.project);
 
         let container = match self.docker.inspect_container(&container_name, None).await {
@@ -88,7 +90,10 @@ impl Factory for LocalFactory {
                     .await
                     .expect("container to be created")
             }
-            Err(error) => return Err(shuttle_service::Error::Custom(CustomError::new(error))),
+            Err(error) => {
+                error!("got unexpected error while inspecting docker container: {error}");
+                return Err(shuttle_service::Error::Custom(CustomError::new(error)));
+            }
         };
 
         let port = container
@@ -124,8 +129,8 @@ impl Factory for LocalFactory {
 
         let db_info = DatabaseReadyInfo::new(
             "postgres".to_string(),
-            "postgres".to_string(),
             PG_PASSWORD.to_string(),
+            "postgres".to_string(),
             port,
         );
 

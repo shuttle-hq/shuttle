@@ -12,21 +12,36 @@
 //! Shuttle is an open-source app platform that uses traits and annotations to configure your backend deployments.
 //!
 //! ## Usage
+//! Start by installing the [`cargo shuttle`](https://docs.rs/crate/cargo-shuttle/latest) subcommand by runnning the following in a terminal:
 //!
-//! Depend on `shuttle-service` in `Cargo.toml`:
-//!
-//! ```toml
-//! shuttle-service = { version = "0.3", features = ["web-rocket"] }
+//! ```bash
+//! $ cargo install cargo-shuttle
 //! ```
 //!
-//! and make sure your crate has a `cdylib` output target:
+//! Now that shuttle is installed, you can create your first project using:
+//!
+//! ```bash
+//! cargo shuttle init my-rocket-app
+//! ```
+//!
+//! By looking at the `Cargo.toml` file of the created project you will see the crate has a `cdylib` type.
+//! This is because all shuttle projects are loaded by shuttle during runtime as dynamic libraries.
+//! Thus, you can convert any library crate to a shuttle project by adding these lines to `Cargo.toml`.
 //!
 //! ```toml
 //! [lib]
 //! crate-type = ["cdylib"]
 //! ```
 //!
-//! See the [shuttle_service::main][main] macro for more information on supported services - like Axum. Here's a simple example using [rocket](https://docs.rs/rocket) to get you started:
+//! Another piece needed for a shuttle project is the `shuttle-service` dependency.
+//! Go ahead and update the `shuttle-service` dependency inside `Cargo.toml` to prepare this crate as a rocket project
+//! by adding the `web-rocket` feature on the `shuttle-service` dependency.
+//!
+//! ```toml
+//! shuttle-service = { version = "0.3", features = ["web-rocket"] }
+//! ```
+//!
+//! Now replace `src/lib.rs` with the following content.
 //!
 //! ```rust,no_run
 //! #[macro_use]
@@ -47,17 +62,12 @@
 //! }
 //! ```
 //!
-//! Complete examples can be found [in the repository](https://github.com/getsynth/shuttle/tree/main/examples/rocket).
+//! See the [shuttle_service::main][main] macro for more information on supported services - like Axum.
+//! Or look at more complete examples [in the repository](https://github.com/getsynth/shuttle/tree/main/examples), but
+//! take note that the examples my update before official releases.
 //!
 //! ## Running locally
-//! To test your app locally before deploying, use the [`cargo shuttle`](https://docs.rs/crate/cargo-shuttle/latest) subcommand.
-//! To install shuttle, run the following in a terminal:
-//!
-//! ```bash
-//! $ cargo install cargo-shuttle
-//! ```
-//!
-//! After the install, run the following to run your app locally:
+//! To test your app locally before deploying, use:
 //!
 //! ```bash
 //! $ cargo shuttle run
@@ -72,8 +82,8 @@
 //!
 //! ## Deploying
 //!
-//! You can deploy your service with the [`cargo shuttle`](https://docs.rs/crate/cargo-shuttle/latest) subcommand.
-//! Once installed, you will need to authenticate with the shuttle service first using:
+//! You can deploy your service with the [`cargo shuttle`](https://docs.rs/crate/cargo-shuttle/latest) subcommand too.
+//! But, you will need to authenticate with the shuttle service first using:
 //!
 //! ```bash
 //! $ cargo shuttle login
@@ -90,7 +100,7 @@
 //! Your service will immediately be available at `{crate_name}.shuttleapp.rs`. For example:
 //!
 //! ```bash
-//! $ curl https://hello-world-rocket-app.shuttleapp.rs/hello
+//! $ curl https://my-rocket-app.shuttleapp.rs/hello
 //! Hello, world!
 //! ```
 //!
@@ -98,11 +108,13 @@
 //!
 //! Here is a quick example to deploy a service which uses a postgres database and [sqlx](http://docs.rs/sqlx):
 //!
-//! Depend on `shuttle-service` in `Cargo.toml`:
+//! Add the `sqlx-postgres` feature to the `shuttle-service` dependency inside `Cargo.toml`:
 //!
 //! ```toml
 //! shuttle-service = { version = "0.3", features = ["web-rocket", "sqlx-postgres"] }
 //! ```
+//!
+//! Now update the `#[shuttle_service::main]` function to take in a `PgPool`:
 //!
 //! ```rust,no_run
 //! #[macro_use]
@@ -129,21 +141,15 @@
 //! }
 //! ```
 //!
+//! For a local run, shuttle will automatically provision a Postgres instance inside a [Docker](https://www.docker.com/) container on your machine and connect it to the `PgPool`.
+//!
+//! For deploys, shuttle will provision a database for your application and connect it to the `PgPool` on your behalf.
+//!
 //! To learn more about shuttle managed services, see [shuttle_service::main][main#getting-shuttle-managed-services].
 //!
 //! ## Configuration
 //!
 //! The `cargo shuttle` command can be customised by creating a `Shuttle.toml` in the same location as your `Cargo.toml`.
-//!
-//! ## Getting API keys
-//!
-//! After you've installed the [cargo-shuttle](https://docs.rs/crate/cargo-shuttle/latest) command, run:
-//!
-//! ```bash
-//! $ cargo shuttle login
-//! ```
-//!
-//! this will open a browser window and prompt you to connect using your GitHub account.
 //!
 //! ##### Change the name of your service
 //!
@@ -160,6 +166,16 @@
 //! ```bash
 //! cargo shuttle deploy --name=$PROJECT_NAME
 //! ```
+//!
+//! ## Getting API keys
+//!
+//! After you've installed the [cargo-shuttle](https://docs.rs/crate/cargo-shuttle/latest) command, run:
+//!
+//! ```bash
+//! $ cargo shuttle login
+//! ```
+//!
+//! this will open a browser window and prompt you to connect using your GitHub account.
 //!
 //! ## We're in alpha 🤗
 //!

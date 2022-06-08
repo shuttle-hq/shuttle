@@ -2978,6 +2978,8 @@ version = "0.1.0"
 dependencies = [
  "clap 3.1.18",
  "ctor",
+ "lazy_static",
+ "portpicker",
  "prost",
  "proto",
  "rand 0.8.5",

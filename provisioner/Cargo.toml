@@ -21,6 +21,8 @@ proto = { path = "../proto" }
 
 [dev-dependencies]
 ctor = "0.1"
+lazy_static = "1.4"
+portpicker = "0.1"
 
 [build-dependencies]
 tonic-build = "0.7"

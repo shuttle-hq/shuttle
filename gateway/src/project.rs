@@ -1,6 +1,7 @@
 use std::fmt::Formatter;
 use std::net::{IpAddr, Ipv4Addr};
 use std::convert::Infallible;
+use std::time::Duration;
 
 use bollard::container::{
     Config,
@@ -20,12 +21,12 @@ use serde::{
     Deserialize,
     Serialize
 };
-
-use crate::ErrorKind;
+use tokio::time;
 
 use super::{
     Context,
     Error,
+    ErrorKind,
     ProjectName,
     Refresh,
     State,
@@ -79,32 +80,27 @@ impl_from_variant!(Project:
                    ProjectStopped => Stopped,
                    ProjectError => Errored);
 
-#[derive(Debug)]
-pub struct DestroyError {
-    error: Error
-}
-
-impl std::fmt::Display for DestroyError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        self.error.fmt(f)
-    }
-}
-
-impl std::error::Error for DestroyError {}
-
 impl Project {
     pub async fn stop<'c, C: Context<'c>>(self, ctx: &C) -> Result<Self, Error> {
         match self {
+            Self::Creating(_) => {
+                Err(Error::custom(ErrorKind::InvalidOperation, "tried to stop a project that was not ready"))
+            }
+            Self::Ready(ProjectReady { container, .. }) => {
+                Ok(Self::Stopped(ProjectStopped {
+                    container
+                }))
+            }
             Self::Started(ProjectStarted { container, .. }) => {
                 ctx.docker()
                     .stop_container(container.id.as_ref().unwrap(), None)
-                    .await
-                    .unwrap();
+                    .await?;
                 Ok(Self::Stopped(ProjectStopped {
-                    container: container.refresh(ctx).await.unwrap()
+                    container: container.refresh(ctx).await?
                 }))
             }
-            _otherwise => todo!()
+            Self::Stopped(stopped) => Ok(Self::Stopped(stopped)),
+            Self::Errored(err) => Ok(Self::Errored(err))
         }
     }
 
@@ -127,7 +123,7 @@ impl Project {
         }
     }
 
-    pub async fn destroy<'c, C: Context<'c>>(self, ctx: &C) -> Result<(), DestroyError> {
+    pub async fn destroy<'c, C: Context<'c>>(self, ctx: &C) -> Result<(), Error> {
         match self {
             Self::Ready(ProjectReady {
                 container: ContainerInspectResponse { id, .. },
@@ -142,11 +138,10 @@ impl Project {
             }) => {
                 ctx.docker()
                     .remove_container(id.as_ref().unwrap(), None)
-                    .await
-                    .unwrap();
+                    .await?;
                 Ok(())
             }
-            _ => todo!()
+            Self::Creating(_) | Self::Errored(_) => Ok(()),
         }
     }
 }
@@ -309,7 +304,7 @@ impl<'c> State<'c> for ProjectReady {
                     Err(err)
                 }
             })?;
-        //let container = self.container.refresh(ctx).await.unwrap();
+        // TODO: sleep while then or else
         let service = Service::from_container(self.container.clone(), ctx);
         Ok(Self::Next {
             container: self.container,
@@ -427,6 +422,14 @@ impl<'c> State<'c> for ProjectStopped {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ProjectError {
     message: String
+}
+
+impl ProjectError {
+    pub fn custom<S: AsRef<str>>(message: S) -> Self {
+        Self {
+            message: message.as_ref().to_string()
+        }
+    }
 }
 
 impl std::fmt::Display for ProjectError {

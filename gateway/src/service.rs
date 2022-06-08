@@ -190,7 +190,7 @@ impl GatewayService {
             project_name,
             account_name,
             work,
-        } in service.iter_projects().await
+        } in service.iter_projects().await.expect("could not list projects")
         {
             match work.refresh(&service.context()).await {
                 Ok(work) => service
@@ -241,17 +241,17 @@ impl GatewayService {
         Ok(resp)
     }
 
-    async fn iter_projects(&self) -> impl Iterator<Item = Work> {
-        query("SELECT * FROM projects")
+    async fn iter_projects(&self) -> Result<impl Iterator<Item = Work>, Error> {
+        let iter = query("SELECT * FROM projects")
             .fetch_all(&self.db)
-            .await
-            .unwrap()
+            .await?
             .into_iter()
             .map(|row| Work {
                 project_name: row.get("project_name"),
                 work: row.get::<SqlxJson<Project>, _>("project_state").0,
                 account_name: row.get("account_name"),
-            })
+            });
+        Ok(iter)
     }
 
     pub async fn find_project(&self, project_name: &ProjectName) -> Result<Project, Error> {
@@ -276,8 +276,7 @@ impl GatewayService {
             .bind(&SqlxJson(project))
             .bind(project_name)
             .execute(&self.db)
-            .await
-            .unwrap();
+            .await?;
         Ok(())
     }
 
@@ -285,10 +284,9 @@ impl GatewayService {
         let key = query("SELECT key FROM accounts WHERE account_name = ?1")
             .bind(account_name)
             .fetch_optional(&self.db)
-            .await
-            .unwrap()
+            .await?
             .map(|row| row.try_get("key").unwrap())
-            .unwrap(); // TODO: account not found
+            .ok_or_else(|| Error::from(ErrorKind::UserNotFound))?;
         Ok(key)
     }
 
@@ -296,8 +294,7 @@ impl GatewayService {
         let name = query("SELECT account_name FROM accounts WHERE key = ?1")
             .bind(key)
             .fetch_optional(&self.db)
-            .await
-            .unwrap()
+            .await?
             .map(|row| row.try_get("account_name").unwrap())
             .ok_or_else(|| Error::from(ErrorKind::UserNotFound))?;
         Ok(name)
@@ -305,7 +302,7 @@ impl GatewayService {
 
     pub async fn user_from_account_name(&self, name: AccountName) -> Result<User, Error> {
         let key = self.key_from_account_name(&name).await?;
-        let projects = self.iter_user_projects(&name).await.collect();
+        let projects = self.iter_user_projects(&name).await?.collect();
         Ok(User {
             name,
             key,
@@ -315,7 +312,7 @@ impl GatewayService {
 
     pub async fn user_from_key(&self, key: Key) -> Result<User, Error> {
         let name = self.account_name_from_key(&key).await?;
-        let projects = self.iter_user_projects(&name).await.collect();
+        let projects = self.iter_user_projects(&name).await?.collect();
         Ok(User {
             name,
             key,
@@ -350,14 +347,14 @@ impl GatewayService {
     async fn iter_user_projects(
         &self,
         AccountName(account_name): &AccountName,
-    ) -> impl Iterator<Item = ProjectName> {
-        query("SELECT project_name FROM projects WHERE account_name = ?1")
+    ) -> Result<impl Iterator<Item = ProjectName>, Error> {
+        let iter = query("SELECT project_name FROM projects WHERE account_name = ?1")
             .bind(account_name)
             .fetch_all(&self.db)
-            .await
-            .unwrap()
+            .await?
             .into_iter()
-            .map(|row| row.try_get::<ProjectName, _>("project_name").unwrap())
+            .map(|row| row.try_get::<ProjectName, _>("project_name").unwrap());
+        Ok(iter)
     }
 
     pub async fn create_project(

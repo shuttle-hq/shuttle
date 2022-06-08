@@ -6,7 +6,7 @@
 // TODO: ~~gateway crate should rewrite the projects -> services route~~
 // TODO: client should create project then push new deployment (refactor endpoint)
 // TODO: ~~rename API crate~~
-// TODO: move common things to the common crate
+// TODO: ~~move common things to the common crate~~
 // TODO: ~~AccountName and ProjectName validation logic?~~
 // TODO: Add some tests (ideas?)
 // TODO: Implement the delete project endpoint to make sure users can
@@ -67,6 +67,8 @@ pub enum ErrorKind {
     Unauthorized,
     UserNotFound,
     ProjectNotFound,
+    InvalidProjectName,
+    InvalidOperation,
     Internal
 }
 
@@ -99,6 +101,13 @@ impl Error {
         }
     }
 
+    pub fn custom<S: AsRef<str>>(kind: ErrorKind, message: S) -> Self {
+        Self {
+            kind,
+            source: Some(Box::new(io::Error::new(io::ErrorKind::Other, message.as_ref().to_string())))
+        }
+    }
+
     pub fn kind(kind: ErrorKind) -> Self {
         Self {
             kind,
@@ -122,6 +131,8 @@ impl IntoResponse for Error {
             ErrorKind::BadHost => (StatusCode::BAD_REQUEST, "the 'Host' header is invalid"),
             ErrorKind::UserNotFound => (StatusCode::NOT_FOUND, "user not found"),
             ErrorKind::ProjectNotFound => (StatusCode::NOT_FOUND, "project not found"),
+            ErrorKind::InvalidProjectName => (StatusCode::BAD_REQUEST, "invalid project name"),
+            ErrorKind::InvalidOperation => (StatusCode::BAD_REQUEST, "the requested operation is invalid"),
             ErrorKind::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
         };
         (status, Json(json!({ "error": error_message }))).into_response()
@@ -160,12 +171,11 @@ impl FromStr for ProjectName {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // TODO: re correct?
         let re = regex::Regex::new("^[a-zA-Z0-9\\-_]{3,64}$").unwrap();
         if re.is_match(s) {
             Ok(Self(s.to_string()))
         } else {
-            todo!()
+            Err(Error::kind(ErrorKind::InvalidProjectName))
         }
     }
 }
@@ -263,7 +273,6 @@ where
     }
 }
 
-// TODO may not want to have Refresh for variants of Project as this may drift OOS
 #[async_trait]
 pub trait Refresh: Sized {
     type Error: StdError;

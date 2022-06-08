@@ -39,6 +39,11 @@ pub struct Loader {
 }
 
 impl Loader {
+    #[allow(dead_code)]
+    pub fn new(service: Box<dyn Service>, so: Library) -> Self {
+        Loader { service, so }
+    }
+
     /// Dynamically load from a `.so` file a value of a type implementing the
     /// [`Service`] trait. Relies on the `.so` library having an ``extern "C"`
     /// function called [`ENTRYPOINT_SYMBOL_NAME`], likely automatically generated

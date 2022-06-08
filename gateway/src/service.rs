@@ -330,14 +330,13 @@ impl GatewayService {
     }
 
     pub async fn is_super_user(&self, account_name: &AccountName) -> Result<bool, Error> {
-        let super_user = query("SELECT super_user FROM accounts WHERE account_name = ?1")
+        query("SELECT super_user FROM accounts WHERE account_name = ?1")
             .bind(account_name)
             .fetch_optional(&self.db)
             .await
             .unwrap()
             .map(|row| row.try_get("super_user").unwrap())
-            .unwrap(); // TODO: user does not exist
-        Ok(super_user)
+            .unwrap_or_default() // defaults to `false` (i.e. not super user)
     }
 
     async fn iter_user_projects(

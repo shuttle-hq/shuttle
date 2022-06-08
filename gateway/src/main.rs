@@ -7,7 +7,12 @@
 // TODO: client should create project then push new deployment (refactor endpoint)
 // TODO: ~~rename API crate~~
 // TODO: move common things to the common crate
-// TODO: AccountName and ProjectName validation logic?
+// TODO: ~~AccountName and ProjectName validation logic?~~
+// TODO: Add some tests (ideas?)
+// TODO: Implement the delete project endpoint to make sure users can
+//       self-serve out of issues
+// TODO: Do a `docker pull` of the target runtime image to use when
+//       starting up
 
 #![allow(warnings)]
 
@@ -146,7 +151,7 @@ impl FromStr for ProjectName {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // TODO: re correct?
-        let re = regex::Regex::new("^[a-zA-Z0-9-_]{3,64}$").unwrap();
+        let re = regex::Regex::new("^[a-zA-Z0-9\-_]{3,64}$").unwrap();
         if re.is_match(s) {
             Ok(Self(s.to_string()))
         } else {

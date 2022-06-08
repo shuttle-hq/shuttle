@@ -212,7 +212,6 @@ impl Refresh for Project {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ProjectCreating {
     project_name: ProjectName,
-    prefix: String,
     initial_key: String,
 }
 
@@ -220,7 +219,6 @@ impl ProjectCreating {
     pub fn new(project_name: ProjectName, prefix: String, initial_key: String) -> Self {
         Self {
             project_name,
-            prefix,
             initial_key
         }
     }
@@ -237,8 +235,10 @@ impl<'c> State<'c> for ProjectCreating {
 
         let initial_key_env = format!("SHUTTLE_INITIAL_KEY={}", self.initial_key);
 
-        let volume_name = format!("{}{}_vol", self.prefix, self.project_name);
-        let container_name = format!("{}{}_run", self.prefix, self.project_name);
+        let prefix = ctx.args().prefix.as_str();
+
+        let volume_name = format!("{}{}_vol", prefix, self.project_name);
+        let container_name = format!("{}{}_run", prefix, self.project_name);
         let container = ctx
             .docker()
             .inspect_container(&container_name.clone(), None)
@@ -260,7 +260,7 @@ impl<'c> State<'c> for ProjectCreating {
                             "PROXY_FQDN=shuttleapp.rs"
                         ]),
                         labels: Some(vec![
-                            ("shuttle_prefix", self.prefix.as_str())
+                            ("shuttle_prefix", prefix)
                         ].into_iter().collect()),
                         host_config: Some(HostConfig {
                             mounts: Some(vec![Mount {

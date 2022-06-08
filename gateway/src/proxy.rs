@@ -24,7 +24,7 @@ use shuttle_common::DeploymentMeta;
 use tower::MakeService;
 
 use crate::service::GatewayService;
-use crate::{Error, ProjectName, Refresh, PROXY_PORT, ErrorKind};
+use crate::{Error, ProjectName, Refresh, ErrorKind};
 
 const SHUTTLEAPP_SUFFIX: &'static str = ".shuttleapp.rs";
 
@@ -60,7 +60,7 @@ impl Service<Request<Body>> for ProxyService {
             let project_name: ProjectName = project_str.parse().unwrap(); // TODO invalid project name
             let project = gateway.find_project(&project_name).await.unwrap(); // TODO project not found
             let target_ip = project.target_ip().unwrap().unwrap(); // TODO project not ready
-            let target_url = format!("http://{}:{}", target_ip, PROXY_PORT);
+            let target_url = format!("http://{}:{}", target_ip, 8000);
             let proxy = hyper_reverse_proxy::call(
                 remote_addr,
                 &target_url,

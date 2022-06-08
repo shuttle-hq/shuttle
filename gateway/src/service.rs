@@ -15,12 +15,20 @@ use hyper::Client as HyperClient;
 use sqlx::migrate::MigrateDatabase;
 use sqlx::sqlite::{Sqlite, SqlitePool};
 use sqlx::types::Json as SqlxJson;
-use sqlx::{query, Row};
+use sqlx::{query, Row, Error as SqlxError};
 use tokio::sync::{Mutex, mpsc::{channel, Receiver, Sender}};
 
 use super::{Context, Error, ProjectName};
 use crate::project::{self, Project};
 use crate::{ErrorKind, Refresh, State, EndState, Service};
+use crate::args::Args;
+
+impl From<SqlxError> for Error {
+    fn from(err: SqlxError) -> Self {
+        debug!("internal SQLx error: {err}");
+        Self::source(ErrorKind::Internal, err)
+    }
+}
 
 #[derive(Debug)]
 pub struct Work<W = Project> {
@@ -110,21 +118,20 @@ pub struct GatewayService {
     hyper: HyperClient<HttpConnector, Body>,
     db: SqlitePool,
     sender: Mutex<Option<Sender<Work>>>,
-    prefix: String,
+    args: Args
 }
 
 const DB_PATH: &'static str = "gateway.sqlite";
 
 use crate::auth::User;
-use crate::API_PORT;
 use crate::{auth::Key, AccountName};
 
 impl GatewayService {
     /// Initialize `GatewayService` and its required dependencies.
     ///
-    /// * `prefix` - An optional string prefix to add to all named
-    /// resources (defaults to "shuttle_prod_").
-    pub async fn init(prefix: Option<&str>) -> Arc<Self> {
+    /// * `args` - The [`Args`] with which the service was
+    /// started. Will be passed as [`Context`] to workers and state.
+    pub async fn init(args: Args) -> Arc<Self> {
         info!("docker host: tcp://127.0.0.1:2735");
         let docker = Docker::connect_with_http_defaults().unwrap();
 
@@ -149,16 +156,12 @@ impl GatewayService {
             .await
             .unwrap();
 
-        let prefix = prefix.unwrap_or("shuttle_prod_").to_string();
-
-        info!("prefix: {}", prefix);
-
         let service = Arc::new(Self {
             docker,
             hyper,
             db,
             sender: Mutex::new(None),
-            prefix,
+            args
         });
 
         let worker = Worker::new(Arc::clone(&service));
@@ -218,13 +221,12 @@ impl GatewayService {
     ) -> Result<Response<Body>, Error> {
         let target_ip = self
             .find_project(project_name)
-            .await
-            .unwrap()
+            .await?
             .target_ip()?
             .unwrap(); // TODO handle
         let resp = hyper_reverse_proxy::call(
             "127.0.0.1".parse().unwrap(),
-            &format!("http://{}:{}/{}", target_ip, API_PORT, route),
+            &format!("http://{}:{}/{}", target_ip, 8001, route),
             req,
         )
         .await
@@ -245,17 +247,17 @@ impl GatewayService {
             })
     }
 
-    pub async fn find_project(&self, project_name: &ProjectName) -> Option<Project> {
+    pub async fn find_project(&self, project_name: &ProjectName) -> Result<Project, Error> {
         query("SELECT project_state FROM projects WHERE project_name=?1")
             .bind(project_name)
             .fetch_optional(&self.db)
-            .await
-            .unwrap()
+            .await?
             .map(|r| {
                 r.try_get::<SqlxJson<Project>, _>("project_state")
                     .unwrap()
                     .0
             })
+            .ok_or_else(|| Error::kind(ErrorKind::ProjectNotFound))
     }
 
     async fn update_project(
@@ -320,8 +322,7 @@ impl GatewayService {
             .bind(&name)
             .bind(&key)
             .execute(&self.db)
-            .await
-            .unwrap(); // TODO: user already exists
+            .await?;
         Ok(User {
             name,
             key,
@@ -330,13 +331,13 @@ impl GatewayService {
     }
 
     pub async fn is_super_user(&self, account_name: &AccountName) -> Result<bool, Error> {
-        query("SELECT super_user FROM accounts WHERE account_name = ?1")
+        let is_super_user = query("SELECT super_user FROM accounts WHERE account_name = ?1")
             .bind(account_name)
             .fetch_optional(&self.db)
-            .await
-            .unwrap()
+            .await?
             .map(|row| row.try_get("super_user").unwrap())
-            .unwrap_or_default() // defaults to `false` (i.e. not super user)
+            .unwrap_or(false); // defaults to `false` (i.e. not super user)
+        Ok(is_super_user)
     }
 
     async fn iter_user_projects(
@@ -358,19 +359,20 @@ impl GatewayService {
         account_name: AccountName,
     ) -> Result<Project, Error> {
         let initial_key = Alphanumeric.sample_string(&mut rand::thread_rng(), 32);
+
         let project = SqlxJson(Project::Creating(project::ProjectCreating::new(
             project_name.clone(),
-            self.prefix.clone(),
+            self.args.prefix.clone(),
             initial_key.clone(),
         )));
+
         query("INSERT INTO projects (project_name, account_name, initial_key, project_state) VALUES (?1, ?2, ?3, ?4)")
             .bind(&project_name)
             .bind(&account_name)
             .bind(&initial_key)
             .bind(&project)
             .execute(&self.db)
-            .await
-            .unwrap();
+            .await?;
 
         let project = project.0;
 
@@ -398,6 +400,7 @@ impl<'c> Service<'c> for Arc<GatewayService> {
         GatewayContext {
             docker: &self.docker,
             hyper: &self.hyper,
+            args: &self.args
         }
     }
 
@@ -409,10 +412,15 @@ impl<'c> Service<'c> for Arc<GatewayService> {
 pub struct GatewayContext<'c> {
     docker: &'c Docker,
     hyper: &'c HyperClient<HttpConnector, Body>,
+    args: &'c Args
 }
 
 impl<'c> Context<'c> for GatewayContext<'c> {
     fn docker(&self) -> &'c Docker {
         self.docker
+    }
+
+    fn args(&self) -> &'c Args {
+        self.args
     }
 }

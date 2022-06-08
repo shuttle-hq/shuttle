@@ -21,6 +21,8 @@ use serde::{
     Serialize
 };
 
+use crate::ErrorKind;
+
 use super::{
     Context,
     Error,
@@ -30,8 +32,6 @@ use super::{
     EndState,
     IntoEndState
 };
-
-const DEFAULT_IMAGE: &'static str = "public.ecr.aws/d7w6e9t1/backend:latest";
 
 macro_rules! impl_from_variant {
     {$e:ty: $($s:ty => $v:ident $(,)?)+} => {
@@ -52,6 +52,13 @@ impl Refresh for ContainerInspectResponse {
         ctx.docker()
             .inspect_container(self.id.as_ref().unwrap(), None)
             .await
+    }
+}
+
+impl From<DockerError> for Error {
+    fn from(err: DockerError) -> Self {
+        debug!("internal Docker error: {err}");
+        Self::source(ErrorKind::Internal, err)
     }
 }
 
@@ -168,7 +175,7 @@ impl<'c> EndState<'c> for Project {
 
 #[async_trait]
 impl Refresh for Project {
-    type Error = ProjectError;
+    type Error = Error;
 
     async fn refresh<'c, C: Context<'c>>(self, ctx: &C) -> Result<Self, Self::Error> {
         let next = match self {
@@ -181,7 +188,7 @@ impl Refresh for Project {
                     Ok(container) => {
                         match container.state.as_ref().unwrap().status.as_ref().unwrap() {
                             ContainerStateStatusEnum::RUNNING => {
-                                let service = Service::from_container(container.clone(), ctx).await?;
+                                let service = Service::from_container(container.clone(), ctx);
                                 Self::Started(ProjectStarted { container, service })
                             }
                             ContainerStateStatusEnum::CREATED => {
@@ -241,7 +248,7 @@ impl<'c> State<'c> for ProjectCreating {
                         name: container_name.clone()
                     };
                     let config = Config {
-                        image: Some(DEFAULT_IMAGE),
+                        image: Some(ctx.args().image.as_str()),
                         env: Some(vec![
                             "PROXY_PORT=8000",
                             "API_PORT=8001",
@@ -303,7 +310,7 @@ impl<'c> State<'c> for ProjectReady {
                 }
             })?;
         //let container = self.container.refresh(ctx).await.unwrap();
-        let service = Service::from_container(self.container.clone(), ctx).await?;
+        let service = Service::from_container(self.container.clone(), ctx);
         Ok(Self::Next {
             container: self.container,
             service
@@ -334,7 +341,7 @@ pub struct Service {
 }
 
 impl Service {
-    pub async fn from_container<'c, C: Context<'c>>(container: ContainerInspectResponse, ctx: &C) -> Result<Self, ProjectError> {
+    pub fn from_container<'c, C: Context<'c>>(container: ContainerInspectResponse, ctx: &C) -> Self {
         let name = container.name
             .as_ref()
             .unwrap()
@@ -358,20 +365,20 @@ impl Service {
             .parse()
             .unwrap();
 
-        Ok(Self {
+        Self {
             name,
             target,
-        })
+        }
     }
 }
 
 #[async_trait]
 impl Refresh for ProjectStarted {
-    type Error = ProjectError;
+    type Error = Error;
 
     async fn refresh<'c, C: Context<'c>>(self, ctx: &C) -> Result<Self, Self::Error> {
         let container = self.container.refresh(ctx).await.unwrap();
-        let service = Service::from_container(container.clone(), ctx).await?;
+        let service = Service::from_container(container.clone(), ctx);
         Ok(Self {
             container,
             service
@@ -396,7 +403,7 @@ pub struct ProjectStopped {
 
 #[async_trait]
 impl Refresh for ProjectStopped {
-    type Error = ProjectError;
+    type Error = Error;
 
     async fn refresh<'c, C: Context<'c>>(self, ctx: &C) -> Result<Self, Self::Error> {
         Ok(Self {
@@ -416,6 +423,7 @@ impl<'c> State<'c> for ProjectStopped {
     }
 }
 
+/// A runtime error coming from inside a project
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ProjectError {
     message: String

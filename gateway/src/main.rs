@@ -45,19 +45,19 @@ use serde::{
     Serialize
 };
 use serde_json::json;
+use clap::Parser;
 
 use crate::api::make_api;
 use crate::proxy::make_proxy;
 use crate::service::GatewayService;
+use crate::args::Args;
 
 pub mod api;
 pub mod project;
 pub mod proxy;
 pub mod service;
 pub mod auth;
-
-pub const API_PORT: &'static str = "8001";
-pub const PROXY_PORT: u16 = 8000;
+pub mod args;
 
 #[derive(Debug)]
 pub enum ErrorKind {
@@ -66,6 +66,7 @@ pub enum ErrorKind {
     KeyMalformed,
     Unauthorized,
     UserNotFound,
+    ProjectNotFound,
     Internal
 }
 
@@ -76,6 +77,14 @@ impl std::fmt::Display for ErrorKind {
     }
 }
 
+/// Server-side errors that do not have to do with the user runtime
+/// should be [`Error`]s.
+///
+/// All [`Error`] have an [`ErrorKind`] and an (optional) source.
+
+/// [`Error] is safe to be used as error variants to axum endpoints
+/// return types as their [`IntoResponse`] implementation does not
+/// leak any sensitive information.
 #[derive(Debug)]
 pub struct Error {
     kind: ErrorKind,
@@ -112,6 +121,7 @@ impl IntoResponse for Error {
             ErrorKind::KeyMalformed => (StatusCode::BAD_REQUEST, "request has an invalid key"),
             ErrorKind::BadHost => (StatusCode::BAD_REQUEST, "the 'Host' header is invalid"),
             ErrorKind::UserNotFound => (StatusCode::NOT_FOUND, "user not found"),
+            ErrorKind::ProjectNotFound => (StatusCode::NOT_FOUND, "project not found"),
             ErrorKind::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
         };
         (status, Json(json!({ "error": error_message }))).into_response()
@@ -151,7 +161,7 @@ impl FromStr for ProjectName {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // TODO: re correct?
-        let re = regex::Regex::new("^[a-zA-Z0-9\-_]{3,64}$").unwrap();
+        let re = regex::Regex::new("^[a-zA-Z0-9\\-_]{3,64}$").unwrap();
         if re.is_match(s) {
             Ok(Self(s.to_string()))
         } else {
@@ -197,6 +207,8 @@ impl<'de> Deserialize<'de> for AccountName {
 
 pub trait Context<'c>: Send + Sync {
     fn docker(&self) -> &'c Docker;
+
+    fn args(&self) -> &'c Args;
 }
 
 #[async_trait]
@@ -263,19 +275,21 @@ pub trait Refresh: Sized {
 async fn main() -> io::Result<()> {
     env_logger::init();
 
-    let gateway = GatewayService::init(None).await;
+    let args = Args::parse();
+
+    let gateway = GatewayService::init(args.clone()).await;
 
     let api = make_api(Arc::clone(&gateway));
 
     let api_handle = tokio::spawn(
-        axum::Server::bind(&format!("0.0.0.0:{}", API_PORT).parse().unwrap())
+        axum::Server::bind(&args.control)
             .serve(api.into_make_service())
     );
 
     let proxy = make_proxy(gateway);
 
     let proxy_handle = tokio::spawn(
-        hyper::Server::bind(&format!("0.0.0.0:{}", PROXY_PORT).parse().unwrap())
+        hyper::Server::bind(&args.user)
             .serve(proxy)
     );
 

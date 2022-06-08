@@ -8,7 +8,6 @@ mod args;
 mod auth;
 mod auth_admin;
 mod build;
-mod database;
 mod deployment;
 mod factory;
 mod proxy;
@@ -159,8 +158,15 @@ async fn rocket() -> Rocket<Build> {
 
     let args: Args = Args::from_args();
     let build_system = FsBuildSystem::initialise(args.path).unwrap();
-    let deployment_manager =
-        Arc::new(DeploymentSystem::new(Box::new(build_system), args.proxy_fqdn.to_string()).await);
+    let deployment_manager = Arc::new(
+        DeploymentSystem::new(
+            Box::new(build_system),
+            args.proxy_fqdn.to_string(),
+            args.provisioner_address,
+            args.provisioner_port,
+        )
+        .await,
+    );
 
     start_proxy(args.bind_addr, args.proxy_port, deployment_manager.clone()).await;
 

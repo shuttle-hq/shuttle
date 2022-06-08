@@ -1,5 +1,6 @@
 **/target/
-Dockerfile
+Containerfile
+Containerfile.dev
 terraform/
 examples/
 .cargo/

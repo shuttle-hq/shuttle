@@ -9,17 +9,21 @@ description = "A cargo command for the shuttle platform (https://www.shuttle.rs/
 [dependencies]
 anyhow = "1.0.54"
 async-trait = "0.1.52"
+bollard = "0.12"
 chrono = "0.4"
 colored = "2.0"
+crossterm = "0.23"
 dirs = "4.0.0"
 env_logger = "0.9.0"
 log = "0.4"
 serde_json = "1.0.79"
 serde = { version = "1.0.136", features = ["derive"] }
+toml_edit = "0.14.4"
 reqwest = { version = "0.11.9", features = ["json"] }
 reqwest-middleware = "0.1"
 reqwest-retry = "0.1"
 cargo = "0.59.0"
+cargo-edit = { version = "0.8.0", features = ["cli"] }
 tokio = "1.0"
 futures = "0.3"
 toml = "0.5.8"
@@ -27,11 +31,8 @@ structopt = "0.3.26"
 cargo_metadata = "0.14.2"
 webbrowser = "0.6"
 uuid = { version = "0.8.2", features = ["v4"] }
+portpicker = "0.1.1"
 semver = { version = "1.0.9" }
-toml_edit = { version = "0.14.4" }
 
 shuttle-common = { version = "0.3.0", path = "../common" }
 shuttle-service = { version = "0.3.0", path = "../service", features = [ "loader" ] }
-
-[dev-dependencies]
-portpicker = "0.1.1"

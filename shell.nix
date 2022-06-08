@@ -17,5 +17,10 @@ in
       terraform
       awscli2
       websocat
+      protobuf
+      grpcurl
     ];
+
+    PROTOC = "${protobuf}/bin/protoc";
+    PROTOC_INCLUDE="${protobuf}/include";
   }

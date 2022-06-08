@@ -166,7 +166,16 @@ impl Deployment {
                     let db_state = database::State::new(&meta.project, db_context);
 
                     let mut factory = ShuttleFactory::new(db_state);
+
+                    if !loaded.initial_secrets.is_empty() {
+                        let db_pool = factory.get_resource();
+                        for (key, value) in loaded.initial_secrets.iter() {
+                            db_pool.set_secret(key, value);
+                        }
+                    }
+
                     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
+
                     match loader.load(&mut factory, addr, run_logs_tx, meta.id).await {
                         Err(e) => {
                             debug!("{}: factory phase FAILED: {:?}", meta.project, e);

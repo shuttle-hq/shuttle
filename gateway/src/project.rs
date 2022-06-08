@@ -13,7 +13,7 @@ use bollard::models::{
     ContainerStateStatusEnum,
     HostConfig,
     Mount,
-    MountTypeEnum
+    MountTypeEnum, HealthStatusEnum, ContainerState
 };
 use futures::prelude::*;
 use rand::distributions::{Alphanumeric, DistString};
@@ -172,6 +172,11 @@ impl<'c> EndState<'c> for Project {
 impl Refresh for Project {
     type Error = Error;
 
+    /// TODO: we could be a bit more clever than this by using the
+    /// health checks instead of matching against the raw container
+    /// state which is probably prone to erroneously setting the
+    /// project into the wrong state if the docker is transitioning
+    /// the state of its resources under us
     async fn refresh<'c, C: Context<'c>>(self, ctx: &C) -> Result<Self, Self::Error> {
         let next = match self {
             Self::Creating(creating) => Self::Creating(creating),
@@ -304,12 +309,27 @@ impl<'c> State<'c> for ProjectReady {
                     Err(err)
                 }
             })?;
-        // TODO: sleep while then or else
-        let service = Service::from_container(self.container.clone(), ctx);
-        Ok(Self::Next {
-            container: self.container,
-            service
-        })
+
+        let mut container = None;
+        for _ in 0..9 {
+            let latest = self.container.clone().refresh(ctx).await?;
+            if matches!(latest.clone().state.unwrap().health.unwrap().status.unwrap(), HealthStatusEnum::HEALTHY) {
+                container = Some(latest);
+                break;
+            } else {
+                time::sleep(Duration::from_secs(1)).await;
+            }
+        }
+
+        if let Some(container) = container {
+            let service = Service::from_container(container.clone(), ctx);
+            Ok(Self::Next {
+                container,
+                service
+            })
+        } else {
+            Err(ProjectError::custom("timed out waiting for runtime to become healthy"))
+        }
     }
 }
 

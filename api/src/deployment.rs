@@ -1,5 +1,5 @@
 use core::default::Default;
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeMap};
 use std::fs::DirEntry;
 use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener};
@@ -18,7 +18,7 @@ use shuttle_common::{
 };
 use shuttle_service::loader::Loader;
 use shuttle_service::logger::Log;
-use shuttle_service::ServeHandle;
+use shuttle_service::{ServeHandle, GetResource, Factory, SecretStore};
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::{mpsc, RwLock};
 
@@ -39,6 +39,7 @@ pub const MAX_DEPLOYS: usize = 512;
 pub(crate) struct Deployment {
     meta: Arc<RwLock<DeploymentMeta>>,
     state: RwLock<DeploymentState>,
+    runtime: tokio::runtime::Runtime,
 }
 
 impl Deployment {
@@ -46,6 +47,7 @@ impl Deployment {
         Self {
             meta: Arc::new(RwLock::new(meta)),
             state: RwLock::new(state),
+            runtime: tokio::runtime::Runtime::new().unwrap(),
         }
     }
 
@@ -53,6 +55,7 @@ impl Deployment {
         Self {
             meta: Arc::new(RwLock::new(DeploymentMeta::queued(fqdn, project))),
             state: RwLock::new(DeploymentState::queued(crate_bytes)),
+            runtime: tokio::runtime::Runtime::new().unwrap(),
         }
     }
 
@@ -147,14 +150,14 @@ impl Deployment {
                     );
 
                     match Loader::from_so_file(&built.build.so_path) {
-                        Ok(loader) => DeploymentState::loaded(loader),
+                        Ok(loader) => DeploymentState::loaded(loader, built.build.initial_secrets),
                         Err(e) => {
                             debug!("failed to load with error: {}", &e);
                             DeploymentState::Error(e.into())
                         }
                     }
                 }
-                DeploymentState::Loaded(loader) => {
+                DeploymentState::Loaded(loaded) => {
                     let port = identify_free_port();
 
                     debug!(
@@ -168,15 +171,16 @@ impl Deployment {
                     let mut factory = ShuttleFactory::new(db_state);
 
                     if !loaded.initial_secrets.is_empty() {
-                        let db_pool = factory.get_resource();
+                        let db_pool = (&mut factory as &mut dyn Factory).get_resource(&self.runtime).await.unwrap(); // TODO
+
                         for (key, value) in loaded.initial_secrets.iter() {
-                            db_pool.set_secret(key, value);
+                            db_pool.set_secret(key, value).await.unwrap();
                         }
                     }
 
                     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
 
-                    match loader.load(&mut factory, addr, run_logs_tx, meta.id).await {
+                    match loaded.loader.load(&mut factory, addr, run_logs_tx, meta.id).await {
                         Err(e) => {
                             debug!("{}: factory phase FAILED: {:?}", meta.project, e);
                             DeploymentState::Error(e.into())
@@ -609,7 +613,7 @@ enum DeploymentState {
     /// dynamically-linked library (`.so` file). The [`libloading`] crate has
     /// been used to achieve this and to obtain this particular deployment's
     /// implementation of the [`shuttle_service::Service`] trait.
-    Loaded(Loader),
+    Loaded(LoadedState),
     /// Deployment that is actively running inside a Tokio task and listening
     /// for connections on some port indicated in [`DeployedState`].
     Deployed(DeployedState),
@@ -635,8 +639,8 @@ impl DeploymentState {
         Self::Built(BuiltState { build })
     }
 
-    fn loaded(loader: Loader) -> Self {
-        Self::Loaded(loader)
+    fn loaded(loader: Loader, initial_secrets: BTreeMap<String, String>) -> Self {
+        Self::Loaded(LoadedState { loader, initial_secrets })
     }
 
     fn deployed(so: Library, port: Port, handle: ServeHandle) -> Self {
@@ -668,4 +672,9 @@ struct DeployedState {
     so: Library,
     port: Port,
     handle: ServeHandle,
+}
+
+struct LoadedState {
+    loader: Loader,
+    initial_secrets: BTreeMap<String, String>,
 }

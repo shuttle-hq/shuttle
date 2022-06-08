@@ -101,10 +101,10 @@ impl Shuttle {
         cargo_doc["lib"] = Item::Table(lib_table);
 
         // Fetch the latest shuttle-service version from crates.io
-        let manifest_path = find(&Some(args.path)).unwrap();
+        let manifest_path = find(Some(&args.path)).unwrap();
         let url = registry_url(manifest_path.as_path(), None).expect("Could not find registry URL");
         let latest_shuttle_service =
-            get_latest_dependency("shuttle-service", false, &manifest_path, &Some(url))
+            get_latest_dependency("shuttle-service", false, &manifest_path, Some(&url))
                 .expect("Could not query the latest version of shuttle-service");
         let shuttle_version = latest_shuttle_service
             .version()
@@ -293,6 +293,7 @@ impl Shuttle {
             list: false,
             check_metadata: true,
             allow_dirty,
+            keep_going: false,
             verify: false,
             jobs: None,
             to_package: Packages::Default,

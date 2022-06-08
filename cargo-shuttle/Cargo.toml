@@ -22,8 +22,8 @@ toml_edit = "0.14.4"
 reqwest = { version = "0.11.9", features = ["json"] }
 reqwest-middleware = "0.1"
 reqwest-retry = "0.1"
-cargo = "0.59.0"
-cargo-edit = { version = "0.8.0", features = ["cli"] }
+cargo = "0.62.0"
+cargo-edit = { version = "0.9.0", features = ["cli"] }
 tokio = "1.0"
 futures = "0.3"
 toml = "0.5.8"

@@ -234,17 +234,18 @@ extern crate shuttle_codegen;
 /// ```
 ///
 /// ## shuttle supported services
-/// The following type can take the place of the `Ok` type and enjoy first class service support in shuttle. Be sure to also enable the feature on
+/// The following type can be returned from a `#[shuttle_service::main]` function and enjoy first class service support in shuttle. Be sure to also enable the feature on
 /// `shuttle-service` in `Cargo.toml` for the type to be recognized.
 ///
-/// | Ok type                                                                        | Feature flag | Service                                     | Version    | Example                                                                             |
-/// | ------------------------------------------------------------------------------ | ------------ | ------------------------------------------- | ---------- | ----------------------------------------------------------------------------------- |
-/// | [`Rocket<Build>`](https://docs.rs/rocket/0.5.0-rc.1/rocket/struct.Rocket.html) | web-rocket   | [rocket](https://docs.rs/rocket/0.5.0-rc.1) | 0.5.0-rc.1 | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/rocket/hello-world) |
-/// | [`SyncWrapper<Router>`](https://docs.rs/axum/0.5/axum/struct.Router.html)      | web-axum     | [axum](https://docs.rs/axum/0.5)            | 0.5        | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/axum/hello-world)   |
-/// | [`Server<T>`](https://docs.rs/tide/latest/tide/struct.Server.html)             | web-tide     | [tide](https://docs.rs/tide/0.16.0)         | 0.16.0     | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/tide/hello-world)   |
+/// | Return type                           | Feature flag | Service                                     | Version    | Example                                                                             |
+/// | ------------------------------------- | ------------ | ------------------------------------------- | ---------- | ----------------------------------------------------------------------------------- |
+/// | `ShuttleRocket`                       | web-rocket   | [rocket](https://docs.rs/rocket/0.5.0-rc.2) | 0.5.0-rc.2 | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/rocket/hello-world) |
+/// | `ShuttleAxum`                         | web-axum     | [axum](https://docs.rs/axum/0.5)            | 0.5        | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/axum/hello-world)   |
+/// | `ShuttleTide`                         | web-tide     | [tide](https://docs.rs/tide/0.16.0)         | 0.16.0     | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/tide/hello-world)   |
+/// | `Result<T, shuttle_service::Error>`   | web-tower    | [tower](https://docs.rs/tower/0.4.12)       | 0.14.12    | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/tower/hello-world)   |
 ///
 /// # Getting shuttle managed services
-/// The shuttle is able to manage service dependencies for you. These services are passed in as inputs to your main function:
+/// The shuttle is able to manage service dependencies for you. These services are passed in as inputs to your `#[shuttle_service::main]` function:
 /// ```rust,no_run
 /// use sqlx::PgPool;
 /// use shuttle_service::ShuttleRocket;

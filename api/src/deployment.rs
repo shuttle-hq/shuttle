@@ -1,15 +1,15 @@
 use core::default::Default;
-use std::collections::{HashMap, BTreeMap};
+use std::collections::{BTreeMap, HashMap};
 use std::fs::DirEntry;
 use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use lazy_static::lazy_static;
 use anyhow::{anyhow, Context as AnyhowContext};
 use chrono::{DateTime, Utc};
 use futures::prelude::*;
+use lazy_static::lazy_static;
 use libloading::Library;
 use rocket::data::ByteUnit;
 use rocket::{tokio, Data};
@@ -19,7 +19,7 @@ use shuttle_common::{
 };
 use shuttle_service::loader::Loader;
 use shuttle_service::logger::Log;
-use shuttle_service::{ServeHandle, GetResource, Factory, SecretStore};
+use shuttle_service::{Factory, GetResource, SecretStore, ServeHandle};
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::{mpsc, RwLock};
@@ -173,34 +173,60 @@ impl Deployment {
 
                     let mut factory = ShuttleFactory::new(db_state);
 
-                    if !loaded.initial_secrets.is_empty() {
-                        let db_pool = (&mut factory as &mut dyn Factory).get_resource(&DB_ACCESS_RUNTIME).await.unwrap(); // TODO
+                    let secrets_set = if !loaded.initial_secrets.is_empty() {
+                        match (&mut factory as &mut dyn Factory)
+                            .get_resource(&DB_ACCESS_RUNTIME)
+                            .await
+                        {
+                            Ok(db_pool) => {
+                                let mut res = Ok(());
 
-                        for (key, value) in loaded.initial_secrets.iter() {
-                            db_pool.set_secret(key, value).await.unwrap();
-                        }
-                    }
+                                for (key, value) in loaded.initial_secrets.iter() {
+                                    if let Err(e) = db_pool.set_secret(key, value).await {
+                                        res = Err(anyhow!("failed to set secret '{}': {}", key, e));
+                                        break;
+                                    }
+                                }
 
-                    let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
-
-                    match loaded.loader.load(&mut factory, addr, run_logs_tx, meta.id).await {
-                        Err(e) => {
-                            debug!("{}: factory phase FAILED: {:?}", meta.project, e);
-                            DeploymentState::Error(e.into())
-                        }
-                        Ok((handle, so)) => {
-                            debug!("{}: factory phase DONE", meta.project);
-                            self.meta.write().await.database_deployment =
-                                factory.to_database_info();
-
-                            // Remove stale active deployments
-                            if let Some(stale_id) = context.router.promote(meta.host, meta.id).await
-                            {
-                                debug!("removing stale deployment `{}`", &stale_id);
-                                context.deployments.write().await.remove(&stale_id);
+                                res
                             }
+                            Err(e) => {
+                                Err(anyhow!("failed to get database pool for purpose of setting initial secrets: {}", e))
+                            }
+                        }
+                    } else {
+                        Ok(())
+                    };
 
-                            DeploymentState::deployed(so, port, handle)
+                    if let Err(e) = secrets_set {
+                        DeploymentState::Error(e)
+                    } else {
+                        let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
+
+                        match loaded
+                            .loader
+                            .load(&mut factory, addr, run_logs_tx, meta.id)
+                            .await
+                        {
+                            Err(e) => {
+                                debug!("{}: factory phase FAILED: {:?}", meta.project, e);
+                                DeploymentState::Error(e.into())
+                            }
+                            Ok((handle, so)) => {
+                                debug!("{}: factory phase DONE", meta.project);
+                                self.meta.write().await.database_deployment =
+                                    factory.to_database_info();
+
+                                // Remove stale active deployments
+                                if let Some(stale_id) =
+                                    context.router.promote(meta.host, meta.id).await
+                                {
+                                    debug!("removing stale deployment `{}`", &stale_id);
+                                    context.deployments.write().await.remove(&stale_id);
+                                }
+
+                                DeploymentState::deployed(so, port, handle)
+                            }
                         }
                     }
                 }
@@ -643,7 +669,10 @@ impl DeploymentState {
     }
 
     fn loaded(loader: Loader, initial_secrets: BTreeMap<String, String>) -> Self {
-        Self::Loaded(LoadedState { loader, initial_secrets })
+        Self::Loaded(LoadedState {
+            loader,
+            initial_secrets,
+        })
     }
 
     fn deployed(so: Library, port: Port, handle: ServeHandle) -> Self {

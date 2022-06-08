@@ -11,8 +11,8 @@
 // TODO: Add some tests (ideas?)
 // TODO: Implement the delete project endpoint to make sure users can
 //       self-serve out of issues
-// TODO: Do a `docker pull` of the target runtime image to use when
-//       starting up
+// TODO: ~~Do a `docker pull` of the target runtime image to use when
+//       starting up~~
 
 #![allow(warnings)]
 

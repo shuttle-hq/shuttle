@@ -63,7 +63,9 @@ async fn delete_project(
     User { name, .. }: User,
     Path(project): Path<ProjectName>,
 ) -> Result<(), Error> {
-    todo!()
+    service
+        .delete_project(&project, &name)
+        .await
 }
 
 async fn route_project(

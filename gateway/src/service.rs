@@ -190,7 +190,10 @@ impl GatewayService {
             project_name,
             account_name,
             work,
-        } in service.iter_projects().await.expect("could not list projects")
+        } in service
+            .iter_projects()
+            .await
+            .expect("could not list projects")
         {
             match work.refresh(&service.context()).await {
                 Ok(work) => service
@@ -390,6 +393,34 @@ impl GatewayService {
 
         Ok(project)
     }
+
+    pub async fn delete_project(
+        &self,
+        project_name: &ProjectName,
+        account_name: &AccountName,
+    ) -> Result<(), Error> {
+        let project = self.find_project(project_name).await?;
+
+        let ctx = self.context();
+        // Would rather err out early and not remove the project from
+        // the db than having dangling resources
+        project.destroy(&ctx).await?;
+
+        query("DELETE FROM projects WHERE project_name = ?1")
+            .bind(&project_name)
+            .execute(&self.db)
+            .await?;
+
+        Ok(())
+    }
+
+    fn context<'c>(&'c self) -> GatewayContext<'c> {
+        GatewayContext {
+            docker: &self.docker,
+            hyper: &self.hyper,
+            args: &self.args,
+        }
+    }
 }
 
 #[async_trait]
@@ -401,11 +432,7 @@ impl<'c> Service<'c> for Arc<GatewayService> {
     type Error = Error;
 
     fn context(&'c self) -> Self::Context {
-        GatewayContext {
-            docker: &self.docker,
-            hyper: &self.hyper,
-            args: &self.args,
-        }
+        GatewayService::context(self)
     }
 
     async fn update(

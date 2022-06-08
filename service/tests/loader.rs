@@ -168,3 +168,99 @@ async fn sqlx_pool() {
     assert_eq!(log.item.target, "sqlx::query");
     assert_eq!(log.item.level, log::Level::Info);
 }
+
+mod panic_handling {
+    use super::*;
+
+    use shuttle_common::DeploymentId;
+    use shuttle_service::{Error, ServeHandle, Service};
+
+    use std::ffi::OsStr;
+    use std::fs;
+
+    use async_trait::async_trait;
+    use libloading::Library;
+
+    struct BuildPanicService;
+
+    #[async_trait]
+    impl Service for BuildPanicService {
+        async fn build(
+            &mut self,
+            _factory: &mut dyn Factory,
+            _logger: Box<dyn log::Log>,
+        ) -> Result<(), Error> {
+            panic!("in build");
+        }
+
+        fn bind(&mut self, _addr: SocketAddr) -> Result<ServeHandle, Error> {
+            let handle = tokio::spawn(async { Ok(()) });
+            Ok(handle)
+        }
+    }
+
+    struct BindPanicService;
+
+    #[async_trait]
+    impl Service for BindPanicService {
+        async fn build(
+            &mut self,
+            _factory: &mut dyn Factory,
+            _logger: Box<dyn log::Log>,
+        ) -> Result<(), Error> {
+            Ok(())
+        }
+
+        fn bind(&mut self, _addr: SocketAddr) -> Result<ServeHandle, Error> {
+            panic!("in bind");
+        }
+    }
+
+    fn find_any_so() -> Library {
+        let (dir, extension) = if cfg!(target_os = "windows") {
+            (r"C:\Windows\System32", OsStr::new("dll"))
+        } else {
+            ("/usr/lib", OsStr::new("so"))
+        };
+
+        for entry in fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+
+            if path.extension() == Some(extension) {
+                return unsafe { Library::new(path).unwrap() };
+            }
+        }
+
+        panic!("could not find a linked library in {}", dir);
+    }
+
+    macro_rules! assert_loader_load_error {
+        ($service:ident, $e:pat) => {
+            let l = Loader::new(Box::new($service), find_any_so());
+
+            let (sender, _) = mpsc::unbounded_channel();
+            let mut factory = DummyFactory::new();
+
+            let res = l
+                .load(
+                    &mut factory,
+                    "127.0.0.1:8000".parse().unwrap(),
+                    sender,
+                    DeploymentId::nil(),
+                )
+                .await;
+
+            assert!(matches!(res, Err($e)));
+        };
+    }
+
+    #[tokio::test]
+    async fn catch_build_panic() {
+        assert_loader_load_error!(BuildPanicService, Error::BuildPanic);
+    }
+
+    #[tokio::test]
+    async fn catch_bind_panic() {
+        assert_loader_load_error!(BindPanicService, Error::BindPanic);
+    }
+}

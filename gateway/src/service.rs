@@ -1,64 +1,123 @@
+use std::fmt::Debug;
 use std::net::IpAddr;
 use std::path::{Path as StdPath, PathBuf};
 use std::sync::Arc;
 
 use rand::distributions::{Alphanumeric, DistString};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use axum::body::Body;
 use axum::http::Request;
 use axum::response::Response;
 use bollard::Docker;
 use hyper::client::HttpConnector;
-use sqlx::migrate::MigrateDatabase;
-use sqlx::sqlite::{
-    Sqlite,
-    SqlitePool
-};
-use sqlx::types::Json as SqlxJson;
-use sqlx::{
-    query,
-    Row
-};
-use tokio::sync::mpsc::{
-    channel,
-    Sender
-};
 use hyper::Client as HyperClient;
+use sqlx::migrate::MigrateDatabase;
+use sqlx::sqlite::{Sqlite, SqlitePool};
+use sqlx::types::Json as SqlxJson;
+use sqlx::{query, Row};
+use tokio::sync::{Mutex, mpsc::{channel, Receiver, Sender}};
 
-use super::{
-    Context,
-    Error,
-    ProjectName
-};
-use crate::project::{
-    self,
-    Project
-};
-use crate::{
-    Refresh,
-    State, ErrorKind
-};
+use super::{Context, Error, ProjectName};
+use crate::project::{self, Project};
+use crate::{ErrorKind, Refresh, State, EndState, Service};
 
-pub struct Work {
+#[derive(Debug)]
+pub struct Work<W = Project> {
     project_name: ProjectName,
     account_name: AccountName,
-    project: Project
+    work: W,
+}
+
+#[async_trait]
+impl<'c, W> State<'c> for Work<W>
+where
+    W: State<'c>
+{
+    type Next = Work<W::Next>;
+
+    type Error = W::Error;
+
+    async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error> {
+        Ok(Work::<W::Next> {
+            project_name: self.project_name,
+            account_name: self.account_name,
+            work: self.work.next(ctx).await?
+        })
+    }
+}
+
+impl<'c, W> EndState<'c> for Work<W>
+where
+    W: EndState<'c>
+{
+    fn is_done(&self) -> bool {
+        self.work.is_done()
+    }
+}
+
+pub struct Worker<Svc, W> {
+    service: Svc,
+    send: Sender<W>,
+    recv: Receiver<W>,
+}
+
+impl<Svc, W> Worker<Svc, W>
+where
+    W: Send
+{
+    pub fn new(service: Svc) -> Self {
+        let (send, recv) = channel(256);
+        Self { service, send, recv }
+    }
+}
+
+impl<Svc, W> Worker<Svc, W> {
+    pub fn sender(&self) -> Sender<W> {
+        self.send.clone()
+    }
+}
+
+impl<Svc, W> Worker<Svc, W>
+where
+    Svc: for<'c> Service<'c, State = W, Error = Error>,
+    W: Debug + Send + for<'c> EndState<'c>
+{
+    pub async fn start(mut self) -> Result<(), Error> {
+        while let Some(work) = self.recv.recv().await {
+            let context = self.service.context();
+
+            // Safety: EndState's transitions are Infallible
+            let next = work.next(&context).await.unwrap();
+
+            match self.service.update(&next).await {
+                Ok(_) => {},
+                Err(err) => info!("failed to update a state: {}\nstate: {:?}", err, next),
+            };
+
+            if ! next.is_done() {
+                // Safety: Should only panic if `self.recv` has
+                // hanged, which at this point can't happen
+                self.send.send(next).await.unwrap();
+            }
+        }
+        Ok(())
+    }
 }
 
 pub struct GatewayService {
     docker: Docker,
     hyper: HyperClient<HttpConnector, Body>,
     db: SqlitePool,
-    work: Sender<Work>,
-    prefix: String
+    sender: Mutex<Option<Sender<Work>>>,
+    prefix: String,
 }
 
 const DB_PATH: &'static str = "gateway.sqlite";
 
+use crate::auth::User;
 use crate::API_PORT;
 use crate::{auth::Key, AccountName};
-use crate::auth::User;
 
 impl GatewayService {
     /// Initialize `GatewayService` and its required dependencies.
@@ -74,7 +133,10 @@ impl GatewayService {
             Sqlite::create_database(DB_PATH).await.unwrap();
         }
 
-        info!("state db: {}", std::fs::canonicalize(DB_PATH).unwrap().to_string_lossy());
+        info!(
+            "state db: {}",
+            std::fs::canonicalize(DB_PATH).unwrap().to_string_lossy()
+        );
         let db = SqlitePool::connect(DB_PATH).await.unwrap();
 
         query("CREATE TABLE IF NOT EXISTS projects (project_name TEXT PRIMARY KEY, account_name TEXT NOT NULL, initial_key TEXT NOT NULL, project_state JSON NOT NULL)")
@@ -87,11 +149,7 @@ impl GatewayService {
             .await
             .unwrap();
 
-        let (work, mut queue) = channel(256);
-
-        let prefix = prefix
-            .unwrap_or("shuttle_prod_")
-            .to_string();
+        let prefix = prefix.unwrap_or("shuttle_prod_").to_string();
 
         info!("prefix: {}", prefix);
 
@@ -99,69 +157,37 @@ impl GatewayService {
             docker,
             hyper,
             db,
-            work: work.clone(),
-            prefix
+            sender: Mutex::new(None),
+            prefix,
         });
 
-        let worker = Arc::clone(&service);
-
-        // TODO: get this out of here, handle error fall back
-        tokio::spawn(async move {
-            while let Some(Work {
-                project_name,
-                project,
-                account_name
-            }) = queue.recv().await
-            {
-                let current_state = project.state();
-                debug!(
-                    "picking up project_name={} in state={}",
-                    project_name, current_state
-                );
-                // TODO panicking loses the worker thread and bricks the service
-                let next = project.next(&worker.context()).await.unwrap();
-                worker.update_project(&project_name, &next).await.unwrap();
-                debug!(
-                    "left project_name={} in new state={} for account={}",
-                    project_name,
-                    next.state(),
-                    account_name
-                );
-                // TODO: replace with is_done
-                if current_state != next.state() {
-                    debug!(
-                        "queuing more work for project_name={} (not done)",
-                        project_name
-                    );
-                    // TODO may deadlock?
-                    work.send(Work {
-                        project_name,
-                        project: next,
-                        account_name
-                    })
-                    .await
-                    .ok()
-                    .expect("failed to queue work");
-                } else {
-                    debug!("worker dropping project_name={} (done)", project_name);
-                }
+        let worker = Worker::new(Arc::clone(&service));
+        let sender = worker.sender();
+        service.set_sender(Some(sender)).await;
+        tokio::spawn({
+            let service = Arc::clone(&service);
+            async move {
+                match worker.start().await {
+                    Ok(_) => info!("worker terminated successfully"),
+                    Err(err) => error!("worker error: {}", err),
+                };
+                service.set_sender(None).await;
             }
         });
 
         // Queue up all the projects for reconciliation
         for Work {
             project_name,
-            project,
-            account_name
+            account_name,
+            work,
         } in service.iter_projects().await
         {
-            let project = project.refresh(&service.context()).await.unwrap();
+            let work = work.refresh(&service.context()).await.unwrap();
             service
-                .work
                 .send(Work {
                     project_name,
-                    project,
-                    account_name
+                    work,
+                    account_name,
                 })
                 .await
                 .ok()
@@ -171,10 +197,16 @@ impl GatewayService {
         service
     }
 
-    pub fn context(&self) -> GatewayContext<'_> {
-        GatewayContext {
-            docker: &self.docker,
-            hyper: &self.hyper,
+    pub async fn set_sender(&self, sender: Option<Sender<Work>>) -> Result<(), Error> {
+        *self.sender.lock().await = sender;
+        Ok(())
+    }
+
+    pub async fn send(&self, work: Work) -> Result<(), Error> {
+        if let Some(sender) = self.sender.lock().await.as_ref() {
+            Ok(sender.send(work).await.or_else(|_| Err(ErrorKind::Internal))?)
+        } else {
+            Err(Error::kind(ErrorKind::Internal))
         }
     }
 
@@ -182,7 +214,7 @@ impl GatewayService {
         &self,
         project_name: &ProjectName,
         route: String,
-        req: Request<Body>
+        req: Request<Body>,
     ) -> Result<Response<Body>, Error> {
         let target_ip = self
             .find_project(project_name)
@@ -193,7 +225,7 @@ impl GatewayService {
         let resp = hyper_reverse_proxy::call(
             "127.0.0.1".parse().unwrap(),
             &format!("http://{}:{}/{}", target_ip, API_PORT, route),
-            req
+            req,
         )
         .await
         .unwrap();
@@ -208,8 +240,8 @@ impl GatewayService {
             .into_iter()
             .map(|row| Work {
                 project_name: row.get("project_name"),
-                project: row.get::<SqlxJson<Project>, _>("project_state").0,
-                account_name: row.get("account_name")
+                work: row.get::<SqlxJson<Project>, _>("project_state").0,
+                account_name: row.get("account_name"),
             })
     }
 
@@ -229,7 +261,7 @@ impl GatewayService {
     async fn update_project(
         &self,
         project_name: &ProjectName,
-        project: &Project
+        project: &Project,
     ) -> Result<(), Error> {
         query("UPDATE projects SET project_state = ?1 WHERE project_name = ?2")
             .bind(&SqlxJson(project))
@@ -247,7 +279,7 @@ impl GatewayService {
             .await
             .unwrap()
             .map(|row| row.try_get("key").unwrap())
-            .unwrap();  // TODO: account not found
+            .unwrap(); // TODO: account not found
         Ok(key)
     }
 
@@ -258,34 +290,27 @@ impl GatewayService {
             .await
             .unwrap()
             .map(|row| row.try_get("account_name").unwrap())
-            .ok_or_else(|| {
-                Error::from(ErrorKind::UserNotFound)
-            })?;
+            .ok_or_else(|| Error::from(ErrorKind::UserNotFound))?;
         Ok(name)
     }
 
     pub async fn user_from_account_name(&self, name: AccountName) -> Result<User, Error> {
         let key = self.key_from_account_name(&name).await?;
-        let projects = self.iter_user_projects(&name)
-            .await
-            .collect();
+        let projects = self.iter_user_projects(&name).await.collect();
         Ok(User {
             name,
             key,
-            projects
+            projects,
         })
     }
 
     pub async fn user_from_key(&self, key: Key) -> Result<User, Error> {
-        let name = self.account_name_from_key(&key)
-            .await?;
-        let projects = self.iter_user_projects(&name)
-            .await
-            .collect();
+        let name = self.account_name_from_key(&key).await?;
+        let projects = self.iter_user_projects(&name).await.collect();
         Ok(User {
             name,
             key,
-            projects
+            projects,
         })
     }
 
@@ -300,7 +325,7 @@ impl GatewayService {
         Ok(User {
             name,
             key,
-            projects: Vec::default()
+            projects: Vec::default(),
         })
     }
 
@@ -311,23 +336,28 @@ impl GatewayService {
             .await
             .unwrap()
             .map(|row| row.try_get("super_user").unwrap())
-            .unwrap();  // TODO: user does not exist
+            .unwrap(); // TODO: user does not exist
         Ok(super_user)
     }
 
-    async fn iter_user_projects(&self, AccountName(account_name): &AccountName) -> impl Iterator<Item = ProjectName> {
+    async fn iter_user_projects(
+        &self,
+        AccountName(account_name): &AccountName,
+    ) -> impl Iterator<Item = ProjectName> {
         query("SELECT project_name FROM projects WHERE account_name = ?1")
             .bind(account_name)
             .fetch_all(&self.db)
             .await
             .unwrap()
             .into_iter()
-            .map(|row| {
-                row.try_get::<ProjectName, _>("project_name").unwrap()
-            })
+            .map(|row| row.try_get::<ProjectName, _>("project_name").unwrap())
     }
 
-    pub async fn create_project(&self, project_name: ProjectName, account_name: AccountName) -> Result<Project, Error> {
+    pub async fn create_project(
+        &self,
+        project_name: ProjectName,
+        account_name: AccountName,
+    ) -> Result<Project, Error> {
         let initial_key = Alphanumeric.sample_string(&mut rand::thread_rng(), 32);
         let project = SqlxJson(Project::Creating(project::ProjectCreating::new(
             project_name.clone(),
@@ -342,23 +372,44 @@ impl GatewayService {
             .execute(&self.db)
             .await
             .unwrap();
+
         let project = project.0;
-        self.work
-            .send(Work {
-                project_name,
-                project: project.clone(),
-                account_name
-            })
-            .await
-            .ok()
-            .expect("failed to queue work");
+
+        let work = Work {
+            project_name,
+            work: project.clone(),
+            account_name,
+        };
+
+        self.send(work).await?;
+
         Ok(project)
+    }
+}
+
+#[async_trait]
+impl<'c> Service<'c> for Arc<GatewayService> {
+    type Context = GatewayContext<'c>;
+
+    type State = Work<Project>;
+
+    type Error = Error;
+
+    fn context(&'c self) -> Self::Context {
+        GatewayContext {
+            docker: &self.docker,
+            hyper: &self.hyper,
+        }
+    }
+
+    async fn update(&self, Work { project_name, work, .. }: &Self::State) -> Result<(), Self::Error> {
+        self.update_project(project_name, work).await
     }
 }
 
 pub struct GatewayContext<'c> {
     docker: &'c Docker,
-    hyper: &'c HyperClient<HttpConnector, Body>
+    hyper: &'c HyperClient<HttpConnector, Body>,
 }
 
 impl<'c> Context<'c> for GatewayContext<'c> {

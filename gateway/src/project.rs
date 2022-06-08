@@ -1,5 +1,6 @@
 use std::fmt::Formatter;
 use std::net::{IpAddr, Ipv4Addr};
+use std::convert::Infallible;
 
 use bollard::container::{
     Config,
@@ -25,10 +26,24 @@ use super::{
     Error,
     ProjectName,
     Refresh,
-    State
+    State,
+    EndState,
+    IntoEndState
 };
 
 const DEFAULT_IMAGE: &'static str = "public.ecr.aws/d7w6e9t1/backend:latest";
+
+macro_rules! impl_from_variant {
+    {$e:ty: $($s:ty => $v:ident $(,)?)+} => {
+        $(
+            impl From<$s> for $e {
+                fn from(s: $s) -> $e {
+                    <$e>::$v(s)
+                }
+            }
+        )+
+    };
+}
 
 #[async_trait]
 impl Refresh for ContainerInspectResponse {
@@ -46,8 +61,16 @@ pub enum Project {
     Creating(ProjectCreating),
     Ready(ProjectReady),
     Started(ProjectStarted),
-    Stopped(ProjectStopped)
+    Stopped(ProjectStopped),
+    Errored(ProjectError),
 }
+
+impl_from_variant!(Project:
+                   ProjectCreating => Creating,
+                   ProjectReady => Ready,
+                   ProjectStarted => Started,
+                   ProjectStopped => Stopped,
+                   ProjectError => Errored);
 
 #[derive(Debug)]
 pub struct DestroyError {
@@ -92,7 +115,8 @@ impl Project {
             Self::Started(_) => "started",
             Self::Stopped(_) => "stopped",
             Self::Ready(_) => "ready",
-            Self::Creating(_) => "creating"
+            Self::Creating(_) => "creating",
+            Self::Errored(_) => "error",
         }
     }
 
@@ -123,22 +147,28 @@ impl Project {
 #[async_trait]
 impl<'c> State<'c> for Project {
     type Next = Self;
-    type Error = Error;
+    type Error = Infallible;
 
     async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error> {
-        let next = match self {
-            Self::Creating(creating) => Self::Ready(creating.next(ctx).await?),
-            Self::Ready(ready) => Self::Started(ready.next(ctx).await?),
-            Self::Started(started) => Self::Started(started.next(ctx).await?),
-            Self::Stopped(stopped) => Self::Ready(stopped.next(ctx).await?)
-        };
-        Ok(next)
+        match self {
+            Self::Creating(creating) => creating.next(ctx).await.into_end_state(),
+            Self::Ready(ready) => ready.next(ctx).await.into_end_state(),
+            Self::Started(started) => started.next(ctx).await.into_end_state(),
+            Self::Stopped(stopped) => stopped.next(ctx).await.into_end_state(),
+            Self::Errored(errored) => Ok(Self::Errored(errored)),
+        }
+    }
+}
+
+impl<'c> EndState<'c> for Project {
+    fn is_done(&self) -> bool {
+        matches!(self, Self::Errored(_) | Self::Started(_))
     }
 }
 
 #[async_trait]
 impl Refresh for Project {
-    type Error = Error;
+    type Error = ProjectError;
 
     async fn refresh<'c, C: Context<'c>>(self, ctx: &C) -> Result<Self, Self::Error> {
         let next = match self {
@@ -165,7 +195,8 @@ impl Refresh for Project {
                     }
                     Err(_err) => todo!()
                 }
-            }
+            },
+            Self::Errored(err) => Self::Errored(err)
         };
         Ok(next)
     }
@@ -191,7 +222,7 @@ impl ProjectCreating {
 #[async_trait]
 impl<'c> State<'c> for ProjectCreating {
     type Next = ProjectReady;
-    type Error = Error;
+    type Error = ProjectError;
 
     async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error> {
         let pg_password = Alphanumeric.sample_string(&mut rand::thread_rng(), 12);
@@ -243,8 +274,7 @@ impl<'c> State<'c> for ProjectCreating {
                     Err(err)
                 }
             })
-            .await
-            .unwrap();
+            .await?;
         Ok(ProjectReady { container })
     }
 }
@@ -257,7 +287,7 @@ pub struct ProjectReady {
 #[async_trait]
 impl<'c> State<'c> for ProjectReady {
     type Next = ProjectStarted;
-    type Error = Error;
+    type Error = ProjectError;
 
     async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error> {
         let container_id = self.container.id.as_ref().unwrap();
@@ -271,12 +301,11 @@ impl<'c> State<'c> for ProjectReady {
                 } else {
                     Err(err)
                 }
-            })
-            .unwrap();
-        let container = self.container.refresh(ctx).await.unwrap();
-        let service = Service::from_container(container.clone(), ctx).await.unwrap();
+            })?;
+        //let container = self.container.refresh(ctx).await.unwrap();
+        let service = Service::from_container(self.container.clone(), ctx).await?;
         Ok(Self::Next {
-            container,
+            container: self.container,
             service
         })
     }
@@ -305,7 +334,7 @@ pub struct Service {
 }
 
 impl Service {
-    pub async fn from_container<'c, C: Context<'c>>(container: ContainerInspectResponse, ctx: &C) -> Result<Self, Error> {
+    pub async fn from_container<'c, C: Context<'c>>(container: ContainerInspectResponse, ctx: &C) -> Result<Self, ProjectError> {
         let name = container.name
             .as_ref()
             .unwrap()
@@ -338,8 +367,9 @@ impl Service {
 
 #[async_trait]
 impl Refresh for ProjectStarted {
-    type Error = Error;
-    async fn refresh<'c, C: Context<'c>>(self, ctx: &C) -> Result<Self, Error> {
+    type Error = ProjectError;
+
+    async fn refresh<'c, C: Context<'c>>(self, ctx: &C) -> Result<Self, Self::Error> {
         let container = self.container.refresh(ctx).await.unwrap();
         let service = Service::from_container(container.clone(), ctx).await?;
         Ok(Self {
@@ -352,10 +382,10 @@ impl Refresh for ProjectStarted {
 #[async_trait]
 impl<'c> State<'c> for ProjectStarted {
     type Next = Self;
-    type Error = Error;
+    type Error = ProjectError;
 
     async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error> {
-        self.refresh(ctx).await
+        Ok(self)
     }
 }
 
@@ -366,11 +396,11 @@ pub struct ProjectStopped {
 
 #[async_trait]
 impl Refresh for ProjectStopped {
-    type Error = Error;
+    type Error = ProjectError;
 
     async fn refresh<'c, C: Context<'c>>(self, ctx: &C) -> Result<Self, Self::Error> {
         Ok(Self {
-            container: self.container.refresh(ctx).await.unwrap()
+            container: self.container.refresh(ctx).await?
         })
     }
 }
@@ -378,11 +408,42 @@ impl Refresh for ProjectStopped {
 #[async_trait]
 impl<'c> State<'c> for ProjectStopped {
     type Next = ProjectReady;
-    type Error = Error;
+    type Error = ProjectError;
 
     async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error> {
-        let ProjectStopped { container } = self.refresh(ctx).await?;
-        Ok(ProjectReady { container })
+        // If stopped, try to restart
+        Ok(ProjectReady { container: self.container })
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ProjectError {
+    message: String
+}
+
+impl std::fmt::Display for ProjectError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+impl std::error::Error for ProjectError {}
+
+impl From<DockerError> for ProjectError {
+    fn from(err: DockerError) -> Self {
+        Self {
+            message: format!("{:?}", err)
+        }
+    }
+}
+
+#[async_trait]
+impl<'c> State<'c> for ProjectError {
+    type Next = Self;
+    type Error = Infallible;
+
+    async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error> {
+        Ok(self)
     }
 }
 

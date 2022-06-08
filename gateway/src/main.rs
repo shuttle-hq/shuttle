@@ -24,6 +24,7 @@ use std::io;
 use std::net::IpAddr;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::convert::Infallible;
 
 use axum::Json;
 use axum::http::StatusCode;
@@ -32,6 +33,7 @@ use axum::response::{
     Response
 };
 use bollard::Docker;
+use convert_case::{Casing, Case};
 use serde::{
     Deserialize,
     Deserializer,
@@ -54,12 +56,19 @@ pub const PROXY_PORT: u16 = 8000;
 
 #[derive(Debug)]
 pub enum ErrorKind {
-    Missing,
+    KeyMissing,
     BadHost,
-    Malformed,
+    KeyMalformed,
     Unauthorized,
     UserNotFound,
     Internal
+}
+
+impl std::fmt::Display for ErrorKind {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let formatted = format!("{:?}", self).to_case(Case::Snake);
+        write!(f, "{}", formatted)
+    }
 }
 
 #[derive(Debug)]
@@ -94,9 +103,9 @@ impl IntoResponse for Error {
     fn into_response(self) -> Response {
         let (status, error_message) = match self.kind {
             ErrorKind::Internal => (StatusCode::INTERNAL_SERVER_ERROR, "internal server error"),
-            ErrorKind::Missing => (StatusCode::BAD_REQUEST, "request is missing a key"),
+            ErrorKind::KeyMissing => (StatusCode::BAD_REQUEST, "request is missing a key"),
+            ErrorKind::KeyMalformed => (StatusCode::BAD_REQUEST, "request has an invalid key"),
             ErrorKind::BadHost => (StatusCode::BAD_REQUEST, "the 'Host' header is invalid"),
-            ErrorKind::Malformed => (StatusCode::BAD_REQUEST, "request has an invalid key"),
             ErrorKind::UserNotFound => (StatusCode::NOT_FOUND, "user not found"),
             ErrorKind::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
         };
@@ -185,14 +194,56 @@ pub trait Context<'c>: Send + Sync {
     fn docker(&self) -> &'c Docker;
 }
 
-/// Assumes that state matches world at init and service is only source of mutation to world
 #[async_trait]
-pub trait State<'c> {
+pub trait Service<'c> {
+    type Context: Context<'c>;
+
+    type State: EndState<'c>;
+
+    type Error: StdError;
+
+    /// Asks for the latest available context for task execution
+    fn context(&'c self) -> Self::Context;
+
+    /// Commit a state update to persistence
+    async fn update(&self, state: &Self::State) -> Result<(), Self::Error>;
+}
+
+/// A generic state which can, when provided with a [`Context`], do
+/// some work and advance itself
+#[async_trait]
+pub trait State<'c>: Send {
     type Next: State<'c>;
 
     type Error: StdError;
 
     async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error>;
+}
+
+/// A [`State`] which contains all its transitions, including
+/// failures
+pub trait EndState<'c>
+where
+    Self: State<'c, Error = Infallible, Next = Self>
+{
+    fn is_done(&self) -> bool;
+}
+
+pub trait IntoEndState<'c, E>
+where
+    E: EndState<'c>
+{
+    fn into_end_state(self) -> Result<E, Infallible>;
+}
+
+impl<'c, E, S, Err> IntoEndState<'c, E> for Result<S, Err>
+where
+    E: EndState<'c> + From<S> + From<Err>
+{
+    fn into_end_state(self) -> Result<E, Infallible> {
+        self.map(|s| E::from(s))
+            .or_else(|err| Ok(E::from(err)))
+    }
 }
 
 // TODO may not want to have Refresh for variants of Project as this may drift OOS

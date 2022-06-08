@@ -36,7 +36,7 @@ where
     async fn from_request(req: &mut RequestParts<B>) -> Result<Self, Self::Rejection> {
         TypedHeader::<Authorization<Basic>>::from_request(req)
             .await
-            .map_err(|_| Error::from(ErrorKind::Missing))
+            .map_err(|_| Error::from(ErrorKind::KeyMissing))
             .and_then(|TypedHeader(Authorization(basic))| basic.password().parse())
     }
 }

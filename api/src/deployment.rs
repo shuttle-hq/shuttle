@@ -4,7 +4,6 @@ use std::fs::DirEntry;
 use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener};
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::SyncSender;
 use std::sync::Arc;
 
 use anyhow::{anyhow, Context as AnyhowContext};
@@ -20,6 +19,7 @@ use shuttle_common::{
 use shuttle_service::loader::Loader;
 use shuttle_service::logger::Log;
 use shuttle_service::ServeHandle;
+use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::{mpsc, RwLock};
 
 use crate::build::Build;
@@ -109,7 +109,7 @@ impl Deployment {
         &self,
         context: &Context,
         db_context: &database::Context,
-        run_logs_tx: SyncSender<Log>,
+        run_logs_tx: UnboundedSender<Log>,
     ) {
         {
             trace!("waiting to get write on the state");
@@ -160,44 +160,28 @@ impl Deployment {
                     );
 
                     debug!("{}: factory phase", meta.project);
-                    let mut db_state = database::State::new(&meta.project, db_context);
+                    let db_state = database::State::new(&meta.project, db_context);
 
-                    // Pre-emptively allocate a dabatase to work around a deadlock issue with sqlx connection pools
-                    // When .build is called, the db_context's connection pool and the inner connection pool instantiated
-                    // by the Service seem to collide and lead to a deadlock. I wonder if the problem is that we have, once again,
-                    // futures on one part of the FFI boundary being run by a runtime on the other (in this case, the pool in the db_state
-                    // lives in `api` but are driven in `postgres` by a runtime in `postgres`).
-                    self.meta.write().await.database_deployment = Some(db_state.request());
-
-                    match db_state.ensure().await {
+                    let mut factory = ShuttleFactory::new(db_state);
+                    let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
+                    match loader.load(&mut factory, addr, run_logs_tx, meta.id).await {
                         Err(e) => {
-                            debug!("{}: db state failed: {:?}", meta.project, e);
-                            let err: anyhow::Error = e.into();
-                            DeploymentState::Error(
-                                err.context(anyhow!("failed to attach database")),
-                            )
+                            debug!("{}: factory phase FAILED: {:?}", meta.project, e);
+                            DeploymentState::Error(e.into())
                         }
-                        Ok(()) => {
-                            let mut factory = ShuttleFactory::new(&mut db_state);
-                            let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
-                            match loader.load(&mut factory, addr, run_logs_tx, meta.id) {
-                                Err(e) => {
-                                    debug!("{}: factory phase FAILED: {:?}", meta.project, e);
-                                    DeploymentState::Error(e.into())
-                                }
-                                Ok((handle, so)) => {
-                                    debug!("{}: factory phase DONE", meta.project);
-                                    // Remove stale active deployments
-                                    if let Some(stale_id) =
-                                        context.router.promote(meta.host, meta.id).await
-                                    {
-                                        debug!("removing stale deployment `{}`", &stale_id);
-                                        context.deployments.write().await.remove(&stale_id);
-                                    }
+                        Ok((handle, so)) => {
+                            debug!("{}: factory phase DONE", meta.project);
+                            self.meta.write().await.database_deployment =
+                                factory.to_database_info();
 
-                                    DeploymentState::deployed(so, port, handle, db_state)
-                                }
+                            // Remove stale active deployments
+                            if let Some(stale_id) = context.router.promote(meta.host, meta.id).await
+                            {
+                                debug!("removing stale deployment `{}`", &stale_id);
+                                context.deployments.write().await.remove(&stale_id);
                             }
+
+                            DeploymentState::deployed(so, port, handle)
                         }
                     }
                 }
@@ -317,7 +301,7 @@ impl JobQueue {
     async fn new(
         context: Context,
         db_context: database::Context,
-        run_logs_tx: SyncSender<Log>,
+        run_logs_tx: UnboundedSender<Log>,
     ) -> Self {
         let (send, mut recv) = mpsc::channel::<Arc<Deployment>>(JOB_QUEUE_SIZE);
 
@@ -363,7 +347,7 @@ pub(crate) struct Context {
 impl DeploymentSystem {
     pub(crate) async fn new(build_system: Box<dyn BuildSystem>, fqdn: String) -> Self {
         let router: Arc<Router> = Default::default();
-        let (tx, rx) = std::sync::mpsc::sync_channel::<Log>(64);
+        let (tx, mut rx) = mpsc::unbounded_channel::<Log>();
 
         let deployments = Arc::new(RwLock::new(
             Self::initialise_from_fs(&build_system.fs_root(), &fqdn).await,
@@ -372,16 +356,11 @@ impl DeploymentSystem {
         let deployments_log = deployments.clone();
 
         tokio::spawn(async move {
-            loop {
-                let res = rx.recv();
+            while let Some(log) = rx.recv().await {
+                let mut deployments_log = deployments_log.write().await;
 
-                if let Ok(log) = res {
-                    let mut deployments_log = deployments_log.write().await;
-                    if let Some(deployment) = deployments_log.get_mut(&log.deployment_id) {
-                        deployment.add_runtime_log(log.datetime, log.item).await;
-                    }
-                } else {
-                    break;
+                if let Some(deployment) = deployments_log.get_mut(&log.deployment_id) {
+                    deployment.add_runtime_log(log.datetime, log.item).await;
                 }
             }
         });
@@ -648,13 +627,8 @@ impl DeploymentState {
         Self::Loaded(loader)
     }
 
-    fn deployed(so: Library, port: Port, handle: ServeHandle, db_state: database::State) -> Self {
-        Self::Deployed(DeployedState {
-            so,
-            port,
-            handle,
-            db_state,
-        })
+    fn deployed(so: Library, port: Port, handle: ServeHandle) -> Self {
+        Self::Deployed(DeployedState { so, port, handle })
     }
 
     fn meta(&self) -> DeploymentStateMeta {
@@ -682,5 +656,4 @@ struct DeployedState {
     so: Library,
     port: Port,
     handle: ServeHandle,
-    db_state: database::State,
 }

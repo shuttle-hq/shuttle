@@ -1,32 +1,38 @@
 [package]
 name = "cargo-shuttle"
-version = "0.2.6"
+version = "0.3.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "A cargo command for the shuttle platform (https://www.shuttle.rs/)"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.53"
+anyhow = "1.0.54"
+async-trait = "0.1.52"
 chrono = "0.4"
 colored = "2.0"
 dirs = "4.0.0"
+env_logger = "0.9.0"
 log = "0.4"
 serde_json = "1.0.79"
 serde = { version = "1.0.136", features = ["derive"] }
+toml_edit = "0.14.4"
 reqwest = { version = "0.11.9", features = ["json"] }
 reqwest-middleware = "0.1"
 reqwest-retry = "0.1"
 cargo = "0.59.0"
+cargo-edit = { version = "0.8.0", features = ["cli"] }
 tokio = "1.0"
 futures = "0.3"
 toml = "0.5.8"
 structopt = "0.3.26"
 cargo_metadata = "0.14.2"
 webbrowser = "0.6"
+uuid = { version = "0.8.2", features = ["v4"] }
+semver = { version = "1.0.9" }
 
-shuttle-common = { version = "0.2.6", path = "../common" }
+shuttle-common = { version = "0.3.0", path = "../common" }
+shuttle-service = { version = "0.3.0", path = "../service", features = [ "loader" ] }
 
 [dev-dependencies]
-assert_cmd = "2.0.4"
-predicates = "2.1.1"
+portpicker = "0.1.1"

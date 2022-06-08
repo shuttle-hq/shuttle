@@ -8,7 +8,6 @@ import {
 } from "../lib/constants";
 import classnames from "classnames";
 import { useAnnouncementBarIsClosed } from "./AnnouncementBar";
-import mixpanel from "mixpanel-browser";
 import ExternalLink from "./ExternalLink";
 
 export default function Hero() {
@@ -27,7 +26,7 @@ export default function Hero() {
     >
       <div className="mx-auto py-5 xl:px-12">
         <div className="p-6 sm:py-8">
-          <div className="m-auto flex max-w-3xl flex-col gap-8 text-center sm:gap-11">
+          <div className="m-auto flex max-w-5xl flex-col gap-8 text-center sm:gap-11">
             {/* <div className="flex m-auto relative">
               <img
                 className="h-16"
@@ -59,6 +58,7 @@ export default function Hero() {
                 className="rounded bg-brand-900 py-3 px-8 font-bold text-white transition hover:bg-brand-700"
                 href={SHUTTLE_DOCS_URL}
                 target="_self"
+                mixpanelEvent="Get Started"
               >
                 Get Started
               </ExternalLink>
@@ -66,6 +66,7 @@ export default function Hero() {
               <ExternalLink
                 className="rounded bg-brand-purple1 py-3 px-8 font-bold text-white transition hover:brightness-125"
                 href={DISCORD_URL}
+                mixpanelEvent="Join Discord"
               >
                 Join Discord
               </ExternalLink>

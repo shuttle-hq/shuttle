@@ -205,7 +205,7 @@ impl Shuttle {
         let so_path = build_crate(working_directory, buf)?;
         let loader = Loader::from_so_file(so_path)?;
 
-        let mut factory = LocalFactory {};
+        let mut factory = LocalFactory::new(self.ctx.project_name().clone())?;
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), run_args.port);
         let deployment_id = Uuid::new_v4();
         let (tx, mut rx) = mpsc::unbounded_channel();

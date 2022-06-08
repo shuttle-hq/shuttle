@@ -5,11 +5,12 @@ pub mod provisioner {
 
     impl From<DatabaseResponse> for DatabaseReadyInfo {
         fn from(response: DatabaseResponse) -> Self {
-            DatabaseReadyInfo {
-                role_name: response.username,
-                role_password: response.password,
-                database_name: response.database_name,
-            }
+            DatabaseReadyInfo::new(
+                response.username,
+                response.password,
+                response.database_name,
+                "5432".to_string(),
+            )
         }
     }
 }

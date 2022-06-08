@@ -107,20 +107,27 @@ pub struct DatabaseReadyInfo {
     pub role_name: String,
     pub role_password: String,
     pub database_name: String,
+    pub port: String,
 }
 
 impl DatabaseReadyInfo {
-    pub fn new(role_name: String, role_password: String, database_name: String) -> Self {
+    pub fn new(
+        role_name: String,
+        role_password: String,
+        database_name: String,
+        port: String,
+    ) -> Self {
         Self {
             role_name,
             role_password,
             database_name,
+            port,
         }
     }
     pub fn connection_string(&self, ip: &str) -> String {
         format!(
-            "postgres://{}:{}@{}/{}",
-            self.role_name, self.role_password, ip, self.database_name
+            "postgres://{}:{}@{}:{}/{}",
+            self.role_name, self.role_password, ip, self.port, self.database_name
         )
     }
 }

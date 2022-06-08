@@ -22,6 +22,7 @@ use colored::Colorize;
 use config::RequestContext;
 use factory::LocalFactory;
 use futures::future::TryFutureExt;
+use semver::{Version, VersionReq};
 use shuttle_service::loader::{build_crate, Loader};
 use tokio::sync::mpsc;
 use toml_edit::{value, Array, Document, Item, Table, Value};
@@ -62,7 +63,10 @@ impl Shuttle {
         self.ctx.set_api_url(args.api_url);
 
         match args.cmd {
-            Command::Deploy(deploy_args) => self.deploy(deploy_args).await,
+            Command::Deploy(deploy_args) => {
+                self.check_lib_version(args.project_args).await?;
+                self.deploy(deploy_args).await
+            }
             Command::Init(init_args) => self.init(init_args).await,
             Command::Status => self.status().await,
             Command::Logs => self.logs().await,
@@ -256,6 +260,24 @@ impl Shuttle {
         })
         .await
         .context("failed to deploy cargo project")
+    }
+
+    async fn check_lib_version(&self, project_args: ProjectArgs) -> Result<()> {
+        let cargo_path = project_args.working_directory.join("Cargo.toml");
+        let cargo_doc = read_to_string(cargo_path.clone())?.parse::<Document>()?;
+        let current_shuttle_version = &cargo_doc["dependencies"]["shuttle-service"]["version"];
+        let service_semver = Version::parse(current_shuttle_version.as_str().unwrap())?;
+        let server_version = client::shuttle_version(self.ctx.api_url()).await?;
+        let server_semver = VersionReq::parse(&server_version)?;
+
+        if server_semver.matches(&service_semver) {
+            Ok(())
+        } else {
+            Err(anyhow!(
+                "Your shuttle_service version is outdated. Update your shuttle_service version to {} and try to deploy again",
+                &server_version,
+            ))
+        }
     }
 
     // Packages the cargo project and returns a File to that file

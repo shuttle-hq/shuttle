@@ -75,11 +75,8 @@ impl Loader {
             .unwrap_or(Err(Error::BuildPanic))?;
 
         // Start service on this side of the FFI
-        let handle = tokio::spawn(async move {
-            std::panic::catch_unwind(AssertUnwindSafe(move || service.bind(addr)))
-                .unwrap_or(Err(Error::BindPanic))?
-                .await?
-        });
+        // Tokio tasks provide natural `panic` protection so no need for `catch_unwind`
+        let handle = tokio::spawn(async move { service.bind(addr)?.await? });
 
         Ok((handle, self.so))
     }

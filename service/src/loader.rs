@@ -74,6 +74,8 @@ impl Loader {
             .await
             .unwrap_or(Err(Error::BuildPanic))?;
 
+        // channel used by task spawned below to indicate whether or not panic
+        // occurred in `service.bind` call
         let (send, recv) = tokio::sync::oneshot::channel();
 
         // Start service on this side of the FFI
@@ -81,6 +83,7 @@ impl Loader {
             let bound = AssertUnwindSafe(async { service.bind(addr) })
                 .catch_unwind()
                 .await;
+
             send.send(bound.is_ok()).unwrap();
 
             if let Ok(b) = bound {

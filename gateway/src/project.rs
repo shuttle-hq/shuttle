@@ -1,38 +1,20 @@
+use std::convert::Infallible;
 use std::fmt::Formatter;
 use std::net::{IpAddr, Ipv4Addr};
-use std::convert::Infallible;
 use std::time::Duration;
 
-use bollard::container::{
-    Config,
-    CreateContainerOptions
-};
+use bollard::container::{Config, CreateContainerOptions};
 use bollard::errors::Error as DockerError;
 use bollard::models::{
-    ContainerInspectResponse,
-    ContainerStateStatusEnum,
-    HostConfig,
-    Mount,
-    MountTypeEnum, HealthStatusEnum, ContainerState
+    ContainerInspectResponse, ContainerState, ContainerStateStatusEnum, HealthStatusEnum,
+    HostConfig, Mount, MountTypeEnum,
 };
 use futures::prelude::*;
 use rand::distributions::{Alphanumeric, DistString};
-use serde::{
-    Deserialize,
-    Serialize
-};
+use serde::{Deserialize, Serialize};
 use tokio::time;
 
-use super::{
-    Context,
-    Error,
-    ErrorKind,
-    ProjectName,
-    Refresh,
-    State,
-    EndState,
-    IntoEndState
-};
+use super::{Context, EndState, Error, ErrorKind, IntoEndState, ProjectName, Refresh, State};
 
 macro_rules! impl_from_variant {
     {$e:ty: $($s:ty => $v:ident $(,)?)+} => {
@@ -83,33 +65,30 @@ impl_from_variant!(Project:
 impl Project {
     pub async fn stop<'c, C: Context<'c>>(self, ctx: &C) -> Result<Self, Error> {
         match self {
-            Self::Creating(_) => {
-                Err(Error::custom(ErrorKind::InvalidOperation, "tried to stop a project that was not ready"))
-            }
+            Self::Creating(_) => Err(Error::custom(
+                ErrorKind::InvalidOperation,
+                "tried to stop a project that was not ready",
+            )),
             Self::Ready(ProjectReady { container, .. }) => {
-                Ok(Self::Stopped(ProjectStopped {
-                    container
-                }))
+                Ok(Self::Stopped(ProjectStopped { container }))
             }
             Self::Started(ProjectStarted { container, .. }) => {
                 ctx.docker()
                     .stop_container(container.id.as_ref().unwrap(), None)
                     .await?;
                 Ok(Self::Stopped(ProjectStopped {
-                    container: container.refresh(ctx).await?
+                    container: container.refresh(ctx).await?,
                 }))
             }
             Self::Stopped(stopped) => Ok(Self::Stopped(stopped)),
-            Self::Errored(err) => Ok(Self::Errored(err))
+            Self::Errored(err) => Ok(Self::Errored(err)),
         }
     }
 
     pub fn target_ip(&self) -> Result<Option<String>, Error> {
         match self.clone() {
-            Self::Started(project_started) => {
-                Ok(Some(project_started.target_ip().to_string()))
-            }
-            _ => Ok(None) // not ready
+            Self::Started(project_started) => Ok(Some(project_started.target_ip().to_string())),
+            _ => Ok(None), // not ready
         }
     }
 
@@ -134,7 +113,7 @@ impl Project {
                 ..
             })
             | Self::Stopped(ProjectStopped {
-                container: ContainerInspectResponse { id, .. }
+                container: ContainerInspectResponse { id, .. },
             }) => {
                 ctx.docker()
                     .remove_container(id.as_ref().unwrap(), None)
@@ -197,13 +176,13 @@ impl Refresh for Project {
                             ContainerStateStatusEnum::EXITED => {
                                 Self::Stopped(ProjectStopped { container })
                             }
-                            _ => todo!()
+                            _ => todo!(),
                         }
                     }
-                    Err(_err) => todo!()
+                    Err(_err) => todo!(),
                 }
-            },
-            Self::Errored(err) => Self::Errored(err)
+            }
+            Self::Errored(err) => Self::Errored(err),
         };
         Ok(next)
     }
@@ -219,7 +198,7 @@ impl ProjectCreating {
     pub fn new(project_name: ProjectName, prefix: String, initial_key: String) -> Self {
         Self {
             project_name,
-            initial_key
+            initial_key,
         }
     }
 }
@@ -243,7 +222,7 @@ impl<'c> State<'c> for ProjectCreating {
             .docker()
             .inspect_container(&container_name.clone(), None)
             .or_else(|err| async move {
-                if matches!(err, DockerError::DockerResponseNotFoundError { .. }) {
+                if matches!(err, DockerError::DockerResponseServerError { status_code, .. } if status_code == 404) {
                     let opts = CreateContainerOptions {
                         name: container_name.clone()
                     };
@@ -288,7 +267,7 @@ impl<'c> State<'c> for ProjectCreating {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ProjectReady {
-    container: ContainerInspectResponse
+    container: ContainerInspectResponse,
 }
 
 #[async_trait]
@@ -302,7 +281,7 @@ impl<'c> State<'c> for ProjectReady {
             .start_container::<String>(container_id, None)
             .await
             .or_else(|err| {
-                if matches!(err, DockerError::DockerResponseNotModifiedError { .. }) {
+                if matches!(err, DockerError::DockerResponseServerError { status_code, .. } if status_code == 304) {
                     // Already started
                     Ok(())
                 } else {
@@ -313,7 +292,17 @@ impl<'c> State<'c> for ProjectReady {
         let mut container = None;
         for _ in 0..9 {
             let latest = self.container.clone().refresh(ctx).await?;
-            if matches!(latest.clone().state.unwrap().health.unwrap().status.unwrap(), HealthStatusEnum::HEALTHY) {
+            if matches!(
+                latest
+                    .clone()
+                    .state
+                    .unwrap()
+                    .health
+                    .unwrap()
+                    .status
+                    .unwrap(),
+                HealthStatusEnum::HEALTHY
+            ) {
                 container = Some(latest);
                 break;
             } else {
@@ -323,12 +312,11 @@ impl<'c> State<'c> for ProjectReady {
 
         if let Some(container) = container {
             let service = Service::from_container(container.clone(), ctx);
-            Ok(Self::Next {
-                container,
-                service
-            })
+            Ok(Self::Next { container, service })
         } else {
-            Err(ProjectError::custom("timed out waiting for runtime to become healthy"))
+            Err(ProjectError::custom(
+                "timed out waiting for runtime to become healthy",
+            ))
         }
     }
 }
@@ -356,8 +344,12 @@ pub struct Service {
 }
 
 impl Service {
-    pub fn from_container<'c, C: Context<'c>>(container: ContainerInspectResponse, ctx: &C) -> Self {
-        let name = container.name
+    pub fn from_container<'c, C: Context<'c>>(
+        container: ContainerInspectResponse,
+        ctx: &C,
+    ) -> Self {
+        let name = container
+            .name
             .as_ref()
             .unwrap()
             .strip_suffix("_run")
@@ -380,10 +372,7 @@ impl Service {
             .parse()
             .unwrap();
 
-        Self {
-            name,
-            target,
-        }
+        Self { name, target }
     }
 }
 
@@ -394,10 +383,7 @@ impl Refresh for ProjectStarted {
     async fn refresh<'c, C: Context<'c>>(self, ctx: &C) -> Result<Self, Self::Error> {
         let container = self.container.refresh(ctx).await.unwrap();
         let service = Service::from_container(container.clone(), ctx);
-        Ok(Self {
-            container,
-            service
-        })
+        Ok(Self { container, service })
     }
 }
 
@@ -413,7 +399,7 @@ impl<'c> State<'c> for ProjectStarted {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ProjectStopped {
-    container: ContainerInspectResponse
+    container: ContainerInspectResponse,
 }
 
 #[async_trait]
@@ -422,7 +408,7 @@ impl Refresh for ProjectStopped {
 
     async fn refresh<'c, C: Context<'c>>(self, ctx: &C) -> Result<Self, Self::Error> {
         Ok(Self {
-            container: self.container.refresh(ctx).await?
+            container: self.container.refresh(ctx).await?,
         })
     }
 }
@@ -434,20 +420,22 @@ impl<'c> State<'c> for ProjectStopped {
 
     async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error> {
         // If stopped, try to restart
-        Ok(ProjectReady { container: self.container })
+        Ok(ProjectReady {
+            container: self.container,
+        })
     }
 }
 
 /// A runtime error coming from inside a project
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ProjectError {
-    message: String
+    message: String,
 }
 
 impl ProjectError {
     pub fn custom<S: AsRef<str>>(message: S) -> Self {
         Self {
-            message: message.as_ref().to_string()
+            message: message.as_ref().to_string(),
         }
     }
 }
@@ -463,7 +451,7 @@ impl std::error::Error for ProjectError {}
 impl From<DockerError> for ProjectError {
     fn from(err: DockerError) -> Self {
         Self {
-            message: format!("{:?}", err)
+            message: format!("{:?}", err),
         }
     }
 }
@@ -488,7 +476,7 @@ pub mod tests {
         let world = World::new();
         let ctx = world.context();
         let mut project = Project::Creating(ProjectCreating::new(
-            "test_project_do_not_upvote".parse().unwrap()
+            "test_project_do_not_upvote".parse().unwrap(),
         ));
         while !matches!(&project, Project::Started(..)) {
             project = project.next(&ctx).await.unwrap();

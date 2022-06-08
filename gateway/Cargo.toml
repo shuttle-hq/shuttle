@@ -21,7 +21,7 @@ axum = { version = "0.4.8", features = [ "headers" ] }
 hyper-reverse-proxy = "0.5.1"
 tower = { version = "0.4.12", features = [ "steer" ] }
 
-bollard = "0.11.1"
+bollard = "0.12"
 
 sqlx = { version = "0.5.11", features = [ "sqlite", "json", "runtime-tokio-rustls" ] }
 

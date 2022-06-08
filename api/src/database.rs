@@ -109,7 +109,8 @@ impl State {
             );
         }
 
-        let info = DatabaseReadyInfo::new(role_name, role_password, database_name);
+        let info =
+            DatabaseReadyInfo::new(role_name, role_password, database_name, "5432".to_string());
         self.info = Some(info.clone());
         Ok(info)
     }

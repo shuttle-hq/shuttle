@@ -29,9 +29,7 @@ structopt = "0.3.26"
 cargo_metadata = "0.14.2"
 webbrowser = "0.6"
 uuid = { version = "0.8.2", features = ["v4"] }
+portpicker = "0.1.1"
 
 shuttle-common = { version = "0.3.0", path = "../common" }
 shuttle-service = { version = "0.3.0", path = "../service", features = [ "loader" ] }
-
-[dev-dependencies]
-portpicker = "0.1.1"

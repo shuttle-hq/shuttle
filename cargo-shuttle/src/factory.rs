@@ -13,6 +13,7 @@ use crossterm::{
     QueueableCommand,
 };
 use futures::StreamExt;
+use portpicker::pick_unused_port;
 use shuttle_common::{project::ProjectName, DatabaseReadyInfo};
 use shuttle_service::{error::CustomError, Factory};
 use std::{collections::HashMap, io::stdout, time::Duration};
@@ -56,10 +57,11 @@ impl Factory for LocalFactory {
                     name: container_name.clone(),
                 });
                 let mut port_bindings = HashMap::new();
+                let host_port = pick_unused_port().expect("system to have a free port");
                 port_bindings.insert(
                     "5432/tcp".to_string(),
                     Some(vec![PortBinding {
-                        host_port: Some("5432".to_string()),
+                        host_port: Some(host_port.to_string()),
                         ..Default::default()
                     }]),
                 );
@@ -89,6 +91,22 @@ impl Factory for LocalFactory {
             Err(error) => return Err(shuttle_service::Error::Custom(CustomError::new(error))),
         };
 
+        let port = container
+            .host_config
+            .expect("container to have host config")
+            .port_bindings
+            .expect("port bindings on container")
+            .get("5432/tcp")
+            .expect("a '5432/tcp' port bindings entry")
+            .as_ref()
+            .expect("a '5432/tcp' port bindings")
+            .first()
+            .expect("at least one port binding")
+            .host_port
+            .as_ref()
+            .expect("a host port")
+            .clone();
+
         if !container
             .state
             .expect("container to have a state")
@@ -99,16 +117,17 @@ impl Factory for LocalFactory {
             self.docker
                 .start_container(&container_name, None::<StartContainerOptions<String>>)
                 .await
-                .expect("failed to start not running container");
+                .expect("failed to start none running container");
         }
 
         self.wait_for_ready(&container_name).await?;
 
-        let db_info = DatabaseReadyInfo {
-            database_name: "postgres".to_string(),
-            role_name: "postgres".to_string(),
-            role_password: PG_PASSWORD.to_string(),
-        };
+        let db_info = DatabaseReadyInfo::new(
+            "postgres".to_string(),
+            "postgres".to_string(),
+            PG_PASSWORD.to_string(),
+            port,
+        );
 
         let conn_str = db_info.connection_string("localhost");
 

@@ -4,24 +4,28 @@ pub mod config;
 mod factory;
 mod print;
 
-use std::fs::File;
+use std::fs::{read_to_string, File};
 use std::io::Write;
 use std::io::{self, stdout};
 use std::net::{Ipv4Addr, SocketAddr};
 use std::rc::Rc;
 
-use anyhow::{Context, Result};
-pub use args::{Args, Command, ProjectArgs, RunArgs};
+use anyhow::{anyhow, Context, Result};
+pub use args::{Args, Command, InitArgs, ProjectArgs, RunArgs};
 use args::{AuthArgs, DeployArgs, LoginArgs};
+use cargo::core::compiler::CompileMode;
 use cargo::core::resolver::CliFeatures;
 use cargo::core::Workspace;
-use cargo::ops::{PackageOpts, Packages};
+use cargo::ops::{CompileOptions, NewOptions, PackageOpts, Packages, TestOptions};
+use cargo_edit::{find, get_latest_dependency, registry_url};
 use colored::Colorize;
 use config::RequestContext;
 use factory::LocalFactory;
 use futures::future::TryFutureExt;
+use semver::{Version, VersionReq};
 use shuttle_service::loader::{build_crate, Loader};
 use tokio::sync::mpsc;
+use toml_edit::{value, Array, Document, Item, Table, Value};
 use uuid::Uuid;
 
 #[macro_use]
@@ -59,7 +63,11 @@ impl Shuttle {
         self.ctx.set_api_url(args.api_url);
 
         match args.cmd {
-            Command::Deploy(deploy_args) => self.deploy(deploy_args).await,
+            Command::Deploy(deploy_args) => {
+                self.check_lib_version(args.project_args).await?;
+                self.deploy(deploy_args).await
+            }
+            Command::Init(init_args) => self.init(init_args).await,
             Command::Status => self.status().await,
             Command::Logs => self.logs().await,
             Command::Delete => self.delete().await,
@@ -67,6 +75,51 @@ impl Shuttle {
             Command::Login(login_args) => self.login(login_args).await,
             Command::Run(run_args) => self.local_run(run_args).await,
         }
+    }
+
+    async fn init(&self, args: InitArgs) -> Result<()> {
+        // Interface with cargo to initialize new lib package for shuttle
+        let opts = NewOptions::new(None, false, true, args.path.clone(), None, None, None)?;
+        let cargo_config = cargo::util::config::Config::default()?;
+        let init_result = cargo::ops::init(&opts, &cargo_config)?;
+        // Mimick `cargo init` behavior and log status or error to shell
+        cargo_config
+            .shell()
+            .status("Created", format!("{} (shuttle) package", init_result))?;
+
+        // Read Cargo.toml into a `Document`
+        let cargo_path = args.path.join("Cargo.toml");
+        let mut cargo_doc = read_to_string(cargo_path.clone())?.parse::<Document>()?;
+
+        // Remove empty dependencies table to re-insert after the lib table is inserted
+        cargo_doc.remove("dependencies");
+
+        // Insert `crate-type = ["cdylib"]` array into `[lib]` table
+        let crate_type_array = Array::from_iter(["cdylib"].into_iter());
+        let mut lib_table = Table::new();
+        lib_table["crate-type"] = Item::Value(Value::Array(crate_type_array));
+        cargo_doc["lib"] = Item::Table(lib_table);
+
+        // Fetch the latest shuttle-service version from crates.io
+        let manifest_path = find(&Some(args.path)).unwrap();
+        let url = registry_url(manifest_path.as_path(), None).expect("Could not find registry URL");
+        let latest_shuttle_service =
+            get_latest_dependency("shuttle-service", false, &manifest_path, &Some(url))
+                .expect("Could not query the latest version of shuttle-service");
+        let shuttle_version = latest_shuttle_service
+            .version()
+            .expect("No latest shuttle-service version available");
+
+        // Insert shuttle-service to `[dependencies]` table
+        let mut dep_table = Table::new();
+        dep_table["shuttle-service"]["version"] = value(shuttle_version);
+        cargo_doc["dependencies"] = Item::Table(dep_table);
+
+        // Truncate Cargo.toml and write the updated `Document` to it
+        let mut cargo_toml = File::create(cargo_path)?;
+        cargo_toml.write_all(cargo_doc.to_string().as_bytes())?;
+
+        Ok(())
     }
 
     pub fn load_project(&mut self, project_args: &ProjectArgs) -> Result<()> {
@@ -183,6 +236,8 @@ impl Shuttle {
     }
 
     async fn deploy(&self, args: DeployArgs) -> Result<()> {
+        self.run_tests(args.no_test)?;
+
         let package_file = self
             .run_cargo_package(args.allow_dirty)
             .context("failed to package cargo project")?;
@@ -205,6 +260,24 @@ impl Shuttle {
         })
         .await
         .context("failed to deploy cargo project")
+    }
+
+    async fn check_lib_version(&self, project_args: ProjectArgs) -> Result<()> {
+        let cargo_path = project_args.working_directory.join("Cargo.toml");
+        let cargo_doc = read_to_string(cargo_path.clone())?.parse::<Document>()?;
+        let current_shuttle_version = &cargo_doc["dependencies"]["shuttle-service"]["version"];
+        let service_semver = Version::parse(current_shuttle_version.as_str().unwrap())?;
+        let server_version = client::shuttle_version(self.ctx.api_url()).await?;
+        let server_semver = VersionReq::parse(&server_version)?;
+
+        if server_semver.matches(&service_semver) {
+            Ok(())
+        } else {
+            Err(anyhow!(
+                "Your shuttle_service version is outdated. Update your shuttle_service version to {} and try to deploy again",
+                &server_version,
+            ))
+        }
     }
 
     // Packages the cargo project and returns a File to that file
@@ -234,5 +307,31 @@ impl Shuttle {
         let locks = cargo::ops::package(&ws, &opts)?.expect("unwrap ok here");
         let owned = locks.get(0).unwrap().file().try_clone()?;
         Ok(owned)
+    }
+
+    fn run_tests(&self, no_test: bool) -> Result<()> {
+        if no_test {
+            return Ok(());
+        }
+
+        let config = cargo::util::config::Config::default()?;
+        let working_directory = self.ctx.working_directory();
+        let path = working_directory.join("Cargo.toml");
+
+        let compile_options = CompileOptions::new(&config, CompileMode::Test).unwrap();
+        let ws = Workspace::new(&path, &config)?;
+        let opts = TestOptions {
+            compile_opts: compile_options,
+            no_run: false,
+            no_fail_fast: false,
+        };
+
+        let test_failures = cargo::ops::run_tests(&ws, &opts, &[])?;
+        match test_failures {
+            None => Ok(()),
+            Some(_) => Err(anyhow!(
+                "Some tests failed. To ignore all tests, pass the `--no-test` flag"
+            )),
+        }
     }
 }

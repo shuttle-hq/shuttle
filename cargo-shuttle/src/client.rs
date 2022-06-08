@@ -69,6 +69,29 @@ pub(crate) async fn status(api_url: ApiUrl, api_key: &ApiKey, project: &ProjectN
     Ok(())
 }
 
+pub(crate) async fn shuttle_version(mut api_url: ApiUrl) -> Result<String> {
+    let client = get_retry_client();
+    api_url.push_str("/version");
+
+    let res: Response = client
+        .get(api_url)
+        .send()
+        .await
+        .context("failed to get version from Shuttle server")?;
+
+    let response_status = res.status();
+
+    if response_status == StatusCode::OK {
+        Ok(res.text().await?)
+    } else {
+        Err(anyhow!(
+            "status: {}, body: {}",
+            response_status,
+            res.text().await?
+        ))
+    }
+}
+
 pub(crate) async fn logs(api_url: ApiUrl, api_key: &ApiKey, project: &ProjectName) -> Result<()> {
     let client = get_retry_client();
 

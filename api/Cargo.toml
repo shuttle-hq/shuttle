@@ -18,8 +18,8 @@ serde = "1.0.136"
 structopt = "0.3.26"
 sqlx = { version = "0.5", features = ["runtime-tokio-native-tls", "postgres"] }
 tokio = { version = "1.15.0", features = ["full"] }
-# not great, but the changes for hyper 0.14 and tokio 1 have not been merged on the main repo
-hyper-reverse-proxy = { git = "https://github.com/jtroo/hyper-reverse-proxy" }
+# not great, but waiting for WebSocket changes to be merged
+hyper-reverse-proxy = { git = "https://github.com/chesedo/hyper-reverse-proxy", branch = "master" }
 hyper = { version = "0.14", features = ["client", "http1", "http2", "tcp" ] } # for reverse proxying
 log = "0.4.14"
 env_logger = "0.9.0"

@@ -5,6 +5,8 @@ members = [
   "cargo-shuttle",
   "common",
   "codegen",
+  "proto",
+  "provisioner",
   "e2e"
 ]
 exclude = [

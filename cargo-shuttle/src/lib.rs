@@ -203,14 +203,6 @@ impl Shuttle {
             key,
             self.ctx.project_name(),
         )
-        .and_then(|_| {
-            client::secrets(
-                self.ctx.api_url(),
-                key,
-                self.ctx.project_name(),
-                self.ctx.secrets(),
-            )
-        })
         .await
         .context("failed to deploy cargo project")
     }

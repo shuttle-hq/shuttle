@@ -14,7 +14,6 @@ mod factory;
 mod proxy;
 mod router;
 
-use std::collections::HashMap;
 use std::net::IpAddr;
 use std::sync::Arc;
 
@@ -25,7 +24,6 @@ use rocket::serde::json::Json;
 use rocket::{tokio, Build, Data, Rocket, State};
 use shuttle_common::project::ProjectName;
 use shuttle_common::{DeploymentApiError, DeploymentMeta, Port};
-use shuttle_service::SecretStore;
 use structopt::StructOpt;
 use uuid::Uuid;
 

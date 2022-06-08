@@ -175,9 +175,10 @@ impl LocalFactory {
             let info = line.expect("failed to create image");
 
             if let Some(id) = info.id.as_ref() {
-                match layers.iter_mut().find(|item: &&mut CreateImageInfo| {
-                    item.id.as_deref() == Some(id)
-                }) {
+                match layers
+                    .iter_mut()
+                    .find(|item: &&mut CreateImageInfo| item.id.as_deref() == Some(id))
+                {
                     Some(item) => *item = info,
                     None => layers.push(info),
                 }

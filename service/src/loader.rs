@@ -127,7 +127,7 @@ pub fn build_crate(project_path: &Path, buf: Box<dyn std::io::Write>) -> anyhow:
 
     if let Some(profiles) = ws.profiles() {
         for profile in profiles.get_all().values() {
-            if profile.panic == Some("abort".to_string()) {
+            if profile.panic.as_deref() == Some("abort") {
                 return Err(anyhow!("a Shuttle project cannot have panics that abort. Please ensure your Cargo.toml does not contain `panic = \"abort\"` for any profiles"));
             }
         }

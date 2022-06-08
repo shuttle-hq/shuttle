@@ -296,24 +296,6 @@ impl RequestContext {
     pub fn get_local_config(
         project_args: &mut ProjectArgs
     ) -> Result<Config<LocalConfigManager, ProjectConfig>> {
-        let root_directory_path = find_root_directory(&project_args.working_directory);
-
-        // Iterates through the directories until it finds the Cargo.toml file (project root) and returns the path
-        pub fn find_root_directory(dir: &Path) -> Option<PathBuf> {
-            for ancestor in dir.ancestors() {
-                if ancestor.join("Cargo.toml").exists() {
-                    return Some(ancestor.to_path_buf());
-                }
-            }
-            None
-        }
-
-        if let Some(working_directory) = root_directory_path {
-            project_args.working_directory = working_directory;
-        } else {
-            panic!("Shuttle.toml not found.");
-        }
-
         let local_manager =
             LocalConfigManager::new(&project_args.working_directory, "Shuttle.toml".to_string());
         let mut project = Config::new(local_manager);
@@ -411,61 +393,5 @@ impl RequestContext {
             .as_ref()
             .and_then(|secrets| secrets.as_ref().cloned())
             .unwrap_or_default()
-    }
-}
-#[cfg(test)]
-mod tests {
-    use std::{path::PathBuf, str::FromStr};
-
-    use shuttle_common::project::ProjectName;
-
-    use crate::{args::ProjectArgs, config::RequestContext};
-
-    use super::{Config, LocalConfigManager, ProjectConfig};
-
-    fn path_from_workspace_root(path: &str) -> PathBuf {
-        PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
-            .join("..")
-            .join(path)
-    }
-
-    fn unwrap_project_name(config: &Config<LocalConfigManager, ProjectConfig>) -> String {
-        config.as_ref().unwrap().name.as_ref().unwrap().to_string()
-    }
-
-    #[test]
-    fn get_local_config_finds_name_in_shuttle_toml() {
-        let mut project_args = ProjectArgs {
-            working_directory: path_from_workspace_root("examples/axum/hello-world/"),
-            name: None,
-        };
-
-        let local_config = RequestContext::get_local_config(&mut project_args).unwrap();
-
-        assert_eq!(unwrap_project_name(&local_config), "hello-world-axum-app");
-    }
-
-    #[test]
-    fn fixme_running_in_src_subdir_finds_crate_but_fails_to_find_config() {
-        let mut project_args = ProjectArgs {
-            working_directory: path_from_workspace_root("examples/axum/hello-world/src"),
-            name: None,
-        };
-
-        let local_config = RequestContext::get_local_config(&mut project_args).unwrap();
-
-        assert_eq!(unwrap_project_name(&local_config), "hello-world-axum-app");
-    }
-
-    #[test]
-    fn setting_name_overrides_name_in_config() {
-        let mut project_args = ProjectArgs {
-            working_directory: path_from_workspace_root("examples/axum/hello-world/"),
-            name: Some(ProjectName::from_str("my-fancy-project-name").unwrap()),
-        };
-
-        let local_config = RequestContext::get_local_config(&mut project_args).unwrap();
-
-        assert_eq!(unwrap_project_name(&local_config), "my-fancy-project-name");
     }
 }

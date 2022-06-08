@@ -8,6 +8,7 @@ use std::fs::{read_to_string, File};
 use std::io::Write;
 use std::io::{self, stdout};
 use std::net::{Ipv4Addr, SocketAddr};
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use anyhow::{anyhow, Context, Result};
@@ -124,6 +125,25 @@ impl Shuttle {
 
     pub fn load_project(&mut self, project_args: &mut ProjectArgs) -> Result<()> {
         trace!("loading project arguments: {project_args:?}");
+
+        let root_directory_path = find_root_directory(&project_args.working_directory);
+
+        // Iterates through the directories until it finds the Cargo.toml file (project root) and returns the path
+        fn find_root_directory(dir: &Path) -> Option<PathBuf> {
+            for ancestor in dir.ancestors() {
+                if ancestor.join("Cargo.toml").exists() {
+                    return Some(ancestor.to_path_buf());
+                }
+            }
+            None
+        }
+
+        if let Some(working_directory) = root_directory_path {
+            project_args.working_directory = working_directory;
+        } else {
+            return Err(anyhow!("Could not locate the root of a cargo project. Are you inside a cargo project? You can also use `--working-directory` to locate your cargo project."));
+        }
+
         self.ctx.load_local(project_args)
     }
 
@@ -136,7 +156,7 @@ impl Shuttle {
             println!("If your browser did not automatically open, go to {url}");
             print!("Enter Api Key: ");
 
-            io::stdout().flush().unwrap();
+            stdout().flush().unwrap();
 
             let mut input = String::new();
 
@@ -337,5 +357,55 @@ impl Shuttle {
                 "Some tests failed. To ignore all tests, pass the `--no-test` flag"
             )),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{path::PathBuf};
+    use crate::{args::ProjectArgs, Shuttle};
+
+    fn path_from_workspace_root(path: &str) -> PathBuf {
+        PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
+            .join("..")
+            .join(path)
+    }
+
+    #[test]
+    fn setting_name_overrides_name_in_config() {
+        let mut project_args = ProjectArgs {
+            working_directory: path_from_workspace_root("examples/axum/hello-world/"),
+            name: None,
+        };
+        let mut shuttle = Shuttle::new();
+        shuttle.load_project(&mut project_args).unwrap();
+
+        assert_eq!(project_args.working_directory, path_from_workspace_root("examples/axum/hello-world/"));
+    }
+
+    #[test]
+    fn get_local_config_finds_name_in_shuttle_toml() {
+        let mut project_args = ProjectArgs {
+            working_directory: path_from_workspace_root("examples/axum/hello-world/"),
+            name: None,
+        };
+
+        let mut shuttle = Shuttle::new();
+        shuttle.load_project(&mut project_args).unwrap();
+
+        assert_eq!(project_args.working_directory, path_from_workspace_root("examples/axum/hello-world/"));
+    }
+
+    #[test]
+    fn running_in_src_subdir_finds_crate_but_fails_to_find_config() {
+        let mut project_args = ProjectArgs {
+            working_directory: path_from_workspace_root("examples/axum/hello-world/src"),
+            name: None,
+        };
+
+        let mut shuttle = Shuttle::new();
+        shuttle.load_project(&mut project_args).unwrap();
+
+        assert_eq!(project_args.working_directory, path_from_workspace_root("examples/axum/hello-world/"));
     }
 }

@@ -167,6 +167,24 @@
 //! cargo shuttle deploy --name=$PROJECT_NAME
 //! ```
 //!
+//! ##### Using Podman instead of Docker
+//! If you are using [Podman](https://podman.io/) instead of Docker, then `cargo shuttle run` will give
+//! `got unexpected error while inspecting docker container: error trying to connect: No such file or directory` error.
+//!
+//! To fix this error you will need to expose a rootless socket for Podman first. This can be done using:
+//!
+//! ```bash
+//! podman system service --time=0 unix:///tmp/podman.sock
+//! ```
+//!
+//! Now set the `DOCKER_HOST` environment variable to point to this socket using:
+//!
+//! ```bash
+//! DOCKER_HOST=unix:///tmp/podman.sock
+//! ```
+//!
+//! Now all `cargo shuttle run` commands will work against Podman.
+//!
 //! ## Getting API keys
 //!
 //! After you've installed the [cargo-shuttle](https://docs.rs/crate/cargo-shuttle/latest) command, run:

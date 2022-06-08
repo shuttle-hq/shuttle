@@ -94,7 +94,7 @@ impl Display for DeploymentMeta {
         Project:            {}
         Deployment Id:      {}
         Deployment Status:  {}
-        Host:               {}
+        Host:               https://{}
         Created At:         {}{}
         "#,
             self.project, self.id, self.state, self.host, self.created_at, db

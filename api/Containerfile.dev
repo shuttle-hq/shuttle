@@ -1,0 +1,33 @@
+FROM rust:buster as runtime
+RUN apt-get update &&\
+    apt-get install -y supervisor
+RUN rustup component add rust-src
+
+FROM rust:buster AS chef
+RUN apt-get update &&\
+    apt-get install -y protobuf-compiler
+WORKDIR app
+RUN cargo install cargo-chef
+
+FROM chef AS planner
+COPY . .
+COPY ./api/docker/config.toml $CARGO_HOME/config.toml
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM chef AS builder
+COPY --from=planner /app/recipe.json recipe.json
+RUN cargo chef cook --recipe-path recipe.json
+COPY . .
+RUN cargo build --bin api
+
+FROM runtime
+WORKDIR /
+COPY --from=builder /app/target/debug/api /usr/local/bin/shuttle-backend
+COPY --from=builder /app/service /app/service
+COPY --from=builder /app/common /app/common
+COPY --from=builder /app/codegen /app/codegen
+
+COPY api/docker/config.toml $CARGO_HOME/config.toml
+COPY api/docker/entrypoint.sh /bin/entrypoint.sh
+COPY api/docker/supervisord.conf /usr/share/supervisord/supervisord.conf
+ENTRYPOINT ["/bin/entrypoint.sh"]

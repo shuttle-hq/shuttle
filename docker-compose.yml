@@ -1,7 +1,9 @@
 version: "3"
 services:
   app:
-    build: .
+    build:
+      context: .
+      dockerfile: api/Containerfile.dev
     ports:
       - "8001:8001"
       - "8000:8000"
@@ -11,5 +13,11 @@ services:
     environment:
       - SHUTTLE_USERS_TOML=/config/users.toml
       - SHUTTLE_ADMIN_SECRET=admin-pass
-      - API_FQDN=api.shuttle.rs
-      - PROXY_FQDN=shuttleapp.rs
+      - PROXY_FQDN=teste.rs
+      - PROVISIONER_ADDRESS=provisioner
+  provisioner:
+    build:
+      context: .
+      dockerfile: provisioner/Containerfile.dev
+    environment:
+      - PORT=5001

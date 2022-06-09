@@ -1,0 +1,60 @@
+---
+title: Infrastructure From Code
+description: A new paradigm for building on the cloud
+author: nodar
+tags: [infra-from-code, rust, startup]
+thumb: infrastructure-from-code-trans.png
+cover: infrastructure-from-code-trans.png
+date: "2022-05-09T15:00:00"
+---
+
+In the early days of Facebook (back when it was still called `thefacebook.com`), Mark Zuckerberg hosted it on Harvard’s university servers. Back then companies used to buy or rent physical servers to run their software on. The advent of the cloud in the mid-2000s changed the game. The elasticity that this enabled has in big part enabled the rapid progress that we’ve all enjoyed since then. What we demand from software has increased tremendously, and correspondingly its architecture has become much more elaborate. The power of flexibility came at a price though - the complexity of wiring code with infrastructure. That price is even higher today.
+
+### The Container Hero
+
+Heroku became part of the cloud-native lore as the first incredibly successful attempt at tackling this complexity. They led the first crusade to rid software developers of the infrastructure complexity dragon. People loved it. Heroku pioneered the wildly popular container-based approach to deployment that abstracted away the burden of managing virtual machines. By being opinionated with the use of containers, Heroku was able to appeal to a broad set of customers looking to quickly build apps. Containers are mutually isolated processes, wired together by third-party configuration which does not belong in the application’s code base - this design choice results in a lack of elasticity and granular control of your system. This results in a conservative outlook of dealing with infrastructure, constantly over-provisioning and hence overpaying to account for potential future load.
+
+Furthermore, infrastructure is still treated separately from code - the two worlds live separately and don’t really know much about each other. There is much less wiring to do than with AWS for example, but what is left to do - and there’s a lot of it - you still have to do yourself. Heroku trades off AWS’s elasticity for ready-made building block components that are statically wired up together through a combination of CLI commands and dashboard operations. Of course, Heroku is limited by its founding principle: static containers as building blocks of applications. With Heroku, it is true you do not have to think about infrastructure - but only in the beginning. Once your application scales, your bills stack up and you’re left without a choice: go back to AWS.
+
+### The Serverless Conundrum
+
+We need to talk about serverless. Serverless (think AWS Lambda) was a new cloud computing execution model where machine allocation happens on-demand and the user is primarily abstracted away from the underlying servers. With it came a familiar promise - developers not needing to think about infrastructure at all. Despite its somewhat counterintuitive name (because, of course, there are always servers running somewhere), serverless sounds like a great ideal to strive towards. This is simple, developers want to spend as much time as possible on delivering business value by writing code, while companies would like to avoid spending fortunes on DevOps. This seems to be the holy grail, but there’s a catch. You might ask, “if you say serverless is so great, why have we all not switched yet”?
+
+Well, serverless forces you to write application business logic as functions, rather than the more traditional idiom of stateful processes. To reap the benefits of serverless, you have to build your application as a multitude of stateless request or event handlers, often requiring a bottoms-up redesign of your system. For some use-cases the serverless paradigm works, but in many cases breaking things into discrete, decoupled functions may not be optimal or even feasible. The next question is, can we have our cake and eat it too? Can we maintain the paradigm of stateful processes and abstract away the underlying infrastructure and orchestration?
+
+### Infrastructure from Code
+
+At shuttle we want to empower engineers by creating the best possible developer experience.
+
+We've already developed an annotation based system that enables Rust apps to be deployed with a one-liner, as well as dependencies like databases being provisioned through static analysis in real-time.
+
+```rust
+#[shuttle_service::main]
+async fn rocket(
+    pool: PgPool, // automatic db provisioning + hands you back an authenticated connection pool
+) -> Result<...> {
+    // application code
+}
+```
+
+Building on the phenomenal engineering done before us, we see a better future. One where developers don’t need to do any “wiring” whatsoever when it comes to code and infrastructure.
+
+In this future, infrastructure can be defined directly from code. Not in the “Infrastructure as Code” kind of way though, but in the way that the code that developers write implicitly defines infrastructure. What your code actually needs in terms of infrastructure should be inferred as you build your application, instead of you having to think upfront about what infrastructure piece is needed and how to wire it up.
+
+This setup should also break the boundaries that keep containers isolated from each other (and thus make it difficult to orchestrate them), without necessarily getting rid of the paradigm of containers. It should not force you into any specific way of writing applications, but just be an extension of your workflow.
+
+### Having your cake and eating it too
+
+When looking back at Heroku’s success, it becomes apparent that focusing on one language, Ruby, which was becoming quite popular at the time - was a remarkable strategy. It enabled their team to focus acutely and produce an unparalleled experience for their users.
+
+At shuttle we are convinced Rust is the best language to start this journey with. It’s been [the most loved](https://www.cantorsparadise.com/the-most-loved-programming-language-in-the-world-5220475fcc22) language by developers for many years in a row (as well as one of the fastest-growing languages). If you want to create the best developer experience - it makes sense to start with the most loved language. Indeed, Rust is the first language packed with such a powerful set of tools for static analysis and code generation, that are required to create the best developer experience when it comes to _Infrastructure ~~as~~ from Code_.
+
+Removing the burden of dealing with DevOps from developers, many of whom find it daunting and stressful, not only do we stand to make development more enjoyable and efficient, but also enable far more people to write and ship applications.
+
+From inception, all of us shared affection for open source software, not only from a philosophical standpoint. We have seen in practice that the best way to build software is together with the end-users. It all goes back to the idea of creating the best developer experience - so for us, this is a no-brainer.
+
+Our community is just as important to us, as our vision is, so if any of this resonates with you - [join us on discord](https://discord.gg/H33rRDTm3p).
+
+Or check out our [jobs board](https://www.workatastartup.com/companies/shuttle).
+
+Also, if you’re curious to learn more about _how_ we are building this - [check out our GitHub](https://github.com/getsynth/shuttle).

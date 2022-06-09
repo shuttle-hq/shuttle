@@ -1,14 +1,10 @@
 use std::fs::File;
+use std::io::{self, BufRead};
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
-use std::process::{ExitStatus, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
+use std::str;
 use std::thread::sleep;
-use std::{
-    io::{self, BufRead},
-    process::{Child, Command},
-    str,
-    time::Duration,
-    time::SystemTime,
-};
+use std::time::{Duration, SystemTime};
 
 use colored::*;
 use portpicker::pick_unused_port;
@@ -31,12 +27,14 @@ impl EnsureSuccess for io::Result<ExitStatus> {
     }
 }
 
-pub struct Api {
+pub struct Services {
     id: String,
     api_addr: SocketAddr,
     proxy_addr: SocketAddr,
-    image: Option<String>,
-    container: Option<String>,
+    api_image: Option<String>,
+    api_container: Option<String>,
+    provisioner_image: Option<String>,
+    provisioner_container: Option<String>,
     target: String,
     color: Color,
 }
@@ -91,7 +89,7 @@ pub fn spawn_and_log<D: std::fmt::Display, C: Into<Color>>(
     child
 }
 
-impl Api {
+impl Services {
     fn new_free<D, C>(target: D, color: C) -> Self
     where
         D: std::fmt::Display,
@@ -117,8 +115,10 @@ impl Api {
             id,
             api_addr,
             proxy_addr,
-            image: None,
-            container: None,
+            api_image: None,
+            api_container: None,
+            provisioner_image: None,
+            provisioner_container: None,
             target: target.to_string(),
             color: color.into(),
         }
@@ -132,27 +132,48 @@ impl Api {
         let mut api = Self::new_free(target, color);
         let users_toml_file = format!("{}/users.toml", env!("CARGO_MANIFEST_DIR"));
 
-        let api_target = format!("   {} api", api.target);
-        let image = format!("unveil_{}_{}", api.target, api.id);
-
-        let mut build = Command::new("docker");
-
-        build
-            .args(["build", "-f", "./Dockerfile.dev", "-t", &image, "."])
-            .current_dir("../");
-
-        spawn_and_log(&mut build, api_target.as_str(), Color::White)
+        // Make sure network is up
+        Command::new("docker")
+            .args(["network", "create", "--driver", "bridge", "shuttle-net"])
+            .spawn()
+            .unwrap()
             .wait()
-            .ensure_success("failed to build `api` image");
+            .unwrap();
 
-        File::create(&users_toml_file).unwrap();
+        let provisioner_image = Self::build_image("provisioner", &api.target, &api.id);
+        api.provisioner_image = Some(provisioner_image.clone());
 
-        let container = format!("unveil_api_{}_{}", api.target, api.id);
+        let provisioner_target = format!("{} provisioner", api.target);
+        let provisioner_container = format!("shuttle_provisioner_{}_{}", api.target, api.id);
         let mut run = Command::new("docker");
         run.args([
             "run",
             "--name",
-            &container,
+            &provisioner_container,
+            "--network",
+            "shuttle-net",
+            "-e",
+            "PORT=5001",
+            &provisioner_image,
+        ]);
+        api.provisioner_container = Some(provisioner_container.clone());
+
+        spawn_and_log(&mut run, provisioner_target, api.color);
+
+        let api_target = format!("        {} api", api.target);
+        let api_image = Self::build_image("api", &api.target, &api.id);
+        api.api_image = Some(api_image.clone());
+
+        File::create(&users_toml_file).unwrap();
+
+        let api_container = format!("shuttle_api_{}_{}", api.target, api.id);
+        let mut run = Command::new("docker");
+        run.args([
+            "run",
+            "--name",
+            &api_container,
+            "--network",
+            "shuttle-net",
             "-p",
             format!("{}:{}", api.proxy_addr.port(), 8000).as_str(),
             "-p",
@@ -167,19 +188,36 @@ impl Api {
             "SHUTTLE_USERS_TOML=/config/users.toml",
             "-e",
             "SHUTTLE_INITIAL_KEY=ci-test",
+            "-e",
+            &format!("PROVISIONER_ADDRESS={provisioner_container}"),
             "-v",
             &format!("{}:/config/users.toml", users_toml_file),
-            &image,
+            &api_image,
         ]);
+        api.api_container = Some(api_container);
 
         spawn_and_log(&mut run, api_target, api.color);
-
-        api.image = Some(image);
-        api.container = Some(container);
 
         api.wait_ready(Duration::from_secs(120));
 
         api
+    }
+
+    fn build_image(service: &str, target: &str, id: &str) -> String {
+        let image = format!("shuttle_{service}_{target}_{id}");
+        let containerfile = format!("./{service}/Containerfile.dev");
+
+        let mut build = Command::new("docker");
+
+        build
+            .args(["build", "-f", &containerfile, "-t", &image, "."])
+            .current_dir("../");
+
+        spawn_and_log(&mut build, target, Color::White)
+            .wait()
+            .ensure_success("failed to build `{service}` image");
+
+        image
     }
 
     pub fn wait_ready(&self, mut timeout: Duration) {
@@ -201,7 +239,7 @@ impl Api {
     where
         I: IntoIterator<Item = &'s str>,
     {
-        let client_target = format!("{} client", self.target);
+        let client_target = format!("     {} client", self.target);
 
         let mut build = Command::new("cargo");
         build
@@ -234,9 +272,9 @@ impl Api {
     }
 }
 
-impl Drop for Api {
+impl Drop for Services {
     fn drop(&mut self) {
-        if let Some(container) = &self.container {
+        if let Some(container) = &self.api_container {
             Command::new("docker")
                 .args(["stop", container])
                 .output()
@@ -247,7 +285,25 @@ impl Drop for Api {
                 .expect("failed to remove api container");
         }
 
-        if let Some(image) = &self.image {
+        if let Some(image) = &self.api_image {
+            Command::new("docker")
+                .args(["rmi", image])
+                .output()
+                .expect("failed to remove api image");
+        }
+
+        if let Some(container) = &self.provisioner_container {
+            Command::new("docker")
+                .args(["stop", container])
+                .output()
+                .expect("failed to stop api container");
+            Command::new("docker")
+                .args(["rm", container])
+                .output()
+                .expect("failed to remove api container");
+        }
+
+        if let Some(image) = &self.provisioner_image {
             Command::new("docker")
                 .args(["rmi", image])
                 .output()

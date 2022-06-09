@@ -17,19 +17,71 @@ import InternalLink from "./InternalLink";
 
 const communities = [
   {
-    href: GITHUB_URL,
     name: "Github",
+    href: GITHUB_URL,
     icon: faGithub,
   },
   {
-    href: DISCORD_URL,
     name: "Discord",
+    href: DISCORD_URL,
     icon: faDiscord,
   },
   {
-    href: TWITTER_URL,
     name: "Twitter",
+    href: TWITTER_URL,
     icon: faTwitter,
+  },
+];
+
+const navigation = [
+  {
+    title: "Product",
+    links: [
+      { name: "Features", href: "/#features" },
+      { name: "Examples", href: "/#examples" },
+      { name: "Code Snippets", href: "/#code-snippets" },
+      {
+        name: "Roadmap",
+        href: "https://github.com/orgs/shuttle-hq/projects/4/views/2",
+      },
+    ],
+  },
+  {
+    title: "Company",
+    links: [
+      { name: "Blog", href: "/blog" },
+      {
+        name: "Careers",
+        href: "https://www.workatastartup.com/companies/shuttle",
+      },
+    ],
+  },
+  {
+    title: "Developers",
+    links: [
+      {
+        name: "Documentation",
+        href: "https://docs.rs/shuttle-service/latest/shuttle_service/",
+      },
+      {
+        name: "Guides",
+        href: "https://github.com/shuttle-hq/shuttle/tree/main/examples",
+      },
+      {
+        name: "Contributors",
+        href: "https://github.com/shuttle-hq/shuttle/graphs/contributors",
+      },
+    ],
+  },
+  {
+    title: "Community",
+    links: [
+      ...communities.map(({ name, href }) => ({ name, href })),
+      {
+        name: "Linkedin",
+        href: "https://www.linkedin.com/company/shuttle-yc/",
+      },
+    ],
   },
 ];
 
@@ -62,6 +114,7 @@ export default function Footer() {
               key={index}
               href={community.href}
               className="inline-block rounded border border-current py-3 px-5 text-base font-medium text-slate-600 hover:text-slate-900 dark:text-gray-200 hover:dark:text-white"
+              mixpanelEvent={community.name}
             >
               <FontAwesomeIcon
                 className="-ml-1 mr-3 text-current transition"
@@ -98,6 +151,37 @@ export default function Footer() {
       </div> */}
 
       <footer className="mx-auto max-w-6xl py-12 px-4 sm:px-6 lg:px-8">
+        <div className="-m-4 flex flex-wrap justify-between pb-8">
+          {navigation.map((col, index) => (
+            <div className="basis-2/4 p-4 md:basis-1" key={index}>
+              <h3 className="text-lg font-medium tracking-wider text-slate-800 dark:text-gray-200">
+                {col.title}
+              </h3>
+              <ul role="list" className="mt-4 space-y-4">
+                {col.links.map((link, index) => (
+                  <li key={index}>
+                    {link.href.startsWith("/") ? (
+                      <InternalLink
+                        href={link.href}
+                        className="whitespace-nowrap text-base text-slate-500 hover:text-slate-900 dark:text-gray-400 hover:dark:text-gray-300"
+                      >
+                        {link.name}
+                      </InternalLink>
+                    ) : (
+                      <ExternalLink
+                        href={link.href}
+                        className="whitespace-nowrap text-base text-slate-500 hover:text-slate-900 dark:text-gray-400 hover:dark:text-gray-300"
+                      >
+                        {link.name}
+                      </ExternalLink>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+
         <div className="mt-8 flex flex-col gap-2 sm:flex-row">
           <p className="text-base dark:text-gray-300">&copy; 2022 shuttle</p>
           {/* <p className="flex gap-2">

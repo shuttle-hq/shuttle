@@ -1,8 +1,10 @@
-use std::{process::Command, thread::sleep, time::Duration};
+use std::future::Future;
+use std::process::Command;
+use std::thread::sleep;
+use std::time::Duration;
 
 use portpicker::pick_unused_port;
 use sqlx::Connection;
-use std::future::Future;
 
 pub struct PostgresInstance {
     port: u16,
@@ -29,7 +31,7 @@ impl PostgresInstance {
                 &format!("POSTGRES_PASSWORD={}", password),
                 "-p",
                 &format!("{}:5432", port),
-                "postgres:11", // Our Dockerfile image is based on buster which has postgres version 11
+                "postgres:11", // Our Containerfile image is based on buster which has postgres version 11
             ])
             .spawn()
             .expect("failed to start a postgres instance");

@@ -1,21 +1,20 @@
-use anyhow::{anyhow, Context};
-use rand::Rng;
-use rocket::form::validate::Contains;
-use rocket::http::Status;
-use rocket::outcome::try_outcome;
-use rocket::request::{FromRequest, Outcome};
-use rocket::Request;
-use rocket::State;
-use serde::{Deserialize, Serialize};
-
-use shuttle_common::project::ProjectName;
-use shuttle_common::DeploymentApiError;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::RwLock;
+
+use anyhow::{anyhow, Context};
+use rand::Rng;
+use rocket::form::validate::Contains;
+use rocket::http::Status;
+use rocket::outcome::try_outcome;
+use rocket::request::{FromRequest, Outcome};
+use rocket::{Request, State};
+use serde::{Deserialize, Serialize};
+use shuttle_common::project::ProjectName;
+use shuttle_common::DeploymentApiError;
 
 #[derive(Clone, Debug, PartialEq, Hash, Eq, Serialize, Deserialize, Responder)]
 #[serde(transparent)]

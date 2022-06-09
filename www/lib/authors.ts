@@ -32,12 +32,26 @@ const authors: readonly Author[] = [
     author_image_url: "https://github.com/brokad.png",
   },
   {
+    author_id: "nodar",
+    author: "Nodar Daneliya",
+    position: "Founder",
+    author_url: "https://github.com/NodarD",
+    author_image_url: "https://github.com/nodard.png",
+  },
+  {
     author_id: "terrencewaters",
     author: "Terrence Waters",
     position: "Software Engineer",
     author_url: "",
     author_image_url: "",
   },
+  {
+    author_id: "ben",
+    author: "Ben",
+    position: "",
+    author_url: "https://github.com/kaleidawave",
+    author_image_url: "https://github.com/kaleidawave.png"
+  }
 ];
 
 export default authors;

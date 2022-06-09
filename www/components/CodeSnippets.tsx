@@ -6,7 +6,10 @@ export default function CodeSnippets() {
   const [activeTab, setActiveTab] = useState(1);
 
   return (
-    <div className="mx-auto max-w-6xl px-4 pt-16 pb-20 sm:px-6 lg:px-8 lg:pt-24 lg:pb-28">
+    <div
+      id="code-snippets"
+      className="mx-auto max-w-6xl px-4 pt-16 pb-20 sm:px-6 lg:px-8 lg:pt-24 lg:pb-28"
+    >
       <div className="grid w-full grid-cols-1 gap-4 lg:grid-cols-12">
         <div className="mb-4 lg:col-span-5">
           <h2 className="text-3xl font-extrabold tracking-tight dark:text-gray-200 sm:text-4xl">

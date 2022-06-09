@@ -1,0 +1,31 @@
+[Unit]
+Description=maintains the shuttle Backend API
+After=docker.socket
+After=opt-shuttle.mount
+After=shuttle-provisioner.service
+
+[Service]
+Type=simple
+User=ubuntu
+RestartSec=30
+Restart=always
+ExecStartPre=/usr/bin/docker pull ${docker_image}:latest
+ExecStart=/usr/bin/docker run --rm \
+			      --network shuttle-net \
+			      --name backend \
+			      -e CRATES_PATH=/opt/shuttle/crates \
+			      -e PROXY_PORT=8000 \
+			      -p 8000:8000 \
+			      -e API_PORT=8001 \
+			      -p 8001:8001 \
+			      -e PROXY_FQDN=${proxy_fqdn} \
+			      -e SHUTTLE_USERS_TOML=/opt/shuttle/users/users.toml \
+			      -e SHUTTLE_ADMIN_SECRET=${shuttle_admin_secret} \
+			      -e SHUTTLE_INITIAL_KEY=${shuttle_initial_key} \
+			      -e PROVISIONER_ADDRESS=provisioner \
+			      -v ${data_dir}/user-data/crates:/opt/shuttle/crates:rw \
+			      -v ${data_dir}/user-data/users:/opt/shuttle/users:rw \
+			      ${docker_image}:latest
+
+[Install]
+WantedBy=multi-user.target

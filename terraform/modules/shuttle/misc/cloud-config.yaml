@@ -1,0 +1,73 @@
+#cloud-config
+
+# Install needed packages
+packages:
+  - docker.io
+  - nfs-common
+
+# Create the docker group
+groups:
+  - docker
+
+# Add default auto-created user to docker group
+system_info:
+  default_user:
+    groups: [docker]
+
+# Make sure files are written every time
+cloud_final_modules:
+ - [runcmd, always]
+ - [write-files, always]
+ - package-update-upgrade-install
+ - fan
+ - landscape
+ - lxd
+ - ubuntu-drivers
+ - write-files-deferred
+ - puppet
+ - chef
+ - mcollective
+ - salt-minion
+ - reset_rmc
+ - refresh_rmc_and_interface
+ - rightscale_userdata
+ - scripts-vendor
+ - scripts-per-once
+ - scripts-per-boot
+ - scripts-per-instance
+ - [scripts-user, always]
+ - ssh-authkey-fingerprints
+ - keys-to-console
+ - install-hotplug
+ - phone-home
+ - final-message
+ - power-state-change
+
+# Create our systemd files
+write_files:
+  - encoding: b64
+    content: ${opt_shuttle_content}
+    path: /lib/systemd/system/opt-shuttle.mount
+    owner: root:root
+    permissions: "0644"
+  - encoding: b64
+    content: ${shuttle_backend_content}
+    path: /lib/systemd/system/shuttle-backend.service
+    owner: root:root
+    permissions: "0644"
+  - encoding: b64
+    content: ${shuttle_provisioner_content}
+    path: /lib/systemd/system/shuttle-provisioner.service
+    owner: root:root
+    permissions: "0644"
+
+power_state:
+  mode: reboot
+
+# Up services on every boot
+runcmd:
+  - docker network inspect shuttle-net || docker network create --driver bridge shuttle-net
+  - [systemctl, daemon-reload]
+  - [systemctl, enable, "opt-shuttle.mount"]
+  - [systemctl, enable, "shuttle-backend.service"]
+  - [systemctl, enable, "shuttle-provisioner.service"]

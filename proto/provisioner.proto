@@ -1,0 +1,16 @@
+syntax = "proto3";
+package provisioner;
+
+service Provisioner {
+  rpc ProvisionDatabase(DatabaseRequest) returns (DatabaseResponse);
+}
+
+message DatabaseRequest {
+  string project_name = 1;
+}
+
+message DatabaseResponse {
+  string username = 1;
+  string password = 2;
+  string database_name = 3;
+}

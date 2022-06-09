@@ -1,27 +1,32 @@
-use crate::{build::Build, BuildSystem, ShuttleFactory};
-use anyhow::{anyhow, Context as AnyhowContext};
 use core::default::Default;
-use futures::prelude::*;
-use libloading::Library;
-use rocket::data::ByteUnit;
-use rocket::tokio;
-use rocket::Data;
-use shuttle_common::{
-    project::ProjectName, DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta,
-    Host, Port,
-};
-use shuttle_service::loader::{Loader, ServeHandle};
 use std::collections::HashMap;
 use std::fs::DirEntry;
 use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tokio::sync::mpsc;
-use tokio::sync::RwLock;
 
-use crate::database;
+use anyhow::{anyhow, Context as AnyhowContext};
+use chrono::{DateTime, Utc};
+use futures::prelude::*;
+use libloading::Library;
+use proto::provisioner::provisioner_client::ProvisionerClient;
+use rocket::data::ByteUnit;
+use rocket::{tokio, Data};
+use shuttle_common::project::ProjectName;
+use shuttle_common::{
+    DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, LogItem, Port,
+};
+use shuttle_service::loader::Loader;
+use shuttle_service::logger::Log;
+use shuttle_service::ServeHandle;
+use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::{mpsc, RwLock};
+use tonic::transport::{Channel, Endpoint};
+
+use crate::build::Build;
 use crate::router::Router;
+use crate::{BuildSystem, ShuttleFactory};
 
 // This controls the maximum number of deploys an api instance can run
 // This is mainly needed because tokio::task::spawn_blocking keeps an internal pool for the number of blocking threads
@@ -102,7 +107,7 @@ impl Deployment {
 
     /// Tries to advance the deployment one stage. Does nothing if the deployment
     /// is in a terminal state.
-    pub(crate) async fn advance(&self, context: &Context, db_context: &database::Context) {
+    pub(crate) async fn advance(&self, context: &Context, run_logs_tx: UnboundedSender<Log>) {
         {
             trace!("waiting to get write on the state");
             let meta = self.meta().await;
@@ -152,44 +157,31 @@ impl Deployment {
                     );
 
                     debug!("{}: factory phase", meta.project);
-                    let mut db_state = database::State::new(&meta.project, db_context);
 
-                    // Pre-emptively allocate a dabatase to work around a deadlock issue with sqlx connection pools
-                    // When .build is called, the db_context's connection pool and the inner connection pool instantiated
-                    // by the Service seem to collide and lead to a deadlock. I wonder if the problem is that we have, once again,
-                    // futures on one part of the FFI boundary being run by a runtime on the other (in this case, the pool in the db_state
-                    // lives in `api` but are driven in `postgres` by a runtime in `postgres`).
-                    self.meta.write().await.database_deployment = Some(db_state.request());
-
-                    match db_state.ensure().await {
+                    let mut factory = ShuttleFactory::new(
+                        context.provisioner_client.clone(),
+                        context.provisioner_address.clone(),
+                        meta.project.clone(),
+                    );
+                    let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
+                    match loader.load(&mut factory, addr, run_logs_tx, meta.id).await {
                         Err(e) => {
-                            debug!("{}: db state failed: {:?}", meta.project, e);
-                            let err: anyhow::Error = e.into();
-                            DeploymentState::Error(
-                                err.context(anyhow!("failed to attach database")),
-                            )
+                            debug!("{}: factory phase FAILED: {:?}", meta.project, e);
+                            DeploymentState::Error(e.into())
                         }
-                        Ok(()) => {
-                            let mut factory = ShuttleFactory::new(&mut db_state);
-                            let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
-                            match loader.load(&mut factory, addr) {
-                                Err(e) => {
-                                    debug!("{}: factory phase FAILED: {:?}", meta.project, e);
-                                    DeploymentState::Error(e.into())
-                                }
-                                Ok((handle, so)) => {
-                                    debug!("{}: factory phase DONE", meta.project);
-                                    // Remove stale active deployments
-                                    if let Some(stale_id) =
-                                        context.router.promote(meta.host, meta.id).await
-                                    {
-                                        debug!("removing stale deployment `{}`", &stale_id);
-                                        context.deployments.write().await.remove(&stale_id);
-                                    }
+                        Ok((handle, so)) => {
+                            debug!("{}: factory phase DONE", meta.project);
+                            self.meta.write().await.database_deployment =
+                                factory.into_database_info();
 
-                                    DeploymentState::deployed(so, port, handle, db_state)
-                                }
+                            // Remove stale active deployments
+                            if let Some(stale_id) = context.router.promote(meta.host, meta.id).await
+                            {
+                                debug!("removing stale deployment `{}`", &stale_id);
+                                context.deployments.write().await.remove(&stale_id);
                             }
+
+                            DeploymentState::deployed(so, port, handle)
                         }
                     }
                 }
@@ -211,6 +203,10 @@ impl Deployment {
             DeploymentState::Deployed(deployed) => Some(deployed.port),
             _ => None,
         }
+    }
+
+    async fn add_runtime_log(&self, datetime: DateTime<Utc>, log: LogItem) {
+        self.meta.write().await.runtime_logs.insert(datetime, log);
     }
 }
 
@@ -289,10 +285,11 @@ type Deployments = HashMap<DeploymentId, Arc<Deployment>>;
 /// The top-level manager for deployments. Is responsible for their creation
 /// and lifecycle.
 pub(crate) struct DeploymentSystem {
-    deployments: RwLock<Deployments>,
+    deployments: Arc<RwLock<Deployments>>,
     job_queue: JobQueue,
     router: Arc<Router>,
     fqdn: String,
+    pub(crate) provisioner_address: String,
 }
 
 const JOB_QUEUE_SIZE: usize = 200;
@@ -302,10 +299,11 @@ struct JobQueue {
 }
 
 impl JobQueue {
-    async fn new(context: Context, db_context: database::Context) -> Self {
+    async fn new(context: Context, run_logs_tx: UnboundedSender<Log>) -> Self {
         let (send, mut recv) = mpsc::channel::<Arc<Deployment>>(JOB_QUEUE_SIZE);
 
         log::debug!("starting job processor task");
+
         tokio::spawn(async move {
             while let Some(deployment) = recv.recv().await {
                 let id = deployment.meta().await.id;
@@ -313,7 +311,9 @@ impl JobQueue {
                 log::debug!("started deployment job for deployment '{}'", id);
 
                 while !deployment.deployment_finished().await {
-                    deployment.advance(&context, &db_context).await;
+                    let run_logs_tx = run_logs_tx.clone();
+
+                    deployment.advance(&context, run_logs_tx).await;
                 }
 
                 debug!("ended deployment job for id: '{}'", id);
@@ -339,27 +339,55 @@ pub(crate) struct Context {
     router: Arc<Router>,
     build_system: Box<dyn BuildSystem>,
     deployments: Arc<RwLock<Deployments>>,
+    provisioner_client: ProvisionerClient<Channel>,
+    provisioner_address: String,
 }
 
 impl DeploymentSystem {
-    pub(crate) async fn new(build_system: Box<dyn BuildSystem>, fqdn: String) -> Self {
+    pub(crate) async fn new(
+        build_system: Box<dyn BuildSystem>,
+        fqdn: String,
+        provisioner_address: String,
+        provisioner_port: Port,
+    ) -> Self {
         let router: Arc<Router> = Default::default();
+        let (tx, mut rx) = mpsc::unbounded_channel::<Log>();
 
         let deployments = Arc::new(RwLock::new(
             Self::initialise_from_fs(&build_system.fs_root(), &fqdn).await,
         ));
 
+        let deployments_log = deployments.clone();
+
+        tokio::spawn(async move {
+            while let Some(log) = rx.recv().await {
+                let mut deployments_log = deployments_log.write().await;
+
+                if let Some(deployment) = deployments_log.get_mut(&log.deployment_id) {
+                    deployment.add_runtime_log(log.datetime, log.item).await;
+                }
+            }
+        });
+
+        let provisioner_uri = Endpoint::try_from(format!(
+            "http://{}:{}",
+            provisioner_address, provisioner_port
+        ))
+        .expect("provisioner uri to be valid");
+
+        let provisioner_client = ProvisionerClient::connect(provisioner_uri)
+            .await
+            .expect("failed to connect to provisioner");
+
         let context = Context {
             router: router.clone(),
             build_system,
             deployments: deployments.clone(),
+            provisioner_client,
+            provisioner_address: provisioner_address.clone(),
         };
 
-        let db_context = database::Context::new()
-            .await
-            .expect("failed to create lazy connection to database");
-
-        let job_queue = JobQueue::new(context, db_context).await;
+        let job_queue = JobQueue::new(context, tx).await;
 
         debug!("loading deployments into job processor");
         for deployment in deployments.read().await.values() {
@@ -368,10 +396,11 @@ impl DeploymentSystem {
         }
 
         Self {
-            deployments: Default::default(),
+            deployments,
             job_queue,
             router,
             fqdn,
+            provisioner_address,
         }
     }
 
@@ -486,9 +515,17 @@ impl DeploymentSystem {
                 let mut lock = deployment.state.write().await;
                 if let DeploymentState::Deployed(DeployedState { so, handle, .. }) = lock.take() {
                     handle.abort();
+
                     tokio::spawn(async move {
                         so.close().unwrap();
                     });
+
+                    match handle.await {
+                        Err(err) if err.is_cancelled() => {}
+                        other => other
+                            .map_err(|e| DeploymentApiError::Internal(e.to_string()))?
+                            .map_err(|e| DeploymentApiError::Internal(e.to_string()))?,
+                    };
                 }
 
                 let _ = self.router.remove(&meta.host);
@@ -603,13 +640,8 @@ impl DeploymentState {
         Self::Loaded(loader)
     }
 
-    fn deployed(so: Library, port: Port, handle: ServeHandle, db_state: database::State) -> Self {
-        Self::Deployed(DeployedState {
-            so,
-            port,
-            handle,
-            db_state,
-        })
+    fn deployed(so: Library, port: Port, handle: ServeHandle) -> Self {
+        Self::Deployed(DeployedState { so, port, handle })
     }
 
     fn meta(&self) -> DeploymentStateMeta {
@@ -637,5 +669,4 @@ struct DeployedState {
     so: Library,
     port: Port,
     handle: ServeHandle,
-    db_state: database::State,
 }

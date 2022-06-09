@@ -1,5 +1,7 @@
+use std::any::Any;
 use std::ffi::OsStr;
 use std::net::SocketAddr;
+use std::panic::AssertUnwindSafe;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context};
@@ -12,6 +14,8 @@ use libloading::{Library, Symbol};
 use shuttle_common::DeploymentId;
 use thiserror::Error as ThisError;
 use tokio::sync::mpsc::UnboundedSender;
+
+use futures::FutureExt;
 
 use crate::{
     logger::{Log, Logger},
@@ -66,12 +70,36 @@ impl Loader {
         let mut service = self.service;
         let logger = Box::new(Logger::new(tx, deployment_id));
 
-        service.build(factory, logger).await?;
+        AssertUnwindSafe(service.build(factory, logger))
+            .catch_unwind()
+            .await
+            .map_err(|e| Error::BuildPanic(map_any_to_panic_string(&*e)))??;
+
+        // channel used by task spawned below to indicate whether or not panic
+        // occurred in `service.bind` call
+        let (send, recv) = tokio::sync::oneshot::channel();
 
         // Start service on this side of the FFI
-        let handle = tokio::spawn(async move { service.bind(addr)?.await? });
+        let handle = tokio::spawn(async move {
+            let bound = AssertUnwindSafe(async { service.bind(addr) })
+                .catch_unwind()
+                .await;
 
-        Ok((handle, self.so))
+            let payload = if let Err(e) = &bound {
+                Err(Error::BindPanic(map_any_to_panic_string(&**e)))
+            } else {
+                Ok(())
+            };
+            send.send(payload).unwrap();
+
+            if let Ok(b) = bound {
+                b?.await?
+            } else {
+                Err(anyhow!("panic in `Service::bound`"))
+            }
+        });
+
+        recv.await.unwrap().map(|_| (handle, self.so))
     }
 }
 
@@ -93,6 +121,15 @@ pub fn build_crate(project_path: &Path, buf: Box<dyn std::io::Write>) -> anyhow:
     let manifest_path = project_path.join("Cargo.toml");
 
     let ws = Workspace::new(&manifest_path, &config)?;
+
+    if let Some(profiles) = ws.profiles() {
+        for profile in profiles.get_all().values() {
+            if profile.panic.as_deref() == Some("abort") {
+                return Err(anyhow!("a Shuttle project cannot have panics that abort. Please ensure your Cargo.toml does not contain `panic = \"abort\"` for any profiles"));
+            }
+        }
+    }
+
     let opts = CompileOptions::new(&config, CompileMode::Build)?;
     let compilation = compile(&ws, &opts)?;
 
@@ -101,6 +138,12 @@ pub fn build_crate(project_path: &Path, buf: Box<dyn std::io::Write>) -> anyhow:
     }
 
     Ok(compilation.cdylibs[0].path.clone())
+}
+
+fn map_any_to_panic_string(a: &dyn Any) -> String {
+    a.downcast_ref::<&str>()
+        .map(|x| x.to_string())
+        .unwrap_or_else(|| "<no panic message>".to_string())
 }
 
 #[cfg(test)]

@@ -14,6 +14,7 @@ async-trait = "0.1.56"
 axum = { version = "0.5.7", optional = true }
 cargo = { version = "0.62.0", optional = true }
 chrono = "0.4.19"
+futures = { version = "0.3.21", features = ["std"] }
 hyper = { version = "0.14.19", features = ["server", "tcp", "http1"], optional = true }
 lazy_static = "1.4.0"
 libloading = { version = "0.7.3", optional = true }

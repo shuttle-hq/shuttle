@@ -18,6 +18,17 @@ jobs:
           override: true
           components: rustfmt
       - run: cargo fmt --all -- --check
+  cargo_sort_test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: shuttle-hq/checkout@v2
+      - uses: shuttle-hq/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          components: rustfmt
+      - run: cargo install cargo-sort
+      - run: cargo sort --check --workspace
   clippy_test:
     strategy:
       fail-fast: true

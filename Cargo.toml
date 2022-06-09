@@ -1,6 +1,5 @@
 [workspace]
 members = [
-  "gateway",
   "api",
   "service",
   "cargo-shuttle",
@@ -11,5 +10,6 @@ members = [
   "e2e"
 ]
 exclude = [
+  "gateway",
   "examples"
 ]

@@ -36,3 +36,8 @@ semver = { version = "1.0.9" }
 
 shuttle-common = { version = "0.3.0", path = "../common" }
 shuttle-service = { version = "0.3.0", path = "../service", features = [ "loader" ] }
+
+[dev-dependencies]
+test-context = "0.1"
+# Tmp until this branch is merged and released
+tokiotest-httpserver = { git = "https://github.com/shuttle-hq/tokiotest-httpserver", branch = "feat/body" }

@@ -11,8 +11,8 @@ use std::net::{Ipv4Addr, SocketAddr};
 use std::rc::Rc;
 
 use anyhow::{anyhow, Context, Result};
-pub use args::{Args, Command, InitArgs, ProjectArgs, RunArgs};
-use args::{AuthArgs, DeployArgs, LoginArgs};
+pub use args::{Args, Command, DeployArgs, InitArgs, ProjectArgs, RunArgs};
+use args::{AuthArgs, LoginArgs};
 use cargo::core::compiler::CompileMode;
 use cargo::core::resolver::CliFeatures;
 use cargo::core::Workspace;

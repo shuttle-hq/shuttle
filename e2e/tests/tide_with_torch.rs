@@ -4,7 +4,7 @@ mod helpers;
 
 #[test]
 fn hello_world() {
-    let client = helpers::Api::new_docker("tide-with-torch", Color::Cyan);
+    let client = helpers::Services::new_docker("hello-world", Color::Cyan);
     client.deploy("../examples/tide/tide-with-torch");
 
     let request_text = client

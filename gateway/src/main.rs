@@ -68,6 +68,7 @@ pub enum ErrorKind {
     UserNotFound,
     ProjectNotFound,
     InvalidProjectName,
+    ProjectAlreadyExists,
     InvalidOperation,
     Internal
 }
@@ -133,6 +134,7 @@ impl IntoResponse for Error {
             ErrorKind::ProjectNotFound => (StatusCode::NOT_FOUND, "project not found"),
             ErrorKind::InvalidProjectName => (StatusCode::BAD_REQUEST, "invalid project name"),
             ErrorKind::InvalidOperation => (StatusCode::BAD_REQUEST, "the requested operation is invalid"),
+            ErrorKind::ProjectAlreadyExists => (StatusCode::BAD_REQUEST, "a project with the same name already exists"),
             ErrorKind::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
         };
         (status, Json(json!({ "error": error_message }))).into_response()

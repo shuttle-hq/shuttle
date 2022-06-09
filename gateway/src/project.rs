@@ -6,15 +6,52 @@ use std::time::Duration;
 use bollard::container::{Config, CreateContainerOptions};
 use bollard::errors::Error as DockerError;
 use bollard::models::{
-    ContainerInspectResponse, ContainerState, ContainerStateStatusEnum, HealthStatusEnum,
-    HostConfig, Mount, MountTypeEnum,
+    ContainerConfig, ContainerInspectResponse, ContainerState, ContainerStateStatusEnum,
+    HealthStatusEnum, HostConfig, Mount, MountTypeEnum,
 };
 use futures::prelude::*;
 use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Serialize};
 use tokio::time;
 
+use crate::args::Args;
+
 use super::{Context, EndState, Error, ErrorKind, IntoEndState, ProjectName, Refresh, State};
+
+macro_rules! safe_unwrap {
+    {$fst:ident$(.$attr:ident$(($ex:expr))?)+} => {
+        $fst$(
+            .$attr$(($ex))?
+                .as_ref()
+                .ok_or_else(|| ProjectError::internal(
+                    concat!("container state object is malformed at attribute: ", stringify!($attr))
+                ))?
+        )+
+    }
+}
+
+macro_rules! safe_unwrap_mut {
+    {$fst:ident$(.$attr:ident$(($ex:expr))?)+} => {
+        $fst$(
+            .$attr$(($ex))?
+                .as_mut()
+                .ok_or_else(|| ProjectError::internal(
+                    concat!("container state object is malformed at attribute: ", stringify!($attr))
+                ))?
+        )+
+    }
+}
+
+macro_rules! deserialize_json {
+    {$ty:ty: $($json:tt)+} => {{
+        let __ty_json = serde_json::json!($($json)+);
+        serde_json::from_value::<$ty>(__ty_json).unwrap()
+    }};
+    {$($json:tt)+} => {{
+        let __ty_json = serde_json::json!($($json)+);
+        serde_json::from_value(__ty_json).unwrap()
+    }}
+}
 
 macro_rules! impl_from_variant {
     {$e:ty: $($s:ty => $v:ident $(,)?)+} => {
@@ -40,7 +77,7 @@ impl Refresh for ContainerInspectResponse {
 
 impl From<DockerError> for Error {
     fn from(err: DockerError) -> Self {
-        debug!("internal Docker error: {err}");
+        error!("internal Docker error: {err}");
         Self::source(ErrorKind::Internal, err)
     }
 }
@@ -167,7 +204,7 @@ impl Refresh for Project {
                     Ok(container) => {
                         match container.state.as_ref().unwrap().status.as_ref().unwrap() {
                             ContainerStateStatusEnum::RUNNING => {
-                                let service = Service::from_container(container.clone(), ctx);
+                                let service = Service::from_container(container.clone(), ctx)?;
                                 Self::Started(ProjectStarted { container, service })
                             }
                             ContainerStateStatusEnum::CREATED => {
@@ -201,6 +238,63 @@ impl ProjectCreating {
             initial_key,
         }
     }
+
+    fn container_name<'c, C: Context<'c>>(&self, ctx: &C) -> String {
+        let Args { prefix, .. } = &ctx.args();
+
+        let Self { project_name, .. } = &self;
+
+        format!("{prefix}{project_name}_run")
+    }
+
+    fn generate_container_config<'c, C: Context<'c>>(
+        &self,
+        ctx: &C
+    ) -> (CreateContainerOptions<String>, Config<String>) {
+        let pg_password = Alphanumeric.sample_string(&mut rand::thread_rng(), 12);
+
+        let Args { image, prefix, .. } = &ctx.args();
+
+        let Self { initial_key, project_name, .. } = &self;
+
+        let create_container_options = CreateContainerOptions {
+            name: self.container_name(ctx)
+        };
+
+        let container_config: ContainerConfig = deserialize_json!({
+            "Image": image,
+            "Env": [
+                "PROXY_PORT=8000",
+                "API_PORT=8001",
+                "PG_PORT=5432",
+                "PG_DATA=/opt/shuttle/postgres",
+                format!("PG_PASSWORD={pg_password}"),
+                format!("SHUTTLE_INITIAL_KEY={initial_key}"),
+                "COPY_PG_CONF=/opt/shuttle/conf/postgres",
+                "PROXY_FQDN=shuttleapp.rs"
+            ],
+            "Labels": {
+                "shuttle_prefix": prefix
+            }
+        });
+
+        let mut config = Config::<String>::from(container_config);
+
+        config.host_config = deserialize_json!({
+            "Mounts": [{
+                "Target": "/opt/shuttle",
+                "Source": format!("{prefix}{project_name}_vol"),
+                "Type": "volume"
+            }]
+        });
+
+        debug!(r"generated a container configuration:
+CreateContainerOpts: {create_container_options:#?}
+Config: {config:#?}
+");
+
+        (create_container_options, config)
+    }
 }
 
 #[async_trait]
@@ -209,49 +303,15 @@ impl<'c> State<'c> for ProjectCreating {
     type Error = ProjectError;
 
     async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error> {
-        let pg_password = Alphanumeric.sample_string(&mut rand::thread_rng(), 12);
-        let pg_password_env = format!("PG_PASSWORD={}", pg_password);
-
-        let initial_key_env = format!("SHUTTLE_INITIAL_KEY={}", self.initial_key);
-
-        let prefix = ctx.args().prefix.as_str();
-
-        let volume_name = format!("{}{}_vol", prefix, self.project_name);
-        let container_name = format!("{}{}_run", prefix, self.project_name);
+        let container_name = self.container_name(ctx);
         let container = ctx
             .docker()
+            // If container already exists, use that
             .inspect_container(&container_name.clone(), None)
+            // Otherwise create it
             .or_else(|err| async move {
                 if matches!(err, DockerError::DockerResponseServerError { status_code, .. } if status_code == 404) {
-                    let opts = CreateContainerOptions {
-                        name: container_name.clone()
-                    };
-                    let config = Config {
-                        image: Some(ctx.args().image.as_str()),
-                        env: Some(vec![
-                            "PROXY_PORT=8000",
-                            "API_PORT=8001",
-                            "PG_PORT=5432",
-                            "PG_DATA=/opt/shuttle/postgres",
-                            &pg_password_env,
-                            &initial_key_env,
-                            "COPY_PG_CONF=/opt/shuttle/conf/postgres",
-                            "PROXY_FQDN=shuttleapp.rs"
-                        ]),
-                        labels: Some(vec![
-                            ("shuttle_prefix", prefix)
-                        ].into_iter().collect()),
-                        host_config: Some(HostConfig {
-                            mounts: Some(vec![Mount {
-                                target: Some("/opt/shuttle".to_string()),
-                                source: Some(volume_name),
-                                typ: Some(MountTypeEnum::VOLUME),
-                                ..Default::default()
-                            }]),
-                            ..Default::default()
-                        }),
-                        ..Default::default()
-                    };
+                    let (opts, config) = self.generate_container_config(ctx);
                     ctx.docker()
                         .create_container(Some(opts), config)
                         .and_then(|_| ctx.docker().inspect_container(&container_name, None))
@@ -293,14 +353,7 @@ impl<'c> State<'c> for ProjectReady {
         for _ in 0..9 {
             let latest = self.container.clone().refresh(ctx).await?;
             if matches!(
-                latest
-                    .clone()
-                    .state
-                    .unwrap()
-                    .health
-                    .unwrap()
-                    .status
-                    .unwrap(),
+                safe_unwrap!(latest.state.health.status),
                 HealthStatusEnum::HEALTHY
             ) {
                 container = Some(latest);
@@ -311,10 +364,10 @@ impl<'c> State<'c> for ProjectReady {
         }
 
         if let Some(container) = container {
-            let service = Service::from_container(container.clone(), ctx);
+            let service = Service::from_container(container.clone(), ctx)?;
             Ok(Self::Next { container, service })
         } else {
-            Err(ProjectError::custom(
+            Err(ProjectError::internal(
                 "timed out waiting for runtime to become healthy",
             ))
         }
@@ -345,34 +398,23 @@ pub struct Service {
 
 impl Service {
     pub fn from_container<'c, C: Context<'c>>(
-        container: ContainerInspectResponse,
+        mut container: ContainerInspectResponse,
         ctx: &C,
-    ) -> Self {
-        let name = container
-            .name
-            .as_ref()
-            .unwrap()
-            .strip_suffix("_run")
-            .unwrap()
-            .strip_prefix("/")
-            .unwrap()
-            .to_string();
+    ) -> Result<Self, ProjectError> {
+        let name = safe_unwrap!(container.name.strip_suffix("_run").strip_prefix("/")).to_string();
 
         // assumes the container is reachable on a "docker subnet" ip known as "bridge" to docker
-        let target = container
-            .clone()
-            .network_settings
-            .unwrap()
-            .networks
-            .unwrap()
-            .remove("bridge")
-            .unwrap()
-            .ip_address
-            .unwrap()
-            .parse()
-            .unwrap();
+        let target = safe_unwrap_mut!(
+            container
+                .network_settings
+                .networks
+                .remove("bridge")
+                .ip_address
+        )
+        .parse()
+        .unwrap();
 
-        Self { name, target }
+        Ok(Self { name, target })
     }
 }
 
@@ -381,8 +423,8 @@ impl Refresh for ProjectStarted {
     type Error = Error;
 
     async fn refresh<'c, C: Context<'c>>(self, ctx: &C) -> Result<Self, Self::Error> {
-        let container = self.container.refresh(ctx).await.unwrap();
-        let service = Service::from_container(container.clone(), ctx);
+        let container = self.container.refresh(ctx).await?;
+        let service = Service::from_container(container.clone(), ctx)?;
         Ok(Self { container, service })
     }
 }
@@ -426,15 +468,22 @@ impl<'c> State<'c> for ProjectStopped {
     }
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum ProjectErrorKind {
+    Internal,
+}
+
 /// A runtime error coming from inside a project
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ProjectError {
+    kind: ProjectErrorKind,
     message: String,
 }
 
 impl ProjectError {
-    pub fn custom<S: AsRef<str>>(message: S) -> Self {
+    pub fn internal<S: AsRef<str>>(message: S) -> Self {
         Self {
+            kind: ProjectErrorKind::Internal,
             message: message.as_ref().to_string(),
         }
     }
@@ -451,8 +500,15 @@ impl std::error::Error for ProjectError {}
 impl From<DockerError> for ProjectError {
     fn from(err: DockerError) -> Self {
         Self {
-            message: format!("{:?}", err),
+            kind: ProjectErrorKind::Internal,
+            message: format!("{}", err),
         }
+    }
+}
+
+impl From<ProjectError> for Error {
+    fn from(err: ProjectError) -> Self {
+        Self::source(ErrorKind::Internal, err)
     }
 }
 

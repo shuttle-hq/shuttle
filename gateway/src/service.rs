@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 use std::net::IpAddr;
+use std::panic::catch_unwind;
 use std::path::{Path as StdPath, PathBuf};
 use std::sync::Arc;
 
@@ -14,6 +15,7 @@ use hyper::client::HttpConnector;
 use hyper::Client as HyperClient;
 use sqlx::migrate::MigrateDatabase;
 use sqlx::sqlite::{Sqlite, SqlitePool};
+use sqlx::error::DatabaseError;
 use sqlx::types::Json as SqlxJson;
 use sqlx::{query, Error as SqlxError, Row};
 use tokio::sync::{
@@ -379,7 +381,18 @@ impl GatewayService {
             .bind(&initial_key)
             .bind(&project)
             .execute(&self.db)
-            .await?;
+            .await
+            .or_else(|err| {
+                // If the error is a broken PK constraint, this is a
+                // project name clash
+                if let Some(db_err) = err.as_database_error() {
+                    if db_err.code().unwrap() == "1555" {  // SQLITE_CONSTRAINT_PRIMARYKEY
+                        return Err(Error::kind(ErrorKind::ProjectAlreadyExists))
+                    }
+                }
+                // Otherwise this is internal
+                return Err(err.into())
+            })?;
 
         let project = project.0;
 

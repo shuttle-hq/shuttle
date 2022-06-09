@@ -176,7 +176,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()
         .unwrap()
         .block_on(async {
-            rocket().await.launch().await?;
+            let _rocket = rocket().await.launch().await?;
 
             Ok(())
         })

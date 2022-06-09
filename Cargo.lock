@@ -3765,6 +3765,7 @@ dependencies = [
  "axum",
  "cargo",
  "chrono",
+ "futures",
  "hyper",
  "lazy_static",
  "libloading",

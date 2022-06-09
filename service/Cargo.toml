@@ -24,6 +24,7 @@ hyper = { version = "0.14", features = ["server", "tcp", "http1"], optional = tr
 sqlx = { version = "0.5", optional = true }
 tokio = { version = "1.0", features = ["rt", "rt-multi-thread"] }
 thiserror = "1.0"
+futures = { version = "0.3", features = ["std"] }
 lazy_static = "1.4"
 regex = "1.5"
 

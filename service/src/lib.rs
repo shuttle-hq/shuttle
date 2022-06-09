@@ -387,7 +387,6 @@ impl Service for SimpleService<rocket::Rocket<rocket::Build>> {
     ) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
             let rocket = builder(factory, &self.runtime, logger).await?;
-
             self.service = Some(rocket);
         }
 
@@ -432,7 +431,6 @@ impl Service for SimpleService<sync_wrapper::SyncWrapper<axum::Router>> {
     ) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
             let axum = builder(factory, &self.runtime, logger).await?;
-
             self.service = Some(axum);
         }
 
@@ -474,7 +472,6 @@ where
     ) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
             let tide = builder(factory, &self.runtime, logger).await?;
-
             self.service = Some(tide);
         }
 
@@ -515,7 +512,6 @@ where
     ) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
             let tower = builder(factory, &self.runtime, logger).await?;
-
             self.service = Some(tower);
         }
 

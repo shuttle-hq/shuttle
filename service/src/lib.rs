@@ -180,7 +180,7 @@
 //! Now set the `DOCKER_HOST` environment variable to point to this socket using:
 //!
 //! ```bash
-//! DOCKER_HOST=unix:///tmp/podman.sock
+//! export DOCKER_HOST=unix:///tmp/podman.sock
 //! ```
 //!
 //! Now all `cargo shuttle run` commands will work against Podman.

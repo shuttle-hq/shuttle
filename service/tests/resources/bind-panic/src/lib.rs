@@ -24,7 +24,7 @@ impl Service for MyService {
         &mut self,
         _: std::net::SocketAddr,
     ) -> Result<ServeHandle, shuttle_service::error::Error> {
-        panic!("panic in build");
+        panic!("panic in bind");
     }
 }
 

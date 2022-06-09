@@ -145,10 +145,11 @@ async fn build_panic() {
     let deployment_id = Uuid::new_v4();
     let (tx, _) = mpsc::unbounded_channel();
 
-    assert!(matches!(
-        loader.load(&mut factory, addr, tx, deployment_id).await,
-        Err(Error::BuildPanic)
-    ));
+    if let Err(Error::BuildPanic(msg)) = loader.load(&mut factory, addr, tx, deployment_id).await {
+        assert_eq!(&msg, "panic in build");
+    } else {
+        panic!("expected `Err(Error::BuildPanic(_))`");
+    }
 }
 
 #[tokio::test]
@@ -160,8 +161,9 @@ async fn bind_panic() {
     let deployment_id = Uuid::new_v4();
     let (tx, _) = mpsc::unbounded_channel();
 
-    assert!(matches!(
-        loader.load(&mut factory, addr, tx, deployment_id).await,
-        Err(Error::BindPanic)
-    ));
+    if let Err(Error::BindPanic(msg)) = loader.load(&mut factory, addr, tx, deployment_id).await {
+        assert_eq!(&msg, "panic in bind");
+    } else {
+        panic!("expected `Err(Error::BindPanic(_))`");
+    }
 }

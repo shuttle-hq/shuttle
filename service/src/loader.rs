@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::ffi::OsStr;
 use std::net::SocketAddr;
 use std::panic::AssertUnwindSafe;
@@ -74,10 +75,16 @@ impl Loader {
         let mut service = self.service;
         let logger = Box::new(Logger::new(tx, deployment_id));
 
+        fn map_any_to_panic_string(a: &dyn Any) -> String {
+            a.downcast_ref::<&str>()
+                .map(|x| x.to_string())
+                .unwrap_or_else(|| "<no panic message>".to_string())
+        }
+
         AssertUnwindSafe(service.build(factory, logger))
             .catch_unwind()
             .await
-            .unwrap_or(Err(Error::BuildPanic))?;
+            .map_err(|e| Error::BuildPanic(map_any_to_panic_string(&*e)))??;
 
         // channel used by task spawned below to indicate whether or not panic
         // occurred in `service.bind` call
@@ -89,7 +96,12 @@ impl Loader {
                 .catch_unwind()
                 .await;
 
-            send.send(bound.is_ok()).unwrap();
+            let payload = if let Err(e) = &bound {
+                Err(Error::BindPanic(map_any_to_panic_string(&**e)))
+            } else {
+                Ok(())
+            };
+            send.send(payload).unwrap();
 
             if let Ok(b) = bound {
                 b?.await?
@@ -98,11 +110,7 @@ impl Loader {
             }
         });
 
-        if matches!(recv.await, Ok(true)) {
-            Ok((handle, self.so))
-        } else {
-            Err(Error::BindPanic)
-        }
+        recv.await.unwrap().map(|_| (handle, self.so))
     }
 }
 

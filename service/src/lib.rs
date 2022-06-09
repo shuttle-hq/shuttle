@@ -64,7 +64,7 @@
 //!
 //! See the [shuttle_service::main][main] macro for more information on supported services - like Axum.
 //! Or look at more complete examples [in the repository](https://github.com/getsynth/shuttle/tree/main/examples), but
-//! take note that the examples my update before official releases.
+//! take note that the examples may update before official releases.
 //!
 //! ## Running locally
 //! To test your app locally before deploying, use:
@@ -252,7 +252,7 @@ extern crate shuttle_codegen;
 /// ```
 ///
 /// ## shuttle supported services
-/// The following type can be returned from a `#[shuttle_service::main]` function and enjoy first class service support in shuttle. Be sure to also enable the feature on
+/// The following types can be returned from a `#[shuttle_service::main]` function and enjoy first class service support in shuttle. Be sure to also enable the correct feature on
 /// `shuttle-service` in `Cargo.toml` for the type to be recognized.
 ///
 /// | Return type                           | Feature flag | Service                                     | Version    | Example                                                                             |
@@ -260,10 +260,10 @@ extern crate shuttle_codegen;
 /// | `ShuttleRocket`                       | web-rocket   | [rocket](https://docs.rs/rocket/0.5.0-rc.2) | 0.5.0-rc.2 | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/rocket/hello-world) |
 /// | `ShuttleAxum`                         | web-axum     | [axum](https://docs.rs/axum/0.5)            | 0.5        | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/axum/hello-world)   |
 /// | `ShuttleTide`                         | web-tide     | [tide](https://docs.rs/tide/0.16.0)         | 0.16.0     | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/tide/hello-world)   |
-/// | `Result<T, shuttle_service::Error>`   | web-tower    | [tower](https://docs.rs/tower/0.4.12)       | 0.14.12    | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/tower/hello-world)   |
+/// | `Result<T, shuttle_service::Error>`   | web-tower    | [tower](https://docs.rs/tower/0.4.12)       | 0.14.12    | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/tower/hello-world)  |
 ///
 /// # Getting shuttle managed services
-/// The shuttle is able to manage service dependencies for you. These services are passed in as inputs to your `#[shuttle_service::main]` function:
+/// Shuttle is able to manage service dependencies for you. These are passed in as inputs to your `#[shuttle_service::main]` function:
 /// ```rust,no_run
 /// use sqlx::PgPool;
 /// use shuttle_service::ShuttleRocket;

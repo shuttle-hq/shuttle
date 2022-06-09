@@ -107,6 +107,6 @@ The rest are the following libraries:
 - `service` is where our special `Service` trait is defined. Anything implementing this `Service` can be loaded by the `api` and the local runner in `cargo-shuttle`.
    The `codegen` automatically implements the `Service` trait for any user service.
 - `proto` contains the gRPC server and client definitions to allow `api` to communicate with `provisioner`.
-- `e2e` just contains tests which starts up the `api` in a container and then deployes services to it using `cargo-shuttle`.
+- `e2e` just contains tests which starts up the `api` in a container and then deploys services to it using `cargo-shuttle`.
 
 Lastly, the `user service` is not a folder in this repository, but is the user service that will be deployed by `api`.

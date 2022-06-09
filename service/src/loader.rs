@@ -70,12 +70,6 @@ impl Loader {
         let mut service = self.service;
         let logger = Box::new(Logger::new(tx, deployment_id));
 
-        fn map_any_to_panic_string(a: &dyn Any) -> String {
-            a.downcast_ref::<&str>()
-                .map(|x| x.to_string())
-                .unwrap_or_else(|| "<no panic message>".to_string())
-        }
-
         AssertUnwindSafe(service.build(factory, logger))
             .catch_unwind()
             .await
@@ -144,6 +138,12 @@ pub fn build_crate(project_path: &Path, buf: Box<dyn std::io::Write>) -> anyhow:
     }
 
     Ok(compilation.cdylibs[0].path.clone())
+}
+
+fn map_any_to_panic_string(a: &dyn Any) -> String {
+    a.downcast_ref::<&str>()
+        .map(|x| x.to_string())
+        .unwrap_or_else(|| "<no panic message>".to_string())
 }
 
 #[cfg(test)]

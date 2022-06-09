@@ -65,3 +65,48 @@ We use the [Angular Commit Guidelines](https://github.com/angular/angular/blob/m
 Furthermore, commits should be squashed before being merged to master.
 
 Also, make sure your commits don't trigger any warnings from Clippy by running: `cargo clippy --tests --all-targets`. If you have a good reason to contradict Clippy, insert an #allow[] macro, so that it won't complain.
+
+## Project Layout
+The folders in this repository relate to each other as follow:
+
+```mermaid
+graph BT
+    classDef default fill:#1f1f1f,stroke-width:0;
+    classDef binary fill:#f25100,font-weight:bold,stroke-width:0;
+    classDef external fill:#343434,font-style:italic,stroke:#f25100;
+
+    api:::binary
+    cargo-shuttle:::binary
+    common
+    codegen
+    e2e
+    proto
+    provisioner:::binary
+    service
+    user([user service]):::external
+    api --> proto
+    api -.->|calls| provisioner
+    service ---> common
+    api --> common
+    cargo-shuttle --->|"features = ['loader']"| service
+    api -->|"features = ['loader', 'secrets']"| service
+    cargo-shuttle --> common
+    service --> codegen
+    proto ---> common
+    provisioner --> proto
+    e2e -.->|starts up| api
+    e2e -.->|calls| cargo-shuttle
+    user -->|"features = ['codegen']"| service
+```
+
+First, `provisioner`, `api`, and `cargo-shuttle` are binary crates with `provisioner` and `api` being backend services. The `cargo-shuttle` binary is the `cargo shuttle` command used by users.
+
+The rest are the following libraries:
+- `common` contains shared models and functions used by the other libraries and binaries.
+- `codegen` contains our proc-macro code which gets exposed to user services from `service` by the `codegen` feature flag. The redirect through `service` is to make it available under the prettier name of `shuttle_service::main`.
+- `service` is where our special `Service` trait is defined. Anything implementing this `Service` can be loaded by the `api` and the local runner in `cargo-shuttle`.
+   The `codegen` automatically implements the `Service` trait for any user service.
+- `proto` contains the gRPC server and client definitions to allow `api` to communicate with `provisioner`.
+- `e2e` just contains tests which starts up the `api` in a container and then deployes services to it using `cargo-shuttle`.
+
+Lastly, the `user service` is not a folder in this repository, but is the user service that will be deployed by `api`.

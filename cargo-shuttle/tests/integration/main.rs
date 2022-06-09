@@ -1,3 +1,5 @@
+mod deploy;
+mod init;
 mod run;
 
 use cargo_shuttle::{Args, Command, ProjectArgs, Shuttle};

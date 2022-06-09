@@ -28,5 +28,15 @@ pub struct Args {
         long,
         default_value = "shuttle_prod_"
     )]
-    pub prefix: String
+    pub prefix: String,
+    /// The address at which an active runtime container will find
+    /// the provisioner service
+    #[clap(
+        long,
+        default_value = "provisioner"
+    )]
+    pub provisioner_host: String,
+    /// The Docker Network ID in which to deploy user runtimes
+    #[clap(long)]
+    pub network_id: String
 }

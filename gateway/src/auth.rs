@@ -3,8 +3,6 @@ use serde_json::json;
 
 use rand::Rng;
 
-//use shuttle_common::project::ProjectName;
-
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::io::Write;
@@ -115,7 +113,13 @@ where
 
     async fn from_request(req: &mut RequestParts<B>) -> Result<Self, Self::Rejection> {
         let user = User::from_request(req).await?;
-        let Path(scope) = Path::<ProjectName>::from_request(req).await.unwrap();
+        let scope = match Path::<ProjectName>::from_request(req).await {
+            Ok(Path(p)) => p,
+            Err(_) => Path::<(ProjectName, String)>::from_request(req)
+                .await
+                .map(|Path((p, _))| p)
+                .unwrap()
+        };
         if user.projects.contains(&scope) {
             Ok(Self { user, scope })
         } else {

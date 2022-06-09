@@ -3,11 +3,11 @@ use std::fmt::Formatter;
 use std::net::{IpAddr, Ipv4Addr};
 use std::time::Duration;
 
-use bollard::container::{Config, CreateContainerOptions};
+use bollard::container::{Config, CreateContainerOptions, StopContainerOptions, RemoveContainerOptions};
 use bollard::errors::Error as DockerError;
 use bollard::models::{
     ContainerConfig, ContainerInspectResponse, ContainerState, ContainerStateStatusEnum,
-    HealthStatusEnum, HostConfig, Mount, MountTypeEnum,
+    HealthStatusEnum, HostConfig, Mount, MountTypeEnum, NetworkingConfig,
 };
 use futures::prelude::*;
 use rand::distributions::{Alphanumeric, DistString};
@@ -152,9 +152,18 @@ impl Project {
             | Self::Stopped(ProjectStopped {
                 container: ContainerInspectResponse { id, .. },
             }) => {
+                let container_id = id.as_ref().unwrap();
                 ctx.docker()
-                    .remove_container(id.as_ref().unwrap(), None)
-                    .await?;
+                    .stop_container(container_id, Some(StopContainerOptions { t: 30 }))
+                    .await
+                    .unwrap_or(());
+                ctx.docker()
+                    .remove_container(container_id, Some(RemoveContainerOptions {
+                        force: true,
+                        ..Default::default()
+                    }))
+                    .await
+                    .unwrap_or(());
                 Ok(())
             }
             Self::Creating(_) | Self::Errored(_) => Ok(()),
@@ -253,7 +262,7 @@ impl ProjectCreating {
     ) -> (CreateContainerOptions<String>, Config<String>) {
         let pg_password = Alphanumeric.sample_string(&mut rand::thread_rng(), 12);
 
-        let Args { image, prefix, .. } = &ctx.args();
+        let Args { image, prefix, provisioner_host, network_id, .. } = &ctx.args();
 
         let Self { initial_key, project_name, .. } = &self;
 
@@ -263,6 +272,7 @@ impl ProjectCreating {
 
         let container_config: ContainerConfig = deserialize_json!({
             "Image": image,
+            "Hostname": format!("{prefix}{project_name}"),
             "Env": [
                 "PROXY_PORT=8000",
                 "API_PORT=8001",
@@ -270,6 +280,8 @@ impl ProjectCreating {
                 "PG_DATA=/opt/shuttle/postgres",
                 format!("PG_PASSWORD={pg_password}"),
                 format!("SHUTTLE_INITIAL_KEY={initial_key}"),
+                format!("PROVISIONER_ADDRESS={provisioner_host}"),
+                "SHUTTLE_USERS_TOML=/opt/shuttle/users.toml",
                 "COPY_PG_CONF=/opt/shuttle/conf/postgres",
                 "PROXY_FQDN=shuttleapp.rs"
             ],
@@ -279,6 +291,14 @@ impl ProjectCreating {
         });
 
         let mut config = Config::<String>::from(container_config);
+
+        config.networking_config = deserialize_json!({
+            "EndpointsConfig": {
+                self.container_name(ctx): {
+                    "NetworkID": network_id
+                }
+            }
+        });
 
         config.host_config = deserialize_json!({
             "Mounts": [{
@@ -401,20 +421,25 @@ impl Service {
         mut container: ContainerInspectResponse,
         ctx: &C,
     ) -> Result<Self, ProjectError> {
-        let name = safe_unwrap!(container.name.strip_suffix("_run").strip_prefix("/")).to_string();
+        let container_name = safe_unwrap!(container.name.strip_prefix("/"))
+            .to_string();
 
-        // assumes the container is reachable on a "docker subnet" ip known as "bridge" to docker
+        let resource_name = safe_unwrap!(container_name.strip_suffix("_run"))
+            .to_string();
+
+        let Args { network_id, .. } = ctx.args();
+
         let target = safe_unwrap_mut!(
             container
                 .network_settings
                 .networks
-                .remove("bridge")
+                .remove(&container_name)
                 .ip_address
         )
-        .parse()
-        .unwrap();
+            .parse()
+            .unwrap();
 
-        Ok(Self { name, target })
+        Ok(Self { name: resource_name, target })
     }
 }
 
@@ -499,6 +524,7 @@ impl std::error::Error for ProjectError {}
 
 impl From<DockerError> for ProjectError {
     fn from(err: DockerError) -> Self {
+        error!("an internal DockerError had to yield a ProjectError: {err}");
         Self {
             kind: ProjectErrorKind::Internal,
             message: format!("{}", err),

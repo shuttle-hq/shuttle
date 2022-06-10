@@ -4,6 +4,8 @@ use std::panic::catch_unwind;
 use std::path::{Path as StdPath, PathBuf};
 use std::sync::Arc;
 
+use axum::headers::authorization::Basic;
+use axum::headers::{Authorization, Header};
 use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Serialize};
 
@@ -13,9 +15,9 @@ use axum::response::Response;
 use bollard::Docker;
 use hyper::client::HttpConnector;
 use hyper::Client as HyperClient;
+use sqlx::error::DatabaseError;
 use sqlx::migrate::MigrateDatabase;
 use sqlx::sqlite::{Sqlite, SqlitePool};
-use sqlx::error::DatabaseError;
 use sqlx::types::Json as SqlxJson;
 use sqlx::{query, Error as SqlxError, Row};
 use tokio::sync::{
@@ -232,17 +234,49 @@ impl GatewayService {
     pub async fn route(
         &self,
         project_name: &ProjectName,
-        route: String,
-        req: Request<Body>,
+        mut route: String,
+        mut req: Request<Body>,
     ) -> Result<Response<Body>, Error> {
-        let target_ip = self.find_project(project_name).await?.target_ip()?.unwrap(); // TODO handle
-        let resp = hyper_reverse_proxy::call(
-            "127.0.0.1".parse().unwrap(),
-            &format!("http://{}:{}/{}", target_ip, 8001, route),
-            req,
-        )
-        .await
-        .unwrap();
+        let target_ip = self
+            .find_project(project_name)
+            .await?
+            .target_ip()?
+            .ok_or_else(|| Error::kind(ErrorKind::ProjectNotReady))?;
+
+        let control_key = self.control_key_from_project_name(project_name).await?;
+
+        // TODO I don't understand the API for `headers`: it gives an
+        // impl. of `Header` which can only be encoded in something
+        // that `Extend<HeaderValue>` but `HeaderMap` only impls
+        // `Extend<(HeaderName, HeaderValue)>` (as one would expect),
+        // therefore why the ugly hack below.
+        {
+            use axum::headers::Header;
+            let auth_header = Authorization::basic(&control_key, "");
+            let auth_header_name = Authorization::<Basic>::name();
+            let mut auth = vec![];
+            auth_header.encode(&mut auth);
+            let headers = req.headers_mut();
+            headers.remove(auth_header_name);
+            headers.append(auth_header_name, auth.pop().unwrap());
+        }
+
+        if !route.starts_with("/") {
+            route = format!("/{route}");
+        }
+
+        route = format!("/projects/{project_name}{route}");
+
+        *req.uri_mut() = route.parse().unwrap();
+
+        let target_url = format!("http://{target_ip}:8001");
+
+        debug!("routing control: {target_url}");
+
+        let resp = hyper_reverse_proxy::call("127.0.0.1".parse().unwrap(), &target_url, req)
+            .await
+            .map_err(|_| Error::kind(ErrorKind::ProjectUnavailable))?;
+
         Ok(resp)
     }
 
@@ -303,6 +337,19 @@ impl GatewayService {
             .map(|row| row.try_get("account_name").unwrap())
             .ok_or_else(|| Error::from(ErrorKind::UserNotFound))?;
         Ok(name)
+    }
+
+    pub async fn control_key_from_project_name(
+        &self,
+        project_name: &ProjectName,
+    ) -> Result<String, Error> {
+        let control_key = query("SELECT initial_key FROM projects WHERE project_name = ?1")
+            .bind(project_name)
+            .fetch_optional(&self.db)
+            .await?
+            .map(|row| row.try_get("initial_key").unwrap())
+            .ok_or_else(|| Error::from(ErrorKind::ProjectNotFound))?;
+        Ok(control_key)
     }
 
     pub async fn user_from_account_name(&self, name: AccountName) -> Result<User, Error> {

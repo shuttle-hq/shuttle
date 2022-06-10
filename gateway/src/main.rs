@@ -69,6 +69,8 @@ pub enum ErrorKind {
     ProjectNotFound,
     InvalidProjectName,
     ProjectAlreadyExists,
+    ProjectNotReady,
+    ProjectUnavailable,
     InvalidOperation,
     Internal
 }
@@ -132,6 +134,8 @@ impl IntoResponse for Error {
             ErrorKind::BadHost => (StatusCode::BAD_REQUEST, "the 'Host' header is invalid"),
             ErrorKind::UserNotFound => (StatusCode::NOT_FOUND, "user not found"),
             ErrorKind::ProjectNotFound => (StatusCode::NOT_FOUND, "project not found"),
+            ErrorKind::ProjectNotReady => (StatusCode::SERVICE_UNAVAILABLE, "project not ready"),
+            ErrorKind::ProjectUnavailable => (StatusCode::BAD_GATEWAY, "project returned invalid response"),
             ErrorKind::InvalidProjectName => (StatusCode::BAD_REQUEST, "invalid project name"),
             ErrorKind::InvalidOperation => (StatusCode::BAD_REQUEST, "the requested operation is invalid"),
             ErrorKind::ProjectAlreadyExists => (StatusCode::BAD_REQUEST, "a project with the same name already exists"),

@@ -1,4 +1,5 @@
-use std::{io::Write, path::Path};
+use std::io::Write;
+use std::path::{Path, PathBuf};
 
 use shuttle_service::loader::build_crate;
 
@@ -31,13 +32,30 @@ fn not_shuttle() {
 }
 
 #[test]
-#[should_panic(
-    expected = "a cdylib was not created. Try adding the following to the Cargo.toml of the service:\n[lib]\ncrate-type = [\"cdylib\"]\n"
-)]
+fn not_lib() {
+    let buf = Box::new(DummyWriter {});
+    let project_path = format!("{}/tests/resources/not-lib", env!("CARGO_MANIFEST_DIR"));
+    assert!(build_crate(Path::new(&project_path), buf).is_err());
+}
+
+#[test]
 fn not_cdylib() {
     let buf = Box::new(DummyWriter {});
     let project_path = format!("{}/tests/resources/not-cdylib", env!("CARGO_MANIFEST_DIR"));
-    build_crate(Path::new(&project_path), buf).unwrap();
+    assert!(build_crate(Path::new(&project_path), buf).is_ok());
+    assert!(PathBuf::from(project_path)
+        .join("target/debug/libnot_cdylib.so")
+        .exists());
+}
+
+#[test]
+fn is_cdylib() {
+    let buf = Box::new(DummyWriter {});
+    let project_path = format!("{}/tests/resources/is-cdylib", env!("CARGO_MANIFEST_DIR"));
+    assert!(build_crate(Path::new(&project_path), buf).is_ok());
+    assert!(PathBuf::from(project_path)
+        .join("target/debug/libis_cdylib.so")
+        .exists());
 }
 
 #[test]

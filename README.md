@@ -55,7 +55,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 rocket = "0.5.0-rc.1"
-shuttle-service = { version = "0.3.2", features = ["web-rocket"] }
+shuttle-service = { version = "0.3.3", features = ["web-rocket"] }
 ```
 
 

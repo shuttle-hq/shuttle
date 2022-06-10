@@ -38,7 +38,7 @@
 //! by adding the `web-rocket` feature on the `shuttle-service` dependency.
 //!
 //! ```toml
-//! shuttle-service = { version = "0.3.2", features = ["web-rocket"] }
+//! shuttle-service = { version = "0.3.3", features = ["web-rocket"] }
 //! ```
 //!
 //! Now replace `src/lib.rs` with the following content.
@@ -111,7 +111,7 @@
 //! Add the `sqlx-postgres` feature to the `shuttle-service` dependency inside `Cargo.toml`:
 //!
 //! ```toml
-//! shuttle-service = { version = "0.3.2", features = ["web-rocket", "sqlx-postgres"] }
+//! shuttle-service = { version = "0.3.3", features = ["web-rocket", "sqlx-postgres"] }
 //! ```
 //!
 //! Now update the `#[shuttle_service::main]` function to take in a `PgPool`:

@@ -9,7 +9,7 @@ prost = "0.10.4"
 tonic = "0.7.2"
 
 [dependencies.shuttle-common]
-version = "0.3.0"
+version = "0.3.1"
 path = "../common"
 
 [build-dependencies]

@@ -123,7 +123,18 @@ pub fn build_crate(project_path: &Path, buf: Box<dyn std::io::Write>) -> anyhow:
     let mut ws = Workspace::new(&manifest_path, &config)?;
 
     let current = ws.current_mut().unwrap();
+    if !current
+        .manifest()
+        .targets()
+        .iter()
+        .any(|target| target.is_lib())
+    {
+        return Err(anyhow!(
+            "Your Shuttle project must be a library. Please add `[lib]` to your Cargo.toml file."
+        ));
+    }
     let manifest = current.manifest_mut();
+
     for target in manifest.targets_mut() {
         if !target.is_cdylib() {
             *target = cargo::core::manifest::Target::lib_target(
@@ -138,7 +149,7 @@ pub fn build_crate(project_path: &Path, buf: Box<dyn std::io::Write>) -> anyhow:
     if let Some(profiles) = ws.profiles() {
         for profile in profiles.get_all().values() {
             if profile.panic.as_deref() == Some("abort") {
-                return Err(anyhow!("a Shuttle project cannot have panics that abort. Please ensure your Cargo.toml does not contain `panic = \"abort\"` for any profiles"));
+                return Err(anyhow!("Your Shuttle project cannot have panics that abort. Please ensure your Cargo.toml does not contain `panic = \"abort\"` for any profiles."));
             }
         }
     }

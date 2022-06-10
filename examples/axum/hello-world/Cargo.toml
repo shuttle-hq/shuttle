@@ -10,5 +10,5 @@ crate-type = ["cdylib"]
 
 [dependencies]
 axum = "0.5"
-shuttle-service = { version = "0.3.2", features = ["web-axum"] }
+shuttle-service = { version = "0.3.3", features = ["web-axum"] }
 sync_wrapper = "0.1"

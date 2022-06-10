@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-service"
-version = "0.3.2"
+version = "0.3.3"
 edition = "2021"
 license = "Apache-2.0"
 description = "Service traits and macros to deploy on the shuttle platform (https://www.shuttle.rs/)"
@@ -29,7 +29,7 @@ tokio = { version = "1.19.2", features = ["rt", "rt-multi-thread"] }
 tower = { version = "0.4.12", features = ["make"], optional = true }
 
 [dependencies.shuttle-codegen]
-version = "0.3.0"
+version = "0.3.1"
 path = "../codegen"
 optional = true
 

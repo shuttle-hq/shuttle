@@ -1,8 +1,5 @@
-// This will fail to compile since it is missing the following section in its Cargo.toml
-//
-// [lib]
-// crate-type = ["cdylib"]
-//
+// This will fail to compile since it is missing a `[lib]` section in its Cargo.toml file.
+
 fn main() {
     println!("this is not valid as it is not a libray!");
 }

@@ -94,11 +94,8 @@ impl Shuttle {
         // Remove empty dependencies table to re-insert after the lib table is inserted
         cargo_doc.remove("dependencies");
 
-        // Insert `crate-type = ["cdylib"]` array into `[lib]` table
-        let crate_type_array = Array::from_iter(["cdylib"].into_iter());
-        let mut lib_table = Table::new();
-        lib_table["crate-type"] = Item::Value(Value::Array(crate_type_array));
-        cargo_doc["lib"] = Item::Table(lib_table);
+        // Create an empty `[lib]` table
+        cargo_doc["lib"] = Item::Table(Table::new());
 
         // Fetch the latest shuttle-service version from crates.io
         let manifest_path = find(Some(&args.path)).unwrap();

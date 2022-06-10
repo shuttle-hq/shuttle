@@ -120,7 +120,20 @@ pub fn build_crate(project_path: &Path, buf: Box<dyn std::io::Write>) -> anyhow:
     let config = Config::new(shell, cwd, homedir);
     let manifest_path = project_path.join("Cargo.toml");
 
-    let ws = Workspace::new(&manifest_path, &config)?;
+    let mut ws = Workspace::new(&manifest_path, &config)?;
+
+    let current = ws.current_mut().unwrap();
+    let manifest = current.manifest_mut();
+    for target in manifest.targets_mut() {
+        if !target.is_cdylib() {
+            *target = cargo::core::manifest::Target::lib_target(
+                target.name(),
+                vec![cargo::core::compiler::CrateType::Cdylib],
+                target.src_path().path().unwrap().to_path_buf(),
+                target.edition(),
+            );
+        }
+    }
 
     if let Some(profiles) = ws.profiles() {
         for profile in profiles.get_all().values() {

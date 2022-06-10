@@ -3,7 +3,9 @@ use std::fmt::Formatter;
 use std::net::{IpAddr, Ipv4Addr};
 use std::time::Duration;
 
-use bollard::container::{Config, CreateContainerOptions, StopContainerOptions, RemoveContainerOptions};
+use bollard::container::{
+    Config, CreateContainerOptions, RemoveContainerOptions, StopContainerOptions,
+};
 use bollard::errors::Error as DockerError;
 use bollard::models::{
     ContainerConfig, ContainerInspectResponse, ContainerState, ContainerStateStatusEnum,
@@ -86,7 +88,7 @@ impl From<DockerError> for Error {
 #[serde(rename_all = "lowercase")]
 pub enum Project {
     Creating(ProjectCreating),
-    Ready(ProjectReady),
+    Starting(ProjectStarting),
     Started(ProjectStarted),
     Stopped(ProjectStopped),
     Errored(ProjectError),
@@ -94,7 +96,7 @@ pub enum Project {
 
 impl_from_variant!(Project:
                    ProjectCreating => Creating,
-                   ProjectReady => Ready,
+                   ProjectStarting => Starting,
                    ProjectStarted => Started,
                    ProjectStopped => Stopped,
                    ProjectError => Errored);
@@ -106,7 +108,7 @@ impl Project {
                 ErrorKind::InvalidOperation,
                 "tried to stop a project that was not ready",
             )),
-            Self::Ready(ProjectReady { container, .. }) => {
+            Self::Starting(ProjectStarting { container, .. }) => {
                 Ok(Self::Stopped(ProjectStopped { container }))
             }
             Self::Started(ProjectStarted { container, .. }) => {
@@ -133,15 +135,15 @@ impl Project {
         match self {
             Self::Started(_) => "started",
             Self::Stopped(_) => "stopped",
-            Self::Ready(_) => "ready",
+            Self::Starting(_) => "starting",
             Self::Creating(_) => "creating",
             Self::Errored(_) => "error",
         }
     }
 
-    pub async fn destroy<'c, C: Context<'c>>(self, ctx: &C) -> Result<(), Error> {
+    pub fn container_id(&self) -> Option<String> {
         match self {
-            Self::Ready(ProjectReady {
+            Self::Starting(ProjectStarting {
                 container: ContainerInspectResponse { id, .. },
                 ..
             })
@@ -151,23 +153,30 @@ impl Project {
             })
             | Self::Stopped(ProjectStopped {
                 container: ContainerInspectResponse { id, .. },
-            }) => {
-                let container_id = id.as_ref().unwrap();
-                ctx.docker()
-                    .stop_container(container_id, Some(StopContainerOptions { t: 30 }))
-                    .await
-                    .unwrap_or(());
-                ctx.docker()
-                    .remove_container(container_id, Some(RemoveContainerOptions {
+            }) => id.clone(),
+            Self::Errored(ProjectError { ctx: Some(ctx), .. }) => ctx.container_id(),
+            _ => None,
+        }
+    }
+
+    pub async fn destroy<'c, C: Context<'c>>(self, ctx: &C) -> Result<(), Error> {
+        if let Some(ref container_id) = self.container_id() {
+            ctx.docker()
+                .stop_container(container_id, Some(StopContainerOptions { t: 30 }))
+                .await
+                .unwrap_or(());
+            ctx.docker()
+                .remove_container(
+                    container_id,
+                    Some(RemoveContainerOptions {
                         force: true,
                         ..Default::default()
-                    }))
-                    .await
-                    .unwrap_or(());
-                Ok(())
-            }
-            Self::Creating(_) | Self::Errored(_) => Ok(()),
+                    }),
+                )
+                .await
+                .unwrap_or(());
         }
+        Ok(())
     }
 }
 
@@ -177,13 +186,31 @@ impl<'c> State<'c> for Project {
     type Error = Infallible;
 
     async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error> {
-        match self {
+        let previous = self.clone();
+        let previous_state = previous.state();
+
+        let mut new = match self {
             Self::Creating(creating) => creating.next(ctx).await.into_end_state(),
-            Self::Ready(ready) => ready.next(ctx).await.into_end_state(),
+            Self::Starting(ready) => ready.next(ctx).await.into_end_state(),
             Self::Started(started) => started.next(ctx).await.into_end_state(),
             Self::Stopped(stopped) => stopped.next(ctx).await.into_end_state(),
             Self::Errored(errored) => Ok(Self::Errored(errored)),
+        };
+
+        if let Ok(Self::Errored(errored)) = &mut new {
+            errored.ctx = Some(Box::new(previous));
         }
+
+        let new_state = new.as_ref().unwrap().state();
+        let container_id = new
+            .as_ref()
+            .unwrap()
+            .container_id()
+            .map(|id| format!("{id}:"))
+            .unwrap_or_default();
+        debug!("{container_id} {previous_state} -> {new_state}");
+
+        new
     }
 }
 
@@ -205,7 +232,7 @@ impl Refresh for Project {
     async fn refresh<'c, C: Context<'c>>(self, ctx: &C) -> Result<Self, Self::Error> {
         let next = match self {
             Self::Creating(creating) => Self::Creating(creating),
-            Self::Ready(ProjectReady { container })
+            Self::Starting(ProjectStarting { container })
             | Self::Started(ProjectStarted { container, .. })
             | Self::Stopped(ProjectStopped { container }) => {
                 let container_name = container.name.as_ref().unwrap().to_owned();
@@ -217,7 +244,7 @@ impl Refresh for Project {
                                 Self::Started(ProjectStarted { container, service })
                             }
                             ContainerStateStatusEnum::CREATED => {
-                                Self::Ready(ProjectReady { container })
+                                Self::Starting(ProjectStarting { container })
                             }
                             ContainerStateStatusEnum::EXITED => {
                                 Self::Stopped(ProjectStopped { container })
@@ -258,16 +285,26 @@ impl ProjectCreating {
 
     fn generate_container_config<'c, C: Context<'c>>(
         &self,
-        ctx: &C
+        ctx: &C,
     ) -> (CreateContainerOptions<String>, Config<String>) {
         let pg_password = Alphanumeric.sample_string(&mut rand::thread_rng(), 12);
 
-        let Args { image, prefix, provisioner_host, network_id, .. } = &ctx.args();
+        let Args {
+            image,
+            prefix,
+            provisioner_host,
+            network_id,
+            ..
+        } = &ctx.args();
 
-        let Self { initial_key, project_name, .. } = &self;
+        let Self {
+            initial_key,
+            project_name,
+            ..
+        } = &self;
 
         let create_container_options = CreateContainerOptions {
-            name: self.container_name(ctx)
+            name: self.container_name(ctx),
         };
 
         let container_config: ContainerConfig = deserialize_json!({
@@ -308,10 +345,12 @@ impl ProjectCreating {
             }]
         });
 
-        debug!(r"generated a container configuration:
+        debug!(
+            r"generated a container configuration:
 CreateContainerOpts: {create_container_options:#?}
 Config: {config:#?}
-");
+"
+        );
 
         (create_container_options, config)
     }
@@ -319,7 +358,7 @@ Config: {config:#?}
 
 #[async_trait]
 impl<'c> State<'c> for ProjectCreating {
-    type Next = ProjectReady;
+    type Next = ProjectStarting;
     type Error = ProjectError;
 
     async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error> {
@@ -341,17 +380,17 @@ impl<'c> State<'c> for ProjectCreating {
                 }
             })
             .await?;
-        Ok(ProjectReady { container })
+        Ok(ProjectStarting { container })
     }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct ProjectReady {
+pub struct ProjectStarting {
     container: ContainerInspectResponse,
 }
 
 #[async_trait]
-impl<'c> State<'c> for ProjectReady {
+impl<'c> State<'c> for ProjectStarting {
     type Next = ProjectStarted;
     type Error = ProjectError;
 
@@ -421,11 +460,9 @@ impl Service {
         mut container: ContainerInspectResponse,
         ctx: &C,
     ) -> Result<Self, ProjectError> {
-        let container_name = safe_unwrap!(container.name.strip_prefix("/"))
-            .to_string();
+        let container_name = safe_unwrap!(container.name.strip_prefix("/")).to_string();
 
-        let resource_name = safe_unwrap!(container_name.strip_suffix("_run"))
-            .to_string();
+        let resource_name = safe_unwrap!(container_name.strip_suffix("_run")).to_string();
 
         let Args { network_id, .. } = ctx.args();
 
@@ -436,10 +473,13 @@ impl Service {
                 .remove(&container_name)
                 .ip_address
         )
-            .parse()
-            .unwrap();
+        .parse()
+        .unwrap();
 
-        Ok(Self { name: resource_name, target })
+        Ok(Self {
+            name: resource_name,
+            target,
+        })
     }
 }
 
@@ -482,12 +522,12 @@ impl Refresh for ProjectStopped {
 
 #[async_trait]
 impl<'c> State<'c> for ProjectStopped {
-    type Next = ProjectReady;
+    type Next = ProjectStarting;
     type Error = ProjectError;
 
     async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error> {
         // If stopped, try to restart
-        Ok(ProjectReady {
+        Ok(ProjectStarting {
             container: self.container,
         })
     }
@@ -503,6 +543,7 @@ pub enum ProjectErrorKind {
 pub struct ProjectError {
     kind: ProjectErrorKind,
     message: String,
+    ctx: Option<Box<Project>>,
 }
 
 impl ProjectError {
@@ -510,6 +551,7 @@ impl ProjectError {
         Self {
             kind: ProjectErrorKind::Internal,
             message: message.as_ref().to_string(),
+            ctx: None,
         }
     }
 }
@@ -528,6 +570,7 @@ impl From<DockerError> for ProjectError {
         Self {
             kind: ProjectErrorKind::Internal,
             message: format!("{}", err),
+            ctx: None,
         }
     }
 }

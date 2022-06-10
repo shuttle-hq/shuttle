@@ -28,11 +28,15 @@ function main()
     echo $version | rg "\d+\.\d+\.\d+" || { echo "first argument must be in the form x.y.z"; exit 1; }
 
     echo "Will try to update to version $version"
+    git checkout -b "chore/v$version"
 
     update-cargo-versions $version
     update-examples-versions $version
 
     echo "Success!! You can now merge this branch"
+    echo ""
+    echo "Thereafter run:"
+    echo "./publish.sh $version"
 }
 
 main "${1-*}"

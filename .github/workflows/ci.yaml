@@ -24,14 +24,14 @@ jobs:
       uses: shuttle-hq/build-push-action@v2
       with:
         context: .
-        file: {context}/api/Containerfile
+        file: api/Containerfile
         push: true
         tags: ${{ env.CONTAINER_REGISTRY }}/backend:${{ github.sha }},${{ env.CONTAINER_REGISTRY }}/backend:latest
     - name: Build And Push Provisioner Image
       uses: shuttle-hq/build-push-action@v2
       with:
         context: .
-        file: {context}/provisioner/Containerfile
+        file: provisioner/Containerfile
         push: true
         tags: ${{ env.CONTAINER_REGISTRY }}/provisioner:${{ github.sha }},${{ env.CONTAINER_REGISTRY }}/provisioner:latest
     - name: Deploy Image

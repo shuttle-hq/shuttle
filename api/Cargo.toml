@@ -1,6 +1,6 @@
 [package]
 name = "api"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 
 [dependencies]
@@ -35,10 +35,10 @@ version = "0.1.0"
 path = "../proto"
 
 [dependencies.shuttle-common]
-version = "0.3.0"
+version = "0.3.1"
 path = "../common"
 
 [dependencies.shuttle-service]
-version = "0.3.0"
+version = "0.3.2"
 path = "../service"
 features = ["loader", "secrets"]

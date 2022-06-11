@@ -123,7 +123,7 @@ impl Shuttle {
         Ok(())
     }
 
-    pub fn find_root_directory(dir: &Path) -> Option<PathBuf> {
+    fn find_root_directory(dir: &Path) -> Option<PathBuf> {
         for ancestor in dir.ancestors() {
             if ancestor.join("Cargo.toml").exists() {
                 return Some(ancestor.to_path_buf());

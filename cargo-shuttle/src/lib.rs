@@ -123,20 +123,18 @@ impl Shuttle {
         Ok(())
     }
 
+    pub fn find_root_directory(dir: &Path) -> Option<PathBuf> {
+        for ancestor in dir.ancestors() {
+            if ancestor.join("Cargo.toml").exists() {
+                return Some(ancestor.to_path_buf());
+            }
+        }
+        None
+    }
+
     pub fn load_project(&mut self, project_args: &mut ProjectArgs) -> Result<()> {
         trace!("loading project arguments: {project_args:?}");
-
-        let root_directory_path = find_root_directory(&project_args.working_directory);
-
-        // Iterates through the directories until it finds the Cargo.toml file (project root) and returns the path
-        fn find_root_directory(dir: &Path) -> Option<PathBuf> {
-            for ancestor in dir.ancestors() {
-                if ancestor.join("Cargo.toml").exists() {
-                    return Some(ancestor.to_path_buf());
-                }
-            }
-            None
-        }
+        let root_directory_path = Shuttle::find_root_directory(&project_args.working_directory);
 
         if let Some(working_directory) = root_directory_path {
             project_args.working_directory = working_directory;
@@ -262,6 +260,7 @@ impl Shuttle {
             .run_cargo_package(args.allow_dirty)
             .context("failed to package cargo project")?;
 
+
         let key = self.ctx.api_key()?;
 
         client::deploy(
@@ -362,8 +361,9 @@ impl Shuttle {
 
 #[cfg(test)]
 mod tests {
-    use std::{path::PathBuf};
-    use crate::{args::ProjectArgs, Shuttle};
+    use crate::Shuttle;
+    use std::path::PathBuf;
+    use crate::args::ProjectArgs;
 
     fn path_from_workspace_root(path: &str) -> PathBuf {
         PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
@@ -372,40 +372,27 @@ mod tests {
     }
 
     #[test]
-    fn setting_name_overrides_name_in_config() {
-        let mut project_args = ProjectArgs {
-            working_directory: path_from_workspace_root("examples/axum/hello-world/"),
-            name: None,
-        };
-        let mut shuttle = Shuttle::new();
-        shuttle.load_project(&mut project_args).unwrap();
+    fn find_root_directory_returns_proper_directory() {
+        let working_directory = path_from_workspace_root("examples/axum/hello-world/src");
+        let deep_working_directory = path_from_workspace_root("examples/axum/hello-world/target/debug");
 
-        assert_eq!(project_args.working_directory, path_from_workspace_root("examples/axum/hello-world/"));
+        let root_dir = Shuttle::find_root_directory(&working_directory).unwrap();
+        let deep_root_dir = Shuttle::find_root_directory(&deep_working_directory).unwrap();
+
+        assert_eq!(root_dir, path_from_workspace_root("examples/axum/hello-world/"));
+        assert_eq!(deep_root_dir, path_from_workspace_root("examples/axum/hello-world/"));
     }
 
     #[test]
-    fn get_local_config_finds_name_in_shuttle_toml() {
-        let mut project_args = ProjectArgs {
-            working_directory: path_from_workspace_root("examples/axum/hello-world/"),
-            name: None,
-        };
-
-        let mut shuttle = Shuttle::new();
-        shuttle.load_project(&mut project_args).unwrap();
-
-        assert_eq!(project_args.working_directory, path_from_workspace_root("examples/axum/hello-world/"));
-    }
-
-    #[test]
-    fn running_in_src_subdir_finds_crate_but_fails_to_find_config() {
+    fn load_project_returns_proper_working_directory_in_project_args() {
         let mut project_args = ProjectArgs {
             working_directory: path_from_workspace_root("examples/axum/hello-world/src"),
             name: None,
         };
-
+    
         let mut shuttle = Shuttle::new();
-        shuttle.load_project(&mut project_args).unwrap();
-
+        Shuttle::load_project(&mut shuttle, &mut project_args).unwrap();
+    
         assert_eq!(project_args.working_directory, path_from_workspace_root("examples/axum/hello-world/"));
     }
 }

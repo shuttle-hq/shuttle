@@ -140,7 +140,7 @@ impl GlobalConfig {
 }
 
 /// Project-local config for things like customizing project name
-#[derive(Deserialize, Serialize, Default)]
+#[derive(Deserialize, Serialize, Default, Debug)]
 pub struct ProjectConfig {
     pub name: Option<ProjectName>,
 }
@@ -393,5 +393,50 @@ impl RequestContext {
             .as_ref()
             .and_then(|secrets| secrets.as_ref().cloned())
             .unwrap_or_default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{path::PathBuf, str::FromStr};
+
+    use shuttle_common::project::ProjectName;
+
+    use crate::{args::ProjectArgs, config::RequestContext};
+
+    use super::{Config, LocalConfigManager, ProjectConfig};
+
+    fn path_from_workspace_root(path: &str) -> PathBuf {
+        PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
+            .join("..")
+            .join(path)
+    }
+
+    fn unwrap_project_name(config: &Config<LocalConfigManager, ProjectConfig>) -> String {
+        config.as_ref().unwrap().name.as_ref().unwrap().to_string()
+    }
+
+    #[test]
+    fn get_local_config_finds_name_in_shuttle_toml() {
+        let mut project_args = ProjectArgs {
+            working_directory: path_from_workspace_root("examples/axum/hello-world/"),
+            name: None,
+        };
+
+        let local_config = RequestContext::get_local_config(&mut project_args).unwrap();
+
+        assert_eq!(unwrap_project_name(&local_config), "hello-world-axum-app");
+    }
+
+    #[test]
+    fn setting_name_overrides_name_in_config() {
+        let mut project_args = ProjectArgs {
+            working_directory: path_from_workspace_root("examples/axum/hello-world/"),
+            name: Some(ProjectName::from_str("my-fancy-project-name").unwrap()),
+        };
+
+        let local_config = RequestContext::get_local_config(&mut project_args).unwrap();
+
+        assert_eq!(unwrap_project_name(&local_config), "my-fancy-project-name");
     }
 }

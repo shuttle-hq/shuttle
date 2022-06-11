@@ -140,7 +140,7 @@ impl GlobalConfig {
 }
 
 /// Project-local config for things like customizing project name
-#[derive(Deserialize, Serialize, Default, Debug)]
+#[derive(Deserialize, Serialize, Default)]
 pub struct ProjectConfig {
     pub name: Option<ProjectName>,
 }

@@ -37,7 +37,7 @@ impl From<SqlxError> for Error {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Work<W = Project> {
     project_name: ProjectName,
     account_name: AccountName,

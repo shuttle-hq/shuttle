@@ -1,18 +1,7 @@
-// TODO: ~~user creation endpoint~~
-// TODO: ~~refactor API crate to only accept local and remove auth~~
-// TODO: ~~API crate should use shared secret for its control plane~~
-// TODO: ~~API crate should expose the active deployed port for a service~~
-// TODO: ~~gateway crate should poll active deployment port for proxy~~
-// TODO: ~~gateway crate should rewrite the projects -> services route~~
 // TODO: client should create project then push new deployment (refactor endpoint)
-// TODO: ~~rename API crate~~
-// TODO: ~~move common things to the common crate~~
-// TODO: ~~AccountName and ProjectName validation logic?~~
 // TODO: Add some tests (ideas?)
 // TODO: Implement the delete project endpoint to make sure users can
 //       self-serve out of issues
-// TODO: ~~Do a `docker pull` of the target runtime image to use when
-//       starting up~~
 
 #![allow(warnings)]
 
@@ -23,41 +12,76 @@ extern crate async_trait;
 extern crate log;
 extern crate core;
 
+use std::convert::Infallible;
 use std::error::Error as StdError;
 use std::fmt::Formatter;
 use std::io;
 use std::net::IpAddr;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::convert::Infallible;
 
-use axum::Json;
 use axum::http::StatusCode;
-use axum::response::{
-    IntoResponse,
-    Response
-};
+use axum::response::{IntoResponse, Response};
+use axum::Json;
 use bollard::Docker;
-use convert_case::{Casing, Case};
-use serde::{
-    Deserialize,
-    Deserializer,
-    Serialize
-};
-use serde_json::json;
 use clap::Parser;
+use convert_case::{Case, Casing};
+use serde::{Deserialize, Deserializer, Serialize};
+use serde_json::json;
+
+#[macro_export]
+macro_rules! assert_matches {
+    (
+        $stream:ident,
+        $(#[assertion = $ctx:literal])? $($pattern:pat_param)|+ $(if $guard:expr)? $(=> $more:block)?,
+    ) => {{
+        let next = $stream
+            .next()
+            .await
+            .expect("Stream ended abruptly");
+        match &next {
+            $($pattern)|+ $(if $guard)? => {
+                println!("{}: {:#?}", "CORRECT".bold().green(), next);
+                $($more)?;
+                next
+            },
+            _ => {
+                eprintln!("{}: {:#?}", "INCORRECT".bold().red(), next);
+                $(eprintln!("{}: {}", "Assertion failed".bold().red(), $ctx);)?
+                    panic!("State mismatch")
+            }
+        }
+    }};
+    (
+        $stream:ident,
+        $(#[assertion = $ctx:literal])? $($pattern:pat_param)|+ $(if $guard:expr)? $(=> $more:block)?,
+        $($(#[assertion = $ctxs:literal])? $($patterns:pat_param)|+ $(if $guards:expr)? $(=> $mores:block)?,)+
+    ) => {
+        assert_matches!(
+            $stream,
+            $(#[assertion = $ctx])?
+                $($pattern)|+ $(if $guard)? => {
+                    $($more)?;
+                    assert_matches!(
+                        $stream,
+                        $($(#[assertion = $ctxs])? $($patterns)|+ $(if $guards)? $(=> $mores)?,)+
+                    )
+                },
+        )
+    }
+}
 
 use crate::api::make_api;
+use crate::args::Args;
 use crate::proxy::make_proxy;
 use crate::service::GatewayService;
-use crate::args::Args;
 
 pub mod api;
+pub mod args;
+pub mod auth;
 pub mod project;
 pub mod proxy;
 pub mod service;
-pub mod auth;
-pub mod args;
 
 #[derive(Debug)]
 pub enum ErrorKind {
@@ -72,7 +96,7 @@ pub enum ErrorKind {
     ProjectNotReady,
     ProjectUnavailable,
     InvalidOperation,
-    Internal
+    Internal,
 }
 
 impl std::fmt::Display for ErrorKind {
@@ -93,29 +117,29 @@ impl std::fmt::Display for ErrorKind {
 #[derive(Debug)]
 pub struct Error {
     kind: ErrorKind,
-    source: Option<Box<dyn StdError + Sync + Send + 'static>>
+    source: Option<Box<dyn StdError + Sync + Send + 'static>>,
 }
 
 impl Error {
     pub fn source<E: StdError + Sync + Send + 'static>(kind: ErrorKind, err: E) -> Self {
         Self {
             kind,
-            source: Some(Box::new(err))
+            source: Some(Box::new(err)),
         }
     }
 
     pub fn custom<S: AsRef<str>>(kind: ErrorKind, message: S) -> Self {
         Self {
             kind,
-            source: Some(Box::new(io::Error::new(io::ErrorKind::Other, message.as_ref().to_string())))
+            source: Some(Box::new(io::Error::new(
+                io::ErrorKind::Other,
+                message.as_ref().to_string(),
+            ))),
         }
     }
 
     pub fn kind(kind: ErrorKind) -> Self {
-        Self {
-            kind,
-            source: None
-        }
+        Self { kind, source: None }
     }
 }
 
@@ -135,10 +159,18 @@ impl IntoResponse for Error {
             ErrorKind::UserNotFound => (StatusCode::NOT_FOUND, "user not found"),
             ErrorKind::ProjectNotFound => (StatusCode::NOT_FOUND, "project not found"),
             ErrorKind::ProjectNotReady => (StatusCode::SERVICE_UNAVAILABLE, "project not ready"),
-            ErrorKind::ProjectUnavailable => (StatusCode::BAD_GATEWAY, "project returned invalid response"),
+            ErrorKind::ProjectUnavailable => {
+                (StatusCode::BAD_GATEWAY, "project returned invalid response")
+            }
             ErrorKind::InvalidProjectName => (StatusCode::BAD_REQUEST, "invalid project name"),
-            ErrorKind::InvalidOperation => (StatusCode::BAD_REQUEST, "the requested operation is invalid"),
-            ErrorKind::ProjectAlreadyExists => (StatusCode::BAD_REQUEST, "a project with the same name already exists"),
+            ErrorKind::InvalidOperation => (
+                StatusCode::BAD_REQUEST,
+                "the requested operation is invalid",
+            ),
+            ErrorKind::ProjectAlreadyExists => (
+                StatusCode::BAD_REQUEST,
+                "a project with the same name already exists",
+            ),
             ErrorKind::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
         };
         (status, Json(json!({ "error": error_message }))).into_response()
@@ -165,7 +197,7 @@ pub struct ProjectName(pub String);
 impl<'de> Deserialize<'de> for ProjectName {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: Deserializer<'de>
+        D: Deserializer<'de>,
     {
         String::deserialize(deserializer)?
             .parse()
@@ -212,8 +244,8 @@ impl std::fmt::Display for AccountName {
 
 impl<'de> Deserialize<'de> for AccountName {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: Deserializer<'de>
+    where
+        D: Deserializer<'de>,
     {
         String::deserialize(deserializer)?
             .parse()
@@ -245,7 +277,7 @@ pub trait Service<'c> {
 /// A generic state which can, when provided with a [`Context`], do
 /// some work and advance itself
 #[async_trait]
-pub trait State<'c>: Send {
+pub trait State<'c>: Send + Sized + Clone {
     type Next: State<'c>;
 
     type Error: StdError;
@@ -257,25 +289,24 @@ pub trait State<'c>: Send {
 /// failures
 pub trait EndState<'c>
 where
-    Self: State<'c, Error = Infallible, Next = Self>
+    Self: State<'c, Error = Infallible, Next = Self>,
 {
     fn is_done(&self) -> bool;
 }
 
 pub trait IntoEndState<'c, E>
 where
-    E: EndState<'c>
+    E: EndState<'c>,
 {
     fn into_end_state(self) -> Result<E, Infallible>;
 }
 
 impl<'c, E, S, Err> IntoEndState<'c, E> for Result<S, Err>
 where
-    E: EndState<'c> + From<S> + From<Err>
+    E: EndState<'c> + From<S> + From<Err>,
 {
     fn into_end_state(self) -> Result<E, Infallible> {
-        self.map(|s| E::from(s))
-            .or_else(|err| Ok(E::from(err)))
+        self.map(|s| E::from(s)).or_else(|err| Ok(E::from(err)))
     }
 }
 
@@ -296,19 +327,47 @@ async fn main() -> io::Result<()> {
 
     let api = make_api(Arc::clone(&gateway));
 
-    let api_handle = tokio::spawn(
-        axum::Server::bind(&args.control)
-            .serve(api.into_make_service())
-    );
+    let api_handle = tokio::spawn(axum::Server::bind(&args.control).serve(api.into_make_service()));
 
     let proxy = make_proxy(gateway);
 
-    let proxy_handle = tokio::spawn(
-        hyper::Server::bind(&args.user)
-            .serve(proxy)
-    );
+    let proxy_handle = tokio::spawn(hyper::Server::bind(&args.user).serve(proxy));
 
     tokio::join!(api_handle, proxy_handle);
 
     Ok(())
+}
+
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+
+    use std::pin::Pin;
+
+    use futures::prelude::*;
+    use futures::stream::TryUnfold;
+
+    pub type StateTryStream<'c, St: State<'c>> =
+        Pin<Box<dyn Stream<Item = Result<St, St::Error>> + 'c>>;
+
+    pub trait StateExt<'c>: State<'c> {
+        /// Convert the state into a [`TryStream`] that yields
+        /// the generated states.
+        ///
+        /// This stream will not end.
+        fn into_stream<Ctx>(self, ctx: Ctx) -> StateTryStream<'c, Self>
+        where
+            Self: 'c + State<'c, Next = Self>,
+            Ctx: 'c + Context<'c>,
+        {
+            Box::pin(stream::try_unfold((self, ctx), |(state, ctx)| async move {
+                state
+                    .next(&ctx)
+                    .await
+                    .map(|state| Some((state.clone(), (state, ctx))))
+            }))
+        }
+    }
+
+    impl<'c, S> StateExt<'c> for S where S: State<'c> {}
 }

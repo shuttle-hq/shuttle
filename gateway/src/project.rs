@@ -593,21 +593,167 @@ impl<'c> State<'c> for ProjectError {
 
 #[cfg(test)]
 pub mod tests {
+    use bollard::{models::Health, network::ListNetworksOptions, Docker};
+
+    use rand::{
+        distributions::{Distribution, Uniform},
+        Rng,
+    };
+
+    use std::env;
+    use std::io;
+
+    use futures::prelude::*;
+
+    use anyhow::{anyhow, Context as AnyhowContext};
+
+    use colored::Colorize;
+
     use super::*;
-    use crate::World;
+
+    use crate::{tests::*, assert_matches};
+
+    pub struct World {
+        docker: Docker,
+        args: Args,
+    }
+
+    #[derive(Clone, Copy)]
+    pub struct WorldContext<'c> {
+        docker: &'c Docker,
+        args: &'c Args,
+    }
+
+    impl World {
+        async fn new() -> anyhow::Result<Self> {
+            let docker_host =
+                option_env!("SHUTTLE_TESTS_DOCKER_HOST").unwrap_or("tcp://127.0.0.1:2735");
+            let docker = Docker::connect_with_http_defaults()?;
+
+            docker.list_images::<&str>(None).await.context(anyhow!(
+                "A docker daemon does not seem accessible at {docker_host}"
+            ))?;
+
+            let control: i16 = Uniform::from(9000..10000).sample(&mut rand::thread_rng());
+            let user = control + 1;
+            let control = format!("127.0.0.1:{control}").parse().unwrap();
+            let user = format!("127.0.0.1:{user}").parse().unwrap();
+
+            let prefix = format!(
+                "shuttle_test_{}_",
+                Alphanumeric.sample_string(&mut rand::thread_rng(), 4)
+            );
+
+            let image = env::var("SHUTTLE_TESTS_RUNTIME_IMAGE")
+                .unwrap_or("public.ecr.aws/d7w6e9t1/backend:latest".to_string());
+
+            let provisioner_host = env::var("SHUTTLE_TESTS_PROVISIONER_HOST")
+                .context("the tests can't run if `SHUTTLE_TESTS_PROVISIONER_HOST` is not set")?;
+
+            let network_id = env::var("SHUTTLE_TESTS_NETWORK_ID")
+                .context("the tests can't run if `SHUTTLE_TESTS_NETWORK_ID` is not set")?;
+
+            docker
+                .list_networks(Some(ListNetworksOptions {
+                    filters: vec![("id", vec![network_id.as_str()])]
+                        .into_iter()
+                        .collect(),
+                }))
+                .await
+                .context("can't list docker networks")
+                .and_then(|networks| {
+                    if networks.is_empty() {
+                        Err(anyhow!("can't find a docker network with id={network_id}"))
+                    } else {
+                        Ok(())
+                    }
+                })?;
+
+            let args = Args {
+                control,
+                user,
+                image,
+                prefix,
+                provisioner_host,
+                network_id,
+            };
+
+            Ok(Self { docker, args })
+        }
+    }
+
+    impl World {
+        fn context<'c>(&'c self) -> WorldContext<'c> {
+            WorldContext {
+                docker: &self.docker,
+                args: &self.args,
+            }
+        }
+    }
+
+    impl<'c> Context<'c> for WorldContext<'c> {
+        fn docker(&self) -> &'c Docker {
+            &self.docker
+        }
+
+        fn args(&self) -> &'c Args {
+            &self.args
+        }
+    }
 
     #[tokio::test]
-    async fn create_project() {
-        let world = World::new();
+    async fn create_start_stop_project() -> anyhow::Result<()> {
+        let world = World::new().await?;
+
+        let state = Project::Creating(ProjectCreating {
+            project_name: "my-project-test".parse().unwrap(),
+            initial_key: "test".to_string(),
+        });
+
         let ctx = world.context();
-        let mut project = Project::Creating(ProjectCreating::new(
-            "test_project_do_not_upvote".parse().unwrap(),
-        ));
-        while !matches!(&project, Project::Started(..)) {
-            project = project.next(&ctx).await.unwrap();
-        }
-        project = project.stop(&ctx).await.unwrap();
-        assert!(matches!(project, Project::Stopped(_)));
-        project.destroy(&ctx).await.unwrap();
+
+        let mut stream = state
+            .into_stream(ctx)
+            .map(|state| match state {
+                Ok(Project::Errored(err)) => Err(err),
+                Ok(otherwise) => Ok(otherwise),
+                Err(_) => unreachable!(),
+            });
+
+        let project_started = assert_matches!(
+            stream,
+            #[assertion = "Container created, assigned an `id`"]
+            Ok(Project::Starting(ProjectStarting {
+                container: ContainerInspectResponse {
+                    id: Some(container_id),
+                    state: Some(ContainerState {
+                        status: Some(ContainerStateStatusEnum::CREATED),
+                        ..
+                    }),
+                    ..
+                }
+            })),
+            #[assertion = "Same container started, in a healthy state"]
+            Ok(Project::Started(ProjectStarted {
+                container: ContainerInspectResponse {
+                    id: Some(id),
+                    state: Some(ContainerState {
+                        status: Some(ContainerStateStatusEnum::RUNNING),
+                        health: Some(Health {
+                            status: Some(HealthStatusEnum::HEALTHY),
+                            ..
+                        }),
+                        ..
+                    }),
+                    ..
+                },
+                ..
+            })) if id == container_id,
+        );
+
+        // How to run assertions on stop/destroy states?
+        project_started.unwrap().destroy(&ctx).await.unwrap();
+
+        Ok(())
     }
 }

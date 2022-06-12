@@ -30,6 +30,5 @@ async fn basic_init() {
     let cargo_toml = read_to_string("tests/tmp/basic-init/Cargo.toml").unwrap();
 
     assert!(cargo_toml.contains("name = \"basic-init\""));
-    assert!(cargo_toml.contains("[lib]\ncrate-type = [\"cdylib\"]"));
     assert!(cargo_toml.contains("shuttle-service = { version = "));
 }

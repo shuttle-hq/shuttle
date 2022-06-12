@@ -295,7 +295,7 @@ pub trait Service<'c> {
 /// some work and advance itself
 #[async_trait]
 pub trait State<'c>: Send + Sized + Clone {
-    type Next: State<'c>;
+    type Next;
 
     type Error: StdError;
 

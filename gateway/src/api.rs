@@ -64,7 +64,7 @@ async fn delete_project(
     Path(project): Path<ProjectName>,
 ) -> Result<(), Error> {
     service
-        .delete_project(&project, &name)
+        .destroy_project(project, name)
         .await
 }
 

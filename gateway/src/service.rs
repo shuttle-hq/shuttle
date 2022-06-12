@@ -76,7 +76,7 @@ where
         Ok(Self {
             project_name: self.project_name,
             account_name: self.account_name,
-            work: self.work.into_result()?
+            work: self.work.into_result()?,
         })
     }
 }
@@ -211,11 +211,11 @@ impl GatewayService {
         {
             match work.refresh(&service.context()).await {
                 Ok(work) => service
-                    .send(Work {
+                    .send(
                         project_name,
-                        work,
                         account_name,
-                    })
+                        work,
+                    )
                     .await
                     .expect("failed to queue work at startup"),
                 Err(err) => error!("could not refresh state for user=`{account_name}` project=`{project_name}`: {}. Skipping it for now.", err)
@@ -230,7 +230,18 @@ impl GatewayService {
         Ok(())
     }
 
-    pub async fn send(&self, work: Work) -> Result<(), Error> {
+    pub async fn send(
+        &self,
+        project_name: ProjectName,
+        account_name: AccountName,
+        work: Project,
+    ) -> Result<(), Error> {
+        let work = Work {
+            project_name,
+            account_name,
+            work,
+        };
+
         if let Some(sender) = self.sender.lock().await.as_ref() {
             Ok(sender
                 .send(work)
@@ -453,36 +464,20 @@ impl GatewayService {
 
         let project = project.0;
 
-        let work = Work {
-            project_name,
-            work: project.clone(),
-            account_name,
-        };
-
-        self.send(work).await?;
+        self.send(project_name, account_name, project.clone())
+            .await?;
 
         Ok(project)
     }
 
-    pub async fn delete_project(
+    pub async fn destroy_project(
         &self,
-        project_name: &ProjectName,
-        account_name: &AccountName,
+        project_name: ProjectName,
+        account_name: AccountName,
     ) -> Result<(), Error> {
-        let project = self.find_project(project_name).await?;
+        let project = self.find_project(&project_name).await?.destroy()?;
 
-        let work = Work {
-            project_name: project_name.clone(),
-            account_name: account_name.clone(),
-            work: project.destroy()?
-        };
-
-        self.send(work).await?;
-
-        query("DELETE FROM projects WHERE project_name = ?1")
-            .bind(&project_name)
-            .execute(&self.db)
-            .await?;
+        self.send(project_name, account_name, project).await?;
 
         Ok(())
     }

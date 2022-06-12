@@ -90,6 +90,7 @@ pub enum Project {
     Creating(ProjectCreating),
     Starting(ProjectStarting),
     Started(ProjectStarted),
+    Ready(ProjectReady),
     Stopping(ProjectStopping),
     Stopped(ProjectStopped),
     Destroying(ProjectDestroying),
@@ -101,6 +102,7 @@ impl_from_variant!(Project:
                    ProjectCreating => Creating,
                    ProjectStarting => Starting,
                    ProjectStarted => Started,
+                   ProjectReady => Ready,
                    ProjectStopping => Stopping,
                    ProjectStopped => Stopped,
                    ProjectDestroying => Destroying,
@@ -109,20 +111,13 @@ impl_from_variant!(Project:
 
 impl Project {
     pub fn stop(self) -> Result<Self, Error> {
-        match self {
-            Self::Creating(_) => Err(Error::custom(
+        if let Some(container) = self.container() {
+            Ok(Self::Stopping(ProjectStopping { container }))
+        } else {
+            Err(Error::custom(
                 ErrorKind::InvalidOperation,
-                "tried to stop a project that was not ready",
-            )),
-            Self::Starting(ProjectStarting { container, .. })
-            | Self::Started(ProjectStarted { container, .. })
-            | Self::Stopping(ProjectStopping { container }) => {
-                Ok(Self::Stopping(ProjectStopping { container }))
-            }
-            Self::Stopped(stopped) => Ok(Self::Stopped(stopped)),
-            Self::Destroying(destroying) => Ok(Self::Destroying(destroying)),
-            Self::Destroyed(destroyed) => Ok(Self::Destroyed(destroyed)),
-            Self::Errored(err) => Ok(Self::Errored(err)),
+                format!("cannot stop a project in the `{}` state", self.state()),
+            ))
         }
     }
 
@@ -134,9 +129,9 @@ impl Project {
         }
     }
 
-    pub fn target_ip(&self) -> Result<Option<String>, Error> {
+    pub fn target_ip(&self) -> Result<Option<IpAddr>, Error> {
         match self.clone() {
-            Self::Started(project_started) => Ok(Some(project_started.target_ip().to_string())),
+            Self::Ready(project_ready) => Ok(Some(project_ready.target_ip().clone())),
             _ => Ok(None), // not ready
         }
     }
@@ -144,6 +139,7 @@ impl Project {
     pub fn state(&self) -> &'static str {
         match self {
             Self::Started(_) => "started",
+            Self::Ready(_) => "ready",
             Self::Stopped(_) => "stopped",
             Self::Starting(_) => "starting",
             Self::Stopping(_) => "stopping",
@@ -158,6 +154,7 @@ impl Project {
         match self {
             Self::Starting(ProjectStarting { container, .. })
             | Self::Started(ProjectStarted { container, .. })
+            | Self::Ready(ProjectReady { container, .. })
             | Self::Stopping(ProjectStopping { container })
             | Self::Stopped(ProjectStopped { container })
             | Self::Destroying(ProjectDestroying { container }) => Some(container.clone()),
@@ -183,7 +180,12 @@ impl<'c> State<'c> for Project {
         let mut new = match self {
             Self::Creating(creating) => creating.next(ctx).await.into_end_state(),
             Self::Starting(ready) => ready.next(ctx).await.into_end_state(),
-            Self::Started(started) => started.next(ctx).await.into_end_state(),
+            Self::Started(started) => match started.next(ctx).await {
+                Ok(ProjectReadying::Ready(ready)) => Ok(ready.into()),
+                Ok(ProjectReadying::Started(started)) => Ok(started.into()),
+                Err(err) => Ok(Self::Errored(err))
+            },
+            Self::Ready(ready) => ready.next(ctx).await.into_end_state(),
             Self::Stopped(stopped) => stopped.next(ctx).await.into_end_state(),
             Self::Stopping(stopping) => stopping.next(ctx).await.into_end_state(),
             Self::Destroying(destroying) => destroying.next(ctx).await.into_end_state(),
@@ -200,9 +202,9 @@ impl<'c> State<'c> for Project {
             .as_ref()
             .unwrap()
             .container_id()
-            .map(|id| format!("{id}:"))
+            .map(|id| format!("{id}: "))
             .unwrap_or_default();
-        debug!("{container_id} {previous_state} -> {new_state}");
+        debug!("{container_id}{previous_state} -> {new_state}");
 
         new
     }
@@ -212,7 +214,10 @@ impl<'c> EndState<'c> for Project {
     type ErrorVariant = ProjectError;
 
     fn is_done(&self) -> bool {
-        matches!(self, Self::Errored(_) | Self::Started(_))
+        matches!(
+            self,
+            Self::Errored(_) | Self::Ready(_) | Self::Stopped(_) | Self::Destroyed(_)
+        )
     }
 
     fn into_result(self) -> Result<Self, Self::ErrorVariant> {
@@ -243,13 +248,13 @@ impl Refresh for Project {
             Self::Creating(creating) => Self::Creating(creating),
             Self::Starting(ProjectStarting { container })
             | Self::Started(ProjectStarted { container, .. })
+            | Self::Ready(ProjectReady { container, .. })
             | Self::Stopping(ProjectStopping { container })
             | Self::Stopped(ProjectStopped { container }) => {
                 let container = container.refresh(ctx).await?;
                 match container.state.as_ref().unwrap().status.as_ref().unwrap() {
                     ContainerStateStatusEnum::RUNNING => {
-                        let service = Service::from_container(container.clone(), ctx)?;
-                        Self::Started(ProjectStarted { container, service })
+                        Self::Started(ProjectStarted { container })
                     }
                     ContainerStateStatusEnum::CREATED => {
                         Self::Starting(ProjectStarting { container })
@@ -418,38 +423,83 @@ impl<'c> State<'c> for ProjectStarting {
                 }
             })?;
 
-        let mut container = None;
-        for _ in 0..9 {
-            let latest = self.container.clone().refresh(ctx).await?;
-            if matches!(
-                safe_unwrap!(latest.state.health.status),
-                HealthStatusEnum::HEALTHY
-            ) {
-                container = Some(latest);
-                break;
-            } else {
-                time::sleep(Duration::from_secs(1)).await;
-            }
-        }
-
-        if let Some(container) = container {
-            let service = Service::from_container(container.clone(), ctx)?;
-            Ok(Self::Next { container, service })
-        } else {
-            Err(ProjectError::internal(
-                "timed out waiting for runtime to become healthy",
-            ))
-        }
+        Ok(Self::Next {
+            container: self.container.refresh(ctx).await?
+        })
     }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ProjectStarted {
     container: ContainerInspectResponse,
+}
+
+#[async_trait]
+impl Refresh for ProjectStarted {
+    type Error = Error;
+
+    async fn refresh<'c, C: Context<'c>>(self, ctx: &C) -> Result<Self, Self::Error> {
+        Ok(Self {
+            container: self.container.refresh(ctx).await?,
+        })
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum ProjectReadying {
+    Ready(ProjectReady),
+    Started(ProjectStarted)
+}
+
+#[async_trait]
+impl<'c> State<'c> for ProjectStarted {
+    type Next = ProjectReadying;
+    type Error = ProjectError;
+
+    async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error> {
+        time::sleep(Duration::from_secs(1)).await;
+        let container = self.container.refresh(ctx).await?;
+        if matches!(
+            safe_unwrap!(container.state.health.status),
+            HealthStatusEnum::HEALTHY
+        ) {
+            let service = Service::from_container(container.clone(), ctx)?;
+            Ok(Self::Next::Ready(ProjectReady { container, service }))
+        } else {
+            // TODO check if timed out
+            Ok(Self::Next::Started(ProjectStarted { container }))
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ProjectReady {
+    container: ContainerInspectResponse,
     service: Service,
 }
 
-impl ProjectStarted {
+#[async_trait]
+impl Refresh for ProjectReady {
+    type Error = Error;
+
+    async fn refresh<'c, C: Context<'c>>(self, ctx: &C) -> Result<Self, Self::Error> {
+        let container = self.container.refresh(ctx).await?;
+        let service = Service::from_container(container.clone(), ctx)?;
+        Ok(Self { container, service })
+    }
+}
+
+#[async_trait]
+impl<'c> State<'c> for ProjectReady {
+    type Next = Self;
+    type Error = ProjectError;
+
+    async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error> {
+        Ok(self)
+    }
+}
+
+impl ProjectReady {
     pub fn name(&self) -> &str {
         &self.service.name
     }
@@ -490,27 +540,6 @@ impl Service {
             name: resource_name,
             target,
         })
-    }
-}
-
-#[async_trait]
-impl Refresh for ProjectStarted {
-    type Error = Error;
-
-    async fn refresh<'c, C: Context<'c>>(self, ctx: &C) -> Result<Self, Self::Error> {
-        let container = self.container.refresh(ctx).await?;
-        let service = Service::from_container(container.clone(), ctx)?;
-        Ok(Self { container, service })
-    }
-}
-
-#[async_trait]
-impl<'c> State<'c> for ProjectStarted {
-    type Next = Self;
-    type Error = ProjectError;
-
-    async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error> {
-        Ok(self)
     }
 }
 
@@ -873,9 +902,7 @@ pub mod tests {
             ctx,
             project_stopped.unwrap().destroy().unwrap(),
             #[assertion = "Container is destroyed"]
-            Ok(Project::Destroyed(ProjectDestroyed {
-                destroyed
-            })),
+            Ok(Project::Destroyed(ProjectDestroyed { destroyed })),
         );
 
         Ok(())

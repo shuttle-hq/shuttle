@@ -183,7 +183,7 @@ impl<'c> State<'c> for Project {
             Self::Started(started) => match started.next(ctx).await {
                 Ok(ProjectReadying::Ready(ready)) => Ok(ready.into()),
                 Ok(ProjectReadying::Started(started)) => Ok(started.into()),
-                Err(err) => Ok(Self::Errored(err))
+                Err(err) => Ok(Self::Errored(err)),
             },
             Self::Ready(ready) => ready.next(ctx).await.into_end_state(),
             Self::Stopped(stopped) => stopped.next(ctx).await.into_end_state(),
@@ -424,7 +424,7 @@ impl<'c> State<'c> for ProjectStarting {
             })?;
 
         Ok(Self::Next {
-            container: self.container.refresh(ctx).await?
+            container: self.container.refresh(ctx).await?,
         })
     }
 }
@@ -434,21 +434,10 @@ pub struct ProjectStarted {
     container: ContainerInspectResponse,
 }
 
-#[async_trait]
-impl Refresh for ProjectStarted {
-    type Error = Error;
-
-    async fn refresh<'c, C: Context<'c>>(self, ctx: &C) -> Result<Self, Self::Error> {
-        Ok(Self {
-            container: self.container.refresh(ctx).await?,
-        })
-    }
-}
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ProjectReadying {
     Ready(ProjectReady),
-    Started(ProjectStarted)
+    Started(ProjectStarted),
 }
 
 #[async_trait]
@@ -476,17 +465,6 @@ impl<'c> State<'c> for ProjectStarted {
 pub struct ProjectReady {
     container: ContainerInspectResponse,
     service: Service,
-}
-
-#[async_trait]
-impl Refresh for ProjectReady {
-    type Error = Error;
-
-    async fn refresh<'c, C: Context<'c>>(self, ctx: &C) -> Result<Self, Self::Error> {
-        let container = self.container.refresh(ctx).await?;
-        let service = Service::from_container(container.clone(), ctx)?;
-        Ok(Self { container, service })
-    }
 }
 
 #[async_trait]
@@ -568,31 +546,9 @@ impl<'c> State<'c> for ProjectStopping {
     }
 }
 
-#[async_trait]
-impl Refresh for ProjectStopping {
-    type Error = Error;
-
-    async fn refresh<'c, C: Context<'c>>(self, ctx: &C) -> Result<Self, Self::Error> {
-        Ok(Self {
-            container: self.container.refresh(ctx).await?,
-        })
-    }
-}
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ProjectStopped {
     container: ContainerInspectResponse,
-}
-
-#[async_trait]
-impl Refresh for ProjectStopped {
-    type Error = Error;
-
-    async fn refresh<'c, C: Context<'c>>(self, ctx: &C) -> Result<Self, Self::Error> {
-        Ok(Self {
-            container: self.container.refresh(ctx).await?,
-        })
-    }
 }
 
 #[async_trait]
@@ -640,17 +596,6 @@ impl<'c> State<'c> for ProjectDestroying {
     }
 }
 
-#[async_trait]
-impl Refresh for ProjectDestroying {
-    type Error = Error;
-
-    async fn refresh<'c, C: Context<'c>>(self, ctx: &C) -> Result<Self, Self::Error> {
-        Ok(Self {
-            container: self.container.refresh(ctx).await?,
-        })
-    }
-}
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ProjectDestroyed {
     destroyed: Option<ContainerInspectResponse>,
@@ -662,15 +607,6 @@ impl<'c> State<'c> for ProjectDestroyed {
     type Error = ProjectError;
 
     async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error> {
-        Ok(self)
-    }
-}
-
-#[async_trait]
-impl Refresh for ProjectDestroyed {
-    type Error = Error;
-
-    async fn refresh<'c, C: Context<'c>>(self, ctx: &C) -> Result<Self, Self::Error> {
         Ok(self)
     }
 }
@@ -753,7 +689,7 @@ pub mod tests {
 
     use super::*;
 
-    use crate::assert_matches;
+    use crate::{assert_matches, assert_stream_matches, EndStateExt};
 
     pub struct World {
         docker: Docker,
@@ -865,12 +801,34 @@ pub mod tests {
                     ..
                 }
             })),
-            #[assertion = "Same container started, in a healthy state"]
+            #[assertion = "Container started, in a running state"]
             Ok(Project::Started(ProjectStarted {
                 container: ContainerInspectResponse {
                     id: Some(id),
                     state: Some(ContainerState {
                         status: Some(ContainerStateStatusEnum::RUNNING),
+                        ..
+                    }),
+                    ..
+                },
+                ..
+            })) if id == container_id,
+        );
+
+        let delay = time::sleep(Duration::from_secs(10));
+        futures::pin_mut!(delay);
+        let mut project_readying = project_started
+            .unwrap()
+            .into_stream(ctx)
+            .take_until(delay)
+            .try_skip_while(|state| future::ready(Ok(!matches!(state, Project::Ready(_)))));
+
+        let project_ready = assert_stream_matches!(
+            project_readying,
+            #[assertion = "Container is ready, in a healthy state"]
+            Ok(Project::Ready(ProjectReady {
+                container: ContainerInspectResponse {
+                    state: Some(ContainerState {
                         health: Some(Health {
                             status: Some(HealthStatusEnum::HEALTHY),
                             ..
@@ -880,12 +838,12 @@ pub mod tests {
                     ..
                 },
                 ..
-            })) if id == container_id,
+            })),
         );
 
         let project_stopped = assert_matches!(
             ctx,
-            project_started.unwrap().stop().unwrap(),
+            project_ready.unwrap().stop().unwrap(),
             #[assertion = "Container is stopped"]
             Ok(Project::Stopped(ProjectStopped {
                 container: ContainerInspectResponse {

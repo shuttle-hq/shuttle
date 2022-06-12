@@ -32,44 +32,59 @@ use futures::stream::TryUnfold;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::json;
 
+macro_rules! value_block_helper {
+    ($next:ident, $block:block) => {
+        $block
+    };
+    ($next:ident,) => {
+        $next
+    };
+}
+
+#[macro_export]
 macro_rules! assert_stream_matches {
     (
         $stream:ident,
-        $(#[assertion = $ctx:literal])? $($pattern:pat_param)|+ $(if $guard:expr)? $(=> $more:block)?,
+        $(#[assertion = $assert:literal])?
+        $($pattern:pat_param)|+ $(if $guard:expr)? $(=> $more:block)?,
     ) => {{
         let next = $stream
             .next()
             .await
-            .expect("Stream ended abruptly");
+            .expect("Stream ended before the last of assertions");
+
         match &next {
             $($pattern)|+ $(if $guard)? => {
-                println!("{}: {}", "CORRECT".bold().green(), $($ctx)?);
-                $($more)?;
-                next
+                print!("{}", "[ok]".bold().green());
+                $(print!(" {}", $assert);)?
+                print!("\n");
+                value_block_helper!(next, $($more)?)
             },
             _ => {
-                eprintln!("{}: {:#?}", "INCORRECT".bold().red(), next);
-                $(eprintln!("{}: {}", "Assertion failed".bold().red(), $ctx);)?
+                eprintln!("{} {:#?}", "[err]".bold().red(), next);
+                eprint!("{}", "Assertion failed".bold().red());
+                $(eprint!(": {}", $assert);)?
                 panic!("State mismatch")
             }
         }
     }};
     (
         $stream:ident,
-        $(#[assertion = $ctx:literal])? $($pattern:pat_param)|+ $(if $guard:expr)? $(=> $more:block)?,
-        $($(#[assertion = $ctxs:literal])? $($patterns:pat_param)|+ $(if $guards:expr)? $(=> $mores:block)?,)+
-    ) => {
+        $(#[$($meta:tt)*])*
+        $($pattern:pat_param)|+ $(if $guard:expr)? $(=> $more:block)?,
+        $($(#[$($metas:tt)*])* $($patterns:pat_param)|+ $(if $guards:expr)? $(=> $mores:block)?,)+
+    ) => {{
         assert_stream_matches!(
             $stream,
-            $(#[assertion = $ctx])? $($pattern)|+ $(if $guard)? => {
+            $(#[$($meta)*])* $($pattern)|+ $(if $guard)? => {
                 $($more)?;
                 assert_stream_matches!(
                     $stream,
-                    $($(#[assertion = $ctxs])? $($patterns)|+ $(if $guards)? $(=> $mores)?,)+
+                    $($(#[$($metas)*])* $($patterns)|+ $(if $guards)? $(=> $mores)?,)+
                 )
             },
         )
-    }
+    }};
 }
 
 #[macro_export]
@@ -77,13 +92,13 @@ macro_rules! assert_matches {
     {
         $ctx:ident,
         $state:expr,
-        $($(#[assertion = $ctxs:literal])? $($patterns:pat_param)|+ $(if $guards:expr)? $(=> $mores:block)?,)+
+        $($(#[$($meta:tt)*])* $($patterns:pat_param)|+ $(if $guards:expr)? $(=> $mores:block)?,)+
     } => {{
         let state = $state;
         let mut stream = crate::EndStateExt::into_stream(state, $ctx);
         assert_stream_matches!(
             stream,
-            $($(#[assertion = $ctxs])? $($patterns)|+ $(if $guards)? $(=> $mores)?,)+
+            $($(#[$($meta)*])* $($patterns)|+ $(if $guards)? $(=> $mores)?,)+
         )
     }}
 }
@@ -316,7 +331,7 @@ where
 }
 
 pub type StateTryStream<'c, St: EndState<'c>> =
-    Pin<Box<dyn Stream<Item = Result<St, St::ErrorVariant>> + 'c>>;
+    Pin<Box<dyn Stream<Item = Result<St, St::ErrorVariant>> + Send + 'c>>;
 
 pub trait EndStateExt<'c>: EndState<'c> {
     /// Convert the state into a [`TryStream`] that yields

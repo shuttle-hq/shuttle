@@ -124,7 +124,7 @@ pub fn build_crate(project_path: &Path, buf: Box<dyn std::io::Write>) -> anyhow:
 
     // Ensure a 'cdylib' will be built:
 
-    let current = ws.current_mut().unwrap();
+    let current = ws.current_mut().map_err(|_| anyhow!("A Shuttle project cannot have a virtual manifest file - please ensure your Cargo.toml file specifies it as a library."))?;
     if let Some(target) = current
         .manifest_mut()
         .targets_mut()
@@ -157,10 +157,6 @@ pub fn build_crate(project_path: &Path, buf: Box<dyn std::io::Write>) -> anyhow:
 
     let opts = CompileOptions::new(&config, CompileMode::Build)?;
     let compilation = compile(&ws, &opts)?;
-
-    if compilation.cdylibs.is_empty() {
-        return Err(anyhow!("a cdylib was not created. Try adding the following to the Cargo.toml of the service:\n[lib]\ncrate-type = [\"cdylib\"]\n"));
-    }
 
     Ok(compilation.cdylibs[0].path.clone())
 }

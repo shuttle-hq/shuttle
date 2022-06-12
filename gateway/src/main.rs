@@ -17,6 +17,7 @@ use std::error::Error as StdError;
 use std::fmt::Formatter;
 use std::io;
 use std::net::IpAddr;
+use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -26,11 +27,12 @@ use axum::Json;
 use bollard::Docker;
 use clap::Parser;
 use convert_case::{Case, Casing};
+use futures::prelude::*;
+use futures::stream::TryUnfold;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::json;
 
-#[macro_export]
-macro_rules! assert_matches {
+macro_rules! assert_stream_matches {
     (
         $stream:ident,
         $(#[assertion = $ctx:literal])? $($pattern:pat_param)|+ $(if $guard:expr)? $(=> $more:block)?,
@@ -41,14 +43,14 @@ macro_rules! assert_matches {
             .expect("Stream ended abruptly");
         match &next {
             $($pattern)|+ $(if $guard)? => {
-                println!("{}: {:#?}", "CORRECT".bold().green(), next);
+                println!("{}: {}", "CORRECT".bold().green(), $($ctx)?);
                 $($more)?;
                 next
             },
             _ => {
                 eprintln!("{}: {:#?}", "INCORRECT".bold().red(), next);
                 $(eprintln!("{}: {}", "Assertion failed".bold().red(), $ctx);)?
-                    panic!("State mismatch")
+                panic!("State mismatch")
             }
         }
     }};
@@ -57,18 +59,33 @@ macro_rules! assert_matches {
         $(#[assertion = $ctx:literal])? $($pattern:pat_param)|+ $(if $guard:expr)? $(=> $more:block)?,
         $($(#[assertion = $ctxs:literal])? $($patterns:pat_param)|+ $(if $guards:expr)? $(=> $mores:block)?,)+
     ) => {
-        assert_matches!(
+        assert_stream_matches!(
             $stream,
-            $(#[assertion = $ctx])?
-                $($pattern)|+ $(if $guard)? => {
-                    $($more)?;
-                    assert_matches!(
-                        $stream,
-                        $($(#[assertion = $ctxs])? $($patterns)|+ $(if $guards)? $(=> $mores)?,)+
-                    )
-                },
+            $(#[assertion = $ctx])? $($pattern)|+ $(if $guard)? => {
+                $($more)?;
+                assert_stream_matches!(
+                    $stream,
+                    $($(#[assertion = $ctxs])? $($patterns)|+ $(if $guards)? $(=> $mores)?,)+
+                )
+            },
         )
     }
+}
+
+#[macro_export]
+macro_rules! assert_matches {
+    {
+        $ctx:ident,
+        $state:expr,
+        $($(#[assertion = $ctxs:literal])? $($patterns:pat_param)|+ $(if $guards:expr)? $(=> $mores:block)?,)+
+    } => {{
+        let state = $state;
+        let mut stream = crate::EndStateExt::into_stream(state, $ctx);
+        assert_stream_matches!(
+            stream,
+            $($(#[assertion = $ctxs])? $($patterns)|+ $(if $guards)? $(=> $mores)?,)+
+        )
+    }}
 }
 
 use crate::api::make_api;
@@ -291,8 +308,38 @@ pub trait EndState<'c>
 where
     Self: State<'c, Error = Infallible, Next = Self>,
 {
+    type ErrorVariant: StdError;
+
     fn is_done(&self) -> bool;
+
+    fn into_result(self) -> Result<Self, Self::ErrorVariant>;
 }
+
+pub type StateTryStream<'c, St: EndState<'c>> =
+    Pin<Box<dyn Stream<Item = Result<St, St::ErrorVariant>> + 'c>>;
+
+pub trait EndStateExt<'c>: EndState<'c> {
+    /// Convert the state into a [`TryStream`] that yields
+    /// the generated states.
+    ///
+    /// This stream will not end.
+    fn into_stream<Ctx>(self, ctx: Ctx) -> StateTryStream<'c, Self>
+    where
+        Self: 'c,
+        Ctx: 'c + Context<'c>,
+    {
+        Box::pin(stream::try_unfold((self, ctx), |(state, ctx)| async move {
+            state
+                .next(&ctx)
+                .await
+                .unwrap() // EndState's `next` is Infallible
+                .into_result()
+                .map(|state| Some((state.clone(), (state, ctx))))
+        }))
+    }
+}
+
+impl<'c, S> EndStateExt<'c> for S where S: EndState<'c> {}
 
 pub trait IntoEndState<'c, E>
 where
@@ -336,38 +383,4 @@ async fn main() -> io::Result<()> {
     tokio::join!(api_handle, proxy_handle);
 
     Ok(())
-}
-
-#[cfg(test)]
-pub mod tests {
-    use super::*;
-
-    use std::pin::Pin;
-
-    use futures::prelude::*;
-    use futures::stream::TryUnfold;
-
-    pub type StateTryStream<'c, St: State<'c>> =
-        Pin<Box<dyn Stream<Item = Result<St, St::Error>> + 'c>>;
-
-    pub trait StateExt<'c>: State<'c> {
-        /// Convert the state into a [`TryStream`] that yields
-        /// the generated states.
-        ///
-        /// This stream will not end.
-        fn into_stream<Ctx>(self, ctx: Ctx) -> StateTryStream<'c, Self>
-        where
-            Self: 'c + State<'c, Next = Self>,
-            Ctx: 'c + Context<'c>,
-        {
-            Box::pin(stream::try_unfold((self, ctx), |(state, ctx)| async move {
-                state
-                    .next(&ctx)
-                    .await
-                    .map(|state| Some((state.clone(), (state, ctx))))
-            }))
-        }
-    }
-
-    impl<'c, S> StateExt<'c> for S where S: State<'c> {}
 }

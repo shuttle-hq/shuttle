@@ -90,7 +90,10 @@ pub enum Project {
     Creating(ProjectCreating),
     Starting(ProjectStarting),
     Started(ProjectStarted),
+    Stopping(ProjectStopping),
     Stopped(ProjectStopped),
+    Destroying(ProjectDestroying),
+    Destroyed(ProjectDestroyed),
     Errored(ProjectError),
 }
 
@@ -98,29 +101,36 @@ impl_from_variant!(Project:
                    ProjectCreating => Creating,
                    ProjectStarting => Starting,
                    ProjectStarted => Started,
+                   ProjectStopping => Stopping,
                    ProjectStopped => Stopped,
+                   ProjectDestroying => Destroying,
+                   ProjectDestroyed => Destroyed,
                    ProjectError => Errored);
 
 impl Project {
-    pub async fn stop<'c, C: Context<'c>>(self, ctx: &C) -> Result<Self, Error> {
+    pub fn stop(self) -> Result<Self, Error> {
         match self {
             Self::Creating(_) => Err(Error::custom(
                 ErrorKind::InvalidOperation,
                 "tried to stop a project that was not ready",
             )),
-            Self::Starting(ProjectStarting { container, .. }) => {
-                Ok(Self::Stopped(ProjectStopped { container }))
-            }
-            Self::Started(ProjectStarted { container, .. }) => {
-                ctx.docker()
-                    .stop_container(container.id.as_ref().unwrap(), None)
-                    .await?;
-                Ok(Self::Stopped(ProjectStopped {
-                    container: container.refresh(ctx).await?,
-                }))
+            Self::Starting(ProjectStarting { container, .. })
+            | Self::Started(ProjectStarted { container, .. })
+            | Self::Stopping(ProjectStopping { container }) => {
+                Ok(Self::Stopping(ProjectStopping { container }))
             }
             Self::Stopped(stopped) => Ok(Self::Stopped(stopped)),
+            Self::Destroying(destroying) => Ok(Self::Destroying(destroying)),
+            Self::Destroyed(destroyed) => Ok(Self::Destroyed(destroyed)),
             Self::Errored(err) => Ok(Self::Errored(err)),
+        }
+    }
+
+    pub fn destroy(self) -> Result<Self, Error> {
+        if let Some(container) = self.container() {
+            Ok(Self::Destroying(ProjectDestroying { container }))
+        } else {
+            Ok(Self::Destroyed(ProjectDestroyed { destroyed: None }))
         }
     }
 
@@ -136,47 +146,28 @@ impl Project {
             Self::Started(_) => "started",
             Self::Stopped(_) => "stopped",
             Self::Starting(_) => "starting",
+            Self::Stopping(_) => "stopping",
             Self::Creating(_) => "creating",
+            Self::Destroying(_) => "destroying",
+            Self::Destroyed(_) => "destroyed",
             Self::Errored(_) => "error",
         }
     }
 
-    pub fn container_id(&self) -> Option<String> {
+    pub fn container(&self) -> Option<ContainerInspectResponse> {
         match self {
-            Self::Starting(ProjectStarting {
-                container: ContainerInspectResponse { id, .. },
-                ..
-            })
-            | Self::Started(ProjectStarted {
-                container: ContainerInspectResponse { id, .. },
-                ..
-            })
-            | Self::Stopped(ProjectStopped {
-                container: ContainerInspectResponse { id, .. },
-            }) => id.clone(),
-            Self::Errored(ProjectError { ctx: Some(ctx), .. }) => ctx.container_id(),
-            _ => None,
+            Self::Starting(ProjectStarting { container, .. })
+            | Self::Started(ProjectStarted { container, .. })
+            | Self::Stopping(ProjectStopping { container })
+            | Self::Stopped(ProjectStopped { container })
+            | Self::Destroying(ProjectDestroying { container }) => Some(container.clone()),
+            Self::Errored(ProjectError { ctx: Some(ctx), .. }) => ctx.container(),
+            Self::Errored(_) | Self::Creating(_) | Self::Destroyed(_) => None,
         }
     }
 
-    pub async fn destroy<'c, C: Context<'c>>(self, ctx: &C) -> Result<(), Error> {
-        if let Some(ref container_id) = self.container_id() {
-            ctx.docker()
-                .stop_container(container_id, Some(StopContainerOptions { t: 30 }))
-                .await
-                .unwrap_or(());
-            ctx.docker()
-                .remove_container(
-                    container_id,
-                    Some(RemoveContainerOptions {
-                        force: true,
-                        ..Default::default()
-                    }),
-                )
-                .await
-                .unwrap_or(());
-        }
-        Ok(())
+    pub fn container_id(&self) -> Option<String> {
+        self.container().and_then(|container| container.id)
     }
 }
 
@@ -194,6 +185,9 @@ impl<'c> State<'c> for Project {
             Self::Starting(ready) => ready.next(ctx).await.into_end_state(),
             Self::Started(started) => started.next(ctx).await.into_end_state(),
             Self::Stopped(stopped) => stopped.next(ctx).await.into_end_state(),
+            Self::Stopping(stopping) => stopping.next(ctx).await.into_end_state(),
+            Self::Destroying(destroying) => destroying.next(ctx).await.into_end_state(),
+            Self::Destroyed(destroyed) => destroyed.next(ctx).await.into_end_state(),
             Self::Errored(errored) => Ok(Self::Errored(errored)),
         };
 
@@ -215,8 +209,17 @@ impl<'c> State<'c> for Project {
 }
 
 impl<'c> EndState<'c> for Project {
+    type ErrorVariant = ProjectError;
+
     fn is_done(&self) -> bool {
         matches!(self, Self::Errored(_) | Self::Started(_))
+    }
+
+    fn into_result(self) -> Result<Self, Self::ErrorVariant> {
+        match self {
+            Self::Errored(perr) => Err(perr),
+            otherwise => Ok(otherwise),
+        }
     }
 }
 
@@ -230,34 +233,41 @@ impl Refresh for Project {
     /// project into the wrong state if the docker is transitioning
     /// the state of its resources under us
     async fn refresh<'c, C: Context<'c>>(self, ctx: &C) -> Result<Self, Self::Error> {
-        let next = match self {
+        let container = if let Some(container_id) = self.container_id() {
+            Some(ctx.docker().inspect_container(&container_id, None).await?)
+        } else {
+            None
+        };
+
+        let refreshed = match self {
             Self::Creating(creating) => Self::Creating(creating),
             Self::Starting(ProjectStarting { container })
             | Self::Started(ProjectStarted { container, .. })
+            | Self::Stopping(ProjectStopping { container })
             | Self::Stopped(ProjectStopped { container }) => {
-                let container_name = container.name.as_ref().unwrap().to_owned();
-                match container.refresh(ctx).await {
-                    Ok(container) => {
-                        match container.state.as_ref().unwrap().status.as_ref().unwrap() {
-                            ContainerStateStatusEnum::RUNNING => {
-                                let service = Service::from_container(container.clone(), ctx)?;
-                                Self::Started(ProjectStarted { container, service })
-                            }
-                            ContainerStateStatusEnum::CREATED => {
-                                Self::Starting(ProjectStarting { container })
-                            }
-                            ContainerStateStatusEnum::EXITED => {
-                                Self::Stopped(ProjectStopped { container })
-                            }
-                            _ => todo!(),
-                        }
+                let container = container.refresh(ctx).await?;
+                match container.state.as_ref().unwrap().status.as_ref().unwrap() {
+                    ContainerStateStatusEnum::RUNNING => {
+                        let service = Service::from_container(container.clone(), ctx)?;
+                        Self::Started(ProjectStarted { container, service })
                     }
-                    Err(_err) => todo!(),
+                    ContainerStateStatusEnum::CREATED => {
+                        Self::Starting(ProjectStarting { container })
+                    }
+                    ContainerStateStatusEnum::EXITED => Self::Stopped(ProjectStopped { container }),
+                    _ => {
+                        return Err(Error::custom(
+                            ErrorKind::Internal,
+                            "container resource has drifted out of sync: cannot recover",
+                        ))
+                    }
                 }
             }
+            Self::Destroying(destroying) => Self::Destroying(destroying),
+            Self::Destroyed(destroyed) => Self::Destroyed(destroyed),
             Self::Errored(err) => Self::Errored(err),
         };
-        Ok(next)
+        Ok(refreshed)
     }
 }
 
@@ -505,6 +515,42 @@ impl<'c> State<'c> for ProjectStarted {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ProjectStopping {
+    container: ContainerInspectResponse,
+}
+
+#[async_trait]
+impl<'c> State<'c> for ProjectStopping {
+    type Next = ProjectStopped;
+
+    type Error = ProjectError;
+
+    async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error> {
+        let Self { container } = self;
+        ctx.docker()
+            .stop_container(
+                container.id.as_ref().unwrap(),
+                Some(StopContainerOptions { t: 30 }),
+            )
+            .await?;
+        Ok(Self::Next {
+            container: container.refresh(ctx).await?,
+        })
+    }
+}
+
+#[async_trait]
+impl Refresh for ProjectStopping {
+    type Error = Error;
+
+    async fn refresh<'c, C: Context<'c>>(self, ctx: &C) -> Result<Self, Self::Error> {
+        Ok(Self {
+            container: self.container.refresh(ctx).await?,
+        })
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ProjectStopped {
     container: ContainerInspectResponse,
 }
@@ -530,6 +576,73 @@ impl<'c> State<'c> for ProjectStopped {
         Ok(ProjectStarting {
             container: self.container,
         })
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ProjectDestroying {
+    container: ContainerInspectResponse,
+}
+
+#[async_trait]
+impl<'c> State<'c> for ProjectDestroying {
+    type Next = ProjectDestroyed;
+    type Error = ProjectError;
+
+    async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error> {
+        let container_id = self.container.id.as_ref().unwrap();
+        ctx.docker()
+            .stop_container(&container_id, Some(StopContainerOptions { t: 1 }))
+            .await
+            .unwrap_or(());
+        ctx.docker()
+            .remove_container(
+                &container_id,
+                Some(RemoveContainerOptions {
+                    force: true,
+                    ..Default::default()
+                }),
+            )
+            .await
+            .unwrap_or(());
+        Ok(Self::Next {
+            destroyed: Some(self.container),
+        })
+    }
+}
+
+#[async_trait]
+impl Refresh for ProjectDestroying {
+    type Error = Error;
+
+    async fn refresh<'c, C: Context<'c>>(self, ctx: &C) -> Result<Self, Self::Error> {
+        Ok(Self {
+            container: self.container.refresh(ctx).await?,
+        })
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ProjectDestroyed {
+    destroyed: Option<ContainerInspectResponse>,
+}
+
+#[async_trait]
+impl<'c> State<'c> for ProjectDestroyed {
+    type Next = ProjectDestroyed;
+    type Error = ProjectError;
+
+    async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error> {
+        Ok(self)
+    }
+}
+
+#[async_trait]
+impl Refresh for ProjectDestroyed {
+    type Error = Error;
+
+    async fn refresh<'c, C: Context<'c>>(self, ctx: &C) -> Result<Self, Self::Error> {
+        Ok(self)
     }
 }
 
@@ -611,7 +724,7 @@ pub mod tests {
 
     use super::*;
 
-    use crate::{tests::*, assert_matches};
+    use crate::assert_matches;
 
     pub struct World {
         docker: Docker,
@@ -702,26 +815,16 @@ pub mod tests {
     }
 
     #[tokio::test]
-    async fn create_start_stop_project() -> anyhow::Result<()> {
+    async fn create_start_stop_destroy_project() -> anyhow::Result<()> {
         let world = World::new().await?;
-
-        let state = Project::Creating(ProjectCreating {
-            project_name: "my-project-test".parse().unwrap(),
-            initial_key: "test".to_string(),
-        });
-
         let ctx = world.context();
 
-        let mut stream = state
-            .into_stream(ctx)
-            .map(|state| match state {
-                Ok(Project::Errored(err)) => Err(err),
-                Ok(otherwise) => Ok(otherwise),
-                Err(_) => unreachable!(),
-            });
-
         let project_started = assert_matches!(
-            stream,
+            ctx,
+            Project::Creating(ProjectCreating {
+                project_name: "my-project-test".parse().unwrap(),
+                initial_key: "test".to_string(),
+            }),
             #[assertion = "Container created, assigned an `id`"]
             Ok(Project::Starting(ProjectStarting {
                 container: ContainerInspectResponse {
@@ -751,8 +854,29 @@ pub mod tests {
             })) if id == container_id,
         );
 
-        // How to run assertions on stop/destroy states?
-        project_started.unwrap().destroy(&ctx).await.unwrap();
+        let project_stopped = assert_matches!(
+            ctx,
+            project_started.unwrap().stop().unwrap(),
+            #[assertion = "Container is stopped"]
+            Ok(Project::Stopped(ProjectStopped {
+                container: ContainerInspectResponse {
+                    state: Some(ContainerState {
+                        status: Some(ContainerStateStatusEnum::EXITED),
+                        ..
+                    }),
+                    ..
+                }
+            })),
+        );
+
+        assert_matches!(
+            ctx,
+            project_stopped.unwrap().destroy().unwrap(),
+            #[assertion = "Container is destroyed"]
+            Ok(Project::Destroyed(ProjectDestroyed {
+                destroyed
+            })),
+        );
 
         Ok(())
     }

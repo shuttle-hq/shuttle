@@ -66,8 +66,18 @@ impl<'c, W> EndState<'c> for Work<W>
 where
     W: EndState<'c>,
 {
+    type ErrorVariant = W::ErrorVariant;
+
     fn is_done(&self) -> bool {
         self.work.is_done()
+    }
+
+    fn into_result(self) -> Result<Self, Self::ErrorVariant> {
+        Ok(Self {
+            project_name: self.project_name,
+            account_name: self.account_name,
+            work: self.work.into_result()?
+        })
     }
 }
 
@@ -461,10 +471,13 @@ impl GatewayService {
     ) -> Result<(), Error> {
         let project = self.find_project(project_name).await?;
 
-        let ctx = self.context();
-        // Would rather err out early and not remove the project from
-        // the db than having dangling resources
-        project.destroy(&ctx).await?;
+        let work = Work {
+            project_name: project_name.clone(),
+            account_name: account_name.clone(),
+            work: project.destroy()?
+        };
+
+        self.send(work).await?;
 
         query("DELETE FROM projects WHERE project_name = ?1")
             .bind(&project_name)

@@ -122,20 +122,15 @@ pub fn build_crate(project_path: &Path, buf: Box<dyn std::io::Write>) -> anyhow:
 
     let mut ws = Workspace::new(&manifest_path, &config)?;
 
-    let current = ws.current_mut().unwrap();
-    if !current
-        .manifest()
-        .targets()
-        .iter()
-        .any(|target| target.is_lib())
-    {
-        return Err(anyhow!(
-            "Your Shuttle project must be a library. Please add `[lib]` to your Cargo.toml file."
-        ));
-    }
-    let manifest = current.manifest_mut();
+    // Ensure a 'cdylib' will be built:
 
-    for target in manifest.targets_mut() {
+    let current = ws.current_mut().unwrap();
+    if let Some(target) = current
+        .manifest_mut()
+        .targets_mut()
+        .iter_mut()
+        .find(|target| target.is_lib())
+    {
         if !target.is_cdylib() {
             *target = cargo::core::manifest::Target::lib_target(
                 target.name(),
@@ -144,7 +139,13 @@ pub fn build_crate(project_path: &Path, buf: Box<dyn std::io::Write>) -> anyhow:
                 target.edition(),
             );
         }
+    } else {
+        return Err(anyhow!(
+            "Your Shuttle project must be a library. Please add `[lib]` to your Cargo.toml file."
+        ));
     }
+
+    // Ensure `panic = "abort"` is not set:
 
     if let Some(profiles) = ws.profiles() {
         for profile in profiles.get_all().values() {

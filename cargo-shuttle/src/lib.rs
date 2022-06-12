@@ -25,7 +25,7 @@ use futures::future::TryFutureExt;
 use semver::{Version, VersionReq};
 use shuttle_service::loader::{build_crate, Loader};
 use tokio::sync::mpsc;
-use toml_edit::{value, Array, Document, Item, Table, Value};
+use toml_edit::{value, Document, Item, Table};
 use uuid::Uuid;
 
 #[macro_use]

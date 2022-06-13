@@ -5,4 +5,10 @@ edition = "2021"
 description = "Service with instances created per project for handling the compliation, loading, and execution of Shuttle services"
 
 [dependencies]
+log = "0.4.17"
+http = "0.2.8"
+anyhow = "1.0.57"
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
 sqlx = { version = "0.5.13", features = ["runtime-tokio-native-tls", "sqlite"] }
+tower = { version = "0.4.12", features = ["make"] }
+hyper = { version = "0.14.19", features = ["server", "tcp", "http1"] }

@@ -1389,7 +1389,13 @@ dependencies = [
 name = "deployer"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "http",
+ "hyper",
+ "log",
  "sqlx",
+ "tokio",
+ "tower",
 ]
 
 [[package]]

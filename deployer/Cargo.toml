@@ -1,0 +1,8 @@
+[package]
+name = "deployer"
+version = "0.1.0"
+edition = "2021"
+description = "Service with instances created per project for handling the compliation, loading, and execution of Shuttle services"
+
+[dependencies]
+sqlx = { version = "0.5.13", features = ["runtime-tokio-native-tls", "sqlite"] }

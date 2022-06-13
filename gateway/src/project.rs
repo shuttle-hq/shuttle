@@ -1,6 +1,6 @@
 use std::convert::Infallible;
 use std::fmt::Formatter;
-use std::net::{IpAddr, Ipv4Addr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
 
 use bollard::container::{
@@ -66,6 +66,8 @@ macro_rules! impl_from_variant {
         )+
     };
 }
+
+const RUNTIME_API_PORT: u16 = 8001;
 
 #[async_trait]
 impl Refresh for ContainerInspectResponse {
@@ -134,6 +136,12 @@ impl Project {
             Self::Ready(project_ready) => Ok(Some(project_ready.target_ip().clone())),
             _ => Ok(None), // not ready
         }
+    }
+
+    pub fn target_addr(&self) -> Result<Option<SocketAddr>, Error> {
+        Ok(self
+            .target_ip()?
+            .map(|target_ip| SocketAddr::new(target_ip, RUNTIME_API_PORT)))
     }
 
     pub fn state(&self) -> &'static str {
@@ -327,7 +335,7 @@ impl ProjectCreating {
             "Hostname": format!("{prefix}{project_name}"),
             "Env": [
                 "PROXY_PORT=8000",
-                "API_PORT=8001",
+                format!("API_PORT={RUNTIME_API_PORT}"),
                 "PG_PORT=5432",
                 "PG_DATA=/opt/shuttle/postgres",
                 format!("PG_PASSWORD={pg_password}"),
@@ -461,7 +469,9 @@ impl<'c> State<'c> for ProjectStarted {
                 })?;
             let now = chrono::offset::Utc::now();
             if created + chrono::Duration::seconds(10) < now {
-                return Err(ProjectError::internal("project did not become healthy in time"))
+                return Err(ProjectError::internal(
+                    "project did not become healthy in time",
+                ));
             }
 
             Ok(Self::Next::Started(ProjectStarted { container }))
@@ -693,21 +703,25 @@ pub mod tests {
 
     use anyhow::{anyhow, Context as AnyhowContext};
 
+    use hyper::{client::HttpConnector, Body, Client as HyperClient};
+
     use colored::Colorize;
 
     use super::*;
 
-    use crate::{assert_matches, assert_stream_matches, EndStateExt};
+    use crate::{assert_matches, assert_stream_matches, tests::Client, EndStateExt};
 
     pub struct World {
         docker: Docker,
         args: Args,
+        hyper: HyperClient<HttpConnector, Body>,
     }
 
     #[derive(Clone, Copy)]
     pub struct WorldContext<'c> {
         docker: &'c Docker,
         args: &'c Args,
+        hyper: &'c HyperClient<HttpConnector, Body>,
     }
 
     impl World {
@@ -764,7 +778,13 @@ pub mod tests {
                 network_id,
             };
 
-            Ok(Self { docker, args })
+            let hyper = HyperClient::builder().build(HttpConnector::new());
+
+            Ok(Self {
+                docker,
+                args,
+                hyper,
+            })
         }
     }
 
@@ -773,6 +793,7 @@ pub mod tests {
             WorldContext {
                 docker: &self.docker,
                 args: &self.args,
+                hyper: &self.hyper,
             }
         }
     }
@@ -790,6 +811,7 @@ pub mod tests {
     #[tokio::test]
     async fn create_start_stop_destroy_project() -> anyhow::Result<()> {
         let world = World::new().await?;
+
         let ctx = world.context();
 
         let project_started = assert_matches!(
@@ -848,6 +870,20 @@ pub mod tests {
                 ..
             })),
         );
+
+        let target_addr = project_ready
+            .as_ref()
+            .unwrap()
+            .target_addr()
+            .unwrap()
+            .unwrap();
+
+        let client = Client::new(&ctx.hyper, target_addr);
+
+        client
+            .get::<serde::de::IgnoredAny, _>("/status")
+            .await
+            .expect("Runtime service does not seem ready");
 
         let project_stopped = assert_matches!(
             ctx,

@@ -400,3 +400,68 @@ async fn main() -> io::Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+pub mod tests {
+    use std::net::SocketAddr;
+
+    use serde::Deserialize;
+
+    use http::{
+        uri::{PathAndQuery, Scheme, Uri},
+        Error as HttpError,
+    };
+    use hyper::{client::HttpConnector, Body, Client as HyperClient, StatusCode};
+
+    use super::*;
+
+    pub struct Client {
+        target: SocketAddr,
+        hyper: HyperClient<HttpConnector, Body>,
+    }
+
+    impl Client {
+        pub fn new(from: &HyperClient<HttpConnector, Body>, target: SocketAddr) -> Self {
+            Self {
+                target,
+                hyper: from.clone(),
+            }
+        }
+
+        pub async fn get<T, P>(&self, p_and_q: P) -> Result<Option<T>, Error>
+        where
+            T: for<'de> Deserialize<'de>,
+            PathAndQuery: TryFrom<P>,
+            <PathAndQuery as TryFrom<P>>::Error: Into<HttpError>,
+        {
+            let uri = Uri::builder()
+                .scheme(Scheme::HTTP)
+                .authority(self.target.to_string())
+                .path_and_query(p_and_q)
+                .build()
+                .map_err(|err| Error::source(ErrorKind::Internal, err))?;
+            let resp = self.hyper.get(uri).await.unwrap();
+            if resp.status() != StatusCode::OK {
+                Err(Error::custom(
+                    ErrorKind::Internal,
+                    format!("invalid response code from runtime: {}", resp.status()),
+                ))
+            } else {
+                let body = resp
+                    .into_body()
+                    .try_fold(Vec::new(), |mut buf, bytes| async move {
+                        buf.extend(bytes.into_iter());
+                        Ok(buf)
+                    })
+                    .await
+                    .unwrap();
+                if body.is_empty() {
+                    Ok(None)
+                } else {
+                    let t = serde_json::from_slice(&body).unwrap();
+                    Ok(t)
+                }
+            }
+        }
+    }
+}

@@ -2,6 +2,8 @@
 #
 # Little script to release a new version.
 # Usage: release.sh x.y.z
+#
+# Dependencies: git, cargo-edit, ripgrep
 
 set -uo pipefail
 

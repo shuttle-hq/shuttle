@@ -2,6 +2,8 @@
 #
 # Little script to publish to crates.io
 # Usage: publish.sh x.y.z
+#
+# Dependencies: git, ripgrep
 
 set -uo pipefail
 

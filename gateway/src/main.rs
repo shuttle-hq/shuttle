@@ -63,7 +63,8 @@ macro_rules! assert_stream_matches {
             _ => {
                 eprintln!("{} {:#?}", "[err]".bold().red(), next);
                 eprint!("{}", "Assertion failed".bold().red());
-                $(eprint!(": {}", $assert);)?
+                $(eprint!(": {}", $assert);)?;
+                eprint!("\n");
                 panic!("State mismatch")
             }
         }

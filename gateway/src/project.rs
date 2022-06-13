@@ -455,7 +455,15 @@ impl<'c> State<'c> for ProjectStarted {
             let service = Service::from_container(container.clone(), ctx)?;
             Ok(Self::Next::Ready(ProjectReady { container, service }))
         } else {
-            // TODO check if timed out
+            let created = chrono::DateTime::parse_from_rfc3339(safe_unwrap!(container.created))
+                .map_err(|err| {
+                    ProjectError::internal("invalid `created` response from Docker daemon")
+                })?;
+            let now = chrono::offset::Utc::now();
+            if created + chrono::Duration::seconds(10) < now {
+                return Err(ProjectError::internal("project did not become healthy in time"))
+            }
+
             Ok(Self::Next::Started(ProjectStarted { container }))
         }
     }

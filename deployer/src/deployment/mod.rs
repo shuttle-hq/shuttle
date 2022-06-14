@@ -1,6 +1,6 @@
-mod states;
 mod queue;
 mod run;
+mod states;
 
 use queue::Queued;
 
@@ -48,8 +48,8 @@ impl DeploymentManager {
         }
     }
 
-    pub async fn queue_push(&self, id: ServiceID) {
-        let queued = Queued { id };
+    pub async fn queue_push(&self, name: String) {
+        let queued = Queued { name };
         self.queue_send.send(queued).await.unwrap();
     }
 
@@ -63,5 +63,3 @@ type QueueReceiver = mpsc::Receiver<queue::Queued>;
 
 type RunSender = mpsc::Sender<run::Built>;
 type RunReceiver = mpsc::Receiver<run::Built>;
-
-type ServiceID = u32; // TODO: Type to refer to services?

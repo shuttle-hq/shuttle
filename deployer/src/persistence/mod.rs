@@ -1,6 +1,9 @@
 use std::path::Path;
 
-use sqlx::{sqlite::{SqlitePool, Sqlite}, migrate::MigrateDatabase};
+use sqlx::{
+    migrate::MigrateDatabase,
+    sqlite::{Sqlite, SqlitePool},
+};
 
 const DB_PATH: &str = "deployer.sqlite";
 

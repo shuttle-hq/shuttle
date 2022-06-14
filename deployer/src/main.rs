@@ -1,6 +1,6 @@
+mod deployment;
 mod persistence;
 mod tower_service;
-mod deployment;
 
 use std::net::SocketAddr;
 

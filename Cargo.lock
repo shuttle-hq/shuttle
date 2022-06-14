@@ -1390,6 +1390,7 @@ name = "deployer"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "env_logger",
  "http",
  "hyper",
  "log",

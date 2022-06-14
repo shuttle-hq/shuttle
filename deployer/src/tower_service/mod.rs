@@ -1,4 +1,4 @@
-mod layers;
+pub mod middleware;
 
 use std::future::Future;
 use std::pin::Pin;
@@ -8,13 +8,6 @@ use anyhow::anyhow;
 
 #[derive(Clone)]
 pub struct Deployer;
-
-impl Deployer {
-    pub fn new() -> Self {
-        // TODO: Apply layers, https://docs.rs/tower/latest/tower/struct.ServiceBuilder.html
-        Deployer
-    }
-}
 
 impl<Body> tower::Service<http::Request<Body>> for Deployer {
     type Response = http::Response<Body>;

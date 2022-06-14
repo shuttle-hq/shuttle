@@ -6,6 +6,7 @@ description = "Service with instances created per project for handling the compl
 
 [dependencies]
 log = "0.4.17"
+env_logger = "0.9.0"
 http = "0.2.8"
 anyhow = "1.0.57"
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }

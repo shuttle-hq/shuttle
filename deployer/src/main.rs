@@ -1,7 +1,6 @@
 mod persistence;
-use persistence::Persistence;
-
 mod tower_service;
+mod deployment;
 
 use std::net::SocketAddr;
 
@@ -13,7 +12,7 @@ async fn main() {
 
     let deployer = tower::ServiceBuilder::new()
         .layer(tower_service::middleware::LoggingLayer(log::Level::Debug))
-        .service(tower_service::Deployer);
+        .service(tower_service::Deployer::new().await);
 
     let shared = tower::make::Shared::new(deployer);
 
@@ -22,5 +21,5 @@ async fn main() {
     hyper::Server::bind(&addr)
         .serve(shared)
         .await
-        .unwrap_or_else(|_| log::error!("Failed to bind to address: {}", addr));
+        .unwrap_or_else(|_| panic!("Failed to bind to address: {}", addr));
 }

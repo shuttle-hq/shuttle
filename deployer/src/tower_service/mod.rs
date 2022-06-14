@@ -1,5 +1,8 @@
 pub mod middleware;
 
+use crate::deployment::DeploymentManager;
+use crate::persistence::Persistence;
+
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -7,7 +10,16 @@ use std::task::{Context, Poll};
 use anyhow::anyhow;
 
 #[derive(Clone)]
-pub struct Deployer;
+pub struct Deployer {
+    deployment_manager: DeploymentManager,
+    persistence: Persistence,
+}
+
+impl Deployer {
+    pub async fn new() -> Self {
+        Deployer { deployment_manager: DeploymentManager::new(), persistence: Persistence::new().await }
+    }
+}
 
 impl<Body> tower::Service<http::Request<Body>> for Deployer {
     type Response = http::Response<Body>;

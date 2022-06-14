@@ -1,6 +1,6 @@
-// Handle database interactions.
+use std::path::Path;
 
-use sqlx::sqlite::SqlitePool;
+use sqlx::{sqlite::{SqlitePool, Sqlite}, migrate::MigrateDatabase};
 
 const DB_PATH: &str = "deployer.sqlite";
 
@@ -11,6 +11,10 @@ pub struct Persistence {
 
 impl Persistence {
     pub async fn new() -> Self {
+        if !Path::new(DB_PATH).exists() {
+            Sqlite::create_database(DB_PATH).await.unwrap();
+        }
+
         let pool = SqlitePool::connect(DB_PATH).await.unwrap();
 
         sqlx::query("

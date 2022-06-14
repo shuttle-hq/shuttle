@@ -4,8 +4,9 @@ use std::fmt;
 pub enum DeploymentState {
     Queued = 0,
     Building = 1,
-    Running = 2,
-    Error = 3,
+    Built = 2,
+    Running = 3,
+    Error = 4,
 }
 
 impl fmt::Display for DeploymentState {
@@ -13,6 +14,7 @@ impl fmt::Display for DeploymentState {
         match self {
             DeploymentState::Queued => write!(f, "queued for deployment"),
             DeploymentState::Building => write!(f, "being built"),
+            DeploymentState::Built => write!(f, "successfully built"),
             DeploymentState::Running => write!(f, "running"),
             DeploymentState::Error => write!(f, "error occurred"),
         }

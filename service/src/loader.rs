@@ -120,22 +120,43 @@ pub fn build_crate(project_path: &Path, buf: Box<dyn std::io::Write>) -> anyhow:
     let config = Config::new(shell, cwd, homedir);
     let manifest_path = project_path.join("Cargo.toml");
 
-    let ws = Workspace::new(&manifest_path, &config)?;
+    let mut ws = Workspace::new(&manifest_path, &config)?;
+
+    // Ensure a 'cdylib' will be built:
+
+    let current = ws.current_mut().map_err(|_| anyhow!("A Shuttle project cannot have a virtual manifest file - please ensure your Cargo.toml file specifies it as a library."))?;
+    if let Some(target) = current
+        .manifest_mut()
+        .targets_mut()
+        .iter_mut()
+        .find(|target| target.is_lib())
+    {
+        if !target.is_cdylib() {
+            *target = cargo::core::manifest::Target::lib_target(
+                target.name(),
+                vec![cargo::core::compiler::CrateType::Cdylib],
+                target.src_path().path().unwrap().to_path_buf(),
+                target.edition(),
+            );
+        }
+    } else {
+        return Err(anyhow!(
+            "Your Shuttle project must be a library. Please add `[lib]` to your Cargo.toml file."
+        ));
+    }
+
+    // Ensure `panic = "abort"` is not set:
 
     if let Some(profiles) = ws.profiles() {
         for profile in profiles.get_all().values() {
             if profile.panic.as_deref() == Some("abort") {
-                return Err(anyhow!("a Shuttle project cannot have panics that abort. Please ensure your Cargo.toml does not contain `panic = \"abort\"` for any profiles"));
+                return Err(anyhow!("Your Shuttle project cannot have panics that abort. Please ensure your Cargo.toml does not contain `panic = \"abort\"` for any profiles."));
             }
         }
     }
 
     let opts = CompileOptions::new(&config, CompileMode::Build)?;
     let compilation = compile(&ws, &opts)?;
-
-    if compilation.cdylibs.is_empty() {
-        return Err(anyhow!("a cdylib was not created. Try adding the following to the Cargo.toml of the service:\n[lib]\ncrate-type = [\"cdylib\"]\n"));
-    }
 
     Ok(compilation.cdylibs[0].path.clone())
 }

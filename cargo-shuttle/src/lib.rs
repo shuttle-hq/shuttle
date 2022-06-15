@@ -134,7 +134,7 @@ impl Shuttle {
 
     pub fn load_project(&mut self, project_args: &mut ProjectArgs) -> Result<()> {
         trace!("loading project arguments: {project_args:?}");
-        let root_directory_path = Shuttle::find_root_directory(&project_args.working_directory);
+        let root_directory_path = Self::find_root_directory(&project_args.working_directory);
 
         if let Some(working_directory) = root_directory_path {
             project_args.working_directory = working_directory;
@@ -260,7 +260,6 @@ impl Shuttle {
             .run_cargo_package(args.allow_dirty)
             .context("failed to package cargo project")?;
 
-
         let key = self.ctx.api_key()?;
 
         client::deploy(
@@ -361,9 +360,9 @@ impl Shuttle {
 
 #[cfg(test)]
 mod tests {
+    use crate::args::ProjectArgs;
     use crate::Shuttle;
     use std::path::PathBuf;
-    use crate::args::ProjectArgs;
 
     fn path_from_workspace_root(path: &str) -> PathBuf {
         PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
@@ -374,13 +373,26 @@ mod tests {
     #[test]
     fn find_root_directory_returns_proper_directory() {
         let working_directory = path_from_workspace_root("examples/axum/hello-world/src");
-        let deep_working_directory = path_from_workspace_root("examples/axum/hello-world/target/debug");
 
         let root_dir = Shuttle::find_root_directory(&working_directory).unwrap();
+
+        assert_eq!(
+            root_dir,
+            path_from_workspace_root("examples/axum/hello-world/")
+        );
+    }
+
+    #[test]
+    fn find_root_directory_returns_proper_directory_from_a_deeper_directory() {
+        let deep_working_directory =
+            path_from_workspace_root("examples/axum/hello-world/target/debug");
+
         let deep_root_dir = Shuttle::find_root_directory(&deep_working_directory).unwrap();
 
-        assert_eq!(root_dir, path_from_workspace_root("examples/axum/hello-world/"));
-        assert_eq!(deep_root_dir, path_from_workspace_root("examples/axum/hello-world/"));
+        assert_eq!(
+            deep_root_dir,
+            path_from_workspace_root("examples/axum/hello-world/")
+        );
     }
 
     #[test]
@@ -389,10 +401,13 @@ mod tests {
             working_directory: path_from_workspace_root("examples/axum/hello-world/src"),
             name: None,
         };
-    
+
         let mut shuttle = Shuttle::new();
         Shuttle::load_project(&mut shuttle, &mut project_args).unwrap();
-    
-        assert_eq!(project_args.working_directory, path_from_workspace_root("examples/axum/hello-world/"));
+
+        assert_eq!(
+            project_args.working_directory,
+            path_from_workspace_root("examples/axum/hello-world/")
+        );
     }
 }

@@ -61,7 +61,7 @@ impl Deployer {
                 };
 
                 // Store deployment state:
-                self.persistence.deployment((&queued).into()).await?;
+                self.persistence.deployment(&queued).await?;
 
                 // Add to build queue:
                 self.deployment_manager.queue_push(queued).await;

@@ -49,7 +49,9 @@ impl Persistence {
         Persistence { pool }
     }
 
-    pub async fn deployment(&self, info: DeploymentInfo) -> anyhow::Result<()> {
+    pub async fn deployment(&self, info: impl Into<DeploymentInfo>) -> anyhow::Result<()> {
+        let info = info.into();
+
         sqlx::query("INSERT OR REPLACE INTO deploying (name, state) VALUES (?, ?)")
             .bind(info.name)
             .bind(info.state)

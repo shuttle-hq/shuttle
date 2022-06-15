@@ -20,7 +20,7 @@ pub async fn task(mut recv: RunReceiver, persistence: Persistence) {
         built.state = DeploymentState::Running;
 
         persistence
-            .deployment((&built).into())
+            .deployment(&built)
             .await
             .expect("TODO: handle");
     }

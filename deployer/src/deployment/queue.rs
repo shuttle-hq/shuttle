@@ -20,7 +20,7 @@ pub async fn task(mut recv: QueueReceiver, run_send: RunSender, persistence: Per
         queued.state = DeploymentState::Building;
 
         persistence
-            .deployment((&queued).into())
+            .deployment(&queued)
             .await
             .expect("TODO");
 
@@ -44,7 +44,7 @@ pub async fn task(mut recv: QueueReceiver, run_send: RunSender, persistence: Per
             state: DeploymentState::Built,
         };
 
-        persistence.deployment((&built).into()).await.expect("TODO");
+        persistence.deployment(&built).await.expect("TODO");
 
         // Send to run queue:
 

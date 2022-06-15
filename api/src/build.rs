@@ -1,3 +1,4 @@
+use std::fs::read_to_string;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -5,7 +6,9 @@ use std::process::Command;
 use anyhow::{anyhow, Context, Result};
 use rocket::tokio;
 use rocket::tokio::io::AsyncWriteExt;
+use semver::{Version, VersionReq};
 use shuttle_service::loader::build_crate;
+use toml_edit::Document;
 use uuid::Uuid;
 
 #[cfg(debug_assertions)]
@@ -97,6 +100,9 @@ impl BuildSystem for FsBuildSystem {
         // extract tarball
         extract_tarball(&crate_path, &project_path)?;
 
+        // check shuttle service version of service
+        check_shuttle_version(&project_path)?;
+
         // run cargo build (--debug for now)
         let so_path = build_crate(&project_path, buf)?;
 
@@ -186,5 +192,25 @@ fn extract_tarball(crate_path: &Path, project_path: &Path) -> Result<()> {
         Err(anyhow::Error::msg(err).context(anyhow!("failed to unpack cargo archive")))
     } else {
         Ok(())
+    }
+}
+
+fn check_shuttle_version(working_directory: &Path) -> anyhow::Result<()> {
+    let cargo_path = working_directory.join("Cargo.toml");
+    let cargo_doc = read_to_string(cargo_path.clone())?.parse::<Document>()?;
+    let current_shuttle_version = &cargo_doc["dependencies"]["shuttle-service"]["version"];
+    let service_semver = Version::parse(current_shuttle_version.as_str().unwrap())?;
+    let server_version = Version::parse(shuttle_service::VERSION)?;
+
+    let version_required = format!("{}.{}", server_version.major, server_version.minor);
+    let server_semver = VersionReq::parse(&version_required)?;
+
+    if server_semver.matches(&service_semver) {
+        Ok(())
+    } else {
+        Err(anyhow!(
+            "Your shuttle_service version is outdated. Update your shuttle_service version to {} and try to deploy again",
+            &server_version,
+        ))
     }
 }

@@ -6,12 +6,17 @@ use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
 
-pub async fn task(mut recv: QueueReceiver, run_send: RunSender, persistence: Persistence) {
-    log::info!("Queue task started");
+pub async fn task(
+    ident: usize,
+    mut recv: QueueReceiver,
+    run_send: RunSender,
+    persistence: Persistence,
+) {
+    log::info!("Queue task {ident} started");
 
     while let Some(mut queued) = recv.recv().await {
         log::info!(
-            "Queued deployment at the front of the queue: {}",
+            "Queued deployment at the front of the queue {ident}: {}",
             queued.name
         );
 
@@ -19,10 +24,7 @@ pub async fn task(mut recv: QueueReceiver, run_send: RunSender, persistence: Per
 
         queued.state = DeploymentState::Building;
 
-        persistence
-            .deployment(&queued)
-            .await
-            .expect("TODO");
+        persistence.deployment(&queued).await.expect("TODO");
 
         // Read POSTed data:
 

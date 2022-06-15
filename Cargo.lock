@@ -1396,6 +1396,7 @@ dependencies = [
  "hyper",
  "lazy_static",
  "log",
+ "num_cpus",
  "regex",
  "sqlx",
  "tokio",
@@ -5434,3 +5435,7 @@ name = "yansi"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09041cd90cf85f7f8b2df60c646f853b7f535ce68f85244eb6731cf89fa498ec"
+
+[[patch.unused]]
+name = "shuttle-service"
+version = "0.3.3"

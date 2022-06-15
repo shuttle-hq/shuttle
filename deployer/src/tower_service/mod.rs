@@ -27,7 +27,11 @@ pub struct Deployer {
 impl Deployer {
     pub async fn new() -> Self {
         let persistence = Persistence::new().await;
-        let deployment_manager = DeploymentManager::new(persistence.clone());
+
+        let cpus = num_cpus::get();
+        let pipeline_count = (cpus + 2) / 3; // TODO: How many is suitable?
+        let deployment_manager = DeploymentManager::new(persistence.clone(), pipeline_count);
+
         Deployer {
             deployment_manager,
             persistence,

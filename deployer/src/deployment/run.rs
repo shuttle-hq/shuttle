@@ -1,11 +1,14 @@
 use super::{DeploymentState, RunReceiver};
 use crate::persistence::Persistence;
 
-pub async fn task(mut recv: RunReceiver, persistence: Persistence) {
-    log::info!("Run task started");
+pub async fn task(ident: usize, mut recv: RunReceiver, persistence: Persistence) {
+    log::info!("Run task {ident} started");
 
     while let Some(mut built) = recv.recv().await {
-        log::info!("Built deployment at the front of run queue: {}", built.name);
+        log::info!(
+            "Built deployment at the front of run queue {ident}: {}",
+            built.name
+        );
 
         // Load service into memory:
 
@@ -19,10 +22,7 @@ pub async fn task(mut recv: RunReceiver, persistence: Persistence) {
 
         built.state = DeploymentState::Running;
 
-        persistence
-            .deployment(&built)
-            .await
-            .expect("TODO: handle");
+        persistence.deployment(&built).await.expect("TODO: handle");
     }
 }
 

@@ -1,6 +1,6 @@
 pub mod middleware;
 
-use crate::deployment::{DeploymentManager, DeploymentState};
+use crate::deployment::{DeploymentManager, DeploymentState, Queued};
 use crate::persistence::Persistence;
 
 use std::fmt::Display;
@@ -49,20 +49,22 @@ impl Deployer {
             http::Method::GET => todo!(),
 
             http::Method::POST => {
-                // Update database with state:
-
-                self.persistence
-                    .deploying(&name, DeploymentState::Queued)
-                    .await?;
-
-                // Put crate into build pipeline:
-
-                let body_future = hyper::body::to_bytes(body).map(|res| {
+                let data_future = Box::pin(hyper::body::to_bytes(body).map(|res| {
                     res.map(|data| data.to_vec())
                         .map_err(|e| anyhow!("Failed to read service POST request body: {}", e))
-                });
+                }));
 
-                self.deployment_manager.queue_push(name, body_future).await;
+                let queued = Queued {
+                    name,
+                    data_future,
+                    state: DeploymentState::Queued,
+                };
+
+                // Store deployment state:
+                self.persistence.deployment((&queued).into()).await?;
+
+                // Add to build queue:
+                self.deployment_manager.queue_push(queued).await;
 
                 // Produce response:
                 Err(anyhow!("TODO"))

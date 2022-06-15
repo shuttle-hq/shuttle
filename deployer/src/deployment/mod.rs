@@ -1,13 +1,15 @@
+mod info;
 mod queue;
 mod run;
 mod states;
 
+pub use info::DeploymentInfo;
 pub use states::DeploymentState;
 
-use crate::persistence::Persistence;
+pub use queue::Queued;
+pub use run::Built;
 
-use futures::Future;
-use queue::Queued;
+use crate::persistence::Persistence;
 
 use tokio::sync::mpsc;
 
@@ -53,20 +55,12 @@ impl DeploymentManager {
         }
     }
 
-    pub async fn queue_push(
-        &self,
-        name: String,
-        data_future: impl Future<Output = Result<Vec<u8>, anyhow::Error>> + Send + Sync + 'static,
-    ) {
-        let queued = Queued {
-            name,
-            data_future: Box::pin(data_future),
-        };
+    pub async fn queue_push(&self, queued: Queued) {
         self.queue_send.send(queued).await.unwrap();
     }
 
-    pub async fn run_push(&self) {
-        todo!()
+    pub async fn run_push(&self, built: Built) {
+        self.run_send.send(built).await.unwrap();
     }
 }
 

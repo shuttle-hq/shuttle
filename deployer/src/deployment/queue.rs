@@ -16,7 +16,7 @@ pub async fn task(mut recv: QueueReceiver, persistence: Persistence) {
         );
 
         persistence
-            .deploying(&queued.name, DeploymentState::Building)
+            .deployment((&queued).into())
             .await
             .expect("TODO");
 
@@ -31,10 +31,15 @@ pub async fn task(mut recv: QueueReceiver, persistence: Persistence) {
 pub struct Queued {
     pub name: String,
     pub data_future: Pin<Box<dyn Future<Output = Result<Vec<u8>, anyhow::Error>> + Send + Sync>>,
+    pub state: DeploymentState,
 }
 
 impl fmt::Debug for Queued {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Queued {{ name: \"{}\", .. }}", self.name)
+        write!(
+            f,
+            "Queued {{ name: \"{}\", state: {}, .. }}",
+            self.name, self.state
+        )
     }
 }

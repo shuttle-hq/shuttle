@@ -1,4 +1,4 @@
-use crate::deployment::DeploymentState;
+use crate::deployment::DeploymentInfo;
 
 use std::path::Path;
 
@@ -49,10 +49,10 @@ impl Persistence {
         Persistence { pool }
     }
 
-    pub async fn deploying(&self, name: &str, state: DeploymentState) -> anyhow::Result<()> {
+    pub async fn deployment(&self, info: DeploymentInfo) -> anyhow::Result<()> {
         sqlx::query("INSERT OR REPLACE INTO deploying (name, state) VALUES (?, ?)")
-            .bind(name)
-            .bind(state)
+            .bind(info.name)
+            .bind(info.state)
             .execute(&self.pool)
             .await
             .map(|_| ())

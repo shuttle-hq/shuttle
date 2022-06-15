@@ -51,7 +51,7 @@ impl Deployer {
     {
         match method {
             http::Method::GET => {
-                let d = self.persistence.get_deployment(&name).await;
+                let d = self.persistence.get_deployment(&name).await?;
                 log::trace!("{:?}", d);
 
                 // TODO: Send back results.
@@ -102,6 +102,13 @@ impl Deployer {
             }
         }
     }
+
+    async fn list_services<Body>(&self) -> anyhow::Result<http::Response<Body>> {
+        let deployments = self.persistence.get_all_deployments().await?;
+        log::trace!("{:?}", deployments);
+
+        Err(anyhow!("TODO"))
+    }
 }
 
 impl<Body> tower::Service<http::Request<Body>> for Deployer
@@ -123,15 +130,18 @@ where
         let method = req.method().clone();
         let body = req.into_body();
 
+        let cloned = self.clone(); // TODO: Work about appropriate lifetimes to avoid cloning
+
         if let Some(groups) = SERVICES_SLASH_NAME_RE.captures(&path) {
             let service_name = groups.get(1).unwrap().as_str().to_string();
-            let cloned = self.clone(); // TODO: Work about appropriate lifetimes to avoid cloning
 
-            return Box::pin(async move {
-                cloned
-                    .access_service::<Body>(service_name, method, body)
-                    .await
-            });
+            return Box::pin(
+                async move { cloned.access_service(service_name, method, body).await },
+            );
+        }
+
+        if path == "/services" {
+            return Box::pin(async move { cloned.list_services().await });
         }
 
         Box::pin(async move { Err(anyhow!("Unexpected HTTP request path: {}", path)) })

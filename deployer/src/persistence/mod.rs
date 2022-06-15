@@ -29,6 +29,7 @@ impl Persistence {
         let pool = SqlitePool::connect(DB_PATH).await.unwrap();
 
         // TODO: Consider indices/keys.
+        // TODO: Is having a separate table for active deployments necessary?
 
         sqlx::query("
             CREATE TABLE IF NOT EXISTS deploying (
@@ -62,7 +63,7 @@ impl Persistence {
             .execute(&self.pool)
             .await
             .map(|_| ())
-            .map_err(|e| anyhow!("Failed to update/insert deployment data: {}", e))
+            .map_err(|e| anyhow!("Failed to update/insert deployment data: {e}"))
     }
 
     pub async fn get_deployment(&self, name: &str) -> anyhow::Result<DeploymentInfo> {
@@ -75,7 +76,7 @@ impl Persistence {
                     .fetch_one(&self.pool)
             })
             .await
-            .map_err(|e| anyhow!("Could not get deployment data: {}", e))
+            .map_err(|e| anyhow!("Could not get deployment data: {e}"))
     }
 
     pub async fn delete_deployment(&self, name: &str) -> anyhow::Result<()> {
@@ -89,6 +90,14 @@ impl Persistence {
             })
             .await
             .map(|_| ())
-            .map_err(|e| anyhow!("Failed to remove deployment data: {}", e))
+            .map_err(|e| anyhow!("Failed to remove deployment data: {e}"))
+    }
+
+    pub async fn get_all_deployments(&self) -> anyhow::Result<Vec<DeploymentInfo>> {
+        // TODO: active_deployments
+        sqlx::query_as("SELECT * from deploying")
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| anyhow!("Failed to get all deployment data: {e}"))
     }
 }

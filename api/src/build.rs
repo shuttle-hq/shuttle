@@ -197,7 +197,7 @@ fn extract_tarball(crate_path: &Path, project_path: &Path) -> Result<()> {
 
 fn check_shuttle_version(working_directory: &Path) -> anyhow::Result<()> {
     let cargo_path = working_directory.join("Cargo.toml");
-    let cargo_doc = read_to_string(cargo_path.clone())?.parse::<Document>()?;
+    let cargo_doc = read_to_string(cargo_path)?.parse::<Document>()?;
     let current_shuttle_version = &cargo_doc["dependencies"]["shuttle-service"]["version"];
     let service_semver = Version::parse(current_shuttle_version.as_str().unwrap())?;
     let server_version = Version::parse(shuttle_service::VERSION)?;

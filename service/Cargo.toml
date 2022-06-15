@@ -29,18 +29,24 @@ tide = { version = "0.16.0", optional = true }
 tokio = { version = "1.19.2", features = ["rt", "rt-multi-thread"] }
 tower = { version = "0.4.12", features = ["make"], optional = true }
 
+# Tide does not have tokio support. So make sure async-std is compatible with tokio
+# https://github.com/http-rs/tide/issues/791
+[dependencies.async-std]
+version = "1"
+features = ["tokio1"]
+
 [dependencies.shuttle-codegen]
 version = "0.3.1"
 path = "../codegen"
 optional = true
 
-[dependencies.shuttle-common]
-version = "0.3.1"
-path = "../common"
-
 [dev-dependencies]
 portpicker = "0.1.1"
 uuid = { version = "1.1.1", features = ["v4"] }
+
+[dependencies.shuttle-common]
+version = "0.3.1"
+path = "../common"
 
 [features]
 default = ["codegen"]
@@ -59,9 +65,3 @@ web-axum = ["axum", "sync_wrapper"]
 web-rocket = ["rocket"]
 web-tide = ["tide"]
 web-tower = ["tower", "hyper"]
-
-# Tide does not have tokio support. So make sure async-std is compatible with tokio
-# https://github.com/http-rs/tide/issues/791
-[dependencies.async-std]
-version = "1"
-features = ["tokio1"]

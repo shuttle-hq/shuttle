@@ -5,11 +5,10 @@ edition = "2021"
 
 [lib]
 crate-type = ["cdylib"]
-
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tide = "0.16.0"
 serde = { version = "1.0", features = ["derive"] }
-sqlx = { version = "0.5", features = ["runtime-tokio-native-tls", "postgres"] }
 shuttle-service = { version = "0.3", features = ["sqlx-aws-postgres", "web-tide"] }
+sqlx = { version = "0.5", features = ["runtime-tokio-native-tls", "postgres"] }
+tide = "0.16.0"

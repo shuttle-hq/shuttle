@@ -32,10 +32,13 @@ fn not_shuttle() {
 }
 
 #[test]
+#[should_panic(
+    expected = "Your Shuttle project must be a library. Please add `[lib]` to your Cargo.toml file."
+)]
 fn not_lib() {
     let buf = Box::new(DummyWriter {});
     let project_path = format!("{}/tests/resources/not-lib", env!("CARGO_MANIFEST_DIR"));
-    assert!(build_crate(Path::new(&project_path), buf).is_err());
+    build_crate(Path::new(&project_path), buf).unwrap();
 }
 
 #[test]

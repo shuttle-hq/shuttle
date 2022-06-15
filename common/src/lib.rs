@@ -88,7 +88,7 @@ impl Display for DeploymentMeta {
         Project:            {}
         Deployment Id:      {}
         Deployment Status:  {}
-        Host:               {}
+        Host:               https://{}
         Created At:         {}{}
         "#,
             self.project, self.id, self.state, self.host, self.created_at, db
@@ -102,6 +102,7 @@ pub struct DatabaseReadyInfo {
     role_name: String,
     role_password: String,
     database_name: String,
+    port: String,
     address_private: String,
     address_public: String,
 }
@@ -112,6 +113,7 @@ impl DatabaseReadyInfo {
         role_name: String,
         role_password: String,
         database_name: String,
+        port: String,
         address_private: String,
         address_public: String,
     ) -> Self {
@@ -120,27 +122,30 @@ impl DatabaseReadyInfo {
             role_name,
             role_password,
             database_name,
+            port,
             address_private,
             address_public,
         }
     }
     pub fn connection_string_private(&self) -> String {
         format!(
-            "{}://{}:{}@{}/{}",
+            "{}://{}:{}@{}:{}/{}",
             self.engine,
             self.role_name,
             self.role_password,
             self.address_private,
+            self.port,
             self.database_name
         )
     }
     pub fn connection_string_public(&self) -> String {
         format!(
-            "{}://{}:{}@{}/{}",
+            "{}://{}:{}@{}:{}/{}",
             self.engine,
             self.role_name,
             self.role_password,
             self.address_public,
+            self.port,
             self.database_name
         )
     }

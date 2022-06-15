@@ -24,7 +24,7 @@ pub fn main(_attr: TokenStream, item: TokenStream) -> TokenStream {
             let constructor: for <'a> fn(
                 &'a mut dyn shuttle_service::Factory,
                 &'a shuttle_service::Runtime,
-                shuttle_service::Logger,
+                Box<dyn shuttle_service::log::Log>,
             ) -> std::pin::Pin<
                 Box<dyn std::future::Future<Output = Result<_, shuttle_service::Error>> + Send + 'a>,
             > = |factory, runtime, logger| Box::pin(__shuttle_wrapper(factory, runtime, logger));
@@ -124,12 +124,12 @@ impl ToTokens for Wrapper {
             async fn __shuttle_wrapper(
                 #factory_ident: &mut dyn shuttle_service::Factory,
                 runtime: &shuttle_service::Runtime,
-                logger: shuttle_service::Logger,
+                logger: Box<dyn shuttle_service::log::Log>,
             ) #fn_output {
                 #extra_imports
 
                 runtime.spawn_blocking(move || {
-                    shuttle_service::log::set_boxed_logger(Box::new(logger))
+                    shuttle_service::log::set_boxed_logger(logger)
                         .map(|()| shuttle_service::log::set_max_level(shuttle_service::log::LevelFilter::Info))
                         .expect("logger set should succeed");
                 }).await.unwrap();
@@ -180,10 +180,10 @@ mod tests {
             async fn __shuttle_wrapper(
                 _factory: &mut dyn shuttle_service::Factory,
                 runtime: &shuttle_service::Runtime,
-                logger: shuttle_service::Logger,
+                logger: Box<dyn shuttle_service::log::Log>,
             ) {
                 runtime.spawn_blocking(move || {
-                    shuttle_service::log::set_boxed_logger(Box::new(logger))
+                    shuttle_service::log::set_boxed_logger(logger)
                         .map(|()| shuttle_service::log::set_max_level(shuttle_service::log::LevelFilter::Info))
                         .expect("logger set should succeed");
                 }).await.unwrap();
@@ -223,10 +223,10 @@ mod tests {
             async fn __shuttle_wrapper(
                 _factory: &mut dyn shuttle_service::Factory,
                 runtime: &shuttle_service::Runtime,
-                logger: shuttle_service::Logger,
+                logger: Box<dyn shuttle_service::log::Log>,
             ) -> Result<(), Box<dyn std::error::Error> > {
                 runtime.spawn_blocking(move || {
-                    shuttle_service::log::set_boxed_logger(Box::new(logger))
+                    shuttle_service::log::set_boxed_logger(logger)
                         .map(|()| shuttle_service::log::set_max_level(shuttle_service::log::LevelFilter::Info))
                         .expect("logger set should succeed");
                 }).await.unwrap();
@@ -293,12 +293,12 @@ mod tests {
             async fn __shuttle_wrapper(
                 factory: &mut dyn shuttle_service::Factory,
                 runtime: &shuttle_service::Runtime,
-                logger: shuttle_service::Logger,
+                logger: Box<dyn shuttle_service::log::Log>,
             ) -> Result<(), Box<dyn std::error::Error> > {
                 use shuttle_service::ResourceBuilder;
 
                 runtime.spawn_blocking(move || {
-                    shuttle_service::log::set_boxed_logger(Box::new(logger))
+                    shuttle_service::log::set_boxed_logger(logger)
                         .map(|()| shuttle_service::log::set_max_level(shuttle_service::log::LevelFilter::Info))
                         .expect("logger set should succeed");
                 }).await.unwrap();

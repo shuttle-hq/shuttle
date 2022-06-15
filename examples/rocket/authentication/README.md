@@ -26,7 +26,9 @@ After logging into shuttle, use the following command to deploy this example:
 ```sh
 $ cargo shuttle deploy
 ```
-Make a note of the `Host` for the deploy to use in the examples below. Or just use `authentication-rocket-app.shuttleapp.rs` as the host below.
+
+Notice how this deploy fails since one of the test fails. See the `TODO` at the top of `src/claims.rs` on how to fix the test. Once the code is fixed, try to deploy again.
+Now make a note of the `Host` for the deploy to use in the examples below. Or just use `authentication-rocket-app.shuttleapp.rs` as the host below.
 
 ### Seeing it in action
 First, we should be able to access the public endpoint without any authentication using:

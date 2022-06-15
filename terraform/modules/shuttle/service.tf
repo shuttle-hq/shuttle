@@ -85,7 +85,7 @@ data "aws_ami" "ubuntu" {
 
   filter {
     name   = "name"
-    values = ["ubuntu/images/hvm-ssd/ubuntu-focal-20.04-arm64-server-*"]
+    values = ["ubuntu/images/hvm-ssd/ubuntu-focal-20.04-arm64-server-20220511"]
   }
 
   filter {
@@ -142,11 +142,18 @@ locals {
     "${path.module}/systemd/system/shuttle-backend.service.tftpl",
     {
       data_dir             = local.data_dir,
-      docker_image         = local.docker_image,
-      pg_password          = var.postgres_password,
+      docker_image         = local.docker_backend_image,
       shuttle_admin_secret = var.shuttle_admin_secret,
       proxy_fqdn           = var.proxy_fqdn,
       shuttle_initial_key  = random_string.initial_key.result
+    }
+  )
+  shuttle_provisioner_content = templatefile(
+    "${path.module}/systemd/system/shuttle-provisioner.service.tftpl",
+    {
+      data_dir     = local.data_dir,
+      docker_image = local.docker_provisioner_image,
+      pg_password  = var.postgres_password,
     }
   )
 }
@@ -160,8 +167,9 @@ data "cloudinit_config" "backend" {
     content = templatefile(
       "${path.module}/misc/cloud-config.yaml",
       {
-        opt_shuttle_content     = base64encode(local.opt_shuttle_content),
-        shuttle_backend_content = base64encode(local.shuttle_backend_content)
+        opt_shuttle_content         = base64encode(local.opt_shuttle_content),
+        shuttle_backend_content     = base64encode(local.shuttle_backend_content)
+        shuttle_provisioner_content = base64encode(local.shuttle_provisioner_content)
       }
     )
     filename = "cloud-config.yaml"

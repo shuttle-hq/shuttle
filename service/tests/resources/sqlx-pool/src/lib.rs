@@ -1,5 +1,5 @@
 use shuttle_service::error::CustomError;
-use shuttle_service::{IntoService, Logger, ResourceBuilder, Runtime, ServeHandle, Service};
+use shuttle_service::{log, IntoService, ResourceBuilder, Runtime, ServeHandle, Service};
 use sqlx::PgPool;
 
 #[macro_use]
@@ -53,11 +53,11 @@ impl Service for PoolService {
     async fn build(
         &mut self,
         factory: &mut dyn shuttle_service::Factory,
-        logger: Logger,
+        logger: Box<dyn log::Log>,
     ) -> Result<(), shuttle_service::Error> {
         self.runtime
             .spawn_blocking(move || {
-                shuttle_service::log::set_boxed_logger(Box::new(logger))
+                shuttle_service::log::set_boxed_logger(logger)
                     .map(|()| {
                         shuttle_service::log::set_max_level(shuttle_service::log::LevelFilter::Info)
                     })

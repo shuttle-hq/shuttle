@@ -16,5 +16,13 @@ in
       cargo-watch
       terraform
       awscli2
+      websocat
+      protobuf
+      grpcurl
+      gh
+      docker-compose
     ];
+
+    PROTOC = "${protobuf}/bin/protoc";
+    PROTOC_INCLUDE="${protobuf}/include";
   }

@@ -46,8 +46,11 @@ impl DeploymentManager {
         let (queue_send, queue_recv) = mpsc::channel(QUEUE_BUFFER_SIZE);
         let (run_send, run_recv) = mpsc::channel(RUN_BUFFER_SIZE);
 
-        tokio::spawn(async move { queue::task(queue_recv, persistence).await });
-        tokio::spawn(async move { run::task(run_recv).await });
+        let run_send_clone = run_send.clone();
+        let persistence_clone = persistence.clone();
+
+        tokio::spawn(async move { queue::task(queue_recv, run_send_clone, persistence).await });
+        tokio::spawn(async move { run::task(run_recv, persistence_clone).await });
 
         DeploymentManager {
             queue_send,

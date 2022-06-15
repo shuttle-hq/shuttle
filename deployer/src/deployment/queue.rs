@@ -1,4 +1,4 @@
-use super::QueueReceiver;
+use super::{Built, QueueReceiver, RunSender};
 use crate::deployment::DeploymentState;
 use crate::persistence::Persistence;
 
@@ -6,25 +6,49 @@ use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
 
-pub async fn task(mut recv: QueueReceiver, persistence: Persistence) {
+pub async fn task(mut recv: QueueReceiver, run_send: RunSender, persistence: Persistence) {
     log::info!("Queue task started");
 
-    while let Some(queued) = recv.recv().await {
+    while let Some(mut queued) = recv.recv().await {
         log::info!(
-            "Queued deployment received the front of the queue: {}",
+            "Queued deployment at the front of the queue: {}",
             queued.name
         );
+
+        // Update deployment state:
+
+        queued.state = DeploymentState::Building;
 
         persistence
             .deployment((&queued).into())
             .await
             .expect("TODO");
 
+        // Read POSTed data:
+
         let data = queued
             .data_future
             .await
             .expect("TODO: Enter DeploymentState::Error instead of panicing");
+
         log::debug!("{} - received {} bytes", queued.name, data.len());
+
+        // Build:
+
+        // TODO
+
+        // Update deployment state to 'built:
+
+        let built = Built {
+            name: queued.name,
+            state: DeploymentState::Built,
+        };
+
+        persistence.deployment((&built).into()).await.expect("TODO");
+
+        // Send to run queue:
+
+        run_send.send(built).await.unwrap();
     }
 }
 

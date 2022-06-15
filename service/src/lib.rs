@@ -222,12 +222,12 @@ use async_trait::async_trait;
 pub use log;
 pub use tokio::runtime::Runtime;
 
-pub mod database;
-
 pub mod error;
 pub use error::Error;
 
 pub mod logger;
+
+pub use shuttle_common::database;
 
 #[cfg(feature = "sqlx-postgres")]
 pub mod shared;

@@ -1,3 +1,4 @@
+pub mod database;
 pub mod project;
 
 use std::{

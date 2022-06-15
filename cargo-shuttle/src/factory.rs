@@ -16,7 +16,7 @@ use crossterm::{
 use futures::StreamExt;
 use portpicker::pick_unused_port;
 use shuttle_common::{project::ProjectName, DatabaseReadyInfo};
-use shuttle_service::{error::CustomError, Factory};
+use shuttle_service::{database::Type, error::CustomError, Factory};
 use std::{collections::HashMap, io::stdout, time::Duration};
 use tokio::time::sleep;
 
@@ -39,7 +39,10 @@ const PG_IMAGE: &str = "postgres:11";
 
 #[async_trait]
 impl Factory for LocalFactory {
-    async fn get_sql_connection_string(&mut self) -> Result<String, shuttle_service::Error> {
+    async fn get_sql_connection_string(
+        &mut self,
+        db_type: Type,
+    ) -> Result<String, shuttle_service::Error> {
         trace!("getting sql string for project '{}'", self.project);
         let container_name = format!("shuttle_{}_postgres", self.project);
 
@@ -129,12 +132,15 @@ impl Factory for LocalFactory {
 
         let db_info = DatabaseReadyInfo::new(
             "postgres".to_string(),
+            "postgres".to_string(),
             PG_PASSWORD.to_string(),
             "postgres".to_string(),
             port,
+            "localhost".to_string(),
+            "localhost".to_string(),
         );
 
-        let conn_str = db_info.connection_string("localhost");
+        let conn_str = db_info.connection_string_private();
 
         println!(
             "{:>12} can be reached at {}\n",

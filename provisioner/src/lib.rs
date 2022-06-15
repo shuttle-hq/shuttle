@@ -1,17 +1,30 @@
 use std::time::Duration;
 
 pub use args::Args;
+use aws_config::timeout;
+use aws_sdk_rds::{error::ModifyDBInstanceErrorKind, model::DbInstance, types::SdkError, Client};
+use aws_smithy_types::tristate::TriState;
 pub use error::Error;
 use proto::provisioner::provisioner_server::Provisioner;
 pub use proto::provisioner::provisioner_server::ProvisionerServer;
-use proto::provisioner::{DatabaseRequest, DatabaseResponse};
+use proto::provisioner::{
+    aws_rds, database_request::DbType, AwsRds, DatabaseRequest, DatabaseResponse,
+};
 use rand::Rng;
 use sqlx::{postgres::PgPoolOptions, PgPool};
+use tokio::time::sleep;
 use tonic::{Request, Response, Status};
-use tracing::info;
+use tracing::{debug, info};
 
 mod args;
 mod error;
+
+const PRIVATE_PG_IP: &str = "provisioner";
+const PUBLIC_PG_IP: &str = "pg.shuttle.rs";
+
+const AWS_RDS_CLASS: &str = "db.t4g.micro";
+const MASTER_USERNAME: &str = "master";
+const RDS_SUBNET_GROUP: &str = "shuttle_rds";
 
 pub struct MyProvisioner {
     pool: PgPool,
@@ -19,7 +32,7 @@ pub struct MyProvisioner {
 }
 
 impl MyProvisioner {
-    pub fn new(uri: &str) -> sqlx::Result<Self> {
+    pub async fn new(uri: &str) -> sqlx::Result<Self> {
         let pool = PgPoolOptions::new()
             .min_connections(4)
             .max_connections(12)
@@ -42,14 +55,18 @@ impl MyProvisioner {
         Ok(Self { pool, rds_client })
     }
 
-    pub async fn request_shared_db(&self, project_name: &str) -> Result<DatabaseResponse, Error> {
+    async fn request_shared_db(&self, project_name: &str) -> Result<DatabaseResponse, Error> {
         let (username, password) = self.shared_role(project_name).await?;
         let database_name = self.shared_db(project_name, &username).await?;
 
         Ok(DatabaseResponse {
+            engine: "postgres".to_string(),
             username,
             password,
             database_name,
+            address_private: PRIVATE_PG_IP.to_string(),
+            address_public: PUBLIC_PG_IP.to_string(),
+            port: "3306".to_string(),
         })
     }
 
@@ -111,6 +128,90 @@ impl MyProvisioner {
 
         Ok(database_name)
     }
+
+    async fn request_aws_rds(
+        &self,
+        project_name: &str,
+        engine: aws_rds::Engine,
+    ) -> Result<DatabaseResponse, Error> {
+        let client = &self.rds_client;
+
+        let password = generate_password();
+        let instance_name = format!("{}-{}", project_name, engine);
+
+        debug!("trying to get AWS RDS instance: {instance_name}");
+        let instance = client
+            .modify_db_instance()
+            .db_instance_identifier(&instance_name)
+            .master_user_password(&password)
+            .send()
+            .await;
+
+        match instance {
+            Ok(_) => {
+                wait_for_instance(client, &instance_name, "resetting-master-credentials").await?;
+            }
+            Err(SdkError::ServiceError { err, .. }) => {
+                if let ModifyDBInstanceErrorKind::DbInstanceNotFoundFault(_) = err.kind {
+                    debug!("creating new AWS RDS {instance_name}");
+
+                    client
+                        .create_db_instance()
+                        .db_instance_identifier(&instance_name)
+                        .master_username(MASTER_USERNAME)
+                        .master_user_password(&password)
+                        .engine(engine.to_string())
+                        .db_instance_class(AWS_RDS_CLASS)
+                        .allocated_storage(20)
+                        .backup_retention_period(0) // Disable backups
+                        .publicly_accessible(true)
+                        .db_name(engine.to_string())
+                        .set_db_subnet_group_name(Some(RDS_SUBNET_GROUP.to_string()))
+                        .send()
+                        .await?
+                        .db_instance
+                        .expect("to be able to create instance");
+
+                    wait_for_instance(client, &instance_name, "creating").await?;
+                } else {
+                    return Err(Error::Plain(format!(
+                        "got unexpected error from AWS RDS service: {}",
+                        err
+                    )));
+                }
+            }
+            Err(unexpected) => {
+                return Err(Error::Plain(format!(
+                    "got unexpected error from AWS during API call: {}",
+                    unexpected
+                )))
+            }
+        };
+
+        // Wait for up
+        let instance = wait_for_instance(client, &instance_name, "available").await?;
+
+        // TODO: find private IP somehow
+        let address = instance
+            .endpoint
+            .expect("instance to have an endpoint")
+            .address
+            .expect("endpoint to have an address");
+
+        Ok(DatabaseResponse {
+            engine: engine.to_string(),
+            username: instance
+                .master_username
+                .expect("instance to have a username"),
+            password,
+            database_name: instance
+                .db_name
+                .expect("instance to have a default database"),
+            address_private: address.clone(),
+            address_public: address,
+            port: engine_to_port(engine),
+        })
+    }
 }
 
 #[tonic::async_trait]
@@ -120,9 +221,16 @@ impl Provisioner for MyProvisioner {
         &self,
         request: Request<DatabaseRequest>,
     ) -> Result<Response<DatabaseResponse>, Status> {
-        let reply = self
-            .request_shared_db(&request.into_inner().project_name)
-            .await?;
+        let request = request.into_inner();
+        let db_type = request.db_type.unwrap();
+
+        let reply = match db_type {
+            DbType::Shared(_) => self.request_shared_db(&request.project_name).await?,
+            DbType::AwsRds(AwsRds { engine }) => {
+                self.request_aws_rds(&request.project_name, engine.expect("oneof to be set"))
+                    .await?
+            }
+        };
 
         Ok(Response::new(reply))
     }
@@ -134,4 +242,44 @@ fn generate_password() -> String {
         .take(12)
         .map(char::from)
         .collect()
+}
+
+async fn wait_for_instance(
+    client: &Client,
+    name: &str,
+    wait_for: &str,
+) -> Result<DbInstance, Error> {
+    debug!("waiting for {name} to enter {wait_for} state");
+    loop {
+        let instance = client
+            .describe_db_instances()
+            .db_instance_identifier(name)
+            .send()
+            .await?
+            .db_instances
+            .expect("aws to return instances")
+            .get(0)
+            .expect("to find the instance just created or modified")
+            .clone();
+
+        let status = instance
+            .db_instance_status
+            .as_ref()
+            .expect("instance to have a status")
+            .clone();
+
+        if status == wait_for {
+            return Ok(instance);
+        }
+
+        sleep(Duration::from_secs(1)).await;
+    }
+}
+
+fn engine_to_port(engine: aws_rds::Engine) -> String {
+    match engine {
+        aws_rds::Engine::Postgres(_) => "5432".to_string(),
+        aws_rds::Engine::Mariadb(_) => "3306".to_string(),
+        aws_rds::Engine::Mysql(_) => "3306".to_string(),
+    }
 }

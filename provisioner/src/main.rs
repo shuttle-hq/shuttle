@@ -15,7 +15,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     } = Args::parse();
     let addr = SocketAddr::new(ip, port);
 
-    let provisioner = MyProvisioner::new(&shared_pg_uri).unwrap();
+    let provisioner = MyProvisioner::new(&shared_pg_uri).await.unwrap();
 
     println!("starting provisioner on {}", addr);
     Server::builder()

@@ -22,15 +22,15 @@ libloading = "0.7.3"
 log = "0.4.17"
 rand = "0.8.5"
 rocket = { version = "0.5.0-rc.2", features = ["uuid", "serde_json", "json"] }
+semver = "1.0.9"
 serde = "1.0.137"
 sqlx = { version = "0.5.13", features = ["runtime-tokio-native-tls", "postgres"] }
 structopt = "0.3.26"
 tokio = { version = "1.19.2", features = ["full"] }
 toml = "0.5.9"
+toml_edit = "0.14.4"
 tonic = "0.7.2"
 uuid = { version = "1.1.1", features = ["v4"] }
-semver = "1.0.9"
-toml_edit = "0.14.4"
 
 [dependencies.proto]
 version = "0.1.0"

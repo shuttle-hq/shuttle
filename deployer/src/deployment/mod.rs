@@ -2,6 +2,10 @@ mod queue;
 mod run;
 mod states;
 
+pub use states::DeploymentState;
+
+use crate::persistence::Persistence;
+
 use futures::Future;
 use queue::Queued;
 
@@ -36,11 +40,11 @@ impl DeploymentManager {
     ///    run task     tasks enter the DeploymentState::Running state and begin
     ///                 executing
     /// ```
-    pub fn new() -> Self {
+    pub fn new(persistence: Persistence) -> Self {
         let (queue_send, queue_recv) = mpsc::channel(QUEUE_BUFFER_SIZE);
         let (run_send, run_recv) = mpsc::channel(RUN_BUFFER_SIZE);
 
-        tokio::spawn(async move { queue::task(queue_recv).await });
+        tokio::spawn(async move { queue::task(queue_recv, persistence).await });
         tokio::spawn(async move { run::task(run_recv).await });
 
         DeploymentManager {

@@ -1,10 +1,12 @@
 use super::QueueReceiver;
+use crate::deployment::DeploymentState;
+use crate::persistence::Persistence;
 
 use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
 
-pub async fn task(mut recv: QueueReceiver) {
+pub async fn task(mut recv: QueueReceiver, persistence: Persistence) {
     log::info!("Queue task started");
 
     while let Some(queued) = recv.recv().await {
@@ -12,6 +14,11 @@ pub async fn task(mut recv: QueueReceiver) {
             "Queued deployment received the front of the queue: {}",
             queued.name
         );
+
+        persistence
+            .deploying(&queued.name, DeploymentState::Building)
+            .await
+            .expect("TODO");
 
         let data = queued
             .data_future

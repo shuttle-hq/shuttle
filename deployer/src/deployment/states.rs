@@ -1,6 +1,7 @@
 use std::fmt;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(sqlx::Type, Debug, Clone, Copy)]
+#[repr(i32)]
 pub enum DeploymentState {
     Queued = 0,
     Building = 1,

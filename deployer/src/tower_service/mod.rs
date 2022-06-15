@@ -1,11 +1,12 @@
 pub mod middleware;
 
-use crate::deployment::DeploymentManager;
+use crate::deployment::{DeploymentManager, DeploymentState};
 use crate::persistence::Persistence;
 
+use std::fmt::Display;
+use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use std::{fmt::Display, future::Future};
 
 use anyhow::anyhow;
 use futures::FutureExt;
@@ -25,9 +26,11 @@ pub struct Deployer {
 
 impl Deployer {
     pub async fn new() -> Self {
+        let persistence = Persistence::new().await;
+        let deployment_manager = DeploymentManager::new(persistence.clone());
         Deployer {
-            deployment_manager: DeploymentManager::new(),
-            persistence: Persistence::new().await,
+            deployment_manager,
+            persistence,
         }
     }
 
@@ -46,6 +49,12 @@ impl Deployer {
             http::Method::GET => todo!(),
 
             http::Method::POST => {
+                // Update database with state:
+
+                self.persistence
+                    .deploying(&name, DeploymentState::Queued)
+                    .await?;
+
                 // Put crate into build pipeline:
 
                 let body_future = hyper::body::to_bytes(body).map(|res| {
@@ -55,11 +64,9 @@ impl Deployer {
 
                 self.deployment_manager.queue_push(name, body_future).await;
 
-                // Update database with state:
-                // TODO
-
                 // Produce response:
-                todo!()
+                Err(anyhow!("TODO"))
+
                 /*Ok(http::Response::builder()
                 .status(http::StatusCode::OK)
                 .body(body)
@@ -87,7 +94,7 @@ where
 {
     type Response = http::Response<Body>;
     type Error = anyhow::Error;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + Sync>>;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
     fn poll_ready(&mut self, _cx: &mut Context) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))

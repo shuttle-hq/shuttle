@@ -15,7 +15,7 @@ use crossterm::{
 };
 use futures::StreamExt;
 use portpicker::pick_unused_port;
-use shuttle_common::{project::ProjectName, DatabaseReadyInfo};
+use shuttle_common::{database::AwsRdsEngine, project::ProjectName, DatabaseReadyInfo};
 use shuttle_service::{database::Type, error::CustomError, Factory};
 use std::{collections::HashMap, io::stdout, time::Duration};
 use tokio::time::sleep;
@@ -34,9 +34,6 @@ impl LocalFactory {
     }
 }
 
-const PG_PASSWORD: &str = "password";
-const PG_IMAGE: &str = "postgres:11";
-
 #[async_trait]
 impl Factory for LocalFactory {
     async fn get_sql_connection_string(
@@ -44,7 +41,19 @@ impl Factory for LocalFactory {
         db_type: Type,
     ) -> Result<String, shuttle_service::Error> {
         trace!("getting sql string for project '{}'", self.project);
-        let container_name = format!("shuttle_{}_postgres", self.project);
+
+        let EngineConfig {
+            r#type,
+            image,
+            engine,
+            username,
+            password,
+            database_name,
+            port,
+            env,
+            is_ready_cmd,
+        } = db_type_to_config(db_type);
+        let container_name = format!("shuttle_{}_{}", self.project, r#type);
 
         let container = match self.docker.inspect_container(&container_name, None).await {
             Ok(container) => {
@@ -54,9 +63,7 @@ impl Factory for LocalFactory {
             Err(bollard::errors::Error::DockerResponseServerError { status_code, .. })
                 if status_code == 404 =>
             {
-                self.pull_image(PG_IMAGE)
-                    .await
-                    .expect("failed to pull image");
+                self.pull_image(&image).await.expect("failed to pull image");
                 trace!("will create DB container {container_name}");
                 let options = Some(CreateContainerOptions {
                     name: container_name.clone(),
@@ -64,7 +71,7 @@ impl Factory for LocalFactory {
                 let mut port_bindings = HashMap::new();
                 let host_port = pick_unused_port().expect("system to have a free port");
                 port_bindings.insert(
-                    "5432/tcp".to_string(),
+                    port.clone(),
                     Some(vec![PortBinding {
                         host_port: Some(host_port.to_string()),
                         ..Default::default()
@@ -75,10 +82,9 @@ impl Factory for LocalFactory {
                     ..Default::default()
                 };
 
-                let password_env = format!("POSTGRES_PASSWORD={PG_PASSWORD}");
                 let config = Config {
-                    image: Some(PG_IMAGE),
-                    env: Some(vec![&password_env]),
+                    image: Some(image),
+                    env,
                     host_config: Some(host_config),
                     ..Default::default()
                 };
@@ -104,10 +110,10 @@ impl Factory for LocalFactory {
             .expect("container to have host config")
             .port_bindings
             .expect("port bindings on container")
-            .get("5432/tcp")
-            .expect("a '5432/tcp' port bindings entry")
+            .get(&port)
+            .expect("a port bindings entry")
             .as_ref()
-            .expect("a '5432/tcp' port bindings")
+            .expect("a port bindings")
             .first()
             .expect("at least one port binding")
             .host_port
@@ -128,13 +134,13 @@ impl Factory for LocalFactory {
                 .expect("failed to start none running container");
         }
 
-        self.wait_for_ready(&container_name).await?;
+        self.wait_for_ready(&container_name, is_ready_cmd).await?;
 
         let db_info = DatabaseReadyInfo::new(
-            "postgres".to_string(),
-            "postgres".to_string(),
-            PG_PASSWORD.to_string(),
-            "postgres".to_string(),
+            engine,
+            username,
+            password,
+            database_name,
             port,
             "localhost".to_string(),
             "localhost".to_string(),
@@ -153,12 +159,16 @@ impl Factory for LocalFactory {
 }
 
 impl LocalFactory {
-    async fn wait_for_ready(&self, container_name: &str) -> Result<(), shuttle_service::Error> {
+    async fn wait_for_ready(
+        &self,
+        container_name: &str,
+        is_ready_cmd: Vec<String>,
+    ) -> Result<(), shuttle_service::Error> {
         loop {
             trace!("waiting for '{container_name}' to be ready for connections");
 
             let config = CreateExecOptions {
-                cmd: Some(vec!["pg_isready"]),
+                cmd: Some(is_ready_cmd.clone()),
                 attach_stdout: Some(true),
                 ..Default::default()
             };
@@ -177,12 +187,12 @@ impl LocalFactory {
 
             if let bollard::exec::StartExecResults::Attached { mut output, .. } = ready_result {
                 while let Some(line) = output.next().await {
-                    if let bollard::container::LogOutput::StdOut { message } =
+                    trace!("line: {:?}", line);
+
+                    if let bollard::container::LogOutput::StdOut { .. } =
                         line.expect("output to have a log line")
                     {
-                        if message.ends_with(b"accepting connections\n") {
-                            return Ok(());
-                        }
+                        return Ok(());
                     }
                 }
             }
@@ -259,4 +269,77 @@ fn print_layers(layers: &Vec<CreateImageInfo>) {
             layers.len().try_into().expect("to convert usize to u16"),
         ))
         .expect("to reset cursor position");
+}
+
+struct EngineConfig {
+    r#type: String,
+    image: String,
+    engine: String,
+    username: String,
+    password: String,
+    database_name: String,
+    port: String,
+    env: Option<Vec<String>>,
+    is_ready_cmd: Vec<String>,
+}
+
+fn db_type_to_config(db_type: Type) -> EngineConfig {
+    match db_type {
+        Type::Shared => EngineConfig {
+            r#type: "shared_postgres".to_string(),
+            image: "postgres:11".to_string(),
+            engine: "postgres".to_string(),
+            username: "postgres".to_string(),
+            password: "postgres".to_string(),
+            database_name: "postgres".to_string(),
+            port: "5432/tcp".to_string(),
+            env: Some(vec!["POSTGRES_PASSWORD=postgres".to_string()]),
+            is_ready_cmd: vec!["pg_isready".to_string()],
+        },
+        Type::AwsRds(AwsRdsEngine::Postgres) => EngineConfig {
+            r#type: "aws_rds_postgres".to_string(),
+            image: "postgres:13.4".to_string(),
+            engine: "postgres".to_string(),
+            username: "postgres".to_string(),
+            password: "postgres".to_string(),
+            database_name: "postgres".to_string(),
+            port: "5432/tcp".to_string(),
+            env: Some(vec!["POSTGRES_PASSWORD=postgres".to_string()]),
+            is_ready_cmd: vec!["pg_isready".to_string()],
+        },
+        Type::AwsRds(AwsRdsEngine::MariaDB) => EngineConfig {
+            r#type: "aws_rds_mariadb".to_string(),
+            image: "mariadb:10.6.7".to_string(),
+            engine: "mariadb".to_string(),
+            username: "root".to_string(),
+            password: "mariadb".to_string(),
+            database_name: "mysql".to_string(),
+            port: "3306/tcp".to_string(),
+            env: Some(vec!["MARIADB_ROOT_PASSWORD=mariadb".to_string()]),
+            is_ready_cmd: vec![
+                "mysql".to_string(),
+                "-pmariadb".to_string(),
+                "--silent".to_string(),
+                "-e".to_string(),
+                "show databases;".to_string(),
+            ],
+        },
+        Type::AwsRds(AwsRdsEngine::MySql) => EngineConfig {
+            r#type: "aws_rds_mysql".to_string(),
+            image: "mysql:8.0.28".to_string(),
+            engine: "mysql".to_string(),
+            username: "root".to_string(),
+            password: "mysql".to_string(),
+            database_name: "mysql".to_string(),
+            port: "3306/tcp".to_string(),
+            env: Some(vec!["MYSQL_ROOT_PASSWORD=mysql".to_string()]),
+            is_ready_cmd: vec![
+                "mysql".to_string(),
+                "-pmysql".to_string(),
+                "--silent".to_string(),
+                "-e".to_string(),
+                "show databases;".to_string(),
+            ],
+        },
+    }
 }

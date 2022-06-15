@@ -3,11 +3,13 @@ pub mod middleware;
 use crate::deployment::DeploymentManager;
 use crate::persistence::Persistence;
 
-use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
+use std::{fmt::Display, future::Future};
 
 use anyhow::anyhow;
+use futures::FutureExt;
+use hyper::body::HttpBody;
 use lazy_static::lazy_static;
 use regex::Regex;
 
@@ -34,17 +36,34 @@ impl Deployer {
         name: String,
         method: http::Method,
         body: Body,
-    ) -> Result<http::Response<Body>, anyhow::Error> {
+    ) -> Result<http::Response<Body>, anyhow::Error>
+    where
+        Body: HttpBody + Send + Sync + 'static,
+        <Body as HttpBody>::Data: Send + Sync,
+        <Body as HttpBody>::Error: Display,
+    {
         match method {
             http::Method::GET => todo!(),
 
             http::Method::POST => {
-                self.deployment_manager.queue_push(name).await;
+                // Put crate into build pipeline:
 
-                Ok(http::Response::builder()
-                    .status(http::StatusCode::OK)
-                    .body(body)
-                    .unwrap())
+                let body_future = hyper::body::to_bytes(body).map(|res| {
+                    res.map(|data| data.to_vec())
+                        .map_err(|e| anyhow!("Failed to read service POST request body: {}", e))
+                });
+
+                self.deployment_manager.queue_push(name, body_future).await;
+
+                // Update database with state:
+                // TODO
+
+                // Produce response:
+                todo!()
+                /*Ok(http::Response::builder()
+                .status(http::StatusCode::OK)
+                .body(body)
+                .unwrap())*/
             }
 
             http::Method::DELETE => todo!(),
@@ -60,7 +79,12 @@ impl Deployer {
     }
 }
 
-impl<Body: Sync + Send + 'static> tower::Service<http::Request<Body>> for Deployer {
+impl<Body> tower::Service<http::Request<Body>> for Deployer
+where
+    Body: HttpBody + Sync + Send + 'static,
+    <Body as HttpBody>::Data: Send + Sync,
+    <Body as HttpBody>::Error: Display,
+{
     type Response = http::Response<Body>;
     type Error = anyhow::Error;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + Sync>>;

@@ -2,6 +2,7 @@ mod queue;
 mod run;
 mod states;
 
+use futures::Future;
 use queue::Queued;
 
 use tokio::sync::mpsc;
@@ -48,8 +49,15 @@ impl DeploymentManager {
         }
     }
 
-    pub async fn queue_push(&self, name: String) {
-        let queued = Queued { name };
+    pub async fn queue_push(
+        &self,
+        name: String,
+        data_future: impl Future<Output = Result<Vec<u8>, anyhow::Error>> + Send + Sync + 'static,
+    ) {
+        let queued = Queued {
+            name,
+            data_future: Box::pin(data_future),
+        };
         self.queue_send.send(queued).await.unwrap();
     }
 

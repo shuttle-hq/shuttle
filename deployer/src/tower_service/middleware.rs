@@ -19,8 +19,9 @@ pub struct LoggingService<S> {
     service: S,
 }
 
-impl<Body, S: tower::Service<http::Request<Body>>> tower::Service<http::Request<Body>>
-    for LoggingService<S>
+impl<Body, S> tower::Service<http::Request<Body>> for LoggingService<S>
+where
+    S: tower::Service<http::Request<Body>>,
 {
     type Response = S::Response;
     type Error = S::Error;

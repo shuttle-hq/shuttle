@@ -11,7 +11,8 @@ http = "0.2.8"
 anyhow = "1.0.57"
 lazy_static = "1.4.0"
 regex = "1.5.6"
+futures = "0.3.7"
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
 sqlx = { version = "0.5.13", features = ["runtime-tokio-native-tls", "sqlite"] }
 tower = { version = "0.4.12", features = ["make"] }
-hyper = { version = "0.14.19", features = ["server", "tcp", "http1"] }
+hyper = { version = "0.14.19", features = ["server", "tcp", "http1", "stream"] }

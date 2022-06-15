@@ -24,7 +24,7 @@ pub async fn task(
 
         queued.state = DeploymentState::Building;
 
-        persistence.deployment(&queued).await.expect("TODO");
+        persistence.update_deployment(&queued).await.expect("TODO");
 
         // Read POSTed data:
 
@@ -46,7 +46,7 @@ pub async fn task(
             state: DeploymentState::Built,
         };
 
-        persistence.deployment(&built).await.expect("TODO");
+        persistence.update_deployment(&built).await.expect("TODO");
 
         // Send to run queue:
 

@@ -22,7 +22,10 @@ pub async fn task(ident: usize, mut recv: RunReceiver, persistence: Persistence)
 
         built.state = DeploymentState::Running;
 
-        persistence.deployment(&built).await.expect("TODO: handle");
+        persistence
+            .update_deployment(&built)
+            .await
+            .expect("TODO: handle");
     }
 }
 

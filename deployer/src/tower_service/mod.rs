@@ -50,7 +50,14 @@ impl Deployer {
         <Body as HttpBody>::Error: Display,
     {
         match method {
-            http::Method::GET => todo!(),
+            http::Method::GET => {
+                let d = self.persistence.get_deployment(&name).await;
+                log::trace!("{:?}", d);
+
+                // TODO: Send back results.
+
+                Err(anyhow!("TODO"))
+            }
 
             http::Method::POST => {
                 let data_future = Box::pin(hyper::body::to_bytes(body).map(|res| {
@@ -65,7 +72,7 @@ impl Deployer {
                 };
 
                 // Store deployment state:
-                self.persistence.deployment(&queued).await?;
+                self.persistence.update_deployment(&queued).await?;
 
                 // Add to build queue:
                 self.deployment_manager.queue_push(queued).await;
@@ -79,7 +86,12 @@ impl Deployer {
                 .unwrap())*/
             }
 
-            http::Method::DELETE => todo!(),
+            http::Method::DELETE => {
+                self.persistence.delete_deployment(&name).await?;
+
+                // Stop task in which the service is executing:
+                Err(anyhow!("TODO"))
+            }
 
             unexpected => {
                 let method_string = unexpected.to_string();

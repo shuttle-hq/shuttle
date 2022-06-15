@@ -7,6 +7,8 @@ use sqlx::sqlite::{Sqlite, SqlitePool};
 
 use anyhow::anyhow;
 
+use futures::TryFutureExt;
+
 const DB_PATH: &str = "deployer.sqlite";
 
 #[derive(Clone)]
@@ -49,8 +51,10 @@ impl Persistence {
         Persistence { pool }
     }
 
-    pub async fn deployment(&self, info: impl Into<DeploymentInfo>) -> anyhow::Result<()> {
+    pub async fn update_deployment(&self, info: impl Into<DeploymentInfo>) -> anyhow::Result<()> {
         let info = info.into();
+
+        // TODO: Handle moving to 'active_deployments' table for DeploymentState::Running.
 
         sqlx::query("INSERT OR REPLACE INTO deploying (name, state) VALUES (?, ?)")
             .bind(info.name)
@@ -59,5 +63,32 @@ impl Persistence {
             .await
             .map(|_| ())
             .map_err(|e| anyhow!("Failed to update/insert deployment data: {}", e))
+    }
+
+    pub async fn get_deployment(&self, name: &str) -> anyhow::Result<DeploymentInfo> {
+        sqlx::query_as("SELECT * FROM deploying WHERE name = ?")
+            .bind(name)
+            .fetch_one(&self.pool)
+            .or_else(|_| {
+                sqlx::query_as("SELECT * FROM active_deployments WHERE name = ?")
+                    .bind(name)
+                    .fetch_one(&self.pool)
+            })
+            .await
+            .map_err(|e| anyhow!("Could not get deployment data: {}", e))
+    }
+
+    pub async fn delete_deployment(&self, name: &str) -> anyhow::Result<()> {
+        sqlx::query("DELETE FROM deploying WHERE name = ?")
+            .bind(name)
+            .execute(&self.pool)
+            .or_else(|_| {
+                sqlx::query("DELETE FROM active_deployments WHERE name = ?")
+                    .bind(name)
+                    .execute(&self.pool)
+            })
+            .await
+            .map(|_| ())
+            .map_err(|e| anyhow!("Failed to remove deployment data: {}", e))
     }
 }

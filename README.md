@@ -51,7 +51,6 @@ version = "0.1.0"
 edition = "2021"
 
 [lib]
-crate-type = ["cdylib"]
 
 [dependencies]
 rocket = "0.5.0-rc.1"
@@ -119,5 +118,3 @@ If you have any requests or suggestions feel free to open an issue.
 
 We are currently in Public Alpha. Watch "releases" of this repo to get 
 notified of major updates!
-
-

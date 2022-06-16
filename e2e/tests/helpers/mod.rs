@@ -153,6 +153,8 @@ impl Services {
             "--network",
             "shuttle-net",
             "-e",
+            "FQDN=unreacable",
+            "-e",
             "PORT=5001",
             &provisioner_image,
         ]);

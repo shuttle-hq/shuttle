@@ -24,16 +24,8 @@
 //! cargo shuttle init my-rocket-app
 //! ```
 //!
-//! By looking at the `Cargo.toml` file of the created project you will see the crate has a `cdylib` type.
-//! This is because all shuttle projects are loaded by shuttle during runtime as dynamic libraries.
-//! Thus, you can convert any library crate to a shuttle project by adding these lines to `Cargo.toml`.
-//!
-//! ```toml
-//! [lib]
-//! crate-type = ["cdylib"]
-//! ```
-//!
-//! Another piece needed for a shuttle project is the `shuttle-service` dependency.
+//! By looking at the `Cargo.toml` file of the generated `my-rocket-app` project you will see it has been made to
+//! be a library crate with a `shuttle-service` dependency.
 //! Go ahead and update the `shuttle-service` dependency inside `Cargo.toml` to prepare this crate as a rocket project
 //! by adding the `web-rocket` feature on the `shuttle-service` dependency.
 //!

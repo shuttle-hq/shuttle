@@ -30,7 +30,7 @@ resource "aws_network_acl_rule" "mysql" {
   to_port        = 3306
 }
 
-resource "aws_security_group" "unreasonable" {
+resource "aws_default_security_group" "default" {
   vpc_id = aws_vpc.backend.id
 
   ingress {

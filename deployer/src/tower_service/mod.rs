@@ -1,6 +1,6 @@
 pub mod middleware;
 
-use crate::deployment::{DeploymentManager, DeploymentState, Queued};
+use crate::deployment::{Built, DeploymentManager, DeploymentState, Queued};
 use crate::persistence::Persistence;
 
 use std::fmt::Display;
@@ -31,6 +31,18 @@ impl Deployer {
         let cpus = num_cpus::get();
         let pipeline_count = (cpus + 2) / 3; // TODO: How many is suitable?
         let deployment_manager = DeploymentManager::new(persistence.clone(), pipeline_count);
+
+        // Any deployments already built? Start 'em up!
+
+        let runnable_deployments = persistence.get_all_runnable_deployments().await.unwrap();
+
+        for deployment in runnable_deployments {
+            let built = Built {
+                name: deployment.name,
+                state: DeploymentState::Built,
+            };
+            deployment_manager.run_push(built).await;
+        }
 
         Deployer {
             deployment_manager,

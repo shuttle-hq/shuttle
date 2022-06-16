@@ -1,5 +1,5 @@
 use super::{Built, QueueReceiver, RunSender};
-use crate::deployment::DeploymentState;
+use crate::deployment::{DeploymentInfo, DeploymentState};
 use crate::persistence::Persistence;
 
 use std::fmt;
@@ -14,44 +14,61 @@ pub async fn task(
 ) {
     log::info!("Queue task {ident} started");
 
-    while let Some(mut queued) = recv.recv().await {
+    while let Some(queued) = recv.recv().await {
         log::info!(
             "Queued deployment at the front of the queue {ident}: {}",
             queued.name
         );
 
-        // Update deployment state:
+        let mut info = DeploymentInfo::from(&queued);
 
-        queued.state = DeploymentState::Building;
+        if let Err(_e) = handle_queued(queued, &persistence, &run_send).await {
+            // TODO: Do something with error msg.
 
-        persistence.update_deployment(&queued).await.expect("TODO");
-
-        // Read POSTed data:
-
-        let data = queued
-            .data_future
-            .await
-            .expect("TODO: Enter DeploymentState::Error instead of panicing");
-
-        log::debug!("{} - received {} bytes", queued.name, data.len());
-
-        // Build:
-
-        // TODO
-
-        // Update deployment state to 'built:
-
-        let built = Built {
-            name: queued.name,
-            state: DeploymentState::Built,
-        };
-
-        persistence.update_deployment(&built).await.expect("TODO");
-
-        // Send to run queue:
-
-        run_send.send(built).await.unwrap();
+            info.state = DeploymentState::Error;
+            persistence
+                .update_deployment(info)
+                .await
+                .unwrap_or_else(|db_err| log::error!("{}", db_err));
+        }
     }
+}
+
+async fn handle_queued(
+    mut queued: Queued,
+    persistence: &Persistence,
+    run_send: &RunSender,
+) -> anyhow::Result<()> {
+    // Update deployment state:
+
+    queued.state = DeploymentState::Building;
+
+    persistence.update_deployment(&queued).await?;
+
+    // Read POSTed data:
+
+    let data = queued.data_future.await?;
+
+    log::debug!("{} - received {} bytes", queued.name, data.len());
+
+    // Build:
+
+    // TODO
+
+    // Update deployment state to 'built:
+
+    let built = Built {
+        name: queued.name,
+        state: DeploymentState::Built,
+    };
+
+    persistence.update_deployment(&built).await?;
+
+    // Send to run queue:
+
+    run_send.send(built).await.unwrap();
+
+    Ok(())
 }
 
 pub struct Queued {

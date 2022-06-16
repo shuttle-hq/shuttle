@@ -25,7 +25,7 @@ pub async fn task(ident: usize, mut recv: RunReceiver, persistence: Persistence)
         persistence
             .update_deployment(&built)
             .await
-            .expect("TODO: handle");
+            .unwrap_or_else(|e| log::error!("{}", e));
     }
 }
 

@@ -4,9 +4,7 @@ use lazy_static::lazy_static;
 use regex::Regex;
 use sqlx::postgres::PgArguments;
 use sqlx::query::Query;
-use sqlx::{
-    ColumnIndex, Database, Decode, Encode, Execute, Executor, IntoArguments, Postgres, Row, Type,
-};
+use sqlx::{ColumnIndex, Database, Decode, Execute, Executor, Postgres, Row, Type};
 
 use crate::error::Error;
 
@@ -26,13 +24,11 @@ fn check_and_lower_secret_key(key: &str) -> Result<String, Error> {
 /// should you prefer). The table in question is created if it is found to not exist every time
 /// either [`get_secret`] or [`set_secret`] is called.
 #[async_trait]
-pub trait SecretStore<DB, Arguments>
+pub trait SecretStore<DB>
 where
-    DB: Database<Arguments = Arguments>,
-    Arguments: for<'q> IntoArguments<'q, DB>,
+    DB: Database,
     for<'c> &'c Self: Executor<'c, Database = DB>,
-    for<'c> String: Decode<'c, DB> + Encode<'c, DB> + Type<DB>,
-    for<'c> &'c str: Encode<'c, DB> + Type<DB>,
+    for<'c> String: Decode<'c, DB> + Type<DB>,
     for<'c> usize: ColumnIndex<<DB as Database>::Row>,
     for<'c> Query<'c, Postgres, PgArguments>: Execute<'c, DB>,
 {
@@ -71,7 +67,7 @@ where
 }
 
 #[async_trait]
-impl SecretStore<sqlx::Postgres, sqlx::postgres::PgArguments> for sqlx::PgPool {
+impl SecretStore<sqlx::Postgres> for sqlx::PgPool {
     const GET_QUERY: &'static str = "SELECT value FROM secrets WHERE key = $1";
     const SET_QUERY: &'static str = "INSERT INTO secrets (key, value) VALUES ($1, $2)
                                      ON CONFLICT (key) DO UPDATE SET value = $2";

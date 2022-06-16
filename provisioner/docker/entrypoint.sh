@@ -36,6 +36,6 @@ export PG_HOST=localhost
 
 export PG_URI=postgres://postgres:${PG_PASSWORD}@localhost:${PG_PORT}/postgres
 
-export INTERNAL_ADDRESS=${INTERNAL_ADDRESS:provisioner}
+export INTERNAL_ADDRESS=${INTERNAL_ADDRESS:-provisioner}
 
 exec supervisord -n -c /usr/share/supervisord/supervisord.conf

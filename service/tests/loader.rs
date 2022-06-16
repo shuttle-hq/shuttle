@@ -3,7 +3,7 @@ mod helpers;
 use helpers::{build_so_create_loader, PostgresInstance};
 
 use shuttle_service::loader::LoaderError;
-use shuttle_service::{Error, Factory};
+use shuttle_service::{database, Error, Factory};
 
 use std::net::{Ipv4Addr, SocketAddr};
 use std::process::exit;

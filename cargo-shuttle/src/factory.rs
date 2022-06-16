@@ -9,7 +9,7 @@ use bollard::{
 };
 use colored::Colorize;
 use crossterm::{
-    cursor::MoveUp,
+    cursor::{MoveDown, MoveUp},
     terminal::{Clear, ClearType},
     QueueableCommand,
 };
@@ -170,6 +170,7 @@ impl LocalFactory {
             let config = CreateExecOptions {
                 cmd: Some(is_ready_cmd.clone()),
                 attach_stdout: Some(true),
+                attach_stderr: Some(true),
                 ..Default::default()
             };
 
@@ -228,6 +229,13 @@ impl LocalFactory {
 
             print_layers(&layers);
         }
+
+        // Undo last MoveUps
+        stdout()
+            .queue(MoveDown(
+                layers.len().try_into().expect("to convert usize to u16"),
+            ))
+            .expect("to reset cursor position");
 
         Ok(())
     }
@@ -294,7 +302,11 @@ fn db_type_to_config(db_type: Type) -> EngineConfig {
             database_name: "postgres".to_string(),
             port: "5432/tcp".to_string(),
             env: Some(vec!["POSTGRES_PASSWORD=postgres".to_string()]),
-            is_ready_cmd: vec!["pg_isready".to_string()],
+            is_ready_cmd: vec![
+                "/bin/sh".to_string(),
+                "-c".to_string(),
+                "pg_isready | grep 'accepting connections'".to_string(),
+            ],
         },
         Type::AwsRds(AwsRdsEngine::Postgres) => EngineConfig {
             r#type: "aws_rds_postgres".to_string(),
@@ -305,7 +317,11 @@ fn db_type_to_config(db_type: Type) -> EngineConfig {
             database_name: "postgres".to_string(),
             port: "5432/tcp".to_string(),
             env: Some(vec!["POSTGRES_PASSWORD=postgres".to_string()]),
-            is_ready_cmd: vec!["pg_isready".to_string()],
+            is_ready_cmd: vec![
+                "/bin/sh".to_string(),
+                "-c".to_string(),
+                "pg_isready | grep 'accepting connections'".to_string(),
+            ],
         },
         Type::AwsRds(AwsRdsEngine::MariaDB) => EngineConfig {
             r#type: "aws_rds_mariadb".to_string(),

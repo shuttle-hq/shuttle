@@ -31,8 +31,8 @@ impl Persistence {
 
         sqlx::query("
             CREATE TABLE IF NOT EXISTS deployments (
-                name TEXT UNIQUE, -- Name of the service being deployed.
-                state INTEGER     -- Enum indicating the current state of the deployment.
+                name TEXT PRIMARY KEY, -- Name of the service being deployed.
+                state INTEGER          -- Enum indicating the current state of the deployment.
             );
 
             CREATE TABLE IF NOT EXISTS logs (

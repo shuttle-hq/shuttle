@@ -273,7 +273,7 @@ impl RequestContext {
     /// Ensures that if `--name` is not specified on the command-line, and either the project
     /// file does not exist, or it has not set the `name` key then the `ProjectConfig` instance
     /// has `ProjectConfig.name = Some("crate-name")`.
-    pub fn load_local(&mut self, project_args: &mut ProjectArgs) -> Result<()> {
+    pub fn load_local(&mut self, project_args: &ProjectArgs) -> Result<()> {
         // Secrets.toml
         let secrets_manager =
             LocalConfigManager::new(&project_args.working_directory, "Secrets.toml".to_string());
@@ -294,7 +294,7 @@ impl RequestContext {
     }
 
     pub fn get_local_config(
-        project_args: &mut ProjectArgs,
+        project_args: &ProjectArgs
     ) -> Result<Config<LocalConfigManager, ProjectConfig>> {
         let local_manager =
             LocalConfigManager::new(&project_args.working_directory, "Shuttle.toml".to_string());
@@ -308,7 +308,7 @@ impl RequestContext {
         }
 
         let config = project.as_mut().unwrap();
-
+        
         match (&project_args.name, &config.name) {
             // Command-line name parameter trumps everything
             (Some(name_from_args), _) => {

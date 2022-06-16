@@ -383,19 +383,6 @@ mod tests {
     }
 
     #[test]
-    fn find_root_directory_returns_proper_directory_from_a_deeper_directory() {
-        let deep_working_directory =
-            path_from_workspace_root("examples/axum/hello-world/target/debug");
-
-        let deep_root_dir = Shuttle::find_root_directory(&deep_working_directory).unwrap();
-
-        assert_eq!(
-            deep_root_dir,
-            path_from_workspace_root("examples/axum/hello-world/")
-        );
-    }
-
-    #[test]
     fn load_project_returns_proper_working_directory_in_project_args() {
         let mut project_args = ProjectArgs {
             working_directory: path_from_workspace_root("examples/axum/hello-world/src"),

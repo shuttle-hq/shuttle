@@ -68,13 +68,18 @@ impl Persistence {
             .map_err(|e| anyhow!("Could not get deployment data: {e}"))
     }
 
-    pub async fn delete_deployment(&self, name: &str) -> anyhow::Result<()> {
-        sqlx::query("DELETE FROM deployments WHERE name = ?")
+    pub async fn delete_deployment(&self, name: &str) -> anyhow::Result<DeploymentInfo> {
+        let info = self
+            .get_deployment(name)
+            .await
+            .map_err(|e| anyhow!("Failed to remove deployment data: {e}"))?;
+
+        let _ = sqlx::query("DELETE FROM deployments WHERE name = ?")
             .bind(name)
             .execute(&self.pool)
-            .await
-            .map(|_| ())
-            .map_err(|e| anyhow!("Failed to remove deployment data: {e}"))
+            .await;
+
+        Ok(info)
     }
 
     pub async fn get_all_deployments(&self) -> anyhow::Result<Vec<DeploymentInfo>> {

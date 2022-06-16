@@ -1,6 +1,7 @@
 use std::fmt;
 
-#[derive(sqlx::Type, Debug, Clone, Copy)]
+#[derive(sqlx::Type, serde::Serialize, Debug, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
 #[repr(i32)]
 pub enum DeploymentState {
     Queued = 0,

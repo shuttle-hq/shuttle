@@ -1,6 +1,6 @@
 use super::{Built, DeploymentState, Queued};
 
-#[derive(sqlx::FromRow, Debug)]
+#[derive(sqlx::FromRow, serde::Serialize, Debug)]
 pub struct DeploymentInfo {
     pub name: String,
     pub state: DeploymentState,

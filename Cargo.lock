@@ -1398,6 +1398,8 @@ dependencies = [
  "log",
  "num_cpus",
  "regex",
+ "serde",
+ "serde_json",
  "sqlx",
  "tokio",
  "tower",

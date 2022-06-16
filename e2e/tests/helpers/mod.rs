@@ -155,7 +155,7 @@ impl Services {
             "-e",
             "FQDN=unreacable",
             "-e",
-            &format!("INTERNAL_ADDRESS={provisioner_image}"),
+            &format!("PROVISIONER_ADDRESS={provisioner_container}"),
             "-e",
             "PORT=5001",
             &provisioner_image,

@@ -70,7 +70,7 @@ impl MyProvisioner {
             database_name,
             address_private: self.internal_address.clone(),
             address_public: self.fqdn.clone(),
-            port: "3306".to_string(),
+            port: "5432".to_string(),
         })
     }
 

@@ -10,7 +10,7 @@ async fn retrieve(req: Request<MyState>) -> tide::Result {
         .fetch_one(&req.state().pool)
         .await?;
 
-    Body::from_json(&todo).map(core::convert::Into::into)
+    Body::from_json(&todo).map(Into::into)
 }
 
 async fn add(mut req: Request<MyState>) -> tide::Result {
@@ -20,7 +20,7 @@ async fn add(mut req: Request<MyState>) -> tide::Result {
         .fetch_one(&req.state().pool)
         .await?;
 
-    Body::from_json(&todo).map(core::convert::Into::into)
+    Body::from_json(&todo).map(Into::into)
 }
 
 #[derive(Clone)]

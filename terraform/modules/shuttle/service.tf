@@ -154,6 +154,7 @@ locals {
       data_dir     = local.data_dir,
       docker_image = local.docker_provisioner_image,
       pg_password  = var.postgres_password,
+      fqdn         = var.pg_fqdn
     }
   )
 }

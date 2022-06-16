@@ -19,9 +19,6 @@ use tracing::{debug, info};
 mod args;
 mod error;
 
-const PRIVATE_PG_IP: &str = "provisioner";
-const PUBLIC_PG_IP: &str = "pg.shuttle.rs";
-
 const AWS_RDS_CLASS: &str = "db.t4g.micro";
 const MASTER_USERNAME: &str = "master";
 const RDS_SUBNET_GROUP: &str = "shuttle_rds";
@@ -29,15 +26,17 @@ const RDS_SUBNET_GROUP: &str = "shuttle_rds";
 pub struct MyProvisioner {
     pool: PgPool,
     rds_client: aws_sdk_rds::Client,
+    fqdn: String,
+    internal_address: String,
 }
 
 impl MyProvisioner {
-    pub async fn new(uri: &str) -> sqlx::Result<Self> {
+    pub async fn new(db_uri: &str, fqdn: String, internal_address: String) -> sqlx::Result<Self> {
         let pool = PgPoolOptions::new()
             .min_connections(4)
             .max_connections(12)
             .connect_timeout(Duration::from_secs(60))
-            .connect_lazy(uri)?;
+            .connect_lazy(db_uri)?;
 
         // Default timeout is too long so lowering it
         let api_timeout_config = timeout::Api::new()
@@ -52,7 +51,12 @@ impl MyProvisioner {
 
         let rds_client = aws_sdk_rds::Client::new(&aws_config);
 
-        Ok(Self { pool, rds_client })
+        Ok(Self {
+            pool,
+            rds_client,
+            fqdn,
+            internal_address,
+        })
     }
 
     pub async fn request_shared_db(&self, project_name: &str) -> Result<DatabaseResponse, Error> {
@@ -64,8 +68,8 @@ impl MyProvisioner {
             username,
             password,
             database_name,
-            address_private: PRIVATE_PG_IP.to_string(),
-            address_public: PUBLIC_PG_IP.to_string(),
+            address_private: self.internal_address.clone(),
+            address_public: self.fqdn.clone(),
             port: "3306".to_string(),
         })
     }

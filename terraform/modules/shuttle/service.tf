@@ -7,11 +7,6 @@ resource "aws_eip" "backend" {
   network_interface = aws_network_interface.backend.id
 }
 
-resource "aws_network_interface_sg_attachment" "backend" {
-  security_group_id    = aws_default_security_group.default.id
-  network_interface_id = aws_network_interface.backend.id
-}
-
 resource "aws_iam_instance_profile" "backend" {
   name = "backend-profile"
   role = aws_iam_role.backend.name

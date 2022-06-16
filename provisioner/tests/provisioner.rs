@@ -110,7 +110,7 @@ fn exec(query: &str) -> String {
 
 #[tokio::test]
 async fn shared_db_role_does_not_exist() {
-    let provisioner = MyProvisioner::new(&PG.uri).unwrap();
+    let provisioner = MyProvisioner::new(&PG.uri).await.unwrap();
 
     assert_eq!(
         exec("SELECT rolname FROM pg_roles WHERE rolname = 'user-not_exist'"),
@@ -127,7 +127,7 @@ async fn shared_db_role_does_not_exist() {
 
 #[tokio::test]
 async fn shared_db_role_does_exist() {
-    let provisioner = MyProvisioner::new(&PG.uri).unwrap();
+    let provisioner = MyProvisioner::new(&PG.uri).await.unwrap();
 
     exec("CREATE ROLE \"user-exist\" WITH LOGIN PASSWORD 'temp'");
     assert_eq!(
@@ -149,7 +149,7 @@ async fn shared_db_role_does_exist() {
     expected = "CreateRole(\"error returned from database: cannot insert multiple commands into a prepared statement\""
 )]
 async fn injection_safe() {
-    let provisioner = MyProvisioner::new(&PG.uri).unwrap();
+    let provisioner = MyProvisioner::new(&PG.uri).await.unwrap();
 
     provisioner
         .request_shared_db("new\"; CREATE ROLE \"injected")
@@ -159,7 +159,7 @@ async fn injection_safe() {
 
 #[tokio::test]
 async fn shared_db_missing() {
-    let provisioner = MyProvisioner::new(&PG.uri).unwrap();
+    let provisioner = MyProvisioner::new(&PG.uri).await.unwrap();
 
     assert_eq!(
         exec("SELECT datname FROM pg_database WHERE datname = 'db-missing'"),
@@ -176,7 +176,7 @@ async fn shared_db_missing() {
 
 #[tokio::test]
 async fn shared_db_filled() {
-    let provisioner = MyProvisioner::new(&PG.uri).unwrap();
+    let provisioner = MyProvisioner::new(&PG.uri).await.unwrap();
 
     exec("CREATE ROLE \"user-filled\" WITH LOGIN PASSWORD 'temp'");
     exec("CREATE DATABASE \"db-filled\" OWNER 'user-filled'");

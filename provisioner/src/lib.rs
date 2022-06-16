@@ -55,7 +55,7 @@ impl MyProvisioner {
         Ok(Self { pool, rds_client })
     }
 
-    async fn request_shared_db(&self, project_name: &str) -> Result<DatabaseResponse, Error> {
+    pub async fn request_shared_db(&self, project_name: &str) -> Result<DatabaseResponse, Error> {
         let (username, password) = self.shared_role(project_name).await?;
         let database_name = self.shared_db(project_name, &username).await?;
 

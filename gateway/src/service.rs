@@ -153,8 +153,7 @@ impl GatewayService {
     /// * `args` - The [`Args`] with which the service was
     /// started. Will be passed as [`Context`] to workers and state.
     pub async fn init(args: Args) -> Arc<Self> {
-        info!("docker host: tcp://127.0.0.1:2735");
-        let docker = Docker::connect_with_http_defaults().unwrap();
+        let docker = Docker::connect_with_local_defaults().unwrap();
 
         let hyper = HyperClient::new();
         if !StdPath::new(DB_PATH).exists() {

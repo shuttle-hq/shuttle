@@ -310,7 +310,6 @@ impl ProjectCreating {
         &self,
         ctx: &C,
     ) -> (CreateContainerOptions<String>, Config<String>) {
-        let pg_password = Alphanumeric.sample_string(&mut rand::thread_rng(), 12);
 
         let Args {
             image,

@@ -50,11 +50,7 @@ impl FromStr for Key {
 impl Key {
     pub fn new_random() -> Self {
         Self(
-            rand::thread_rng()
-                .sample_iter(&rand::distributions::Alphanumeric)
-                .take(16)
-                .map(char::from)
-                .collect::<String>(),
+            rand::distributions::Alphanumeric.sample_string(&mut rand::thread_rng(), 16)
         )
     }
 }
@@ -123,7 +119,7 @@ where
         if user.projects.contains(&scope) {
             Ok(Self { user, scope })
         } else {
-            Err(Error::from(ErrorKind::Unauthorized))
+            Err(Error::from(ErrorKind::Forbidden))
         }
     }
 }
@@ -145,7 +141,7 @@ where
         if service.is_super_user(&user.name).await? {
             Ok(Self { user })
         } else {
-            Err(Error::from(ErrorKind::Unauthorized))
+            Err(Error::from(ErrorKind::Forbidden))
         }
     }
 }

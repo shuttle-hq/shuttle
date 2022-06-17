@@ -19,7 +19,7 @@ pub struct Args {
     /// Default image to deploy user runtimes into
     #[clap(
         long,
-        default_value = "public.ecr.aws/d7w6e9t1/backend:latest"
+        default_value = "public.ecr.aws/shuttle/backend:latest"
     )]
     pub image: String,
     /// Prefix to add to the name of all docker resources managed by

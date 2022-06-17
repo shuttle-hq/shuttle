@@ -23,7 +23,7 @@ async fn get_user(
     service
         .user_from_account_name(account_name)
         .await
-        .map(|user| AxumJson(user))
+        .map(AxumJson)
 }
 
 async fn post_user(
@@ -34,7 +34,7 @@ async fn post_user(
     service
         .create_user(account_name)
         .await
-        .map(|user| AxumJson(user))
+        .map(AxumJson)
 }
 
 async fn get_project(
@@ -44,7 +44,7 @@ async fn get_project(
     service
         .find_project(&scope)
         .await
-        .map(|project| AxumJson(project))
+        .map(AxumJson)
 }
 
 async fn post_project(
@@ -55,7 +55,7 @@ async fn post_project(
     service
         .create_project(project, name)
         .await
-        .map(|project| AxumJson(project))
+        .map(AxumJson)
 }
 
 async fn delete_project(

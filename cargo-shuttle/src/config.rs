@@ -308,6 +308,7 @@ impl RequestContext {
         }
 
         let config = project.as_mut().unwrap();
+
         match (&project_args.name, &config.name) {
             // Command-line name parameter trumps everything
             (Some(name_from_args), _) => {
@@ -425,20 +426,6 @@ mod tests {
         let local_config = RequestContext::get_local_config(&project_args).unwrap();
 
         assert_eq!(unwrap_project_name(&local_config), "hello-world-axum-app");
-    }
-
-    #[test]
-    fn fixme_running_in_src_subdir_finds_crate_but_fails_to_find_config() {
-        let project_args = ProjectArgs {
-            working_directory: path_from_workspace_root("examples/axum/hello-world/src"),
-            name: None,
-        };
-
-        let local_config = RequestContext::get_local_config(&project_args).unwrap();
-
-        // FIXME: this is not the intended behaviour. We should fix this.
-        // This should really be "hello-world-axum-app", as above.
-        assert_eq!(unwrap_project_name(&local_config), "hello-world");
     }
 
     #[test]

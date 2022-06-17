@@ -1,12 +1,12 @@
 [package]
-name = "not-cdylib"
+name = "is-cdylib"
 version = "0.1.0"
 edition = "2021"
 
 [workspace]
 
 [lib]
-crate-type = ["staticlib"]
+crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
 rocket = "0.5.0-rc.1"

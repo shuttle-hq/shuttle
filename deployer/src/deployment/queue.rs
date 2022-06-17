@@ -1,3 +1,6 @@
+use bytes::Bytes;
+use futures::{Stream, StreamExt};
+
 use super::{Built, QueueReceiver, RunSender};
 use crate::deployment::{DeploymentInfo, DeploymentState};
 use crate::persistence::Persistence;
@@ -47,9 +50,10 @@ async fn handle_queued(
 
     // Read POSTed data:
 
-    let data = queued.data_future.await?;
-
-    log::debug!("{} - received {} bytes", queued.name, data.len());
+    while let Some(chunk) = queued.data_stream.next().await {
+        let chunk = chunk?;
+        log::debug!("{} - streamed {} bytes", queued.name, chunk.len());
+    }
 
     // Build:
 
@@ -73,7 +77,7 @@ async fn handle_queued(
 
 pub struct Queued {
     pub name: String,
-    pub data_future: Pin<Box<dyn Future<Output = Result<Vec<u8>, anyhow::Error>> + Send + Sync>>,
+    pub data_stream: Pin<Box<dyn Stream<Item = Result<Bytes, axum::Error>> + Send + Sync>>,
     pub state: DeploymentState,
 }
 

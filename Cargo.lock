@@ -1390,13 +1390,13 @@ name = "deployer"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "axum",
+ "bytes",
  "env_logger",
  "futures",
  "http",
- "hyper",
  "lazy_static",
  "log",
- "num_cpus",
  "regex",
  "serde",
  "serde_json",

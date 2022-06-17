@@ -1,8 +1,12 @@
 mod deployment;
+mod handlers;
 mod persistence;
-mod tower_service;
+
+use persistence::Persistence;
 
 use std::net::SocketAddr;
+
+use crate::deployment::DeploymentManager;
 
 const SECRET_KEY: &str = "GATEWAY_SECRET";
 
@@ -20,16 +24,16 @@ async fn main() {
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 8001));
 
-    let deployer = tower::ServiceBuilder::new()
-        .layer(tower_service::middleware::LoggingLayer(log::Level::Debug))
-        .service(tower_service::Deployer::new().await);
+    let persistence = Persistence::new().await;
+    let deployment_manager = DeploymentManager::new(persistence.clone(), 4);
 
-    let shared = tower::make::Shared::new(deployer);
+    let router = handlers::make_router(persistence, deployment_manager);
+    let make_service = router.into_make_service();
 
     log::info!("Binding to and listening at address: {}", addr);
 
-    hyper::Server::bind(&addr)
-        .serve(shared)
+    axum::Server::bind(&addr)
+        .serve(make_service)
         .await
         .unwrap_or_else(|_| panic!("Failed to bind to address: {}", addr));
 }

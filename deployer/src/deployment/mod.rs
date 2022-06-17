@@ -9,30 +9,32 @@ pub use states::DeploymentState;
 pub use queue::Queued;
 pub use run::Built;
 
-use std::iter;
-use std::sync::Arc;
-
 use crate::persistence::Persistence;
 
-use tokio::{sync::mpsc, task::JoinHandle};
+use tokio::sync::{broadcast, mpsc};
 
 const QUEUE_BUFFER_SIZE: usize = 100;
 const RUN_BUFFER_SIZE: usize = 100;
+const KILL_BUFFER_SIZE: usize = 10;
 
 #[derive(Clone)]
 pub struct DeploymentManager {
     pipelines: Vec<Pipeline>,
+    kill_send: KillSender,
 }
 
 impl DeploymentManager {
     /// Create a new deployment manager. Manages one or more 'pipelines' for
     /// processing service building, loading, and deployment.
     pub fn new(persistence: Persistence, pipeline_count: usize) -> Self {
+        let (kill_send, _) = broadcast::channel(KILL_BUFFER_SIZE);
+
         DeploymentManager {
             pipelines: (0..pipeline_count)
                 .into_iter()
-                .map(|i| Pipeline::new(i, persistence.clone()))
+                .map(|i| Pipeline::new(i, kill_send.clone(), persistence.clone()))
                 .collect(),
+            kill_send,
         }
     }
 
@@ -55,6 +57,12 @@ impl DeploymentManager {
 
         highest_capacity.run_send.send(built).await.unwrap();
     }
+
+    pub async fn kill(&self, name: String) {
+        if self.kill_send.receiver_count() > 0 {
+            self.kill_send.send(name).unwrap();
+        }
+    }
 }
 
 /// ```
@@ -75,8 +83,6 @@ impl DeploymentManager {
 struct Pipeline {
     queue_send: QueueSender,
     run_send: RunSender,
-    queue_task: Arc<JoinHandle<()>>,
-    run_task: Arc<JoinHandle<()>>,
 }
 
 impl Pipeline {
@@ -84,24 +90,21 @@ impl Pipeline {
     /// executing/deploying built services. Two multi-producer, single consumer
     /// channels are also created which are for moving on-going service
     /// deployments between the aforementioned tasks.
-    fn new(ident: usize, persistence: Persistence) -> Pipeline {
+    fn new(ident: usize, kill_send: KillSender, persistence: Persistence) -> Pipeline {
         let (queue_send, queue_recv) = mpsc::channel(QUEUE_BUFFER_SIZE);
         let (run_send, run_recv) = mpsc::channel(RUN_BUFFER_SIZE);
 
         let run_send_clone = run_send.clone();
         let persistence_clone = persistence.clone();
 
-        let queue_task = tokio::spawn(async move {
-            queue::task(ident, queue_recv, run_send_clone, persistence).await
-        });
-        let run_task =
-            tokio::spawn(async move { run::task(ident, run_recv, persistence_clone).await });
+        tokio::spawn(
+            async move { queue::task(ident, queue_recv, run_send_clone, persistence).await },
+        );
+        tokio::spawn(async move { run::task(ident, run_recv, kill_send, persistence_clone).await });
 
         Pipeline {
             queue_send,
             run_send,
-            queue_task: Arc::new(queue_task),
-            run_task: Arc::new(run_task),
         }
     }
 }
@@ -111,3 +114,5 @@ type QueueReceiver = mpsc::Receiver<queue::Queued>;
 
 type RunSender = mpsc::Sender<run::Built>;
 type RunReceiver = mpsc::Receiver<run::Built>;
+
+type KillSender = broadcast::Sender<String>;

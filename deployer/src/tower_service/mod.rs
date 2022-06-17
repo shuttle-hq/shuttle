@@ -92,10 +92,7 @@ impl Deployer {
 
             http::Method::DELETE => {
                 let deleted = self.persistence.delete_deployment(&name).await?;
-
-                // Stop task in which the service is executing:
-                // TODO
-
+                self.deployment_manager.kill(name).await;
                 Ok(serde_json::to_value(deleted).unwrap())
             }
 

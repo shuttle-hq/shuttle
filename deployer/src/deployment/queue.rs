@@ -2,7 +2,7 @@ use axum::body::Bytes;
 use futures::{Stream, StreamExt};
 
 use super::{Built, QueueReceiver, RunSender};
-use crate::deployment::{DeploymentInfo, DeploymentState};
+use crate::deployment::DeploymentState;
 use crate::error::Result;
 use crate::persistence::Persistence;
 
@@ -23,62 +23,48 @@ pub async fn task(
             queued.name
         );
 
-        let mut info = DeploymentInfo::from(&queued);
-
-        if let Err(_e) = handle_queued(queued, &persistence, &run_send).await {
-            // TODO: Do something with error msg.
-
-            info.state = DeploymentState::Error;
-            persistence
-                .update_deployment(info)
-                .await
-                .unwrap_or_else(|db_err| log::error!("{}", db_err));
-        }
+        tokio::spawn(queued.handle(run_send.clone(), persistence.clone()));
     }
-}
-
-async fn handle_queued(
-    mut queued: Queued,
-    persistence: &Persistence,
-    run_send: &RunSender,
-) -> Result<()> {
-    // Update deployment state:
-
-    queued.state = DeploymentState::Building;
-
-    persistence.update_deployment(&queued).await?;
-
-    // Read POSTed data:
-
-    while let Some(chunk) = queued.data_stream.next().await {
-        let chunk = chunk?;
-        log::debug!("{} - streamed {} bytes", queued.name, chunk.len());
-    }
-
-    // Build:
-
-    // TODO
-
-    // Update deployment state to 'built:
-
-    let built = Built {
-        name: queued.name,
-        state: DeploymentState::Built,
-    };
-
-    persistence.update_deployment(&built).await?;
-
-    // Send to run queue:
-
-    run_send.send(built).await.unwrap();
-
-    Ok(())
 }
 
 pub struct Queued {
     pub name: String,
     pub data_stream: Pin<Box<dyn Stream<Item = Result<Bytes>> + Send + Sync>>,
     pub state: DeploymentState,
+}
+
+impl Queued {
+    async fn handle(mut self, run_send: RunSender, persistence: Persistence) {
+        // Update deployment state:
+
+        self.state = DeploymentState::Building;
+
+        persistence.update_deployment(&self).await.expect("TODO");
+
+        // Read POSTed data:
+
+        while let Some(chunk) = self.data_stream.next().await {
+            let chunk = chunk.expect("TODO");
+            log::debug!("{} - streamed {} bytes", self.name, chunk.len());
+        }
+
+        // Build:
+
+        // TODO
+
+        // Update deployment state to 'built:
+
+        let built = Built {
+            name: self.name,
+            state: DeploymentState::Built,
+        };
+
+        persistence.update_deployment(&built).await.expect("TODO");
+
+        // Send to run queue:
+
+        run_send.send(built).await.unwrap();
+    }
 }
 
 impl fmt::Debug for Queued {

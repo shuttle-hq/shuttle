@@ -1,4 +1,5 @@
 mod deployment;
+mod error;
 mod handlers;
 mod persistence;
 

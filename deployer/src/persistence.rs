@@ -1,11 +1,10 @@
 use crate::deployment::{DeploymentInfo, DeploymentState};
+use crate::error::Result;
 
 use std::path::Path;
 
 use sqlx::migrate::MigrateDatabase;
 use sqlx::sqlite::{Sqlite, SqlitePool};
-
-use anyhow::anyhow;
 
 const DB_PATH: &str = "deployer.sqlite";
 
@@ -46,7 +45,7 @@ impl Persistence {
         Persistence { pool }
     }
 
-    pub async fn update_deployment(&self, info: impl Into<DeploymentInfo>) -> anyhow::Result<()> {
+    pub async fn update_deployment(&self, info: impl Into<DeploymentInfo>) -> Result<()> {
         let info = info.into();
 
         // TODO: Handle moving to 'active_deployments' table for DeploymentState::Running.
@@ -57,22 +56,19 @@ impl Persistence {
             .execute(&self.pool)
             .await
             .map(|_| ())
-            .map_err(|e| anyhow!("Failed to update/insert deployment data: {e}"))
+            .map_err(Into::into)
     }
 
-    pub async fn get_deployment(&self, name: &str) -> anyhow::Result<DeploymentInfo> {
+    pub async fn get_deployment(&self, name: &str) -> Result<DeploymentInfo> {
         sqlx::query_as("SELECT * FROM deployments WHERE name = ?")
             .bind(name)
             .fetch_one(&self.pool)
             .await
-            .map_err(|e| anyhow!("Could not get deployment data: {e}"))
+            .map_err(Into::into)
     }
 
-    pub async fn delete_deployment(&self, name: &str) -> anyhow::Result<DeploymentInfo> {
-        let info = self
-            .get_deployment(name)
-            .await
-            .map_err(|e| anyhow!("Failed to remove deployment data: {e}"))?;
+    pub async fn delete_deployment(&self, name: &str) -> Result<DeploymentInfo> {
+        let info = self.get_deployment(name).await?;
 
         let _ = sqlx::query("DELETE FROM deployments WHERE name = ?")
             .bind(name)
@@ -82,19 +78,19 @@ impl Persistence {
         Ok(info)
     }
 
-    pub async fn get_all_deployments(&self) -> anyhow::Result<Vec<DeploymentInfo>> {
+    pub async fn get_all_deployments(&self) -> Result<Vec<DeploymentInfo>> {
         sqlx::query_as("SELECT * FROM deployments")
             .fetch_all(&self.pool)
             .await
-            .map_err(|e| anyhow!("Failed to get all deployment data: {e}"))
+            .map_err(Into::into)
     }
 
-    pub async fn get_all_runnable_deployments(&self) -> anyhow::Result<Vec<DeploymentInfo>> {
+    pub async fn get_all_runnable_deployments(&self) -> Result<Vec<DeploymentInfo>> {
         sqlx::query_as("SELECT * FROM deployments WHERE state = ? OR state = ?")
             .bind(DeploymentState::Built)
             .bind(DeploymentState::Running)
             .fetch_all(&self.pool)
             .await
-            .map_err(|e| anyhow!("Failed to get all deployment data: {e}"))
+            .map_err(Into::into)
     }
 }

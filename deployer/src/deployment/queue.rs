@@ -1,12 +1,12 @@
-use bytes::Bytes;
+use axum::body::Bytes;
 use futures::{Stream, StreamExt};
 
 use super::{Built, QueueReceiver, RunSender};
 use crate::deployment::{DeploymentInfo, DeploymentState};
+use crate::error::Result;
 use crate::persistence::Persistence;
 
 use std::fmt;
-use std::future::Future;
 use std::pin::Pin;
 
 pub async fn task(
@@ -41,7 +41,7 @@ async fn handle_queued(
     mut queued: Queued,
     persistence: &Persistence,
     run_send: &RunSender,
-) -> anyhow::Result<()> {
+) -> Result<()> {
     // Update deployment state:
 
     queued.state = DeploymentState::Building;
@@ -77,7 +77,7 @@ async fn handle_queued(
 
 pub struct Queued {
     pub name: String,
-    pub data_stream: Pin<Box<dyn Stream<Item = Result<Bytes, axum::Error>> + Send + Sync>>,
+    pub data_stream: Pin<Box<dyn Stream<Item = Result<Bytes>> + Send + Sync>>,
     pub state: DeploymentState,
 }
 

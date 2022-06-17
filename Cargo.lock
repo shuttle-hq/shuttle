@@ -1389,18 +1389,14 @@ dependencies = [
 name = "deployer"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "axum",
- "bytes",
  "env_logger",
  "futures",
- "http",
- "lazy_static",
  "log",
- "regex",
  "serde",
  "serde_json",
  "sqlx",
+ "thiserror",
  "tokio",
  "tower",
 ]

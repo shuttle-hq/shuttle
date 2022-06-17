@@ -1,8 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use rand::Rng;
-
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::io::Write;
@@ -15,6 +13,7 @@ use axum::response::{IntoResponse, Response};
 use std::str::FromStr;
 use axum::http::StatusCode;
 use axum::Json;
+use rand::distributions::{Alphanumeric, DistString};
 
 use crate::service::GatewayService;
 use crate::{Error, ErrorKind, ProjectName, AccountName};
@@ -50,7 +49,7 @@ impl FromStr for Key {
 impl Key {
     pub fn new_random() -> Self {
         Self(
-            rand::distributions::Alphanumeric.sample_string(&mut rand::thread_rng(), 16)
+            Alphanumeric.sample_string(&mut rand::thread_rng(), 16)
         )
     }
 }
@@ -61,7 +60,7 @@ impl Key {
 /// The `FromRequest` impl consumes the API key and verifies it is valid for the
 /// a user. Generally you want to use [`ScopedUser`] instead to ensure the request
 /// is valid against the user's owned resources.
-#[derive(Clone, Deserialize, Serialize, Debug)]
+#[derive(Clone, Deserialize, PartialEq, Eq, Serialize, Debug)]
 pub struct User {
     pub name: AccountName,
     pub key: Key,
@@ -84,7 +83,7 @@ where
             .await
             // Absord any error into `Unauthorized`
             .map_err(|_| {
-                Error::kind(ErrorKind::Unauthorized)
+                Error::from_kind(ErrorKind::Unauthorized)
             })?;
         Ok(user)
     }

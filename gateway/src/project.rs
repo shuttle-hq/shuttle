@@ -310,7 +310,6 @@ impl ProjectCreating {
         &self,
         ctx: &C,
     ) -> (CreateContainerOptions<String>, Config<String>) {
-
         let Args {
             image,
             prefix,
@@ -337,7 +336,6 @@ impl ProjectCreating {
                 format!("API_PORT={RUNTIME_API_PORT}"),
                 "PG_PORT=5432",
                 "PG_DATA=/opt/shuttle/postgres",
-                format!("PG_PASSWORD={pg_password}"),
                 format!("SHUTTLE_INITIAL_KEY={initial_key}"),
                 format!("PROVISIONER_ADDRESS={provisioner_host}"),
                 "SHUTTLE_USERS_TOML=/opt/shuttle/users.toml",
@@ -688,124 +686,19 @@ impl<'c> State<'c> for ProjectError {
 
 #[cfg(test)]
 pub mod tests {
-    use bollard::{models::Health, network::ListNetworksOptions, Docker};
-
-    use rand::{
-        distributions::{Distribution, Uniform},
-        Rng,
-    };
-
     use std::env;
     use std::io;
 
+    use bollard::models::Health;
     use futures::prelude::*;
-
-    use anyhow::{anyhow, Context as AnyhowContext};
-
-    use hyper::{client::HttpConnector, Body, Client as HyperClient};
-
-    use colored::Colorize;
 
     use super::*;
 
-    use crate::{assert_matches, assert_stream_matches, tests::Client, EndStateExt};
-
-    pub struct World {
-        docker: Docker,
-        args: Args,
-        hyper: HyperClient<HttpConnector, Body>,
-    }
-
-    #[derive(Clone, Copy)]
-    pub struct WorldContext<'c> {
-        docker: &'c Docker,
-        args: &'c Args,
-        hyper: &'c HyperClient<HttpConnector, Body>,
-    }
-
-    impl World {
-        async fn new() -> anyhow::Result<Self> {
-            let docker_host =
-                option_env!("SHUTTLE_TESTS_DOCKER_HOST").unwrap_or("tcp://127.0.0.1:2735");
-            let docker = Docker::connect_with_http_defaults()?;
-
-            docker.list_images::<&str>(None).await.context(anyhow!(
-                "A docker daemon does not seem accessible at {docker_host}"
-            ))?;
-
-            let control: i16 = Uniform::from(9000..10000).sample(&mut rand::thread_rng());
-            let user = control + 1;
-            let control = format!("127.0.0.1:{control}").parse().unwrap();
-            let user = format!("127.0.0.1:{user}").parse().unwrap();
-
-            let prefix = format!(
-                "shuttle_test_{}_",
-                Alphanumeric.sample_string(&mut rand::thread_rng(), 4)
-            );
-
-            let image = env::var("SHUTTLE_TESTS_RUNTIME_IMAGE")
-                .unwrap_or("public.ecr.aws/d7w6e9t1/backend:latest".to_string());
-
-            let provisioner_host = env::var("SHUTTLE_TESTS_PROVISIONER_HOST")
-                .context("the tests can't run if `SHUTTLE_TESTS_PROVISIONER_HOST` is not set")?;
-
-            let network_id = env::var("SHUTTLE_TESTS_NETWORK_ID")
-                .context("the tests can't run if `SHUTTLE_TESTS_NETWORK_ID` is not set")?;
-
-            docker
-                .list_networks(Some(ListNetworksOptions {
-                    filters: vec![("id", vec![network_id.as_str()])]
-                        .into_iter()
-                        .collect(),
-                }))
-                .await
-                .context("can't list docker networks")
-                .and_then(|networks| {
-                    if networks.is_empty() {
-                        Err(anyhow!("can't find a docker network with id={network_id}"))
-                    } else {
-                        Ok(())
-                    }
-                })?;
-
-            let args = Args {
-                control,
-                user,
-                image,
-                prefix,
-                provisioner_host,
-                network_id,
-            };
-
-            let hyper = HyperClient::builder().build(HttpConnector::new());
-
-            Ok(Self {
-                docker,
-                args,
-                hyper,
-            })
-        }
-    }
-
-    impl World {
-        fn context<'c>(&'c self) -> WorldContext<'c> {
-            WorldContext {
-                docker: &self.docker,
-                args: &self.args,
-                hyper: &self.hyper,
-            }
-        }
-    }
-
-    impl<'c> Context<'c> for WorldContext<'c> {
-        fn docker(&self) -> &'c Docker {
-            &self.docker
-        }
-
-        fn args(&self) -> &'c Args {
-            &self.args
-        }
-    }
+    use crate::{
+        assert_matches, assert_stream_matches,
+        tests::{Client, World},
+        EndStateExt,
+    };
 
     #[tokio::test]
     async fn create_start_stop_destroy_project() -> anyhow::Result<()> {
@@ -877,7 +770,7 @@ pub mod tests {
             .unwrap()
             .unwrap();
 
-        let client = Client::new(&ctx.hyper, target_addr);
+        let client = Client::new(ctx.hyper, target_addr);
 
         client
             .get::<serde::de::IgnoredAny, _>("/status")

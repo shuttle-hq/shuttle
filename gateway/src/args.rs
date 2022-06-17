@@ -1,4 +1,4 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr, path::PathBuf};
 
 use clap::Parser;
 
@@ -38,5 +38,11 @@ pub struct Args {
     pub provisioner_host: String,
     /// The Docker Network ID in which to deploy user runtimes
     #[clap(long)]
-    pub network_id: String
+    pub network_id: String,
+    /// Uri to the `.sqlite` file used to store state
+    #[clap(
+        long,
+        default_value = "./gateway.sqlite"
+    )]
+    pub state: String
 }

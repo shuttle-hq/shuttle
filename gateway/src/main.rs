@@ -48,21 +48,20 @@ macro_rules! assert_stream_matches {
         $(#[assertion = $assert:literal])?
         $($pattern:pat_param)|+ $(if $guard:expr)? $(=> $more:block)?,
     ) => {{
-        let next = $stream
-            .next()
+        let next = ::futures::stream::StreamExt::next(&mut $stream)
             .await
             .expect("Stream ended before the last of assertions");
 
         match &next {
             $($pattern)|+ $(if $guard)? => {
-                print!("{}", "[ok]".bold().green());
+                print!("{}", ::colored::Colorize::green(::colored::Colorize::bold("[ok]")));
                 $(print!(" {}", $assert);)?
                 print!("\n");
                 value_block_helper!(next, $($more)?)
             },
             _ => {
-                eprintln!("{} {:#?}", "[err]".bold().red(), next);
-                eprint!("{}", "Assertion failed".bold().red());
+                eprintln!("{} {:#?}", ::colored::Colorize::red(::colored::Colorize::bold("[err]")), next);
+                eprint!("{}", ::colored::Colorize::red(::colored::Colorize::bold("Assertion failed")));
                 $(eprint!(": {}", $assert);)?;
                 eprint!("\n");
                 panic!("State mismatch")
@@ -104,6 +103,19 @@ macro_rules! assert_matches {
     }}
 }
 
+#[macro_export]
+macro_rules! assert_err_kind {
+    {
+        $left:expr, ErrorKind::$right:ident
+    } => {{
+        let left: Result<_, Error> = $left;
+        assert_eq!(
+            left.map_err(|err| err.kind()),
+            Err(ErrorKind::$right)
+        );
+    }};
+}
+
 use crate::api::make_api;
 use crate::args::Args;
 use crate::proxy::make_proxy;
@@ -116,13 +128,15 @@ pub mod project;
 pub mod proxy;
 pub mod service;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorKind {
     KeyMissing,
     BadHost,
     KeyMalformed,
     Unauthorized,
+    Forbidden,
     UserNotFound,
+    UserAlreadyExists,
     ProjectNotFound,
     InvalidProjectName,
     ProjectAlreadyExists,
@@ -171,14 +185,18 @@ impl Error {
         }
     }
 
-    pub fn kind(kind: ErrorKind) -> Self {
+    pub fn from_kind(kind: ErrorKind) -> Self {
         Self { kind, source: None }
+    }
+
+    fn kind(&self) -> ErrorKind {
+        self.kind
     }
 }
 
 impl From<ErrorKind> for Error {
     fn from(kind: ErrorKind) -> Self {
-        Self { kind, source: None }
+        Self::from_kind(kind)
     }
 }
 
@@ -190,6 +208,7 @@ impl IntoResponse for Error {
             ErrorKind::KeyMalformed => (StatusCode::BAD_REQUEST, "request has an invalid key"),
             ErrorKind::BadHost => (StatusCode::BAD_REQUEST, "the 'Host' header is invalid"),
             ErrorKind::UserNotFound => (StatusCode::NOT_FOUND, "user not found"),
+            ErrorKind::UserAlreadyExists => (StatusCode::BAD_REQUEST, "user already exists"),
             ErrorKind::ProjectNotFound => (StatusCode::NOT_FOUND, "project not found"),
             ErrorKind::ProjectNotReady => (StatusCode::SERVICE_UNAVAILABLE, "project not ready"),
             ErrorKind::ProjectUnavailable => {
@@ -205,6 +224,7 @@ impl IntoResponse for Error {
                 "a project with the same name already exists",
             ),
             ErrorKind::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
+            ErrorKind::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
         };
         (status, Json(json!({ "error": error_message }))).into_response()
     }
@@ -246,7 +266,7 @@ impl FromStr for ProjectName {
         if re.is_match(s) {
             Ok(Self(s.to_string()))
         } else {
-            Err(Error::kind(ErrorKind::InvalidProjectName))
+            Err(Error::from_kind(ErrorKind::InvalidProjectName))
         }
     }
 }
@@ -257,7 +277,7 @@ impl std::fmt::Display for ProjectName {
     }
 }
 
-#[derive(Debug, Clone, sqlx::Type, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, sqlx::Type, Serialize)]
 #[sqlx(transparent)]
 pub struct AccountName(pub String);
 
@@ -298,13 +318,13 @@ pub trait Service<'c> {
 
     type State: EndState<'c>;
 
-    type Error: StdError;
+    type Error;
 
     /// Asks for the latest available context for task execution
     fn context(&'c self) -> Self::Context;
 
     /// Commit a state update to persistence
-    async fn update(&self, state: &Self::State) -> Result<(), Self::Error>;
+    async fn update(&mut self, state: &Self::State) -> Result<(), Self::Error>;
 }
 
 /// A generic state which can, when provided with a [`Context`], do
@@ -313,7 +333,7 @@ pub trait Service<'c> {
 pub trait State<'c>: Send + Sized + Clone {
     type Next;
 
-    type Error: StdError;
+    type Error;
 
     async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error>;
 }
@@ -324,7 +344,7 @@ pub trait EndState<'c>
 where
     Self: State<'c, Error = Infallible, Next = Self>,
 {
-    type ErrorVariant: StdError;
+    type ErrorVariant;
 
     fn is_done(&self) -> bool;
 
@@ -403,6 +423,16 @@ async fn main() -> io::Result<()> {
 
 #[cfg(test)]
 pub mod tests {
+    use std::env;
+
+    use anyhow::{anyhow, Context as AnyhowContext};
+    use bollard::{models::Health, network::ListNetworksOptions, Docker};
+    use colored::Colorize;
+    use rand::distributions::{Alphanumeric, DistString, Distribution, Uniform};
+    use tempfile::NamedTempFile;
+
+    use crate::{args::Args, Context};
+
     use std::net::SocketAddr;
 
     use serde::Deserialize;
@@ -462,6 +492,108 @@ pub mod tests {
                     Ok(t)
                 }
             }
+        }
+    }
+
+    pub struct World {
+        state: NamedTempFile,
+        docker: Docker,
+        args: Args,
+        hyper: HyperClient<HttpConnector, Body>,
+    }
+
+    #[derive(Clone, Copy)]
+    pub struct WorldContext<'c> {
+        pub docker: &'c Docker,
+        pub args: &'c Args,
+        pub hyper: &'c HyperClient<HttpConnector, Body>,
+    }
+
+    impl World {
+        pub async fn new() -> anyhow::Result<Self> {
+            let docker_host =
+                option_env!("SHUTTLE_TESTS_DOCKER_HOST").unwrap_or("tcp://127.0.0.1:2735");
+            let docker = Docker::connect_with_http_defaults()?;
+
+            docker.list_images::<&str>(None).await.context(anyhow!(
+                "A docker daemon does not seem accessible at {docker_host}"
+            ))?;
+
+            let control: i16 = Uniform::from(9000..10000).sample(&mut rand::thread_rng());
+            let user = control + 1;
+            let control = format!("127.0.0.1:{control}").parse().unwrap();
+            let user = format!("127.0.0.1:{user}").parse().unwrap();
+
+            let prefix = format!(
+                "shuttle_test_{}_",
+                Alphanumeric.sample_string(&mut rand::thread_rng(), 4)
+            );
+
+            let image = env::var("SHUTTLE_TESTS_RUNTIME_IMAGE")
+                .unwrap_or("public.ecr.aws/shuttle/backend:latest".to_string());
+
+            let provisioner_host = env::var("SHUTTLE_TESTS_PROVISIONER_HOST")
+                .context("the tests can't run if `SHUTTLE_TESTS_PROVISIONER_HOST` is not set")?;
+
+            let network_id = env::var("SHUTTLE_TESTS_NETWORK_ID")
+                .context("the tests can't run if `SHUTTLE_TESTS_NETWORK_ID` is not set")?;
+
+            docker
+                .list_networks(Some(ListNetworksOptions {
+                    filters: vec![("id", vec![network_id.as_str()])]
+                        .into_iter()
+                        .collect(),
+                }))
+                .await
+                .context("can't list docker networks")
+                .and_then(|networks| {
+                    if networks.is_empty() {
+                        Err(anyhow!("can't find a docker network with id={network_id}"))
+                    } else {
+                        Ok(())
+                    }
+                })?;
+
+            let state = NamedTempFile::new().unwrap();
+
+            let args = Args {
+                control,
+                user,
+                image,
+                prefix,
+                provisioner_host,
+                network_id,
+                state: state.path().to_str().unwrap().to_string(),
+            };
+
+            let hyper = HyperClient::builder().build(HttpConnector::new());
+
+            Ok(Self {
+                state,
+                docker,
+                args,
+                hyper,
+            })
+        }
+    }
+
+    impl World {
+        pub fn context<'c>(&'c self) -> WorldContext<'c> {
+            WorldContext {
+                docker: &self.docker,
+                args: &self.args,
+                hyper: &self.hyper,
+            }
+        }
+    }
+
+    impl<'c> Context<'c> for WorldContext<'c> {
+        fn docker(&self) -> &'c Docker {
+            &self.docker
+        }
+
+        fn args(&self) -> &'c Args {
+            &self.args
         }
     }
 }

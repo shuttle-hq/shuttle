@@ -53,23 +53,23 @@ impl Service<Request<Body>> for ProxyService {
                             .unwrap_or(host)
                             .strip_suffix(SHUTTLEAPP_SUFFIX)
                     })
-                    .ok_or_else(|| Error::kind(ErrorKind::ProjectNotFound))?;
+                    .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotFound))?;
 
                 let project_name: ProjectName = project_str
                     .parse()
-                    .map_err(|_| Error::kind(ErrorKind::InvalidProjectName))?;
+                    .map_err(|_| Error::from_kind(ErrorKind::InvalidProjectName))?;
 
                 let project = gateway.find_project(&project_name).await?;
 
                 let target_ip = project
                     .target_ip()?
-                    .ok_or_else(|| Error::kind(ErrorKind::ProjectNotReady))?;
+                    .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotReady))?;
 
                 let target_url = format!("http://{}:{}", target_ip, 8000);
 
                 let proxy = hyper_reverse_proxy::call(remote_addr, &target_url, req)
                     .await
-                    .map_err(|_| Error::kind(ErrorKind::ProjectUnavailable))?;
+                    .map_err(|_| Error::from_kind(ErrorKind::ProjectUnavailable))?;
 
                 let (parts, body) = proxy.into_parts();
                 let body = <Body as HttpBody>::map_err(body, axum::Error::new).boxed_unsync();

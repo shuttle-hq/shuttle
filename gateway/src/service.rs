@@ -82,8 +82,8 @@ where
 }
 
 pub struct Worker<Svc, W> {
-    service: Svc,
-    send: Sender<W>,
+    pub service: Svc,
+    send: Option<Sender<W>>,
     recv: Receiver<W>,
 }
 
@@ -95,15 +95,17 @@ where
         let (send, recv) = channel(256);
         Self {
             service,
-            send,
+            send: Some(send),
             recv,
         }
     }
 }
 
 impl<Svc, W> Worker<Svc, W> {
+    /// # Panics
+    /// If this worker has already been started before.
     pub fn sender(&self) -> Sender<W> {
-        self.send.clone()
+        self.send.as_ref().unwrap().clone()
     }
 }
 
@@ -112,25 +114,34 @@ where
     Svc: for<'c> Service<'c, State = W, Error = Error>,
     W: Debug + Send + for<'c> EndState<'c>,
 {
-    pub async fn start(mut self) -> Result<(), Error> {
-        while let Some(work) = self.recv.recv().await {
-            let context = self.service.context();
+    /// Starts the worker, waiting and processing elements from the
+    /// queue until the last sending end for the channel is dropped,
+    /// at which point this future resolves.
+    pub async fn start(mut self) -> Result<Self, Error> {
+        // Drop our sender to prevent a deadlock if this is the last
+        // one for this channel
+        self.send = None;
 
-            // Safety: EndState's transitions are Infallible
-            let next = work.next(&context).await.unwrap();
+        while let Some(mut work) = self.recv.recv().await {
+            loop {
+                work = {
+                    let context = self.service.context();
 
-            match self.service.update(&next).await {
-                Ok(_) => {}
-                Err(err) => info!("failed to update a state: {}\nstate: {:?}", err, next),
-            };
+                    // Safety: EndState's transitions are Infallible
+                    work.next(&context).await.unwrap()
+                };
 
-            if !next.is_done() {
-                // Safety: Should only panic if `self.recv` has
-                // hanged, which at this point can't happen
-                self.send.send(next).await.unwrap();
+                match self.service.update(&work).await {
+                    Ok(_) => {}
+                    Err(err) => info!("failed to update a state: {}\nstate: {:?}", err, work),
+                };
+
+                if work.is_done() {
+                    break;
+                }
             }
         }
-        Ok(())
+        Ok(self)
     }
 }
 
@@ -141,8 +152,6 @@ pub struct GatewayService {
     sender: Mutex<Option<Sender<Work>>>,
     args: Args,
 }
-
-const DB_PATH: &'static str = "gateway.sqlite";
 
 use crate::auth::User;
 use crate::{auth::Key, AccountName};
@@ -155,16 +164,18 @@ impl GatewayService {
     pub async fn init(args: Args) -> Arc<Self> {
         let docker = Docker::connect_with_local_defaults().unwrap();
 
+        let db_uri = &args.state;
+
         let hyper = HyperClient::new();
-        if !StdPath::new(DB_PATH).exists() {
-            Sqlite::create_database(DB_PATH).await.unwrap();
+        if !StdPath::new(db_uri).exists() {
+            Sqlite::create_database(db_uri).await.unwrap();
         }
 
         info!(
             "state db: {}",
-            std::fs::canonicalize(DB_PATH).unwrap().to_string_lossy()
+            std::fs::canonicalize(db_uri).unwrap().to_string_lossy()
         );
-        let db = SqlitePool::connect(DB_PATH).await.unwrap();
+        let db = SqlitePool::connect(db_uri).await.unwrap();
 
         query("CREATE TABLE IF NOT EXISTS projects (project_name TEXT PRIMARY KEY, account_name TEXT NOT NULL, initial_key TEXT NOT NULL, project_state JSON NOT NULL)")
             .execute(&db)
@@ -176,11 +187,13 @@ impl GatewayService {
             .await
             .unwrap();
 
+        let sender = Mutex::new(None);
+
         let service = Arc::new(Self {
             docker,
             hyper,
             db,
-            sender: Mutex::new(None),
+            sender,
             args,
         });
 
@@ -247,7 +260,7 @@ impl GatewayService {
                 .await
                 .or_else(|_| Err(ErrorKind::Internal))?)
         } else {
-            Err(Error::kind(ErrorKind::Internal))
+            Err(Error::from_kind(ErrorKind::Internal))
         }
     }
 
@@ -261,7 +274,7 @@ impl GatewayService {
             .find_project(project_name)
             .await?
             .target_ip()?
-            .ok_or_else(|| Error::kind(ErrorKind::ProjectNotReady))?;
+            .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotReady))?;
 
         let control_key = self.control_key_from_project_name(project_name).await?;
 
@@ -295,7 +308,7 @@ impl GatewayService {
 
         let resp = hyper_reverse_proxy::call("127.0.0.1".parse().unwrap(), &target_url, req)
             .await
-            .map_err(|_| Error::kind(ErrorKind::ProjectUnavailable))?;
+            .map_err(|_| Error::from_kind(ErrorKind::ProjectUnavailable))?;
 
         Ok(resp)
     }
@@ -323,7 +336,7 @@ impl GatewayService {
                     .unwrap()
                     .0
             })
-            .ok_or_else(|| Error::kind(ErrorKind::ProjectNotFound))
+            .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotFound))
     }
 
     async fn update_project(
@@ -398,7 +411,19 @@ impl GatewayService {
             .bind(&name)
             .bind(&key)
             .execute(&self.db)
-            .await?;
+            .await
+            .or_else(|err| {
+                // If the error is a broken PK constraint, this is a
+                // project name clash
+                if let Some(db_err) = err.as_database_error() {
+                    if db_err.code().unwrap() == "1555" {
+                        // SQLITE_CONSTRAINT_PRIMARYKEY
+                        return Err(Error::from_kind(ErrorKind::UserAlreadyExists));
+                    }
+                }
+                // Otherwise this is internal
+                return Err(err.into());
+            })?;
         Ok(User {
             name,
             key,
@@ -454,7 +479,7 @@ impl GatewayService {
                 // project name clash
                 if let Some(db_err) = err.as_database_error() {
                     if db_err.code().unwrap() == "1555" {  // SQLITE_CONSTRAINT_PRIMARYKEY
-                        return Err(Error::kind(ErrorKind::ProjectAlreadyExists))
+                        return Err(Error::from_kind(ErrorKind::ProjectAlreadyExists))
                     }
                 }
                 // Otherwise this is internal
@@ -503,7 +528,7 @@ impl<'c> Service<'c> for Arc<GatewayService> {
     }
 
     async fn update(
-        &self,
+        &mut self,
         Work {
             project_name, work, ..
         }: &Self::State,
@@ -525,5 +550,177 @@ impl<'c> Context<'c> for GatewayContext<'c> {
 
     fn args(&self) -> &'c Args {
         self.args
+    }
+}
+
+#[cfg(test)]
+pub mod tests {
+    use anyhow::anyhow;
+
+    use std::{convert::Infallible, marker::PhantomData, time::Duration};
+
+    use crate::{
+        assert_err_kind,
+        tests::{World, WorldContext},
+    };
+
+    use super::*;
+
+    pub struct DummyService<S> {
+        world: World,
+        state: Option<S>,
+    }
+
+    impl DummyService<()> {
+        pub async fn new<S>() -> anyhow::Result<DummyService<S>> {
+            World::new()
+                .await
+                .map(|world| DummyService { world, state: None })
+        }
+    }
+
+    #[async_trait]
+    impl<'c, S> Service<'c> for DummyService<S>
+    where
+        S: EndState<'c> + Sync,
+    {
+        type Context = WorldContext<'c>;
+
+        type State = S;
+
+        type Error = Error;
+
+        fn context(&'c self) -> Self::Context {
+            self.world.context()
+        }
+
+        async fn update(&mut self, state: &Self::State) -> Result<(), Self::Error> {
+            self.state = Some(state.clone());
+            Ok(())
+        }
+    }
+
+    #[derive(Debug, PartialEq, Clone)]
+    pub struct FiniteState {
+        count: usize,
+        max_count: usize,
+    }
+
+    #[async_trait]
+    impl<'c> State<'c> for FiniteState {
+        type Next = Self;
+
+        type Error = Infallible;
+
+        async fn next<C: Context<'c>>(mut self, ctx: &C) -> Result<Self::Next, Self::Error> {
+            if self.count < self.max_count {
+                self.count += 1;
+            }
+            Ok(self)
+        }
+    }
+
+    impl<'c> EndState<'c> for FiniteState {
+        type ErrorVariant = anyhow::Error;
+
+        fn is_done(&self) -> bool {
+            self.count == self.max_count
+        }
+
+        fn into_result(self) -> Result<Self, Self::ErrorVariant> {
+            if self.count > self.max_count {
+                Err(anyhow!(
+                    "count is over max_count: {} > {}",
+                    self.count,
+                    self.max_count
+                ))
+            } else {
+                Ok(self)
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn worker_queue_and_proceed_until_done() {
+        let svc = DummyService::new::<FiniteState>().await.unwrap();
+
+        let worker = Worker::new(svc);
+
+        {
+            let sender = worker.sender();
+
+            let state = FiniteState {
+                count: 0,
+                max_count: 42,
+            };
+
+            sender.send(state).await.unwrap();
+        }
+
+        let Worker {
+            service: DummyService { state, .. },
+            ..
+        } = worker.start().await.unwrap();
+
+        assert_eq!(
+            state,
+            Some(FiniteState {
+                count: 42,
+                max_count: 42
+            })
+        )
+    }
+
+    #[tokio::test]
+    async fn service_create_find_user() -> anyhow::Result<()> {
+        let world = World::new().await?;
+        let svc = GatewayService::init(world.context().args.clone()).await;
+
+        let account_name: AccountName = "test_user_123".parse()?;
+
+        assert_err_kind!(
+            svc.user_from_account_name(account_name.clone()).await,
+            ErrorKind::UserNotFound
+        );
+
+        assert_err_kind!(
+            svc.user_from_key(Key("123".to_string())).await,
+            ErrorKind::UserNotFound
+        );
+
+        let user = svc.create_user(account_name.clone()).await?;
+
+        assert_eq!(
+            svc.user_from_account_name(account_name.clone()).await?,
+            user
+        );
+
+        assert!(!svc.is_super_user(&account_name).await?);
+
+        let User {
+            name,
+            key,
+            projects,
+        } = user;
+
+        assert!(projects.is_empty());
+
+        assert_eq!(name, account_name);
+
+        assert_err_kind!(
+            svc.create_user(account_name.clone()).await,
+            ErrorKind::UserAlreadyExists
+        );
+
+        let user_key = svc.key_from_account_name(&account_name).await?;
+
+        assert_eq!(key, user_key);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn service_create_find_destroy_project() {
+        todo!()
     }
 }

@@ -294,7 +294,7 @@ impl RequestContext {
     }
 
     pub fn get_local_config(
-        project_args: &ProjectArgs
+        project_args: &ProjectArgs,
     ) -> Result<Config<LocalConfigManager, ProjectConfig>> {
         let local_manager =
             LocalConfigManager::new(&project_args.working_directory, "Shuttle.toml".to_string());
@@ -308,7 +308,7 @@ impl RequestContext {
         }
 
         let config = project.as_mut().unwrap();
-        
+
         match (&project_args.name, &config.name) {
             // Command-line name parameter trumps everything
             (Some(name_from_args), _) => {

@@ -16,11 +16,11 @@ futures = "0.3.21"
 
 regex = "1.5.5"
 
-http = "0.2.7"
+http = "0.2.8"
 hyper = { version = "0.14.19", features = [ "stream" ] }
-axum = { version = "0.4.8", features = [ "headers" ] }
 hyper-reverse-proxy = "0.5.1"
-tower = { version = "0.4.12", features = [ "steer" ] }
+axum = { version = "0.5.8", features = [ "headers" ] }
+tower = { version = "0.4.13", features = [ "steer" ] }
 
 bollard = "0.12"
 

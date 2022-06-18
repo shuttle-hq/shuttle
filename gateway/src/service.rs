@@ -28,120 +28,13 @@ use tokio::sync::{
 use super::{Context, Error, ProjectName};
 use crate::args::Args;
 use crate::project::{self, Project};
+use crate::worker::{Work, Worker};
 use crate::{EndState, ErrorKind, Refresh, Service, State};
 
 impl From<SqlxError> for Error {
     fn from(err: SqlxError) -> Self {
         debug!("internal SQLx error: {err}");
         Self::source(ErrorKind::Internal, err)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Work<W = Project> {
-    project_name: ProjectName,
-    account_name: AccountName,
-    work: W,
-}
-
-#[async_trait]
-impl<'c, W> State<'c> for Work<W>
-where
-    W: State<'c>,
-{
-    type Next = Work<W::Next>;
-
-    type Error = W::Error;
-
-    async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error> {
-        Ok(Work::<W::Next> {
-            project_name: self.project_name,
-            account_name: self.account_name,
-            work: self.work.next(ctx).await?,
-        })
-    }
-}
-
-impl<'c, W> EndState<'c> for Work<W>
-where
-    W: EndState<'c>,
-{
-    type ErrorVariant = W::ErrorVariant;
-
-    fn is_done(&self) -> bool {
-        self.work.is_done()
-    }
-
-    fn into_result(self) -> Result<Self, Self::ErrorVariant> {
-        Ok(Self {
-            project_name: self.project_name,
-            account_name: self.account_name,
-            work: self.work.into_result()?,
-        })
-    }
-}
-
-pub struct Worker<Svc, W> {
-    pub service: Svc,
-    send: Option<Sender<W>>,
-    recv: Receiver<W>,
-}
-
-impl<Svc, W> Worker<Svc, W>
-where
-    W: Send,
-{
-    pub fn new(service: Svc) -> Self {
-        let (send, recv) = channel(256);
-        Self {
-            service,
-            send: Some(send),
-            recv,
-        }
-    }
-}
-
-impl<Svc, W> Worker<Svc, W> {
-    /// # Panics
-    /// If this worker has already been started before.
-    pub fn sender(&self) -> Sender<W> {
-        self.send.as_ref().unwrap().clone()
-    }
-}
-
-impl<Svc, W> Worker<Svc, W>
-where
-    Svc: for<'c> Service<'c, State = W, Error = Error>,
-    W: Debug + Send + for<'c> EndState<'c>,
-{
-    /// Starts the worker, waiting and processing elements from the
-    /// queue until the last sending end for the channel is dropped,
-    /// at which point this future resolves.
-    pub async fn start(mut self) -> Result<Self, Error> {
-        // Drop our sender to prevent a deadlock if this is the last
-        // one for this channel
-        let _ = self.send.take();
-
-        while let Some(mut work) = self.recv.recv().await {
-            loop {
-                work = {
-                    let context = self.service.context();
-
-                    // Safety: EndState's transitions are Infallible
-                    work.next(&context).await.unwrap()
-                };
-
-                match self.service.update(&work).await {
-                    Ok(_) => {}
-                    Err(err) => info!("failed to update a state: {}\nstate: {:?}", err, work),
-                };
-
-                if work.is_done() {
-                    break;
-                }
-            }
-        }
-        Ok(self)
     }
 }
 
@@ -161,7 +54,7 @@ impl GatewayService {
     ///
     /// * `args` - The [`Args`] with which the service was
     /// started. Will be passed as [`Context`] to workers and state.
-    pub async fn init(args: Args) -> Arc<Self> {
+    pub async fn init(args: Args) -> Self {
         let docker = Docker::connect_with_local_defaults().unwrap();
 
         let db_uri = &args.state;
@@ -189,59 +82,52 @@ impl GatewayService {
 
         let sender = Mutex::new(None);
 
-        let service = Arc::new(Self {
+        Self {
             docker,
             hyper,
             db,
             sender,
             args,
-        });
+        }
+    }
 
-        let worker = Worker::new(Arc::clone(&service));
-        let sender = worker.sender();
-        service.set_sender(Some(sender)).await;
-        tokio::spawn({
-            let service = Arc::clone(&service);
-            async move {
-                match worker.start().await {
-                    Ok(_) => info!("worker terminated successfully"),
-                    Err(err) => error!("worker error: {}", err),
-                };
-                service.set_sender(None).await;
-            }
-        });
-
-        // Queue up all the projects for reconciliation
+    /// Goes through all projects, refreshing their state and queuing
+    /// them up to be advanced if appropriate
+    pub async fn refresh(&self) -> Result<(), Error> {
         for Work {
             project_name,
             account_name,
             work,
-        } in service
-            .iter_projects()
-            .await
-            .expect("could not list projects")
+        } in self.iter_projects().await.expect("could not list projects")
         {
-            match work.refresh(&service.context()).await {
-                Ok(work) => service
+            match work.refresh(&self.context()).await {
+                Ok(work) => self
                     .send(
                         project_name,
                         account_name,
                         work,
                     )
-                    .await
-                    .expect("failed to queue work at startup"),
+                    .await?,
                 Err(err) => error!("could not refresh state for user=`{account_name}` project=`{project_name}`: {}. Skipping it for now.", err)
             }
         }
 
-        service
+        Ok(())
     }
 
+    /// Set the [`Sender`] to which [`Work`] will be submitted. If
+    /// `sender` is `None`, no further work will be submitted.
     pub async fn set_sender(&self, sender: Option<Sender<Work>>) -> Result<(), Error> {
         *self.sender.lock().await = sender;
         Ok(())
     }
 
+    /// Send [`Work`] to the [`Sender`] set with
+    /// [`set_sender`](GatewayService::set_sender).
+    ///
+    /// # Returns
+    /// If none has been set (or if the channel has been closed),
+    /// returns an [`ErrorKind::NotReady`] error.
     pub async fn send(
         &self,
         project_name: ProjectName,
@@ -254,14 +140,19 @@ impl GatewayService {
             work,
         };
 
-        if let Some(sender) = self.sender.lock().await.as_ref() {
-            Ok(sender
-                .send(work)
-                .await
-                .or_else(|_| Err(ErrorKind::Internal))?)
-        } else {
-            Err(Error::from_kind(ErrorKind::Internal))
+        let mut lock = self.sender.lock().await;
+
+        if let Some(sender) = lock.as_ref() {
+            match sender.send(work).await {
+                Ok(_) => return Ok(()),
+                Err(_) => {
+                    // receiving end was dropped or stopped
+                    *lock = None;
+                }
+            }
         }
+
+        Err(Error::from_kind(ErrorKind::NotReady))
     }
 
     pub async fn route(
@@ -441,6 +332,15 @@ impl GatewayService {
         Ok(is_super_user)
     }
 
+    pub async fn set_super_user(&self, account_name: &AccountName, value: bool) -> Result<(), Error> {
+        query("UPDATE accounts SET super_user = ?1 WHERE account_name = ?2")
+            .bind(value)
+            .bind(account_name)
+            .execute(&self.db)
+            .await?;
+        Ok(())
+    }
+
     async fn iter_user_projects(
         &self,
         AccountName(account_name): &AccountName,
@@ -557,119 +457,9 @@ impl<'c> Context<'c> for GatewayContext<'c> {
 pub mod tests {
     use anyhow::anyhow;
 
-    use std::{convert::Infallible, marker::PhantomData, time::Duration};
-
-    use crate::{
-        assert_err_kind,
-        tests::{World, WorldContext},
-    };
+    use crate::{assert_err_kind, tests::World};
 
     use super::*;
-
-    pub struct DummyService<S> {
-        world: World,
-        state: Option<S>,
-    }
-
-    impl DummyService<()> {
-        pub async fn new<S>() -> anyhow::Result<DummyService<S>> {
-            World::new()
-                .await
-                .map(|world| DummyService { world, state: None })
-        }
-    }
-
-    #[async_trait]
-    impl<'c, S> Service<'c> for DummyService<S>
-    where
-        S: EndState<'c> + Sync,
-    {
-        type Context = WorldContext<'c>;
-
-        type State = S;
-
-        type Error = Error;
-
-        fn context(&'c self) -> Self::Context {
-            self.world.context()
-        }
-
-        async fn update(&mut self, state: &Self::State) -> Result<(), Self::Error> {
-            self.state = Some(state.clone());
-            Ok(())
-        }
-    }
-
-    #[derive(Debug, PartialEq, Clone)]
-    pub struct FiniteState {
-        count: usize,
-        max_count: usize,
-    }
-
-    #[async_trait]
-    impl<'c> State<'c> for FiniteState {
-        type Next = Self;
-
-        type Error = Infallible;
-
-        async fn next<C: Context<'c>>(mut self, ctx: &C) -> Result<Self::Next, Self::Error> {
-            if self.count < self.max_count {
-                self.count += 1;
-            }
-            Ok(self)
-        }
-    }
-
-    impl<'c> EndState<'c> for FiniteState {
-        type ErrorVariant = anyhow::Error;
-
-        fn is_done(&self) -> bool {
-            self.count == self.max_count
-        }
-
-        fn into_result(self) -> Result<Self, Self::ErrorVariant> {
-            if self.count > self.max_count {
-                Err(anyhow!(
-                    "count is over max_count: {} > {}",
-                    self.count,
-                    self.max_count
-                ))
-            } else {
-                Ok(self)
-            }
-        }
-    }
-
-    #[tokio::test]
-    async fn worker_queue_and_proceed_until_done() {
-        let svc = DummyService::new::<FiniteState>().await.unwrap();
-
-        let worker = Worker::new(svc);
-
-        {
-            let sender = worker.sender();
-
-            let state = FiniteState {
-                count: 0,
-                max_count: 42,
-            };
-
-            sender.send(state).await.unwrap();
-        }
-
-        let Worker {
-            service: DummyService { state, .. },
-            ..
-        } = worker.start().await.unwrap();
-
-        assert_eq!(
-            state,
-            Some(FiniteState {
-                count: 42,
-                max_count: 42
-            })
-        )
-    }
 
     #[tokio::test]
     async fn service_create_find_user() -> anyhow::Result<()> {

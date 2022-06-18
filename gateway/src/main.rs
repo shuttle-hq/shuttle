@@ -120,6 +120,7 @@ use crate::api::make_api;
 use crate::args::Args;
 use crate::proxy::make_proxy;
 use crate::service::GatewayService;
+use crate::worker::Worker;
 
 pub mod api;
 pub mod args;
@@ -127,6 +128,7 @@ pub mod auth;
 pub mod project;
 pub mod proxy;
 pub mod service;
+pub mod worker;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorKind {
@@ -144,6 +146,7 @@ pub enum ErrorKind {
     ProjectUnavailable,
     InvalidOperation,
     Internal,
+    NotReady,
 }
 
 impl std::fmt::Display for ErrorKind {
@@ -204,7 +207,7 @@ impl IntoResponse for Error {
     fn into_response(self) -> Response {
         let (status, error_message) = match self.kind {
             ErrorKind::Internal => (StatusCode::INTERNAL_SERVER_ERROR, "internal server error"),
-            ErrorKind::KeyMissing => (StatusCode::BAD_REQUEST, "request is missing a key"),
+            ErrorKind::KeyMissing => (StatusCode::UNAUTHORIZED, "request is missing a key"),
             ErrorKind::KeyMalformed => (StatusCode::BAD_REQUEST, "request has an invalid key"),
             ErrorKind::BadHost => (StatusCode::BAD_REQUEST, "the 'Host' header is invalid"),
             ErrorKind::UserNotFound => (StatusCode::NOT_FOUND, "user not found"),
@@ -225,6 +228,7 @@ impl IntoResponse for Error {
             ),
             ErrorKind::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
             ErrorKind::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
+            ErrorKind::NotReady => (StatusCode::INTERNAL_SERVER_ERROR, "not ready yet"),
         };
         (status, Json(json!({ "error": error_message }))).into_response()
     }
@@ -406,7 +410,22 @@ async fn main() -> io::Result<()> {
 
     let args = Args::parse();
 
-    let gateway = GatewayService::init(args.clone()).await;
+    let gateway = Arc::new(GatewayService::init(args.clone()).await);
+
+    let worker = Worker::new(Arc::clone(&gateway));
+    gateway.set_sender(Some(worker.sender())).await;
+    gateway
+        .refresh()
+        .map_err(|err| error!("failed to refresh state at startup: {err}"))
+        .await
+        .unwrap();
+
+    let worker_handle = tokio::spawn(
+        worker
+            .start()
+            .map_ok(|_| info!("worker terminated successfully"))
+            .map_err(|err| error!("worker error: {}", err)),
+    );
 
     let api = make_api(Arc::clone(&gateway));
 
@@ -416,7 +435,7 @@ async fn main() -> io::Result<()> {
 
     let proxy_handle = tokio::spawn(hyper::Server::bind(&args.user).serve(proxy));
 
-    tokio::join!(api_handle, proxy_handle);
+    tokio::join!(worker_handle, api_handle, proxy_handle);
 
     Ok(())
 }

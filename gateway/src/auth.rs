@@ -23,6 +23,12 @@ use crate::{Error, ErrorKind, ProjectName, AccountName};
 #[sqlx(transparent)]
 pub struct Key(pub String);
 
+impl Key {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 #[async_trait]
 impl<B> FromRequest<B> for Key
 where
@@ -35,6 +41,12 @@ where
             .await
             .map_err(|_| Error::from(ErrorKind::KeyMissing))
             .and_then(|TypedHeader(Authorization(basic))| basic.password().parse())
+    }
+}
+
+impl std::fmt::Display for Key {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 

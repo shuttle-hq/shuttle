@@ -90,5 +90,73 @@ pub fn make_api(service: Arc<GatewayService>) -> Router<Body> {
 
 #[cfg(test)]
 pub mod tests {
-    
+    use std::sync::Arc;
+
+    use tokio::sync::mpsc::channel;
+
+    use tower::Service;
+    use axum::{body::{Body, HttpBody}, http::Request, headers::{Header, Authorization, authorization::Basic}};
+
+    use super::*;
+
+    use crate::{tests::World, service::GatewayService, worker::Work};
+
+    #[tokio::test]
+    async fn api_create_get_delete_project() -> anyhow::Result<()> {
+        let world = World::new().await?;
+        let service = Arc::new(GatewayService::init(world.context().args.clone()).await);
+
+        let (sender, receiver) = channel::<Work>(256);
+        service.set_sender(Some(sender));
+
+        let mut router = make_api(Arc::clone(&service));
+
+        let req = Request::builder()
+            .method("GET")
+            .uri("/users/neo")
+            .body(Body::empty())
+            .unwrap();
+        let mut resp = router.call(req).await?;
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+
+        let user = service.create_user("neo".parse().unwrap()).await?;
+
+        let req = Request::builder()
+            .method("GET")
+            .uri("/users/neo")
+            .body(Body::empty())
+            .unwrap();
+        let resp = router.call(req).await?;
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+
+        let mut values = vec![];
+        let header = Authorization::basic("", user.key.as_str());
+        header.encode(&mut values);
+        let value = values.pop().unwrap();
+        let req = Request::builder()
+            .method("GET")
+            .uri("/users/neo")
+            .header(Authorization::<Basic>::name(), value)
+            .body(Body::empty())
+            .unwrap();
+        let resp = router.call(req).await?;
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+
+        service.set_super_user(&user.name, true).await?;
+
+        let mut values = vec![];
+        let header = Authorization::basic("", user.key.as_str());
+        header.encode(&mut values);
+        let value = values.pop().unwrap();
+        let req = Request::builder()
+            .method("GET")
+            .uri("/users/neo")
+            .header(Authorization::<Basic>::name(), value)
+            .body(Body::empty())
+            .unwrap();
+        let resp = router.call(req).await?;
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        Ok(())
+    }
 }

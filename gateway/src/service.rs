@@ -120,7 +120,7 @@ where
     pub async fn start(mut self) -> Result<Self, Error> {
         // Drop our sender to prevent a deadlock if this is the last
         // one for this channel
-        self.send = None;
+        let _ = self.send.take();
 
         while let Some(mut work) = self.recv.recv().await {
             loop {
@@ -477,8 +477,8 @@ impl GatewayService {
             .or_else(|err| {
                 // If the error is a broken PK constraint, this is a
                 // project name clash
-                if let Some(db_err) = err.as_database_error() {
-                    if db_err.code().unwrap() == "1555" {  // SQLITE_CONSTRAINT_PRIMARYKEY
+                if let Some(db_err_code) = err.as_database_error().and_then(DatabaseError::code) {
+                    if db_err_code == "1555" {  // SQLITE_CONSTRAINT_PRIMARYKEY
                         return Err(Error::from_kind(ErrorKind::ProjectAlreadyExists))
                     }
                 }
@@ -717,10 +717,5 @@ pub mod tests {
         assert_eq!(key, user_key);
 
         Ok(())
-    }
-
-    #[tokio::test]
-    async fn service_create_find_destroy_project() {
-        todo!()
     }
 }

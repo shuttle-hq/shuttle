@@ -87,3 +87,8 @@ pub fn make_api(service: Arc<GatewayService>) -> Router<Body> {
         .route("/projects/:project/*any", any(route_project))
         .layer(Extension(service))
 }
+
+#[cfg(test)]
+pub mod tests {
+    
+}

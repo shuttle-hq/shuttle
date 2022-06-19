@@ -26,7 +26,7 @@ async fn main() {
     let addr = SocketAddr::from(([127, 0, 0, 1], 8001));
 
     let persistence = Persistence::new().await;
-    let deployment_manager = DeploymentManager::new(persistence.clone(), 4);
+    let deployment_manager = DeploymentManager::new(persistence.clone());
 
     let router = handlers::make_router(persistence, deployment_manager);
     let make_service = router.into_make_service();

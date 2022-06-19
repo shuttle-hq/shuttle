@@ -1,19 +1,11 @@
 use super::{DeploymentState, KillReceiver, KillSender, RunReceiver};
 use crate::persistence::Persistence;
 
-pub async fn task(
-    ident: usize,
-    mut recv: RunReceiver,
-    kill_send: KillSender,
-    persistence: Persistence,
-) {
-    log::info!("Run task {ident} started");
+pub async fn task(mut recv: RunReceiver, kill_send: KillSender, persistence: Persistence) {
+    log::info!("Run task started");
 
     while let Some(built) = recv.recv().await {
-        log::info!(
-            "Built deployment at the front of run queue {ident}: {}",
-            built.name
-        );
+        log::info!("Built deployment at the front of run queue: {}", built.name);
 
         tokio::spawn(built.handle(kill_send.subscribe(), persistence.clone()));
     }

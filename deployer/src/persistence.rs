@@ -65,15 +65,15 @@ impl Persistence {
             .map_err(Into::into)
     }
 
-    pub async fn get_deployment(&self, name: &str) -> Result<DeploymentInfo> {
+    pub async fn get_deployment(&self, name: &str) -> Result<Option<DeploymentInfo>> {
         sqlx::query_as("SELECT * FROM deployments WHERE name = ?")
             .bind(name)
-            .fetch_one(&self.pool)
+            .fetch_optional(&self.pool)
             .await
             .map_err(Into::into)
     }
 
-    pub async fn delete_deployment(&self, name: &str) -> Result<DeploymentInfo> {
+    pub async fn delete_deployment(&self, name: &str) -> Result<Option<DeploymentInfo>> {
         let info = self.get_deployment(name).await?;
 
         let _ = sqlx::query("DELETE FROM deployments WHERE name = ?")
@@ -116,7 +116,7 @@ mod tests {
         };
 
         p.update_deployment(info.clone()).await.unwrap();
-        assert_eq!(p.get_deployment("abc").await.unwrap(), info);
+        assert_eq!(p.get_deployment("abc").await.unwrap().unwrap(), info);
 
         p.update_deployment(&Built {
             name: "abc".to_string(),
@@ -125,7 +125,7 @@ mod tests {
         .await
         .unwrap();
         info.state = DeploymentState::Built;
-        assert_eq!(p.get_deployment("abc").await.unwrap(), info);
+        assert_eq!(p.get_deployment("abc").await.unwrap().unwrap(), info);
     }
 
     #[tokio::test]
@@ -170,8 +170,8 @@ mod tests {
         })
         .await
         .unwrap();
-        assert!(p.get_deployment("x").await.is_ok()); // TODO: is_some
+        assert!(p.get_deployment("x").await.unwrap().is_some());
         p.delete_deployment("x").await.unwrap();
-        assert!(p.get_deployment("x").await.is_err());
+        assert!(p.get_deployment("x").await.unwrap().is_none());
     }
 }

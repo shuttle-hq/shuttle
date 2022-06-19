@@ -31,7 +31,7 @@ async fn list_services(
 async fn get_service(
     Extension(persistence): Extension<Persistence>,
     Path(name): Path<String>,
-) -> Result<Json<DeploymentInfo>> {
+) -> Result<Json<Option<DeploymentInfo>>> {
     persistence.get_deployment(&name).await.map(Json)
 }
 
@@ -58,7 +58,7 @@ async fn delete_service(
     Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
     Path(name): Path<String>,
-) -> Result<Json<DeploymentInfo>> {
+) -> Result<Json<Option<DeploymentInfo>>> {
     let old_info = persistence.delete_deployment(&name).await?;
     deployment_manager.kill(name).await;
 

@@ -24,10 +24,16 @@ impl Persistence {
         }
 
         let pool = SqlitePool::connect(DB_PATH).await.unwrap();
+        Self::from_pool(pool).await
+    }
 
-        // TODO: Consider indices/keys.
-        // TODO: Is having a separate table for active deployments necessary?
+    #[allow(dead_code)]
+    async fn new_in_memory() -> Self {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        Self::from_pool(pool).await
+    }
 
+    async fn from_pool(pool: SqlitePool) -> Self {
         sqlx::query("
             CREATE TABLE IF NOT EXISTS deployments (
                 name TEXT PRIMARY KEY, -- Name of the service being deployed.
@@ -92,5 +98,80 @@ impl Persistence {
             .fetch_all(&self.pool)
             .await
             .map_err(Into::into)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::deployment::Built;
+
+    #[tokio::test]
+    async fn deployment_updates() {
+        let p = Persistence::new_in_memory().await;
+
+        let mut info = DeploymentInfo {
+            name: "abc".to_string(),
+            state: DeploymentState::Queued,
+        };
+
+        p.update_deployment(info.clone()).await.unwrap();
+        assert_eq!(p.get_deployment("abc").await.unwrap(), info);
+
+        p.update_deployment(&Built {
+            name: "abc".to_string(),
+            state: DeploymentState::Built,
+        })
+        .await
+        .unwrap();
+        info.state = DeploymentState::Built;
+        assert_eq!(p.get_deployment("abc").await.unwrap(), info);
+    }
+
+    #[tokio::test]
+    async fn fetching_runnable_deployments() {
+        let p = Persistence::new_in_memory().await;
+
+        for info in [
+            DeploymentInfo {
+                name: "abc".to_string(),
+                state: DeploymentState::Queued,
+            },
+            DeploymentInfo {
+                name: "foo".to_string(),
+                state: DeploymentState::Built,
+            },
+            DeploymentInfo {
+                name: "bar".to_string(),
+                state: DeploymentState::Running,
+            },
+            DeploymentInfo {
+                name: "def".to_string(),
+                state: DeploymentState::Building,
+            },
+        ] {
+            p.update_deployment(info).await.unwrap();
+        }
+
+        let runnable = p.get_all_runnable_deployments().await.unwrap();
+        assert!(!runnable.iter().any(|x| x.name == "abc"));
+        assert!(runnable.iter().any(|x| x.name == "foo"));
+        assert!(runnable.iter().any(|x| x.name == "bar"));
+        assert!(!runnable.iter().any(|x| x.name == "def"));
+    }
+
+    #[tokio::test]
+    async fn deployment_deletion() {
+        let p = Persistence::new_in_memory().await;
+
+        p.update_deployment(DeploymentInfo {
+            name: "x".to_string(),
+            state: DeploymentState::Running,
+        })
+        .await
+        .unwrap();
+        assert!(p.get_deployment("x").await.is_ok()); // TODO: is_some
+        p.delete_deployment("x").await.unwrap();
+        assert!(p.get_deployment("x").await.is_err());
     }
 }

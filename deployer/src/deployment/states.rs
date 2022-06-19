@@ -1,6 +1,6 @@
 use std::fmt;
 
-#[derive(sqlx::Type, serde::Serialize, Debug, Clone, Copy)]
+#[derive(sqlx::Type, serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 #[repr(i32)]
 pub enum DeploymentState {

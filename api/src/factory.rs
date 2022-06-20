@@ -1,25 +1,24 @@
 use async_trait::async_trait;
-use proto::provisioner::{provisioner_client::ProvisionerClient, DatabaseRequest};
+use proto::provisioner::{
+    database_request::DbType, provisioner_client::ProvisionerClient, DatabaseRequest,
+};
 use shuttle_common::{project::ProjectName, DatabaseReadyInfo};
-use shuttle_service::Factory;
+use shuttle_service::{database::Type, Factory};
 use tonic::{transport::Channel, Request};
 
 pub(crate) struct ShuttleFactory {
     project_name: ProjectName,
     provisioner_client: ProvisionerClient<Channel>,
-    provisioner_address: String,
     info: Option<DatabaseReadyInfo>,
 }
 
 impl ShuttleFactory {
     pub(crate) fn new(
         provisioner_client: ProvisionerClient<Channel>,
-        provisioner_address: String,
         project_name: ProjectName,
     ) -> Self {
         Self {
             provisioner_client,
-            provisioner_address,
             project_name,
             info: None,
         }
@@ -32,13 +31,19 @@ impl ShuttleFactory {
 
 #[async_trait]
 impl Factory for ShuttleFactory {
-    async fn get_sql_connection_string(&mut self) -> Result<String, shuttle_service::Error> {
+    async fn get_sql_connection_string(
+        &mut self,
+        db_type: Type,
+    ) -> Result<String, shuttle_service::Error> {
         if let Some(ref info) = self.info {
-            return Ok(info.connection_string(&self.provisioner_address));
+            return Ok(info.connection_string_private());
         }
+
+        let db_type: DbType = db_type.into();
 
         let request = Request::new(DatabaseRequest {
             project_name: self.project_name.to_string(),
+            db_type: Some(db_type),
         });
 
         let response = self
@@ -49,7 +54,7 @@ impl Factory for ShuttleFactory {
             .into_inner();
 
         let info: DatabaseReadyInfo = response.into();
-        let conn_str = info.connection_string(&self.provisioner_address);
+        let conn_str = info.connection_string_private();
         self.info = Some(info);
 
         debug!("giving a sql connection string: {}", conn_str);

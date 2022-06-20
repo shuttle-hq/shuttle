@@ -49,11 +49,11 @@ resource "aws_efs_file_system" "user_data" {
 resource "aws_efs_mount_target" "user_data_a" {
   file_system_id  = aws_efs_file_system.user_data.id
   subnet_id       = aws_subnet.backend_a.id
-  security_groups = [aws_security_group.unreasonable.id]
+  security_groups = [aws_default_security_group.default.id]
 }
 
 resource "aws_efs_mount_target" "user_data_b" {
   file_system_id  = aws_efs_file_system.user_data.id
   subnet_id       = aws_subnet.backend_b.id
-  security_groups = [aws_security_group.unreasonable.id]
+  security_groups = [aws_default_security_group.default.id]
 }

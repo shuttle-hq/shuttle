@@ -8,29 +8,29 @@ resource "aws_internet_gateway" "public" {
   vpc_id = aws_vpc.backend.id
 }
 
-resource "aws_network_acl" "unreasonable" {
-  vpc_id = aws_vpc.backend.id
-
-  egress {
-    protocol   = "tcp"
-    rule_no    = 100
-    action     = "allow"
-    cidr_block = "10.0.0.0/16"
-    from_port  = 0
-    to_port    = 65535
-  }
-
-  ingress {
-    protocol   = "tcp"
-    rule_no    = 100
-    action     = "allow"
-    cidr_block = "10.0.0.0/16"
-    from_port  = 0
-    to_port    = 65535
-  }
+resource "aws_network_acl_rule" "postgres" {
+  network_acl_id = aws_vpc.backend.default_network_acl_id
+  rule_number    = 10
+  egress         = false
+  protocol       = "tcp"
+  rule_action    = "allow"
+  cidr_block     = "0.0.0.0/0"
+  from_port      = 5432
+  to_port        = 5432
 }
 
-resource "aws_security_group" "unreasonable" {
+resource "aws_network_acl_rule" "mysql" {
+  network_acl_id = aws_vpc.backend.default_network_acl_id
+  rule_number    = 11
+  egress         = false
+  protocol       = "tcp"
+  rule_action    = "allow"
+  cidr_block     = "0.0.0.0/0"
+  from_port      = 3306
+  to_port        = 3306
+}
+
+resource "aws_default_security_group" "default" {
   vpc_id = aws_vpc.backend.id
 
   ingress {

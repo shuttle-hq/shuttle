@@ -1,12 +1,12 @@
 #[macro_use]
 extern crate rocket;
 
-use shuttle_service::SecretStore;
-use shuttle_service::error::CustomError;
 use rocket::response::status::BadRequest;
 use rocket::serde::json::Json;
 use rocket::State;
 use serde::{Deserialize, Serialize};
+use shuttle_service::error::CustomError;
+use shuttle_service::SecretStore;
 use sqlx::{Executor, FromRow, PgPool};
 
 #[get("/<id>")]
@@ -37,7 +37,11 @@ async fn add(
 #[get("/secret")]
 async fn secret(state: &State<MyState>) -> Result<String, BadRequest<String>> {
     // get secret defined in `Secrets.toml` file.
-    state.pool.get_secret("MY_API_KEY").await.map_err(|e| BadRequest(Some(e.to_string())))
+    state
+        .pool
+        .get_secret("MY_API_KEY")
+        .await
+        .map_err(|e| BadRequest(Some(e.to_string())))
 }
 
 struct MyState {
@@ -45,7 +49,7 @@ struct MyState {
 }
 
 #[shuttle_service::main]
-async fn rocket(pool: PgPool) -> shuttle_service::ShuttleRocket {
+async fn rocket(#[shared::Postgres] pool: PgPool) -> shuttle_service::ShuttleRocket {
     pool.get_secret("MY_API_KEY").await.expect("could not access secret from `Secrets.toml` in main function");
 
     pool.execute(include_str!("../schema.sql"))

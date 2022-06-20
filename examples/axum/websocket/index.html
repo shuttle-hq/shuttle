@@ -36,7 +36,7 @@
          const button = document.querySelector("button");
 
          function track() {
-             const websocket = new WebSocket(`ws://${window.location.host}/websocket`);
+             const websocket = new WebSocket(`wss://${window.location.host}/websocket`);
 
              websocket.onopen = () => {
                  console.log("connection opened");

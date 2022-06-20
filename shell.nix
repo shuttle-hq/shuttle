@@ -19,6 +19,8 @@ in
       websocat
       protobuf
       grpcurl
+      gh
+      docker-compose
     ];
 
     PROTOC = "${protobuf}/bin/protoc";

@@ -18,9 +18,9 @@ use shuttle_common::project::ProjectName;
 use shuttle_common::{
     DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, LogItem, Port,
 };
-use shuttle_service::loader::Loader;
+use shuttle_service::{loader::Loader, shared};
 use shuttle_service::logger::Log;
-use shuttle_service::{Factory, GetResource, SecretStore, ServeHandle};
+use shuttle_service::{Factory, ResourceBuilder, SecretStore, ServeHandle};
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::{mpsc, RwLock};
@@ -169,14 +169,11 @@ impl Deployment {
 
                     let mut factory = ShuttleFactory::new(
                         context.provisioner_client.clone(),
-                        context.provisioner_address.clone(),
                         meta.project.clone(),
                     );
 
                     let secrets_set = if !loaded.initial_secrets.is_empty() {
-                        match (&mut factory as &mut dyn Factory)
-                            .get_resource(&DB_ACCESS_RUNTIME)
-                            .await
+                        match shared::Postgres::new().build(&mut factory, &DB_ACCESS_RUNTIME).await
                         {
                             Ok(db_pool) => {
                                 let mut res = Ok(());
@@ -334,7 +331,6 @@ pub(crate) struct DeploymentSystem {
     job_queue: JobQueue,
     router: Arc<Router>,
     fqdn: String,
-    pub(crate) provisioner_address: String,
 }
 
 const JOB_QUEUE_SIZE: usize = 200;
@@ -385,7 +381,6 @@ pub(crate) struct Context {
     build_system: Box<dyn BuildSystem>,
     deployments: Arc<RwLock<Deployments>>,
     provisioner_client: ProvisionerClient<Channel>,
-    provisioner_address: String,
 }
 
 impl DeploymentSystem {
@@ -429,7 +424,6 @@ impl DeploymentSystem {
             build_system,
             deployments: deployments.clone(),
             provisioner_client,
-            provisioner_address: provisioner_address.clone(),
         };
 
         let job_queue = JobQueue::new(context, tx).await;
@@ -445,7 +439,6 @@ impl DeploymentSystem {
             job_queue,
             router,
             fqdn,
-            provisioner_address,
         }
     }
 

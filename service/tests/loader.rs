@@ -1,15 +1,19 @@
-use std::net::{Ipv4Addr, SocketAddr};
-use std::process::{exit, Command};
-use std::time::Duration;
-
 mod helpers;
 
+use helpers::{build_so_create_loader, PostgresInstance};
+
+use shuttle_service::loader::LoaderError;
+use shuttle_service::{database, Error, Factory};
+
+use std::net::{Ipv4Addr, SocketAddr};
+use std::process::exit;
+use std::time::Duration;
+
 use async_trait::async_trait;
-use helpers::PostgresInstance;
-use shuttle_service::loader::{Loader, LoaderError};
-use shuttle_service::{Error, Factory};
 use tokio::sync::mpsc;
 use uuid::Uuid;
+
+const RESOURCES_PATH: &str = "tests/resources";
 
 struct DummyFactory {
     postgres_instance: Option<PostgresInstance>,
@@ -25,7 +29,7 @@ impl DummyFactory {
 
 #[async_trait]
 impl Factory for DummyFactory {
-    async fn get_sql_connection_string(&mut self) -> Result<String, Error> {
+    async fn get_sql_connection_string(&mut self, _: database::Type) -> Result<String, Error> {
         let uri = if let Some(postgres_instance) = &self.postgres_instance {
             postgres_instance.get_uri()
         } else {
@@ -43,33 +47,13 @@ impl Factory for DummyFactory {
 
 #[test]
 fn not_shuttle() {
-    Command::new("cargo")
-        .args(["build", "--release"])
-        .current_dir("tests/resources/not-shuttle")
-        .spawn()
-        .unwrap()
-        .wait()
-        .unwrap();
-
-    let result =
-        Loader::from_so_file("tests/resources/not-shuttle/target/release/libnot_shuttle.so");
-
+    let result = build_so_create_loader(RESOURCES_PATH, "not-shuttle");
     assert!(matches!(result, Err(LoaderError::GetEntrypoint(_))));
 }
 
 #[tokio::test]
 async fn sleep_async() {
-    Command::new("cargo")
-        .args(["build", "--release"])
-        .current_dir("tests/resources/sleep-async")
-        .spawn()
-        .unwrap()
-        .wait()
-        .unwrap();
-
-    let loader =
-        Loader::from_so_file("tests/resources/sleep-async/target/release/libsleep_async.so")
-            .unwrap();
+    let loader = build_so_create_loader(RESOURCES_PATH, "sleep-async").unwrap();
 
     let mut factory = DummyFactory::new();
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
@@ -96,15 +80,7 @@ async fn sleep_async() {
 
 #[tokio::test]
 async fn sleep() {
-    Command::new("cargo")
-        .args(["build", "--release"])
-        .current_dir("tests/resources/sleep")
-        .spawn()
-        .unwrap()
-        .wait()
-        .unwrap();
-
-    let loader = Loader::from_so_file("tests/resources/sleep/target/release/libsleep.so").unwrap();
+    let loader = build_so_create_loader(RESOURCES_PATH, "sleep").unwrap();
 
     let mut factory = DummyFactory::new();
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
@@ -131,16 +107,7 @@ async fn sleep() {
 
 #[tokio::test]
 async fn sqlx_pool() {
-    Command::new("cargo")
-        .args(["build", "--release"])
-        .current_dir("tests/resources/sqlx-pool")
-        .spawn()
-        .unwrap()
-        .wait()
-        .unwrap();
-
-    let loader =
-        Loader::from_so_file("tests/resources/sqlx-pool/target/release/libsqlx_pool.so").unwrap();
+    let loader = build_so_create_loader(RESOURCES_PATH, "sqlx-pool").unwrap();
 
     // Don't initialize a pre-existing PostgresInstance here because the `PostgresInstance::wait_for_connectable()`
     // code has `awaits` and we want to make sure they do not block inside `Service::build()`.
@@ -167,4 +134,36 @@ async fn sqlx_pool() {
     );
     assert_eq!(log.item.target, "sqlx::query");
     assert_eq!(log.item.level, log::Level::Info);
+}
+
+#[tokio::test]
+async fn build_panic() {
+    let loader = build_so_create_loader(RESOURCES_PATH, "build-panic").unwrap();
+
+    let mut factory = DummyFactory::new();
+    let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
+    let deployment_id = Uuid::new_v4();
+    let (tx, _) = mpsc::unbounded_channel();
+
+    if let Err(Error::BuildPanic(msg)) = loader.load(&mut factory, addr, tx, deployment_id).await {
+        assert_eq!(&msg, "panic in build");
+    } else {
+        panic!("expected `Err(Error::BuildPanic(_))`");
+    }
+}
+
+#[tokio::test]
+async fn bind_panic() {
+    let loader = build_so_create_loader(RESOURCES_PATH, "bind-panic").unwrap();
+
+    let mut factory = DummyFactory::new();
+    let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
+    let deployment_id = Uuid::new_v4();
+    let (tx, _) = mpsc::unbounded_channel();
+
+    if let Err(Error::BindPanic(msg)) = loader.load(&mut factory, addr, tx, deployment_id).await {
+        assert_eq!(&msg, "panic in bind");
+    } else {
+        panic!("expected `Err(Error::BindPanic(_))`");
+    }
 }

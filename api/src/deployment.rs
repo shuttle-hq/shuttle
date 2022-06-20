@@ -18,9 +18,9 @@ use shuttle_common::project::ProjectName;
 use shuttle_common::{
     DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, LogItem, Port,
 };
-use shuttle_service::{loader::Loader, shared};
 use shuttle_service::logger::Log;
-use shuttle_service::{Factory, ResourceBuilder, SecretStore, ServeHandle};
+use shuttle_service::{loader::Loader, shared};
+use shuttle_service::{ResourceBuilder, SecretStore, ServeHandle};
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::{mpsc, RwLock};

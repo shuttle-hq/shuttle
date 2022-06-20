@@ -542,7 +542,7 @@ pub mod tests {
         let neo: AccountName = "neo".parse().unwrap();
         let matrix: ProjectName = "matrix".parse().unwrap();
 
-        let matches_project_name = |project: &Project, project_name: &ProjectName| {
+        let creating_same_project_name = |project: &Project, project_name: &ProjectName| {
             matches!(
                 project,
                 Project::Creating(creating) if creating.project_name() == project_name
@@ -556,7 +556,7 @@ pub mod tests {
             move |work| {
                 let matrix = matrix.clone();
                 async move {
-                    assert!(matches_project_name(&work.work, &matrix));
+                    assert!(creating_same_project_name(&work.work, &matrix));
                 }
             }
         })
@@ -567,7 +567,7 @@ pub mod tests {
             .await
             .unwrap();
 
-        assert!(matches_project_name(&project, &matrix));
+        assert!(creating_same_project_name(&project, &matrix));
 
         assert_eq!(svc.find_project(&matrix).await.unwrap(), project);
 

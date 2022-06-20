@@ -281,7 +281,11 @@ impl Shuttle {
         let cargo_path = project_args.working_directory.join("Cargo.toml");
         let cargo_doc = read_to_string(cargo_path.clone())?.parse::<Document>()?;
         let current_shuttle_version = &cargo_doc["dependencies"]["shuttle-service"]["version"];
-        let service_semver = Version::parse(current_shuttle_version.as_str().unwrap())?;
+        let service_semver = match Version::parse(current_shuttle_version.as_str().unwrap()) {
+            Ok(version) => version,
+            Err(error) => return Err(anyhow!("You shuttle-service version ({}) is invalid and should follow the MAJOR.MINOR.PATCH semantic versioning format. Error given: {:?}", current_shuttle_version.as_str().unwrap(), error.to_string())),
+        };
+
         let server_version = client::shuttle_version(self.ctx.api_url()).await?;
         let server_version = Version::parse(&server_version)?;
 

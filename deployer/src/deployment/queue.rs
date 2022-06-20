@@ -13,12 +13,18 @@ pub async fn task(mut recv: QueueReceiver, run_send: RunSender, persistence: Per
     log::info!("Queue task started");
 
     while let Some(queued) = recv.recv().await {
-        log::info!(
-            "Queued deployment at the front of the queue: {}",
-            queued.name
-        );
+        let name = queued.name.clone();
 
-        tokio::spawn(queued.handle(run_send.clone(), persistence.clone()));
+        log::info!("Queued deployment at the front of the queue: {}", name);
+
+        let run_send_cloned = run_send.clone();
+        let persistence_cloned = persistence.clone();
+
+        tokio::spawn(async move {
+            if let Err(e) = queued.handle(run_send_cloned, persistence_cloned).await {
+                log::error!("Error during building of deployment '{}' - {e}", name);
+            }
+        });
     }
 }
 
@@ -29,17 +35,17 @@ pub struct Queued {
 }
 
 impl Queued {
-    async fn handle(mut self, run_send: RunSender, persistence: Persistence) {
+    async fn handle(mut self, run_send: RunSender, persistence: Persistence) -> Result<()> {
         // Update deployment state:
 
         self.state = DeploymentState::Building;
 
-        persistence.update_deployment(&self).await.expect("TODO");
+        persistence.update_deployment(&self).await?;
 
         // Read POSTed data:
 
         while let Some(chunk) = self.data_stream.next().await {
-            let chunk = chunk.expect("TODO");
+            let chunk = chunk?;
             log::debug!("{} - streamed {} bytes", self.name, chunk.len());
         }
 
@@ -54,11 +60,13 @@ impl Queued {
             state: DeploymentState::Built,
         };
 
-        persistence.update_deployment(&built).await.expect("TODO");
+        persistence.update_deployment(&built).await?;
 
         // Send to run queue:
 
         run_send.send(built).await.unwrap();
+
+        Ok(())
     }
 }
 

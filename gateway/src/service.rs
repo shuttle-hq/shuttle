@@ -145,7 +145,8 @@ impl GatewayService {
         if let Some(sender) = lock.as_ref() {
             match sender.send(work).await {
                 Ok(_) => return Ok(()),
-                Err(_) => {
+                Err(err) => {
+                    error!("work send error: {err}");
                     // receiving end was dropped or stopped
                     *lock = None;
                 }
@@ -332,7 +333,11 @@ impl GatewayService {
         Ok(is_super_user)
     }
 
-    pub async fn set_super_user(&self, account_name: &AccountName, value: bool) -> Result<(), Error> {
+    pub async fn set_super_user(
+        &self,
+        account_name: &AccountName,
+        value: bool,
+    ) -> Result<(), Error> {
         query("UPDATE accounts SET super_user = ?1 WHERE account_name = ?2")
             .bind(value)
             .bind(account_name)
@@ -455,9 +460,13 @@ impl<'c> Context<'c> for GatewayContext<'c> {
 
 #[cfg(test)]
 pub mod tests {
-    use anyhow::anyhow;
+    use futures::Future;
+    use tokio::task::JoinHandle;
 
-    use crate::{assert_err_kind, tests::World};
+    use anyhow::anyhow;
+    use tokio::sync::mpsc::unbounded_channel;
+
+    use crate::{assert_err_kind, project::ProjectCreating, tests::World};
 
     use super::*;
 
@@ -505,6 +514,88 @@ pub mod tests {
         let user_key = svc.key_from_account_name(&account_name).await?;
 
         assert_eq!(key, user_key);
+
+        Ok(())
+    }
+
+    async fn capture_work<S, C, Fut>(svc: S, mut capture: C) -> JoinHandle<()>
+    where
+        S: AsRef<GatewayService>,
+        C: FnMut(Work) -> Fut + Send + 'static,
+        Fut: Future<Output = ()> + Send,
+    {
+        let (sender, mut receiver) = channel::<Work>(256);
+        let handle = tokio::spawn(async move {
+            while let Some(work) = receiver.recv().await {
+                capture(work).await
+            }
+        });
+        svc.as_ref().set_sender(Some(sender)).await.unwrap();
+        handle
+    }
+
+    #[tokio::test]
+    async fn service_create_find_delete_project() -> anyhow::Result<()> {
+        let world = World::new().await?;
+        let svc = Arc::new(GatewayService::init(world.context().args.clone()).await);
+
+        let neo: AccountName = "neo".parse().unwrap();
+        let matrix: ProjectName = "matrix".parse().unwrap();
+
+        let matches_project_name = |project: &Project, project_name: &ProjectName| {
+            matches!(
+                project,
+                Project::Creating(creating) if creating.project_name() == project_name
+            )
+        };
+
+        svc.create_user(neo.clone()).await.unwrap();
+
+        capture_work(&svc, {
+            let matrix = matrix.clone();
+            move |work| {
+                let matrix = matrix.clone();
+                async move {
+                    assert!(matches_project_name(&work.work, &matrix));
+                }
+            }
+        })
+        .await;
+
+        let project = svc
+            .create_project(matrix.clone(), neo.clone())
+            .await
+            .unwrap();
+
+        assert!(matches_project_name(&project, &matrix));
+
+        assert_eq!(svc.find_project(&matrix).await.unwrap(), project);
+
+        let update_project = capture_work(&svc, {
+            let svc = Arc::clone(&svc);
+            let matrix = matrix.clone();
+            move |work| {
+                let svc = Arc::clone(&svc);
+                let matrix = matrix.clone();
+                async move {
+                    assert!(matches!(&work.work, Project::Destroyed(_)));
+                    svc.update_project(&matrix, &work.work).await;
+                }
+            }
+        })
+        .await;
+
+        svc.destroy_project(matrix.clone(), neo).await.unwrap();
+
+        // Which drops the only sender, thus breaking the work loop
+        svc.set_sender(None).await.unwrap();
+
+        update_project.await;
+
+        assert!(matches!(
+            svc.find_project(&matrix).await.unwrap(),
+            Project::Destroyed(_)
+        ));
 
         Ok(())
     }

@@ -86,7 +86,7 @@ impl From<DockerError> for Error {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Project {
     Creating(ProjectCreating),
@@ -284,7 +284,7 @@ impl Refresh for Project {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectCreating {
     project_name: ProjectName,
     initial_key: String,
@@ -296,6 +296,10 @@ impl ProjectCreating {
             project_name,
             initial_key,
         }
+    }
+
+    pub fn project_name(&self) -> &ProjectName {
+        &self.project_name
     }
 
     fn container_name<'c, C: Context<'c>>(&self, ctx: &C) -> String {
@@ -404,7 +408,7 @@ impl<'c> State<'c> for ProjectCreating {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProjectStarting {
     container: ContainerInspectResponse,
 }
@@ -434,7 +438,7 @@ impl<'c> State<'c> for ProjectStarting {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProjectStarted {
     container: ContainerInspectResponse,
 }
@@ -476,7 +480,7 @@ impl<'c> State<'c> for ProjectStarted {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProjectReady {
     container: ContainerInspectResponse,
     service: Service,
@@ -502,7 +506,7 @@ impl ProjectReady {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Service {
     name: String,
     target: IpAddr,
@@ -536,7 +540,7 @@ impl Service {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProjectStopping {
     container: ContainerInspectResponse,
 }
@@ -561,7 +565,7 @@ impl<'c> State<'c> for ProjectStopping {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProjectStopped {
     container: ContainerInspectResponse,
 }
@@ -579,7 +583,7 @@ impl<'c> State<'c> for ProjectStopped {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProjectDestroying {
     container: ContainerInspectResponse,
 }
@@ -611,7 +615,7 @@ impl<'c> State<'c> for ProjectDestroying {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProjectDestroyed {
     destroyed: Option<ContainerInspectResponse>,
 }
@@ -626,13 +630,13 @@ impl<'c> State<'c> for ProjectDestroyed {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum ProjectErrorKind {
     Internal,
 }
 
 /// A runtime error coming from inside a project
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProjectError {
     kind: ProjectErrorKind,
     message: String,

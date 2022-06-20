@@ -283,7 +283,7 @@ impl Shuttle {
         let current_shuttle_version = &cargo_doc["dependencies"]["shuttle-service"]["version"];
         let service_semver = match Version::parse(current_shuttle_version.as_str().unwrap()) {
             Ok(version) => version,
-            Err(error) => return Err(anyhow!("You shuttle-service version ({}) is invalid and should follow the MAJOR.MINOR.PATCH semantic versioning format. Error given: {:?}", current_shuttle_version.as_str().unwrap(), error.to_string())),
+            Err(error) => return Err(anyhow!("Your shuttle-service version ({}) is invalid and should follow the MAJOR.MINOR.PATCH semantic versioning format. Error given: {:?}", current_shuttle_version.as_str().unwrap(), error.to_string())),
         };
 
         let server_version = client::shuttle_version(self.ctx.api_url()).await?;

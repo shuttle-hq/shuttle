@@ -695,6 +695,9 @@ pub mod tests {
 
     use bollard::models::Health;
     use futures::prelude::*;
+    use hyper::Body;
+    use hyper::Request;
+    use hyper::StatusCode;
 
     use super::*;
 
@@ -777,9 +780,12 @@ pub mod tests {
         let client = Client::new(ctx.hyper, target_addr);
 
         client
-            .get::<serde::de::IgnoredAny, _>("/status")
+            .request(Request::get("/status").body(Body::empty()).unwrap())
+            .map_ok(|resp| {
+                assert_eq!(resp.status(), StatusCode::OK)
+            })
             .await
-            .expect("Runtime service does not seem ready");
+            .unwrap();
 
         let project_stopped = assert_matches!(
             ctx,

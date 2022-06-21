@@ -88,7 +88,7 @@ pub mod tests {
         body::{Body, HttpBody},
         headers::{
             authorization::{self, Basic},
-            Authorization, Header,
+            Authorization
         },
         http::Request,
     };
@@ -96,44 +96,7 @@ pub mod tests {
 
     use super::*;
 
-    use crate::{service::GatewayService, tests::World, worker::Work};
-
-    mod request_builder_ext {
-        pub trait Sealed {}
-
-        impl Sealed for axum::http::request::Builder {}
-
-        impl<'r> Sealed for &'r mut axum::headers::HeaderMap {}
-
-        impl<B> Sealed for axum::http::Request<B> {}
-    }
-
-    pub trait RequestBuilderExt: Sized + request_builder_ext::Sealed {
-        fn with_header<H: axum::headers::Header>(self, header: &H) -> Self;
-    }
-
-    impl RequestBuilderExt for axum::http::request::Builder {
-        fn with_header<H: Header>(mut self, header: &H) -> Self {
-            self.headers_mut().unwrap().with_header(header);
-            self
-        }
-    }
-
-    impl<'r> RequestBuilderExt for &'r mut axum::headers::HeaderMap {
-        fn with_header<H: axum::headers::Header>(self, header: &H) -> Self {
-            let mut buf = vec![];
-            header.encode(&mut buf);
-            self.append(H::name(), buf.pop().unwrap());
-            self
-        }
-    }
-
-    impl<B> RequestBuilderExt for Request<B> {
-        fn with_header<H: axum::headers::Header>(mut self, header: &H) -> Self {
-            self.headers_mut().with_header(header);
-            self
-        }
-    }
+    use crate::{service::GatewayService, tests::World, worker::Work, tests::RequestBuilderExt};
 
     #[tokio::test]
     async fn api_create_get_delete_projects() -> anyhow::Result<()> {

@@ -191,7 +191,7 @@ impl GatewayService {
             route = format!("/{route}");
         }
 
-        route = format!("/projects/{project_name}{route}");
+        //route = format!("/projects/{project_name}{route}");
 
         *req.uri_mut() = route.parse().unwrap();
 

@@ -414,6 +414,8 @@ pub mod tests {
 
     use serde::Deserialize;
 
+    use axum::{headers::Header, http::Request, body::HttpBody};
+
     use http::{
         uri::{PathAndQuery, Scheme, Uri},
         Error as HttpError,
@@ -435,40 +437,65 @@ pub mod tests {
             }
         }
 
-        pub async fn get<T, P>(&self, p_and_q: P) -> Result<Option<T>, Error>
-        where
-            T: for<'de> Deserialize<'de>,
-            PathAndQuery: TryFrom<P>,
-            <PathAndQuery as TryFrom<P>>::Error: Into<HttpError>,
-        {
-            let uri = Uri::builder()
-                .scheme(Scheme::HTTP)
-                .authority(self.target.to_string())
-                .path_and_query(p_and_q)
-                .build()
-                .map_err(|err| Error::source(ErrorKind::Internal, err))?;
-            let resp = self.hyper.get(uri).await.unwrap();
-            if resp.status() != StatusCode::OK {
-                Err(Error::custom(
-                    ErrorKind::Internal,
-                    format!("invalid response code from runtime: {}", resp.status()),
-                ))
-            } else {
-                let body = resp
-                    .into_body()
-                    .try_fold(Vec::new(), |mut buf, bytes| async move {
-                        buf.extend(bytes.into_iter());
-                        Ok(buf)
-                    })
-                    .await
-                    .unwrap();
-                if body.is_empty() {
-                    Ok(None)
-                } else {
-                    let t = serde_json::from_slice(&body).unwrap();
-                    Ok(t)
-                }
+        pub async fn request(
+            &self,
+            mut req: Request<Body>,
+        ) -> Result<Response<Vec<u8>>, hyper::Error> {
+            if req.uri().authority().is_none() {
+                let mut uri = req.uri().clone().into_parts();
+                uri.scheme = Some(Scheme::HTTP);
+                uri.authority = Some(self.target.to_string().parse().unwrap());
+                *req.uri_mut() = Uri::from_parts(uri).unwrap();
             }
+            self.hyper
+                .request(req)
+                .and_then(|mut resp| async move {
+                    let body = resp.body_mut()
+                        .try_fold(Vec::new(), |mut acc, x| async move {
+                            acc.extend(x);
+                            Ok(acc)
+                        }).await?;
+                    let (parts, _) = resp.into_parts();
+                    Ok(Response::from_parts(parts, body))
+                })
+                .await
+        }
+    }
+
+    mod request_builder_ext {
+        pub trait Sealed {}
+
+        impl Sealed for axum::http::request::Builder {}
+
+        impl<'r> Sealed for &'r mut axum::headers::HeaderMap {}
+
+        impl<B> Sealed for axum::http::Request<B> {}
+    }
+
+    pub trait RequestBuilderExt: Sized + request_builder_ext::Sealed {
+        fn with_header<H: axum::headers::Header>(self, header: &H) -> Self;
+    }
+
+    impl RequestBuilderExt for axum::http::request::Builder {
+        fn with_header<H: Header>(mut self, header: &H) -> Self {
+            self.headers_mut().unwrap().with_header(header);
+            self
+        }
+    }
+
+    impl<'r> RequestBuilderExt for &'r mut axum::headers::HeaderMap {
+        fn with_header<H: axum::headers::Header>(self, header: &H) -> Self {
+            let mut buf = vec![];
+            header.encode(&mut buf);
+            self.append(H::name(), buf.pop().unwrap());
+            self
+        }
+    }
+
+    impl<B> RequestBuilderExt for Request<B> {
+        fn with_header<H: axum::headers::Header>(mut self, header: &H) -> Self {
+            self.headers_mut().with_header(header);
+            self
         }
     }
 
@@ -551,6 +578,13 @@ pub mod tests {
                 args,
                 hyper,
             })
+        }
+
+        pub fn client<A: Into<SocketAddr>>(&self, addr: A) -> Client {
+            Client {
+                target: addr.into(),
+                hyper: self.hyper.clone(),
+            }
         }
     }
 

@@ -66,6 +66,8 @@ impl Key {
     }
 }
 
+const FALSE: fn() -> bool = || false;
+
 /// A wrapper for a guard that verifies an API key is associated with a
 /// valid user.
 ///
@@ -78,6 +80,7 @@ pub struct User {
     pub key: Key,
     pub projects: Vec<ProjectName>,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
+    #[serde(default = "FALSE")]
     pub super_user: bool
 }
 

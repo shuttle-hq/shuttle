@@ -1,13 +1,19 @@
-use axum::body::Bytes;
-use futures::{Stream, StreamExt};
-
 use super::{Built, QueueReceiver, RunSender};
 use crate::deployment::DeploymentState;
 use crate::error::Result;
 use crate::persistence::Persistence;
 
 use std::fmt;
+use std::path::PathBuf;
 use std::pin::Pin;
+
+use bytes::{BufMut, Bytes};
+use flate2::read::GzDecoder;
+use futures::{Stream, StreamExt};
+use tar::Archive;
+use tokio::fs;
+
+const BUILDS_PATH: &str = "shuttle-builds";
 
 pub async fn task(mut recv: QueueReceiver, run_send: RunSender, persistence: Persistence) {
     log::info!("Queue task started");
@@ -44,16 +50,28 @@ impl Queued {
 
         // Read POSTed data:
 
-        while let Some(chunk) = self.data_stream.next().await {
-            let chunk = chunk?;
-            log::debug!("{} - streamed {} bytes", self.name, chunk.len());
+        let mut vec = Vec::with_capacity(self.data_stream.size_hint().0);
+        while let Some(buf) = self.data_stream.next().await {
+            let buf = buf?;
+            log::debug!("Received {} bytes for deployment {}", buf.len(), self.name);
+            vec.put(buf);
         }
+
+        // Extract .tar.gz data:
+
+        fs::create_dir_all(BUILDS_PATH).await?;
+
+        let archive_path = PathBuf::from(BUILDS_PATH).join(&self.name);
+
+        let tar = GzDecoder::new(vec.as_slice());
+        let mut archive = Archive::new(tar);
+        archive.unpack(archive_path)?;
 
         // Build:
 
         // TODO
 
-        // Update deployment state to 'built:
+        // Update deployment state to built:
 
         let built = Built {
             name: self.name,

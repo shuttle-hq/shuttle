@@ -13,5 +13,8 @@ tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
 sqlx = { version = "0.5.13", features = ["runtime-tokio-native-tls", "sqlite"] }
 tower = { version = "0.4.12", features = ["make"] }
 axum = "0.5.7"
+bytes = "1.1.0"
 serde = { version = "1.0.137", features = ["derive"] }
 serde_json = "1.0.81"
+flate2 = "1.0.24"
+tar = "0.4.38"

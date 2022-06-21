@@ -4,6 +4,7 @@ use std::panic::catch_unwind;
 use std::path::{Path as StdPath, PathBuf};
 use std::sync::Arc;
 
+use axum::extract::Path;
 use axum::headers::authorization::Basic;
 use axum::headers::{Authorization, Header};
 use rand::distributions::{Alphanumeric, DistString};
@@ -159,7 +160,7 @@ impl GatewayService {
     pub async fn route(
         &self,
         project_name: &ProjectName,
-        mut route: String,
+        Path(mut route): Path<String>,
         mut req: Request<Body>,
     ) -> Result<Response<Body>, Error> {
         let target_ip = self

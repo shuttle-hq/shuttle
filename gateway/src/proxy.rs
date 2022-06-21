@@ -75,7 +75,7 @@ impl Service<Request<Body>> for ProxyService {
                 let body = <Body as HttpBody>::map_err(body, axum::Error::new).boxed_unsync();
                 Ok(Response::from_parts(parts, body))
             }
-            .or_else(|err: Error| async move { Ok(err.into_response()) }),
+            .or_else(|err: Error| future::ready(Ok(err.into_response())))
         )
     }
 }

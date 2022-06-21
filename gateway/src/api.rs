@@ -62,8 +62,8 @@ async fn route_project(
     ScopedUser { scope, .. }: ScopedUser,
     Path((_, route)): Path<(String, String)>,
     req: Request<Body>,
-) -> Response<Body> {
-    service.route(&scope, route, req).await.unwrap()
+) -> Result<Response<Body>, Error> {
+    service.route(&scope, Path(route), req).await
 }
 
 pub fn make_api(service: Arc<GatewayService>) -> Router<Body> {

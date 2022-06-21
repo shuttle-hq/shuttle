@@ -76,7 +76,9 @@ impl Key {
 pub struct User {
     pub name: AccountName,
     pub key: Key,
-    pub projects: Vec<ProjectName>
+    pub projects: Vec<ProjectName>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub super_user: bool
 }
 
 #[async_trait]
@@ -127,7 +129,7 @@ where
                 .map(|Path((p, _))| p)
                 .unwrap()
         };
-        if user.projects.contains(&scope) {
+        if user.super_user || user.projects.contains(&scope) {
             Ok(Self { user, scope })
         } else {
             Err(Error::from(ErrorKind::Forbidden))

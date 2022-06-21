@@ -51,15 +51,15 @@ async fn post_project(
 
 async fn delete_project(
     Extension(service): Extension<Arc<GatewayService>>,
-    User { name, .. }: User,
+    ScopedUser { scope, user: User { name, .. } }: ScopedUser,
     Path(project): Path<ProjectName>,
 ) -> Result<(), Error> {
     service.destroy_project(project, name).await
 }
 
 async fn route_project(
-    ScopedUser { scope, .. }: ScopedUser,
     Extension(service): Extension<Arc<GatewayService>>,
+    ScopedUser { scope, .. }: ScopedUser,
     Path((_, route)): Path<(String, String)>,
     req: Request<Body>,
 ) -> Response<Body> {
@@ -146,7 +146,7 @@ pub mod tests {
                 // do not do any work with inbound requests
             }
         });
-        service.set_sender(Some(sender));
+        service.set_sender(Some(sender)).await.unwrap();
 
         let mut router = make_api(Arc::clone(&service));
 
@@ -160,10 +160,19 @@ pub mod tests {
                 .unwrap()
         };
 
+        let delete_project = |project: &str| {
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/projects/{project}"))
+                .body(Body::empty())
+                .unwrap()
+        };
+
         router
             .call(create_project("matrix"))
             .map_ok(|resp| assert_eq!(resp.status(), StatusCode::UNAUTHORIZED))
-            .await?;
+            .await
+            .unwrap();
 
         let authorization = Authorization::basic("", neo.key.as_str());
 
@@ -172,14 +181,16 @@ pub mod tests {
             .map_ok(|resp| {
                 assert_eq!(resp.status(), StatusCode::OK);
             })
-            .await?;
+            .await
+            .unwrap();
 
         router
             .call(create_project("matrix").with_header(&authorization))
             .map_ok(|resp| {
                 assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
             })
-            .await?;
+            .await
+            .unwrap();
 
         let get_project = |project| {
             Request::builder()
@@ -194,21 +205,32 @@ pub mod tests {
             .map_ok(|resp| {
                 assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
             })
-            .await?;
+            .await
+            .unwrap();
 
         router
             .call(get_project("matrix").with_header(&authorization))
             .map_ok(|resp| {
                 assert_eq!(resp.status(), StatusCode::OK);
             })
-            .await?;
+            .await
+            .unwrap();
+
+        router
+            .call(delete_project("matrix").with_header(&authorization))
+            .map_ok(|resp| {
+                assert_eq!(resp.status(), StatusCode::OK);
+            })
+            .await
+            .unwrap();
 
         router
             .call(create_project("reloaded").with_header(&authorization))
             .map_ok(|resp| {
                 assert_eq!(resp.status(), StatusCode::OK);
             })
-            .await?;
+            .await
+            .unwrap();
 
         let trinity = service.create_user("trinity".parse().unwrap()).await?;
 
@@ -216,19 +238,35 @@ pub mod tests {
 
         router
             .call(get_project("reloaded").with_header(&authorization))
-            .map_ok(|resp| {
-                assert_eq!(resp.status(), StatusCode::FORBIDDEN)
-            })
-            .await?;
+            .map_ok(|resp| assert_eq!(resp.status(), StatusCode::FORBIDDEN))
+            .await
+            .unwrap();
 
-        service.set_super_user(&"trinity".parse().unwrap(), true).await?;
+        router
+            .call(delete_project("reloaded").with_header(&authorization))
+            .map_ok(|resp| {
+                assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+            })
+            .await
+            .unwrap();
+
+        service
+            .set_super_user(&"trinity".parse().unwrap(), true)
+            .await?;
 
         router
             .call(get_project("reloaded").with_header(&authorization))
+            .map_ok(|resp| assert_eq!(resp.status(), StatusCode::OK))
+            .await
+            .unwrap();
+
+        router
+            .call(delete_project("reloaded").with_header(&authorization))
             .map_ok(|resp| {
-                assert_eq!(resp.status(), StatusCode::OK)
+                assert_eq!(resp.status(), StatusCode::OK);
             })
-            .await?;
+            .await
+            .unwrap();
 
         Ok(())
     }
@@ -261,7 +299,8 @@ pub mod tests {
             .map_ok(|resp| {
                 assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
             })
-            .await?;
+            .await
+            .unwrap();
 
         let user = service.create_user("neo".parse().unwrap()).await?;
 
@@ -270,7 +309,8 @@ pub mod tests {
             .map_ok(|resp| {
                 assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
             })
-            .await?;
+            .await
+            .unwrap();
 
         let authorization = Authorization::basic("", user.key.as_str());
 
@@ -279,12 +319,14 @@ pub mod tests {
             .map_ok(|resp| {
                 assert_eq!(resp.status(), StatusCode::FORBIDDEN);
             })
-            .await?;
+            .await
+            .unwrap();
 
         router
             .call(post_trinity().with_header(&authorization))
             .map_ok(|resp| assert_eq!(resp.status(), StatusCode::FORBIDDEN))
-            .await?;
+            .await
+            .unwrap();
 
         service.set_super_user(&user.name, true).await?;
 
@@ -293,17 +335,20 @@ pub mod tests {
             .map_ok(|resp| {
                 assert_eq!(resp.status(), StatusCode::OK);
             })
-            .await?;
+            .await
+            .unwrap();
 
         router
             .call(post_trinity().with_header(&authorization))
             .map_ok(|resp| assert_eq!(resp.status(), StatusCode::OK))
-            .await?;
+            .await
+            .unwrap();
 
         router
             .call(post_trinity().with_header(&authorization))
             .map_ok(|resp| assert_eq!(resp.status(), StatusCode::BAD_REQUEST))
-            .await?;
+            .await
+            .unwrap();
 
         Ok(())
     }

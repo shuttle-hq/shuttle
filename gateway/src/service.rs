@@ -279,21 +279,25 @@ impl GatewayService {
 
     pub async fn user_from_account_name(&self, name: AccountName) -> Result<User, Error> {
         let key = self.key_from_account_name(&name).await?;
+        let super_user = self.is_super_user(&name).await?;
         let projects = self.iter_user_projects(&name).await?.collect();
         Ok(User {
             name,
             key,
             projects,
+            super_user
         })
     }
 
     pub async fn user_from_key(&self, key: Key) -> Result<User, Error> {
         let name = self.account_name_from_key(&key).await?;
+        let super_user = self.is_super_user(&name).await?;
         let projects = self.iter_user_projects(&name).await?.collect();
         Ok(User {
             name,
             key,
             projects,
+            super_user
         })
     }
 
@@ -320,6 +324,7 @@ impl GatewayService {
             name,
             key,
             projects: Vec::default(),
+            super_user: false
         })
     }
 
@@ -500,9 +505,12 @@ pub mod tests {
             name,
             key,
             projects,
+            super_user
         } = user;
 
         assert!(projects.is_empty());
+
+        assert!(!super_user);
 
         assert_eq!(name, account_name);
 

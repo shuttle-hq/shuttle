@@ -9,7 +9,7 @@ log = "0.4.17"
 env_logger = "0.9.0"
 thiserror = "1.0.24"
 futures = "0.3.7"
-tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "fs"] }
 sqlx = { version = "0.5.13", features = ["runtime-tokio-native-tls", "sqlite"] }
 tower = { version = "0.4.12", features = ["make"] }
 axum = "0.5.7"
@@ -24,3 +24,6 @@ rand = "0.8.5"
 version = "0.3.3"
 path = "../service"
 features = ["loader"]
+
+[dev-dependencies]
+hex = "0.4.3"

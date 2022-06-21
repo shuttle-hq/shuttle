@@ -1394,6 +1394,7 @@ dependencies = [
  "env_logger",
  "flate2",
  "futures",
+ "hex 0.4.3",
  "log",
  "rand 0.8.5",
  "serde",

@@ -150,9 +150,8 @@ async fn end_to_end() {
     // === deployment test BEGIN ===
     api_client
         .request({
-            use std::fs::File;
             let mut data = Vec::new();
-            let mut f = File::open("tests/hello_world.crate").unwrap();
+            let mut f = std::fs::File::open("tests/hello_world.crate").unwrap();
             f.read_to_end(&mut data).unwrap();
             Request::post("/projects/matrix/projects/matrix")
                 .with_header(&authorization)

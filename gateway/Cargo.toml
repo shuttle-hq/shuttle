@@ -17,6 +17,7 @@ tokio = { version = "1.17", features = [ "full" ] }
 async-trait = "0.1.52"
 futures = "0.3.21"
 
+lazy_static = "1.4.0"
 regex = "1.5.5"
 
 http = "0.2.8"
@@ -29,7 +30,7 @@ bollard = "0.12"
 
 chrono = "0.4"
 
-sqlx = { version = "0.5.11", features = [ "sqlite", "json", "runtime-tokio-rustls" ] }
+sqlx = { version = "0.5.11", features = [ "sqlite", "json", "runtime-tokio-rustls", "migrate" ] }
 
 base64 = "0.13"
 rand = "0.8.5"

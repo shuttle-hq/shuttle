@@ -5,7 +5,8 @@ extern crate async_trait;
 
 #[macro_use]
 extern crate log;
-extern crate core;
+
+use lazy_static::lazy_static;
 
 use std::convert::Infallible;
 use std::error::Error as StdError;
@@ -25,6 +26,7 @@ use futures::prelude::*;
 use futures::stream::TryUnfold;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::json;
+use regex::Regex;
 
 macro_rules! value_block_helper {
     ($next:ident, $block:block) => {
@@ -123,6 +125,12 @@ pub mod project;
 pub mod proxy;
 pub mod service;
 pub mod worker;
+
+lazy_static! {
+    static ref PROJECT_REGEX: Regex = {
+        Regex::new("^[a-zA-Z0-9\\-_]{3,64}$").unwrap()
+    };
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorKind {
@@ -252,7 +260,7 @@ impl<'de> Deserialize<'de> for ProjectName {
     {
         String::deserialize(deserializer)?
             .parse()
-            .map_err(|_err| todo!())
+            .map_err(|err| <D::Error as serde::de::Error>::custom(err))
     }
 }
 
@@ -260,8 +268,7 @@ impl FromStr for ProjectName {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let re = regex::Regex::new("^[a-zA-Z0-9\\-_]{3,64}$").unwrap();
-        if re.is_match(s) {
+        if PROJECT_REGEX.is_match(s) {
             Ok(Self(s.to_string()))
         } else {
             Err(Error::from_kind(ErrorKind::InvalidProjectName))

@@ -1,8 +1,3 @@
-// TODO: client should create project then push new deployment (refactor endpoint)
-// TODO: Add some tests (ideas?)
-// TODO: Implement the delete project endpoint to make sure users can
-//       self-serve out of issues
-
 use std::io;
 use std::sync::Arc;
 

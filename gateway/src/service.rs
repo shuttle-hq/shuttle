@@ -17,7 +17,7 @@ use bollard::Docker;
 use hyper::client::HttpConnector;
 use hyper::Client as HyperClient;
 use sqlx::error::DatabaseError;
-use sqlx::migrate::MigrateDatabase;
+use sqlx::migrate::{MigrateDatabase, Migrator};
 use sqlx::sqlite::{Sqlite, SqlitePool};
 use sqlx::types::Json as SqlxJson;
 use sqlx::{query, Error as SqlxError, Row};
@@ -31,6 +31,10 @@ use crate::args::Args;
 use crate::project::{self, Project};
 use crate::worker::{Work, Worker};
 use crate::{EndState, ErrorKind, Refresh, Service, State};
+use crate::auth::User;
+use crate::{auth::Key, AccountName};
+
+static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
 impl From<SqlxError> for Error {
     fn from(err: SqlxError) -> Self {
@@ -47,9 +51,6 @@ pub struct GatewayService {
     args: Args,
 }
 
-use crate::auth::User;
-use crate::{auth::Key, AccountName};
-
 impl GatewayService {
     /// Initialize `GatewayService` and its required dependencies.
     ///
@@ -58,9 +59,10 @@ impl GatewayService {
     pub async fn init(args: Args) -> Self {
         let docker = Docker::connect_with_local_defaults().unwrap();
 
+        let hyper = HyperClient::new();
+
         let db_uri = &args.state;
 
-        let hyper = HyperClient::new();
         if !StdPath::new(db_uri).exists() {
             Sqlite::create_database(db_uri).await.unwrap();
         }
@@ -71,15 +73,7 @@ impl GatewayService {
         );
         let db = SqlitePool::connect(db_uri).await.unwrap();
 
-        query("CREATE TABLE IF NOT EXISTS projects (project_name TEXT PRIMARY KEY, account_name TEXT NOT NULL, initial_key TEXT NOT NULL, project_state JSON NOT NULL)")
-            .execute(&db)
-            .await
-            .unwrap();
-
-        query("CREATE TABLE IF NOT EXISTS accounts (account_name TEXT PRIMARY KEY, key TEXT UNIQUE, super_user BOOLEAN DEFAULT FALSE)")
-            .execute(&db)
-            .await
-            .unwrap();
+        MIGRATIONS.run(&db).await.unwrap();
 
         let sender = Mutex::new(None);
 

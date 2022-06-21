@@ -1,22 +1,45 @@
-use serde::{Deserialize, Serialize};
-use serde_json::json;
-
 use std::collections::HashMap;
-use std::fmt::{Display, Formatter};
+use std::fmt::{
+    Display,
+    Formatter
+};
 use std::io::Write;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::Arc;
 
-use axum::extract::{FromRequest, Extension, RequestParts, TypedHeader, Path};
-use axum::headers::{authorization::Basic, Authorization};
-use axum::response::{IntoResponse, Response};
-use std::str::FromStr;
+use axum::extract::{
+    Extension,
+    FromRequest,
+    Path,
+    RequestParts,
+    TypedHeader
+};
+use axum::headers::authorization::Basic;
+use axum::headers::Authorization;
 use axum::http::StatusCode;
+use axum::response::{
+    IntoResponse,
+    Response
+};
 use axum::Json;
-use rand::distributions::{Alphanumeric, DistString};
+use rand::distributions::{
+    Alphanumeric,
+    DistString
+};
+use serde::{
+    Deserialize,
+    Serialize
+};
+use serde_json::json;
 
 use crate::service::GatewayService;
-use crate::{Error, ErrorKind, ProjectName, AccountName};
+use crate::{
+    AccountName,
+    Error,
+    ErrorKind,
+    ProjectName
+};
 
 #[derive(Clone, Debug, sqlx::Type, PartialEq, Hash, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -60,9 +83,7 @@ impl FromStr for Key {
 
 impl Key {
     pub fn new_random() -> Self {
-        Self(
-            Alphanumeric.sample_string(&mut rand::thread_rng(), 16)
-        )
+        Self(Alphanumeric.sample_string(&mut rand::thread_rng(), 16))
     }
 }
 
@@ -96,12 +117,11 @@ where
         let Extension(service) = Extension::<Arc<GatewayService>>::from_request(req)
             .await
             .unwrap();
-        let user = service.user_from_key(key)
+        let user = service
+            .user_from_key(key)
             .await
             // Absord any error into `Unauthorized`
-            .map_err(|_| {
-                Error::from_kind(ErrorKind::Unauthorized)
-            })?;
+            .map_err(|_| Error::from_kind(ErrorKind::Unauthorized))?;
         Ok(user)
     }
 }
@@ -113,7 +133,7 @@ where
 /// by [`ScopedUser::name`].
 pub struct ScopedUser {
     pub user: User,
-    pub scope: ProjectName,
+    pub scope: ProjectName
 }
 
 #[async_trait]
@@ -141,7 +161,7 @@ where
 }
 
 pub struct Admin {
-    pub user: User,
+    pub user: User
 }
 
 #[async_trait]
@@ -153,7 +173,9 @@ where
 
     async fn from_request(req: &mut RequestParts<B>) -> Result<Self, Self::Rejection> {
         let user = User::from_request(req).await?;
-        let service = Extension::<Arc<GatewayService>>::from_request(req).await.unwrap();
+        let service = Extension::<Arc<GatewayService>>::from_request(req)
+            .await
+            .unwrap();
         if service.is_super_user(&user.name).await? {
             Ok(Self { user })
         } else {

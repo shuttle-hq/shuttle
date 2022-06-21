@@ -4,29 +4,50 @@ use std::io;
 use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Context, Poll};
+use std::task::{
+    Context,
+    Poll
+};
 
-use axum::body::{HttpBody, BoxBody};
-use axum::response::{IntoResponse, Response};
+use axum::body::{
+    BoxBody,
+    HttpBody
+};
+use axum::response::{
+    IntoResponse,
+    Response
+};
 use futures::prelude::*;
 use hyper::body::Body;
 use hyper::server::conn::AddrStream;
-use hyper::service::{make_service_fn, service_fn};
-use hyper::{Request, StatusCode};
+use hyper::service::{
+    make_service_fn,
+    service_fn
+};
+use hyper::{
+    Request,
+    StatusCode
+};
 use hyper_reverse_proxy::ProxyError;
-use tower::Service;
-
 use shuttle_common::DeploymentMeta;
-use tower::MakeService;
+use tower::{
+    MakeService,
+    Service
+};
 
 use crate::service::GatewayService;
-use crate::{Error, ErrorKind, ProjectName, Refresh};
+use crate::{
+    Error,
+    ErrorKind,
+    ProjectName,
+    Refresh
+};
 
 const SHUTTLEAPP_SUFFIX: &'static str = ".shuttleapp.rs";
 
 pub struct ProxyService {
     gateway: Arc<GatewayService>,
-    remote_addr: SocketAddr,
+    remote_addr: SocketAddr
 }
 
 impl Service<Request<Body>> for ProxyService {
@@ -81,7 +102,7 @@ impl Service<Request<Body>> for ProxyService {
 }
 
 pub struct MakeProxyService {
-    gateway: Arc<GatewayService>,
+    gateway: Arc<GatewayService>
 }
 
 impl<'r> Service<&'r AddrStream> for MakeProxyService {
@@ -100,7 +121,7 @@ impl<'r> Service<&'r AddrStream> for MakeProxyService {
         Box::pin(async move {
             Ok(ProxyService {
                 remote_addr,
-                gateway,
+                gateway
             })
         })
     }

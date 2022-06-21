@@ -3,11 +3,15 @@ use std::sync::Arc;
 
 use clap::Parser;
 use futures::prelude::*;
-use log::{error, info};
-
-use shuttle_gateway::{
-    api::make_api, args::Args, proxy::make_proxy, service::GatewayService, worker::Worker,
+use log::{
+    error,
+    info
 };
+use shuttle_gateway::api::make_api;
+use shuttle_gateway::args::Args;
+use shuttle_gateway::proxy::make_proxy;
+use shuttle_gateway::service::GatewayService;
+use shuttle_gateway::worker::Worker;
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
@@ -29,7 +33,7 @@ async fn main() -> io::Result<()> {
         worker
             .start()
             .map_ok(|_| info!("worker terminated successfully"))
-            .map_err(|err| error!("worker error: {}", err)),
+            .map_err(|err| error!("worker error: {}", err))
     );
 
     let api = make_api(Arc::clone(&gateway));

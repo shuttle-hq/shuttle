@@ -6,8 +6,6 @@ extern crate async_trait;
 #[macro_use]
 extern crate log;
 
-use lazy_static::lazy_static;
-
 use std::convert::Infallible;
 use std::error::Error as StdError;
 use std::fmt::Formatter;
@@ -18,15 +16,26 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use axum::http::StatusCode;
-use axum::response::{IntoResponse, Response};
+use axum::response::{
+    IntoResponse,
+    Response
+};
 use axum::Json;
 use bollard::Docker;
-use convert_case::{Case, Casing};
+use convert_case::{
+    Case,
+    Casing
+};
 use futures::prelude::*;
 use futures::stream::TryUnfold;
-use serde::{Deserialize, Deserializer, Serialize};
-use serde_json::json;
+use lazy_static::lazy_static;
 use regex::Regex;
+use serde::{
+    Deserialize,
+    Deserializer,
+    Serialize
+};
+use serde_json::json;
 
 macro_rules! value_block_helper {
     ($next:ident, $block:block) => {
@@ -127,9 +136,7 @@ pub mod service;
 pub mod worker;
 
 lazy_static! {
-    static ref PROJECT_REGEX: Regex = {
-        Regex::new("^[a-zA-Z0-9\\-_]{3,64}$").unwrap()
-    };
+    static ref PROJECT_REGEX: Regex = { Regex::new("^[a-zA-Z0-9\\-_]{3,64}$").unwrap() };
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -148,7 +155,7 @@ pub enum ErrorKind {
     ProjectUnavailable,
     InvalidOperation,
     Internal,
-    NotReady,
+    NotReady
 }
 
 impl std::fmt::Display for ErrorKind {
@@ -169,14 +176,14 @@ impl std::fmt::Display for ErrorKind {
 #[derive(Debug)]
 pub struct Error {
     kind: ErrorKind,
-    source: Option<Box<dyn StdError + Sync + Send + 'static>>,
+    source: Option<Box<dyn StdError + Sync + Send + 'static>>
 }
 
 impl Error {
     pub fn source<E: StdError + Sync + Send + 'static>(kind: ErrorKind, err: E) -> Self {
         Self {
             kind,
-            source: Some(Box::new(err)),
+            source: Some(Box::new(err))
         }
     }
 
@@ -185,8 +192,8 @@ impl Error {
             kind,
             source: Some(Box::new(io::Error::new(
                 io::ErrorKind::Other,
-                message.as_ref().to_string(),
-            ))),
+                message.as_ref().to_string()
+            )))
         }
     }
 
@@ -222,15 +229,15 @@ impl IntoResponse for Error {
             ErrorKind::InvalidProjectName => (StatusCode::BAD_REQUEST, "invalid project name"),
             ErrorKind::InvalidOperation => (
                 StatusCode::BAD_REQUEST,
-                "the requested operation is invalid",
+                "the requested operation is invalid"
             ),
             ErrorKind::ProjectAlreadyExists => (
                 StatusCode::BAD_REQUEST,
-                "a project with the same name already exists",
+                "a project with the same name already exists"
             ),
             ErrorKind::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
             ErrorKind::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
-            ErrorKind::NotReady => (StatusCode::INTERNAL_SERVER_ERROR, "not ready yet"),
+            ErrorKind::NotReady => (StatusCode::INTERNAL_SERVER_ERROR, "not ready yet")
         };
         (status, Json(json!({ "error": error_message }))).into_response()
     }
@@ -256,7 +263,7 @@ pub struct ProjectName(pub String);
 impl<'de> Deserialize<'de> for ProjectName {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: Deserializer<'de>,
+        D: Deserializer<'de>
     {
         String::deserialize(deserializer)?
             .parse()
@@ -303,7 +310,7 @@ impl std::fmt::Display for AccountName {
 impl<'de> Deserialize<'de> for AccountName {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: Deserializer<'de>,
+        D: Deserializer<'de>
     {
         String::deserialize(deserializer)?
             .parse()
@@ -347,7 +354,7 @@ pub trait State<'c>: Send + Sized + Clone {
 /// failures
 pub trait EndState<'c>
 where
-    Self: State<'c, Error = Infallible, Next = Self>,
+    Self: State<'c, Error = Infallible, Next = Self>
 {
     type ErrorVariant;
 
@@ -367,7 +374,7 @@ pub trait EndStateExt<'c>: EndState<'c> {
     fn into_stream<Ctx>(self, ctx: Ctx) -> StateTryStream<'c, Self>
     where
         Self: 'c,
-        Ctx: 'c + Context<'c>,
+        Ctx: 'c + Context<'c>
     {
         Box::pin(stream::try_unfold((self, ctx), |(state, ctx)| async move {
             state
@@ -384,14 +391,14 @@ impl<'c, S> EndStateExt<'c> for S where S: EndState<'c> {}
 
 pub trait IntoEndState<'c, E>
 where
-    E: EndState<'c>,
+    E: EndState<'c>
 {
     fn into_end_state(self) -> Result<E, Infallible>;
 }
 
 impl<'c, E, S, Err> IntoEndState<'c, E> for Result<S, Err>
 where
-    E: EndState<'c> + From<S> + From<Err>,
+    E: EndState<'c> + From<S> + From<Err>
 {
     fn into_end_state(self) -> Result<E, Infallible> {
         self.map(|s| E::from(s)).or_else(|err| Ok(E::from(err)))
@@ -408,45 +415,59 @@ pub trait Refresh: Sized {
 #[cfg(any(test, feature = "testing"))]
 pub mod tests {
     use std::env;
-
-    use anyhow::{anyhow, Context as AnyhowContext};
-    use tempfile::NamedTempFile;
-
-    use bollard::{models::Health, network::ListNetworksOptions, Docker};
-    use rand::distributions::{Alphanumeric, DistString, Distribution, Uniform};
-
-    use crate::{args::Args, Context};
-
     use std::net::SocketAddr;
 
-    use serde::Deserialize;
-
-    use axum::{headers::Header, http::Request, body::HttpBody};
-
-    use http::{
-        uri::{PathAndQuery, Scheme, Uri},
-        Error as HttpError,
+    use anyhow::{
+        anyhow,
+        Context as AnyhowContext
     };
-    use hyper::{client::HttpConnector, Body, Client as HyperClient, StatusCode};
+    use axum::body::HttpBody;
+    use axum::headers::Header;
+    use axum::http::Request;
+    use bollard::models::Health;
+    use bollard::network::ListNetworksOptions;
+    use bollard::Docker;
+    use http::uri::{
+        PathAndQuery,
+        Scheme,
+        Uri
+    };
+    use http::Error as HttpError;
+    use hyper::client::HttpConnector;
+    use hyper::{
+        Body,
+        Client as HyperClient,
+        StatusCode
+    };
+    use rand::distributions::{
+        Alphanumeric,
+        DistString,
+        Distribution,
+        Uniform
+    };
+    use serde::Deserialize;
+    use tempfile::NamedTempFile;
 
     use super::*;
+    use crate::args::Args;
+    use crate::Context;
 
     pub struct Client {
         target: SocketAddr,
-        hyper: HyperClient<HttpConnector, Body>,
+        hyper: HyperClient<HttpConnector, Body>
     }
 
     impl Client {
         pub fn new(from: &HyperClient<HttpConnector, Body>, target: SocketAddr) -> Self {
             Self {
                 target,
-                hyper: from.clone(),
+                hyper: from.clone()
             }
         }
 
         pub async fn request(
             &self,
-            mut req: Request<Body>,
+            mut req: Request<Body>
         ) -> Result<Response<Vec<u8>>, hyper::Error> {
             if req.uri().authority().is_none() {
                 let mut uri = req.uri().clone().into_parts();
@@ -457,11 +478,13 @@ pub mod tests {
             self.hyper
                 .request(req)
                 .and_then(|mut resp| async move {
-                    let body = resp.body_mut()
+                    let body = resp
+                        .body_mut()
                         .try_fold(Vec::new(), |mut acc, x| async move {
                             acc.extend(x);
                             Ok(acc)
-                        }).await?;
+                        })
+                        .await?;
                     let (parts, _) = resp.into_parts();
                     Ok(Response::from_parts(parts, body))
                 })
@@ -510,14 +533,14 @@ pub mod tests {
         state: NamedTempFile,
         docker: Docker,
         args: Args,
-        hyper: HyperClient<HttpConnector, Body>,
+        hyper: HyperClient<HttpConnector, Body>
     }
 
     #[derive(Clone, Copy)]
     pub struct WorldContext<'c> {
         pub docker: &'c Docker,
         pub args: &'c Args,
-        pub hyper: &'c HyperClient<HttpConnector, Body>,
+        pub hyper: &'c HyperClient<HttpConnector, Body>
     }
 
     impl World {
@@ -553,7 +576,7 @@ pub mod tests {
                 .list_networks(Some(ListNetworksOptions {
                     filters: vec![("id", vec![network_id.as_str()])]
                         .into_iter()
-                        .collect(),
+                        .collect()
                 }))
                 .await
                 .context("can't list docker networks")
@@ -574,7 +597,7 @@ pub mod tests {
                 prefix,
                 provisioner_host,
                 network_id,
-                state: state.path().to_str().unwrap().to_string(),
+                state: state.path().to_str().unwrap().to_string()
             };
 
             let hyper = HyperClient::builder().build(HttpConnector::new());
@@ -583,14 +606,14 @@ pub mod tests {
                 state,
                 docker,
                 args,
-                hyper,
+                hyper
             })
         }
 
         pub fn client<A: Into<SocketAddr>>(&self, addr: A) -> Client {
             Client {
                 target: addr.into(),
-                hyper: self.hyper.clone(),
+                hyper: self.hyper.clone()
             }
         }
     }
@@ -600,7 +623,7 @@ pub mod tests {
             WorldContext {
                 docker: &self.docker,
                 args: &self.args,
-                hyper: &self.hyper,
+                hyper: &self.hyper
             }
         }
     }

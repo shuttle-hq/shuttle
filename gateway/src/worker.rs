@@ -1,23 +1,34 @@
 use std::fmt::Debug;
 
-use tokio::sync::mpsc::{channel, Receiver, Sender};
+use tokio::sync::mpsc::{
+    channel,
+    Receiver,
+    Sender
+};
 
+use crate::project::Project;
 use crate::{
-    project::Project, AccountName, Context, EndState, Error, ProjectName, Refresh,
-    Service, State,
+    AccountName,
+    Context,
+    EndState,
+    Error,
+    ProjectName,
+    Refresh,
+    Service,
+    State
 };
 
 #[derive(Debug, Clone)]
 pub struct Work<W = Project> {
     pub project_name: ProjectName,
     pub account_name: AccountName,
-    pub work: W,
+    pub work: W
 }
 
 #[async_trait]
 impl<'c, W> State<'c> for Work<W>
 where
-    W: State<'c>,
+    W: State<'c>
 {
     type Next = Work<W::Next>;
 
@@ -27,14 +38,14 @@ where
         Ok(Work::<W::Next> {
             project_name: self.project_name,
             account_name: self.account_name,
-            work: self.work.next(ctx).await?,
+            work: self.work.next(ctx).await?
         })
     }
 }
 
 impl<'c, W> EndState<'c> for Work<W>
 where
-    W: EndState<'c>,
+    W: EndState<'c>
 {
     type ErrorVariant = W::ErrorVariant;
 
@@ -46,7 +57,7 @@ where
         Ok(Self {
             project_name: self.project_name,
             account_name: self.account_name,
-            work: self.work.into_result()?,
+            work: self.work.into_result()?
         })
     }
 }
@@ -54,19 +65,19 @@ where
 pub struct Worker<Svc, W> {
     pub service: Svc,
     send: Option<Sender<W>>,
-    recv: Receiver<W>,
+    recv: Receiver<W>
 }
 
 impl<Svc, W> Worker<Svc, W>
 where
-    W: Send,
+    W: Send
 {
     pub fn new(service: Svc) -> Self {
         let (send, recv) = channel(256);
         Self {
             service,
             send: Some(send),
-            recv,
+            recv
         }
     }
 }
@@ -82,7 +93,7 @@ impl<Svc, W> Worker<Svc, W> {
 impl<Svc, W> Worker<Svc, W>
 where
     Svc: for<'c> Service<'c, State = W, Error = Error>,
-    W: Debug + Send + for<'c> EndState<'c>,
+    W: Debug + Send + for<'c> EndState<'c>
 {
     /// Starts the worker, waiting and processing elements from the
     /// queue until the last sending end for the channel is dropped,
@@ -103,7 +114,7 @@ where
 
                 match self.service.update(&work).await {
                     Ok(_) => {}
-                    Err(err) => info!("failed to update a state: {}\nstate: {:?}", err, work),
+                    Err(err) => info!("failed to update a state: {}\nstate: {:?}", err, work)
                 };
 
                 if work.is_done() {
@@ -118,17 +129,19 @@ where
 
 #[cfg(test)]
 pub mod tests {
-    use anyhow::anyhow;
-
     use std::convert::Infallible;
 
-    use super::*;
+    use anyhow::anyhow;
 
-    use crate::tests::{World, WorldContext};
+    use super::*;
+    use crate::tests::{
+        World,
+        WorldContext
+    };
 
     pub struct DummyService<S> {
         world: World,
-        state: Option<S>,
+        state: Option<S>
     }
 
     impl DummyService<()> {
@@ -142,7 +155,7 @@ pub mod tests {
     #[async_trait]
     impl<'c, S> Service<'c> for DummyService<S>
     where
-        S: EndState<'c> + Sync,
+        S: EndState<'c> + Sync
     {
         type Context = WorldContext<'c>;
 
@@ -163,7 +176,7 @@ pub mod tests {
     #[derive(Debug, PartialEq, Clone)]
     pub struct FiniteState {
         count: usize,
-        max_count: usize,
+        max_count: usize
     }
 
     #[async_trait]
@@ -211,7 +224,7 @@ pub mod tests {
 
             let state = FiniteState {
                 count: 0,
-                max_count: 42,
+                max_count: 42
             };
 
             sender.send(state).await.unwrap();

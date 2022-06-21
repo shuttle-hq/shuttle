@@ -1386,6 +1386,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "deployer"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "env_logger",
+ "futures",
+ "log",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror",
+ "tokio",
+ "tower",
+]
+
+[[package]]
 name = "devise"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1634,6 +1650,18 @@ dependencies = [
  "libc",
  "libz-sys",
  "miniz_oxide",
+]
+
+[[package]]
+name = "flume"
+version = "0.10.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1ceeb589a3157cac0ab8cc585feb749bd2cea5cb55a6ee802ad72d9fd38303da"
+dependencies = [
+ "futures-core",
+ "futures-sink",
+ "pin-project",
+ "spin 0.9.2",
 ]
 
 [[package]]
@@ -2418,6 +2446,17 @@ checksum = "57ed28aba195b38d5ff02b9170cbff627e336a20925e43b4945390401c5dc93f"
 dependencies = [
  "cc",
  "libc",
+]
+
+[[package]]
+name = "libsqlite3-sys"
+version = "0.24.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "898745e570c7d0453cc1fbc4a701eb6c662ed54e8fec8b7d14be137ebeeb9d14"
+dependencies = [
+ "cc",
+ "pkg-config",
+ "vcpkg",
 ]
 
 [[package]]
@@ -4054,6 +4093,9 @@ name = "spin"
 version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "511254be0c5bcf062b019a6c89c01a664aa359ded62f78aa72c6fc137c0590e5"
+dependencies = [
+ "lock_api",
+]
 
 [[package]]
 name = "sqlformat"
@@ -4093,8 +4135,10 @@ dependencies = [
  "dirs",
  "either",
  "event-listener",
+ "flume",
  "futures-channel",
  "futures-core",
+ "futures-executor",
  "futures-intrusive",
  "futures-util",
  "hashlink",
@@ -4104,6 +4148,7 @@ dependencies = [
  "indexmap",
  "itoa",
  "libc",
+ "libsqlite3-sys",
  "log",
  "md-5",
  "memchr",
@@ -5388,3 +5433,7 @@ name = "yansi"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09041cd90cf85f7f8b2df60c646f853b7f535ce68f85244eb6731cf89fa498ec"
+
+[[patch.unused]]
+name = "shuttle-service"
+version = "0.3.3"

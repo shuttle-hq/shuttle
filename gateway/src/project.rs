@@ -1,42 +1,21 @@
 use std::convert::Infallible;
 
-use std::net::{
-    IpAddr,
-    SocketAddr
-};
+use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
 
 use bollard::container::{
-    Config,
-    CreateContainerOptions,
-    RemoveContainerOptions,
-    StopContainerOptions
+    Config, CreateContainerOptions, RemoveContainerOptions, StopContainerOptions,
 };
 use bollard::errors::Error as DockerError;
 use bollard::models::{
-    ContainerConfig,
-    ContainerInspectResponse,
-    ContainerStateStatusEnum,
-    HealthStatusEnum
+    ContainerConfig, ContainerInspectResponse, ContainerStateStatusEnum, HealthStatusEnum,
 };
 use futures::prelude::*;
 
-use serde::{
-    Deserialize,
-    Serialize
-};
+use serde::{Deserialize, Serialize};
 use tokio::time;
 
-use super::{
-    Context,
-    EndState,
-    Error,
-    ErrorKind,
-    IntoEndState,
-    ProjectName,
-    Refresh,
-    State
-};
+use super::{Context, EndState, Error, ErrorKind, IntoEndState, ProjectName, Refresh, State};
 use crate::args::Args;
 
 macro_rules! safe_unwrap {
@@ -116,7 +95,7 @@ pub enum Project {
     Stopped(ProjectStopped),
     Destroying(ProjectDestroying),
     Destroyed(ProjectDestroyed),
-    Errored(ProjectError)
+    Errored(ProjectError),
 }
 
 impl_from_variant!(Project:
@@ -137,7 +116,7 @@ impl Project {
         } else {
             Err(Error::custom(
                 ErrorKind::InvalidOperation,
-                format!("cannot stop a project in the `{}` state", self.state())
+                format!("cannot stop a project in the `{}` state", self.state()),
             ))
         }
     }
@@ -153,7 +132,7 @@ impl Project {
     pub fn target_ip(&self) -> Result<Option<IpAddr>, Error> {
         match self.clone() {
             Self::Ready(project_ready) => Ok(Some(project_ready.target_ip().clone())),
-            _ => Ok(None) // not ready
+            _ => Ok(None), // not ready
         }
     }
 
@@ -173,7 +152,7 @@ impl Project {
             Self::Creating(_) => "creating",
             Self::Destroying(_) => "destroying",
             Self::Destroyed(_) => "destroyed",
-            Self::Errored(_) => "error"
+            Self::Errored(_) => "error",
         }
     }
 
@@ -186,7 +165,7 @@ impl Project {
             | Self::Stopped(ProjectStopped { container })
             | Self::Destroying(ProjectDestroying { container }) => Some(container.clone()),
             Self::Errored(ProjectError { ctx: Some(ctx), .. }) => ctx.container(),
-            Self::Errored(_) | Self::Creating(_) | Self::Destroyed(_) => None
+            Self::Errored(_) | Self::Creating(_) | Self::Destroyed(_) => None,
         }
     }
 
@@ -210,14 +189,14 @@ impl<'c> State<'c> for Project {
             Self::Started(started) => match started.next(ctx).await {
                 Ok(ProjectReadying::Ready(ready)) => Ok(ready.into()),
                 Ok(ProjectReadying::Started(started)) => Ok(started.into()),
-                Err(err) => Ok(Self::Errored(err))
+                Err(err) => Ok(Self::Errored(err)),
             },
             Self::Ready(ready) => ready.next(ctx).await.into_end_state(),
             Self::Stopped(stopped) => stopped.next(ctx).await.into_end_state(),
             Self::Stopping(stopping) => stopping.next(ctx).await.into_end_state(),
             Self::Destroying(destroying) => destroying.next(ctx).await.into_end_state(),
             Self::Destroyed(destroyed) => destroyed.next(ctx).await.into_end_state(),
-            Self::Errored(errored) => Ok(Self::Errored(errored))
+            Self::Errored(errored) => Ok(Self::Errored(errored)),
         };
 
         if let Ok(Self::Errored(errored)) = &mut new {
@@ -250,7 +229,7 @@ impl<'c> EndState<'c> for Project {
     fn into_result(self) -> Result<Self, Self::ErrorVariant> {
         match self {
             Self::Errored(perr) => Err(perr),
-            otherwise => Ok(otherwise)
+            otherwise => Ok(otherwise),
         }
     }
 }
@@ -290,14 +269,14 @@ impl Refresh for Project {
                     _ => {
                         return Err(Error::custom(
                             ErrorKind::Internal,
-                            "container resource has drifted out of sync: cannot recover"
+                            "container resource has drifted out of sync: cannot recover",
                         ))
                     }
                 }
             }
             Self::Destroying(destroying) => Self::Destroying(destroying),
             Self::Destroyed(destroyed) => Self::Destroyed(destroyed),
-            Self::Errored(err) => Self::Errored(err)
+            Self::Errored(err) => Self::Errored(err),
         };
         Ok(refreshed)
     }
@@ -306,14 +285,14 @@ impl Refresh for Project {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectCreating {
     project_name: ProjectName,
-    initial_key: String
+    initial_key: String,
 }
 
 impl ProjectCreating {
     pub fn new(project_name: ProjectName, _prefix: String, initial_key: String) -> Self {
         Self {
             project_name,
-            initial_key
+            initial_key,
         }
     }
 
@@ -331,7 +310,7 @@ impl ProjectCreating {
 
     fn generate_container_config<'c, C: Context<'c>>(
         &self,
-        ctx: &C
+        ctx: &C,
     ) -> (CreateContainerOptions<String>, Config<String>) {
         let Args {
             image,
@@ -348,7 +327,7 @@ impl ProjectCreating {
         } = &self;
 
         let create_container_options = CreateContainerOptions {
-            name: self.container_name(ctx)
+            name: self.container_name(ctx),
         };
 
         let container_config: ContainerConfig = deserialize_json!({
@@ -429,7 +408,7 @@ impl<'c> State<'c> for ProjectCreating {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProjectStarting {
-    container: ContainerInspectResponse
+    container: ContainerInspectResponse,
 }
 
 #[async_trait]
@@ -452,20 +431,20 @@ impl<'c> State<'c> for ProjectStarting {
             })?;
 
         Ok(Self::Next {
-            container: self.container.refresh(ctx).await?
+            container: self.container.refresh(ctx).await?,
         })
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProjectStarted {
-    container: ContainerInspectResponse
+    container: ContainerInspectResponse,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ProjectReadying {
     Ready(ProjectReady),
-    Started(ProjectStarted)
+    Started(ProjectStarted),
 }
 
 #[async_trait]
@@ -490,7 +469,7 @@ impl<'c> State<'c> for ProjectStarted {
             let now = chrono::offset::Utc::now();
             if created + chrono::Duration::seconds(10) < now {
                 return Err(ProjectError::internal(
-                    "project did not become healthy in time"
+                    "project did not become healthy in time",
                 ));
             }
 
@@ -502,7 +481,7 @@ impl<'c> State<'c> for ProjectStarted {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProjectReady {
     container: ContainerInspectResponse,
-    service: Service
+    service: Service,
 }
 
 #[async_trait]
@@ -528,13 +507,13 @@ impl ProjectReady {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Service {
     name: String,
-    target: IpAddr
+    target: IpAddr,
 }
 
 impl Service {
     pub fn from_container<'c, C: Context<'c>>(
         mut container: ContainerInspectResponse,
-        ctx: &C
+        ctx: &C,
     ) -> Result<Self, ProjectError> {
         let container_name = safe_unwrap!(container.name.strip_prefix("/")).to_string();
 
@@ -554,14 +533,14 @@ impl Service {
 
         Ok(Self {
             name: resource_name,
-            target
+            target,
         })
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProjectStopping {
-    container: ContainerInspectResponse
+    container: ContainerInspectResponse,
 }
 
 #[async_trait]
@@ -575,18 +554,18 @@ impl<'c> State<'c> for ProjectStopping {
         ctx.docker()
             .stop_container(
                 container.id.as_ref().unwrap(),
-                Some(StopContainerOptions { t: 30 })
+                Some(StopContainerOptions { t: 30 }),
             )
             .await?;
         Ok(Self::Next {
-            container: container.refresh(ctx).await?
+            container: container.refresh(ctx).await?,
         })
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProjectStopped {
-    container: ContainerInspectResponse
+    container: ContainerInspectResponse,
 }
 
 #[async_trait]
@@ -597,14 +576,14 @@ impl<'c> State<'c> for ProjectStopped {
     async fn next<C: Context<'c>>(self, _ctx: &C) -> Result<Self::Next, Self::Error> {
         // If stopped, try to restart
         Ok(ProjectStarting {
-            container: self.container
+            container: self.container,
         })
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProjectDestroying {
-    container: ContainerInspectResponse
+    container: ContainerInspectResponse,
 }
 
 #[async_trait]
@@ -624,19 +603,19 @@ impl<'c> State<'c> for ProjectDestroying {
                 Some(RemoveContainerOptions {
                     force: true,
                     ..Default::default()
-                })
+                }),
             )
             .await
             .unwrap_or(());
         Ok(Self::Next {
-            destroyed: Some(self.container)
+            destroyed: Some(self.container),
         })
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProjectDestroyed {
-    destroyed: Option<ContainerInspectResponse>
+    destroyed: Option<ContainerInspectResponse>,
 }
 
 #[async_trait]
@@ -651,7 +630,7 @@ impl<'c> State<'c> for ProjectDestroyed {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum ProjectErrorKind {
-    Internal
+    Internal,
 }
 
 /// A runtime error coming from inside a project
@@ -659,7 +638,7 @@ pub enum ProjectErrorKind {
 pub struct ProjectError {
     kind: ProjectErrorKind,
     message: String,
-    ctx: Option<Box<Project>>
+    ctx: Option<Box<Project>>,
 }
 
 impl ProjectError {
@@ -667,7 +646,7 @@ impl ProjectError {
         Self {
             kind: ProjectErrorKind::Internal,
             message: message.as_ref().to_string(),
-            ctx: None
+            ctx: None,
         }
     }
 }
@@ -686,7 +665,7 @@ impl From<DockerError> for ProjectError {
         Self {
             kind: ProjectErrorKind::Internal,
             message: format!("{}", err),
-            ctx: None
+            ctx: None,
         }
     }
 }
@@ -709,26 +688,14 @@ impl<'c> State<'c> for ProjectError {
 
 #[cfg(test)]
 pub mod tests {
-    
 
-    use bollard::models::{Health, ContainerState};
+    use bollard::models::{ContainerState, Health};
     use futures::prelude::*;
-    use hyper::{
-        Body,
-        Request,
-        StatusCode
-    };
+    use hyper::{Body, Request, StatusCode};
 
     use super::*;
-    use crate::tests::{
-        Client,
-        World
-    };
-    use crate::{
-        assert_matches,
-        assert_stream_matches,
-        EndStateExt
-    };
+    use crate::tests::World;
+    use crate::{assert_matches, assert_stream_matches, EndStateExt};
 
     #[tokio::test]
     async fn create_start_stop_destroy_project() -> anyhow::Result<()> {
@@ -800,7 +767,7 @@ pub mod tests {
             .unwrap()
             .unwrap();
 
-        let client = Client::new(ctx.hyper, target_addr);
+        let client = world.client(target_addr);
 
         client
             .request(Request::get("/status").body(Body::empty()).unwrap())
@@ -828,7 +795,8 @@ pub mod tests {
             project_stopped.unwrap().destroy().unwrap(),
             #[assertion = "Container is destroyed"]
             Ok(Project::Destroyed(ProjectDestroyed { destroyed: _ })),
-        ).unwrap();
+        )
+        .unwrap();
 
         Ok(())
     }

@@ -39,6 +39,12 @@ pub struct Args {
         default_value = "5001"
     )]
     pub(crate) provisioner_port: Port,
+    #[structopt(
+        long,
+        about = "MSSV - Minimum supported Shuttle Version",
+        default_value = shuttle_service::VERSION
+    )]
+    pub(crate) shuttle_version: String,
 }
 
 fn parse_fqdn(src: &str) -> Result<FQDN, String> {

@@ -123,6 +123,7 @@ impl Deployment {
                         .build(
                             &queued.crate_bytes,
                             meta.project.as_str(),
+                            &context.shuttle_version,
                             Box::new(console_writer),
                         )
                         .await
@@ -290,6 +291,7 @@ pub(crate) struct DeploymentSystem {
     router: Arc<Router>,
     fqdn: String,
     pub(crate) provisioner_address: String,
+    pub(crate) shuttle_version: String,
 }
 
 const JOB_QUEUE_SIZE: usize = 200;
@@ -341,6 +343,7 @@ pub(crate) struct Context {
     deployments: Arc<RwLock<Deployments>>,
     provisioner_client: ProvisionerClient<Channel>,
     provisioner_address: String,
+    shuttle_version: String,
 }
 
 impl DeploymentSystem {
@@ -349,6 +352,7 @@ impl DeploymentSystem {
         fqdn: String,
         provisioner_address: String,
         provisioner_port: Port,
+        shuttle_version: String,
     ) -> Self {
         let router: Arc<Router> = Default::default();
         let (tx, mut rx) = mpsc::unbounded_channel::<Log>();
@@ -385,6 +389,7 @@ impl DeploymentSystem {
             deployments: deployments.clone(),
             provisioner_client,
             provisioner_address: provisioner_address.clone(),
+            shuttle_version: shuttle_version.clone(),
         };
 
         let job_queue = JobQueue::new(context, tx).await;
@@ -401,6 +406,7 @@ impl DeploymentSystem {
             router,
             fqdn,
             provisioner_address,
+            shuttle_version,
         }
     }
 
@@ -577,7 +583,11 @@ impl DeploymentSystem {
             })?
             .to_vec();
 
-        let deployment = Arc::new(Deployment::from_bytes(&self.fqdn, project, crate_bytes));
+        let deployment = Arc::new(Deployment::from_bytes(
+            &self.fqdn,
+            project,
+            crate_bytes,
+        ));
 
         let info = deployment.meta().await;
 

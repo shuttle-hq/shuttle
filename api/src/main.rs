@@ -52,8 +52,8 @@ async fn get_or_create_user(
 async fn status() {}
 
 #[get("/version")]
-async fn version() -> String {
-    String::from(shuttle_service::VERSION)
+async fn version(state: &State<ApiState>) -> String {
+    String::from(&state.deployment_manager.shuttle_version)
 }
 
 #[get("/<_>/deployments/<id>")]
@@ -198,6 +198,7 @@ async fn rocket() -> Rocket<Build> {
             args.proxy_fqdn.to_string(),
             args.provisioner_address,
             args.provisioner_port,
+            args.shuttle_version,
         )
         .await,
     );

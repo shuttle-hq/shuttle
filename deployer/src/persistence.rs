@@ -1,17 +1,20 @@
-use crate::deployment::deploy_layer::{self, LogRecorder};
+use crate::deployment::deploy_layer::{self, LogRecorder, LogType};
 use crate::deployment::{DeploymentInfo, Log, State};
 use crate::error::Result;
 
 use std::path::Path;
 
+use serde_json::json;
 use sqlx::migrate::MigrateDatabase;
 use sqlx::sqlite::{Sqlite, SqlitePool};
+use tokio::sync::mpsc::{self, UnboundedSender};
 
 const DB_PATH: &str = "deployer.sqlite";
 
 #[derive(Clone)]
 pub struct Persistence {
     pool: SqlitePool,
+    log_send: UnboundedSender<deploy_layer::Log>,
 }
 
 impl Persistence {
@@ -50,7 +53,35 @@ impl Persistence {
             );
         ").execute(&pool).await.unwrap();
 
-        Persistence { pool }
+        let (log_send, mut log_recv) = mpsc::unbounded_channel();
+
+        let me = Self { pool, log_send };
+        let me_clone = me.clone();
+
+        // The logs are received on a non-async thread.
+        // This moves them to an async thread
+        tokio::spawn(async move {
+            while let Some(log) = log_recv.recv().await {
+                match log.r#type {
+                    LogType::Event => me_clone.insert_log(log).await.unwrap(),
+                    LogType::State => {
+                        me_clone
+                            .insert_log(Log {
+                                name: log.name.clone(),
+                                timestamp: log.timestamp.clone(),
+                                state: log.state.clone(),
+                                level: log.level.clone(),
+                                fields: json!("NEW STATE"),
+                            })
+                            .await
+                            .unwrap();
+                        me_clone.update_deployment(log).await.unwrap();
+                    }
+                };
+            }
+        });
+
+        me
     }
 
     pub async fn update_deployment(&self, info: impl Into<DeploymentInfo>) -> Result<()> {
@@ -102,7 +133,9 @@ impl Persistence {
             .map_err(Into::into)
     }
 
-    async fn insert_log(&self, log: Log) -> Result<()> {
+    async fn insert_log(&self, log: impl Into<Log>) -> Result<()> {
+        let log = log.into();
+
         sqlx::query(
             "INSERT INTO logs (name, timestamp, state, level, fields) VALUES (?, ?, ?, ?, ?)",
         )
@@ -127,13 +160,17 @@ impl Persistence {
 }
 
 impl LogRecorder for Persistence {
-    fn record(&self, event: deploy_layer::Log) {
-        todo!()
+    fn record(&self, log: deploy_layer::Log) {
+        self.log_send
+            .send(log)
+            .expect("failed to move log to async thread");
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use chrono::Utc;
     use serde_json::json;
 
@@ -257,8 +294,70 @@ mod tests {
         p.insert_log(log_a2.clone()).await.unwrap();
 
         let logs = p.get_deployment_logs("a").await.unwrap();
-        assert!(!logs.is_empty(), "there should be one log");
+        assert!(!logs.is_empty(), "there should be three logs");
 
         assert_eq!(logs, vec![log_a1, log_a2]);
+    }
+
+    #[tokio::test]
+    async fn log_recorder_event() {
+        let p = Persistence::new_in_memory().await;
+        let event = deploy_layer::Log {
+            name: "x".to_string(),
+            timestamp: Utc::now(),
+            state: State::Queued,
+            level: Level::Info,
+            fields: json!({"message": "job queued"}),
+            r#type: deploy_layer::LogType::Event,
+        };
+
+        p.record(event);
+
+        tokio::time::sleep(Duration::from_micros(200)).await;
+        let logs = p.get_deployment_logs("a").await.unwrap();
+
+        assert!(!logs.is_empty(), "there should be one log");
+
+        let log = logs.first().unwrap();
+        assert_eq!(log.name, "x");
+        assert_eq!(log.state, State::Queued);
+        assert_eq!(log.level, Level::Info);
+        assert_eq!(log.fields, json!({"message": "job queued"}));
+    }
+
+    #[tokio::test]
+    async fn log_recorder_state() {
+        tracing_subscriber::fmt::init();
+
+        let p = Persistence::new_in_memory().await;
+        let state = deploy_layer::Log {
+            name: "z".to_string(),
+            timestamp: Utc::now(),
+            state: State::Running,
+            level: Level::Info,
+            fields: serde_json::Value::Null,
+            r#type: deploy_layer::LogType::State,
+        };
+
+        p.record(state);
+
+        tokio::time::sleep(Duration::from_micros(200)).await;
+        let logs = p.get_deployment_logs("a").await.unwrap();
+
+        assert!(!logs.is_empty(), "state change should be logged");
+
+        let log = logs.first().unwrap();
+        assert_eq!(log.name, "z");
+        assert_eq!(log.state, State::Running);
+        assert_eq!(log.level, Level::Info);
+        assert_eq!(log.fields, json!("NEW STATE"));
+
+        assert_eq!(
+            p.get_deployment("z").await.unwrap().unwrap(),
+            DeploymentInfo {
+                name: "z".to_string(),
+                state: State::Running
+            }
+        );
     }
 }

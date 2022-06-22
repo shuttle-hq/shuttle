@@ -1,29 +1,57 @@
+use chrono::{DateTime, Utc};
 use serde_json::json;
 use tracing::{field::Visit, span, Metadata, Subscriber};
 use tracing_subscriber::Layer;
 
-use super::{log::Level, State};
+use super::{
+    log::{self, Level},
+    DeploymentInfo, State,
+};
 
 /// Records logs for the deployment progress
 pub trait LogRecorder {
-    fn record(&self, event: Log);
+    fn record(&self, log: Log);
 }
 
 #[derive(Debug, PartialEq)]
 pub struct Log {
     /// Deployment name
-    name: String,
+    pub name: String,
 
     /// Current state of the deployment
-    state: State,
+    pub state: State,
 
     /// Log level
-    level: Level,
+    pub level: Level,
+
+    /// Time log happened
+    pub timestamp: DateTime<Utc>,
 
     /// Extra structured log fields
-    fields: serde_json::Value,
+    pub fields: serde_json::Value,
 
-    r#type: LogType,
+    pub r#type: LogType,
+}
+
+impl From<Log> for log::Log {
+    fn from(log: Log) -> Self {
+        Self {
+            name: log.name,
+            timestamp: log.timestamp,
+            state: log.state,
+            level: log.level,
+            fields: log.fields,
+        }
+    }
+}
+
+impl From<Log> for DeploymentInfo {
+    fn from(log: Log) -> Self {
+        Self {
+            name: log.name,
+            state: log.state,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -75,6 +103,7 @@ where
                     name: details.name.clone(),
                     state: details.state,
                     level: event.metadata().level().into(),
+                    timestamp: Utc::now(),
                     fields: serde_json::Value::Object(visitor.0),
                     r#type: LogType::Event,
                 });
@@ -108,6 +137,7 @@ where
             name: details.name.clone(),
             state: details.state,
             level: span.metadata().level().into(),
+            timestamp: Utc::now(),
             fields: Default::default(),
             r#type: LogType::State,
         });

@@ -5,9 +5,7 @@ use axum::extract::{
     Extension,
     Path
 };
-use axum::http::{
-    Request
-};
+use axum::http::Request;
 use axum::response::Response;
 use axum::routing::{
     any,
@@ -100,16 +98,13 @@ pub fn make_api(service: Arc<GatewayService>) -> Router<Body> {
 pub mod tests {
     use std::sync::Arc;
 
-    use axum::body::{
-        Body
-    };
-    
+    use axum::body::Body;
     use axum::headers::Authorization;
     use axum::http::Request;
     use futures::TryFutureExt;
+    use hyper::StatusCode;
     use tokio::sync::mpsc::channel;
     use tower::Service;
-    use hyper::StatusCode;
 
     use super::*;
     use crate::service::GatewayService;

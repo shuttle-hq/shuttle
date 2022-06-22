@@ -1,8 +1,4 @@
-
-use std::fmt::
-    Formatter
-;
-
+use std::fmt::Formatter;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -15,9 +11,6 @@ use axum::extract::{
 };
 use axum::headers::authorization::Basic;
 use axum::headers::Authorization;
-
-
-
 use rand::distributions::{
     Alphanumeric,
     DistString
@@ -26,7 +19,6 @@ use serde::{
     Deserialize,
     Serialize
 };
-
 
 use crate::service::GatewayService;
 use crate::{

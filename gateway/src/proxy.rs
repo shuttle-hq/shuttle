@@ -1,6 +1,4 @@
-
 use std::future::Future;
-
 use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -9,9 +7,7 @@ use std::task::{
     Poll
 };
 
-use axum::body::{
-    HttpBody
-};
+use axum::body::HttpBody;
 use axum::response::{
     IntoResponse,
     Response
@@ -19,15 +15,8 @@ use axum::response::{
 use futures::prelude::*;
 use hyper::body::Body;
 use hyper::server::conn::AddrStream;
-
-use hyper::{
-    Request
-};
-
-
-use tower::{
-    Service
-};
+use hyper::Request;
+use tower::Service;
 
 use crate::service::GatewayService;
 use crate::{

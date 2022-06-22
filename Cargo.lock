@@ -1390,6 +1390,7 @@ name = "deployer"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "chrono",
  "futures",
  "serde",
  "serde_json",
@@ -4130,6 +4131,7 @@ dependencies = [
  "bitflags",
  "byteorder",
  "bytes",
+ "chrono",
  "crc",
  "crossbeam-queue",
  "dirs",
@@ -4182,6 +4184,7 @@ dependencies = [
  "once_cell",
  "proc-macro2",
  "quote",
+ "serde_json",
  "sha2 0.10.2",
  "sqlx-core",
  "sqlx-rt",

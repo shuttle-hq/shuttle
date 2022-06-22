@@ -11,7 +11,7 @@ use tracing_subscriber::{fmt, EnvFilter};
 
 use std::net::SocketAddr;
 
-use crate::deployment::DeployLayer;
+use crate::deployment::deploy_layer::DeployLayer;
 
 const SECRET_KEY: &str = "GATEWAY_SECRET";
 

@@ -1,5 +1,6 @@
-mod deploy_layer;
+pub mod deploy_layer;
 mod info;
+pub mod log;
 mod queue;
 mod run;
 mod states;
@@ -7,7 +8,7 @@ mod states;
 pub use info::DeploymentInfo;
 pub use states::State;
 
-pub use deploy_layer::{DeployLayer, Log, LogRecorder};
+pub use log::Log;
 pub use queue::Queued;
 pub use run::Built;
 use tracing::instrument;

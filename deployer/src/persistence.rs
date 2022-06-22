@@ -1,4 +1,5 @@
-use crate::deployment::{DeploymentInfo, LogRecorder, State};
+use crate::deployment::deploy_layer::{self, LogRecorder};
+use crate::deployment::{DeploymentInfo, Log, State};
 use crate::error::Result;
 
 use std::path::Path;
@@ -41,10 +42,11 @@ impl Persistence {
             );
 
             CREATE TABLE IF NOT EXISTS logs (
-                text TEXT,        -- Log line(s).
-                name TEXT,        -- The service that this log line pertains to.
-                state INTEGER,    -- The state of the deployment at the time at which the log text was produced.
-                timestamp INTEGER -- Unix eopch timestamp.
+                name TEXT,         -- The service that this log line pertains to.
+                timestamp INTEGER, -- Unix eopch timestamp.
+                state INTEGER,     -- The state of the deployment at the time at which the log text was produced.
+                level TEXT,        -- The log level
+                fields TEXT        -- Log fields object.
             );
         ").execute(&pool).await.unwrap();
 
@@ -99,18 +101,44 @@ impl Persistence {
             .await
             .map_err(Into::into)
     }
+
+    async fn insert_log(&self, log: Log) -> Result<()> {
+        sqlx::query(
+            "INSERT INTO logs (name, timestamp, state, level, fields) VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(log.name)
+        .bind(log.timestamp)
+        .bind(log.state)
+        .bind(log.level)
+        .bind(log.fields)
+        .execute(&self.pool)
+        .await
+        .map(|_| ())
+        .map_err(Into::into)
+    }
+
+    async fn get_deployment_logs(&self, name: &str) -> Result<Vec<Log>> {
+        sqlx::query_as("SELECT * FROM logs WHERE name = ?")
+            .bind(name)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(Into::into)
+    }
 }
 
 impl LogRecorder for Persistence {
-    fn record(&self, event: crate::deployment::Log) {
+    fn record(&self, event: deploy_layer::Log) {
         todo!()
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use chrono::Utc;
+    use serde_json::json;
+
     use super::*;
-    use crate::deployment::Built;
+    use crate::deployment::{log::Level, Built};
 
     #[tokio::test]
     async fn deployment_updates() {
@@ -178,5 +206,59 @@ mod tests {
         assert!(p.get_deployment("x").await.unwrap().is_some());
         p.delete_deployment("x").await.unwrap();
         assert!(p.get_deployment("x").await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn log_insert() {
+        let p = Persistence::new_in_memory().await;
+        let log = Log {
+            name: "a".to_string(),
+            timestamp: Utc::now(),
+            state: State::Queued,
+            level: Level::Info,
+            fields: json!({"message": "job queued"}),
+        };
+
+        p.insert_log(log.clone()).await.unwrap();
+
+        let logs = p.get_deployment_logs("a").await.unwrap();
+        assert!(!logs.is_empty(), "there should be one log");
+
+        assert_eq!(logs.first().unwrap(), &log);
+    }
+
+    #[tokio::test]
+    async fn logs_for_deployment() {
+        let p = Persistence::new_in_memory().await;
+        let log_a1 = Log {
+            name: "a".to_string(),
+            timestamp: Utc::now(),
+            state: State::Queued,
+            level: Level::Info,
+            fields: json!({"message": "job queued"}),
+        };
+        let log_b = Log {
+            name: "b".to_string(),
+            timestamp: Utc::now(),
+            state: State::Queued,
+            level: Level::Info,
+            fields: json!({"message": "job queued"}),
+        };
+        let log_a2 = Log {
+            name: "a".to_string(),
+            timestamp: Utc::now(),
+            state: State::Building,
+            level: Level::Warn,
+            fields: json!({"message": "unused Result"}),
+        };
+
+        p.insert_log(log_a1.clone()).await.unwrap();
+        p.insert_log(log_b).await.unwrap();
+        p.insert_log(log_a2.clone()).await.unwrap();
+
+        let logs = p.get_deployment_logs("a").await.unwrap();
+        assert!(!logs.is_empty(), "there should be one log");
+
+        assert_eq!(logs, vec![log_a1, log_a2]);
     }
 }

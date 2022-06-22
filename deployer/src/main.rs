@@ -5,6 +5,7 @@ mod persistence;
 
 use deployment::{Built, DeploymentManager, DeploymentState};
 use persistence::Persistence;
+use tracing::{info, trace};
 
 use std::net::SocketAddr;
 
@@ -12,7 +13,7 @@ const SECRET_KEY: &str = "GATEWAY_SECRET";
 
 #[tokio::main]
 async fn main() {
-    env_logger::init();
+    tracing_subscriber::fmt::init();
 
     let gateway_secret = std::env::var(SECRET_KEY).unwrap_or_else(|_| {
         panic!(
@@ -20,7 +21,7 @@ async fn main() {
             SECRET_KEY
         )
     });
-    log::trace!("{SECRET_KEY} = {gateway_secret}");
+    trace!("{SECRET_KEY} = {gateway_secret}");
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 8001));
 
@@ -38,7 +39,7 @@ async fn main() {
     let router = handlers::make_router(persistence, deployment_manager);
     let make_service = router.into_make_service();
 
-    log::info!("Binding to and listening at address: {}", addr);
+    info!("Binding to and listening at address: {}", addr);
 
     axum::Server::bind(&addr)
         .serve(make_service)

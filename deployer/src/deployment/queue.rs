@@ -1,5 +1,6 @@
 use axum::body::Bytes;
 use futures::{Stream, StreamExt};
+use tracing::{debug, error, info};
 
 use super::{Built, QueueReceiver, RunSender};
 use crate::deployment::DeploymentState;
@@ -10,19 +11,19 @@ use std::fmt;
 use std::pin::Pin;
 
 pub async fn task(mut recv: QueueReceiver, run_send: RunSender, persistence: Persistence) {
-    log::info!("Queue task started");
+    info!("Queue task started");
 
     while let Some(queued) = recv.recv().await {
         let name = queued.name.clone();
 
-        log::info!("Queued deployment at the front of the queue: {}", name);
+        info!("Queued deployment at the front of the queue: {}", name);
 
         let run_send_cloned = run_send.clone();
         let persistence_cloned = persistence.clone();
 
         tokio::spawn(async move {
             if let Err(e) = queued.handle(run_send_cloned, persistence_cloned).await {
-                log::error!("Error during building of deployment '{}' - {e}", name);
+                error!("Error during building of deployment '{}' - {e}", name);
             }
         });
     }
@@ -46,7 +47,7 @@ impl Queued {
 
         while let Some(chunk) = self.data_stream.next().await {
             let chunk = chunk?;
-            log::debug!("{} - streamed {} bytes", self.name, chunk.len());
+            debug!("{} - streamed {} bytes", self.name, chunk.len());
         }
 
         // Build:

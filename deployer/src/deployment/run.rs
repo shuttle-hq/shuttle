@@ -1,21 +1,23 @@
+use tracing::{debug, error, info};
+
 use super::{DeploymentState, KillReceiver, KillSender, RunReceiver};
 use crate::error::Result;
 use crate::persistence::Persistence;
 
 pub async fn task(mut recv: RunReceiver, kill_send: KillSender, persistence: Persistence) {
-    log::info!("Run task started");
+    info!("Run task started");
 
     while let Some(built) = recv.recv().await {
         let name = built.name.clone();
 
-        log::info!("Built deployment at the front of run queue: {}", name);
+        info!("Built deployment at the front of run queue: {}", name);
 
         let kill_recv = kill_send.subscribe();
         let persistence_cloned = persistence.clone();
 
         tokio::spawn(async move {
             if let Err(e) = built.handle(kill_recv, persistence_cloned).await {
-                log::error!("Error during running of deployment '{}' - {e}", name);
+                error!("Error during running of deployment '{}' - {e}", name);
             }
         });
     }
@@ -45,7 +47,7 @@ impl Built {
             tokio::select! {
                 Ok(name) = kill_recv.recv() => {
                     if name == self.name {
-                        log::debug!("Service {name} killed");
+                        debug!("Service {name} killed");
                         break;
                     }
                 }

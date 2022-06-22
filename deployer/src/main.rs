@@ -3,7 +3,7 @@ mod error;
 mod handlers;
 mod persistence;
 
-use deployment::{Built, DeploymentManager, DeploymentState, Log, LogRecorder};
+use deployment::{Built, DeploymentManager, Log, LogRecorder};
 use persistence::Persistence;
 use tracing::{info, trace};
 use tracing_subscriber::prelude::*;
@@ -55,7 +55,6 @@ async fn main() {
     for existing_deployment in persistence.get_all_runnable_deployments().await.unwrap() {
         let built = Built {
             name: existing_deployment.name,
-            state: DeploymentState::Built,
         };
         deployment_manager.run_push(built).await;
     }

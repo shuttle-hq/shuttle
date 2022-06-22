@@ -1,6 +1,6 @@
 use tracing::{debug, error, info, instrument};
 
-use super::{DeploymentState, KillReceiver, KillSender, RunReceiver, State};
+use super::{KillReceiver, KillSender, RunReceiver, State};
 use crate::error::Result;
 
 pub async fn task(mut recv: RunReceiver, kill_send: KillSender) {
@@ -24,19 +24,14 @@ pub async fn task(mut recv: RunReceiver, kill_send: KillSender) {
 #[derive(Debug)]
 pub struct Built {
     pub name: String,
-    pub state: DeploymentState,
 }
 
 impl Built {
     #[instrument(skip(self), fields(name = self.name.as_str(), state = %State::Running))]
-    async fn handle(mut self, mut kill_recv: KillReceiver) -> Result<()> {
+    async fn handle(self, mut kill_recv: KillReceiver) -> Result<()> {
         // Load service into memory:
         // TODO
         let mut execute_future = Box::pin(async { loop {} }); // placeholder
-
-        // Update deployment state:
-
-        self.state = DeploymentState::Running;
 
         // Execute loaded service:
 

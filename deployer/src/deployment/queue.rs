@@ -3,7 +3,7 @@ use futures::{Stream, StreamExt};
 use tracing::{debug, error, info, instrument};
 
 use super::{Built, QueueReceiver, RunSender};
-use crate::deployment::{DeploymentState, State};
+use crate::deployment::State;
 use crate::error::Result;
 
 use std::fmt;
@@ -36,16 +36,11 @@ async fn promote_to_run(built: Built, run_send: RunSender) {
 pub struct Queued {
     pub name: String,
     pub data_stream: Pin<Box<dyn Stream<Item = Result<Bytes>> + Send + Sync>>,
-    pub state: DeploymentState,
 }
 
 impl Queued {
     #[instrument(skip(self), fields(name = self.name.as_str(), state = %State::Queued))]
     async fn handle(mut self) -> Result<Built> {
-        // Update deployment state:
-
-        self.state = DeploymentState::Building;
-
         // Read POSTed data:
 
         while let Some(chunk) = self.data_stream.next().await {
@@ -59,10 +54,7 @@ impl Queued {
 
         // Update deployment state to 'built:
 
-        let built = Built {
-            name: self.name,
-            state: DeploymentState::Built,
-        };
+        let built = Built { name: self.name };
 
         Ok(built)
     }
@@ -70,10 +62,6 @@ impl Queued {
 
 impl fmt::Debug for Queued {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Queued {{ name: \"{}\", state: {}, .. }}",
-            self.name, self.state
-        )
+        write!(f, "Queued {{ name: \"{}\", .. }}", self.name)
     }
 }

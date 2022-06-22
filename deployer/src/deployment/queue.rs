@@ -19,7 +19,7 @@ use tokio::fs;
 use tokio::io::AsyncReadExt;
 
 /// Path of the directory that contains extracted service Cargo projects.
-const BUILDS_PATH: &str = "shuttle-builds";
+const BUILDS_PATH: &str = "/tmp/shuttle-builds";
 
 /// The name given to 'marker files' (text files placed in project directories
 /// that have in them the name of the linked library '.so' file of that service
@@ -63,7 +63,7 @@ impl Queued {
 
         persistence.update_deployment(&self).await?;
 
-        // Read POSTed data:
+        log::info!("Fetching POSTed data for deployment '{}'", self.name);
 
         let mut vec = Vec::new();
         while let Some(buf) = self.data_stream.next().await {
@@ -72,7 +72,7 @@ impl Queued {
             vec.put(buf);
         }
 
-        // Extract '.tar.gz' data:
+        log::info!("Extracting received data for deployment '{}'", self.name);
 
         fs::create_dir_all(BUILDS_PATH).await?;
 
@@ -80,17 +80,21 @@ impl Queued {
 
         extract_tar_gz_data(vec.as_slice(), &project_path)?;
 
-        // Build:
+        log::info!("Building deployment '{}'", self.name);
 
         let cargo_output_buf = Box::new(std::io::stdout());
 
+        let project_path = project_path.canonicalize()?;
         let so_path = build_crate(&project_path, cargo_output_buf).unwrap(); // TODO: Handle error
 
-        // Remove old build if any:
+        log::info!("Removing old build (if present) for {}", self.name);
 
         remove_old_build(&project_path).await?;
 
-        // Copy and rename the built '.so' file and create a marker file:
+        log::info!(
+            "Moving built library and creating marker file for deployment '{}'",
+            self.name
+        );
 
         rename_build(&project_path, so_path).await?;
 
@@ -103,7 +107,7 @@ impl Queued {
 
         persistence.update_deployment(&built).await?;
 
-        // Send to run queue:
+        log::info!("Moving deployment '{}' to run queue", self.name);
 
         run_send.send(built).await.unwrap();
 

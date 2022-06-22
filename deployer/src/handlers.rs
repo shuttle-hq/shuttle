@@ -36,7 +36,6 @@ async fn get_service(
 }
 
 async fn post_service(
-    Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
     Path(name): Path<String>,
     stream: BodyStream,
@@ -48,7 +47,6 @@ async fn post_service(
     };
     let info = DeploymentInfo::from(&queued);
 
-    persistence.update_deployment(&queued).await?;
     deployment_manager.queue_push(queued).await;
 
     Ok(Json(info))

@@ -1,17 +1,18 @@
+mod deploy_layer;
 mod info;
 mod queue;
 mod run;
 mod states;
-mod tracing;
 
 pub use info::DeploymentInfo;
 pub use states::DeploymentState;
 
-pub use crate::deployment::tracing::{DeployLayer, Log, LogRecorder};
+pub use deploy_layer::{DeployLayer, Log, LogRecorder};
 pub use queue::Queued;
 pub use run::Built;
+use tracing::instrument;
 
-use crate::persistence::Persistence;
+use deploy_layer::State;
 
 use tokio::sync::{broadcast, mpsc};
 
@@ -28,19 +29,21 @@ pub struct DeploymentManager {
 impl DeploymentManager {
     /// Create a new deployment manager. Manages one or more 'pipelines' for
     /// processing service building, loading, and deployment.
-    pub fn new(persistence: Persistence) -> Self {
+    pub fn new() -> Self {
         let (kill_send, _) = broadcast::channel(KILL_BUFFER_SIZE);
 
         DeploymentManager {
-            pipeline: Pipeline::new(kill_send.clone(), persistence),
+            pipeline: Pipeline::new(kill_send.clone()),
             kill_send,
         }
     }
 
+    #[instrument(skip(self), fields(name = queued.name.as_str(), state = %State::Queued))]
     pub async fn queue_push(&self, queued: Queued) {
         self.pipeline.queue_send.send(queued).await.unwrap();
     }
 
+    #[instrument(skip(self), fields(name = built.name.as_str(), state = %State::Built))]
     pub async fn run_push(&self, built: Built) {
         self.pipeline.run_send.send(built).await.unwrap();
     }
@@ -77,15 +80,14 @@ impl Pipeline {
     /// executing/deploying built services. Two multi-producer, single consumer
     /// channels are also created which are for moving on-going service
     /// deployments between the aforementioned tasks.
-    fn new(kill_send: KillSender, persistence: Persistence) -> Pipeline {
+    fn new(kill_send: KillSender) -> Pipeline {
         let (queue_send, queue_recv) = mpsc::channel(QUEUE_BUFFER_SIZE);
         let (run_send, run_recv) = mpsc::channel(RUN_BUFFER_SIZE);
 
         let run_send_clone = run_send.clone();
-        let persistence_clone = persistence.clone();
 
-        tokio::spawn(async move { queue::task(queue_recv, run_send_clone, persistence).await });
-        tokio::spawn(async move { run::task(run_recv, kill_send, persistence_clone).await });
+        tokio::spawn(async move { queue::task(queue_recv, run_send_clone).await });
+        tokio::spawn(async move { run::task(run_recv, kill_send).await });
 
         Pipeline {
             queue_send,

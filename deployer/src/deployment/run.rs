@@ -1,10 +1,9 @@
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, instrument};
 
-use super::{DeploymentState, KillReceiver, KillSender, RunReceiver};
+use super::{DeploymentState, KillReceiver, KillSender, RunReceiver, State};
 use crate::error::Result;
-use crate::persistence::Persistence;
 
-pub async fn task(mut recv: RunReceiver, kill_send: KillSender, persistence: Persistence) {
+pub async fn task(mut recv: RunReceiver, kill_send: KillSender) {
     info!("Run task started");
 
     while let Some(built) = recv.recv().await {
@@ -13,10 +12,9 @@ pub async fn task(mut recv: RunReceiver, kill_send: KillSender, persistence: Per
         info!("Built deployment at the front of run queue: {}", name);
 
         let kill_recv = kill_send.subscribe();
-        let persistence_cloned = persistence.clone();
 
         tokio::spawn(async move {
-            if let Err(e) = built.handle(kill_recv, persistence_cloned).await {
+            if let Err(e) = built.handle(kill_recv).await {
                 error!("Error during running of deployment '{}' - {e}", name);
             }
         });
@@ -30,7 +28,8 @@ pub struct Built {
 }
 
 impl Built {
-    async fn handle(mut self, mut kill_recv: KillReceiver, persistence: Persistence) -> Result<()> {
+    #[instrument(skip(self), fields(name = self.name.as_str(), state = %State::Running))]
+    async fn handle(mut self, mut kill_recv: KillReceiver) -> Result<()> {
         // Load service into memory:
         // TODO
         let mut execute_future = Box::pin(async { loop {} }); // placeholder
@@ -38,8 +37,6 @@ impl Built {
         // Update deployment state:
 
         self.state = DeploymentState::Running;
-
-        persistence.update_deployment(&self).await?;
 
         // Execute loaded service:
 

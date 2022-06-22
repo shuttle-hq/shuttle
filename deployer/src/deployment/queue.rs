@@ -1,16 +1,15 @@
 use axum::body::Bytes;
 use futures::{Stream, StreamExt};
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, instrument};
 
 use super::{Built, QueueReceiver, RunSender};
-use crate::deployment::DeploymentState;
+use crate::deployment::{DeploymentState, State};
 use crate::error::Result;
-use crate::persistence::Persistence;
 
 use std::fmt;
 use std::pin::Pin;
 
-pub async fn task(mut recv: QueueReceiver, run_send: RunSender, persistence: Persistence) {
+pub async fn task(mut recv: QueueReceiver, run_send: RunSender) {
     info!("Queue task started");
 
     while let Some(queued) = recv.recv().await {
@@ -19,14 +18,19 @@ pub async fn task(mut recv: QueueReceiver, run_send: RunSender, persistence: Per
         info!("Queued deployment at the front of the queue: {}", name);
 
         let run_send_cloned = run_send.clone();
-        let persistence_cloned = persistence.clone();
 
         tokio::spawn(async move {
-            if let Err(e) = queued.handle(run_send_cloned, persistence_cloned).await {
-                error!("Error during building of deployment '{}' - {e}", name);
+            match queued.handle().await {
+                Ok(built) => promote_to_run(built, run_send_cloned).await,
+                Err(e) => error!("Error during building of deployment '{}' - {e}", name),
             }
         });
     }
+}
+
+#[instrument(fields(name = built.name.as_str(), state = %State::Built))]
+async fn promote_to_run(built: Built, run_send: RunSender) {
+    run_send.send(built).await.unwrap();
 }
 
 pub struct Queued {
@@ -36,12 +40,11 @@ pub struct Queued {
 }
 
 impl Queued {
-    async fn handle(mut self, run_send: RunSender, persistence: Persistence) -> Result<()> {
+    #[instrument(skip(self), fields(name = self.name.as_str(), state = %State::Queued))]
+    async fn handle(mut self) -> Result<Built> {
         // Update deployment state:
 
         self.state = DeploymentState::Building;
-
-        persistence.update_deployment(&self).await?;
 
         // Read POSTed data:
 
@@ -61,13 +64,7 @@ impl Queued {
             state: DeploymentState::Built,
         };
 
-        persistence.update_deployment(&built).await?;
-
-        // Send to run queue:
-
-        run_send.send(built).await.unwrap();
-
-        Ok(())
+        Ok(built)
     }
 }
 

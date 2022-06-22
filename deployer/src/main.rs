@@ -50,7 +50,7 @@ async fn main() {
     let addr = SocketAddr::from(([127, 0, 0, 1], 8001));
 
     let persistence = Persistence::new().await;
-    let deployment_manager = DeploymentManager::new(persistence.clone());
+    let deployment_manager = DeploymentManager::new();
 
     for existing_deployment in persistence.get_all_runnable_deployments().await.unwrap() {
         let built = Built {

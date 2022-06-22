@@ -3,17 +3,41 @@ mod error;
 mod handlers;
 mod persistence;
 
-use deployment::{Built, DeploymentManager, DeploymentState};
+use deployment::{Built, DeploymentManager, DeploymentState, Log, LogRecorder};
 use persistence::Persistence;
 use tracing::{info, trace};
+use tracing_subscriber::prelude::*;
+use tracing_subscriber::{fmt, EnvFilter};
 
 use std::net::SocketAddr;
 
+use crate::deployment::DeployLayer;
+
 const SECRET_KEY: &str = "GATEWAY_SECRET";
+
+/// TODO: hook to persistence
+struct Stub;
+
+impl LogRecorder for Stub {
+    fn record(&self, event: Log) {
+        println!("{event:#?}");
+    }
+}
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt::init();
+    let recorder = Stub;
+
+    let fmt_layer = fmt::layer();
+    let filter_layer = EnvFilter::try_from_default_env()
+        .or_else(|_| EnvFilter::try_new("info"))
+        .unwrap();
+
+    tracing_subscriber::registry()
+        .with(DeployLayer::new(recorder))
+        .with(filter_layer)
+        .with(fmt_layer)
+        .init();
 
     let gateway_secret = std::env::var(SECRET_KEY).unwrap_or_else(|_| {
         panic!(

@@ -2,10 +2,12 @@ mod info;
 mod queue;
 mod run;
 mod states;
+mod tracing;
 
 pub use info::DeploymentInfo;
 pub use states::DeploymentState;
 
+pub use crate::deployment::tracing::{DeployLayer, Log, LogRecorder};
 pub use queue::Queued;
 pub use run::Built;
 

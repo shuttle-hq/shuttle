@@ -14,4 +14,4 @@ axum = "0.5.7"
 serde = { version = "1.0.137", features = ["derive"] }
 serde_json = "1.0.81"
 tracing = "0.1.35"
-tracing-subscriber = "0.3.11"
+tracing-subscriber = { version = "0.3.11", features = ["env-filter"] }

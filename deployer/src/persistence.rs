@@ -1,4 +1,4 @@
-use crate::deployment::{DeploymentInfo, State};
+use crate::deployment::{DeploymentInfo, LogRecorder, State};
 use crate::error::Result;
 
 use std::path::Path;
@@ -98,6 +98,12 @@ impl Persistence {
             .fetch_all(&self.pool)
             .await
             .map_err(Into::into)
+    }
+}
+
+impl LogRecorder for Persistence {
+    fn record(&self, event: crate::deployment::Log) {
+        todo!()
     }
 }
 

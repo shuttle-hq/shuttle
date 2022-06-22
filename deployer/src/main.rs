@@ -3,7 +3,7 @@ mod error;
 mod handlers;
 mod persistence;
 
-use deployment::{Built, DeploymentManager, Log, LogRecorder};
+use deployment::{Built, DeploymentManager};
 use persistence::Persistence;
 use tracing::{info, trace};
 use tracing_subscriber::prelude::*;
@@ -15,30 +15,8 @@ use crate::deployment::DeployLayer;
 
 const SECRET_KEY: &str = "GATEWAY_SECRET";
 
-/// TODO: hook to persistence
-struct Stub;
-
-impl LogRecorder for Stub {
-    fn record(&self, event: Log) {
-        println!("{event:#?}");
-    }
-}
-
 #[tokio::main]
 async fn main() {
-    let recorder = Stub;
-
-    let fmt_layer = fmt::layer();
-    let filter_layer = EnvFilter::try_from_default_env()
-        .or_else(|_| EnvFilter::try_new("info"))
-        .unwrap();
-
-    tracing_subscriber::registry()
-        .with(DeployLayer::new(recorder))
-        .with(filter_layer)
-        .with(fmt_layer)
-        .init();
-
     let gateway_secret = std::env::var(SECRET_KEY).unwrap_or_else(|_| {
         panic!(
             "No gateway secret specified with environment variable {}",
@@ -49,7 +27,18 @@ async fn main() {
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 8001));
 
+    let fmt_layer = fmt::layer();
+    let filter_layer = EnvFilter::try_from_default_env()
+        .or_else(|_| EnvFilter::try_new("info"))
+        .unwrap();
+
     let persistence = Persistence::new().await;
+    tracing_subscriber::registry()
+        .with(DeployLayer::new(persistence.clone()))
+        .with(filter_layer)
+        .with(fmt_layer)
+        .init();
+
     let deployment_manager = DeploymentManager::new();
 
     for existing_deployment in persistence.get_all_runnable_deployments().await.unwrap() {

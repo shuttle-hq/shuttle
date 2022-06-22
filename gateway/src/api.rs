@@ -6,8 +6,7 @@ use axum::extract::{
     Path
 };
 use axum::http::{
-    Request,
-    StatusCode
+    Request
 };
 use axum::response::Response;
 use axum::routing::{
@@ -28,7 +27,6 @@ use crate::project::Project;
 use crate::{
     AccountName,
     Error,
-    ErrorKind,
     GatewayService,
     ProjectName
 };
@@ -70,7 +68,7 @@ async fn post_project(
 async fn delete_project(
     Extension(service): Extension<Arc<GatewayService>>,
     ScopedUser {
-        scope,
+        scope: _,
         user: User { name, .. }
     }: ScopedUser,
     Path(project): Path<ProjectName>
@@ -103,18 +101,15 @@ pub mod tests {
     use std::sync::Arc;
 
     use axum::body::{
-        Body,
-        HttpBody
+        Body
     };
-    use axum::headers::authorization::{
-        self,
-        Basic
-    };
+    
     use axum::headers::Authorization;
     use axum::http::Request;
     use futures::TryFutureExt;
     use tokio::sync::mpsc::channel;
     use tower::Service;
+    use hyper::StatusCode;
 
     use super::*;
     use crate::service::GatewayService;

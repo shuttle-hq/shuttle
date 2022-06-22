@@ -8,10 +8,10 @@ use std::convert::Infallible;
 use std::error::Error as StdError;
 use std::fmt::Formatter;
 use std::io;
-use std::net::IpAddr;
+
 use std::pin::Pin;
 use std::str::FromStr;
-use std::sync::Arc;
+
 
 use axum::http::StatusCode;
 use axum::response::{
@@ -25,7 +25,7 @@ use convert_case::{
     Casing
 };
 use futures::prelude::*;
-use futures::stream::TryUnfold;
+
 use lazy_static::lazy_static;
 use regex::Regex;
 use serde::{
@@ -119,11 +119,11 @@ macro_rules! assert_err_kind {
     }};
 }
 
-use crate::api::make_api;
+
 use crate::args::Args;
-use crate::proxy::make_proxy;
+
 use crate::service::GatewayService;
-use crate::worker::Worker;
+
 
 pub mod api;
 pub mod args;
@@ -134,7 +134,7 @@ pub mod service;
 pub mod worker;
 
 lazy_static! {
-    static ref PROJECT_REGEX: Regex = { Regex::new("^[a-zA-Z0-9\\-_]{3,64}$").unwrap() };
+    static ref PROJECT_REGEX: Regex = Regex::new("^[a-zA-Z0-9\\-_]{3,64}$").unwrap();
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -361,15 +361,15 @@ where
     fn into_result(self) -> Result<Self, Self::ErrorVariant>;
 }
 
-pub type StateTryStream<'c, St: EndState<'c>> =
-    Pin<Box<dyn Stream<Item = Result<St, St::ErrorVariant>> + Send + 'c>>;
+pub type StateTryStream<'c, St, Err> =
+    Pin<Box<dyn Stream<Item = Result<St, Err>> + Send + 'c>>;
 
 pub trait EndStateExt<'c>: EndState<'c> {
     /// Convert the state into a [`TryStream`] that yields
     /// the generated states.
     ///
     /// This stream will not end.
-    fn into_stream<Ctx>(self, ctx: Ctx) -> StateTryStream<'c, Self>
+    fn into_stream<Ctx>(self, ctx: Ctx) -> StateTryStream<'c, Self, Self::ErrorVariant>
     where
         Self: 'c,
         Ctx: 'c + Context<'c>
@@ -419,23 +419,21 @@ pub mod tests {
         anyhow,
         Context as AnyhowContext
     };
-    use axum::body::HttpBody;
+    
     use axum::headers::Header;
     use axum::http::Request;
-    use bollard::models::Health;
+    
     use bollard::network::ListNetworksOptions;
     use bollard::Docker;
     use http::uri::{
-        PathAndQuery,
         Scheme,
         Uri
     };
-    use http::Error as HttpError;
+    
     use hyper::client::HttpConnector;
     use hyper::{
         Body,
-        Client as HyperClient,
-        StatusCode
+        Client as HyperClient
     };
     use rand::distributions::{
         Alphanumeric,
@@ -443,7 +441,7 @@ pub mod tests {
         Distribution,
         Uniform
     };
-    use serde::Deserialize;
+    
     use tempfile::NamedTempFile;
 
     use super::*;

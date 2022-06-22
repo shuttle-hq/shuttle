@@ -13,7 +13,6 @@ use crate::{
     EndState,
     Error,
     ProjectName,
-    Refresh,
     Service,
     State
 };
@@ -185,7 +184,7 @@ pub mod tests {
 
         type Error = Infallible;
 
-        async fn next<C: Context<'c>>(mut self, ctx: &C) -> Result<Self::Next, Self::Error> {
+        async fn next<C: Context<'c>>(mut self, _ctx: &C) -> Result<Self::Next, Self::Error> {
             if self.count < self.max_count {
                 self.count += 1;
             }

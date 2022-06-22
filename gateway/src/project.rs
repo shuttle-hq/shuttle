@@ -1,8 +1,7 @@
 use std::convert::Infallible;
-use std::fmt::Formatter;
+
 use std::net::{
     IpAddr,
-    Ipv4Addr,
     SocketAddr
 };
 use std::time::Duration;
@@ -17,19 +16,11 @@ use bollard::errors::Error as DockerError;
 use bollard::models::{
     ContainerConfig,
     ContainerInspectResponse,
-    ContainerState,
     ContainerStateStatusEnum,
-    HealthStatusEnum,
-    HostConfig,
-    Mount,
-    MountTypeEnum,
-    NetworkingConfig
+    HealthStatusEnum
 };
 use futures::prelude::*;
-use rand::distributions::{
-    Alphanumeric,
-    DistString
-};
+
 use serde::{
     Deserialize,
     Serialize
@@ -274,7 +265,7 @@ impl Refresh for Project {
     /// project into the wrong state if the docker is transitioning
     /// the state of its resources under us
     async fn refresh<'c, C: Context<'c>>(self, ctx: &C) -> Result<Self, Self::Error> {
-        let container = if let Some(container_id) = self.container_id() {
+        let _container = if let Some(container_id) = self.container_id() {
             Some(ctx.docker().inspect_container(&container_id, None).await?)
         } else {
             None
@@ -319,7 +310,7 @@ pub struct ProjectCreating {
 }
 
 impl ProjectCreating {
-    pub fn new(project_name: ProjectName, prefix: String, initial_key: String) -> Self {
+    pub fn new(project_name: ProjectName, _prefix: String, initial_key: String) -> Self {
         Self {
             project_name,
             initial_key
@@ -493,7 +484,7 @@ impl<'c> State<'c> for ProjectStarted {
             Ok(Self::Next::Ready(ProjectReady { container, service }))
         } else {
             let created = chrono::DateTime::parse_from_rfc3339(safe_unwrap!(container.created))
-                .map_err(|err| {
+                .map_err(|_err| {
                     ProjectError::internal("invalid `created` response from Docker daemon")
                 })?;
             let now = chrono::offset::Utc::now();
@@ -519,7 +510,7 @@ impl<'c> State<'c> for ProjectReady {
     type Next = Self;
     type Error = ProjectError;
 
-    async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error> {
+    async fn next<C: Context<'c>>(self, _ctx: &C) -> Result<Self::Next, Self::Error> {
         Ok(self)
     }
 }
@@ -549,7 +540,7 @@ impl Service {
 
         let resource_name = safe_unwrap!(container_name.strip_suffix("_run")).to_string();
 
-        let Args { network_id, .. } = ctx.args();
+        let Args { network_id: _, .. } = ctx.args();
 
         let target = safe_unwrap_mut!(
             container
@@ -603,7 +594,7 @@ impl<'c> State<'c> for ProjectStopped {
     type Next = ProjectStarting;
     type Error = ProjectError;
 
-    async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error> {
+    async fn next<C: Context<'c>>(self, _ctx: &C) -> Result<Self::Next, Self::Error> {
         // If stopped, try to restart
         Ok(ProjectStarting {
             container: self.container
@@ -653,7 +644,7 @@ impl<'c> State<'c> for ProjectDestroyed {
     type Next = ProjectDestroyed;
     type Error = ProjectError;
 
-    async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error> {
+    async fn next<C: Context<'c>>(self, _ctx: &C) -> Result<Self::Next, Self::Error> {
         Ok(self)
     }
 }
@@ -711,19 +702,16 @@ impl<'c> State<'c> for ProjectError {
     type Next = Self;
     type Error = Infallible;
 
-    async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error> {
+    async fn next<C: Context<'c>>(self, _ctx: &C) -> Result<Self::Next, Self::Error> {
         Ok(self)
     }
 }
 
 #[cfg(test)]
 pub mod tests {
-    use std::{
-        env,
-        io
-    };
+    
 
-    use bollard::models::Health;
+    use bollard::models::{Health, ContainerState};
     use futures::prelude::*;
     use hyper::{
         Body,
@@ -839,7 +827,7 @@ pub mod tests {
             ctx,
             project_stopped.unwrap().destroy().unwrap(),
             #[assertion = "Container is destroyed"]
-            Ok(Project::Destroyed(ProjectDestroyed { destroyed })),
+            Ok(Project::Destroyed(ProjectDestroyed { destroyed: _ })),
         );
 
         Ok(())

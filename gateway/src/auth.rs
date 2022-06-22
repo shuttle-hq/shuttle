@@ -1,10 +1,9 @@
-use std::collections::HashMap;
+
 use std::fmt::{
-    Display,
     Formatter
 };
 use std::io::Write;
-use std::path::PathBuf;
+
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -17,12 +16,9 @@ use axum::extract::{
 };
 use axum::headers::authorization::Basic;
 use axum::headers::Authorization;
-use axum::http::StatusCode;
-use axum::response::{
-    IntoResponse,
-    Response
-};
-use axum::Json;
+
+
+
 use rand::distributions::{
     Alphanumeric,
     DistString
@@ -31,7 +27,7 @@ use serde::{
     Deserialize,
     Serialize
 };
-use serde_json::json;
+
 
 use crate::service::GatewayService;
 use crate::{

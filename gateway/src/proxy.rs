@@ -1,6 +1,6 @@
-use std::convert::Infallible;
+
 use std::future::Future;
-use std::io;
+
 use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -10,7 +10,6 @@ use std::task::{
 };
 
 use axum::body::{
-    BoxBody,
     HttpBody
 };
 use axum::response::{
@@ -20,18 +19,13 @@ use axum::response::{
 use futures::prelude::*;
 use hyper::body::Body;
 use hyper::server::conn::AddrStream;
-use hyper::service::{
-    make_service_fn,
-    service_fn
-};
+
 use hyper::{
-    Request,
-    StatusCode
+    Request
 };
-use hyper_reverse_proxy::ProxyError;
-use shuttle_common::DeploymentMeta;
+
+
 use tower::{
-    MakeService,
     Service
 };
 
@@ -39,8 +33,7 @@ use crate::service::GatewayService;
 use crate::{
     Error,
     ErrorKind,
-    ProjectName,
-    Refresh
+    ProjectName
 };
 
 const SHUTTLEAPP_SUFFIX: &'static str = ".shuttleapp.rs";
@@ -56,7 +49,7 @@ impl Service<Request<Body>> for ProxyService {
     type Future =
         Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
 
-    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
     }
 
@@ -111,7 +104,7 @@ impl<'r> Service<&'r AddrStream> for MakeProxyService {
     type Future =
         Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
 
-    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
     }
 

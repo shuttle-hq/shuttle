@@ -5,14 +5,12 @@ mod run;
 mod states;
 
 pub use info::DeploymentInfo;
-pub use states::DeploymentState;
+pub use states::State;
 
 pub use deploy_layer::{DeployLayer, Log, LogRecorder};
 pub use queue::Queued;
 pub use run::Built;
 use tracing::instrument;
-
-use deploy_layer::State;
 
 use tokio::sync::{broadcast, mpsc};
 
@@ -56,17 +54,17 @@ impl DeploymentManager {
 }
 
 /// ```
-/// queue channel   all deployments here are DeploymentState::Queued
+/// queue channel   all deployments here are State::Queued
 ///       |
 ///       v
 ///  queue task     when taken from the channel by this task, deployments
-///                 enter the DeploymentState::Building state and upon being
-///       |         built transition to the DeploymentState::Built state
+///                 enter the State::Building state and upon being
+///       |         built transition to the State::Built state
 ///       v
-///  run channel    all deployments here are DeploymentState::Built
+///  run channel    all deployments here are State::Built
 ///       |
 ///       v
-///    run task     tasks enter the DeploymentState::Running state and begin
+///    run task     tasks enter the State::Running state and begin
 ///                 executing
 /// ```
 #[derive(Clone)]

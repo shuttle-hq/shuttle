@@ -1,4 +1,4 @@
-use crate::deployment::{DeploymentInfo, DeploymentState};
+use crate::deployment::{DeploymentInfo, State};
 use crate::error::Result;
 
 use std::path::Path;
@@ -54,7 +54,7 @@ impl Persistence {
     pub async fn update_deployment(&self, info: impl Into<DeploymentInfo>) -> Result<()> {
         let info = info.into();
 
-        // TODO: Handle moving to 'active_deployments' table for DeploymentState::Running.
+        // TODO: Handle moving to 'active_deployments' table for State::Running.
 
         sqlx::query("INSERT OR REPLACE INTO deployments (name, state) VALUES (?, ?)")
             .bind(info.name)
@@ -93,8 +93,8 @@ impl Persistence {
 
     pub async fn get_all_runnable_deployments(&self) -> Result<Vec<DeploymentInfo>> {
         sqlx::query_as("SELECT * FROM deployments WHERE state = ? OR state = ?")
-            .bind(DeploymentState::Built)
-            .bind(DeploymentState::Running)
+            .bind(State::Built)
+            .bind(State::Running)
             .fetch_all(&self.pool)
             .await
             .map_err(Into::into)
@@ -112,7 +112,7 @@ mod tests {
 
         let mut info = DeploymentInfo {
             name: "abc".to_string(),
-            state: DeploymentState::Queued,
+            state: State::Queued,
         };
 
         p.update_deployment(info.clone()).await.unwrap();
@@ -120,11 +120,10 @@ mod tests {
 
         p.update_deployment(&Built {
             name: "abc".to_string(),
-            state: DeploymentState::Built,
         })
         .await
         .unwrap();
-        info.state = DeploymentState::Built;
+        info.state = State::Built;
         assert_eq!(p.get_deployment("abc").await.unwrap().unwrap(), info);
     }
 
@@ -135,19 +134,19 @@ mod tests {
         for info in [
             DeploymentInfo {
                 name: "abc".to_string(),
-                state: DeploymentState::Queued,
+                state: State::Queued,
             },
             DeploymentInfo {
                 name: "foo".to_string(),
-                state: DeploymentState::Built,
+                state: State::Built,
             },
             DeploymentInfo {
                 name: "bar".to_string(),
-                state: DeploymentState::Running,
+                state: State::Running,
             },
             DeploymentInfo {
                 name: "def".to_string(),
-                state: DeploymentState::Building,
+                state: State::Building,
             },
         ] {
             p.update_deployment(info).await.unwrap();
@@ -166,7 +165,7 @@ mod tests {
 
         p.update_deployment(DeploymentInfo {
             name: "x".to_string(),
-            state: DeploymentState::Running,
+            state: State::Running,
         })
         .await
         .unwrap();

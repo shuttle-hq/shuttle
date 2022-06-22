@@ -100,3 +100,6 @@ type RunReceiver = mpsc::Receiver<run::Built>;
 
 type KillSender = broadcast::Sender<String>;
 type KillReceiver = broadcast::Receiver<String>;
+
+type BuildLogSender = broadcast::Sender<String>;
+pub type BuildLogReceiver = broadcast::Receiver<String>;

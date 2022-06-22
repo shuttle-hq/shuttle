@@ -1,5 +1,5 @@
 use super::{Built, QueueReceiver, RunSender};
-use crate::deployment::DeploymentState;
+use crate::deployment::{DeploymentState, BuildLogSender};
 use crate::error::{Error, Result};
 use crate::persistence::Persistence;
 
@@ -53,6 +53,7 @@ pub struct Queued {
     pub name: String,
     pub data_stream: Pin<Box<dyn Stream<Item = Result<Bytes>> + Send + Sync>>,
     pub state: DeploymentState,
+    pub build_log_sender: BuildLogSender,
 }
 
 impl Queued {

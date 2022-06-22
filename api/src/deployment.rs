@@ -583,11 +583,7 @@ impl DeploymentSystem {
             })?
             .to_vec();
 
-        let deployment = Arc::new(Deployment::from_bytes(
-            &self.fqdn,
-            project,
-            crate_bytes,
-        ));
+        let deployment = Arc::new(Deployment::from_bytes(&self.fqdn, project, crate_bytes));
 
         let info = deployment.meta().await;
 

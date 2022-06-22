@@ -3,12 +3,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::headers::{
-    authorization,
     Authorization
 };
 use futures::prelude::*;
 use http::Request;
-use hyper::body::Bytes;
+
 use hyper::{
     Body,
     StatusCode
@@ -85,7 +84,7 @@ async fn end_to_end() {
     let serve_proxy = hyper::Server::bind(&proxy_addr).serve(proxy);
     let proxy_client = world.client(proxy_addr.clone());
 
-    let gateway = tokio::spawn(async move {
+    let _gateway = tokio::spawn(async move {
         tokio::select! {
             _ = worker.start() => {},
             _ = serve_api => {},

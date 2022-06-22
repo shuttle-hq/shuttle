@@ -1,6 +1,6 @@
 use super::{Built, QueueReceiver, RunSender};
 use crate::deployment::DeploymentState;
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::persistence::Persistence;
 
 use shuttle_service::loader::build_crate;
@@ -82,10 +82,11 @@ impl Queued {
 
         log::info!("Building deployment '{}'", self.name);
 
-        let cargo_output_buf = Box::new(std::io::stdout());
+        let cargo_output_buf = Box::new(std::io::stdout()); // TODO: Redirect over WebSocket.
 
         let project_path = project_path.canonicalize()?;
-        let so_path = build_crate(&project_path, cargo_output_buf).unwrap(); // TODO: Handle error
+        let so_path =
+            build_crate(&project_path, cargo_output_buf).map_err(|e| Error::Build(e.into()))?;
 
         log::info!("Removing old build (if present) for {}", self.name);
 
@@ -107,7 +108,7 @@ impl Queued {
 
         persistence.update_deployment(&built).await?;
 
-        log::info!("Moving deployment '{}' to run queue", self.name);
+        log::info!("Moving deployment '{}' to run queue", built.name);
 
         run_send.send(built).await.unwrap();
 

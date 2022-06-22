@@ -1,8 +1,7 @@
 
-use std::fmt::{
+use std::fmt::
     Formatter
-};
-use std::io::Write;
+;
 
 use std::str::FromStr;
 use std::sync::Arc;

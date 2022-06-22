@@ -828,7 +828,7 @@ pub mod tests {
             project_stopped.unwrap().destroy().unwrap(),
             #[assertion = "Container is destroyed"]
             Ok(Project::Destroyed(ProjectDestroyed { destroyed: _ })),
-        );
+        ).unwrap();
 
         Ok(())
     }

@@ -8,8 +8,6 @@ use axum::headers::{Authorization, Header};
 use axum::http::Request;
 use axum::response::Response;
 use bollard::Docker;
-use hyper::client::HttpConnector;
-use hyper::Client as HyperClient;
 use rand::distributions::{Alphanumeric, DistString};
 
 use sqlx::error::DatabaseError;
@@ -18,7 +16,7 @@ use sqlx::sqlite::{Sqlite, SqlitePool};
 use sqlx::types::Json as SqlxJson;
 use sqlx::{query, Error as SqlxError, Row};
 use tokio::sync::Mutex;
-use tokio::sync::{self, mpsc::Sender};
+use tokio::sync::mpsc::{Sender};
 
 use super::{Context, Error, ProjectName};
 use crate::args::Args;
@@ -38,7 +36,6 @@ impl From<SqlxError> for Error {
 
 pub struct GatewayService {
     docker: Docker,
-    hyper: HyperClient<HttpConnector, Body>,
     db: SqlitePool,
     sender: Mutex<Option<Sender<Work>>>,
     args: Args,
@@ -51,8 +48,6 @@ impl GatewayService {
     /// started. Will be passed as [`Context`] to workers and state.
     pub async fn init(args: Args) -> Self {
         let docker = Docker::connect_with_local_defaults().unwrap();
-
-        let hyper = HyperClient::new();
 
         let db_uri = &args.state;
 
@@ -72,7 +67,6 @@ impl GatewayService {
 
         Self {
             docker,
-            hyper,
             db,
             sender,
             args,
@@ -164,7 +158,6 @@ impl GatewayService {
         // `Extend<(HeaderName, HeaderValue)>` (as one would expect),
         // therefore why the ugly hack below.
         {
-            use axum::headers::Header;
             let auth_header = Authorization::basic(&control_key, "");
             let auth_header_name = Authorization::<Basic>::name();
             let mut auth = vec![];
@@ -407,7 +400,6 @@ impl GatewayService {
     fn context<'c>(&'c self) -> GatewayContext<'c> {
         GatewayContext {
             docker: &self.docker,
-            hyper: &self.hyper,
             args: &self.args,
         }
     }
@@ -437,7 +429,6 @@ impl<'c> Service<'c> for Arc<GatewayService> {
 
 pub struct GatewayContext<'c> {
     docker: &'c Docker,
-    hyper: &'c HyperClient<HttpConnector, Body>,
     args: &'c Args,
 }
 
@@ -457,6 +448,7 @@ pub mod tests {
     use futures::Future;
 
     use tokio::task::JoinHandle;
+    use tokio::sync::mpsc::channel;
 
     use super::*;
     use crate::assert_err_kind;
@@ -520,7 +512,7 @@ pub mod tests {
         C: FnMut(Work) -> Fut + Send + 'static,
         Fut: Future<Output = ()> + Send,
     {
-        let (sender, mut receiver) = mpsc::channel::<Work>(256);
+        let (sender, mut receiver) = channel::<Work>(256);
         let handle = tokio::spawn(async move {
             while let Some(work) = receiver.recv().await {
                 capture(work).await
@@ -575,7 +567,7 @@ pub mod tests {
                 let matrix = matrix.clone();
                 async move {
                     assert!(matches!(&work.work, Project::Destroyed(_)));
-                    svc.update_project(&matrix, &work.work).await;
+                    svc.update_project(&matrix, &work.work).await.unwrap();
                 }
             }
         })
@@ -586,7 +578,7 @@ pub mod tests {
         // Which drops the only sender, thus breaking the work loop
         svc.set_sender(None).await.unwrap();
 
-        update_project.await;
+        update_project.await.unwrap();
 
         assert!(matches!(
             svc.find_project(&matrix).await.unwrap(),

@@ -205,7 +205,9 @@ async fn end_to_end() {
                 String::from_utf8(resp.into_body()).unwrap().as_str(),
                 "Hello, world!"
             );
-        });
+        })
+        .await
+        .unwrap();
     // === deployment test END ===
 
     api_client

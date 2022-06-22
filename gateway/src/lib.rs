@@ -35,6 +35,7 @@ use serde::{
 };
 use serde_json::json;
 
+#[macro_export]
 macro_rules! value_block_helper {
     ($next:ident, $block:block) => {
         $block
@@ -65,7 +66,7 @@ macro_rules! assert_stream_matches {
             _ => {
                 eprintln!("{} {:#?}", ::colored::Colorize::red(::colored::Colorize::bold("[err]")), next);
                 eprint!("{}", ::colored::Colorize::red(::colored::Colorize::bold("Assertion failed")));
-                $(eprint!(": {}", $assert);)?;
+                $(eprint!(": {}", $assert);)?
                 eprint!("\n");
                 panic!("State mismatch")
             }
@@ -80,7 +81,7 @@ macro_rules! assert_stream_matches {
         assert_stream_matches!(
             $stream,
             $(#[$($meta)*])* $($pattern)|+ $(if $guard)? => {
-                $($more)?;
+                $($more)?
                 assert_stream_matches!(
                     $stream,
                     $($(#[$($metas)*])* $($patterns)|+ $(if $guards)? $(=> $mores)?,)+
@@ -199,7 +200,7 @@ impl Error {
         Self { kind, source: None }
     }
 
-    fn kind(&self) -> ErrorKind {
+    pub fn kind(&self) -> ErrorKind {
         self.kind
     }
 }
@@ -526,7 +527,7 @@ pub mod tests {
     }
 
     pub struct World {
-        state: NamedTempFile,
+        _state: NamedTempFile,
         docker: Docker,
         args: Args,
         hyper: HyperClient<HttpConnector, Body>
@@ -599,7 +600,7 @@ pub mod tests {
             let hyper = HyperClient::builder().build(HttpConnector::new());
 
             Ok(Self {
-                state,
+                _state: state,
                 docker,
                 args,
                 hyper

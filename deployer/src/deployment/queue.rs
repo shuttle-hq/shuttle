@@ -88,31 +88,11 @@ impl Queued {
 
         // Remove old build if any:
 
-        let marker_path = project_path.join(MARKER_FILE_NAME);
+        remove_old_build(&project_path).await?;
 
-        if let Ok(mut existing_marker_file) = fs::File::open(&marker_path).await {
-            let mut old_so_name = String::new();
-            existing_marker_file
-                .read_to_string(&mut old_so_name)
-                .await?;
+        // Copy and rename the built '.so' file and create a marker file:
 
-            let old_so_path = project_path.join(old_so_name);
-
-            if old_so_path.exists() {
-                fs::remove_file(old_so_path).await?;
-            }
-        }
-
-        // Copy and rename the built '.so' file:
-
-        let random_so_name =
-            rand::distributions::Alphanumeric.sample_string(&mut rand::thread_rng(), 16);
-        let random_so_path = project_path.join(&random_so_name);
-        fs::copy(so_path, random_so_path).await?;
-
-        // Create a marker file to indicate the name of the '.so' file:
-
-        fs::write(marker_path, random_so_name).await?;
+        rename_build(&project_path, so_path).await?;
 
         // Update deployment state to built:
 
@@ -156,12 +136,52 @@ fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<()> {
     Ok(())
 }
 
+/// Check for an existing marker file is the specified project directory and
+/// if one exists delete the indicated '.so' file.
+async fn remove_old_build(project_path: impl AsRef<Path>) -> Result<()> {
+    let marker_path = project_path.as_ref().join(MARKER_FILE_NAME);
+
+    if let Ok(mut existing_marker_file) = fs::File::open(&marker_path).await {
+        let mut old_so_name = String::new();
+        existing_marker_file
+            .read_to_string(&mut old_so_name)
+            .await?;
+
+        let old_so_path = project_path.as_ref().join(old_so_name);
+
+        if old_so_path.exists() {
+            fs::remove_file(old_so_path).await?;
+        }
+
+        fs::remove_file(marker_path).await?;
+    }
+
+    Ok(())
+}
+
+async fn rename_build(project_path: impl AsRef<Path>, so_path: impl AsRef<Path>) -> Result<()> {
+    let random_so_name =
+        rand::distributions::Alphanumeric.sample_string(&mut rand::thread_rng(), 16);
+    let random_so_path = project_path.as_ref().join(&random_so_name);
+
+    fs::rename(so_path, random_so_path).await?;
+
+    fs::write(project_path.as_ref().join(MARKER_FILE_NAME), random_so_name).await?;
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::path::Path;
+    use tokio::fs;
+
+    use crate::deployment::queue::MARKER_FILE_NAME;
 
     #[tokio::test]
-    async fn tar_gz_extraction() {
+    async fn extract_tar_gz_data() {
+        let p = Path::new("/tmp/shuttle-extraction-test");
+
         // Binary data for an archive in the following form:
         //
         // - temp
@@ -180,16 +200,87 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
         )
         .unwrap();
 
-        extract_tar_gz_data(test_data.as_slice(), "/tmp/shuttle-extraction-test").unwrap();
-        assert!(fs::read_to_string("/tmp/shuttle-extraction-test/world.txt")
+        super::extract_tar_gz_data(test_data.as_slice(), &p).unwrap();
+        assert!(fs::read_to_string(p.join("world.txt"))
             .await
             .unwrap()
             .starts_with("abc"));
-        assert!(
-            fs::read_to_string("/tmp/shuttle-extraction-test/subdir/hello.txt")
-                .await
-                .unwrap()
-                .starts_with("def")
+        assert!(fs::read_to_string(p.join("subdir/hello.txt"))
+            .await
+            .unwrap()
+            .starts_with("def"));
+
+        // Can we extract again without error?
+        super::extract_tar_gz_data(test_data.as_slice(), &p).unwrap();
+
+        let _ = fs::remove_dir(p).await;
+    }
+
+    #[tokio::test]
+    async fn remove_old_build() {
+        let p = Path::new("/tmp/shuttle-remove-old-test");
+
+        // Ensure no error occurs with an non-existent directory:
+
+        super::remove_old_build(&p).await.unwrap();
+
+        // Ensure no errors with an empty directory:
+
+        fs::create_dir_all(&p).await.unwrap();
+
+        super::remove_old_build(&p).await.unwrap();
+
+        // Ensure no errror occurs with a marker file pointing to a non-existent
+        // file:
+
+        fs::write(p.join(MARKER_FILE_NAME), "i-dont-exist.so")
+            .await
+            .unwrap();
+
+        super::remove_old_build(&p).await.unwrap();
+
+        assert!(!p.join(MARKER_FILE_NAME).exists());
+
+        // Create a mock marker file and linked library and ensure deletetion
+        // occurs correctly:
+
+        fs::write(p.join(MARKER_FILE_NAME), "delete-me.so")
+            .await
+            .unwrap();
+        fs::write(p.join("delete-me.so"), "foobar").await.unwrap();
+
+        assert!(p.join("delete-me.so").exists());
+
+        super::remove_old_build(&p).await.unwrap();
+
+        assert!(!p.join("delete-me").exists());
+        assert!(!p.join(MARKER_FILE_NAME).exists());
+
+        let _ = fs::remove_dir(p).await;
+    }
+
+    #[tokio::test]
+    async fn rename_build() {
+        let p = Path::new("/tmp/shuttle-rename-build-test");
+
+        let so_path = p.join("xyz.so");
+        let marker_path = p.join(MARKER_FILE_NAME);
+
+        fs::create_dir_all(&p).await.unwrap();
+        fs::write(&so_path, "barfoo").await.unwrap();
+
+        super::rename_build(&p, &so_path).await.unwrap();
+
+        // Old '.so' file gone?
+        assert!(!so_path.exists());
+
+        // Ensure marker file aligns with the '.so' file's new location:
+        let new_so_name = fs::read_to_string(&marker_path).await.unwrap();
+        assert_eq!(
+            fs::read_to_string(p.join(new_so_name)).await.unwrap(),
+            "barfoo"
         );
+
+        let _ = fs::remove_dir(p).await;
     }
 }

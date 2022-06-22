@@ -480,8 +480,10 @@ pub mod tests {
     use tokio::task::JoinHandle;
 
     use super::*;
-    use crate::tests::assert_err_kind;
-    use crate::tests::World;
+    use crate::tests::{
+        assert_err_kind,
+        World
+    };
 
     #[tokio::test]
     async fn service_create_find_user() -> anyhow::Result<()> {

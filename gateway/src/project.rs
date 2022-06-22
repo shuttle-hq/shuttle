@@ -720,12 +720,12 @@ pub mod tests {
     };
 
     use super::*;
-    use crate::EndStateExt;
-    use crate::tests::World;
     use crate::tests::{
         assert_matches,
         assert_stream_matches,
+        World
     };
+    use crate::EndStateExt;
 
     #[tokio::test]
     async fn create_start_stop_destroy_project() -> anyhow::Result<()> {

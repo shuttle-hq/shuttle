@@ -720,11 +720,11 @@ pub mod tests {
     };
 
     use super::*;
+    use crate::EndStateExt;
     use crate::tests::World;
-    use crate::{
+    use crate::tests::{
         assert_matches,
         assert_stream_matches,
-        EndStateExt
     };
 
     #[tokio::test]

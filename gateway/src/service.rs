@@ -480,7 +480,7 @@ pub mod tests {
     use tokio::task::JoinHandle;
 
     use super::*;
-    use crate::assert_err_kind;
+    use crate::tests::assert_err_kind;
     use crate::tests::World;
 
     #[tokio::test]

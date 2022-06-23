@@ -19,18 +19,13 @@ pub fn main(_attr: TokenStream, item: TokenStream) -> TokenStream {
         #fn_decl
 
         #[no_mangle]
-        pub extern "C" fn _create_service() -> *mut dyn shuttle_service::Service {
-            // Ensure constructor returns concrete type.
-            let constructor: for <'a> fn(
-                &'a mut dyn shuttle_service::Factory,
-                &'a shuttle_service::Runtime,
-                Box<dyn shuttle_service::log::Log>,
-            ) -> std::pin::Pin<
-                Box<dyn std::future::Future<Output = Result<_, shuttle_service::Error>> + Send + 'a>,
-            > = |factory, runtime, logger| Box::pin(__shuttle_wrapper(factory, runtime, logger));
+        pub extern "C" fn _create_service() -> *mut shuttle_service::Bootstrapper {
+            let builder: shuttle_service::StateBuilder<Box<dyn shuttle_service::Service>> =
+                |factory, runtime, logger| Box::pin(__shuttle_wrapper(factory, runtime, logger));
 
-            let obj = shuttle_service::IntoService::into_service((constructor));
-            let boxed: Box<dyn shuttle_service::Service> = Box::new(obj);
+            let bootstrapper = shuttle_service::Bootstrapper::new(builder, __binder);
+
+            let boxed = Box::new(bootstrapper);
             Box::into_raw(boxed)
         }
     };
@@ -125,7 +120,7 @@ impl ToTokens for Wrapper {
                 #factory_ident: &mut dyn shuttle_service::Factory,
                 runtime: &shuttle_service::Runtime,
                 logger: Box<dyn shuttle_service::log::Log>,
-            ) #fn_output {
+            ) -> Result<Box<dyn shuttle_service::Service>, shuttle_service::Error> {
                 #extra_imports
 
                 runtime.spawn_blocking(move || {
@@ -137,7 +132,22 @@ impl ToTokens for Wrapper {
 
                 #(let #fn_inputs = shuttle_service::#fn_inputs_builder::new().build(#factory_ident, runtime).await?;)*
 
-                runtime.spawn(#fn_ident(#(#fn_inputs),*)).await.unwrap()
+                runtime.spawn(async {
+                    #fn_ident(#(#fn_inputs),*).await.map(|ok| {
+                        let r: Box<dyn shuttle_service::Service> = Box::new(ok);
+                        r
+                    })
+                })
+                .await
+                .unwrap()
+            }
+
+            fn __binder(
+                service: Box<dyn shuttle_service::Service>,
+                addr: std::net::SocketAddr,
+                runtime: &shuttle_service::Runtime,
+            ) -> shuttle_service::ServeHandle {
+                runtime.spawn(async move { service.bind(addr).await })
             }
         };
 

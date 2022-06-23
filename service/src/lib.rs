@@ -208,7 +208,7 @@ use std::future::Future;
 use std::net::SocketAddr;
 use std::pin::Pin;
 
-use async_trait::async_trait;
+pub use async_trait::async_trait;
 
 // Pub uses by `codegen`
 pub use log;
@@ -326,40 +326,17 @@ pub trait ResourceBuilder<T> {
 }
 
 /// A tokio handle the service was started on
-pub type ServeHandle = JoinHandle<Result<(), anyhow::Error>>;
+pub type ServeHandle = JoinHandle<Result<(), error::Error>>;
 
 /// The core trait of the shuttle platform. Every crate deployed to shuttle needs to implement this trait.
 ///
 /// Use the [declare_service!][crate::declare_service] macro to expose your implementation to the deployment backend.
 #[async_trait]
 pub trait Service: Send + Sync {
-    /// This function is run exactly once on each instance of a deployment, prior to calling [bind][Service::bind].
-    ///
-    /// The passed [Factory][Factory] can be used to configure additional resources (like databases).
-    /// And the logger is for logging all runtime events
-    ///
-    /// The default is a noop that returns `Ok(())`.
-    async fn build(
-        &mut self,
-        _: &mut dyn Factory,
-        _logger: Box<dyn log::Log>,
-    ) -> Result<(), Error> {
-        Ok(())
-    }
-
     /// This function is run exactly once on each instance of a deployment.
     ///
     /// The deployer expects this instance of [Service][Service] to bind to the passed [SocketAddr][SocketAddr].
-    fn bind(&mut self, addr: SocketAddr) -> Result<ServeHandle, error::Error>;
-}
-
-/// A convenience trait for handling out of the box conversions into [Service][Service] instances.
-pub trait IntoService {
-    /// The [Service][Service] instance this converts to.
-    type Service: Service;
-
-    /// Convert into a [Service][Service] instance.
-    fn into_service(self) -> Self::Service;
+    async fn bind(mut self: Box<Self>, addr: SocketAddr) -> Result<(), error::Error>;
 }
 
 pub type StateBuilder<T> =
@@ -369,52 +346,76 @@ pub type StateBuilder<T> =
         Box<dyn log::Log>,
     ) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + 'a>>;
 
-/// A wrapper that takes a user's future, gives the future a factory, and takes the returned service from the future
-/// The returned service will be deployed by shuttle
-pub struct SimpleService<T> {
-    service: Option<T>,
-    builder: Option<StateBuilder<T>>,
+pub type Binder = for<'a> fn(Box<dyn Service>, SocketAddr, &'a Runtime) -> ServeHandle;
+
+pub struct Bootstrapper {
+    service: Option<Box<dyn Service>>,
+    builder: Option<StateBuilder<Box<dyn Service>>>,
+    binder: Binder,
     runtime: Runtime,
 }
 
-impl<T> IntoService
-    for for<'a> fn(
-        &'a mut dyn Factory,
-        &'a Runtime,
-        Box<dyn log::Log>,
-    ) -> Pin<Box<dyn Future<Output = Result<T, Error>> + Send + 'a>>
-where
-    SimpleService<T>: Service,
-{
-    type Service = SimpleService<T>;
-
-    fn into_service(self) -> Self::Service {
-        SimpleService {
+impl Bootstrapper {
+    pub fn new(builder: StateBuilder<Box<dyn Service>>, binder: Binder, runtime: Runtime) -> Self {
+        Self {
             service: None,
-            builder: Some(self),
-            runtime: Runtime::new().unwrap(),
+            builder: Some(builder),
+            binder,
+            runtime,
         }
     }
-}
 
-#[cfg(feature = "web-rocket")]
-#[async_trait]
-impl Service for SimpleService<rocket::Rocket<rocket::Build>> {
-    async fn build(
+    async fn bootstrap(
         &mut self,
         factory: &mut dyn Factory,
         logger: Box<dyn log::Log>,
     ) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
-            let rocket = builder(factory, &self.runtime, logger).await?;
-            self.service = Some(rocket);
+            let service = builder(factory, &self.runtime, logger).await?;
+            self.service = Some(service);
         }
 
         Ok(())
     }
 
-    fn bind(&mut self, addr: SocketAddr) -> Result<ServeHandle, error::Error> {
-        let rocket = self.service.take().expect("service has already been bound");
+    fn into_handle(mut self, addr: SocketAddr) -> Result<ServeHandle, Error> {
+        let service = self.service.take().expect("service has already been bound");
+
+        let handle = (self.binder)(service, addr, &self.runtime);
+
+        std::mem::forget(self.runtime);
+
+        Ok(handle)
+    }
+}
+
+/// A wrapper that takes a user's future, gives the future a factory, and takes the returned service from the future
+/// The returned service will be deployed by shuttle
+// pub struct SimpleService<T> {
+//     service: Option<T>,
+//     builder: Option<StateBuilder<T>>,
+//     runtime: Runtime,
+// }
+
+// impl<T> IntoService for StateBuilder<T>
+// where
+//     SimpleService<T>: Service,
+// {
+//     type Service = SimpleService<T>;
+
+//     fn into_service(self) -> Self::Service {
+//         SimpleService {
+//             service: None,
+//             builder: Some(self),
+//             runtime: Runtime::new().unwrap(),
+//         }
+//     }
+// }
+
+#[cfg(feature = "web-rocket")]
+#[async_trait]
+impl Service for rocket::Rocket<rocket::Build> {
+    async fn bind(mut self: Box<Self>, addr: SocketAddr) -> Result<(), error::Error> {
         let shutdown = rocket::config::Shutdown {
             ctrlc: false,
             ..rocket::config::Shutdown::default()
@@ -427,13 +428,13 @@ impl Service for SimpleService<rocket::Rocket<rocket::Build>> {
             shutdown,
             ..Default::default()
         };
-        let launched = rocket.configure(config).launch();
-        let handle = self.runtime.spawn(async {
-            let _rocket = launched.await.map_err(error::CustomError::new)?;
+        let _rocket = self
+            .configure(config)
+            .launch()
+            .await
+            .map_err(error::CustomError::new)?;
 
-            Ok(())
-        });
-        Ok(handle)
+        Ok(())
     }
 }
 
@@ -441,119 +442,119 @@ impl Service for SimpleService<rocket::Rocket<rocket::Build>> {
 #[cfg(feature = "web-rocket")]
 pub type ShuttleRocket = Result<rocket::Rocket<rocket::Build>, Error>;
 
-#[cfg(feature = "web-axum")]
-#[async_trait]
-impl Service for SimpleService<sync_wrapper::SyncWrapper<axum::Router>> {
-    async fn build(
-        &mut self,
-        factory: &mut dyn Factory,
-        logger: Box<dyn log::Log>,
-    ) -> Result<(), Error> {
-        if let Some(builder) = self.builder.take() {
-            let axum = builder(factory, &self.runtime, logger).await?;
-            self.service = Some(axum);
-        }
+// #[cfg(feature = "web-axum")]
+// #[async_trait]
+// impl Service for SimpleService<sync_wrapper::SyncWrapper<axum::Router>> {
+//     async fn build(
+//         &mut self,
+//         factory: &mut dyn Factory,
+//         logger: Box<dyn log::Log>,
+//     ) -> Result<(), Error> {
+//         if let Some(builder) = self.builder.take() {
+//             let axum = builder(factory, &self.runtime, logger).await?;
+//             self.service = Some(axum);
+//         }
 
-        Ok(())
-    }
+//         Ok(())
+//     }
 
-    fn bind(&mut self, addr: SocketAddr) -> Result<ServeHandle, error::Error> {
-        let axum = self
-            .service
-            .take()
-            .expect("service has already been bound")
-            .into_inner();
+//     fn bind(&mut self, addr: SocketAddr) -> Result<ServeHandle, error::Error> {
+//         let axum = self
+//             .service
+//             .take()
+//             .expect("service has already been bound")
+//             .into_inner();
 
-        let handle = self.runtime.spawn(async move {
-            axum::Server::bind(&addr)
-                .serve(axum.into_make_service())
-                .await
-                .map_err(error::CustomError::new)
-        });
+//         let handle = self.runtime.spawn(async move {
+//             axum::Server::bind(&addr)
+//                 .serve(axum.into_make_service())
+//                 .await
+//                 .map_err(error::CustomError::new)
+//         });
 
-        Ok(handle)
-    }
-}
+//         Ok(handle)
+//     }
+// }
 
-#[allow(dead_code)]
-#[cfg(feature = "web-axum")]
-pub type ShuttleAxum = Result<sync_wrapper::SyncWrapper<axum::Router>, Error>;
+// #[allow(dead_code)]
+// #[cfg(feature = "web-axum")]
+// pub type ShuttleAxum = Result<sync_wrapper::SyncWrapper<axum::Router>, Error>;
 
-#[cfg(feature = "web-tide")]
-#[async_trait]
-impl<T> Service for SimpleService<tide::Server<T>>
-where
-    T: Clone + Send + Sync + 'static,
-{
-    async fn build(
-        &mut self,
-        factory: &mut dyn Factory,
-        logger: Box<dyn log::Log>,
-    ) -> Result<(), Error> {
-        if let Some(builder) = self.builder.take() {
-            let tide = builder(factory, &self.runtime, logger).await?;
-            self.service = Some(tide);
-        }
+// #[cfg(feature = "web-tide")]
+// #[async_trait]
+// impl<T> Service for SimpleService<tide::Server<T>>
+// where
+//     T: Clone + Send + Sync + 'static,
+// {
+//     async fn build(
+//         &mut self,
+//         factory: &mut dyn Factory,
+//         logger: Box<dyn log::Log>,
+//     ) -> Result<(), Error> {
+//         if let Some(builder) = self.builder.take() {
+//             let tide = builder(factory, &self.runtime, logger).await?;
+//             self.service = Some(tide);
+//         }
 
-        Ok(())
-    }
+//         Ok(())
+//     }
 
-    fn bind(&mut self, addr: SocketAddr) -> Result<ServeHandle, error::Error> {
-        let tide = self.service.take().expect("service has already been bound");
+//     fn bind(&mut self, addr: SocketAddr) -> Result<ServeHandle, error::Error> {
+//         let tide = self.service.take().expect("service has already been bound");
 
-        let handle = self
-            .runtime
-            .spawn(async move { tide.listen(addr).await.map_err(error::CustomError::new) });
+//         let handle = self
+//             .runtime
+//             .spawn(async move { tide.listen(addr).await.map_err(error::CustomError::new) });
 
-        Ok(handle)
-    }
-}
+//         Ok(handle)
+//     }
+// }
 
-#[allow(dead_code)]
-#[cfg(feature = "web-tide")]
-pub type ShuttleTide<T> = Result<tide::Server<T>, Error>;
+// #[allow(dead_code)]
+// #[cfg(feature = "web-tide")]
+// pub type ShuttleTide<T> = Result<tide::Server<T>, Error>;
 
-#[cfg(feature = "web-tower")]
-#[async_trait]
-impl<T> Service for SimpleService<T>
-where
-    T: tower::Service<hyper::Request<hyper::Body>, Response = hyper::Response<hyper::Body>>
-        + Clone
-        + Send
-        + Sync
-        + 'static,
-    T::Error: std::error::Error + Send + Sync,
-    T::Future: std::future::Future + Send + Sync,
-{
-    async fn build(
-        &mut self,
-        factory: &mut dyn Factory,
-        logger: Box<dyn log::Log>,
-    ) -> Result<(), Error> {
-        if let Some(builder) = self.builder.take() {
-            let tower = builder(factory, &self.runtime, logger).await?;
-            self.service = Some(tower);
-        }
+// #[cfg(feature = "web-tower")]
+// #[async_trait]
+// impl<T> Service for SimpleService<T>
+// where
+//     T: tower::Service<hyper::Request<hyper::Body>, Response = hyper::Response<hyper::Body>>
+//         + Clone
+//         + Send
+//         + Sync
+//         + 'static,
+//     T::Error: std::error::Error + Send + Sync,
+//     T::Future: std::future::Future + Send + Sync,
+// {
+//     async fn build(
+//         &mut self,
+//         factory: &mut dyn Factory,
+//         logger: Box<dyn log::Log>,
+//     ) -> Result<(), Error> {
+//         if let Some(builder) = self.builder.take() {
+//             let tower = builder(factory, &self.runtime, logger).await?;
+//             self.service = Some(tower);
+//         }
 
-        Ok(())
-    }
+//         Ok(())
+//     }
 
-    fn bind(&mut self, addr: SocketAddr) -> Result<ServeHandle, error::Error> {
-        let service = self.service.take().expect("service has already been bound");
+//     fn bind(&mut self, addr: SocketAddr) -> Result<ServeHandle, error::Error> {
+//         let service = self.service.take().expect("service has already been bound");
 
-        let handle = self.runtime.spawn(async move {
-            let shared = tower::make::Shared::new(service);
-            hyper::Server::bind(&addr)
-                .serve(shared)
-                .await
-                .map_err(error::CustomError::new)?;
+//         let handle = self.runtime.spawn(async move {
+//             let shared = tower::make::Shared::new(service);
+//             hyper::Server::bind(&addr)
+//                 .serve(shared)
+//                 .await
+//                 .map_err(error::CustomError::new)?;
 
-            Ok(())
-        });
+//             Ok(())
+//         });
 
-        Ok(handle)
-    }
-}
+//         Ok(handle)
+//     }
+// }
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 

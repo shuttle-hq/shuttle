@@ -11,31 +11,34 @@ use cargo::ops::{compile, CompileOptions};
 use cargo::util::homedir;
 use cargo::Config;
 use libloading::{Library, Symbol};
+use log::trace;
 use shuttle_common::DeploymentId;
 use thiserror::Error as ThisError;
 use tokio::sync::mpsc::UnboundedSender;
 
 use futures::FutureExt;
 
+use crate::error::CustomError;
+use crate::Bootstrapper;
 use crate::{
     logger::{Log, Logger},
-    Error, Factory, ServeHandle, Service,
+    Error, Factory, ServeHandle,
 };
 
 const ENTRYPOINT_SYMBOL_NAME: &[u8] = b"_create_service\0";
 
-type CreateService = unsafe extern "C" fn() -> *mut dyn Service;
+type CreateService = unsafe extern "C" fn() -> *mut Bootstrapper;
 
 #[derive(Debug, ThisError)]
 pub enum LoaderError {
-    #[error("failed to load library")]
+    #[error("failed to load library: {0}")]
     Load(libloading::Error),
     #[error("failed to find the shuttle entrypoint. Did you use the provided shuttle macros?")]
     GetEntrypoint(libloading::Error),
 }
 
 pub struct Loader {
-    service: Box<dyn Service>,
+    bootstrapper: Bootstrapper,
     so: Library,
 }
 
@@ -45,6 +48,7 @@ impl Loader {
     /// function called [`ENTRYPOINT_SYMBOL_NAME`], likely automatically generated
     /// using the [`shuttle_service::declare_service`] macro.
     pub fn from_so_file<P: AsRef<OsStr>>(so_path: P) -> Result<Self, LoaderError> {
+        trace!("loading {:?}", so_path.as_ref().to_str());
         unsafe {
             let lib = Library::new(so_path).map_err(LoaderError::Load)?;
 
@@ -54,7 +58,7 @@ impl Loader {
             let raw = entrypoint();
 
             Ok(Self {
-                service: Box::from_raw(raw),
+                bootstrapper: *Box::from_raw(raw),
                 so: lib,
             })
         }
@@ -67,21 +71,22 @@ impl Loader {
         tx: UnboundedSender<Log>,
         deployment_id: DeploymentId,
     ) -> Result<(ServeHandle, Library), Error> {
-        let mut service = self.service;
+        let mut bootstrapper = self.bootstrapper;
         let logger = Box::new(Logger::new(tx, deployment_id));
 
-        AssertUnwindSafe(service.build(factory, logger))
+        AssertUnwindSafe(bootstrapper.bootstrap(factory, logger))
             .catch_unwind()
             .await
             .map_err(|e| Error::BuildPanic(map_any_to_panic_string(&*e)))??;
 
+        trace!("bootstrapping done");
         // channel used by task spawned below to indicate whether or not panic
         // occurred in `service.bind` call
         let (send, recv) = tokio::sync::oneshot::channel();
 
         // Start service on this side of the FFI
         let handle = tokio::spawn(async move {
-            let bound = AssertUnwindSafe(async { service.bind(addr) })
+            let bound = AssertUnwindSafe(async { bootstrapper.into_handle(addr) })
                 .catch_unwind()
                 .await;
 
@@ -93,9 +98,9 @@ impl Loader {
             send.send(payload).unwrap();
 
             if let Ok(b) = bound {
-                b?.await?
+                b?.await.map_err(CustomError::new)?
             } else {
-                Err(anyhow!("panic in `Service::bound`"))
+                Err(Error::BindPanic("panic in `Service::bound`".to_string()))
             }
         });
 

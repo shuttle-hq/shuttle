@@ -347,8 +347,6 @@ mod tests {
 
     #[tokio::test]
     async fn log_recorder_state() {
-        tracing_subscriber::fmt::init();
-
         let (p, handle) = Persistence::new_in_memory().await;
         let state = deploy_layer::Log {
             name: "z".to_string(),

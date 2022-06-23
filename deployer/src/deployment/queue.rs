@@ -39,7 +39,7 @@ pub struct Queued {
 }
 
 impl Queued {
-    #[instrument(skip(self), fields(name = self.name.as_str(), state = %State::Queued))]
+    #[instrument(skip(self), fields(name = self.name.as_str(), state = %State::Building))]
     async fn handle(mut self) -> Result<Built> {
         // Read POSTed data:
 

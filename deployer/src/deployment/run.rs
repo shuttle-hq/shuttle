@@ -31,7 +31,11 @@ impl Built {
     async fn handle(self, mut kill_recv: KillReceiver) -> Result<()> {
         // Load service into memory:
         // TODO
-        let mut execute_future = Box::pin(async { loop {} }); // placeholder
+        let mut execute_future = Box::pin(async {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            }
+        }); // placeholder
 
         // Execute loaded service:
 

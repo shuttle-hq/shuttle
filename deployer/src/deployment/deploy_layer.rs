@@ -230,3 +230,109 @@ impl Visit for JsonVisitor {
             .insert(field.name().to_string(), json!(format!("{value:?}")));
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use axum::body::Bytes;
+    use futures::FutureExt;
+    use tracing_subscriber::prelude::*;
+
+    use crate::deployment::{deploy_layer::LogType, DeploymentManager, Queued, State};
+
+    use super::{DeployLayer, Log, LogRecorder};
+
+    struct RecorderMock {
+        states: Arc<Mutex<Vec<StateLog>>>,
+    }
+
+    #[derive(Debug, PartialEq)]
+    struct StateLog {
+        name: String,
+        state: State,
+    }
+
+    impl From<Log> for StateLog {
+        fn from(log: Log) -> Self {
+            Self {
+                name: log.name,
+                state: log.state,
+            }
+        }
+    }
+
+    impl RecorderMock {
+        fn new() -> Arc<Mutex<Self>> {
+            Arc::new(Mutex::new(Self {
+                states: Arc::new(Mutex::new(Vec::new())),
+            }))
+        }
+    }
+
+    impl LogRecorder for RecorderMock {
+        fn record(&self, event: Log) {
+            // We are only testing the state transitions
+            if event.r#type == LogType::State {
+                self.states.lock().unwrap().push(event.into());
+            }
+        }
+    }
+
+    impl<R: LogRecorder> LogRecorder for Arc<Mutex<R>> {
+        fn record(&self, event: Log) {
+            self.lock().unwrap().record(event);
+        }
+    }
+
+    #[tokio::test]
+    async fn deployment_to_be_queued() {
+        let recorder = RecorderMock::new();
+        tracing_subscriber::registry()
+            .with(DeployLayer::new(Arc::clone(&recorder)))
+            .init();
+
+        let deployment_manager = DeploymentManager::new();
+
+        deployment_manager
+            .queue_push(Queued {
+                name: "queue_test".to_string(),
+                data_stream: Box::pin(async { Ok(Bytes::from("data")) }.into_stream()),
+            })
+            .await;
+
+        // Give it a small time to start up
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+        let recorder = recorder.lock().unwrap();
+        let states = recorder.states.lock().unwrap();
+
+        assert_eq!(
+            states.len(),
+            4,
+            "did not expect these states:\n\t{states:#?}"
+        );
+
+        assert_eq!(
+            *states,
+            vec![
+                StateLog {
+                    name: "queue_test".to_string(),
+                    state: State::Queued,
+                },
+                StateLog {
+                    name: "queue_test".to_string(),
+                    state: State::Building,
+                },
+                StateLog {
+                    name: "queue_test".to_string(),
+                    state: State::Built,
+                },
+                StateLog {
+                    name: "queue_test".to_string(),
+                    state: State::Running,
+                },
+            ]
+        );
+    }
+}

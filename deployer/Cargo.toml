@@ -16,3 +16,6 @@ serde = { version = "1.0.137", features = ["derive"] }
 serde_json = "1.0.81"
 tracing = "0.1.35"
 tracing-subscriber = { version = "0.3.11", features = ["env-filter"] }
+
+[dev-dependencies]
+ctor = "0.1.22"

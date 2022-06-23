@@ -236,18 +236,29 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use axum::body::Bytes;
+    use ctor::ctor;
     use futures::FutureExt;
     use tracing_subscriber::prelude::*;
 
-    use crate::deployment::{deploy_layer::LogType, DeploymentManager, Queued, State};
+    use crate::deployment::{deploy_layer::LogType, Built, DeploymentManager, Queued, State};
 
     use super::{DeployLayer, Log, LogRecorder};
+
+    #[ctor]
+    static RECORDER: Arc<Mutex<RecorderMock>> = {
+        let recorder = RecorderMock::new();
+        tracing_subscriber::registry()
+            .with(DeployLayer::new(Arc::clone(&recorder)))
+            .init();
+
+        recorder
+    };
 
     struct RecorderMock {
         states: Arc<Mutex<Vec<StateLog>>>,
     }
 
-    #[derive(Debug, PartialEq)]
+    #[derive(Clone, Debug, PartialEq)]
     struct StateLog {
         name: String,
         state: State,
@@ -268,6 +279,16 @@ mod tests {
                 states: Arc::new(Mutex::new(Vec::new())),
             }))
         }
+
+        fn get_deployment_states(&self, name: &str) -> Vec<StateLog> {
+            self.states
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|log| log.name == name)
+                .cloned()
+                .collect()
+        }
     }
 
     impl LogRecorder for RecorderMock {
@@ -287,11 +308,6 @@ mod tests {
 
     #[tokio::test]
     async fn deployment_to_be_queued() {
-        let recorder = RecorderMock::new();
-        tracing_subscriber::registry()
-            .with(DeployLayer::new(Arc::clone(&recorder)))
-            .init();
-
         let deployment_manager = DeploymentManager::new();
 
         deployment_manager
@@ -304,8 +320,8 @@ mod tests {
         // Give it a small time to start up
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-        let recorder = recorder.lock().unwrap();
-        let states = recorder.states.lock().unwrap();
+        let recorder = RECORDER.lock().unwrap();
+        let states = recorder.get_deployment_states("queue_test");
 
         assert_eq!(
             states.len(),
@@ -330,6 +346,43 @@ mod tests {
                 },
                 StateLog {
                     name: "queue_test".to_string(),
+                    state: State::Running,
+                },
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn deployment_from_run() {
+        let deployment_manager = DeploymentManager::new();
+
+        deployment_manager
+            .run_push(Built {
+                name: "run_test".to_string(),
+            })
+            .await;
+
+        // Give it a small time to start up
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+        let recorder = RECORDER.lock().unwrap();
+        let states = recorder.get_deployment_states("run_test");
+
+        assert_eq!(
+            states.len(),
+            2,
+            "did not expect these states:\n\t{states:#?}"
+        );
+
+        assert_eq!(
+            *states,
+            vec![
+                StateLog {
+                    name: "run_test".to_string(),
+                    state: State::Built,
+                },
+                StateLog {
+                    name: "run_test".to_string(),
                     state: State::Running,
                 },
             ]

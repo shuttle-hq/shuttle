@@ -1,3 +1,4 @@
+pub mod database;
 pub mod project;
 
 use std::{
@@ -70,19 +71,13 @@ impl DeploymentMeta {
     }
 }
 
-#[cfg(debug_assertions)]
-const PUBLIC_IP: &str = "localhost";
-
-#[cfg(not(debug_assertions))]
-const PUBLIC_IP: &'static str = "pg.shuttle.rs";
-
 impl Display for DeploymentMeta {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let db = {
             if let Some(info) = &self.database_deployment {
                 format!(
                     "\n        Database URI:       {}",
-                    info.connection_string(PUBLIC_IP)
+                    info.connection_string_public()
                 )
             } else {
                 "".to_string()
@@ -104,30 +99,55 @@ impl Display for DeploymentMeta {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatabaseReadyInfo {
-    pub role_name: String,
-    pub role_password: String,
-    pub database_name: String,
-    pub port: String,
+    engine: String,
+    role_name: String,
+    role_password: String,
+    database_name: String,
+    port: String,
+    address_private: String,
+    address_public: String,
 }
 
 impl DatabaseReadyInfo {
     pub fn new(
+        engine: String,
         role_name: String,
         role_password: String,
         database_name: String,
         port: String,
+        address_private: String,
+        address_public: String,
     ) -> Self {
         Self {
+            engine,
             role_name,
             role_password,
             database_name,
             port,
+            address_private,
+            address_public,
         }
     }
-    pub fn connection_string(&self, ip: &str) -> String {
+    pub fn connection_string_private(&self) -> String {
         format!(
-            "postgres://{}:{}@{}:{}/{}",
-            self.role_name, self.role_password, ip, self.port, self.database_name
+            "{}://{}:{}@{}:{}/{}",
+            self.engine,
+            self.role_name,
+            self.role_password,
+            self.address_private,
+            self.port,
+            self.database_name
+        )
+    }
+    pub fn connection_string_public(&self) -> String {
+        format!(
+            "{}://{}:{}@{}:{}/{}",
+            self.engine,
+            self.role_name,
+            self.role_password,
+            self.address_public,
+            self.port,
+            self.database_name
         )
     }
 }

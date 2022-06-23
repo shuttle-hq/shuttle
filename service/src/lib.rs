@@ -125,7 +125,7 @@
 //! }
 //!
 //! #[shuttle_service::main]
-//! async fn rocket(pool: PgPool) -> ShuttleRocket {
+//! async fn rocket(#[shared::Postgres] pool: PgPool) -> ShuttleRocket {
 //!     let state = MyState(pool);
 //!     let rocket = rocket::build().manage(state).mount("/", routes![hello]);
 //!
@@ -219,10 +219,22 @@ pub use error::Error;
 
 pub mod logger;
 
+pub use shuttle_common::database;
+
+#[cfg(feature = "sqlx-postgres")]
+pub mod shared;
+
 #[cfg(feature = "secrets")]
 pub mod secrets;
 #[cfg(feature = "secrets")]
 pub use secrets::SecretStore;
+
+#[cfg(any(
+    feature = "sqlx-aws-mariadb",
+    feature = "sqlx-aws-mysql",
+    feature = "sqlx-aws-postgres"
+))]
+pub mod aws;
 
 #[cfg(feature = "codegen")]
 extern crate shuttle_codegen;
@@ -255,7 +267,7 @@ extern crate shuttle_codegen;
 /// | `Result<T, shuttle_service::Error>`   | web-tower    | [tower](https://docs.rs/tower/0.4.12)       | 0.14.12    | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/tower/hello-world)  |
 ///
 /// # Getting shuttle managed services
-/// Shuttle is able to manage service dependencies for you. These are passed in as inputs to your `#[shuttle_service::main]` function:
+/// Shuttle is able to manage service dependencies for you. These services are passed in as inputs to your `#[shuttle_service::main]` function and are configured using attributes:
 /// ```rust,no_run
 /// use sqlx::PgPool;
 /// use shuttle_service::ShuttleRocket;
@@ -263,7 +275,7 @@ extern crate shuttle_codegen;
 /// struct MyState(PgPool);
 ///
 /// #[shuttle_service::main]
-/// async fn rocket(pool: PgPool) -> ShuttleRocket {
+/// async fn rocket(#[shared::Postgres] pool: PgPool) -> ShuttleRocket {
 ///     let state = MyState(pool);
 ///     let rocket = rocket::build().manage(state);
 ///
@@ -272,11 +284,14 @@ extern crate shuttle_codegen;
 /// ```
 ///
 /// ## shuttle managed dependencies
-/// The following dependencies can be managed by shuttle - remember to enable their feature flags for the `shuttle-service` dependency in `Cargo.toml`:
+/// The following dependencies can be managed by shuttle - remember to enable their feature flags for the `shuttle-service` dependency in `Cargo.toml` and configure them using an attribute annotation:
 ///
-/// | Argument type                                                 | Feature flag  | Dependency                                                         | Example                                                                          |
-/// | ------------------------------------------------------------- | ------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
-/// | [`PgPool`](https://docs.rs/sqlx/latest/sqlx/type.PgPool.html) | sqlx-postgres | A PostgresSql instance accessed using [sqlx](https://docs.rs/sqlx) | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/rocket/postgres) |
+/// | Argument type                                                       | Feature flag      | Attribute            | Dependency                                                                                         | Example                                                                          |
+/// | ------------------------------------------------------------------- | ----------------- | -------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+/// | [`PgPool`](https://docs.rs/sqlx/latest/sqlx/type.PgPool.html)       | sqlx-postgres     | `shared::Postgres`   | A shared PostgresSql instance accessed using [sqlx](https://docs.rs/sqlx)                          | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/rocket/postgres) |
+/// | [`MySqlPool`](https://docs.rs/sqlx/latest/sqlx/type.MySqlPool.html) | sqlx-aws-mariadb  | `aws::rds::MariaDB`  | An AWS RDS MariaDB instance tied to your instance and accessed using [sqlx](https://docs.rs/sqlx)  |                                                                                  |
+/// | [`MySqlPool`](https://docs.rs/sqlx/latest/sqlx/type.MySqlPool.html) | sqlx-aws-mysql    | `aws::rds::MySql`    | An AWS RDS MySql instance tied to your instance and accessed using [sqlx](https://docs.rs/sqlx)    |                                                                                  |
+/// | [`PgPool`](https://docs.rs/sqlx/latest/sqlx/type.PgPool.html)       | sqlx-aws-postgres | `aws::rds::Postgres` | An AWS RDS Postgres instance tied to your instance and accessed using [sqlx](https://docs.rs/sqlx) | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/tide/postgres)   |
 pub use shuttle_codegen::main;
 use tokio::task::JoinHandle;
 
@@ -293,7 +308,10 @@ pub trait Factory: Send + Sync {
     /// Declare that the [Service][Service] requires a Postgres database.
     ///
     /// Returns the connection string to the provisioned database.
-    async fn get_sql_connection_string(&mut self) -> Result<String, crate::Error>;
+    async fn get_sql_connection_string(
+        &mut self,
+        db_type: database::Type,
+    ) -> Result<String, crate::Error>;
 }
 
 /// Used to get resources of type `T` from factories.
@@ -302,34 +320,9 @@ pub trait Factory: Send + Sync {
 /// Some resources cannot cross the boundary between the api runtime and the runtime of services. These resources
 /// should be created on the passed in runtime.
 #[async_trait]
-pub trait GetResource<T> {
-    async fn get_resource(self, runtime: &Runtime) -> Result<T, crate::Error>;
-}
-
-/// Get an `sqlx::PgPool` from any factory
-#[cfg(feature = "sqlx-postgres")]
-#[async_trait]
-impl GetResource<sqlx::PgPool> for &mut dyn Factory {
-    async fn get_resource(self, runtime: &Runtime) -> Result<sqlx::PgPool, crate::Error> {
-        use error::CustomError;
-
-        let connection_string = self.get_sql_connection_string().await?;
-
-        // A sqlx Pool cannot cross runtime boundaries, so make sure to create the Pool on the service end
-        let pool = runtime
-            .spawn(async move {
-                sqlx::postgres::PgPoolOptions::new()
-                    .min_connections(1)
-                    .max_connections(5)
-                    .connect(&connection_string)
-                    .await
-            })
-            .await
-            .map_err(CustomError::new)?
-            .map_err(CustomError::new)?;
-
-        Ok(pool)
-    }
+pub trait ResourceBuilder<T> {
+    fn new() -> Self;
+    async fn build(self, factory: &mut dyn Factory, runtime: &Runtime) -> Result<T, crate::Error>;
 }
 
 /// A tokio handle the service was started on

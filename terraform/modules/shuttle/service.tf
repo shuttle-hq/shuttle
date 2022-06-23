@@ -7,11 +7,6 @@ resource "aws_eip" "backend" {
   network_interface = aws_network_interface.backend.id
 }
 
-resource "aws_network_interface_sg_attachment" "backend" {
-  security_group_id    = aws_security_group.unreasonable.id
-  network_interface_id = aws_network_interface.backend.id
-}
-
 resource "aws_iam_instance_profile" "backend" {
   name = "backend-profile"
   role = aws_iam_role.backend.name
@@ -37,6 +32,29 @@ resource "aws_iam_role" "backend" {
     ]
 }
 EOF
+
+  inline_policy {
+    name = "Handle_RDS"
+    policy = jsonencode(
+      {
+        Statement = [
+          {
+            Action = [
+              "rds:CreateDBInstance",
+              "rds:DescribeDBInstances",
+              "rds:ModifyDBInstance",
+            ]
+            Effect = "Allow"
+            Resource = [
+              "arn:aws:rds:*:${local.account_id}:db:*",
+              "arn:aws:rds:*:${local.account_id}:subgrp:shuttle_rds",
+            ]
+          },
+        ]
+        Version = "2012-10-17"
+      }
+    )
+  }
 }
 
 resource "aws_lb_target_group_attachment" "api" {
@@ -83,6 +101,14 @@ resource "aws_instance" "backend" {
 
   iam_instance_profile = aws_iam_instance_profile.backend.id
 
+  metadata_options {
+    http_endpoint = "enabled"
+    # Our api runs in a container and therefore has an extra hop limit
+    # https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instancedata-data-retrieval.html#imds-considerations
+    http_put_response_hop_limit = 2
+    http_tokens                 = "required"
+  }
+
   network_interface {
     network_interface_id = aws_network_interface.backend.id
     device_index         = 0
@@ -123,6 +149,7 @@ locals {
       data_dir     = local.data_dir,
       docker_image = local.docker_provisioner_image,
       pg_password  = var.postgres_password,
+      fqdn         = var.pg_fqdn
     }
   )
 }

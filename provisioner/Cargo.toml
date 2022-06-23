@@ -6,7 +6,11 @@ description = "Service responsible for provisioning and managing resources for s
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+aws-config = "0.12"
+aws-sdk-rds = "0.12"
+aws-smithy-types = "0.42"
 clap = { version = "3.1.18", features = ["derive", "env"] }
+fqdn = "0.1.9"
 prost = "0.10.4"
 rand = "0.8.5"
 sqlx = { version = "0.5.13", features = ["postgres", "runtime-tokio-native-tls"] }

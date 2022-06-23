@@ -20,4 +20,5 @@ services:
       context: .
       dockerfile: provisioner/Containerfile.dev
     environment:
+      - FQDN=unreacable
       - PORT=5001

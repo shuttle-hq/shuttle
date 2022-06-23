@@ -161,7 +161,6 @@ impl Deployment {
 
                     let mut factory = ShuttleFactory::new(
                         context.provisioner_client.clone(),
-                        context.provisioner_address.clone(),
                         meta.project.clone(),
                     );
                     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
@@ -290,7 +289,6 @@ pub(crate) struct DeploymentSystem {
     job_queue: JobQueue,
     router: Arc<Router>,
     fqdn: String,
-    pub(crate) provisioner_address: String,
     pub(crate) shuttle_version: String,
 }
 
@@ -342,7 +340,6 @@ pub(crate) struct Context {
     build_system: Box<dyn BuildSystem>,
     deployments: Arc<RwLock<Deployments>>,
     provisioner_client: ProvisionerClient<Channel>,
-    provisioner_address: String,
     shuttle_version: String,
 }
 
@@ -388,7 +385,6 @@ impl DeploymentSystem {
             build_system,
             deployments: deployments.clone(),
             provisioner_client,
-            provisioner_address: provisioner_address.clone(),
             shuttle_version: shuttle_version.clone(),
         };
 
@@ -405,7 +401,6 @@ impl DeploymentSystem {
             job_queue,
             router,
             fqdn,
-            provisioner_address,
             shuttle_version,
         }
     }

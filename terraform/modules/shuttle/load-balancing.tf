@@ -5,7 +5,7 @@ resource "aws_lb" "api" {
 
   load_balancer_type = "application"
 
-  security_groups = [aws_security_group.unreasonable.id]
+  security_groups = [aws_default_security_group.default.id]
   subnets         = [aws_subnet.backend_a.id, aws_subnet.backend_b.id]
 
   access_logs {
@@ -22,7 +22,7 @@ resource "aws_lb" "db" {
 
   load_balancer_type = "network"
 
-  //security_groups = [aws_security_group.unreasonable.id]
+  //security_groups = [aws_default_security_group.default.id]
   subnets = [aws_subnet.backend_a.id, aws_subnet.backend_b.id]
 
   access_logs {
@@ -84,7 +84,7 @@ resource "aws_lb" "user" {
 
   load_balancer_type = "application"
 
-  security_groups = [aws_security_group.unreasonable.id]
+  security_groups = [aws_default_security_group.default.id]
   subnets         = [aws_subnet.backend_a.id, aws_subnet.backend_b.id]
 
   access_logs {

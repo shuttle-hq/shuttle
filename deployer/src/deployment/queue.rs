@@ -258,7 +258,7 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
 
         super::remove_old_build(&p).await.unwrap();
 
-        assert!(!p.join("delete-me").exists());
+        assert!(!p.join("delete-me.so").exists());
         assert!(!p.join(MARKER_FILE_NAME).exists());
 
         let _ = fs::remove_dir(p).await;

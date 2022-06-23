@@ -23,7 +23,11 @@ pub fn main(_attr: TokenStream, item: TokenStream) -> TokenStream {
             let builder: shuttle_service::StateBuilder<Box<dyn shuttle_service::Service>> =
                 |factory, runtime, logger| Box::pin(__shuttle_wrapper(factory, runtime, logger));
 
-            let bootstrapper = shuttle_service::Bootstrapper::new(builder, __binder);
+            let bootstrapper = shuttle_service::Bootstrapper::new(
+                builder,
+                __binder,
+                shuttle_service::Runtime::new().unwrap(),
+            );
 
             let boxed = Box::new(bootstrapper);
             Box::into_raw(boxed)

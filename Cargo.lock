@@ -4445,7 +4445,6 @@ dependencies = [
  "shuttle-codegen",
  "shuttle-common",
  "sqlx",
- "sync_wrapper",
  "thiserror",
  "tide",
  "tokio",

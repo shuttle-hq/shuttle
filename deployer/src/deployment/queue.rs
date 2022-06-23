@@ -10,6 +10,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 
+use log::{info, debug, error};
 use bytes::{BufMut, Bytes};
 use flate2::read::GzDecoder;
 use futures::{Stream, StreamExt};
@@ -27,19 +28,19 @@ const BUILDS_PATH: &str = "/tmp/shuttle-builds";
 const MARKER_FILE_NAME: &str = ".shuttle-marker";
 
 pub async fn task(mut recv: QueueReceiver, run_send: RunSender, persistence: Persistence) {
-    log::info!("Queue task started");
+    info!("Queue task started");
 
     while let Some(queued) = recv.recv().await {
         let name = queued.name.clone();
 
-        log::info!("Queued deployment at the front of the queue: {}", name);
+        info!("Queued deployment at the front of the queue: {}", name);
 
         let run_send_cloned = run_send.clone();
         let persistence_cloned = persistence.clone();
 
         tokio::spawn(async move {
             if let Err(e) = queued.handle(run_send_cloned, persistence_cloned).await {
-                log::error!("Error during building of deployment '{}' - {e}", name);
+                error!("Error during building of deployment '{}' - {e}", name);
             }
         });
     }
@@ -63,16 +64,16 @@ impl Queued {
 
         persistence.update_deployment(&self).await?;
 
-        log::info!("Fetching POSTed data for deployment '{}'", self.name);
+        info!("Fetching POSTed data for deployment '{}'", self.name);
 
         let mut vec = Vec::new();
         while let Some(buf) = self.data_stream.next().await {
             let buf = buf?;
-            log::debug!("Received {} bytes for deployment {}", buf.len(), self.name);
+            debug!("Received {} bytes for deployment {}", buf.len(), self.name);
             vec.put(buf);
         }
 
-        log::info!("Extracting received data for deployment '{}'", self.name);
+        info!("Extracting received data for deployment '{}'", self.name);
 
         fs::create_dir_all(BUILDS_PATH).await?;
 
@@ -80,7 +81,7 @@ impl Queued {
 
         extract_tar_gz_data(vec.as_slice(), &project_path)?;
 
-        log::info!("Building deployment '{}'", self.name);
+        info!("Building deployment '{}'", self.name);
 
         let cargo_output_buf = Box::new(std::io::stdout()); // TODO: Redirect over WebSocket.
 
@@ -88,11 +89,11 @@ impl Queued {
         let so_path =
             build_crate(&project_path, cargo_output_buf).map_err(|e| Error::Build(e.into()))?;
 
-        log::info!("Removing old build (if present) for {}", self.name);
+        info!("Removing old build (if present) for {}", self.name);
 
         remove_old_build(&project_path).await?;
 
-        log::info!(
+        info!(
             "Moving built library and creating marker file for deployment '{}'",
             self.name
         );
@@ -108,7 +109,7 @@ impl Queued {
 
         persistence.update_deployment(&built).await?;
 
-        log::info!("Moving deployment '{}' to run queue", built.name);
+        info!("Moving deployment '{}' to run queue", built.name);
 
         run_send.send(built).await.unwrap();
 

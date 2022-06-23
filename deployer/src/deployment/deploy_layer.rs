@@ -1,3 +1,24 @@
+//! This is a layer for [tracing] to capture the state transition of deploys
+//!
+//! The idea is as follow: as a deployment moves through the [super::DeploymentManager] a set of functions will be invoked.
+//! These functions are clear markers for the deployment entering a new state so we would want to change the state as soon as entering these functions.
+//! But rather than passing a persistence layer around to be able record the state in these functions we can rather use [tracing].
+//!
+//! This is very similar to Aspect Oriented Programming where we use the annotations from the function to trigger the recording of a new state.
+//! This annotation is a [#[instrument]](https://docs.rs/tracing-attributes/latest/tracing_attributes/attr.instrument.html) with a `name` and `state` field as follow:
+//! ```
+//! #[instrument(fields(name = built.name.as_str(), state = %State::Built))]
+//! pub async fn new_state_fn(built: Built) {
+//!     self.pipeline.run_send.send(built).await.unwrap();
+//! }
+//! ```
+//!
+//! Here the `name` is extracted from the `built` argument and the `state` is taken from the [State] enum (the special `%` is needed to use the `Display` trait to convert it to a string).
+//!
+//! All `debug!()` etc in these functions will be capture by this layer and will be associated with the deployment and the state.
+//!
+//! **Warning** Don't log out sensitive info in these functions
+
 use chrono::{DateTime, Utc};
 use serde_json::json;
 use tracing::{field::Visit, span, Metadata, Subscriber};
@@ -13,6 +34,7 @@ pub trait LogRecorder {
     fn record(&self, log: Log);
 }
 
+/// An event or state transition log
 #[derive(Debug, PartialEq)]
 pub struct Log {
     /// Deployment name

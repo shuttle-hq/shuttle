@@ -32,7 +32,7 @@ async fn main() {
         .or_else(|_| EnvFilter::try_new("info"))
         .unwrap();
 
-    let persistence = Persistence::new().await;
+    let (persistence, _) = Persistence::new().await;
     tracing_subscriber::registry()
         .with(DeployLayer::new(persistence.clone()))
         .with(filter_layer)

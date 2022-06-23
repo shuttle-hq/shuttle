@@ -8,6 +8,7 @@ use serde_json::json;
 use sqlx::migrate::MigrateDatabase;
 use sqlx::sqlite::{Sqlite, SqlitePool};
 use tokio::sync::mpsc::{self, UnboundedSender};
+use tokio::task::JoinHandle;
 
 const DB_PATH: &str = "deployer.sqlite";
 
@@ -22,7 +23,7 @@ impl Persistence {
     /// function creates all necessary tables and sets up a database connection
     /// pool - new connections should be made by cloning [`Persistence`] rather
     /// than repeatedly calling [`Persistence::new`].
-    pub async fn new() -> Self {
+    pub async fn new() -> (Self, JoinHandle<()>) {
         if !Path::new(DB_PATH).exists() {
             Sqlite::create_database(DB_PATH).await.unwrap();
         }
@@ -32,12 +33,12 @@ impl Persistence {
     }
 
     #[allow(dead_code)]
-    async fn new_in_memory() -> Self {
+    async fn new_in_memory() -> (Self, JoinHandle<()>) {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
         Self::from_pool(pool).await
     }
 
-    async fn from_pool(pool: SqlitePool) -> Self {
+    async fn from_pool(pool: SqlitePool) -> (Self, JoinHandle<()>) {
         sqlx::query("
             CREATE TABLE IF NOT EXISTS deployments (
                 name TEXT PRIMARY KEY, -- Name of the service being deployed.
@@ -53,57 +54,47 @@ impl Persistence {
             );
         ").execute(&pool).await.unwrap();
 
-        let (log_send, mut log_recv) = mpsc::unbounded_channel();
+        let (log_send, mut log_recv): (UnboundedSender<deploy_layer::Log>, _) =
+            mpsc::unbounded_channel();
 
-        let me = Self { pool, log_send };
-        let me_clone = me.clone();
+        let pool_cloned = pool.clone();
 
         // The logs are received on a non-async thread.
         // This moves them to an async thread
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             while let Some(log) = log_recv.recv().await {
                 match log.r#type {
-                    LogType::Event => me_clone.insert_log(log).await.unwrap(),
+                    LogType::Event => insert_log(&pool_cloned, log).await.unwrap(),
                     LogType::State => {
-                        me_clone
-                            .insert_log(Log {
+                        insert_log(
+                            &pool_cloned,
+                            Log {
                                 name: log.name.clone(),
                                 timestamp: log.timestamp.clone(),
                                 state: log.state.clone(),
                                 level: log.level.clone(),
                                 fields: json!("NEW STATE"),
-                            })
-                            .await
-                            .unwrap();
-                        me_clone.update_deployment(log).await.unwrap();
+                            },
+                        )
+                        .await
+                        .unwrap();
+                        update_deployment(&pool_cloned, log).await.unwrap();
                     }
                 };
             }
         });
 
-        me
+        let persistence = Self { pool, log_send };
+
+        (persistence, handle)
     }
 
     pub async fn update_deployment(&self, info: impl Into<DeploymentInfo>) -> Result<()> {
-        let info = info.into();
-
-        // TODO: Handle moving to 'active_deployments' table for State::Running.
-
-        sqlx::query("INSERT OR REPLACE INTO deployments (name, state) VALUES (?, ?)")
-            .bind(info.name)
-            .bind(info.state)
-            .execute(&self.pool)
-            .await
-            .map(|_| ())
-            .map_err(Into::into)
+        update_deployment(&self.pool, info).await
     }
 
     pub async fn get_deployment(&self, name: &str) -> Result<Option<DeploymentInfo>> {
-        sqlx::query_as("SELECT * FROM deployments WHERE name = ?")
-            .bind(name)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(Into::into)
+        get_deployment(&self.pool, name).await
     }
 
     pub async fn delete_deployment(&self, name: &str) -> Result<Option<DeploymentInfo>> {
@@ -134,29 +125,57 @@ impl Persistence {
     }
 
     async fn insert_log(&self, log: impl Into<Log>) -> Result<()> {
-        let log = log.into();
+        insert_log(&self.pool, log).await
+    }
 
-        sqlx::query(
-            "INSERT INTO logs (name, timestamp, state, level, fields) VALUES (?, ?, ?, ?, ?)",
-        )
+    async fn get_deployment_logs(&self, name: &str) -> Result<Vec<Log>> {
+        get_deployment_logs(&self.pool, name).await
+    }
+}
+
+async fn update_deployment(pool: &SqlitePool, info: impl Into<DeploymentInfo>) -> Result<()> {
+    let info = info.into();
+
+    // TODO: Handle moving to 'active_deployments' table for State::Running.
+
+    sqlx::query("INSERT OR REPLACE INTO deployments (name, state) VALUES (?, ?)")
+        .bind(info.name)
+        .bind(info.state)
+        .execute(pool)
+        .await
+        .map(|_| ())
+        .map_err(Into::into)
+}
+
+async fn get_deployment(pool: &SqlitePool, name: &str) -> Result<Option<DeploymentInfo>> {
+    sqlx::query_as("SELECT * FROM deployments WHERE name = ?")
+        .bind(name)
+        .fetch_optional(pool)
+        .await
+        .map_err(Into::into)
+}
+
+async fn insert_log(pool: &SqlitePool, log: impl Into<Log>) -> Result<()> {
+    let log = log.into();
+
+    sqlx::query("INSERT INTO logs (name, timestamp, state, level, fields) VALUES (?, ?, ?, ?, ?)")
         .bind(log.name)
         .bind(log.timestamp)
         .bind(log.state)
         .bind(log.level)
         .bind(log.fields)
-        .execute(&self.pool)
+        .execute(pool)
         .await
         .map(|_| ())
         .map_err(Into::into)
-    }
+}
 
-    async fn get_deployment_logs(&self, name: &str) -> Result<Vec<Log>> {
-        sqlx::query_as("SELECT * FROM logs WHERE name = ?")
-            .bind(name)
-            .fetch_all(&self.pool)
-            .await
-            .map_err(Into::into)
-    }
+async fn get_deployment_logs(pool: &SqlitePool, name: &str) -> Result<Vec<Log>> {
+    sqlx::query_as("SELECT * FROM logs WHERE name = ?")
+        .bind(name)
+        .fetch_all(pool)
+        .await
+        .map_err(Into::into)
 }
 
 impl LogRecorder for Persistence {
@@ -169,8 +188,6 @@ impl LogRecorder for Persistence {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
-
     use chrono::Utc;
     use serde_json::json;
 
@@ -179,7 +196,7 @@ mod tests {
 
     #[tokio::test]
     async fn deployment_updates() {
-        let p = Persistence::new_in_memory().await;
+        let (p, _) = Persistence::new_in_memory().await;
 
         let mut info = DeploymentInfo {
             name: "abc".to_string(),
@@ -200,7 +217,7 @@ mod tests {
 
     #[tokio::test]
     async fn fetching_runnable_deployments() {
-        let p = Persistence::new_in_memory().await;
+        let (p, _) = Persistence::new_in_memory().await;
 
         for info in [
             DeploymentInfo {
@@ -232,7 +249,7 @@ mod tests {
 
     #[tokio::test]
     async fn deployment_deletion() {
-        let p = Persistence::new_in_memory().await;
+        let (p, _) = Persistence::new_in_memory().await;
 
         p.update_deployment(DeploymentInfo {
             name: "x".to_string(),
@@ -247,7 +264,7 @@ mod tests {
 
     #[tokio::test]
     async fn log_insert() {
-        let p = Persistence::new_in_memory().await;
+        let (p, _) = Persistence::new_in_memory().await;
         let log = Log {
             name: "a".to_string(),
             timestamp: Utc::now(),
@@ -266,7 +283,7 @@ mod tests {
 
     #[tokio::test]
     async fn logs_for_deployment() {
-        let p = Persistence::new_in_memory().await;
+        let (p, _) = Persistence::new_in_memory().await;
         let log_a1 = Log {
             name: "a".to_string(),
             timestamp: Utc::now(),
@@ -301,7 +318,7 @@ mod tests {
 
     #[tokio::test]
     async fn log_recorder_event() {
-        let p = Persistence::new_in_memory().await;
+        let (p, handle) = Persistence::new_in_memory().await;
         let event = deploy_layer::Log {
             name: "x".to_string(),
             timestamp: Utc::now(),
@@ -313,8 +330,11 @@ mod tests {
 
         p.record(event);
 
-        tokio::time::sleep(Duration::from_micros(200)).await;
-        let logs = p.get_deployment_logs("a").await.unwrap();
+        // Drop channel and wait for it to finish
+        drop(p.log_send);
+        assert!(handle.await.is_ok());
+
+        let logs = get_deployment_logs(&p.pool, "x").await.unwrap();
 
         assert!(!logs.is_empty(), "there should be one log");
 
@@ -329,7 +349,7 @@ mod tests {
     async fn log_recorder_state() {
         tracing_subscriber::fmt::init();
 
-        let p = Persistence::new_in_memory().await;
+        let (p, handle) = Persistence::new_in_memory().await;
         let state = deploy_layer::Log {
             name: "z".to_string(),
             timestamp: Utc::now(),
@@ -341,8 +361,11 @@ mod tests {
 
         p.record(state);
 
-        tokio::time::sleep(Duration::from_micros(200)).await;
-        let logs = p.get_deployment_logs("a").await.unwrap();
+        // Drop channel and wait for it to finish
+        drop(p.log_send);
+        assert!(handle.await.is_ok());
+
+        let logs = get_deployment_logs(&p.pool, "z").await.unwrap();
 
         assert!(!logs.is_empty(), "state change should be logged");
 
@@ -353,7 +376,7 @@ mod tests {
         assert_eq!(log.fields, json!("NEW STATE"));
 
         assert_eq!(
-            p.get_deployment("z").await.unwrap().unwrap(),
+            get_deployment(&p.pool, "z").await.unwrap().unwrap(),
             DeploymentInfo {
                 name: "z".to_string(),
                 state: State::Running

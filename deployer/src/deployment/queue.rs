@@ -181,7 +181,7 @@ mod tests {
     use std::path::Path;
     use tokio::fs;
 
-    use crate::deployment::queue::MARKER_FILE_NAME;
+    use super::MARKER_FILE_NAME;
 
     #[tokio::test]
     async fn extract_tar_gz_data() {

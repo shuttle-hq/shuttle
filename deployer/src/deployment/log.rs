@@ -8,6 +8,8 @@ pub struct Log {
     pub timestamp: DateTime<Utc>,
     pub state: State,
     pub level: Level,
+    pub file: Option<String>,
+    pub line: Option<u32>,
     pub fields: serde_json::Value,
 }
 

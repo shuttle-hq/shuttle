@@ -49,6 +49,12 @@ pub struct Log {
     /// Time log happened
     pub timestamp: DateTime<Utc>,
 
+    /// File event took place in
+    pub file: Option<String>,
+
+    /// Line in file event happened on
+    pub line: Option<u32>,
+
     /// Extra structured log fields
     pub fields: serde_json::Value,
 
@@ -62,6 +68,8 @@ impl From<Log> for log::Log {
             timestamp: log.timestamp,
             state: log.state,
             level: log.level,
+            file: log.file,
+            line: log.line,
             fields: log.fields,
         }
     }
@@ -120,12 +128,15 @@ where
                 let mut visitor = JsonVisitor::default();
 
                 event.record(&mut visitor);
+                let metadata = event.metadata();
 
                 self.recorder.record(Log {
                     name: details.name.clone(),
                     state: details.state,
-                    level: event.metadata().level().into(),
+                    level: metadata.level().into(),
                     timestamp: Utc::now(),
+                    file: metadata.file().map(str::to_string),
+                    line: metadata.line(),
                     fields: serde_json::Value::Object(visitor.0),
                     r#type: LogType::Event,
                 });
@@ -154,12 +165,15 @@ where
         // Safe to unwrap since this is the `on_new_span` method
         let span = ctx.span(id).unwrap();
         let mut extensions = span.extensions_mut();
+        let metadata = span.metadata();
 
         self.recorder.record(Log {
             name: details.name.clone(),
             state: details.state,
-            level: span.metadata().level().into(),
+            level: metadata.level().into(),
             timestamp: Utc::now(),
+            file: metadata.file().map(str::to_string),
+            line: metadata.line(),
             fields: Default::default(),
             r#type: LogType::State,
         });

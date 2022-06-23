@@ -50,6 +50,8 @@ impl Persistence {
                 timestamp INTEGER, -- Unix eopch timestamp.
                 state INTEGER,     -- The state of the deployment at the time at which the log text was produced.
                 level TEXT,        -- The log level
+                file TEXT,         -- The file log took place in
+                line INTEGER,       -- The line log took place on
                 fields TEXT        -- Log fields object.
             );
         ").execute(&pool).await.unwrap();
@@ -73,6 +75,8 @@ impl Persistence {
                                 timestamp: log.timestamp.clone(),
                                 state: log.state.clone(),
                                 level: log.level.clone(),
+                                file: log.file.clone(),
+                                line: log.line,
                                 fields: json!("NEW STATE"),
                             },
                         )
@@ -158,11 +162,13 @@ async fn get_deployment(pool: &SqlitePool, name: &str) -> Result<Option<Deployme
 async fn insert_log(pool: &SqlitePool, log: impl Into<Log>) -> Result<()> {
     let log = log.into();
 
-    sqlx::query("INSERT INTO logs (name, timestamp, state, level, fields) VALUES (?, ?, ?, ?, ?)")
+    sqlx::query("INSERT INTO logs (name, timestamp, state, level, file, line, fields) VALUES (?, ?, ?, ?, ?, ?, ?)")
         .bind(log.name)
         .bind(log.timestamp)
         .bind(log.state)
         .bind(log.level)
+        .bind(log.file)
+        .bind(log.line)
         .bind(log.fields)
         .execute(pool)
         .await
@@ -270,6 +276,8 @@ mod tests {
             timestamp: Utc::now(),
             state: State::Queued,
             level: Level::Info,
+            file: Some("queue.rs".to_string()),
+            line: Some(12),
             fields: json!({"message": "job queued"}),
         };
 
@@ -289,6 +297,8 @@ mod tests {
             timestamp: Utc::now(),
             state: State::Queued,
             level: Level::Info,
+            file: Some("file.rs".to_string()),
+            line: Some(5),
             fields: json!({"message": "job queued"}),
         };
         let log_b = Log {
@@ -296,6 +306,8 @@ mod tests {
             timestamp: Utc::now(),
             state: State::Queued,
             level: Level::Info,
+            file: Some("file.rs".to_string()),
+            line: Some(5),
             fields: json!({"message": "job queued"}),
         };
         let log_a2 = Log {
@@ -303,6 +315,8 @@ mod tests {
             timestamp: Utc::now(),
             state: State::Building,
             level: Level::Warn,
+            file: None,
+            line: None,
             fields: json!({"message": "unused Result"}),
         };
 
@@ -324,6 +338,8 @@ mod tests {
             timestamp: Utc::now(),
             state: State::Queued,
             level: Level::Info,
+            file: Some("file.rs".to_string()),
+            line: Some(5),
             fields: json!({"message": "job queued"}),
             r#type: deploy_layer::LogType::Event,
         };
@@ -342,6 +358,8 @@ mod tests {
         assert_eq!(log.name, "x");
         assert_eq!(log.state, State::Queued);
         assert_eq!(log.level, Level::Info);
+        assert_eq!(log.file, Some("file.rs".to_string()));
+        assert_eq!(log.line, Some(5));
         assert_eq!(log.fields, json!({"message": "job queued"}));
     }
 
@@ -353,6 +371,8 @@ mod tests {
             timestamp: Utc::now(),
             state: State::Running,
             level: Level::Info,
+            file: None,
+            line: None,
             fields: serde_json::Value::Null,
             r#type: deploy_layer::LogType::State,
         };

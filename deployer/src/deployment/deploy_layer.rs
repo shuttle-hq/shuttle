@@ -9,15 +9,15 @@
 //! ```
 //! #[instrument(fields(name = built.name.as_str(), state = %State::Built))]
 //! pub async fn new_state_fn(built: Built) {
-//!     self.pipeline.run_send.send(built).await.unwrap();
+//!     // Get built ready for starting
 //! }
 //! ```
 //!
 //! Here the `name` is extracted from the `built` argument and the `state` is taken from the [State] enum (the special `%` is needed to use the `Display` trait to convert it to a string).
 //!
-//! All `debug!()` etc in these functions will be capture by this layer and will be associated with the deployment and the state.
+//! All `debug!()` etc in these functions will be captured by this layer and will be associated with the deployment and the state.
 //!
-//! **Warning** Don't log out sensitive info in these functions
+//! **Warning** Don't log out sensitive info in functions with these annotations
 
 use chrono::{DateTime, Utc};
 use serde_json::json;
@@ -113,7 +113,7 @@ where
     R: LogRecorder + Send + Sync + 'static,
 {
     fn on_event(&self, event: &tracing::Event<'_>, ctx: tracing_subscriber::layer::Context<'_, S>) {
-        // We only care about events in some status scope
+        // We only care about events in some state scope
         let scope = if let Some(scope) = ctx.event_scope(event) {
             scope
         } else {

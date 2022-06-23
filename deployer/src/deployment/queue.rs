@@ -52,8 +52,6 @@ impl Queued {
 
         // TODO
 
-        // Update deployment state to 'built:
-
         let built = Built { name: self.name };
 
         Ok(built)

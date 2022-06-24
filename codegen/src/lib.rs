@@ -97,22 +97,7 @@ fn check_return_type(signature: &Signature) {
             doc = "https://docs.rs/shuttle-service/latest/shuttle_service/attr.main.html#shuttle-supported-services"
         ),
         ReturnType::Type(_, r#type) => match r#type.as_ref() {
-            Type::Path(path) => {
-                let segments = &path.path.segments;
-                if segments.is_empty() {
-                    todo!()
-                } else {
-                    let ident = &segments[0].ident;
-                    if ident.to_string() != "Result" {
-                        emit_error!(
-                            r#type,
-                            "shuttle_service::main functions need to return a first class service or 'Result<impl Service, shuttle_service::Error>";
-                            hint = "See the docs for services with first class support";
-                            doc = "https://docs.rs/shuttle-service/latest/shuttle_service/attr.main.html#shuttle-supported-services"
-                        )
-                    }
-                }
-            }
+            Type::Path(_) => {}
             _ => emit_error!(
                 r#type,
                 "shuttle_service::main functions need to return a first class service or 'Result<impl Service, shuttle_service::Error>";

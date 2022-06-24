@@ -89,16 +89,20 @@ async fn subscribe_build_logs(
     Path(name): Path<String>,
     ws_upgrade: ws::WebSocketUpgrade,
 ) -> axum::response::Response {
-    // TODO: Error handling.
-    let log_recv = build_log_receivers.lock().await.remove(&name).unwrap();
+    let log_recv = build_log_receivers.lock().await.remove(&name);
 
     ws_upgrade.on_upgrade(move |s| websocket_handler(s, log_recv))
 }
 
-async fn websocket_handler(mut s: WebSocket, mut log_recv: BuildLogReceiver) {
-    while let Some(msg) = log_recv.recv().await {
-        if s.send(ws::Message::Text(msg)).await.is_err() {
-            return; // client disconnected
+async fn websocket_handler(mut s: WebSocket, log_recv: Option<BuildLogReceiver>) {
+    if let Some(mut log_recv) = log_recv {
+        while let Some(msg) = log_recv.recv().await {
+            let sent = s.send(ws::Message::Text(msg)).await;
+
+            // Client disconnected?
+            if sent.is_err() {
+                return;
+            }
         }
     }
     let _ = s.close().await;

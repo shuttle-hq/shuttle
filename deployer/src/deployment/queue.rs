@@ -1,4 +1,4 @@
-use super::{Built, QueueReceiver, RunSender, BuildLogSender, DeploymentState};
+use super::{BuildLogSender, Built, DeploymentState, QueueReceiver, RunSender};
 use crate::error::{Error, Result};
 use crate::persistence::Persistence;
 
@@ -183,10 +183,13 @@ impl io::Write for BuildLogWriter {
         println!("{:?}", buf);
 
         let msg = String::from_utf8_lossy(buf).into_owned();
-            //.map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
         let sender_clone = self.sender.clone();
-        std::thread::spawn(move || { let _ = sender_clone.blocking_send(msg); }).join().unwrap();
+        std::thread::spawn(move || {
+            let _ = sender_clone.blocking_send(msg);
+        })
+        .join()
+        .unwrap();
 
         Ok(buf.len())
     }

@@ -46,7 +46,7 @@ impl Loader {
     /// Dynamically load from a `.so` file a value of a type implementing the
     /// [`Service`] trait. Relies on the `.so` library having an ``extern "C"`
     /// function called [`ENTRYPOINT_SYMBOL_NAME`], likely automatically generated
-    /// using the [`shuttle_service::declare_service`] macro.
+    /// using the [`shuttle_service::main`] macro.
     pub fn from_so_file<P: AsRef<OsStr>>(so_path: P) -> Result<Self, LoaderError> {
         trace!("loading {:?}", so_path.as_ref().to_str());
         unsafe {

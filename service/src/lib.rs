@@ -302,7 +302,7 @@ pub mod loader;
 ///
 /// An instance of factory is passed by the deployer as an argument to [Service::build][Service::build] in the initial phase of deployment.
 ///
-/// Also see the [declare_service!][declare_service] macro.
+/// Also see the [main][main] macro.
 #[async_trait]
 pub trait Factory: Send + Sync {
     /// Declare that the [Service][Service] requires a Postgres database.
@@ -330,7 +330,7 @@ pub type ServeHandle = JoinHandle<Result<(), error::Error>>;
 
 /// The core trait of the shuttle platform. Every crate deployed to shuttle needs to implement this trait.
 ///
-/// Use the [declare_service!][crate::declare_service] macro to expose your implementation to the deployment backend.
+/// Use the [main][main] macro to expose your implementation to the deployment backend.
 #[async_trait]
 pub trait Service: Send {
     /// This function is run exactly once on each instance of a deployment.
@@ -479,89 +479,3 @@ where
 }
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
-
-/// Helper macro that generates the entrypoint required of any service.
-///
-/// Can be used in one of two ways:
-///
-/// ## Without a state
-///
-/// If your service does not require a state (like a database connection pool), just pass a type and a constructor function:
-///
-/// ```rust,no_run
-/// #[macro_use]
-/// extern crate shuttle_service;
-///
-/// use rocket::{Rocket, Build};
-///
-/// fn rocket() -> Rocket<Build> {
-///     rocket::build()
-/// }
-///
-/// declare_service!(Rocket<Build>, rocket);
-/// ```
-///
-/// The constructor function must return an instance of the type passed as first argument. Furthermore, the type must implement [IntoService][IntoService].
-///
-/// ## With a state
-///
-/// If your service requires a state, pass a type, a constructor and a state builder:
-///
-/// ```rust,no_run
-/// use rocket::{Rocket, Build};
-/// use sqlx::PgPool;
-///
-/// #[macro_use]
-/// extern crate shuttle_service;
-/// use shuttle_service::{Factory, Error};
-///
-/// struct MyState(PgPool);
-///
-/// async fn state(factory: &mut dyn Factory) -> Result<MyState, shuttle_service::Error> {
-///    let pool = sqlx::postgres::PgPoolOptions::new()
-///        .connect(&factory.get_sql_connection_string().await?)
-///        .await?;
-///    Ok(MyState(pool))
-/// }
-///
-/// fn rocket() -> Rocket<Build> {
-///     rocket::build()
-/// }
-///
-/// declare_service!(Rocket<Build>, rocket, state);
-/// ```
-///
-/// The state builder will be called when the deployer calls [Service::build][Service::build].
-///
-#[macro_export]
-macro_rules! declare_service {
-    ($service_type:ty, $constructor:path) => {
-        #[no_mangle]
-        pub extern "C" fn _create_service() -> *mut dyn $crate::Service {
-            // Ensure constructor returns concrete type.
-            let constructor: fn() -> $service_type = $constructor;
-
-            let obj = $crate::IntoService::into_service(constructor());
-            let boxed: Box<dyn $crate::Service> = Box::new(obj);
-            Box::into_raw(boxed)
-        }
-    };
-    ($service_type:ty, $constructor:path, $state_builder:path) => {
-        #[no_mangle]
-        pub extern "C" fn _create_service() -> *mut dyn $crate::Service {
-            // Ensure constructor returns concrete type.
-            let constructor: fn() -> $service_type = $constructor;
-
-            // Ensure state builder is a function
-            let state_builder: fn(
-                &mut dyn $crate::Factory,
-            ) -> std::pin::Pin<
-                Box<dyn std::future::Future<Output = Result<_, $crate::Error>> + Send + '_>,
-            > = |factory| Box::pin($state_builder(factory));
-
-            let obj = $crate::IntoService::into_service((constructor(), state_builder));
-            let boxed: Box<dyn $crate::Service> = Box::new(obj);
-            Box::into_raw(boxed)
-        }
-    };
-}

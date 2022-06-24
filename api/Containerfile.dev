@@ -3,22 +3,13 @@ RUN apt-get update &&\
     apt-get install -y supervisor
 RUN rustup component add rust-src
 
-FROM rust:buster AS chef
+FROM rust:buster AS builder
 RUN apt-get update &&\
     apt-get install -y protobuf-compiler
 WORKDIR app
-RUN cargo install cargo-chef
-
-FROM chef AS planner
 COPY . .
 COPY ./api/docker/config.toml $CARGO_HOME/config.toml
-RUN cargo chef prepare --recipe-path recipe.json
-
-FROM chef AS builder
-COPY --from=planner /app/recipe.json recipe.json
-RUN cargo chef cook --recipe-path recipe.json
-COPY . .
-RUN cargo build --bin api
+RUN cargo build --bin api -p api
 
 FROM runtime
 WORKDIR /
@@ -31,3 +22,5 @@ COPY api/docker/config.toml $CARGO_HOME/config.toml
 COPY api/docker/entrypoint.sh /bin/entrypoint.sh
 COPY api/docker/supervisord.conf /usr/share/supervisord/supervisord.conf
 ENTRYPOINT ["/bin/entrypoint.sh"]
+
+HEALTHCHECK --interval=5s --timeout=5s CMD curl --fail http://localhost:8001/status || exit 1

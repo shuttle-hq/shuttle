@@ -10,5 +10,6 @@ members = [
   "service"
 ]
 exclude = [
+  "gateway",
   "examples"
 ]

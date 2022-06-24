@@ -83,7 +83,7 @@ async fn delete_service(
 async fn get_build_logs(
     Extension(build_logs_manager): Extension<BuildLogsManager>,
     Path(name): Path<String>,
-) -> Json<Vec<String>> {
+) -> Json<Option<Vec<String>>> {
     Json(build_logs_manager.get_logs_so_far(&name).await)
 }
 

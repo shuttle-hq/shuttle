@@ -4,9 +4,9 @@ use std::collections::HashMap;
 use std::io;
 use std::sync::Arc;
 
-use tokio::sync::{broadcast, Mutex};
+use tokio::sync::{broadcast, Mutex, RwLock};
 
-const BUFFER_SIZE: usize = 300;
+const BUFFER_SIZE: usize = 10;
 
 #[derive(Clone)]
 pub struct BuildLogsManager {
@@ -21,17 +21,23 @@ impl BuildLogsManager {
     }
 
     pub async fn for_deployment(&self, name: String) -> BuildLogWriter {
-        let (sender, receiver) = broadcast::channel(BUFFER_SIZE);
+        let (sender, mut receiver) = broadcast::channel(BUFFER_SIZE);
 
-        let sender_clone = sender.clone();
+        let logs_so_far = Arc::new(RwLock::new(Vec::new()));
+
         self.deployments.lock().await.insert(
             name,
             Deployment {
-                sender: sender_clone,
-                original_receiver: receiver,
-                logs_consumed_so_far: Vec::new(),
+                sender: sender.clone(),
+                logs_so_far: logs_so_far.clone(),
             },
         );
+
+        tokio::spawn(async move {
+            while let Ok(line) = receiver.recv().await {
+                logs_so_far.write().await.push(line);
+            }
+        });
 
         BuildLogWriter {
             sender,
@@ -47,34 +53,18 @@ impl BuildLogsManager {
             .map(|p| p.sender.subscribe())
     }
 
-    pub async fn get_logs_so_far(&self, name: &str) -> Vec<String> {
-        let mut new_lines = Vec::new();
-
-        if let Some(receiver) = self
-            .deployments
-            .lock()
-            .await
-            .get_mut(name)
-            .map(|p| &mut p.original_receiver)
-        {
-            while let Ok(line) = receiver.try_recv() {
-                new_lines.push(line);
-            }
-        }
-
-        if let Some(deployment) = self.deployments.lock().await.get_mut(name) {
-            deployment.logs_consumed_so_far.extend(new_lines);
-            deployment.logs_consumed_so_far.clone()
+    pub async fn get_logs_so_far(&self, name: &str) -> Option<Vec<String>> {
+        if let Some(deployment) = self.deployments.lock().await.get(name) {
+            Some(deployment.logs_so_far.read().await.clone())
         } else {
-            Vec::new()
+            None
         }
     }
 }
 
 struct Deployment {
     sender: BuildLogSender,
-    original_receiver: BuildLogReceiver,
-    logs_consumed_so_far: Vec<String>,
+    logs_so_far: Arc<RwLock<Vec<String>>>,
 }
 
 pub struct BuildLogWriter {

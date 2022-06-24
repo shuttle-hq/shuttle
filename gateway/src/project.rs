@@ -530,9 +530,7 @@ pub struct Service {
 }
 
 impl Service {
-    pub fn from_container(
-        mut container: ContainerInspectResponse,
-    ) -> Result<Self, ProjectError> {
+    pub fn from_container(mut container: ContainerInspectResponse) -> Result<Self, ProjectError> {
         let container_name = safe_unwrap!(container.name.strip_prefix("/")).to_string();
 
         let resource_name = safe_unwrap!(container_name.strip_suffix("_run")).to_string();

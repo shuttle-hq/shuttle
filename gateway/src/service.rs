@@ -5,26 +5,55 @@ use std::sync::Arc;
 use axum::body::Body;
 use axum::extract::Path;
 use axum::headers::authorization::Basic;
-use axum::headers::{Authorization, Header};
+use axum::headers::{
+    Authorization,
+    Header
+};
 use axum::http::Request;
 use axum::response::Response;
 use bollard::network::ListNetworksOptions;
 use bollard::Docker;
-use rand::distributions::{Alphanumeric, DistString};
+use rand::distributions::{
+    Alphanumeric,
+    DistString
+};
 use sqlx::error::DatabaseError;
-use sqlx::migrate::{MigrateDatabase, Migrator};
-use sqlx::sqlite::{Sqlite, SqlitePool};
+use sqlx::migrate::{
+    MigrateDatabase,
+    Migrator
+};
+use sqlx::sqlite::{
+    Sqlite,
+    SqlitePool
+};
 use sqlx::types::Json as SqlxJson;
-use sqlx::{query, Error as SqlxError, Row};
+use sqlx::{
+    query,
+    Error as SqlxError,
+    Row
+};
 use tokio::sync::mpsc::Sender;
 use tokio::sync::Mutex;
 
 use crate::args::Args;
-use crate::auth::{Key, User};
-use crate::project::{self, Project};
+use crate::auth::{
+    Key,
+    User
+};
+use crate::project::{
+    self,
+    Project
+};
 use crate::worker::Work;
-use crate::{AccountName, ErrorKind, Refresh, Service};
-use crate::{Context, Error, ProjectName};
+use crate::{
+    AccountName,
+    Context,
+    Error,
+    ErrorKind,
+    ProjectName,
+    Refresh,
+    Service
+};
 
 static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
@@ -41,7 +70,7 @@ pub struct ContainerSettingsBuilder<'d> {
     image: Option<String>,
     provisioner: Option<String>,
     network: Option<String>,
-    network_is_name: bool,
+    network_is_name: bool
 }
 
 impl<'d> ContainerSettingsBuilder<'d> {
@@ -57,7 +86,13 @@ impl<'d> ContainerSettingsBuilder<'d> {
     }
 
     pub async fn from_args(self, args: &Args) -> ContainerSettings {
-        let Args { prefix, network_name, provisioner_host, image, .. } = args;
+        let Args {
+            prefix,
+            network_name,
+            provisioner_host,
+            image,
+            ..
+        } = args;
         self.prefix(prefix)
             .image(image)
             .provisioner_host(provisioner_host)
@@ -99,7 +134,7 @@ impl<'d> ContainerSettingsBuilder<'d> {
     async fn resolve_network_id(&self, network_name: &str) -> String {
         self.docker
             .list_networks(Some(ListNetworksOptions {
-                filters: HashMap::from([("name", vec![network_name])]),
+                filters: HashMap::from([("name", vec![network_name])])
             }))
             .await
             .unwrap()
@@ -141,7 +176,7 @@ pub struct ContainerSettings {
     pub prefix: String,
     pub image: String,
     pub provisioner_host: String,
-    pub network_id: String,
+    pub network_id: String
 }
 
 impl ContainerSettings {
@@ -157,10 +192,7 @@ pub struct GatewayContextProvider {
 
 impl GatewayContextProvider {
     pub fn new(docker: Docker, settings: ContainerSettings) -> Self {
-        Self {
-            docker,
-            settings
-        }
+        Self { docker, settings }
     }
 
     pub fn context<'c>(&'c self) -> GatewayContext {
@@ -174,7 +206,7 @@ impl GatewayContextProvider {
 pub struct GatewayService {
     provider: GatewayContextProvider,
     db: SqlitePool,
-    sender: Mutex<Option<Sender<Work>>>,
+    sender: Mutex<Option<Sender<Work>>>
 }
 
 impl GatewayService {
@@ -185,9 +217,7 @@ impl GatewayService {
     pub async fn init(args: Args) -> Self {
         let docker = Docker::connect_with_local_defaults().unwrap();
 
-        let container_settings = ContainerSettings::builder(&docker)
-            .from_args(&args)
-            .await;
+        let container_settings = ContainerSettings::builder(&docker).from_args(&args).await;
 
         let provider = GatewayContextProvider::new(docker, container_settings);
 
@@ -210,7 +240,7 @@ impl GatewayService {
         Self {
             provider,
             db,
-            sender,
+            sender
         }
     }
 
@@ -220,7 +250,7 @@ impl GatewayService {
         for Work {
             project_name,
             account_name,
-            work,
+            work
         } in self.iter_projects().await.expect("could not list projects")
         {
             match work.refresh(&self.context()).await {
@@ -255,12 +285,12 @@ impl GatewayService {
         &self,
         project_name: ProjectName,
         account_name: AccountName,
-        work: Project,
+        work: Project
     ) -> Result<(), Error> {
         let work = Work {
             project_name,
             account_name,
-            work,
+            work
         };
 
         let mut lock = self.sender.lock().await;
@@ -283,7 +313,7 @@ impl GatewayService {
         &self,
         project_name: &ProjectName,
         Path(mut route): Path<String>,
-        mut req: Request<Body>,
+        mut req: Request<Body>
     ) -> Result<Response<Body>, Error> {
         let target_ip = self
             .find_project(project_name)
@@ -335,7 +365,7 @@ impl GatewayService {
             .map(|row| Work {
                 project_name: row.get("project_name"),
                 work: row.get::<SqlxJson<Project>, _>("project_state").0,
-                account_name: row.get("account_name"),
+                account_name: row.get("account_name")
             });
         Ok(iter)
     }
@@ -356,7 +386,7 @@ impl GatewayService {
     async fn update_project(
         &self,
         project_name: &ProjectName,
-        project: &Project,
+        project: &Project
     ) -> Result<(), Error> {
         query("UPDATE projects SET project_state = ?1 WHERE project_name = ?2")
             .bind(&SqlxJson(project))
@@ -388,7 +418,7 @@ impl GatewayService {
 
     pub async fn control_key_from_project_name(
         &self,
-        project_name: &ProjectName,
+        project_name: &ProjectName
     ) -> Result<String, Error> {
         let control_key = query("SELECT initial_key FROM projects WHERE project_name = ?1")
             .bind(project_name)
@@ -407,7 +437,7 @@ impl GatewayService {
             name,
             key,
             projects,
-            super_user,
+            super_user
         })
     }
 
@@ -419,7 +449,7 @@ impl GatewayService {
             name,
             key,
             projects,
-            super_user,
+            super_user
         })
     }
 
@@ -446,7 +476,7 @@ impl GatewayService {
             name,
             key,
             projects: Vec::default(),
-            super_user: false,
+            super_user: false
         })
     }
 
@@ -463,7 +493,7 @@ impl GatewayService {
     pub async fn set_super_user(
         &self,
         account_name: &AccountName,
-        value: bool,
+        value: bool
     ) -> Result<(), Error> {
         query("UPDATE accounts SET super_user = ?1 WHERE account_name = ?2")
             .bind(value)
@@ -475,7 +505,7 @@ impl GatewayService {
 
     async fn iter_user_projects(
         &self,
-        AccountName(account_name): &AccountName,
+        AccountName(account_name): &AccountName
     ) -> Result<impl Iterator<Item = ProjectName>, Error> {
         let iter = query("SELECT project_name FROM projects WHERE account_name = ?1")
             .bind(account_name)
@@ -489,13 +519,13 @@ impl GatewayService {
     pub async fn create_project(
         &self,
         project_name: ProjectName,
-        account_name: AccountName,
+        account_name: AccountName
     ) -> Result<Project, Error> {
         let initial_key = Alphanumeric.sample_string(&mut rand::thread_rng(), 32);
 
         let project = SqlxJson(Project::Creating(project::ProjectCreating::new(
             project_name.clone(),
-            initial_key.clone(),
+            initial_key.clone()
         )));
 
         query("INSERT INTO projects (project_name, account_name, initial_key, project_state) VALUES (?1, ?2, ?3, ?4)")
@@ -528,7 +558,7 @@ impl GatewayService {
     pub async fn destroy_project(
         &self,
         project_name: ProjectName,
-        account_name: AccountName,
+        account_name: AccountName
     ) -> Result<(), Error> {
         let project = self.find_project(&project_name).await?.destroy()?;
 
@@ -558,7 +588,7 @@ impl<'c> Service<'c> for Arc<GatewayService> {
         &mut self,
         Work {
             project_name, work, ..
-        }: &Self::State,
+        }: &Self::State
     ) -> Result<(), Self::Error> {
         self.update_project(project_name, work).await
     }
@@ -566,7 +596,7 @@ impl<'c> Service<'c> for Arc<GatewayService> {
 
 pub struct GatewayContext<'c> {
     docker: &'c Docker,
-    settings: &'c ContainerSettings,
+    settings: &'c ContainerSettings
 }
 
 impl<'c> Context<'c> for GatewayContext<'c> {
@@ -587,7 +617,10 @@ pub mod tests {
     use tokio::task::JoinHandle;
 
     use super::*;
-    use crate::tests::{assert_err_kind, World};
+    use crate::tests::{
+        assert_err_kind,
+        World
+    };
 
     #[tokio::test]
     async fn service_create_find_user() -> anyhow::Result<()> {
@@ -619,7 +652,7 @@ pub mod tests {
             name,
             key,
             projects,
-            super_user,
+            super_user
         } = user;
 
         assert!(projects.is_empty());
@@ -644,7 +677,7 @@ pub mod tests {
     where
         S: AsRef<GatewayService>,
         C: FnMut(Work) -> Fut + Send + 'static,
-        Fut: Future<Output = ()> + Send,
+        Fut: Future<Output = ()> + Send
     {
         let (sender, mut receiver) = channel::<Work>(256);
         let handle = tokio::spawn(async move {

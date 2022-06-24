@@ -3,7 +3,7 @@ use proc_macro_error::{emit_error, proc_macro_error};
 use quote::{quote, ToTokens};
 use syn::{
     parse_macro_input, parse_quote, spanned::Spanned, Attribute, FnArg, Ident, ItemFn, Pat, Path,
-    ReturnType, Stmt,
+    ReturnType, Stmt, Type,
 };
 
 #[proc_macro_error]
@@ -79,11 +79,22 @@ impl Wrapper {
             })
             .collect();
 
-        if item_fn.sig.output == ReturnType::Default {
-            emit_error!(
+        match &item_fn.sig.output {
+            ReturnType::Default => emit_error!(
                 item_fn.sig,
-                "shuttle_service::main functions need to return a service"; hint = "See the docs for services with first class support"; doc = "https://docs.rs/shuttle-service/latest/shuttle_service/attr.main.html#shuttle-supported-services"
-            )
+                "shuttle_service::main functions need to return a service";
+                hint = "See the docs for services with first class support";
+                doc = "https://docs.rs/shuttle-service/latest/shuttle_service/attr.main.html#shuttle-supported-services"
+            ),
+            ReturnType::Type(_, r#type) => match r#type.as_ref() {
+                Type::Path(path) => println!("{:#?}", path),
+                _ => emit_error!(
+                    r#type,
+                    "shuttle_service::main functions need to return a first class service or 'Result<impl Service, shuttle_service::Error>";
+                    hint = "See the docs for services with first class support";
+                    doc = "https://docs.rs/shuttle-service/latest/shuttle_service/attr.main.html#shuttle-supported-services"
+                ),
+            },
         }
 
         Self {

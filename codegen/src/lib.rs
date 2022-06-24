@@ -16,6 +16,14 @@ pub fn main(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let expanded = quote! {
         #wrapper
 
+        fn __binder(
+            service: Box<dyn shuttle_service::Service>,
+            addr: std::net::SocketAddr,
+            runtime: &shuttle_service::Runtime,
+        ) -> shuttle_service::ServeHandle {
+            runtime.spawn(async move { service.bind(addr).await })
+        }
+
         #fn_decl
 
         #[no_mangle]
@@ -151,52 +159,43 @@ impl ToTokens for Wrapper {
                         .map(|()| shuttle_service::log::set_max_level(shuttle_service::log::LevelFilter::Info))
                         .expect("logger set should succeed");
                 })
-                .await
-                .map_err(|e| {
-                    if e.is_panic() {
-                        let mes = e
-                            .into_panic()
-                            .downcast_ref::<&str>()
-                            .map(|x| x.to_string())
-                            .unwrap_or_else(|| "<no panic message>".to_string());
+                    .await
+                    .map_err(|e| {
+                        if e.is_panic() {
+                            let mes = e
+                                .into_panic()
+                                .downcast_ref::<&str>()
+                                .map(|x| x.to_string())
+                                .unwrap_or_else(|| "<no panic message>".to_string());
 
-                        shuttle_service::Error::BuildPanic(mes)
-                    } else {
-                        shuttle_service::Error::Custom(shuttle_service::error::CustomError::new(e))
-                    }
-                })?;
+                            shuttle_service::Error::BuildPanic(mes)
+                        } else {
+                            shuttle_service::Error::Custom(shuttle_service::error::CustomError::new(e))
+                        }
+                    })?;
 
 
                 #(let #fn_inputs = shuttle_service::#fn_inputs_builder::new().build(#factory_ident, runtime).await?;)*
 
                 runtime.spawn(async {
-                    #fn_ident(#(#fn_inputs),*).await.map(|ok| {
-                        let r: Box<dyn shuttle_service::Service> = Box::new(ok);
-                        r
-                    })
+                    #fn_ident(#(#fn_inputs),*)
+                        .await
+                        .map(|ok| Box::new(ok) as Box<dyn shuttle_service::Service>)
                 })
-                .await
-                .map_err(|e| {
-                    if e.is_panic() {
-                        let mes = e
-                            .into_panic()
-                            .downcast_ref::<&str>()
-                            .map(|x| x.to_string())
-                            .unwrap_or_else(|| "<no panic message>".to_string());
+                    .await
+                    .map_err(|e| {
+                        if e.is_panic() {
+                            let mes = e
+                                .into_panic()
+                                .downcast_ref::<&str>()
+                                .map(|x| x.to_string())
+                                .unwrap_or_else(|| "<no panic message>".to_string());
 
-                        shuttle_service::Error::BuildPanic(mes)
-                    } else {
-                        shuttle_service::Error::Custom(shuttle_service::error::CustomError::new(e))
-                    }
-                })?
-            }
-
-            fn __binder(
-                service: Box<dyn shuttle_service::Service>,
-                addr: std::net::SocketAddr,
-                runtime: &shuttle_service::Runtime,
-            ) -> shuttle_service::ServeHandle {
-                runtime.spawn(async move { service.bind(addr).await })
+                            shuttle_service::Error::BuildPanic(mes)
+                        } else {
+                            shuttle_service::Error::Custom(shuttle_service::error::CustomError::new(e))
+                        }
+                    })?
             }
         };
 
@@ -213,9 +212,9 @@ mod tests {
     use crate::{Input, Wrapper};
 
     #[test]
-    fn from_not_service() {
+    fn from_with_return() {
         let mut input = parse_quote!(
-            async fn complex() -> Result<(), Box<dyn std::error::Error>> {}
+            async fn complex() -> ShuttleAxum {}
         );
 
         let actual = Wrapper::from_item_fn(&mut input);
@@ -238,14 +237,46 @@ mod tests {
                 _factory: &mut dyn shuttle_service::Factory,
                 runtime: &shuttle_service::Runtime,
                 logger: Box<dyn shuttle_service::log::Log>,
-            ) -> Result<(), Box<dyn std::error::Error> > {
+            ) -> Result<Box<dyn shuttle_service::Service>, shuttle_service::Error> {
                 runtime.spawn_blocking(move || {
                     shuttle_service::log::set_boxed_logger(logger)
                         .map(|()| shuttle_service::log::set_max_level(shuttle_service::log::LevelFilter::Info))
                         .expect("logger set should succeed");
-                }).await.unwrap();
+                })
+                .await
+                .map_err(|e| {
+                    if e.is_panic() {
+                        let mes = e
+                            .into_panic()
+                            .downcast_ref::<&str>()
+                            .map(|x| x.to_string())
+                            .unwrap_or_else(|| "<no panic message>".to_string());
 
-                runtime.spawn(complex()).await.unwrap()
+                        shuttle_service::Error::BuildPanic(mes)
+                    } else {
+                        shuttle_service::Error::Custom(shuttle_service::error::CustomError::new(e))
+                    }
+                })?;
+
+                runtime.spawn(async {
+                    complex()
+                        .await
+                        .map(|ok| Box::new(ok) as Box<dyn shuttle_service::Service>)
+                })
+                .await
+                .map_err(|e| {
+                    if e.is_panic() {
+                        let mes = e
+                            .into_panic()
+                            .downcast_ref::<&str>()
+                            .map(|x| x.to_string())
+                            .unwrap_or_else(|| "<no panic message>".to_string());
+
+                        shuttle_service::Error::BuildPanic(mes)
+                    } else {
+                        shuttle_service::Error::Custom(shuttle_service::error::CustomError::new(e))
+                    }
+                })?
             }
         };
 
@@ -255,10 +286,7 @@ mod tests {
     #[test]
     fn from_with_inputs() {
         let mut input = parse_quote!(
-            async fn complex(
-                #[shared::Postgres] pool: PgPool,
-            ) -> Result<(), Box<dyn std::error::Error>> {
-            }
+            async fn complex(#[shared::Postgres] pool: PgPool) -> ShuttleTide {}
         );
 
         let actual = Wrapper::from_item_fn(&mut input);
@@ -305,19 +333,51 @@ mod tests {
                 factory: &mut dyn shuttle_service::Factory,
                 runtime: &shuttle_service::Runtime,
                 logger: Box<dyn shuttle_service::log::Log>,
-            ) -> Result<(), Box<dyn std::error::Error> > {
+            ) -> Result<Box<dyn shuttle_service::Service>, shuttle_service::Error> {
                 use shuttle_service::ResourceBuilder;
 
                 runtime.spawn_blocking(move || {
                     shuttle_service::log::set_boxed_logger(logger)
                         .map(|()| shuttle_service::log::set_max_level(shuttle_service::log::LevelFilter::Info))
                         .expect("logger set should succeed");
-                }).await.unwrap();
+                })
+                .await
+                .map_err(|e| {
+                    if e.is_panic() {
+                        let mes = e
+                            .into_panic()
+                            .downcast_ref::<&str>()
+                            .map(|x| x.to_string())
+                            .unwrap_or_else(|| "<no panic message>".to_string());
+
+                        shuttle_service::Error::BuildPanic(mes)
+                    } else {
+                        shuttle_service::Error::Custom(shuttle_service::error::CustomError::new(e))
+                    }
+                })?;
 
                 let pool = shuttle_service::shared::Postgres::new().build(factory, runtime).await?;
                 let redis = shuttle_service::shared::Redis::new().build(factory, runtime).await?;
 
-                runtime.spawn(complex(pool, redis)).await.unwrap()
+                runtime.spawn(async {
+                    complex(pool, redis)
+                        .await
+                        .map(|ok| Box::new(ok) as Box<dyn shuttle_service::Service>)
+                })
+                .await
+                .map_err(|e| {
+                    if e.is_panic() {
+                        let mes = e
+                            .into_panic()
+                            .downcast_ref::<&str>()
+                            .map(|x| x.to_string())
+                            .unwrap_or_else(|| "<no panic message>".to_string());
+
+                        shuttle_service::Error::BuildPanic(mes)
+                    } else {
+                        shuttle_service::Error::Custom(shuttle_service::error::CustomError::new(e))
+                    }
+                })?
             }
         };
 

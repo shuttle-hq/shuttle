@@ -6,17 +6,17 @@ use std::sync::Arc;
 
 use tokio::sync::{broadcast, Mutex};
 
-const BUFFER_SIZE: usize = 200;
+const BUFFER_SIZE: usize = 300;
 
 #[derive(Clone)]
 pub struct BuildLogsManager {
-    receivers: Arc<Mutex<HashMap<String, PastLogsReceiverPair>>>,
+    deployments: Arc<Mutex<HashMap<String, Deployment>>>,
 }
 
 impl BuildLogsManager {
     pub fn new() -> Self {
         BuildLogsManager {
-            receivers: Arc::new(Mutex::new(HashMap::new())),
+            deployments: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -24,9 +24,9 @@ impl BuildLogsManager {
         let (sender, receiver) = broadcast::channel(BUFFER_SIZE);
 
         let sender_clone = sender.clone();
-        self.receivers.lock().await.insert(
+        self.deployments.lock().await.insert(
             name,
-            PastLogsReceiverPair {
+            Deployment {
                 sender: sender_clone,
                 original_receiver: receiver,
                 logs_consumed_so_far: Vec::new(),
@@ -40,7 +40,7 @@ impl BuildLogsManager {
     }
 
     pub async fn take_receiver(&self, name: &str) -> Option<BuildLogReceiver> {
-        self.receivers
+        self.deployments
             .lock()
             .await
             .get(name)
@@ -51,7 +51,7 @@ impl BuildLogsManager {
         let mut new_lines = Vec::new();
 
         if let Some(receiver) = self
-            .receivers
+            .deployments
             .lock()
             .await
             .get_mut(name)
@@ -62,7 +62,7 @@ impl BuildLogsManager {
             }
         }
 
-        if let Some(deployment) = self.receivers.lock().await.get_mut(name) {
+        if let Some(deployment) = self.deployments.lock().await.get_mut(name) {
             deployment.logs_consumed_so_far.extend(new_lines);
             deployment.logs_consumed_so_far.clone()
         } else {
@@ -71,7 +71,7 @@ impl BuildLogsManager {
     }
 }
 
-struct PastLogsReceiverPair {
+struct Deployment {
     sender: BuildLogSender,
     original_receiver: BuildLogReceiver,
     logs_consumed_so_far: Vec<String>,

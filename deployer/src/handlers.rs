@@ -1,5 +1,5 @@
 use crate::deployment::{
-    BuildLogReceiver, DeploymentInfo, DeploymentManager, DeploymentState, Queued,
+    BuildLogReceiver, BuildLogsManager, DeploymentInfo, DeploymentManager, DeploymentState, Queued,
 };
 use crate::error::{Error, Result};
 use crate::persistence::Persistence;
@@ -11,14 +11,11 @@ use axum::routing::{get, Router};
 use axum::Json;
 
 use futures::TryStreamExt;
-use tokio::sync::{mpsc, Mutex};
-
-use std::collections::HashMap;
-use std::sync::Arc;
 
 pub fn make_router(
     persistence: Persistence,
     deployment_manager: DeploymentManager,
+    build_logs_manager: BuildLogsManager,
 ) -> Router<Body> {
     Router::new()
         .route("/services", get(list_services))
@@ -26,10 +23,14 @@ pub fn make_router(
             "/services/:name",
             get(get_service).post(post_service).delete(delete_service),
         )
-        .route("/services/:name/build-logs", get(subscribe_build_logs))
+        .route(
+            "/services/:name/build-logs-subscribe",
+            get(get_build_logs_subscribe),
+        )
+        .route("/services/:name/build-logs", get(get_build_logs))
         .layer(Extension(persistence))
         .layer(Extension(deployment_manager))
-        .layer(Extension(Arc::new(Mutex::new(BuildLogReceivers::new()))))
+        .layer(Extension(build_logs_manager))
 }
 
 async fn list_services(
@@ -48,22 +49,17 @@ async fn get_service(
 async fn post_service(
     Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
-    Extension(build_log_receivers): Extension<Arc<Mutex<BuildLogReceivers>>>,
+    Extension(build_logs_manager): Extension<BuildLogsManager>,
     Path(name): Path<String>,
     stream: BodyStream,
 ) -> Result<Json<DeploymentInfo>> {
-    let (build_log_sender, build_log_receiver) = mpsc::channel(10);
-
-    build_log_receivers
-        .lock()
-        .await
-        .insert(name.clone(), build_log_receiver);
+    let build_log_writer = build_logs_manager.for_deployment(name.clone()).await;
 
     let queued = Queued {
         name,
         state: DeploymentState::Queued,
         data_stream: Box::pin(stream.map_err(Error::Streaming)),
-        build_log_sender,
+        build_log_writer,
     };
     let info = DeploymentInfo::from(&queued);
 
@@ -84,12 +80,14 @@ async fn delete_service(
     Ok(Json(old_info))
 }
 
-async fn subscribe_build_logs(
-    Extension(build_log_receivers): Extension<Arc<Mutex<BuildLogReceivers>>>,
+async fn get_build_logs() {}
+
+async fn get_build_logs_subscribe(
+    Extension(build_logs_manager): Extension<BuildLogsManager>,
     Path(name): Path<String>,
     ws_upgrade: ws::WebSocketUpgrade,
 ) -> axum::response::Response {
-    let log_recv = build_log_receivers.lock().await.remove(&name);
+    let log_recv = build_logs_manager.take_receiver(&name).await;
 
     ws_upgrade.on_upgrade(move |s| websocket_handler(s, log_recv))
 }
@@ -107,5 +105,3 @@ async fn websocket_handler(mut s: WebSocket, log_recv: Option<BuildLogReceiver>)
     }
     let _ = s.close().await;
 }
-
-type BuildLogReceivers = HashMap<String, BuildLogReceiver>;

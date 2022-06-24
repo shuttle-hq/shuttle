@@ -1,3 +1,4 @@
+mod build_logs;
 mod info;
 mod queue;
 mod run;
@@ -8,6 +9,8 @@ pub use states::DeploymentState;
 
 pub use queue::Queued;
 pub use run::Built;
+
+pub use build_logs::{BuildLogWriter, BuildLogsManager};
 
 use crate::persistence::Persistence;
 
@@ -101,5 +104,5 @@ type RunReceiver = mpsc::Receiver<run::Built>;
 type KillSender = broadcast::Sender<String>;
 type KillReceiver = broadcast::Receiver<String>;
 
-pub type BuildLogSender = mpsc::Sender<String>;
+type BuildLogSender = mpsc::Sender<String>;
 pub type BuildLogReceiver = mpsc::Receiver<String>;

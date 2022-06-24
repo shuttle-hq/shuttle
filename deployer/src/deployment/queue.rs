@@ -1,13 +1,13 @@
-use super::{BuildLogSender, Built, DeploymentState, QueueReceiver, RunSender};
+use super::{BuildLogWriter, Built, DeploymentState, QueueReceiver, RunSender};
 use crate::error::{Error, Result};
 use crate::persistence::Persistence;
 
 use shuttle_service::loader::build_crate;
 
+use std::fmt;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
-use std::{fmt, io};
 
 use bytes::{BufMut, Bytes};
 use flate2::read::GzDecoder;
@@ -48,7 +48,7 @@ pub struct Queued {
     pub name: String,
     pub data_stream: Pin<Box<dyn Stream<Item = Result<Bytes>> + Send + Sync>>,
     pub state: DeploymentState,
-    pub build_log_sender: BuildLogSender,
+    pub build_log_writer: BuildLogWriter,
 }
 
 impl Queued {
@@ -78,14 +78,9 @@ impl Queued {
 
         log::info!("Building deployment '{}'", self.name);
 
-        let cargo_output_buf = Box::new(BuildLogWriter {
-            sender: self.build_log_sender,
-            buffer: String::new(),
-        });
-
         let project_path = project_path.canonicalize()?;
-        let so_path =
-            build_crate(&project_path, cargo_output_buf).map_err(|e| Error::Build(e.into()))?;
+        let so_path = build_crate(&project_path, Box::new(self.build_log_writer))
+            .map_err(|e| Error::Build(e.into()))?;
 
         log::info!("Removing old build (if present) for {}", self.name);
 
@@ -173,42 +168,6 @@ async fn rename_build(project_path: impl AsRef<Path>, so_path: impl AsRef<Path>)
     fs::write(project_path.as_ref().join(MARKER_FILE_NAME), random_so_name).await?;
 
     Ok(())
-}
-
-struct BuildLogWriter {
-    sender: BuildLogSender,
-    buffer: String,
-}
-
-impl io::Write for BuildLogWriter {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        for c in buf {
-            let c = *c as char;
-
-            if c == '\n' {
-                self.flush()?;
-            } else {
-                self.buffer.push(c);
-            }
-        }
-
-        Ok(buf.len())
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        let sender = self.sender.clone();
-        let msg = self.buffer.clone();
-
-        self.buffer.clear();
-
-        std::thread::spawn(move || {
-            let _ = sender.blocking_send(msg);
-        })
-        .join()
-        .unwrap();
-
-        Ok(())
-    }
 }
 
 #[cfg(test)]

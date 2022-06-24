@@ -3,7 +3,7 @@ use proc_macro_error::{emit_error, proc_macro_error};
 use quote::{quote, ToTokens};
 use syn::{
     parse_macro_input, parse_quote, spanned::Spanned, Attribute, FnArg, Ident, ItemFn, Pat, Path,
-    ReturnType, Stmt, Type,
+    ReturnType, Signature, Stmt, Type,
 };
 
 #[proc_macro_error]
@@ -79,28 +79,47 @@ impl Wrapper {
             })
             .collect();
 
-        match &item_fn.sig.output {
-            ReturnType::Default => emit_error!(
-                item_fn.sig,
-                "shuttle_service::main functions need to return a service";
-                hint = "See the docs for services with first class support";
-                doc = "https://docs.rs/shuttle-service/latest/shuttle_service/attr.main.html#shuttle-supported-services"
-            ),
-            ReturnType::Type(_, r#type) => match r#type.as_ref() {
-                Type::Path(path) => println!("{:#?}", path),
-                _ => emit_error!(
-                    r#type,
-                    "shuttle_service::main functions need to return a first class service or 'Result<impl Service, shuttle_service::Error>";
-                    hint = "See the docs for services with first class support";
-                    doc = "https://docs.rs/shuttle-service/latest/shuttle_service/attr.main.html#shuttle-supported-services"
-                ),
-            },
-        }
+        check_return_type(&item_fn.sig);
 
         Self {
             fn_ident: item_fn.sig.ident.clone(),
             fn_inputs: inputs,
         }
+    }
+}
+
+fn check_return_type(signature: &Signature) {
+    match &signature.output {
+        ReturnType::Default => emit_error!(
+            signature,
+            "shuttle_service::main functions need to return a service";
+            hint = "See the docs for services with first class support";
+            doc = "https://docs.rs/shuttle-service/latest/shuttle_service/attr.main.html#shuttle-supported-services"
+        ),
+        ReturnType::Type(_, r#type) => match r#type.as_ref() {
+            Type::Path(path) => {
+                let segments = &path.path.segments;
+                if segments.is_empty() {
+                    todo!()
+                } else {
+                    let ident = &segments[0].ident;
+                    if ident.to_string() != "Result" {
+                        emit_error!(
+                            r#type,
+                            "shuttle_service::main functions need to return a first class service or 'Result<impl Service, shuttle_service::Error>";
+                            hint = "See the docs for services with first class support";
+                            doc = "https://docs.rs/shuttle-service/latest/shuttle_service/attr.main.html#shuttle-supported-services"
+                        )
+                    }
+                }
+            }
+            _ => emit_error!(
+                r#type,
+                "shuttle_service::main functions need to return a first class service or 'Result<impl Service, shuttle_service::Error>";
+                hint = "See the docs for services with first class support";
+                doc = "https://docs.rs/shuttle-service/latest/shuttle_service/attr.main.html#shuttle-supported-services"
+            ),
+        },
     }
 }
 

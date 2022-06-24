@@ -53,7 +53,7 @@ impl BuildLogsManager {
         self.deployments.lock().await.remove(name);
     }
 
-    pub async fn take_receiver(&self, name: &str) -> Option<BuildLogReceiver> {
+    pub async fn subscribe(&self, name: &str) -> Option<BuildLogReceiver> {
         self.deployments
             .lock()
             .await
@@ -120,6 +120,71 @@ impl io::Write for BuildLogWriter {
 
 #[cfg(test)]
 mod tests {
-    #[test]
-    fn abc() {}
+    use super::BuildLogsManager;
+
+    use std::io::Write;
+    use std::time::Duration;
+
+    use tokio::time::sleep;
+
+    #[tokio::test]
+    async fn logs_so_far() {
+        let m = BuildLogsManager::new();
+        let name = "test".to_string();
+
+        assert!(m.get_logs_so_far(&name).await.is_none());
+
+        let mut writer = m.for_deployment(name.clone()).await;
+
+        assert_eq!(m.get_logs_so_far(&name).await, Some(vec![]));
+
+        writer.write("hello\nworld\n".as_bytes()).unwrap();
+        sleep(Duration::from_millis(250)).await;
+        assert_eq!(
+            m.get_logs_so_far(&name).await,
+            Some(vec!["hello".to_string(), "world".to_string()])
+        );
+
+        writer.write("funky ".as_bytes()).unwrap();
+        writer.write("town\n".as_bytes()).unwrap();
+        sleep(Duration::from_millis(250)).await;
+        for _ in 0..2 {
+            assert_eq!(
+                m.get_logs_so_far(&name).await,
+                Some(vec![
+                    "hello".to_string(),
+                    "world".to_string(),
+                    "funky town".to_string()
+                ])
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn streaming_logs() {
+        let m = BuildLogsManager::new();
+        let name = "test".to_string();
+
+        let mut writer = m.for_deployment(name.clone()).await;
+
+        let mut first_recv = m.subscribe(&name).await.unwrap();
+        let mut second_recv = m.subscribe(&name).await.unwrap();
+
+        writer.write("hello\nworld\n".as_bytes()).unwrap();
+
+        for expected in ["hello", "world"] {
+            assert_eq!(first_recv.recv().await, Ok(expected.to_string()));
+        }
+
+        let mut third_recv = m.subscribe(&name).await.unwrap();
+
+        writer.write("foobar\n".as_bytes()).unwrap();
+
+        assert_eq!(first_recv.recv().await, Ok("foobar".to_string()));
+        assert_eq!(third_recv.recv().await, Ok("foobar".to_string()));
+
+        for expected in ["hello", "world", "foobar"] {
+            assert_eq!(second_recv.recv().await, Ok(expected.to_string()));
+        }
+    }
 }

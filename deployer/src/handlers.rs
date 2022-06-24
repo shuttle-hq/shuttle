@@ -94,7 +94,7 @@ async fn get_build_logs_subscribe(
     Path(name): Path<String>,
     ws_upgrade: ws::WebSocketUpgrade,
 ) -> axum::response::Response {
-    let log_recv = build_logs_manager.take_receiver(&name).await;
+    let log_recv = build_logs_manager.subscribe(&name).await;
 
     ws_upgrade.on_upgrade(move |s| websocket_handler(s, log_recv))
 }

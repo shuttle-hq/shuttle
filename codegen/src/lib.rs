@@ -79,6 +79,13 @@ impl Wrapper {
             })
             .collect();
 
+        if item_fn.sig.output == ReturnType::Default {
+            emit_error!(
+                item_fn.sig,
+                "shuttle_service::main functions need to return a service"; hint = "See the docs for services with first class support"; doc = "https://docs.rs/shuttle-service/latest/shuttle_service/attr.main.html#shuttle-supported-services"
+            )
+        }
+
         Self {
             fn_ident: item_fn.sig.ident.clone(),
             fn_inputs: inputs,
@@ -189,19 +196,6 @@ mod tests {
     use syn::{parse_quote, Ident};
 
     use crate::{Input, Wrapper};
-
-    #[test]
-    fn from_missing_return() {
-        let mut input = parse_quote!(
-            async fn simple() {}
-        );
-
-        let actual = Wrapper::from_item_fn(&mut input);
-        let expected_ident: Ident = parse_quote!(simple);
-
-        assert_eq!(actual.fn_ident, expected_ident);
-        assert_eq!(actual.fn_inputs, Vec::<Input>::new());
-    }
 
     #[test]
     fn from_not_service() {

@@ -39,7 +39,6 @@ pub fn main(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
 struct Wrapper {
     fn_ident: Ident,
-    fn_output: ReturnType,
     fn_inputs: Vec<Input>,
 }
 
@@ -82,7 +81,6 @@ impl Wrapper {
 
         Self {
             fn_ident: item_fn.sig.ident.clone(),
-            fn_output: item_fn.sig.output.clone(),
             fn_inputs: inputs,
         }
     }
@@ -100,7 +98,6 @@ fn attribute_to_path(attrs: Vec<Attribute>) -> Result<Path, String> {
 
 impl ToTokens for Wrapper {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-        let fn_output = &self.fn_output;
         let fn_ident = &self.fn_ident;
         let fn_inputs: Vec<_> = self.fn_inputs.iter().map(|i| i.ident.clone()).collect();
         let fn_inputs_builder: Vec<_> = self.fn_inputs.iter().map(|i| i.builder.clone()).collect();
@@ -189,7 +186,7 @@ impl ToTokens for Wrapper {
 mod tests {
     use pretty_assertions::assert_eq;
     use quote::quote;
-    use syn::{parse_quote, Ident, ReturnType};
+    use syn::{parse_quote, Ident};
 
     use crate::{Input, Wrapper};
 
@@ -203,50 +200,19 @@ mod tests {
         let expected_ident: Ident = parse_quote!(simple);
 
         assert_eq!(actual.fn_ident, expected_ident);
-        assert_eq!(actual.fn_output, ReturnType::Default);
         assert_eq!(actual.fn_inputs, Vec::<Input>::new());
     }
 
     #[test]
-    fn output_missing_return() {
-        let input = Wrapper {
-            fn_ident: parse_quote!(simple),
-            fn_output: ReturnType::Default,
-            fn_inputs: Vec::new(),
-        };
-
-        let actual = quote!(#input);
-        let expected = quote! {
-            async fn __shuttle_wrapper(
-                _factory: &mut dyn shuttle_service::Factory,
-                runtime: &shuttle_service::Runtime,
-                logger: Box<dyn shuttle_service::log::Log>,
-            ) {
-                runtime.spawn_blocking(move || {
-                    shuttle_service::log::set_boxed_logger(logger)
-                        .map(|()| shuttle_service::log::set_max_level(shuttle_service::log::LevelFilter::Info))
-                        .expect("logger set should succeed");
-                }).await.unwrap();
-
-                runtime.spawn(simple()).await.unwrap()
-            }
-        };
-
-        assert_eq!(actual.to_string(), expected.to_string());
-    }
-
-    #[test]
-    fn from_with_return() {
+    fn from_not_service() {
         let mut input = parse_quote!(
             async fn complex() -> Result<(), Box<dyn std::error::Error>> {}
         );
 
         let actual = Wrapper::from_item_fn(&mut input);
         let expected_ident: Ident = parse_quote!(complex);
-        let expected_output: ReturnType = parse_quote!(-> Result<(), Box<dyn std::error::Error>>);
 
         assert_eq!(actual.fn_ident, expected_ident);
-        assert_eq!(actual.fn_output, expected_output);
         assert_eq!(actual.fn_inputs, Vec::<Input>::new());
     }
 
@@ -254,7 +220,6 @@ mod tests {
     fn output_with_return() {
         let input = Wrapper {
             fn_ident: parse_quote!(complex),
-            fn_output: parse_quote!(-> Result<(), Box<dyn std::error::Error>>),
             fn_inputs: Vec::new(),
         };
 
@@ -289,14 +254,12 @@ mod tests {
 
         let actual = Wrapper::from_item_fn(&mut input);
         let expected_ident: Ident = parse_quote!(complex);
-        let expected_output: ReturnType = parse_quote!(-> Result<(), Box<dyn std::error::Error>>);
         let expected_inputs: Vec<Input> = vec![Input {
             ident: parse_quote!(pool),
             builder: parse_quote!(shared::Postgres),
         }];
 
         assert_eq!(actual.fn_ident, expected_ident);
-        assert_eq!(actual.fn_output, expected_output);
         assert_eq!(actual.fn_inputs, expected_inputs);
 
         // Make sure attributes was removed from input
@@ -315,7 +278,6 @@ mod tests {
     fn output_with_inputs() {
         let input = Wrapper {
             fn_ident: parse_quote!(complex),
-            fn_output: parse_quote!(-> Result<(), Box<dyn std::error::Error>>),
             fn_inputs: vec![
                 Input {
                     ident: parse_quote!(pool),

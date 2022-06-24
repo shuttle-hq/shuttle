@@ -44,7 +44,7 @@ pub struct Args {
         about = "MSSV - Minimum supported Shuttle Version",
         default_value = shuttle_service::VERSION
     )]
-    pub(crate) shuttle_version: String,
+    pub(crate) shuttle_version: semver::Version,
 }
 
 fn parse_fqdn(src: &str) -> Result<FQDN, String> {

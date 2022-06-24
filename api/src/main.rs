@@ -197,7 +197,7 @@ async fn rocket() -> Rocket<Build> {
             args.proxy_fqdn.to_string(),
             args.provisioner_address,
             args.provisioner_port,
-            args.shuttle_version,
+            args.shuttle_version.to_string(),
         )
         .await,
     );

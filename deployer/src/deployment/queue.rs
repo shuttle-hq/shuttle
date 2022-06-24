@@ -1,14 +1,13 @@
-use super::{Built, QueueReceiver, RunSender};
-use crate::deployment::{DeploymentState, BuildLogSender};
+use super::{Built, QueueReceiver, RunSender, BuildLogSender, DeploymentState};
 use crate::error::{Error, Result};
 use crate::persistence::Persistence;
 
 use shuttle_service::loader::build_crate;
 
-use std::fmt;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
+use std::{fmt, io};
 
 use bytes::{BufMut, Bytes};
 use flate2::read::GzDecoder;
@@ -45,10 +44,6 @@ pub async fn task(mut recv: QueueReceiver, run_send: RunSender, persistence: Per
     }
 }
 
-// TODO:
-// * Handling code shared between services? Git dependencies?
-// * Ensure builds do not interfere with one another.
-
 pub struct Queued {
     pub name: String,
     pub data_stream: Pin<Box<dyn Stream<Item = Result<Bytes>> + Send + Sync>>,
@@ -83,7 +78,9 @@ impl Queued {
 
         log::info!("Building deployment '{}'", self.name);
 
-        let cargo_output_buf = Box::new(std::io::stdout()); // TODO: Redirect over WebSocket.
+        let cargo_output_buf = Box::new(BuildLogWriter {
+            sender: self.build_log_sender,
+        });
 
         let project_path = project_path.canonicalize()?;
         let so_path =
@@ -175,6 +172,28 @@ async fn rename_build(project_path: impl AsRef<Path>, so_path: impl AsRef<Path>)
     fs::write(project_path.as_ref().join(MARKER_FILE_NAME), random_so_name).await?;
 
     Ok(())
+}
+
+struct BuildLogWriter {
+    sender: BuildLogSender,
+}
+
+impl io::Write for BuildLogWriter {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        println!("{:?}", buf);
+
+        let msg = String::from_utf8_lossy(buf).into_owned();
+            //.map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+
+        let sender_clone = self.sender.clone();
+        std::thread::spawn(move || { let _ = sender_clone.blocking_send(msg); }).join().unwrap();
+
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
 }
 
 #[cfg(test)]

@@ -16,9 +16,9 @@ system_info:
 
 # Make sure files are written every time
 cloud_final_modules:
+ - package-update-upgrade-install
  - [runcmd, always]
  - [write-files, always]
- - package-update-upgrade-install
  - fan
  - landscape
  - lxd

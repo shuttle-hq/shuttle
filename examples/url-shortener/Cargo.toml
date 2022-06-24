@@ -4,14 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [lib]
-crate-type = ["cdylib"]
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 rocket = { version = "0.5.0-rc.1", features = ["json"] }
 serde = "1.0"
 sqlx = { version = "0.5", features = ["runtime-tokio-native-tls", "postgres"] }
-shuttle-service = { version = "0.3.1", features = ["sqlx-postgres", "web-rocket"] }
+shuttle-service = { version = "0.3.3", features = ["sqlx-postgres", "web-rocket"] }
 nanoid = "0.4"
 url ="2.2"

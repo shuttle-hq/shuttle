@@ -1,0 +1,13 @@
+[package]
+name = "bind-panic"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[workspace]
+
+[dependencies]
+shuttle-service = { path = "../../../" }
+async-trait = "0.1.56"

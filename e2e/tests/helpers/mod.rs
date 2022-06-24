@@ -153,6 +153,10 @@ impl Services {
             "--network",
             "shuttle-net",
             "-e",
+            "FQDN=unreacable",
+            "-e",
+            &format!("PROVISIONER_ADDRESS={provisioner_container}"),
+            "-e",
             "PORT=5001",
             &provisioner_image,
         ]);

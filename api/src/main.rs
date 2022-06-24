@@ -148,8 +148,7 @@ async fn project_secrets(
         .await?;
 
     if let Some(database_deployment) = &deployment.database_deployment {
-        let conn_str =
-            database_deployment.connection_string(&state.deployment_manager.provisioner_address);
+        let conn_str = database_deployment.connection_string_private();
         let conn = sqlx::PgPool::connect(&conn_str)
             .await
             .map_err(|e| DeploymentApiError::Internal(e.to_string()))?;
@@ -176,7 +175,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()
         .unwrap()
         .block_on(async {
-            rocket().await.launch().await?;
+            let _rocket = rocket().await.launch().await?;
 
             Ok(())
         })

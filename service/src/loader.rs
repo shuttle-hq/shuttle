@@ -1,5 +1,7 @@
+use std::any::Any;
 use std::ffi::OsStr;
 use std::net::SocketAddr;
+use std::panic::AssertUnwindSafe;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context};
@@ -12,6 +14,8 @@ use libloading::{Library, Symbol};
 use shuttle_common::DeploymentId;
 use thiserror::Error as ThisError;
 use tokio::sync::mpsc::UnboundedSender;
+
+use futures::FutureExt;
 
 use crate::{
     logger::{Log, Logger},
@@ -66,12 +70,36 @@ impl Loader {
         let mut service = self.service;
         let logger = Box::new(Logger::new(tx, deployment_id));
 
-        service.build(factory, logger).await?;
+        AssertUnwindSafe(service.build(factory, logger))
+            .catch_unwind()
+            .await
+            .map_err(|e| Error::BuildPanic(map_any_to_panic_string(&*e)))??;
+
+        // channel used by task spawned below to indicate whether or not panic
+        // occurred in `service.bind` call
+        let (send, recv) = tokio::sync::oneshot::channel();
 
         // Start service on this side of the FFI
-        let handle = tokio::spawn(async move { service.bind(addr)?.await? });
+        let handle = tokio::spawn(async move {
+            let bound = AssertUnwindSafe(async { service.bind(addr) })
+                .catch_unwind()
+                .await;
 
-        Ok((handle, self.so))
+            let payload = if let Err(e) = &bound {
+                Err(Error::BindPanic(map_any_to_panic_string(&**e)))
+            } else {
+                Ok(())
+            };
+            send.send(payload).unwrap();
+
+            if let Ok(b) = bound {
+                b?.await?
+            } else {
+                Err(anyhow!("panic in `Service::bound`"))
+            }
+        });
+
+        recv.await.unwrap().map(|_| (handle, self.so))
     }
 }
 
@@ -92,15 +120,51 @@ pub fn build_crate(project_path: &Path, buf: Box<dyn std::io::Write>) -> anyhow:
     let config = Config::new(shell, cwd, homedir);
     let manifest_path = project_path.join("Cargo.toml");
 
-    let ws = Workspace::new(&manifest_path, &config)?;
+    let mut ws = Workspace::new(&manifest_path, &config)?;
+
+    // Ensure a 'cdylib' will be built:
+
+    let current = ws.current_mut().map_err(|_| anyhow!("A Shuttle project cannot have a virtual manifest file - please ensure your Cargo.toml file specifies it as a library."))?;
+    if let Some(target) = current
+        .manifest_mut()
+        .targets_mut()
+        .iter_mut()
+        .find(|target| target.is_lib())
+    {
+        if !target.is_cdylib() {
+            *target = cargo::core::manifest::Target::lib_target(
+                target.name(),
+                vec![cargo::core::compiler::CrateType::Cdylib],
+                target.src_path().path().unwrap().to_path_buf(),
+                target.edition(),
+            );
+        }
+    } else {
+        return Err(anyhow!(
+            "Your Shuttle project must be a library. Please add `[lib]` to your Cargo.toml file."
+        ));
+    }
+
+    // Ensure `panic = "abort"` is not set:
+
+    if let Some(profiles) = ws.profiles() {
+        for profile in profiles.get_all().values() {
+            if profile.panic.as_deref() == Some("abort") {
+                return Err(anyhow!("Your Shuttle project cannot have panics that abort. Please ensure your Cargo.toml does not contain `panic = \"abort\"` for any profiles."));
+            }
+        }
+    }
+
     let opts = CompileOptions::new(&config, CompileMode::Build)?;
     let compilation = compile(&ws, &opts)?;
 
-    if compilation.cdylibs.is_empty() {
-        return Err(anyhow!("a cdylib was not created. Try adding the following to the Cargo.toml of the service:\n[lib]\ncrate-type = [\"cdylib\"]\n"));
-    }
-
     Ok(compilation.cdylibs[0].path.clone())
+}
+
+fn map_any_to_panic_string(a: &dyn Any) -> String {
+    a.downcast_ref::<&str>()
+        .map(|x| x.to_string())
+        .unwrap_or_else(|| "<no panic message>".to_string())
 }
 
 #[cfg(test)]

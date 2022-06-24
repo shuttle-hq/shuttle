@@ -244,7 +244,7 @@ fn get_shuttle_service_from_user_crate(cargo_path: &Path) -> anyhow::Result<Stri
         .filter(|line| line.contains("shuttle-service"))
         .for_each(|dep| {
             service_version = dep.split_whitespace().skip(1).take(1).collect();
-            service_version = service_version.replace("v", "");
+            service_version = service_version.replace('v', "");
         });
 
     Ok(service_version)

@@ -131,7 +131,21 @@ impl ToTokens for Wrapper {
                     shuttle_service::log::set_boxed_logger(logger)
                         .map(|()| shuttle_service::log::set_max_level(shuttle_service::log::LevelFilter::Info))
                         .expect("logger set should succeed");
-                }).await.unwrap();
+                })
+                .await
+                .map_err(|e| {
+                    if e.is_panic() {
+                        let mes = e
+                            .into_panic()
+                            .downcast_ref::<&str>()
+                            .map(|x| x.to_string())
+                            .unwrap_or_else(|| "<no panic message>".to_string());
+
+                        shuttle_service::Error::BuildPanic(mes)
+                    } else {
+                        shuttle_service::Error::Custom(shuttle_service::error::CustomError::new(e))
+                    }
+                })?;
 
 
                 #(let #fn_inputs = shuttle_service::#fn_inputs_builder::new().build(#factory_ident, runtime).await?;)*
@@ -143,7 +157,19 @@ impl ToTokens for Wrapper {
                     })
                 })
                 .await
-                .unwrap()
+                .map_err(|e| {
+                    if e.is_panic() {
+                        let mes = e
+                            .into_panic()
+                            .downcast_ref::<&str>()
+                            .map(|x| x.to_string())
+                            .unwrap_or_else(|| "<no panic message>".to_string());
+
+                        shuttle_service::Error::BuildPanic(mes)
+                    } else {
+                        shuttle_service::Error::Custom(shuttle_service::error::CustomError::new(e))
+                    }
+                })?
             }
 
             fn __binder(

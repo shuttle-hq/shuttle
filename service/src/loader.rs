@@ -77,34 +77,26 @@ impl Loader {
         AssertUnwindSafe(bootstrapper.bootstrap(factory, logger))
             .catch_unwind()
             .await
-            .map_err(|e| Error::BuildPanic(map_any_to_panic_string(&*e)))??;
+            .map_err(|e| Error::BuildPanic(map_any_to_panic_string(e)))??;
 
         trace!("bootstrapping done");
-        // channel used by task spawned below to indicate whether or not panic
-        // occurred in `service.bind` call
-        let (send, recv) = tokio::sync::oneshot::channel();
 
         // Start service on this side of the FFI
         let handle = tokio::spawn(async move {
-            let bound = AssertUnwindSafe(async { bootstrapper.into_handle(addr) })
-                .catch_unwind()
-                .await;
+            bootstrapper.into_handle(addr)?.await.map_err(|e| {
+                if e.is_panic() {
+                    let mes = e.into_panic();
 
-            let payload = if let Err(e) = &bound {
-                Err(Error::BindPanic(map_any_to_panic_string(&**e)))
-            } else {
-                Ok(())
-            };
-            send.send(payload).unwrap();
-
-            if let Ok(b) = bound {
-                b?.await.map_err(CustomError::new)?
-            } else {
-                Err(Error::BindPanic("panic in `Service::bound`".to_string()))
-            }
+                    Error::BindPanic(map_any_to_panic_string(mes))
+                } else {
+                    Error::Custom(CustomError::new(e))
+                }
+            })?
         });
 
-        recv.await.unwrap().map(|_| (handle, self.so))
+        trace!("creating handle done");
+
+        Ok((handle, self.so))
     }
 }
 
@@ -166,7 +158,7 @@ pub fn build_crate(project_path: &Path, buf: Box<dyn std::io::Write>) -> anyhow:
     Ok(compilation.cdylibs[0].path.clone())
 }
 
-fn map_any_to_panic_string(a: &dyn Any) -> String {
+fn map_any_to_panic_string(a: Box<dyn Any>) -> String {
     a.downcast_ref::<&str>()
         .map(|x| x.to_string())
         .unwrap_or_else(|| "<no panic message>".to_string())

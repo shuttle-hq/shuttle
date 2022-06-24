@@ -355,7 +355,7 @@ pub struct Bootstrapper {
     binder: Binder,
     // Do you have time on your hands? If yes, then move this field higher and spend endless hours debugging the segmentation fault
     // It seems that the [Runtime] changes in size when crossing the FFI which misaligns all fields after it
-    runtime: Runtime,
+    runtime: Option<Runtime>,
 }
 
 impl Bootstrapper {
@@ -364,7 +364,7 @@ impl Bootstrapper {
             service: None,
             builder: Some(builder),
             binder,
-            runtime,
+            runtime: Some(runtime),
         }
     }
 
@@ -375,7 +375,7 @@ impl Bootstrapper {
         logger: Box<dyn log::Log>,
     ) -> Result<(), Error> {
         if let Some(builder) = self.builder.take() {
-            let service = builder(factory, &self.runtime, logger).await?;
+            let service = builder(factory, self.runtime.as_ref().unwrap(), logger).await?;
             self.service = Some(service);
         }
 
@@ -386,12 +386,18 @@ impl Bootstrapper {
     fn into_handle(mut self, addr: SocketAddr) -> Result<ServeHandle, Error> {
         let service = self.service.take().expect("service has already been bound");
 
-        let handle = (self.binder)(service, addr, &self.runtime);
-
-        // TODO: find a way to drop the runtime
-        std::mem::forget(self.runtime);
+        let handle = (self.binder)(service, addr, self.runtime.as_ref().unwrap());
 
         Ok(handle)
+    }
+}
+
+impl Drop for Bootstrapper {
+    fn drop(&mut self) {
+        if let Some(runtime) = self.runtime.take() {
+            // TODO: find a way to drop the runtime
+            std::mem::forget(runtime);
+        }
     }
 }
 

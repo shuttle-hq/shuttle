@@ -80,6 +80,7 @@ impl Queued {
 
         let cargo_output_buf = Box::new(BuildLogWriter {
             sender: self.build_log_sender,
+            buffer: String::new(),
         });
 
         let project_path = project_path.canonicalize()?;
@@ -176,25 +177,36 @@ async fn rename_build(project_path: impl AsRef<Path>, so_path: impl AsRef<Path>)
 
 struct BuildLogWriter {
     sender: BuildLogSender,
+    buffer: String,
 }
 
 impl io::Write for BuildLogWriter {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        println!("{:?}", buf);
+        for c in buf {
+            let c = *c as char;
 
-        let msg = String::from_utf8_lossy(buf).into_owned();
-
-        let sender_clone = self.sender.clone();
-        std::thread::spawn(move || {
-            let _ = sender_clone.blocking_send(msg);
-        })
-        .join()
-        .unwrap();
+            if c == '\n' {
+                self.flush()?;
+            } else {
+                self.buffer.push(c);
+            }
+        }
 
         Ok(buf.len())
     }
 
     fn flush(&mut self) -> io::Result<()> {
+        let sender = self.sender.clone();
+        let msg = self.buffer.clone();
+
+        self.buffer.clear();
+
+        std::thread::spawn(move || {
+            let _ = sender.blocking_send(msg);
+        })
+        .join()
+        .unwrap();
+
         Ok(())
     }
 }

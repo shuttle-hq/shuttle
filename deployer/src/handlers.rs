@@ -72,9 +72,11 @@ async fn post_service(
 async fn delete_service(
     Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
+    Extension(build_logs_manager): Extension<BuildLogsManager>,
     Path(name): Path<String>,
 ) -> Result<Json<Option<DeploymentInfo>>> {
     let old_info = persistence.delete_deployment(&name).await?;
+    build_logs_manager.delete_deployment(&name).await;
     deployment_manager.kill(name).await;
 
     Ok(Json(old_info))

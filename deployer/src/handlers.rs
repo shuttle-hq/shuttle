@@ -80,7 +80,12 @@ async fn delete_service(
     Ok(Json(old_info))
 }
 
-async fn get_build_logs() {}
+async fn get_build_logs(
+    Extension(build_logs_manager): Extension<BuildLogsManager>,
+    Path(name): Path<String>,
+) -> Json<Vec<String>> {
+    Json(build_logs_manager.get_logs_so_far(&name).await)
+}
 
 async fn get_build_logs_subscribe(
     Extension(build_logs_manager): Extension<BuildLogsManager>,
@@ -94,7 +99,7 @@ async fn get_build_logs_subscribe(
 
 async fn websocket_handler(mut s: WebSocket, log_recv: Option<BuildLogReceiver>) {
     if let Some(mut log_recv) = log_recv {
-        while let Some(msg) = log_recv.recv().await {
+        while let Ok(msg) = log_recv.recv().await {
             let sent = s.send(ws::Message::Text(msg)).await;
 
             // Client disconnected?

@@ -103,12 +103,8 @@ impl io::Write for BuildLogWriter {
 
         self.buffer.clear();
 
-        // Work around the fact that this function does not return a future
-        // meaning `sender.send` can't be used, but is also executing in Tokio
-        // context meaning `blocking_send` panics. Spawning and immediately
-        // joining a thread 'escapes' Tokio meaning `blocking_send` can be used.
         std::thread::spawn(move || {
-            let _ = sender.send(msg);
+            sender.send(msg).unwrap();
         })
         .join()
         .unwrap();

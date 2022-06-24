@@ -3,8 +3,8 @@ title: Generative metatag images in Rust
 description: Creating images in Rust using svgs
 author: ben
 tags: [rust, tutorial]
-thumb: rust-programming-language.jpg
-cover: rust-programming-language.jpg
+thumb: generative-meta-images.png
+cover: generative-meta-images.png
 date: "2022-06-23T15:00:00"
 ---
 
@@ -94,7 +94,7 @@ We will start exploring the format with a simple SVG with three shapes in differ
 
 SVGs renders line by line, so the white box will be at the behind, rendering the shapes in front.
 
-![](https://i.imgur.com/BuVEoY8.png)
+![](/images/blog/metatag-shapes.png)
 
 #### Turning SVGS into WEBP images with Rust
 
@@ -206,7 +206,7 @@ let tree = Tree::from_str(&svg, &options.to_ref())?;
 
 Which will render the following:
 
-![](https://i.imgur.com/VfgcoMm.png)
+![](/images/blog/metatag-test-text.png)
 
 ### Adding images
 
@@ -258,10 +258,9 @@ let mut options = Options {
 
 And now we have:
 
-![](https://i.imgur.com/CKdxHsV.png)
+![](/images/blog/metatag-ferris.png)
 
-
-### Benchmarking
+## Benchmarking
 
 Compared to the headless browser technique this process is faster. While doing a lot of the same things that the headless browser process was doing, we have picked out the only part we wanted, the svg renderer. 
 
@@ -273,11 +272,13 @@ Aside from rendering performance the Rust version is self contained, only the co
 
 Also the headless browser version was harder to work with, importing fonts and setting the output size was considerably more complicated.
 
-### Conclusion
+## Conclusion
 
 Hopefully this was a interesting post and taught some things about generating images in Rust. This technique can be used for other types of image generation not just for meta tag results. 
 
 To complete the result all you need to do is hook up a service for the url in the meta tag. Rather than saving the image to the file system you would then return send the bytes back over the wire. For images that aren't updated you should be caching the images that are generated as to not regenerate them on every request. 
+
+[Full code for the demo is here](https://github.com/kaleidawave/image-generation-rust) 
 
 And if you are looking for a service to host your new procedurally generated meta tag images, why not try shuttle:
 

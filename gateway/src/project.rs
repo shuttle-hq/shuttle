@@ -25,7 +25,8 @@ use serde::{
 };
 use tokio::time;
 
-use super::{
+use crate::{
+    ContainerSettings,
     Context,
     EndState,
     Error,
@@ -35,7 +36,6 @@ use super::{
     Refresh,
     State
 };
-use crate::args::Args;
 
 macro_rules! safe_unwrap {
     {$fst:ident$(.$attr:ident$(($ex:expr))?)+} => {
@@ -308,7 +308,7 @@ pub struct ProjectCreating {
 }
 
 impl ProjectCreating {
-    pub fn new(project_name: ProjectName, _prefix: String, initial_key: String) -> Self {
+    pub fn new(project_name: ProjectName, initial_key: String) -> Self {
         Self {
             project_name,
             initial_key
@@ -320,7 +320,7 @@ impl ProjectCreating {
     }
 
     fn container_name<'c, C: Context<'c>>(&self, ctx: &C) -> String {
-        let Args { prefix, .. } = &ctx.args();
+        let prefix = &ctx.container_settings().prefix;
 
         let Self { project_name, .. } = &self;
 
@@ -331,13 +331,13 @@ impl ProjectCreating {
         &self,
         ctx: &C
     ) -> (CreateContainerOptions<String>, Config<String>) {
-        let Args {
+        let ContainerSettings {
             image,
             prefix,
             provisioner_host,
             network_id,
             ..
-        } = &ctx.args();
+        } = ctx.container_settings();
 
         let Self {
             initial_key,
@@ -478,7 +478,7 @@ impl<'c> State<'c> for ProjectStarted {
             safe_unwrap!(container.state.health.status),
             HealthStatusEnum::HEALTHY
         ) {
-            let service = Service::from_container(container.clone(), ctx)?;
+            let service = Service::from_container(container.clone())?;
             Ok(Self::Next::Ready(ProjectReady { container, service }))
         } else {
             let created = chrono::DateTime::parse_from_rfc3339(safe_unwrap!(container.created))
@@ -530,15 +530,12 @@ pub struct Service {
 }
 
 impl Service {
-    pub fn from_container<'c, C: Context<'c>>(
+    pub fn from_container(
         mut container: ContainerInspectResponse,
-        ctx: &C
     ) -> Result<Self, ProjectError> {
         let container_name = safe_unwrap!(container.name.strip_prefix("/")).to_string();
 
         let resource_name = safe_unwrap!(container_name.strip_suffix("_run")).to_string();
-
-        let Args { network_id: _, .. } = ctx.args();
 
         let target = safe_unwrap_mut!(
             container
@@ -729,7 +726,7 @@ pub mod tests {
 
     #[tokio::test]
     async fn create_start_stop_destroy_project() -> anyhow::Result<()> {
-        let world = World::new().await?;
+        let world = World::new().await;
 
         let ctx = world.context();
 

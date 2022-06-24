@@ -116,8 +116,8 @@ pub mod tests {
 
     #[tokio::test]
     async fn api_create_get_delete_projects() -> anyhow::Result<()> {
-        let world = World::new().await?;
-        let service = Arc::new(GatewayService::init(world.context().args.clone()).await);
+        let world = World::new().await;
+        let service = Arc::new(GatewayService::init(world.args()).await);
 
         let (sender, mut receiver) = channel::<Work>(256);
         tokio::spawn(async move {
@@ -252,8 +252,8 @@ pub mod tests {
 
     #[tokio::test]
     async fn api_create_get_users() -> anyhow::Result<()> {
-        let world = World::new().await?;
-        let service = Arc::new(GatewayService::init(world.context().args.clone()).await);
+        let world = World::new().await;
+        let service = Arc::new(GatewayService::init(world.args()).await);
 
         let mut router = make_api(Arc::clone(&service));
 

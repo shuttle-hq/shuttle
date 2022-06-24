@@ -21,9 +21,9 @@ pub struct Args {
     /// the provisioner service
     #[clap(long, default_value = "provisioner")]
     pub provisioner_host: String,
-    /// The Docker Network ID in which to deploy user runtimes
-    #[clap(long)]
-    pub network_id: String,
+    /// The Docker Network name in which to deploy user runtimes
+    #[clap(long, default_value = "shuttle_default")]
+    pub network_name: String,
     /// Uri to the `.sqlite` file used to store state
     #[clap(long, default_value = "./gateway.sqlite")]
     pub state: String

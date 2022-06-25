@@ -3,13 +3,13 @@ use colored::Color;
 mod helpers;
 
 #[test]
-fn hello_world() {
-    let client = helpers::Services::new_docker("hello-world", Color::Cyan);
-    client.deploy("../examples/tide/hello-world");
+fn hello_world_tide() {
+    let client = helpers::Services::new_docker("hello-world (tide)", Color::Cyan);
+    client.deploy("tide/hello-world");
 
     let request_text = client
         .get("hello")
-        .header("Host", "hello-world-tide-app.shuttleapp.test")
+        .header("Host", "hello-world-tide-app.localhost.local")
         .send()
         .unwrap()
         .text()

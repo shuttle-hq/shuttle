@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 
 use clap::Parser;
-use provisioner::{Args, MyProvisioner, ProvisionerServer};
+use shuttle_provisioner::{Args, MyProvisioner, ProvisionerServer};
 use tonic::transport::Server;
 
 #[tokio::main]

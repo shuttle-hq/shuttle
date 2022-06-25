@@ -10,7 +10,7 @@ use anyhow::{anyhow, Context as AnyhowContext};
 use chrono::{DateTime, Utc};
 use futures::prelude::*;
 use libloading::Library;
-use proto::provisioner::provisioner_client::ProvisionerClient;
+use shuttle_proto::provisioner::provisioner_client::ProvisionerClient;
 use rocket::data::ByteUnit;
 use rocket::{tokio, Data};
 use shuttle_common::project::ProjectName;

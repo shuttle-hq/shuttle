@@ -1,7 +1,8 @@
 [package]
-name = "api"
+name = "shuttle-api"
 version = "0.1.2"
 edition = "2021"
+publish = false
 
 [dependencies]
 anyhow = "1.0.57"
@@ -30,7 +31,7 @@ toml = "0.5.9"
 tonic = "0.7.2"
 uuid = { version = "1.1.1", features = ["v4"] }
 
-[dependencies.proto]
+[dependencies.shuttle-proto]
 version = "0.1.0"
 path = "../proto"
 

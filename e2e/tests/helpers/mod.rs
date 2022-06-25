@@ -1,18 +1,69 @@
-use std::fs::File;
-use std::io::{self, BufRead};
-use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
-use std::process::{Child, Command, ExitStatus, Stdio};
+use std::io::{self, stderr, stdout, BufRead, Write};
+use std::net::SocketAddr;
+use std::path::{Path, PathBuf};
+use std::process::{Child, Command, ExitStatus, Output, Stdio};
 use std::str;
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
 
 use colored::*;
-use portpicker::pick_unused_port;
-use rand::Rng;
 use reqwest::blocking::RequestBuilder;
 
-const ID_CHARSET: &[u8] = b"0123456789abcdef";
-const ID_LEN: u8 = 8;
+use lazy_static::lazy_static;
+
+lazy_static! {
+    static ref WORKSPACE_ROOT: PathBuf = {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .to_path_buf()
+    };
+    static ref DOCKER: PathBuf = which::which("docker").unwrap();
+    static ref CARGO: PathBuf = which::which("cargo").unwrap();
+    static ref LOCAL_UP: () = {
+        let docker_bake = WORKSPACE_ROOT.join("docker-bake.hcl");
+        let docker_bake_override = WORKSPACE_ROOT.join("e2e/docker-bake-override.hcl");
+        let docker_compose = WORKSPACE_ROOT.join("docker-compose.dev.yml");
+        println!(
+            "
+----------------------------------- PREPARING ------------------------------------
+docker: {}
+docker-bake: {}
+docker-bake-override: {}
+docker-compose: {}
+cargo: {}
+----------------------------------------------------------------------------------
+",
+            DOCKER.display(),
+            docker_bake.display(),
+            docker_bake_override.display(),
+            docker_compose.display(),
+            CARGO.display()
+        );
+
+        Command::new(DOCKER.as_os_str())
+            .args(["buildx", "bake", "-f"])
+            .arg(docker_bake)
+            .arg("-f")
+            .arg(docker_bake_override)
+            .args(["provisioner", "api"])
+            .output()
+            .ensure_success("failed to `docker buildx bake`");
+
+        Command::new(DOCKER.as_os_str())
+            .args(["compose", "-f"])
+            .arg(docker_compose)
+            .args(["up", "-d"])
+            .output()
+            .ensure_success("failed to `docker compose up`");
+
+        Command::new(CARGO.as_os_str())
+            .args(["build", "--bin", "cargo-shuttle"])
+            .current_dir(WORKSPACE_ROOT.as_path())
+            .output()
+            .ensure_success("failed to `cargo build --bin cargo-shuttle`");
+    };
+}
 
 trait EnsureSuccess {
     fn ensure_success<S: AsRef<str>>(self, s: S);
@@ -27,16 +78,15 @@ impl EnsureSuccess for io::Result<ExitStatus> {
     }
 }
 
-pub struct Services {
-    id: String,
-    api_addr: SocketAddr,
-    proxy_addr: SocketAddr,
-    api_image: Option<String>,
-    api_container: Option<String>,
-    provisioner_image: Option<String>,
-    provisioner_container: Option<String>,
-    target: String,
-    color: Color,
+impl EnsureSuccess for io::Result<Output> {
+    fn ensure_success<S: AsRef<str>>(self, s: S) {
+        self.map(|output| {
+            let _ = stderr().write_all(&output.stderr);
+            let _ = stdout().write_all(&output.stdout);
+            output.status
+        })
+        .ensure_success(s)
+    }
 }
 
 pub fn log_lines<R: io::Read, D: std::fmt::Display>(mut reader: R, target: D) {
@@ -89,36 +139,22 @@ pub fn spawn_and_log<D: std::fmt::Display, C: Into<Color>>(
     child
 }
 
+pub struct Services {
+    api_addr: SocketAddr,
+    proxy_addr: SocketAddr,
+    target: String,
+    color: Color,
+}
+
 impl Services {
     fn new_free<D, C>(target: D, color: C) -> Self
     where
         D: std::fmt::Display,
         C: Into<Color>,
     {
-        let mut rng = rand::thread_rng();
-        let id: String = (0..ID_LEN)
-            .map(|_| {
-                let idx = rng.gen_range(0..ID_CHARSET.len());
-                ID_CHARSET[idx] as char
-            })
-            .collect();
-
-        let api_port = pick_unused_port().expect("could not find a free port for API");
-
-        let api_addr = SocketAddrV4::new(Ipv4Addr::LOCALHOST, api_port).into();
-
-        let proxy_port = pick_unused_port().expect("could not find a free port for proxy");
-
-        let proxy_addr = SocketAddrV4::new(Ipv4Addr::LOCALHOST, proxy_port).into();
-
         Self {
-            id,
-            api_addr,
-            proxy_addr,
-            api_image: None,
-            api_container: None,
-            provisioner_image: None,
-            provisioner_container: None,
+            api_addr: "127.0.0.1:8001".parse().unwrap(),
+            proxy_addr: "127.0.0.1:8000".parse().unwrap(),
             target: target.to_string(),
             color: color.into(),
         }
@@ -129,99 +165,10 @@ impl Services {
         D: std::fmt::Display,
         C: Into<Color>,
     {
-        let mut api = Self::new_free(target, color);
-        let users_toml_file = format!("{}/users.toml", env!("CARGO_MANIFEST_DIR"));
-
-        // Make sure network is up
-        Command::new("docker")
-            .args(["network", "create", "--driver", "bridge", "shuttle-net"])
-            .spawn()
-            .unwrap()
-            .wait()
-            .unwrap();
-
-        let provisioner_image = Self::build_image("provisioner", &api.target, &api.id);
-        api.provisioner_image = Some(provisioner_image.clone());
-
-        let provisioner_target = format!("{} provisioner", api.target);
-        let provisioner_container = format!("shuttle_provisioner_{}_{}", api.target, api.id);
-        let mut run = Command::new("docker");
-        run.args([
-            "run",
-            "--name",
-            &provisioner_container,
-            "--network",
-            "shuttle-net",
-            "-e",
-            "FQDN=unreacable",
-            "-e",
-            &format!("PROVISIONER_ADDRESS={provisioner_container}"),
-            "-e",
-            "PORT=5001",
-            &provisioner_image,
-        ]);
-        api.provisioner_container = Some(provisioner_container.clone());
-
-        spawn_and_log(&mut run, provisioner_target, api.color);
-
-        let api_target = format!("        {} api", api.target);
-        let api_image = Self::build_image("api", &api.target, &api.id);
-        api.api_image = Some(api_image.clone());
-
-        File::create(&users_toml_file).unwrap();
-
-        let api_container = format!("shuttle_api_{}_{}", api.target, api.id);
-        let mut run = Command::new("docker");
-        run.args([
-            "run",
-            "--name",
-            &api_container,
-            "--network",
-            "shuttle-net",
-            "-p",
-            format!("{}:{}", api.proxy_addr.port(), 8000).as_str(),
-            "-p",
-            format!("{}:{}", api.api_addr.port(), 8001).as_str(),
-            "-e",
-            "PROXY_PORT=8000",
-            "-e",
-            "API_PORT=8001",
-            "-e",
-            "PROXY_FQDN=shuttleapp.test",
-            "-e",
-            "SHUTTLE_USERS_TOML=/config/users.toml",
-            "-e",
-            "SHUTTLE_INITIAL_KEY=ci-test",
-            "-e",
-            &format!("PROVISIONER_ADDRESS={provisioner_container}"),
-            "-v",
-            &format!("{}:/config/users.toml", users_toml_file),
-            &api_image,
-        ]);
-        api.api_container = Some(api_container);
-
-        spawn_and_log(&mut run, api_target, api.color);
-
-        api.wait_ready(Duration::from_secs(120));
-
-        api
-    }
-
-    fn build_image(service: &str, target: &str, id: &str) -> String {
-        let image = format!("shuttle_{service}_{target}_{id}");
-        let containerfile = format!("./{service}/Containerfile.dev");
-
-        let mut build = Command::new("docker");
-
-        build
-            .args(["build", "-f", &containerfile, "-t", &image, "."])
-            .current_dir("../");
-
-        spawn_and_log(&mut build, target, Color::White)
-            .wait()
-            .ensure_success("failed to build `{service}` image");
-
-        image
+        let _ = *LOCAL_UP;
+        let service = Self::new_free(target, color);
+        service.wait_ready(Duration::from_secs(15));
+        service
     }
 
     pub fn wait_ready(&self, mut timeout: Duration) {
@@ -239,31 +186,23 @@ impl Services {
         panic!("timed out while waiting for api to /status OK");
     }
 
-    pub fn run_client<'s, I>(&self, args: I, path: &str) -> Child
+    pub fn run_client<'s, I, P>(&self, args: I, path: P) -> Child
     where
+        P: AsRef<Path>,
         I: IntoIterator<Item = &'s str>,
     {
-        let client_target = format!("     {} client", self.target);
-
-        let mut build = Command::new("cargo");
-        build
-            .args(["build", "--bin", "cargo-shuttle"])
-            .current_dir("../");
-        spawn_and_log(&mut build, client_target.as_str(), Color::White)
-            .wait()
-            .ensure_success("failed to build `cargo-shuttle`");
-
-        let mut run = Command::new("../../../target/debug/cargo-shuttle");
-        run.args(args)
-            .current_dir(path)
-            .env("SHUTTLE_API", format!("http://{}", self.api_addr));
-        spawn_and_log(&mut run, client_target, self.color)
+        let mut run = Command::new(WORKSPACE_ROOT.join("target/debug/cargo-shuttle"));
+        run.args(args).current_dir(path);
+        spawn_and_log(&mut run, &self.target, self.color)
     }
 
     pub fn deploy(&self, project_path: &str) {
-        self.run_client(["deploy", "--allow-dirty"], project_path)
-            .wait()
-            .ensure_success("failed to run deploy");
+        self.run_client(
+            ["deploy", "--allow-dirty"],
+            WORKSPACE_ROOT.join("examples").join(project_path),
+        )
+        .wait()
+        .ensure_success("failed to run deploy");
     }
 
     pub fn get(&self, sub_path: &str) -> RequestBuilder {
@@ -273,45 +212,5 @@ impl Services {
     #[allow(dead_code)]
     pub fn post(&self, sub_path: &str) -> RequestBuilder {
         reqwest::blocking::Client::new().post(format!("http://{}/{}", self.proxy_addr, sub_path))
-    }
-}
-
-impl Drop for Services {
-    fn drop(&mut self) {
-        if let Some(container) = &self.api_container {
-            Command::new("docker")
-                .args(["stop", container])
-                .output()
-                .expect("failed to stop api container");
-            Command::new("docker")
-                .args(["rm", container])
-                .output()
-                .expect("failed to remove api container");
-        }
-
-        if let Some(image) = &self.api_image {
-            Command::new("docker")
-                .args(["rmi", image])
-                .output()
-                .expect("failed to remove api image");
-        }
-
-        if let Some(container) = &self.provisioner_container {
-            Command::new("docker")
-                .args(["stop", container])
-                .output()
-                .expect("failed to stop api container");
-            Command::new("docker")
-                .args(["rm", container])
-                .output()
-                .expect("failed to remove api container");
-        }
-
-        if let Some(image) = &self.provisioner_image {
-            Command::new("docker")
-                .args(["rmi", image])
-                .output()
-                .expect("failed to remove api image");
-        }
     }
 }

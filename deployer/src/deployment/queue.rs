@@ -46,10 +46,6 @@ pub async fn task(mut recv: QueueReceiver, run_send: RunSender, persistence: Per
     }
 }
 
-// TODO:
-// * Handling code shared between services? Git dependencies?
-// * Ensure builds do not interfere with one another.
-
 pub struct Queued {
     pub name: String,
     pub data_stream: Pin<Box<dyn Stream<Item = Result<Bytes>> + Send + Sync>>,
@@ -165,6 +161,8 @@ async fn remove_old_build(project_path: impl AsRef<Path>) -> Result<()> {
     Ok(())
 }
 
+/// Give the '.so' file specified a random name so that re-deployments are
+/// properly re-loaded.
 async fn rename_build(project_path: impl AsRef<Path>, so_path: impl AsRef<Path>) -> Result<()> {
     let random_so_name =
         rand::distributions::Alphanumeric.sample_string(&mut rand::thread_rng(), 16);
@@ -219,7 +217,7 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
         // Can we extract again without error?
         super::extract_tar_gz_data(test_data.as_slice(), &p).unwrap();
 
-        let _ = fs::remove_dir(p).await;
+        fs::remove_dir_all(p).await.unwrap();
     }
 
     #[tokio::test]
@@ -262,7 +260,7 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
         assert!(!p.join("delete-me.so").exists());
         assert!(!p.join(MARKER_FILE_NAME).exists());
 
-        let _ = fs::remove_dir(p).await;
+        fs::remove_dir_all(p).await.unwrap();
     }
 
     #[tokio::test]
@@ -287,6 +285,6 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
             "barfoo"
         );
 
-        let _ = fs::remove_dir(p).await;
+        fs::remove_dir_all(p).await.unwrap();
     }
 }

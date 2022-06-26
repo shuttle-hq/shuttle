@@ -54,8 +54,6 @@ impl Persistence {
     pub async fn update_deployment(&self, info: impl Into<DeploymentInfo>) -> Result<()> {
         let info = info.into();
 
-        // TODO: Handle moving to 'active_deployments' table for DeploymentState::Running.
-
         sqlx::query("INSERT OR REPLACE INTO deployments (name, state) VALUES (?, ?)")
             .bind(info.name)
             .bind(info.state)

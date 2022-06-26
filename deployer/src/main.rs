@@ -3,7 +3,7 @@ mod error;
 mod handlers;
 mod persistence;
 
-use deployment::{BuildLogsManager, Built, DeploymentManager, DeploymentState};
+use deployment::DeploymentManager;
 use persistence::Persistence;
 
 use std::net::SocketAddr;
@@ -26,17 +26,12 @@ async fn main() {
 
     let persistence = Persistence::new().await;
     let deployment_manager = DeploymentManager::new(persistence.clone());
-    let build_log_manager = BuildLogsManager::new();
 
     for existing_deployment in persistence.get_all_runnable_deployments().await.unwrap() {
-        let built = Built {
-            name: existing_deployment.name,
-            state: DeploymentState::Built,
-        };
-        deployment_manager.run_push(built).await;
+        deployment_manager.run_push(existing_deployment.name).await;
     }
 
-    let router = handlers::make_router(persistence, deployment_manager, build_log_manager);
+    let router = handlers::make_router(persistence, deployment_manager);
     let make_service = router.into_make_service();
 
     log::info!("Binding to and listening at address: {}", addr);

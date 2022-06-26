@@ -1,6 +1,4 @@
-use crate::deployment::{
-    BuildLogReceiver, BuildLogsManager, DeploymentInfo, DeploymentManager, DeploymentState, Queued,
-};
+use crate::deployment::{BuildLogReceiver, DeploymentInfo, DeploymentManager};
 use crate::error::{Error, Result};
 use crate::persistence::Persistence;
 
@@ -15,7 +13,6 @@ use futures::TryStreamExt;
 pub fn make_router(
     persistence: Persistence,
     deployment_manager: DeploymentManager,
-    build_logs_manager: BuildLogsManager,
 ) -> Router<Body> {
     Router::new()
         .route("/services", get(list_services))
@@ -30,7 +27,6 @@ pub fn make_router(
         .route("/services/:name/build-logs", get(get_build_logs))
         .layer(Extension(persistence))
         .layer(Extension(deployment_manager))
-        .layer(Extension(build_logs_manager))
 }
 
 async fn list_services(
@@ -49,22 +45,13 @@ async fn get_service(
 async fn post_service(
     Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
-    Extension(build_logs_manager): Extension<BuildLogsManager>,
     Path(name): Path<String>,
     stream: BodyStream,
 ) -> Result<Json<DeploymentInfo>> {
-    let build_log_writer = build_logs_manager.for_deployment(name.clone()).await;
-
-    let queued = Queued {
-        name,
-        state: DeploymentState::Queued,
-        data_stream: Box::pin(stream.map_err(Error::Streaming)),
-        build_log_writer,
-    };
-    let info = DeploymentInfo::from(&queued);
-
-    persistence.update_deployment(&queued).await?;
-    deployment_manager.queue_push(queued).await;
+    let info = deployment_manager
+        .queue_push(name, stream.map_err(Error::Streaming))
+        .await;
+    persistence.update_deployment(info.clone()).await?;
 
     Ok(Json(info))
 }
@@ -72,29 +59,27 @@ async fn post_service(
 async fn delete_service(
     Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
-    Extension(build_logs_manager): Extension<BuildLogsManager>,
     Path(name): Path<String>,
 ) -> Result<Json<Option<DeploymentInfo>>> {
     let old_info = persistence.delete_deployment(&name).await?;
-    build_logs_manager.delete_deployment(&name).await;
     deployment_manager.kill(name).await;
 
     Ok(Json(old_info))
 }
 
 async fn get_build_logs(
-    Extension(build_logs_manager): Extension<BuildLogsManager>,
+    Extension(deployment_manager): Extension<DeploymentManager>,
     Path(name): Path<String>,
 ) -> Json<Option<Vec<String>>> {
-    Json(build_logs_manager.get_logs_so_far(&name).await)
+    Json(deployment_manager.build_logs_so_far(&name).await)
 }
 
 async fn get_build_logs_subscribe(
-    Extension(build_logs_manager): Extension<BuildLogsManager>,
+    Extension(deployment_manager): Extension<DeploymentManager>,
     Path(name): Path<String>,
     ws_upgrade: ws::WebSocketUpgrade,
 ) -> axum::response::Response {
-    let log_recv = build_logs_manager.subscribe(&name).await;
+    let log_recv = deployment_manager.build_logs_subscribe(&name).await;
 
     ws_upgrade.on_upgrade(move |s| websocket_handler(s, log_recv))
 }

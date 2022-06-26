@@ -212,7 +212,7 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
         // Can we extract again without error?
         super::extract_tar_gz_data(test_data.as_slice(), &p).unwrap();
 
-        let _ = fs::remove_dir(p).await;
+        fs::remove_dir_all(p).await.unwrap();
     }
 
     #[tokio::test]
@@ -255,7 +255,7 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
         assert!(!p.join("delete-me").exists());
         assert!(!p.join(MARKER_FILE_NAME).exists());
 
-        let _ = fs::remove_dir(p).await;
+        fs::remove_dir_all(p).await.unwrap();
     }
 
     #[tokio::test]
@@ -280,6 +280,6 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
             "barfoo"
         );
 
-        let _ = fs::remove_dir(p).await;
+        fs::remove_dir_all(p).await.unwrap();
     }
 }

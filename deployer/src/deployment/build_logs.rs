@@ -4,19 +4,19 @@ use std::collections::HashMap;
 use std::io;
 use std::sync::Arc;
 
-use tokio::sync::{broadcast, Mutex, RwLock};
+use tokio::sync::{broadcast, RwLock};
 
 const BUFFER_SIZE: usize = 10;
 
 #[derive(Clone)]
 pub struct BuildLogsManager {
-    deployments: Arc<Mutex<HashMap<String, Deployment>>>,
+    deployments: Arc<RwLock<HashMap<String, Deployment>>>,
 }
 
 impl BuildLogsManager {
     pub fn new() -> Self {
         BuildLogsManager {
-            deployments: Arc::new(Mutex::new(HashMap::new())),
+            deployments: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -34,7 +34,7 @@ impl BuildLogsManager {
             }
         });
 
-        self.deployments.lock().await.insert(
+        self.deployments.write().await.insert(
             name,
             Deployment {
                 sender: sender.clone(),
@@ -50,19 +50,19 @@ impl BuildLogsManager {
     }
 
     pub async fn delete_deployment(&self, name: &str) {
-        self.deployments.lock().await.remove(name);
+        self.deployments.write().await.remove(name);
     }
 
     pub async fn subscribe(&self, name: &str) -> Option<BuildLogReceiver> {
         self.deployments
-            .lock()
+            .read()
             .await
             .get(name)
             .map(|d| d.sender.subscribe())
     }
 
     pub async fn get_logs_so_far(&self, name: &str) -> Option<Vec<String>> {
-        if let Some(deployment) = self.deployments.lock().await.get(name) {
+        if let Some(deployment) = self.deployments.read().await.get(name) {
             Some(deployment.logs_so_far.read().await.clone())
         } else {
             None

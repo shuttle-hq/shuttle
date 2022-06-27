@@ -1,6 +1,6 @@
 use colored::Color;
 
-mod helpers;
+use crate::helpers;
 
 #[test]
 fn hello_world_rocket() {

@@ -42,6 +42,12 @@ cargo: {}
             CARGO.display()
         );
 
+        println!(
+            "{} buildx bake -f {} -f {} provisioner api",
+            DOCKER.display(),
+            docker_bake.display(),
+            docker_bake_override.display()
+        );
         Command::new(DOCKER.as_os_str())
             .args(["buildx", "bake", "-f"])
             .arg(docker_bake)
@@ -51,6 +57,11 @@ cargo: {}
             .output()
             .ensure_success("failed to `docker buildx bake`");
 
+        println!(
+            "{} -f {} up -d",
+            DOCKER_COMPOSE.display(),
+            docker_compose.display()
+        );
         Command::new(DOCKER_COMPOSE.as_os_str())
             .arg("-f")
             .arg(docker_compose)
@@ -105,7 +116,7 @@ pub fn log_lines<R: io::Read, D: std::fmt::Display>(mut reader: R, target: D) {
         }
 
         for line in io::BufReader::new(&buf[..current_pos]).lines() {
-            eprintln!("{} {}", target, line.unwrap());
+            println!("{} {}", target, line.unwrap());
         }
 
         current_pos = 0;
@@ -114,7 +125,7 @@ pub fn log_lines<R: io::Read, D: std::fmt::Display>(mut reader: R, target: D) {
     // Log last
     if current_pos != 0 {
         for line in io::BufReader::new(&buf[..current_pos]).lines() {
-            eprintln!("{} {}", target, line.unwrap());
+            println!("{} {}", target, line.unwrap());
         }
     }
 }

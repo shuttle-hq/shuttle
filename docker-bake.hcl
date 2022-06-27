@@ -24,7 +24,6 @@ target "api" {
     shuttle-common = "target:common"
   }
   tags = ["${registry}/backend"]
-  platforms = ["linux/amd64"]
   args = {
     crate = "shuttle-api"
   }
@@ -38,7 +37,6 @@ target "provisioner" {
     shuttle-common = "target:common"
   }
   tags = ["${registry}/provisioner"]
-  platforms = ["linux/amd64"]
   args = {
     crate = "shuttle-provisioner"
   }

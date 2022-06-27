@@ -3,11 +3,10 @@ name: cargo-test
 on:
   push:
     branches: [main]
-    paths: ["**/*.rs", "**/Cargo.toml"]
+    paths: ["**/*.rs", "**/Cargo.toml", "**/Cargo.lock"]
   pull_request:
     branches: [main]
-    paths: ["**/*.rs", "**/Cargo.toml"]
-
+    paths: ["**/*.rs", "**/Cargo.toml", "**/Cargo.lock"]
   workflow_dispatch:
 
 concurrency:
@@ -23,4 +22,4 @@ jobs:
         with:
           toolchain: stable
           override: true
-      - run: cargo test -- --nocapture
+      - run: SHUTTLE_API_KEY=test-key cargo test -- --nocapture

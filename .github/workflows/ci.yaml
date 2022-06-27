@@ -19,7 +19,8 @@ jobs:
         aws-region: us-east-1
     - name: Docker Login
       run: |
-        aws ecr-public get-login-password | docker login --username AWS --password-stdin $CONTAINER_REGISTRY
+        aws ecr-public get-login-password |\
+        docker login --username AWS --password-stdin $CONTAINER_REGISTRY
     - name: Build And Push Backend Image
       uses: shuttle-hq/build-push-action@v2
       with:

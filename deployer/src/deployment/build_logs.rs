@@ -2,7 +2,7 @@ use super::{BuildLogReceiver, BuildLogSender};
 
 use std::collections::HashMap;
 use std::io;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 
 use tokio::sync::{broadcast, RwLock};
 
@@ -21,43 +21,30 @@ impl BuildLogsManager {
     }
 
     pub async fn for_deployment(&self, name: String) -> BuildLogWriter {
-        let sender = {
-            // The lock is made outside of the `if let` construct below as that
-            // would result in the lock being held even if the `else` clause is
-            // executed.
-            let read_lock = self.deployments.read().await;
+        let (sender, mut receiver) = broadcast::channel(BUFFER_SIZE);
 
-            if let Some(deployment) = read_lock.get(&name) {
-                deployment.logs_so_far.write().await.clear();
-                deployment.sender.clone()
-            } else {
-                drop(read_lock);
+        let sender = Arc::new(sender);
+        let sender_weak = Arc::downgrade(&sender);
 
-                let (sender, mut receiver) = broadcast::channel(BUFFER_SIZE);
+        let logs_so_far = Arc::new(RwLock::new(Vec::new()));
 
-                let logs_so_far = Arc::new(RwLock::new(Vec::new()));
-
-                let logs_so_far_clone = logs_so_far.clone();
-                // This Tokio task is responsible for receiving build log lines and
-                // storing them in the `logs_so_far` vector.
-                let log_store_task_handle = tokio::spawn(async move {
-                    while let Ok(line) = receiver.recv().await {
-                        logs_so_far_clone.write().await.push(line);
-                    }
-                });
-
-                self.deployments.write().await.insert(
-                    name,
-                    Deployment {
-                        sender: sender.clone(),
-                        logs_so_far: logs_so_far.clone(),
-                        log_store_task_handle,
-                    },
-                );
-
-                sender
+        let logs_so_far_clone = logs_so_far.clone();
+        // This Tokio task is responsible for receiving build log lines and
+        // storing them in the `logs_so_far` vector.
+        let log_store_task_handle = tokio::spawn(async move {
+            while let Ok(line) = receiver.recv().await {
+                logs_so_far_clone.write().await.push(line);
             }
-        };
+        });
+
+        self.deployments.write().await.insert(
+            name,
+            Deployment {
+                sender: sender_weak,
+                logs_so_far: logs_so_far.clone(),
+                log_store_task_handle,
+            },
+        );
 
         BuildLogWriter {
             sender,
@@ -74,7 +61,8 @@ impl BuildLogsManager {
             .read()
             .await
             .get(name)
-            .map(|d| d.sender.subscribe())
+            .and_then(|deployer| deployer.sender.upgrade())
+            .map(|sender| sender.subscribe())
     }
 
     pub async fn get_logs_so_far(&self, name: &str) -> Option<Vec<String>> {
@@ -87,7 +75,13 @@ impl BuildLogsManager {
 }
 
 struct Deployment {
-    sender: BuildLogSender,
+    /// A weak pointer to the [`BuildLogSender`] stored in a [`BuildLogWriter`].
+    /// It is a weak pointer so that it is possible to identify when a build
+    /// has failed/ended (and thus close a WebSocket connection sending build
+    /// logs). The dropping of `BuildLogWriter` will result in the closing of
+    /// the build log broadcast channel as this weak pointer cannot keep the
+    /// channel open.
+    sender: Weak<BuildLogSender>,
     logs_so_far: Arc<RwLock<Vec<String>>>,
     log_store_task_handle: tokio::task::JoinHandle<()>,
 }
@@ -99,7 +93,7 @@ impl Drop for Deployment {
 }
 
 pub struct BuildLogWriter {
-    sender: BuildLogSender,
+    sender: Arc<BuildLogSender>,
     buffer: String,
 }
 

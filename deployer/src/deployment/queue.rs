@@ -138,7 +138,7 @@ fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<()> {
     Ok(())
 }
 
-/// Check for an existing marker file is the specified project directory and
+/// Check for an existing marker file in the specified project directory and
 /// if one exists delete the indicated '.so' file.
 async fn remove_old_build(project_path: impl AsRef<Path>) -> Result<()> {
     let marker_path = project_path.as_ref().join(MARKER_FILE_NAME);

@@ -331,8 +331,11 @@ pub type ServeHandle = JoinHandle<Result<(), error::Error>>;
 /// The core trait of the shuttle platform. Every crate deployed to shuttle needs to implement this trait.
 ///
 /// Use the [main][main] macro to expose your implementation to the deployment backend.
+///
+/// TODO: our current state machine in the api crate stores this service and can move it across
+/// threads (handlers) causing `Service` to need `Sync`. We should remove this restriction
 #[async_trait]
-pub trait Service: Send {
+pub trait Service: Send + Sync {
     /// This function is run exactly once on each instance of a deployment.
     ///
     /// The deployer expects this instance of [Service][Service] to bind to the passed [SocketAddr][SocketAddr].
@@ -432,10 +435,12 @@ pub type ShuttleRocket = Result<rocket::Rocket<rocket::Build>, Error>;
 
 #[cfg(feature = "web-axum")]
 #[async_trait]
-impl Service for axum::Router {
+impl Service for sync_wrapper::SyncWrapper<axum::Router> {
     async fn bind(mut self: Box<Self>, addr: SocketAddr) -> Result<(), error::Error> {
+        let router = self.into_inner();
+
         axum::Server::bind(&addr)
-            .serve(self.into_make_service())
+            .serve(router.into_make_service())
             .await
             .map_err(error::CustomError::new)?;
 
@@ -444,7 +449,7 @@ impl Service for axum::Router {
 }
 
 #[cfg(feature = "web-axum")]
-pub type ShuttleAxum = Result<axum::Router, Error>;
+pub type ShuttleAxum = Result<sync_wrapper::SyncWrapper<axum::Router>, Error>;
 
 #[cfg(feature = "web-tide")]
 #[async_trait]

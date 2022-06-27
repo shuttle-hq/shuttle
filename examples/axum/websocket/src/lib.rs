@@ -15,6 +15,7 @@ use hyper::{Client, Uri};
 use hyper_tls::HttpsConnector;
 use serde::Serialize;
 use shuttle_service::ShuttleAxum;
+use sync_wrapper::SyncWrapper;
 use tokio::{
     sync::{watch, Mutex},
     time::sleep,
@@ -76,7 +77,9 @@ async fn main() -> ShuttleAxum {
         .route("/websocket", get(websocket_handler))
         .layer(Extension(state));
 
-    Ok(router)
+    let sync_wrapper = SyncWrapper::new(router);
+
+    Ok(sync_wrapper)
 }
 
 async fn websocket_handler(

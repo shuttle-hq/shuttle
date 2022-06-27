@@ -1,4 +1,5 @@
-use std::error::Error as _;
+use std::error::Error as StdError;
+use std::io;
 
 use axum::http::{header, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
@@ -12,6 +13,10 @@ pub enum Error {
     Database(#[from] sqlx::Error),
     #[error("Streaming error: {0}")]
     Streaming(#[source] axum::Error),
+    #[error("Internal I/O error: {0}")]
+    InputOutput(#[from] io::Error),
+    #[error("Build error: {0}")]
+    Build(#[source] Box<dyn StdError>),
 }
 
 impl Serialize for Error {

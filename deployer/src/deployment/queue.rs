@@ -10,10 +10,10 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 
-use log::{info, debug, error};
 use bytes::{BufMut, Bytes};
 use flate2::read::GzDecoder;
 use futures::{Stream, StreamExt};
+use log::{debug, error, info};
 use rand::distributions::DistString;
 use tar::Archive;
 use tokio::fs;
@@ -177,14 +177,15 @@ async fn rename_build(project_path: impl AsRef<Path>, so_path: impl AsRef<Path>)
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
+    use tempdir::TempDir;
     use tokio::fs;
 
     use super::MARKER_FILE_NAME;
 
     #[tokio::test]
     async fn extract_tar_gz_data() {
-        let p = Path::new("/tmp/shuttle-extraction-test");
+        let dir = TempDir::new("/tmp/shuttle-extraction-test").unwrap();
+        let p = dir.path();
 
         // Binary data for an archive in the following form:
         //
@@ -222,7 +223,8 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
 
     #[tokio::test]
     async fn remove_old_build() {
-        let p = Path::new("/tmp/shuttle-remove-old-test");
+        let dir = TempDir::new("/tmp/shuttle-remove-old-test").unwrap();
+        let p = dir.path();
 
         // Ensure no error occurs with an non-existent directory:
 
@@ -265,7 +267,8 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
 
     #[tokio::test]
     async fn rename_build() {
-        let p = Path::new("/tmp/shuttle-rename-build-test");
+        let dir = TempDir::new("/tmp/shuttle-rename-build-test").unwrap();
+        let p = dir.path();
 
         let so_path = p.join("xyz.so");
         let marker_path = p.join(MARKER_FILE_NAME);

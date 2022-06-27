@@ -19,6 +19,7 @@ lazy_static! {
             .to_path_buf()
     };
     static ref DOCKER: PathBuf = which::which("docker").unwrap();
+    static ref DOCKER_COMPOSE: PathBuf = which::which("docker-compose").unwrap();
     static ref CARGO: PathBuf = which::which("cargo").unwrap();
     static ref LOCAL_UP: () = {
         let docker_bake = WORKSPACE_ROOT.join("docker-bake.hcl");
@@ -50,8 +51,8 @@ cargo: {}
             .output()
             .ensure_success("failed to `docker buildx bake`");
 
-        Command::new(DOCKER.as_os_str())
-            .args(["compose", "-f"])
+        Command::new(DOCKER_COMPOSE.as_os_str())
+            .arg("-f")
             .arg(docker_compose)
             .args(["up", "-d"])
             .output()

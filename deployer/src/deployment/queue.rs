@@ -12,6 +12,7 @@ use std::pin::Pin;
 use bytes::{BufMut, Bytes};
 use flate2::read::GzDecoder;
 use futures::{Stream, StreamExt};
+use log::{debug, error, info};
 use rand::distributions::DistString;
 use tar::Archive;
 use tokio::fs;
@@ -26,19 +27,19 @@ const BUILDS_PATH: &str = "/tmp/shuttle-builds";
 const MARKER_FILE_NAME: &str = ".shuttle-marker";
 
 pub async fn task(mut recv: QueueReceiver, run_send: RunSender, persistence: Persistence) {
-    log::info!("Queue task started");
+    info!("Queue task started");
 
     while let Some(queued) = recv.recv().await {
         let name = queued.name.clone();
 
-        log::info!("Queued deployment at the front of the queue: {}", name);
+        info!("Queued deployment at the front of the queue: {}", name);
 
         let run_send_cloned = run_send.clone();
         let persistence_cloned = persistence.clone();
 
         tokio::spawn(async move {
             if let Err(e) = queued.handle(run_send_cloned, persistence_cloned).await {
-                log::error!("Error during building of deployment '{}' - {e}", name);
+                error!("Error during building of deployment '{}' - {e}", name);
             }
         });
     }
@@ -59,16 +60,16 @@ impl Queued {
 
         persistence.update_deployment(&self).await?;
 
-        log::info!("Fetching POSTed data for deployment '{}'", self.name);
+        info!("Fetching POSTed data for deployment '{}'", self.name);
 
         let mut vec = Vec::new();
         while let Some(buf) = self.data_stream.next().await {
             let buf = buf?;
-            log::debug!("Received {} bytes for deployment {}", buf.len(), self.name);
+            debug!("Received {} bytes for deployment {}", buf.len(), self.name);
             vec.put(buf);
         }
 
-        log::info!("Extracting received data for deployment '{}'", self.name);
+        info!("Extracting received data for deployment '{}'", self.name);
 
         fs::create_dir_all(BUILDS_PATH).await?;
 
@@ -76,17 +77,17 @@ impl Queued {
 
         extract_tar_gz_data(vec.as_slice(), &project_path)?;
 
-        log::info!("Building deployment '{}'", self.name);
+        info!("Building deployment '{}'", self.name);
 
         let project_path = project_path.canonicalize()?;
         let so_path = build_crate(&project_path, Box::new(self.build_log_writer))
             .map_err(|e| Error::Build(e.into()))?;
 
-        log::info!("Removing old build (if present) for {}", self.name);
+        info!("Removing old build (if present) for {}", self.name);
 
         remove_old_build(&project_path).await?;
 
-        log::info!(
+        info!(
             "Moving built library and creating marker file for deployment '{}'",
             self.name
         );
@@ -102,7 +103,7 @@ impl Queued {
 
         persistence.update_deployment(&built).await?;
 
-        log::info!("Moving deployment '{}' to run queue", built.name);
+        info!("Moving deployment '{}' to run queue", built.name);
 
         run_send.send(built).await.unwrap();
 
@@ -135,7 +136,7 @@ fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<()> {
     Ok(())
 }
 
-/// Check for an existing marker file is the specified project directory and
+/// Check for an existing marker file in the specified project directory and
 /// if one exists delete the indicated '.so' file.
 async fn remove_old_build(project_path: impl AsRef<Path>) -> Result<()> {
     let marker_path = project_path.as_ref().join(MARKER_FILE_NAME);
@@ -158,6 +159,8 @@ async fn remove_old_build(project_path: impl AsRef<Path>) -> Result<()> {
     Ok(())
 }
 
+/// Give the '.so' file specified a random name so that re-deployments are
+/// properly re-loaded.
 async fn rename_build(project_path: impl AsRef<Path>, so_path: impl AsRef<Path>) -> Result<()> {
     let random_so_name =
         rand::distributions::Alphanumeric.sample_string(&mut rand::thread_rng(), 16);
@@ -172,14 +175,15 @@ async fn rename_build(project_path: impl AsRef<Path>, so_path: impl AsRef<Path>)
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
+    use tempdir::TempDir;
     use tokio::fs;
 
-    use crate::deployment::queue::MARKER_FILE_NAME;
+    use super::MARKER_FILE_NAME;
 
     #[tokio::test]
     async fn extract_tar_gz_data() {
-        let p = Path::new("/tmp/shuttle-extraction-test");
+        let dir = TempDir::new("/tmp/shuttle-extraction-test").unwrap();
+        let p = dir.path();
 
         // Binary data for an archive in the following form:
         //
@@ -217,7 +221,8 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
 
     #[tokio::test]
     async fn remove_old_build() {
-        let p = Path::new("/tmp/shuttle-remove-old-test");
+        let dir = TempDir::new("/tmp/shuttle-remove-old-test").unwrap();
+        let p = dir.path();
 
         // Ensure no error occurs with an non-existent directory:
 
@@ -252,7 +257,7 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
 
         super::remove_old_build(&p).await.unwrap();
 
-        assert!(!p.join("delete-me").exists());
+        assert!(!p.join("delete-me.so").exists());
         assert!(!p.join(MARKER_FILE_NAME).exists());
 
         fs::remove_dir_all(p).await.unwrap();
@@ -260,7 +265,8 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
 
     #[tokio::test]
     async fn rename_build() {
-        let p = Path::new("/tmp/shuttle-rename-build-test");
+        let dir = TempDir::new("/tmp/shuttle-rename-build-test").unwrap();
+        let p = dir.path();
 
         let so_path = p.join("xyz.so");
         let marker_path = p.join(MARKER_FILE_NAME);

@@ -474,6 +474,7 @@ where
     T: tower::Service<hyper::Request<hyper::Body>, Response = hyper::Response<hyper::Body>>
         + Clone
         + Send
+        + Sync
         + 'static,
     T::Error: std::error::Error + Send + Sync,
     T::Future: std::future::Future + Send + Sync,

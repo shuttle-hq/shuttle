@@ -7,7 +7,7 @@ use std::{
 
 use ctor::dtor;
 use lazy_static::lazy_static;
-use provisioner::MyProvisioner;
+use shuttle_provisioner::MyProvisioner;
 
 lazy_static! {
     static ref PG: DockerPG = DockerPG::new();

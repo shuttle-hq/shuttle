@@ -119,7 +119,7 @@ Finally, you can start a local deployment of the backend with
 $ docker compose -f docker-compose.dev.yml up -d
 ```
 
-The API is now accessible on `localhost:8000` (for app proxies) and `localhost:8001` (for the control plane). When running `cargo run --bin cargo-shuttle` (in a debug build), the CLI will point itself to `localhost` for its API calls.
+The API is now accessible on `localhost:8000` (for app proxies) and `localhost:8001` (for the control plane). When running `cargo run --bin cargo-shuttle` (in a debug build), the CLI will point itself to `localhost` for its API calls. The deployment parameters can be tweaked by changing values in the [.env](./.env) file.
 
 In order to test local changes to the `shuttle-service` crate, you may want to add the following to a `.cargo/config.toml` file:
 

@@ -21,27 +21,43 @@ impl BuildLogsManager {
     }
 
     pub async fn for_deployment(&self, name: String) -> BuildLogWriter {
-        let (sender, mut receiver) = broadcast::channel(BUFFER_SIZE);
+        let sender = {
+            // The lock is made outside of the `if let` construct below as that
+            // would result in the lock being held even if the `else` clause is
+            // executed.
+            let read_lock = self.deployments.read().await;
 
-        let logs_so_far = Arc::new(RwLock::new(Vec::new()));
+            if let Some(deployment) = read_lock.get(&name) {
+                deployment.logs_so_far.write().await.clear();
+                deployment.sender.clone()
+            } else {
+                drop(read_lock);
 
-        let logs_so_far_clone = logs_so_far.clone();
-        // This Tokio task is responsible for receiving build log lines and
-        // storing them in the `logs_so_far` vector.
-        let log_store_task_handle = tokio::spawn(async move {
-            while let Ok(line) = receiver.recv().await {
-                logs_so_far_clone.write().await.push(line);
+                let (sender, mut receiver) = broadcast::channel(BUFFER_SIZE);
+
+                let logs_so_far = Arc::new(RwLock::new(Vec::new()));
+
+                let logs_so_far_clone = logs_so_far.clone();
+                // This Tokio task is responsible for receiving build log lines and
+                // storing them in the `logs_so_far` vector.
+                let log_store_task_handle = tokio::spawn(async move {
+                    while let Ok(line) = receiver.recv().await {
+                        logs_so_far_clone.write().await.push(line);
+                    }
+                });
+
+                self.deployments.write().await.insert(
+                    name,
+                    Deployment {
+                        sender: sender.clone(),
+                        logs_so_far: logs_so_far.clone(),
+                        log_store_task_handle,
+                    },
+                );
+
+                sender
             }
-        });
-
-        self.deployments.write().await.insert(
-            name,
-            Deployment {
-                sender: sender.clone(),
-                logs_so_far: logs_so_far.clone(),
-                log_store_task_handle,
-            },
-        );
+        };
 
         BuildLogWriter {
             sender,

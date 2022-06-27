@@ -5,12 +5,12 @@ use aws_config::timeout;
 use aws_sdk_rds::{error::ModifyDBInstanceErrorKind, model::DbInstance, types::SdkError, Client};
 use aws_smithy_types::tristate::TriState;
 pub use error::Error;
+use rand::Rng;
 use shuttle_proto::provisioner::provisioner_server::Provisioner;
 pub use shuttle_proto::provisioner::provisioner_server::ProvisionerServer;
 use shuttle_proto::provisioner::{
     aws_rds, database_request::DbType, AwsRds, DatabaseRequest, DatabaseResponse,
 };
-use rand::Rng;
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use tokio::time::sleep;
 use tonic::{Request, Response, Status};

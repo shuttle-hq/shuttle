@@ -10,13 +10,13 @@ use anyhow::{anyhow, Context as AnyhowContext};
 use chrono::{DateTime, Utc};
 use futures::prelude::*;
 use libloading::Library;
-use shuttle_proto::provisioner::provisioner_client::ProvisionerClient;
 use rocket::data::ByteUnit;
 use rocket::{tokio, Data};
 use shuttle_common::project::ProjectName;
 use shuttle_common::{
     DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, LogItem, Port,
 };
+use shuttle_proto::provisioner::provisioner_client::ProvisionerClient;
 use shuttle_service::loader::Loader;
 use shuttle_service::logger::Log;
 use shuttle_service::ServeHandle;

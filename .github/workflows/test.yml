@@ -20,6 +20,11 @@ jobs:
       matrix:
         features: ["web-axum", "web-rocket", "web-tide", "web-tower"]
     steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
       - uses: actions/cache@v3
         with:
           path: |
@@ -29,16 +34,16 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
       - name: cargo test --package shuttle-service
         run: cargo test --package shuttle-service --features="codegen,loader,secrets,${{ matrix.features }}"
   provisioner_tests:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
       - uses: actions/cache@v3
         with:
           path: |
@@ -48,11 +53,6 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
       - name: cargo test --package shuttle-service
         run: cargo test --package shuttle-provisioner -- --test-threads=1
   platform_tests:
@@ -62,6 +62,11 @@ jobs:
         crate: ["shuttle-provisioner", "shuttle-api", "cargo-shuttle"]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
       - uses: actions/cache@v3
         with:
           path: |
@@ -71,11 +76,6 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
       - name: cargo test ${{ matrix.crate }} --all-features
         run: cargo test --package ${{ matrix.crate }} --all-features
   e2e_tests:

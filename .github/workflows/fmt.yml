@@ -42,5 +42,14 @@ jobs:
           toolchain: stable
           override: true
           components: clippy
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Run test with ${{ matrix.features}}
         run: cargo clippy --tests --all-targets --features="codegen,loader,sqlx-integration,sqlx-postgres,secrets,${{ matrix.features }}" --no-deps -- --D warnings

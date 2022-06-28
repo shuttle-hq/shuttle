@@ -23,12 +23,6 @@ fn cargo_shuttle_command(
 }
 
 #[tokio::test]
-#[should_panic(expected = "failed to lookup address information: Name or service not known")]
-async fn network_support_is_intentionally_broken_in_tests() {
-    cargo_shuttle_command(Command::Status, ".").await.unwrap()
-}
-
-#[tokio::test]
 #[should_panic(
     expected = "Could not locate the root of a cargo project. Are you inside a cargo project? You can also use `--working-directory` to locate your cargo project."
 )]

@@ -1,4 +1,4 @@
-name: Build
+name: images
 on:
   push:
     branches: [master]
@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  build_images:
+  build_and_push_images:
     runs-on: ubuntu-latest
     env:
       CONTAINER_REGISTRY: public.ecr.aws/shuttle

@@ -1,5 +1,9 @@
-use std::path::PathBuf;
+use std::{
+    net::{Ipv4Addr, SocketAddr},
+    path::PathBuf,
+};
 
+use portpicker::pick_unused_port;
 use shuttle_common::DeploymentId;
 use shuttle_service::{loader::Loader, Factory};
 use tokio::sync::mpsc;
@@ -19,7 +23,14 @@ pub async fn task(mut recv: RunReceiver, kill_send: KillSender) {
         let kill_recv = kill_send.subscribe();
 
         tokio::spawn(async move {
-            if let Err(e) = built.handle(kill_recv, |_built| {}).await {
+            let port = pick_unused_port().unwrap();
+            let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
+            let mut factory = StubFactory;
+
+            if let Err(e) = built
+                .handle(addr, &mut factory, kill_recv, |_built| {})
+                .await
+            {
                 error!("Error during running of deployment '{}' - {e}", name);
             }
         });
@@ -44,22 +55,19 @@ impl Factory for StubFactory {
 }
 
 impl Built {
-    #[instrument(skip(self, handle_cleanup), fields(name = self.name.as_str(), state = %State::Running))]
+    #[instrument(skip(self, factory, handle_cleanup), fields(name = self.name.as_str(), state = %State::Running))]
     async fn handle(
         self,
+        addr: SocketAddr,
+        factory: &mut dyn Factory,
         mut kill_recv: KillReceiver,
         handle_cleanup: impl FnOnce(Result<()>) + Send + 'static,
     ) -> Result<()> {
         let loader = Loader::from_so_file(self.so_path.clone())?;
 
         let deployment_id = DeploymentId::default();
-        let addr = "127.0.0.1:8010".parse().unwrap();
         let (tx, _rx) = mpsc::unbounded_channel();
-        let mut factory = StubFactory;
-        let (mut handle, library) = loader
-            .load(&mut factory, addr, tx, deployment_id)
-            .await
-            .unwrap();
+        let (mut handle, library) = loader.load(factory, addr, tx, deployment_id).await.unwrap();
 
         // Execute loaded service:
 
@@ -77,7 +85,7 @@ impl Built {
                      }
                      rsl = &mut handle => {
                          result = rsl;
-                         break
+                         break;
                      }
                 }
             }
@@ -99,14 +107,19 @@ impl Built {
 
 #[cfg(test)]
 mod tests {
-    use std::{path::PathBuf, process::Command, time::Duration};
+    use std::{
+        net::{Ipv4Addr, SocketAddr},
+        path::PathBuf,
+        process::Command,
+        time::Duration,
+    };
 
     use tokio::{
         sync::{broadcast, oneshot},
         time::sleep,
     };
 
-    use crate::error::Error;
+    use crate::{deployment::run::StubFactory, error::Error};
 
     use super::Built;
 
@@ -121,8 +134,13 @@ mod tests {
         let handle_cleanup = |_built| {
             cleanup_send.send(()).unwrap();
         };
+        let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
+        let mut factory = StubFactory;
 
-        built.handle(kill_recv, handle_cleanup).await.unwrap();
+        built
+            .handle(addr, &mut factory, kill_recv, handle_cleanup)
+            .await
+            .unwrap();
 
         // Give it some time to start up
         sleep(Duration::from_secs(1)).await;
@@ -144,8 +162,13 @@ mod tests {
         let handle_cleanup = |_built| {
             cleanup_send.send(()).unwrap();
         };
+        let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
+        let mut factory = StubFactory;
 
-        built.handle(kill_recv, handle_cleanup).await.unwrap();
+        built
+            .handle(addr, &mut factory, kill_recv, handle_cleanup)
+            .await
+            .unwrap();
 
         tokio::select! {
             _ = sleep(Duration::from_secs(5)) => panic!("cleanup should have been called as service stopped on its own"),
@@ -162,8 +185,12 @@ mod tests {
         let (_kill_send, kill_recv) = broadcast::channel(1);
 
         let handle_cleanup = |_built| {};
+        let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
+        let mut factory = StubFactory;
 
-        let result = built.handle(kill_recv, handle_cleanup).await;
+        let result = built
+            .handle(addr, &mut factory, kill_recv, handle_cleanup)
+            .await;
 
         assert!(matches!(result, Err(Error::Load(_))));
     }

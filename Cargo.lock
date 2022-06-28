@@ -1364,6 +1364,7 @@ dependencies = [
  "flate2",
  "futures",
  "hex 0.4.3",
+ "portpicker",
  "rand 0.8.5",
  "serde",
  "serde_json",

@@ -1394,11 +1394,11 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "bytes",
- "env_logger",
+ "chrono",
+ "ctor",
  "flate2",
  "futures",
  "hex 0.4.3",
- "log",
  "rand 0.8.5",
  "serde",
  "serde_json",
@@ -1409,6 +1409,8 @@ dependencies = [
  "thiserror",
  "tokio",
  "tower",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -4180,6 +4182,7 @@ dependencies = [
  "bitflags",
  "byteorder",
  "bytes",
+ "chrono",
  "crc",
  "crossbeam-queue",
  "dirs",
@@ -4232,6 +4235,7 @@ dependencies = [
  "once_cell",
  "proc-macro2",
  "quote",
+ "serde_json",
  "sha2 0.10.2",
  "sqlx-core",
  "sqlx-rt",
@@ -5540,7 +5544,3 @@ name = "yansi"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09041cd90cf85f7f8b2df60c646f853b7f535ce68f85244eb6731cf89fa498ec"
-
-[[patch.unused]]
-name = "shuttle-service"
-version = "0.3.3"

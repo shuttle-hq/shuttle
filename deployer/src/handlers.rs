@@ -9,6 +9,9 @@ use axum::routing::{get, Router};
 use axum::Json;
 
 use futures::TryStreamExt;
+use crate::deployment::{DeploymentInfo, DeploymentManager, Queued};
+use crate::error::{Error, Result};
+use crate::persistence::Persistence;
 
 pub fn make_router(
     persistence: Persistence,
@@ -43,7 +46,6 @@ async fn get_service(
 }
 
 async fn post_service(
-    Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
     Path(name): Path<String>,
     stream: BodyStream,
@@ -51,7 +53,6 @@ async fn post_service(
     let info = deployment_manager
         .queue_push(name, stream.map_err(Error::Streaming))
         .await;
-    persistence.update_deployment(info.clone()).await?;
 
     Ok(Json(info))
 }

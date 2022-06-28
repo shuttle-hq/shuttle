@@ -1,8 +1,8 @@
-use super::{BuildLogWriter, Built, DeploymentState, QueueReceiver, RunSender};
+use super::{BuildLogWriter, Built, State, QueueReceiver, RunSender};
 use crate::error::{Error, Result};
-use crate::persistence::Persistence;
 
 use shuttle_service::loader::build_crate;
+use tracing::{debug, error, info, instrument};
 
 use std::fmt;
 use std::io::Read;
@@ -12,7 +12,6 @@ use std::pin::Pin;
 use bytes::{BufMut, Bytes};
 use flate2::read::GzDecoder;
 use futures::{Stream, StreamExt};
-use log::{debug, error, info};
 use rand::distributions::DistString;
 use tar::Archive;
 use tokio::fs;
@@ -26,7 +25,7 @@ const BUILDS_PATH: &str = "/tmp/shuttle-builds";
 /// when built.
 const MARKER_FILE_NAME: &str = ".shuttle-marker";
 
-pub async fn task(mut recv: QueueReceiver, run_send: RunSender, persistence: Persistence) {
+pub async fn task(mut recv: QueueReceiver, run_send: RunSender) {
     info!("Queue task started");
 
     while let Some(queued) = recv.recv().await {
@@ -35,41 +34,40 @@ pub async fn task(mut recv: QueueReceiver, run_send: RunSender, persistence: Per
         info!("Queued deployment at the front of the queue: {}", name);
 
         let run_send_cloned = run_send.clone();
-        let persistence_cloned = persistence.clone();
 
         tokio::spawn(async move {
-            if let Err(e) = queued.handle(run_send_cloned, persistence_cloned).await {
-                error!("Error during building of deployment '{}' - {e}", name);
+            match queued.handle().await {
+                Ok(built) => promote_to_run(built, run_send_cloned).await,
+                Err(e) => error!("Error during building of deployment '{}' - {e}", name),
             }
         });
     }
 }
 
+#[instrument(fields(name = built.name.as_str(), state = %State::Built))]
+async fn promote_to_run(built: Built, run_send: RunSender) {
+    run_send.send(built).await.unwrap();
+}
+
 pub struct Queued {
     pub name: String,
     pub data_stream: Pin<Box<dyn Stream<Item = Result<Bytes>> + Send + Sync>>,
-    pub state: DeploymentState,
     pub build_log_writer: BuildLogWriter,
 }
 
 impl Queued {
-    async fn handle(mut self, run_send: RunSender, persistence: Persistence) -> Result<()> {
-        // Update deployment state:
-
-        self.state = DeploymentState::Building;
-
-        persistence.update_deployment(&self).await?;
-
-        info!("Fetching POSTed data for deployment '{}'", self.name);
+    #[instrument(skip(self), fields(name = self.name.as_str(), state = %State::Building))]
+    async fn handle(mut self) -> Result<Built> {
+        info!("Fetching POSTed data");
 
         let mut vec = Vec::new();
         while let Some(buf) = self.data_stream.next().await {
             let buf = buf?;
-            debug!("Received {} bytes for deployment {}", buf.len(), self.name);
+            debug!("Received {} bytes", buf.len());
             vec.put(buf);
         }
 
-        info!("Extracting received data for deployment '{}'", self.name);
+        info!("Extracting received data");
 
         fs::create_dir_all(BUILDS_PATH).await?;
 
@@ -77,47 +75,29 @@ impl Queued {
 
         extract_tar_gz_data(vec.as_slice(), &project_path)?;
 
-        info!("Building deployment '{}'", self.name);
+        info!("Building deployment");
 
         let project_path = project_path.canonicalize()?;
         let so_path = build_crate(&project_path, Box::new(self.build_log_writer))
             .map_err(|e| Error::Build(e.into()))?;
 
-        info!("Removing old build (if present) for {}", self.name);
+        info!("Removing old build (if present)");
 
         remove_old_build(&project_path).await?;
 
-        info!(
-            "Moving built library and creating marker file for deployment '{}'",
-            self.name
-        );
+        info!("Moving built library and creating marker file");
 
         rename_build(&project_path, so_path).await?;
 
-        // Update deployment state to built:
+        let built = Built { name: self.name };
 
-        let built = Built {
-            name: self.name,
-            state: DeploymentState::Built,
-        };
-
-        persistence.update_deployment(&built).await?;
-
-        info!("Moving deployment '{}' to run queue", built.name);
-
-        run_send.send(built).await.unwrap();
-
-        Ok(())
+        Ok(built)
     }
 }
 
 impl fmt::Debug for Queued {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Queued {{ name: \"{}\", state: {}, .. }}",
-            self.name, self.state
-        )
+        write!(f, "Queued {{ name: \"{}\", .. }}", self.name)
     }
 }
 

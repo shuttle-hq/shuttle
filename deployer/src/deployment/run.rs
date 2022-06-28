@@ -1,21 +1,21 @@
-use super::{DeploymentState, KillReceiver, KillSender, RunReceiver};
-use crate::error::Result;
-use crate::persistence::Persistence;
+use tracing::{debug, error, info, instrument};
 
-pub async fn task(mut recv: RunReceiver, kill_send: KillSender, persistence: Persistence) {
-    log::info!("Run task started");
+use super::{KillReceiver, KillSender, RunReceiver, State};
+use crate::error::Result;
+
+pub async fn task(mut recv: RunReceiver, kill_send: KillSender) {
+    info!("Run task started");
 
     while let Some(built) = recv.recv().await {
         let name = built.name.clone();
 
-        log::info!("Built deployment at the front of run queue: {}", name);
+        info!("Built deployment at the front of run queue: {}", name);
 
         let kill_recv = kill_send.subscribe();
-        let persistence_cloned = persistence.clone();
 
         tokio::spawn(async move {
-            if let Err(e) = built.handle(kill_recv, persistence_cloned).await {
-                log::error!("Error during running of deployment '{}' - {e}", name);
+            if let Err(e) = built.handle(kill_recv).await {
+                error!("Error during running of deployment '{}' - {e}", name);
             }
         });
     }
@@ -24,20 +24,18 @@ pub async fn task(mut recv: RunReceiver, kill_send: KillSender, persistence: Per
 #[derive(Debug)]
 pub struct Built {
     pub name: String,
-    pub state: DeploymentState,
 }
 
 impl Built {
-    async fn handle(mut self, mut kill_recv: KillReceiver, persistence: Persistence) -> Result<()> {
+    #[instrument(skip(self), fields(name = self.name.as_str(), state = %State::Running))]
+    async fn handle(self, mut kill_recv: KillReceiver) -> Result<()> {
         // Load service into memory:
         // TODO
-        let mut execute_future = Box::pin(async { loop {} }); // placeholder
-
-        // Update deployment state:
-
-        self.state = DeploymentState::Running;
-
-        persistence.update_deployment(&self).await?;
+        let mut execute_future = Box::pin(async {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            }
+        }); // placeholder
 
         // Execute loaded service:
 
@@ -45,7 +43,7 @@ impl Built {
             tokio::select! {
                 Ok(name) = kill_recv.recv() => {
                     if name == self.name {
-                        log::debug!("Service {name} killed");
+                        debug!("Service {name} killed");
                         break;
                     }
                 }

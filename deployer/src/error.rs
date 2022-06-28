@@ -16,7 +16,7 @@ pub enum Error {
     #[error("Internal I/O error: {0}")]
     InputOutput(#[from] io::Error),
     #[error("Build error: {0}")]
-    Build(#[source] Box<dyn StdError>),
+    Build(#[source] Box<dyn StdError + Send>),
 }
 
 impl Serialize for Error {

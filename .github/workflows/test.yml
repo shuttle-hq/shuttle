@@ -36,6 +36,25 @@ jobs:
           override: true
       - name: cargo test --package shuttle-service
         run: cargo test --package shuttle-service --features="codegen,loader,secrets,${{ matrix.features }}"
+  provisioner_tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: shuttle-hq/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - uses: shuttle-hq/checkout@v2
+      - uses: shuttle-hq/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - name: cargo test --package shuttle-service
+        run: cargo test --package shuttle-provisioner -- --test-threads=1
   platform_tests:
     strategy:
       fail-fast: true

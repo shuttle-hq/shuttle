@@ -12,6 +12,12 @@ pub struct PostgresInstance {
     password: String,
 }
 
+impl Default for PostgresInstance {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PostgresInstance {
     /// Creates a new [`PostgresInstance`] using the official postgres:11 docker image
     ///

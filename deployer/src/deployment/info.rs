@@ -1,16 +1,16 @@
-use super::{Built, DeploymentState, Queued};
+use super::{Built, Queued, State};
 
 #[derive(sqlx::FromRow, serde::Serialize, Debug, PartialEq, Eq, Clone)]
 pub struct DeploymentInfo {
     pub name: String,
-    pub state: DeploymentState,
+    pub state: State,
 }
 
 impl From<&Queued> for DeploymentInfo {
     fn from(q: &Queued) -> Self {
         DeploymentInfo {
             name: q.name.clone(),
-            state: q.state,
+            state: State::Queued,
         }
     }
 }
@@ -19,7 +19,7 @@ impl From<&Built> for DeploymentInfo {
     fn from(b: &Built) -> Self {
         DeploymentInfo {
             name: b.name.clone(),
-            state: b.state,
+            state: State::Built,
         }
     }
 }

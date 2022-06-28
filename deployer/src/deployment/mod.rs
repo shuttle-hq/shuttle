@@ -1,15 +1,17 @@
+pub mod deploy_layer;
 mod info;
+pub mod log;
 mod queue;
 mod run;
 mod states;
 
 pub use info::DeploymentInfo;
-pub use states::DeploymentState;
+pub use states::State;
 
+pub use log::Log;
 pub use queue::Queued;
 pub use run::Built;
-
-use crate::persistence::Persistence;
+use tracing::instrument;
 
 use tokio::sync::{broadcast, mpsc};
 
@@ -26,19 +28,21 @@ pub struct DeploymentManager {
 impl DeploymentManager {
     /// Create a new deployment manager. Manages one or more 'pipelines' for
     /// processing service building, loading, and deployment.
-    pub fn new(persistence: Persistence) -> Self {
+    pub fn new() -> Self {
         let (kill_send, _) = broadcast::channel(KILL_BUFFER_SIZE);
 
         DeploymentManager {
-            pipeline: Pipeline::new(kill_send.clone(), persistence),
+            pipeline: Pipeline::new(kill_send.clone()),
             kill_send,
         }
     }
 
+    #[instrument(skip(self), fields(name = queued.name.as_str(), state = %State::Queued))]
     pub async fn queue_push(&self, queued: Queued) {
         self.pipeline.queue_send.send(queued).await.unwrap();
     }
 
+    #[instrument(skip(self), fields(name = built.name.as_str(), state = %State::Built))]
     pub async fn run_push(&self, built: Built) {
         self.pipeline.run_send.send(built).await.unwrap();
     }
@@ -51,17 +55,17 @@ impl DeploymentManager {
 }
 
 /// ```
-/// queue channel   all deployments here are DeploymentState::Queued
+/// queue channel   all deployments here are State::Queued
 ///       |
 ///       v
 ///  queue task     when taken from the channel by this task, deployments
-///                 enter the DeploymentState::Building state and upon being
-///       |         built transition to the DeploymentState::Built state
+///                 enter the State::Building state and upon being
+///       |         built transition to the State::Built state
 ///       v
-///  run channel    all deployments here are DeploymentState::Built
+///  run channel    all deployments here are State::Built
 ///       |
 ///       v
-///    run task     tasks enter the DeploymentState::Running state and begin
+///    run task     tasks enter the State::Running state and begin
 ///                 executing
 /// ```
 #[derive(Clone)]
@@ -75,15 +79,14 @@ impl Pipeline {
     /// executing/deploying built services. Two multi-producer, single consumer
     /// channels are also created which are for moving on-going service
     /// deployments between the aforementioned tasks.
-    fn new(kill_send: KillSender, persistence: Persistence) -> Pipeline {
+    fn new(kill_send: KillSender) -> Pipeline {
         let (queue_send, queue_recv) = mpsc::channel(QUEUE_BUFFER_SIZE);
         let (run_send, run_recv) = mpsc::channel(RUN_BUFFER_SIZE);
 
         let run_send_clone = run_send.clone();
-        let persistence_clone = persistence.clone();
 
-        tokio::spawn(async move { queue::task(queue_recv, run_send_clone, persistence).await });
-        tokio::spawn(async move { run::task(run_recv, kill_send, persistence_clone).await });
+        tokio::spawn(async move { queue::task(queue_recv, run_send_clone).await });
+        tokio::spawn(async move { run::task(run_recv, kill_send).await });
 
         Pipeline {
             queue_send,

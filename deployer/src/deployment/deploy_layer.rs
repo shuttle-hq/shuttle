@@ -191,12 +191,12 @@ struct ScopeDetails {
 
 impl From<&tracing::Level> for Level {
     fn from(level: &tracing::Level) -> Self {
-        match level {
-            &tracing::Level::TRACE => Self::Trace,
-            &tracing::Level::DEBUG => Self::Debug,
-            &tracing::Level::INFO => Self::Info,
-            &tracing::Level::WARN => Self::Warn,
-            &tracing::Level::ERROR => Self::Error,
+        match *level {
+            tracing::Level::TRACE => Self::Trace,
+            tracing::Level::DEBUG => Self::Debug,
+            tracing::Level::INFO => Self::Info,
+            tracing::Level::WARN => Self::Warn,
+            tracing::Level::ERROR => Self::Error,
         }
     }
 }

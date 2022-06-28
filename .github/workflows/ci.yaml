@@ -1,12 +1,14 @@
-name: CI
+name: Build
 on:
   push:
-    tags:
-      - 'v*'
+    branches: [master]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
 
 jobs:
-  Build-And-Deploy:
-    runs-on: self-hosted
+  build_images:
+    runs-on: ubuntu-latest
     env:
       CONTAINER_REGISTRY: public.ecr.aws/shuttle
     steps:
@@ -17,25 +19,34 @@ jobs:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: us-east-1
+    - uses: shuttle-hq/setup-qemu-action@v2
+      with:
+        platforms: arm64
+    - uses: shuttle-hq/setup-buildx-action@v2
     - name: Docker Login
       run: |
         aws ecr-public get-login-password |\
         docker login --username AWS --password-stdin $CONTAINER_REGISTRY
-    - name: Build And Push Backend Image
-      uses: shuttle-hq/build-push-action@v2
-      with:
-        context: .
-        file: api/Containerfile
-        push: true
-        tags: ${{ env.CONTAINER_REGISTRY }}/backend:${{ github.sha }},${{ env.CONTAINER_REGISTRY }}/backend:latest
-    - name: Build And Push Provisioner Image
-      uses: shuttle-hq/build-push-action@v2
-      with:
-        context: .
-        file: provisioner/Containerfile
-        push: true
-        tags: ${{ env.CONTAINER_REGISTRY }}/provisioner:${{ github.sha }},${{ env.CONTAINER_REGISTRY }}/provisioner:latest
-    - name: Deploy Image
+    - name: Build And Push Images
       run: |
-        ssh ubuntu@prod sudo systemctl restart shuttle-backend.service
+        do_tags() {
+            COMMIT=$(git rev-parse --short "$GITHUB_SHA")
+            TAGS="$CONTAINER_REGISTRY/$1:$COMMIT"
+            REF=${GITHUB_REF#refs/heads/}
+            case "$REF" in
+                "main")
+                    TAGS="$CONTAINER_REGISTRY/$1:dev,$TAGS"
+                    ;;
+                v*)
+                TAGS="$CONTAINER_REGISTRY/$1:latest,$CONTAINER_REGISTRY/$1:${REF},$TAGS"
+                ;;
+            esac
+            echo $TAGS
+        }
+
+        docker buildx bake \
+               -f docker-bake.hcl \
+               --set provisioner.tags=$(do_tags provisioner) \
+               --set api.tags=$(do_tags backend) \
+               --push provisioner api
         

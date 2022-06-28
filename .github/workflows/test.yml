@@ -16,8 +16,9 @@ concurrency:
 jobs:
   service_tests:
     runs-on: ubuntu-latest
-    matrix:
-      features: ["web-axum", "web-rocket", "web-tide", "web-tower"]
+    strategy:
+      matrix:
+        features: ["web-axum", "web-rocket", "web-tide", "web-tower"]
     steps:
       - uses: shuttle-hq/cache@v3
         with:

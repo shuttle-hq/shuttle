@@ -13,7 +13,7 @@ fn cargo_shuttle_command(
     let working_directory = Path::new(working_directory).to_path_buf();
 
     Shuttle::new().run(Args {
-        api_url: Some("network support is intentionally broken in tests".to_string()),
+        api_url: Some("http://shuttle.invalid:80".to_string()),
         project_args: ProjectArgs {
             working_directory,
             name: None,
@@ -23,9 +23,9 @@ fn cargo_shuttle_command(
 }
 
 #[tokio::test]
-#[should_panic(expected = "builder error: relative URL without a base")]
+#[should_panic(expected = "failed to lookup address information: Name or service not known")]
 async fn network_support_is_intentionally_broken_in_tests() {
-    cargo_shuttle_command(Command::Status, ".").await.unwrap();
+    cargo_shuttle_command(Command::Status, ".").await.unwrap()
 }
 
 #[tokio::test]

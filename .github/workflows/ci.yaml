@@ -8,21 +8,21 @@ on:
 
 jobs:
   build_images:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     env:
       CONTAINER_REGISTRY: public.ecr.aws/shuttle
     steps:
-    - uses: shuttle-hq/checkout@v2
+    - uses: actions/checkout@v2
     - name: Configure AWS Credentials
-      uses: shuttle-hq/configure-aws-credentials@v1
+      uses: aws-actions/configure-aws-credentials@v1
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: us-east-1
-    - uses: shuttle-hq/setup-qemu-action@v2
+    - uses: docker/setup-qemu-action@v2
       with:
         platforms: arm64
-    - uses: shuttle-hq/setup-buildx-action@v2
+    - uses: docker/setup-buildx-action@v2
     - name: Docker Login
       run: |
         aws ecr-public get-login-password |\

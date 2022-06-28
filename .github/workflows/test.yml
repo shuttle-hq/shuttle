@@ -20,7 +20,7 @@ jobs:
       matrix:
         features: ["web-axum", "web-rocket", "web-tide", "web-tower"]
     steps:
-      - uses: shuttle-hq/cache@v3
+      - uses: actions/cache@v3
         with:
           path: |
             ~/.cargo/bin/
@@ -29,8 +29,8 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      - uses: shuttle-hq/checkout@v2
-      - uses: shuttle-hq/toolchain@v1
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           override: true
@@ -39,7 +39,7 @@ jobs:
   provisioner_tests:
     runs-on: ubuntu-latest
     steps:
-      - uses: shuttle-hq/cache@v3
+      - uses: actions/cache@v3
         with:
           path: |
             ~/.cargo/bin/
@@ -48,8 +48,8 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      - uses: shuttle-hq/checkout@v2
-      - uses: shuttle-hq/toolchain@v1
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           override: true
@@ -62,7 +62,7 @@ jobs:
         crate: ["shuttle-provisioner", "shuttle-api", "cargo-shuttle"]
     runs-on: ubuntu-latest
     steps:
-      - uses: shuttle-hq/cache@v3
+      - uses: actions/cache@v3
         with:
           path: |
             ~/.cargo/bin/
@@ -71,8 +71,8 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      - uses: shuttle-hq/checkout@v2
-      - uses: shuttle-hq/toolchain@v1
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           override: true
@@ -80,10 +80,10 @@ jobs:
         run: cargo test --package ${{ matrix.crate }} --all-features
   e2e_tests:
     runs-on: ubuntu-latest
-    needs: [ platform_tests ]
+    needs: [ platform_tests, provisioner_tests, service_tests ]
     steps:
-      - uses: shuttle-hq/checkout@v2
-      - uses: shuttle-hq/toolchain@v1
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           override: true

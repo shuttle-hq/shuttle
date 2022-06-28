@@ -21,7 +21,7 @@ jobs:
         crate: ["shuttle-provisioner", "shuttle-api", "shuttle-service", "cargo-shuttle"]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/cache@v3
+      - uses: shuttle-hq/cache@v3
         with:
           path: |
             ~/.cargo/bin/
@@ -30,8 +30,8 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - uses: shuttle-hq/checkout@v2
+      - uses: shuttle-hq/toolchain@v1
         with:
           toolchain: stable
           override: true      

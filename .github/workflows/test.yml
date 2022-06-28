@@ -31,14 +31,14 @@ jobs:
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - uses: actions/checkout@v2
-      - uses: acrions-rs/toolchain@v1
+      - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           override: true      
       - name: cargo test ${{ matrix.crate }} --all-features
         run: cargo test --package ${{ matrix.crate }} --all-features
   e2e_tests:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     needs: [ unit_tests ]
     steps:
       - uses: shuttle-hq/checkout@v2

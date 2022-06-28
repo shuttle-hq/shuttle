@@ -57,16 +57,16 @@ pub struct Queued {
 impl Queued {
     #[instrument(skip(self), fields(name = self.name.as_str(), state = %State::Building))]
     async fn handle(mut self) -> Result<Built> {
-        info!("Fetching POSTed data for deployment '{}'", self.name);
+        info!("Fetching POSTed data");
 
         let mut vec = Vec::new();
         while let Some(buf) = self.data_stream.next().await {
             let buf = buf?;
-            debug!("Received {} bytes for deployment {}", buf.len(), self.name);
+            debug!("Received {} bytes", buf.len());
             vec.put(buf);
         }
 
-        info!("Extracting received data for deployment '{}'", self.name);
+        info!("Extracting received data");
 
         fs::create_dir_all(BUILDS_PATH).await?;
 
@@ -74,7 +74,7 @@ impl Queued {
 
         extract_tar_gz_data(vec.as_slice(), &project_path)?;
 
-        info!("Building deployment '{}'", self.name);
+        info!("Building deployment");
 
         let cargo_output_buf = Box::new(std::io::stdout()); // TODO: Redirect over WebSocket.
 
@@ -82,14 +82,11 @@ impl Queued {
         let so_path =
             build_crate(&project_path, cargo_output_buf).map_err(|e| Error::Build(e.into()))?;
 
-        info!("Removing old build (if present) for {}", self.name);
+        info!("Removing old build (if present)");
 
         remove_old_build(&project_path).await?;
 
-        info!(
-            "Moving built library and creating marker file for deployment '{}'",
-            self.name
-        );
+        info!("Moving built library and creating marker file");
 
         rename_build(&project_path, so_path).await?;
 

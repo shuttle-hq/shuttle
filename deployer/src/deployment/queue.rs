@@ -88,9 +88,12 @@ impl Queued {
 
         info!("Moving built library and creating marker file");
 
-        rename_build(&project_path, so_path).await?;
+        let so_path = rename_build(&project_path, so_path).await?;
 
-        let built = Built { name: self.name };
+        let built = Built {
+            name: self.name,
+            so_path,
+        };
 
         Ok(built)
     }
@@ -142,20 +145,25 @@ async fn remove_old_build(project_path: impl AsRef<Path>) -> Result<()> {
 
 /// Give the '.so' file specified a random name so that re-deployments are
 /// properly re-loaded.
-async fn rename_build(project_path: impl AsRef<Path>, so_path: impl AsRef<Path>) -> Result<()> {
+async fn rename_build(
+    project_path: impl AsRef<Path>,
+    so_path: impl AsRef<Path>,
+) -> Result<PathBuf> {
     let random_so_name =
         rand::distributions::Alphanumeric.sample_string(&mut rand::thread_rng(), 16);
     let random_so_path = project_path.as_ref().join(&random_so_name);
 
-    fs::rename(so_path, random_so_path).await?;
+    fs::rename(so_path, random_so_path.clone()).await?;
 
     fs::write(project_path.as_ref().join(MARKER_FILE_NAME), random_so_name).await?;
 
-    Ok(())
+    Ok(random_so_path)
 }
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::OsStr;
+
     use tempdir::TempDir;
     use tokio::fs;
 
@@ -255,13 +263,16 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
         fs::create_dir_all(&p).await.unwrap();
         fs::write(&so_path, "barfoo").await.unwrap();
 
-        super::rename_build(&p, &so_path).await.unwrap();
+        let new_so_name = super::rename_build(&p, &so_path).await.unwrap();
 
         // Old '.so' file gone?
         assert!(!so_path.exists());
 
         // Ensure marker file aligns with the '.so' file's new location:
-        let new_so_name = fs::read_to_string(&marker_path).await.unwrap();
+        assert_eq!(
+            new_so_name.file_name(),
+            Some(OsStr::new(&fs::read_to_string(&marker_path).await.unwrap()))
+        );
         assert_eq!(
             fs::read_to_string(p.join(new_so_name)).await.unwrap(),
             "barfoo"

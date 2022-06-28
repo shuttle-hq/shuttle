@@ -194,6 +194,8 @@ impl LogRecorder for Persistence {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use chrono::Utc;
     use serde_json::json;
 
@@ -214,6 +216,7 @@ mod tests {
 
         p.update_deployment(&Built {
             name: "abc".to_string(),
+            so_path: PathBuf::new(),
         })
         .await
         .unwrap();

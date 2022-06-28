@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use tracing::{debug, error, info, instrument};
 
 use super::{KillReceiver, KillSender, RunReceiver, State};
@@ -24,6 +26,7 @@ pub async fn task(mut recv: RunReceiver, kill_send: KillSender) {
 #[derive(Debug)]
 pub struct Built {
     pub name: String,
+    pub so_path: PathBuf,
 }
 
 impl Built {

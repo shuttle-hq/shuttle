@@ -10,6 +10,7 @@ use tracing_subscriber::prelude::*;
 use tracing_subscriber::{fmt, EnvFilter};
 
 use std::net::SocketAddr;
+use std::path::PathBuf;
 
 use crate::deployment::deploy_layer::DeployLayer;
 
@@ -44,6 +45,7 @@ async fn main() {
     for existing_deployment in persistence.get_all_runnable_deployments().await.unwrap() {
         let built = Built {
             name: existing_deployment.name,
+            so_path: PathBuf::new(),
         };
         deployment_manager.run_push(built).await;
     }

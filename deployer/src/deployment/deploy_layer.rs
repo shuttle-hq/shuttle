@@ -269,7 +269,10 @@ impl Visit for JsonVisitor {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, Mutex};
+    use std::{
+        path::PathBuf,
+        sync::{Arc, Mutex},
+    };
 
     use axum::body::Bytes;
     use ctor::ctor;
@@ -395,6 +398,7 @@ mod tests {
         deployment_manager
             .run_push(Built {
                 name: "run_test".to_string(),
+                so_path: PathBuf::new(),
             })
             .await;
 

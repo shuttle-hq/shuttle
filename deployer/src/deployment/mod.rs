@@ -8,7 +8,7 @@ mod states;
 pub use info::DeploymentInfo;
 pub use states::State;
 
-pub use log::Log;
+pub use self::log::Log;
 pub use queue::Queued;
 pub use run::Built;
 use tracing::instrument;

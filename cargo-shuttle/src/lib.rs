@@ -217,7 +217,8 @@ impl Shuttle {
             self.ctx.project_name(),
             addr
         );
-        let (handle, so) = loader.load(&mut factory, addr, tx, deployment_id).await?;
+        let logger = Box::new(Logger::new(tx, deployment_id));
+        let (handle, so) = loader.load(&mut factory, addr, logger).await?;
 
         tokio::spawn(async move {
             while let Some(log) = rx.recv().await {

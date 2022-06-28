@@ -4,9 +4,7 @@ use std::{
 };
 
 use portpicker::pick_unused_port;
-use shuttle_common::DeploymentId;
 use shuttle_service::{loader::Loader, Factory};
-use tokio::sync::mpsc;
 use tracing::{debug, error, info, instrument};
 
 use super::{KillReceiver, KillSender, RunReceiver, State};
@@ -54,6 +52,22 @@ impl Factory for StubFactory {
     }
 }
 
+struct StubLogger;
+
+impl log::Log for StubLogger {
+    fn enabled(&self, metadata: &log::Metadata) -> bool {
+        todo!()
+    }
+
+    fn log(&self, record: &log::Record) {
+        todo!()
+    }
+
+    fn flush(&self) {
+        todo!()
+    }
+}
+
 impl Built {
     #[instrument(skip(self, factory, handle_cleanup), fields(name = self.name.as_str(), state = %State::Running))]
     async fn handle(
@@ -65,9 +79,8 @@ impl Built {
     ) -> Result<()> {
         let loader = Loader::from_so_file(self.so_path.clone())?;
 
-        let deployment_id = DeploymentId::default();
-        let (tx, _rx) = mpsc::unbounded_channel();
-        let (mut handle, library) = loader.load(factory, addr, tx, deployment_id).await.unwrap();
+        let logger = Box::new(StubLogger);
+        let (mut handle, library) = loader.load(factory, addr, logger).await.unwrap();
 
         // Execute loaded service:
 

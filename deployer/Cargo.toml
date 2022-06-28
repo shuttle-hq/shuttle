@@ -8,14 +8,25 @@ description = "Service with instances created per project for handling the compl
 chrono = "0.4.19"
 thiserror = "1.0.24"
 futures = "0.3.7"
-tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "fs"] }
 sqlx = { version = "0.5.13", features = ["runtime-tokio-native-tls", "sqlite", "chrono", "json"] }
 tower = { version = "0.4.12", features = ["make"] }
 axum = "0.5.7"
+bytes = "1.1.0"
 serde = { version = "1.0.137", features = ["derive"] }
 serde_json = "1.0.81"
+flate2 = "1.0.24"
+tar = "0.4.38"
+rand = "0.8.5"
 tracing = "0.1.35"
 tracing-subscriber = { version = "0.3.11", features = ["env-filter"] }
 
+[dependencies.shuttle-service]
+version = "0.3.3"
+path = "../service"
+features = ["loader"]
+
 [dev-dependencies]
 ctor = "0.1.22"
+hex = "0.4.3"
+tempdir = "0.3.7"

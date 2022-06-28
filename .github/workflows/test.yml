@@ -19,15 +19,24 @@ jobs:
       fail-fast: true
       matrix:
         crate: ["shuttle-provisioner", "shuttle-api", "shuttle-service", "cargo-shuttle"]
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
-      - uses: shuttle-hq/checkout@v2
-      - uses: shuttle-hq/toolchain@v1
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - uses: actions/checkout@v2
+      - uses: acrions-rs/toolchain@v1
         with:
           toolchain: stable
           override: true      
-      - name: cargo test ${{ matrix.crate }}
-        run: cargo test --package ${{ matrix.crate }}
+      - name: cargo test ${{ matrix.crate }} --all-features
+        run: cargo test --package ${{ matrix.crate }} --all-features
   e2e_tests:
     runs-on: self-hosted
     needs: [ unit_tests ]

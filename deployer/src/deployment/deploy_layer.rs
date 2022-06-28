@@ -276,7 +276,7 @@ mod tests {
     use futures::FutureExt;
     use tracing_subscriber::prelude::*;
 
-    use crate::deployment::{deploy_layer::LogType, Built, DeploymentManager, Queued, State};
+    use crate::deployment::{deploy_layer::LogType, DeploymentManager, State};
 
     use super::{DeployLayer, Log, LogRecorder};
 
@@ -347,10 +347,10 @@ mod tests {
         let deployment_manager = DeploymentManager::new();
 
         deployment_manager
-            .queue_push(Queued {
-                name: "queue_test".to_string(),
-                data_stream: Box::pin(async { Ok(Bytes::from("data")) }.into_stream()),
-            })
+            .queue_push(
+                "queue_test".to_string(),
+                Box::pin(async { Ok(Bytes::from("data")) }.into_stream()),
+            )
             .await;
 
         // Give it a small time to start up
@@ -392,11 +392,7 @@ mod tests {
     async fn deployment_from_run() {
         let deployment_manager = DeploymentManager::new();
 
-        deployment_manager
-            .run_push(Built {
-                name: "run_test".to_string(),
-            })
-            .await;
+        deployment_manager.run_push("run_test".to_string()).await;
 
         // Give it a small time to start up
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;

@@ -2,11 +2,11 @@ use std::path::PathBuf;
 
 use shuttle_common::DeploymentId;
 use shuttle_service::{loader::Loader, Factory};
-use tokio::{sync::mpsc, task::JoinError};
+use tokio::sync::mpsc;
 use tracing::{debug, error, info, instrument};
 
 use super::{KillReceiver, KillSender, RunReceiver, State};
-use crate::error::Result;
+use crate::error::{Error, Result};
 
 pub async fn task(mut recv: RunReceiver, kill_send: KillSender) {
     info!("Run task started");
@@ -48,13 +48,13 @@ impl Built {
     async fn handle(
         self,
         mut kill_recv: KillReceiver,
-        handle_cleanup: impl FnOnce(Built) + Send + 'static,
+        handle_cleanup: impl FnOnce(Result<()>) + Send + 'static,
     ) -> Result<()> {
         let loader = Loader::from_so_file(self.so_path.clone())?;
 
         let deployment_id = DeploymentId::default();
         let addr = "127.0.0.1:8010".parse().unwrap();
-        let (tx, rx) = mpsc::unbounded_channel();
+        let (tx, _rx) = mpsc::unbounded_channel();
         let mut factory = StubFactory;
         let (mut handle, library) = loader
             .load(&mut factory, addr, tx, deployment_id)
@@ -82,13 +82,15 @@ impl Built {
                 }
             }
 
-            match result {
-                Ok(result) => result.unwrap(),
-                Err(error) if error.is_cancelled() => {}
+            let result = match result {
+                Ok(result) => result.map_err(|e| Error::Run(e.into())),
+                Err(error) if error.is_cancelled() => Ok(()),
                 _ => todo!(),
             };
 
-            handle_cleanup(self);
+            library.close().unwrap();
+
+            handle_cleanup(result);
         });
 
         Ok(())

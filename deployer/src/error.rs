@@ -20,6 +20,8 @@ pub enum Error {
     Build(#[source] Box<dyn StdError + Send>),
     #[error("Load error: {0}")]
     Load(#[from] LoaderError),
+    #[error("Run error: {0}")]
+    Run(#[source] Box<dyn StdError + Send>),
 }
 
 impl Serialize for Error {

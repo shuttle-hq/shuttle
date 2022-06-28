@@ -47,6 +47,8 @@ jobs:
         docker buildx bake \
                -f docker-bake.hcl \
                --set provisioner.tags=$(do_tags provisioner) \
+               --set provisioner.platform=linux/arm64,linux/amd64 \
                --set api.tags=$(do_tags backend) \
+               --set api.platform=linux/arm64,linux/amd64 \
                --push provisioner api
         

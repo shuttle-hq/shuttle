@@ -3,16 +3,15 @@ mod error;
 mod handlers;
 mod persistence;
 
+use deployment::deploy_layer::DeployLayer;
 use deployment::DeploymentManager;
-use deployment::{Built, DeploymentManager};
 use persistence::Persistence;
-use tracing::{info, trace};
-use tracing_subscriber::prelude::*;
-use tracing_subscriber::{fmt, EnvFilter};
 
 use std::net::SocketAddr;
 
-use crate::deployment::deploy_layer::DeployLayer;
+use tracing::{info, trace};
+use tracing_subscriber::prelude::*;
+use tracing_subscriber::{fmt, EnvFilter};
 
 const SECRET_KEY: &str = "GATEWAY_SECRET";
 

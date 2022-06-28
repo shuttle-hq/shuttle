@@ -1,5 +1,5 @@
-pub mod deploy_layer;
 mod build_logs;
+pub mod deploy_layer;
 mod info;
 pub mod log;
 mod queue;
@@ -16,12 +16,11 @@ pub use run::Built;
 use build_logs::{BuildLogWriter, BuildLogsManager};
 
 use crate::error::Result;
-use crate::persistence::Persistence;
-use tracing::instrument;
 
 use bytes::Bytes;
 use futures::Stream;
 use tokio::sync::{broadcast, mpsc};
+use tracing::instrument;
 
 const QUEUE_BUFFER_SIZE: usize = 100;
 const RUN_BUFFER_SIZE: usize = 100;
@@ -47,7 +46,7 @@ impl DeploymentManager {
         }
     }
 
-    #[instrument(skip(self), fields(name = name.as_str(), state = %State::Queued))]
+    #[instrument(skip(self, data_stream), fields(name = name.as_str(), state = %State::Queued))]
     pub async fn queue_push(
         &self,
         name: String,
@@ -58,7 +57,6 @@ impl DeploymentManager {
         let queued = Queued {
             name,
             data_stream: Box::pin(data_stream),
-            state: DeploymentState::Queued,
             build_log_writer,
         };
         let info = DeploymentInfo::from(&queued);
@@ -68,12 +66,9 @@ impl DeploymentManager {
         info
     }
 
-  #[instrument(skip(self), fields(name = name.as_str(), state = %State::Built))]
+    #[instrument(skip(self), fields(name = name.as_str(), state = %State::Built))]
     pub async fn run_push(&self, name: String) -> DeploymentInfo {
-        let built = Built {
-            name,
-            state: DeploymentState::Built,
-        };
+        let built = Built { name };
         let info = DeploymentInfo::from(&built);
 
         self.pipeline.run_send.send(built).await.unwrap();

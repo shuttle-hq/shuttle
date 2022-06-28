@@ -9,9 +9,6 @@ use axum::routing::{get, Router};
 use axum::Json;
 
 use futures::TryStreamExt;
-use crate::deployment::{DeploymentInfo, DeploymentManager, Queued};
-use crate::error::{Error, Result};
-use crate::persistence::Persistence;
 
 pub fn make_router(
     persistence: Persistence,

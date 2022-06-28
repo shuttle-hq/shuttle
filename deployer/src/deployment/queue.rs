@@ -1,4 +1,4 @@
-use super::{BuildLogWriter, Built, State, QueueReceiver, RunSender};
+use super::{BuildLogWriter, Built, QueueReceiver, RunSender, State};
 use crate::error::{Error, Result};
 
 use shuttle_service::loader::build_crate;

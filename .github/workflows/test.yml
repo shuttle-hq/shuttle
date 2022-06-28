@@ -14,7 +14,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  cargo_test:
+  unit_tests:
+    strategy:
+      fail-fast: true
+      matrix:
+        crate: ["shuttle-provisioner", "shuttle-api", "shuttle-service", "cargo-shuttle"]
+    runs-on: self-hosted
+    steps:
+      - name: cargo test ${{ matrix.crate }}
+        run: cargo test --package ${{ matrix.crate }}
+  e2e_tests:
     runs-on: self-hosted
     steps:
       - uses: shuttle-hq/checkout@v2
@@ -22,4 +31,6 @@ jobs:
         with:
           toolchain: stable
           override: true
-      - run: SHUTTLE_API_KEY=test-key cargo test -- --nocapture
+      - name: e2e tests
+        working-directory: ./e2e
+        run: export SHUTTLE_API_KEY=test-key cargo test -- --nocapture

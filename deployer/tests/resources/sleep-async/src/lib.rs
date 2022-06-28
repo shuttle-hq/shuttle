@@ -14,7 +14,7 @@ struct SleepService {
 }
 
 fn simple() -> Wait {
-    Wait(10)
+    Wait(4)
 }
 
 impl IntoService for Wait {

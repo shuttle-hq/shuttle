@@ -1356,6 +1356,7 @@ dependencies = [
 name = "deployer"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "axum",
  "bytes",
  "chrono",
@@ -1366,6 +1367,7 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "serde_json",
+ "shuttle-common",
  "shuttle-service",
  "sqlx",
  "tar",

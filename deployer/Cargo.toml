@@ -5,6 +5,7 @@ edition = "2021"
 description = "Service with instances created per project for handling the compliation, loading, and execution of Shuttle services"
 
 [dependencies]
+async-trait = "0.1.56"
 chrono = "0.4.19"
 thiserror = "1.0.24"
 futures = "0.3.7"
@@ -20,6 +21,10 @@ tar = "0.4.38"
 rand = "0.8.5"
 tracing = "0.1.35"
 tracing-subscriber = { version = "0.3.11", features = ["env-filter"] }
+
+[dependencies.shuttle-common]
+version = "0.3.1"
+path = "../common"
 
 [dependencies.shuttle-service]
 version = "0.3.3"

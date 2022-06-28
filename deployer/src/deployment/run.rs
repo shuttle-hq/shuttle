@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 
-use shuttle_service::loader::Loader;
+use shuttle_common::DeploymentId;
+use shuttle_service::{loader::Loader, Factory};
+use tokio::{sync::mpsc, task::JoinError};
 use tracing::{debug, error, info, instrument};
 
 use super::{KillReceiver, KillSender, RunReceiver, State};
@@ -30,6 +32,17 @@ pub struct Built {
     pub so_path: PathBuf,
 }
 
+struct StubFactory;
+
+#[async_trait::async_trait]
+impl Factory for StubFactory {
+    async fn get_sql_connection_string(
+        &mut self,
+    ) -> core::result::Result<String, shuttle_service::Error> {
+        todo!()
+    }
+}
+
 impl Built {
     #[instrument(skip(self, handle_cleanup), fields(name = self.name.as_str(), state = %State::Running))]
     async fn handle(
@@ -39,26 +52,41 @@ impl Built {
     ) -> Result<()> {
         let loader = Loader::from_so_file(self.so_path.clone())?;
 
-        // Load service into memory:
-        // TODO
-        let mut execute_future = Box::pin(async {
-            loop {
-                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-            }
-        }); // placeholder
+        let deployment_id = DeploymentId::default();
+        let addr = "127.0.0.1:8010".parse().unwrap();
+        let (tx, rx) = mpsc::unbounded_channel();
+        let mut factory = StubFactory;
+        let (mut handle, library) = loader
+            .load(&mut factory, addr, tx, deployment_id)
+            .await
+            .unwrap();
 
         // Execute loaded service:
 
         tokio::spawn(async move {
-            tokio::select! {
-                Ok(name) = kill_recv.recv() => {
-                    if name == self.name {
-                        debug!("Service {name} killed");
-                        // execute_future.abort();
-                    }
+            let result;
+            loop {
+                tokio::select! {
+                     Ok(name) = kill_recv.recv() => {
+                         if name == self.name {
+                             debug!("Service {name} killed");
+                             handle.abort();
+                             result = handle.await;
+                             break;
+                         }
+                     }
+                     rsl = &mut handle => {
+                         result = rsl;
+                         break
+                     }
                 }
-                _ = &mut execute_future => {}
             }
+
+            match result {
+                Ok(result) => result.unwrap(),
+                Err(error) if error.is_cancelled() => {}
+                _ => todo!(),
+            };
 
             handle_cleanup(self);
         });
@@ -69,20 +97,22 @@ impl Built {
 
 #[cfg(test)]
 mod tests {
-    use std::{path::PathBuf, time::Duration};
+    use std::{path::PathBuf, process::Command, time::Duration};
 
-    use tokio::sync::{broadcast, oneshot};
+    use tokio::{
+        sync::{broadcast, oneshot},
+        time::sleep,
+    };
 
     use crate::error::Error;
 
     use super::Built;
 
+    const RESOURCES_PATH: &str = "tests/resources";
+
     #[tokio::test]
     async fn can_be_killed() {
-        let built = Built {
-            name: "test".to_string(),
-            so_path: PathBuf::new(),
-        };
+        let built = make_so_create_built("sleep-async");
         let (kill_send, kill_recv) = broadcast::channel(1);
         let (cleanup_send, cleanup_recv) = oneshot::channel();
 
@@ -92,10 +122,31 @@ mod tests {
 
         built.handle(kill_recv, handle_cleanup).await.unwrap();
 
-        kill_send.send("test".to_string()).unwrap();
+        // Give it some time to start up
+        sleep(Duration::from_secs(1)).await;
+
+        kill_send.send("sleep-async".to_string()).unwrap();
 
         tokio::select! {
-            _ = tokio::time::sleep(Duration::from_secs(1)) => panic!("cleanup should be called"),
+            _ = sleep(Duration::from_secs(1)) => panic!("cleanup should have been called"),
+            _ = cleanup_recv => {}
+        }
+    }
+
+    #[tokio::test]
+    async fn self_stop() {
+        let built = make_so_create_built("sleep-async");
+        let (_kill_send, kill_recv) = broadcast::channel(1);
+        let (cleanup_send, cleanup_recv) = oneshot::channel();
+
+        let handle_cleanup = |_built| {
+            cleanup_send.send(()).unwrap();
+        };
+
+        built.handle(kill_recv, handle_cleanup).await.unwrap();
+
+        tokio::select! {
+            _ = sleep(Duration::from_secs(5)) => panic!("cleanup should have been called as service stopped on its own"),
             _ = cleanup_recv => {}
         }
     }
@@ -113,5 +164,32 @@ mod tests {
         let result = built.handle(kill_recv, handle_cleanup).await;
 
         assert!(matches!(result, Err(Error::Load(_))));
+    }
+
+    fn make_so_create_built(crate_name: &str) -> Built {
+        let crate_dir: PathBuf = [RESOURCES_PATH, crate_name].iter().collect();
+
+        Command::new("cargo")
+            .args(["build", "--release"])
+            .current_dir(&crate_dir)
+            .spawn()
+            .unwrap()
+            .wait()
+            .unwrap();
+
+        let dashes_replaced = crate_name.replace('-', "_");
+
+        let lib_name = if cfg!(target_os = "windows") {
+            format!("{}.dll", dashes_replaced)
+        } else {
+            format!("lib{}.so", dashes_replaced)
+        };
+
+        let so_path = crate_dir.join("target/release").join(lib_name);
+
+        Built {
+            name: crate_name.to_string(),
+            so_path,
+        }
     }
 }

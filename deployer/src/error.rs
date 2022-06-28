@@ -6,6 +6,7 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 
 use serde::{ser::SerializeMap, Serialize};
+use shuttle_service::loader::LoaderError;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -17,6 +18,8 @@ pub enum Error {
     InputOutput(#[from] io::Error),
     #[error("Build error: {0}")]
     Build(#[source] Box<dyn StdError + Send>),
+    #[error("Load error: {0}")]
+    Load(#[from] LoaderError),
 }
 
 impl Serialize for Error {

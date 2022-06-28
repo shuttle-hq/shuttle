@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use shuttle_service::loader::Loader;
 use tracing::{debug, error, info, instrument};
 
 use super::{KillReceiver, KillSender, RunReceiver, State};
@@ -36,6 +37,8 @@ impl Built {
         mut kill_recv: KillReceiver,
         handle_cleanup: impl FnOnce(Built) + Send + 'static,
     ) -> Result<()> {
+        let loader = Loader::from_so_file(self.so_path.clone())?;
+
         // Load service into memory:
         // TODO
         let mut execute_future = Box::pin(async {
@@ -66,9 +69,11 @@ impl Built {
 
 #[cfg(test)]
 mod tests {
-    use std::{path::PathBuf, sync::atomic::AtomicBool, time::Duration};
+    use std::{path::PathBuf, time::Duration};
 
     use tokio::sync::{broadcast, oneshot};
+
+    use crate::error::Error;
 
     use super::Built;
 
@@ -93,5 +98,20 @@ mod tests {
             _ = tokio::time::sleep(Duration::from_secs(1)) => panic!("cleanup should be called"),
             _ = cleanup_recv => {}
         }
+    }
+
+    #[tokio::test]
+    async fn missing_so() {
+        let built = Built {
+            name: "test".to_string(),
+            so_path: PathBuf::from("missing.so"),
+        };
+        let (_kill_send, kill_recv) = broadcast::channel(1);
+
+        let handle_cleanup = |_built| {};
+
+        let result = built.handle(kill_recv, handle_cleanup).await;
+
+        assert!(matches!(result, Err(Error::Load(_))));
     }
 }

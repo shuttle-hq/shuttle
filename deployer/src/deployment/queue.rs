@@ -56,6 +56,7 @@ async fn promote_to_run(built: Built, run_send: RunSender) {
 pub struct Queued {
     pub name: String,
     pub data_stream: Pin<Box<dyn Stream<Item = Result<Bytes>> + Send + Sync>>,
+    pub will_run_tests: bool,
 }
 
 impl Queued {
@@ -86,9 +87,11 @@ impl Queued {
         let so_path =
             build_crate(&project_path, cargo_output_buf).map_err(|e| Error::Build(e.into()))?;
 
-        info!("Running deployment's unit tests");
+        if self.will_run_tests {
+            info!("Running deployment's unit tests");
 
-        run_pre_deploy_tests(&project_path)?;
+            run_pre_deploy_tests(&project_path)?;
+        }
 
         info!("Removing old build (if present)");
 

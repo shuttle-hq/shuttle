@@ -10,6 +10,10 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 
 use bytes::{BufMut, Bytes};
+use cargo::core::compiler::CompileMode;
+use cargo::core::Workspace;
+use cargo::ops::{CompileOptions, TestOptions};
+use cargo::util::config::Config as CargoConfig;
 use flate2::read::GzDecoder;
 use futures::{Stream, StreamExt};
 use rand::distributions::DistString;
@@ -82,6 +86,10 @@ impl Queued {
         let so_path =
             build_crate(&project_path, cargo_output_buf).map_err(|e| Error::Build(e.into()))?;
 
+        info!("Running deployment's unit tests");
+
+        run_pre_deploy_tests(&project_path)?;
+
         info!("Removing old build (if present)");
 
         remove_old_build(&project_path).await?;
@@ -115,6 +123,27 @@ fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn run_pre_deploy_tests(project_path: impl AsRef<Path>) -> Result<()> {
+    let config = CargoConfig::default().unwrap();
+    let manifest_path = project_path.as_ref().join("Cargo.toml");
+
+    let ws = Workspace::new(&manifest_path, &config).map_err(|e| Error::Build(e.into()))?;
+
+    let opts = TestOptions {
+        compile_opts: CompileOptions::new(&config, CompileMode::Test).unwrap(),
+        no_run: false,
+        no_fail_fast: false,
+    };
+
+    let test_failures =
+        cargo::ops::run_tests(&ws, &opts, &[]).map_err(|e| Error::Build(e.into()))?;
+
+    match test_failures {
+        Some(failures) => Err(failures.into()),
+        None => Ok(()),
+    }
 }
 
 /// Check for an existing marker file in the specified project directory and

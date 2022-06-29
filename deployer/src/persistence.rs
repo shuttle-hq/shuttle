@@ -72,8 +72,8 @@ impl Persistence {
                             &pool_cloned,
                             Log {
                                 name: log.name.clone(),
-                                timestamp: log.timestamp.clone(),
-                                state: log.state.clone(),
+                                timestamp: log.timestamp,
+                                state: log.state,
                                 level: log.level.clone(),
                                 file: log.file.clone(),
                                 line: log.line,

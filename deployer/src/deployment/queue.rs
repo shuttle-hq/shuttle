@@ -1,4 +1,4 @@
-use super::{Built, QueueReceiver, RunSender, State};
+use super::{BuildLogWriter, Built, QueueReceiver, RunSender, State};
 use crate::error::{Error, Result};
 
 use shuttle_service::loader::build_crate;
@@ -52,6 +52,7 @@ async fn promote_to_run(built: Built, run_send: RunSender) {
 pub struct Queued {
     pub name: String,
     pub data_stream: Pin<Box<dyn Stream<Item = Result<Bytes>> + Send + Sync>>,
+    pub build_log_writer: BuildLogWriter,
 }
 
 impl Queued {
@@ -76,11 +77,9 @@ impl Queued {
 
         info!("Building deployment");
 
-        let cargo_output_buf = Box::new(std::io::stdout()); // TODO: Redirect over WebSocket.
-
         let project_path = project_path.canonicalize()?;
-        let so_path =
-            build_crate(&project_path, cargo_output_buf).map_err(|e| Error::Build(e.into()))?;
+        let so_path = build_crate(&project_path, Box::new(self.build_log_writer))
+            .map_err(|e| Error::Build(e.into()))?;
 
         info!("Removing old build (if present)");
 

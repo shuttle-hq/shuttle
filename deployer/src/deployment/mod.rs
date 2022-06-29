@@ -1,3 +1,4 @@
+mod build_logs;
 pub mod deploy_layer;
 mod info;
 pub mod log;
@@ -11,9 +12,15 @@ pub use states::State;
 pub use log::Log;
 pub use queue::Queued;
 pub use run::Built;
-use tracing::instrument;
 
+use build_logs::{BuildLogWriter, BuildLogsManager};
+
+use crate::error::Result;
+
+use bytes::Bytes;
+use futures::Stream;
 use tokio::sync::{broadcast, mpsc};
+use tracing::instrument;
 
 const QUEUE_BUFFER_SIZE: usize = 100;
 const RUN_BUFFER_SIZE: usize = 100;
@@ -23,6 +30,7 @@ const KILL_BUFFER_SIZE: usize = 10;
 pub struct DeploymentManager {
     pipeline: Pipeline,
     kill_send: KillSender,
+    build_logs: BuildLogsManager,
 }
 
 impl DeploymentManager {
@@ -34,23 +42,54 @@ impl DeploymentManager {
         DeploymentManager {
             pipeline: Pipeline::new(kill_send.clone()),
             kill_send,
+            build_logs: BuildLogsManager::new(),
         }
     }
 
-    #[instrument(skip(self), fields(name = queued.name.as_str(), state = %State::Queued))]
-    pub async fn queue_push(&self, queued: Queued) {
+    #[instrument(skip(self, data_stream), fields(name = name.as_str(), state = %State::Queued))]
+    pub async fn queue_push(
+        &self,
+        name: String,
+        data_stream: impl Stream<Item = Result<Bytes>> + Send + Sync + 'static,
+    ) -> DeploymentInfo {
+        let build_log_writer = self.build_logs.for_deployment(name.clone()).await;
+
+        let queued = Queued {
+            name,
+            data_stream: Box::pin(data_stream),
+            build_log_writer,
+        };
+        let info = DeploymentInfo::from(&queued);
+
         self.pipeline.queue_send.send(queued).await.unwrap();
+
+        info
     }
 
-    #[instrument(skip(self), fields(name = built.name.as_str(), state = %State::Built))]
-    pub async fn run_push(&self, built: Built) {
+    #[instrument(skip(self), fields(name = name.as_str(), state = %State::Built))]
+    pub async fn run_push(&self, name: String) -> DeploymentInfo {
+        let built = Built { name };
+        let info = DeploymentInfo::from(&built);
+
         self.pipeline.run_send.send(built).await.unwrap();
+
+        info
     }
 
     pub async fn kill(&self, name: String) {
+        self.build_logs.delete_deployment(&name).await;
+
         if self.kill_send.receiver_count() > 0 {
             self.kill_send.send(name).unwrap();
         }
+    }
+
+    pub async fn build_logs_subscribe(&self, name: &str) -> Option<BuildLogReceiver> {
+        self.build_logs.subscribe(name).await
+    }
+
+    pub async fn build_logs_so_far(&self, name: &str) -> Option<Vec<String>> {
+        self.build_logs.get_logs_so_far(name).await
     }
 }
 
@@ -103,3 +142,6 @@ type RunReceiver = mpsc::Receiver<run::Built>;
 
 type KillSender = broadcast::Sender<String>;
 type KillReceiver = broadcast::Receiver<String>;
+
+type BuildLogSender = broadcast::Sender<String>;
+pub type BuildLogReceiver = broadcast::Receiver<String>;

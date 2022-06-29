@@ -133,39 +133,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "08f9b8508dccb7687a1d6c4ce66b2b0ecef467c94667de27d8d7fe1f8d2a9cdc"
 
 [[package]]
-name = "api"
-version = "0.1.2"
-dependencies = [
- "anyhow",
- "async-mutex",
- "async-trait",
- "base64 0.13.0",
- "cargo",
- "cargo-util",
- "chrono",
- "env_logger",
- "fqdn",
- "futures",
- "hyper",
- "hyper-reverse-proxy",
- "lazy_static",
- "libloading",
- "log",
- "proto",
- "rand 0.8.5",
- "rocket",
- "serde",
- "shuttle-common",
- "shuttle-service",
- "sqlx",
- "structopt",
- "tokio",
- "toml",
- "tonic",
- "uuid",
-]
-
-[[package]]
 name = "arrayref"
 version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1703,12 +1670,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fqdn"
-version = "0.1.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b4b9cc8d7db413f35e3647159e2f726741d605522b7de6f2c59056da0badf79"
-
-[[package]]
 name = "fuchsia-cprng"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2200,17 +2161,6 @@ dependencies = [
  "tower-service",
  "tracing",
  "want",
-]
-
-[[package]]
-name = "hyper-reverse-proxy"
-version = "0.5.2-dev"
-source = "git+https://github.com/chesedo/hyper-reverse-proxy?branch=master#a4deffef77685b37fda7224ae678d3d9f00d391e"
-dependencies = [
- "hyper",
- "lazy_static",
- "tokio",
- "tracing",
 ]
 
 [[package]]
@@ -3617,7 +3567,6 @@ dependencies = [
  "rocket_codegen",
  "rocket_http",
  "serde",
- "serde_json",
  "state",
  "tempfile",
  "time 0.3.9",
@@ -3625,7 +3574,6 @@ dependencies = [
  "tokio-stream",
  "tokio-util 0.7.1",
  "ubyte",
- "uuid",
  "version_check",
  "yansi",
 ]
@@ -3671,7 +3619,6 @@ dependencies = [
  "time 0.3.9",
  "tokio",
  "uncased",
- "uuid",
 ]
 
 [[package]]

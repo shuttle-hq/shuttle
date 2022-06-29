@@ -20,7 +20,7 @@ pub enum Error {
     #[error("Build error: {0}")]
     Build(#[source] Box<dyn StdError + Send>),
     #[error("Pre-deployment test failure: {0}")]
-    PreDeployTest(#[from] CargoTestError),
+    PreDeployTestFailure(#[from] CargoTestError),
 }
 
 impl Serialize for Error {

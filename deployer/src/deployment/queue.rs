@@ -188,10 +188,13 @@ async fn rename_build(project_path: impl AsRef<Path>, so_path: impl AsRef<Path>)
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use tempdir::TempDir;
     use tokio::fs;
 
     use super::MARKER_FILE_NAME;
+    use crate::error::Error;
 
     #[tokio::test]
     async fn extract_tar_gz_data() {
@@ -230,6 +233,20 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
         super::extract_tar_gz_data(test_data.as_slice(), &p).unwrap();
 
         fs::remove_dir_all(p).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn run_pre_deploy_tests() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+
+        let failure_project_path = root.join("tests/resources/tests-fail");
+        assert!(matches!(
+            super::run_pre_deploy_tests(failure_project_path),
+            Err(Error::PreDeployTestFailure(_))
+        ));
+
+        let pass_project_path = root.join("tests/resources/tests-pass");
+        super::run_pre_deploy_tests(pass_project_path).unwrap();
     }
 
     #[tokio::test]

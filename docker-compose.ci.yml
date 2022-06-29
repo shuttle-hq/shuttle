@@ -1,0 +1,68 @@
+version: "3"
+volumes:
+  shuttle-backend-vol:
+    external: true
+services:
+  backend:
+    image: "public.ecr.aws/shuttle/backend:${BACKEND_TAG}"
+    volumes:
+      - shuttle-backend-vol:/var/lib/shuttle/
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+    depends_on:
+      - provisioner
+    ports:
+      - 8000:8000
+      - 8001:8001
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        mkdir -p /var/lib/shuttle/crates
+
+        cat<<EOF > /var/lib/shuttle/users.toml
+        [test-key]
+        name = "tester"
+        projects = []
+        EOF
+
+        mkdir -p $$CARGO_HOME
+        cat<<EOF > $$CARGO_HOME/config.toml
+        [patch.crates-io]
+        shuttle-service = { path = "/usr/src/shuttle/service" }
+        EOF
+
+        exec /usr/local/bin/service "$${@:0}"
+    volumes:
+      - .:/usr/src/shuttle
+    environment:
+      - SHUTTLE_USERS_TOML=/var/lib/shuttle/users.toml
+      - RUST_LOG=${RUST_LOG}
+    command:
+      - "--path=/var/lib/shuttle/crates"
+      - "--bind-addr=0.0.0.0"
+      - "--api-port=8001"
+      - "--proxy-port=8000"
+      - "--proxy-fqdn=${APPS_FQDN}"
+      - "--provisioner-address=provisioner"
+      - "--provisioner-port=8000"
+  provisioner:
+    image: "public.ecr.aws/shuttle/provisioner:${PROVISIONER_TAG}"
+    depends_on:
+      - db
+    environment:
+      - RUST_LOG=${RUST_LOG}
+    command:
+      - "--ip=0.0.0.0"
+      - "--port=8000"
+      - "--shared-pg-uri=postgres://postgres:${POSTGRES_PASSWORD}@db:5432/postgres"
+      - "--internal-address=db"
+      - "--fqdn=${DB_FQDN}"
+  db:
+    image: "postgres"
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}

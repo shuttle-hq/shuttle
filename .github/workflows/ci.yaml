@@ -3,8 +3,6 @@ on:
   push:
     branches: [master]
     tags: ["v*"]
-  pull_request:
-    branches: [main]
 
 jobs:
   build_and_push_images:

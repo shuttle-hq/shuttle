@@ -53,7 +53,7 @@ jobs:
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: cargo test ${{ matrix.crate }} --all-features
-        run: cargo test --package ${{ matrix.crate }} --all-features
+        run: cargo test --package ${{ matrix.crate }} --all-features -- --nocapture
   e2e_tests:
     runs-on: ubuntu-latest
     steps:
@@ -62,6 +62,15 @@ jobs:
         with:
           toolchain: stable
           override: true
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: e2e tests
         working-directory: ./e2e
         run: |

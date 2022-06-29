@@ -15,7 +15,7 @@ async fn cargo_shuttle_run(working_directory: &str) -> u16 {
     let run_args = RunArgs { port };
 
     let runner = Shuttle::new().run(Args {
-        api_url: Some("network support is intentionally broken in tests".to_string()),
+        api_url: Some("http://shuttle.invalid:80".to_string()),
         project_args: ProjectArgs {
             working_directory: working_directory.clone(),
             name: None,

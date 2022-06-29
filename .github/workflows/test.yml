@@ -52,6 +52,12 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Patch shuttle-service
+        run:
+          cat<<EOF > ~/.cargo/config.toml
+          [patch.crates-io]
+          shuttle-service = { path = "$PWD/service" }
+          EOF
       - name: cargo test ${{ matrix.crate }} --all-features
         run: cargo test --package ${{ matrix.crate }} --all-features -- --nocapture
   e2e_tests:
@@ -75,4 +81,4 @@ jobs:
         working-directory: ./e2e
         run: |
           docker volume create shuttle-backend-vol
-          SHUTTLE_API_KEY=test-key SHUTTLE_DOCKER_COMPOSE=$PWD/docker-compose.ci.yml cargo test -- --nocapture
+          SHUTTLE_API_KEY=test-key SHUTTLE_DOCKER_COMPOSE=../docker-compose.ci.yml cargo test -- --nocapture

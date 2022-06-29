@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Output, Stdio};
 use std::str;
 use std::thread::sleep;
+use std::env;
 use std::time::{Duration, SystemTime};
 
 use colored::*;
@@ -24,7 +25,9 @@ lazy_static! {
     static ref LOCAL_UP: () = {
         let docker_bake = WORKSPACE_ROOT.join("docker-bake.hcl");
         let docker_bake_override = WORKSPACE_ROOT.join("e2e/docker-bake-override.hcl");
-        let docker_compose = WORKSPACE_ROOT.join("docker-compose.dev.yml");
+        let docker_compose = env::var("SHUTTLE_DOCKER_COMPOSE")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| WORKSPACE_ROOT.join("docker-compose.dev.yml"));
         println!(
             "
 ----------------------------------- PREPARING ------------------------------------

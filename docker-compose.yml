@@ -4,7 +4,7 @@ volumes:
     external: true
 services:
   backend:
-    image: "public.ecr.aws/shuttle/backend:${BACKEND_TAG}"
+    image: "${CONTAINER_REGISTRY}/backend:${BACKEND_TAG}"
     volumes:
       - shuttle-backend-vol:/var/lib/shuttle/
     depends_on:
@@ -29,7 +29,7 @@ services:
       - "--provisioner-address=provisioner"
       - "--provisioner-port=8000"
   provisioner:
-    image: "public.ecr.aws/shuttle/provisioner:${PROVISIONER_TAG}"
+    image: "${CONTAINER_REGISTRY}/provisioner:${PROVISIONER_TAG}"
     depends_on:
       - db
     environment:

@@ -1,12 +1,12 @@
 variable "registry" {
-  default = "public.ecr.aws/shuttle"
+  default = "public.ecr.aws/j5v8s8v8"
 }
 
 variable "context" {
   default = "."
 }
 
-target "api" {
+target "backend" {
   dockerfile = "Containerfile"
   context = "${context}"
   tags = ["${registry}/backend"]

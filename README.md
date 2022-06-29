@@ -102,7 +102,7 @@ If you want to setup a local environment to test code changes to core `shuttle` 
 Build the required images with 
 
 ```bash
-$ docker buildx bake -f docker-bake.hcl provisioner api
+$ docker buildx bake -f docker-bake.hcl provisioner backend
 ```
 
 The images get build with [cargo-chef](https://github.com/LukeMathWalker/cargo-chef) and therefore support incremental builds (most of the time). So they will be much faster to re-build after an incremental change in your code - should you wish to deploy it locally straightaway.

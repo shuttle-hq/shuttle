@@ -1804,18 +1804,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "453440c271cf5577fd2a40e4942540cb7d0d2f85e27c8d07dd0023c925a67541"
 
 [[package]]
-name = "e2e"
-version = "0.1.0"
-dependencies = [
- "colored",
- "lazy_static",
- "portpicker",
- "rand 0.8.5",
- "reqwest",
- "which",
-]
-
-[[package]]
 name = "either"
 version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

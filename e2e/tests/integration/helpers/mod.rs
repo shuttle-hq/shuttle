@@ -46,7 +46,7 @@ cargo: {}
         );
 
         println!(
-            "{} buildx bake -f {} -f {} provisioner api",
+            "{} buildx bake -f {} -f {} provisioner backend",
             DOCKER.display(),
             docker_bake.display(),
             docker_bake_override.display()
@@ -56,7 +56,7 @@ cargo: {}
             .arg(docker_bake)
             .arg("-f")
             .arg(docker_bake_override)
-            .args(["provisioner", "api"])
+            .args(["provisioner", "backend"])
             .output()
             .ensure_success("failed to `docker buildx bake`");
 

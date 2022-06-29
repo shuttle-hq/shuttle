@@ -46,7 +46,7 @@ async fn post_service(
     let queued = Queued {
         name,
         data_stream: Box::pin(stream.map_err(Error::Streaming)),
-        will_run_tests: params.get("no-testing").is_none(),
+        will_run_tests: !params.contains_key("no-testing"),
     };
     let info = DeploymentInfo::from(&queued);
 

@@ -24,7 +24,7 @@ async fn cargo_shuttle_run(working_directory: &str) -> u16 {
     });
 
     tokio::spawn(async move {
-        sleep(Duration::from_secs(180)).await;
+        sleep(Duration::from_secs(600)).await;
 
         println!(
             "run test for '{}' took too long. Did it fail to shutdown?",

@@ -43,7 +43,6 @@ async fn post_service(
     Query(params): Query<HashMap<String, String>>,
     stream: BodyStream,
 ) -> Result<Json<DeploymentInfo>> {
-    println!("{:?}", params);
     let queued = Queued {
         name,
         data_stream: Box::pin(stream.map_err(Error::Streaming)),

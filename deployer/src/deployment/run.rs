@@ -1,16 +1,24 @@
 use std::{
     net::{Ipv4Addr, SocketAddr},
     path::PathBuf,
+    str::FromStr,
 };
 
 use portpicker::pick_unused_port;
+use shuttle_common::project::ProjectName;
 use shuttle_service::{loader::Loader, Factory};
 use tracing::{debug, error, info, instrument};
 
-use super::{KillReceiver, KillSender, RunReceiver, State};
+use super::{provisioner_factory::AbstractFactory, KillReceiver, KillSender, RunReceiver, State};
 use crate::error::{Error, Result};
 
-pub async fn task(mut recv: RunReceiver, kill_send: KillSender) {
+/// Run a task which takes runnable deploys from a channel and starts them up with factory provided by the abstract factory
+/// A deploy is killed when it receives a signal from the kill channel
+pub async fn task(
+    mut recv: RunReceiver,
+    kill_send: KillSender,
+    abstract_factory: impl AbstractFactory,
+) {
     info!("Run task started");
 
     while let Some(built) = recv.recv().await {
@@ -20,10 +28,12 @@ pub async fn task(mut recv: RunReceiver, kill_send: KillSender) {
 
         let kill_recv = kill_send.subscribe();
 
+        let abstract_factory = abstract_factory.clone();
+
         tokio::spawn(async move {
             let port = pick_unused_port().unwrap();
             let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
-            let mut factory = StubFactory;
+            let mut factory = abstract_factory.get_factory(ProjectName::from_str(&name).unwrap());
 
             if let Err(e) = built
                 .handle(addr, &mut factory, kill_recv, |_built| {})
@@ -39,17 +49,6 @@ pub async fn task(mut recv: RunReceiver, kill_send: KillSender) {
 pub struct Built {
     pub name: String,
     pub so_path: PathBuf,
-}
-
-struct StubFactory;
-
-#[async_trait::async_trait]
-impl Factory for StubFactory {
-    async fn get_sql_connection_string(
-        &mut self,
-    ) -> core::result::Result<String, shuttle_service::Error> {
-        todo!()
-    }
 }
 
 struct StubLogger;
@@ -127,16 +126,28 @@ mod tests {
         time::Duration,
     };
 
+    use shuttle_service::Factory;
     use tokio::{
         sync::{broadcast, oneshot},
         time::sleep,
     };
 
-    use crate::{deployment::run::StubFactory, error::Error};
+    use crate::error::Error;
 
     use super::Built;
 
     const RESOURCES_PATH: &str = "tests/resources";
+
+    struct StubFactory;
+
+    #[async_trait::async_trait]
+    impl Factory for StubFactory {
+        async fn get_sql_connection_string(
+            &mut self,
+        ) -> core::result::Result<String, shuttle_service::Error> {
+            todo!()
+        }
+    }
 
     #[tokio::test]
     async fn can_be_killed() {

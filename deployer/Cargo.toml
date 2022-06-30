@@ -23,6 +23,15 @@ tar = "0.4.38"
 rand = "0.8.5"
 tracing = "0.1.35"
 tracing-subscriber = { version = "0.3.11", features = ["env-filter"] }
+tonic = "0.7.2"
+
+[dependencies.proto]
+version = "0.1.0"
+path = "../proto"
+
+[dependencies.shuttle-common]
+version = "0.3.1"
+path = "../common"
 
 [dependencies.shuttle-service]
 version = "0.3.3"

@@ -5,6 +5,8 @@ mod persistence;
 
 use deployment::{Built, DeploymentManager};
 use persistence::Persistence;
+use proto::provisioner::provisioner_client::ProvisionerClient;
+use tonic::transport::Endpoint;
 use tracing::{info, trace};
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{fmt, EnvFilter};
@@ -13,8 +15,11 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 
 use crate::deployment::deploy_layer::DeployLayer;
+use crate::deployment::AbstractProvisionerFactory;
 
 const SECRET_KEY: &str = "GATEWAY_SECRET";
+const PROVISIONER_ADDRESS: &str = "provisioner";
+const PROVISIONER_PORT: u32 = 5000;
 
 #[tokio::main]
 async fn main() {
@@ -40,7 +45,18 @@ async fn main() {
         .with(fmt_layer)
         .init();
 
-    let deployment_manager = DeploymentManager::new();
+    let provisioner_uri =
+        Endpoint::try_from(format!("http://{PROVISIONER_ADDRESS}:{PROVISIONER_PORT}"))
+            .expect("provisioner uri is not valid");
+
+    let provisioner_client = ProvisionerClient::connect(provisioner_uri)
+        .await
+        .expect("failed to connect to provisioner");
+
+    let abstract_factory =
+        AbstractProvisionerFactory::new(provisioner_client, PROVISIONER_ADDRESS.to_string());
+
+    let deployment_manager = DeploymentManager::new(abstract_factory);
 
     for existing_deployment in persistence.get_all_runnable_deployments().await.unwrap() {
         let built = Built {

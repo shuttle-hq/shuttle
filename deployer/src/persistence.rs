@@ -33,7 +33,7 @@ impl Persistence {
     }
 
     #[allow(dead_code)]
-    async fn new_in_memory() -> (Self, JoinHandle<()>) {
+    pub async fn new_in_memory() -> (Self, JoinHandle<()>) {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
         Self::from_pool(pool).await
     }

@@ -91,7 +91,7 @@ if let Err(send_error) = send_message(message) {
 
 In the above example we inspect the value of the item and branch on it.
 However, if we didn't inspect and handle the returned Result then the Rust
-compiler gives use a helpful warning about it so that you don't forget to
+compiler gives us a helpful warning about it so that you don't forget to
 explicitly deal with errors in your program.
 
 ```
@@ -103,7 +103,7 @@ explicitly deal with errors in your program.
 
 ### Examples of `Result` in the standard library
 
-`Result` can be found in most libraries. On of my favorite examples is the
+`Result` can be found in most libraries. One of my favorite examples is the
 return type of the [FromStr::from_str](https://doc.rust-lang.org/std/str/trait.FromStr.html#tymethod.from_str) trait method. With [str::parse](https://doc.rust-lang.org/std/primitive.str.html#method.parse) (which uses the `FromStr` trait) we can do the following:
 
 ```rust
@@ -165,7 +165,8 @@ fn foo() -> Result<SomeType, MyError> {
 }
 ```
 
-To give a concrete example, all functions which operate on the FS have the same
+To give a concrete example, all functions which operate on the file system have
+the same
 errors (file not exists, invalid permissions). [io::Result](https://doc.rust-lang.org/std/io/type.Result.html) is a alias over a result but means that every function does not have to specify the error type:
 
 ```rust
@@ -217,7 +218,7 @@ the question-mark implicitly runs [Into::into](https://doc.rust-lang.org/std/con
 (which is automatically implemented for [From](https://doc.rust-lang.org/std/convert/trait.From.html) implementors) on the error value. So we don't have to worry about converting the error before we use the operator:
 
 ```rust
-// This derive means we get a a into implementation for `std::io::Error -> MyError`
+// This derive an into implementation for `std::io::Error -> MyError`
 #[derive(derive_enum_from_into::EnumFrom)]
 enum MyError {
     IoError(std::io::Error)
@@ -235,15 +236,14 @@ We will look at more patterns for combining error types later!
 ## [The Error trait](https://doc.rust-lang.org/std/error/trait.Error.html)
 
 The [Error](https://doc.rust-lang.org/std/error/trait.Error.html#) trait is
-defined in the standard library. It basically
-represents the expectations of error values - values of type `E` in
-`Result<T,E>`
+defined in the standard library. It basically represents the expectations of
+error values - values of type `E` in `Result<T,E>`.
 [The Error trait is implemented for many errors](https://doc.rust-lang.org/std/error/trait.Error.html#implementors)
 and provides a unified API for information on errors. The Error trait is a bit needy and requires that the error implements both [Debug](https://doc.rust-lang.org/std/fmt/trait.Debug.html) and [Display](https://doc.rust-lang.org/std/fmt/trait.Display.html). While it can be cumbersome to implement we will see some helper libraries for doing so later on.
 
-In the standard library [VarError](https://doc.rust-lang.org/std/env/enum.VarError.html) (for reading environment variables) and [ParseIntError](https://doc.rust-lang.org/std/num/struct.ParseIntError.html) (for parsing a string slice as a integer) are different errors. When we interact them we need to differentiate between the types because they have different properties and different stack sizes. To build a combination of them we could build a sum type using a enum. Alternatively we can use dynamically dispatched traits which handled varying stack sized items and other type information.
+In the standard library [VarError](https://doc.rust-lang.org/std/env/enum.VarError.html) (for reading environment variables) and [ParseIntError](https://doc.rust-lang.org/std/num/struct.ParseIntError.html) (for parsing a string slice as a integer) are different errors. When we interact them we need to differentiate between the types because they have different properties and different stack sizes. To build a combination of them we could build a sum type using an enum. Alternatively we can use dynamically dispatched traits which handle varying stack sized items and other type information.
 
-Using the above mentioned try syntax (`?`) we can convert the the above errors to be dynamically dispatched. This makes it easy to handle different errors without building enums to combine errors.
+Using the above mentioned try syntax (`?`) we can convert the above errors to be dynamically dispatched. This makes it easy to handle different errors without building enums to combine errors.
 
 ```rust
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -254,7 +254,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-While this is a easy way to handle errors, it isn't easy to differentiate between the types and can make handling errors in libraries hard. More information on this later.
+While this is an easy way to handle errors, it isn't easy to differentiate
+between the types and can make handling errors in libraries hard. More information on this later.
 
 ### The Error trait vs Results and enums
 
@@ -280,7 +281,8 @@ other applications using the trait can be a lot simpler.
 
 ## Methods on Result
 
-Result and Option contains many useful functions. Here are some of my commonly used:
+Result and Option contains many useful functions. Here are some functions I
+commonly use:
 
 ### [Result::map](https://doc.rust-lang.org/std/result/enum.Result.html#method.map)
 
@@ -388,7 +390,7 @@ let value = if let Ok(value) = result {
 };
 ```
 
-The uses cases for this is developer error and situations the compiler can't
+The uses-cases for this are developer error and situations the compiler can't
 quite figure out.
 If you are just trying something and don't want to set up a full error handling system then they can be used to ignore compiler warnings.
 
@@ -499,8 +501,7 @@ docs to use `anyhow` for applications and `thiserror` for libraries.
 ### [eyre](https://crates.io/crates/eyre)
 
 Finally, `eyre` is a fork of `anyhow` and adds more backtrace information.
-It's highly customisable and using [color-eyre](https://lib.
-rs/crates/color-eyre) we get colors in our panic messages - a little color
+It's highly customisable and using [color-eyre](https://lib.rs/crates/color-eyre) we get colors in our panic messages - a little color
 always brightens up the dev experience.
 
 ```

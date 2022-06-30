@@ -1,6 +1,7 @@
-use std::io;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::{fs, io};
 
 use anyhow::{anyhow, Context, Result};
 use rocket::tokio;
@@ -17,6 +18,7 @@ pub const DEFAULT_FS_ROOT: &str = "/var/lib/shuttle/crates/";
 
 pub(crate) struct Build {
     pub(crate) so_path: PathBuf,
+    pub(crate) initial_secrets: BTreeMap<String, String>,
 }
 
 // remove the trait at some point
@@ -97,6 +99,9 @@ impl BuildSystem for FsBuildSystem {
         // extract tarball
         extract_tarball(&crate_path, &project_path)?;
 
+        // read initial_secrets from Secrets.toml
+        let initial_secrets = read_initial_secrets(&project_path)?;
+
         // run cargo build (--debug for now)
         let so_path = build_crate(&project_path, buf)?;
 
@@ -106,7 +111,10 @@ impl BuildSystem for FsBuildSystem {
         // create marker file
         create_so_marker(&project_path, &so_path)?;
 
-        Ok(Build { so_path })
+        Ok(Build {
+            so_path,
+            initial_secrets,
+        })
     }
 
     fn fs_root(&self) -> PathBuf {
@@ -186,5 +194,18 @@ fn extract_tarball(crate_path: &Path, project_path: &Path) -> Result<()> {
         Err(anyhow::Error::msg(err).context(anyhow!("failed to unpack cargo archive")))
     } else {
         Ok(())
+    }
+}
+
+fn read_initial_secrets(crate_path: &Path) -> Result<BTreeMap<String, String>> {
+    let secrets_toml_path = crate_path.join("Secrets.toml");
+
+    if let Ok(secrets_toml) = fs::read_to_string(&secrets_toml_path) {
+        secrets_toml
+            .parse::<toml::Value>()
+            .and_then(toml::Value::try_into)
+            .map_err(|e| anyhow!("unable to parse Secrets.toml file: {e}"))
+    } else {
+        Ok(BTreeMap::new())
     }
 }

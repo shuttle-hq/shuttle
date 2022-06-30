@@ -13,7 +13,6 @@ mod factory;
 mod proxy;
 mod router;
 
-use std::collections::HashMap;
 use std::net::IpAddr;
 use std::sync::Arc;
 
@@ -24,7 +23,6 @@ use rocket::serde::json::Json;
 use rocket::{tokio, Build, Data, Rocket, State};
 use shuttle_common::project::ProjectName;
 use shuttle_common::{DeploymentApiError, DeploymentMeta, Port};
-use shuttle_service::SecretStore;
 use structopt::StructOpt;
 use uuid::Uuid;
 
@@ -133,37 +131,6 @@ async fn create_project(
     Ok(Json(deployment))
 }
 
-#[post("/<project_name>/secrets", data = "<secrets>")]
-async fn project_secrets(
-    state: &State<ApiState>,
-    secrets: Json<HashMap<String, String>>,
-    project_name: ProjectName,
-    user: ScopedUser,
-) -> ApiResult<DeploymentMeta, DeploymentApiError> {
-    info!("[PROJECT_SECRETS, {}, {}]", user.name(), &project_name);
-
-    let deployment = state
-        .deployment_manager
-        .get_deployment_for_project(user.scope())
-        .await?;
-
-    if let Some(database_deployment) = &deployment.database_deployment {
-        let conn_str = database_deployment.connection_string_private();
-        let conn = sqlx::PgPool::connect(&conn_str)
-            .await
-            .map_err(|e| DeploymentApiError::Internal(e.to_string()))?;
-
-        let map = secrets.into_inner();
-        for (key, value) in map.iter() {
-            conn.set_secret(key, value)
-                .await
-                .map_err(|e| DeploymentApiError::BadRequest(e.to_string()))?;
-        }
-    }
-
-    Ok(Json(deployment))
-}
-
 struct ApiState {
     deployment_manager: Arc<DeploymentSystem>,
 }
@@ -222,7 +189,6 @@ async fn rocket() -> Rocket<Build> {
                 delete_project,
                 create_project,
                 get_project,
-                project_secrets
             ],
         )
         .mount("/", routes![get_or_create_user, status, version])

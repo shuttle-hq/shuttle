@@ -50,6 +50,8 @@ struct MyState {
 
 #[shuttle_service::main]
 async fn rocket(#[shared::Postgres] pool: PgPool) -> shuttle_service::ShuttleRocket {
+    pool.get_secret("MY_API_KEY").await.expect("could not access secret from `Secrets.toml` in main function");
+
     pool.execute(include_str!("../schema.sql"))
         .await
         .map_err(CustomError::new)?;

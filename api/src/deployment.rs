@@ -1,5 +1,5 @@
 use core::default::Default;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs::DirEntry;
 use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener};
@@ -9,6 +9,7 @@ use std::sync::Arc;
 use anyhow::{anyhow, Context as AnyhowContext};
 use chrono::{DateTime, Utc};
 use futures::prelude::*;
+use lazy_static::lazy_static;
 use libloading::Library;
 use proto::provisioner::provisioner_client::ProvisionerClient;
 use rocket::data::ByteUnit;
@@ -17,9 +18,10 @@ use shuttle_common::project::ProjectName;
 use shuttle_common::{
     DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, LogItem, Port,
 };
-use shuttle_service::loader::Loader;
 use shuttle_service::logger::Log;
-use shuttle_service::ServeHandle;
+use shuttle_service::{loader::Loader, shared};
+use shuttle_service::{ResourceBuilder, SecretStore, ServeHandle};
+use tokio::runtime::Runtime;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::{mpsc, RwLock};
 use tonic::transport::{Channel, Endpoint};
@@ -35,6 +37,10 @@ use crate::{BuildSystem, ShuttleFactory};
 // The current tokio default for this pool is 512
 // https://docs.rs/tokio/latest/tokio/runtime/struct.Builder.html#method.max_blocking_threads
 pub const MAX_DEPLOYS: usize = 512;
+
+lazy_static! {
+    static ref DB_ACCESS_RUNTIME: Arc<Runtime> = Arc::new(Runtime::new().unwrap());
+}
 
 /// Inner struct of a deployment which holds the deployment itself
 /// and the some metadata
@@ -78,7 +84,10 @@ impl Deployment {
             .context("could not parse contents of marker file to a valid path")?;
 
         let meta = DeploymentMeta::built(fqdn, project_name);
-        let state = DeploymentState::built(Build { so_path });
+        let state = DeploymentState::built(Build {
+            so_path,
+            initial_secrets: BTreeMap::new(),
+        });
         Ok(Self::new(meta, state))
     }
 
@@ -141,14 +150,14 @@ impl Deployment {
                     );
 
                     match Loader::from_so_file(&built.build.so_path) {
-                        Ok(loader) => DeploymentState::loaded(loader),
+                        Ok(loader) => DeploymentState::loaded(loader, built.build.initial_secrets),
                         Err(e) => {
                             debug!("failed to load with error: {}", &e);
                             DeploymentState::Error(e.into())
                         }
                     }
                 }
-                DeploymentState::Loaded(loader) => {
+                DeploymentState::Loaded(loaded) => {
                     let port = identify_free_port();
 
                     debug!(
@@ -162,25 +171,59 @@ impl Deployment {
                         context.provisioner_client.clone(),
                         meta.project.clone(),
                     );
-                    let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
-                    match loader.load(&mut factory, addr, run_logs_tx, meta.id).await {
-                        Err(e) => {
-                            debug!("{}: factory phase FAILED: {:?}", meta.project, e);
-                            DeploymentState::Error(e.into())
-                        }
-                        Ok((handle, so)) => {
-                            debug!("{}: factory phase DONE", meta.project);
-                            self.meta.write().await.database_deployment =
-                                factory.into_database_info();
 
-                            // Remove stale active deployments
-                            if let Some(stale_id) = context.router.promote(meta.host, meta.id).await
-                            {
-                                debug!("removing stale deployment `{}`", &stale_id);
-                                context.deployments.write().await.remove(&stale_id);
+                    let secrets_set = if !loaded.initial_secrets.is_empty() {
+                        match shared::Postgres::new().build(&mut factory, &DB_ACCESS_RUNTIME).await
+                        {
+                            Ok(db_pool) => {
+                                let mut res = Ok(());
+
+                                for (key, value) in loaded.initial_secrets.iter() {
+                                    if let Err(e) = db_pool.set_secret(key, value).await {
+                                        res = Err(anyhow!("failed to set secret '{}': {}", key, e));
+                                        break;
+                                    }
+                                }
+
+                                res
                             }
+                            Err(e) => {
+                                Err(anyhow!("failed to get database pool for purpose of setting initial secrets: {}", e))
+                            }
+                        }
+                    } else {
+                        Ok(())
+                    };
 
-                            DeploymentState::deployed(so, port, handle)
+                    if let Err(e) = secrets_set {
+                        DeploymentState::Error(e)
+                    } else {
+                        let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
+
+                        match loaded
+                            .loader
+                            .load(&mut factory, addr, run_logs_tx, meta.id)
+                            .await
+                        {
+                            Err(e) => {
+                                debug!("{}: factory phase FAILED: {:?}", meta.project, e);
+                                DeploymentState::Error(e.into())
+                            }
+                            Ok((handle, so)) => {
+                                debug!("{}: factory phase DONE", meta.project);
+                                self.meta.write().await.database_deployment =
+                                    factory.into_database_info();
+
+                                // Remove stale active deployments
+                                if let Some(stale_id) =
+                                    context.router.promote(meta.host, meta.id).await
+                                {
+                                    debug!("removing stale deployment `{}`", &stale_id);
+                                    context.deployments.write().await.remove(&stale_id);
+                                }
+
+                                DeploymentState::deployed(so, port, handle)
+                            }
                         }
                     }
                 }
@@ -605,7 +648,7 @@ enum DeploymentState {
     /// dynamically-linked library (`.so` file). The [`libloading`] crate has
     /// been used to achieve this and to obtain this particular deployment's
     /// implementation of the [`shuttle_service::Service`] trait.
-    Loaded(Loader),
+    Loaded(LoadedState),
     /// Deployment that is actively running inside a Tokio task and listening
     /// for connections on some port indicated in [`DeployedState`].
     Deployed(DeployedState),
@@ -631,8 +674,11 @@ impl DeploymentState {
         Self::Built(BuiltState { build })
     }
 
-    fn loaded(loader: Loader) -> Self {
-        Self::Loaded(loader)
+    fn loaded(loader: Loader, initial_secrets: BTreeMap<String, String>) -> Self {
+        Self::Loaded(LoadedState {
+            loader,
+            initial_secrets,
+        })
     }
 
     fn deployed(so: Library, port: Port, handle: ServeHandle) -> Self {
@@ -664,4 +710,9 @@ struct DeployedState {
     so: Library,
     port: Port,
     handle: ServeHandle,
+}
+
+struct LoadedState {
+    loader: Loader,
+    initial_secrets: BTreeMap<String, String>,
 }

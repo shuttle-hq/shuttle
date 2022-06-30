@@ -1,6 +1,6 @@
 ---
-title: Error handling in Rust
-description: A complete guide to error handling in Rust
+title: More than you've ever wanted to know about errors in Rust
+description: A (mostly) complete guide to error handling in Rust
 author: ben
 tags: [rust, tutorial]
 thumb: ferris-error-handling.png
@@ -8,11 +8,17 @@ cover: ferris-error-handling.png
 date: "2022-06-30T18:00:00"
 ---
 
-No program is perfect, some make errors. This post goes over how to handle them.
+This blog post is powered by shuttle! The serverless platform built for Rust.
 
-Before talking about Results and how to handle them we must first talk about panics:
- 
-### Panics
+---
+
+To quote the Rust Book, 'errors are a fact of life in software'. This post goes
+over how to handle them.
+
+Before talking about recoverable errors and the `Result` type, let's first
+touch on unrecoverable errors - a.k.a  panics.
+
+## Panics
 
 [Panics](https://doc.rust-lang.org/std/macro.panic.html) are exceptions a program can throw. It stops all execution in the current thread. When a panic is thrown it returns a short description of what went wrong as well as information about the position of the the panic.
 
@@ -29,7 +35,9 @@ Running the above causes:
 thread 'main' panicked at 'error!', examples\panics.rs:2:5
 ```
 
-They are similar to `throw` in JavaScript and other languages, in that the don't need a annotation on the function to run and they can pass through function boundaries. However in Rust, panics cannot be recovered from, there is no way to incept a panic in the current thread. 
+They are similar to `throw` in JavaScript and other languages, in that they
+don't require an annotation on the function to run and they can pass through
+function boundaries. However in Rust, panics cannot be recovered from, there is no way to incept a panic in the current thread.
 
 ```rust
 fn send_message(s: String) {
@@ -41,9 +49,12 @@ fn send_message(s: String) {
 }
 ```
 
-The `send_message` function is fallible (can go wrong). If this is called with a empty message then the program stops running. There is no way for the callee to track that an error has occurred. For services and other programs this can cause everything to crash and not handle anything else. 
+The `send_message` function is fallible (can go wrong). If this is called
+with an empty message then the program stops running. There is no way for the callee to track that an error has occurred.
 
-Instead for recoverable errors Rust has a type for error handling in the standard library called a **`Result`**. It is a generic type. Which means the result and error variant can be whatever you want.
+For recoverable errors, Rust has a type for error handling in the standard
+library called a **`Result`**. It is a generic type, which means the result
+and error variant can basically be whatever you want.
 
 ```rust
 pub enum Result<T, E> {
@@ -52,7 +63,7 @@ pub enum Result<T, E> {
 }
 ```
 
-### Basic error creation and handling
+## Basic error creation and handling
 
 At the moment our `send_message` function doesn't return anything. This means no information can be received by the callee. We can change the definition to instead return a `Result` and rather than panicking we can early return a `Result::Err`.
 
@@ -76,9 +87,12 @@ if let Err(send_error) = send_message(message) {
 }
 ```
 
-##### Rust knows when a Result is unused.
+### Rust knows when a Result is unused.
 
-In the above example we inspect the value of the item and branch on it. But if we didn't inspect and handle the returned Result then Rust gives use a helpful warning about it:
+In the above example we inspect the value of the item and branch on it.
+However, if we didn't inspect and handle the returned Result then the Rust
+compiler gives use a helpful warning about it so that you don't forget to
+explicitly deal with errors in your program.
 
 ```
 |     send_message();
@@ -89,7 +103,8 @@ In the above example we inspect the value of the item and branch on it. But if w
 
 ### Examples of `Result` in the standard library
 
-Result can be found in most libraries. On of my favorite examples is the return type of the [FromStr::from_str](https://doc.rust-lang.org/std/str/trait.FromStr.html#tymethod.from_str) trait method. With [str::parse](https://doc.rust-lang.org/std/primitive.str.html#method.parse) (which uses the `FromStr` trait) we can do the following:
+`Result` can be found in most libraries. On of my favorite examples is the
+return type of the [FromStr::from_str](https://doc.rust-lang.org/std/str/trait.FromStr.html#tymethod.from_str) trait method. With [str::parse](https://doc.rust-lang.org/std/primitive.str.html#method.parse) (which uses the `FromStr` trait) we can do the following:
 
 ```rust
 fn main() {
@@ -107,7 +122,7 @@ fn main() {
 }
 ```
 
-We will ignore the unwrap for now 😉
+(We'll ignore the `unwrap` for now 😉)
 
 ```js
 $ cargo r --example input -q
@@ -127,23 +142,45 @@ bad
 
 Here we can see when we type in a number we get a `Ok` variant with the number else we get a [ParseFloatError](https://doc.rust-lang.org/std/num/struct.ParseFloatError.html)
 
-### Files, networks and databases
+## Files, networks and databases
 
-**All errors occur when you interact with the outside world or things outside of the Rust runtime**. One of the places where a lot of errors can occur is interacting with the file system. The `File::open` function attempts to open a file. This can fail for many reasons, either the filename being attempted to open is invalid, the file does not exist or a permission error. Otherwise it returns a Ok variant with a [File](https://doc.rust-lang.org/std/fs/struct.File.html) which can be read or written to.
+**All errors occur when you interact with the outside world or things
+outside the Rust runtime**. One of the places where a lot of errors can
+occur is interacting with the file system. The `File::open` function
+attempts to open a file. This can fail for a variety of reasons. The
+filename is invalid, the file doesn't exist or you simply don't have
+permission to read the file. Notice the errors are well-defined and known
+before-hand. You can even access the error variants with the [`kind`](https://doc.rust-lang.org/std/io/struct.Error.html#method.kind) function
+and in order to implement your program logic or return an instructive error
+message to the user.
 
-##### Aliasing Results and errors
+### Aliasing Results and errors
 
-For many results that have the same error you can use type aliases to simplify things. All functions which operate on the FS have the same errors (file not exists, invalid permissions). [io::Result](https://doc.rust-lang.org/std/io/type.Result.html) is a alias over a result but means that every function does not have to specify the error type:
+When you're working on a project you'll often find yourself repeating
+yourself when it comes to return types in function signatures:
+
+```rust
+fn foo() -> Result<SomeType, MyError> {
+...
+}
+```
+
+To give a concrete example, all functions which operate on the FS have the same
+errors (file not exists, invalid permissions). [io::Result](https://doc.rust-lang.org/std/io/type.Result.html) is a alias over a result but means that every function does not have to specify the error type:
 
 ```rust
 pub type Result<T> = Result<T, io::Error>;
 ```
 
-If you have a API which has a common error type it may be a good idea to consider this pattern.
+If you have an API which has a common error type, you may want to
+consider this pattern.
 
-### The question mark operator 
+### The question mark operator
 
-The question mark operator can short circuit Result error values.
+One of the best things about Results is the question mark operator, The
+question mark operator can short circuit Result
+error values. Let's look at a simple function which uploads text from a file.
+This can error in a bunch of different ways:
 
 ```rust
 fn upload_file() -> Result<(), &'static str> {
@@ -160,20 +197,24 @@ fn upload_file() -> Result<(), &'static str> {
 }
 ```
 
-We are writing Rust not Go!
+Hang on, we're writing Rust not Go!
 
-If a `?` is postfixed on to a Result (or anything that implements [`try`](https://doc.rust-lang.org/std/ops/trait.Try.html) so also `Option`) then it desugars or is equivalent to:
+If a `?` is postfixed on to a Result (or anything that implements [`try`](https://doc.rust-lang.org/std/ops/trait.Try.html) so also `Option`) we can
+obtain a functionally equivalent outcome with a much more readable and
+concise syntax.
 
 ```rust
-fn move_from_file_to_db() -> Result<(), &'static str> {
-    let text = std::fs::read_to_string("file.txt")?
-        .map_err(|_| "read file error");
-    send_to_db()?;
+fn upload_file() -> Result<(), &'static str> {
+    let text = std::fs::read_to_string("file.txt").map_err(|_| "read file error")?;
+    upload_text(text)?;
     Ok(())
 }
 ```
 
-The nice thing about the question mark operator on Result is that it implicitly runs [Into::into](https://doc.rust-lang.org/std/convert/trait.Into.html#tymethod.into) (which is automatically implemented for [From](https://doc.rust-lang.org/std/convert/trait.From.html) implementors) on the error value. So we can don't have to worry about converting the error before we use the operator:
+As long as the calling function also returns a `Result` with the
+same `Error` type, `?` saves a ton of explicit code being written. Moreover,
+the question-mark implicitly runs [Into::into](https://doc.rust-lang.org/std/convert/trait.Into.html#tymethod.into)
+(which is automatically implemented for [From](https://doc.rust-lang.org/std/convert/trait.From.html) implementors) on the error value. So we don't have to worry about converting the error before we use the operator:
 
 ```rust
 // This derive means we get a a into implementation for `std::io::Error -> MyError`
@@ -191,9 +232,14 @@ fn do_stuff() -> Result<(), MyError> {
 
 We will look at more patterns for combining error types later!
 
-### [The error trait](https://doc.rust-lang.org/std/error/trait.Error.html)
+## [The Error trait](https://doc.rust-lang.org/std/error/trait.Error.html)
 
-[The Error trait is implemented for many errors](https://doc.rust-lang.org/std/error/trait.Error.html#implementors) and provides a unified API for information on errors. The Error trait is a bit needy and requires that the error implements both [Debug](https://doc.rust-lang.org/std/fmt/trait.Debug.html) and [Display](https://doc.rust-lang.org/std/fmt/trait.Display.html). While it can be cumbersome to implement we will see some helper libraries for doing so later on.
+The [Error](https://doc.rust-lang.org/std/error/trait.Error.html#) trait is
+defined in the standard library. It basically
+represents the expectations of error values - values of type `E` in
+`Result<T,E>`
+[The Error trait is implemented for many errors](https://doc.rust-lang.org/std/error/trait.Error.html#implementors)
+and provides a unified API for information on errors. The Error trait is a bit needy and requires that the error implements both [Debug](https://doc.rust-lang.org/std/fmt/trait.Debug.html) and [Display](https://doc.rust-lang.org/std/fmt/trait.Display.html). While it can be cumbersome to implement we will see some helper libraries for doing so later on.
 
 In the standard library [VarError](https://doc.rust-lang.org/std/env/enum.VarError.html) (for reading environment variables) and [ParseIntError](https://doc.rust-lang.org/std/num/struct.ParseIntError.html) (for parsing a string slice as a integer) are different errors. When we interact them we need to differentiate between the types because they have different properties and different stack sizes. To build a combination of them we could build a sum type using a enum. Alternatively we can use dynamically dispatched traits which handled varying stack sized items and other type information.
 
@@ -208,17 +254,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-[(main function can return Result)](https://github.com/rust-lang/rust/pull/49162)
-
 While this is a easy way to handle errors, it isn't easy to differentiate between the types and can make handling errors in libraries hard. More information on this later.
 
-### Methods on Result
+### The Error trait vs Results and enums
+
+One thing when using an enum is we can use `match` to branch on the enum
+error variants. On the other hand, with the `dyn` trait unless you go down
+the down casting path it is very hard to get specific information about the
+error:
+
+```rust
+match my_enum_error {
+    FsError(err) => {
+        report_fs_error(err)
+    },
+    DbError(DbError { err, database }) => {
+        report_db_error(database, err)
+    },
+}
+```
+
+For reusable libraries it is better to use enums to combine errors so that
+users of your library can handle the specifics themselves. But for CLIs and
+other applications using the trait can be a lot simpler.
+
+## Methods on Result
 
 Result and Option contains many useful functions. Here are some of my commonly used:
 
-##### [Result::map](https://doc.rust-lang.org/std/result/enum.Result.html#method.map)
+### [Result::map](https://doc.rust-lang.org/std/result/enum.Result.html#method.map)
 
-This maps or converts the Ok value if it exists. This can be more concise than using the `?` operator.
+This maps or converts the `Ok` value if it exists. This can be more concise
+than using the `?` operator.
 
 ```rust
 fn string_to_plus_one(s: &str) -> Result<i32, std::num::ParseIntError> {
@@ -226,7 +293,7 @@ fn string_to_plus_one(s: &str) -> Result<i32, std::num::ParseIntError> {
 }
 ```
 
-##### [Result::ok](https://doc.rust-lang.org/std/result/enum.Result.html#method.ok)
+### [Result::ok](https://doc.rust-lang.org/std/result/enum.Result.html#method.ok)
 
 Useful for converting Results to Options
 
@@ -245,9 +312,12 @@ fn get_first(vec: &Vec<i32>) -> Result<&i32, NotInVec> {
 }
 ```
 
-### Error handling for iteration 
+### Error handling for iteration
 
-Using results in iterator chains can be a little confusing. Luckily Result implements collect. We can use this to short circuit a iterator if a error occurs. In the following, if all the `parse`s succeed then we get collected vec of numbers result. If one fails then it instead returns a Result with the failing Err.
+Using results in iterator chains can be a little confusing. Luckily `Result`
+implements [collect](https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.collect).
+We can use this to short circuit an iterator if an error
+occurs. In the following, if all the `parse`s succeed then we get collected vec of numbers result. If one fails then it instead returns a Result with the failing Err.
 
 ```rust
 fn main() {
@@ -260,20 +330,25 @@ fn main() {
 ```
 
 ```
-[examples\iteration.rs:6] a = Err( ParseFloatError { kind: Invalid, }, ) 
+[examples\iteration.rs:6] a = Err( ParseFloatError { kind: Invalid, }, )
 ```
 
 Removing the `"not a number"` entry
 
 ```
-[examples\iteration.rs:3] a = Ok( [ 1.0, 2.0, ], ) 
+[examples\iteration.rs:3] a = Ok( [ 1.0, 2.0, ], )
 ```
 
 Because Rust iterators are *piecewise* and lazy the iterator can short circuit without evaluating parse on any of the later items.
 
+## More Panic
+
 ### Special panics
 
-`todo!()`, `unimplemented!()`, `unreachable!()` are all wrappers for `panic!()` which but are specialized to their situation. Panics have a special `!` never type, which means they can be passed of as any type.
+`todo!()`, `unimplemented!()`, `unreachable!()` are all wrappers for `panic!
+()` which but are specialized to their situation. Panics have a special [`!`](https://doc.rust-lang.org/reference/types/never.html)
+type, called the 'never type', which represents the result of computations
+that never complete (also means it can be passed anywhere):
 
 ```rust
 fn func_i_havent_written_yet() -> u32 {
@@ -281,7 +356,8 @@ fn func_i_havent_written_yet() -> u32 {
 }
 ```
 
-Sometimes there is Rust code which the compiler cannot properly infer is valid. For those using a `unreachable!` panic can be used:
+Sometimes there is Rust code which the compiler cannot properly infer is
+valid. For this type of situation, the `unreachable!` panic can be used:
 
 ```rust
 fn get_from_vec_else_zero(a: Vec<i32>) -> i32 {
@@ -299,7 +375,8 @@ fn get_from_vec_else_zero(a: Vec<i32>) -> i32 {
 
 ### Unwrapping
 
-Unwraps turn Results into panics and exist on Option and Result. They return the Ok or Some variant or else panic...
+`unwrap` is a method on `Result` and `Option`. They return the `Ok` or `Some`
+variant or else panic...
 
 ```rust
 // result.unwrap()
@@ -311,11 +388,21 @@ let value = if let Ok(value) = result {
 };
 ```
 
-The uses cases for this is developer error and in situations the compiler cannot infer. If you are just trying something and don't want to set up a full error handling system then they can be used to ignore compiler warnings.
+The uses cases for this is developer error and situations the compiler can't
+quite figure out.
+If you are just trying something and don't want to set up a full error handling system then they can be used to ignore compiler warnings.
 
-### Standard library panics
+Even if the situation calls for `unwrap` you are better off using `expect`
+which has an accompanying message - you'll be thanking your past self when the
+`expect` error message helps you find the root cause of an issue 2 weeks
+down the line.
 
-It is important to note that some of the APIs in the standard library can panic. You should look out for these annotations in the docs. One of them is [Vec::remove](https://doc.rust-lang.org/std/vec/struct.Vec.html#panics-6). If you use this then make sure to handle the case if you are not sure that the argument is in its indexable range.
+### Panics in the standard library
+
+It is important to note that some of the APIs in the standard library *can*
+panic. You should look out for these annotations in the docs. One of them is
+[Vec::remove](https://doc.rust-lang.org/std/vec/struct.Vec.html#panics-6).
+If you use this you should ensure that the argument is in its indexable range.
 
 ```rust
 fn remove_at_idx(a: usize, vec: &mut Vec<i32>) -> Option<i32> {
@@ -327,9 +414,12 @@ fn remove_at_idx(a: usize, vec: &mut Vec<i32>) -> Option<i32> {
 }
 ```
 
-# Handling multiple errors and helper crates:
+## Handling multiple errors and helper crates:
 
-Handling errors from multiple libraries and APIs become different because they are different types. They are different sizes and contain different information. To unify the types we have to build a sum type using a enum to ensure they have the same size.
+Handling errors from multiple libraries and APIs can become challenging as
+you have to deal with a bunch of different types. They are different sizes
+and contain different information. To unify the types we have to build a sum
+type using an enum, in order to ensure they have the same size at compile time.
 
 ```rust
 enum Errors {
@@ -343,7 +433,9 @@ Some crates for making creating these unifying enums easier:
 
 ### [thiserror](https://crates.io/crates/thiserror)
 
-This errors is a derive implementation which adds the Error trait for us. As previously mentioned to implement Error we have to implement display and thiserrors' `#[error]` attributes provide templating for the displayed errors.
+`thiserror` provides a derive implementation which adds the Error trait for us.
+As previously mentioned, to implement Error we have to implement display and
+thiserrors' `#[error]` attributes provide templating for the displayed errors.
 
 ```rust
 use thiserror::Error;
@@ -366,25 +458,50 @@ pub enum DataStoreError {
 
 ### [anyhow](https://crates.io/crates/anyhow)
 
-Anyhow is a different way for handling Errors. It is similar to the previously mentioned error trait but has additional features such as adding context to thrown errors.
+`anyhow` provides an ergonomic and idiomatic alternative to explicitly
+handling errors. It is similar to the previously mentioned error trait but
+has additional features such as adding context to thrown errors.
+
+This is really, really, useful when you want to convey errors to an
+application's users in a context-aware fashion:
 
 ```rust
 use anyhow::{bail, Result, Context};
 
 fn main() -> Result<()> {
     println!("Hello World!");
-    func1().context("Calling func1")?;
+    func1().context("while calling func1")?;
     Ok(())
 }
 
 fn func1() -> Result<()> {
-    bail!("Test")
+    func2().context("while calling func2")
+}
+
+fn func2() -> Result<()> {
+    bail!("Hmm something went wrong ")
 }
 ```
 
+```
+Error: while calling func1
+
+Caused by:
+    0: while calling func2
+    1: Hmm something went wrong
+```
+
+
+Similar to the `Error` trait, `anyhow` suffers from the fact you can't match on
+`anyhow`'s result error variant. This is why it is suggested in `anyhow`'s
+docs to use `anyhow` for applications and `thiserror` for libraries.
+
 ### [eyre](https://crates.io/crates/eyre)
 
-Adds more backtrace information and using [color-eyre](https://lib.rs/crates/color-eyre) we get colors in our panic messages.
+Finally, `eyre` is a fork of `anyhow` and adds more backtrace information.
+It's highly customisable and using [color-eyre](https://lib.
+rs/crates/color-eyre) we get colors in our panic messages - a little color
+always brightens up the dev experience.
 
 ```
 The application panicked (crashed).
@@ -392,13 +509,11 @@ Message:  test
 Location: examples\color_eyre.rs:6
 
   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                                ⋮ 13 frames hidden ⋮                              
+                                ⋮ 13 frames hidden ⋮
   14: core::ops::function::FnOnce::call_once<enum$<core::result::Result<tuple$<>,eyre::Report>, 1, 18446744073709551615, Err> (*)(),tuple$<> ><unknown>
       at /rustc/7737e0b5c4103216d6fd8cf941b7ab9bdbaace7c\library\core\src\ops\function.rs:227
                                 ⋮ 17 frames hidden ⋮
 ```
-
-This blog post is powered by shuttle! The serverless platform built for Rust.
 
 ## [Shuttle](https://www.shuttle.rs/): Stateful Serverless for Rust
 

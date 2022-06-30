@@ -121,12 +121,9 @@ impl Shuttle {
     }
 
     fn find_root_directory(dir: &Path) -> Option<PathBuf> {
-        for ancestor in dir.ancestors() {
-            if ancestor.join("Cargo.toml").exists() {
-                return Some(ancestor.to_path_buf());
-            }
-        }
-        None
+        dir.ancestors()
+            .find(|ancestor| ancestor.join("Cargo.toml").exists())
+            .map(|path| path.to_path_buf())
     }
 
     pub fn load_project(&mut self, project_args: &mut ProjectArgs) -> Result<()> {

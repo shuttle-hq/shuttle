@@ -277,6 +277,7 @@ mod tests {
     use tracing_subscriber::prelude::*;
 
     use crate::deployment::{deploy_layer::LogType, Built, DeploymentManager, Queued, State};
+    use crate::persistence::Persistence;
 
     use super::{DeployLayer, Log, LogRecorder};
 
@@ -344,7 +345,7 @@ mod tests {
 
     #[tokio::test]
     async fn deployment_to_be_queued() {
-        let deployment_manager = DeploymentManager::new();
+        let deployment_manager = DeploymentManager::new(Persistence::new_in_memory().await.0);
 
         deployment_manager
             .queue_push(Queued {
@@ -390,7 +391,7 @@ mod tests {
 
     #[tokio::test]
     async fn deployment_from_run() {
-        let deployment_manager = DeploymentManager::new();
+        let deployment_manager = DeploymentManager::new(Persistence::new_in_memory().await.0);
 
         deployment_manager
             .run_push(Built {

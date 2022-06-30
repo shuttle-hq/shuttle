@@ -32,18 +32,16 @@ $ docker compose -f docker-compose.dev.yml up -d
 
 The API is now accessible on `localhost:8000` (for app proxies) and `localhost:8001` (for the control plane). When running `cargo run --bin cargo-shuttle` (in a debug build), the CLI will point itself to `localhost` for its API calls. The deployment parameters can be tweaked by changing values in the [.env](./.env) file.
 
-In order to test local changes to the `shuttle-service` crate, you may want to add the following to a `.cargo/config.toml` file:
-See [Overriding Dependencies](https://doc.rust-lang.org/cargo/reference/overriding-dependencies.html) for more.
+In order to test local changes to the `shuttle-service` crate, you may want to add the below to a `.cargo/config.toml` file. (See [Overriding Dependencies](https://doc.rust-lang.org/cargo/reference/overriding-dependencies.html) for more)
 
 ``` toml
 [patch.crates-io]
 shuttle-service = { path = "[base]/shuttle/service" }
 ```
 
-Login to shuttle service in a new terminal window:
+Login to shuttle service in a new terminal window from the main shuttle directory:
 
 ```bash
-cd path/to/shuttle/repo
 cargo run --bin cargo-shuttle -- login --api-key "ci-test"
 ```
 

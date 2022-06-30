@@ -24,7 +24,7 @@ fn cargo_shuttle_deploy(path: &str, api_url: String) -> impl Future<Output = any
 }
 
 #[should_panic(
-    expected = "Your shuttle_service version is outdated. Update your shuttle_service version to 1.2.5 and try to deploy again"
+    expected = "Your shuttle-service version is outdated. Update your shuttle-service version to 1.2.5 and try to deploy again"
 )]
 #[test_context(HttpTestContext)]
 #[tokio::test]

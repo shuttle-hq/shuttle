@@ -5,6 +5,7 @@ use std::process::Command;
 use anyhow::{anyhow, Context, Result};
 use rocket::tokio;
 use rocket::tokio::io::AsyncWriteExt;
+use semver::{Version, VersionReq};
 use shuttle_service::loader::build_crate;
 use uuid::Uuid;
 
@@ -26,6 +27,7 @@ pub(crate) trait BuildSystem: Send + Sync {
         &self,
         crate_bytes: &[u8],
         project: &str,
+        mssv: &str,
         buf: Box<dyn std::io::Write + Send>,
     ) -> Result<Build>;
 
@@ -73,6 +75,7 @@ impl BuildSystem for FsBuildSystem {
         &self,
         crate_bytes: &[u8],
         project_name: &str,
+        mssv: &str,
         buf: Box<dyn std::io::Write + Send>,
     ) -> Result<Build> {
         // project path
@@ -96,6 +99,9 @@ impl BuildSystem for FsBuildSystem {
 
         // extract tarball
         extract_tarball(&crate_path, &project_path)?;
+
+        // check shuttle service version of service
+        check_shuttle_version(&project_path, mssv)?;
 
         // run cargo build (--debug for now)
         let so_path = build_crate(&project_path, buf)?;
@@ -187,4 +193,59 @@ fn extract_tarball(crate_path: &Path, project_path: &Path) -> Result<()> {
     } else {
         Ok(())
     }
+}
+
+fn check_shuttle_version(working_directory: &Path, mssv: &str) -> anyhow::Result<()> {
+    let cargo_path = working_directory.join("Cargo.toml");
+    let current_shuttle_version = get_shuttle_service_from_user_crate(&cargo_path)?;
+    let service_semver = Version::parse(&current_shuttle_version)?;
+    let server_version = Version::parse(mssv)?;
+    let version_required = format!("{}.{}", server_version.major, server_version.minor);
+    let server_semver = VersionReq::parse(&version_required)?;
+
+    if server_semver.matches(&service_semver) {
+        Ok(())
+    } else {
+        Err(anyhow!(
+            "Your shuttle-service version ({}) is outdated. Update your shuttle-service version to {} and try to deploy again",
+            &current_shuttle_version,
+            &server_version,
+        ))
+    }
+}
+
+fn get_shuttle_service_from_user_crate(cargo_path: &Path) -> anyhow::Result<String> {
+    let cargo_tree = Command::new("cargo")
+        .args([
+            "tree",
+            "--manifest-path",
+            cargo_path.to_str().unwrap(),
+            "--package",
+            "shuttle-service",
+            "--depth",
+            "0",
+        ])
+        .output()
+        .map_err(|err| match err.kind() {
+            io::ErrorKind::NotFound => io::Error::new(io::ErrorKind::NotFound, "Cargo not found"),
+            _ => err,
+        })?;
+
+    let stdout = String::from_utf8_lossy(&cargo_tree.stdout);
+    let mut service_version = String::new();
+
+    stdout
+        .as_ref()
+        .lines()
+        .map(|line| match line.find('(') {
+            Some(index) => &line[..index - 1],
+            None => line,
+        })
+        .filter(|line| line.contains("shuttle-service"))
+        .for_each(|dep| {
+            service_version = dep.split_whitespace().skip(1).take(1).collect();
+            service_version = service_version.replace('v', "");
+        });
+
+    Ok(service_version)
 }

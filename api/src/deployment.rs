@@ -123,6 +123,7 @@ impl Deployment {
                         .build(
                             &queued.crate_bytes,
                             meta.project.as_str(),
+                            &context.shuttle_version,
                             Box::new(console_writer),
                         )
                         .await
@@ -288,6 +289,7 @@ pub(crate) struct DeploymentSystem {
     job_queue: JobQueue,
     router: Arc<Router>,
     fqdn: String,
+    pub(crate) shuttle_version: String,
 }
 
 const JOB_QUEUE_SIZE: usize = 200;
@@ -338,6 +340,7 @@ pub(crate) struct Context {
     build_system: Box<dyn BuildSystem>,
     deployments: Arc<RwLock<Deployments>>,
     provisioner_client: ProvisionerClient<Channel>,
+    shuttle_version: String,
 }
 
 impl DeploymentSystem {
@@ -346,6 +349,7 @@ impl DeploymentSystem {
         fqdn: String,
         provisioner_address: String,
         provisioner_port: Port,
+        shuttle_version: String,
     ) -> Self {
         let router: Arc<Router> = Default::default();
         let (tx, mut rx) = mpsc::unbounded_channel::<Log>();
@@ -381,6 +385,7 @@ impl DeploymentSystem {
             build_system,
             deployments: deployments.clone(),
             provisioner_client,
+            shuttle_version: shuttle_version.clone(),
         };
 
         let job_queue = JobQueue::new(context, tx).await;
@@ -396,6 +401,7 @@ impl DeploymentSystem {
             job_queue,
             router,
             fqdn,
+            shuttle_version,
         }
     }
 

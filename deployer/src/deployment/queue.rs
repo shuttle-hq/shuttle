@@ -1,5 +1,6 @@
 use super::{Built, QueueReceiver, RunSender, State};
 use crate::error::{Error, Result};
+use crate::persistence::Persistence;
 
 use shuttle_service::loader::build_crate;
 use tracing::{debug, error, info, instrument};
@@ -15,17 +16,14 @@ use futures::{Stream, StreamExt};
 use rand::distributions::DistString;
 use tar::Archive;
 use tokio::fs;
-use tokio::io::AsyncReadExt;
 
 /// Path of the directory that contains extracted service Cargo projects.
 const BUILDS_PATH: &str = "/tmp/shuttle-builds";
 
-/// The name given to 'marker files' (text files placed in project directories
-/// that have in them the name of the linked library '.so' file of that service
-/// when built.
-const MARKER_FILE_NAME: &str = ".shuttle-marker";
+/// The directory in which compiled '.so' files are stored.
+const LIBS_PATH: &str = "/tmp/shuttle-libs";
 
-pub async fn task(mut recv: QueueReceiver, run_send: RunSender) {
+pub async fn task(mut recv: QueueReceiver, persistence: Persistence, run_send: RunSender) {
     info!("Queue task started");
 
     while let Some(queued) = recv.recv().await {
@@ -33,10 +31,11 @@ pub async fn task(mut recv: QueueReceiver, run_send: RunSender) {
 
         info!("Queued deployment at the front of the queue: {}", name);
 
+        let persistence_clone = persistence.clone();
         let run_send_cloned = run_send.clone();
 
         tokio::spawn(async move {
-            match queued.handle().await {
+            match queued.handle(persistence_clone).await {
                 Ok(built) => promote_to_run(built, run_send_cloned).await,
                 Err(e) => error!("Error during building of deployment '{}' - {e}", name),
             }
@@ -55,8 +54,11 @@ pub struct Queued {
 }
 
 impl Queued {
-    #[instrument(skip(self), fields(name = self.name.as_str(), state = %State::Building))]
-    async fn handle(mut self) -> Result<Built> {
+    #[instrument(skip(self, persistence), fields(name = self.name.as_str(), state = %State::Building))]
+    async fn handle(mut self, persistence: Persistence) -> Result<Built> {
+        fs::create_dir_all(BUILDS_PATH).await?;
+        fs::create_dir_all(LIBS_PATH).await?;
+
         info!("Fetching POSTed data");
 
         let mut vec = Vec::new();
@@ -67,8 +69,6 @@ impl Queued {
         }
 
         info!("Extracting received data");
-
-        fs::create_dir_all(BUILDS_PATH).await?;
 
         let project_path = PathBuf::from(BUILDS_PATH).join(&self.name);
 
@@ -84,11 +84,11 @@ impl Queued {
 
         info!("Removing old build (if present)");
 
-        remove_old_build(&project_path).await?;
+        remove_old_build(&persistence, &self.name).await?;
 
-        info!("Moving built library and creating marker file");
+        info!("Moving built library and storing its location in the database");
 
-        rename_build(&project_path, so_path).await?;
+        store_build(&persistence, &self.name, so_path).await?;
 
         let built = Built { name: self.name };
 
@@ -117,41 +117,34 @@ fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<()> {
     Ok(())
 }
 
-/// Check for an existing marker file in the specified project directory and
-/// if one exists delete the indicated '.so' file.
-async fn remove_old_build(project_path: impl AsRef<Path>) -> Result<()> {
-    let marker_path = project_path.as_ref().join(MARKER_FILE_NAME);
+/// Check for a '.so' file specified in the database for the given deployment
+/// name and, if one is found, delete it from the libs directory.
+async fn remove_old_build(persistence: &Persistence, name: &str) -> Result<()> {
+    if let Some(lib_name) = persistence.get_last_built_lib(name).await? {
+        let lib_path = Path::new(LIBS_PATH).join(lib_name);
 
-    if let Ok(mut existing_marker_file) = fs::File::open(&marker_path).await {
-        let mut old_so_name = String::new();
-        existing_marker_file
-            .read_to_string(&mut old_so_name)
-            .await?;
-
-        let old_so_path = project_path.as_ref().join(old_so_name);
-
-        if old_so_path.exists() {
-            fs::remove_file(old_so_path).await?;
+        if lib_path.exists() {
+            fs::remove_file(lib_path).await?;
         }
-
-        fs::remove_file(marker_path).await?;
     }
 
     Ok(())
 }
 
 /// Give the '.so' file specified a random name so that re-deployments are
-/// properly re-loaded.
-async fn rename_build(project_path: impl AsRef<Path>, so_path: impl AsRef<Path>) -> Result<()> {
+/// properly re-loaded. Store that name in the database.
+async fn store_build(
+    persistence: &Persistence,
+    name: &str,
+    old_so_path: impl AsRef<Path>,
+) -> Result<()> {
     let random_so_name =
         rand::distributions::Alphanumeric.sample_string(&mut rand::thread_rng(), 16);
-    let random_so_path = project_path.as_ref().join(&random_so_name);
+    let new_so_path = Path::new(LIBS_PATH).join(&random_so_name);
 
-    fs::rename(so_path, random_so_path).await?;
+    fs::rename(old_so_path, new_so_path).await?;
 
-    fs::write(project_path.as_ref().join(MARKER_FILE_NAME), random_so_name).await?;
-
-    Ok(())
+    persistence.set_last_built_lib(name, &random_so_name).await
 }
 
 #[cfg(test)]

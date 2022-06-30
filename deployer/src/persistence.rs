@@ -45,13 +45,18 @@ impl Persistence {
                 state INTEGER          -- Enum indicating the current state of the deployment.
             );
 
+            CREATE TABLE IF NOT EXISTS libs (
+                name TEXT PRIMARY KEY, -- Name of the service.
+                lib TEXT               -- The name of linked library produced the last time the service was built.
+            );
+
             CREATE TABLE IF NOT EXISTS logs (
                 name TEXT,         -- The service that this log line pertains to.
                 timestamp INTEGER, -- Unix eopch timestamp.
                 state INTEGER,     -- The state of the deployment at the time at which the log text was produced.
                 level TEXT,        -- The log level
                 file TEXT,         -- The file log took place in
-                line INTEGER,       -- The line log took place on
+                line INTEGER,      -- The line log took place on
                 fields TEXT        -- Log fields object.
             );
         ").execute(&pool).await.unwrap();
@@ -125,6 +130,25 @@ impl Persistence {
             .bind(State::Running)
             .fetch_all(&self.pool)
             .await
+            .map_err(Into::into)
+    }
+
+    pub async fn get_last_built_lib(&self, name: &str) -> Result<Option<String>> {
+        sqlx::query_as("SELECT lib FROM libs WHERE name = ?")
+            .bind(name)
+            .fetch_optional(&self.pool)
+            .await
+            .map(|option| option.map(|(lib,)| lib))
+            .map_err(Into::into)
+    }
+
+    pub async fn set_last_built_lib(&self, name: &str, lib: &str) -> Result<()> {
+        sqlx::query("INSERT OR REPLACE INTO libs (name, lib) VALUES (?, ?)")
+            .bind(name)
+            .bind(lib)
+            .execute(&self.pool)
+            .await
+            .map(|_| ())
             .map_err(Into::into)
     }
 

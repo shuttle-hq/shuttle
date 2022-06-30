@@ -1,15 +1,15 @@
 use colored::Color;
 
-mod helpers;
+use crate::helpers;
 
 #[test]
-fn hello_world() {
-    let client = helpers::Services::new_docker("hello-world", Color::Green);
-    client.deploy("../examples/rocket/hello-world");
+fn hello_world_rocket() {
+    let client = helpers::Services::new_docker("hello-world (rocket)", Color::Green);
+    client.deploy("rocket/hello-world");
 
     let request_text = client
         .get("hello")
-        .header("Host", "hello-world-rocket-app.shuttleapp.test")
+        .header("Host", "hello-world-rocket-app.localhost.local")
         .send()
         .unwrap()
         .text()
@@ -19,14 +19,14 @@ fn hello_world() {
 }
 
 #[test]
-fn postgres() {
+fn postgres_rocket() {
     let client = helpers::Services::new_docker("postgres", Color::Blue);
-    client.deploy("../examples/rocket/postgres");
+    client.deploy("rocket/postgres");
 
     let add_response = client
         .post("todo")
         .body("{\"note\": \"To the stars\"}")
-        .header("Host", "postgres-rocket-app.shuttleapp.test")
+        .header("Host", "postgres-rocket-app.localhost.local")
         .send()
         .unwrap()
         .text()
@@ -36,7 +36,7 @@ fn postgres() {
 
     let fetch_response: String = client
         .get("todo/1")
-        .header("Host", "postgres-rocket-app.shuttleapp.test")
+        .header("Host", "postgres-rocket-app.localhost.local")
         .send()
         .unwrap()
         .text()
@@ -46,7 +46,7 @@ fn postgres() {
 
     let secret_response: String = client
         .get("secret")
-        .header("Host", "postgres-rocket-app.shuttleapp.test")
+        .header("Host", "postgres-rocket-app.localhost.local")
         .send()
         .unwrap()
         .text()

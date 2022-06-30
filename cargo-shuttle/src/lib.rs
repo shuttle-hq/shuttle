@@ -178,7 +178,7 @@ impl Shuttle {
     async fn delete(&self) -> Result<()> {
         client::delete(
             self.ctx.api_url(),
-            self.ctx.api_key()?,
+            &self.ctx.api_key()?,
             self.ctx.project_name(),
         )
         .await
@@ -188,7 +188,7 @@ impl Shuttle {
     async fn status(&self) -> Result<()> {
         client::status(
             self.ctx.api_url(),
-            self.ctx.api_key()?,
+            &self.ctx.api_key()?,
             self.ctx.project_name(),
         )
         .await
@@ -198,7 +198,7 @@ impl Shuttle {
     async fn logs(&self) -> Result<()> {
         client::logs(
             self.ctx.api_url(),
-            self.ctx.api_key()?,
+            &self.ctx.api_key()?,
             self.ctx.project_name(),
         )
         .await
@@ -262,13 +262,13 @@ impl Shuttle {
         client::deploy(
             package_file,
             self.ctx.api_url(),
-            key,
+            &key,
             self.ctx.project_name(),
         )
         .and_then(|_| {
             client::secrets(
                 self.ctx.api_url(),
-                key,
+                &key,
                 self.ctx.project_name(),
                 self.ctx.secrets(),
             )

@@ -1,11 +1,18 @@
+pub mod database;
 pub mod project;
 
-use crate::project::ProjectName;
+use std::{
+    collections::BTreeMap,
+    fmt::{Display, Formatter},
+};
+
 use chrono::{DateTime, Utc};
+use log::Level;
 use rocket::Responder;
 use serde::{Deserialize, Serialize};
-use std::fmt::{Display, Formatter};
 use uuid::Uuid;
+
+use crate::project::ProjectName;
 
 pub const SHUTTLE_PROJECT_HEADER: &str = "Shuttle-Project";
 
@@ -31,7 +38,7 @@ pub struct DeploymentMeta {
     pub state: DeploymentStateMeta,
     pub host: String,
     pub build_logs: Option<String>,
-    pub runtime_logs: Option<String>,
+    pub runtime_logs: BTreeMap<DateTime<Utc>, LogItem>,
     pub database_deployment: Option<DatabaseReadyInfo>,
     pub created_at: DateTime<Utc>,
 }
@@ -53,7 +60,7 @@ impl DeploymentMeta {
             state,
             host,
             build_logs: None,
-            runtime_logs: None,
+            runtime_logs: BTreeMap::new(),
             database_deployment: None,
             created_at: Utc::now(),
         }
@@ -64,19 +71,13 @@ impl DeploymentMeta {
     }
 }
 
-#[cfg(debug_assertions)]
-const PUBLIC_IP: &str = "localhost";
-
-#[cfg(not(debug_assertions))]
-const PUBLIC_IP: &'static str = "pg.shuttle.rs";
-
 impl Display for DeploymentMeta {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let db = {
             if let Some(info) = &self.database_deployment {
                 format!(
                     "\n        Database URI:       {}",
-                    info.connection_string(PUBLIC_IP)
+                    info.connection_string_public()
                 )
             } else {
                 "".to_string()
@@ -88,7 +89,7 @@ impl Display for DeploymentMeta {
         Project:            {}
         Deployment Id:      {}
         Deployment Status:  {}
-        Host:               {}
+        Host:               https://{}
         Created At:         {}{}
         "#,
             self.project, self.id, self.state, self.host, self.created_at, db
@@ -98,23 +99,55 @@ impl Display for DeploymentMeta {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatabaseReadyInfo {
-    pub role_name: String,
-    pub role_password: String,
-    pub database_name: String,
+    engine: String,
+    role_name: String,
+    role_password: String,
+    database_name: String,
+    port: String,
+    address_private: String,
+    address_public: String,
 }
 
 impl DatabaseReadyInfo {
-    pub fn new(role_name: String, role_password: String, database_name: String) -> Self {
+    pub fn new(
+        engine: String,
+        role_name: String,
+        role_password: String,
+        database_name: String,
+        port: String,
+        address_private: String,
+        address_public: String,
+    ) -> Self {
         Self {
+            engine,
             role_name,
             role_password,
             database_name,
+            port,
+            address_private,
+            address_public,
         }
     }
-    pub fn connection_string(&self, ip: &str) -> String {
+    pub fn connection_string_private(&self) -> String {
         format!(
-            "postgres://{}:{}@{}/{}",
-            self.role_name, self.role_password, ip, self.database_name
+            "{}://{}:{}@{}:{}/{}",
+            self.engine,
+            self.role_name,
+            self.role_password,
+            self.address_private,
+            self.port,
+            self.database_name
+        )
+    }
+    pub fn connection_string_public(&self) -> String {
+        format!(
+            "{}://{}:{}@{}:{}/{}",
+            self.engine,
+            self.role_name,
+            self.role_password,
+            self.address_public,
+            self.port,
+            self.database_name
         )
     }
 }
@@ -173,3 +206,10 @@ impl Display for DeploymentApiError {
 }
 
 impl std::error::Error for DeploymentApiError {}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct LogItem {
+    pub body: String,
+    pub level: Level,
+    pub target: String,
+}

@@ -1,9 +1,10 @@
-use crate::auth::AuthorizationError;
 use lazy_static::lazy_static;
 use rocket::http::Status;
 use rocket::request::{FromRequest, Outcome};
 use rocket::Request;
 use serde::{Deserialize, Serialize};
+
+use crate::auth::AuthorizationError;
 
 lazy_static! {
     static ref SHUTTLE_ADMIN_SECRET: String =

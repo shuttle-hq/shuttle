@@ -1,12 +1,18 @@
+use std::collections::HashMap;
+use std::fs::File;
+use std::io::Read;
+use std::time::Duration;
+
 use anyhow::{anyhow, Context, Result};
 use reqwest::{Response, StatusCode};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
-use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
-
+use reqwest_retry::policies::ExponentialBackoff;
+use reqwest_retry::RetryTransientMiddleware;
 use shuttle_common::project::ProjectName;
 use shuttle_common::{ApiKey, ApiUrl, DeploymentMeta, DeploymentStateMeta, SHUTTLE_PROJECT_HEADER};
-use std::{fs::File, io::Read, time::Duration};
 use tokio::time::sleep;
+
+use crate::print;
 
 pub(crate) async fn auth(api_url: ApiUrl, username: String) -> Result<ApiKey> {
     let client = get_retry_client();
@@ -63,21 +69,56 @@ pub(crate) async fn status(api_url: ApiUrl, api_key: &ApiKey, project: &ProjectN
     Ok(())
 }
 
+pub(crate) async fn shuttle_version(mut api_url: ApiUrl) -> Result<String> {
+    let client = get_retry_client();
+    api_url.push_str("/version");
+
+    let res: Response = client
+        .get(api_url)
+        .send()
+        .await
+        .context("failed to get version from Shuttle server")?;
+
+    let response_status = res.status();
+
+    if response_status == StatusCode::OK {
+        Ok(res.text().await?)
+    } else {
+        Err(anyhow!(
+            "status: {}, body: {}",
+            response_status,
+            res.text().await?
+        ))
+    }
+}
+
+pub(crate) async fn logs(api_url: ApiUrl, api_key: &ApiKey, project: &ProjectName) -> Result<()> {
+    let client = get_retry_client();
+
+    let deployment_meta = get_deployment_meta(api_url, api_key, project, &client).await?;
+
+    for (datetime, log_item) in deployment_meta.runtime_logs {
+        print::log(datetime, log_item);
+    }
+
+    Ok(())
+}
+
 async fn get_deployment_meta(
     api_url: ApiUrl,
     api_key: &ApiKey,
     project: &ProjectName,
     client: &ClientWithMiddleware,
 ) -> Result<DeploymentMeta> {
-    let mut api_url = api_url;
-    api_url.push_str(&format!("/projects/{}", project));
+    let mut url = api_url;
+    url.push_str(&format!("/projects/{}", project));
 
     let res: Response = client
-        .get(api_url)
+        .get(url)
         .basic_auth(api_key.clone(), Some(""))
         .send()
         .await
-        .context("failed to get deployment from the Shuttle server")?;
+        .context("failed to get deployment metadata")?;
 
     to_api_result(res).await
 }
@@ -96,8 +137,7 @@ pub(crate) async fn deploy(
     project: &ProjectName,
 ) -> Result<DeploymentStateMeta> {
     let mut url = api_url.clone();
-    url.push_str("/projects/");
-    url.push_str(project.as_str());
+    url.push_str(&format!("/projects/{}", project.as_str()));
 
     let client = get_retry_client();
 
@@ -136,6 +176,32 @@ pub(crate) async fn deploy(
     println!("{}", &deployment_meta);
 
     Ok(deployment_meta.state)
+}
+
+pub(crate) async fn secrets(
+    api_url: ApiUrl,
+    api_key: &ApiKey,
+    project: &ProjectName,
+    secrets: HashMap<String, String>,
+) -> Result<()> {
+    if secrets.is_empty() {
+        return Ok(());
+    }
+
+    let mut url = api_url.clone();
+    url.push_str(&format!("/projects/{}/secrets/", project.as_str()));
+
+    let client = get_retry_client();
+
+    client
+        .post(url)
+        .body(serde_json::to_string(&secrets)?)
+        .header(SHUTTLE_PROJECT_HEADER, serde_json::to_string(&project)?)
+        .basic_auth(api_key.clone(), Some(""))
+        .send()
+        .await
+        .context("failed to send deployment's secrets to the Shuttle server")
+        .map(|_| ())
 }
 
 fn print_log(logs: &Option<String>, log_pos: &mut usize) {

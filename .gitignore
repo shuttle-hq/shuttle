@@ -14,8 +14,12 @@ Cargo.lock
 # VS Code
 .vscode/
 
+# OS Specific
+.DS_Store
+
 # Terraform
 **/secret*
 **/.terraform*
 
 e2e/users.toml
+

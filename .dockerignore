@@ -1,5 +1,7 @@
 **/target/
-Dockerfile
+**/*Containerfile*
 terraform/
 examples/
-.cargo/
+**/.cargo/
+**/docker/
+**/*.md

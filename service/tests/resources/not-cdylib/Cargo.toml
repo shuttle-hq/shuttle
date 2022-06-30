@@ -1,0 +1,13 @@
+[package]
+name = "not-cdylib"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+rocket = "0.5.0-rc.1"
+shuttle-service = { path = "../../../", features = ["web-rocket"] }

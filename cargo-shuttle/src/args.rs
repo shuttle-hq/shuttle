@@ -1,3 +1,10 @@
+use std::{
+    ffi::{OsStr, OsString},
+    fs::{canonicalize, create_dir_all},
+    path::PathBuf,
+};
+
+use shuttle_common::project::ProjectName;
 use structopt::StructOpt;
 
 #[derive(StructOpt)]
@@ -17,22 +24,46 @@ pub struct Args {
     )]
     /// Run this command against the api at the supplied url
     pub api_url: Option<String>,
+    #[structopt(flatten)]
+    pub project_args: ProjectArgs,
     #[structopt(subcommand)]
     pub cmd: Command,
 }
 
+// Common args for subcommands that deal with projects.
+#[derive(StructOpt, Debug)]
+pub struct ProjectArgs {
+    #[structopt(
+        global = true,
+        long,
+        parse(try_from_os_str = parse_path),
+        default_value = ".",
+    )]
+    /// Specify the working directory
+    pub working_directory: PathBuf,
+    #[structopt(global = true, long)]
+    /// Specify the name of the project (overrides crate name)
+    pub name: Option<ProjectName>,
+}
+
 #[derive(StructOpt)]
 pub enum Command {
-    #[structopt(about = "deploy an shuttle project")]
+    #[structopt(about = "deploy a shuttle project")]
     Deploy(DeployArgs),
-    #[structopt(about = "view the status of an shuttle project")]
+    #[structopt(about = "create a new shuttle project")]
+    Init(InitArgs),
+    #[structopt(about = "view the status of a shuttle project")]
     Status,
+    #[structopt(about = "view the logs of a shuttle project")]
+    Logs,
     #[structopt(about = "delete the latest deployment for a shuttle project")]
     Delete,
     #[structopt(about = "create user credentials for the shuttle platform")]
     Auth(AuthArgs),
     #[structopt(about = "login to the shuttle platform")]
     Login(LoginArgs),
+    #[structopt(about = "run a shuttle project locally")]
+    Run(RunArgs),
 }
 
 #[derive(StructOpt)]
@@ -51,4 +82,35 @@ pub struct AuthArgs {
 pub struct DeployArgs {
     #[structopt(long, about = "allow dirty working directories to be packaged")]
     pub allow_dirty: bool,
+    #[structopt(long, about = "allows pre-deploy tests to be skipped")]
+    pub no_test: bool,
+}
+
+#[derive(StructOpt, Debug)]
+pub struct RunArgs {
+    #[structopt(long, about = "port to start service on", default_value = "8000")]
+    pub port: u16,
+}
+
+#[derive(StructOpt)]
+pub struct InitArgs {
+    #[structopt(
+        about = "the path to initialize a new shuttle project",
+        parse(try_from_os_str = parse_init_path),
+        default_value = ".",
+    )]
+    pub path: PathBuf,
+}
+
+// Helper function to parse and return the absolute path
+fn parse_path(path: &OsStr) -> Result<PathBuf, OsString> {
+    canonicalize(path).map_err(|e| format!("could not turn {path:?} into a real path: {e}").into())
+}
+
+// Helper function to parse, create if not exists, and return the absolute path
+fn parse_init_path(path: &OsStr) -> Result<PathBuf, OsString> {
+    // Create the directory if does not exist
+    create_dir_all(path).expect("could not find or create a directory with the given path");
+
+    parse_path(path)
 }

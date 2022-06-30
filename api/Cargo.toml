@@ -1,32 +1,45 @@
 [package]
-name = "api"
-version = "0.1.0"
+name = "shuttle-api"
+version = "0.1.2"
 edition = "2021"
+publish = false
 
 [dependencies]
-rocket = { version = "0.5.0-rc.1", features = ["uuid", "serde_json", "json"] }
-cargo = "0.59.0"
-cargo-util = "0.1"
-anyhow = "1.0.54"
-libloading = "0.7.3"
-futures = "0.3"
-fqdn = "0.1"
-uuid = { version = "0.8.2", features = ["v4"] }
+anyhow = "1.0.57"
 async-mutex = "1.4.0"
-serde = "1.0.136"
-structopt = "0.3.26"
-sqlx = { version = "0.5", features = ["runtime-tokio-native-tls", "postgres"] }
-tokio = { version = "1.15.0", features = ["full"] }
-# not great, but the changes for hyper 0.14 and tokio 1 have not been merged on the main repo
-hyper-reverse-proxy = { git = "https://github.com/jtroo/hyper-reverse-proxy" }
-hyper = { version = "0.14", features = ["client", "http1", "http2", "tcp" ] } # for reverse proxying
-log = "0.4.14"
-env_logger = "0.9.0"
-async-trait = "0.1.52"
-lazy_static = "1.4.0"
-toml = "0.5.8"
+async-trait = "0.1.56"
 base64 = "0.13.0"
+cargo = "0.62.0"
+cargo-util = "0.1.2"
+chrono = "0.4.19"
+env_logger = "0.9.0"
+fqdn = "0.1.9"
+futures = "0.3.21"
+hyper = { version = "0.14.19", features = ["client", "http1", "http2", "tcp" ] } # for reverse proxying
+# not great, but waiting for WebSocket changes to be merged
+hyper-reverse-proxy = { git = "https://github.com/chesedo/hyper-reverse-proxy", branch = "master" }
+lazy_static = "1.4.0"
+libloading = "0.7.3"
+log = "0.4.17"
 rand = "0.8.5"
+rocket = { version = "0.5.0-rc.2", features = ["uuid", "serde_json", "json"] }
+serde = "1.0.137"
+sqlx = { version = "0.5.13", features = ["runtime-tokio-native-tls", "postgres"] }
+structopt = "0.3.26"
+tokio = { version = "1.19.2", features = ["full"] }
+toml = "0.5.9"
+tonic = "0.7.2"
+uuid = { version = "1.1.1", features = ["v4"] }
 
-shuttle-common = { version = "0.2.6", path = "../common" }
-shuttle-service = { version = "0.2.6", path = "../service", features = [ "loader" ] }
+[dependencies.shuttle-common]
+version = "0.3.1"
+path = "../common"
+
+[dependencies.shuttle-proto]
+version = "0.1.0"
+path = "../proto"
+
+[dependencies.shuttle-service]
+version = "0.3.3"
+path = "../service"
+features = ["loader", "secrets"]

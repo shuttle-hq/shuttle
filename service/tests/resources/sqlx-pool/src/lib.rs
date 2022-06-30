@@ -1,7 +1,6 @@
 use shuttle_service::error::CustomError;
-use shuttle_service::{Factory, IntoService, Service};
+use shuttle_service::{log, IntoService, ResourceBuilder, Runtime, ServeHandle, Service};
 use sqlx::PgPool;
-use tokio::runtime::Runtime;
 
 #[macro_use]
 extern crate shuttle_service;
@@ -28,56 +27,53 @@ impl IntoService for Args {
     }
 }
 
-impl PoolService {
-    async fn start(&self) -> Result<(), shuttle_service::error::Error> {
-        if let Some(pool) = &self.pool {
-            let (rec,): (String,) = sqlx::query_as("SELECT 'Hello world'")
-                .fetch_one(pool)
-                .await
-                .map_err(CustomError::new)?;
+async fn start(pool: PgPool) -> Result<(), shuttle_service::error::CustomError> {
+    let (rec,): (String,) = sqlx::query_as("SELECT 'Hello world'")
+        .fetch_one(&pool)
+        .await
+        .map_err(CustomError::new)?;
 
-            assert_eq!(rec, "Hello world");
-        } else {
-            panic!("we should have an active pool");
-        }
+    assert_eq!(rec, "Hello world");
 
-        Ok(())
-    }
+    Ok(())
 }
 
+#[async_trait]
 impl Service for PoolService {
-    fn bind(&mut self, _: std::net::SocketAddr) -> Result<(), shuttle_service::error::Error> {
-        self.runtime.block_on(self.start())?;
+    fn bind(
+        &mut self,
+        _: std::net::SocketAddr,
+    ) -> Result<ServeHandle, shuttle_service::error::Error> {
+        let launch = start(self.pool.take().expect("we should have an active pool"));
+        let handle = self.runtime.spawn(launch);
 
-        Ok(())
+        Ok(handle)
     }
 
-    fn build(
+    async fn build(
         &mut self,
         factory: &mut dyn shuttle_service::Factory,
+        logger: Box<dyn log::Log>,
     ) -> Result<(), shuttle_service::Error> {
-        let pool = self
-            .runtime
-            .block_on(get_postgres_connection_pool(factory))?;
+        self.runtime
+            .spawn_blocking(move || {
+                shuttle_service::log::set_boxed_logger(logger)
+                    .map(|()| {
+                        shuttle_service::log::set_max_level(shuttle_service::log::LevelFilter::Info)
+                    })
+                    .expect("logger set should succeed");
+            })
+            .await
+            .unwrap();
+
+        let pool = shuttle_service::shared::Postgres::new()
+            .build(factory, &self.runtime)
+            .await?;
 
         self.pool = Some(pool);
 
         Ok(())
     }
-}
-
-async fn get_postgres_connection_pool(
-    factory: &mut dyn Factory,
-) -> Result<PgPool, shuttle_service::error::Error> {
-    let connection_string = factory.get_sql_connection_string().await?;
-    let pool = sqlx::postgres::PgPoolOptions::new()
-        .min_connections(1)
-        .max_connections(5)
-        .connect(&connection_string)
-        .await
-        .map_err(CustomError::new)?;
-
-    Ok(pool)
 }
 
 declare_service!(Args, init);

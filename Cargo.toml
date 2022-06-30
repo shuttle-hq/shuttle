@@ -1,12 +1,14 @@
 [workspace]
 members = [
   "api",
-  "service",
   "cargo-shuttle",
-  "common",
   "codegen",
-  "e2e"
+  "common",
+  "proto",
+  "provisioner",
+  "service"
 ]
 exclude = [
+  "e2e",
   "examples"
 ]

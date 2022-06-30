@@ -1,30 +1,29 @@
 import { useRouter } from "next/router";
-import { useApiKeyModalState } from "./ApiKeyModal";
-import { useUser } from "@auth0/nextjs-auth0";
 import InternalLink from "./InternalLink";
 import { SHUTTLE_DOCS_URL } from "../lib/constants";
 import ExternalLink from "./ExternalLink";
 import ThemeSwitch from "./ThemeSwitch";
 import NoSsr from "./NoSsr";
+import mixpanel from "mixpanel-browser";
+import LoginButton from "./LoginButton";
 
 const navigation = [
   { name: "Features", href: "/#features", internal: true },
   { name: "Examples", href: "/#examples", internal: true },
   { name: "Docs", href: SHUTTLE_DOCS_URL, internal: false },
   { name: "Blog", href: "/blog", internal: true },
+  { name: "Pricing", href: "/pricing", internal: true },
 ];
 
 export default function Header() {
   const { basePath } = useRouter();
-  const [open, setOpen] = useApiKeyModalState();
-  const { user, error, isLoading } = useUser();
 
   return (
     <header className="sticky top-0 z-20 bg-slate-100 !bg-opacity-70 dark:bg-dark-700">
       <nav className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8" aria-label="Top">
         <div className="flex w-full items-center justify-between py-3">
           <div className="flex items-center">
-            <InternalLink href="/">
+            <InternalLink href="/" mixpanelEvent="Shuttle Home">
               <div className="relative m-auto flex">
                 <img
                   className="h-8 w-auto"
@@ -43,6 +42,7 @@ export default function Header() {
                     key={link.name}
                     href={link.href}
                     className="text-base font-medium text-slate-600 hover:text-slate-900 dark:text-gray-200 hover:dark:text-white"
+                    mixpanelEvent={link.name}
                   >
                     {link.name}
                   </InternalLink>
@@ -51,6 +51,7 @@ export default function Header() {
                     key={link.name}
                     href={link.href}
                     className="text-base font-medium text-slate-600 hover:text-slate-900 dark:text-gray-200 hover:dark:text-white"
+                    mixpanelEvent={link.name}
                   >
                     {link.name}
                   </ExternalLink>
@@ -63,23 +64,7 @@ export default function Header() {
               <ThemeSwitch />
             </NoSsr>
 
-            {user && (
-              <button
-                className="inline-block rounded border border-slate-900 bg-transparent py-1 px-4 text-base font-medium text-slate-900 transition-colors hover:bg-slate-800 hover:text-slate-100 dark:border-white dark:text-white hover:dark:bg-white hover:dark:text-dark-700"
-                onClick={() => setOpen(true)}
-              >
-                Log In
-              </button>
-            )}
-
-            {!user && (
-              <a
-                className="inline-block rounded border border-slate-900 bg-transparent py-1 px-4 text-base font-medium text-slate-900 transition-colors hover:bg-slate-800 hover:text-slate-100 dark:border-white dark:text-white hover:dark:bg-white hover:dark:text-dark-700"
-                href="/login"
-              >
-                Log In
-              </a>
-            )}
+            <LoginButton />
           </div>
         </div>
         <div className="flex flex-wrap justify-center space-x-6 py-4 lg:hidden">
@@ -89,6 +74,8 @@ export default function Header() {
                 key={link.name}
                 href={link.href}
                 className="text-base font-medium dark:text-gray-200 hover:dark:text-white"
+                onClick={() => void mixpanel.track(link.name)}
+                mixpanelEvent={link.name}
               >
                 {link.name}
               </InternalLink>
@@ -97,6 +84,7 @@ export default function Header() {
                 key={link.name}
                 href={link.href}
                 className="text-base font-medium dark:text-gray-200 hover:dark:text-white"
+                mixpanelEvent={link.name}
               >
                 {link.name}
               </ExternalLink>

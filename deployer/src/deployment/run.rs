@@ -9,15 +9,20 @@ use shuttle_common::project::ProjectName;
 use shuttle_service::{loader::Loader, Factory};
 use tracing::{debug, error, info, instrument};
 
-use super::{provisioner_factory::AbstractFactory, KillReceiver, KillSender, RunReceiver, State};
+use super::{
+    provisioner_factory::AbstractFactory, KillReceiver, KillSender, RunReceiver,
+    RuntimeLoggerFactory, State,
+};
 use crate::error::{Error, Result};
 
-/// Run a task which takes runnable deploys from a channel and starts them up with factory provided by the abstract factory
+/// Run a task which takes runnable deploys from a channel and starts them up with a factory provided by the
+/// abstract factory and a runtime logger provided by the logger factory
 /// A deploy is killed when it receives a signal from the kill channel
 pub async fn task(
     mut recv: RunReceiver,
     kill_send: KillSender,
     abstract_factory: impl AbstractFactory,
+    logger_factory: RuntimeLoggerFactory,
 ) {
     info!("Run task started");
 
@@ -28,15 +33,14 @@ pub async fn task(
 
         let kill_recv = kill_send.subscribe();
 
-        let abstract_factory = abstract_factory.clone();
+        let port = pick_unused_port().unwrap();
+        let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
+        let mut factory = abstract_factory.get_factory(ProjectName::from_str(&name).unwrap());
+        let logger = logger_factory.get_logger(name.clone());
 
         tokio::spawn(async move {
-            let port = pick_unused_port().unwrap();
-            let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
-            let mut factory = abstract_factory.get_factory(ProjectName::from_str(&name).unwrap());
-
             if let Err(e) = built
-                .handle(addr, &mut factory, kill_recv, |_built| {})
+                .handle(addr, &mut factory, logger, kill_recv, |_built| {})
                 .await
             {
                 error!("Error during running of deployment '{}' - {e}", name);
@@ -51,34 +55,18 @@ pub struct Built {
     pub so_path: PathBuf,
 }
 
-struct StubLogger;
-
-impl log::Log for StubLogger {
-    fn enabled(&self, metadata: &log::Metadata) -> bool {
-        todo!()
-    }
-
-    fn log(&self, record: &log::Record) {
-        todo!()
-    }
-
-    fn flush(&self) {
-        todo!()
-    }
-}
-
 impl Built {
-    #[instrument(skip(self, factory, handle_cleanup), fields(name = self.name.as_str(), state = %State::Running))]
+    #[instrument(skip(self, factory, logger, handle_cleanup), fields(name = self.name.as_str(), state = %State::Running))]
     async fn handle(
         self,
         addr: SocketAddr,
         factory: &mut dyn Factory,
+        logger: Box<dyn log::Log>,
         mut kill_recv: KillReceiver,
         handle_cleanup: impl FnOnce(Result<()>) + Send + 'static,
     ) -> Result<()> {
         let loader = Loader::from_so_file(self.so_path.clone())?;
 
-        let logger = Box::new(StubLogger);
         let (mut handle, library) = loader.load(factory, addr, logger).await.unwrap();
 
         // Execute loaded service:
@@ -149,6 +137,17 @@ mod tests {
         }
     }
 
+    struct StubLogger;
+    impl log::Log for StubLogger {
+        fn enabled(&self, _metadata: &log::Metadata) -> bool {
+            false
+        }
+
+        fn log(&self, _record: &log::Record) {}
+
+        fn flush(&self) {}
+    }
+
     #[tokio::test]
     async fn can_be_killed() {
         let built = make_so_create_built("sleep-async");
@@ -160,9 +159,10 @@ mod tests {
         };
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
         let mut factory = StubFactory;
+        let logger = Box::new(StubLogger);
 
         built
-            .handle(addr, &mut factory, kill_recv, handle_cleanup)
+            .handle(addr, &mut factory, logger, kill_recv, handle_cleanup)
             .await
             .unwrap();
 
@@ -188,9 +188,10 @@ mod tests {
         };
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
         let mut factory = StubFactory;
+        let logger = Box::new(StubLogger);
 
         built
-            .handle(addr, &mut factory, kill_recv, handle_cleanup)
+            .handle(addr, &mut factory, logger, kill_recv, handle_cleanup)
             .await
             .unwrap();
 
@@ -211,9 +212,10 @@ mod tests {
         let handle_cleanup = |_built| {};
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
         let mut factory = StubFactory;
+        let logger = Box::new(StubLogger);
 
         let result = built
-            .handle(addr, &mut factory, kill_recv, handle_cleanup)
+            .handle(addr, &mut factory, logger, kill_recv, handle_cleanup)
             .await;
 
         assert!(matches!(result, Err(Error::Load(_))));

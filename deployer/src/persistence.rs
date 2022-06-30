@@ -135,6 +135,10 @@ impl Persistence {
     async fn get_deployment_logs(&self, name: &str) -> Result<Vec<Log>> {
         get_deployment_logs(&self.pool, name).await
     }
+
+    pub fn get_log_sender(&self) -> UnboundedSender<deploy_layer::Log> {
+        self.log_send.clone()
+    }
 }
 
 async fn update_deployment(pool: &SqlitePool, info: impl Into<DeploymentInfo>) -> Result<()> {

@@ -6,7 +6,7 @@ use tonic::{transport::Channel, Request};
 use tracing::debug;
 
 /// Trait to make it easy to get a factory (service locator) for each service being started
-pub trait AbstractFactory: Clone + Send + 'static {
+pub trait AbstractFactory: Send + 'static {
     type Output: Factory;
 
     /// Get a factory for a specific project

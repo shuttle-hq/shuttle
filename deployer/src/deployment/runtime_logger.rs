@@ -1,0 +1,77 @@
+use chrono::Utc;
+use log::{Level, Metadata, Record};
+use serde_json::json;
+use tokio::sync::mpsc::UnboundedSender;
+
+use crate::deployment::State;
+
+use super::deploy_layer;
+
+/// Factory to create runtime loggers for projects
+pub struct RuntimeLoggerFactory {
+    log_send: UnboundedSender<deploy_layer::Log>,
+}
+
+impl RuntimeLoggerFactory {
+    pub fn new(log_send: UnboundedSender<deploy_layer::Log>) -> Self {
+        Self { log_send }
+    }
+
+    pub fn get_logger(&self, project_name: String) -> Box<dyn log::Log> {
+        Box::new(RuntimeLogger::new(project_name, self.log_send.clone()))
+    }
+}
+
+/// Captures and redirects runtime logs for a deploy
+pub struct RuntimeLogger {
+    project_name: String,
+    log_send: UnboundedSender<deploy_layer::Log>,
+}
+
+impl RuntimeLogger {
+    pub(crate) fn new(project_name: String, log_send: UnboundedSender<deploy_layer::Log>) -> Self {
+        Self {
+            project_name,
+            log_send,
+        }
+    }
+}
+
+impl log::Log for RuntimeLogger {
+    fn enabled(&self, metadata: &Metadata) -> bool {
+        metadata.level() <= Level::Info
+    }
+
+    fn log(&self, record: &Record) {
+        if self.enabled(record.metadata()) {
+            let datetime = Utc::now();
+
+            self.log_send
+                .send(deploy_layer::Log {
+                    name: self.project_name.clone(),
+                    state: State::Running,
+                    level: record.level().into(),
+                    timestamp: datetime,
+                    file: None,
+                    line: None,
+                    fields: json!({ "message": format!("{}", record.args()) }),
+                    r#type: deploy_layer::LogType::Event,
+                })
+                .expect("sending log should succeed");
+        }
+    }
+
+    fn flush(&self) {}
+}
+
+impl From<Level> for super::log::Level {
+    fn from(level: Level) -> Self {
+        match level {
+            Level::Error => Self::Error,
+            Level::Warn => Self::Warn,
+            Level::Info => Self::Info,
+            Level::Debug => Self::Debug,
+            Level::Trace => Self::Trace,
+        }
+    }
+}

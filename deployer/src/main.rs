@@ -15,7 +15,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 
 use crate::deployment::deploy_layer::DeployLayer;
-use crate::deployment::AbstractProvisionerFactory;
+use crate::deployment::{AbstractProvisionerFactory, RuntimeLoggerFactory};
 
 const SECRET_KEY: &str = "GATEWAY_SECRET";
 const PROVISIONER_ADDRESS: &str = "provisioner";
@@ -56,7 +56,9 @@ async fn main() {
     let abstract_factory =
         AbstractProvisionerFactory::new(provisioner_client, PROVISIONER_ADDRESS.to_string());
 
-    let deployment_manager = DeploymentManager::new(abstract_factory);
+    let runtime_logger_factory = RuntimeLoggerFactory::new(persistence.get_log_sender());
+
+    let deployment_manager = DeploymentManager::new(abstract_factory, runtime_logger_factory);
 
     for existing_deployment in persistence.get_all_runnable_deployments().await.unwrap() {
         let built = Built {

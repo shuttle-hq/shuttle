@@ -21,7 +21,7 @@ pub enum Error {
     #[error("Load error: {0}")]
     Load(#[from] LoaderError),
     #[error("Run error: {0}")]
-    Run(#[source] Box<dyn StdError + Send>),
+    Run(#[from] shuttle_service::Error),
 }
 
 impl Serialize for Error {

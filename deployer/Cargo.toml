@@ -25,6 +25,7 @@ tracing = "0.1.35"
 tracing-subscriber = { version = "0.3.11", features = ["env-filter"] }
 tonic = "0.7.2"
 clap = { version = "3.2.8", features = ["derive"] }
+anyhow = "1.0.58"
 
 [dependencies.proto]
 version = "0.1.0"

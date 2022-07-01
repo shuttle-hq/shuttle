@@ -7,13 +7,14 @@ use std::{
 use portpicker::pick_unused_port;
 use shuttle_common::project::ProjectName;
 use shuttle_service::{loader::Loader, Factory};
+use tokio::task::JoinError;
 use tracing::{debug, error, info, instrument};
 
 use super::{
     provisioner_factory::AbstractFactory, KillReceiver, KillSender, RunReceiver,
     RuntimeLoggerFactory, State,
 };
-use crate::error::{Error, Result};
+use crate::error::Result;
 
 /// Run a task which takes runnable deploys from a channel and starts them up with a factory provided by the
 /// abstract factory and a runtime logger provided by the logger factory
@@ -63,14 +64,13 @@ impl Built {
         factory: &mut dyn Factory,
         logger: Box<dyn log::Log>,
         mut kill_recv: KillReceiver,
-        handle_cleanup: impl FnOnce(Result<()>) + Send + 'static,
+        handle_cleanup: impl FnOnce(std::result::Result<anyhow::Result<()>, JoinError>) + Send + 'static,
     ) -> Result<()> {
         let loader = Loader::from_so_file(self.so_path.clone())?;
 
-        let (mut handle, library) = loader.load(factory, addr, logger).await.unwrap();
+        let (mut handle, library) = loader.load(factory, addr, logger).await?;
 
-        // Execute loaded service:
-
+        // Execute loaded service
         tokio::spawn(async move {
             let result;
             loop {
@@ -89,12 +89,6 @@ impl Built {
                      }
                 }
             }
-
-            let result = match result {
-                Ok(result) => result.map_err(|e| Error::Run(e.into())),
-                Err(error) if error.is_cancelled() => Ok(()),
-                _ => todo!(),
-            };
 
             library.close().unwrap();
 
@@ -117,6 +111,7 @@ mod tests {
     use shuttle_service::Factory;
     use tokio::{
         sync::{broadcast, oneshot},
+        task::JoinError,
         time::sleep,
     };
 
@@ -155,7 +150,11 @@ mod tests {
         let (kill_send, kill_recv) = broadcast::channel(1);
         let (cleanup_send, cleanup_recv) = oneshot::channel();
 
-        let handle_cleanup = |_built| {
+        let handle_cleanup = |result: std::result::Result<anyhow::Result<()>, JoinError>| {
+            assert!(
+                result.unwrap_err().is_cancelled(),
+                "handle should have been cancelled"
+            );
             cleanup_send.send(()).unwrap();
         };
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
@@ -186,7 +185,61 @@ mod tests {
         let (_kill_send, kill_recv) = broadcast::channel(1);
         let (cleanup_send, cleanup_recv) = oneshot::channel();
 
-        let handle_cleanup = |_built| {
+        let handle_cleanup = |result: std::result::Result<anyhow::Result<()>, JoinError>| {
+            let result = result.unwrap();
+            assert!(
+                result.is_ok(),
+                "did not expect error from self stopping service: {}",
+                result.unwrap_err()
+            );
+            cleanup_send.send(()).unwrap();
+        };
+        let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
+        let mut factory = StubFactory;
+        let logger = Box::new(StubLogger);
+
+        built
+            .handle(addr, &mut factory, logger, kill_recv, handle_cleanup)
+            .await
+            .unwrap();
+
+        tokio::select! {
+            _ = sleep(Duration::from_secs(5)) => panic!("cleanup should have been called as service stopped on its own"),
+            _ = cleanup_recv => {}
+        }
+    }
+
+    // Test for panics in Service::bind
+    #[tokio::test]
+    async fn panic_in_bind() {
+        let built = make_so_create_built("bind-panic");
+        let (_kill_send, kill_recv) = broadcast::channel(1);
+
+        let handle_cleanup = |_result| panic!("handle from service should never start");
+        let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
+        let mut factory = StubFactory;
+        let logger = Box::new(StubLogger);
+
+        let result = built
+            .handle(addr, &mut factory, logger, kill_recv, handle_cleanup)
+            .await;
+
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Run error: Panic occurred in `Service::bind`: panic in bind"
+        );
+    }
+
+    // Test for panics in handle returned from Service::bind
+    #[tokio::test]
+    async fn panic_in_bind_handle() {
+        let built = make_so_create_built("handle-panic");
+        let (_kill_send, kill_recv) = broadcast::channel(1);
+        let (cleanup_send, cleanup_recv) = oneshot::channel();
+
+        let handle_cleanup = |result: std::result::Result<anyhow::Result<()>, JoinError>| {
+            let result = result.unwrap();
+            assert!(result.is_err(), "expected inner error from handle");
             cleanup_send.send(()).unwrap();
         };
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);

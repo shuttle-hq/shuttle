@@ -267,165 +267,165 @@ impl Visit for JsonVisitor {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use std::{
-        path::PathBuf,
-        sync::{Arc, Mutex},
-    };
+// #[cfg(test)]
+// mod tests {
+//     use std::{
+//         path::PathBuf,
+//         sync::{Arc, Mutex},
+//     };
 
-    use axum::body::Bytes;
-    use ctor::ctor;
-    use futures::FutureExt;
-    use tracing_subscriber::prelude::*;
+//     use axum::body::Bytes;
+//     use ctor::ctor;
+//     use futures::FutureExt;
+//     use tracing_subscriber::prelude::*;
 
-    use crate::deployment::{deploy_layer::LogType, Built, DeploymentManager, Queued, State};
+//     use crate::deployment::{deploy_layer::LogType, Built, DeploymentManager, Queued, State};
 
-    use super::{DeployLayer, Log, LogRecorder};
+//     use super::{DeployLayer, Log, LogRecorder};
 
-    #[ctor]
-    static RECORDER: Arc<Mutex<RecorderMock>> = {
-        let recorder = RecorderMock::new();
-        tracing_subscriber::registry()
-            .with(DeployLayer::new(Arc::clone(&recorder)))
-            .init();
+//     #[ctor]
+//     static RECORDER: Arc<Mutex<RecorderMock>> = {
+//         let recorder = RecorderMock::new();
+//         tracing_subscriber::registry()
+//             .with(DeployLayer::new(Arc::clone(&recorder)))
+//             .init();
 
-        recorder
-    };
+//         recorder
+//     };
 
-    struct RecorderMock {
-        states: Arc<Mutex<Vec<StateLog>>>,
-    }
+//     struct RecorderMock {
+//         states: Arc<Mutex<Vec<StateLog>>>,
+//     }
 
-    #[derive(Clone, Debug, PartialEq)]
-    struct StateLog {
-        name: String,
-        state: State,
-    }
+//     #[derive(Clone, Debug, PartialEq)]
+//     struct StateLog {
+//         name: String,
+//         state: State,
+//     }
 
-    impl From<Log> for StateLog {
-        fn from(log: Log) -> Self {
-            Self {
-                name: log.name,
-                state: log.state,
-            }
-        }
-    }
+//     impl From<Log> for StateLog {
+//         fn from(log: Log) -> Self {
+//             Self {
+//                 name: log.name,
+//                 state: log.state,
+//             }
+//         }
+//     }
 
-    impl RecorderMock {
-        fn new() -> Arc<Mutex<Self>> {
-            Arc::new(Mutex::new(Self {
-                states: Arc::new(Mutex::new(Vec::new())),
-            }))
-        }
+//     impl RecorderMock {
+//         fn new() -> Arc<Mutex<Self>> {
+//             Arc::new(Mutex::new(Self {
+//                 states: Arc::new(Mutex::new(Vec::new())),
+//             }))
+//         }
 
-        fn get_deployment_states(&self, name: &str) -> Vec<StateLog> {
-            self.states
-                .lock()
-                .unwrap()
-                .iter()
-                .filter(|log| log.name == name)
-                .cloned()
-                .collect()
-        }
-    }
+//         fn get_deployment_states(&self, name: &str) -> Vec<StateLog> {
+//             self.states
+//                 .lock()
+//                 .unwrap()
+//                 .iter()
+//                 .filter(|log| log.name == name)
+//                 .cloned()
+//                 .collect()
+//         }
+//     }
 
-    impl LogRecorder for RecorderMock {
-        fn record(&self, event: Log) {
-            // We are only testing the state transitions
-            if event.r#type == LogType::State {
-                self.states.lock().unwrap().push(event.into());
-            }
-        }
-    }
+//     impl LogRecorder for RecorderMock {
+//         fn record(&self, event: Log) {
+//             // We are only testing the state transitions
+//             if event.r#type == LogType::State {
+//                 self.states.lock().unwrap().push(event.into());
+//             }
+//         }
+//     }
 
-    impl<R: LogRecorder> LogRecorder for Arc<Mutex<R>> {
-        fn record(&self, event: Log) {
-            self.lock().unwrap().record(event);
-        }
-    }
+//     impl<R: LogRecorder> LogRecorder for Arc<Mutex<R>> {
+//         fn record(&self, event: Log) {
+//             self.lock().unwrap().record(event);
+//         }
+//     }
 
-    #[tokio::test]
-    async fn deployment_to_be_queued() {
-        let deployment_manager = DeploymentManager::new();
+//     #[tokio::test]
+//     async fn deployment_to_be_queued() {
+//         let deployment_manager = DeploymentManager::new();
 
-        deployment_manager
-            .queue_push(Queued {
-                name: "queue_test".to_string(),
-                data_stream: Box::pin(async { Ok(Bytes::from("data")) }.into_stream()),
-            })
-            .await;
+//         deployment_manager
+//             .queue_push(Queued {
+//                 name: "queue_test".to_string(),
+//                 data_stream: Box::pin(async { Ok(Bytes::from("data")) }.into_stream()),
+//             })
+//             .await;
 
-        // Give it a small time to start up
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+//         // Give it a small time to start up
+//         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-        let recorder = RECORDER.lock().unwrap();
-        let states = recorder.get_deployment_states("queue_test");
+//         let recorder = RECORDER.lock().unwrap();
+//         let states = recorder.get_deployment_states("queue_test");
 
-        assert_eq!(
-            states.len(),
-            4,
-            "did not expect these states:\n\t{states:#?}"
-        );
+//         assert_eq!(
+//             states.len(),
+//             4,
+//             "did not expect these states:\n\t{states:#?}"
+//         );
 
-        assert_eq!(
-            *states,
-            vec![
-                StateLog {
-                    name: "queue_test".to_string(),
-                    state: State::Queued,
-                },
-                StateLog {
-                    name: "queue_test".to_string(),
-                    state: State::Building,
-                },
-                StateLog {
-                    name: "queue_test".to_string(),
-                    state: State::Built,
-                },
-                StateLog {
-                    name: "queue_test".to_string(),
-                    state: State::Running,
-                },
-            ]
-        );
-    }
+//         assert_eq!(
+//             *states,
+//             vec![
+//                 StateLog {
+//                     name: "queue_test".to_string(),
+//                     state: State::Queued,
+//                 },
+//                 StateLog {
+//                     name: "queue_test".to_string(),
+//                     state: State::Building,
+//                 },
+//                 StateLog {
+//                     name: "queue_test".to_string(),
+//                     state: State::Built,
+//                 },
+//                 StateLog {
+//                     name: "queue_test".to_string(),
+//                     state: State::Running,
+//                 },
+//             ]
+//         );
+//     }
 
-    #[tokio::test]
-    async fn deployment_from_run() {
-        let deployment_manager = DeploymentManager::new();
+//     #[tokio::test]
+//     async fn deployment_from_run() {
+//         let deployment_manager = DeploymentManager::new();
 
-        deployment_manager
-            .run_push(Built {
-                name: "run_test".to_string(),
-                so_path: PathBuf::new(),
-            })
-            .await;
+//         deployment_manager
+//             .run_push(Built {
+//                 name: "run_test".to_string(),
+//                 so_path: PathBuf::new(),
+//             })
+//             .await;
 
-        // Give it a small time to start up
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+//         // Give it a small time to start up
+//         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-        let recorder = RECORDER.lock().unwrap();
-        let states = recorder.get_deployment_states("run_test");
+//         let recorder = RECORDER.lock().unwrap();
+//         let states = recorder.get_deployment_states("run_test");
 
-        assert_eq!(
-            states.len(),
-            2,
-            "did not expect these states:\n\t{states:#?}"
-        );
+//         assert_eq!(
+//             states.len(),
+//             2,
+//             "did not expect these states:\n\t{states:#?}"
+//         );
 
-        assert_eq!(
-            *states,
-            vec![
-                StateLog {
-                    name: "run_test".to_string(),
-                    state: State::Built,
-                },
-                StateLog {
-                    name: "run_test".to_string(),
-                    state: State::Running,
-                },
-            ]
-        );
-    }
-}
+//         assert_eq!(
+//             *states,
+//             vec![
+//                 StateLog {
+//                     name: "run_test".to_string(),
+//                     state: State::Built,
+//                 },
+//                 StateLog {
+//                     name: "run_test".to_string(),
+//                     state: State::Running,
+//                 },
+//             ]
+//         );
+//     }
+// }

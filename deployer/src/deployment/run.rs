@@ -38,16 +38,50 @@ pub async fn task(
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
         let mut factory = abstract_factory.get_factory(ProjectName::from_str(&name).unwrap());
         let logger = logger_factory.get_logger(name.clone());
+        let cleanup_name = name.clone();
+        let cleanup = move |result: std::result::Result<anyhow::Result<()>, JoinError>| match result
+        {
+            Ok(inner) => match inner {
+                Ok(()) => completed_cleanup(&cleanup_name),
+                Err(err) => crashed_cleanup(&cleanup_name, err),
+            },
+            Err(err) if err.is_cancelled() => stopped_cleanup(&cleanup_name),
+            Err(err) => start_crashed_cleanup(&cleanup_name, err),
+        };
 
         tokio::spawn(async move {
             if let Err(e) = built
-                .handle(addr, &mut factory, logger, kill_recv, |_built| {})
+                .handle(addr, &mut factory, logger, kill_recv, cleanup)
                 .await
             {
                 error!("Error during running of deployment '{}' - {e}", name);
             }
         });
     }
+}
+
+#[instrument(fields(state = %State::Completed))]
+fn completed_cleanup(_name: &str) {
+    info!("service finished all on its own");
+}
+
+#[instrument(fields(state = %State::Stopped))]
+fn stopped_cleanup(_name: &str) {
+    info!("service was stopped by the user");
+}
+
+#[instrument(fields(state = %State::Crashed))]
+fn crashed_cleanup(_name: &str, err: anyhow::Error) {
+    let error: &dyn std::error::Error = err.as_ref();
+    error!(error, "service encountered an error");
+}
+
+#[instrument(fields(state = %State::Crashed))]
+fn start_crashed_cleanup(_name: &str, err: impl std::error::Error + 'static) {
+    error!(
+        error = &err as &dyn std::error::Error,
+        "service startup encountered an error"
+    );
 }
 
 #[derive(Debug)]
@@ -57,14 +91,14 @@ pub struct Built {
 }
 
 impl Built {
-    #[instrument(skip(self, factory, logger, handle_cleanup), fields(name = self.name.as_str(), state = %State::Running))]
+    #[instrument(skip(self, factory, logger, cleanup), fields(name = self.name.as_str(), state = %State::Running))]
     async fn handle(
         self,
         addr: SocketAddr,
         factory: &mut dyn Factory,
         logger: Box<dyn log::Log>,
         mut kill_recv: KillReceiver,
-        handle_cleanup: impl FnOnce(std::result::Result<anyhow::Result<()>, JoinError>) + Send + 'static,
+        cleanup: impl FnOnce(std::result::Result<anyhow::Result<()>, JoinError>) + Send + 'static,
     ) -> Result<()> {
         let loader = Loader::from_so_file(self.so_path.clone())?;
 
@@ -92,7 +126,7 @@ impl Built {
 
             library.close().unwrap();
 
-            handle_cleanup(result);
+            cleanup(result);
         });
 
         Ok(())

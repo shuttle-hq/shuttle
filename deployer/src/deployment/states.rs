@@ -9,7 +9,9 @@ pub enum State {
     Building = 1,
     Built = 2,
     Running = 3,
-    Error = 4,
+    Completed = 4,
+    Stopped = 5,
+    Crashed = 6,
     Unknown = 10,
 }
 
@@ -20,7 +22,9 @@ impl fmt::Display for State {
             Self::Building => write!(f, "building"),
             Self::Built => write!(f, "built"),
             Self::Running => write!(f, "running"),
-            Self::Error => write!(f, "error"),
+            State::Completed => write!(f, "completed"),
+            State::Stopped => write!(f, "stopped"),
+            State::Crashed => write!(f, "crashed"),
             Self::Unknown => write!(f, "unknown"),
         }
     }
@@ -39,7 +43,9 @@ impl From<&dyn std::fmt::Debug> for State {
             "building" => Self::Building,
             "built" => Self::Built,
             "running" => Self::Running,
-            "error" => Self::Error,
+            "completed" => Self::Completed,
+            "stopped" => Self::Stopped,
+            "crashed" => Self::Crashed,
             _ => Self::Unknown,
         }
     }

@@ -24,6 +24,7 @@ rand = "0.8.5"
 tracing = "0.1.35"
 tracing-subscriber = { version = "0.3.11", features = ["env-filter"] }
 tonic = "0.7.2"
+clap = { version = "3.2.8", features = ["derive"] }
 
 [dependencies.proto]
 version = "0.1.0"

@@ -648,7 +648,7 @@ dependencies = [
  "bytesize",
  "cargo-platform",
  "cargo-util",
- "clap 3.1.18",
+ "clap 3.2.8",
  "crates-io",
  "crossbeam-utils",
  "curl",
@@ -703,7 +703,7 @@ checksum = "34965aea9b211a43ace81105894e2e2d15103be244884b31f26065e7538fe30b"
 dependencies = [
  "anyhow",
  "cargo_metadata",
- "clap 3.1.18",
+ "clap 3.2.8",
  "concolor-control",
  "crates-index",
  "dirs-next",
@@ -888,16 +888,16 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "3.1.18"
+version = "3.2.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2dbdf4bdacb33466e854ce889eee8dfd5729abf7ccd7664d0a2d60cd384440b"
+checksum = "190814073e85d238f31ff738fcb0bf6910cedeb73376c87cd69291028966fd83"
 dependencies = [
  "atty",
  "bitflags",
  "clap_derive",
  "clap_lex",
  "indexmap",
- "lazy_static",
+ "once_cell",
  "strsim 0.10.0",
  "termcolor",
  "terminal_size",
@@ -906,9 +906,9 @@ dependencies = [
 
 [[package]]
 name = "clap_derive"
-version = "3.1.18"
+version = "3.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25320346e922cffe59c0bbc5410c8d8784509efb321488971081313cb1e1a33c"
+checksum = "759bf187376e1afa7b85b959e6a664a3e7a95203415dba952ad19139e798f902"
 dependencies = [
  "heck 0.4.0",
  "proc-macro-error",
@@ -919,9 +919,9 @@ dependencies = [
 
 [[package]]
 name = "clap_lex"
-version = "0.2.0"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a37c35f1112dad5e6e0b1adaff798507497a18fceeb30cceb3bae7d1427b9213"
+checksum = "2850f2f5a82cbf437dd5af4d49848fbdfc27c157c3d010345776f952765261c5"
 dependencies = [
  "os_str_bytes",
 ]
@@ -1360,6 +1360,7 @@ dependencies = [
  "axum",
  "bytes",
  "chrono",
+ "clap 3.2.8",
  "ctor",
  "flate2",
  "futures",
@@ -3200,7 +3201,7 @@ dependencies = [
 name = "provisioner"
 version = "0.1.0"
 dependencies = [
- "clap 3.1.18",
+ "clap 3.2.8",
  "ctor",
  "lazy_static",
  "portpicker",

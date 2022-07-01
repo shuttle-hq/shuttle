@@ -1,8 +1,10 @@
+mod args;
 mod deployment;
 mod error;
 mod handlers;
 mod persistence;
 
+use clap::Parser;
 use deployment::{Built, DeploymentManager};
 use persistence::Persistence;
 use proto::provisioner::provisioner_client::ProvisionerClient;
@@ -14,15 +16,15 @@ use tracing_subscriber::{fmt, EnvFilter};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
+use crate::args::Args;
 use crate::deployment::deploy_layer::DeployLayer;
 use crate::deployment::{AbstractProvisionerFactory, RuntimeLoggerFactory};
 
 const SECRET_KEY: &str = "GATEWAY_SECRET";
-const PROVISIONER_ADDRESS: &str = "provisioner";
-const PROVISIONER_PORT: u32 = 5000;
 
 #[tokio::main]
 async fn main() {
+    let args = Args::parse();
     let gateway_secret = std::env::var(SECRET_KEY).unwrap_or_else(|_| {
         panic!(
             "No gateway secret specified with environment variable {}",
@@ -45,16 +47,18 @@ async fn main() {
         .with(fmt_layer)
         .init();
 
-    let provisioner_uri =
-        Endpoint::try_from(format!("http://{PROVISIONER_ADDRESS}:{PROVISIONER_PORT}"))
-            .expect("provisioner uri is not valid");
+    let provisioner_uri = Endpoint::try_from(format!(
+        "http://{}:{}",
+        args.provisioner_address, args.provisioner_port
+    ))
+    .expect("provisioner uri is not valid");
 
     let provisioner_client = ProvisionerClient::connect(provisioner_uri)
         .await
         .expect("failed to connect to provisioner");
 
     let abstract_factory =
-        AbstractProvisionerFactory::new(provisioner_client, PROVISIONER_ADDRESS.to_string());
+        AbstractProvisionerFactory::new(provisioner_client, args.provisioner_address);
 
     let runtime_logger_factory = RuntimeLoggerFactory::new(persistence.get_log_sender());
 

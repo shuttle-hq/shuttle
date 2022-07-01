@@ -2,6 +2,7 @@ mod args;
 mod client;
 pub mod config;
 mod factory;
+mod logger;
 mod print;
 
 use std::fs::{read_to_string, File};
@@ -27,6 +28,8 @@ use shuttle_service::loader::{build_crate, Loader};
 use tokio::sync::mpsc;
 use toml_edit::{value, Array, Document, Item, Table, Value};
 use uuid::Uuid;
+
+use crate::logger::Logger;
 
 #[macro_use]
 extern crate log;
@@ -208,7 +211,6 @@ impl Shuttle {
         let mut factory = LocalFactory::new(self.ctx.project_name().clone())?;
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), run_args.port);
         let deployment_id = Uuid::new_v4();
-        let (tx, mut rx) = mpsc::unbounded_channel();
 
         trace!("loading project");
         println!(
@@ -217,14 +219,8 @@ impl Shuttle {
             self.ctx.project_name(),
             addr
         );
-        let logger = Box::new(Logger::new(tx, deployment_id));
+        let logger = Box::new(Logger);
         let (handle, so) = loader.load(&mut factory, addr, logger).await?;
-
-        tokio::spawn(async move {
-            while let Some(log) = rx.recv().await {
-                print::log(log.datetime, log.item);
-            }
-        });
 
         handle.await??;
 

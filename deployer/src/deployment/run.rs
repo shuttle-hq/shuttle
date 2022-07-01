@@ -148,6 +148,7 @@ mod tests {
         fn flush(&self) {}
     }
 
+    // This test uses the kill signal to make sure a service does stop when asked to
     #[tokio::test]
     async fn can_be_killed() {
         let built = make_so_create_built("sleep-async");
@@ -169,6 +170,7 @@ mod tests {
         // Give it some time to start up
         sleep(Duration::from_secs(1)).await;
 
+        // Send kill signal
         kill_send.send("sleep-async".to_string()).unwrap();
 
         tokio::select! {
@@ -177,6 +179,7 @@ mod tests {
         }
     }
 
+    // This test does not use a kill signal to stop the service. Rather the service decided to stop on its own without errors
     #[tokio::test]
     async fn self_stop() {
         let built = make_so_create_built("sleep-async");

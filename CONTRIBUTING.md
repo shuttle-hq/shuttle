@@ -42,7 +42,7 @@ shuttle-service = { path = "[base]/shuttle/service" }
 Login to shuttle service in a new terminal window from the main shuttle directory:
 
 ```bash
-cargo run --bin cargo-shuttle -- login --api-key "ci-test"
+cargo run --bin cargo-shuttle -- login --api-key "test-key"
 ```
 
 cd into one of the examples:

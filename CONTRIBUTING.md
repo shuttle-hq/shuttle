@@ -62,7 +62,7 @@ Test if the deploy is working:
 
 ```bash
 # (the Host header should match the Host from the deploy output)
-curl --header "Host: hello-world-rocket-app.teste.rs" localhost:8000/hello
+curl --header "Host: {app}.localhost.local" localhost:8000/hello
 ```
 ### Using Podman instead of Docker
 If you are using Podman over Docker, then expose a rootless socket of Podman using the following command:

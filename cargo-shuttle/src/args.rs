@@ -92,8 +92,14 @@ pub struct RunArgs {
     pub port: u16,
 }
 
-#[derive(StructOpt)]
+#[derive(StructOpt, Debug)]
 pub struct InitArgs {
+    /// Initialize with axum framework
+    #[structopt(long, conflicts_with_all = &["actix"])]
+    pub axum: bool,
+    /// Initialize with actix-web framework
+    #[structopt(long, conflicts_with_all = &["axum"])]
+    pub rocket: bool,
     #[structopt(
         about = "the path to initialize a new shuttle project",
         parse(try_from_os_str = parse_init_path),

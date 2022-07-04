@@ -383,7 +383,7 @@ mod tests {
 
     impl log::Log for StubRuntimeLogger {
         fn enabled(&self, _metadata: &log::Metadata) -> bool {
-            true
+            false
         }
 
         fn log(&self, _record: &log::Record) {}
@@ -406,7 +406,7 @@ mod tests {
                 let states = recorder.get_deployment_states("deploy-layer-sleep-async");
 
                 if states.len() < 4 {
-                    drop(recorder);
+                    drop(recorder); // Don't block
                     sleep(Duration::from_millis(350)).await;
                     continue;
                 }
@@ -500,7 +500,7 @@ mod tests {
                 let states = recorder.get_deployment_states("deploy-layer-self-stop");
 
                 if states.len() < 5 {
-                    drop(recorder);
+                    drop(recorder); // Don't block
                     sleep(Duration::from_millis(350)).await;
                     continue;
                 }
@@ -562,7 +562,7 @@ mod tests {
                 let states = recorder.get_deployment_states("deploy-layer-bind-panic");
 
                 if states.len() < 5 {
-                    drop(recorder);
+                    drop(recorder); // Don't block
                     sleep(Duration::from_millis(350)).await;
                     continue;
                 }
@@ -626,7 +626,7 @@ mod tests {
                 let states = recorder.get_deployment_states("deploy-layer-handle-panic");
 
                 if states.len() < 5 {
-                    drop(recorder);
+                    drop(recorder); // Don't block
                     sleep(Duration::from_millis(350)).await;
                     continue;
                 }

@@ -83,7 +83,7 @@ impl Shuttle {
         let framework = init::get_framework(&args);
 
         let mut shuttle_init = init::ShuttleInit::new(args.path.clone(), framework);
-        shuttle_init.generate_files()?;
+        shuttle_init.shuttle_init()?;
 
         Ok(())
     }

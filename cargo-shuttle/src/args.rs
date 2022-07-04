@@ -95,11 +95,17 @@ pub struct RunArgs {
 #[derive(StructOpt, Debug)]
 pub struct InitArgs {
     /// Initialize with axum framework
-    #[structopt(long, conflicts_with_all = &["actix"])]
+    #[structopt(long, conflicts_with_all = &["rocket", "tide", "tower"])]
     pub axum: bool,
     /// Initialize with actix-web framework
-    #[structopt(long, conflicts_with_all = &["axum"])]
+    #[structopt(long, conflicts_with_all = &["axum", "tide", "tower"])]
     pub rocket: bool,
+    /// Initialize with tide framework
+    #[structopt(long, conflicts_with_all = &["axum", "rocket", "tower"])]
+    pub tide: bool,
+    /// Initialize with tower framework
+    #[structopt(long, conflicts_with_all = &["axum", "rocket", "tide"])]
+    pub tower: bool,
     #[structopt(
         about = "the path to initialize a new shuttle project",
         parse(try_from_os_str = parse_init_path),

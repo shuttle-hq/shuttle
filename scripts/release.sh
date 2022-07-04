@@ -19,7 +19,17 @@ function update-examples-versions()
 {
     local version=$1
 
-    rg "shuttle-service = \{ version" --files-with-matches -g '!www/*' | xargs sed -i "s/shuttle-service = { version = \"[[:digit:]]*.[[:digit:]]*.[[:digit:]]*\"/shuttle-service = { version = \"$version\"/g"
+    for d in examples/*/*/;
+    do
+        cd "$d"
+        cargo add shuttle-service@$version
+        cd ../../../
+    done
+
+    # Update docs in service and README
+    rg "shuttle-service = \{ version" --files-with-matches service/ | xargs sed -i "s/shuttle-service = { version = \"[[:digit:]]*.[[:digit:]]*.[[:digit:]]*\"/shuttle-service = { version = \"$version\"/g"
+    sed -i "s/shuttle-service = { version = \"[[:digit:]]*.[[:digit:]]*.[[:digit:]]*\"/shuttle-service = { version = \"$version\"/g" README.md
+
     git commit -am "docs: v$version"
 }
 

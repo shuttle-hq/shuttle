@@ -1,5 +1,5 @@
 use axum::body::Body;
-use axum::extract::{Extension, Path};
+use axum::extract::{Extension, Path, Query};
 use axum::routing::{get, Router};
 use axum::{extract::BodyStream, Json};
 use futures::TryStreamExt;
@@ -7,6 +7,8 @@ use futures::TryStreamExt;
 use crate::deployment::{DeploymentInfo, DeploymentManager, Queued};
 use crate::error::{Error, Result};
 use crate::persistence::Persistence;
+
+use std::collections::HashMap;
 
 pub fn make_router(
     persistence: Persistence,
@@ -38,11 +40,13 @@ async fn get_service(
 async fn post_service(
     Extension(deployment_manager): Extension<DeploymentManager>,
     Path(name): Path<String>,
+    Query(params): Query<HashMap<String, String>>,
     stream: BodyStream,
 ) -> Result<Json<DeploymentInfo>> {
     let queued = Queued {
         name,
         data_stream: Box::pin(stream.map_err(Error::Streaming)),
+        will_run_tests: !params.contains_key("no-testing"),
     };
     let info = DeploymentInfo::from(&queued);
 

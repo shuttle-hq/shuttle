@@ -20,6 +20,7 @@ tar = "0.4.38"
 rand = "0.8.5"
 tracing = "0.1.35"
 tracing-subscriber = { version = "0.3.11", features = ["env-filter"] }
+cargo = "0.62.0"
 
 [dependencies.shuttle-service]
 version = "0.3.3"

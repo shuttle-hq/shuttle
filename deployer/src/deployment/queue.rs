@@ -10,6 +10,10 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 
 use bytes::{BufMut, Bytes};
+use cargo::core::compiler::CompileMode;
+use cargo::core::Workspace;
+use cargo::ops::{CompileOptions, TestOptions};
+use cargo::util::config::Config as CargoConfig;
 use flate2::read::GzDecoder;
 use futures::{Stream, StreamExt};
 use rand::distributions::DistString;
@@ -52,6 +56,7 @@ async fn promote_to_run(built: Built, run_send: RunSender) {
 pub struct Queued {
     pub name: String,
     pub data_stream: Pin<Box<dyn Stream<Item = Result<Bytes>> + Send + Sync>>,
+    pub will_run_tests: bool,
 }
 
 impl Queued {
@@ -81,6 +86,12 @@ impl Queued {
         let project_path = project_path.canonicalize()?;
         let so_path =
             build_crate(&project_path, cargo_output_buf).map_err(|e| Error::Build(e.into()))?;
+
+        if self.will_run_tests {
+            info!("Running deployment's unit tests");
+
+            run_pre_deploy_tests(&project_path)?;
+        }
 
         info!("Removing old build (if present)");
 
@@ -115,6 +126,27 @@ fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn run_pre_deploy_tests(project_path: impl AsRef<Path>) -> Result<()> {
+    let config = CargoConfig::default().unwrap();
+    let manifest_path = project_path.as_ref().join("Cargo.toml");
+
+    let ws = Workspace::new(&manifest_path, &config).map_err(|e| Error::Build(e.into()))?;
+
+    let opts = TestOptions {
+        compile_opts: CompileOptions::new(&config, CompileMode::Test).unwrap(),
+        no_run: false,
+        no_fail_fast: false,
+    };
+
+    let test_failures =
+        cargo::ops::run_tests(&ws, &opts, &[]).map_err(|e| Error::Build(e.into()))?;
+
+    match test_failures {
+        Some(failures) => Err(failures.into()),
+        None => Ok(()),
+    }
 }
 
 /// Check for an existing marker file in the specified project directory and
@@ -156,10 +188,13 @@ async fn rename_build(project_path: impl AsRef<Path>, so_path: impl AsRef<Path>)
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use tempdir::TempDir;
     use tokio::fs;
 
     use super::MARKER_FILE_NAME;
+    use crate::error::Error;
 
     #[tokio::test]
     async fn extract_tar_gz_data() {
@@ -198,6 +233,20 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
         super::extract_tar_gz_data(test_data.as_slice(), &p).unwrap();
 
         fs::remove_dir_all(p).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn run_pre_deploy_tests() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+
+        let failure_project_path = root.join("tests/resources/tests-fail");
+        assert!(matches!(
+            super::run_pre_deploy_tests(failure_project_path),
+            Err(Error::PreDeployTestFailure(_))
+        ));
+
+        let pass_project_path = root.join("tests/resources/tests-pass");
+        super::run_pre_deploy_tests(pass_project_path).unwrap();
     }
 
     #[tokio::test]

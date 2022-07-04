@@ -350,6 +350,7 @@ mod tests {
             .queue_push(Queued {
                 name: "queue_test".to_string(),
                 data_stream: Box::pin(async { Ok(Bytes::from("data")) }.into_stream()),
+                will_run_tests: false,
             })
             .await;
 

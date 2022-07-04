@@ -308,6 +308,7 @@ impl RequestContext {
         }
 
         let config = project.as_mut().unwrap();
+
         match (&project_args.name, &config.name) {
             // Command-line name parameter trumps everything
             (Some(name_from_args), _) => {
@@ -341,15 +342,28 @@ impl RequestContext {
         }
     }
 
-    /// Get the API key from the global configuration. Returns an error if API key not set in there.
-    pub fn api_key(&self) -> Result<&ApiKey> {
-        self.global.as_ref().unwrap().api_key().ok_or_else(|| {
-            anyhow!(
-                "Configuration file: `{}`",
-                self.global.manager.path().display()
-            )
-            .context(anyhow!("No valid API key found, try logging in first."))
-        })
+    /// Get the API key from the `SHUTTLE_API_KEY` env variable, or
+    /// otherwise from the global configuration. Returns an error if
+    /// an API key is not set.
+    pub fn api_key(&self) -> Result<ApiKey> {
+        std::env::var("SHUTTLE_API_KEY")
+            .context("environment variable SHUTTLE_API_KEY is not set or invalid")
+            .or_else(|_| {
+                self.global
+                    .as_ref()
+                    .unwrap()
+                    .api_key()
+                    .map(|key| key.to_owned())
+                    .ok_or_else(|| {
+                        anyhow!(
+                            "Configuration file: `{}`",
+                            self.global.manager.path().display()
+                        )
+                        .context(anyhow!(
+                            "No valid API key found, try logging in first with:\n\tcargo shuttle login"
+                        ))
+                    })
+            })
     }
 
     /// Get the current context working directory
@@ -425,20 +439,6 @@ mod tests {
         let local_config = RequestContext::get_local_config(&project_args).unwrap();
 
         assert_eq!(unwrap_project_name(&local_config), "hello-world-axum-app");
-    }
-
-    #[test]
-    fn fixme_running_in_src_subdir_finds_crate_but_fails_to_find_config() {
-        let project_args = ProjectArgs {
-            working_directory: path_from_workspace_root("examples/axum/hello-world/src"),
-            name: None,
-        };
-
-        let local_config = RequestContext::get_local_config(&project_args).unwrap();
-
-        // FIXME: this is not the intended behaviour. We should fix this.
-        // This should really be "hello-world-axum-app", as above.
-        assert_eq!(unwrap_project_name(&local_config), "hello-world");
     }
 
     #[test]

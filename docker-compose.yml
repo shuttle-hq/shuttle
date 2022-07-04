@@ -1,23 +1,47 @@
 version: "3"
+volumes:
+  shuttle-backend-vol:
+    external: true
 services:
-  app:
-    build:
-      context: .
-      dockerfile: api/Containerfile.dev
-    ports:
-      - "8001:8001"
-      - "8000:8000"
+  backend:
+    image: "${CONTAINER_REGISTRY}/backend:${BACKEND_TAG}"
     volumes:
-      - ./api/users.toml:/config/users.toml
-      - /tmp/shuttle/crates:/var/lib/shuttle/crates
+      - shuttle-backend-vol:/var/lib/shuttle/
+    depends_on:
+      - provisioner
+    ports:
+      - 8000:8000
+      - 8001:8001
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
     environment:
-      - SHUTTLE_USERS_TOML=/config/users.toml
-      - SHUTTLE_ADMIN_SECRET=admin-pass
-      - PROXY_FQDN=teste.rs
-      - PROVISIONER_ADDRESS=provisioner
+      - SHUTTLE_USERS_TOML=/var/lib/shuttle/users.toml
+      - RUST_LOG=${RUST_LOG}
+    command:
+      - "--path=/var/lib/shuttle/crates"
+      - "--bind-addr=0.0.0.0"
+      - "--api-port=8001"
+      - "--proxy-port=8000"
+      - "--proxy-fqdn=${APPS_FQDN}"
+      - "--provisioner-address=provisioner"
+      - "--provisioner-port=8000"
   provisioner:
-    build:
-      context: .
-      dockerfile: provisioner/Containerfile.dev
+    image: "${CONTAINER_REGISTRY}/provisioner:${PROVISIONER_TAG}"
+    depends_on:
+      - db
     environment:
-      - PORT=5001
+      - RUST_LOG=${RUST_LOG}
+    command:
+      - "--ip=0.0.0.0"
+      - "--port=8000"
+      - "--shared-pg-uri=postgres://postgres:${POSTGRES_PASSWORD}@db:5432/postgres"
+      - "--internal-address=db"
+      - "--fqdn=${DB_FQDN}"
+  db:
+    image: "postgres"
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}

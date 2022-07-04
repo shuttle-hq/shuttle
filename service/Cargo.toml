@@ -19,6 +19,7 @@ hyper = { version = "0.14.19", features = ["server", "tcp", "http1"], optional =
 lazy_static = "1.4.0"
 libloading = { version = "0.7.3", optional = true }
 log = "0.4.17"
+paste = "1.0.7"
 regex = "1.5.6"
 rocket = { version = "0.5.0-rc.2", optional = true }
 sqlx = { version = "0.5.13", optional = true }
@@ -28,18 +29,24 @@ tide = { version = "0.16.0", optional = true }
 tokio = { version = "1.19.2", features = ["rt", "rt-multi-thread"] }
 tower = { version = "0.4.12", features = ["make"], optional = true }
 
+# Tide does not have tokio support. So make sure async-std is compatible with tokio
+# https://github.com/http-rs/tide/issues/791
+[dependencies.async-std]
+version = "1"
+features = ["tokio1"]
+
 [dependencies.shuttle-codegen]
 version = "0.3.1"
 path = "../codegen"
 optional = true
 
+[dev-dependencies]
+portpicker = { version = "0.1.1" }
+uuid = { version = "1.1.1", features = ["v4"] }
+
 [dependencies.shuttle-common]
 version = "0.3.1"
 path = "../common"
-
-[dev-dependencies]
-portpicker = "0.1.1"
-uuid = "1.1.1"
 
 [features]
 default = ["codegen"]
@@ -48,6 +55,9 @@ loader = ["cargo", "libloading"]
 
 sqlx-integration = ["sqlx/runtime-tokio-native-tls"]
 sqlx-postgres = ["sqlx-integration", "sqlx/postgres"]
+sqlx-aws-postgres = ["sqlx-integration", "sqlx/postgres"]
+sqlx-aws-mysql = ["sqlx-integration", "sqlx/mysql"]
+sqlx-aws-mariadb = ["sqlx-integration", "sqlx/mysql"]
 
 secrets = ["sqlx-postgres"]
 

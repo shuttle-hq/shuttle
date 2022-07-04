@@ -1,5 +1,5 @@
 use shuttle_service::error::CustomError;
-use shuttle_service::{log, GetResource, IntoService, Runtime, ServeHandle, Service};
+use shuttle_service::{log, IntoService, ResourceBuilder, Runtime, ServeHandle, Service};
 use sqlx::PgPool;
 
 #[macro_use]
@@ -66,7 +66,9 @@ impl Service for PoolService {
             .await
             .unwrap();
 
-        let pool = factory.get_resource(&self.runtime).await?;
+        let pool = shuttle_service::shared::Postgres::new()
+            .build(factory, &self.runtime)
+            .await?;
 
         self.pool = Some(pool);
 

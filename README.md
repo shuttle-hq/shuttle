@@ -51,7 +51,6 @@ version = "0.1.0"
 edition = "2021"
 
 [lib]
-crate-type = ["cdylib"]
 
 [dependencies]
 rocket = "0.5.0-rc.1"
@@ -96,6 +95,41 @@ $ cargo shuttle deploy
 
 For the full documentation, visit [docs.rs/shuttle-service](https://docs.rs/shuttle-service)
 
+## Working on shuttle
+
+If you want to setup a local environment to test code changes to core `shuttle` packages, follow these steps.
+
+Build the required images with 
+
+```bash
+$ docker buildx bake -f docker-bake.hcl provisioner backend
+```
+
+The images get build with [cargo-chef](https://github.com/LukeMathWalker/cargo-chef) and therefore support incremental builds (most of the time). So they will be much faster to re-build after an incremental change in your code - should you wish to deploy it locally straightaway.
+
+Create a docker persistent volume with
+
+```bash
+$ docker volume create shuttle-backend-vol
+```
+
+Finally, you can start a local deployment of the backend with
+
+```bash
+$ docker compose -f docker-compose.dev.yml up -d
+```
+
+The API is now accessible on `localhost:8000` (for app proxies) and `localhost:8001` (for the control plane). When running `cargo run --bin cargo-shuttle` (in a debug build), the CLI will point itself to `localhost` for its API calls. The deployment parameters can be tweaked by changing values in the [.env](./.env) file.
+
+In order to test local changes to the `shuttle-service` crate, you may want to add the following to a `.cargo/config.toml` file:
+
+``` toml
+[patch.crates-io]
+shuttle-service = { path = "[base]/shuttle/service" }
+```
+
+See [Overriding Dependencies](https://doc.rust-lang.org/cargo/reference/overriding-dependencies.html) for more.
+
 ## Roadmap
 
 For a comprehensive view of the shuttle roadmap check out this [project board](https://github.com/orgs/shuttle-hq/projects/4).
@@ -119,5 +153,3 @@ If you have any requests or suggestions feel free to open an issue.
 
 We are currently in Public Alpha. Watch "releases" of this repo to get 
 notified of major updates!
-
-

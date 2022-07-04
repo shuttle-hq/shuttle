@@ -225,8 +225,6 @@ pub use tokio::runtime::Runtime;
 pub mod error;
 pub use error::Error;
 
-pub mod logger;
-
 #[cfg(feature = "secrets")]
 pub mod secrets;
 #[cfg(feature = "secrets")]

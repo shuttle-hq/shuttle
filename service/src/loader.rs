@@ -10,17 +10,11 @@ use cargo::core::{Shell, Verbosity, Workspace};
 use cargo::ops::{compile, CompileOptions};
 use cargo::util::homedir;
 use cargo::Config;
-use libloading::{Library, Symbol};
-use shuttle_common::DeploymentId;
-use thiserror::Error as ThisError;
-use tokio::sync::mpsc::UnboundedSender;
-
 use futures::FutureExt;
+use libloading::{Library, Symbol};
+use thiserror::Error as ThisError;
 
-use crate::{
-    logger::{Log, Logger},
-    Error, Factory, ServeHandle, Service,
-};
+use crate::{Error, Factory, ServeHandle, Service};
 
 const ENTRYPOINT_SYMBOL_NAME: &[u8] = b"_create_service\0";
 
@@ -64,11 +58,9 @@ impl Loader {
         self,
         factory: &mut dyn Factory,
         addr: SocketAddr,
-        tx: UnboundedSender<Log>,
-        deployment_id: DeploymentId,
+        logger: Box<dyn log::Log>,
     ) -> Result<(ServeHandle, Library), Error> {
         let mut service = self.service;
-        let logger = Box::new(Logger::new(tx, deployment_id));
 
         AssertUnwindSafe(service.build(factory, logger))
             .catch_unwind()

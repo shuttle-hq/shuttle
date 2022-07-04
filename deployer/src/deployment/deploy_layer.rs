@@ -191,12 +191,12 @@ struct ScopeDetails {
 
 impl From<&tracing::Level> for Level {
     fn from(level: &tracing::Level) -> Self {
-        match level {
-            &tracing::Level::TRACE => Self::Trace,
-            &tracing::Level::DEBUG => Self::Debug,
-            &tracing::Level::INFO => Self::Info,
-            &tracing::Level::WARN => Self::Warn,
-            &tracing::Level::ERROR => Self::Error,
+        match *level {
+            tracing::Level::TRACE => Self::Trace,
+            tracing::Level::DEBUG => Self::Debug,
+            tracing::Level::INFO => Self::Info,
+            tracing::Level::WARN => Self::Warn,
+            tracing::Level::ERROR => Self::Error,
         }
     }
 }
@@ -269,14 +269,24 @@ impl Visit for JsonVisitor {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, Mutex};
+    use std::{
+        fs::read_dir,
+        path::PathBuf,
+        sync::{Arc, Mutex},
+        time::Duration,
+    };
 
     use axum::body::Bytes;
     use ctor::ctor;
+    use flate2::{write::GzEncoder, Compression};
     use futures::FutureExt;
+    use tokio::{select, time::sleep};
     use tracing_subscriber::prelude::*;
 
-    use crate::deployment::{deploy_layer::LogType, Built, DeploymentManager, Queued, State};
+    use crate::deployment::{
+        deploy_layer::LogType, provisioner_factory, runtime_logger, Built, DeploymentManager,
+        Queued, State,
+    };
 
     use super::{DeployLayer, Log, LogRecorder};
 
@@ -342,59 +352,338 @@ mod tests {
         }
     }
 
+    struct StubAbstractProvisionerFactory;
+
+    impl provisioner_factory::AbstractFactory for StubAbstractProvisionerFactory {
+        type Output = StubProvisionerFactory;
+
+        fn get_factory(&self, _project_name: shuttle_common::project::ProjectName) -> Self::Output {
+            StubProvisionerFactory
+        }
+    }
+
+    struct StubProvisionerFactory;
+
+    #[async_trait::async_trait]
+    impl shuttle_service::Factory for StubProvisionerFactory {
+        async fn get_sql_connection_string(&mut self) -> Result<String, shuttle_service::Error> {
+            panic!("did not expect any deploy_layer test to connect to the database")
+        }
+    }
+
+    struct StubRuntimeLoggerFactory;
+
+    impl runtime_logger::Factory for StubRuntimeLoggerFactory {
+        fn get_logger(&self, _project_name: String) -> Box<dyn log::Log> {
+            Box::new(StubRuntimeLogger)
+        }
+    }
+
+    struct StubRuntimeLogger;
+
+    impl log::Log for StubRuntimeLogger {
+        fn enabled(&self, _metadata: &log::Metadata) -> bool {
+            false
+        }
+
+        fn log(&self, _record: &log::Record) {}
+
+        fn flush(&self) {}
+    }
+
     #[tokio::test]
     async fn deployment_to_be_queued() {
-        let deployment_manager = DeploymentManager::new();
+        let deployment_manager =
+            DeploymentManager::new(StubAbstractProvisionerFactory, StubRuntimeLoggerFactory);
 
         deployment_manager
-            .queue_push(Queued {
-                name: "queue_test".to_string(),
-                data_stream: Box::pin(async { Ok(Bytes::from("data")) }.into_stream()),
-            })
+            .queue_push(get_queue("sleep-async"))
             .await;
 
-        // Give it a small time to start up
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        let test = async {
+            loop {
+                let recorder = RECORDER.lock().unwrap();
+                let states = recorder.get_deployment_states("deploy-layer-sleep-async");
+
+                if states.len() < 4 {
+                    drop(recorder); // Don't block
+                    sleep(Duration::from_millis(350)).await;
+                    continue;
+                }
+
+                assert_eq!(
+                    states.len(),
+                    4,
+                    "did not expect these states:\n\t{states:#?}"
+                );
+
+                assert_eq!(
+                    *states,
+                    vec![
+                        StateLog {
+                            name: "deploy-layer-sleep-async".to_string(),
+                            state: State::Queued,
+                        },
+                        StateLog {
+                            name: "deploy-layer-sleep-async".to_string(),
+                            state: State::Building,
+                        },
+                        StateLog {
+                            name: "deploy-layer-sleep-async".to_string(),
+                            state: State::Built,
+                        },
+                        StateLog {
+                            name: "deploy-layer-sleep-async".to_string(),
+                            state: State::Running,
+                        },
+                    ]
+                );
+
+                break;
+            }
+        };
+
+        select! {
+            _ = sleep(Duration::from_secs(120)) => {
+                panic!("states should go into 'Running' for a valid service");
+            }
+            _ = test => {}
+        }
+
+        // Send kill signal
+        deployment_manager
+            .kill("deploy-layer-sleep-async".to_string())
+            .await;
+
+        sleep(Duration::from_secs(1)).await;
 
         let recorder = RECORDER.lock().unwrap();
-        let states = recorder.get_deployment_states("queue_test");
-
-        assert_eq!(
-            states.len(),
-            4,
-            "did not expect these states:\n\t{states:#?}"
-        );
+        let states = recorder.get_deployment_states("deploy-layer-sleep-async");
 
         assert_eq!(
             *states,
             vec![
                 StateLog {
-                    name: "queue_test".to_string(),
+                    name: "deploy-layer-sleep-async".to_string(),
                     state: State::Queued,
                 },
                 StateLog {
-                    name: "queue_test".to_string(),
+                    name: "deploy-layer-sleep-async".to_string(),
                     state: State::Building,
                 },
                 StateLog {
-                    name: "queue_test".to_string(),
+                    name: "deploy-layer-sleep-async".to_string(),
                     state: State::Built,
                 },
                 StateLog {
-                    name: "queue_test".to_string(),
+                    name: "deploy-layer-sleep-async".to_string(),
                     state: State::Running,
+                },
+                StateLog {
+                    name: "deploy-layer-sleep-async".to_string(),
+                    state: State::Stopped,
                 },
             ]
         );
     }
 
     #[tokio::test]
+    async fn deployment_self_stop() {
+        let deployment_manager =
+            DeploymentManager::new(StubAbstractProvisionerFactory, StubRuntimeLoggerFactory);
+
+        deployment_manager.queue_push(get_queue("self-stop")).await;
+
+        let test = async {
+            loop {
+                let recorder = RECORDER.lock().unwrap();
+                let states = recorder.get_deployment_states("deploy-layer-self-stop");
+
+                if states.len() < 5 {
+                    drop(recorder); // Don't block
+                    sleep(Duration::from_millis(350)).await;
+                    continue;
+                }
+
+                assert_eq!(
+                    states.len(),
+                    5,
+                    "did not expect these states:\n\t{states:#?}"
+                );
+
+                assert_eq!(
+                    *states,
+                    vec![
+                        StateLog {
+                            name: "deploy-layer-self-stop".to_string(),
+                            state: State::Queued,
+                        },
+                        StateLog {
+                            name: "deploy-layer-self-stop".to_string(),
+                            state: State::Building,
+                        },
+                        StateLog {
+                            name: "deploy-layer-self-stop".to_string(),
+                            state: State::Built,
+                        },
+                        StateLog {
+                            name: "deploy-layer-self-stop".to_string(),
+                            state: State::Running,
+                        },
+                        StateLog {
+                            name: "deploy-layer-self-stop".to_string(),
+                            state: State::Completed,
+                        },
+                    ]
+                );
+
+                break;
+            }
+        };
+
+        select! {
+            _ = sleep(Duration::from_secs(120)) => {
+                panic!("states should go into 'Completed' when a service stops by itself");
+            }
+            _ = test => {}
+        }
+    }
+
+    #[tokio::test]
+    async fn deployment_bind_panic() {
+        let deployment_manager =
+            DeploymentManager::new(StubAbstractProvisionerFactory, StubRuntimeLoggerFactory);
+
+        deployment_manager.queue_push(get_queue("bind-panic")).await;
+
+        let test = async {
+            loop {
+                let recorder = RECORDER.lock().unwrap();
+                let states = recorder.get_deployment_states("deploy-layer-bind-panic");
+
+                if states.len() < 5 {
+                    drop(recorder); // Don't block
+                    sleep(Duration::from_millis(350)).await;
+                    continue;
+                }
+
+                assert_eq!(
+                    states.len(),
+                    5,
+                    "did not expect these states:\n\t{states:#?}"
+                );
+
+                assert_eq!(
+                    *states,
+                    vec![
+                        StateLog {
+                            name: "deploy-layer-bind-panic".to_string(),
+                            state: State::Queued,
+                        },
+                        StateLog {
+                            name: "deploy-layer-bind-panic".to_string(),
+                            state: State::Building,
+                        },
+                        StateLog {
+                            name: "deploy-layer-bind-panic".to_string(),
+                            state: State::Built,
+                        },
+                        StateLog {
+                            name: "deploy-layer-bind-panic".to_string(),
+                            state: State::Running,
+                        },
+                        StateLog {
+                            name: "deploy-layer-bind-panic".to_string(),
+                            state: State::Crashed,
+                        },
+                    ]
+                );
+
+                break;
+            }
+        };
+
+        select! {
+            _ = sleep(Duration::from_secs(120)) => {
+                panic!("states should go into 'Crashed' panicing in bind");
+            }
+            _ = test => {}
+        }
+    }
+
+    #[tokio::test]
+    async fn deployment_handle_panic() {
+        let deployment_manager =
+            DeploymentManager::new(StubAbstractProvisionerFactory, StubRuntimeLoggerFactory);
+
+        deployment_manager
+            .queue_push(get_queue("handle-panic"))
+            .await;
+
+        let test = async {
+            loop {
+                let recorder = RECORDER.lock().unwrap();
+                let states = recorder.get_deployment_states("deploy-layer-handle-panic");
+
+                if states.len() < 5 {
+                    drop(recorder); // Don't block
+                    sleep(Duration::from_millis(350)).await;
+                    continue;
+                }
+
+                assert_eq!(
+                    states.len(),
+                    5,
+                    "did not expect these states:\n\t{states:#?}"
+                );
+
+                assert_eq!(
+                    *states,
+                    vec![
+                        StateLog {
+                            name: "deploy-layer-handle-panic".to_string(),
+                            state: State::Queued,
+                        },
+                        StateLog {
+                            name: "deploy-layer-handle-panic".to_string(),
+                            state: State::Building,
+                        },
+                        StateLog {
+                            name: "deploy-layer-handle-panic".to_string(),
+                            state: State::Built,
+                        },
+                        StateLog {
+                            name: "deploy-layer-handle-panic".to_string(),
+                            state: State::Running,
+                        },
+                        StateLog {
+                            name: "deploy-layer-handle-panic".to_string(),
+                            state: State::Crashed,
+                        },
+                    ]
+                );
+
+                break;
+            }
+        };
+
+        select! {
+            _ = sleep(Duration::from_secs(120)) => {
+                panic!("states should go into 'Crashed' when panicing in handle");
+            }
+            _ = test => {}
+        }
+    }
+
+    #[tokio::test]
     async fn deployment_from_run() {
-        let deployment_manager = DeploymentManager::new();
+        let deployment_manager =
+            DeploymentManager::new(StubAbstractProvisionerFactory, StubRuntimeLoggerFactory);
 
         deployment_manager
             .run_push(Built {
-                name: "run_test".to_string(),
+                name: "run-test".to_string(),
+                so_path: PathBuf::new(),
             })
             .await;
 
@@ -402,11 +691,11 @@ mod tests {
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
         let recorder = RECORDER.lock().unwrap();
-        let states = recorder.get_deployment_states("run_test");
+        let states = recorder.get_deployment_states("run-test");
 
         assert_eq!(
             states.len(),
-            2,
+            3,
             "did not expect these states:\n\t{states:#?}"
         );
 
@@ -414,14 +703,44 @@ mod tests {
             *states,
             vec![
                 StateLog {
-                    name: "run_test".to_string(),
+                    name: "run-test".to_string(),
                     state: State::Built,
                 },
                 StateLog {
-                    name: "run_test".to_string(),
+                    name: "run-test".to_string(),
                     state: State::Running,
+                },
+                StateLog {
+                    name: "run-test".to_string(),
+                    state: State::Crashed,
                 },
             ]
         );
+    }
+
+    fn get_queue(name: &str) -> Queued {
+        let enc = GzEncoder::new(Vec::new(), Compression::fast());
+        let mut tar = tar::Builder::new(enc);
+
+        for dir_entry in read_dir(format!("tests/deploy_layer/{name}")).unwrap() {
+            let dir_entry = dir_entry.unwrap();
+            if dir_entry.file_name() != "target" {
+                let path = format!("{name}/{}", dir_entry.file_name().to_str().unwrap());
+
+                if dir_entry.file_type().unwrap().is_dir() {
+                    tar.append_dir_all(path, dir_entry.path()).unwrap();
+                } else {
+                    tar.append_path_with_name(dir_entry.path(), path).unwrap();
+                }
+            }
+        }
+
+        let enc = tar.into_inner().unwrap();
+        let bytes = enc.finish().unwrap();
+
+        Queued {
+            name: format!("deploy-layer-{name}"),
+            data_stream: Box::pin(async { Ok(Bytes::from(bytes)) }.into_stream()),
+        }
     }
 }

@@ -72,8 +72,8 @@ impl Persistence {
                             &pool_cloned,
                             Log {
                                 name: log.name.clone(),
-                                timestamp: log.timestamp.clone(),
-                                state: log.state.clone(),
+                                timestamp: log.timestamp,
+                                state: log.state,
                                 level: log.level.clone(),
                                 file: log.file.clone(),
                                 line: log.line,
@@ -135,6 +135,10 @@ impl Persistence {
     async fn get_deployment_logs(&self, name: &str) -> Result<Vec<Log>> {
         get_deployment_logs(&self.pool, name).await
     }
+
+    pub fn get_log_sender(&self) -> UnboundedSender<deploy_layer::Log> {
+        self.log_send.clone()
+    }
 }
 
 async fn update_deployment(pool: &SqlitePool, info: impl Into<DeploymentInfo>) -> Result<()> {
@@ -194,6 +198,8 @@ impl LogRecorder for Persistence {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use chrono::Utc;
     use serde_json::json;
 
@@ -214,6 +220,7 @@ mod tests {
 
         p.update_deployment(&Built {
             name: "abc".to_string(),
+            so_path: PathBuf::new(),
         })
         .await
         .unwrap();

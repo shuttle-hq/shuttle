@@ -11,7 +11,6 @@ pub use info::DeploymentInfo;
 pub use states::State;
 
 pub use self::log::Log;
-use self::provisioner_factory::AbstractFactory;
 pub use provisioner_factory::AbstractProvisionerFactory;
 pub use queue::Queued;
 pub use run::Built;
@@ -34,8 +33,8 @@ impl DeploymentManager {
     /// Create a new deployment manager. Manages one or more 'pipelines' for
     /// processing service building, loading, and deployment.
     pub fn new(
-        abstract_factory: impl AbstractFactory,
-        runtime_logger_factory: RuntimeLoggerFactory,
+        abstract_factory: impl provisioner_factory::AbstractFactory,
+        runtime_logger_factory: impl runtime_logger::Factory,
     ) -> Self {
         let (kill_send, _) = broadcast::channel(KILL_BUFFER_SIZE);
 
@@ -89,8 +88,8 @@ impl Pipeline {
     /// deployments between the aforementioned tasks.
     fn new(
         kill_send: KillSender,
-        abstract_factory: impl AbstractFactory,
-        runtime_logger_factory: RuntimeLoggerFactory,
+        abstract_factory: impl provisioner_factory::AbstractFactory,
+        runtime_logger_factory: impl runtime_logger::Factory,
     ) -> Pipeline {
         let (queue_send, queue_recv) = mpsc::channel(QUEUE_BUFFER_SIZE);
         let (run_send, run_recv) = mpsc::channel(RUN_BUFFER_SIZE);

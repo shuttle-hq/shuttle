@@ -10,10 +10,7 @@ use shuttle_service::{loader::Loader, Factory};
 use tokio::task::JoinError;
 use tracing::{debug, error, info, instrument};
 
-use super::{
-    provisioner_factory::AbstractFactory, KillReceiver, KillSender, RunReceiver,
-    RuntimeLoggerFactory, State,
-};
+use super::{provisioner_factory, runtime_logger, KillReceiver, KillSender, RunReceiver, State};
 use crate::error::Result;
 
 /// Run a task which takes runnable deploys from a channel and starts them up with a factory provided by the
@@ -22,8 +19,8 @@ use crate::error::Result;
 pub async fn task(
     mut recv: RunReceiver,
     kill_send: KillSender,
-    abstract_factory: impl AbstractFactory,
-    logger_factory: RuntimeLoggerFactory,
+    abstract_factory: impl provisioner_factory::AbstractFactory,
+    logger_factory: impl runtime_logger::Factory,
 ) {
     info!("Run task started");
 
@@ -50,33 +47,33 @@ pub async fn task(
         };
 
         tokio::spawn(async move {
-            if let Err(e) = built
+            if let Err(err) = built
                 .handle(addr, &mut factory, logger, kill_recv, cleanup)
                 .await
             {
-                error!("Error during running of deployment '{}' - {e}", name);
+                start_crashed_cleanup(&name, err)
             }
         });
     }
 }
 
-#[instrument(fields(state = %State::Completed))]
+#[instrument(fields(name = _name, state = %State::Completed))]
 fn completed_cleanup(_name: &str) {
     info!("service finished all on its own");
 }
 
-#[instrument(fields(state = %State::Stopped))]
+#[instrument(fields(name = _name, state = %State::Stopped))]
 fn stopped_cleanup(_name: &str) {
     info!("service was stopped by the user");
 }
 
-#[instrument(fields(state = %State::Crashed))]
+#[instrument(fields(name = _name, state = %State::Crashed))]
 fn crashed_cleanup(_name: &str, err: anyhow::Error) {
     let error: &dyn std::error::Error = err.as_ref();
     error!(error, "service encountered an error");
 }
 
-#[instrument(fields(state = %State::Crashed))]
+#[instrument(fields(name = _name, state = %State::Crashed))]
 fn start_crashed_cleanup(_name: &str, err: impl std::error::Error + 'static) {
     error!(
         error = &err as &dyn std::error::Error,

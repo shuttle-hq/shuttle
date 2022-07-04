@@ -38,10 +38,18 @@ pub async fn task(mut recv: QueueReceiver, run_send: RunSender) {
         tokio::spawn(async move {
             match queued.handle().await {
                 Ok(built) => promote_to_run(built, run_send_cloned).await,
-                Err(e) => error!("Error during building of deployment '{}' - {e}", name),
+                Err(err) => build_failed(&name, err),
             }
         });
     }
+}
+
+#[instrument(fields(name = _name, state = %State::Crashed))]
+fn build_failed(_name: &str, err: impl std::error::Error + 'static) {
+    error!(
+        error = &err as &dyn std::error::Error,
+        "service build encountered an error"
+    );
 }
 
 #[instrument(fields(name = built.name.as_str(), state = %State::Built))]
@@ -68,9 +76,8 @@ impl Queued {
 
         info!("Extracting received data");
 
-        fs::create_dir_all(BUILDS_PATH).await?;
-
         let project_path = PathBuf::from(BUILDS_PATH).join(&self.name);
+        fs::create_dir_all(project_path.clone()).await?;
 
         extract_tar_gz_data(vec.as_slice(), &project_path)?;
 

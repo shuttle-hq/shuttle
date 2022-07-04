@@ -7,6 +7,10 @@ use crate::deployment::State;
 
 use super::deploy_layer;
 
+pub trait Factory: Send + 'static {
+    fn get_logger(&self, project_name: String) -> Box<dyn log::Log>;
+}
+
 /// Factory to create runtime loggers for projects
 pub struct RuntimeLoggerFactory {
     log_send: UnboundedSender<deploy_layer::Log>,
@@ -16,8 +20,10 @@ impl RuntimeLoggerFactory {
     pub fn new(log_send: UnboundedSender<deploy_layer::Log>) -> Self {
         Self { log_send }
     }
+}
 
-    pub fn get_logger(&self, project_name: String) -> Box<dyn log::Log> {
+impl Factory for RuntimeLoggerFactory {
+    fn get_logger(&self, project_name: String) -> Box<dyn log::Log> {
         Box::new(RuntimeLogger::new(project_name, self.log_send.clone()))
     }
 }

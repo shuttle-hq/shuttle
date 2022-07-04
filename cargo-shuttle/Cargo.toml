@@ -19,6 +19,7 @@ crossterm = "0.23.2"
 dirs = "4.0.0"
 env_logger = "0.9.0"
 futures = "0.3.21"
+indoc = "1.0.6"
 log = "0.4.17"
 portpicker = "0.1.1"
 reqwest = { version = "0.11.10", features = ["json"] }
@@ -31,6 +32,7 @@ structopt = "0.3.26"
 tokio = "1.19.2"
 toml = "0.5.9"
 toml_edit = "0.14.4"
+url = "2.2.2"
 uuid = { version = "1.1.1", features = ["v4"] }
 webbrowser = "0.7.1"
 

@@ -29,7 +29,7 @@ function main()
     publish-folder "cargo-shuttle"
 
     git tag "v$version"
-    git push --tags
+    git push "v$version"
 
     echo "Success!! Now tell about it on Discord :D"
 }

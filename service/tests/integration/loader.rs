@@ -1,6 +1,4 @@
-mod helpers;
-
-use helpers::{build_so_create_loader, PostgresInstance};
+use crate::helpers::{loader::build_so_create_loader, sqlx::PostgresInstance};
 
 use shuttle_service::loader::LoaderError;
 use shuttle_service::{database, Error, Factory};

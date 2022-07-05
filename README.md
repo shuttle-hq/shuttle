@@ -95,6 +95,10 @@ $ cargo shuttle deploy
 
 For the full documentation, visit [docs.rs/shuttle-service](https://docs.rs/shuttle-service)
 
+## Contributing to shuttle
+
+If you want to setup a local environment to test code changes to core `shuttle` packages, or want to contribute to the project see [CONTRIBUTING.md](https://github.com/shuttle-hq/shuttle/blob/main/CONTRIBUTING.md)
+
 ## Roadmap
 
 For a comprehensive view of the shuttle roadmap check out this [project board](https://github.com/orgs/shuttle-hq/projects/4).

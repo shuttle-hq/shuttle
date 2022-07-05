@@ -1,0 +1,38 @@
+version: "3"
+volumes:
+  shuttle-backend-vol:
+    external: true
+services:
+  backend:
+    extends:
+      file: docker-compose.yml
+      service: backend
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        mkdir -p /var/lib/shuttle/crates
+
+        cat<<EOF > /var/lib/shuttle/users.toml
+        [test-key]
+        name = "tester"
+        projects = []
+        EOF
+
+        mkdir -p $$CARGO_HOME
+        cat<<EOF > $$CARGO_HOME/config.toml
+        [patch.crates-io]
+        shuttle-service = { path = "/usr/src/shuttle/service" }
+        EOF
+
+        exec /usr/local/bin/service "$${@:0}"
+    volumes:
+      - .:/usr/src/shuttle
+  provisioner:
+    extends:
+      file: docker-compose.yml
+      service: provisioner
+  db:
+    extends:
+      file: docker-compose.yml
+      service: db

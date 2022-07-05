@@ -1,0 +1,3 @@
+variable "context" {
+  default = "../"
+}

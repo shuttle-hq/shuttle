@@ -14,6 +14,7 @@ use futures::{SinkExt, StreamExt};
 use hyper::{Client, Uri};
 use hyper_tls::HttpsConnector;
 use serde::Serialize;
+use shuttle_service::ShuttleAxum;
 use sync_wrapper::SyncWrapper;
 use tokio::{
     sync::{watch, Mutex},
@@ -36,7 +37,7 @@ struct Response {
 }
 
 #[shuttle_service::main]
-async fn main() -> Result<SyncWrapper<Router>, shuttle_service::Error> {
+async fn main() -> ShuttleAxum {
     let (tx, rx) = watch::channel(Message::Text("{}".to_string()));
 
     let state = Arc::new(Mutex::new(State {

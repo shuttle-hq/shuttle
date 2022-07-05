@@ -49,7 +49,9 @@ async fn get_or_create_user(
 
 /// Status API to be used to check if the service is alive
 #[get("/status")]
-async fn status() {}
+async fn status() -> String {
+    String::from("Ok")
+}
 
 #[get("/version")]
 async fn version() -> String {

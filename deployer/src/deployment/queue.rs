@@ -33,34 +33,34 @@ pub async fn task(mut recv: QueueReceiver, run_send: RunSender) {
     info!("Queue task started");
 
     while let Some(queued) = recv.recv().await {
-        let name = queued.name.clone();
+        let id = queued.id.clone();
 
-        info!("Queued deployment at the front of the queue: {}", name);
+        info!("Queued deployment at the front of the queue: {id}");
 
         let run_send_cloned = run_send.clone();
 
         tokio::spawn(async move {
             match queued.handle().await {
                 Ok(built) => promote_to_run(built, run_send_cloned).await,
-                Err(e) => error!("Error during building of deployment '{}' - {e}", name),
+                Err(e) => error!("Error during building of deployment '{}' - {e}", id),
             }
         });
     }
 }
 
-#[instrument(fields(name = built.name.as_str(), state = %State::Built))]
+#[instrument(fields(id = built.id.as_str(), state = %State::Built))]
 async fn promote_to_run(built: Built, run_send: RunSender) {
     run_send.send(built).await.unwrap();
 }
 
 pub struct Queued {
-    pub name: String,
+    pub id: String,
     pub data_stream: Pin<Box<dyn Stream<Item = Result<Bytes>> + Send + Sync>>,
     pub will_run_tests: bool,
 }
 
 impl Queued {
-    #[instrument(skip(self), fields(name = self.name.as_str(), state = %State::Building))]
+    #[instrument(skip(self), fields(id = self.id.as_str(), state = %State::Building))]
     async fn handle(mut self) -> Result<Built> {
         info!("Fetching POSTed data");
 
@@ -101,7 +101,7 @@ impl Queued {
 
         rename_build(&project_path, so_path).await?;
 
-        let built = Built { name: self.name };
+        let built = Built { id: self.id };
 
         Ok(built)
     }

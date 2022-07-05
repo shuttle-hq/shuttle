@@ -26,7 +26,7 @@ use tracing_subscriber::Layer;
 
 use super::{
     log::{self, Level},
-    DeploymentInfo, State,
+    DeploymentState, State,
 };
 
 /// Records logs for the deployment progress
@@ -37,8 +37,8 @@ pub trait LogRecorder {
 /// An event or state transition log
 #[derive(Debug, PartialEq)]
 pub struct Log {
-    /// Deployment name
-    pub name: String,
+    /// Deployment id
+    pub id: String,
 
     /// Current state of the deployment
     pub state: State,
@@ -64,7 +64,7 @@ pub struct Log {
 impl From<Log> for log::Log {
     fn from(log: Log) -> Self {
         Self {
-            name: log.name,
+            id: log.id,
             timestamp: log.timestamp,
             state: log.state,
             level: log.level,
@@ -75,11 +75,12 @@ impl From<Log> for log::Log {
     }
 }
 
-impl From<Log> for DeploymentInfo {
+impl From<Log> for DeploymentState {
     fn from(log: Log) -> Self {
         Self {
-            name: log.name,
+            id: log.id,
             state: log.state,
+            last_update: log.timestamp,
         }
     }
 }
@@ -131,7 +132,7 @@ where
                 let metadata = event.metadata();
 
                 self.recorder.record(Log {
-                    name: details.name.clone(),
+                    id: details.id.clone(),
                     state: details.state,
                     level: metadata.level().into(),
                     timestamp: Utc::now(),
@@ -168,7 +169,7 @@ where
         let metadata = span.metadata();
 
         self.recorder.record(Log {
-            name: details.name.clone(),
+            id: details.id.clone(),
             state: details.state,
             level: metadata.level().into(),
             timestamp: Utc::now(),
@@ -185,7 +186,7 @@ where
 /// Used to keep track of the current state a deployment scope is in
 #[derive(Debug, Default)]
 struct ScopeDetails {
-    name: String,
+    id: String,
     state: State,
 }
 
@@ -209,22 +210,22 @@ struct NewStateVisitor {
 
 impl NewStateVisitor {
     /// Field containing the deployment name identifier
-    const NAME_IDENT: &'static str = "name";
+    const ID_IDENT: &'static str = "id";
 
     /// Field containing the deployment state identifier
     const STATE_IDENT: &'static str = "state";
 
     fn is_valid(metadata: &Metadata) -> bool {
         metadata.is_span()
-            && metadata.fields().field(Self::NAME_IDENT).is_some()
+            && metadata.fields().field(Self::ID_IDENT).is_some()
             && metadata.fields().field(Self::STATE_IDENT).is_some()
     }
 }
 
 impl Visit for NewStateVisitor {
     fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
-        if field.name() == Self::NAME_IDENT {
-            self.details.name = value.to_string();
+        if field.name() == Self::ID_IDENT {
+            self.details.id = value.to_string();
         }
     }
     fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
@@ -296,14 +297,14 @@ mod tests {
 
     #[derive(Clone, Debug, PartialEq)]
     struct StateLog {
-        name: String,
+        id: String,
         state: State,
     }
 
     impl From<Log> for StateLog {
         fn from(log: Log) -> Self {
             Self {
-                name: log.name,
+                id: log.id,
                 state: log.state,
             }
         }
@@ -316,12 +317,12 @@ mod tests {
             }))
         }
 
-        fn get_deployment_states(&self, name: &str) -> Vec<StateLog> {
+        fn get_deployment_states(&self, id: &str) -> Vec<StateLog> {
             self.states
                 .lock()
                 .unwrap()
                 .iter()
-                .filter(|log| log.name == name)
+                .filter(|log| log.id == id)
                 .cloned()
                 .collect()
         }
@@ -348,7 +349,7 @@ mod tests {
 
         deployment_manager
             .queue_push(Queued {
-                name: "queue_test".to_string(),
+                id: "queue_test".to_string(),
                 data_stream: Box::pin(async { Ok(Bytes::from("data")) }.into_stream()),
                 will_run_tests: false,
             })
@@ -370,19 +371,19 @@ mod tests {
             *states,
             vec![
                 StateLog {
-                    name: "queue_test".to_string(),
+                    id: "queue_test".to_string(),
                     state: State::Queued,
                 },
                 StateLog {
-                    name: "queue_test".to_string(),
+                    id: "queue_test".to_string(),
                     state: State::Building,
                 },
                 StateLog {
-                    name: "queue_test".to_string(),
+                    id: "queue_test".to_string(),
                     state: State::Built,
                 },
                 StateLog {
-                    name: "queue_test".to_string(),
+                    id: "queue_test".to_string(),
                     state: State::Running,
                 },
             ]
@@ -395,7 +396,7 @@ mod tests {
 
         deployment_manager
             .run_push(Built {
-                name: "run_test".to_string(),
+                id: "run_test".to_string(),
             })
             .await;
 
@@ -415,11 +416,11 @@ mod tests {
             *states,
             vec![
                 StateLog {
-                    name: "run_test".to_string(),
+                    id: "run_test".to_string(),
                     state: State::Built,
                 },
                 StateLog {
-                    name: "run_test".to_string(),
+                    id: "run_test".to_string(),
                     state: State::Running,
                 },
             ]

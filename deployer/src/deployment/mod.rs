@@ -5,7 +5,7 @@ mod queue;
 mod run;
 mod states;
 
-pub use info::DeploymentInfo;
+pub use info::DeploymentState;
 pub use states::State;
 
 pub use log::Log;
@@ -37,12 +37,12 @@ impl DeploymentManager {
         }
     }
 
-    #[instrument(skip(self), fields(name = queued.name.as_str(), state = %State::Queued))]
+    #[instrument(skip(self), fields(id = queued.id.as_str(), state = %State::Queued))]
     pub async fn queue_push(&self, queued: Queued) {
         self.pipeline.queue_send.send(queued).await.unwrap();
     }
 
-    #[instrument(skip(self), fields(name = built.name.as_str(), state = %State::Built))]
+    #[instrument(skip(self), fields(id = built.id.as_str(), state = %State::Built))]
     pub async fn run_push(&self, built: Built) {
         self.pipeline.run_send.send(built).await.unwrap();
     }

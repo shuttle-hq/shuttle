@@ -4,9 +4,9 @@ use axum::routing::{get, Router};
 use axum::{extract::BodyStream, Json};
 use futures::TryStreamExt;
 
-use crate::deployment::{DeploymentInfo, DeploymentManager, Queued};
+use crate::deployment::{DeploymentManager, DeploymentState, Queued};
 use crate::error::{Error, Result};
-use crate::persistence::Persistence;
+use crate::persistence::{Deployment, Persistence};
 
 use std::collections::HashMap;
 
@@ -26,14 +26,14 @@ pub fn make_router(
 
 async fn list_services(
     Extension(persistence): Extension<Persistence>,
-) -> Result<Json<Vec<DeploymentInfo>>> {
-    persistence.get_all_deployments().await.map(Json)
+) -> Result<Json<Vec<DeploymentState>>> {
+    persistence.get_all_services().await.map(Json)
 }
 
 async fn get_service(
     Extension(persistence): Extension<Persistence>,
     Path(name): Path<String>,
-) -> Result<Json<Option<DeploymentInfo>>> {
+) -> Result<Json<Option<Deployment>>> {
     persistence.get_deployment(&name).await.map(Json)
 }
 
@@ -42,13 +42,15 @@ async fn post_service(
     Path(name): Path<String>,
     Query(params): Query<HashMap<String, String>>,
     stream: BodyStream,
-) -> Result<Json<DeploymentInfo>> {
+) -> Result<Json<DeploymentState>> {
+    let id = name.clone();
+
     let queued = Queued {
-        name,
+        id,
         data_stream: Box::pin(stream.map_err(Error::Streaming)),
         will_run_tests: !params.contains_key("no-testing"),
     };
-    let info = DeploymentInfo::from(&queued);
+    let info = DeploymentState::from(&queued);
 
     deployment_manager.queue_push(queued).await;
 
@@ -59,8 +61,8 @@ async fn delete_service(
     Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
     Path(name): Path<String>,
-) -> Result<Json<Option<DeploymentInfo>>> {
-    let old_info = persistence.delete_deployment(&name).await?;
+) -> Result<Json<Option<Deployment>>> {
+    let old_info = persistence.delete_service(&name).await?;
     deployment_manager.kill(name).await;
 
     Ok(Json(old_info))

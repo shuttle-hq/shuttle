@@ -4,7 +4,7 @@ use super::State;
 
 #[derive(Clone, Debug, PartialEq, sqlx::FromRow)]
 pub struct Log {
-    pub name: String,
+    pub id: String,
     pub timestamp: DateTime<Utc>,
     pub state: State,
     pub level: Level,

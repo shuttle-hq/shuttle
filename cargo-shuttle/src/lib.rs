@@ -22,7 +22,6 @@ use cargo_edit::{find, get_latest_dependency, registry_url};
 use colored::Colorize;
 use config::RequestContext;
 use factory::LocalFactory;
-use futures::future::TryFutureExt;
 use semver::{Version, VersionReq};
 use shuttle_service::loader::{build_crate, Loader};
 use tokio::sync::mpsc;
@@ -31,6 +30,8 @@ use uuid::Uuid;
 
 #[macro_use]
 extern crate log;
+
+use shuttle_common::DeploymentStateMeta;
 
 pub struct Shuttle {
     ctx: RequestContext,
@@ -48,7 +49,7 @@ impl Shuttle {
         Self { ctx }
     }
 
-    pub async fn run(mut self, mut args: Args) -> Result<()> {
+    pub async fn run(mut self, mut args: Args) -> Result<CommandOutcome> {
         trace!("running local client");
         if matches!(
             args.cmd,
@@ -66,7 +67,7 @@ impl Shuttle {
         match args.cmd {
             Command::Deploy(deploy_args) => {
                 self.check_lib_version(args.project_args).await?;
-                self.deploy(deploy_args).await
+                return self.deploy(deploy_args).await;
             }
             Command::Init(init_args) => self.init(init_args).await,
             Command::Status => self.status().await,
@@ -76,6 +77,7 @@ impl Shuttle {
             Command::Login(login_args) => self.login(login_args).await,
             Command::Run(run_args) => self.local_run(run_args).await,
         }
+        .map(|_| CommandOutcome::Ok)
     }
 
     async fn init(&self, args: InitArgs) -> Result<()> {
@@ -250,7 +252,7 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn deploy(&self, args: DeployArgs) -> Result<()> {
+    async fn deploy(&self, args: DeployArgs) -> Result<CommandOutcome> {
         self.run_tests(args.no_test)?;
 
         let package_file = self
@@ -259,22 +261,28 @@ impl Shuttle {
 
         let key = self.ctx.api_key()?;
 
-        client::deploy(
+        let state_meta = client::deploy(
             package_file,
             self.ctx.api_url(),
             &key,
             self.ctx.project_name(),
         )
-        .and_then(|_| {
-            client::secrets(
-                self.ctx.api_url(),
-                &key,
-                self.ctx.project_name(),
-                self.ctx.secrets(),
-            )
-        })
         .await
-        .context("failed to deploy cargo project")
+        .context("failed to deploy cargo project")?;
+
+        client::secrets(
+            self.ctx.api_url(),
+            &key,
+            self.ctx.project_name(),
+            self.ctx.secrets(),
+        )
+        .await
+        .context("failed to set up secrets for deployment")?;
+
+        Ok(match state_meta {
+            DeploymentStateMeta::Error(_) => CommandOutcome::DeploymentFailure,
+            _ => CommandOutcome::Ok,
+        })
     }
 
     async fn check_lib_version(&self, project_args: ProjectArgs) -> Result<()> {
@@ -357,6 +365,11 @@ impl Shuttle {
             )),
         }
     }
+}
+
+pub enum CommandOutcome {
+    Ok,
+    DeploymentFailure,
 }
 
 #[cfg(test)]

@@ -3,6 +3,7 @@ use crate::error::{Error, Result};
 
 use shuttle_service::loader::build_crate;
 use tracing::{debug, error, info, instrument};
+use uuid::Uuid;
 
 use std::fmt;
 use std::io::Read;
@@ -48,19 +49,20 @@ pub async fn task(mut recv: QueueReceiver, run_send: RunSender) {
     }
 }
 
-#[instrument(fields(id = built.id.as_str(), state = %State::Built))]
+#[instrument(fields(id = %built.id, state = %State::Built))]
 async fn promote_to_run(built: Built, run_send: RunSender) {
     run_send.send(built).await.unwrap();
 }
 
 pub struct Queued {
-    pub id: String,
+    pub id: Uuid,
+    pub name: String,
     pub data_stream: Pin<Box<dyn Stream<Item = Result<Bytes>> + Send + Sync>>,
     pub will_run_tests: bool,
 }
 
 impl Queued {
-    #[instrument(skip(self), fields(id = self.id.as_str(), state = %State::Building))]
+    #[instrument(skip(self), fields(id = %self.id, state = %State::Building))]
     async fn handle(mut self) -> Result<Built> {
         info!("Fetching POSTed data");
 
@@ -109,7 +111,11 @@ impl Queued {
 
 impl fmt::Debug for Queued {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Queued {{ name: \"{}\", .. }}", self.name)
+        write!(
+            f,
+            "Queued {{ id: \"{}\", name: \"{}\", .. }}",
+            self.id, self.name
+        )
     }
 }
 

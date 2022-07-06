@@ -10,6 +10,7 @@ use sqlx::migrate::MigrateDatabase;
 use sqlx::sqlite::{Sqlite, SqlitePool};
 use tokio::sync::mpsc::{self, UnboundedSender};
 use tokio::task::JoinHandle;
+use uuid::Uuid;
 
 const DB_PATH: &str = "deployer.sqlite";
 
@@ -115,7 +116,7 @@ impl Persistence {
         update_deployment(&self.pool, info).await
     }
 
-    pub async fn get_deployment(&self, id: &str) -> Result<Option<Deployment>> {
+    pub async fn get_deployment(&self, id: &Uuid) -> Result<Option<Deployment>> {
         get_deployment(&self.pool, id).await
     }
 
@@ -161,7 +162,7 @@ impl Persistence {
         insert_log(&self.pool, log).await
     }
 
-    async fn get_deployment_logs(&self, id: &str) -> Result<Vec<Log>> {
+    async fn get_deployment_logs(&self, id: &Uuid) -> Result<Vec<Log>> {
         get_deployment_logs(&self.pool, id).await
     }
 }
@@ -181,7 +182,7 @@ async fn update_deployment(pool: &SqlitePool, info: impl Into<DeploymentState>) 
         .map_err(Into::into)
 }
 
-async fn get_deployment(pool: &SqlitePool, id: &str) -> Result<Option<Deployment>> {
+async fn get_deployment(pool: &SqlitePool, id: &Uuid) -> Result<Option<Deployment>> {
     sqlx::query_as("SELECT * FROM deployments WHERE id = ?")
         .bind(id)
         .fetch_optional(pool)
@@ -206,7 +207,7 @@ async fn insert_log(pool: &SqlitePool, log: impl Into<Log>) -> Result<()> {
         .map_err(Into::into)
 }
 
-async fn get_deployment_logs(pool: &SqlitePool, id: &str) -> Result<Vec<Log>> {
+async fn get_deployment_logs(pool: &SqlitePool, id: &Uuid) -> Result<Vec<Log>> {
     sqlx::query_as("SELECT * FROM logs WHERE id = ?")
         .bind(id)
         .fetch_all(pool)
@@ -224,7 +225,7 @@ impl LogRecorder for Persistence {
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, sqlx::FromRow)]
 pub struct Deployment {
-    pub id: String,
+    pub id: Uuid,
     pub name: String,
     pub state: State,
     pub last_update: DateTime<Utc>,
@@ -242,22 +243,19 @@ mod tests {
     async fn deployment_updates() {
         let (p, _) = Persistence::new_in_memory().await;
 
+        let id = Uuid::new_v4();
         let deployment = Deployment {
-            id: "abc".to_string(),
+            id,
             name: "abc".to_string(),
             state: State::Queued,
             last_update: Utc.ymd(2022, 04, 25).and_hms(4, 43, 33),
         };
 
         p.insert_deployment(deployment.clone()).await.unwrap();
-        assert_eq!(p.get_deployment("abc").await.unwrap().unwrap(), deployment);
+        assert_eq!(p.get_deployment(&id).await.unwrap().unwrap(), deployment);
 
-        p.update_deployment(&Built {
-            id: "abc".to_string(),
-        })
-        .await
-        .unwrap();
-        let update = p.get_deployment("abc").await.unwrap().unwrap();
+        p.update_deployment(&Built { id }).await.unwrap();
+        let update = p.get_deployment(&id).await.unwrap().unwrap();
         assert_eq!(update.state, State::Built);
         assert_ne!(update.last_update, Utc.ymd(2022, 04, 25).and_hms(4, 43, 33));
     }
@@ -266,33 +264,36 @@ mod tests {
     async fn fetching_runnable_deployments() {
         let (p, _) = Persistence::new_in_memory().await;
 
+        let id_bar = Uuid::new_v4();
+        let id_foo2 = Uuid::new_v4();
+
         for deployment in [
             Deployment {
-                id: "abc".to_string(),
+                id: Uuid::new_v4(),
                 name: "abc".to_string(),
                 state: State::Built,
                 last_update: Utc.ymd(2022, 04, 25).and_hms(4, 29, 33),
             },
             Deployment {
-                id: "foo1".to_string(),
+                id: Uuid::new_v4(),
                 name: "foo".to_string(),
                 state: State::Running,
                 last_update: Utc.ymd(2022, 04, 25).and_hms(4, 29, 44),
             },
             Deployment {
-                id: "bar".to_string(),
+                id: id_bar,
                 name: "bar".to_string(),
                 state: State::Running,
                 last_update: Utc.ymd(2022, 04, 25).and_hms(4, 33, 48),
             },
             Deployment {
-                id: "def".to_string(),
+                id: Uuid::new_v4(),
                 name: "def".to_string(),
                 state: State::Error,
                 last_update: Utc.ymd(2022, 04, 25).and_hms(4, 38, 52),
             },
             Deployment {
-                id: "foo2".to_string(),
+                id: id_foo2,
                 name: "foo".to_string(),
                 state: State::Running,
                 last_update: Utc.ymd(2022, 04, 25).and_hms(4, 42, 32),
@@ -306,12 +307,12 @@ mod tests {
             runnable,
             [
                 DeploymentState {
-                    id: "bar".to_string(),
+                    id: id_bar,
                     state: State::Running,
                     last_update: Utc.ymd(2022, 04, 25).and_hms(4, 33, 48),
                 },
                 DeploymentState {
-                    id: "foo2".to_string(),
+                    id: id_foo2,
                     state: State::Running,
                     last_update: Utc.ymd(2022, 04, 25).and_hms(4, 42, 32),
                 },
@@ -325,13 +326,13 @@ mod tests {
 
         let deployments = [
             Deployment {
-                id: "x1".to_string(),
+                id: Uuid::new_v4(),
                 name: "x".to_string(),
                 state: State::Running,
                 last_update: Utc::now(),
             },
             Deployment {
-                id: "x2".to_string(),
+                id: Uuid::new_v4(),
                 name: "x".to_string(),
                 state: State::Running,
                 last_update: Utc::now(),
@@ -350,8 +351,10 @@ mod tests {
     #[tokio::test]
     async fn log_insert() {
         let (p, _) = Persistence::new_in_memory().await;
+
+        let id = Uuid::new_v4();
         let log = Log {
-            id: "a".to_string(),
+            id,
             timestamp: Utc::now(),
             state: State::Queued,
             level: Level::Info,
@@ -362,7 +365,7 @@ mod tests {
 
         p.insert_log(log.clone()).await.unwrap();
 
-        let logs = p.get_deployment_logs("a").await.unwrap();
+        let logs = p.get_deployment_logs(&id).await.unwrap();
         assert!(!logs.is_empty(), "there should be one log");
 
         assert_eq!(logs.first().unwrap(), &log);
@@ -371,8 +374,10 @@ mod tests {
     #[tokio::test]
     async fn logs_for_deployment() {
         let (p, _) = Persistence::new_in_memory().await;
+
+        let id_a = Uuid::new_v4();
         let log_a1 = Log {
-            id: "a".to_string(),
+            id: id_a,
             timestamp: Utc::now(),
             state: State::Queued,
             level: Level::Info,
@@ -381,7 +386,7 @@ mod tests {
             fields: json!({"message": "job queued"}),
         };
         let log_b = Log {
-            id: "b".to_string(),
+            id: Uuid::new_v4(),
             timestamp: Utc::now(),
             state: State::Queued,
             level: Level::Info,
@@ -390,7 +395,7 @@ mod tests {
             fields: json!({"message": "job queued"}),
         };
         let log_a2 = Log {
-            id: "a".to_string(),
+            id: id_a,
             timestamp: Utc::now(),
             state: State::Building,
             level: Level::Warn,
@@ -403,7 +408,7 @@ mod tests {
         p.insert_log(log_b).await.unwrap();
         p.insert_log(log_a2.clone()).await.unwrap();
 
-        let logs = p.get_deployment_logs("a").await.unwrap();
+        let logs = p.get_deployment_logs(&id_a).await.unwrap();
         assert!(!logs.is_empty(), "there should be three logs");
 
         assert_eq!(logs, vec![log_a1, log_a2]);
@@ -412,8 +417,10 @@ mod tests {
     #[tokio::test]
     async fn log_recorder_event() {
         let (p, handle) = Persistence::new_in_memory().await;
+
+        let id = Uuid::new_v4();
         let event = deploy_layer::Log {
-            id: "x".to_string(),
+            id,
             timestamp: Utc::now(),
             state: State::Queued,
             level: Level::Info,
@@ -429,12 +436,12 @@ mod tests {
         drop(p.log_send);
         assert!(handle.await.is_ok());
 
-        let logs = get_deployment_logs(&p.pool, "x").await.unwrap();
+        let logs = get_deployment_logs(&p.pool, &id).await.unwrap();
 
         assert!(!logs.is_empty(), "there should be one log");
 
         let log = logs.first().unwrap();
-        assert_eq!(log.id, "x");
+        assert_eq!(log.id, id);
         assert_eq!(log.state, State::Queued);
         assert_eq!(log.level, Level::Info);
         assert_eq!(log.file, Some("file.rs".to_string()));
@@ -446,8 +453,10 @@ mod tests {
     async fn log_recorder_state() {
         let (p, handle) = Persistence::new_in_memory().await;
 
+        let id = Uuid::new_v4();
+
         p.insert_deployment(Deployment {
-            id: "z".to_string(),
+            id,
             name: "z".to_string(),
             state: State::Queued,
             last_update: Utc.ymd(2022, 04, 29).and_hms(2, 39, 39),
@@ -455,7 +464,7 @@ mod tests {
         .await
         .unwrap();
         let state = deploy_layer::Log {
-            id: "z".to_string(),
+            id,
             timestamp: Utc.ymd(2022, 04, 29).and_hms(2, 39, 59),
             state: State::Running,
             level: Level::Info,
@@ -471,20 +480,20 @@ mod tests {
         drop(p.log_send);
         assert!(handle.await.is_ok());
 
-        let logs = get_deployment_logs(&p.pool, "z").await.unwrap();
+        let logs = get_deployment_logs(&p.pool, &id).await.unwrap();
 
         assert!(!logs.is_empty(), "state change should be logged");
 
         let log = logs.first().unwrap();
-        assert_eq!(log.id, "z");
+        assert_eq!(log.id, id);
         assert_eq!(log.state, State::Running);
         assert_eq!(log.level, Level::Info);
         assert_eq!(log.fields, json!("NEW STATE"));
 
         assert_eq!(
-            get_deployment(&p.pool, "z").await.unwrap().unwrap(),
+            get_deployment(&p.pool, &id).await.unwrap().unwrap(),
             Deployment {
-                id: "z".to_string(),
+                id,
                 name: "z".to_string(),
                 state: State::Running,
                 last_update: Utc.ymd(2022, 04, 29).and_hms(2, 39, 59),

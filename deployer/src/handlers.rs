@@ -4,6 +4,7 @@ use axum::routing::{get, Router};
 use axum::{extract::BodyStream, Json};
 use chrono::Utc;
 use futures::TryStreamExt;
+use uuid::Uuid;
 
 use crate::deployment::{DeploymentManager, DeploymentState, Queued, State};
 use crate::error::{Error, Result};
@@ -34,8 +35,8 @@ async fn list_services(
 async fn get_service(
     Extension(persistence): Extension<Persistence>,
     Path(name): Path<String>,
-) -> Result<Json<Option<Deployment>>> {
-    persistence.get_deployment(&name).await.map(Json)
+) -> Result<Json<Vec<Deployment>>> {
+    persistence.get_deployments(&name).await.map(Json)
 }
 
 async fn post_service(
@@ -45,11 +46,11 @@ async fn post_service(
     Query(params): Query<HashMap<String, String>>,
     stream: BodyStream,
 ) -> Result<Json<Deployment>> {
-    let id = name.clone();
+    let id = Uuid::new_v4();
 
     let deployment = Deployment {
         id: id.clone(),
-        name,
+        name: name.clone(),
         state: State::Queued,
         last_update: Utc::now(),
     };
@@ -58,6 +59,7 @@ async fn post_service(
 
     let queued = Queued {
         id,
+        name,
         data_stream: Box::pin(stream.map_err(Error::Streaming)),
         will_run_tests: !params.contains_key("no-testing"),
     };
@@ -73,7 +75,10 @@ async fn delete_service(
     Path(name): Path<String>,
 ) -> Result<Json<Vec<Deployment>>> {
     let old_deployments = persistence.delete_service(&name).await?;
-    deployment_manager.kill(name).await;
+
+    for deployment in old_deployments.iter() {
+        deployment_manager.kill(deployment.id).await;
+    }
 
     Ok(Json(old_deployments))
 }

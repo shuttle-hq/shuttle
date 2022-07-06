@@ -1,4 +1,5 @@
 use tracing::{debug, error, info, instrument};
+use uuid::Uuid;
 
 use super::{KillReceiver, KillSender, RunReceiver, State};
 use crate::error::Result;
@@ -23,11 +24,11 @@ pub async fn task(mut recv: RunReceiver, kill_send: KillSender) {
 
 #[derive(Debug)]
 pub struct Built {
-    pub id: String,
+    pub id: Uuid,
 }
 
 impl Built {
-    #[instrument(skip(self), fields(id = self.id.as_str(), state = %State::Running))]
+    #[instrument(skip(self), fields(id = %self.id, state = %State::Running))]
     async fn handle(self, mut kill_recv: KillReceiver) -> Result<()> {
         // Load service into memory:
         // TODO

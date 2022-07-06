@@ -1,10 +1,11 @@
 use chrono::{DateTime, Utc};
+use uuid::Uuid;
 
 use super::{Built, State};
 
 #[derive(sqlx::FromRow, serde::Serialize, Debug, PartialEq, Eq, Clone)]
 pub struct DeploymentState {
-    pub id: String,
+    pub id: Uuid,
     pub state: State,
     pub last_update: DateTime<Utc>,
 }

@@ -21,7 +21,7 @@
 
 use chrono::{DateTime, Utc};
 use serde_json::json;
-use tracing::{field::Visit, span, Metadata, Subscriber};
+use tracing::{field::Visit, span, warn, Metadata, Subscriber};
 use tracing_subscriber::Layer;
 use uuid::Uuid;
 
@@ -167,6 +167,7 @@ where
         let details = visitor.details;
 
         if details.id.is_nil() {
+            warn!("scope details does not have a valid id");
             return;
         }
 
@@ -429,6 +430,32 @@ mod tests {
                     state: State::Running,
                 },
             ]
+        );
+    }
+
+    #[tokio::test]
+    async fn scope_with_nil_id() {
+        let deployment_manager = DeploymentManager::new();
+
+        let id = Uuid::nil();
+        deployment_manager
+            .queue_push(Queued {
+                id,
+                name: "nil_id".to_string(),
+                data_stream: Box::pin(async { Ok(Bytes::from("violets are red")) }.into_stream()),
+                will_run_tests: false,
+            })
+            .await;
+
+        // Give it a small time to start up
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+        let recorder = RECORDER.lock().unwrap();
+        let states = recorder.get_deployment_states(&id);
+
+        assert!(
+            states.is_empty(),
+            "no logs should be recorded when the scope id is invalid:\n\t{states:#?}"
         );
     }
 }

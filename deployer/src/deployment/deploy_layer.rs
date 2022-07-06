@@ -25,9 +25,11 @@ use tracing::{field::Visit, span, Metadata, Subscriber};
 use tracing_subscriber::Layer;
 use uuid::Uuid;
 
+use crate::persistence::DeploymentState;
+
 use super::{
     log::{self, Level},
-    DeploymentState, State,
+    State,
 };
 
 /// Records logs for the deployment progress

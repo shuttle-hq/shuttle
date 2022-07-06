@@ -1,11 +1,9 @@
 pub mod deploy_layer;
-mod info;
 pub mod log;
 mod queue;
 mod run;
 mod states;
 
-pub use info::DeploymentState;
 pub use states::State;
 
 pub use log::Log;

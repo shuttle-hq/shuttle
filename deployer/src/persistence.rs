@@ -1,5 +1,5 @@
 use crate::deployment::deploy_layer::{self, LogRecorder, LogType};
-use crate::deployment::{DeploymentState, Log, State};
+use crate::deployment::{Log, State};
 use crate::error::Result;
 
 use std::path::Path;
@@ -112,10 +112,6 @@ impl Persistence {
             .map_err(Into::into)
     }
 
-    pub async fn update_deployment(&self, info: impl Into<DeploymentState>) -> Result<()> {
-        update_deployment(&self.pool, info).await
-    }
-
     pub async fn get_deployment(&self, id: &Uuid) -> Result<Option<Deployment>> {
         get_deployment(&self.pool, id).await
     }
@@ -168,15 +164,15 @@ impl Persistence {
     }
 }
 
-async fn update_deployment(pool: &SqlitePool, info: impl Into<DeploymentState>) -> Result<()> {
-    let info = info.into();
+async fn update_deployment(pool: &SqlitePool, state: impl Into<DeploymentState>) -> Result<()> {
+    let state = state.into();
 
     // TODO: Handle moving to 'active_deployments' table for State::Running.
 
     sqlx::query("UPDATE deployments SET state = ?, last_update = ? WHERE id = ?")
-        .bind(info.state)
-        .bind(info.last_update)
-        .bind(info.id)
+        .bind(state.state)
+        .bind(state.last_update)
+        .bind(state.id)
         .execute(pool)
         .await
         .map(|_| ())
@@ -232,13 +228,20 @@ pub struct Deployment {
     pub last_update: DateTime<Utc>,
 }
 
+#[derive(sqlx::FromRow, Debug, PartialEq, Eq)]
+pub struct DeploymentState {
+    pub id: Uuid,
+    pub state: State,
+    pub last_update: DateTime<Utc>,
+}
+
 #[cfg(test)]
 mod tests {
     use chrono::{TimeZone, Utc};
     use serde_json::json;
 
     use super::*;
-    use crate::deployment::{log::Level, Built};
+    use crate::deployment::log::Level;
 
     #[tokio::test]
     async fn deployment_updates() {
@@ -255,7 +258,16 @@ mod tests {
         p.insert_deployment(deployment.clone()).await.unwrap();
         assert_eq!(p.get_deployment(&id).await.unwrap().unwrap(), deployment);
 
-        p.update_deployment(&Built { id }).await.unwrap();
+        update_deployment(
+            &p.pool,
+            DeploymentState {
+                id,
+                state: State::Built,
+                last_update: Utc::now(),
+            },
+        )
+        .await
+        .unwrap();
         let update = p.get_deployment(&id).await.unwrap().unwrap();
         assert_eq!(update.state, State::Built);
         assert_ne!(update.last_update, Utc.ymd(2022, 04, 25).and_hms(4, 43, 33));

@@ -71,9 +71,9 @@ async fn delete_service(
     Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
     Path(name): Path<String>,
-) -> Result<Json<Option<Deployment>>> {
-    let old_info = persistence.delete_service(&name).await?;
+) -> Result<Json<Vec<Deployment>>> {
+    let old_deployments = persistence.delete_service(&name).await?;
     deployment_manager.kill(name).await;
 
-    Ok(Json(old_info))
+    Ok(Json(old_deployments))
 }

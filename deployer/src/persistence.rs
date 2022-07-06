@@ -119,15 +119,23 @@ impl Persistence {
         get_deployment(&self.pool, id).await
     }
 
-    pub async fn delete_service(&self, name: &str) -> Result<Option<Deployment>> {
-        let deployment = self.get_deployment(name).await?;
+    pub async fn get_deployments(&self, name: &str) -> Result<Vec<Deployment>> {
+        sqlx::query_as("SELECT * FROM deployments WHERE name = ?")
+            .bind(name)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn delete_service(&self, name: &str) -> Result<Vec<Deployment>> {
+        let deployments = self.get_deployments(name).await?;
 
         let _ = sqlx::query("DELETE FROM deployments WHERE name = ?")
             .bind(name)
             .execute(&self.pool)
             .await;
 
-        Ok(deployment)
+        Ok(deployments)
     }
 
     pub async fn get_all_services(&self) -> Result<Vec<DeploymentState>> {
@@ -138,7 +146,6 @@ impl Persistence {
     }
 
     pub async fn get_all_runnable_deployments(&self) -> Result<Vec<DeploymentState>> {
-        // TODO: only get last for name
         sqlx::query_as(
             r#"SELECT * FROM deployments AS d
                     INNER JOIN (SELECT id, max(last_update) FROM deployments WHERE state = ? GROUP BY name) AS l
@@ -316,17 +323,28 @@ mod tests {
     async fn deployment_deletion() {
         let (p, _) = Persistence::new_in_memory().await;
 
-        p.insert_deployment(Deployment {
-            id: "x".to_string(),
-            name: "x".to_string(),
-            state: State::Running,
-            last_update: Utc::now(),
-        })
-        .await
-        .unwrap();
-        assert!(p.get_deployment("x").await.unwrap().is_some());
-        p.delete_service("x").await.unwrap();
-        assert!(p.get_deployment("x").await.unwrap().is_none());
+        let deployments = [
+            Deployment {
+                id: "x1".to_string(),
+                name: "x".to_string(),
+                state: State::Running,
+                last_update: Utc::now(),
+            },
+            Deployment {
+                id: "x2".to_string(),
+                name: "x".to_string(),
+                state: State::Running,
+                last_update: Utc::now(),
+            },
+        ];
+
+        for deployment in deployments.iter() {
+            p.insert_deployment(deployment.clone()).await.unwrap();
+        }
+
+        assert!(!p.get_deployments("x").await.unwrap().is_empty());
+        assert_eq!(p.delete_service("x").await.unwrap(), deployments);
+        assert!(p.get_deployments("x").await.unwrap().is_empty());
     }
 
     #[tokio::test]

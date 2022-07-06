@@ -145,9 +145,7 @@ impl Persistence {
 
     pub async fn get_all_runnable_deployments(&self) -> Result<Vec<DeploymentState>> {
         sqlx::query_as(
-            r#"SELECT * FROM deployments AS d
-                    INNER JOIN (SELECT id, max(last_update) FROM deployments WHERE state = ? GROUP BY name) AS l
-                    on d.id = l.id"#,
+            r#"SELECT id, state, max(last_update) as last_update FROM deployments WHERE state = ? GROUP BY name"#,
         )
         .bind(State::Running)
         .fetch_all(&self.pool)

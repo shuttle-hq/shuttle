@@ -17,18 +17,11 @@ use cargo::ops::{CompileOptions, TestOptions};
 use cargo::util::config::Config as CargoConfig;
 use flate2::read::GzDecoder;
 use futures::{Stream, StreamExt};
-use rand::distributions::DistString;
 use tar::Archive;
 use tokio::fs;
-use tokio::io::AsyncReadExt;
 
 /// Path of the directory that contains extracted service Cargo projects.
 const BUILDS_PATH: &str = "/tmp/shuttle-builds";
-
-/// The name given to 'marker files' (text files placed in project directories
-/// that have in them the name of the linked library '.so' file of that service
-/// when built.
-const MARKER_FILE_NAME: &str = ".shuttle-marker";
 
 pub async fn task(mut recv: QueueReceiver, run_send: RunSender) {
     info!("Queue task started");
@@ -95,13 +88,9 @@ impl Queued {
             run_pre_deploy_tests(&project_path)?;
         }
 
-        info!("Removing old build (if present)");
+        info!("Moving built library");
 
-        remove_old_build(&project_path).await?;
-
-        info!("Moving built library and creating marker file");
-
-        rename_build(&project_path, so_path).await?;
+        rename_build(&project_path, so_path, &self.id).await?;
 
         let built = Built { id: self.id };
 
@@ -155,39 +144,16 @@ fn run_pre_deploy_tests(project_path: impl AsRef<Path>) -> Result<()> {
     }
 }
 
-/// Check for an existing marker file in the specified project directory and
-/// if one exists delete the indicated '.so' file.
-async fn remove_old_build(project_path: impl AsRef<Path>) -> Result<()> {
-    let marker_path = project_path.as_ref().join(MARKER_FILE_NAME);
-
-    if let Ok(mut existing_marker_file) = fs::File::open(&marker_path).await {
-        let mut old_so_name = String::new();
-        existing_marker_file
-            .read_to_string(&mut old_so_name)
-            .await?;
-
-        let old_so_path = project_path.as_ref().join(old_so_name);
-
-        if old_so_path.exists() {
-            fs::remove_file(old_so_path).await?;
-        }
-
-        fs::remove_file(marker_path).await?;
-    }
-
-    Ok(())
-}
-
 /// Give the '.so' file specified a random name so that re-deployments are
 /// properly re-loaded.
-async fn rename_build(project_path: impl AsRef<Path>, so_path: impl AsRef<Path>) -> Result<()> {
-    let random_so_name =
-        rand::distributions::Alphanumeric.sample_string(&mut rand::thread_rng(), 16);
-    let random_so_path = project_path.as_ref().join(&random_so_name);
+async fn rename_build(
+    project_path: impl AsRef<Path>,
+    so_path: impl AsRef<Path>,
+    id: &Uuid,
+) -> Result<()> {
+    let new_so_path = project_path.as_ref().join(id.to_string());
 
-    fs::rename(so_path, random_so_path).await?;
-
-    fs::write(project_path.as_ref().join(MARKER_FILE_NAME), random_so_name).await?;
+    fs::rename(so_path, new_so_path).await?;
 
     Ok(())
 }
@@ -198,8 +164,8 @@ mod tests {
 
     use tempdir::TempDir;
     use tokio::fs;
+    use uuid::Uuid;
 
-    use super::MARKER_FILE_NAME;
     use crate::error::Error;
 
     #[tokio::test]
@@ -256,69 +222,24 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
     }
 
     #[tokio::test]
-    async fn remove_old_build() {
-        let dir = TempDir::new("/tmp/shuttle-remove-old-test").unwrap();
-        let p = dir.path();
-
-        // Ensure no error occurs with an non-existent directory:
-
-        super::remove_old_build(&p).await.unwrap();
-
-        // Ensure no errors with an empty directory:
-
-        fs::create_dir_all(&p).await.unwrap();
-
-        super::remove_old_build(&p).await.unwrap();
-
-        // Ensure no errror occurs with a marker file pointing to a non-existent
-        // file:
-
-        fs::write(p.join(MARKER_FILE_NAME), "i-dont-exist.so")
-            .await
-            .unwrap();
-
-        super::remove_old_build(&p).await.unwrap();
-
-        assert!(!p.join(MARKER_FILE_NAME).exists());
-
-        // Create a mock marker file and linked library and ensure deletetion
-        // occurs correctly:
-
-        fs::write(p.join(MARKER_FILE_NAME), "delete-me.so")
-            .await
-            .unwrap();
-        fs::write(p.join("delete-me.so"), "foobar").await.unwrap();
-
-        assert!(p.join("delete-me.so").exists());
-
-        super::remove_old_build(&p).await.unwrap();
-
-        assert!(!p.join("delete-me.so").exists());
-        assert!(!p.join(MARKER_FILE_NAME).exists());
-
-        fs::remove_dir_all(p).await.unwrap();
-    }
-
-    #[tokio::test]
     async fn rename_build() {
         let dir = TempDir::new("/tmp/shuttle-rename-build-test").unwrap();
         let p = dir.path();
 
         let so_path = p.join("xyz.so");
-        let marker_path = p.join(MARKER_FILE_NAME);
+        let id = Uuid::new_v4();
 
         fs::create_dir_all(&p).await.unwrap();
         fs::write(&so_path, "barfoo").await.unwrap();
 
-        super::rename_build(&p, &so_path).await.unwrap();
+        super::rename_build(&p, &so_path, &id).await.unwrap();
 
         // Old '.so' file gone?
         assert!(!so_path.exists());
 
         // Ensure marker file aligns with the '.so' file's new location:
-        let new_so_name = fs::read_to_string(&marker_path).await.unwrap();
         assert_eq!(
-            fs::read_to_string(p.join(new_so_name)).await.unwrap(),
+            fs::read_to_string(p.join(id.to_string())).await.unwrap(),
             "barfoo"
         );
 

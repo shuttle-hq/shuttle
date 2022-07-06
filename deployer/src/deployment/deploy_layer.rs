@@ -5,15 +5,15 @@
 //! But rather than passing a persistence layer around to be able record the state in these functions we can rather use [tracing].
 //!
 //! This is very similar to Aspect Oriented Programming where we use the annotations from the function to trigger the recording of a new state.
-//! This annotation is a [#[instrument]](https://docs.rs/tracing-attributes/latest/tracing_attributes/attr.instrument.html) with a `name` and `state` field as follow:
+//! This annotation is a [#[instrument]](https://docs.rs/tracing-attributes/latest/tracing_attributes/attr.instrument.html) with an `id` and `state` field as follow:
 //! ```
-//! #[instrument(fields(name = built.name.as_str(), state = %State::Built))]
+//! #[instrument(fields(id = %built.id, state = %State::Built))]
 //! pub async fn new_state_fn(built: Built) {
 //!     // Get built ready for starting
 //! }
 //! ```
 //!
-//! Here the `name` is extracted from the `built` argument and the `state` is taken from the [State] enum (the special `%` is needed to use the `Display` trait to convert it to a string).
+//! Here the `id` is extracted from the `built` argument and the `state` is taken from the [State] enum (the special `%` is needed to use the `Display` trait to convert the values to a str).
 //!
 //! All `debug!()` etc in these functions will be captured by this layer and will be associated with the deployment and the state.
 //!

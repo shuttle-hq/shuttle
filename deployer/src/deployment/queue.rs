@@ -170,7 +170,7 @@ mod tests {
 
     #[tokio::test]
     async fn extract_tar_gz_data() {
-        let dir = TempDir::new("/tmp/shuttle-extraction-test").unwrap();
+        let dir = TempDir::new("shuttle-extraction-test").unwrap();
         let p = dir.path();
 
         // Binary data for an archive in the following form:
@@ -203,8 +203,6 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
 
         // Can we extract again without error?
         super::extract_tar_gz_data(test_data.as_slice(), &p).unwrap();
-
-        fs::remove_dir_all(p).await.unwrap();
     }
 
     #[tokio::test]
@@ -223,7 +221,7 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
 
     #[tokio::test]
     async fn rename_build() {
-        let dir = TempDir::new("/tmp/shuttle-rename-build-test").unwrap();
+        let dir = TempDir::new("shuttle-rename-build-test").unwrap();
         let p = dir.path();
 
         let so_path = p.join("xyz.so");
@@ -242,7 +240,5 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
             fs::read_to_string(p.join(id.to_string())).await.unwrap(),
             "barfoo"
         );
-
-        fs::remove_dir_all(p).await.unwrap();
     }
 }

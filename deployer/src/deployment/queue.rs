@@ -23,8 +23,18 @@ use tokio::fs;
 /// Path of the directory that contains extracted service Cargo projects.
 const BUILDS_PATH: &str = "/tmp/shuttle-builds";
 
+/// The directory in which compiled '.so' files are stored.
+const LIBS_PATH: &str = "/tmp/shuttle-libs";
+
 pub async fn task(mut recv: QueueReceiver, run_send: RunSender) {
     info!("Queue task started");
+
+    fs::create_dir_all(BUILDS_PATH)
+        .await
+        .expect("could not create builds directory");
+    fs::create_dir_all(LIBS_PATH)
+        .await
+        .expect("could not create libs directory");
 
     while let Some(queued) = recv.recv().await {
         let id = queued.id.clone();
@@ -68,8 +78,6 @@ impl Queued {
 
         info!("Extracting received data");
 
-        fs::create_dir_all(BUILDS_PATH).await?;
-
         let project_path = PathBuf::from(BUILDS_PATH).join(&self.name);
 
         extract_tar_gz_data(vec.as_slice(), &project_path)?;
@@ -90,7 +98,7 @@ impl Queued {
 
         info!("Moving built library");
 
-        rename_build(&project_path, so_path, &self.id).await?;
+        store_lib(LIBS_PATH, so_path, &self.id).await?;
 
         let built = Built { id: self.id };
 
@@ -144,14 +152,13 @@ fn run_pre_deploy_tests(project_path: impl AsRef<Path>) -> Result<()> {
     }
 }
 
-/// Give the '.so' file specified a random name so that re-deployments are
-/// properly re-loaded.
-async fn rename_build(
-    project_path: impl AsRef<Path>,
+/// Store 'so' file in the libs folder
+async fn store_lib(
+    storage_dir_path: impl AsRef<Path>,
     so_path: impl AsRef<Path>,
     id: &Uuid,
 ) -> Result<()> {
-    let new_so_path = project_path.as_ref().join(id.to_string());
+    let new_so_path = storage_dir_path.as_ref().join(id.to_string());
 
     fs::rename(so_path, new_so_path).await?;
 
@@ -220,24 +227,28 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
     }
 
     #[tokio::test]
-    async fn rename_build() {
-        let dir = TempDir::new("shuttle-rename-build-test").unwrap();
-        let p = dir.path();
+    async fn store_lib() {
+        let libs_dir = TempDir::new("lib-store").unwrap();
+        let libs_p = libs_dir.path();
 
-        let so_path = p.join("xyz.so");
+        let build_dir = TempDir::new("build-store").unwrap();
+        let build_p = build_dir.path();
+
+        let so_path = build_p.join("xyz.so");
         let id = Uuid::new_v4();
 
-        fs::create_dir_all(&p).await.unwrap();
         fs::write(&so_path, "barfoo").await.unwrap();
 
-        super::rename_build(&p, &so_path, &id).await.unwrap();
+        super::store_lib(&libs_p, &so_path, &id).await.unwrap();
 
         // Old '.so' file gone?
         assert!(!so_path.exists());
 
         // Ensure marker file aligns with the '.so' file's new location:
         assert_eq!(
-            fs::read_to_string(p.join(id.to_string())).await.unwrap(),
+            fs::read_to_string(libs_p.join(id.to_string()))
+                .await
+                .unwrap(),
             "barfoo"
         );
     }

@@ -138,12 +138,16 @@ impl Persistence {
     }
 
     pub async fn get_all_runnable_deployments(&self) -> Result<Vec<DeploymentState>> {
-        sqlx::query_as("SELECT * FROM deployments WHERE state = ? OR state = ?")
-            .bind(State::Built)
-            .bind(State::Running)
-            .fetch_all(&self.pool)
-            .await
-            .map_err(Into::into)
+        // TODO: only get last for name
+        sqlx::query_as(
+            r#"SELECT * FROM deployments AS d
+                    INNER JOIN (SELECT id, max(last_update) FROM deployments WHERE state = ? GROUP BY name) AS l
+                    on d.id = l.id"#,
+        )
+        .bind(State::Running)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(Into::into)
     }
 
     async fn insert_log(&self, log: impl Into<Log>) -> Result<()> {
@@ -259,36 +263,53 @@ mod tests {
             Deployment {
                 id: "abc".to_string(),
                 name: "abc".to_string(),
-                state: State::Queued,
-                last_update: Utc.ymd(2022, 04, 25).and_hms(4, 43, 33),
+                state: State::Built,
+                last_update: Utc.ymd(2022, 04, 25).and_hms(4, 29, 33),
             },
             Deployment {
-                id: "foo".to_string(),
+                id: "foo1".to_string(),
                 name: "foo".to_string(),
-                state: State::Built,
-                last_update: Utc.ymd(2022, 04, 25).and_hms(4, 43, 33),
+                state: State::Running,
+                last_update: Utc.ymd(2022, 04, 25).and_hms(4, 29, 44),
             },
             Deployment {
                 id: "bar".to_string(),
                 name: "bar".to_string(),
                 state: State::Running,
-                last_update: Utc.ymd(2022, 04, 25).and_hms(4, 43, 33),
+                last_update: Utc.ymd(2022, 04, 25).and_hms(4, 33, 48),
             },
             Deployment {
                 id: "def".to_string(),
                 name: "def".to_string(),
-                state: State::Building,
-                last_update: Utc.ymd(2022, 04, 25).and_hms(4, 43, 33),
+                state: State::Error,
+                last_update: Utc.ymd(2022, 04, 25).and_hms(4, 38, 52),
+            },
+            Deployment {
+                id: "foo2".to_string(),
+                name: "foo".to_string(),
+                state: State::Running,
+                last_update: Utc.ymd(2022, 04, 25).and_hms(4, 42, 32),
             },
         ] {
             p.insert_deployment(deployment).await.unwrap();
         }
 
         let runnable = p.get_all_runnable_deployments().await.unwrap();
-        assert!(!runnable.iter().any(|x| x.id == "abc"));
-        assert!(runnable.iter().any(|x| x.id == "foo"));
-        assert!(runnable.iter().any(|x| x.id == "bar"));
-        assert!(!runnable.iter().any(|x| x.id == "def"));
+        assert_eq!(
+            runnable,
+            [
+                DeploymentState {
+                    id: "bar".to_string(),
+                    state: State::Running,
+                    last_update: Utc.ymd(2022, 04, 25).and_hms(4, 33, 48),
+                },
+                DeploymentState {
+                    id: "foo2".to_string(),
+                    state: State::Running,
+                    last_update: Utc.ymd(2022, 04, 25).and_hms(4, 42, 32),
+                },
+            ]
+        );
     }
 
     #[tokio::test]

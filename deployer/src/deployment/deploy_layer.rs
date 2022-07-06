@@ -5,15 +5,15 @@
 //! But rather than passing a persistence layer around to be able record the state in these functions we can rather use [tracing].
 //!
 //! This is very similar to Aspect Oriented Programming where we use the annotations from the function to trigger the recording of a new state.
-//! This annotation is a [#[instrument]](https://docs.rs/tracing-attributes/latest/tracing_attributes/attr.instrument.html) with a `name` and `state` field as follow:
+//! This annotation is a [#[instrument]](https://docs.rs/tracing-attributes/latest/tracing_attributes/attr.instrument.html) with an `id` and `state` field as follow:
 //! ```
-//! #[instrument(fields(name = built.name.as_str(), state = %State::Built))]
+//! #[instrument(fields(id = %built.id, state = %State::Built))]
 //! pub async fn new_state_fn(built: Built) {
 //!     // Get built ready for starting
 //! }
 //! ```
 //!
-//! Here the `name` is extracted from the `built` argument and the `state` is taken from the [State] enum (the special `%` is needed to use the `Display` trait to convert it to a string).
+//! Here the `id` is extracted from the `built` argument and the `state` is taken from the [State] enum (the special `%` is needed to use the `Display` trait to convert the values to a str).
 //!
 //! All `debug!()` etc in these functions will be captured by this layer and will be associated with the deployment and the state.
 //!
@@ -21,12 +21,15 @@
 
 use chrono::{DateTime, Utc};
 use serde_json::json;
-use tracing::{field::Visit, span, Metadata, Subscriber};
+use tracing::{field::Visit, span, warn, Metadata, Subscriber};
 use tracing_subscriber::Layer;
+use uuid::Uuid;
+
+use crate::persistence::DeploymentState;
 
 use super::{
     log::{self, Level},
-    DeploymentInfo, State,
+    State,
 };
 
 /// Records logs for the deployment progress
@@ -37,8 +40,8 @@ pub trait LogRecorder {
 /// An event or state transition log
 #[derive(Debug, PartialEq)]
 pub struct Log {
-    /// Deployment name
-    pub name: String,
+    /// Deployment id
+    pub id: Uuid,
 
     /// Current state of the deployment
     pub state: State,
@@ -64,7 +67,7 @@ pub struct Log {
 impl From<Log> for log::Log {
     fn from(log: Log) -> Self {
         Self {
-            name: log.name,
+            id: log.id,
             timestamp: log.timestamp,
             state: log.state,
             level: log.level,
@@ -75,11 +78,12 @@ impl From<Log> for log::Log {
     }
 }
 
-impl From<Log> for DeploymentInfo {
+impl From<Log> for DeploymentState {
     fn from(log: Log) -> Self {
         Self {
-            name: log.name,
+            id: log.id,
             state: log.state,
+            last_update: log.timestamp,
         }
     }
 }
@@ -131,7 +135,7 @@ where
                 let metadata = event.metadata();
 
                 self.recorder.record(Log {
-                    name: details.name.clone(),
+                    id: details.id.clone(),
                     state: details.state,
                     level: metadata.level().into(),
                     timestamp: Utc::now(),
@@ -162,13 +166,18 @@ where
 
         let details = visitor.details;
 
+        if details.id.is_nil() {
+            warn!("scope details does not have a valid id");
+            return;
+        }
+
         // Safe to unwrap since this is the `on_new_span` method
         let span = ctx.span(id).unwrap();
         let mut extensions = span.extensions_mut();
         let metadata = span.metadata();
 
         self.recorder.record(Log {
-            name: details.name.clone(),
+            id: details.id.clone(),
             state: details.state,
             level: metadata.level().into(),
             timestamp: Utc::now(),
@@ -185,7 +194,7 @@ where
 /// Used to keep track of the current state a deployment scope is in
 #[derive(Debug, Default)]
 struct ScopeDetails {
-    name: String,
+    id: Uuid,
     state: State,
 }
 
@@ -209,27 +218,25 @@ struct NewStateVisitor {
 
 impl NewStateVisitor {
     /// Field containing the deployment name identifier
-    const NAME_IDENT: &'static str = "name";
+    const ID_IDENT: &'static str = "id";
 
     /// Field containing the deployment state identifier
     const STATE_IDENT: &'static str = "state";
 
     fn is_valid(metadata: &Metadata) -> bool {
         metadata.is_span()
-            && metadata.fields().field(Self::NAME_IDENT).is_some()
+            && metadata.fields().field(Self::ID_IDENT).is_some()
             && metadata.fields().field(Self::STATE_IDENT).is_some()
     }
 }
 
 impl Visit for NewStateVisitor {
-    fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
-        if field.name() == Self::NAME_IDENT {
-            self.details.name = value.to_string();
-        }
-    }
     fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
         if field.name() == Self::STATE_IDENT {
             self.details.state = value.into();
+        }
+        if field.name() == Self::ID_IDENT {
+            self.details.id = Uuid::try_parse(&format!("{value:?}")).unwrap_or_default();
         }
     }
 }
@@ -275,6 +282,7 @@ mod tests {
     use ctor::ctor;
     use futures::FutureExt;
     use tracing_subscriber::prelude::*;
+    use uuid::Uuid;
 
     use crate::deployment::{deploy_layer::LogType, Built, DeploymentManager, Queued, State};
 
@@ -296,14 +304,14 @@ mod tests {
 
     #[derive(Clone, Debug, PartialEq)]
     struct StateLog {
-        name: String,
+        id: Uuid,
         state: State,
     }
 
     impl From<Log> for StateLog {
         fn from(log: Log) -> Self {
             Self {
-                name: log.name,
+                id: log.id,
                 state: log.state,
             }
         }
@@ -316,12 +324,12 @@ mod tests {
             }))
         }
 
-        fn get_deployment_states(&self, name: &str) -> Vec<StateLog> {
+        fn get_deployment_states(&self, id: &Uuid) -> Vec<StateLog> {
             self.states
                 .lock()
                 .unwrap()
                 .iter()
-                .filter(|log| log.name == name)
+                .filter(|log| log.id == *id)
                 .cloned()
                 .collect()
         }
@@ -346,8 +354,10 @@ mod tests {
     async fn deployment_to_be_queued() {
         let deployment_manager = DeploymentManager::new();
 
+        let id = Uuid::new_v4();
         deployment_manager
             .queue_push(Queued {
+                id,
                 name: "queue_test".to_string(),
                 data_stream: Box::pin(async { Ok(Bytes::from("data")) }.into_stream()),
                 will_run_tests: false,
@@ -358,7 +368,7 @@ mod tests {
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
         let recorder = RECORDER.lock().unwrap();
-        let states = recorder.get_deployment_states("queue_test");
+        let states = recorder.get_deployment_states(&id);
 
         assert_eq!(
             states.len(),
@@ -370,19 +380,19 @@ mod tests {
             *states,
             vec![
                 StateLog {
-                    name: "queue_test".to_string(),
+                    id,
                     state: State::Queued,
                 },
                 StateLog {
-                    name: "queue_test".to_string(),
+                    id,
                     state: State::Building,
                 },
                 StateLog {
-                    name: "queue_test".to_string(),
+                    id,
                     state: State::Built,
                 },
                 StateLog {
-                    name: "queue_test".to_string(),
+                    id,
                     state: State::Running,
                 },
             ]
@@ -393,17 +403,14 @@ mod tests {
     async fn deployment_from_run() {
         let deployment_manager = DeploymentManager::new();
 
-        deployment_manager
-            .run_push(Built {
-                name: "run_test".to_string(),
-            })
-            .await;
+        let id = Uuid::new_v4();
+        deployment_manager.run_push(Built { id }).await;
 
         // Give it a small time to start up
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
         let recorder = RECORDER.lock().unwrap();
-        let states = recorder.get_deployment_states("run_test");
+        let states = recorder.get_deployment_states(&id);
 
         assert_eq!(
             states.len(),
@@ -415,14 +422,40 @@ mod tests {
             *states,
             vec![
                 StateLog {
-                    name: "run_test".to_string(),
+                    id,
                     state: State::Built,
                 },
                 StateLog {
-                    name: "run_test".to_string(),
+                    id,
                     state: State::Running,
                 },
             ]
+        );
+    }
+
+    #[tokio::test]
+    async fn scope_with_nil_id() {
+        let deployment_manager = DeploymentManager::new();
+
+        let id = Uuid::nil();
+        deployment_manager
+            .queue_push(Queued {
+                id,
+                name: "nil_id".to_string(),
+                data_stream: Box::pin(async { Ok(Bytes::from("violets are red")) }.into_stream()),
+                will_run_tests: false,
+            })
+            .await;
+
+        // Give it a small time to start up
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+        let recorder = RECORDER.lock().unwrap();
+        let states = recorder.get_deployment_states(&id);
+
+        assert!(
+            states.is_empty(),
+            "no logs should be recorded when the scope id is invalid:\n\t{states:#?}"
         );
     }
 }

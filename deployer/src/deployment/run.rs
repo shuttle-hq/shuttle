@@ -1,4 +1,5 @@
 use tracing::{debug, error, info, instrument};
+use uuid::Uuid;
 
 use super::{KillReceiver, KillSender, RunReceiver, State};
 use crate::error::Result;
@@ -7,15 +8,15 @@ pub async fn task(mut recv: RunReceiver, kill_send: KillSender) {
     info!("Run task started");
 
     while let Some(built) = recv.recv().await {
-        let name = built.name.clone();
+        let id = built.id.clone();
 
-        info!("Built deployment at the front of run queue: {}", name);
+        info!("Built deployment at the front of run queue: {id}");
 
         let kill_recv = kill_send.subscribe();
 
         tokio::spawn(async move {
             if let Err(e) = built.handle(kill_recv).await {
-                error!("Error during running of deployment '{}' - {e}", name);
+                error!("Error during running of deployment '{}' - {e}", id);
             }
         });
     }
@@ -23,11 +24,11 @@ pub async fn task(mut recv: RunReceiver, kill_send: KillSender) {
 
 #[derive(Debug)]
 pub struct Built {
-    pub name: String,
+    pub id: Uuid,
 }
 
 impl Built {
-    #[instrument(skip(self), fields(name = self.name.as_str(), state = %State::Running))]
+    #[instrument(skip(self), fields(id = %self.id, state = %State::Running))]
     async fn handle(self, mut kill_recv: KillReceiver) -> Result<()> {
         // Load service into memory:
         // TODO
@@ -41,9 +42,9 @@ impl Built {
 
         loop {
             tokio::select! {
-                Ok(name) = kill_recv.recv() => {
-                    if name == self.name {
-                        debug!("Service {name} killed");
+                Ok(id) = kill_recv.recv() => {
+                    if id == self.id {
+                        debug!("deployment {id} killed");
                         break;
                     }
                 }

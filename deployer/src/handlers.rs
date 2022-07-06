@@ -22,6 +22,10 @@ pub fn make_router(
             "/services/:name",
             get(get_service).post(post_service).delete(delete_service),
         )
+        .route(
+            "/deployments/:id",
+            get(get_deployment).delete(delete_deployment),
+        )
         .layer(Extension(persistence))
         .layer(Extension(deployment_manager))
 }
@@ -81,4 +85,21 @@ async fn delete_service(
     }
 
     Ok(Json(old_deployments))
+}
+
+async fn get_deployment(
+    Extension(persistence): Extension<Persistence>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Option<Deployment>>> {
+    persistence.get_deployment(&id).await.map(Json)
+}
+
+async fn delete_deployment(
+    Extension(persistence): Extension<Persistence>,
+    Extension(deployment_manager): Extension<DeploymentManager>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Option<Deployment>>> {
+    deployment_manager.kill(id).await;
+
+    persistence.get_deployment(&id).await.map(Json)
 }

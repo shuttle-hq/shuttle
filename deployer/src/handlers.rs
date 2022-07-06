@@ -2,9 +2,10 @@ use axum::body::Body;
 use axum::extract::{Extension, Path, Query};
 use axum::routing::{get, Router};
 use axum::{extract::BodyStream, Json};
+use chrono::Utc;
 use futures::TryStreamExt;
 
-use crate::deployment::{DeploymentManager, DeploymentState, Queued};
+use crate::deployment::{DeploymentManager, DeploymentState, Queued, State};
 use crate::error::{Error, Result};
 use crate::persistence::{Deployment, Persistence};
 
@@ -38,23 +39,32 @@ async fn get_service(
 }
 
 async fn post_service(
+    Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
     Path(name): Path<String>,
     Query(params): Query<HashMap<String, String>>,
     stream: BodyStream,
-) -> Result<Json<DeploymentState>> {
+) -> Result<Json<Deployment>> {
     let id = name.clone();
+
+    let deployment = Deployment {
+        id: id.clone(),
+        name,
+        state: State::Queued,
+        last_update: Utc::now(),
+    };
+
+    persistence.insert_deployment(deployment.clone()).await?;
 
     let queued = Queued {
         id,
         data_stream: Box::pin(stream.map_err(Error::Streaming)),
         will_run_tests: !params.contains_key("no-testing"),
     };
-    let info = DeploymentState::from(&queued);
 
     deployment_manager.queue_push(queued).await;
 
-    Ok(Json(info))
+    Ok(Json(deployment))
 }
 
 async fn delete_service(

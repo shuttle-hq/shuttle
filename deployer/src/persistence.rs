@@ -139,11 +139,12 @@ impl Persistence {
         Ok(deployments)
     }
 
-    pub async fn get_all_services(&self) -> Result<Vec<DeploymentState>> {
-        sqlx::query_as("SELECT * FROM deployments")
+    pub async fn get_all_services(&self) -> Result<Vec<String>> {
+        sqlx::query_as::<_, (String,)>("SELECT UNIQUE(name) FROM deployments")
             .fetch_all(&self.pool)
             .await
             .map_err(Into::into)
+            .map(|vec| vec.into_iter().map(|t| t.0).collect())
     }
 
     pub async fn get_all_runnable_deployments(&self) -> Result<Vec<DeploymentState>> {

@@ -3,7 +3,7 @@ use uuid::Uuid;
 
 use super::{Built, State};
 
-#[derive(sqlx::FromRow, serde::Serialize, Debug, PartialEq, Eq, Clone)]
+#[derive(sqlx::FromRow, Debug, PartialEq, Eq)]
 pub struct DeploymentState {
     pub id: Uuid,
     pub state: State,

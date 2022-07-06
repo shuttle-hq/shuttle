@@ -6,7 +6,7 @@ use chrono::Utc;
 use futures::TryStreamExt;
 use uuid::Uuid;
 
-use crate::deployment::{DeploymentManager, DeploymentState, Queued, State};
+use crate::deployment::{DeploymentManager, Queued, State};
 use crate::error::{Error, Result};
 use crate::persistence::{Deployment, Persistence};
 
@@ -28,7 +28,7 @@ pub fn make_router(
 
 async fn list_services(
     Extension(persistence): Extension<Persistence>,
-) -> Result<Json<Vec<DeploymentState>>> {
+) -> Result<Json<Vec<String>>> {
     persistence.get_all_services().await.map(Json)
 }
 

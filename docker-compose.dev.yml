@@ -1,12 +1,7 @@
 version: "3"
-volumes:
-  shuttle-backend-vol:
-    external: true
+
 services:
   backend:
-    extends:
-      file: docker-compose.yml
-      service: backend
     entrypoint:
       - /bin/bash
       - -c
@@ -28,11 +23,18 @@ services:
         exec /usr/local/bin/service "$${@:0}"
     volumes:
       - .:/usr/src/shuttle
+
+    build:
+      context: .
+      dockerfile: Containerfile
+      args:
+        crate: shuttle-api
+    image: "${CONTAINER_REGISTRY}/backend:dev"
+
   provisioner:
-    extends:
-      file: docker-compose.yml
-      service: provisioner
-  db:
-    extends:
-      file: docker-compose.yml
-      service: db
+    build:
+      context: .
+      dockerfile: Containerfile
+      args:
+        crate: shuttle-provisioner
+    image: "${CONTAINER_REGISTRY}/provisioner:dev"

@@ -98,12 +98,13 @@
 //!
 //! ## Using `sqlx`
 //!
-//! Here is a quick example to deploy a service which uses a postgres database and [sqlx](http://docs.rs/sqlx):
+//! Here is a quick example to deploy a service that uses a postgres database and [sqlx](http://docs.rs/sqlx):
 //!
-//! Add the `sqlx-postgres` feature to the `shuttle-service` dependency inside `Cargo.toml`:
+//! Add the `sqlx-postgres` feature to the `shuttle-service` dependency, and add `sqlx` as a dependency with the `runtime-tokio-native-tls` and `postgres` features inside `Cargo.toml`:
 //!
 //! ```toml
 //! shuttle-service = { version = "0.3.3", features = ["web-rocket", "sqlx-postgres"] }
+//! sqlx = { version = "0.5", features = ["runtime-tokio-native-tls", "postgres"] }
 //! ```
 //!
 //! Now update the `#[shuttle_service::main]` function to take in a `PgPool`:

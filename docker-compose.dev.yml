@@ -20,6 +20,12 @@ services:
         shuttle-service = { path = "/usr/src/shuttle/service" }
         EOF
 
+        until </dev/tcp/provisioner/8000
+        do
+          >&2 echo "provisioner is not available yet - sleeping"
+          sleep 1
+        done
+
         exec /usr/local/bin/service "$${@:0}"
     volumes:
       - .:/usr/src/shuttle
@@ -32,6 +38,19 @@ services:
     image: "${CONTAINER_REGISTRY}/backend:dev"
 
   provisioner:
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        until </dev/tcp/db/5432
+        do
+          >&2 echo "DB is not available yet - sleeping"
+          sleep 1
+        done
+
+        >&2 echo "DB is available - starting provisioner"
+
+        exec /usr/local/bin/service "$${@:0}"
     build:
       context: .
       dockerfile: Containerfile

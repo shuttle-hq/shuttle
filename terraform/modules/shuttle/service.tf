@@ -126,21 +126,30 @@ resource "aws_instance" "backend" {
 }
 
 locals {
-  storage_mount_content = templatefile(
-    "${path.module}/systemd/system/storage.mount.tftpl",
+  opt_shuttle_content = templatefile(
+    "${path.module}/systemd/system/opt-shuttle.mount.tftpl",
     {
       dns_name = aws_efs_file_system.user_data.dns_name,
       data_dir = local.data_dir
     }
   )
-  shuttle_platform_service_content = templatefile(
-    "${path.module}/systemd/system/shuttle-platform.service.tftpl",
+  shuttle_backend_content = templatefile(
+    "${path.module}/systemd/system/shuttle-backend.service.tftpl",
     {
       data_dir             = local.data_dir,
       docker_image         = local.docker_backend_image,
       shuttle_admin_secret = var.shuttle_admin_secret,
       proxy_fqdn           = var.proxy_fqdn,
       shuttle_initial_key  = random_string.initial_key.result
+    }
+  )
+  shuttle_provisioner_content = templatefile(
+    "${path.module}/systemd/system/shuttle-provisioner.service.tftpl",
+    {
+      data_dir     = local.data_dir,
+      docker_image = local.docker_provisioner_image,
+      pg_password  = var.postgres_password,
+      fqdn         = var.pg_fqdn
     }
   )
 }
@@ -154,8 +163,9 @@ data "cloudinit_config" "backend" {
     content = templatefile(
       "${path.module}/misc/cloud-config.yaml",
       {
-        storage_mount_content                = base64encode(local.storage_mount_content),
-        shuttle_platform_service_content     = base64encode(local.shuttle_platform_service_content)
+        opt_shuttle_content         = base64encode(local.opt_shuttle_content),
+        shuttle_backend_content     = base64encode(local.shuttle_backend_content)
+        shuttle_provisioner_content = base64encode(local.shuttle_provisioner_content)
       }
     )
     filename = "cloud-config.yaml"

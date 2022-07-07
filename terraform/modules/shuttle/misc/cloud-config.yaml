@@ -46,13 +46,18 @@ cloud_final_modules:
 # Create our systemd files
 write_files:
   - encoding: b64
-    content: ${storage_mount_content}
-    path: /lib/systemd/system/storage.mount
+    content: ${opt_shuttle_content}
+    path: /lib/systemd/system/opt-shuttle.mount
     owner: root:root
     permissions: "0644"
   - encoding: b64
-    content: ${shuttle_platform_service_content}
-    path: /lib/systemd/system/shuttle-platform.service
+    content: ${shuttle_backend_content}
+    path: /lib/systemd/system/shuttle-backend.service
+    owner: root:root
+    permissions: "0644"
+  - encoding: b64
+    content: ${shuttle_provisioner_content}
+    path: /lib/systemd/system/shuttle-provisioner.service
     owner: root:root
     permissions: "0644"
 
@@ -62,7 +67,7 @@ power_state:
 # Up services on every boot
 runcmd:
   - docker network inspect shuttle-net || docker network create --driver bridge shuttle-net
-  - docker volume inspect shuttle-vol || docker volume create shuttle-vol
   - [systemctl, daemon-reload]
-  - [systemctl, enable, "storage.mount"]
-  - [systemctl, enable, "shuttle-platform.service"]
+  - [systemctl, enable, "opt-shuttle.mount"]
+  - [systemctl, enable, "shuttle-backend.service"]
+  - [systemctl, enable, "shuttle-provisioner.service"]

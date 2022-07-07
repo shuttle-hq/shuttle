@@ -1,0 +1,26 @@
+[Unit]
+Description=maintains the shuttle provisioner which creates and manages resources
+After=docker.socket
+After=opt-shuttle.mount
+
+[Service]
+Type=simple
+User=ubuntu
+RestartSec=30
+Restart=always
+ExecStartPre=/usr/bin/docker pull ${docker_image}:latest
+ExecStart=/usr/bin/docker run --rm \
+			      --network shuttle-net \
+			      --name provisioner \
+			      -e PG_PORT=5432 \
+			      -p 5432:5432 \
+			      -e PORT=5001 \
+			      -e FQDN=${fqdn} \
+			      -e PG_PASSWORD=${pg_password} \
+			      -e PG_DATA=/opt/shuttle/postgres \
+			      -v ${data_dir}/conf/postgres:/etc/postgresql/11/shuttle:rw \
+			      -v ${data_dir}/user-data/postgres:/opt/shuttle/postgres:rw \
+			      ${docker_image}:latest
+
+[Install]
+WantedBy=multi-user.target

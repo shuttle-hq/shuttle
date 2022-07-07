@@ -1,10 +1,10 @@
+use std::env;
 use std::io::{self, stderr, stdout, BufRead, Write};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Output, Stdio};
 use std::str;
 use std::thread::sleep;
-use std::env;
 use std::time::{Duration, SystemTime};
 
 use colored::*;
@@ -19,56 +19,40 @@ lazy_static! {
             .unwrap()
             .to_path_buf()
     };
-    static ref DOCKER: PathBuf = which::which("docker").unwrap();
     static ref DOCKER_COMPOSE: PathBuf = which::which("docker-compose").unwrap();
     static ref CARGO: PathBuf = which::which("cargo").unwrap();
     static ref LOCAL_UP: () = {
-        let docker_bake = WORKSPACE_ROOT.join("docker-bake.hcl");
-        let docker_bake_override = WORKSPACE_ROOT.join("e2e/docker-bake-override.hcl");
         let docker_compose = env::var("SHUTTLE_DOCKER_COMPOSE")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| WORKSPACE_ROOT.join("docker-compose.yml"));
+        let docker_compose_dev = env::var("SHUTTLE_DOCKER_COMPOSE_DEV")
             .map(PathBuf::from)
             .unwrap_or_else(|_| WORKSPACE_ROOT.join("docker-compose.dev.yml"));
         println!(
             "
 ----------------------------------- PREPARING ------------------------------------
-docker: {}
-docker-bake: {}
-docker-bake-override: {}
 docker-compose: {}
+docker-compose-dev: {}
 cargo: {}
 ----------------------------------------------------------------------------------
 ",
-            DOCKER.display(),
-            docker_bake.display(),
-            docker_bake_override.display(),
             docker_compose.display(),
+            docker_compose_dev.display(),
             CARGO.display()
         );
 
         println!(
-            "{} buildx bake -f {} -f {} provisioner backend",
-            DOCKER.display(),
-            docker_bake.display(),
-            docker_bake_override.display()
-        );
-        Command::new(DOCKER.as_os_str())
-            .args(["buildx", "bake", "-f"])
-            .arg(docker_bake)
-            .arg("-f")
-            .arg(docker_bake_override)
-            .args(["provisioner", "backend"])
-            .output()
-            .ensure_success("failed to `docker buildx bake`");
-
-        println!(
-            "{} -f {} up -d",
+            "{} -f {} -f {} up -d --build",
             DOCKER_COMPOSE.display(),
-            docker_compose.display()
+            docker_compose.display(),
+            docker_compose_dev.display()
         );
         Command::new(DOCKER_COMPOSE.as_os_str())
             .arg("-f")
             .arg(docker_compose)
-            .args(["up", "-d"])
+            .arg("-f")
+            .arg(docker_compose_dev)
+            .args(["up", "-d", "--build"])
             .output()
             .ensure_success("failed to `docker compose up`");
 

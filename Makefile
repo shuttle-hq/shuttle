@@ -27,26 +27,47 @@ TAG?=$(shell git describe --tags)
 
 ifeq ($(PROD),true)
 DOCKER_COMPOSE_FILES=-f docker-compose.yml
+STACK=shuttle-prod
 else
 DOCKER_COMPOSE_FILES=-f docker-compose.yml -f docker-compose.dev.yml
+STACK=shuttle-dev
 endif
 
-.PHONY: images clean src
+POSTGRES_EXTRA_PATH ?= ./extras/postgres
+POSTGRES_TAG ?= latest
+
+DOCKER_COMPOSE_ENV=CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) BACKEND_TAG=$(TAG) PROVISIONER_TAG=$(TAG)
+
+.PHONY: images clean src up down deploy docker-compose.rendered.yml postgres
 
 clean:
 	rm .shuttle-*
+	rm docker-compose.rendered.yml
 
-images: .shuttle-provisioner .shuttle-api
+images: .shuttle-provisioner .shuttle-api postgres
+
+postgres:
+	docker buildx build \
+	       --build-arg POSTGRES_TAG=$(POSTGRES_TAG) \
+	       --tag $(CONTAINER_REGISTRY)/postgres:$(POSTGRES_TAG) \
+	       -f $(POSTGRES_EXTRA_PATH)/Containerfile \
+	       $(POSTGRES_EXTRA_PATH)
 
 api: .shuttle-api
 
 provisioner: .shuttle-provisioner
 
 up: images
-	CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) docker-compose $(DOCKER_COMPOSE_FILES) up -d
+	$(DOCKER_COMPOSE_ENV) docker-compose -f $(DOCKER_COMPOSE_FILES) up -d
 
 down:
-	CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) docker-compose $(DOCKER_COMPOSE_FILES) down
+	$(DOCKER_COMPOSE_ENV) docker-compose -f $(DOCKER_COMPOSE_FILES) down
+
+docker-compose.rendered.yml: docker-compose.yml
+	$(DOCKER_COMPOSE_ENV) docker-compose -f docker-compose.yml config > $@
+
+deploy: docker-compose.rendered.yml
+	docker stack deploy -c $^ $(STACK)
 
 .shuttle-%: ${SRC} Cargo.lock
 	docker buildx build \

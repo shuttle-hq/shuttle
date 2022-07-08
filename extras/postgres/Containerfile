@@ -1,0 +1,16 @@
+ARG POSTGRES_TAG=
+
+FROM postgres:${POSTGRES_TAG}
+
+RUN apt-get update &&\
+    apt-get install --yes curl python3 python3-aiohttp
+
+COPY watch /usr/sbin/watch
+COPY shuttle-entrypoint.sh /usr/local/bin/shuttle-entrypoint.sh
+
+HEALTHCHECK CMD curl --fail http://localhost:8000 || exit 1
+
+ENTRYPOINT ["/usr/local/bin/shuttle-entrypoint.sh"]
+EXPOSE 5432
+EXPOSE 8000
+CMD ["postgres"]

@@ -17,6 +17,9 @@ services:
         condition: on-failure
         delay: 5s
         max_attempts: 3
+      placement:
+        constraints:
+          - node.hostname==controller
     environment:
       - SHUTTLE_USERS_TOML=/var/lib/shuttle/users.toml
       - RUST_LOG=${RUST_LOG}
@@ -40,8 +43,16 @@ services:
       - "--shared-pg-uri=postgres://postgres:${POSTGRES_PASSWORD}@db:5432/postgres"
       - "--internal-address=db"
       - "--fqdn=${DB_FQDN}"
+    deploy:
+      placement:
+        constraints:
+          - node.hostname==provisioner
   db:
-    image: "postgres"
+    image: "${CONTAINER_REGISTRY}/postgres:${POSTGRES_TAG}"
     restart: always
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    deploy:
+      placement:
+        constraints:
+          - node.hostname==postgres

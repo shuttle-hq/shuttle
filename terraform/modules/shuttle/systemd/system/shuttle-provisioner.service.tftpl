@@ -1,0 +1,25 @@
+[Unit]
+Description=maintains the shuttle provisioner which creates and manages resources
+After=docker.socket
+After=shuttle-db.service
+
+[Service]
+Type=simple
+User=ubuntu
+RestartSec=30
+Restart=always
+ExecStartPre=/usr/bin/docker pull ${docker_image}:latest
+ExecStart=/usr/bin/docker run --rm \
+			      --network shuttle-net \
+			      --name provisioner \
+                  -e RUST_BACKTRACE=1 \
+                  -e RUST_LOG=debug \
+			      ${docker_image}:latest \
+                  --ip 0.0.0.0 \
+                  --port 5001 \
+                  --shared-pg-uri postgres://postgres:${pg_password}@db:5432/postgres \
+                  --fqdn ${fqdn} \
+                  --internal-address provisioner
+
+[Install]
+WantedBy=multi-user.target

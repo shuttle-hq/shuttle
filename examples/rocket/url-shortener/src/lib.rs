@@ -71,7 +71,7 @@ async fn shorten(url: String, state: &State<AppState>) -> Result<String, status:
 static MIGRATOR: Migrator = sqlx::migrate!();
 
 #[shuttle_service::main]
-async fn rocket(#[shared::Postgres] pool: PgPool) -> ShuttleRocket {
+async fn rocket(pool: PgPool) -> ShuttleRocket {
     MIGRATOR.run(&pool).await.map_err(CustomError::new)?;
 
     let state = AppState { pool };

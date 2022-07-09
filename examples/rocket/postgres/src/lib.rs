@@ -49,7 +49,7 @@ struct MyState {
 }
 
 #[shuttle_service::main]
-async fn rocket(#[shared::Postgres] pool: PgPool) -> shuttle_service::ShuttleRocket {
+async fn rocket(pool: PgPool) -> shuttle_service::ShuttleRocket {
     pool.execute(include_str!("../schema.sql"))
         .await
         .map_err(CustomError::new)?;

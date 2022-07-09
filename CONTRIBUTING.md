@@ -24,7 +24,7 @@ Create a docker persistent volume with:
 $ docker volume create shuttle-backend-vol
 ```
 
-Finally, you can start a local deployment of the backend with:
+Finally, you can start a local deployment of shuttle with:
 
 ```bash
 $ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d

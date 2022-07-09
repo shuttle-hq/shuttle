@@ -1,4 +1,4 @@
-[ci-test]
+[test-key]
 name = 'ci'
 projects = [
     'hello-world-rocket-app',

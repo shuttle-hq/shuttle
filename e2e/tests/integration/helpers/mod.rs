@@ -20,6 +20,8 @@ lazy_static! {
             .to_path_buf()
     };
     static ref DOCKER_COMPOSE: PathBuf = which::which("docker-compose").unwrap();
+    static ref DOCKER: PathBuf = which::which("docker").unwrap();
+    static ref MAKE: PathBuf = which::which("make").unwrap();
     static ref CARGO: PathBuf = which::which("cargo").unwrap();
     static ref LOCAL_UP: () = {
         let docker_compose = env::var("SHUTTLE_DOCKER_COMPOSE")
@@ -31,30 +33,21 @@ lazy_static! {
         println!(
             "
 ----------------------------------- PREPARING ------------------------------------
-docker-compose: {}
-docker-compose-dev: {}
+docker: {}
+make: {}
 cargo: {}
 ----------------------------------------------------------------------------------
 ",
-            docker_compose.display(),
-            docker_compose_dev.display(),
+            DOCKER.display(),
+            MAKE.display(),
             CARGO.display()
         );
 
-        println!(
-            "{} -f {} -f {} up -d --build",
-            DOCKER_COMPOSE.display(),
-            docker_compose.display(),
-            docker_compose_dev.display()
-        );
-        Command::new(DOCKER_COMPOSE.as_os_str())
-            .arg("-f")
-            .arg(docker_compose)
-            .arg("-f")
-            .arg(docker_compose_dev)
-            .args(["up", "-d", "--build"])
+        Command::new(MAKE.as_os_str())
+            .arg("up")
+            .current_dir(WORKSPACE_ROOT.as_path())
             .output()
-            .ensure_success("failed to `docker compose up`");
+            .ensure_success("failed to `make up`");
 
         Command::new(CARGO.as_os_str())
             .args(["build", "--bin", "cargo-shuttle"])

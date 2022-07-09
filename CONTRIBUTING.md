@@ -13,7 +13,7 @@ You should now be ready to setup a local environment to test code changes to cor
 Build the required images with:
 
 ```bash
-$ docker buildx bake -f docker-bake.hcl provisioner backend
+$ docker buildx bake -f docker-bake.hcl provisioner api
 ```
 
 The images get built with [cargo-chef](https://github.com/LukeMathWalker/cargo-chef) and therefore support incremental builds (most of the time). So they will be much faster to re-build after an incremental change in your code - should you wish to deploy it locally straightaway.
@@ -24,7 +24,7 @@ Create a docker persistent volume with:
 $ docker volume create shuttle-backend-vol
 ```
 
-Finally, you can start a local deployment of the backend with:
+Finally, you can start a local deployment of shuttle with:
 
 ```bash
 $ docker compose -f docker-compose.dev.yml up -d

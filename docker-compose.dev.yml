@@ -3,10 +3,10 @@ volumes:
   shuttle-backend-vol:
     external: true
 services:
-  backend:
+  api:
     extends:
       file: docker-compose.yml
-      service: backend
+      service: api
     entrypoint:
       - /bin/bash
       - -c

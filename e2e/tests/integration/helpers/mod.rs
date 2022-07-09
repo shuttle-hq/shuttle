@@ -19,17 +19,10 @@ lazy_static! {
             .unwrap()
             .to_path_buf()
     };
-    static ref DOCKER_COMPOSE: PathBuf = which::which("docker-compose").unwrap();
     static ref DOCKER: PathBuf = which::which("docker").unwrap();
     static ref MAKE: PathBuf = which::which("make").unwrap();
     static ref CARGO: PathBuf = which::which("cargo").unwrap();
     static ref LOCAL_UP: () = {
-        let docker_compose = env::var("SHUTTLE_DOCKER_COMPOSE")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| WORKSPACE_ROOT.join("docker-compose.yml"));
-        let docker_compose_dev = env::var("SHUTTLE_DOCKER_COMPOSE_DEV")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| WORKSPACE_ROOT.join("docker-compose.dev.yml"));
         println!(
             "
 ----------------------------------- PREPARING ------------------------------------

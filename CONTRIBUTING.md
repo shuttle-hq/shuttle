@@ -13,7 +13,7 @@ You should now be ready to setup a local environment to test code changes to cor
 Build the required images with:
 
 ```bash
-$ docker buildx bake -f docker-bake.hcl provisioner api
+$ docker-compose -f docker-compose.yml -f docker-compose.dev.yml build
 ```
 
 The images get built with [cargo-chef](https://github.com/LukeMathWalker/cargo-chef) and therefore support incremental builds (most of the time). So they will be much faster to re-build after an incremental change in your code - should you wish to deploy it locally straightaway.
@@ -27,7 +27,7 @@ $ docker volume create shuttle-backend-vol
 Finally, you can start a local deployment of shuttle with:
 
 ```bash
-$ docker compose -f docker-compose.dev.yml up -d
+$ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 ```
 
 The API is now accessible on `localhost:8000` (for app proxies) and `localhost:8001` (for the control plane). When running `cargo run --bin cargo-shuttle` (in a debug build), the CLI will point itself to `localhost` for its API calls. The deployment parameters can be tweaked by changing values in the [.env](./.env) file.

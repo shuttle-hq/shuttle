@@ -26,9 +26,9 @@ BUILDX_FLAGS=$(BUILDX_OP) $(PLATFORM_FLAGS) -f Containerfile $(CACHE_FLAGS)
 TAG?=$(shell git describe --tags)
 
 ifeq ($(PROD),true)
-DOCKER_COMPOSE=docker-compose.yml
+DOCKER_COMPOSE_FILES=-f docker-compose.yml
 else
-DOCKER_COMPOSE=docker-compose.dev.yml
+DOCKER_COMPOSE_FILES=-f docker-compose.yml -f docker-compose.dev.yml
 endif
 
 .PHONY: images clean src
@@ -43,10 +43,10 @@ api: .shuttle-api
 provisioner: .shuttle-provisioner
 
 up: images
-	CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) docker-compose -f $(DOCKER_COMPOSE) up -d
+	CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) docker-compose $(DOCKER_COMPOSE_FILES) up -d
 
 down:
-	CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) docker-compose -f $(DOCKER_COMPOSE) down
+	CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) docker-compose $(DOCKER_COMPOSE_FILES) down
 
 .shuttle-%: ${SRC} Cargo.lock
 	docker buildx build \

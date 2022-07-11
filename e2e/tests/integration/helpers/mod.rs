@@ -1,10 +1,10 @@
+use std::env;
 use std::io::{self, stderr, stdout, BufRead, Write};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Output, Stdio};
 use std::str;
 use std::thread::sleep;
-use std::env;
 use std::time::{Duration, SystemTime};
 
 use colored::*;
@@ -23,9 +23,6 @@ lazy_static! {
     static ref MAKE: PathBuf = which::which("make").unwrap();
     static ref CARGO: PathBuf = which::which("cargo").unwrap();
     static ref LOCAL_UP: () = {
-        let docker_compose = env::var("SHUTTLE_DOCKER_COMPOSE")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| WORKSPACE_ROOT.join("docker-compose.dev.yml"));
         println!(
             "
 ----------------------------------- PREPARING ------------------------------------

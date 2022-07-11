@@ -431,24 +431,24 @@ mod tests {
 
     #[test]
     fn get_local_config_finds_name_in_shuttle_toml() {
-        let mut project_args = ProjectArgs {
+        let project_args = ProjectArgs {
             working_directory: path_from_workspace_root("examples/axum/hello-world/"),
             name: None,
         };
 
-        let local_config = RequestContext::get_local_config(&mut project_args).unwrap();
+        let local_config = RequestContext::get_local_config(&project_args).unwrap();
 
         assert_eq!(unwrap_project_name(&local_config), "hello-world-axum-app");
     }
 
     #[test]
     fn setting_name_overrides_name_in_config() {
-        let mut project_args = ProjectArgs {
+        let project_args = ProjectArgs {
             working_directory: path_from_workspace_root("examples/axum/hello-world/"),
             name: Some(ProjectName::from_str("my-fancy-project-name").unwrap()),
         };
 
-        let local_config = RequestContext::get_local_config(&mut project_args).unwrap();
+        let local_config = RequestContext::get_local_config(&project_args).unwrap();
 
         assert_eq!(unwrap_project_name(&local_config), "my-fancy-project-name");
     }

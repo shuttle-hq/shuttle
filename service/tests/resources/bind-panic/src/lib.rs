@@ -1,31 +1,18 @@
-use async_trait::async_trait;
-
-use shuttle_service::{IntoService, ServeHandle, Service};
-
-#[macro_use]
-extern crate shuttle_service;
-
-#[derive(Default)]
-struct Builder;
-
-impl IntoService for Builder {
-    type Service = MyService;
-
-    fn into_service(self) -> Self::Service {
-        MyService
-    }
-}
+use shuttle_service::Service;
 
 struct MyService;
 
-#[async_trait]
+#[shuttle_service::async_trait]
 impl Service for MyService {
-    fn bind(
-        &mut self,
+    async fn bind(
+        mut self: Box<Self>,
         _: std::net::SocketAddr,
-    ) -> Result<ServeHandle, shuttle_service::error::Error> {
+    ) -> Result<(), shuttle_service::Error> {
         panic!("panic in bind");
     }
 }
 
-declare_service!(Builder, Builder::default);
+#[shuttle_service::main]
+async fn bind_panic() -> Result<MyService, shuttle_service::Error> {
+    Ok(MyService)
+}

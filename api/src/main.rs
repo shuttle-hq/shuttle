@@ -49,7 +49,9 @@ async fn get_or_create_user(
 
 /// Status API to be used to check if the service is alive
 #[get("/status")]
-async fn status() {}
+async fn status() -> String {
+    String::from("Ok")
+}
 
 #[get("/version")]
 async fn version() -> String {
@@ -186,7 +188,8 @@ async fn rocket() -> Rocket<Build> {
     env_logger::Builder::new()
         .filter_module("rocket", log::LevelFilter::Warn)
         .filter_module("_", log::LevelFilter::Warn)
-        .filter_module("api", log::LevelFilter::Debug)
+        .filter_module("shuttle_api", log::LevelFilter::Debug)
+        .filter_module("shuttle_service", log::LevelFilter::Debug)
         .init();
 
     let args: Args = Args::from_args();

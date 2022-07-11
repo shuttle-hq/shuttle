@@ -4324,7 +4324,33 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "45bb67a18fa91266cc7807181f62f9178a6873bfad7dc788c42e6430db40184f"
 
 [[package]]
-name = "shuttle-api"
+name = "shuttle-codegen"
+version = "0.3.1"
+dependencies = [
+ "pretty_assertions",
+ "proc-macro-error",
+ "proc-macro2",
+ "quote",
+ "syn",
+ "trybuild",
+]
+
+[[package]]
+name = "shuttle-common"
+version = "0.3.1"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "lazy_static",
+ "log",
+ "rocket",
+ "serde",
+ "serde_json",
+ "uuid",
+]
+
+[[package]]
+name = "shuttle-pod"
 version = "0.1.2"
 dependencies = [
  "anyhow",
@@ -4353,32 +4379,6 @@ dependencies = [
  "tokio",
  "toml",
  "tonic",
- "uuid",
-]
-
-[[package]]
-name = "shuttle-codegen"
-version = "0.3.1"
-dependencies = [
- "pretty_assertions",
- "proc-macro-error",
- "proc-macro2",
- "quote",
- "syn",
- "trybuild",
-]
-
-[[package]]
-name = "shuttle-common"
-version = "0.3.1"
-dependencies = [
- "anyhow",
- "chrono",
- "lazy_static",
- "log",
- "rocket",
- "serde",
- "serde_json",
  "uuid",
 ]
 
@@ -5954,7 +5954,3 @@ name = "zeroize"
 version = "1.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94693807d016b2f2d2e14420eb3bfcca689311ff775dcf113d74ea624b7cdf07"
-
-[[patch.unused]]
-name = "shuttle-service"
-version = "0.3.3"

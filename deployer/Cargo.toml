@@ -23,7 +23,7 @@ tracing-subscriber = { version = "0.3.11", features = ["env-filter"] }
 cargo = "0.62.0"
 
 [dependencies.shuttle-service]
-version = "0.3.3"
+version = "0.4.0"
 path = "../service"
 features = ["loader"]
 

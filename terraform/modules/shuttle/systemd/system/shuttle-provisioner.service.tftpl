@@ -1,7 +1,7 @@
 [Unit]
 Description=maintains the shuttle provisioner which creates and manages resources
 After=docker.socket
-After=opt-shuttle.mount
+After=shuttle-db.service
 
 [Service]
 Type=simple
@@ -12,14 +12,14 @@ ExecStartPre=/usr/bin/docker pull ${docker_image}:latest
 ExecStart=/usr/bin/docker run --rm \
 			      --network shuttle-net \
 			      --name provisioner \
-			      -e PG_PORT=5432 \
-			      -p 5432:5432 \
-			      -e PORT=5001 \
-			      -e PG_PASSWORD=${pg_password} \
-			      -e PG_DATA=/opt/shuttle/postgres \
-			      -v ${data_dir}/conf/postgres:/etc/postgresql/11/shuttle:rw \
-			      -v ${data_dir}/user-data/postgres:/opt/shuttle/postgres:rw \
-			      ${docker_image}:latest
+                  -e RUST_BACKTRACE=1 \
+                  -e RUST_LOG=debug \
+			      ${docker_image}:latest \
+                  --ip 0.0.0.0 \
+                  --port 5001 \
+                  --shared-pg-uri postgres://postgres:${pg_password}@db:5432/postgres \
+                  --fqdn ${fqdn} \
+                  --internal-address provisioner
 
 [Install]
 WantedBy=multi-user.target

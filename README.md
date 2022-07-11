@@ -51,11 +51,10 @@ version = "0.1.0"
 edition = "2021"
 
 [lib]
-crate-type = ["cdylib"]
 
 [dependencies]
 rocket = "0.5.0-rc.1"
-shuttle-service = { version = "0.3.3", features = ["web-rocket"] }
+shuttle-service = { version = "0.4.0", features = ["web-rocket"] }
 ```
 
 
@@ -96,6 +95,10 @@ $ cargo shuttle deploy
 
 For the full documentation, visit [docs.rs/shuttle-service](https://docs.rs/shuttle-service)
 
+## Contributing to shuttle
+
+If you want to setup a local environment to test code changes to core `shuttle` packages, or want to contribute to the project see [CONTRIBUTING.md](https://github.com/shuttle-hq/shuttle/blob/main/CONTRIBUTING.md)
+
 ## Roadmap
 
 For a comprehensive view of the shuttle roadmap check out this [project board](https://github.com/orgs/shuttle-hq/projects/4).
@@ -119,5 +122,3 @@ If you have any requests or suggestions feel free to open an issue.
 
 We are currently in Public Alpha. Watch "releases" of this repo to get 
 notified of major updates!
-
-

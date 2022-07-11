@@ -8,6 +8,7 @@ use std::fs::{read_to_string, File};
 use std::io::Write;
 use std::io::{self, stdout};
 use std::net::{Ipv4Addr, SocketAddr};
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use anyhow::{anyhow, Context, Result};
@@ -21,15 +22,16 @@ use cargo_edit::{find, get_latest_dependency, registry_url};
 use colored::Colorize;
 use config::RequestContext;
 use factory::LocalFactory;
-use futures::future::TryFutureExt;
 use semver::{Version, VersionReq};
 use shuttle_service::loader::{build_crate, Loader};
 use tokio::sync::mpsc;
-use toml_edit::{value, Array, Document, Item, Table, Value};
+use toml_edit::{value, Document, Item, Table};
 use uuid::Uuid;
 
 #[macro_use]
 extern crate log;
+
+use shuttle_common::DeploymentStateMeta;
 
 pub struct Shuttle {
     ctx: RequestContext,
@@ -47,7 +49,7 @@ impl Shuttle {
         Self { ctx }
     }
 
-    pub async fn run(mut self, args: Args) -> Result<()> {
+    pub async fn run(mut self, mut args: Args) -> Result<CommandOutcome> {
         trace!("running local client");
         if matches!(
             args.cmd,
@@ -57,7 +59,7 @@ impl Shuttle {
                 | Command::Logs
                 | Command::Run(..)
         ) {
-            self.load_project(&args.project_args)?;
+            self.load_project(&mut args.project_args)?;
         }
 
         self.ctx.set_api_url(args.api_url);
@@ -65,7 +67,7 @@ impl Shuttle {
         match args.cmd {
             Command::Deploy(deploy_args) => {
                 self.check_lib_version(args.project_args).await?;
-                self.deploy(deploy_args).await
+                return self.deploy(deploy_args).await;
             }
             Command::Init(init_args) => self.init(init_args).await,
             Command::Status => self.status().await,
@@ -75,6 +77,7 @@ impl Shuttle {
             Command::Login(login_args) => self.login(login_args).await,
             Command::Run(run_args) => self.local_run(run_args).await,
         }
+        .map(|_| CommandOutcome::Ok)
     }
 
     async fn init(&self, args: InitArgs) -> Result<()> {
@@ -94,11 +97,8 @@ impl Shuttle {
         // Remove empty dependencies table to re-insert after the lib table is inserted
         cargo_doc.remove("dependencies");
 
-        // Insert `crate-type = ["cdylib"]` array into `[lib]` table
-        let crate_type_array = Array::from_iter(["cdylib"].into_iter());
-        let mut lib_table = Table::new();
-        lib_table["crate-type"] = Item::Value(Value::Array(crate_type_array));
-        cargo_doc["lib"] = Item::Table(lib_table);
+        // Create an empty `[lib]` table
+        cargo_doc["lib"] = Item::Table(Table::new());
 
         // Fetch the latest shuttle-service version from crates.io
         let manifest_path = find(Some(&args.path)).unwrap();
@@ -122,8 +122,25 @@ impl Shuttle {
         Ok(())
     }
 
-    pub fn load_project(&mut self, project_args: &ProjectArgs) -> Result<()> {
+    fn find_root_directory(dir: &Path) -> Option<PathBuf> {
+        for ancestor in dir.ancestors() {
+            if ancestor.join("Cargo.toml").exists() {
+                return Some(ancestor.to_path_buf());
+            }
+        }
+        None
+    }
+
+    pub fn load_project(&mut self, project_args: &mut ProjectArgs) -> Result<()> {
         trace!("loading project arguments: {project_args:?}");
+        let root_directory_path = Self::find_root_directory(&project_args.working_directory);
+
+        if let Some(working_directory) = root_directory_path {
+            project_args.working_directory = working_directory;
+        } else {
+            return Err(anyhow!("Could not locate the root of a cargo project. Are you inside a cargo project? You can also use `--working-directory` to locate your cargo project."));
+        }
+
         self.ctx.load_local(project_args)
     }
 
@@ -136,7 +153,7 @@ impl Shuttle {
             println!("If your browser did not automatically open, go to {url}");
             print!("Enter Api Key: ");
 
-            io::stdout().flush().unwrap();
+            stdout().flush().unwrap();
 
             let mut input = String::new();
 
@@ -163,7 +180,7 @@ impl Shuttle {
     async fn delete(&self) -> Result<()> {
         client::delete(
             self.ctx.api_url(),
-            self.ctx.api_key()?,
+            &self.ctx.api_key()?,
             self.ctx.project_name(),
         )
         .await
@@ -173,7 +190,7 @@ impl Shuttle {
     async fn status(&self) -> Result<()> {
         client::status(
             self.ctx.api_url(),
-            self.ctx.api_key()?,
+            &self.ctx.api_key()?,
             self.ctx.project_name(),
         )
         .await
@@ -183,7 +200,7 @@ impl Shuttle {
     async fn logs(&self) -> Result<()> {
         client::logs(
             self.ctx.api_url(),
-            self.ctx.api_key()?,
+            &self.ctx.api_key()?,
             self.ctx.project_name(),
         )
         .await
@@ -235,7 +252,7 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn deploy(&self, args: DeployArgs) -> Result<()> {
+    async fn deploy(&self, args: DeployArgs) -> Result<CommandOutcome> {
         self.run_tests(args.no_test)?;
 
         let package_file = self
@@ -244,29 +261,39 @@ impl Shuttle {
 
         let key = self.ctx.api_key()?;
 
-        client::deploy(
+        let state_meta = client::deploy(
             package_file,
             self.ctx.api_url(),
-            key,
+            &key,
             self.ctx.project_name(),
         )
-        .and_then(|_| {
-            client::secrets(
-                self.ctx.api_url(),
-                key,
-                self.ctx.project_name(),
-                self.ctx.secrets(),
-            )
-        })
         .await
-        .context("failed to deploy cargo project")
+        .context("failed to deploy cargo project")?;
+
+        client::secrets(
+            self.ctx.api_url(),
+            &key,
+            self.ctx.project_name(),
+            self.ctx.secrets(),
+        )
+        .await
+        .context("failed to set up secrets for deployment")?;
+
+        Ok(match state_meta {
+            DeploymentStateMeta::Error(_) => CommandOutcome::DeploymentFailure,
+            _ => CommandOutcome::Ok,
+        })
     }
 
     async fn check_lib_version(&self, project_args: ProjectArgs) -> Result<()> {
         let cargo_path = project_args.working_directory.join("Cargo.toml");
         let cargo_doc = read_to_string(cargo_path.clone())?.parse::<Document>()?;
         let current_shuttle_version = &cargo_doc["dependencies"]["shuttle-service"]["version"];
-        let service_semver = Version::parse(current_shuttle_version.as_str().unwrap())?;
+        let service_semver = match Version::parse(current_shuttle_version.as_str().unwrap()) {
+            Ok(version) => version,
+            Err(error) => return Err(anyhow!("Your shuttle-service version ({}) is invalid and should follow the MAJOR.MINOR.PATCH semantic versioning format. Error given: {:?}", current_shuttle_version.as_str().unwrap(), error.to_string())),
+        };
+
         let server_version = client::shuttle_version(self.ctx.api_url()).await?;
         let server_version = Version::parse(&server_version)?;
 
@@ -337,5 +364,51 @@ impl Shuttle {
                 "Some tests failed. To ignore all tests, pass the `--no-test` flag"
             )),
         }
+    }
+}
+
+pub enum CommandOutcome {
+    Ok,
+    DeploymentFailure,
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::args::ProjectArgs;
+    use crate::Shuttle;
+    use std::path::PathBuf;
+
+    fn path_from_workspace_root(path: &str) -> PathBuf {
+        PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
+            .join("..")
+            .join(path)
+    }
+
+    #[test]
+    fn find_root_directory_returns_proper_directory() {
+        let working_directory = path_from_workspace_root("examples/axum/hello-world/src");
+
+        let root_dir = Shuttle::find_root_directory(&working_directory).unwrap();
+
+        assert_eq!(
+            root_dir,
+            path_from_workspace_root("examples/axum/hello-world/")
+        );
+    }
+
+    #[test]
+    fn load_project_returns_proper_working_directory_in_project_args() {
+        let mut project_args = ProjectArgs {
+            working_directory: path_from_workspace_root("examples/axum/hello-world/src"),
+            name: None,
+        };
+
+        let mut shuttle = Shuttle::new();
+        Shuttle::load_project(&mut shuttle, &mut project_args).unwrap();
+
+        assert_eq!(
+            project_args.working_directory,
+            path_from_workspace_root("examples/axum/hello-world/")
+        );
     }
 }

@@ -35,7 +35,7 @@ services:
       dockerfile: Containerfile
       args:
         crate: shuttle-api
-    image: "${CONTAINER_REGISTRY}/backend:dev"
+    image: "${CONTAINER_REGISTRY}/api:dev"
 
   provisioner:
     entrypoint:

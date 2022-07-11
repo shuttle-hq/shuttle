@@ -80,15 +80,14 @@ impl Shuttle {
 
     async fn init(&self, args: InitArgs) -> Result<()> {
         // Interface with cargo to initialize new lib package for shuttle
-        let framework = init::get_framework(&args);
         let path = args.path.clone();
         init::cargo_init(path.clone())?;
-        init::process_cargo_init(path)?;
+        init::process_cargo_init(path.clone())?;
 
+        let framework = init::get_framework(&args);
         match framework {
-            Some(framework_enum) => {
-                let mut shuttle_init = init::ShuttleInitFactory::new(args.path.clone(), framework_enum);
-                shuttle_init.shuttle_init()?;
+            Some(framework) => {
+                init::framework_init(&path, framework)?;
             },
             None => {},
         }

@@ -9,35 +9,26 @@ use shuttle_common::Port;
 #[derive(Parser)]
 #[clap(name = "shuttle")]
 pub struct Args {
-    #[clap(long, help = "Override the default root path for shuttle")]
+    /// Override the default root path for shuttle
+    #[clap(long)]
     pub(crate) path: Option<PathBuf>,
-    #[clap(
-        long,
-        help = "Override the default port for the proxy",
-        default_value = "8000"
-    )]
+    /// Override the default port for the proxy
+    #[clap(long, default_value = "8000")]
     pub(crate) proxy_port: Port,
-    #[clap(
-        long,
-        help = "Override the default port for the api",
-        default_value = "8001"
-    )]
+    /// Override the default port for the api
+    #[clap(long, default_value = "8001")]
     pub(crate) api_port: Port,
-    #[clap(
-        long,
-        help = "Override the default bind address",
-        default_value = "127.0.0.1"
-    )]
+    /// Override the default bind address
+    #[clap(long, default_value = "127.0.0.1")]
     pub(crate) bind_addr: IpAddr,
-    #[clap(long, help = "Fully qualified domain name deployed services are reachable at", parse(try_from_str = parse_fqdn))]
+    /// Fully qualified domain name deployed services are reachable at
+    #[clap(long, parse(try_from_str = parse_fqdn))]
     pub(crate) proxy_fqdn: FQDN,
-    #[clap(long, help = "Address to connect to the provisioning service")]
+    /// Address to connect to the provisioning service
+    #[clap(long)]
     pub(crate) provisioner_address: String,
-    #[clap(
-        long,
-        help = "Port provisioner is reachable at",
-        default_value = "5001"
-    )]
+    /// Port provisioner is reachable at
+    #[clap(long, default_value = "5001")]
     pub(crate) provisioner_port: Port,
 }
 

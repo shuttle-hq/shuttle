@@ -2,11 +2,14 @@ version: "3"
 volumes:
   shuttle-backend-vol:
     external: true
+  shuttle-cargo-registry-vol:
+    external: true
 services:
-  api:
-    image: "${CONTAINER_REGISTRY}/api:${BACKEND_TAG}"
+  deployer:
+    image: "${CONTAINER_REGISTRY}/deployer:${BACKEND_TAG}"
     volumes:
-      - shuttle-backend-vol:/var/lib/shuttle/
+      - shuttle-backend-vol:/tmp/shuttle-builds/
+      - shuttle-cargo-registry-vol:/usr/local/cargo/registry/
     depends_on:
       - provisioner
     ports:
@@ -18,8 +21,9 @@ services:
         delay: 5s
         max_attempts: 3
     environment:
-      - SHUTTLE_USERS_TOML=/var/lib/shuttle/users.toml
       - RUST_LOG=${RUST_LOG}
+      - CARGO_HOME=/usr/local/cargo
+      - GATEWAY_SECRET=tmp
     command:
       - "--path=/var/lib/shuttle/crates"
       - "--bind-addr=0.0.0.0"

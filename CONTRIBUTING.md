@@ -18,10 +18,11 @@ $ docker-compose -f docker-compose.yml -f docker-compose.dev.yml build
 
 The images get built with [cargo-chef](https://github.com/LukeMathWalker/cargo-chef) and therefore support incremental builds (most of the time). So they will be much faster to re-build after an incremental change in your code - should you wish to deploy it locally straightaway.
 
-Create a docker persistent volume with:
+Create docker persistent volumes with:
 
 ```bash
 $ docker volume create shuttle-backend-vol
+$ docker volume create shuttle-cargo-registry-vol
 ```
 
 Finally, you can start a local deployment of shuttle with:

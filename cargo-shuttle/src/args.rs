@@ -18,12 +18,9 @@ use shuttle_common::project::ProjectName;
         .hidden(true))
 )]
 pub struct Args {
-    #[clap(
-        long,
-        help = "allows targeting a custom deloyed instance for this command only",
-        env = "SHUTTLE_API"
-    )]
-    /// Run this command against the api at the supplied url
+    /// run this command against the api at the supplied url
+    /// (allows targeting a custom deployed instance for this command only)
+    #[clap(long, env = "SHUTTLE_API")]
     pub api_url: Option<String>,
     #[clap(flatten)]
     pub project_args: ProjectArgs,
@@ -34,69 +31,74 @@ pub struct Args {
 // Common args for subcommands that deal with projects.
 #[derive(Parser, Debug)]
 pub struct ProjectArgs {
+    /// Specify the working directory
     #[clap(
         global = true,
         long,
         parse(try_from_os_str = parse_path),
         default_value = ".",
     )]
-    /// Specify the working directory
     pub working_directory: PathBuf,
-    #[clap(global = true, long)]
     /// Specify the name of the project (overrides crate name)
+    #[clap(global = true, long)]
     pub name: Option<ProjectName>,
 }
 
 #[derive(Parser)]
 pub enum Command {
-    #[clap(help = "deploy a shuttle project")]
+    /// deploy a shuttle project
     Deploy(DeployArgs),
-    #[clap(help = "create a new shuttle project")]
+    /// create a new shuttle project
     Init(InitArgs),
-    #[clap(help = "view the status of a shuttle project")]
+    /// view the status of a shuttle project
     Status,
-    #[clap(help = "view the logs of a shuttle project")]
+    /// view the logs of a shuttle project
     Logs,
-    #[clap(help = "delete the latest deployment for a shuttle project")]
+    /// delete the latest deployment for a shuttle project
     Delete,
-    #[clap(help = "create user credentials for the shuttle platform")]
+    /// create user credentials for the shuttle platform
     Auth(AuthArgs),
-    #[clap(help = "login to the shuttle platform")]
+    /// login to the shuttle platform
     Login(LoginArgs),
-    #[clap(help = "run a shuttle project locally")]
+    /// run a shuttle project locally
     Run(RunArgs),
 }
 
 #[derive(Parser)]
 pub struct LoginArgs {
-    #[clap(long, help = "api key for the shuttle platform")]
+    /// api key for the shuttle platform
+    #[clap(long)]
     pub api_key: Option<String>,
 }
 
 #[derive(Parser)]
 pub struct AuthArgs {
-    #[clap(help = "the desired username for the shuttle platform")]
+    /// the desired username for the shuttle platform
+    #[clap()]
     pub username: String,
 }
 
 #[derive(Parser)]
 pub struct DeployArgs {
-    #[clap(long, help = "allow dirty working directories to be packaged")]
+    /// allow dirty working directories to be packaged
+    #[clap(long)]
     pub allow_dirty: bool,
-    #[clap(long, help = "allows pre-deploy tests to be skipped")]
+    /// allows pre-deploy tests to be skipped
+    #[clap(long)]
     pub no_test: bool,
 }
 
 #[derive(Parser, Debug)]
 pub struct RunArgs {
-    #[clap(long, help = "port to start service on", default_value = "8000")]
+    /// port to start service on
+    #[clap(long, default_value = "8000")]
     pub port: u16,
 }
 
 #[derive(Parser)]
 pub struct InitArgs {
+    /// the path to initialize a new shuttle project
     #[clap(
-        help = "the path to initialize a new shuttle project",
         parse(try_from_os_str = parse_init_path),
         default_value = ".",
     )]

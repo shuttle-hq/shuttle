@@ -2,11 +2,14 @@ version: "3"
 volumes:
   shuttle-backend-vol:
     external: true
+  shuttle-cargo-registry-vol:
+    external: true
 services:
   deployer:
     image: "${CONTAINER_REGISTRY}/deployer:${BACKEND_TAG}"
     volumes:
       - shuttle-backend-vol:/tmp/shuttle-builds/
+      - shuttle-cargo-registry-vol:/usr/local/cargo/registry/
     depends_on:
       - provisioner
     ports:
@@ -19,6 +22,7 @@ services:
         max_attempts: 3
     environment:
       - RUST_LOG=${RUST_LOG}
+      - CARGO_HOME=/usr/local/cargo
       - GATEWAY_SECRET=tmp
     command:
       - "--path=/var/lib/shuttle/crates"

@@ -1034,7 +1034,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-shuttle"
-version = "0.3.2"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4324,34 +4324,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "45bb67a18fa91266cc7807181f62f9178a6873bfad7dc788c42e6430db40184f"
 
 [[package]]
-name = "shuttle-codegen"
-version = "0.3.1"
-dependencies = [
- "pretty_assertions",
- "proc-macro-error",
- "proc-macro2",
- "quote",
- "syn",
- "trybuild",
-]
-
-[[package]]
-name = "shuttle-common"
-version = "0.3.1"
-dependencies = [
- "anyhow",
- "chrono",
- "lazy_static",
- "log",
- "rocket",
- "serde",
- "serde_json",
- "uuid",
-]
-
-[[package]]
-name = "shuttle-pod"
-version = "0.1.2"
+name = "shuttle-api"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "async-mutex",
@@ -4360,6 +4334,7 @@ dependencies = [
  "cargo",
  "cargo-util",
  "chrono",
+ "clap 3.2.6",
  "env_logger",
  "fqdn",
  "futures",
@@ -4375,7 +4350,6 @@ dependencies = [
  "shuttle-proto",
  "shuttle-service",
  "sqlx",
- "structopt",
  "tokio",
  "toml",
  "tonic",
@@ -4383,8 +4357,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "shuttle-codegen"
+version = "0.4.0"
+dependencies = [
+ "pretty_assertions",
+ "proc-macro-error",
+ "proc-macro2",
+ "quote",
+ "syn",
+ "trybuild",
+]
+
+[[package]]
+name = "shuttle-common"
+version = "0.4.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "lazy_static",
+ "log",
+ "rocket",
+ "serde",
+ "serde_json",
+ "uuid",
+]
+
+[[package]]
 name = "shuttle-proto"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "prost",
  "shuttle-common",
@@ -4394,7 +4394,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-provisioner"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "aws-config",
  "aws-sdk-rds",
@@ -4418,7 +4418,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-service"
-version = "0.3.3"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "async-std",

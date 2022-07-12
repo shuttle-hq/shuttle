@@ -2,40 +2,40 @@ use std::net::IpAddr;
 use std::path::PathBuf;
 use std::str::FromStr;
 
+use clap::Parser;
 use fqdn::FQDN;
 use shuttle_common::Port;
-use structopt::StructOpt;
 
-#[derive(StructOpt)]
-#[structopt(name = "shuttle")]
+#[derive(Parser)]
+#[clap(name = "shuttle")]
 pub struct Args {
-    #[structopt(long, about = "Override the default root path for shuttle")]
+    #[clap(long, help = "Override the default root path for shuttle")]
     pub(crate) path: Option<PathBuf>,
-    #[structopt(
+    #[clap(
         long,
-        about = "Override the default port for the proxy",
+        help = "Override the default port for the proxy",
         default_value = "8000"
     )]
     pub(crate) proxy_port: Port,
-    #[structopt(
+    #[clap(
         long,
-        about = "Override the default port for the api",
+        help = "Override the default port for the api",
         default_value = "8001"
     )]
     pub(crate) api_port: Port,
-    #[structopt(
+    #[clap(
         long,
-        about = "Override the default bind address",
+        help = "Override the default bind address",
         default_value = "127.0.0.1"
     )]
     pub(crate) bind_addr: IpAddr,
-    #[structopt(long, about = "Fully qualified domain name deployed services are reachable at", parse(try_from_str = parse_fqdn))]
+    #[clap(long, help = "Fully qualified domain name deployed services are reachable at", parse(try_from_str = parse_fqdn))]
     pub(crate) proxy_fqdn: FQDN,
-    #[structopt(long, about = "Address to connect to the provisioning service")]
+    #[clap(long, help = "Address to connect to the provisioning service")]
     pub(crate) provisioner_address: String,
-    #[structopt(
+    #[clap(
         long,
-        about = "Port provisioner is reachable at",
+        help = "Port provisioner is reachable at",
         default_value = "5001"
     )]
     pub(crate) provisioner_port: Port,

@@ -18,6 +18,7 @@ use std::net::IpAddr;
 use std::sync::Arc;
 
 use auth_admin::Admin;
+use clap::Parser;
 use deployment::MAX_DEPLOYS;
 use factory::ShuttleFactory;
 use rocket::serde::json::Json;
@@ -25,7 +26,6 @@ use rocket::{tokio, Build, Data, Rocket, State};
 use shuttle_common::project::ProjectName;
 use shuttle_common::{DeploymentApiError, DeploymentMeta, Port};
 use shuttle_service::SecretStore;
-use structopt::StructOpt;
 use uuid::Uuid;
 
 use crate::args::Args;
@@ -49,7 +49,9 @@ async fn get_or_create_user(
 
 /// Status API to be used to check if the service is alive
 #[get("/status")]
-async fn status() {}
+async fn status() -> String {
+    String::from("Ok")
+}
 
 #[get("/version")]
 async fn version() -> String {
@@ -186,10 +188,11 @@ async fn rocket() -> Rocket<Build> {
     env_logger::Builder::new()
         .filter_module("rocket", log::LevelFilter::Warn)
         .filter_module("_", log::LevelFilter::Warn)
-        .filter_module("api", log::LevelFilter::Debug)
+        .filter_module("shuttle_api", log::LevelFilter::Debug)
+        .filter_module("shuttle_service", log::LevelFilter::Debug)
         .init();
 
-    let args: Args = Args::from_args();
+    let args: Args = Args::parse();
     let build_system = FsBuildSystem::initialise(args.path).unwrap();
     let deployment_manager = Arc::new(
         DeploymentSystem::new(

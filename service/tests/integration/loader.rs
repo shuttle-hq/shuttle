@@ -159,7 +159,12 @@ async fn bind_panic() {
     let deployment_id = Uuid::new_v4();
     let (tx, _) = mpsc::unbounded_channel();
 
-    if let Err(Error::BindPanic(msg)) = loader.load(&mut factory, addr, tx, deployment_id).await {
+    let (handle, _) = loader
+        .load(&mut factory, addr, tx, deployment_id)
+        .await
+        .unwrap();
+
+    if let Err(Error::BindPanic(msg)) = handle.await.unwrap() {
         assert_eq!(&msg, "panic in bind");
     } else {
         panic!("expected `Err(Error::BindPanic(_))`");

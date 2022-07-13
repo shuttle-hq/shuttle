@@ -1,6 +1,6 @@
 [package]
 name = "cargo-shuttle"
-version = "0.3.2"
+version = "0.4.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "A cargo command for the shuttle platform (https://www.shuttle.rs/)"
@@ -14,6 +14,7 @@ cargo = "0.62.0"
 cargo-edit = { version = "0.9.1", features = ["cli"] }
 cargo_metadata = "0.14.2"
 chrono = "0.4.19"
+clap = { version = "3.1.18", features = ["derive", "env"] }
 colored = "2.0.0"
 crossterm = "0.23.2"
 dirs = "4.0.0"
@@ -28,7 +29,6 @@ reqwest-retry = "0.1.5"
 semver = "1.0.9"
 serde = { version = "1.0.137", features = ["derive"] }
 serde_json = "1.0.81"
-structopt = "0.3.26"
 tokio = "1.19.2"
 toml = "0.5.9"
 toml_edit = "0.14.4"
@@ -37,11 +37,11 @@ uuid = { version = "1.1.1", features = ["v4"] }
 webbrowser = "0.7.1"
 
 [dependencies.shuttle-common]
-version = "0.3.1"
+version = "0.4.0"
 path = "../common"
 
 [dependencies.shuttle-service]
-version = "0.3.3"
+version = "0.4.0"
 path = "../service"
 features = ["loader"]
 

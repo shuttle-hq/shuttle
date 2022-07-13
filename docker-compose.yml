@@ -3,8 +3,8 @@ volumes:
   shuttle-backend-vol:
     external: true
 services:
-  backend:
-    image: "${CONTAINER_REGISTRY}/backend:${BACKEND_TAG}"
+  api:
+    image: "${CONTAINER_REGISTRY}/api:${BACKEND_TAG}"
     volumes:
       - shuttle-backend-vol:/var/lib/shuttle/
     depends_on:

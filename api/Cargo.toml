@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-api"
-version = "0.1.2"
+version = "0.4.0"
 edition = "2021"
 publish = false
 
@@ -12,6 +12,7 @@ base64 = "0.13.0"
 cargo = "0.62.0"
 cargo-util = "0.1.2"
 chrono = "0.4.19"
+clap = { version = "3.1.18", features = ["derive"] }
 env_logger = "0.9.0"
 fqdn = "0.1.9"
 futures = "0.3.21"
@@ -25,21 +26,20 @@ rand = "0.8.5"
 rocket = { version = "0.5.0-rc.2", features = ["uuid", "serde_json", "json"] }
 serde = "1.0.137"
 sqlx = { version = "0.5.13", features = ["runtime-tokio-native-tls", "postgres"] }
-structopt = "0.3.26"
 tokio = { version = "1.19.2", features = ["full"] }
 toml = "0.5.9"
 tonic = "0.7.2"
 uuid = { version = "1.1.1", features = ["v4"] }
 
 [dependencies.shuttle-common]
-version = "0.3.1"
+version = "0.4.0"
 path = "../common"
 
 [dependencies.shuttle-proto]
-version = "0.1.0"
+version = "0.4.0"
 path = "../proto"
 
 [dependencies.shuttle-service]
-version = "0.3.3"
+version = "0.4.0"
 path = "../service"
 features = ["loader", "secrets"]

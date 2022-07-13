@@ -95,7 +95,7 @@ pub struct RunArgs {
     pub port: u16,
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 pub struct InitArgs {
     /// Initialize with axum framework
     #[clap(long, conflicts_with_all = &["rocket", "tide", "tower"])]

@@ -19,7 +19,13 @@ fn cargo_shuttle_init(path: &str) -> impl Future<Output = anyhow::Result<()>> {
             working_directory,
             name: None,
         },
-        cmd: Command::Init(InitArgs { path }),
+        cmd: Command::Init(InitArgs {
+            axum: false,
+            rocket: false,
+            tide: false,
+            tower: false,
+            path,
+        }),
     })
 }
 

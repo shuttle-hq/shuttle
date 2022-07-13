@@ -11,20 +11,32 @@ use toml_edit::{value, Array, Document, Item, Table};
 use url::Url;
 
 pub trait ShuttleInit {
-    fn set_cargo_dependencies(&self, dependencies: &mut Table, manifest_path: &PathBuf, url: &Url);
+    fn set_cargo_dependencies(
+        &self,
+        dependencies: &mut Table,
+        manifest_path: &PathBuf,
+        url: &Url,
+        get_dependency_version_fn: GetDependencyVersionFn,
+    );
     fn get_boilerplate_code_for_framework(&self) -> &'static str;
 }
 
 pub struct ShuttleInitAxum;
 
 impl ShuttleInit for ShuttleInitAxum {
-    fn set_cargo_dependencies(&self, dependencies: &mut Table, manifest_path: &PathBuf, url: &Url) {
+    fn set_cargo_dependencies(
+        &self, dependencies: &mut Table,
+        manifest_path: &PathBuf,
+        url: &Url,
+        get_dependency_version_fn: GetDependencyVersionFn,
+    ) {
         // Set "shuttle-service" version to `[dependencies]` table
         set_inline_table_dependency_version(
             "shuttle-service",
              dependencies,
             &manifest_path,
             &url,
+            get_dependency_version_fn,
         );
 
         set_key_value_dependency_version(
@@ -32,6 +44,7 @@ impl ShuttleInit for ShuttleInitAxum {
              dependencies,
             &manifest_path,
             &url,
+            get_dependency_version_fn,
         );
 
         set_inline_table_dependency_features(
@@ -44,9 +57,10 @@ impl ShuttleInit for ShuttleInitAxum {
              dependencies,
             &manifest_path,
             &url,
+            get_dependency_version_fn,
         );
     }
-    
+
     fn get_boilerplate_code_for_framework(&self) -> &'static str {
         indoc! {r#"
         use axum::{routing::get, Router};
@@ -69,12 +83,18 @@ impl ShuttleInit for ShuttleInitAxum {
 pub struct ShuttleInitRocket;
 
 impl ShuttleInit for ShuttleInitRocket {
-    fn set_cargo_dependencies(&self, dependencies: &mut Table, manifest_path: &PathBuf, url: &Url) {
+    fn set_cargo_dependencies(
+        &self, dependencies: &mut Table,
+        manifest_path: &PathBuf,
+        url: &Url,
+        get_dependency_version_fn: GetDependencyVersionFn,
+    ) {
         set_inline_table_dependency_version(
             "shuttle-service",
              dependencies,
             &manifest_path,
             &url,
+            get_dependency_version_fn,
         );
 
         set_key_value_dependency_version(
@@ -82,6 +102,7 @@ impl ShuttleInit for ShuttleInitRocket {
             dependencies,
             &manifest_path,
             &url,
+            get_dependency_version_fn,
         );
 
         set_inline_table_dependency_features(
@@ -113,20 +134,19 @@ impl ShuttleInit for ShuttleInitRocket {
 pub struct ShuttleInitTide;
 
 impl ShuttleInit for ShuttleInitTide {
-    fn set_cargo_dependencies(&self, dependencies: &mut Table, manifest_path: &PathBuf, url: &Url) {
-        set_key_value_dependency_version(
-            "tide",
-            dependencies,
-            &manifest_path,
-            &url,
-        );
-
+    fn set_cargo_dependencies(
+        &self, dependencies: &mut Table,
+        manifest_path: &PathBuf,
+        url: &Url,
+        get_dependency_version_fn: GetDependencyVersionFn,
+    ) {
         // Set "shuttle-service" version to `[dependencies]` table
         set_inline_table_dependency_version(
             "shuttle-service",
             dependencies,
             &manifest_path,
             &url,
+            get_dependency_version_fn,
         );
 
         set_inline_table_dependency_features(
@@ -134,8 +154,16 @@ impl ShuttleInit for ShuttleInitTide {
             dependencies,
             vec!["web-tide".to_string()],
         );
+
+        set_key_value_dependency_version(
+            "tide",
+            dependencies,
+            &manifest_path,
+            &url,
+            get_dependency_version_fn,
+        );
     }
-    
+
     fn get_boilerplate_code_for_framework(&self) -> &'static str {
         indoc! {r#"
         #[shuttle_service::main]
@@ -153,38 +181,18 @@ impl ShuttleInit for ShuttleInitTide {
 pub struct ShuttleInitTower;
 
 impl ShuttleInit for ShuttleInitTower {
-    fn set_cargo_dependencies(&self, dependencies: &mut Table, manifest_path: &PathBuf, url: &Url) {
+    fn set_cargo_dependencies(
+        &self, dependencies: &mut Table,
+        manifest_path: &PathBuf,
+        url: &Url,
+        get_dependency_version_fn: GetDependencyVersionFn,
+    ) {
         set_inline_table_dependency_version(
             "shuttle-service",
             dependencies,
             &manifest_path,
             &url,
-        );
-
-        set_inline_table_dependency_version(
-            "tower",
-            dependencies,
-            &manifest_path,
-            &url,
-        );
-
-        set_inline_table_dependency_features(
-            "tower",
-            dependencies,
-            vec!["full".to_string()],
-        );
-
-        set_inline_table_dependency_version(
-            "hyper",
-            dependencies,
-            &manifest_path,
-            &url,
-        );
-
-        set_inline_table_dependency_features(
-            "hyper",
-            dependencies,
-            vec!["full".to_string()],
+            get_dependency_version_fn,
         );
 
         set_inline_table_dependency_features(
@@ -192,8 +200,36 @@ impl ShuttleInit for ShuttleInitTower {
             dependencies,
             vec!["web-tower".to_string()],
         );
+
+        set_inline_table_dependency_version(
+            "tower",
+            dependencies,
+            &manifest_path,
+            &url,
+            get_dependency_version_fn,
+        );
+
+        set_inline_table_dependency_features(
+            "tower",
+            dependencies,
+            vec!["full".to_string()],
+        );
+
+        set_inline_table_dependency_version(
+            "hyper",
+            dependencies,
+            &manifest_path,
+            &url,
+            get_dependency_version_fn,
+        );
+
+        set_inline_table_dependency_features(
+            "hyper",
+            dependencies,
+            vec!["full".to_string()],
+        );
     }
-    
+
     fn get_boilerplate_code_for_framework(&self) -> &'static str {
         indoc! {r#"
         use std::convert::Infallible;
@@ -234,7 +270,7 @@ impl ShuttleInit for ShuttleInitTower {
 }
 
 /// Returns a framework-specific struct that implements the trait `ShuttleInit`
-/// for writing framework-specific dependencies to `Cargo.toml` and generating 
+/// for writing framework-specific dependencies to `Cargo.toml` and generating
 /// boilerplate code in `src/lib.rs`.
 pub fn get_framework(init_args: &InitArgs) -> Option<Box<dyn ShuttleInit>> {
     if init_args.axum {
@@ -283,7 +319,7 @@ pub fn cargo_init(path: PathBuf) -> Result<()> {
 pub fn process_cargo_init(path: PathBuf) -> Result<()> {
     let cargo_toml_path = path.join("Cargo.toml");
     let mut cargo_doc = read_to_string(cargo_toml_path.clone()).unwrap().parse::<Document>().unwrap();
-    
+
     // Remove empty dependencies table to re-insert after the lib table is inserted
     cargo_doc.remove("dependencies");
 
@@ -303,6 +339,7 @@ pub fn process_cargo_init(path: PathBuf) -> Result<()> {
         &mut dependencies,
         &manifest_path,
         &url,
+        get_latest_dependency_version,
     );
 
     cargo_doc["dependencies"] = Item::Table(dependencies);
@@ -320,13 +357,18 @@ pub fn framework_init(project_path: &PathBuf, framework: Box<dyn ShuttleInit>) -
     let lib_path = project_path.join("src").join("lib.rs");
     let cargo_toml_path = project_path.join("Cargo.toml");
     let mut cargo_doc = read_to_string(cargo_toml_path.clone()).unwrap().parse::<Document>().unwrap();
-    
+
     let manifest_path = find(Some(&project_path)).unwrap();
     let url = registry_url(manifest_path.as_path(), None).expect("Could not find registry URL");
     let dependencies = cargo_doc["dependencies"].as_table_mut().unwrap();
-    
-    framework.set_cargo_dependencies(dependencies, &manifest_path, &url);
-    
+
+    framework.set_cargo_dependencies(
+        dependencies,
+        &manifest_path,
+        &url,
+        get_latest_dependency_version,
+    );
+
     let mut cargo_toml = File::create(cargo_toml_path.clone())?;
     cargo_toml.write_all(cargo_doc.to_string().as_bytes())?;
 
@@ -337,21 +379,44 @@ pub fn framework_init(project_path: &PathBuf, framework: Box<dyn ShuttleInit>) -
     Ok(())
 }
 
-fn set_key_value_dependency_version(crate_name: &str, dependencies: &mut Table, manifest_path: &PathBuf, url: &Url) {
-    let dependency_version = get_latest_dependency_version(crate_name, &manifest_path, &url);
+/// Sets dependency version for a key-value pair:
+/// `crate_name = "version"`
+fn set_key_value_dependency_version(
+    crate_name: &str,
+    dependencies: &mut Table,
+    manifest_path: &PathBuf,
+    url: &Url,
+    get_dependency_version_fn: GetDependencyVersionFn,
+) {
+    let dependency_version = get_dependency_version_fn(crate_name, &manifest_path, &url);
     dependencies[crate_name] = value(dependency_version);
 }
 
-fn set_inline_table_dependency_version(crate_name: &str, dependencies: &mut Table, manifest_path: &PathBuf, url: &Url) {
-    let dependency_version = get_latest_dependency_version(crate_name, &manifest_path, &url);
+/// Sets dependency version for an inline table:
+/// `crate_name = { version = "version" }`
+fn set_inline_table_dependency_version(
+    crate_name: &str,
+    dependencies: &mut Table,
+    manifest_path: &PathBuf,
+    url: &Url,
+    get_dependency_version_fn: GetDependencyVersionFn,
+) {
+    let dependency_version = get_dependency_version_fn(crate_name, &manifest_path, &url);
     dependencies[crate_name]["version"] = value(dependency_version);
 }
 
+/// Sets dependency features for an inline table:
+/// `crate_name = { features = ["some-feature"] }`
 fn set_inline_table_dependency_features(crate_name: &str, dependencies: &mut Table, features: Vec<String>) {
     let features = Array::from_iter(features);
     dependencies[crate_name]["features"] = value(features);
 }
 
+/// Abstract type for `get_latest_dependency_version` function.
+type GetDependencyVersionFn = fn(&str, &PathBuf, &Url) -> String;
+
+/// Gets the latest version for a dependency of `crate_name`.
+/// This is a wrapper function for `cargo_edit::get_latest_dependency` function.
 fn get_latest_dependency_version(crate_name: &str, manifest_path: &PathBuf, url: &Url) -> String {
     let latest_version =
         get_latest_dependency(crate_name, false, &manifest_path, Some(&url))
@@ -363,6 +428,7 @@ fn get_latest_dependency_version(crate_name: &str, manifest_path: &PathBuf, url:
     latest_version.to_string()
 }
 
+/// Writes `boilerplate` code to the specified `lib.rs` file path.
 pub fn write_lib_file(boilerplate: &'static str, lib_path: &PathBuf) -> Result<()> {
     let mut lib_file = File::create(lib_path.clone())?;
     lib_file.write_all(boilerplate.as_bytes())?;
@@ -370,3 +436,215 @@ pub fn write_lib_file(boilerplate: &'static str, lib_path: &PathBuf) -> Result<(
     Ok(())
 }
 
+#[cfg(test)]
+mod shuttle_init_tests {
+    use super::*;
+
+    fn init_args_factory(framework: &str) -> InitArgs {
+        let mut init_args = InitArgs {
+            axum: false,
+            rocket: false,
+            tide: false,
+            tower: false,
+            path: PathBuf::new(),
+        };
+
+        match framework {
+            "axum" => init_args.axum = true,
+            "rocket" => init_args.rocket = true,
+            "tide" => init_args.tide = true,
+            "tower" => init_args.tower = true,
+            _ => unreachable!(),
+        }
+
+        init_args
+    }
+
+    fn cargo_toml_factory() -> Document {
+        indoc! {r#"
+            [dependencies]
+        "#}.parse::<Document>().unwrap()
+    }
+
+    fn mock_get_latest_dependency_version(
+        _crate_name: &str,
+        _manifest_path: &PathBuf,
+        _url: &Url,
+    ) -> String {
+        "1.0".to_string()
+    }
+
+    #[test]
+    fn test_get_framework_via_get_boilerplate_code() {
+        let frameworks = vec!["axum", "rocket", "tide", "tower"];
+        let framework_inits: Vec<Box<dyn ShuttleInit>> = vec![
+            Box::new(ShuttleInitAxum),
+            Box::new(ShuttleInitRocket),
+            Box::new(ShuttleInitTide),
+            Box::new(ShuttleInitTower),
+        ];
+
+        for (framework, expected_framework_init) in frameworks.into_iter().zip(framework_inits) {
+            let framework_init = get_framework(&init_args_factory(framework)).unwrap();
+            assert_eq!(
+                framework_init.get_boilerplate_code_for_framework(),
+                expected_framework_init.get_boilerplate_code_for_framework(),
+            );
+        }
+    }
+
+    #[test]
+    fn test_set_inline_table_dependency_features() {
+        let mut cargo_toml = cargo_toml_factory();
+        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
+
+        set_inline_table_dependency_features("shuttle-service", dependencies, vec!["test-feature".to_string()]);
+
+        let expected = indoc! {r#"
+            [dependencies]
+            shuttle-service = { features = ["test-feature"] }
+        "#};
+
+        assert_eq!(cargo_toml.to_string(), expected);
+    }
+
+    #[test]
+    fn test_set_inline_table_dependency_version() {
+        let mut cargo_toml = cargo_toml_factory();
+        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
+        let manifest_path = PathBuf::new();
+        let url = Url::parse("https://shuttle.rs").unwrap();
+
+        set_inline_table_dependency_version(
+            "shuttle-service",
+            dependencies,
+            &manifest_path,
+            &url,
+            mock_get_latest_dependency_version,
+        );
+
+        let expected = indoc! {r#"
+            [dependencies]
+            shuttle-service = { version = "1.0" }
+        "#};
+
+        assert_eq!(cargo_toml.to_string(), expected);
+    }
+
+    #[test]
+    fn test_set_key_value_dependency_version() {
+        let mut cargo_toml = cargo_toml_factory();
+        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
+        let manifest_path = PathBuf::new();
+        let url = Url::parse("https://shuttle.rs").unwrap();
+
+        set_key_value_dependency_version(
+            "shuttle-service",
+            dependencies,
+            &manifest_path,
+            &url,
+            mock_get_latest_dependency_version,
+        );
+
+        let expected = indoc! {r#"
+            [dependencies]
+            shuttle-service = "1.0"
+        "#};
+
+        assert_eq!(cargo_toml.to_string(), expected);
+    }
+
+    #[test]
+    fn test_set_cargo_dependencies_axum() {
+        let mut cargo_toml = cargo_toml_factory();
+        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
+        let manifest_path = PathBuf::new();
+        let url = Url::parse("https://shuttle.rs").unwrap();
+
+        ShuttleInitAxum.set_cargo_dependencies(
+            dependencies,
+            &manifest_path,
+            &url,
+            mock_get_latest_dependency_version,
+        );
+
+        let expected = indoc! {r#"
+            [dependencies]
+            shuttle-service = { version = "1.0", features = ["web-axum"] }
+            axum = "1.0"
+            sync_wrapper = "1.0"
+        "#};
+
+        assert_eq!(cargo_toml.to_string(), expected);
+    }
+
+    #[test]
+    fn test_set_cargo_dependencies_rocket() {
+        let mut cargo_toml = cargo_toml_factory();
+        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
+        let manifest_path = PathBuf::new();
+        let url = Url::parse("https://shuttle.rs").unwrap();
+
+        ShuttleInitRocket.set_cargo_dependencies(
+            dependencies,
+            &manifest_path,
+            &url,
+            mock_get_latest_dependency_version,
+        );
+
+        let expected = indoc! {r#"
+            [dependencies]
+            shuttle-service = { version = "1.0", features = ["web-rocket"] }
+            rocket = "1.0"
+        "#};
+
+        assert_eq!(cargo_toml.to_string(), expected);
+    }
+
+    #[test]
+    fn test_set_cargo_dependencies_tide() {
+        let mut cargo_toml = cargo_toml_factory();
+        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
+        let manifest_path = PathBuf::new();
+        let url = Url::parse("https://shuttle.rs").unwrap();
+
+        ShuttleInitTide.set_cargo_dependencies(
+            dependencies,
+            &manifest_path,
+            &url,
+            mock_get_latest_dependency_version,
+        );
+
+        let expected = indoc! {r#"
+            [dependencies]
+            shuttle-service = { version = "1.0", features = ["web-tide"] }
+            tide = "1.0"
+        "#};
+
+        assert_eq!(cargo_toml.to_string(), expected);
+    }
+
+    #[test]
+    fn test_set_cargo_dependencies_tower() {
+        let mut cargo_toml = cargo_toml_factory();
+        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
+        let manifest_path = PathBuf::new();
+        let url = Url::parse("https://shuttle.rs").unwrap();
+
+        ShuttleInitTower.set_cargo_dependencies(
+            dependencies,
+            &manifest_path,
+            &url,
+            mock_get_latest_dependency_version,
+        );
+
+        let expected = indoc! {r#"
+            [dependencies]
+            shuttle-service = { version = "1.0", features = ["web-tower"] }
+            tower = { version = "1.0", features = ["full"] }
+            hyper = { version = "1.0", features = ["full"] }
+        "#};
+
+        assert_eq!(cargo_toml.to_string(), expected);
+    }
+}

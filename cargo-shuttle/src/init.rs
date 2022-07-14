@@ -30,15 +30,6 @@ impl ShuttleInit for ShuttleInitAxum {
         url: &Url,
         get_dependency_version_fn: GetDependencyVersionFn,
     ) {
-        // Set "shuttle-service" version to `[dependencies]` table
-        set_inline_table_dependency_version(
-            "shuttle-service",
-             dependencies,
-            &manifest_path,
-            &url,
-            get_dependency_version_fn,
-        );
-
         set_key_value_dependency_version(
             "axum",
              dependencies,
@@ -89,14 +80,6 @@ impl ShuttleInit for ShuttleInitRocket {
         url: &Url,
         get_dependency_version_fn: GetDependencyVersionFn,
     ) {
-        set_inline_table_dependency_version(
-            "shuttle-service",
-             dependencies,
-            &manifest_path,
-            &url,
-            get_dependency_version_fn,
-        );
-
         set_key_value_dependency_version(
             "rocket",
             dependencies,
@@ -140,15 +123,6 @@ impl ShuttleInit for ShuttleInitTide {
         url: &Url,
         get_dependency_version_fn: GetDependencyVersionFn,
     ) {
-        // Set "shuttle-service" version to `[dependencies]` table
-        set_inline_table_dependency_version(
-            "shuttle-service",
-            dependencies,
-            &manifest_path,
-            &url,
-            get_dependency_version_fn,
-        );
-
         set_inline_table_dependency_features(
             "shuttle-service",
             dependencies,
@@ -187,14 +161,6 @@ impl ShuttleInit for ShuttleInitTower {
         url: &Url,
         get_dependency_version_fn: GetDependencyVersionFn,
     ) {
-        set_inline_table_dependency_version(
-            "shuttle-service",
-            dependencies,
-            &manifest_path,
-            &url,
-            get_dependency_version_fn,
-        );
-
         set_inline_table_dependency_features(
             "shuttle-service",
             dependencies,

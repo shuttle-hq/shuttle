@@ -990,7 +990,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "34965aea9b211a43ace81105894e2e2d15103be244884b31f26065e7538fe30b"
 dependencies = [
  "anyhow",
- "cargo_metadata",
+ "cargo_metadata 0.14.2",
  "clap 3.2.6",
  "concolor-control",
  "crates-index",
@@ -1032,7 +1032,7 @@ dependencies = [
  "bollard",
  "cargo",
  "cargo-edit",
- "cargo_metadata",
+ "cargo_metadata 0.15.0",
  "chrono",
  "colored",
  "crossterm",
@@ -1086,6 +1086,19 @@ name = "cargo_metadata"
 version = "0.14.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4acbb09d9ee8e23699b9634375c72795d095bf268439da88562cf9b501f181fa"
+dependencies = [
+ "camino",
+ "cargo-platform",
+ "semver 1.0.10",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "cargo_metadata"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3abb7553d5b9b8421c6de7cb02606ff15e0c6eea7d8eadd75ef013fd636bec36"
 dependencies = [
  "camino",
  "cargo-platform",
@@ -1663,32 +1676,6 @@ dependencies = [
  "darling_core",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "deployer"
-version = "0.1.0"
-dependencies = [
- "axum",
- "bytes",
- "cargo",
- "chrono",
- "ctor",
- "flate2",
- "futures",
- "hex 0.4.3",
- "rand 0.8.5",
- "serde",
- "serde_json",
- "shuttle-service",
- "sqlx",
- "tar",
- "tempdir",
- "thiserror",
- "tokio",
- "tower",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -3389,6 +3376,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
 
 [[package]]
+name = "pipe"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1c7b8f27da217eb966df4c58d4159ea939431950ca03cf782c22bd7c5c1d8d75"
+dependencies = [
+ "crossbeam-channel",
+]
+
+[[package]]
 name = "pkcs1"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4419,6 +4415,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "shuttle-deployer"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "bytes",
+ "cargo",
+ "chrono",
+ "ctor",
+ "flate2",
+ "futures",
+ "hex 0.4.3",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "shuttle-service",
+ "sqlx",
+ "tar",
+ "tempdir",
+ "thiserror",
+ "tokio",
+ "tower",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "shuttle-proto"
 version = "0.4.0"
 dependencies = [
@@ -4461,6 +4483,7 @@ dependencies = [
  "async-trait",
  "axum",
  "cargo",
+ "cargo_metadata 0.15.0",
  "chrono",
  "futures",
  "hyper",
@@ -4468,6 +4491,7 @@ dependencies = [
  "libloading",
  "log",
  "paste",
+ "pipe",
  "portpicker",
  "regex",
  "rocket",

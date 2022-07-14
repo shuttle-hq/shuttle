@@ -1,5 +1,5 @@
 [package]
-name = "deployer"
+name = "shuttle-deployer"
 version = "0.1.0"
 edition = "2021"
 description = "Service with instances created per project for handling the compliation, loading, and execution of Shuttle services"

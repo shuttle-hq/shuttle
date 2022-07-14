@@ -5,11 +5,12 @@ use std::panic::AssertUnwindSafe;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context};
-use cargo::core::compiler::CompileMode;
+use cargo::core::compiler::{CompileMode, MessageFormat};
 use cargo::core::{Shell, Verbosity, Workspace};
 use cargo::ops::{compile, CompileOptions};
 use cargo::util::homedir;
 use cargo::Config;
+use cargo_metadata::Message;
 use libloading::{Library, Symbol};
 use log::trace;
 use shuttle_common::DeploymentId;
@@ -101,61 +102,87 @@ impl Loader {
 }
 
 /// Given a project directory path, builds the crate
-pub fn build_crate(project_path: &Path, buf: Box<dyn std::io::Write>) -> anyhow::Result<PathBuf> {
-    let mut shell = Shell::from_write(buf);
-    shell.set_verbosity(Verbosity::Normal);
+pub async fn build_crate(
+    project_path: &Path,
+    tx: UnboundedSender<Message>,
+) -> anyhow::Result<PathBuf> {
+    let (read, write) = pipe::pipe();
+    let project_path = project_path.to_owned();
 
-    let cwd = std::env::current_dir()
-        .with_context(|| "couldn't get the current directory of the process")?;
-    let homedir = homedir(&cwd).ok_or_else(|| {
-        anyhow!(
-            "Cargo couldn't find your home directory. \
+    let handle = tokio::spawn(async move {
+        let mut shell = Shell::from_write(Box::new(write));
+        shell.set_verbosity(Verbosity::Normal);
+        let cwd = std::env::current_dir()
+            .with_context(|| "couldn't get the current directory of the process")?;
+        let homedir = homedir(&cwd).ok_or_else(|| {
+            anyhow!(
+                "Cargo couldn't find your home directory. \
                  This probably means that $HOME was not set."
-        )
-    })?;
+            )
+        })?;
 
-    let config = Config::new(shell, cwd, homedir);
-    let manifest_path = project_path.join("Cargo.toml");
+        let config = Config::new(shell, cwd, homedir);
+        let manifest_path = project_path.join("Cargo.toml");
 
-    let mut ws = Workspace::new(&manifest_path, &config)?;
+        let mut ws = Workspace::new(&manifest_path, &config)?;
 
-    // Ensure a 'cdylib' will be built:
+        // Ensure a 'cdylib' will be built:
 
-    let current = ws.current_mut().map_err(|_| anyhow!("A Shuttle project cannot have a virtual manifest file - please ensure your Cargo.toml file specifies it as a library."))?;
-    if let Some(target) = current
-        .manifest_mut()
-        .targets_mut()
-        .iter_mut()
-        .find(|target| target.is_lib())
-    {
-        if !target.is_cdylib() {
-            *target = cargo::core::manifest::Target::lib_target(
-                target.name(),
-                vec![cargo::core::compiler::CrateType::Cdylib],
-                target.src_path().path().unwrap().to_path_buf(),
-                target.edition(),
-            );
-        }
-    } else {
-        return Err(anyhow!(
+        let current = ws.current_mut().map_err(|_| anyhow!("A Shuttle project cannot have a virtual manifest file - please ensure your Cargo.toml file specifies it as a library."))?;
+        if let Some(target) = current
+            .manifest_mut()
+            .targets_mut()
+            .iter_mut()
+            .find(|target| target.is_lib())
+        {
+            if !target.is_cdylib() {
+                *target = cargo::core::manifest::Target::lib_target(
+                    target.name(),
+                    vec![cargo::core::compiler::CrateType::Cdylib],
+                    target.src_path().path().unwrap().to_path_buf(),
+                    target.edition(),
+                );
+            }
+        } else {
+            return Err(anyhow!(
             "Your Shuttle project must be a library. Please add `[lib]` to your Cargo.toml file."
         ));
-    }
+        }
 
-    // Ensure `panic = "abort"` is not set:
+        // Ensure `panic = "abort"` is not set:
 
-    if let Some(profiles) = ws.profiles() {
-        for profile in profiles.get_all().values() {
-            if profile.panic.as_deref() == Some("abort") {
-                return Err(anyhow!("Your Shuttle project cannot have panics that abort. Please ensure your Cargo.toml does not contain `panic = \"abort\"` for any profiles."));
+        if let Some(profiles) = ws.profiles() {
+            for profile in profiles.get_all().values() {
+                if profile.panic.as_deref() == Some("abort") {
+                    return Err(anyhow!("Your Shuttle project cannot have panics that abort. Please ensure your Cargo.toml does not contain `panic = \"abort\"` for any profiles."));
+                }
             }
+        }
+
+        let mut opts = CompileOptions::new(&config, CompileMode::Build)?;
+        opts.build_config.message_format = MessageFormat::Json {
+            render_diagnostics: false,
+            short: false,
+            ansi: false,
+        };
+
+        let compilation = compile(&ws, &opts);
+
+        Ok(compilation?.cdylibs[0].path.clone())
+    });
+
+    for message in Message::parse_stream(read) {
+        let message = message.unwrap();
+
+        let done = matches!(message, Message::BuildFinished(_));
+        tx.send(message)?;
+
+        if done {
+            break;
         }
     }
 
-    let opts = CompileOptions::new(&config, CompileMode::Build)?;
-    let compilation = compile(&ws, &opts)?;
-
-    Ok(compilation.cdylibs[0].path.clone())
+    handle.await?
 }
 
 fn map_any_to_panic_string(a: Box<dyn Any>) -> String {

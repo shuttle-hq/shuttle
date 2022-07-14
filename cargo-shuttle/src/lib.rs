@@ -19,12 +19,13 @@ use cargo::core::resolver::CliFeatures;
 use cargo::core::Workspace;
 use cargo::ops::{CompileOptions, NewOptions, PackageOpts, Packages, TestOptions};
 use cargo_edit::{find, get_latest_dependency, registry_url};
+use cargo_metadata::Message;
 use colored::Colorize;
 use config::RequestContext;
 use factory::LocalFactory;
 use semver::{Version, VersionReq};
 use shuttle_service::loader::{build_crate, Loader};
-use tokio::sync::mpsc;
+use tokio::sync::mpsc::{self, UnboundedSender};
 use toml_edit::{value, Document, Item, Table};
 use uuid::Uuid;
 
@@ -210,7 +211,21 @@ impl Shuttle {
     async fn local_run(&self, run_args: RunArgs) -> Result<()> {
         trace!("starting a local run for a service: {run_args:?}");
 
-        let buf = Box::new(stdout());
+        let (tx, mut rx): (UnboundedSender<Message>, _) = mpsc::unbounded_channel();
+        tokio::spawn(async move {
+            while let Some(message) = rx.recv().await {
+                match message {
+                    Message::TextLine(line) => println!("{line}"),
+                    Message::CompilerMessage(message) => {
+                        if let Some(rendered) = message.message.rendered {
+                            println!("{rendered}");
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        });
+
         let working_directory = self.ctx.working_directory();
 
         trace!("building project");
@@ -219,7 +234,8 @@ impl Shuttle {
             "Building".bold().green(),
             working_directory.display()
         );
-        let so_path = build_crate(working_directory, buf)?;
+        let so_path = build_crate(working_directory, tx).await?;
+
         let loader = Loader::from_so_file(so_path)?;
 
         let mut factory = LocalFactory::new(self.ctx.project_name().clone())?;

@@ -59,10 +59,10 @@ api: .shuttle-api
 provisioner: .shuttle-provisioner
 
 up: images
-	$(DOCKER_COMPOSE_ENV) docker-compose -f $(DOCKER_COMPOSE_FILES) up -d
+	$(DOCKER_COMPOSE_ENV) docker-compose $(DOCKER_COMPOSE_FILES) up -d
 
 down:
-	$(DOCKER_COMPOSE_ENV) docker-compose -f $(DOCKER_COMPOSE_FILES) down
+	$(DOCKER_COMPOSE_ENV) docker-compose $(DOCKER_COMPOSE_FILES) down
 
 docker-compose.rendered.yml: docker-compose.yml
 	$(DOCKER_COMPOSE_ENV) docker-compose -f docker-compose.yml config > $@

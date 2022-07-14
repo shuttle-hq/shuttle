@@ -49,6 +49,9 @@ services:
           - node.hostname==provisioner
   db:
     image: "${CONTAINER_REGISTRY}/postgres:${POSTGRES_TAG}"
+    ports:
+      - 8002:8000
+      - 5432:5432
     restart: always
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}

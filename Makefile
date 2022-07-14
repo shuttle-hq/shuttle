@@ -21,7 +21,7 @@ ifdef PLATFORMS
 PLATFORM_FLAGS=--platform $(PLATFORMS)
 endif
 
-BUILDX_FLAGS=$(BUILDX_OP) $(PLATFORM_FLAGS) -f Containerfile $(CACHE_FLAGS)
+BUILDX_FLAGS=$(BUILDX_OP) $(PLATFORM_FLAGS) $(CACHE_FLAGS)
 
 TAG?=$(shell git describe --tags)
 
@@ -33,8 +33,8 @@ DOCKER_COMPOSE_FILES=-f docker-compose.yml -f docker-compose.dev.yml
 STACK=shuttle-dev
 endif
 
-POSTGRES_EXTRA_PATH ?= ./extras/postgres
-POSTGRES_TAG ?= latest
+POSTGRES_EXTRA_PATH?=./extras/postgres
+POSTGRES_TAG?=latest
 
 DOCKER_COMPOSE_ENV=CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) BACKEND_TAG=$(TAG) PROVISIONER_TAG=$(TAG)
 
@@ -50,6 +50,7 @@ postgres:
 	docker buildx build \
 	       --build-arg POSTGRES_TAG=$(POSTGRES_TAG) \
 	       --tag $(CONTAINER_REGISTRY)/postgres:$(POSTGRES_TAG) \
+	       $(BUILDX_FLAGS) \
 	       -f $(POSTGRES_EXTRA_PATH)/Containerfile \
 	       $(POSTGRES_EXTRA_PATH)
 
@@ -76,5 +77,6 @@ deploy: docker-compose.rendered.yml
 	       --tag $(CONTAINER_REGISTRY)/$(*):$(TAG) \
 	       --tag $(CONTAINER_REGISTRY)/$(*):latest \
 	       $(BUILDX_FLAGS) \
+	       -f Containerfile \
 	       .
 	touch $@

@@ -1060,6 +1060,7 @@ dependencies = [
  "serde_json",
  "shuttle-common",
  "shuttle-service",
+ "tempfile",
  "test-context",
  "tokio",
  "tokiotest-httpserver",

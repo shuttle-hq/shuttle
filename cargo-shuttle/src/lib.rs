@@ -84,15 +84,9 @@ impl Shuttle {
         // Interface with cargo to initialize new lib package for shuttle
         let path = args.path.clone();
         init::cargo_init(path.clone())?;
-        init::process_cargo_init(path.clone())?;
 
-        let framework = init::get_framework(&args);
-        match framework {
-            Some(framework) => {
-                init::framework_init(&path, framework)?;
-            },
-            None => {},
-        }
+        let framework = init::get_framework(&args).unwrap();
+        init::cargo_shuttle_init(path.clone(), framework)?;
 
         Ok(())
     }

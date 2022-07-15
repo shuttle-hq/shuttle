@@ -69,10 +69,12 @@ async fn framework_init() {
     let temp_dir = Builder::new().prefix("rocket-init").tempdir().unwrap();
     let temp_dir_path = temp_dir.path().to_owned();
 
-    cargo_shuttle_init_framework(temp_dir_path.clone()).await.unwrap();
+    cargo_shuttle_init_framework(temp_dir_path.clone())
+        .await
+        .unwrap();
 
     let cargo_toml = read_to_string(temp_dir_path.join("Cargo.toml")).unwrap();
-    
+
     // Expected: name = "rocket-initRANDOM_CHARS"
     assert!(cargo_toml.contains("name = \"rocket-init"));
     assert!(cargo_toml.contains("shuttle-service = { version = "));

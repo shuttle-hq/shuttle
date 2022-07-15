@@ -313,8 +313,6 @@ pub fn cargo_shuttle_init(path: PathBuf, framework: Box<dyn ShuttleInit>) -> Res
     );
 
     // Set framework-specific dependencies to the `dependencies` table
-    let lib_path = path.join("src").join("lib.rs");
-    let cargo_toml_path = path.join("Cargo.toml");
     framework.set_cargo_dependencies(
         &mut dependencies,
         &manifest_path,
@@ -323,11 +321,13 @@ pub fn cargo_shuttle_init(path: PathBuf, framework: Box<dyn ShuttleInit>) -> Res
     );
 
     // Truncate Cargo.toml and write the updated `Document` to it
+    let cargo_toml_path = path.join("Cargo.toml");
     let mut cargo_toml = File::create(cargo_toml_path.clone())?;
     cargo_doc["dependencies"] = Item::Table(dependencies);
     cargo_toml.write_all(cargo_doc.to_string().as_bytes())?;
 
     // Write boilerplate to `src/lib.rs` file
+    let lib_path = path.join("src").join("lib.rs");
     let boilerplate = framework.get_boilerplate_code_for_framework();
     if !boilerplate.is_empty() {
         write_lib_file(boilerplate, &lib_path)?;

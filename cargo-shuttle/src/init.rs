@@ -379,10 +379,7 @@ type GetDependencyVersionFn = fn(&str, &Path, &Url) -> String;
 /// This is a wrapper function for `cargo_edit::get_latest_dependency` function.
 fn get_latest_dependency_version(crate_name: &str, manifest_path: &Path, url: &Url) -> String {
     let latest_version = get_latest_dependency(crate_name, false, manifest_path, Some(url))
-        .unwrap_or_else(|_| panic!(
-            "Could not query the latest version of {}",
-            crate_name
-        ));
+        .unwrap_or_else(|_| panic!("Could not query the latest version of {}", crate_name));
     let latest_version = latest_version
         .version()
         .expect("No latest shuttle-service version available");

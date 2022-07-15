@@ -1,7 +1,13 @@
+use super::deploy_layer::{Log, LogRecorder, LogType};
+use super::log::Level;
 use super::{Built, QueueReceiver, RunSender, State};
 use crate::error::{Error, Result};
 
+use cargo_metadata::Message;
+use chrono::Utc;
+use serde_json::json;
 use shuttle_service::loader::build_crate;
+use tokio::sync::mpsc::{self, UnboundedSender};
 use tracing::{debug, error, info, instrument};
 
 use std::fmt;
@@ -29,7 +35,7 @@ const BUILDS_PATH: &str = "/tmp/shuttle-builds";
 /// when built.
 const MARKER_FILE_NAME: &str = ".shuttle-marker";
 
-pub async fn task(mut recv: QueueReceiver, run_send: RunSender) {
+pub async fn task(mut recv: QueueReceiver, run_send: RunSender, log_recorder: impl LogRecorder) {
     info!("Queue task started");
 
     while let Some(queued) = recv.recv().await {
@@ -38,9 +44,10 @@ pub async fn task(mut recv: QueueReceiver, run_send: RunSender) {
         info!("Queued deployment at the front of the queue: {}", name);
 
         let run_send_cloned = run_send.clone();
+        let log_recorder = log_recorder.clone();
 
         tokio::spawn(async move {
-            match queued.handle().await {
+            match queued.handle(log_recorder).await {
                 Ok(built) => promote_to_run(built, run_send_cloned).await,
                 Err(e) => error!("Error during building of deployment '{}' - {e}", name),
             }
@@ -60,8 +67,8 @@ pub struct Queued {
 }
 
 impl Queued {
-    #[instrument(skip(self), fields(name = self.name.as_str(), state = %State::Building))]
-    async fn handle(mut self) -> Result<Built> {
+    #[instrument(skip(self, log_recorder), fields(name = self.name.as_str(), state = %State::Building))]
+    async fn handle(mut self, log_recorder: impl LogRecorder) -> Result<Built> {
         info!("Fetching POSTed data");
 
         let mut vec = Vec::new();
@@ -81,11 +88,40 @@ impl Queued {
 
         info!("Building deployment");
 
-        let cargo_output_buf = Box::new(std::io::stdout()); // TODO: Redirect over WebSocket.
+        let (tx, mut rx): (UnboundedSender<Message>, _) = mpsc::unbounded_channel();
+        let name = self.name.clone();
+        tokio::spawn(async move {
+            while let Some(message) = rx.recv().await {
+                match message {
+                    Message::TextLine(line) => log_recorder.record(Log {
+                        name: name.clone(),
+                        state: State::Building,
+                        level: Level::Info,
+                        timestamp: Utc::now(),
+                        file: None,
+                        line: None,
+                        fields: json!({ "build_line": line }),
+                        r#type: LogType::Event,
+                    }),
+                    message => log_recorder.record(Log {
+                        name: name.clone(),
+                        state: State::Building,
+                        level: Level::Debug,
+                        timestamp: Utc::now(),
+                        file: None,
+                        line: None,
+                        fields: serde_json::to_value(message).unwrap(),
+                        r#type: LogType::Event,
+                    }),
+                }
+            }
+        });
 
         let project_path = project_path.canonicalize()?;
-        let so_path =
-            build_crate(&project_path, cargo_output_buf).map_err(|e| Error::Build(e.into()))?;
+        info!("building");
+        let so_path = build_crate(&project_path, tx)
+            .await
+            .map_err(|e| Error::Build(e.into()))?;
 
         if self.will_run_tests {
             info!("Running deployment's unit tests");

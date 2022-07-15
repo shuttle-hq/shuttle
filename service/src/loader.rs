@@ -171,16 +171,18 @@ pub async fn build_crate(
         Ok(compilation?.cdylibs[0].path.clone())
     });
 
-    for message in Message::parse_stream(read) {
-        let message = message.unwrap();
+    tokio::spawn(async move {
+        for message in Message::parse_stream(read) {
+            let message = message.unwrap();
 
-        let done = matches!(message, Message::BuildFinished(_));
-        tx.send(message)?;
+            let done = matches!(message, Message::BuildFinished(_));
+            tx.send(message).unwrap();
 
-        if done {
-            break;
+            if done {
+                break;
+            }
         }
-    }
+    });
 
     handle.await?
 }

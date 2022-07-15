@@ -5,6 +5,7 @@ edition = "2021"
 description = "Service with instances created per project for handling the compliation, loading, and execution of Shuttle services"
 
 [dependencies]
+cargo_metadata = "0.15.0"
 chrono = "0.4.19"
 thiserror = "1.0.24"
 futures = "0.3.7"

@@ -30,7 +30,7 @@ use super::{
 };
 
 /// Records logs for the deployment progress
-pub trait LogRecorder {
+pub trait LogRecorder: Clone + Send + 'static {
     fn record(&self, log: Log);
 }
 

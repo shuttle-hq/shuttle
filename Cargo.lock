@@ -4421,6 +4421,7 @@ dependencies = [
  "axum",
  "bytes",
  "cargo",
+ "cargo_metadata 0.15.0",
  "chrono",
  "ctor",
  "flate2",

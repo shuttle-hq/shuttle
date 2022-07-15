@@ -250,32 +250,24 @@ impl ShuttleInit for ShuttleInitNoOp {
 /// Returns a framework-specific struct that implements the trait `ShuttleInit`
 /// for writing framework-specific dependencies to `Cargo.toml` and generating
 /// boilerplate code in `src/lib.rs`.
-pub fn get_framework(init_args: &InitArgs) -> Option<Box<dyn ShuttleInit>> {
+pub fn get_framework(init_args: &InitArgs) -> Box<dyn ShuttleInit> {
     if init_args.axum {
-        return Some(
-            Box::new(ShuttleInitAxum)
-        );
+        return Box::new(ShuttleInitAxum);
     }
 
     if init_args.rocket {
-        return Some(
-            Box::new(ShuttleInitRocket)
-        );
+        return Box::new(ShuttleInitRocket);
     }
 
     if init_args.tide {
-        return Some(
-            Box::new(ShuttleInitTide)
-        );
+        return Box::new(ShuttleInitTide);
     }
 
     if init_args.tower {
-        return Some(
-            Box::new(ShuttleInitTower)
-        );
+        return Box::new(ShuttleInitTower);
     }
 
-    Some(Box::new(ShuttleInitNoOp))
+    Box::new(ShuttleInitNoOp)
 }
 
 /// Interoprates with `cargo` crate and calls `cargo init --libs [path]`.
@@ -458,7 +450,7 @@ mod shuttle_init_tests {
         ];
 
         for (framework, expected_framework_init) in frameworks.into_iter().zip(framework_inits) {
-            let framework_init = get_framework(&init_args_factory(framework)).unwrap();
+            let framework_init = get_framework(&init_args_factory(framework));
             assert_eq!(
                 framework_init.get_boilerplate_code_for_framework(),
                 expected_framework_init.get_boilerplate_code_for_framework(),

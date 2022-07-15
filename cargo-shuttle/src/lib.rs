@@ -86,7 +86,7 @@ impl Shuttle {
         init::cargo_init(path.clone())?;
 
         let framework = init::get_framework(&args);
-        init::cargo_shuttle_init(path.clone(), framework)?;
+        init::cargo_shuttle_init(path, framework)?;
 
         Ok(())
     }

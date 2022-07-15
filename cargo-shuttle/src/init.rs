@@ -1,6 +1,6 @@
 use std::fs::{read_to_string, File};
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::args::InitArgs;
 use anyhow::Result;
@@ -14,7 +14,7 @@ pub trait ShuttleInit {
     fn set_cargo_dependencies(
         &self,
         dependencies: &mut Table,
-        manifest_path: &PathBuf,
+        manifest_path: &Path,
         url: &Url,
         get_dependency_version_fn: GetDependencyVersionFn,
     );
@@ -27,15 +27,15 @@ impl ShuttleInit for ShuttleInitAxum {
     fn set_cargo_dependencies(
         &self,
         dependencies: &mut Table,
-        manifest_path: &PathBuf,
+        manifest_path: &Path,
         url: &Url,
         get_dependency_version_fn: GetDependencyVersionFn,
     ) {
         set_key_value_dependency_version(
             "axum",
             dependencies,
-            &manifest_path,
-            &url,
+            manifest_path,
+            url,
             get_dependency_version_fn,
         );
 
@@ -47,8 +47,8 @@ impl ShuttleInit for ShuttleInitAxum {
         set_key_value_dependency_version(
             "sync_wrapper",
             dependencies,
-            &manifest_path,
-            &url,
+            manifest_path,
+            url,
             get_dependency_version_fn,
         );
     }
@@ -78,15 +78,15 @@ impl ShuttleInit for ShuttleInitRocket {
     fn set_cargo_dependencies(
         &self,
         dependencies: &mut Table,
-        manifest_path: &PathBuf,
+        manifest_path: &Path,
         url: &Url,
         get_dependency_version_fn: GetDependencyVersionFn,
     ) {
         set_key_value_dependency_version(
             "rocket",
             dependencies,
-            &manifest_path,
-            &url,
+            manifest_path,
+            url,
             get_dependency_version_fn,
         );
 
@@ -122,7 +122,7 @@ impl ShuttleInit for ShuttleInitTide {
     fn set_cargo_dependencies(
         &self,
         dependencies: &mut Table,
-        manifest_path: &PathBuf,
+        manifest_path: &Path,
         url: &Url,
         get_dependency_version_fn: GetDependencyVersionFn,
     ) {
@@ -135,8 +135,8 @@ impl ShuttleInit for ShuttleInitTide {
         set_key_value_dependency_version(
             "tide",
             dependencies,
-            &manifest_path,
-            &url,
+            manifest_path,
+            url,
             get_dependency_version_fn,
         );
     }
@@ -161,7 +161,7 @@ impl ShuttleInit for ShuttleInitTower {
     fn set_cargo_dependencies(
         &self,
         dependencies: &mut Table,
-        manifest_path: &PathBuf,
+        manifest_path: &Path,
         url: &Url,
         get_dependency_version_fn: GetDependencyVersionFn,
     ) {
@@ -174,8 +174,8 @@ impl ShuttleInit for ShuttleInitTower {
         set_inline_table_dependency_version(
             "tower",
             dependencies,
-            &manifest_path,
-            &url,
+            manifest_path,
+            url,
             get_dependency_version_fn,
         );
 
@@ -184,8 +184,8 @@ impl ShuttleInit for ShuttleInitTower {
         set_inline_table_dependency_version(
             "hyper",
             dependencies,
-            &manifest_path,
-            &url,
+            manifest_path,
+            url,
             get_dependency_version_fn,
         );
 
@@ -236,7 +236,7 @@ impl ShuttleInit for ShuttleInitNoOp {
     fn set_cargo_dependencies(
         &self,
         _dependencies: &mut Table,
-        _manifest_path: &PathBuf,
+        _manifest_path: &Path,
         _url: &Url,
         _get_dependency_version_fn: GetDependencyVersionFn,
     ) {
@@ -321,8 +321,7 @@ pub fn cargo_shuttle_init(path: PathBuf, framework: Box<dyn ShuttleInit>) -> Res
     );
 
     // Truncate Cargo.toml and write the updated `Document` to it
-    let cargo_toml_path = path.join("Cargo.toml");
-    let mut cargo_toml = File::create(cargo_toml_path.clone())?;
+    let mut cargo_toml = File::create(cargo_toml_path)?;
     cargo_doc["dependencies"] = Item::Table(dependencies);
     cargo_toml.write_all(cargo_doc.to_string().as_bytes())?;
 
@@ -341,11 +340,11 @@ pub fn cargo_shuttle_init(path: PathBuf, framework: Box<dyn ShuttleInit>) -> Res
 fn set_key_value_dependency_version(
     crate_name: &str,
     dependencies: &mut Table,
-    manifest_path: &PathBuf,
+    manifest_path: &Path,
     url: &Url,
     get_dependency_version_fn: GetDependencyVersionFn,
 ) {
-    let dependency_version = get_dependency_version_fn(crate_name, &manifest_path, &url);
+    let dependency_version = get_dependency_version_fn(crate_name, manifest_path, url);
     dependencies[crate_name] = value(dependency_version);
 }
 
@@ -354,11 +353,11 @@ fn set_key_value_dependency_version(
 fn set_inline_table_dependency_version(
     crate_name: &str,
     dependencies: &mut Table,
-    manifest_path: &PathBuf,
+    manifest_path: &Path,
     url: &Url,
     get_dependency_version_fn: GetDependencyVersionFn,
 ) {
-    let dependency_version = get_dependency_version_fn(crate_name, &manifest_path, &url);
+    let dependency_version = get_dependency_version_fn(crate_name, manifest_path, url);
     dependencies[crate_name]["version"] = value(dependency_version);
 }
 
@@ -374,13 +373,13 @@ fn set_inline_table_dependency_features(
 }
 
 /// Abstract type for `get_latest_dependency_version` function.
-type GetDependencyVersionFn = fn(&str, &PathBuf, &Url) -> String;
+type GetDependencyVersionFn = fn(&str, &Path, &Url) -> String;
 
 /// Gets the latest version for a dependency of `crate_name`.
 /// This is a wrapper function for `cargo_edit::get_latest_dependency` function.
-fn get_latest_dependency_version(crate_name: &str, manifest_path: &PathBuf, url: &Url) -> String {
-    let latest_version = get_latest_dependency(crate_name, false, &manifest_path, Some(&url))
-        .expect(&format!(
+fn get_latest_dependency_version(crate_name: &str, manifest_path: &Path, url: &Url) -> String {
+    let latest_version = get_latest_dependency(crate_name, false, manifest_path, Some(url))
+        .unwrap_or_else(|_| panic!(
             "Could not query the latest version of {}",
             crate_name
         ));
@@ -392,8 +391,8 @@ fn get_latest_dependency_version(crate_name: &str, manifest_path: &PathBuf, url:
 }
 
 /// Writes `boilerplate` code to the specified `lib.rs` file path.
-pub fn write_lib_file(boilerplate: &'static str, lib_path: &PathBuf) -> Result<()> {
-    let mut lib_file = File::create(lib_path.clone())?;
+pub fn write_lib_file(boilerplate: &'static str, lib_path: &Path) -> Result<()> {
+    let mut lib_file = File::create(lib_path)?;
     lib_file.write_all(boilerplate.as_bytes())?;
 
     Ok(())
@@ -433,7 +432,7 @@ mod shuttle_init_tests {
 
     fn mock_get_latest_dependency_version(
         _crate_name: &str,
-        _manifest_path: &PathBuf,
+        _manifest_path: &Path,
         _url: &Url,
     ) -> String {
         "1.0".to_string()

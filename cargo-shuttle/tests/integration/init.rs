@@ -2,9 +2,10 @@ use std::{
     fs::read_to_string,
     path::{Path, PathBuf},
 };
-use tempfile::Builder;
 
 use cargo_shuttle::{Args, Command, CommandOutcome, InitArgs, ProjectArgs, Shuttle};
+use indoc::indoc;
+use tempfile::Builder;
 
 /// creates a `cargo-shuttle` init instance with some reasonable defaults set.
 async fn cargo_shuttle_init(path: PathBuf) -> anyhow::Result<CommandOutcome> {
@@ -50,57 +51,50 @@ async fn cargo_shuttle_init_framework(path: PathBuf) -> anyhow::Result<CommandOu
         .await
 }
 
-#[cfg(test)]
-mod init_integration_tests {
-    use indoc::indoc;
+#[tokio::test]
+async fn basic_init() {
+    let temp_dir = Builder::new().prefix("basic-init").tempdir().unwrap();
+    let temp_dir_path = temp_dir.path().to_owned();
 
-    use super::*;
+    cargo_shuttle_init(temp_dir_path.clone()).await.unwrap();
+    let cargo_toml = read_to_string(temp_dir_path.join("Cargo.toml")).unwrap();
 
-    #[tokio::test]
-    async fn basic_init() {
-        let temp_dir = Builder::new().prefix("basic-init").tempdir().unwrap();
-        let temp_dir_path = temp_dir.path().to_owned();
+    // Expected: name = "basic-initRANDOM_CHARS"
+    assert!(cargo_toml.contains("name = \"basic-init"));
+    assert!(cargo_toml.contains("shuttle-service = { version = "));
+}
 
-        cargo_shuttle_init(temp_dir_path.clone()).await.unwrap();
-        let cargo_toml = read_to_string(temp_dir_path.join("Cargo.toml")).unwrap();
+#[tokio::test]
+async fn framework_init() {
+    let temp_dir = Builder::new().prefix("rocket-init").tempdir().unwrap();
+    let temp_dir_path = temp_dir.path().to_owned();
+
+    cargo_shuttle_init_framework(temp_dir_path.clone()).await.unwrap();
+
+    let cargo_toml = read_to_string(temp_dir_path.join("Cargo.toml")).unwrap();
     
-        // Expected: name = "basic-initRANDOM_CHARS"
-        assert!(cargo_toml.contains("name = \"basic-init"));
-        assert!(cargo_toml.contains("shuttle-service = { version = "));
+    // Expected: name = "rocket-initRANDOM_CHARS"
+    assert!(cargo_toml.contains("name = \"rocket-init"));
+    assert!(cargo_toml.contains("shuttle-service = { version = "));
+    assert!(cargo_toml.contains("features = [\"web-rocket\"]"));
+    assert!(cargo_toml.contains("rocket = "));
+
+    let lib_file = read_to_string(temp_dir_path.join("src").join("lib.rs")).unwrap();
+    let expected = indoc! {r#"
+    #[macro_use]
+    extern crate rocket;
+    
+    #[get("/")]
+    fn index() -> &'static str {
+        "Hello, world!"
     }
+    
+    #[shuttle_service::main]
+    async fn rocket() -> shuttle_service::ShuttleRocket {
+        let rocket = rocket::build().mount("/hello", routes![index]);
+    
+        Ok(rocket)
+    }"#};
 
-    #[tokio::test]
-    async fn framework_init() {
-        let temp_dir = Builder::new().prefix("rocket-init").tempdir().unwrap();
-        let temp_dir_path = temp_dir.path().to_owned();
-
-        cargo_shuttle_init_framework(temp_dir_path.clone()).await.unwrap();
-
-        let cargo_toml = read_to_string(temp_dir_path.join("Cargo.toml")).unwrap();
-        
-        // Expected: name = "rocket-initRANDOM_CHARS"
-        assert!(cargo_toml.contains("name = \"rocket-init"));
-        assert!(cargo_toml.contains("shuttle-service = { version = "));
-        assert!(cargo_toml.contains("features = [\"web-rocket\"]"));
-        assert!(cargo_toml.contains("rocket = "));
-
-        let lib_file = read_to_string(temp_dir_path.join("src").join("lib.rs")).unwrap();
-        let expected = indoc! {r#"
-        #[macro_use]
-        extern crate rocket;
-        
-        #[get("/")]
-        fn index() -> &'static str {
-            "Hello, world!"
-        }
-        
-        #[shuttle_service::main]
-        async fn rocket() -> shuttle_service::ShuttleRocket {
-            let rocket = rocket::build().mount("/hello", routes![index]);
-        
-            Ok(rocket)
-        }"#};
-
-        assert_eq!(lib_file, expected);
-    }
+    assert_eq!(lib_file, expected);
 }

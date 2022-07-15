@@ -527,6 +527,13 @@ mod shuttle_init_tests {
         let manifest_path = PathBuf::new();
         let url = Url::parse("https://shuttle.rs").unwrap();
 
+        set_inline_table_dependency_version(
+            "shuttle-service",
+            dependencies, &manifest_path,
+            &url,
+            mock_get_latest_dependency_version,
+        );
+
         ShuttleInitAxum.set_cargo_dependencies(
             dependencies,
             &manifest_path,
@@ -551,6 +558,13 @@ mod shuttle_init_tests {
         let manifest_path = PathBuf::new();
         let url = Url::parse("https://shuttle.rs").unwrap();
 
+        set_inline_table_dependency_version(
+            "shuttle-service",
+            dependencies, &manifest_path,
+            &url,
+            mock_get_latest_dependency_version,
+        );
+
         ShuttleInitRocket.set_cargo_dependencies(
             dependencies,
             &manifest_path,
@@ -574,6 +588,13 @@ mod shuttle_init_tests {
         let manifest_path = PathBuf::new();
         let url = Url::parse("https://shuttle.rs").unwrap();
 
+        set_inline_table_dependency_version(
+            "shuttle-service",
+            dependencies, &manifest_path,
+            &url,
+            mock_get_latest_dependency_version,
+        );
+
         ShuttleInitTide.set_cargo_dependencies(
             dependencies,
             &manifest_path,
@@ -596,6 +617,13 @@ mod shuttle_init_tests {
         let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
         let manifest_path = PathBuf::new();
         let url = Url::parse("https://shuttle.rs").unwrap();
+
+        set_inline_table_dependency_version(
+            "shuttle-service",
+            dependencies, &manifest_path,
+            &url,
+            mock_get_latest_dependency_version,
+        );
 
         ShuttleInitTower.set_cargo_dependencies(
             dependencies,

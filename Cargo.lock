@@ -1049,6 +1049,7 @@ dependencies = [
  "dirs",
  "env_logger",
  "futures",
+ "indoc",
  "log",
  "portpicker",
  "reqwest",
@@ -1059,11 +1060,13 @@ dependencies = [
  "serde_json",
  "shuttle-common",
  "shuttle-service",
+ "tempfile",
  "test-context",
  "tokio",
  "tokiotest-httpserver",
  "toml",
  "toml_edit 0.14.4",
+ "url",
  "uuid",
  "webbrowser",
 ]
@@ -2556,6 +2559,12 @@ dependencies = [
  "hashbrown 0.12.1",
  "serde",
 ]
+
+[[package]]
+name = "indoc"
+version = "1.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "05a0bd019339e5d968b37855180087b7b9d512c5046fbd244cf8c95687927d6e"
 
 [[package]]
 name = "infer"

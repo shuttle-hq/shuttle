@@ -95,9 +95,21 @@ pub struct RunArgs {
     pub port: u16,
 }
 
-#[derive(Parser)]
+#[derive(Parser, Debug)]
 pub struct InitArgs {
-    /// the path to initialize a new shuttle project
+    /// Initialize with axum framework
+    #[clap(long, conflicts_with_all = &["rocket", "tide", "tower"])]
+    pub axum: bool,
+    /// Initialize with actix-web framework
+    #[clap(long, conflicts_with_all = &["axum", "tide", "tower"])]
+    pub rocket: bool,
+    /// Initialize with tide framework
+    #[clap(long, conflicts_with_all = &["axum", "rocket", "tower"])]
+    pub tide: bool,
+    /// Initialize with tower framework
+    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide"])]
+    pub tower: bool,
+    /// Path to initialize a new shuttle project
     #[clap(
         parse(try_from_os_str = parse_init_path),
         default_value = ".",

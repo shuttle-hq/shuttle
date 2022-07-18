@@ -1,8 +1,11 @@
 use axum::body::Body;
-use axum::extract::{Extension, Path, Query};
+use axum::extract::ws::WebSocket;
+use axum::extract::{ws, Extension, Path, Query};
 use axum::routing::{get, Router};
 use axum::{extract::BodyStream, Json};
+use chrono::{TimeZone, Utc};
 use futures::TryStreamExt;
+use shuttle_common::BuildLog;
 
 use crate::deployment::{DeploymentInfo, DeploymentManager, Queued};
 use crate::error::{Error, Result};
@@ -20,6 +23,11 @@ pub fn make_router(
             "/services/:name",
             get(get_service).post(post_service).delete(delete_service),
         )
+        .route(
+            "/services/:name/build-logs-subscribe",
+            get(get_build_logs_subscribe),
+        )
+        .route("/services/:name/build-logs", get(get_build_logs))
         .layer(Extension(persistence))
         .layer(Extension(deployment_manager))
 }
@@ -64,4 +72,48 @@ async fn delete_service(
     deployment_manager.kill(name).await;
 
     Ok(Json(old_info))
+}
+
+async fn get_build_logs(
+    Extension(persistence): Extension<Persistence>,
+    Path(name): Path<String>,
+) -> Result<Json<Vec<BuildLog>>> {
+    persistence.get_build_logs(&name).await.map(Json)
+}
+
+async fn get_build_logs_subscribe(
+    Extension(persistence): Extension<Persistence>,
+    Path(name): Path<String>,
+    ws_upgrade: ws::WebSocketUpgrade,
+) -> axum::response::Response {
+    ws_upgrade.on_upgrade(move |s| websocket_handler(s, persistence, name))
+}
+
+async fn websocket_handler(mut s: WebSocket, persistence: Persistence, name: String) {
+    let mut log_recv = persistence.get_build_log_subscriber();
+    let backlog = persistence.get_build_logs(&name).await.unwrap();
+    let mut last_timestamp = Utc.timestamp(0, 0);
+
+    for log in backlog {
+        let sent = s.send(ws::Message::Text(log.message)).await;
+        last_timestamp = log.timestamp;
+
+        // Client disconnected?
+        if sent.is_err() {
+            return;
+        }
+    }
+
+    while let Ok(msg) = log_recv.recv().await {
+        if msg.name == name && msg.timestamp > last_timestamp {
+            let sent = s.send(ws::Message::Text(msg.message)).await;
+
+            // Client disconnected?
+            if sent.is_err() {
+                return;
+            }
+        }
+    }
+
+    let _ = s.close().await;
 }

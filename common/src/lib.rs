@@ -213,3 +213,10 @@ pub struct LogItem {
     pub level: Level,
     pub target: String,
 }
+
+#[derive(Clone, Debug, serde::Serialize, PartialEq)]
+pub struct BuildLog {
+    pub name: String,
+    pub message: String,
+    pub timestamp: DateTime<Utc>,
+}

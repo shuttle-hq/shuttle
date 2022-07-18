@@ -4,9 +4,12 @@ use crate::error::Result;
 
 use std::path::Path;
 
-use serde_json::json;
+use chrono::{DateTime, Utc};
+use serde_json::{json, Value};
+use shuttle_common::BuildLog;
 use sqlx::migrate::MigrateDatabase;
 use sqlx::sqlite::{Sqlite, SqlitePool};
+use tokio::sync::broadcast::{self, Receiver, Sender};
 use tokio::sync::mpsc::{self, UnboundedSender};
 use tokio::task::JoinHandle;
 
@@ -16,6 +19,7 @@ const DB_PATH: &str = "deployer.sqlite";
 pub struct Persistence {
     pool: SqlitePool,
     log_send: UnboundedSender<deploy_layer::Log>,
+    build_log_send: Sender<BuildLog>,
 }
 
 impl Persistence {
@@ -59,6 +63,9 @@ impl Persistence {
         let (log_send, mut log_recv): (UnboundedSender<deploy_layer::Log>, _) =
             mpsc::unbounded_channel();
 
+        let (build_log_send, _) = broadcast::channel(32);
+        let build_log_send_clone = build_log_send.clone();
+
         let pool_cloned = pool.clone();
 
         // The logs are received on a non-async thread.
@@ -66,7 +73,17 @@ impl Persistence {
         let handle = tokio::spawn(async move {
             while let Some(log) = log_recv.recv().await {
                 match log.r#type {
-                    LogType::Event => insert_log(&pool_cloned, log).await.unwrap(),
+                    LogType::Event => {
+                        if log.state == State::Building {
+                            if let Some(build_log) = convert_b(&log) {
+                                build_log_send_clone
+                                    .send(build_log)
+                                    .expect("failed to broadcast build log");
+                            }
+                        }
+
+                        insert_log(&pool_cloned, log).await.unwrap();
+                    }
                     LogType::State => {
                         insert_log(
                             &pool_cloned,
@@ -88,7 +105,11 @@ impl Persistence {
             }
         });
 
-        let persistence = Self { pool, log_send };
+        let persistence = Self {
+            pool,
+            log_send,
+            build_log_send,
+        };
 
         (persistence, handle)
     }
@@ -135,6 +156,61 @@ impl Persistence {
     async fn get_deployment_logs(&self, name: &str) -> Result<Vec<Log>> {
         get_deployment_logs(&self.pool, name).await
     }
+
+    pub fn get_build_log_subscriber(&self) -> Receiver<BuildLog> {
+        self.build_log_send.subscribe()
+    }
+
+    pub async fn get_build_logs(&self, name: &str) -> Result<Vec<BuildLog>> {
+        let logs: Vec<Log> =
+            sqlx::query_as("SELECT * FROM logs WHERE name = ? OR state = ? ORDER BY timestamp")
+                .bind(name)
+                .bind(State::Building)
+                .fetch_all(&self.pool)
+                .await?;
+
+        let logs = logs.into_iter().filter_map(convert_a).collect();
+
+        Ok(logs)
+    }
+}
+
+fn convert_a(log: Log) -> Option<BuildLog> {
+    convert(&log.name, &log.timestamp, &log.fields)
+}
+
+fn convert_b(log: &deploy_layer::Log) -> Option<BuildLog> {
+    convert(&log.name, &log.timestamp, &log.fields)
+}
+
+fn convert(name: &str, timestamp: &DateTime<Utc>, fields: &Value) -> Option<BuildLog> {
+    if let Value::Object(ref map) = fields {
+        if let Some(message) = map.get("build_line") {
+            let build_log = BuildLog {
+                name: name.to_string(),
+                timestamp: timestamp.clone(),
+                message: message.as_str().unwrap().to_string(),
+            };
+
+            return Some(build_log);
+        }
+
+        if let Some(message) = map.get("message") {
+            if let Value::Object(ref m) = message {
+                if let Some(rendered) = m.get("rendered") {
+                    let build_log = BuildLog {
+                        name: name.to_string(),
+                        timestamp: timestamp.clone(),
+                        message: rendered.as_str().unwrap().to_string(),
+                    };
+
+                    return Some(build_log);
+                }
+            }
+        }
+    }
+
+    None
 }
 
 async fn update_deployment(pool: &SqlitePool, info: impl Into<DeploymentInfo>) -> Result<()> {
@@ -177,7 +253,7 @@ async fn insert_log(pool: &SqlitePool, log: impl Into<Log>) -> Result<()> {
 }
 
 async fn get_deployment_logs(pool: &SqlitePool, name: &str) -> Result<Vec<Log>> {
-    sqlx::query_as("SELECT * FROM logs WHERE name = ?")
+    sqlx::query_as("SELECT * FROM logs WHERE name = ? ORDER BY timestamp")
         .bind(name)
         .fetch_all(pool)
         .await
@@ -328,6 +404,71 @@ mod tests {
         assert!(!logs.is_empty(), "there should be three logs");
 
         assert_eq!(logs, vec![log_a1, log_a2]);
+    }
+
+    #[tokio::test]
+    async fn get_build_logs() {
+        let (p, _) = Persistence::new_in_memory().await;
+        let log_a1 = Log {
+            name: "a".to_string(),
+            timestamp: Utc::now(),
+            state: State::Queued,
+            level: Level::Info,
+            file: Some("file.rs".to_string()),
+            line: Some(5),
+            fields: json!({"message": "job queued"}),
+        };
+        let log_b = Log {
+            name: "b".to_string(),
+            timestamp: Utc::now(),
+            state: State::Queued,
+            level: Level::Info,
+            file: Some("file.rs".to_string()),
+            line: Some(5),
+            fields: json!({"message": "job queued"}),
+        };
+        let log_a2 = Log {
+            name: "a".to_string(),
+            timestamp: Utc::now(),
+            state: State::Building,
+            level: Level::Info,
+            file: None,
+            line: None,
+            fields: json!({"build_line": "Compiling rocket v0.5.0"}),
+        };
+        let log_a3 = Log {
+            name: "a".to_string(),
+            timestamp: Utc::now(),
+            state: State::Building,
+            level: Level::Warn,
+            file: None,
+            line: None,
+            fields: json!({"message": {"rendered": "unused Result"}}),
+        };
+
+        p.insert_log(log_a1).await.unwrap();
+        p.insert_log(log_b).await.unwrap();
+        p.insert_log(log_a2.clone()).await.unwrap();
+        p.insert_log(log_a3.clone()).await.unwrap();
+
+        let logs = p.get_build_logs("a").await.unwrap();
+        assert!(!logs.is_empty(), "there should be two logs");
+
+        assert_eq!(
+            logs,
+            vec![
+                BuildLog {
+                    name: "a".to_string(),
+                    timestamp: log_a2.timestamp.clone(),
+                    message: "Compiling rocket v0.5.0".to_string(),
+                },
+                BuildLog {
+                    name: "a".to_string(),
+                    timestamp: log_a3.timestamp.clone(),
+                    message: "unused Result".to_string(),
+                }
+            ]
+        );
     }
 
     #[tokio::test]

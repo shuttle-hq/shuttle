@@ -290,6 +290,7 @@ mod tests {
         recorder
     };
 
+    #[derive(Clone)]
     struct RecorderMock {
         states: Arc<Mutex<Vec<StateLog>>>,
     }
@@ -344,7 +345,7 @@ mod tests {
 
     #[tokio::test]
     async fn deployment_to_be_queued() {
-        let deployment_manager = DeploymentManager::new();
+        let deployment_manager = DeploymentManager::new(RECORDER.clone());
 
         deployment_manager
             .queue_push(Queued {
@@ -391,7 +392,7 @@ mod tests {
 
     #[tokio::test]
     async fn deployment_from_run() {
-        let deployment_manager = DeploymentManager::new();
+        let deployment_manager = DeploymentManager::new(RECORDER.clone());
 
         deployment_manager
             .run_push(Built {

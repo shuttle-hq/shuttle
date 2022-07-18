@@ -92,6 +92,8 @@ impl Queued {
         let name = self.name.clone();
         tokio::spawn(async move {
             while let Some(message) = rx.recv().await {
+                // TODO: change these to `info!(...)` as [valuable] support increases.
+                // Currently it is not possible to turn these serde `message`s into a `valuable`, but once it is the passing down of `log_recorder` should be removed.
                 match message {
                     Message::TextLine(line) => log_recorder.record(Log {
                         name: name.clone(),

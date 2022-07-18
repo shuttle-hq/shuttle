@@ -97,19 +97,19 @@ pub fn to_build_log(name: &str, timestamp: &DateTime<Utc>, fields: &Value) -> Op
             let build_log = BuildLog {
                 name: name.to_string(),
                 timestamp: timestamp.clone(),
-                message: message.as_str().unwrap().to_string(),
+                message: message.as_str()?.to_string(),
             };
 
             return Some(build_log);
         }
 
         if let Some(message) = map.get("message") {
-            if let Value::Object(ref m) = message {
-                if let Some(rendered) = m.get("rendered") {
+            if let Value::Object(ref message_object) = message {
+                if let Some(rendered) = message_object.get("rendered") {
                     let build_log = BuildLog {
                         name: name.to_string(),
                         timestamp: timestamp.clone(),
-                        message: rendered.as_str().unwrap().to_string(),
+                        message: rendered.as_str()?.to_string(),
                     };
 
                     return Some(build_log);

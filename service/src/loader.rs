@@ -171,6 +171,7 @@ pub async fn build_crate(
         Ok(compilation?.cdylibs[0].path.clone())
     });
 
+    // This needs to be on a separate thread, else deployer will block (reason currently unknown :D)
     tokio::spawn(async move {
         for message in Message::parse_stream(read) {
             let message = message.expect("to parse cargo message");

@@ -20,7 +20,8 @@
 //! **Warning** Don't log out sensitive info in functions with these annotations
 
 use chrono::{DateTime, Utc};
-use serde_json::json;
+use serde_json::{json, Value};
+use shuttle_common::BuildLog;
 use tracing::{field::Visit, span, Metadata, Subscriber};
 use tracing_subscriber::Layer;
 
@@ -82,6 +83,42 @@ impl From<Log> for DeploymentInfo {
             state: log.state,
         }
     }
+}
+
+impl From<&Log> for Option<BuildLog> {
+    fn from(log: &Log) -> Self {
+        to_build_log(&log.name, &log.timestamp, &log.fields)
+    }
+}
+
+pub fn to_build_log(name: &str, timestamp: &DateTime<Utc>, fields: &Value) -> Option<BuildLog> {
+    if let Value::Object(ref map) = fields {
+        if let Some(message) = map.get("build_line") {
+            let build_log = BuildLog {
+                name: name.to_string(),
+                timestamp: timestamp.clone(),
+                message: message.as_str().unwrap().to_string(),
+            };
+
+            return Some(build_log);
+        }
+
+        if let Some(message) = map.get("message") {
+            if let Value::Object(ref m) = message {
+                if let Some(rendered) = m.get("rendered") {
+                    let build_log = BuildLog {
+                        name: name.to_string(),
+                        timestamp: timestamp.clone(),
+                        message: rendered.as_str().unwrap().to_string(),
+                    };
+
+                    return Some(build_log);
+                }
+            }
+        }
+    }
+
+    None
 }
 
 #[derive(Debug, PartialEq)]

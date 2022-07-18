@@ -4,8 +4,7 @@ use crate::error::Result;
 
 use std::path::Path;
 
-use chrono::{DateTime, Utc};
-use serde_json::{json, Value};
+use serde_json::json;
 use shuttle_common::BuildLog;
 use sqlx::migrate::MigrateDatabase;
 use sqlx::sqlite::{Sqlite, SqlitePool};
@@ -75,7 +74,7 @@ impl Persistence {
                 match log.r#type {
                     LogType::Event => {
                         if log.state == State::Building {
-                            if let Some(build_log) = convert_b(&log) {
+                            if let Some(build_log) = Into::into(&log) {
                                 build_log_send_clone
                                     .send(build_log)
                                     .expect("failed to broadcast build log");
@@ -169,48 +168,10 @@ impl Persistence {
                 .fetch_all(&self.pool)
                 .await?;
 
-        let logs = logs.into_iter().filter_map(convert_a).collect();
+        let logs = logs.into_iter().filter_map(Into::into).collect();
 
         Ok(logs)
     }
-}
-
-fn convert_a(log: Log) -> Option<BuildLog> {
-    convert(&log.name, &log.timestamp, &log.fields)
-}
-
-fn convert_b(log: &deploy_layer::Log) -> Option<BuildLog> {
-    convert(&log.name, &log.timestamp, &log.fields)
-}
-
-fn convert(name: &str, timestamp: &DateTime<Utc>, fields: &Value) -> Option<BuildLog> {
-    if let Value::Object(ref map) = fields {
-        if let Some(message) = map.get("build_line") {
-            let build_log = BuildLog {
-                name: name.to_string(),
-                timestamp: timestamp.clone(),
-                message: message.as_str().unwrap().to_string(),
-            };
-
-            return Some(build_log);
-        }
-
-        if let Some(message) = map.get("message") {
-            if let Value::Object(ref m) = message {
-                if let Some(rendered) = m.get("rendered") {
-                    let build_log = BuildLog {
-                        name: name.to_string(),
-                        timestamp: timestamp.clone(),
-                        message: rendered.as_str().unwrap().to_string(),
-                    };
-
-                    return Some(build_log);
-                }
-            }
-        }
-    }
-
-    None
 }
 
 async fn update_deployment(pool: &SqlitePool, info: impl Into<DeploymentInfo>) -> Result<()> {

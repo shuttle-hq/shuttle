@@ -7,9 +7,9 @@ use std::{
 };
 
 use chrono::{DateTime, Utc};
-use log::Level;
 use rocket::Responder;
 use serde::{Deserialize, Serialize};
+use tracing::log::Level;
 use uuid::Uuid;
 
 use crate::project::ProjectName;
@@ -43,7 +43,7 @@ pub struct DeploymentMeta {
     pub created_at: DateTime<Utc>,
 }
 
-impl DeploymentMeta {
+impl DeploymentMeta  {
     pub fn queued(fqdn: &str, project: ProjectName) -> Self {
         Self::new(fqdn, project, DeploymentStateMeta::Queued)
     }
@@ -210,6 +210,18 @@ impl std::error::Error for DeploymentApiError {}
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct LogItem {
     pub body: String,
+    #[serde(with = "TracingLevelDef")]
     pub level: Level,
     pub target: String,
 }
+
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "Level")]
+enum TracingLevelDef {
+    Error = 1,
+    Warn,
+    Info,
+    Debug,
+    Trace,
+}
+

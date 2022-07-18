@@ -42,7 +42,7 @@ pub(crate) async fn start(
 
     let server = Server::bind(&socket_address).serve(make_svc);
 
-    log::debug!("starting proxy server: {}", &socket_address);
+    tracing::log::debug!("starting proxy server: {}", &socket_address);
 
     if let Err(e) = server.await {
         eprintln!("server error: {}", e);
@@ -91,15 +91,15 @@ async fn handle(
         Err(error) => {
             match error {
                 ProxyError::InvalidUri(e) => {
-                    log::warn!("error while handling request in reverse proxy: {}", e);
+                    tracing::log::warn!("error while handling request in reverse proxy: {}", e);
                 }
                 ProxyError::HyperError(e) => {
-                    log::warn!("error while handling request in reverse proxy: {}", e);
+                    tracing::log::warn!("error while handling request in reverse proxy: {}", e);
                 }
                 ProxyError::ForwardHeaderError => {
-                    log::warn!("error while handling request in reverse proxy: 'fwd header error'");
+                    tracing::log::warn!("error while handling request in reverse proxy: 'fwd header error'");
                 }
-                ProxyError::UpgradeError(e) => log::warn!(
+                ProxyError::UpgradeError(e) => tracing::log::warn!(
                     "error while handling request needing upgrade in reverse proxy: {}",
                     e
                 ),

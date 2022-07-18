@@ -29,7 +29,7 @@ use toml_edit::Document;
 use uuid::Uuid;
 
 #[macro_use]
-extern crate log;
+extern crate tracing;
 
 use shuttle_common::DeploymentStateMeta;
 

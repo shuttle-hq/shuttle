@@ -1047,10 +1047,8 @@ dependencies = [
  "colored",
  "crossterm",
  "dirs",
- "env_logger",
  "futures",
  "indoc",
- "log",
  "portpicker",
  "reqwest",
  "reqwest-middleware",
@@ -1066,6 +1064,7 @@ dependencies = [
  "tokiotest-httpserver",
  "toml",
  "toml_edit 0.14.4",
+ "tracing",
  "url",
  "uuid",
  "webbrowser",
@@ -4320,14 +4319,12 @@ dependencies = [
  "cargo-util",
  "chrono",
  "clap",
- "env_logger",
  "fqdn",
  "futures",
  "hyper",
  "hyper-reverse-proxy",
  "lazy_static",
  "libloading",
- "log",
  "rand 0.8.5",
  "rocket",
  "serde",
@@ -4338,6 +4335,8 @@ dependencies = [
  "tokio",
  "toml",
  "tonic",
+ "tracing",
+ "tracing-subscriber",
  "uuid",
 ]
 
@@ -4360,10 +4359,11 @@ dependencies = [
  "anyhow",
  "chrono",
  "lazy_static",
- "log",
  "rocket",
  "serde",
  "serde_json",
+ "tracing",
+ "tracing-test",
  "uuid",
 ]
 
@@ -4415,7 +4415,6 @@ dependencies = [
  "hyper",
  "lazy_static",
  "libloading",
- "log",
  "paste",
  "portpicker",
  "regex",
@@ -4428,6 +4427,7 @@ dependencies = [
  "tide",
  "tokio",
  "tower",
+ "tracing",
  "uuid",
 ]
 
@@ -5352,13 +5352,13 @@ dependencies = [
 
 [[package]]
 name = "tracing-subscriber"
-version = "0.3.11"
+version = "0.3.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4bc28f93baff38037f64e6f43d34cfa1605f27a49c34e8a04c5e78b0babf2596"
+checksum = "3a713421342a5a666b7577783721d3117f1b69a393df803ee17bb73b1e122a59"
 dependencies = [
  "ansi_term",
- "lazy_static",
  "matchers",
+ "once_cell",
  "regex",
  "sharded-slab",
  "smallvec",
@@ -5366,6 +5366,29 @@ dependencies = [
  "tracing",
  "tracing-core",
  "tracing-log",
+]
+
+[[package]]
+name = "tracing-test"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f6992d8a98f570be1c729fe8b6f464fb18c4117054c10f1f952c22d533b48a74"
+dependencies = [
+ "lazy_static",
+ "tracing-core",
+ "tracing-subscriber",
+ "tracing-test-macro",
+]
+
+[[package]]
+name = "tracing-test-macro"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "719fa6c65bada6a7a3b8466702ec6fb4c4189b69339f78c9e597f796e493712e"
+dependencies = [
+ "lazy_static",
+ "quote",
+ "syn",
 ]
 
 [[package]]

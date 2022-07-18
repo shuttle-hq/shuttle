@@ -302,7 +302,7 @@ impl UserDirectory {
             users: RwLock::new(users),
         };
 
-        log::debug!("initialising user directory: {:#?}", &directory);
+        tracing::debug!("initialising user directory: {:#?}", &directory);
 
         Ok(directory)
     }
@@ -311,7 +311,7 @@ impl UserDirectory {
         match std::env::var("SHUTTLE_USERS_TOML") {
             Ok(val) => val.into(),
             Err(_) => {
-                log::debug!("could not find environment variable `SHUTTLE_USERS_TOML`, defaulting to MANIFEST_DIR");
+                tracing::debug!("could not find environment variable `SHUTTLE_USERS_TOML`, defaulting to MANIFEST_DIR");
                 let manifest_path: PathBuf = env!("CARGO_MANIFEST_DIR").into();
                 manifest_path.join("users.toml")
             }

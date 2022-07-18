@@ -173,14 +173,8 @@ pub async fn build_crate(
 
     tokio::spawn(async move {
         for message in Message::parse_stream(read) {
-            let message = message.unwrap();
-
-            let done = matches!(message, Message::BuildFinished(_));
-            tx.send(message).unwrap();
-
-            if done {
-                break;
-            }
+            let message = message.expect("to parse cargo message");
+            tx.send(message).expect("to send cargo message on channel");
         }
     });
 

@@ -26,10 +26,8 @@ use semver::{Version, VersionReq};
 use shuttle_service::loader::{build_crate, Loader};
 use tokio::sync::mpsc;
 use toml_edit::{value, Document, Item, Table};
+use tracing::trace;
 use uuid::Uuid;
-
-#[macro_use]
-extern crate log;
 
 use shuttle_common::DeploymentStateMeta;
 

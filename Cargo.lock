@@ -1037,7 +1037,6 @@ dependencies = [
  "colored",
  "crossterm",
  "dirs",
- "env_logger",
  "futures",
  "log",
  "portpicker",
@@ -1055,6 +1054,8 @@ dependencies = [
  "tokiotest-httpserver",
  "toml",
  "toml_edit 0.14.4",
+ "tracing",
+ "tracing-subscriber",
  "uuid",
  "webbrowser",
 ]

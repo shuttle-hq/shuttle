@@ -12,6 +12,7 @@ use reqwest_retry::RetryTransientMiddleware;
 use shuttle_common::project::ProjectName;
 use shuttle_common::{ApiKey, ApiUrl, DeploymentMeta, DeploymentStateMeta, SHUTTLE_PROJECT_HEADER};
 use tokio::time::sleep;
+use tracing::error;
 
 use crate::print;
 
@@ -33,11 +34,12 @@ pub(crate) async fn auth(mut api_url: ApiUrl, username: String) -> Result<ApiKey
         return Ok(response_text);
     }
 
-    Err(anyhow!(
-        "status: {}, body: {}",
-        response_status,
-        response_text
-    ))
+    error!(
+        text = response_text,
+        status = %response_status,
+        "failed to authenicate with server"
+    );
+    Err(anyhow!("failed to authenticate with server",))
 }
 
 pub(crate) async fn delete(
@@ -87,11 +89,12 @@ pub(crate) async fn shuttle_version(mut api_url: ApiUrl) -> Result<String> {
     if response_status == StatusCode::OK {
         Ok(res.text().await?)
     } else {
-        Err(anyhow!(
-            "status: {}, body: {}",
-            response_status,
-            res.text().await?
-        ))
+        error!(
+            text = res.text().await?,
+            status = %response_status,
+            "failed to get shuttle version from server"
+        );
+        Err(anyhow!("failed to get shuttle version from server",))
     }
 }
 
@@ -220,6 +223,12 @@ async fn to_api_result(res: Response) -> Result<DeploymentMeta> {
     let text = res.text().await?;
     match serde_json::from_str::<DeploymentMeta>(&text) {
         Ok(meta) => Ok(meta),
-        Err(_) => Err(anyhow!("{}", text)),
+        Err(error) => {
+            error!(
+                error = &error as &dyn std::error::Error,
+                text, "failed to parse deployment meta"
+            );
+            Err(anyhow!("could not parse server response"))
+        }
     }
 }

@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
+use shuttle_common::BuildLog;
 
-use super::State;
+use super::{deploy_layer::to_build_log, State};
 
 #[derive(Clone, Debug, PartialEq, sqlx::FromRow)]
 pub struct Log {
@@ -20,4 +21,10 @@ pub enum Level {
     Info,
     Warn,
     Error,
+}
+
+impl From<Log> for Option<BuildLog> {
+    fn from(log: Log) -> Self {
+        to_build_log(&log.name, &log.timestamp, &log.fields)
+    }
 }

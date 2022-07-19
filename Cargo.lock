@@ -1065,6 +1065,7 @@ dependencies = [
  "toml",
  "toml_edit 0.14.4",
  "tracing",
+ "tracing-subscriber",
  "url",
  "uuid",
  "webbrowser",

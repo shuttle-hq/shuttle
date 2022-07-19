@@ -1,15 +1,16 @@
 error: shuttle_service::main functions need to return a first class service or 'Result<impl Service, shuttle_service::Error>
-
-         = help: See the docs for services with first class support
-         = note: https://docs.rs/shuttle-service/latest/shuttle_service/attr.main.html#shuttle-supported-services
-
  --> tests/ui/return-tuple.rs:2:28
   |
 2 | async fn return_tuple() -> (String, bool) {}
   |                            ^^^^^^^^^^^^^^
-
-error[E0601]: `main` function not found in crate `$CRATE`
- --> tests/ui/return-tuple.rs:2:45
   |
-2 | async fn return_tuple() -> (String, bool) {}
-  |                                             ^ consider adding a `main` function to `$DIR/tests/ui/return-tuple.rs`
+  = help: See the docs for services with first class support
+  = note: https://docs.rs/shuttle-service/latest/shuttle_service/attr.main.html#shuttle-supported-services
+
+error[E0433]: failed to resolve: use of undeclared crate or module `shuttle_service`
+ --> tests/ui/return-tuple.rs:1:1
+  |
+1 | #[shuttle_codegen::main]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^ use of undeclared crate or module `shuttle_service`
+  |
+  = note: this error originates in the attribute macro `shuttle_codegen::main` (in Nightly builds, run with -Z macro-backtrace for more info)

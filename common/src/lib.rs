@@ -218,10 +218,15 @@ pub struct LogItem {
 #[derive(Serialize, Deserialize)]
 #[serde(remote = "Level")]
 enum TracingLevelDef {
+    #[serde(alias = "ERROR")]
     Error = 1,
+    #[serde(alias = "WARN")]
     Warn,
+    #[serde(alias = "INFO")]
     Info,
+    #[serde(alias = "DEBUG")]
     Debug,
+    #[serde(alias = "TRACE")]
     Trace,
 }
 

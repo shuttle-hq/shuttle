@@ -220,6 +220,6 @@ async fn to_api_result(res: Response) -> Result<DeploymentMeta> {
     let text = res.text().await?;
     match serde_json::from_str::<DeploymentMeta>(&text) {
         Ok(meta) => Ok(meta),
-        Err(_) => Err(anyhow!("{}", text)),
+        Err(e) => Err(anyhow!("Couldn't deserialize response text to DeploymentMeta struct! Response text: {}", text).context(e)),
     }
 }

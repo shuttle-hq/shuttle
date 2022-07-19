@@ -21,7 +21,7 @@
 //! Now that shuttle is installed, you can create your first project using:
 //!
 //! ```bash
-//! cargo shuttle init my-rocket-app
+//! $ cargo shuttle init my-rocket-app
 //! ```
 //!
 //! By looking at the `Cargo.toml` file of the created project you will see the crate has a `cdylib` type.

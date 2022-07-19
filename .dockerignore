@@ -1,6 +1,8 @@
 **/target/
-Containerfile
-Containerfile.dev
+**/*Containerfile*
 terraform/
 examples/
-.cargo/
+**/.cargo/
+**/docker/
+**/*.md
+Makefile

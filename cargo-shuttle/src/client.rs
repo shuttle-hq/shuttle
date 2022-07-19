@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::Write;
 use std::fs::File;
 use std::io::Read;
 use std::time::Duration;
@@ -14,11 +15,10 @@ use tokio::time::sleep;
 
 use crate::print;
 
-pub(crate) async fn auth(api_url: ApiUrl, username: String) -> Result<ApiKey> {
+pub(crate) async fn auth(mut api_url: ApiUrl, username: String) -> Result<ApiKey> {
     let client = get_retry_client();
-    let mut api_url = api_url;
 
-    api_url.push_str(&format!("/users/{}", username));
+    let _ = write!(api_url, "/users/{}", username);
 
     let res: Response = client
         .post(api_url)
@@ -40,11 +40,14 @@ pub(crate) async fn auth(api_url: ApiUrl, username: String) -> Result<ApiKey> {
     ))
 }
 
-pub(crate) async fn delete(api_url: ApiUrl, api_key: &ApiKey, project: &ProjectName) -> Result<()> {
+pub(crate) async fn delete(
+    mut api_url: ApiUrl,
+    api_key: &ApiKey,
+    project: &ProjectName,
+) -> Result<()> {
     let client = get_retry_client();
-    let mut api_url = api_url;
 
-    api_url.push_str(&format!("/projects/{}", project));
+    let _ = write!(api_url, "/projects/{}", project);
     let res: Response = client
         .delete(api_url)
         .basic_auth(api_key, Some(""))
@@ -105,20 +108,19 @@ pub(crate) async fn logs(api_url: ApiUrl, api_key: &ApiKey, project: &ProjectNam
 }
 
 async fn get_deployment_meta(
-    api_url: ApiUrl,
+    mut api_url: ApiUrl,
     api_key: &ApiKey,
     project: &ProjectName,
     client: &ClientWithMiddleware,
 ) -> Result<DeploymentMeta> {
-    let mut url = api_url;
-    url.push_str(&format!("/projects/{}", project));
+    let _ = write!(api_url, "/projects/{}", project);
 
     let res: Response = client
-        .get(url)
+        .get(api_url)
         .basic_auth(api_key.clone(), Some(""))
         .send()
         .await
-        .context("failed to get deployment from the Shuttle server")?;
+        .context("failed to get deployment metadata")?;
 
     to_api_result(res).await
 }
@@ -135,9 +137,9 @@ pub(crate) async fn deploy(
     api_url: ApiUrl,
     api_key: &ApiKey,
     project: &ProjectName,
-) -> Result<()> {
+) -> Result<DeploymentStateMeta> {
     let mut url = api_url.clone();
-    url.push_str(&format!("/projects/{}", project.as_str()));
+    let _ = write!(url, "/projects/{}", project.as_str());
 
     let client = get_retry_client();
 
@@ -175,11 +177,11 @@ pub(crate) async fn deploy(
 
     println!("{}", &deployment_meta);
 
-    Ok(())
+    Ok(deployment_meta.state)
 }
 
 pub(crate) async fn secrets(
-    api_url: ApiUrl,
+    mut api_url: ApiUrl,
     api_key: &ApiKey,
     project: &ProjectName,
     secrets: HashMap<String, String>,
@@ -188,13 +190,12 @@ pub(crate) async fn secrets(
         return Ok(());
     }
 
-    let mut url = api_url.clone();
-    url.push_str(&format!("/projects/{}/secrets/", project.as_str()));
+    let _ = write!(api_url, "/projects/{}/secrets/", project.as_str());
 
     let client = get_retry_client();
 
     client
-        .post(url)
+        .post(api_url)
         .body(serde_json::to_string(&secrets)?)
         .header(SHUTTLE_PROJECT_HEADER, serde_json::to_string(&project)?)
         .basic_auth(api_key.clone(), Some(""))

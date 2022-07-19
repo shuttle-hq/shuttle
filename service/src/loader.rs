@@ -11,31 +11,34 @@ use cargo::ops::{compile, CompileOptions};
 use cargo::util::homedir;
 use cargo::Config;
 use libloading::{Library, Symbol};
+use log::trace;
 use shuttle_common::DeploymentId;
 use thiserror::Error as ThisError;
 use tokio::sync::mpsc::UnboundedSender;
 
 use futures::FutureExt;
 
+use crate::error::CustomError;
+use crate::Bootstrapper;
 use crate::{
     logger::{Log, Logger},
-    Error, Factory, ServeHandle, Service,
+    Error, Factory, ServeHandle,
 };
 
 const ENTRYPOINT_SYMBOL_NAME: &[u8] = b"_create_service\0";
 
-type CreateService = unsafe extern "C" fn() -> *mut dyn Service;
+type CreateService = unsafe extern "C" fn() -> *mut Bootstrapper;
 
 #[derive(Debug, ThisError)]
 pub enum LoaderError {
-    #[error("failed to load library")]
+    #[error("failed to load library: {0}")]
     Load(libloading::Error),
     #[error("failed to find the shuttle entrypoint. Did you use the provided shuttle macros?")]
     GetEntrypoint(libloading::Error),
 }
 
 pub struct Loader {
-    service: Box<dyn Service>,
+    bootstrapper: Bootstrapper,
     so: Library,
 }
 
@@ -43,8 +46,9 @@ impl Loader {
     /// Dynamically load from a `.so` file a value of a type implementing the
     /// [`Service`] trait. Relies on the `.so` library having an ``extern "C"`
     /// function called [`ENTRYPOINT_SYMBOL_NAME`], likely automatically generated
-    /// using the [`shuttle_service::declare_service`] macro.
+    /// using the [`shuttle_service::main`] macro.
     pub fn from_so_file<P: AsRef<OsStr>>(so_path: P) -> Result<Self, LoaderError> {
+        trace!("loading {:?}", so_path.as_ref().to_str());
         unsafe {
             let lib = Library::new(so_path).map_err(LoaderError::Load)?;
 
@@ -54,7 +58,7 @@ impl Loader {
             let raw = entrypoint();
 
             Ok(Self {
-                service: Box::from_raw(raw),
+                bootstrapper: *Box::from_raw(raw),
                 so: lib,
             })
         }
@@ -67,39 +71,32 @@ impl Loader {
         tx: UnboundedSender<Log>,
         deployment_id: DeploymentId,
     ) -> Result<(ServeHandle, Library), Error> {
-        let mut service = self.service;
+        let mut bootstrapper = self.bootstrapper;
         let logger = Box::new(Logger::new(tx, deployment_id));
 
-        AssertUnwindSafe(service.build(factory, logger))
+        AssertUnwindSafe(bootstrapper.bootstrap(factory, logger))
             .catch_unwind()
             .await
-            .map_err(|e| Error::BuildPanic(map_any_to_panic_string(&*e)))??;
+            .map_err(|e| Error::BuildPanic(map_any_to_panic_string(e)))??;
 
-        // channel used by task spawned below to indicate whether or not panic
-        // occurred in `service.bind` call
-        let (send, recv) = tokio::sync::oneshot::channel();
+        trace!("bootstrapping done");
 
         // Start service on this side of the FFI
         let handle = tokio::spawn(async move {
-            let bound = AssertUnwindSafe(async { service.bind(addr) })
-                .catch_unwind()
-                .await;
+            bootstrapper.into_handle(addr)?.await.map_err(|e| {
+                if e.is_panic() {
+                    let mes = e.into_panic();
 
-            let payload = if let Err(e) = &bound {
-                Err(Error::BindPanic(map_any_to_panic_string(&**e)))
-            } else {
-                Ok(())
-            };
-            send.send(payload).unwrap();
-
-            if let Ok(b) = bound {
-                b?.await?
-            } else {
-                Err(anyhow!("panic in `Service::bound`"))
-            }
+                    Error::BindPanic(map_any_to_panic_string(mes))
+                } else {
+                    Error::Custom(CustomError::new(e))
+                }
+            })?
         });
 
-        recv.await.unwrap().map(|_| (handle, self.so))
+        trace!("creating handle done");
+
+        Ok((handle, self.so))
     }
 }
 
@@ -120,12 +117,37 @@ pub fn build_crate(project_path: &Path, buf: Box<dyn std::io::Write>) -> anyhow:
     let config = Config::new(shell, cwd, homedir);
     let manifest_path = project_path.join("Cargo.toml");
 
-    let ws = Workspace::new(&manifest_path, &config)?;
+    let mut ws = Workspace::new(&manifest_path, &config)?;
+
+    // Ensure a 'cdylib' will be built:
+
+    let current = ws.current_mut().map_err(|_| anyhow!("A Shuttle project cannot have a virtual manifest file - please ensure your Cargo.toml file specifies it as a library."))?;
+    if let Some(target) = current
+        .manifest_mut()
+        .targets_mut()
+        .iter_mut()
+        .find(|target| target.is_lib())
+    {
+        if !target.is_cdylib() {
+            *target = cargo::core::manifest::Target::lib_target(
+                target.name(),
+                vec![cargo::core::compiler::CrateType::Cdylib],
+                target.src_path().path().unwrap().to_path_buf(),
+                target.edition(),
+            );
+        }
+    } else {
+        return Err(anyhow!(
+            "Your Shuttle project must be a library. Please add `[lib]` to your Cargo.toml file."
+        ));
+    }
+
+    // Ensure `panic = "abort"` is not set:
 
     if let Some(profiles) = ws.profiles() {
         for profile in profiles.get_all().values() {
             if profile.panic.as_deref() == Some("abort") {
-                return Err(anyhow!("a Shuttle project cannot have panics that abort. Please ensure your Cargo.toml does not contain `panic = \"abort\"` for any profiles"));
+                return Err(anyhow!("Your Shuttle project cannot have panics that abort. Please ensure your Cargo.toml does not contain `panic = \"abort\"` for any profiles."));
             }
         }
     }
@@ -133,14 +155,10 @@ pub fn build_crate(project_path: &Path, buf: Box<dyn std::io::Write>) -> anyhow:
     let opts = CompileOptions::new(&config, CompileMode::Build)?;
     let compilation = compile(&ws, &opts)?;
 
-    if compilation.cdylibs.is_empty() {
-        return Err(anyhow!("a cdylib was not created. Try adding the following to the Cargo.toml of the service:\n[lib]\ncrate-type = [\"cdylib\"]\n"));
-    }
-
     Ok(compilation.cdylibs[0].path.clone())
 }
 
-fn map_any_to_panic_string(a: &dyn Any) -> String {
+fn map_any_to_panic_string(a: Box<dyn Any>) -> String {
     a.downcast_ref::<&str>()
         .map(|x| x.to_string())
         .unwrap_or_else(|| "<no panic message>".to_string())

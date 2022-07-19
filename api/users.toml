@@ -1,4 +1,4 @@
-[ci-test]
+[test-key]
 name = 'ci'
 projects = [
     'hello-world-rocket-app',
@@ -8,4 +8,5 @@ projects = [
     'authentication-rocket-app',
     'hello-world-tide-app',
     'hello-world-tower-app',
+    'postgres-tide-app',
 ]

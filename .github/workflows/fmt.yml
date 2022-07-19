@@ -11,8 +11,8 @@ jobs:
   fmt_test:
     runs-on: ubuntu-latest
     steps:
-      - uses: shuttle-hq/checkout@v2
-      - uses: shuttle-hq/toolchain@v1
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           override: true
@@ -21,8 +21,8 @@ jobs:
   cargo_sort_test:
     runs-on: ubuntu-latest
     steps:
-      - uses: shuttle-hq/checkout@v2
-      - uses: shuttle-hq/toolchain@v1
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           override: true
@@ -36,11 +36,27 @@ jobs:
         features: ["web-axum", "web-rocket", "web-tide", "web-tower"]
     runs-on: ubuntu-latest
     steps:
-      - uses: shuttle-hq/checkout@v2
-      - uses: shuttle-hq/toolchain@v1
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           override: true
           components: clippy
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Run test with ${{ matrix.features}}
-        run: cargo clippy --tests --all-targets --features="codegen,loader,sqlx-integration,sqlx-postgres,secrets,${{ matrix.features }}" --no-deps -- --D warnings
+        run: |
+          cargo clippy --tests \
+                       --all-targets \
+                       --features="codegen,loader,sqlx-integration,sqlx-postgres,secrets,${{ matrix.features }}" \
+                       --no-deps -- \
+                       --D warnings \
+                       -A clippy::let-unit-value \
+                       -A clippy::format-push-string

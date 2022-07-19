@@ -10,13 +10,13 @@ use anyhow::{anyhow, Context as AnyhowContext};
 use chrono::{DateTime, Utc};
 use futures::prelude::*;
 use libloading::Library;
-use proto::provisioner::provisioner_client::ProvisionerClient;
 use rocket::data::ByteUnit;
 use rocket::{tokio, Data};
 use shuttle_common::project::ProjectName;
 use shuttle_common::{
     DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, LogItem, Port,
 };
+use shuttle_proto::provisioner::provisioner_client::ProvisionerClient;
 use shuttle_service::loader::Loader;
 use shuttle_service::logger::Log;
 use shuttle_service::ServeHandle;
@@ -160,7 +160,6 @@ impl Deployment {
 
                     let mut factory = ShuttleFactory::new(
                         context.provisioner_client.clone(),
-                        context.provisioner_address.clone(),
                         meta.project.clone(),
                     );
                     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
@@ -289,7 +288,6 @@ pub(crate) struct DeploymentSystem {
     job_queue: JobQueue,
     router: Arc<Router>,
     fqdn: String,
-    pub(crate) provisioner_address: String,
 }
 
 const JOB_QUEUE_SIZE: usize = 200;
@@ -340,7 +338,6 @@ pub(crate) struct Context {
     build_system: Box<dyn BuildSystem>,
     deployments: Arc<RwLock<Deployments>>,
     provisioner_client: ProvisionerClient<Channel>,
-    provisioner_address: String,
 }
 
 impl DeploymentSystem {
@@ -384,7 +381,6 @@ impl DeploymentSystem {
             build_system,
             deployments: deployments.clone(),
             provisioner_client,
-            provisioner_address: provisioner_address.clone(),
         };
 
         let job_queue = JobQueue::new(context, tx).await;
@@ -400,7 +396,6 @@ impl DeploymentSystem {
             job_queue,
             router,
             fqdn,
-            provisioner_address,
         }
     }
 

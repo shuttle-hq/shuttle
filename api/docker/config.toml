@@ -1,2 +1,0 @@
-[patch.crates-io]
-shuttle-service = { path = "/app/service" }

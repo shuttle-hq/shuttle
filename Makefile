@@ -21,32 +21,54 @@ ifdef PLATFORMS
 PLATFORM_FLAGS=--platform $(PLATFORMS)
 endif
 
-BUILDX_FLAGS=$(BUILDX_OP) $(PLATFORM_FLAGS) -f Containerfile $(CACHE_FLAGS)
+BUILDX_FLAGS=$(BUILDX_OP) $(PLATFORM_FLAGS) $(CACHE_FLAGS)
 
 TAG?=$(shell git describe --tags)
 
 ifeq ($(PROD),true)
 DOCKER_COMPOSE_FILES=-f docker-compose.yml
+STACK=shuttle-prod
 else
 DOCKER_COMPOSE_FILES=-f docker-compose.yml -f docker-compose.dev.yml
+STACK=shuttle-dev
 endif
 
-.PHONY: images clean src
+POSTGRES_EXTRA_PATH?=./extras/postgres
+POSTGRES_TAG?=latest
+
+DOCKER_COMPOSE_ENV=CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) BACKEND_TAG=$(TAG) PROVISIONER_TAG=$(TAG)
+
+.PHONY: images clean src up down deploy docker-compose.rendered.yml postgres
 
 clean:
 	rm .shuttle-*
+	rm docker-compose.rendered.yml
 
-images: .shuttle-provisioner .shuttle-api
+images: .shuttle-provisioner .shuttle-api postgres
+
+postgres:
+	docker buildx build \
+	       --build-arg POSTGRES_TAG=$(POSTGRES_TAG) \
+	       --tag $(CONTAINER_REGISTRY)/postgres:$(POSTGRES_TAG) \
+	       $(BUILDX_FLAGS) \
+	       -f $(POSTGRES_EXTRA_PATH)/Containerfile \
+	       $(POSTGRES_EXTRA_PATH)
 
 api: .shuttle-api
 
 provisioner: .shuttle-provisioner
 
 up: images
-	CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) docker-compose $(DOCKER_COMPOSE_FILES) up -d
+	$(DOCKER_COMPOSE_ENV) docker-compose $(DOCKER_COMPOSE_FILES) up -d
 
 down:
-	CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) docker-compose $(DOCKER_COMPOSE_FILES) down
+	$(DOCKER_COMPOSE_ENV) docker-compose $(DOCKER_COMPOSE_FILES) down
+
+docker-compose.rendered.yml: docker-compose.yml
+	$(DOCKER_COMPOSE_ENV) docker-compose -f docker-compose.yml config > $@
+
+deploy: docker-compose.rendered.yml
+	docker stack deploy -c $^ $(STACK)
 
 .shuttle-%: ${SRC} Cargo.lock
 	docker buildx build \
@@ -55,5 +77,6 @@ down:
 	       --tag $(CONTAINER_REGISTRY)/$(*):$(TAG) \
 	       --tag $(CONTAINER_REGISTRY)/$(*):latest \
 	       $(BUILDX_FLAGS) \
+	       -f Containerfile \
 	       .
 	touch $@

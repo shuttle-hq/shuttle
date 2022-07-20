@@ -48,7 +48,22 @@ impl ShuttleInit for ShuttleInitActix {
 
     fn get_boilerplate_code_for_framework(&self) -> &'static str {
         indoc! {r#"
-            TODO!
+        use actix_web::{get, web, App, HttpServer, Responder};
+
+        #[get("/hello")]
+        async fn hello_world(name: web::Path<String>) -> impl Responder {
+            format!("Hello, world!")
+        }
+
+        #[shuttle_service::main]
+        async fn actix() -> shuttle_service::ShuttleActix {
+            let actix = HttpServer::new(|| {
+                App::new().service(hello_world)
+            })
+            .bind(("127.0.0.1", 8080))?
+            .run();
+
+            Ok(actix)
         }"#}
     }
 }

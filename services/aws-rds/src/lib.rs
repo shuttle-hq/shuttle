@@ -1,10 +1,10 @@
-use crate::{
+use async_trait::async_trait;
+use paste::paste;
+use shuttle_service::{
     database::{AwsRdsEngine, Type},
     error::CustomError,
     Factory, ResourceBuilder,
 };
-use async_trait::async_trait;
-use paste::paste;
 use tokio::runtime::Runtime;
 
 macro_rules! aws_engine {
@@ -22,7 +22,7 @@ macro_rules! aws_engine {
                     Self {}
                 }
 
-                async fn build(self, factory: &mut dyn Factory, runtime: &Runtime) -> Result<$pool_path, crate::Error> {
+                async fn build(self, factory: &mut dyn Factory, runtime: &Runtime) -> Result<$pool_path, shuttle_service::Error> {
                     let connection_string = factory
                         .get_sql_connection_string(Type::AwsRds(AwsRdsEngine::$struct_ident))
                         .await?;
@@ -48,21 +48,21 @@ macro_rules! aws_engine {
 }
 
 aws_engine!(
-    "sqlx-aws-postgres",
+    "postgres",
     sqlx::PgPool,
     sqlx::postgres::PgPoolOptions,
     Postgres
 );
 
 aws_engine!(
-    "sqlx-aws-mysql",
+    "mysql",
     sqlx::MySqlPool,
     sqlx::mysql::MySqlPoolOptions,
     MySql
 );
 
 aws_engine!(
-    "sqlx-aws-mariadb",
+    "mariadb",
     sqlx::MySqlPool,
     sqlx::mysql::MySqlPoolOptions,
     MariaDB

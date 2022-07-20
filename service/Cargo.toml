@@ -19,10 +19,7 @@ hyper = { version = "0.14.19", features = ["server", "tcp", "http1"], optional =
 lazy_static = "1.4.0"
 libloading = { version = "0.7.3", optional = true }
 log = "0.4.17"
-paste = "1.0.7"
-regex = "1.5.6"
 rocket = { version = "0.5.0-rc.2", optional = true }
-sqlx = { version = "0.5.13", optional = true }
 sync_wrapper = { version = "0.1.1", optional = true }
 thiserror = "1.0.31"
 tide = { version = "0.16.0", optional = true }
@@ -52,14 +49,6 @@ path = "../common"
 default = ["codegen"]
 codegen = ["shuttle-codegen"]
 loader = ["cargo", "libloading"]
-
-sqlx-integration = ["sqlx/runtime-tokio-native-tls"]
-sqlx-postgres = ["sqlx-integration", "sqlx/postgres"]
-sqlx-aws-postgres = ["sqlx-integration", "sqlx/postgres"]
-sqlx-aws-mysql = ["sqlx-integration", "sqlx/mysql"]
-sqlx-aws-mariadb = ["sqlx-integration", "sqlx/mysql"]
-
-secrets = ["sqlx-postgres"]
 
 web-axum = ["axum", "sync_wrapper"]
 web-rocket = ["rocket"]

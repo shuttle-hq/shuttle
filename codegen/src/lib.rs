@@ -175,7 +175,7 @@ impl ToTokens for Wrapper {
                     })?;
 
 
-                #(let #fn_inputs = shuttle_service::#fn_inputs_builder::new().build(#factory_ident, runtime).await?;)*
+                #(let #fn_inputs = #fn_inputs_builder::new().build(#factory_ident, runtime).await?;)*
 
                 runtime.spawn(async {
                     #fn_ident(#(#fn_inputs),*)

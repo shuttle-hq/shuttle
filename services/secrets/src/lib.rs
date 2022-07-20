@@ -2,11 +2,10 @@ use anyhow::anyhow;
 use async_trait::async_trait;
 use lazy_static::lazy_static;
 use regex::Regex;
+use shuttle_service::{error::CustomError, Error};
 use sqlx::postgres::PgArguments;
 use sqlx::query::Query;
 use sqlx::{ColumnIndex, Database, Decode, Execute, Executor, Postgres, Row, Type};
-
-use crate::error::Error;
 
 fn check_and_lower_secret_key(key: &str) -> Result<String, Error> {
     lazy_static! {
@@ -41,26 +40,38 @@ where
     /// Read the secret with the given key from the database. Will error if a secret with the
     /// given key does not exist or otherwise could not be accessed.
     async fn get_secret(&self, key: &str) -> Result<String, Error> {
-        self.execute(sqlx::query(Self::CREATE_TABLE_QUERY)).await?;
+        self.execute(sqlx::query(Self::CREATE_TABLE_QUERY))
+            .await
+            .map_err(CustomError::new)
+            .map_err(Error::from)?;
 
-        let key = check_and_lower_secret_key(key)?;
+        let key = check_and_lower_secret_key(key)
+            .map_err(CustomError::new)
+            .map_err(Error::from)?;
         let query = sqlx::query(Self::GET_QUERY).bind(key);
 
         self.fetch_one(query)
             .await
             .map(|row| row.get(0))
+            .map_err(CustomError::new)
             .map_err(Error::from)
     }
 
     /// Create (or overwrite if already present) a key/value secret in the database. Will error if
     /// the database could not be accessed or execution of the query otherwise failed.
     async fn set_secret(&self, key: &str, val: &str) -> Result<(), Error> {
-        self.execute(sqlx::query(Self::CREATE_TABLE_QUERY)).await?;
+        self.execute(sqlx::query(Self::CREATE_TABLE_QUERY))
+            .await
+            .map_err(CustomError::new)
+            .map_err(Error::from)?;
 
         let key = check_and_lower_secret_key(key)?;
         let query = sqlx::query(Self::SET_QUERY).bind(key).bind(val);
 
-        self.execute(query).await?;
+        self.execute(query)
+            .await
+            .map_err(CustomError::new)
+            .map_err(Error::from)?;
 
         Ok(())
     }

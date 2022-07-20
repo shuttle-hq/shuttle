@@ -220,14 +220,6 @@ pub mod logger;
 
 pub use shuttle_common::database;
 
-#[cfg(feature = "sqlx-postgres")]
-pub mod shared;
-
-#[cfg(feature = "secrets")]
-pub mod secrets;
-#[cfg(feature = "secrets")]
-pub use secrets::SecretStore;
-
 #[cfg(any(
     feature = "sqlx-aws-mariadb",
     feature = "sqlx-aws-mysql",

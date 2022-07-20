@@ -1,6 +1,6 @@
 use tokio::runtime::Runtime;
 
-use crate::{database, error::CustomError, Factory, ResourceBuilder};
+use shuttle_service::{database, Error, error::CustomError, Factory, ResourceBuilder};
 use async_trait::async_trait;
 
 pub struct Postgres;
@@ -16,7 +16,7 @@ impl ResourceBuilder<sqlx::PgPool> for Postgres {
         self,
         factory: &mut dyn Factory,
         runtime: &Runtime,
-    ) -> Result<sqlx::PgPool, crate::Error> {
+    ) -> Result<sqlx::PgPool, Error> {
         let connection_string = factory
             .get_sql_connection_string(database::Type::Shared)
             .await?;

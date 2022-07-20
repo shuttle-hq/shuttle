@@ -32,7 +32,7 @@ impl ShuttleInit for ShuttleInitActix {
         get_dependency_version_fn: GetDependencyVersionFn,
     ) {
         set_key_value_dependency_version(
-            "actix",
+            "actix-web",
             dependencies,
             manifest_path,
             url,
@@ -43,13 +43,6 @@ impl ShuttleInit for ShuttleInitActix {
             "shuttle-service",
             dependencies,
             vec!["web-actix".to_string()],
-        );
-        set_key_value_dependency_version(
-            "sync_wrapper",
-            dependencies,
-            manifest_path,
-            url,
-            get_dependency_version_fn,
         );
     }
 
@@ -716,7 +709,7 @@ mod shuttle_init_tests {
         let expected = indoc! {r#"
             [dependencies]
             shuttle-service = { version = "1.0", features = ["web-actix"] }
-            actix-web = { version = "4" }
+            actix-web = "1.0"
         "#};
 
         assert_eq!(cargo_toml.to_string(), expected);

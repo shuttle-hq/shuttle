@@ -21,6 +21,7 @@ in
       grpcurl
       gh
       docker-compose
+      datadog-agent
     ];
 
     PROTOC = "${protobuf}/bin/protoc";

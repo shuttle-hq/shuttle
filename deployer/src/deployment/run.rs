@@ -27,7 +27,7 @@ pub struct Built {
 }
 
 impl Built {
-    #[instrument(skip(self), fields(name = self.name.as_str(), state = %State::Running))]
+    #[instrument(name = "built_handle", skip(self), fields(name = self.name.as_str(), state = %State::Running))]
     async fn handle(self, mut kill_recv: KillReceiver) -> Result<()> {
         // Load service into memory:
         // TODO

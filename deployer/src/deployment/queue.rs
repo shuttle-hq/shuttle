@@ -82,16 +82,11 @@ pub struct Queued {
 }
 
 impl Queued {
-    #[instrument(skip(self, log_recorder), fields(id = %self.id, state = %State::Building))]
-    async fn handle(mut self, log_recorder: impl LogRecorder) -> Result<Built> {
+    #[instrument(name = "queued_handle", skip(self, log_recorder), fields(id = %self.id, state = %State::Building))]
+    async fn handle(self, log_recorder: impl LogRecorder) -> Result<Built> {
         info!("Fetching POSTed data");
 
-        let mut vec = Vec::new();
-        while let Some(buf) = self.data_stream.next().await {
-            let buf = buf?;
-            debug!("Received {} bytes", buf.len());
-            vec.put(buf);
-        }
+        let vec = extract_stream(self.data_stream).await?;
 
         info!("Extracting received data");
 
@@ -134,10 +129,7 @@ impl Queued {
         });
 
         let project_path = project_path.canonicalize()?;
-        info!("building");
-        let so_path = build_crate(&project_path, tx)
-            .await
-            .map_err(|e| Error::Build(e.into()))?;
+        let so_path = build_deployment(&project_path, tx).await?;
 
         if self.will_run_tests {
             info!("Running deployment's unit tests");
@@ -168,7 +160,22 @@ impl fmt::Debug for Queued {
     }
 }
 
+#[instrument(skip(data_stream))]
+async fn extract_stream(
+    mut data_stream: Pin<Box<dyn Stream<Item = Result<Bytes>> + Send + Sync>>,
+) -> Result<Vec<u8>> {
+    let mut vec = Vec::new();
+    while let Some(buf) = data_stream.next().await {
+        let buf = buf?;
+        debug!("Received {} bytes", buf.len());
+        vec.put(buf);
+    }
+
+    Ok(vec)
+}
+
 /// Equivalent to the command: `tar -xzf --strip-components 1`
+#[instrument(skip(data, dest))]
 fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<()> {
     let tar = GzDecoder::new(data);
     let mut archive = Archive::new(tar);
@@ -183,6 +190,16 @@ fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<()> {
     Ok(())
 }
 
+#[instrument(skip(project_path, tx))]
+async fn build_deployment(project_path: &Path, tx: UnboundedSender<Message>) -> Result<PathBuf> {
+    let so_path = build_crate(&project_path, tx)
+        .await
+        .map_err(|e| Error::Build(e.into()))?;
+
+    Ok(so_path)
+}
+
+#[instrument(skip(project_path))]
 fn run_pre_deploy_tests(project_path: impl AsRef<Path>) -> Result<()> {
     let config = CargoConfig::default().map_err(|e| Error::Build(e.into()))?;
     let manifest_path = project_path.as_ref().join("Cargo.toml");
@@ -206,6 +223,7 @@ fn run_pre_deploy_tests(project_path: impl AsRef<Path>) -> Result<()> {
 }
 
 /// Store 'so' file in the libs folder
+#[instrument(skip(storage_dir_path, so_path, id))]
 async fn store_lib(
     storage_dir_path: impl AsRef<Path>,
     so_path: impl AsRef<Path>,

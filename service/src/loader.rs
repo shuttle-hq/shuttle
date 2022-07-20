@@ -34,6 +34,8 @@ pub enum LoaderError {
     GetEntrypoint(libloading::Error),
 }
 
+pub type LoadedService = (ServeHandle, Library);
+
 pub struct Loader {
     bootstrapper: Bootstrapper,
     so: Library,
@@ -66,7 +68,7 @@ impl Loader {
         factory: &mut dyn Factory,
         addr: SocketAddr,
         logger: Box<dyn log::Log>,
-    ) -> Result<(ServeHandle, Library), Error> {
+    ) -> Result<LoadedService, Error> {
         let mut bootstrapper = self.bootstrapper;
 
         AssertUnwindSafe(bootstrapper.bootstrap(factory, logger))

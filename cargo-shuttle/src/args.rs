@@ -97,17 +97,20 @@ pub struct RunArgs {
 
 #[derive(Parser, Debug)]
 pub struct InitArgs {
+    /// Initialize with actix framework
+    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "tower"])]
+    pub actix: bool,
     /// Initialize with axum framework
-    #[clap(long, conflicts_with_all = &["rocket", "tide", "tower"])]
+    #[clap(long, conflicts_with_all = &["actix", "rocket", "tide", "tower"])]
     pub axum: bool,
-    /// Initialize with actix-web framework
-    #[clap(long, conflicts_with_all = &["axum", "tide", "tower"])]
+    /// Initialize with actix framework
+    #[clap(long, conflicts_with_all = &["actix", "axum", "tide", "tower"])]
     pub rocket: bool,
     /// Initialize with tide framework
-    #[clap(long, conflicts_with_all = &["axum", "rocket", "tower"])]
+    #[clap(long, conflicts_with_all = &["actix", "axum", "rocket", "tower"])]
     pub tide: bool,
     /// Initialize with tower framework
-    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide"])]
+    #[clap(long, conflicts_with_all = &["actix", "axum", "rocket", "tide"])]
     pub tower: bool,
     /// Path to initialize a new shuttle project
     #[clap(

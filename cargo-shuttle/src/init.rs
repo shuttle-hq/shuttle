@@ -310,10 +310,6 @@ pub fn get_framework(init_args: &InitArgs) -> Box<dyn ShuttleInit> {
         return Box::new(ShuttleInitTower);
     }
 
-    if init_args.actix {
-        return Box::new(ShuttleInitActix);
-    }
-
     Box::new(ShuttleInitNoOp)
 }
 
@@ -720,7 +716,7 @@ mod shuttle_init_tests {
         let expected = indoc! {r#"
             [dependencies]
             shuttle-service = { version = "1.0", features = ["web-actix"] }
-            actix = { version = "4" }
+            actix-web = { version = "4" }
         "#};
 
         assert_eq!(cargo_toml.to_string(), expected);

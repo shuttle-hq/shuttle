@@ -103,7 +103,7 @@ pub struct InitArgs {
     /// Initialize with axum framework
     #[clap(long, conflicts_with_all = &["actix", "rocket", "tide", "tower"])]
     pub axum: bool,
-    /// Initialize with actix framework
+    /// Initialize with rocket framework
     #[clap(long, conflicts_with_all = &["actix", "axum", "tide", "tower"])]
     pub rocket: bool,
     /// Initialize with tide framework

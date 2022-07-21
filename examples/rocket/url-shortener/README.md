@@ -31,7 +31,7 @@ The project consists of the following files
 To deploy this app, check out the repository locally
 
 ```bash
-$ git clone https://github.com/getsynth/shuttle.git
+$ git clone https://github.com/shuttle-hq/shuttle.git
 ```
 
 navigate to `examples/url-shortener`

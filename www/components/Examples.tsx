@@ -12,21 +12,21 @@ const cards: Card[] = [
     title: "Persist with Postgres",
     description:
       "Build any web service with a fully managed database using Rocket and sqlx",
-    link: "https://github.com/getsynth/shuttle/tree/main/examples/rocket/postgres",
+    link: "https://github.com/shuttle-hq/shuttle/tree/main/examples/rocket/postgres",
     icon: "/images/icon1.svg",
   },
   {
     title: "Url Shortener",
     description:
       "A URL shortener that you can use from your terminal - built with shuttle, rocket and postgres/sqlx.",
-    link: "https://github.com/getsynth/shuttle/tree/main/examples/rocket/url-shortener",
+    link: "https://github.com/shuttle-hq/shuttle/tree/main/examples/rocket/url-shortener",
     icon: "/images/icon2.svg",
   },
   {
     title: "JWT authentication",
     description:
       "Guard endpoints using self-issued JWT tokens while keeping public endpoint open",
-    link: "https://github.com/getsynth/shuttle/tree/main/examples/rocket/authentication",
+    link: "https://github.com/shuttle-hq/shuttle/tree/main/examples/rocket/authentication",
     icon: "/images/icon3.svg",
   },
 ];

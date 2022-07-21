@@ -1,5 +1,3 @@
-#[macro_use]
-extern crate rocket;
 use actix_web::{get, web, App, Responder};
 
 #[get("/")]

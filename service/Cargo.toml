@@ -40,6 +40,7 @@ optional = true
 
 [dev-dependencies]
 portpicker = { version = "0.1.1" }
+sqlx = { version = "0.5.13", features = ["runtime-tokio-native-tls", "postgres"] }
 uuid = { version = "1.1.1", features = ["v4"] }
 
 [dependencies.shuttle-common]

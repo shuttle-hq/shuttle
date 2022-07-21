@@ -40,6 +40,7 @@ jobs:
             shuttle-service = { path = "$PWD/service" }
             EOF
 
+            make down
             docker volume create shuttle-backend-vol
             cd e2e; BUILDX_CACHE=/var/cache/buildx SHUTTLE_API_KEY=test-key cargo test -- --nocapture
       - when:

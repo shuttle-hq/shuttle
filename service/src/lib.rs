@@ -98,10 +98,10 @@
 //!
 //! Here is a quick example to deploy a service that uses a postgres database and [sqlx](http://docs.rs/sqlx):
 //!
-//! Add the `sqlx-postgres` feature to the `shuttle-service` dependency, and add `sqlx` as a dependency with the `runtime-tokio-native-tls` and `postgres` features inside `Cargo.toml`:
+//! Add `shuttle-shared-db` as a dependency with the `postgres` feature, and add `sqlx` as a dependency with the `runtime-tokio-native-tls` and `postgres` features inside `Cargo.toml`:
 //!
 //! ```toml
-//! shuttle-service = { version = "0.4.0", features = ["web-rocket", "sqlx-postgres"] }
+//! shuttle-shared-db = { version = "0.4.0", features = ["postgres"] }
 //! sqlx = { version = "0.5", features = ["runtime-tokio-native-tls", "postgres"] }
 //! ```
 //!
@@ -124,7 +124,7 @@
 //! }
 //!
 //! #[shuttle_service::main]
-//! async fn rocket(#[shared::Postgres] pool: PgPool) -> ShuttleRocket {
+//! async fn rocket(#[shuttle_shared_db::Postgres] pool: PgPool) -> ShuttleRocket {
 //!     let state = MyState(pool);
 //!     let rocket = rocket::build().manage(state).mount("/", routes![hello]);
 //!
@@ -266,7 +266,7 @@ extern crate shuttle_codegen;
 /// struct MyState(PgPool);
 ///
 /// #[shuttle_service::main]
-/// async fn rocket(#[shared::Postgres] pool: PgPool) -> ShuttleRocket {
+/// async fn rocket(#[shuttle_shared_db::Postgres] pool: PgPool) -> ShuttleRocket {
 ///     let state = MyState(pool);
 ///     let rocket = rocket::build().manage(state);
 ///
@@ -275,14 +275,11 @@ extern crate shuttle_codegen;
 /// ```
 ///
 /// ## shuttle managed dependencies
-/// The following dependencies can be managed by shuttle - remember to enable their feature flags for the `shuttle-service` dependency in `Cargo.toml` and configure them using an attribute annotation:
-///
-/// | Argument type                                                       | Feature flag      | Attribute            | Dependency                                                                                         | Example                                                                          |
-/// | ------------------------------------------------------------------- | ----------------- | -------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-/// | [`PgPool`](https://docs.rs/sqlx/latest/sqlx/type.PgPool.html)       | sqlx-postgres     | `shared::Postgres`   | A shared PostgresSql instance accessed using [sqlx](https://docs.rs/sqlx)                          | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/rocket/postgres) |
-/// | [`MySqlPool`](https://docs.rs/sqlx/latest/sqlx/type.MySqlPool.html) | sqlx-aws-mariadb  | `aws::rds::MariaDB`  | An AWS RDS MariaDB instance tied to your instance and accessed using [sqlx](https://docs.rs/sqlx)  |                                                                                  |
-/// | [`MySqlPool`](https://docs.rs/sqlx/latest/sqlx/type.MySqlPool.html) | sqlx-aws-mysql    | `aws::rds::MySql`    | An AWS RDS MySql instance tied to your instance and accessed using [sqlx](https://docs.rs/sqlx)    |                                                                                  |
-/// | [`PgPool`](https://docs.rs/sqlx/latest/sqlx/type.PgPool.html)       | sqlx-aws-postgres | `aws::rds::Postgres` | An AWS RDS Postgres instance tied to your instance and accessed using [sqlx](https://docs.rs/sqlx) | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/tide/postgres)   |
+/// All managed dependencies are isolated crate plugins. A full list can be found by searching [crates.io for 'shuttle-service'](https://crates.io/search?q=shuttle-service),
+/// but some worthy mentions that are maintained by the shuttle team are:
+/// - [shuttle-aws-rds](https://crates.io/crates/shuttle-aws-rds)
+/// - [shuttle-shared-db](https://crates.io/crates/shuttle-shared-db)
+/// - [shuttle-secrets](https://crates.io/crates/shuttle-secrets)
 pub use shuttle_codegen::main;
 use tokio::task::JoinHandle;
 

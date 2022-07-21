@@ -1,10 +1,14 @@
+#![doc = include_str!("../README.md")]
+
 use tokio::runtime::Runtime;
 
-use shuttle_service::{database, Error, error::CustomError, Factory, ResourceBuilder};
 use async_trait::async_trait;
+use shuttle_service::{database, error::CustomError, Error, Factory, ResourceBuilder};
 
+#[cfg(feature = "postgres")]
 pub struct Postgres;
 
+#[cfg(feature = "postgres")]
 /// Get an `sqlx::PgPool` from any factory
 #[async_trait]
 impl ResourceBuilder<sqlx::PgPool> for Postgres {

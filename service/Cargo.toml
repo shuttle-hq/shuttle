@@ -4,6 +4,7 @@ version = "0.4.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Service traits and macros to deploy on the shuttle platform (https://www.shuttle.rs/)"
+homepage = "https://www.shuttle.rs"
 
 [lib]
 doctest = false

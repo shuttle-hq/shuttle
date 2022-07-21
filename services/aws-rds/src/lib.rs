@@ -1,3 +1,5 @@
+#![doc = include_str!("../README.md")]
+
 use async_trait::async_trait;
 use paste::paste;
 use shuttle_service::{

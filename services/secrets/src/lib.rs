@@ -1,3 +1,5 @@
+#![doc = include_str!("../README.md")]
+
 use anyhow::anyhow;
 use async_trait::async_trait;
 use lazy_static::lazy_static;
@@ -21,7 +23,7 @@ fn check_and_lower_secret_key(key: &str) -> Result<String, Error> {
 /// purposes, such as storing API keys. Note that secrets are not encrypted and are stored directly
 /// in a table in the database (meaning they can be accessed via SQL rather than this abstraction
 /// should you prefer). The table in question is created if it is found to not exist every time
-/// either [`get_secret`] or [`set_secret`] is called.
+/// either [`SecretStore::get_secret`] or [`SecretStore::set_secret`] is called.
 #[async_trait]
 pub trait SecretStore<DB>
 where

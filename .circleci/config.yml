@@ -18,7 +18,7 @@ jobs:
       - restore_cache:
           keys:
             # Try lock cache first
-            - docker-buildx-v2-{{ checksum "./Cargo.lock" }}
+            - docker-buildx-{{ checksum "./Cargo.lock" }}
             # Try branch cache next
             - docker-buildx-{{ .Branch }}
             # Fallback to main cache

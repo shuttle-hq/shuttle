@@ -80,7 +80,7 @@ impl Wrapper {
                         builder,
                     }),
                     Err(err) => {
-                        emit_error!(pat_ident, err; hint = pat_ident.span() => "Try adding a config like `#[shared::Postgres]`");
+                        emit_error!(pat_ident, err; hint = pat_ident.span() => "Try adding a config like `#[shuttle_shared_db::Postgres]`");
                         None
                     }
                 }
@@ -214,11 +214,11 @@ mod tests {
     #[test]
     fn from_with_return() {
         let mut input = parse_quote!(
-            async fn complex() -> ShuttleAxum {}
+            async fn simple() -> ShuttleAxum {}
         );
 
         let actual = Wrapper::from_item_fn(&mut input);
-        let expected_ident: Ident = parse_quote!(complex);
+        let expected_ident: Ident = parse_quote!(simple);
 
         assert_eq!(actual.fn_ident, expected_ident);
         assert_eq!(actual.fn_inputs, Vec::<Input>::new());
@@ -227,7 +227,7 @@ mod tests {
     #[test]
     fn output_with_return() {
         let input = Wrapper {
-            fn_ident: parse_quote!(complex),
+            fn_ident: parse_quote!(simple),
             fn_inputs: Vec::new(),
         };
 
@@ -259,7 +259,7 @@ mod tests {
                 })?;
 
                 runtime.spawn(async {
-                    complex()
+                    simple()
                         .await
                         .map(|ok| Box::new(ok) as Box<dyn shuttle_service::Service>)
                 })
@@ -286,14 +286,14 @@ mod tests {
     #[test]
     fn from_with_inputs() {
         let mut input = parse_quote!(
-            async fn complex(#[shared::Postgres] pool: PgPool) -> ShuttleTide {}
+            async fn complex(#[shuttle_shared_db::Postgres] pool: PgPool) -> ShuttleTide {}
         );
 
         let actual = Wrapper::from_item_fn(&mut input);
         let expected_ident: Ident = parse_quote!(complex);
         let expected_inputs: Vec<Input> = vec![Input {
             ident: parse_quote!(pool),
-            builder: parse_quote!(shared::Postgres),
+            builder: parse_quote!(shuttle_shared_db::Postgres),
         }];
 
         assert_eq!(actual.fn_ident, expected_ident);
@@ -318,11 +318,11 @@ mod tests {
             fn_inputs: vec![
                 Input {
                     ident: parse_quote!(pool),
-                    builder: parse_quote!(shared::Postgres),
+                    builder: parse_quote!(shuttle_shared_db::Postgres),
                 },
                 Input {
                     ident: parse_quote!(redis),
-                    builder: parse_quote!(shared::Redis),
+                    builder: parse_quote!(shuttle_shared_db::Redis),
                 },
             ],
         };
@@ -356,8 +356,8 @@ mod tests {
                     }
                 })?;
 
-                let pool = shuttle_service::shared::Postgres::new().build(factory, runtime).await?;
-                let redis = shuttle_service::shared::Redis::new().build(factory, runtime).await?;
+                let pool = shuttle_shared_db::Postgres::new().build(factory, runtime).await?;
+                let redis = shuttle_shared_db::Redis::new().build(factory, runtime).await?;
 
                 runtime.spawn(async {
                     complex(pool, redis)

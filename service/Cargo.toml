@@ -9,6 +9,7 @@ description = "Service traits and macros to deploy on the shuttle platform (http
 doctest = false
 
 [dependencies]
+actix-web = { version = "4.1.0", optional = true }
 anyhow = "1.0.57"
 async-trait = "0.1.56"
 axum = { version = "0.5.7", optional = true }
@@ -61,6 +62,7 @@ sqlx-aws-mariadb = ["sqlx-integration", "sqlx/mysql"]
 
 secrets = ["sqlx-postgres"]
 
+web-actix = ["actix-web"]
 web-axum = ["axum", "sync_wrapper"]
 web-rocket = ["rocket"]
 web-tide = ["tide"]

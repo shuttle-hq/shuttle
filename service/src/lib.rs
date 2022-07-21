@@ -495,6 +495,23 @@ where
     }
 }
 
-// TODO: Add support for actix-web
+#[cfg(feature = "web-actix")]
+#[async_trait]
+impl<T> Service for actix_web::dev::Server<T>
+where
+    T: Clone + Send + Sync + 'static,
+{
+    async fn bind(mut self: Box<Self>, addr: SocketAddr) -> Result<(), error::Error> {
+        self.listen(addr)
+            .run()
+            .await
+            .map_err(error::CustomError::new)?;
+
+        Ok(())
+    }
+}
+
+#[cfg(feature = "web-actix")]
+pub type ShuttleActix<T> = Result<actix_web::dev::Server<T>, Error>;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

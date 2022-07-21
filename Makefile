@@ -43,11 +43,9 @@ api: .shuttle-api
 provisioner: .shuttle-provisioner
 
 up: images
-	CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) docker-compose $(DOCKER_COMPOSE_FILES) ps
 	CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) docker-compose $(DOCKER_COMPOSE_FILES) up -d
 
 down:
-	CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) docker-compose $(DOCKER_COMPOSE_FILES) ps
 	CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) docker-compose $(DOCKER_COMPOSE_FILES) down
 
 .shuttle-%: ${SRC} Cargo.lock

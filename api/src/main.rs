@@ -25,7 +25,7 @@ use rocket::serde::json::Json;
 use rocket::{tokio, Build, Data, Rocket, State};
 use shuttle_common::project::ProjectName;
 use shuttle_common::{DeploymentApiError, DeploymentMeta, Port};
-use shuttle_service::SecretStore;
+use shuttle_secrets::SecretStore;
 use uuid::Uuid;
 
 use crate::args::Args;

@@ -55,7 +55,7 @@ jobs:
         run: |
           cargo clippy --tests \
                        --all-targets \
-                       --features="codegen,loader,sqlx-integration,sqlx-postgres,secrets,${{ matrix.features }}" \
+                       --features="codegen,loader,${{ matrix.features }}" \
                        --no-deps -- \
                        --D warnings \
                        -A clippy::let-unit-value \

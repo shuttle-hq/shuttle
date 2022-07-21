@@ -6,22 +6,19 @@ RUN cargo install cargo-chef
 WORKDIR /build
 
 FROM shuttle-build as cache
-ARG SRC_CRATES
 WORKDIR /src
 COPY . .
 RUN find ${SRC_CRATES} \( -name "*.proto" -or -name "*.rs" -or -name "*.toml" \) -type f -exec install -D \{\} /build/\{\} \;
 
 FROM shuttle-build AS planner
-ARG crate
 COPY --from=cache /build .
 RUN cargo chef prepare --recipe-path recipe.json
 
 FROM shuttle-build AS builder
-ARG crate
-ARG src
 COPY --from=planner /build/recipe.json recipe.json
 RUN cargo chef cook --recipe-path recipe.json
 COPY --from=cache /build .
+ARG crate
 RUN cargo build --bin ${crate}
 
 FROM rust:buster as shuttle-common

@@ -9,7 +9,7 @@ FROM shuttle-build as cache
 ARG SRC_CRATES
 WORKDIR /src
 COPY . .
-RUN find ${SRC_CRATES} \( -name "*.proto" -or -name "*.rs" -or -name "*.toml" \) -type f -exec install -D \{\} /build/\{\} \;
+RUN find ${SRC_CRATES} \( -name "*.proto" -or -name "*.rs" -or -name "*.toml" -name "README.md" \) -type f -exec install -D \{\} /build/\{\} \;
 
 FROM shuttle-build AS planner
 ARG crate

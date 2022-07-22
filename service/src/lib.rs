@@ -497,7 +497,10 @@ where
 
 #[cfg(feature = "web-actix")]
 #[async_trait]
-impl Service for sync_wrapper::SyncWrapper<actix_web::App<()>> {
+impl<T> Service for sync_wrapper::SyncWrapper<actix_web::App<T>>
+where
+    T: Clone + Send + Sync + 'static,
+{
     async fn bind(mut self: Box<Self>, addr: SocketAddr) -> Result<(), error::Error> {
         let router = self.into_inner();
 
@@ -512,6 +515,6 @@ impl Service for sync_wrapper::SyncWrapper<actix_web::App<()>> {
 }
 
 #[cfg(feature = "web-actix")]
-pub type ShuttleActix = Result<sync_wrapper::SyncWrapper<actix_web::App<()>>, Error>;
+pub type ShuttleActix<T> = Result<sync_wrapper::SyncWrapper<actix_web::App<T>>, Error>;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

@@ -16,7 +16,7 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo install cargo-sort
       - run: cargo sort --check --workspace
-      - run: cargo check --workspace
+      - run: cargo check --workspace --all-targets
       - save_cache:
           key: cargo-{{ checksum "Cargo.lock" }}
           paths:
@@ -37,6 +37,36 @@ jobs:
           cargo clippy --tests \
                        --all-targets \
                        --features="codegen,loader,sqlx-integration,sqlx-postgres,secrets,<< parameters.framework >>" \
+                       --no-deps -- \
+                       --D warnings \
+                       -A clippy::let-unit-value \
+                       -A clippy::format-push-string
+  check-standalone:
+    parameters:
+      path:
+        description: "Path to crate excluded from workspace"
+        type: string
+    docker:
+      - image: cimg/rust:1.62.0
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - cargo-{{ checksum "Cargo.lock" }}
+      - run:
+          name: Patch service
+          command: |
+            cat\<< EOF > ~/.cargo/config.toml
+            [patch.crates-io]
+            shuttle-service = { path = "$PWD/service" }
+            EOF
+      - run: cargo fmt --all --check --manifest-path << parameters.path >>/Cargo.toml
+      - run: cargo install cargo-sort
+      - run: cargo sort --check << parameters.path >>
+      - run: |
+          cargo clippy --tests \
+                       --all-targets \
+                       --manifest-path << parameters.path >>/Cargo.toml \
                        --no-deps -- \
                        --D warnings \
                        -A clippy::let-unit-value \
@@ -118,6 +148,21 @@ workflows:
           matrix:
             parameters:
               framework: ["web-axum", "web-rocket", "web-tide", "web-tower"]
+      - check-standalone:
+          requires:
+            - clippy-workspace
+          matrix:
+            parameters:
+              path:
+                - examples/axum/hello-world
+                - examples/axum/websocket
+                - examples/rocket/authentication
+                - examples/rocket/hello-world
+                - examples/rocket/postgres
+                - examples/rocket/url-shortener
+                - examples/tide/hello-world
+                - examples/tide/postgres
+                - examples/tower/hello-world
   # build-test-and-push:
   #   jobs:
   #     - build-test-and-push

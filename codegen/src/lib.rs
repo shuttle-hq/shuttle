@@ -3,8 +3,8 @@ use proc_macro_error::{emit_error, proc_macro_error};
 use quote::{quote, ToTokens};
 use syn::{
     parenthesized, parse::Parse, parse2, parse_macro_input, parse_quote, punctuated::Punctuated,
-    spanned::Spanned, token::Paren, Attribute, Expr, FnArg, Ident, ItemFn, Pat, Path, ReturnType,
-    Signature, Stmt, Token, Type,
+    spanned::Spanned, token::Paren, Attribute, Expr, FnArg, Ident, ItemFn, Pat, PatIdent, Path,
+    ReturnType, Signature, Stmt, Token, Type,
 };
 
 #[proc_macro_error]
@@ -133,7 +133,7 @@ impl Wrapper {
                 _ => None,
             })
             .filter_map(|(pat_ident, attrs)| {
-                match attribute_to_builder(attrs) {
+                match attribute_to_builder(pat_ident, attrs) {
                     Ok(builder) => Some(Input {
                         ident: pat_ident.ident.clone(),
                         builder,
@@ -175,10 +175,12 @@ fn check_return_type(signature: &Signature) {
     }
 }
 
-fn attribute_to_builder(attrs: Vec<Attribute>) -> syn::Result<Builder> {
+fn attribute_to_builder(pat_ident: &PatIdent, attrs: Vec<Attribute>) -> syn::Result<Builder> {
     if attrs.is_empty() {
-        todo!()
-        // return Err("resource needs an attribute configuration".to_string());
+        return Err(syn::Error::new_spanned(
+            pat_ident,
+            "resource needs an attribute configuration",
+        ));
     }
 
     let options = if attrs[0].tokens.is_empty() {

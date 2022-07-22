@@ -10,14 +10,17 @@ jobs:
       - image: cimg/rust:1.62.0
     steps:
       - checkout
+      - restore_cache:
+          keys:
+            - cargo-{{ checksum "Cargo.lock" }}
       - run: cargo fmt --all --check
       - run: cargo install cargo-sort
       - run: cargo sort --check --workspace
       - run: cargo check --workspace
-      - persist_to_workspace:
-          root: .
+      - save_cache:
+          key: cargo-{{ checksum "Cargo.lock" }}
           paths:
-              - target/*
+            - ~/.cargo
   clippy-workspace:
     parameters:
       framework:
@@ -27,8 +30,9 @@ jobs:
       - image: cimg/rust:1.62.0
     steps:
       - checkout
-      - attach_workspace:
-          at: .
+      - restore_cache:
+          keys:
+            - cargo-{{ checksum "Cargo.lock" }}
       - run: |
           cargo clippy --tests \
                        --all-targets \

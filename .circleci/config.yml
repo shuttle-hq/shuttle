@@ -11,6 +11,7 @@ jobs:
     steps:
       - checkout
       - run: cargo fmt --all --check
+      - run: cargo install cargo-sort
       - run: cargo sort --check --workspace
 
   build-test-and-push:

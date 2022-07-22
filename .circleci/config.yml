@@ -5,12 +5,13 @@ orbs:
   aws-ecr: circleci/aws-ecr@8.1.2
 
 jobs:
-  fmt:
+  fmt-workspace:
     docker:
       - image: cimg/rust:1.62.0
     steps:
       - checkout
       - run: cargo fmt --all --check
+      - run: cargo sort --check --workspace
 
   build-test-and-push:
     resource_class: xlarge
@@ -81,7 +82,7 @@ workflows:
   version: 2
   fmt:
     jobs:
-      - fmt
+      - fmt-workspace
   # build-test-and-push:
   #   jobs:
   #     - build-test-and-push

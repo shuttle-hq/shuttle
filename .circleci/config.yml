@@ -15,9 +15,9 @@ jobs:
       - run: cargo sort --check --workspace
       - run: cargo check --workspace
       - persist_to_workspace:
-        root: .
-        paths:
-          - .
+          root: .
+          paths:
+              - target/*
   clippy-workspace:
     parameters:
       framework:
@@ -26,6 +26,7 @@ jobs:
     docker:
       - image: cimg/rust:1.62.0
     steps:
+      - checkout
       - attach_workspace:
           at: .
       - run: |

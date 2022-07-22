@@ -69,7 +69,7 @@ struct Builder {
     options: BuilderOptions,
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Debug, Default, PartialEq)]
 struct BuilderOptions {
     /// Parenthesize around options
     paren_token: Paren,
@@ -78,7 +78,7 @@ struct BuilderOptions {
     options: Punctuated<BuilderOption, Token![,]>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, PartialEq)]
 struct BuilderOption {
     /// Identifier of the option to set
     ident: Ident,
@@ -100,8 +100,8 @@ impl Parse for BuilderOptions {
 
 impl ToTokens for BuilderOptions {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-        let methods: Vec<_> = self.options.iter().map(|o| o.ident.clone()).collect();
-        let values: Vec<_> = self.options.iter().map(|o| o.value.clone()).collect();
+        let (methods, values): (Vec<_>, Vec<_>) =
+            self.options.iter().map(|o| (&o.ident, &o.value)).unzip();
         let chain = quote!(#(.#methods(#values))*);
 
         chain.to_tokens(tokens);
@@ -200,17 +200,15 @@ fn attribute_to_builder(pat_ident: &PatIdent, attrs: Vec<Attribute>) -> syn::Res
 impl ToTokens for Wrapper {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let fn_ident = &self.fn_ident;
-        let fn_inputs: Vec<_> = self.fn_inputs.iter().map(|i| i.ident.clone()).collect();
-        let fn_inputs_builder: Vec<_> = self
-            .fn_inputs
-            .iter()
-            .map(|i| i.builder.path.clone())
-            .collect();
-        let fn_inputs_builder_options: Vec<_> = self
-            .fn_inputs
-            .iter()
-            .map(|i| i.builder.options.clone())
-            .collect();
+        let mut fn_inputs: Vec<_> = Vec::with_capacity(self.fn_inputs.len());
+        let mut fn_inputs_builder: Vec<_> = Vec::with_capacity(self.fn_inputs.len());
+        let mut fn_inputs_builder_options: Vec<_> = Vec::with_capacity(self.fn_inputs.len());
+
+        for input in self.fn_inputs.iter() {
+            fn_inputs.push(&input.ident);
+            fn_inputs_builder.push(&input.builder.path);
+            fn_inputs_builder_options.push(&input.builder.options);
+        }
 
         let factory_ident: Ident = if self.fn_inputs.is_empty() {
             parse_quote!(_factory)

@@ -37,6 +37,9 @@ In order to test local changes to the `shuttle-service` crate, you may want to a
 ``` toml
 [patch.crates-io]
 shuttle-service = { path = "[base]/shuttle/service" }
+shuttle-aws-rds = { path = "[base]/shuttle/services/aws-rds" }
+shuttle-shared-db = { path = "[base]/shuttle/services/shared-db" }
+shuttle-secrets = { path = "[base]/shuttle/services/secrets" }
 ```
 
 Login to shuttle service in a new terminal window from the main shuttle directory:

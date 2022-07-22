@@ -31,7 +31,7 @@ jobs:
             **/target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('./Cargo.lock') }}
       - name: cargo test --package shuttle-service
-        run: cargo test --package shuttle-service --features="codegen,loader,secrets,${{ matrix.features }}"
+        run: cargo test --package shuttle-service --features="codegen,loader,${{ matrix.features }}"
   platform_tests:
     strategy:
       matrix:
@@ -57,6 +57,9 @@ jobs:
           cat<<EOF > ~/.cargo/config.toml
           [patch.crates-io]
           shuttle-service = { path = "$PWD/service" }
+          shuttle-aws-rds = { path = "$PWD/services/aws-rds" }
+          shuttle-shared-db = { path = "$PWD/services/shared-db" }
+          shuttle-secrets = { path = "$PWD/services/secrets" }
           EOF
       - name: cargo test ${{ matrix.crate }} --all-features
         run: cargo test --package ${{ matrix.crate }} --all-features -- --nocapture

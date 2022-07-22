@@ -1,6 +1,6 @@
 error: resource needs an attribute configuration
 
-         = help: Try adding a config like `#[shared::Postgres]`
+         = help: Try adding a config like `#[shuttle_shared_db::Postgres]`
 
  --> tests/ui/missing-attribute.rs:2:27
   |
@@ -9,7 +9,7 @@ error: resource needs an attribute configuration
 
 error: resource needs an attribute configuration
 
-         = help: Try adding a config like `#[shared::Postgres]`
+         = help: Try adding a config like `#[shuttle_shared_db::Postgres]`
 
  --> tests/ui/missing-attribute.rs:2:41
   |

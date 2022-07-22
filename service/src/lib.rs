@@ -505,7 +505,7 @@ where
         let router = self.into_inner();
 
         actix_web::HttpServer::new(move || router)
-            .bind(addr.to_socket_addrs())?
+            .bind(&addr)?
             .run()
             .await
             .map_err(error::CustomError::new)?;
@@ -515,6 +515,6 @@ where
 }
 
 #[cfg(feature = "web-actix")]
-pub type ShuttleActix<T> = Result<sync_wrapper::SyncWrapper<actix_web::App<T>>, Error>;
+pub type ShuttleActix = Result<sync_wrapper::SyncWrapper<actix_web::App<()>>, Error>;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

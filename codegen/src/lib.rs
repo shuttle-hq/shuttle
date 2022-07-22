@@ -2,8 +2,9 @@ use proc_macro::TokenStream;
 use proc_macro_error::{emit_error, proc_macro_error};
 use quote::{quote, ToTokens};
 use syn::{
-    parse_macro_input, parse_quote, spanned::Spanned, Attribute, FnArg, Ident, ItemFn, Pat, Path,
-    ReturnType, Signature, Stmt, Type,
+    parenthesized, parse::Parse, parse2, parse_macro_input, parse_quote, punctuated::Punctuated,
+    spanned::Spanned, token::Paren, Attribute, Expr, FnArg, Ident, ItemFn, Pat, Path, ReturnType,
+    Signature, Stmt, Token, Type,
 };
 
 #[proc_macro_error]
@@ -55,8 +56,66 @@ struct Input {
     /// The identifier for a resource input
     ident: Ident,
 
-    /// The shuttle_service path to the builder for this resource
-    builder: Path,
+    /// The shuttle_service builder for this resource
+    builder: Builder,
+}
+
+#[derive(Debug, PartialEq)]
+struct Builder {
+    /// Path to the builder
+    path: Path,
+
+    /// Options to call on the builder
+    options: BuilderOptions,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+struct BuilderOptions {
+    /// Parenthesize around options
+    paren_token: Paren,
+
+    /// The actual options
+    options: Punctuated<BuilderOption, Token![,]>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct BuilderOption {
+    /// Identifier of the option to set
+    ident: Ident,
+
+    /// Value to set option to
+    value: Expr,
+}
+
+impl Parse for BuilderOptions {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let content;
+
+        Ok(Self {
+            paren_token: parenthesized!(content in input),
+            options: content.parse_terminated(BuilderOption::parse)?,
+        })
+    }
+}
+
+impl ToTokens for BuilderOptions {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        let methods: Vec<_> = self.options.iter().map(|o| o.ident.clone()).collect();
+        let values: Vec<_> = self.options.iter().map(|o| o.value.clone()).collect();
+        let chain = quote!(#(.#methods(#values))*);
+
+        chain.to_tokens(tokens);
+    }
+}
+
+impl Parse for BuilderOption {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let ident = input.parse()?;
+        let _equal: Token![=] = input.parse()?;
+        let value = input.parse()?;
+
+        Ok(Self { ident, value })
+    }
 }
 
 impl Wrapper {
@@ -74,7 +133,7 @@ impl Wrapper {
                 _ => None,
             })
             .filter_map(|(pat_ident, attrs)| {
-                match attribute_to_path(attrs) {
+                match attribute_to_builder(attrs) {
                     Ok(builder) => Some(Input {
                         ident: pat_ident.ident.clone(),
                         builder,
@@ -116,12 +175,16 @@ fn check_return_type(signature: &Signature) {
     }
 }
 
-fn attribute_to_path(attrs: Vec<Attribute>) -> Result<Path, String> {
+fn attribute_to_builder(attrs: Vec<Attribute>) -> syn::Result<Builder> {
     if attrs.is_empty() {
-        return Err("resource needs an attribute configuration".to_string());
+        todo!()
+        // return Err("resource needs an attribute configuration".to_string());
     }
 
-    let builder = attrs[0].path.clone();
+    let builder = Builder {
+        path: attrs[0].path.clone(),
+        options: parse2(attrs[0].tokens.clone())?,
+    };
 
     Ok(builder)
 }
@@ -130,7 +193,16 @@ impl ToTokens for Wrapper {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let fn_ident = &self.fn_ident;
         let fn_inputs: Vec<_> = self.fn_inputs.iter().map(|i| i.ident.clone()).collect();
-        let fn_inputs_builder: Vec<_> = self.fn_inputs.iter().map(|i| i.builder.clone()).collect();
+        let fn_inputs_builder: Vec<_> = self
+            .fn_inputs
+            .iter()
+            .map(|i| i.builder.path.clone())
+            .collect();
+        let fn_inputs_builder_options: Vec<_> = self
+            .fn_inputs
+            .iter()
+            .map(|i| i.builder.options.clone())
+            .collect();
 
         let factory_ident: Ident = if self.fn_inputs.is_empty() {
             parse_quote!(_factory)
@@ -175,7 +247,7 @@ impl ToTokens for Wrapper {
                     })?;
 
 
-                #(let #fn_inputs = shuttle_service::#fn_inputs_builder::new().build(#factory_ident, runtime).await?;)*
+                #(let #fn_inputs = shuttle_service::#fn_inputs_builder::new()#fn_inputs_builder_options.build(#factory_ident, runtime).await?;)*
 
                 runtime.spawn(async {
                     #fn_ident(#(#fn_inputs),*)
@@ -209,7 +281,7 @@ mod tests {
     use quote::quote;
     use syn::{parse_quote, Ident};
 
-    use crate::{Input, Wrapper};
+    use crate::{Builder, BuilderOptions, Input, Wrapper};
 
     #[test]
     fn from_with_return() {
@@ -293,7 +365,10 @@ mod tests {
         let expected_ident: Ident = parse_quote!(complex);
         let expected_inputs: Vec<Input> = vec![Input {
             ident: parse_quote!(pool),
-            builder: parse_quote!(shared::Postgres),
+            builder: Builder {
+                path: parse_quote!(shared::Postgres),
+                options: Default::default(),
+            },
         }];
 
         assert_eq!(actual.fn_ident, expected_ident);
@@ -318,11 +393,17 @@ mod tests {
             fn_inputs: vec![
                 Input {
                     ident: parse_quote!(pool),
-                    builder: parse_quote!(shared::Postgres),
+                    builder: Builder {
+                        path: parse_quote!(shared::Postgres),
+                        options: Default::default(),
+                    },
                 },
                 Input {
                     ident: parse_quote!(redis),
-                    builder: parse_quote!(shared::Redis),
+                    builder: Builder {
+                        path: parse_quote!(shared::Redis),
+                        options: Default::default(),
+                    },
                 },
             ],
         };
@@ -361,6 +442,170 @@ mod tests {
 
                 runtime.spawn(async {
                     complex(pool, redis)
+                        .await
+                        .map(|ok| Box::new(ok) as Box<dyn shuttle_service::Service>)
+                })
+                .await
+                .map_err(|e| {
+                    if e.is_panic() {
+                        let mes = e
+                            .into_panic()
+                            .downcast_ref::<&str>()
+                            .map(|x| x.to_string())
+                            .unwrap_or_else(|| "<no panic message>".to_string());
+
+                        shuttle_service::Error::BuildPanic(mes)
+                    } else {
+                        shuttle_service::Error::Custom(shuttle_service::error::CustomError::new(e))
+                    }
+                })?
+            }
+        };
+
+        assert_eq!(actual.to_string(), expected.to_string());
+    }
+
+    #[test]
+    fn parse_builder_options() {
+        let input: BuilderOptions = parse_quote!((
+            string = "string_val",
+            boolean = true,
+            integer = 5,
+            float = 2.65,
+            enum_variant = SomeEnum::Variant1
+        ));
+
+        let mut expected: BuilderOptions = Default::default();
+        expected.options.push(parse_quote!(string = "string_val"));
+        expected.options.push(parse_quote!(boolean = true));
+        expected.options.push(parse_quote!(integer = 5));
+        expected.options.push(parse_quote!(float = 2.65));
+        expected
+            .options
+            .push(parse_quote!(enum_variant = SomeEnum::Variant1));
+
+        assert_eq!(input, expected);
+    }
+
+    #[test]
+    fn tokenize_builder_options() {
+        let mut input: BuilderOptions = Default::default();
+        input.options.push(parse_quote!(string = "string_val"));
+        input.options.push(parse_quote!(boolean = true));
+        input.options.push(parse_quote!(integer = 5));
+        input.options.push(parse_quote!(float = 2.65));
+        input
+            .options
+            .push(parse_quote!(enum_variant = SomeEnum::Variant1));
+
+        let actual = quote!(#input);
+        let expected = quote!(.string("string_val").boolean(true).integer(5).float(2.65).enum_variant(SomeEnum::Variant1));
+
+        assert_eq!(actual.to_string(), expected.to_string());
+    }
+
+    #[test]
+    fn from_with_input_options() {
+        let mut input = parse_quote!(
+            async fn complex(
+                #[shared::Postgres(size = "10Gb", public = false)] pool: PgPool,
+            ) -> ShuttlePoem {
+            }
+        );
+
+        let actual = Wrapper::from_item_fn(&mut input);
+        let expected_ident: Ident = parse_quote!(complex);
+        let mut expected_inputs: Vec<Input> = vec![Input {
+            ident: parse_quote!(pool),
+            builder: Builder {
+                path: parse_quote!(shared::Postgres),
+                options: Default::default(),
+            },
+        }];
+
+        expected_inputs[0]
+            .builder
+            .options
+            .options
+            .push(parse_quote!(size = "10Gb"));
+        expected_inputs[0]
+            .builder
+            .options
+            .options
+            .push(parse_quote!(public = false));
+
+        assert_eq!(actual.fn_ident, expected_ident);
+        assert_eq!(actual.fn_inputs, expected_inputs);
+
+        // Make sure attributes was removed from input
+        if let syn::FnArg::Typed(param) = input.sig.inputs.first().unwrap() {
+            assert!(
+                param.attrs.is_empty(),
+                "some attributes were not removed: {:?}",
+                param.attrs
+            );
+        } else {
+            panic!("expected first input to be typed")
+        }
+    }
+
+    #[test]
+    fn output_with_input_options() {
+        let mut input = Wrapper {
+            fn_ident: parse_quote!(complex),
+            fn_inputs: vec![Input {
+                ident: parse_quote!(pool),
+                builder: Builder {
+                    path: parse_quote!(shared::Postgres),
+                    options: Default::default(),
+                },
+            }],
+        };
+
+        input.fn_inputs[0]
+            .builder
+            .options
+            .options
+            .push(parse_quote!(size = "10Gb"));
+        input.fn_inputs[0]
+            .builder
+            .options
+            .options
+            .push(parse_quote!(public = false));
+
+        let actual = quote!(#input);
+        let expected = quote! {
+            async fn __shuttle_wrapper(
+                factory: &mut dyn shuttle_service::Factory,
+                runtime: &shuttle_service::Runtime,
+                logger: Box<dyn shuttle_service::log::Log>,
+            ) -> Result<Box<dyn shuttle_service::Service>, shuttle_service::Error> {
+                use shuttle_service::ResourceBuilder;
+
+                runtime.spawn_blocking(move || {
+                    shuttle_service::log::set_boxed_logger(logger)
+                        .map(|()| shuttle_service::log::set_max_level(shuttle_service::log::LevelFilter::Info))
+                        .expect("logger set should succeed");
+                })
+                .await
+                .map_err(|e| {
+                    if e.is_panic() {
+                        let mes = e
+                            .into_panic()
+                            .downcast_ref::<&str>()
+                            .map(|x| x.to_string())
+                            .unwrap_or_else(|| "<no panic message>".to_string());
+
+                        shuttle_service::Error::BuildPanic(mes)
+                    } else {
+                        shuttle_service::Error::Custom(shuttle_service::error::CustomError::new(e))
+                    }
+                })?;
+
+                let pool = shuttle_service::shared::Postgres::new().size("10Gb").public(false).build(factory, runtime).await?;
+
+                runtime.spawn(async {
+                    complex(pool)
                         .await
                         .map(|ok| Box::new(ok) as Box<dyn shuttle_service::Service>)
                 })

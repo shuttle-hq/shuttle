@@ -17,7 +17,7 @@ commands:
       - run:
           name: Install sccache
           command: |
-            cargo install sccache
+            ls ~/.cargo/bin/sccache || cargo install sccache
             # This configures Rust to use sccache.
             echo 'export "RUSTC_WRAPPER"="sccache"' >> $BASH_ENV
             sccache --version

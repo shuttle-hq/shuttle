@@ -62,7 +62,7 @@ sqlx-aws-mariadb = ["sqlx-integration", "sqlx/mysql"]
 
 secrets = ["sqlx-postgres"]
 
-web-actix = ["actix-web"]
+web-actix = ["actix-web", "sync_wrapper"]
 web-axum = ["axum", "sync_wrapper"]
 web-rocket = ["rocket"]
 web-tide = ["tide"]

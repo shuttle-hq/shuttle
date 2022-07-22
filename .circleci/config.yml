@@ -21,6 +21,7 @@ jobs:
     docker:
       - image: cimg/rust:1.62.0
     steps:
+      - checkout
       - run: |
           cargo clippy --tests \
                        --all-targets \
@@ -101,6 +102,8 @@ workflows:
     jobs:
       - fmt-workspace
       - clippy-workspace:
+          requires:
+            - fmt-workspace
           matrix:
             parameters:
               framework: ["web-axum", "web-rocket", "web-tide", "web-tower"]

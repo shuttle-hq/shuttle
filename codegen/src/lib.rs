@@ -544,17 +544,6 @@ mod tests {
 
         assert_eq!(actual.fn_ident, expected_ident);
         assert_eq!(actual.fn_inputs, expected_inputs);
-
-        // Make sure attributes was removed from input
-        if let syn::FnArg::Typed(param) = input.sig.inputs.first().unwrap() {
-            assert!(
-                param.attrs.is_empty(),
-                "some attributes were not removed: {:?}",
-                param.attrs
-            );
-        } else {
-            panic!("expected first input to be typed")
-        }
     }
 
     #[test]

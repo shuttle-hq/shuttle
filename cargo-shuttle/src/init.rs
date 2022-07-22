@@ -731,6 +731,7 @@ mod shuttle_init_tests {
             [dependencies]
             shuttle-service = { version = "1.0", features = ["web-actix"] }
             actix-web = "1.0"
+            sync_wrapper = "1.0"
         "#};
 
         assert_eq!(cargo_toml.to_string(), expected);

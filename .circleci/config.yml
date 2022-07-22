@@ -13,6 +13,22 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo install cargo-sort
       - run: cargo sort --check --workspace
+  clippy-workspace:
+    parameters:
+      framework:
+        description: "Framework to activate"
+        type: string
+    docker:
+      - image: cimg/rust:1.62.0
+    steps:
+      - run: |
+          cargo clippy --tests \
+                       --all-targets \
+                       --features="codegen,loader,sqlx-integration,sqlx-postgres,secrets,<< parameters.framework >>" \
+                       --no-deps -- \
+                       --D warnings \
+                       -A clippy::let-unit-value \
+                       -A clippy::format-push-string
 
   build-test-and-push:
     resource_class: xlarge
@@ -84,6 +100,10 @@ workflows:
   fmt:
     jobs:
       - fmt-workspace
+      - clippy-workspace:
+          matrix:
+            parameters:
+              framework: ["web-axum", "web-rocket", "web-tide", "web-tower"]
   # build-test-and-push:
   #   jobs:
   #     - build-test-and-push

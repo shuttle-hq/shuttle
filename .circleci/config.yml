@@ -4,23 +4,58 @@ orbs:
   docker-buildx: sensu/docker-buildx@1.1.1
   aws-ecr: circleci/aws-ecr@8.1.2
 
+# sscache steps are from this guide
+# https://medium.com/@edouard.oger/rust-caching-on-circleci-using-sccache-c996344f0115
+commands:
+  restore-cache:
+    steps:
+      # Restore cargo cache before installing anything with the cargo command (ie cargo install ...)
+      - restore_cache:
+          name: Restore cargo cache
+          keys:
+            - cargo-{{ checksum "Cargo.lock" }}-a
+      - run:
+          name: Install sccache
+          command: |
+            cargo install sccache
+            # This configures Rust to use sccache.
+            echo 'export "RUSTC_WRAPPER"="sccache"' >> $BASH_ENV
+            sccache --version
+      - restore_cache:
+          name: Restore sccache cache
+          key: sccache-cache-{{ .Environment.CIRCLE_JOB }}
+  save-cache:
+    steps:
+      - run:
+          name: Sccache stats
+          command: sccache --show-stats
+      - save_cache:
+          name: Save sccache cache
+          # We use {{ epoch }} to always upload a fresh cache:
+          # Of course, restore_cache will not find this exact key,
+          # but it will fall back to the closest key (aka the most recent).
+          # See https://discuss.circleci.com/t/add-mechanism-to-update-existing-cache-key/9014/13
+          key: sccache-cache-{{ .Environment.CIRCLE_JOB }}-{{ epoch }}
+          paths:
+            - "~/.cache/sccache"
+      - save_cache:
+          name: Save cargo cache
+          key: cargo-{{ checksum "Cargo.lock" }}-a-{{ epoch }}
+          paths:
+            - ~/.cargo
+
 jobs:
   fmt-workspace:
     docker:
       - image: cimg/rust:1.62.0
     steps:
       - checkout
-      - restore_cache:
-          keys:
-            - cargo-{{ checksum "Cargo.lock" }}
+      - restore-cache
       - run: cargo fmt --all --check
       - run: cargo install cargo-sort
       - run: cargo sort --check --workspace
       - run: cargo check --workspace --all-targets
-      - save_cache:
-          key: cargo-{{ checksum "Cargo.lock" }}
-          paths:
-            - ~/.cargo
+      - save-cache
   clippy-workspace:
     parameters:
       framework:
@@ -30,9 +65,7 @@ jobs:
       - image: cimg/rust:1.62.0
     steps:
       - checkout
-      - restore_cache:
-          keys:
-            - cargo-{{ checksum "Cargo.lock" }}
+      - restore-cache
       - run: |
           cargo clippy --tests \
                        --all-targets \
@@ -41,6 +74,7 @@ jobs:
                        --D warnings \
                        -A clippy::let-unit-value \
                        -A clippy::format-push-string
+      - save-cache
   check-standalone:
     parameters:
       path:
@@ -50,9 +84,7 @@ jobs:
       - image: cimg/rust:1.62.0
     steps:
       - checkout
-      - restore_cache:
-          keys:
-            - cargo-{{ checksum "Cargo.lock" }}
+      - restore-cache
       - run:
           name: Patch service
           command: |
@@ -71,6 +103,7 @@ jobs:
                        --D warnings \
                        -A clippy::let-unit-value \
                        -A clippy::format-push-string
+      - save-cache
 
   build-test-and-push:
     resource_class: xlarge

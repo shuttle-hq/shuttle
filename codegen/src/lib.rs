@@ -181,9 +181,15 @@ fn attribute_to_builder(attrs: Vec<Attribute>) -> syn::Result<Builder> {
         // return Err("resource needs an attribute configuration".to_string());
     }
 
+    let options = if attrs[0].tokens.is_empty() {
+        Default::default()
+    } else {
+        parse2(attrs[0].tokens.clone())?
+    };
+
     let builder = Builder {
         path: attrs[0].path.clone(),
-        options: parse2(attrs[0].tokens.clone())?,
+        options,
     };
 
     Ok(builder)

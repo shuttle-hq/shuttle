@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 tide = "0.16.0"
 shuttle-service = { version = "0.4.0", features = ["web-tide"] }
+tide-tracing = "0.0.11"

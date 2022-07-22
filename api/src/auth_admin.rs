@@ -49,7 +49,7 @@ impl<'r> FromRequest<'r> for Admin {
         if admin_secret.0 == *SHUTTLE_ADMIN_SECRET {
             Outcome::Success(Admin {})
         } else {
-            log::warn!("authorization failure for admin secret {:?}", &admin_secret);
+            tracing::log::warn!("authorization failure for admin secret {:?}", &admin_secret);
 
             Outcome::Failure((Status::Unauthorized, AuthorizationError::Unauthorized(())))
         }

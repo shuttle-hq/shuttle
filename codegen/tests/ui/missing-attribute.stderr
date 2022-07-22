@@ -1,23 +1,31 @@
 error: resource needs an attribute configuration
-
-         = help: Try adding a config like `#[shared::Postgres]`
-
+ --> tests/ui/missing-attribute.rs:2:27
+  |
+2 | async fn missing_attriute(pool: PgPool, cache: Redis) -> ShuttleRocket {}
+  |                           ^^^^
+  |
+help: Try adding a config like `#[shared::Postgres]`
  --> tests/ui/missing-attribute.rs:2:27
   |
 2 | async fn missing_attriute(pool: PgPool, cache: Redis) -> ShuttleRocket {}
   |                           ^^^^
 
 error: resource needs an attribute configuration
-
-         = help: Try adding a config like `#[shared::Postgres]`
-
+ --> tests/ui/missing-attribute.rs:2:41
+  |
+2 | async fn missing_attriute(pool: PgPool, cache: Redis) -> ShuttleRocket {}
+  |                                         ^^^^^
+  |
+help: Try adding a config like `#[shared::Postgres]`
  --> tests/ui/missing-attribute.rs:2:41
   |
 2 | async fn missing_attriute(pool: PgPool, cache: Redis) -> ShuttleRocket {}
   |                                         ^^^^^
 
-error[E0601]: `main` function not found in crate `$CRATE`
- --> tests/ui/missing-attribute.rs:2:74
+error[E0433]: failed to resolve: use of undeclared crate or module `shuttle_service`
+ --> tests/ui/missing-attribute.rs:1:1
   |
-2 | async fn missing_attriute(pool: PgPool, cache: Redis) -> ShuttleRocket {}
-  |                                                                          ^ consider adding a `main` function to `$DIR/tests/ui/missing-attribute.rs`
+1 | #[shuttle_codegen::main]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^ use of undeclared crate or module `shuttle_service`
+  |
+  = note: this error originates in the attribute macro `shuttle_codegen::main` (in Nightly builds, run with -Z macro-backtrace for more info)

@@ -300,13 +300,13 @@ impl JobQueue {
     async fn new(context: Context, run_logs_tx: UnboundedSender<Log>) -> Self {
         let (send, mut recv) = mpsc::channel::<Arc<Deployment>>(JOB_QUEUE_SIZE);
 
-        log::debug!("starting job processor task");
+        tracing::log::debug!("starting job processor task");
 
         tokio::spawn(async move {
             while let Some(deployment) = recv.recv().await {
                 let id = deployment.meta().await.id;
 
-                log::debug!("started deployment job for deployment '{}'", id);
+                tracing::log::debug!("started deployment job for deployment '{}'", id);
 
                 while !deployment.deployment_finished().await {
                     let run_logs_tx = run_logs_tx.clone();
@@ -317,7 +317,7 @@ impl JobQueue {
                 debug!("ended deployment job for id: '{}'", id);
             }
 
-            log::debug!("job processor task ended");
+            tracing::log::debug!("job processor task ended");
         });
 
         Self { send }

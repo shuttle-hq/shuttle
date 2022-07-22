@@ -1,6 +1,6 @@
 use chrono::{DateTime, Local, Utc};
 use colored::{ColoredString, Colorize};
-use log::Level;
+use tracing::log::Level;
 use shuttle_common::LogItem;
 
 pub fn log(datetime: DateTime<Utc>, log_item: LogItem) {

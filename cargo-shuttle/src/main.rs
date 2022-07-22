@@ -4,8 +4,6 @@ use clap::Parser;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    env_logger::init();
-
     let result = Shuttle::new().run(Args::parse()).await;
 
     if matches!(result, Ok(CommandOutcome::DeploymentFailure)) {

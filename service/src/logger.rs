@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use log::{Level, Metadata, Record};
+use tracing::log::{Level, Metadata, Record};
 use shuttle_common::{DeploymentId, LogItem};
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -21,7 +21,7 @@ impl Logger {
     }
 }
 
-impl log::Log for Logger {
+impl tracing::log::Log for Logger {
     fn enabled(&self, metadata: &Metadata) -> bool {
         metadata.level() <= Level::Info
     }

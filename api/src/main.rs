@@ -1,9 +1,6 @@
 #[macro_use]
 extern crate rocket;
 
-#[macro_use]
-extern crate log;
-
 mod args;
 mod auth;
 mod auth_admin;
@@ -185,11 +182,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 //noinspection ALL
 async fn rocket() -> Rocket<Build> {
-    env_logger::Builder::new()
-        .filter_module("rocket", log::LevelFilter::Warn)
-        .filter_module("_", log::LevelFilter::Warn)
-        .filter_module("shuttle_api", log::LevelFilter::Debug)
-        .filter_module("shuttle_service", log::LevelFilter::Debug)
+    // env_logger::Builder::new()
+    //     .filter_module("rocket", log::LevelFilter::Warn)
+    //     .filter_module("_", log::LevelFilter::Warn)
+    //     .filter_module("shuttle_api", log::LevelFilter::Debug)
+    //     .filter_module("shuttle_service", log::LevelFilter::Debug)
+    //     .init();
+
+    tracing_subscriber::fmt()
+        .with_env_filter("warn,rocket=warn,shuttle_api=debug,shuttle_service=debug")
         .init();
 
     let args: Args = Args::parse();

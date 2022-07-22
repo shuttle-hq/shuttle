@@ -89,7 +89,7 @@ pub fn log_lines<R: io::Read, D: std::fmt::Display>(mut reader: R, target: D) {
         }
 
         for line in io::BufReader::new(&buf[..current_pos]).lines() {
-            println!("{} {}", target, line.unwrap());
+            //println!("{} {}", target, line.unwrap());
         }
 
         current_pos = 0;
@@ -98,7 +98,7 @@ pub fn log_lines<R: io::Read, D: std::fmt::Display>(mut reader: R, target: D) {
     // Log last
     if current_pos != 0 {
         for line in io::BufReader::new(&buf[..current_pos]).lines() {
-            println!("{} {}", target, line.unwrap());
+            //println!("{} {}", target, line.unwrap());
         }
     }
 }

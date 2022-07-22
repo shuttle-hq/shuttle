@@ -61,7 +61,7 @@ And that's it! It turns out there are more than a few devils in the details here
 
 ## $ cargo shuttle deploy
 
-The cargo subcommand [`cargo shuttle`](https://github.com/getsynth/shuttle/tree/main/cargo-shuttle) seemed like the obvious place to start.
+The cargo subcommand [`cargo shuttle`](https://github.com/shuttle-hq/shuttle/tree/main/cargo-shuttle) seemed like the obvious place to start.
 
 To create a third-party cargo subcommand, the binary needs to be named `cargo-${command}` and it needs to be stored in `~./.cargo/bin`. The easiest way to do this is to create a binary called `cargo-shuttle` and publish it to `crates.io`. Then, `cargo install cargo-shuttle` will place it in `~./.cargo/bin`. Pretty simple.
 

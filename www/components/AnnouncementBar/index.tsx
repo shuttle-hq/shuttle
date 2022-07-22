@@ -21,7 +21,7 @@ export default function AnnouncementBar() {
         ⭐️ If you like Shuttle,&nbsp;
         <ExternalLink
           className={styles.announcement__link}
-          href={"https://github.com/getsynth/shuttle"}
+          href={"https://github.com/shuttle-hq/shuttle"}
         >
           give it a star on GitHub
         </ExternalLink>

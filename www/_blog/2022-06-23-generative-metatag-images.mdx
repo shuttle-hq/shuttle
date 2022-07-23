@@ -266,7 +266,7 @@ Compared to the headless browser technique this process is faster. While doing a
 
 With some rough benchmarks the Rust loading, rendering and encoded was two times faster than the nodejs puppeteer equivalent (100ms vs 200ms). 
 
-This time accounts for the startup time in the nodejs version. If you aren't retaining the browser window then the results are even more noticable. Generating one of images (*cold start*) the Rust version is 7x faster.
+This time accounts for the startup time in the nodejs version. If you aren't retaining the browser window then the results are even more noticeable. Generating one of images (*cold start*) the Rust version is 7x faster.
 
 Aside from rendering performance the Rust version is self contained, only the compiled binary is needed to generate the image. No having to worry about whether chromium is in the environment. This is huge benefit if you are doing image generation in a serverless environment.
 

@@ -38,9 +38,9 @@ pub(crate) struct FsBuildSystem {
 }
 
 impl FsBuildSystem {
-    /// Intialises the FS Build System. Optionally you can define the root
+    /// Initialises the FS Build System. Optionally you can define the root
     /// of its file system. If unspecified, will default to `FS_ROOT`.
-    /// The FS Build System will fail to intialise if the directory does not.
+    /// The FS Build System will fail to initialise if the directory does not.
     /// exist
     pub(crate) fn initialise(path: Option<PathBuf>) -> Result<Self> {
         let fs_root = path.unwrap_or_else(|| PathBuf::from(DEFAULT_FS_ROOT));

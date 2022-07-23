@@ -297,7 +297,7 @@ impl UserDirectory {
             &file_path
         ))?;
         let users = toml::from_str(&file_contents)
-            .context("this should blow up if the users.toml file is unparseable")?;
+            .context("this should blow up if the users.toml file is unparsable")?;
         let directory = Self {
             users: RwLock::new(users),
         };

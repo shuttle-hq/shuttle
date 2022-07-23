@@ -63,7 +63,7 @@ fn login(login: Json<LoginRequest>) -> Result<Json<LoginResponse>, Custom<String
 
     let claim = Claims::from_name(&login.username);
     let response = LoginResponse {
-        token: claim.to_token()?,
+        token: claim.into_token()?,
     };
 
     Ok(Json(response))

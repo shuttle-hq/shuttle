@@ -104,6 +104,26 @@ jobs:
                        -A clippy::let-unit-value \
                        -A clippy::format-push-string
       - save-cache
+  test-service:
+    parameters:
+      framework:
+        description: "Framework to activate"
+        type: string
+    machine:
+      image: ubuntu-2204:2022.04.1
+      docker_layer_caching: true
+    steps:
+      - run:
+          name: Install Rust
+          command: |
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+            sudo apt update && sudo apt install -y libssl1.1
+      - checkout
+      - restore-cache
+      - run:
+          name: Run unit tests
+          command: cargo test --package shuttle-service --features="codegen,loader,secrets,<< parameters.framework >>"
+      - save-cache
 
   build-test-and-push:
     resource_class: xlarge
@@ -174,28 +194,36 @@ workflows:
   version: 2
   fmt:
     jobs:
-      - fmt-workspace
-      - clippy-workspace:
-          requires:
-            - fmt-workspace
+      # - fmt-workspace
+      # - clippy-workspace:
+      #     name: clippy-workspace-<< matrix.framework >>
+      #     requires:
+      #       - fmt-workspace
+      #     matrix:
+      #       parameters:
+      #         framework: ["web-axum", "web-rocket", "web-tide", "web-tower"]
+      # - check-standalone:
+      #     requires:
+      #       - clippy-workspace
+      #     matrix:
+      #       parameters:
+      #         path:
+      #           - examples/axum/hello-world
+      #           - examples/axum/websocket
+      #           - examples/rocket/authentication
+      #           - examples/rocket/hello-world
+      #           - examples/rocket/postgres
+      #           - examples/rocket/url-shortener
+      #           - examples/tide/hello-world
+      #           - examples/tide/postgres
+      #           - examples/tower/hello-world
+      - test-service:
+          name: test-service-<< matrix.framework >>
+          # requires:
+          #   - clippy-workspace-<< matrix.framework >>
           matrix:
             parameters:
               framework: ["web-axum", "web-rocket", "web-tide", "web-tower"]
-      - check-standalone:
-          requires:
-            - clippy-workspace
-          matrix:
-            parameters:
-              path:
-                - examples/axum/hello-world
-                - examples/axum/websocket
-                - examples/rocket/authentication
-                - examples/rocket/hello-world
-                - examples/rocket/postgres
-                - examples/rocket/url-shortener
-                - examples/tide/hello-world
-                - examples/tide/postgres
-                - examples/tower/hello-world
   # build-test-and-push:
   #   jobs:
   #     - build-test-and-push

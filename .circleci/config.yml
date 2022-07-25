@@ -219,34 +219,34 @@ workflows:
   version: 2
   ci:
     jobs:
-      # - workspace-fmt
-      # - workspace-clippy:
-      #     name: workspace-clippy-<< matrix.framework >>
-      #     requires:
-      #       - workspace-fmt
-      #     matrix:
-      #       parameters:
-      #         framework: ["web-axum", "web-rocket", "web-tide", "web-tower"]
-      # - check-standalone:
-      #     matrix:
-      #       parameters:
-      #         path:
-      #           - examples/axum/hello-world
-      #           - examples/axum/websocket
-      #           - examples/rocket/authentication
-      #           - examples/rocket/hello-world
-      #           - examples/rocket/postgres
-      #           - examples/rocket/url-shortener
-      #           - examples/tide/hello-world
-      #           - examples/tide/postgres
-      #           - examples/tower/hello-world
-      # - service-test:
-      #     name: service-test
-      #     requires:
-      #       - workspace-clippy
+      - workspace-fmt
+      - workspace-clippy:
+          name: workspace-clippy-<< matrix.framework >>
+          requires:
+            - workspace-fmt
+          matrix:
+            parameters:
+              framework: ["web-axum", "web-rocket", "web-tide", "web-tower"]
+      - check-standalone:
+          matrix:
+            parameters:
+              path:
+                - examples/axum/hello-world
+                - examples/axum/websocket
+                - examples/rocket/authentication
+                - examples/rocket/hello-world
+                - examples/rocket/postgres
+                - examples/rocket/url-shortener
+                - examples/tide/hello-world
+                - examples/tide/postgres
+                - examples/tower/hello-world
+      - service-test:
+          name: service-test
+          requires:
+            - workspace-clippy
       - platform-test:
-          # requires:
-          #   - service-test
+          requires:
+            - workspace-clippy
           matrix:
             parameters:
               crate: ["shuttle-api", "cargo-shuttle", "shuttle-codegen", "shuttle-common", "shuttle-proto", "shuttle-provisioner"]

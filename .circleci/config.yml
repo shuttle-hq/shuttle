@@ -78,7 +78,7 @@ jobs:
   check-standalone:
     parameters:
       path:
-        description: "Path to crate excluded from workspace"
+        description: "Path to crate external from workspace"
         type: string
     docker:
       - image: cimg/rust:1.62.0
@@ -117,8 +117,11 @@ jobs:
       - checkout
       - restore-cache
       - run:
-          name: Run tests
-          command: cargo test --package shuttle-service --features="codegen,loader,secrets"
+          name: Run unit tests
+          command: cargo test --package shuttle-service --features="codegen,loader,secrets" --lib -- --nocapture
+      - run:
+          name: Run integration tests
+          command: cargo test --package shuttle-service --features="codegen,loader,secrets" --test '*' -- --nocapture
       - save-cache
   platform-test:
     parameters:
@@ -141,7 +144,10 @@ jobs:
           command: cargo test --package << parameters.crate >> --all-features --lib -- --nocapture
       - run:
           name: Run integration tests
-          command: cargo test --package << parameters.crate >> --all-features --test '*' -- --nocapture
+          # Only run integration tests if there are any
+          command: |
+            set +o pipefail
+            (cargo test --package << parameters.crate >> --all-features --test '*' -- --list 2>&1 | grep -q "no test target matches pattern") && echo "nothing to test" || cargo test --package << parameters.crate >> --all-features --test '*' -- --nocapture
       - save-cache
 
   build-test-and-push:
@@ -211,7 +217,7 @@ jobs:
           when: always
 workflows:
   version: 2
-  fmt:
+  ci:
     jobs:
       # - workspace-fmt
       # - workspace-clippy:
@@ -222,8 +228,6 @@ workflows:
       #       parameters:
       #         framework: ["web-axum", "web-rocket", "web-tide", "web-tower"]
       # - check-standalone:
-      #     requires:
-      #       - workspace-clippy
       #     matrix:
       #       parameters:
       #         path:
@@ -238,14 +242,14 @@ workflows:
       #           - examples/tower/hello-world
       # - service-test:
       #     name: service-test
-          # requires:
-          #   - workspace-clippy
+      #     requires:
+      #       - workspace-clippy
       - platform-test:
           # requires:
           #   - service-test
           matrix:
             parameters:
-              crate: ["shuttle-provisioner", "shuttle-api", "cargo-shuttle"]
+              crate: ["shuttle-api", "cargo-shuttle", "shuttle-codegen", "shuttle-common", "shuttle-proto", "shuttle-provisioner"]
   # build-test-and-push:
   #   jobs:
   #     - build-test-and-push

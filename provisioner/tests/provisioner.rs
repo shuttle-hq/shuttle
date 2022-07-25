@@ -61,10 +61,13 @@ impl DockerPG {
                 .status;
 
             if status.success() {
+                println!("{container_name} is ready...");
                 return;
             }
 
             sleep(Duration::from_millis(350));
+
+            println!("waiting for {container_name} to be ready...");
 
             timeout = timeout
                 .checked_sub(now.elapsed().unwrap())

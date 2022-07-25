@@ -45,6 +45,10 @@ impl DockerPG {
 
         Self::wait_ready(container_name, Duration::from_secs(120));
 
+        // Postgres restarts, so wait for it to be ready after the restart
+        sleep(Duration::from_millis(500));
+        Self::wait_ready(container_name, Duration::from_secs(10));
+
         Self {
             container_name: container_name.to_string(),
             uri: format!("postgres://postgres:password@localhost:{port}"),

@@ -12,3 +12,6 @@ exclude = [
   "e2e",
   "examples"
 ]
+
+[patch.crates-io]
+shuttle-service = { path = "./service" }

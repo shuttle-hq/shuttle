@@ -222,7 +222,9 @@ impl Shuttle {
         self.run_tests(args.no_test)?;
 
         let package_file = self
-            .run_cargo_package(args.allow_dirty)
+            // #TODO: Revert this, just dev convenience
+            // .run_cargo_package(args.allow_dirty)
+            .run_cargo_package(true)
             .context("failed to package cargo project")?;
 
         let key = self.ctx.api_key()?;

@@ -1,7 +1,7 @@
 # TODO: replace with the public alias when ready
 CONTAINER_REGISTRY ?= public.ecr.aws/q0k3o0d8
 
-SRC_CRATES=api common codegen cargo-shuttle proto provisioner service
+SRC_CRATES=deployer common codegen cargo-shuttle proto provisioner service
 SRC=$(shell find $(SRC_CRATES) -name "*.rs" -type f -not -path "**/target/*")
 
 COMMIT_SHA ?= $(shell git rev-parse --short HEAD)
@@ -36,9 +36,9 @@ endif
 clean:
 	rm .shuttle-*
 
-images: .shuttle-provisioner .shuttle-api
+images: .shuttle-provisioner .shuttle-deployer
 
-api: .shuttle-api
+deployer: .shuttle-deployer
 
 provisioner: .shuttle-provisioner
 

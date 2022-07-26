@@ -62,6 +62,12 @@ pub struct Log {
     pub r#type: LogType,
 }
 
+impl Log {
+    pub fn to_build_log(&self) -> Option<BuildLog> {
+        to_build_log(&self.name, &self.timestamp, &self.fields)
+    }
+}
+
 impl From<Log> for log::Log {
     fn from(log: Log) -> Self {
         Self {
@@ -82,12 +88,6 @@ impl From<Log> for DeploymentInfo {
             name: log.name,
             state: log.state,
         }
-    }
-}
-
-impl From<&Log> for Option<BuildLog> {
-    fn from(log: &Log) -> Self {
-        to_build_log(&log.name, &log.timestamp, &log.fields)
     }
 }
 

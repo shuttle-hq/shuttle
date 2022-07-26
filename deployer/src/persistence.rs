@@ -74,7 +74,7 @@ impl Persistence {
                 match log.r#type {
                     LogType::Event => {
                         if log.state == State::Building {
-                            if let Some(build_log) = Into::into(&log) {
+                            if let Some(build_log) = log.to_build_log() {
                                 build_log_send_clone
                                     .send(build_log)
                                     .expect("failed to broadcast build log");
@@ -168,7 +168,7 @@ impl Persistence {
                 .fetch_all(&self.pool)
                 .await?;
 
-        let logs = logs.into_iter().filter_map(Into::into).collect();
+        let logs = logs.into_iter().filter_map(Log::into_build_log).collect();
 
         Ok(logs)
     }

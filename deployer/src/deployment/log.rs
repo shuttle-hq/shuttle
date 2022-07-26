@@ -23,8 +23,8 @@ pub enum Level {
     Error,
 }
 
-impl From<Log> for Option<BuildLog> {
-    fn from(log: Log) -> Self {
-        to_build_log(&log.name, &log.timestamp, &log.fields)
+impl Log {
+    pub fn into_build_log(self) -> Option<BuildLog> {
+        to_build_log(&self.name, &self.timestamp, &self.fields)
     }
 }

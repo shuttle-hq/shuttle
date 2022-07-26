@@ -94,7 +94,7 @@ pub(crate) async fn shuttle_version(mut api_url: ApiUrl) -> Result<String> {
             status = %response_status,
             "failed to get shuttle version from server"
         );
-        Err(anyhow!("failed to get shuttle version from server",))
+        Err(anyhow!("failed to get shuttle version from server"))
     }
 }
 
@@ -221,14 +221,8 @@ fn print_log(logs: &Option<String>, log_pos: &mut usize) {
 
 async fn to_api_result(res: Response) -> Result<DeploymentMeta> {
     let text = res.text().await?;
-    match serde_json::from_str::<DeploymentMeta>(&text) {
-        Ok(meta) => Ok(meta),
-        Err(error) => {
-            error!(
-                error = &error as &dyn std::error::Error,
-                text, "failed to parse deployment meta"
-            );
-            Err(anyhow!("could not parse server response"))
-        }
-    }
+    serde_json::from_str::<DeploymentMeta>(&text).with_context(|| {
+        error!(text, "failed to parse deployment meta");
+        "could not parse server response"
+    })
 }

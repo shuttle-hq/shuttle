@@ -27,7 +27,6 @@ services:
       dockerfile: Containerfile
       args:
         crate: shuttle-deployer
-    image: "${CONTAINER_REGISTRY}/deployer:dev"
 
   provisioner:
     entrypoint:
@@ -48,4 +47,3 @@ services:
       dockerfile: Containerfile
       args:
         crate: shuttle-provisioner
-    image: "${CONTAINER_REGISTRY}/provisioner:dev"

@@ -7,7 +7,7 @@ orbs:
 # sscache steps are from this guide
 # https://medium.com/@edouard.oger/rust-caching-on-circleci-using-sccache-c996344f0115
 commands:
-  restore-cache:
+  restore-cargo-cache:
     steps:
       # Restore cargo cache before installing anything with the cargo command (ie cargo install ...)
       - restore_cache:
@@ -24,7 +24,7 @@ commands:
       - restore_cache:
           name: Restore sccache cache
           key: sccache-cache-{{ .Environment.CIRCLE_JOB }}
-  save-cache:
+  save-cargo-cache:
     steps:
       - run:
           name: Sccache stats
@@ -43,6 +43,31 @@ commands:
           key: cargo-{{ checksum "Cargo.lock" }}-{{ epoch }}
           paths:
             - ~/.cargo
+  restore-buildx-cache:
+    steps:
+      - docker-buildx/install:
+          version: 0.8.2
+          qemu-user-static-version: 7.0.0-7
+      - restore_cache:
+          name: Restore buildx cache
+          keys:
+            # Try lock cache first
+            - docker-buildx-{{ checksum "./Cargo.lock" }}
+            # Try branch cache next
+            - docker-buildx-{{ .Branch }}
+            # Fallback to main cache
+            - docker-buildx-main
+      - run:
+          name: Configure buildx cache
+          command: export BUILDX_CACHE=/tmp/cache/buildx
+  save-buildx-cache:
+    steps:
+      - save_cache:
+          name: Save buildx cache
+          paths:
+            - "/tmp/cache/buildx"
+          key: docker-buildx-{{ checksum "./Cargo.lock" }}-{{ epoch }}
+          when: always
 
 jobs:
   workspace-fmt:
@@ -50,12 +75,12 @@ jobs:
       - image: cimg/rust:1.62.0
     steps:
       - checkout
-      - restore-cache
+      - restore-cargo-cache
       - run: cargo fmt --all --check
       - run: cargo install cargo-sort
       - run: cargo sort --check --workspace
       - run: cargo check --workspace --all-targets
-      - save-cache
+      - save-cargo-cache
   workspace-clippy:
     parameters:
       framework:
@@ -65,7 +90,7 @@ jobs:
       - image: cimg/rust:1.62.0
     steps:
       - checkout
-      - restore-cache
+      - restore-cargo-cache
       - run: |
           cargo clippy --tests \
                        --all-targets \
@@ -74,7 +99,7 @@ jobs:
                        --D warnings \
                        -A clippy::let-unit-value \
                        -A clippy::format-push-string
-      - save-cache
+      - save-cargo-cache
   check-standalone:
     parameters:
       path:
@@ -84,7 +109,7 @@ jobs:
       - image: cimg/rust:1.62.0
     steps:
       - checkout
-      - restore-cache
+      - restore-cargo-cache
       - run:
           name: Patch service
           command: |
@@ -103,7 +128,7 @@ jobs:
                        --D warnings \
                        -A clippy::let-unit-value \
                        -A clippy::format-push-string
-      - save-cache
+      - save-cargo-cache
   service-test:
     # Using an image since tests will start a docker container
     machine:
@@ -115,14 +140,14 @@ jobs:
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
             sudo apt update && sudo apt install -y libssl1.1
       - checkout
-      - restore-cache
+      - restore-cargo-cache
       - run:
           name: Run unit tests
           command: cargo test --package shuttle-service --features="codegen,loader,secrets" --lib -- --nocapture
       - run:
           name: Run integration tests
           command: cargo test --package shuttle-service --features="codegen,loader,secrets" --test '*' -- --nocapture
-      - save-cache
+      - save-cargo-cache
   platform-test:
     parameters:
       crate:
@@ -138,7 +163,7 @@ jobs:
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
             sudo apt update && sudo apt install -y libssl1.1
       - checkout
-      - restore-cache
+      - restore-cargo-cache
       - run:
           name: Run unit tests
           command: cargo test --package << parameters.crate >> --all-features --lib -- --nocapture
@@ -148,8 +173,7 @@ jobs:
           command: |
             set +o pipefail
             (cargo test --package << parameters.crate >> --all-features --test '*' -- --list 2>&1 | grep -q "no test target matches pattern") && echo "nothing to test" || cargo test --package << parameters.crate >> --all-features --test '*' -- --nocapture
-      - save-cache
-
+      - save-cargo-cache
   e2e-test:
     resource_class: xlarge
     machine:
@@ -157,28 +181,15 @@ jobs:
       docker_layer_caching: true
     steps:
       - checkout
-      - docker-buildx/install:
-          version: 0.8.2
-          qemu-user-static-version: 7.0.0-7
-      - restore_cache:
-          keys:
-            # Try lock cache first
-            - docker-buildx-{{ checksum "./Cargo.lock" }}
-            # Try branch cache next
-            - docker-buildx-{{ .Branch }}
-            # Fallback to main cache
-            - docker-buildx-main
+      - restore-buildx-cache
       - run:
+          name: Make images for tests
           command: |
-            export BUILDX_CACHE=/tmp/cache/buildx
             sudo mkdir -p $BUILDX_CACHE && sudo chown -R circleci:circleci $BUILDX_CACHE
             make images
-      - save_cache:
-          paths:
-            - "/tmp/cache/buildx"
-          key: docker-buildx-{{ checksum "./Cargo.lock" }}-{{ epoch }}
-          when: always
+      - save-buildx-cache
       - run:
+          name: Install libraries
           command: |
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
       - run:
@@ -205,30 +216,18 @@ jobs:
       docker_layer_caching: true
     steps:
       - checkout
-      - docker-buildx/install:
-          version: 0.8.2
-          qemu-user-static-version: 7.0.0-7
-      - restore_cache:
-          keys:
-            # Try lock cache first
-            - docker-buildx-{{ checksum "./Cargo.lock" }}
-            # Try branch cache next
-            - docker-buildx-{{ .Branch }}
-            # Fallback to main cache
-            - docker-buildx-main
+      - restore-buildx-cache
       - aws-ecr/ecr-login:
           aws-access-key-id: AWS_ACCESS_KEY_ID
           aws-secret-access-key: AWS_SECRET_ACCESS_KEY
           public-registry: true
       - run:
+          name: Make and push images
           command: |
             make clean
-            PUSH=true BUILDX_CACHE=/tmp/cache/buildx PLATFORMS=linux/amd64,linux/arm64 make images
-      - save_cache:
-          paths:
-            - "/tmp/cache/buildx"
-          key: docker-buildx-{{ checksum "./Cargo.lock" }}-{{ epoch }}
-          when: always
+            PUSH=true PLATFORMS=linux/amd64,linux/arm64 make images
+      - save-buildx-cache
+
 workflows:
   version: 2
   ci:

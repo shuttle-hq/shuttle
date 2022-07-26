@@ -87,8 +87,8 @@ impl Pipeline {
 
         let run_send_clone = run_send.clone();
 
-        tokio::spawn(async move { queue::task(queue_recv, run_send_clone, log_recorder).await });
-        tokio::spawn(async move { run::task(run_recv, kill_send).await });
+        tokio::spawn(queue::task(queue_recv, run_send_clone, log_recorder));
+        tokio::spawn(run::task(run_recv, kill_send));
 
         Pipeline {
             queue_send,

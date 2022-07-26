@@ -13,7 +13,7 @@ commands:
       - restore_cache:
           name: Restore cargo cache
           keys:
-            - cargo-{{ checksum "Cargo.lock" }}-a
+            - cargo-{{ checksum "Cargo.lock" }}
       - run:
           name: Install sccache
           command: |
@@ -40,7 +40,7 @@ commands:
             - "~/.cache/sccache"
       - save_cache:
           name: Save cargo cache
-          key: cargo-{{ checksum "Cargo.lock" }}-a-{{ epoch }}
+          key: cargo-{{ checksum "Cargo.lock" }}-{{ epoch }}
           paths:
             - ~/.cargo
 
@@ -150,7 +150,7 @@ jobs:
             (cargo test --package << parameters.crate >> --all-features --test '*' -- --list 2>&1 | grep -q "no test target matches pattern") && echo "nothing to test" || cargo test --package << parameters.crate >> --all-features --test '*' -- --nocapture
       - save-cache
 
-  build-test-and-push:
+  e2e-test:
     resource_class: xlarge
     machine:
       image: ubuntu-2204:2022.04.1
@@ -176,7 +176,7 @@ jobs:
       - save_cache:
           paths:
             - "/tmp/cache/buildx"
-          key: docker-buildx-{{ checksum "./Cargo.lock" }}
+          key: docker-buildx-{{ checksum "./Cargo.lock" }}-{{ epoch }}
           when: always
       - run:
           command: |
@@ -193,27 +193,41 @@ jobs:
             make down
             docker volume create shuttle-backend-vol
             cd e2e; BUILDX_CACHE=/tmp/cache/buildx SHUTTLE_API_KEY=test-key cargo test -- --nocapture
-      - when:
-          condition:
-            equal: [ main, << pipeline.git.branch >> ]
-          steps:
-            - aws-ecr/ecr-login:
-                aws-access-key-id: AWS_ACCESS_KEY_ID
-                aws-secret-access-key: AWS_SECRET_ACCESS_KEY
-                public-registry: true
-            - run:
-               command: |
-                 make clean
-                 PUSH=true BUILDX_CACHE=/tmp/cache/buildx PLATFORMS=linux/amd64,linux/arm64 make images
-      - save_cache:
-          paths:
-            - "/tmp/cache/buildx"
-          key: docker-buildx-{{ checksum "./Cargo.lock" }}
-          when: always
       - save_cache:
           paths:
             - "/tmp/cache/buildx"
           key: docker-buildx-{{ .Branch }}
+          when: always
+  build-and-push:
+    resource_class: xlarge
+    machine:
+      image: ubuntu-2204:2022.04.1
+      docker_layer_caching: true
+    steps:
+      - checkout
+      - docker-buildx/install:
+          version: 0.8.2
+          qemu-user-static-version: 7.0.0-7
+      - restore_cache:
+          keys:
+            # Try lock cache first
+            - docker-buildx-{{ checksum "./Cargo.lock" }}
+            # Try branch cache next
+            - docker-buildx-{{ .Branch }}
+            # Fallback to main cache
+            - docker-buildx-main
+      - aws-ecr/ecr-login:
+          aws-access-key-id: AWS_ACCESS_KEY_ID
+          aws-secret-access-key: AWS_SECRET_ACCESS_KEY
+          public-registry: true
+      - run:
+          command: |
+            make clean
+            PUSH=true BUILDX_CACHE=/tmp/cache/buildx PLATFORMS=linux/amd64,linux/arm64 make images
+      - save_cache:
+          paths:
+            - "/tmp/cache/buildx"
+          key: docker-buildx-{{ checksum "./Cargo.lock" }}-{{ epoch }}
           when: always
 workflows:
   version: 2
@@ -241,7 +255,6 @@ workflows:
                 - examples/tide/postgres
                 - examples/tower/hello-world
       - service-test:
-          name: service-test
           requires:
             - workspace-clippy
       - platform-test:
@@ -250,6 +263,14 @@ workflows:
           matrix:
             parameters:
               crate: ["shuttle-api", "cargo-shuttle", "shuttle-codegen", "shuttle-common", "shuttle-proto", "shuttle-provisioner"]
-  # build-test-and-push:
-  #   jobs:
-  #     - build-test-and-push
+      - e2e-test:
+          requires:
+            - service-test
+            - platform-test
+            - check-standalone
+      - build-and-push:
+          requires:
+            - e2e-test
+          filters:
+            branches:
+              only: main

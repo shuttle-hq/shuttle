@@ -239,13 +239,15 @@ workflows:
             - workspace-fmt
           matrix:
             parameters:
-              framework: ["web-axum", "web-rocket", "web-tide", "web-tower"]
+              framework: ["web-axum", "web-rocket", "web-poem", "web-tide", "web-tower"]
       - check-standalone:
           matrix:
             parameters:
               path:
                 - examples/axum/hello-world
                 - examples/axum/websocket
+                - examples/poem/hello-world
+                - examples/poem/postgres
                 - examples/rocket/authentication
                 - examples/rocket/hello-world
                 - examples/rocket/postgres

@@ -12,7 +12,7 @@
 //! Shuttle is an open-source app platform that uses traits and annotations to configure your backend deployments.
 //!
 //! ## Usage
-//! Start by installing the [`cargo shuttle`](https://docs.rs/crate/cargo-shuttle/latest) subcommand by runnning the following in a terminal:
+//! Start by installing the [`cargo shuttle`](https://github.com/shuttle-hq/shuttle/blob/main/cargo-shuttle/README.md) subcommand by runnning the following in a terminal:
 //!
 //! ```bash
 //! $ cargo install cargo-shuttle
@@ -72,7 +72,7 @@
 //!
 //! ## Deploying
 //!
-//! You can deploy your service with the [`cargo shuttle`](https://docs.rs/crate/cargo-shuttle/latest) subcommand too.
+//! You can deploy your service with the [`cargo shuttle`](https://github.com/shuttle-hq/shuttle/blob/main/cargo-shuttle/README.md) subcommand too.
 //! But, you will need to authenticate with the shuttle service first using:
 //!
 //! ```bash
@@ -178,7 +178,7 @@
 //!
 //! ## Getting API keys
 //!
-//! After you've installed the [cargo-shuttle](https://docs.rs/crate/cargo-shuttle/latest) command, run:
+//! After you've installed the [cargo-shuttle](https://github.com/shuttle-hq/shuttle/blob/main/cargo-shuttle/README.md) command, run:
 //!
 //! ```bash
 //! $ cargo shuttle login

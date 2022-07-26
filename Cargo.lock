@@ -1654,32 +1654,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "deployer"
-version = "0.1.0"
-dependencies = [
- "axum",
- "bytes",
- "cargo",
- "chrono",
- "ctor",
- "flate2",
- "futures",
- "hex 0.4.3",
- "rand 0.8.5",
- "serde",
- "serde_json",
- "shuttle-service",
- "sqlx",
- "tar",
- "tempdir",
- "thiserror",
- "tokio",
- "tower",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "der"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4401,6 +4375,32 @@ dependencies = [
  "serde",
  "serde_json",
  "uuid",
+]
+
+[[package]]
+name = "shuttle-deployer"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "bytes",
+ "cargo",
+ "chrono",
+ "ctor",
+ "flate2",
+ "futures",
+ "hex 0.4.3",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "shuttle-service",
+ "sqlx",
+ "tar",
+ "tempdir",
+ "thiserror",
+ "tokio",
+ "tower",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

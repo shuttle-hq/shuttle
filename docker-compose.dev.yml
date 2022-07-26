@@ -1,19 +1,11 @@
 version: "3"
 
 services:
-  api:
+  deployer:
     entrypoint:
       - /bin/bash
       - -c
       - |
-        mkdir -p /var/lib/shuttle/crates
-
-        cat<<EOF > /var/lib/shuttle/users.toml
-        [test-key]
-        name = "tester"
-        projects = []
-        EOF
-
         mkdir -p $$CARGO_HOME
         cat<<EOF > $$CARGO_HOME/config.toml
         [patch.crates-io]
@@ -34,8 +26,7 @@ services:
       context: .
       dockerfile: Containerfile
       args:
-        crate: shuttle-api
-    image: "${CONTAINER_REGISTRY}/api:dev"
+        crate: shuttle-deployer
 
   provisioner:
     entrypoint:
@@ -56,4 +47,3 @@ services:
       dockerfile: Containerfile
       args:
         crate: shuttle-provisioner
-    image: "${CONTAINER_REGISTRY}/provisioner:dev"

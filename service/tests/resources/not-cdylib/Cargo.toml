@@ -1,10 +1,13 @@
 [package]
-name = "not-cdynlib"
+name = "not-cdylib"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [workspace]
 
+[lib]
+crate-type = ["staticlib"]
+
 [dependencies]
+rocket = "0.5.0-rc.1"
+shuttle-service = { path = "../../../", features = ["web-rocket"] }

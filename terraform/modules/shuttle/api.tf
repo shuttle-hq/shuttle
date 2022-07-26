@@ -23,7 +23,7 @@ resource "aws_apigatewayv2_api_mapping" "backend" {
 resource "aws_apigatewayv2_vpc_link" "private" {
   name = "shuttle-api-gateway-vpc-link"
 
-  security_group_ids = [aws_security_group.unreasonable.id]
+  security_group_ids = [aws_default_security_group.default.id]
   subnet_ids         = [aws_subnet.backend_a.id, aws_subnet.backend_b.id]
 }
 

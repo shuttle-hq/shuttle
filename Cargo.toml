@@ -3,12 +3,12 @@ members = [
   "cargo-shuttle",
   "codegen",
   "common",
-  "e2e",
   "deployer",
   "proto",
   "provisioner",
   "service"
 ]
 exclude = [
+  "e2e",
   "examples"
 ]

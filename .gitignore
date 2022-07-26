@@ -22,3 +22,6 @@ Cargo.lock
 **/.terraform*
 
 e2e/users.toml
+
+# direnv cache directory
+.direnv/

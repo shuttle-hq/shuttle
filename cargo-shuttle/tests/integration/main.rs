@@ -2,34 +2,32 @@ mod deploy;
 mod init;
 mod run;
 
-use cargo_shuttle::{Args, Command, ProjectArgs, Shuttle};
-use std::{future::Future, path::Path};
+use cargo_shuttle::{Args, Command, CommandOutcome, ProjectArgs, Shuttle};
+use std::path::Path;
 
 /// creates a `cargo-shuttle` run instance with some reasonable defaults set.
-fn cargo_shuttle_command(
+async fn cargo_shuttle_command(
     cmd: Command,
     working_directory: &str,
-) -> impl Future<Output = anyhow::Result<()>> {
+) -> anyhow::Result<CommandOutcome> {
     let working_directory = Path::new(working_directory).to_path_buf();
 
-    Shuttle::new().run(Args {
-        api_url: Some("network support is intentionally broken in tests".to_string()),
-        project_args: ProjectArgs {
-            working_directory,
-            name: None,
-        },
-        cmd,
-    })
+    Shuttle::new()
+        .run(Args {
+            api_url: Some("http://shuttle.invalid:80".to_string()),
+            project_args: ProjectArgs {
+                working_directory,
+                name: None,
+            },
+            cmd,
+        })
+        .await
 }
 
 #[tokio::test]
-#[should_panic(expected = "builder error: relative URL without a base")]
-async fn network_support_is_intentionally_broken_in_tests() {
-    cargo_shuttle_command(Command::Status, ".").await.unwrap();
-}
-
-#[tokio::test]
-#[should_panic(expected = "No such file or directory")]
+#[should_panic(
+    expected = "Could not locate the root of a cargo project. Are you inside a cargo project? You can also use `--working-directory` to locate your cargo project."
+)]
 async fn fails_if_working_directory_does_not_exist() {
     cargo_shuttle_command(Command::Status, "/path_that_does_not_exist")
         .await
@@ -37,7 +35,9 @@ async fn fails_if_working_directory_does_not_exist() {
 }
 
 #[tokio::test]
-#[should_panic(expected = "error: could not find `Cargo.toml` in `/` or any parent directory")]
+#[should_panic(
+    expected = "Could not locate the root of a cargo project. Are you inside a cargo project? You can also use `--working-directory` to locate your cargo project."
+)]
 async fn fails_if_working_directory_not_part_of_cargo_workspace() {
     cargo_shuttle_command(Command::Status, "/").await.unwrap();
 }

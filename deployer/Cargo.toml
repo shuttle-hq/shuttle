@@ -1,5 +1,5 @@
 [package]
-name = "deployer"
+name = "shuttle-deployer"
 version = "0.1.0"
 edition = "2021"
 description = "Service with instances created per project for handling the compliation, loading, and execution of Shuttle services"
@@ -24,7 +24,7 @@ cargo = "0.62.0"
 uuid = { version = "1.1.2", features = ["v4"] }
 
 [dependencies.shuttle-service]
-version = "0.3.3"
+version = "0.4.0"
 path = "../service"
 features = ["loader"]
 

@@ -39,10 +39,15 @@ First download the Shuttle cargo extension and login:
 ```bash
 $ cargo install cargo-shuttle
 $ cargo shuttle login
-$ cargo init --lib hello-world
 ```
 
-Update your `Cargo.toml`:
+Create your first shuttle app with `rocket` framework:
+
+```bash
+$ cargo shuttle init --rocket hello-world
+```
+
+Your `Cargo.toml` should look like:
 
 ```toml
 [package]
@@ -51,21 +56,18 @@ version = "0.1.0"
 edition = "2021"
 
 [lib]
-crate-type = ["cdylib"]
 
 [dependencies]
-rocket = "0.5.0-rc.1"
-shuttle-service = { version = "0.3.3", features = ["web-rocket"] }
+shuttle-service = { version = "0.4.0", features = ["web-rocket"] }
+rocket = "0.4.11"
 ```
 
 
-Create your first shuttle app in `lib.rs`:
+Your shuttle app in `lib.rs` should look like:
 
 ```rust
 #[macro_use]
 extern crate rocket;
-
-use rocket::{Build, Rocket};
 
 #[get("/")]
 fn index() -> &'static str {
@@ -73,7 +75,7 @@ fn index() -> &'static str {
 }
 
 #[shuttle_service::main]
-async fn rocket() -> Result<Rocket<Build>,shuttle_service::Error> {
+async fn rocket() -> shuttle_service::ShuttleRocket {
     let rocket = rocket::build().mount("/hello", routes![index]);
 
     Ok(rocket)
@@ -95,6 +97,10 @@ $ cargo shuttle deploy
 ```
 
 For the full documentation, visit [docs.rs/shuttle-service](https://docs.rs/shuttle-service)
+
+## Contributing to shuttle
+
+If you want to setup a local environment to test code changes to core `shuttle` packages, or want to contribute to the project see [CONTRIBUTING.md](./CONTRIBUTING.md)
 
 ## Roadmap
 
@@ -119,5 +125,3 @@ If you have any requests or suggestions feel free to open an issue.
 
 We are currently in Public Alpha. Watch "releases" of this repo to get 
 notified of major updates!
-
-

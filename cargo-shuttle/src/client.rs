@@ -37,7 +37,7 @@ pub(crate) async fn auth(mut api_url: ApiUrl, username: String) -> Result<ApiKey
     error!(
         text = response_text,
         status = %response_status,
-        "failed to authenicate with server"
+        "failed to authenticate with server"
     );
     Err(anyhow!("failed to authenticate with server",))
 }

@@ -4,7 +4,7 @@ use clap::Parser;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    env_logger::init();
+    tracing_subscriber::fmt::init();
 
     let result = Shuttle::new().run(Args::parse()).await;
 

@@ -1,11 +1,12 @@
 use chrono::{DateTime, Utc};
 use shuttle_common::BuildLog;
+use uuid::Uuid;
 
 use super::{deploy_layer::to_build_log, State};
 
 #[derive(Clone, Debug, PartialEq, sqlx::FromRow)]
 pub struct Log {
-    pub name: String,
+    pub id: Uuid,
     pub timestamp: DateTime<Utc>,
     pub state: State,
     pub level: Level,
@@ -25,6 +26,6 @@ pub enum Level {
 
 impl Log {
     pub fn into_build_log(self) -> Option<BuildLog> {
-        to_build_log(&self.name, &self.timestamp, &self.fields)
+        to_build_log(&self.id, &self.timestamp, &self.fields)
     }
 }

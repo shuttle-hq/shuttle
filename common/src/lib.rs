@@ -216,7 +216,7 @@ pub struct LogItem {
 
 #[derive(Clone, Debug, serde::Serialize, PartialEq)]
 pub struct BuildLog {
-    pub name: String,
+    pub id: Uuid,
     pub message: String,
     pub timestamp: DateTime<Utc>,
 }

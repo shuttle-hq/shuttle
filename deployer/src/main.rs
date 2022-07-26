@@ -43,7 +43,7 @@ async fn main() {
 
     for existing_deployment in persistence.get_all_runnable_deployments().await.unwrap() {
         let built = Built {
-            name: existing_deployment.name,
+            id: existing_deployment.id,
         };
         deployment_manager.run_push(built).await;
     }

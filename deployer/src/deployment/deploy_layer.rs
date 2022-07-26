@@ -20,7 +20,8 @@
 //! **Warning** Don't log out sensitive info in functions with these annotations
 
 use chrono::{DateTime, Utc};
-use serde_json::json;
+use serde_json::{json, Value};
+use shuttle_common::BuildLog;
 use tracing::{field::Visit, span, warn, Metadata, Subscriber};
 use tracing_subscriber::Layer;
 use uuid::Uuid;
@@ -33,7 +34,7 @@ use super::{
 };
 
 /// Records logs for the deployment progress
-pub trait LogRecorder {
+pub trait LogRecorder: Clone + Send + 'static {
     fn record(&self, log: Log);
 }
 
@@ -64,6 +65,12 @@ pub struct Log {
     pub r#type: LogType,
 }
 
+impl Log {
+    pub fn to_build_log(&self) -> Option<BuildLog> {
+        to_build_log(&self.id, &self.timestamp, &self.fields)
+    }
+}
+
 impl From<Log> for log::Log {
     fn from(log: Log) -> Self {
         Self {
@@ -86,6 +93,34 @@ impl From<Log> for DeploymentState {
             last_update: log.timestamp,
         }
     }
+}
+
+pub fn to_build_log(id: &Uuid, timestamp: &DateTime<Utc>, fields: &Value) -> Option<BuildLog> {
+    if let Value::Object(ref map) = fields {
+        if let Some(message) = map.get("build_line") {
+            let build_log = BuildLog {
+                id: *id,
+                timestamp: *timestamp,
+                message: message.as_str()?.to_string(),
+            };
+
+            return Some(build_log);
+        }
+
+        if let Some(Value::Object(message_object)) = map.get("message") {
+            if let Some(rendered) = message_object.get("rendered") {
+                let build_log = BuildLog {
+                    id: *id,
+                    timestamp: *timestamp,
+                    message: rendered.as_str()?.to_string(),
+                };
+
+                return Some(build_log);
+            }
+        }
+    }
+
+    None
 }
 
 #[derive(Debug, PartialEq)]
@@ -135,7 +170,7 @@ where
                 let metadata = event.metadata();
 
                 self.recorder.record(Log {
-                    id: details.id.clone(),
+                    id: details.id,
                     state: details.state,
                     level: metadata.level().into(),
                     timestamp: Utc::now(),
@@ -177,7 +212,7 @@ where
         let metadata = span.metadata();
 
         self.recorder.record(Log {
-            id: details.id.clone(),
+            id: details.id,
             state: details.state,
             level: metadata.level().into(),
             timestamp: Utc::now(),
@@ -200,12 +235,12 @@ struct ScopeDetails {
 
 impl From<&tracing::Level> for Level {
     fn from(level: &tracing::Level) -> Self {
-        match level {
-            &tracing::Level::TRACE => Self::Trace,
-            &tracing::Level::DEBUG => Self::Debug,
-            &tracing::Level::INFO => Self::Info,
-            &tracing::Level::WARN => Self::Warn,
-            &tracing::Level::ERROR => Self::Error,
+        match *level {
+            tracing::Level::TRACE => Self::Trace,
+            tracing::Level::DEBUG => Self::Debug,
+            tracing::Level::INFO => Self::Info,
+            tracing::Level::WARN => Self::Warn,
+            tracing::Level::ERROR => Self::Error,
         }
     }
 }
@@ -298,6 +333,7 @@ mod tests {
         recorder
     };
 
+    #[derive(Clone)]
     struct RecorderMock {
         states: Arc<Mutex<Vec<StateLog>>>,
     }
@@ -352,7 +388,7 @@ mod tests {
 
     #[tokio::test]
     async fn deployment_to_be_queued() {
-        let deployment_manager = DeploymentManager::new();
+        let deployment_manager = DeploymentManager::new(RECORDER.clone());
 
         let id = Uuid::new_v4();
         deployment_manager
@@ -372,7 +408,7 @@ mod tests {
 
         assert_eq!(
             states.len(),
-            4,
+            2,
             "did not expect these states:\n\t{states:#?}"
         );
 
@@ -387,21 +423,13 @@ mod tests {
                     id,
                     state: State::Building,
                 },
-                StateLog {
-                    id,
-                    state: State::Built,
-                },
-                StateLog {
-                    id,
-                    state: State::Running,
-                },
             ]
         );
     }
 
     #[tokio::test]
     async fn deployment_from_run() {
-        let deployment_manager = DeploymentManager::new();
+        let deployment_manager = DeploymentManager::new(RECORDER.clone());
 
         let id = Uuid::new_v4();
         deployment_manager.run_push(Built { id }).await;
@@ -435,7 +463,7 @@ mod tests {
 
     #[tokio::test]
     async fn scope_with_nil_id() {
-        let deployment_manager = DeploymentManager::new();
+        let deployment_manager = DeploymentManager::new(RECORDER.clone());
 
         let id = Uuid::nil();
         deployment_manager

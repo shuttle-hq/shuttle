@@ -6,10 +6,13 @@ use std::path::Path;
 
 use chrono::{DateTime, Utc};
 use serde_json::json;
+use shuttle_common::BuildLog;
 use sqlx::migrate::MigrateDatabase;
 use sqlx::sqlite::{Sqlite, SqlitePool};
+use tokio::sync::broadcast::{self, Receiver, Sender};
 use tokio::sync::mpsc::{self, UnboundedSender};
 use tokio::task::JoinHandle;
+use tracing::error;
 use uuid::Uuid;
 
 const DB_PATH: &str = "deployer.sqlite";
@@ -18,6 +21,7 @@ const DB_PATH: &str = "deployer.sqlite";
 pub struct Persistence {
     pool: SqlitePool,
     log_send: UnboundedSender<deploy_layer::Log>,
+    build_log_send: Sender<BuildLog>,
 }
 
 impl Persistence {
@@ -64,6 +68,9 @@ impl Persistence {
         let (log_send, mut log_recv): (UnboundedSender<deploy_layer::Log>, _) =
             mpsc::unbounded_channel();
 
+        let (build_log_send, _) = broadcast::channel(32);
+        let build_log_send_clone = build_log_send.clone();
+
         let pool_cloned = pool.clone();
 
         // The logs are received on a non-async thread.
@@ -71,14 +78,36 @@ impl Persistence {
         let handle = tokio::spawn(async move {
             while let Some(log) = log_recv.recv().await {
                 match log.r#type {
-                    LogType::Event => insert_log(&pool_cloned, log).await.unwrap(),
+                    LogType::Event => {
+                        if log.state == State::Building {
+                            if let Some(build_log) = log.to_build_log() {
+                                build_log_send_clone
+                                    .send(build_log)
+                                    .unwrap_or_else(|error| {
+                                        error!(
+                                            error = &error as &dyn std::error::Error,
+                                            "failed to broadcast build log"
+                                        );
+
+                                        0
+                                    });
+                            }
+                        }
+
+                        insert_log(&pool_cloned, log).await.unwrap_or_else(|error| {
+                            error!(
+                                error = &error as &dyn std::error::Error,
+                                "failed to insert event log"
+                            )
+                        });
+                    }
                     LogType::State => {
                         insert_log(
                             &pool_cloned,
                             Log {
-                                id: log.id.clone(),
-                                timestamp: log.timestamp.clone(),
-                                state: log.state.clone(),
+                                id: log.id,
+                                timestamp: log.timestamp,
+                                state: log.state,
                                 level: log.level.clone(),
                                 file: log.file.clone(),
                                 line: log.line,
@@ -86,14 +115,30 @@ impl Persistence {
                             },
                         )
                         .await
-                        .unwrap();
-                        update_deployment(&pool_cloned, log).await.unwrap();
+                        .unwrap_or_else(|error| {
+                            error!(
+                                error = &error as &dyn std::error::Error,
+                                "failed to insert state log"
+                            )
+                        });
+                        update_deployment(&pool_cloned, log)
+                            .await
+                            .unwrap_or_else(|error| {
+                                error!(
+                                    error = &error as &dyn std::error::Error,
+                                    "failed to update deployment state"
+                                )
+                            });
                     }
                 };
             }
         });
 
-        let persistence = Self { pool, log_send };
+        let persistence = Self {
+            pool,
+            log_send,
+            build_log_send,
+        };
 
         (persistence, handle)
     }
@@ -160,6 +205,24 @@ impl Persistence {
     async fn get_deployment_logs(&self, id: &Uuid) -> Result<Vec<Log>> {
         get_deployment_logs(&self.pool, id).await
     }
+
+    pub fn get_build_log_subscriber(&self) -> Receiver<BuildLog> {
+        self.build_log_send.subscribe()
+    }
+
+    pub async fn get_build_logs(&self, id: &Uuid) -> Result<Vec<BuildLog>> {
+        // TODO: stress this a bit
+        let logs: Vec<Log> =
+            sqlx::query_as("SELECT * FROM logs WHERE id = ? AND state = ? ORDER BY timestamp")
+                .bind(id)
+                .bind(State::Building)
+                .fetch_all(&self.pool)
+                .await?;
+
+        let logs = logs.into_iter().filter_map(Log::into_build_log).collect();
+
+        Ok(logs)
+    }
 }
 
 async fn update_deployment(pool: &SqlitePool, state: impl Into<DeploymentState>) -> Result<()> {
@@ -203,7 +266,7 @@ async fn insert_log(pool: &SqlitePool, log: impl Into<Log>) -> Result<()> {
 }
 
 async fn get_deployment_logs(pool: &SqlitePool, id: &Uuid) -> Result<Vec<Log>> {
-    sqlx::query_as("SELECT * FROM logs WHERE id = ?")
+    sqlx::query_as("SELECT * FROM logs WHERE id = ? ORDER BY timestamp")
         .bind(id)
         .fetch_all(pool)
         .await
@@ -250,7 +313,7 @@ mod tests {
             id,
             name: "abc".to_string(),
             state: State::Queued,
-            last_update: Utc.ymd(2022, 04, 25).and_hms(4, 43, 33),
+            last_update: Utc.ymd(2022, 4, 25).and_hms(4, 43, 33),
         };
 
         p.insert_deployment(deployment.clone()).await.unwrap();
@@ -268,7 +331,7 @@ mod tests {
         .unwrap();
         let update = p.get_deployment(&id).await.unwrap().unwrap();
         assert_eq!(update.state, State::Built);
-        assert_ne!(update.last_update, Utc.ymd(2022, 04, 25).and_hms(4, 43, 33));
+        assert_ne!(update.last_update, Utc.ymd(2022, 4, 25).and_hms(4, 43, 33));
     }
 
     #[tokio::test]
@@ -283,31 +346,31 @@ mod tests {
                 id: Uuid::new_v4(),
                 name: "abc".to_string(),
                 state: State::Built,
-                last_update: Utc.ymd(2022, 04, 25).and_hms(4, 29, 33),
+                last_update: Utc.ymd(2022, 4, 25).and_hms(4, 29, 33),
             },
             Deployment {
                 id: Uuid::new_v4(),
                 name: "foo".to_string(),
                 state: State::Running,
-                last_update: Utc.ymd(2022, 04, 25).and_hms(4, 29, 44),
+                last_update: Utc.ymd(2022, 4, 25).and_hms(4, 29, 44),
             },
             Deployment {
                 id: id_bar,
                 name: "bar".to_string(),
                 state: State::Running,
-                last_update: Utc.ymd(2022, 04, 25).and_hms(4, 33, 48),
+                last_update: Utc.ymd(2022, 4, 25).and_hms(4, 33, 48),
             },
             Deployment {
                 id: Uuid::new_v4(),
                 name: "def".to_string(),
                 state: State::Error,
-                last_update: Utc.ymd(2022, 04, 25).and_hms(4, 38, 52),
+                last_update: Utc.ymd(2022, 4, 25).and_hms(4, 38, 52),
             },
             Deployment {
                 id: id_foo2,
                 name: "foo".to_string(),
                 state: State::Running,
-                last_update: Utc.ymd(2022, 04, 25).and_hms(4, 42, 32),
+                last_update: Utc.ymd(2022, 4, 25).and_hms(4, 42, 32),
             },
         ] {
             p.insert_deployment(deployment).await.unwrap();
@@ -320,12 +383,12 @@ mod tests {
                 DeploymentState {
                     id: id_bar,
                     state: State::Running,
-                    last_update: Utc.ymd(2022, 04, 25).and_hms(4, 33, 48),
+                    last_update: Utc.ymd(2022, 4, 25).and_hms(4, 33, 48),
                 },
                 DeploymentState {
                     id: id_foo2,
                     state: State::Running,
-                    last_update: Utc.ymd(2022, 04, 25).and_hms(4, 42, 32),
+                    last_update: Utc.ymd(2022, 4, 25).and_hms(4, 42, 32),
                 },
             ]
         );
@@ -426,6 +489,83 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn get_build_logs() {
+        let (p, _) = Persistence::new_in_memory().await;
+        let id_a = Uuid::new_v4();
+        let id_b = Uuid::new_v4();
+        let log_a1 = Log {
+            id: id_a,
+            timestamp: Utc::now(),
+            state: State::Queued,
+            level: Level::Info,
+            file: Some("file.rs".to_string()),
+            line: Some(5),
+            fields: json!({"message": {"rendered": "job queued"}}),
+        };
+        let log_b1 = Log {
+            id: id_b,
+            timestamp: Utc::now(),
+            state: State::Queued,
+            level: Level::Info,
+            file: Some("file.rs".to_string()),
+            line: Some(5),
+            fields: json!({"message": "job queued"}),
+        };
+        let log_b2 = Log {
+            id: id_b,
+            timestamp: Utc::now(),
+            state: State::Building,
+            level: Level::Info,
+            file: Some("file.rs".to_string()),
+            line: Some(5),
+            fields: json!({"build_line": "Compiling axum v0.3.0"}),
+        };
+        let log_a2 = Log {
+            id: id_a,
+            timestamp: Utc::now(),
+            state: State::Building,
+            level: Level::Info,
+            file: None,
+            line: None,
+            fields: json!({"build_line": "Compiling rocket v0.5.0"}),
+        };
+        let log_a3 = Log {
+            id: id_a,
+            timestamp: Utc::now(),
+            state: State::Building,
+            level: Level::Warn,
+            file: None,
+            line: None,
+            fields: json!({"message": {"rendered": "unused Result"}}),
+        };
+
+        p.insert_log(log_a1).await.unwrap();
+        p.insert_log(log_b1).await.unwrap();
+        p.insert_log(log_b2).await.unwrap();
+        p.insert_log(log_a2.clone()).await.unwrap();
+        p.insert_log(log_a3.clone()).await.unwrap();
+
+        let logs = p.get_build_logs(&id_a).await.unwrap();
+        assert!(!logs.is_empty(), "there should be two logs");
+
+        assert_eq!(
+            logs,
+            vec![
+                BuildLog {
+                    id: id_a,
+                    timestamp: log_a2.timestamp,
+                    message: "Compiling rocket v0.5.0".to_string(),
+                },
+                BuildLog {
+                    id: id_a,
+                    timestamp: log_a3.timestamp,
+                    message: "unused Result".to_string(),
+                }
+            ]
+        );
+    }
+
+    #[tokio::test]
     async fn log_recorder_event() {
         let (p, handle) = Persistence::new_in_memory().await;
 
@@ -470,13 +610,13 @@ mod tests {
             id,
             name: "z".to_string(),
             state: State::Queued,
-            last_update: Utc.ymd(2022, 04, 29).and_hms(2, 39, 39),
+            last_update: Utc.ymd(2022, 4, 29).and_hms(2, 39, 39),
         })
         .await
         .unwrap();
         let state = deploy_layer::Log {
             id,
-            timestamp: Utc.ymd(2022, 04, 29).and_hms(2, 39, 59),
+            timestamp: Utc.ymd(2022, 4, 29).and_hms(2, 39, 59),
             state: State::Running,
             level: Level::Info,
             file: None,
@@ -507,7 +647,7 @@ mod tests {
                 id,
                 name: "z".to_string(),
                 state: State::Running,
-                last_update: Utc.ymd(2022, 04, 29).and_hms(2, 39, 59),
+                last_update: Utc.ymd(2022, 4, 29).and_hms(2, 39, 59),
             }
         );
     }

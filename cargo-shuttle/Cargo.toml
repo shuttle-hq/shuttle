@@ -12,7 +12,7 @@ async-trait = "0.1.56"
 bollard = "0.12.0"
 cargo = "0.62.0"
 cargo-edit = { version = "0.9.1", features = ["cli"] }
-cargo_metadata = "0.14.2"
+cargo_metadata = "0.15.0"
 chrono = "0.4.19"
 clap = { version = "3.1.18", features = ["derive", "env"] }
 colored = "2.0.0"

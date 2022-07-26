@@ -5,13 +5,14 @@ edition = "2021"
 description = "Service with instances created per project for handling the compliation, loading, and execution of Shuttle services"
 
 [dependencies]
+cargo_metadata = "0.15.0"
 chrono = "0.4.19"
 thiserror = "1.0.24"
 futures = "0.3.7"
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "fs"] }
 sqlx = { version = "0.6.0", features = ["runtime-tokio-native-tls", "sqlite", "chrono", "json", "uuid"] }
 tower = { version = "0.4.12", features = ["make"] }
-axum = "0.5.7"
+axum = { version = "0.5.7", features = ["ws"] }
 bytes = "1.1.0"
 serde = { version = "1.0.137", features = ["derive"] }
 serde_json = "1.0.81"
@@ -22,6 +23,10 @@ tracing = "0.1.35"
 tracing-subscriber = { version = "0.3.11", features = ["env-filter"] }
 cargo = "0.62.0"
 uuid = { version = "1.1.2", features = ["v4"] }
+
+[dependencies.shuttle-common]
+version = "0.4.0"
+path = "../common"
 
 [dependencies.shuttle-service]
 version = "0.4.0"

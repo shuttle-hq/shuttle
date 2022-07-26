@@ -1,9 +1,12 @@
 use axum::body::Body;
-use axum::extract::{Extension, Path, Query};
+use axum::extract::ws::WebSocket;
+use axum::extract::{ws, Extension, Path, Query};
 use axum::routing::{get, Router};
 use axum::{extract::BodyStream, Json};
-use chrono::Utc;
+use chrono::{TimeZone, Utc};
 use futures::TryStreamExt;
+use shuttle_common::BuildLog;
+use tracing::error;
 use uuid::Uuid;
 
 use crate::deployment::{DeploymentManager, Queued, State};
@@ -26,6 +29,11 @@ pub fn make_router(
             "/deployments/:id",
             get(get_deployment).delete(delete_deployment),
         )
+        .route(
+            "/deployments/:id/build-logs-subscribe",
+            get(get_build_logs_subscribe),
+        )
+        .route("/deployments/:id/build-logs", get(get_build_logs))
         .layer(Extension(persistence))
         .layer(Extension(deployment_manager))
 }
@@ -53,7 +61,7 @@ async fn post_service(
     let id = Uuid::new_v4();
 
     let deployment = Deployment {
-        id: id.clone(),
+        id,
         name: name.clone(),
         state: State::Queued,
         last_update: Utc::now(),
@@ -102,4 +110,62 @@ async fn delete_deployment(
     deployment_manager.kill(id).await;
 
     persistence.get_deployment(&id).await.map(Json)
+}
+
+async fn get_build_logs(
+    Extension(persistence): Extension<Persistence>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Vec<BuildLog>>> {
+    persistence.get_build_logs(&id).await.map(Json)
+}
+
+async fn get_build_logs_subscribe(
+    Extension(persistence): Extension<Persistence>,
+    Path(id): Path<Uuid>,
+    ws_upgrade: ws::WebSocketUpgrade,
+) -> axum::response::Response {
+    ws_upgrade.on_upgrade(move |s| websocket_handler(s, persistence, id))
+}
+
+async fn websocket_handler(mut s: WebSocket, persistence: Persistence, id: Uuid) {
+    let mut log_recv = persistence.get_build_log_subscriber();
+    let backlog = match persistence.get_build_logs(&id).await {
+        Ok(backlog) => backlog,
+        Err(error) => {
+            error!(
+                error = &error as &dyn std::error::Error,
+                "failed to get backlog build logs"
+            );
+
+            let _ = s
+                .send(ws::Message::Text("failed to get build logs".to_string()))
+                .await;
+            let _ = s.close().await;
+            return;
+        }
+    };
+    let mut last_timestamp = Utc.timestamp(0, 0);
+
+    for log in backlog {
+        let sent = s.send(ws::Message::Text(log.message)).await;
+        last_timestamp = log.timestamp;
+
+        // Client disconnected?
+        if sent.is_err() {
+            return;
+        }
+    }
+
+    while let Ok(msg) = log_recv.recv().await {
+        if msg.id == id && msg.timestamp > last_timestamp {
+            let sent = s.send(ws::Message::Text(msg.message)).await;
+
+            // Client disconnected?
+            if sent.is_err() {
+                return;
+            }
+        }
+    }
+
+    let _ = s.close().await;
 }

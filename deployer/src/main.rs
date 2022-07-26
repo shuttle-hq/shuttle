@@ -39,7 +39,7 @@ async fn main() {
         .with(fmt_layer)
         .init();
 
-    let deployment_manager = DeploymentManager::new();
+    let deployment_manager = DeploymentManager::new(persistence.clone());
 
     for existing_deployment in persistence.get_all_runnable_deployments().await.unwrap() {
         let built = Built {

@@ -61,7 +61,7 @@ async fn post_service(
     let id = Uuid::new_v4();
 
     let deployment = Deployment {
-        id: id.clone(),
+        id,
         name: name.clone(),
         state: State::Queued,
         last_update: Utc::now(),

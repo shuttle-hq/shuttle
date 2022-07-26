@@ -43,7 +43,7 @@ pub async fn task(mut recv: QueueReceiver, run_send: RunSender, log_recorder: im
         .expect("could not create libs directory");
 
     while let Some(queued) = recv.recv().await {
-        let id = queued.id.clone();
+        let id = queued.id;
 
         info!("Queued deployment at the front of the queue: {id}");
 
@@ -92,7 +92,7 @@ impl Queued {
         info!("Building deployment");
 
         let (tx, mut rx): (UnboundedSender<Message>, _) = mpsc::unbounded_channel();
-        let id = self.id.clone();
+        let id = self.id;
         tokio::spawn(async move {
             while let Some(message) = rx.recv().await {
                 // TODO: change these to `info!(...)` as [valuable] support increases.

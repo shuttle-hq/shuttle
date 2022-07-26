@@ -105,9 +105,9 @@ impl Persistence {
                         insert_log(
                             &pool_cloned,
                             Log {
-                                id: log.id.clone(),
-                                timestamp: log.timestamp.clone(),
-                                state: log.state.clone(),
+                                id: log.id,
+                                timestamp: log.timestamp,
+                                state: log.state,
                                 level: log.level.clone(),
                                 file: log.file.clone(),
                                 line: log.line,
@@ -313,7 +313,7 @@ mod tests {
             id,
             name: "abc".to_string(),
             state: State::Queued,
-            last_update: Utc.ymd(2022, 04, 25).and_hms(4, 43, 33),
+            last_update: Utc.ymd(2022, 4, 25).and_hms(4, 43, 33),
         };
 
         p.insert_deployment(deployment.clone()).await.unwrap();
@@ -331,7 +331,7 @@ mod tests {
         .unwrap();
         let update = p.get_deployment(&id).await.unwrap().unwrap();
         assert_eq!(update.state, State::Built);
-        assert_ne!(update.last_update, Utc.ymd(2022, 04, 25).and_hms(4, 43, 33));
+        assert_ne!(update.last_update, Utc.ymd(2022, 4, 25).and_hms(4, 43, 33));
     }
 
     #[tokio::test]
@@ -346,31 +346,31 @@ mod tests {
                 id: Uuid::new_v4(),
                 name: "abc".to_string(),
                 state: State::Built,
-                last_update: Utc.ymd(2022, 04, 25).and_hms(4, 29, 33),
+                last_update: Utc.ymd(2022, 4, 25).and_hms(4, 29, 33),
             },
             Deployment {
                 id: Uuid::new_v4(),
                 name: "foo".to_string(),
                 state: State::Running,
-                last_update: Utc.ymd(2022, 04, 25).and_hms(4, 29, 44),
+                last_update: Utc.ymd(2022, 4, 25).and_hms(4, 29, 44),
             },
             Deployment {
                 id: id_bar,
                 name: "bar".to_string(),
                 state: State::Running,
-                last_update: Utc.ymd(2022, 04, 25).and_hms(4, 33, 48),
+                last_update: Utc.ymd(2022, 4, 25).and_hms(4, 33, 48),
             },
             Deployment {
                 id: Uuid::new_v4(),
                 name: "def".to_string(),
                 state: State::Error,
-                last_update: Utc.ymd(2022, 04, 25).and_hms(4, 38, 52),
+                last_update: Utc.ymd(2022, 4, 25).and_hms(4, 38, 52),
             },
             Deployment {
                 id: id_foo2,
                 name: "foo".to_string(),
                 state: State::Running,
-                last_update: Utc.ymd(2022, 04, 25).and_hms(4, 42, 32),
+                last_update: Utc.ymd(2022, 4, 25).and_hms(4, 42, 32),
             },
         ] {
             p.insert_deployment(deployment).await.unwrap();
@@ -383,12 +383,12 @@ mod tests {
                 DeploymentState {
                     id: id_bar,
                     state: State::Running,
-                    last_update: Utc.ymd(2022, 04, 25).and_hms(4, 33, 48),
+                    last_update: Utc.ymd(2022, 4, 25).and_hms(4, 33, 48),
                 },
                 DeploymentState {
                     id: id_foo2,
                     state: State::Running,
-                    last_update: Utc.ymd(2022, 04, 25).and_hms(4, 42, 32),
+                    last_update: Utc.ymd(2022, 4, 25).and_hms(4, 42, 32),
                 },
             ]
         );
@@ -553,12 +553,12 @@ mod tests {
             vec![
                 BuildLog {
                     id: id_a,
-                    timestamp: log_a2.timestamp.clone(),
+                    timestamp: log_a2.timestamp,
                     message: "Compiling rocket v0.5.0".to_string(),
                 },
                 BuildLog {
                     id: id_a,
-                    timestamp: log_a3.timestamp.clone(),
+                    timestamp: log_a3.timestamp,
                     message: "unused Result".to_string(),
                 }
             ]
@@ -610,13 +610,13 @@ mod tests {
             id,
             name: "z".to_string(),
             state: State::Queued,
-            last_update: Utc.ymd(2022, 04, 29).and_hms(2, 39, 39),
+            last_update: Utc.ymd(2022, 4, 29).and_hms(2, 39, 39),
         })
         .await
         .unwrap();
         let state = deploy_layer::Log {
             id,
-            timestamp: Utc.ymd(2022, 04, 29).and_hms(2, 39, 59),
+            timestamp: Utc.ymd(2022, 4, 29).and_hms(2, 39, 59),
             state: State::Running,
             level: Level::Info,
             file: None,
@@ -647,7 +647,7 @@ mod tests {
                 id,
                 name: "z".to_string(),
                 state: State::Running,
-                last_update: Utc.ymd(2022, 04, 29).and_hms(2, 39, 59),
+                last_update: Utc.ymd(2022, 4, 29).and_hms(2, 39, 59),
             }
         );
     }

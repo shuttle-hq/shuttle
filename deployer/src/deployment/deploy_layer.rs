@@ -99,25 +99,23 @@ pub fn to_build_log(id: &Uuid, timestamp: &DateTime<Utc>, fields: &Value) -> Opt
     if let Value::Object(ref map) = fields {
         if let Some(message) = map.get("build_line") {
             let build_log = BuildLog {
-                id: id.clone(),
-                timestamp: timestamp.clone(),
+                id: *id,
+                timestamp: *timestamp,
                 message: message.as_str()?.to_string(),
             };
 
             return Some(build_log);
         }
 
-        if let Some(message) = map.get("message") {
-            if let Value::Object(ref message_object) = message {
-                if let Some(rendered) = message_object.get("rendered") {
-                    let build_log = BuildLog {
-                        id: id.clone(),
-                        timestamp: timestamp.clone(),
-                        message: rendered.as_str()?.to_string(),
-                    };
+        if let Some(Value::Object(message_object)) = map.get("message") {
+            if let Some(rendered) = message_object.get("rendered") {
+                let build_log = BuildLog {
+                    id: *id,
+                    timestamp: *timestamp,
+                    message: rendered.as_str()?.to_string(),
+                };
 
-                    return Some(build_log);
-                }
+                return Some(build_log);
             }
         }
     }
@@ -172,7 +170,7 @@ where
                 let metadata = event.metadata();
 
                 self.recorder.record(Log {
-                    id: details.id.clone(),
+                    id: details.id,
                     state: details.state,
                     level: metadata.level().into(),
                     timestamp: Utc::now(),
@@ -214,7 +212,7 @@ where
         let metadata = span.metadata();
 
         self.recorder.record(Log {
-            id: details.id.clone(),
+            id: details.id,
             state: details.state,
             level: metadata.level().into(),
             timestamp: Utc::now(),
@@ -237,12 +235,12 @@ struct ScopeDetails {
 
 impl From<&tracing::Level> for Level {
     fn from(level: &tracing::Level) -> Self {
-        match level {
-            &tracing::Level::TRACE => Self::Trace,
-            &tracing::Level::DEBUG => Self::Debug,
-            &tracing::Level::INFO => Self::Info,
-            &tracing::Level::WARN => Self::Warn,
-            &tracing::Level::ERROR => Self::Error,
+        match *level {
+            tracing::Level::TRACE => Self::Trace,
+            tracing::Level::DEBUG => Self::Debug,
+            tracing::Level::INFO => Self::Info,
+            tracing::Level::WARN => Self::Warn,
+            tracing::Level::ERROR => Self::Error,
         }
     }
 }

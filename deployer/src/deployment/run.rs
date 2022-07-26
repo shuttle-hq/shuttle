@@ -8,7 +8,7 @@ pub async fn task(mut recv: RunReceiver, kill_send: KillSender) {
     info!("Run task started");
 
     while let Some(built) = recv.recv().await {
-        let id = built.id.clone();
+        let id = built.id;
 
         info!("Built deployment at the front of run queue: {id}");
 

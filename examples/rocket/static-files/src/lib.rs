@@ -10,7 +10,7 @@ fn index() -> &'static str {
 async fn rocket() -> shuttle_service::ShuttleRocket {
     let rocket = rocket::build()
         .mount("/hello", routes![index])
-        .mount("/public", rocket::fs::FileServer::from("assets/"));
+        .mount("/public", rocket::fs::FileServer::from("/var/lib/shuttle/crates/static-files-rocket-app/assets/"));
 
     Ok(rocket)
 }

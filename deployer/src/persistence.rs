@@ -161,8 +161,9 @@ impl Persistence {
     }
 
     pub async fn get_build_logs(&self, name: &str) -> Result<Vec<BuildLog>> {
+        // TODO: stress this a bit
         let logs: Vec<Log> =
-            sqlx::query_as("SELECT * FROM logs WHERE name = ? OR state = ? ORDER BY timestamp")
+            sqlx::query_as("SELECT * FROM logs WHERE name = ? AND state = ? ORDER BY timestamp")
                 .bind(name)
                 .bind(State::Building)
                 .fetch_all(&self.pool)
@@ -377,9 +378,9 @@ mod tests {
             level: Level::Info,
             file: Some("file.rs".to_string()),
             line: Some(5),
-            fields: json!({"message": "job queued"}),
+            fields: json!({"message": {"rendered": "job queued"}}),
         };
-        let log_b = Log {
+        let log_b1 = Log {
             name: "b".to_string(),
             timestamp: Utc::now(),
             state: State::Queued,
@@ -387,6 +388,15 @@ mod tests {
             file: Some("file.rs".to_string()),
             line: Some(5),
             fields: json!({"message": "job queued"}),
+        };
+        let log_b2 = Log {
+            name: "b".to_string(),
+            timestamp: Utc::now(),
+            state: State::Building,
+            level: Level::Info,
+            file: Some("file.rs".to_string()),
+            line: Some(5),
+            fields: json!({"build_line": "Compiling axum v0.3.0"}),
         };
         let log_a2 = Log {
             name: "a".to_string(),
@@ -408,7 +418,8 @@ mod tests {
         };
 
         p.insert_log(log_a1).await.unwrap();
-        p.insert_log(log_b).await.unwrap();
+        p.insert_log(log_b1).await.unwrap();
+        p.insert_log(log_b2).await.unwrap();
         p.insert_log(log_a2.clone()).await.unwrap();
         p.insert_log(log_a3.clone()).await.unwrap();
 

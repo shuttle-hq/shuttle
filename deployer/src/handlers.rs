@@ -100,7 +100,8 @@ async fn websocket_handler(mut s: WebSocket, persistence: Persistence, name: Str
                 "failed to get backlog build logs"
             );
 
-            s.send(ws::Message::Text("failed to get build logs".to_string()))
+            let _ = s
+                .send(ws::Message::Text("failed to get build logs".to_string()))
                 .await;
             let _ = s.close().await;
             return;

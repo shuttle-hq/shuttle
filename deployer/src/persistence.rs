@@ -11,6 +11,7 @@ use sqlx::sqlite::{Sqlite, SqlitePool};
 use tokio::sync::broadcast::{self, Receiver, Sender};
 use tokio::sync::mpsc::{self, UnboundedSender};
 use tokio::task::JoinHandle;
+use tracing::error;
 
 const DB_PATH: &str = "deployer.sqlite";
 
@@ -77,11 +78,23 @@ impl Persistence {
                             if let Some(build_log) = log.to_build_log() {
                                 build_log_send_clone
                                     .send(build_log)
-                                    .expect("failed to broadcast build log");
+                                    .unwrap_or_else(|error| {
+                                        error!(
+                                            error = &error as &dyn std::error::Error,
+                                            "failed to broadcast build log"
+                                        );
+
+                                        0
+                                    });
                             }
                         }
 
-                        insert_log(&pool_cloned, log).await.unwrap();
+                        insert_log(&pool_cloned, log).await.unwrap_or_else(|error| {
+                            error!(
+                                error = &error as &dyn std::error::Error,
+                                "failed to insert event log"
+                            )
+                        });
                     }
                     LogType::State => {
                         insert_log(
@@ -97,8 +110,20 @@ impl Persistence {
                             },
                         )
                         .await
-                        .unwrap();
-                        update_deployment(&pool_cloned, log).await.unwrap();
+                        .unwrap_or_else(|error| {
+                            error!(
+                                error = &error as &dyn std::error::Error,
+                                "failed to insert state log"
+                            )
+                        });
+                        update_deployment(&pool_cloned, log)
+                            .await
+                            .unwrap_or_else(|error| {
+                                error!(
+                                    error = &error as &dyn std::error::Error,
+                                    "failed to update deployment state"
+                                )
+                            });
                     }
                 };
             }

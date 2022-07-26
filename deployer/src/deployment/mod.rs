@@ -1,11 +1,9 @@
 pub mod deploy_layer;
-mod info;
 pub mod log;
 mod queue;
 mod run;
 mod states;
 
-pub use info::DeploymentInfo;
 pub use states::State;
 
 pub use log::Log;
@@ -14,6 +12,7 @@ pub use run::Built;
 use tracing::instrument;
 
 use tokio::sync::{broadcast, mpsc};
+use uuid::Uuid;
 
 const QUEUE_BUFFER_SIZE: usize = 100;
 const RUN_BUFFER_SIZE: usize = 100;
@@ -37,19 +36,19 @@ impl DeploymentManager {
         }
     }
 
-    #[instrument(skip(self), fields(name = queued.name.as_str(), state = %State::Queued))]
+    #[instrument(skip(self), fields(id = %queued.id, state = %State::Queued))]
     pub async fn queue_push(&self, queued: Queued) {
         self.pipeline.queue_send.send(queued).await.unwrap();
     }
 
-    #[instrument(skip(self), fields(name = built.name.as_str(), state = %State::Built))]
+    #[instrument(skip(self), fields(id = %built.id, state = %State::Built))]
     pub async fn run_push(&self, built: Built) {
         self.pipeline.run_send.send(built).await.unwrap();
     }
 
-    pub async fn kill(&self, name: String) {
+    pub async fn kill(&self, id: Uuid) {
         if self.kill_send.receiver_count() > 0 {
-            self.kill_send.send(name).unwrap();
+            self.kill_send.send(id).unwrap();
         }
     }
 }
@@ -101,5 +100,5 @@ type QueueReceiver = mpsc::Receiver<queue::Queued>;
 type RunSender = mpsc::Sender<run::Built>;
 type RunReceiver = mpsc::Receiver<run::Built>;
 
-type KillSender = broadcast::Sender<String>;
-type KillReceiver = broadcast::Receiver<String>;
+type KillSender = broadcast::Sender<Uuid>;
+type KillReceiver = broadcast::Receiver<Uuid>;

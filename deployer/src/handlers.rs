@@ -6,6 +6,7 @@ use axum::{extract::BodyStream, Json};
 use chrono::{TimeZone, Utc};
 use futures::TryStreamExt;
 use shuttle_common::BuildLog;
+use tracing::error;
 
 use crate::deployment::{DeploymentInfo, DeploymentManager, Queued};
 use crate::error::{Error, Result};
@@ -91,7 +92,20 @@ async fn get_build_logs_subscribe(
 
 async fn websocket_handler(mut s: WebSocket, persistence: Persistence, name: String) {
     let mut log_recv = persistence.get_build_log_subscriber();
-    let backlog = persistence.get_build_logs(&name).await.unwrap();
+    let backlog = match persistence.get_build_logs(&name).await {
+        Ok(backlog) => backlog,
+        Err(error) => {
+            error!(
+                error = &error as &dyn std::error::Error,
+                "failed to get backlog build logs"
+            );
+
+            s.send(ws::Message::Text("failed to get build logs".to_string()))
+                .await;
+            let _ = s.close().await;
+            return;
+        }
+    };
     let mut last_timestamp = Utc.timestamp(0, 0);
 
     for log in backlog {

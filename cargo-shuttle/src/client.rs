@@ -193,7 +193,6 @@ pub(crate) async fn secrets(
     let _ = write!(api_url, "/projects/{}/secrets/", project.as_str());
 
     let client = get_retry_client();
-
     client
         .post(api_url)
         .body(serde_json::to_string(&secrets)?)

@@ -1,0 +1,10 @@
+[package]
+name = "static-files"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+
+[dependencies]
+rocket = "0.5.0-rc.1"
+shuttle-service = { version = "0.4.0", features = ["web-rocket"] }

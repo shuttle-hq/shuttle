@@ -28,4 +28,7 @@ RUN apt-get update &&\
 FROM shuttle-common
 ARG crate
 COPY --from=builder /build/target/debug/${crate} /usr/local/bin/service
+# [s] invokes Glob functionality so if assets doesn't exist, the container won't fail https://stackoverflow.com/questions/70096208/dockerfile-copy-folder-if-it-exists-conditional-copy
+# Likely MUCH better way
+COPY --from=builder /build/asset[s]/ /usr/local/bin/assets/
 ENTRYPOINT ["/usr/local/bin/service"]

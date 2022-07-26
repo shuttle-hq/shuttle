@@ -33,7 +33,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        features: ["web-axum", "web-rocket", "web-tide", "web-tower"]
+        features: ["web-axum", "web-rocket", "web-tide", "web-tower", web-poem]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2

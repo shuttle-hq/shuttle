@@ -77,6 +77,12 @@ commands:
             [patch.crates-io]
             shuttle-service = { path = "$PWD/service" }
             EOF
+  install-rust:
+    steps:
+      - run:
+          name: Install Rust
+          command: |
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 
 jobs:
   workspace-fmt:
@@ -137,11 +143,7 @@ jobs:
     machine:
       image: ubuntu-2204:2022.04.1
     steps:
-      - run:
-          name: Install Rust
-          command: |
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-            sudo apt update && sudo apt install -y libssl1.1
+      - install-rust
       - checkout
       - restore-cargo-cache
       - run:
@@ -160,11 +162,7 @@ jobs:
     machine:
       image: ubuntu-2204:2022.04.1
     steps:
-      - run:
-          name: Install Rust
-          command: |
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-            sudo apt update && sudo apt install -y libssl1.1
+      - install-rust
       - checkout
       - restore-cargo-cache
       - apply-patches
@@ -184,6 +182,7 @@ jobs:
       image: ubuntu-2204:2022.04.1
       docker_layer_caching: true
     steps:
+      - install-rust
       - checkout
       - restore-buildx-cache
       - run:
@@ -192,10 +191,6 @@ jobs:
             sudo mkdir -p $BUILDX_CACHE && sudo chown -R circleci:circleci $BUILDX_CACHE
             make images
       - save-buildx-cache
-      - run:
-          name: Install libraries
-          command: |
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
       - apply-patches
       - run:
           name: Run the E2E tests

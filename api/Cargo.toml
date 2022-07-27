@@ -6,7 +6,6 @@ publish = false
 
 [dependencies]
 anyhow = "1.0.57"
-async-mutex = "1.4.0"
 async-trait = "0.1.56"
 base64 = "0.13.0"
 cargo = "0.62.0"

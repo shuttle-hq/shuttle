@@ -1046,7 +1046,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-shuttle"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4399,7 +4399,7 @@ checksum = "45bb67a18fa91266cc7807181f62f9178a6873bfad7dc788c42e6430db40184f"
 
 [[package]]
 name = "shuttle-api"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "anyhow",
  "async-mutex",
@@ -4432,7 +4432,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-codegen"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "pretty_assertions",
  "proc-macro-error",
@@ -4444,7 +4444,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-common"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4458,7 +4458,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-proto"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "prost",
  "shuttle-common",
@@ -4468,7 +4468,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-provisioner"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "aws-config",
  "aws-sdk-rds",
@@ -4492,7 +4492,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-service"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "anyhow",
  "async-std",

@@ -83,6 +83,7 @@ commands:
           name: Install Rust
           command: |
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+            sudo apt update && sudo apt install -y libssl1.1
 
 jobs:
   workspace-fmt:

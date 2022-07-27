@@ -68,6 +68,15 @@ commands:
             - "/tmp/cache/buildx"
           key: docker-buildx-{{ checksum "./Cargo.lock" }}-{{ epoch }}
           when: always
+  apply-patches:
+    steps:
+      - run:
+          name: Patch service
+          command: |
+            cat\<< EOF > ~/.cargo/config.toml
+            [patch.crates-io]
+            shuttle-service = { path = "$PWD/service" }
+            EOF
 
 jobs:
   workspace-fmt:
@@ -110,13 +119,7 @@ jobs:
     steps:
       - checkout
       - restore-cargo-cache
-      - run:
-          name: Patch service
-          command: |
-            cat\<< EOF > ~/.cargo/config.toml
-            [patch.crates-io]
-            shuttle-service = { path = "$PWD/service" }
-            EOF
+      - apply-patches
       - run: cargo fmt --all --check --manifest-path << parameters.path >>/Cargo.toml
       - run: cargo install cargo-sort
       - run: cargo sort --check << parameters.path >>
@@ -164,6 +167,7 @@ jobs:
             sudo apt update && sudo apt install -y libssl1.1
       - checkout
       - restore-cargo-cache
+      - apply-patches
       - run:
           name: Run unit tests
           command: cargo test --package << parameters.crate >> --all-features --lib -- --nocapture
@@ -192,15 +196,10 @@ jobs:
           name: Install libraries
           command: |
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+      - apply-patches
       - run:
           name: Run the E2E tests
           command: |
-            mkdir -p ~/.cargo
-            cat\<< EOF > ~/.cargo/config.toml
-            [patch.crates-io]
-            shuttle-service = { path = "$PWD/service" }
-            EOF
-
             make down
             docker volume create shuttle-backend-vol
             cd e2e; BUILDX_CACHE=/tmp/cache/buildx SHUTTLE_API_KEY=test-key cargo test -- --nocapture

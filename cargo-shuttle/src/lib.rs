@@ -25,7 +25,7 @@ use factory::LocalFactory;
 use semver::{Version, VersionReq};
 use shuttle_service::loader::{build_crate, Loader};
 use tokio::sync::mpsc;
-use toml_edit::Document;
+use toml_edit::{Document, Item};
 use uuid::Uuid;
 
 #[macro_use]
@@ -254,10 +254,31 @@ impl Shuttle {
     async fn check_lib_version(&self, project_args: ProjectArgs) -> Result<()> {
         let cargo_path = project_args.working_directory.join("Cargo.toml");
         let cargo_doc = read_to_string(cargo_path.clone())?.parse::<Document>()?;
-        let current_shuttle_version = &cargo_doc["dependencies"]["shuttle-service"]["version"];
-        let service_semver = match Version::parse(current_shuttle_version.as_str().unwrap()) {
+
+        let shuttle_service_entry = cargo_doc
+            .get("dependencies")
+            .ok_or_else(|| anyhow!("Missing dependencies section in Cargo.toml"))?
+            .get("shuttle-service")
+            .ok_or_else(|| anyhow!("Missing shuttle_service dependency in Cargo.toml"))?;
+
+        let current_shuttle_version = match shuttle_service_entry {
+            Item::ArrayOfTables(_)
+            Item::None => {
+                return Err(anyhow!("Invalid entry for shuttle_service"));
+            }
+            Item::Value(_) => shuttle_service_entry,
+            Item::Table(table) => table
+                .get("version")
+                .ok_or_else(|| anyhow!("Missing version key"))?
+        };
+
+        let version_string = current_shuttle_version
+            .as_str()
+            .ok_or_else(|| anyhow!("Invalid version as string"))?;
+        
+        let service_semver = match Version::parse(version_string) {
             Ok(version) => version,
-            Err(error) => return Err(anyhow!("Your shuttle-service version ({}) is invalid and should follow the MAJOR.MINOR.PATCH semantic versioning format. Error given: {:?}", current_shuttle_version.as_str().unwrap(), error.to_string())),
+            Err(error) => return Err(anyhow!("Your shuttle-service version ({}) is invalid and should follow the MAJOR.MINOR.PATCH semantic versioning format. Error given: {:?}", version_string, error.to_string())),
         };
 
         let server_version = client::shuttle_version(self.ctx.api_url()).await?;

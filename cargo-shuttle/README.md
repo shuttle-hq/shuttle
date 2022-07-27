@@ -3,10 +3,10 @@
 # cargo-shuttle
 
 <p align=center>
-  <a href="https://github.com/getsynth/shuttle/search?l=rust">
+  <a href="https://github.com/shuttle-hq/shuttle/search?l=rust">
     <img alt="language" src="https://img.shields.io/badge/language-Rust-orange.svg">
   </a>
-  <a href="https://github.com/getsynth/shuttle/actions">
+  <a href="https://github.com/shuttle-hq/shuttle/actions">
     <img alt="build status" src="https://img.shields.io/github/workflow/status/getsynth/shuttle/cargo-test"/>
   </a>
   <a href="https://discord.gg/H33rRDTm3p">
@@ -77,7 +77,7 @@ SUBCOMMANDS:
 
 To initialize a shuttle project with boilerplates, run `cargo shuttle init [OPTIONS] [PATH]`. 
 
-Currently, `cargo shuttle init` supports the following options include:
+Currently, `cargo shuttle init` supports the following frameworks:
 
 - `--axum`: for [axum](https://github.com/tokio-rs/axum) framework
 - `--poem`: for [poem](https://github.com/poem-web/poem) framework
@@ -88,7 +88,7 @@ Currently, `cargo shuttle init` supports the following options include:
 For example, running the following command will initialize a project for [rocket](https://rocket.rs/):
 
 ```sh
-$ cargo shuttle init my-rocket-app
+$ cargo shuttle init --rocket my-rocket-app
 ```
 
 This should generate the following dependency in `Cargo.toml`:
@@ -153,7 +153,7 @@ $ cargo shuttle login --api-key your-api-key-from-browser
 To deploy your shuttle project to the cloud, run:
 
 ```sh
-$ $ cargo shuttle deploy
+$ cargo shuttle deploy
 ```
 
 Your service will immediately be available at `{crate_name}.shuttleapp.rs`. For instance:
@@ -207,4 +207,4 @@ During our alpha period, API keys are completely free and you can deploy as many
 
 Just keep in mind that there may be some kinks that require us to take all deployments down once in a while. In certain circumstances we may also have to delete all the data associated with those deployments.
 
-🚀 To contribute to `cargo-shuttle` or stay updated with our development, please [open an issue, discussion or PR on Github](https://github.com/shuttle-hq/shuttle) and [join our Discord](https://discord.gg/H33rRDTm3p)!
+To contribute to `cargo-shuttle` or stay updated with our development, please [open an issue, discussion or PR on Github](https://github.com/shuttle-hq/shuttle) and [join our Discord](https://discord.gg/H33rRDTm3p)! 🚀

@@ -317,7 +317,7 @@ let number_of_channels = guild.get_number_of_channels(client);
 ```
 
 This pattern is used in the futures crate with the [FutureExt trait](https://docs.rs/futures/0.3.21/futures/future/trait.FutureExt.html).
-Here using the trait `FutureExt` provides additional methods to the existing [`Future` trait in Rust's standard library](https://doc.rust-lang.org/std/future/trait.Future.html). Aside from syntax aesthetics, it becomes much easier to object-specific functions when using an IDE.
+Here using the trait `FutureExt` provides additional methods to the existing [`Future` trait in Rust's standard library](https://doc.rust-lang.org/std/future/trait.Future.html). Aside from syntax aesthetics, it becomes much easier to find object-specific functions when using an IDE.
 
 You can use the [easy_ext](https://docs.rs/easy-ext/1.0.0/easy_ext/) for doing this pattern on a single type without having to write the trait / trait definition is generated for you.
 

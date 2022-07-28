@@ -262,14 +262,16 @@ impl Shuttle {
             .ok_or_else(|| anyhow!("Missing shuttle_service dependency in Cargo.toml"))?;
 
         let current_shuttle_version = match shuttle_service_entry {
-            Item::ArrayOfTables(_)
+            Item::ArrayOfTables(_) |
             Item::None => {
                 return Err(anyhow!("Invalid entry for shuttle_service"));
             }
             Item::Value(_) => shuttle_service_entry,
-            Item::Table(table) => table
-                .get("version")
-                .ok_or_else(|| anyhow!("Missing version key"))?
+            Item::Table(table) => {
+                table
+                    .get("version")
+                    .ok_or_else(|| anyhow!("Missing version key"))?
+            }
         };
 
         let version_string = current_shuttle_version

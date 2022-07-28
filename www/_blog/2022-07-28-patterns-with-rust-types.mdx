@@ -1,0 +1,332 @@
+---
+title: Patterns with Rust types
+description: Patterns to use types for better safety and design
+author: ben
+tags: [rust, tutorial]
+thumb: rust-type-patterns-banner.png
+cover: rust-type-patterns-banner.png
+date: "2022-07-28T18:00:00"
+---
+
+Maybe you are writing a library and struggling how to write a safe api level and tighten down on problems at edge cases and how to do that within the rules of Rust. **This post introduces some patterns and tricks for better using types in Rust. This post is advanced, you should evaluate the benefits and consider whether the complexities are worth it for your use case**.
+
+## The new type pattern
+
+There are several uses and benefits for the new type pattern, we will look at a few:
+
+### Separation of identifiers 
+
+Identifiers are stored well as numbers. In Rust the `usize` is a whole number type ranging from zero to eighteen quintillion (thats a lot of available identifiers). 
+
+Let's say we have a function that gets a identifier **User** from a database through a username. Using a unique identifier the api can get full information about the user. Here our function returns a identifier using a usize
+
+```rust
+fn get_user_id_from_username(username: &str) -> usize
+```
+
+Let's say we have a similar mechanism for another entity, a `Post`.
+
+If our application is doing operations involving posts **and** users, the logic can get in a mix:
+
+```rust
+let user_id: usize = get_user_id_from_username(username);
+let post_id: usize = get_last_post();
+
+fn delete_post(post_id: usize) {
+	// ...
+}
+
+delete_post(user_id);
+```
+
+Here `get_user_id_from_username` and `get_last_post` both return `usize`s. and `update_post_description` takes a usize. In this code we can call `delete_post` using our `user_id`.
+
+To differentiate between these two identifiers we can use the new type pattern:
+
+The new type pattern boils down to creating **a new tuple struct with a single item**, in this case `usize`
+
+```rust
+struct UserId(pub usize);
+```
+
+Now we can change our library definition to return a `UserId` instead of `usize`
+
+```rust
+fn get_user_id_from_username(username: String) -> UserId {
+	let user_id: usize = ...
+	UserId(user_id)
+}
+```
+
+Doing similar for the posts system with a `PostId`, when now compiling we get an error on when calling `get_post`.
+
+```rust
+   |
+14 |     get_post(x);
+   |              ^ expected struct `PostId`, found struct `UserId`
+```
+
+With the new type pattern the struct is only interpreted differently by the compiler. There is no overhead performance.  
+
+### Re-adding functionality to our type
+
+After creating this new *wrapper* type it is new and so doesn't carry the properties of `usize`:
+
+```rust
+let banned_users: HashSet<UserId> = HashSet::new();
+```
+
+The above doesn't compile because our new type doesn't implement equality and hashing behavior from our previous usize definition. Because these behaviors are missing we cannot create a hash set of `UserId`s. To add these traits back we can use the inbuilt derive macro, which generates implementations for our struct based on the single and only field.
+
+```rust
+#[derive(PartialEq, Eq, Hash)]
+struct UserId(usize);
+```
+
+### Contract based programming in Rust / sub-typing
+
+The new type pattern can also be used constraining to a set of *valid* values. 
+
+In the above example we used a wrapper type to enforce *flow* of values, this method benefits from that plus enforces the content of the value. In our application we only want usernames to contain lowercase alphabetic characters. Wrapping over String we can do this:
+
+```rust
+struct Username(String);
+```
+
+The only way to create a Username is using the `TryFrom` trait.
+
+```rust
+impl TryFrom<String> for Username {
+	type Error = String;
+
+	fn try_from(value: String) -> Result<Self, Self::Error> {
+		if value.chars().all(|c| matches!(c, 'a'..='z')) {
+			Ok(Username(value))
+		} else {
+			Err(value)
+		}
+	}
+}
+```
+
+This implementation returns a new `Username` if *all* the characters are lowercase. Else the string is returned and can be reused in logic possibly displaying a error.
+
+Here because the string field is private a `Username` cannot be created with `Username(my_string)`. It also cannot be modified by outsiders to be invalidate the contract.
+
+With our new structure we can use it as a input for a function in our api:
+
+```rust
+fn create_user(db: &mut DB, username: Username) -> Result<(), CreationError> {
+	// ...
+}
+```
+
+Here because the username is validated to be lowercase ahead of time the `create_user` function does not need to care about whether username is valid inside in its own scope. 
+
+This can lead to easier error handling. `CreationError` doesn't have to include a variant for the if the username has invalid characters.
+
+However if you do validation at the database level the additional check can be wasteful and unnecessary.
+
+One problem is that although **the only safe way** to construct if through the validator `TryFrom` trait, the `Username` can be created through unsafe transmute (casting the bits of one value to the type of another without checks). This is normally fine though as with unsafe you are introducing undefined behavior anyway so none of the panics are your fault.
+
+```rust
+let string = String::new("muahahaha 👿");
+let bad_username = unsafe { std::mem::transmute::<String, Username>(string) };
+dbg!(bad_username);
+```
+
+### Wrapping vs canonical type
+
+Our wrapped type is great from the outside however inside the logic we are relying on our logic to validate the contract.
+
+We can be really drill down on the structure of our username. Here we also enforce that the username has to be between four and ten letters.
+
+```rust
+#[rustfmt::skip]
+enum Alphabet {
+	A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z
+}
+
+enum Username {
+	FourLetters([Alphabet; 4]),
+	FiveLetters([Alphabet; 5]),
+	SixLetters([Alphabet; 6]),
+	SevenLetters([Alphabet; 7]),
+	EightLetters([Alphabet; 8]),
+	NineLetters([Alphabet; 9]),
+	TenLetters([Alphabet; 10]),
+}
+```
+
+In this case there is no way to make a invalid username in the program. (unless using unsafe)
+
+But it is a little bit over the top 😂. In some small cases it can be beneficial but above not really. 
+
+In the above example we take a string as input and will probably use it as a string again. It will be better to represent that using `String` rather than having to convert back and forward between the byte layout of our new `Username`. 
+
+### Working around foreign trait on foreign object rules
+
+Traits can be implemented on Rust structures (struct, enum). A problem that you might run into when writing trait implementations is that you can't add foreign traits to foreign items. The reason for this error is that traits cannot be implemented twice for the same structure:
+
+![](/images/blog/rust-trait-rules-diagram.png)
+
+In our crate the compiler does not know when calling `MyTrait` methods on `MyStruct` whether to use the implementation defined in crate 3 or crate 4? [Rust has a set of orphan rules](https://github.com/Ixrec/rust-orphan-rules) to prevent this situation happening. 
+
+But if you have the situation whether crate X has a function that requires something to abide some trait, and you are using a structure from crate Y which does not implement that trait you might find the new type pattern useful.
+
+```rust
+// crate X
+trait ToTree {
+	// ...
+}
+
+fn very_useful_function(something: impl ToTree)
+
+// Our crate
+enum Wrapper(pub crate_y::MyType);
+
+impl ToTree for Wrapper {
+	// ...
+}
+
+// Yay 
+very_useful_function(Wrapper(foreign_value))
+```
+
+One of the gotchas with this is that you have to manual implement the trait. You can't do use derive macros, e.g. `#[derive(PartialEq)]` and reach through to the declaration of the wrapped type and read its declaration. You also have to make sure that you can properly implement the trait on the item. `crate_y::MyType` might hide information needed for the implementation 😕.
+
+<hr/>
+
+Lots of uses for the new type pattern. We will leave the new type pattern and look at some other tricks when working with types in Rust.
+
+## Using either to unify different types
+
+Sometimes we have a case where we have a complicated data type
+
+```rust
+enum PostUser {
+	Single {
+		username: UserId
+	},
+	Group {
+		usernames: HashSet<UserId>
+	}
+}
+```
+
+We want a method that returns a iterator, but we are stuck because we either return a single once iterable ([std::iter::Once](https://doc.rust-lang.org/std/iter/struct.Once.html)) or a iterator over a hashset. These iterators are different types and have different properties, so Rust does not like when we try and build a function returning both.
+
+A Rust function / method cannot can only return one type:
+
+```rust
+impl PostUser {
+	fn iter(&self) -> impl Iterator<Item=&UserId> + '_ {
+		match self {
+			PostUser::User { username } => std::iter::once(username),
+			PostUser::Group { usernames } => usernames.into_iter(),
+		}
+	}
+}
+```
+
+The following will fail because the match arms have different types. 
+
+```rust
+   |
+17 | /         match self {
+18 | |             PostUser::User { username } => std::iter::once(username),
+   | |                                            ------------------------- this is found to be of type `std::iter::Once<&UserId>`
+19 | |             PostUser::Group { usernames } => usernames.into_iter(),
+   | |                                              ^^^^^^^^^^^^^^^^^^^^^ expected struct `std::iter::Once`, found struct `std::collections::hash_set::Iter`
+20 | |         }
+   | |_________- `match` arms have incompatible types
+   |
+   = note: expected struct `std::iter::Once<&UserId>`
+              found struct `std::collections::hash_set::Iter<'_, UserId>`
+```
+
+The [`either` crate](https://crates.io/crates/either) offers a general purpose sum type [that implements many traits](https://docs.rs/either/1.7.0/either/enum.Either.html#trait-implementations). Using `either::Left` for the once iterator and `either::Right` we can build two iterators into what Rust considers as a single type.
+
+```rust
+impl PostUser {
+	fn iter(&self) -> impl Iterator<Item=&UserId> + '_ {
+		match self {
+			PostUser::User { username } => either::Left(std::iter::once(username)),
+			PostUser::Group { usernames } => either::Right(usernames.into_iter()),
+		}
+	}
+}
+```
+
+We could have instead boxed the results and returned `Box<dyn Iterator<Item=&UserId>>`. The benefit of using either is that it uses static dispatch rather than dynamic dispatch. [enum_dispatch has good performance comparison for using static dispatch over dyn](https://docs.rs/enum_dispatch/latest/enum_dispatch/#the-benchmarks) so if you are on a critical hot path, and you have know all the returned types it is faster to use enums to unify types rather than dynamic trait dispatching.
+
+## Extension traits
+
+When creating a library we may add some functions for working with existing types (whether in the standard library or a different crate).
+
+Let's say we are writing a library on top of *serenity* that has models for discord servers (which discord refers to as guilds).
+
+Maybe we want to write a helper function that gets the number of channels in a [Guild](https://docs.rs/serenity/0.11.4/serenity/model/guild/struct.Guild.html).
+
+```rust
+async fn get_number_of_channels(
+	guild: &serenity::model::Guild, 
+	http: impl AsRef<Http>
+) -> serenity::Result<usize>
+```
+
+When calling the function we **have to** pass the guild as the first argument. 
+
+```rust
+let guild: serenity::model::Guild = // ...
+get_number_of_channels(&guild, client);
+```
+
+But maybe we prefer the design of calling it using member notation `guild.get_number_of_channels(client)`. 
+
+We can't use add a direct implementation for a type defined outside our current crate.
+
+```rust
+/ impl serenity::model::Guild {
+|     fn number_of_channels<T: AsRef<Http>>(&self, http: T) -> serenity::Result<usize> {
+|         todo!()
+|     }
+| }
+|_^ impl for type defined outside of crate.
+```
+
+To define a associated method on a type outside the crate we must instead make a intermediate trait:
+
+```rust
+trait GuildExt {
+	fn number_of_channels<T: AsRef<Http>>(&self, http: T) -> serenity::Result<usize>;
+}
+
+impl GuildExt for serenity::model::Guild {
+	fn number_of_channels<T: AsRef<Http>>(&self, http: T) -> serenity::Result<usize> {
+		// ...
+	}
+}
+```
+
+Using the intermediate trait means the language can reason about when the method exists. To use the method syntax and show to Rust the extension exists we must import the trait into our scope:
+
+```rust
+use crate::GuildExt;
+let guild: serenity::model::Guild = // ...
+let number_of_channels = guild.get_number_of_channels(client);
+```
+
+This pattern is used in the futures crate with the [FutureExt trait](https://docs.rs/futures/0.3.21/futures/future/trait.FutureExt.html). Here using the trait `FutureExt` provides additional methods to the existing [`Future` trait in Rust's standard library](https://doc.rust-lang.org/std/future/trait.Future.html). Aside from syntax aesthetics, the nice thing is it becomes easier to find functions specific to objects when using a editor
+
+You can use the [easy_ext](https://docs.rs/easy-ext/1.0.0/easy_ext/) for doing this pattern on a single item without having to write the trait / trait definition is generated for you.
+
+## Conclusion
+
+And there is a collection of patterns and tricks I have used when dealing with types in Rust before. There is a great book out on [Rust design patterns](https://rust-unofficial.github.io/patterns/intro.html) that covers some of these and more general Rust patterns. Have you used these patterns before?
+
+## [Shuttle](https://www.shuttle.rs/): Stateful Serverless for Rust
+
+Deploying and managing your Rust web apps can be an expensive, anxious and time consuming process.
+
+If you want a batteries included and ops-free experience, [try out Shuttle](https://docs.rs/shuttle-service/latest/shuttle_service/).

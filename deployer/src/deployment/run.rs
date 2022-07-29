@@ -297,7 +297,7 @@ mod tests {
     // Test for panics in the main function
     #[tokio::test]
     async fn panic_in_main() {
-        let built = make_so_create_and_built("handle-panic");
+        let built = make_so_create_and_built("main-panic");
         let (_kill_send, kill_recv) = broadcast::channel(1);
 
         let handle_cleanup = |_result| panic!("the service shouldn't even start");

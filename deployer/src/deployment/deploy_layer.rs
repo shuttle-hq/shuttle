@@ -678,7 +678,7 @@ mod tests {
             RECORDER.clone(),
         );
 
-        let queued = get_queue("handle-panic");
+        let queued = get_queue("main-panic");
         let id = queued.id;
         deployment_manager.queue_push(queued).await;
 

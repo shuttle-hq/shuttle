@@ -13,6 +13,6 @@ impl Service for MyService {
 }
 
 #[shuttle_service::main]
-async fn handle_panic() -> Result<MyService, shuttle_service::Error> {
+async fn main_panic() -> Result<MyService, shuttle_service::Error> {
     panic!("handle panic")
 }

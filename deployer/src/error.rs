@@ -8,6 +8,8 @@ use axum::Json;
 use serde::{ser::SerializeMap, Serialize};
 use shuttle_service::loader::LoaderError;
 
+use cargo::util::errors::CargoTestError;
+
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("Database error: {0}")]
@@ -22,6 +24,8 @@ pub enum Error {
     Load(#[from] LoaderError),
     #[error("Run error: {0}")]
     Run(#[from] shuttle_service::Error),
+    #[error("Pre-deployment test failure: {0}")]
+    PreDeployTestFailure(#[from] CargoTestError),
 }
 
 impl Serialize for Error {

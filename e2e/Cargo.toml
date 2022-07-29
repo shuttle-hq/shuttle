@@ -6,6 +6,8 @@ edition = "2021"
 
 [dev-dependencies]
 colored = "2.0.0"
+lazy_static = "1.4.0"
 portpicker = "0.1.1"
 rand = "0.8.5"
 reqwest = { version = "0.11.10", features = ["blocking", "json"] }
+which = "4.2.5"

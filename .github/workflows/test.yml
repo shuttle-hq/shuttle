@@ -3,24 +3,60 @@ name: cargo-test
 on:
   push:
     branches: [main]
-    paths: ["**/*.rs", "**/Cargo.toml"]
+    paths: ["**/*.rs", "**/Cargo.toml", "**/Cargo.lock"]
   pull_request:
     branches: [main]
-    paths: ["**/*.rs", "**/Cargo.toml"]
-
+    paths: ["**/*.rs", "**/Cargo.toml", "**/Cargo.lock"]
   workflow_dispatch:
 
-concurrency:
-  group: test-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  cargo_test:
-    runs-on: self-hosted
+  service_tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        features: ["web-axum", "web-rocket", "web-tide", "web-tower", "web-poem"]
     steps:
-      - uses: shuttle-hq/checkout@v2
-      - uses: shuttle-hq/toolchain@v1
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           override: true
-      - run: cargo test -- --nocapture
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            **/target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('./Cargo.lock') }}
+      - name: cargo test --package shuttle-service
+        run: cargo test --package shuttle-service --features="codegen,loader,secrets,${{ matrix.features }}"
+  platform_tests:
+    strategy:
+      matrix:
+        crate: ["shuttle-provisioner", "shuttle-api", "cargo-shuttle"]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            **/target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('./Cargo.lock') }}
+      - name: Patch shuttle-service
+        run: |
+          cat<<EOF > ~/.cargo/config.toml
+          [patch.crates-io]
+          shuttle-service = { path = "$PWD/service" }
+          EOF
+      - name: cargo test ${{ matrix.crate }} --all-features
+        run: cargo test --package ${{ matrix.crate }} --all-features -- --nocapture

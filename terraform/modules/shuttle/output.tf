@@ -27,8 +27,3 @@ output "user_content_host" {
   value       = aws_lb.user.dns_name
   description = "URL for user proxy load balancer"
 }
-
-output "initial_user_key" {
-  value       = random_string.initial_key.result
-  description = "Key given to the initial shuttle user"
-}

@@ -2,13 +2,14 @@ use chrono::Utc;
 use log::{Level, Metadata, Record};
 use serde_json::json;
 use tokio::sync::mpsc::UnboundedSender;
+use uuid::Uuid;
 
 use crate::deployment::State;
 
 use super::deploy_layer;
 
 pub trait Factory: Send + 'static {
-    fn get_logger(&self, project_name: String) -> Box<dyn log::Log>;
+    fn get_logger(&self, id: Uuid) -> Box<dyn log::Log>;
 }
 
 /// Factory to create runtime loggers for projects
@@ -23,23 +24,20 @@ impl RuntimeLoggerFactory {
 }
 
 impl Factory for RuntimeLoggerFactory {
-    fn get_logger(&self, project_name: String) -> Box<dyn log::Log> {
-        Box::new(RuntimeLogger::new(project_name, self.log_send.clone()))
+    fn get_logger(&self, id: Uuid) -> Box<dyn log::Log> {
+        Box::new(RuntimeLogger::new(id, self.log_send.clone()))
     }
 }
 
 /// Captures and redirects runtime logs for a deploy
 pub struct RuntimeLogger {
-    project_name: String,
+    id: Uuid,
     log_send: UnboundedSender<deploy_layer::Log>,
 }
 
 impl RuntimeLogger {
-    pub(crate) fn new(project_name: String, log_send: UnboundedSender<deploy_layer::Log>) -> Self {
-        Self {
-            project_name,
-            log_send,
-        }
+    pub(crate) fn new(id: Uuid, log_send: UnboundedSender<deploy_layer::Log>) -> Self {
+        Self { id, log_send }
     }
 }
 
@@ -54,7 +52,7 @@ impl log::Log for RuntimeLogger {
 
             self.log_send
                 .send(deploy_layer::Log {
-                    name: self.project_name.clone(),
+                    id: self.id,
                     state: State::Running,
                     level: record.level().into(),
                     timestamp: datetime,

@@ -15,7 +15,7 @@ async fn cargo_shuttle_run(working_directory: &str) -> u16 {
     let run_args = RunArgs { port };
 
     let runner = Shuttle::new().run(Args {
-        api_url: Some("network support is intentionally broken in tests".to_string()),
+        api_url: Some("http://shuttle.invalid:80".to_string()),
         project_args: ProjectArgs {
             working_directory: working_directory.clone(),
             name: None,
@@ -24,7 +24,7 @@ async fn cargo_shuttle_run(working_directory: &str) -> u16 {
     });
 
     tokio::spawn(async move {
-        sleep(Duration::from_secs(180)).await;
+        sleep(Duration::from_secs(600)).await;
 
         println!(
             "run test for '{}' took too long. Did it fail to shutdown?",
@@ -196,4 +196,51 @@ async fn tower_hello_world() {
         .unwrap();
 
     assert_eq!(request_text, "Hello, world!");
+}
+
+#[tokio::test]
+async fn poem_hello_world() {
+    let port = cargo_shuttle_run("../examples/poem/hello-world").await;
+
+    let request_text = reqwest::Client::new()
+        .get(format!("http://localhost:{port}/hello"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+
+    assert_eq!(request_text, "Hello, world!");
+}
+
+// This example uses a shared Postgres. Thus local runs should create a docker container for it.
+#[tokio::test]
+async fn poem_postgres() {
+    let port = cargo_shuttle_run("../examples/poem/postgres").await;
+    let client = reqwest::Client::new();
+
+    let post_text = client
+        .post(format!("http://localhost:{port}/todo"))
+        .body("{\"note\": \"Deploy to shuttle\"}")
+        .header("content-type", "application/json")
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+
+    assert_eq!(post_text, "{\"id\":1,\"note\":\"Deploy to shuttle\"}");
+
+    let request_text = client
+        .get(format!("http://localhost:{port}/todo/1"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+
+    assert_eq!(request_text, "{\"id\":1,\"note\":\"Deploy to shuttle\"}");
 }

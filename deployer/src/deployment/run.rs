@@ -9,8 +9,12 @@ use shuttle_common::project::ProjectName;
 use shuttle_service::{loader::Loader, Factory};
 use tokio::task::JoinError;
 use tracing::{debug, error, info, instrument};
+use uuid::Uuid;
 
-use super::{provisioner_factory, runtime_logger, KillReceiver, KillSender, RunReceiver, State};
+use super::{
+    provisioner_factory, queue::LIBS_PATH, runtime_logger, KillReceiver, KillSender, RunReceiver,
+    State,
+};
 use crate::error::Result;
 
 /// Run a task which takes runnable deploys from a channel and starts them up with a factory provided by the
@@ -25,25 +29,26 @@ pub async fn task(
     info!("Run task started");
 
     while let Some(built) = recv.recv().await {
-        let name = built.name.clone();
+        let id = built.id;
 
-        info!("Built deployment at the front of run queue: {}", name);
+        info!("Built deployment at the front of run queue: {id}");
 
         let kill_recv = kill_send.subscribe();
 
         let port = pick_unused_port().unwrap();
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
-        let mut factory = abstract_factory.get_factory(ProjectName::from_str(&name).unwrap());
-        let logger = logger_factory.get_logger(name.clone());
-        let cleanup_name = name.clone();
-        let cleanup = move |result: std::result::Result<anyhow::Result<()>, JoinError>| match result
-        {
+        let mut factory = abstract_factory.get_factory(ProjectName::from_str(&built.name).unwrap());
+        let logger = logger_factory.get_logger(id);
+        let cleanup = move |result: std::result::Result<
+            std::result::Result<(), shuttle_service::Error>,
+            JoinError,
+        >| match result {
             Ok(inner) => match inner {
-                Ok(()) => completed_cleanup(&cleanup_name),
-                Err(err) => crashed_cleanup(&cleanup_name, err),
+                Ok(()) => completed_cleanup(&id),
+                Err(err) => crashed_cleanup(&id, err),
             },
-            Err(err) if err.is_cancelled() => stopped_cleanup(&cleanup_name),
-            Err(err) => start_crashed_cleanup(&cleanup_name, err),
+            Err(err) if err.is_cancelled() => stopped_cleanup(&id),
+            Err(err) => start_crashed_cleanup(&id, err),
         };
 
         tokio::spawn(async move {
@@ -51,30 +56,32 @@ pub async fn task(
                 .handle(addr, &mut factory, logger, kill_recv, cleanup)
                 .await
             {
-                start_crashed_cleanup(&name, err)
+                start_crashed_cleanup(&id, err)
             }
         });
     }
 }
 
-#[instrument(fields(name = _name, state = %State::Completed))]
-fn completed_cleanup(_name: &str) {
+#[instrument(fields(id = %_id, state = %State::Completed))]
+fn completed_cleanup(_id: &Uuid) {
     info!("service finished all on its own");
 }
 
-#[instrument(fields(name = _name, state = %State::Stopped))]
-fn stopped_cleanup(_name: &str) {
+#[instrument(fields(id = %_id, state = %State::Stopped))]
+fn stopped_cleanup(_id: &Uuid) {
     info!("service was stopped by the user");
 }
 
-#[instrument(fields(name = _name, state = %State::Crashed))]
-fn crashed_cleanup(_name: &str, err: anyhow::Error) {
-    let error: &dyn std::error::Error = err.as_ref();
-    error!(error, "service encountered an error");
+#[instrument(fields(id = %_id, state = %State::Crashed))]
+fn crashed_cleanup(_id: &Uuid, err: impl std::error::Error + 'static) {
+    error!(
+        error = &err as &dyn std::error::Error,
+        "service encountered an error"
+    );
 }
 
-#[instrument(fields(name = _name, state = %State::Crashed))]
-fn start_crashed_cleanup(_name: &str, err: impl std::error::Error + 'static) {
+#[instrument(fields(id = %_id, state = %State::Crashed))]
+fn start_crashed_cleanup(_id: &Uuid, err: impl std::error::Error + 'static) {
     error!(
         error = &err as &dyn std::error::Error,
         "service startup encountered an error"
@@ -83,21 +90,24 @@ fn start_crashed_cleanup(_name: &str, err: impl std::error::Error + 'static) {
 
 #[derive(Debug)]
 pub struct Built {
+    pub id: Uuid,
     pub name: String,
-    pub so_path: PathBuf,
 }
 
 impl Built {
-    #[instrument(skip(self, factory, logger, cleanup), fields(name = self.name.as_str(), state = %State::Running))]
+    #[instrument(skip(self, factory, logger, cleanup), fields(id = %self.id, state = %State::Running))]
     async fn handle(
         self,
         addr: SocketAddr,
         factory: &mut dyn Factory,
         logger: Box<dyn log::Log>,
         mut kill_recv: KillReceiver,
-        cleanup: impl FnOnce(std::result::Result<anyhow::Result<()>, JoinError>) + Send + 'static,
+        cleanup: impl FnOnce(std::result::Result<std::result::Result<(), shuttle_service::Error>, JoinError>)
+            + Send
+            + 'static,
     ) -> Result<()> {
-        let loader = Loader::from_so_file(self.so_path.clone())?;
+        let so_path = PathBuf::from(LIBS_PATH).join(self.id.to_string());
+        let loader = Loader::from_so_file(so_path)?;
 
         let (mut handle, library) = loader.load(factory, addr, logger).await?;
 
@@ -106,9 +116,9 @@ impl Built {
             let result;
             loop {
                 tokio::select! {
-                     Ok(name) = kill_recv.recv() => {
-                         if name == self.name {
-                             debug!("Service {name} killed");
+                     Ok(id) = kill_recv.recv() => {
+                         if id == self.id {
+                             debug!("deployment '{id}' killed");
                              handle.abort();
                              result = handle.await;
                              break;
@@ -139,14 +149,16 @@ mod tests {
         time::Duration,
     };
 
+    use shuttle_common::database;
     use shuttle_service::Factory;
     use tokio::{
         sync::{broadcast, oneshot},
         task::JoinError,
         time::sleep,
     };
+    use uuid::Uuid;
 
-    use crate::error::Error;
+    use crate::{deployment::queue::LIBS_PATH, error::Error};
 
     use super::Built;
 
@@ -158,6 +170,7 @@ mod tests {
     impl Factory for StubFactory {
         async fn get_sql_connection_string(
             &mut self,
+            _db_type: database::Type,
         ) -> core::result::Result<String, shuttle_service::Error> {
             panic!("no run test should get an sql connection");
         }
@@ -178,10 +191,14 @@ mod tests {
     #[tokio::test]
     async fn can_be_killed() {
         let built = make_so_create_and_built("sleep-async");
+        let id = built.id;
         let (kill_send, kill_recv) = broadcast::channel(1);
         let (cleanup_send, cleanup_recv) = oneshot::channel();
 
-        let handle_cleanup = |result: std::result::Result<anyhow::Result<()>, JoinError>| {
+        let handle_cleanup = |result: std::result::Result<
+            std::result::Result<(), shuttle_service::Error>,
+            JoinError,
+        >| {
             assert!(
                 result.unwrap_err().is_cancelled(),
                 "handle should have been cancelled"
@@ -201,7 +218,7 @@ mod tests {
         sleep(Duration::from_secs(1)).await;
 
         // Send kill signal
-        kill_send.send("sleep-async".to_string()).unwrap();
+        kill_send.send(id).unwrap();
 
         tokio::select! {
             _ = sleep(Duration::from_secs(1)) => panic!("cleanup should have been called"),
@@ -216,7 +233,10 @@ mod tests {
         let (_kill_send, kill_recv) = broadcast::channel(1);
         let (cleanup_send, cleanup_recv) = oneshot::channel();
 
-        let handle_cleanup = |result: std::result::Result<anyhow::Result<()>, JoinError>| {
+        let handle_cleanup = |result: std::result::Result<
+            std::result::Result<(), shuttle_service::Error>,
+            JoinError,
+        >| {
             let result = result.unwrap();
             assert!(
                 result.is_ok(),
@@ -245,32 +265,18 @@ mod tests {
     async fn panic_in_bind() {
         let built = make_so_create_and_built("bind-panic");
         let (_kill_send, kill_recv) = broadcast::channel(1);
+        let (cleanup_send, cleanup_recv): (oneshot::Sender<()>, _) = oneshot::channel();
 
-        let handle_cleanup = |_result| panic!("handle from service should never start");
-        let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
-        let mut factory = StubFactory;
-        let logger = Box::new(StubLogger);
-
-        let result = built
-            .handle(addr, &mut factory, logger, kill_recv, handle_cleanup)
-            .await;
-
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Run error: Panic occurred in `Service::bind`: panic in bind"
-        );
-    }
-
-    // Test for panics in handle returned from Service::bind
-    #[tokio::test]
-    async fn panic_in_bind_handle() {
-        let built = make_so_create_and_built("handle-panic");
-        let (_kill_send, kill_recv) = broadcast::channel(1);
-        let (cleanup_send, cleanup_recv) = oneshot::channel();
-
-        let handle_cleanup = |result: std::result::Result<anyhow::Result<()>, JoinError>| {
+        let handle_cleanup = |result: std::result::Result<
+            std::result::Result<(), shuttle_service::Error>,
+            JoinError,
+        >| {
             let result = result.unwrap();
-            assert!(result.is_err(), "expected inner error from handle");
+            assert!(
+                result.is_err(),
+                "expected inner error from handle: {:?}",
+                result
+            );
             cleanup_send.send(()).unwrap();
         };
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
@@ -288,15 +294,33 @@ mod tests {
         }
     }
 
+    // Test for panics in the main function
+    #[tokio::test]
+    async fn panic_in_main() {
+        let built = make_so_create_and_built("handle-panic");
+        let (_kill_send, kill_recv) = broadcast::channel(1);
+
+        let handle_cleanup = |_result| panic!("the service shouldn't even start");
+        let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
+        let mut factory = StubFactory;
+        let logger = Box::new(StubLogger);
+
+        let result = built
+            .handle(addr, &mut factory, logger, kill_recv, handle_cleanup)
+            .await;
+
+        assert!(result.is_err(), "expected inner error from handle");
+    }
+
     #[tokio::test]
     async fn missing_so() {
         let built = Built {
+            id: Uuid::new_v4(),
             name: "test".to_string(),
-            so_path: PathBuf::from("missing.so"),
         };
         let (_kill_send, kill_recv) = broadcast::channel(1);
 
-        let handle_cleanup = |_built| {};
+        let handle_cleanup = |_result| panic!("no service means no cleanup");
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
         let mut factory = StubFactory;
         let logger = Box::new(StubLogger);
@@ -327,11 +351,15 @@ mod tests {
             format!("lib{}.so", dashes_replaced)
         };
 
+        let id = Uuid::new_v4();
         let so_path = crate_dir.join("target/release").join(lib_name);
+        let new_so_path = PathBuf::from(LIBS_PATH).join(id.to_string());
+
+        std::fs::copy(so_path, new_so_path).unwrap();
 
         Built {
+            id,
             name: crate_name.to_string(),
-            so_path,
         }
     }
 }

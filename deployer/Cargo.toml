@@ -1,19 +1,20 @@
 [package]
-name = "deployer"
+name = "shuttle-deployer"
 version = "0.1.0"
 edition = "2021"
 description = "Service with instances created per project for handling the compliation, loading, and execution of Shuttle services"
 
 [dependencies]
 async-trait = "0.1.56"
+cargo_metadata = "0.15.0"
 chrono = "0.4.19"
 thiserror = "1.0.24"
-futures = "0.3.7"
+futures = "0.3.21"
 log = "0.4.17"
-tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "fs"] }
-sqlx = { version = "0.5.13", features = ["runtime-tokio-native-tls", "sqlite", "chrono", "json"] }
+tokio = { version = "1.19.2", features = ["fs"] }
+sqlx = { version = "0.6.0", features = ["runtime-tokio-native-tls", "sqlite", "chrono", "json", "uuid"] }
 tower = { version = "0.4.12", features = ["make"] }
-axum = "0.5.7"
+axum = { version = "0.5.7", features = ["ws"] }
 bytes = "1.1.0"
 serde = { version = "1.0.137", features = ["derive"] }
 serde_json = "1.0.81"
@@ -23,20 +24,22 @@ tar = "0.4.38"
 rand = "0.8.5"
 tracing = "0.1.35"
 tracing-subscriber = { version = "0.3.11", features = ["env-filter"] }
+cargo = "0.62.0"
+uuid = { version = "1.1.2", features = ["v4"] }
 tonic = "0.7.2"
 clap = { version = "3.2.8", features = ["derive"] }
 anyhow = "1.0.58"
 
-[dependencies.proto]
-version = "0.1.0"
-path = "../proto"
-
 [dependencies.shuttle-common]
-version = "0.3.1"
+version = "0.4.1"
 path = "../common"
 
+[dependencies.shuttle-proto]
+version = "0.4.1"
+path = "../proto"
+
 [dependencies.shuttle-service]
-version = "0.3.3"
+version = "0.4.1"
 path = "../service"
 features = ["loader"]
 

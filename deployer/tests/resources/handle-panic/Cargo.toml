@@ -11,5 +11,4 @@ crate-type = ["cdylib"]
 [workspace]
 
 [dependencies]
-async-trait = "0.1.56"
 shuttle-service = { path = "../../../../service" }

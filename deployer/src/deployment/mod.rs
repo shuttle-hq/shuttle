@@ -1,5 +1,4 @@
 pub mod deploy_layer;
-mod info;
 pub mod log;
 mod provisioner_factory;
 mod queue;
@@ -7,7 +6,6 @@ mod run;
 mod runtime_logger;
 mod states;
 
-pub use info::DeploymentInfo;
 pub use states::State;
 
 pub use self::log::Log;
@@ -18,6 +16,9 @@ pub use runtime_logger::RuntimeLoggerFactory;
 use tracing::instrument;
 
 use tokio::sync::{broadcast, mpsc};
+use uuid::Uuid;
+
+use self::deploy_layer::LogRecorder;
 
 const QUEUE_BUFFER_SIZE: usize = 100;
 const RUN_BUFFER_SIZE: usize = 100;
@@ -35,28 +36,34 @@ impl DeploymentManager {
     pub fn new(
         abstract_factory: impl provisioner_factory::AbstractFactory,
         runtime_logger_factory: impl runtime_logger::Factory,
+        build_log_recorder: impl LogRecorder,
     ) -> Self {
         let (kill_send, _) = broadcast::channel(KILL_BUFFER_SIZE);
 
         DeploymentManager {
-            pipeline: Pipeline::new(kill_send.clone(), abstract_factory, runtime_logger_factory),
+            pipeline: Pipeline::new(
+                kill_send.clone(),
+                abstract_factory,
+                runtime_logger_factory,
+                build_log_recorder,
+            ),
             kill_send,
         }
     }
 
-    #[instrument(skip(self), fields(name = queued.name.as_str(), state = %State::Queued))]
+    #[instrument(skip(self), fields(id = %queued.id, state = %State::Queued))]
     pub async fn queue_push(&self, queued: Queued) {
         self.pipeline.queue_send.send(queued).await.unwrap();
     }
 
-    #[instrument(skip(self), fields(name = built.name.as_str(), state = %State::Built))]
+    #[instrument(skip(self), fields(id = %built.id, state = %State::Built))]
     pub async fn run_push(&self, built: Built) {
         self.pipeline.run_send.send(built).await.unwrap();
     }
 
-    pub async fn kill(&self, name: String) {
+    pub async fn kill(&self, id: Uuid) {
         if self.kill_send.receiver_count() > 0 {
-            self.kill_send.send(name).unwrap();
+            self.kill_send.send(id).unwrap();
         }
     }
 }
@@ -90,22 +97,20 @@ impl Pipeline {
         kill_send: KillSender,
         abstract_factory: impl provisioner_factory::AbstractFactory,
         runtime_logger_factory: impl runtime_logger::Factory,
+        build_log_recorder: impl LogRecorder,
     ) -> Pipeline {
         let (queue_send, queue_recv) = mpsc::channel(QUEUE_BUFFER_SIZE);
         let (run_send, run_recv) = mpsc::channel(RUN_BUFFER_SIZE);
 
         let run_send_clone = run_send.clone();
 
-        tokio::spawn(async move { queue::task(queue_recv, run_send_clone).await });
-        tokio::spawn(async move {
-            run::task(
-                run_recv,
-                kill_send,
-                abstract_factory,
-                runtime_logger_factory,
-            )
-            .await
-        });
+        tokio::spawn(queue::task(queue_recv, run_send_clone, build_log_recorder));
+        tokio::spawn(run::task(
+            run_recv,
+            kill_send,
+            abstract_factory,
+            runtime_logger_factory,
+        ));
 
         Pipeline {
             queue_send,
@@ -120,5 +125,5 @@ type QueueReceiver = mpsc::Receiver<queue::Queued>;
 type RunSender = mpsc::Sender<run::Built>;
 type RunReceiver = mpsc::Receiver<run::Built>;
 
-type KillSender = broadcast::Sender<String>;
-type KillReceiver = broadcast::Receiver<String>;
+type KillSender = broadcast::Sender<Uuid>;
+type KillReceiver = broadcast::Receiver<Uuid>;

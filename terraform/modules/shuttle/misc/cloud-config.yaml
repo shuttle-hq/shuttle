@@ -60,6 +60,11 @@ write_files:
     path: /lib/systemd/system/shuttle-provisioner.service
     owner: root:root
     permissions: "0644"
+  - encoding: b64
+    content: ${shuttle_db_content}
+    path: /lib/systemd/system/shuttle-db.service
+    owner: root:root
+    permissions: "0644"
 
 power_state:
   mode: reboot
@@ -69,5 +74,6 @@ runcmd:
   - docker network inspect shuttle-net || docker network create --driver bridge shuttle-net
   - [systemctl, daemon-reload]
   - [systemctl, enable, "opt-shuttle.mount"]
-  - [systemctl, enable, "shuttle-backend.service"]
+  - [systemctl, enable, "shuttle-db.service"]
   - [systemctl, enable, "shuttle-provisioner.service"]
+  - [systemctl, enable, "shuttle-backend.service"]

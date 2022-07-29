@@ -1,45 +1,25 @@
 use std::{thread::sleep, time::Duration};
 
-use shuttle_service::{IntoService, Runtime, ServeHandle, Service};
-
-#[macro_use]
-extern crate shuttle_service;
-
-struct Wait(u64);
+use shuttle_service::Service;
 
 struct SleepService {
     duration: u64,
-    runtime: Runtime,
 }
 
-fn simple() -> Wait {
-    Wait(10)
+#[shuttle_service::main]
+async fn simple() -> Result<SleepService, shuttle_service::Error> {
+    Ok(SleepService { duration: 10 })
 }
 
-impl IntoService for Wait {
-    type Service = SleepService;
-
-    fn into_service(self) -> Self::Service {
-        SleepService {
-            duration: self.0,
-            runtime: Runtime::new().unwrap(),
-        }
-    }
-}
-
+#[shuttle_service::async_trait]
 impl Service for SleepService {
-    fn bind(
-        &mut self,
+    async fn bind(
+        mut self: Box<Self>,
         _: std::net::SocketAddr,
-    ) -> Result<ServeHandle, shuttle_service::error::Error> {
+    ) -> Result<(), shuttle_service::error::Error> {
         let duration = Duration::from_secs(self.duration);
-        let handle = self.runtime.spawn(async move {
-            sleep(duration);
-            Ok(())
-        });
 
-        Ok(handle)
+        sleep(duration);
+        Ok(())
     }
 }
-
-declare_service!(Wait, simple);

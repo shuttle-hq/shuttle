@@ -4,10 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [lib]
-crate-type = ["cdylib"]
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 tide = "0.16.0"
-shuttle-service = { version = "0.3.3", features = ["web-tide"] }
+shuttle-service = { version = "0.4.1", features = ["web-tide"] }

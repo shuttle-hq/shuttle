@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-common"
-version = "0.3.1"
+version = "0.4.1"
 edition = "2021"
 license = "Apache-2.0"
 description = "Common library for the shuttle platform (https://www.shuttle.rs/)"

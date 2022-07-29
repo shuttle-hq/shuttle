@@ -190,7 +190,7 @@ mod tests {
     // This test uses the kill signal to make sure a service does stop when asked to
     #[tokio::test]
     async fn can_be_killed() {
-        let built = make_so_create_and_built("sleep-async");
+        let built = make_so_and_built("sleep-async");
         let id = built.id;
         let (kill_send, kill_recv) = broadcast::channel(1);
         let (cleanup_send, cleanup_recv) = oneshot::channel();
@@ -229,7 +229,7 @@ mod tests {
     // This test does not use a kill signal to stop the service. Rather the service decided to stop on its own without errors
     #[tokio::test]
     async fn self_stop() {
-        let built = make_so_create_and_built("sleep-async");
+        let built = make_so_and_built("sleep-async");
         let (_kill_send, kill_recv) = broadcast::channel(1);
         let (cleanup_send, cleanup_recv) = oneshot::channel();
 
@@ -263,7 +263,7 @@ mod tests {
     // Test for panics in Service::bind
     #[tokio::test]
     async fn panic_in_bind() {
-        let built = make_so_create_and_built("bind-panic");
+        let built = make_so_and_built("bind-panic");
         let (_kill_send, kill_recv) = broadcast::channel(1);
         let (cleanup_send, cleanup_recv): (oneshot::Sender<()>, _) = oneshot::channel();
 
@@ -289,7 +289,7 @@ mod tests {
             .unwrap();
 
         tokio::select! {
-            _ = sleep(Duration::from_secs(5)) => panic!("cleanup should have been called as service stopped on its own"),
+            _ = sleep(Duration::from_secs(5)) => panic!("cleanup should have been called as service handle stopped after panic"),
             _ = cleanup_recv => {}
         }
     }
@@ -297,7 +297,7 @@ mod tests {
     // Test for panics in the main function
     #[tokio::test]
     async fn panic_in_main() {
-        let built = make_so_create_and_built("main-panic");
+        let built = make_so_and_built("main-panic");
         let (_kill_send, kill_recv) = broadcast::channel(1);
 
         let handle_cleanup = |_result| panic!("the service shouldn't even start");
@@ -332,7 +332,7 @@ mod tests {
         assert!(matches!(result, Err(Error::Load(_))));
     }
 
-    fn make_so_create_and_built(crate_name: &str) -> Built {
+    fn make_so_and_built(crate_name: &str) -> Built {
         let crate_dir: PathBuf = [RESOURCES_PATH, crate_name].iter().collect();
 
         Command::new("cargo")

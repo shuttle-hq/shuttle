@@ -12,7 +12,7 @@ pub trait Factory: Send + 'static {
     fn get_logger(&self, id: Uuid) -> Box<dyn log::Log>;
 }
 
-/// Factory to create runtime loggers for projects
+/// Factory to create runtime loggers for deployments
 pub struct RuntimeLoggerFactory {
     log_send: UnboundedSender<deploy_layer::Log>,
 }
@@ -30,6 +30,7 @@ impl Factory for RuntimeLoggerFactory {
 }
 
 /// Captures and redirects runtime logs for a deploy
+/// TODO: convert to a tracing subscriber
 pub struct RuntimeLogger {
     id: Uuid,
     log_send: UnboundedSender<deploy_layer::Log>,

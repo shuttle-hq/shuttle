@@ -5,7 +5,7 @@
 #
 # Dependencies: git, ripgrep
 
-set -uo pipefail
+set -ueo pipefail
 
 function publish-folder()
 {

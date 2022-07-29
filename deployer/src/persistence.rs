@@ -188,9 +188,9 @@ impl Persistence {
             .map(|vec| vec.into_iter().map(|t| t.0).collect())
     }
 
-    pub async fn get_all_runnable_deployments(&self) -> Result<Vec<DeploymentState>> {
+    pub async fn get_all_runnable_deployments(&self) -> Result<Vec<DeploymentRunnable>> {
         sqlx::query_as(
-            r#"SELECT id, name, state, max(last_update) as last_update FROM deployments WHERE state = ? GROUP BY name"#,
+            r#"SELECT id, name, max(last_update) as last_update FROM deployments WHERE state = ? GROUP BY name"#,
         )
         .bind(State::Running)
         .fetch_all(&self.pool)
@@ -293,12 +293,17 @@ pub struct Deployment {
     pub last_update: DateTime<Utc>,
 }
 
-#[derive(sqlx::FromRow, Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct DeploymentState {
     pub id: Uuid,
-    pub name: String,
     pub state: State,
     pub last_update: DateTime<Utc>,
+}
+
+#[derive(sqlx::FromRow, Debug, PartialEq, Eq)]
+pub struct DeploymentRunnable {
+    pub id: Uuid,
+    pub name: String,
 }
 
 #[cfg(test)]
@@ -328,8 +333,6 @@ mod tests {
             &p.pool,
             DeploymentState {
                 id,
-                // TODO: remove this
-                name: "tmp".to_string(),
                 state: State::Built,
                 last_update: Utc::now(),
             },
@@ -387,17 +390,13 @@ mod tests {
         assert_eq!(
             runnable,
             [
-                DeploymentState {
+                DeploymentRunnable {
                     id: id_bar,
                     name: "bar".to_string(),
-                    state: State::Running,
-                    last_update: Utc.ymd(2022, 4, 25).and_hms(4, 33, 48),
                 },
-                DeploymentState {
+                DeploymentRunnable {
                     id: id_foo2,
                     name: "foo".to_string(),
-                    state: State::Running,
-                    last_update: Utc.ymd(2022, 4, 25).and_hms(4, 42, 32),
                 },
             ]
         );

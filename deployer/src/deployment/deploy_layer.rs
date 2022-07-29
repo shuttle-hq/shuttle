@@ -89,8 +89,6 @@ impl From<Log> for DeploymentState {
     fn from(log: Log) -> Self {
         Self {
             id: log.id,
-            // TODO: why????
-            name: "".to_string(),
             state: log.state,
             last_update: log.timestamp,
         }

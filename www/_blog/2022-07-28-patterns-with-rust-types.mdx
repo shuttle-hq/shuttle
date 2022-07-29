@@ -17,7 +17,7 @@ The new type pattern provides encapsulation  as well as a guarantee that the rig
 
 ### Identifier Separation
 
-A common representation of an identifier is a number - in this case let's use the unsiged integer type `usize`.
+A common representation of an identifier is a number - in this case let's use the unsigned integer type `usize`.
 
 Let's say we have a function that receives an identifier for a **User** from a database by username. By using a unique username our API retrieves the identifier of the user:
 
@@ -77,7 +77,7 @@ After creating this new *wrapper* type, we may need to implement some of the beh
 let banned_users: HashSet<UserId> = HashSet::new();
 ```
 
-The above doesn't compile because our new type `UserId` doesn't implement equality and hashing behavior whereas `usize` did. To add these traits back we can use the inbuilt derive macro, which generates implementations for our struct based on the single and only field.
+The above doesn't compile because our new type `UserId` doesn't implement equality and hashing behaviour whereas `usize` did. To add these traits back we can use the inbuilt derive macro, which generates implementations for our struct based on the single and only field.
 
 ```rust
 #[derive(PartialEq, Eq, Hash)]
@@ -128,7 +128,7 @@ Since the username is validated to be lowercase ahead of time, the `create_user`
 
 This can lead to easier error handling. `CreationError` doesn't have to include a variant for the if the username has invalid characters.
 
-Although **the only safe way** to construct if through the validator `TryFrom` trait, the `Username` can be created through unsafe transmute (casting the bits of one value to the type of another without checks). This is normally fine though as with unsafe you are introducing undefined behavior anyway.
+Although **the only safe way** to construct if through the validator `TryFrom` trait, the `Username` can be created through unsafe transmute (casting the bits of one value to the type of another without checks). This is normally fine though as with unsafe you are introducing undefined behaviour anyway.
 
 ```rust
 let string = String::new("muahahaha 👿");
@@ -196,7 +196,7 @@ very_useful_function(Wrapper(foreign_value))
 
 One of the gotchas with this is that you have to manually implement the trait. You can't use derive macros, e.g. `#[derive(PartialEq)]` and reach through to the declaration of the wrapped type and read its declaration. You also have to make sure that you can properly implement the trait on the item. `crate_y::MyType` might hide information needed for the implementation 😕.
 
-Ok - enough witht the new type pattern. Let's leave it for a minute and look at some other tricks when working with types in Rust.
+Ok - enough with the new type pattern. Let's leave it for a minute and look at some other tricks when working with types in Rust.
 
 ## Using either to unify different types
 
@@ -323,7 +323,7 @@ You can use the [easy_ext](https://docs.rs/easy-ext/1.0.0/easy_ext/) for doing t
 
 ## Conclusion
 
-We saw how we can use various patterns like the new-type pattern and extension pattern to make our Rust code more ergonomic and take advantage of the type system and compiler to write better code. There is a great book out on [Rust design patterns](https://rust-unofficial.github.io/patterns/intro.html) which covers some of these and many more paterns in Rust. What are your favourite design patterns in Rust? Let us know and we'll cover them next time!
+We saw how we can use various patterns like the new-type pattern and extension pattern to make our Rust code more ergonomic and take advantage of the type system and compiler to write better code. There is a great book out on [Rust design patterns](https://rust-unofficial.github.io/patterns/intro.html) which covers some of these and many more patterns in Rust. What are your favourite design patterns in Rust? Let us know and we'll cover them next time!
 
 ## [Shuttle](https://www.shuttle.rs/): Stateful Serverless for Rust
 

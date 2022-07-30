@@ -1,3 +1,4 @@
+use crate::resource::{self, Input};
 use proc_macro::TokenStream;
 use proc_macro_error::emit_error;
 use quote::{quote, ToTokens};
@@ -48,48 +49,16 @@ struct Wrapper {
     fn_inputs: Vec<Input>,
 }
 
-#[derive(Debug, PartialEq)]
-struct Input {
-    /// The identifier for a resource input
-    ident: Ident,
-
-    /// The shuttle_service path to the builder for this resource
-    builder: Path,
-}
-
 impl Wrapper {
     pub(crate) fn from_item_fn(item_fn: &mut ItemFn) -> Self {
-        let inputs: Vec<_> = item_fn
-            .sig
-            .inputs
-            .iter_mut()
-            .filter_map(|input| match input {
-                FnArg::Receiver(_) => None,
-                FnArg::Typed(typed) => Some(typed),
-            })
-            .filter_map(|typed| match typed.pat.as_ref() {
-                Pat::Ident(ident) => Some((ident, typed.attrs.drain(..).collect())),
-                _ => None,
-            })
-            .filter_map(|(pat_ident, attrs)| {
-                match attribute_to_path(attrs) {
-                    Ok(builder) => Some(Input {
-                        ident: pat_ident.ident.clone(),
-                        builder,
-                    }),
-                    Err(err) => {
-                        emit_error!(pat_ident, err; hint = pat_ident.span() => "Try adding a config like `#[shared::Postgres]`");
-                        None
-                    }
-                }
-            })
-            .collect();
+        let inputs = item_fn.sig.inputs.iter_mut();
+        let fn_inputs = resource::get_inputs(inputs);
 
         check_return_type(&item_fn.sig);
 
         Self {
             fn_ident: item_fn.sig.ident.clone(),
-            fn_inputs: inputs,
+            fn_inputs,
         }
     }
 }
@@ -112,16 +81,6 @@ fn check_return_type(signature: &Signature) {
             ),
         },
     }
-}
-
-fn attribute_to_path(attrs: Vec<Attribute>) -> Result<Path, String> {
-    if attrs.is_empty() {
-        return Err("resource needs an attribute configuration".to_string());
-    }
-
-    let builder = attrs[0].path.clone();
-
-    Ok(builder)
 }
 
 impl ToTokens for Wrapper {

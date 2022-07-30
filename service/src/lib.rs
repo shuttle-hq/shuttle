@@ -210,6 +210,7 @@ use std::pin::Pin;
 pub use async_trait::async_trait;
 
 // Pub uses by `codegen`
+pub use lambda_runtime;
 pub use log;
 pub use tokio::runtime::Runtime;
 

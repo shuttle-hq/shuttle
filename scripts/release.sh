@@ -5,7 +5,7 @@
 #
 # Dependencies: git, cargo-edit, ripgrep
 
-set -uo pipefail
+set -ueo pipefail
 
 function update-cargo-versions()
 {

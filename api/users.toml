@@ -9,4 +9,6 @@ projects = [
     'hello-world-tide-app',
     'hello-world-tower-app',
     'postgres-tide-app',
+    'hello-world-poem-app',
+    'postgres-poem-app'
 ]

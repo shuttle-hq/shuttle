@@ -215,7 +215,7 @@ enum PostUser {
 
 We'd like a method that returns an iterator, but we're stuck since we either return a single once iterable ([std::iter::Once](https://doc.rust-lang.org/std/iter/struct.Once.html)) or an iterator over a hashset. These iterators are different types and have different properties, so Rust doesn't like when we try to build a function returning both.
 
-A Rust function / method cannot can only return one type:
+A Rust function / method can only return one type:
 
 ```rust
 impl PostUser {

@@ -200,8 +200,9 @@ mod tests {
             JoinError,
         >| {
             assert!(
-                result.unwrap_err().is_cancelled(),
-                "handle should have been cancelled"
+                matches!(result, Err(ref join_error) if join_error.is_cancelled()),
+                "handle should have been cancelled: {:?}",
+                result
             );
             cleanup_send.send(()).unwrap();
         };
@@ -222,7 +223,7 @@ mod tests {
 
         tokio::select! {
             _ = sleep(Duration::from_secs(1)) => panic!("cleanup should have been called"),
-            _ = cleanup_recv => {}
+            Ok(()) = cleanup_recv => {}
         }
     }
 
@@ -256,7 +257,7 @@ mod tests {
 
         tokio::select! {
             _ = sleep(Duration::from_secs(5)) => panic!("cleanup should have been called as service stopped on its own"),
-            _ = cleanup_recv => {}
+            Ok(()) = cleanup_recv => {},
         }
     }
 
@@ -273,7 +274,7 @@ mod tests {
         >| {
             let result = result.unwrap();
             assert!(
-                result.is_err(),
+                matches!(result, Err(shuttle_service::Error::BindPanic(ref msg)) if msg == "panic in bind"),
                 "expected inner error from handle: {:?}",
                 result
             );
@@ -290,7 +291,7 @@ mod tests {
 
         tokio::select! {
             _ = sleep(Duration::from_secs(5)) => panic!("cleanup should have been called as service handle stopped after panic"),
-            _ = cleanup_recv => {}
+            Ok(()) = cleanup_recv => {}
         }
     }
 
@@ -309,7 +310,11 @@ mod tests {
             .handle(addr, &mut factory, logger, kill_recv, handle_cleanup)
             .await;
 
-        assert!(result.is_err(), "expected inner error from handle");
+        assert!(
+            matches!(result, Err(Error::Run(shuttle_service::Error::BuildPanic(ref msg))) if msg == "main panic"),
+            "expected inner error from main: {:?}",
+            result
+        );
     }
 
     #[tokio::test]
@@ -329,7 +334,14 @@ mod tests {
             .handle(addr, &mut factory, logger, kill_recv, handle_cleanup)
             .await;
 
-        assert!(matches!(result, Err(Error::Load(_))));
+        assert!(
+            matches!(
+                result,
+                Err(Error::Load(shuttle_service::loader::LoaderError::Load(_)))
+            ),
+            "expected missing 'so' error: {:?}",
+            result
+        );
     }
 
     fn make_so_and_built(crate_name: &str) -> Built {

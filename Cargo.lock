@@ -2708,7 +2708,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "76cf2e2a435d327806e7c8d46d341d624a6a2e3b35b253eee44d1c89980451be"
 dependencies = [
  "async-stream",
- "bytes",
+ "bytes 1.1.0",
  "http",
  "hyper",
  "lambda_runtime_api_client",
@@ -3542,9 +3542,9 @@ dependencies = [
 
 [[package]]
 name = "prettyplease"
-version = "0.1.15"
+version = "0.1.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e1516508b396cefe095485fdce673007422f5e48e82934b7b423dc26aa5e6a4"
+checksum = "fffbe84bf1905c007253d1f10ffb85fbc8ca8624a40cff8f2ded6f36920e38e0"
 dependencies = [
  "proc-macro2",
  "syn",
@@ -4466,6 +4466,7 @@ name = "shuttle-codegen"
 version = "0.4.1"
 dependencies = [
  "pretty_assertions",
+ "prettyplease",
  "proc-macro-error",
  "proc-macro2",
  "quote",

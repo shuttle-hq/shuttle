@@ -18,3 +18,4 @@ syn = { version = "1.0.96", features = ["full", "extra-traits"] }
 [dev-dependencies]
 pretty_assertions = "1.2.1"
 trybuild = "1.0"
+prettyplease = "0.1.17"

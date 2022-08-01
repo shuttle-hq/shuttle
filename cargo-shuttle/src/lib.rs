@@ -66,7 +66,12 @@ impl Shuttle {
 
         match args.cmd {
             Command::Deploy(deploy_args) => {
-                self.check_lib_version(args.project_args).await?;
+                let cargo_path = args.project_args.working_directory.join("Cargo.toml");
+                let cargo_doc = read_to_string(cargo_path.clone())?.parse::<Document>()?;
+
+                let server_version = client::shuttle_version(self.ctx.api_url()).await?;
+                let server_version = Version::parse(&server_version)?;
+                Self::check_lib_version(cargo_doc, &server_version)?;
                 return self.deploy(deploy_args).await;
             }
             Command::Init(init_args) => self.init(init_args).await,
@@ -251,43 +256,41 @@ impl Shuttle {
         })
     }
 
-    async fn check_lib_version(&self, project_args: ProjectArgs) -> Result<()> {
-        let cargo_path = project_args.working_directory.join("Cargo.toml");
-        let cargo_doc = read_to_string(cargo_path.clone())?.parse::<Document>()?;
-
+    fn check_lib_version(cargo_doc: Document, server_version: &Version) -> Result<()> {
         let shuttle_service_entry = cargo_doc
             .get("dependencies")
             .ok_or_else(|| anyhow!("Missing dependencies section in Cargo.toml"))?
             .get("shuttle-service")
             .ok_or_else(|| anyhow!("Missing shuttle_service dependency in Cargo.toml"))?;
 
-        let current_shuttle_version = match shuttle_service_entry {
-            Item::ArrayOfTables(_) |
-            Item::None => {
+        let version_item = match shuttle_service_entry {
+            Item::ArrayOfTables(_) | Item::None => {
                 return Err(anyhow!("Invalid entry for shuttle_service"));
             }
             Item::Value(_) => shuttle_service_entry,
-            Item::Table(table) => {
-                table
-                    .get("version")
-                    .ok_or_else(|| anyhow!("Missing version key"))?
-            }
+            Item::Table(table) => table
+                .get("version")
+                .ok_or_else(|| anyhow!("Missing version key"))?,
         };
 
-        let version_string = current_shuttle_version
+        let version_string = version_item
             .as_str()
-            .ok_or_else(|| anyhow!("Invalid version as string"))?;
-        
+            .ok_or_else(|| anyhow!("Expected version as string, found {}", version_item))?;
+
         let service_semver = match Version::parse(version_string) {
             Ok(version) => version,
             Err(error) => return Err(anyhow!("Your shuttle-service version ({}) is invalid and should follow the MAJOR.MINOR.PATCH semantic versioning format. Error given: {:?}", version_string, error.to_string())),
         };
 
-        let server_version = client::shuttle_version(self.ctx.api_url()).await?;
-        let server_version = Version::parse(&server_version)?;
-
-        let version_required = format!("{}.{}", server_version.major, server_version.minor);
-        let server_semver = VersionReq::parse(&version_required)?;
+        let server_semver = VersionReq {
+            comparators: vec![semver::Comparator {
+                op: semver::Op::GreaterEq,
+                major: server_version.major,
+                minor: Some(server_version.minor),
+                patch: None,
+                pre: semver::Prerelease::EMPTY,
+            }],
+        };
 
         if server_semver.matches(&service_semver) {
             Ok(())
@@ -399,5 +402,32 @@ mod tests {
             project_args.working_directory,
             path_from_workspace_root("examples/axum/hello-world/")
         );
+    }
+
+    #[test]
+    fn check_lib_version() {
+        use semver::Version;
+        use std::str::FromStr;
+        use toml_edit::Document;
+
+        let test_version = Version::parse("0.4.1").unwrap();
+
+        assert!(Shuttle::check_lib_version(Document::new(), &test_version).is_err());
+        assert!(Shuttle::check_lib_version(
+            Document::from_str("[dependencies]\nshuttle-service = \"0.3.1\"").unwrap(),
+            &test_version
+        )
+        .is_err());
+        assert!(Shuttle::check_lib_version(
+            Document::from_str("[dependencies]\nshuttle-service = \"0.4.1\"").unwrap(),
+            &test_version
+        )
+        .is_ok());
+        assert!(Shuttle::check_lib_version(
+            Document::from_str("[dependencies]\nshuttle-service = { version = \"0.4.1\" }")
+                .unwrap(),
+            &test_version
+        )
+        .is_ok());
     }
 }

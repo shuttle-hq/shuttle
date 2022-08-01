@@ -37,6 +37,7 @@ pub fn make_router(
             get(get_build_logs_subscribe),
         )
         .route("/deployments/:id/build-logs", get(get_build_logs))
+        .route("/version", get(get_version))
         .layer(Extension(persistence))
         .layer(Extension(deployment_manager))
         .layer(
@@ -183,4 +184,8 @@ async fn websocket_handler(mut s: WebSocket, persistence: Persistence, id: Uuid)
     }
 
     let _ = s.close().await;
+}
+
+async fn get_version() -> String {
+    shuttle_service::VERSION.to_string()
 }

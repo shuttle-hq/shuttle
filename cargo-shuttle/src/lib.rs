@@ -25,7 +25,7 @@ use factory::LocalFactory;
 use semver::{Version, VersionReq};
 use shuttle_service::loader::{build_crate, Loader};
 use tokio::sync::mpsc;
-use toml_edit::{Document, Item};
+use toml_edit::{Document, Item, TableLike, Value};
 use uuid::Uuid;
 
 #[macro_use]
@@ -257,31 +257,37 @@ impl Shuttle {
     }
 
     fn check_lib_version(cargo_doc: Document, server_version: &Version) -> Result<()> {
-        fn get_dependency_version_string(
-            document: Document,
+        fn get_dependency_version_string<'a>(
+            document: &'a Document,
             dependency_name: &str,
-        ) -> Result<Version> {
-            let entry = cargo_doc
+        ) -> Result<&'a str> {
+            fn get_table_key<'a>(table: &'a impl TableLike, key: &str) -> Result<&'a Item> {
+                table
+                    .get("version")
+                    .ok_or_else(|| anyhow!("Missing {} key", key))
+            }
+
+            fn get_item_as_str(item: &Item) -> Result<&str> {
+                item.as_str()
+                    .ok_or_else(|| anyhow!("Expected string, found {}", item))
+            }
+
+            let entry = document
                 .get("dependencies")
                 .ok_or_else(|| anyhow!("Missing dependencies section in Cargo.toml"))?
                 .get(dependency_name);
 
             if let Some(entry) = entry {
-                match shuttle_service_entry {
-                    Item::ArrayOfTables(_) | Item::Table(table) | Item::None => {
+                match entry {
+                    Item::ArrayOfTables(_) | Item::None => {
                         Err(anyhow!("Invalid entry for {}", dependency_name))
                     }
-                    Item::Value(Value::InlineTable(table)) => table
-                        .get("version")
-                        .ok_or_else(|| anyhow!("Missing version key")),
-                    Item::Value(value) => value
-                        .as_str()
-                        .ok_or_else(|| anyhow!("Expected version as string, found {}", value)),
+                    Item::Value(Value::InlineTable(table)) => {
+                        get_item_as_str(get_table_key(table, "version")?)
+                    }
+                    Item::Table(table) => get_item_as_str(get_table_key(table, "version")?),
+                    item => get_item_as_str(item),
                 }
-            } else if Some(table) = cargo_doc.get(&format!("dependencies.{}", dependency_name)) {
-                table
-                    .get("version")
-                    .ok_or_else(|| anyhow!("Missing version section in Cargo.toml"))
             } else {
                 Err(anyhow!(
                     "Missing {} dependency in Cargo.toml",
@@ -290,7 +296,7 @@ impl Shuttle {
             }
         }
 
-        let version_string = get_dependency_version_string(cargo_doc, "shuttle-service");
+        let version_string = get_dependency_version_string(&cargo_doc, "shuttle-service")?;
 
         let service_semver = match Version::parse(version_string) {
             Ok(version) => version,

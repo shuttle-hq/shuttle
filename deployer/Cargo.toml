@@ -24,6 +24,7 @@ flate2 = "1.0.24"
 portpicker = "0.1.1"
 tar = "0.4.38"
 rand = "0.8.5"
+strum = { version = "0.24.1", features = ["derive"] }
 tracing = "0.1.35"
 tracing-subscriber = { version = "0.3.11", features = ["env-filter"] }
 tracing-opentelemetry = "0.17.4"

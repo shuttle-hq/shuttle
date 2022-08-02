@@ -4633,6 +4633,7 @@ dependencies = [
  "shuttle-proto",
  "shuttle-service",
  "sqlx 0.6.0",
+ "strum",
  "tar",
  "tempdir",
  "thiserror",

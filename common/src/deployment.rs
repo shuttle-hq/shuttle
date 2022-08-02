@@ -16,29 +16,15 @@ pub struct Response {
 
 #[derive(Clone, Debug, Deserialize, Display, Serialize)]
 #[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
 pub enum State {
-    #[strum(serialize = "queued")]
     Queued,
-
-    #[strum(serialize = "building")]
     Building,
-
-    #[strum(serialize = "built")]
     Built,
-
-    #[strum(serialize = "running")]
     Running,
-
-    #[strum(serialize = "completed")]
     Completed,
-
-    #[strum(serialize = "stopped")]
     Stopped,
-
-    #[strum(serialize = "crashed")]
     Crashed,
-
-    #[strum(serialize = "unknown")]
     Unknown,
 }
 

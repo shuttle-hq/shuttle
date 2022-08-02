@@ -22,6 +22,7 @@
 use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
 use shuttle_common::{deployment, log::StreamLog};
+use std::str::FromStr;
 use tracing::{field::Visit, span, warn, Metadata, Subscriber};
 use tracing_subscriber::Layer;
 use uuid::Uuid;
@@ -281,7 +282,7 @@ impl NewStateVisitor {
 impl Visit for NewStateVisitor {
     fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
         if field.name() == Self::STATE_IDENT {
-            self.details.state = value.into();
+            self.details.state = State::from_str(&format!("{value:?}")).unwrap_or_default();
         }
         if field.name() == Self::ID_IDENT {
             self.details.id = Uuid::try_parse(&format!("{value:?}")).unwrap_or_default();

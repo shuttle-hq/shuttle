@@ -48,14 +48,14 @@ impl Persistence {
             CREATE TABLE IF NOT EXISTS deployments (
                 id TEXT PRIMARY KEY, -- Identifier of the deployment.
                 name TEXT,           -- Name of the service being deployed.
-                state INTEGER,       -- Enum indicating the current state of the deployment.
+                state TEXT,          -- Enum indicating the current state of the deployment.
                 last_update INTEGER  -- Unix epoch of the last status update
             );
 
             CREATE TABLE IF NOT EXISTS logs (
                 id TEXT,           -- The deployment that this log line pertains to.
                 timestamp INTEGER, -- Unix epoch timestamp.
-                state INTEGER,     -- The state of the deployment at the time at which the log text was produced.
+                state TEXT,        -- The state of the deployment at the time at which the log text was produced.
                 level TEXT,        -- The log level
                 file TEXT,         -- The file log took place in
                 line INTEGER,      -- The line log took place on
@@ -311,7 +311,7 @@ mod tests {
     use super::*;
     use crate::deployment::log::Level;
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn deployment_updates() {
         let (p, _) = Persistence::new_in_memory().await;
 
@@ -341,7 +341,7 @@ mod tests {
         assert_ne!(update.last_update, Utc.ymd(2022, 4, 25).and_hms(4, 43, 33));
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn fetching_runnable_deployments() {
         let (p, _) = Persistence::new_in_memory().await;
 
@@ -399,7 +399,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn deployment_deletion() {
         let (p, _) = Persistence::new_in_memory().await;
 
@@ -427,7 +427,7 @@ mod tests {
         assert!(p.get_deployments("x").await.unwrap().is_empty());
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn log_insert() {
         let (p, _) = Persistence::new_in_memory().await;
 
@@ -450,7 +450,7 @@ mod tests {
         assert_eq!(logs.first().unwrap(), &log);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn logs_for_deployment() {
         let (p, _) = Persistence::new_in_memory().await;
 
@@ -528,7 +528,7 @@ mod tests {
         assert_eq!(log.fields, json!({"message": "job queued"}));
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn log_recorder_state() {
         let (p, handle) = Persistence::new_in_memory().await;
 

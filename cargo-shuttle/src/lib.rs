@@ -257,25 +257,40 @@ impl Shuttle {
     }
 
     fn check_lib_version(cargo_doc: Document, server_version: &Version) -> Result<()> {
-        let shuttle_service_entry = cargo_doc
-            .get("dependencies")
-            .ok_or_else(|| anyhow!("Missing dependencies section in Cargo.toml"))?
-            .get("shuttle-service")
-            .ok_or_else(|| anyhow!("Missing shuttle_service dependency in Cargo.toml"))?;
+        fn get_dependency_version_string(
+            document: Document,
+            dependency_name: &str,
+        ) -> Result<Version> {
+            let entry = cargo_doc
+                .get("dependencies")
+                .ok_or_else(|| anyhow!("Missing dependencies section in Cargo.toml"))?
+                .get(dependency_name);
 
-        let version_item = match shuttle_service_entry {
-            Item::ArrayOfTables(_) | Item::None => {
-                return Err(anyhow!("Invalid entry for shuttle_service"));
+            if let Some(entry) = entry {
+                match shuttle_service_entry {
+                    Item::ArrayOfTables(_) | Item::Table(table) | Item::None => {
+                        Err(anyhow!("Invalid entry for {}", dependency_name))
+                    }
+                    Item::Value(Value::InlineTable(table)) => table
+                        .get("version")
+                        .ok_or_else(|| anyhow!("Missing version key")),
+                    Item::Value(value) => value
+                        .as_str()
+                        .ok_or_else(|| anyhow!("Expected version as string, found {}", value)),
+                }
+            } else if Some(table) = cargo_doc.get(&format!("dependencies.{}", dependency_name)) {
+                table
+                    .get("version")
+                    .ok_or_else(|| anyhow!("Missing version section in Cargo.toml"))
+            } else {
+                Err(anyhow!(
+                    "Missing {} dependency in Cargo.toml",
+                    dependency_name
+                ))
             }
-            Item::Value(_) => shuttle_service_entry,
-            Item::Table(table) => table
-                .get("version")
-                .ok_or_else(|| anyhow!("Missing version key"))?,
-        };
+        }
 
-        let version_string = version_item
-            .as_str()
-            .ok_or_else(|| anyhow!("Expected version as string, found {}", version_item))?;
+        let version_string = get_dependency_version_string(cargo_doc, "shuttle-service");
 
         let service_semver = match Version::parse(version_string) {
             Ok(version) => version,
@@ -426,6 +441,11 @@ mod tests {
         assert!(Shuttle::check_lib_version(
             Document::from_str("[dependencies]\nshuttle-service = { version = \"0.4.1\" }")
                 .unwrap(),
+            &test_version
+        )
+        .is_ok());
+        assert!(Shuttle::check_lib_version(
+            Document::from_str("[dependencies.shuttle-service]\nversion = \"0.4.1\"").unwrap(),
             &test_version
         )
         .is_ok());

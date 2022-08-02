@@ -10,7 +10,6 @@ use shuttle_common::{deployment, log::StreamLog};
 use sqlx::migrate::MigrateDatabase;
 use sqlx::sqlite::{Sqlite, SqlitePool};
 use tokio::sync::broadcast::{self, Receiver, Sender};
-use tokio::sync::mpsc::{self, UnboundedSender};
 use tokio::task::JoinHandle;
 use tracing::error;
 use uuid::Uuid;
@@ -20,7 +19,7 @@ const DB_PATH: &str = "deployer.sqlite";
 #[derive(Clone)]
 pub struct Persistence {
     pool: SqlitePool,
-    log_send: UnboundedSender<deploy_layer::Log>,
+    log_send: crossbeam_channel::Sender<deploy_layer::Log>,
     stream_log_send: Sender<StreamLog>,
 }
 
@@ -65,8 +64,8 @@ impl Persistence {
             );
         ").execute(&pool).await.unwrap();
 
-        let (log_send, mut log_recv): (UnboundedSender<deploy_layer::Log>, _) =
-            mpsc::unbounded_channel();
+        let (log_send, log_recv): (crossbeam_channel::Sender<deploy_layer::Log>, _) =
+            crossbeam_channel::bounded(16);
 
         let (stream_log_send, _) = broadcast::channel(32);
         let stream_log_send_clone = stream_log_send.clone();
@@ -76,7 +75,7 @@ impl Persistence {
         // The logs are received on a non-async thread.
         // This moves them to an async thread
         let handle = tokio::spawn(async move {
-            while let Some(log) = log_recv.recv().await {
+            while let Ok(log) = log_recv.recv() {
                 if stream_log_send_clone.receiver_count() > 0 {
                     if let Some(stream_log) = log.to_stream_log() {
                         stream_log_send_clone
@@ -211,7 +210,7 @@ impl Persistence {
         self.stream_log_send.subscribe()
     }
 
-    pub fn get_log_sender(&self) -> UnboundedSender<deploy_layer::Log> {
+    pub fn get_log_sender(&self) -> crossbeam_channel::Sender<deploy_layer::Log> {
         self.log_send.clone()
     }
 }

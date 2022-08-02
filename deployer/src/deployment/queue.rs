@@ -7,7 +7,6 @@ use cargo_metadata::Message;
 use chrono::Utc;
 use serde_json::json;
 use shuttle_service::loader::build_crate;
-use tokio::sync::mpsc::{self, UnboundedSender};
 use tracing::{debug, error, info, instrument};
 use uuid::Uuid;
 
@@ -97,14 +96,14 @@ impl Queued {
 
         info!("Building deployment");
 
-        let (tx, mut rx): (UnboundedSender<Message>, _) = mpsc::unbounded_channel();
+        let (tx, rx): (crossbeam_channel::Sender<Message>, _) = crossbeam_channel::bounded(0);
         let id = self.id;
         tokio::spawn(async move {
-            while let Some(message) = rx.recv().await {
+            while let Ok(message) = rx.recv() {
                 // TODO: change these to `info!(...)` as [valuable] support increases.
                 // Currently it is not possible to turn these serde `message`s into a `valuable`, but once it is the passing down of `log_recorder` should be removed.
-                match message {
-                    Message::TextLine(line) => log_recorder.record(Log {
+                let log = match message {
+                    Message::TextLine(line) => Log {
                         id,
                         state: State::Building,
                         level: Level::Info,
@@ -113,8 +112,8 @@ impl Queued {
                         line: None,
                         fields: json!({ "build_line": line }),
                         r#type: LogType::Event,
-                    }),
-                    message => log_recorder.record(Log {
+                    },
+                    message => Log {
                         id,
                         state: State::Building,
                         level: Level::Debug,
@@ -123,8 +122,9 @@ impl Queued {
                         line: None,
                         fields: serde_json::to_value(message).unwrap(),
                         r#type: LogType::Event,
-                    }),
-                }
+                    },
+                };
+                log_recorder.record(log);
             }
         });
 

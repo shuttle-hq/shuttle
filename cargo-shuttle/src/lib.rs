@@ -27,7 +27,6 @@ use factory::LocalFactory;
 use semver::{Version, VersionReq};
 use shuttle_common::deployment;
 use shuttle_service::loader::{build_crate, Loader};
-use tokio::sync::mpsc::{self, UnboundedSender};
 use toml_edit::Document;
 use tracing::trace;
 
@@ -176,9 +175,9 @@ impl Shuttle {
     async fn local_run(&self, run_args: RunArgs) -> Result<()> {
         trace!("starting a local run for a service: {run_args:?}");
 
-        let (tx, mut rx): (UnboundedSender<Message>, _) = mpsc::unbounded_channel();
+        let (tx, rx): (crossbeam_channel::Sender<Message>, _) = crossbeam_channel::bounded(0);
         tokio::spawn(async move {
-            while let Some(message) = rx.recv().await {
+            while let Ok(message) = rx.recv() {
                 match message {
                     Message::TextLine(line) => println!("{line}"),
                     Message::CompilerMessage(message) => {

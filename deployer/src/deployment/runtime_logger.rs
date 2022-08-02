@@ -1,7 +1,6 @@
 use chrono::Utc;
 use log::{Level, Metadata, Record};
 use serde_json::json;
-use tokio::sync::mpsc::UnboundedSender;
 use uuid::Uuid;
 
 use crate::deployment::State;
@@ -14,11 +13,11 @@ pub trait Factory: Send + 'static {
 
 /// Factory to create runtime loggers for deployments
 pub struct RuntimeLoggerFactory {
-    log_send: UnboundedSender<deploy_layer::Log>,
+    log_send: crossbeam_channel::Sender<deploy_layer::Log>,
 }
 
 impl RuntimeLoggerFactory {
-    pub fn new(log_send: UnboundedSender<deploy_layer::Log>) -> Self {
+    pub fn new(log_send: crossbeam_channel::Sender<deploy_layer::Log>) -> Self {
         Self { log_send }
     }
 }
@@ -33,11 +32,11 @@ impl Factory for RuntimeLoggerFactory {
 /// TODO: convert to a tracing subscriber
 pub struct RuntimeLogger {
     id: Uuid,
-    log_send: UnboundedSender<deploy_layer::Log>,
+    log_send: crossbeam_channel::Sender<deploy_layer::Log>,
 }
 
 impl RuntimeLogger {
-    pub(crate) fn new(id: Uuid, log_send: UnboundedSender<deploy_layer::Log>) -> Self {
+    pub(crate) fn new(id: Uuid, log_send: crossbeam_channel::Sender<deploy_layer::Log>) -> Self {
         Self { id, log_send }
     }
 }

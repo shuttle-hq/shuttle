@@ -8,6 +8,7 @@ description = "Service with instances created per project for handling the compl
 async-trait = "0.1.56"
 cargo_metadata = "0.15.0"
 chrono = "0.4.19"
+crossbeam-channel = "0.5.6"
 thiserror = "1.0.24"
 futures = "0.3.21"
 log = "0.4.17"

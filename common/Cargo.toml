@@ -9,9 +9,11 @@ description = "Common library for the shuttle platform (https://www.shuttle.rs/)
 [dependencies]
 anyhow = "1.0.57"
 chrono = { version = "0.4.19", features = ["serde"] }
+colored = "2.0.0"
 lazy_static = "1.4.0"
 log = { version = "0.4.17", features = ["serde"] }
 rocket = "0.5.0-rc.2"
 serde = "1.0.137"
 serde_json = "1.0.81"
+strum = { version = "0.24.1", features = ["derive"] }
 uuid = { version = "1.1.1", features = ["v4", "serde"] }

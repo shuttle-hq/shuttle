@@ -2,16 +2,17 @@ use std::collections::HashMap;
 use std::fmt::Write;
 use std::fs::File;
 use std::io::Read;
-use std::time::Duration;
 
 use anyhow::{anyhow, Context, Result};
+use futures::StreamExt;
 use reqwest::{Response, StatusCode};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use shuttle_common::project::ProjectName;
-use shuttle_common::{ApiKey, ApiUrl, DeploymentMeta, DeploymentStateMeta, SHUTTLE_PROJECT_HEADER};
-use tokio::time::sleep;
+use shuttle_common::{deployment, ApiKey, ApiUrl, DeploymentMeta, SHUTTLE_PROJECT_HEADER};
+use tokio_tungstenite::connect_async;
+use tokio_tungstenite::tungstenite::Message;
 use tracing::error;
 
 use crate::print;
@@ -140,9 +141,9 @@ pub(crate) async fn deploy(
     api_url: ApiUrl,
     api_key: &ApiKey,
     project: &ProjectName,
-) -> Result<DeploymentStateMeta> {
+) -> Result<deployment::State> {
     let mut url = api_url.clone();
-    let _ = write!(url, "/projects/{}", project.as_str());
+    let _ = write!(url, "/services/{}", project.as_str());
 
     let client = get_retry_client();
 
@@ -155,32 +156,39 @@ pub(crate) async fn deploy(
     let res: Response = client
         .post(url)
         .body(package_content)
-        .header(SHUTTLE_PROJECT_HEADER, serde_json::to_string(&project)?)
         .basic_auth(api_key.clone(), Some(""))
         .send()
         .await
         .context("failed to send deployment to the Shuttle server")?;
 
-    let mut deployment_meta = to_api_result(res).await?;
+    let text = res.text().await?;
+    let res = serde_json::from_str::<deployment::Response>(&text).with_context(|| {
+        error!(text, "failed to parse deployment response");
+        "could not parse server response"
+    })?;
 
-    let mut log_pos = 0;
+    println!("");
+    println!("{res}");
 
-    while !matches!(
-        deployment_meta.state,
-        DeploymentStateMeta::Deployed | DeploymentStateMeta::Error(_)
-    ) {
-        print_log(&deployment_meta.build_logs, &mut log_pos);
+    let id = res.id;
+    let mut ws_url = api_url.clone().replace("http", "ws");
+    let _ = write!(ws_url, "/deployments/{}/build-logs-subscribe", id);
 
-        sleep(Duration::from_millis(350)).await;
+    let (mut stream, _) = connect_async(ws_url).await.with_context(|| {
+        error!("failed to connect to build logs websocket");
+        "could not connect to build logs websocket"
+    })?;
 
-        deployment_meta = get_deployment_meta(api_url.clone(), api_key, project, &client).await?;
+    while let Some(Ok(msg)) = stream.next().await {
+        match msg {
+            Message::Text(line) => println!("{line}"),
+            _ => {}
+        }
     }
 
-    print_log(&deployment_meta.build_logs, &mut log_pos);
+    // TODO: print result
 
-    println!("{}", &deployment_meta);
-
-    Ok(deployment_meta.state)
+    Ok(res.state)
 }
 
 pub(crate) async fn secrets(
@@ -206,17 +214,6 @@ pub(crate) async fn secrets(
         .await
         .context("failed to send deployment's secrets to the Shuttle server")
         .map(|_| ())
-}
-
-fn print_log(logs: &Option<String>, log_pos: &mut usize) {
-    if let Some(logs) = logs {
-        let new = &logs[*log_pos..];
-
-        if !new.is_empty() {
-            *log_pos = logs.len();
-            print!("{}", new);
-        }
-    }
 }
 
 async fn to_api_result(res: Response) -> Result<DeploymentMeta> {

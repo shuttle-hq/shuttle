@@ -1,8 +1,9 @@
 use chrono::{DateTime, Utc};
-use shuttle_common::BuildLog;
+use serde_json::Value;
+use shuttle_common::{deployment, log::StreamLog};
 use uuid::Uuid;
 
-use super::{deploy_layer::to_build_log, State};
+use super::{deploy_layer::extract_message, State};
 
 #[derive(Clone, Debug, PartialEq, sqlx::FromRow)]
 pub struct Log {
@@ -25,7 +26,37 @@ pub enum Level {
 }
 
 impl Log {
-    pub fn into_build_log(self) -> Option<BuildLog> {
-        to_build_log(&self.id, &self.timestamp, &self.fields)
+    pub fn into_stream_log(self) -> Option<StreamLog> {
+        let (state, message) = if let Value::String(str_value) = &self.fields {
+            if str_value == "NEW STATE" {
+                match self.state {
+                    State::Queued => Some((deployment::State::Queued, None)),
+                    State::Building => Some((deployment::State::Building, None)),
+                    State::Built => Some((deployment::State::Built, None)),
+                    State::Running => Some((deployment::State::Running, None)),
+                    State::Completed => Some((deployment::State::Completed, None)),
+                    State::Stopped => Some((deployment::State::Stopped, None)),
+                    State::Crashed => Some((deployment::State::Crashed, None)),
+                    State::Unknown => Some((deployment::State::Unknown, None)),
+                }
+            } else {
+                None
+            }
+        } else {
+            match self.state {
+                State::Building => {
+                    let msg = extract_message(&self.fields)?;
+                    Some((deployment::State::Building, Some(msg)))
+                }
+                _ => None,
+            }
+        }?;
+
+        Some(StreamLog {
+            id: self.id,
+            timestamp: self.timestamp,
+            state,
+            message,
+        })
     }
 }

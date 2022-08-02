@@ -25,7 +25,7 @@ use colored::Colorize;
 use config::RequestContext;
 use factory::LocalFactory;
 use semver::{Version, VersionReq};
-use shuttle_common::DeploymentStateMeta;
+use shuttle_common::deployment;
 use shuttle_service::loader::{build_crate, Loader};
 use tokio::sync::mpsc::{self, UnboundedSender};
 use toml_edit::Document;
@@ -235,7 +235,7 @@ impl Shuttle {
 
         let key = self.ctx.api_key()?;
 
-        let state_meta = client::deploy(
+        let state = client::deploy(
             package_file,
             self.ctx.api_url(),
             &key,
@@ -253,8 +253,8 @@ impl Shuttle {
         .await
         .context("failed to set up secrets for deployment")?;
 
-        Ok(match state_meta {
-            DeploymentStateMeta::Error(_) => CommandOutcome::DeploymentFailure,
+        Ok(match state {
+            deployment::State::Crashed => CommandOutcome::DeploymentFailure,
             _ => CommandOutcome::Ok,
         })
     }

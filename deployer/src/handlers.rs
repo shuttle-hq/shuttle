@@ -6,12 +6,12 @@ use axum::routing::{get, Router};
 use axum::{extract::BodyStream, Json};
 use chrono::{TimeZone, Utc};
 use futures::TryStreamExt;
-use shuttle_common::BuildLog;
+use shuttle_common::{deployment, log};
 use tower_http::trace::TraceLayer;
 use tracing::{debug, debug_span, error, field, Span};
 use uuid::Uuid;
 
-use crate::deployment::{DeploymentManager, Queued, State};
+use crate::deployment::{DeploymentManager, Log, Queued, State};
 use crate::error::{Error, Result};
 use crate::persistence::{Deployment, Persistence};
 
@@ -73,17 +73,17 @@ async fn post_service(
     Path(name): Path<String>,
     Query(params): Query<HashMap<String, String>>,
     stream: BodyStream,
-) -> Result<Json<Deployment>> {
+) -> Result<Json<deployment::Response>> {
     let id = Uuid::new_v4();
 
-    let deployment = Deployment {
+    let deployment = deployment::Response {
         id,
         name: name.clone(),
-        state: State::Queued,
+        state: deployment::State::Queued,
         last_update: Utc::now(),
     };
 
-    persistence.insert_deployment(deployment.clone()).await?;
+    persistence.insert_deployment(&deployment).await?;
 
     let queued = Queued {
         id,
@@ -131,8 +131,16 @@ async fn delete_deployment(
 async fn get_build_logs(
     Extension(persistence): Extension<Persistence>,
     Path(id): Path<Uuid>,
-) -> Result<Json<Vec<BuildLog>>> {
-    persistence.get_build_logs(&id).await.map(Json)
+) -> Result<Json<Vec<log::StreamLog>>> {
+    Ok(Json(
+        persistence
+            .get_deployment_logs(&id)
+            .await?
+            .into_iter()
+            .filter(|log| matches!(log.state, State::Building))
+            .filter_map(Log::into_stream_log)
+            .collect(),
+    ))
 }
 
 async fn get_build_logs_subscribe(
@@ -144,8 +152,8 @@ async fn get_build_logs_subscribe(
 }
 
 async fn websocket_handler(mut s: WebSocket, persistence: Persistence, id: Uuid) {
-    let mut log_recv = persistence.get_build_log_subscriber();
-    let backlog = match persistence.get_build_logs(&id).await {
+    let mut log_recv = persistence.get_stream_log_subscriber();
+    let backlog = match persistence.get_deployment_logs(&id).await {
         Ok(backlog) => backlog,
         Err(error) => {
             error!(
@@ -162,23 +170,41 @@ async fn websocket_handler(mut s: WebSocket, persistence: Persistence, id: Uuid)
     };
     let mut last_timestamp = Utc.timestamp(0, 0);
 
-    for log in backlog {
-        let sent = s.send(ws::Message::Text(log.message)).await;
-        last_timestamp = log.timestamp;
+    for log in backlog.into_iter().filter_map(Log::into_stream_log) {
+        match (log.state, log.message) {
+            (deployment::State::Building, Some(msg)) => {
+                let sent = s.send(ws::Message::Text(msg)).await;
+                last_timestamp = log.timestamp;
 
-        // Client disconnected?
-        if sent.is_err() {
-            return;
+                // Client disconnected?
+                if sent.is_err() {
+                    return;
+                }
+            }
+            (deployment::State::Building, None) => {}
+            (deployment::State::Queued, _) => {}
+            _ => {
+                debug!("closing channel after reaching more than just build logs");
+                let _ = s.close().await;
+                return;
+            }
         }
     }
 
-    while let Ok(msg) = log_recv.recv().await {
-        if msg.id == id && msg.timestamp > last_timestamp {
-            let sent = s.send(ws::Message::Text(msg.message)).await;
+    while let Ok(log) = log_recv.recv().await {
+        if log.id == id && log.timestamp > last_timestamp {
+            match (log.state, log.message) {
+                (deployment::State::Building, Some(msg)) => {
+                    let sent = s.send(ws::Message::Text(msg)).await;
 
-            // Client disconnected?
-            if sent.is_err() {
-                return;
+                    // Client disconnected?
+                    if sent.is_err() {
+                        return;
+                    }
+                }
+                (deployment::State::Queued, _) => {}
+                (deployment::State::Building, None) => {}
+                _ => break,
             }
         }
     }

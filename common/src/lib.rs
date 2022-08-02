@@ -1,4 +1,6 @@
 pub mod database;
+pub mod deployment;
+pub mod log;
 pub mod project;
 
 use std::{
@@ -6,8 +8,8 @@ use std::{
     fmt::{Display, Formatter},
 };
 
+use ::log::Level;
 use chrono::{DateTime, Utc};
-use log::Level;
 use rocket::Responder;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -212,11 +214,4 @@ pub struct LogItem {
     pub body: String,
     pub level: Level,
     pub target: String,
-}
-
-#[derive(Clone, Debug, serde::Serialize, PartialEq)]
-pub struct BuildLog {
-    pub id: Uuid,
-    pub message: String,
-    pub timestamp: DateTime<Utc>,
 }

@@ -1,8 +1,8 @@
+use shuttle_common::deployment;
 use std::fmt;
 
 /// States a deployment can be in
-#[derive(sqlx::Type, serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
+#[derive(sqlx::Type, Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[repr(i32)]
 pub enum State {
     /// Deployment is queued to be build
@@ -62,6 +62,21 @@ impl From<&dyn std::fmt::Debug> for State {
             "stopped" => Self::Stopped,
             "crashed" => Self::Crashed,
             _ => Self::Unknown,
+        }
+    }
+}
+
+impl From<deployment::State> for State {
+    fn from(state: deployment::State) -> Self {
+        match state {
+            deployment::State::Queued => Self::Queued,
+            deployment::State::Building => Self::Building,
+            deployment::State::Built => Self::Built,
+            deployment::State::Running => Self::Running,
+            deployment::State::Completed => Self::Completed,
+            deployment::State::Stopped => Self::Stopped,
+            deployment::State::Crashed => Self::Crashed,
+            deployment::State::Unknown => Self::Unknown,
         }
     }
 }

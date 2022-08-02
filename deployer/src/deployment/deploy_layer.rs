@@ -21,7 +21,7 @@
 
 use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
-use shuttle_common::BuildLog;
+use shuttle_common::{deployment, log::StreamLog};
 use tracing::{field::Visit, span, warn, Metadata, Subscriber};
 use tracing_subscriber::Layer;
 use uuid::Uuid;
@@ -66,8 +66,33 @@ pub struct Log {
 }
 
 impl Log {
-    pub fn to_build_log(&self) -> Option<BuildLog> {
-        to_build_log(&self.id, &self.timestamp, &self.fields)
+    pub fn to_stream_log(&self) -> Option<StreamLog> {
+        let (state, message) = match self.r#type {
+            LogType::State => match self.state {
+                State::Queued => Some((deployment::State::Queued, None)),
+                State::Building => Some((deployment::State::Building, None)),
+                State::Built => Some((deployment::State::Built, None)),
+                State::Running => Some((deployment::State::Running, None)),
+                State::Completed => Some((deployment::State::Completed, None)),
+                State::Stopped => Some((deployment::State::Stopped, None)),
+                State::Crashed => Some((deployment::State::Crashed, None)),
+                State::Unknown => Some((deployment::State::Unknown, None)),
+            },
+            LogType::Event => match self.state {
+                State::Building => {
+                    let msg = extract_message(&self.fields)?;
+                    Some((deployment::State::Building, Some(msg)))
+                }
+                _ => None,
+            },
+        }?;
+
+        Some(StreamLog {
+            id: self.id,
+            timestamp: self.timestamp,
+            state,
+            message,
+        })
     }
 }
 
@@ -95,27 +120,15 @@ impl From<Log> for DeploymentState {
     }
 }
 
-pub fn to_build_log(id: &Uuid, timestamp: &DateTime<Utc>, fields: &Value) -> Option<BuildLog> {
+pub fn extract_message(fields: &Value) -> Option<String> {
     if let Value::Object(ref map) = fields {
         if let Some(message) = map.get("build_line") {
-            let build_log = BuildLog {
-                id: *id,
-                timestamp: *timestamp,
-                message: message.as_str()?.to_string(),
-            };
-
-            return Some(build_log);
+            return Some(message.as_str()?.to_string());
         }
 
         if let Some(Value::Object(message_object)) = map.get("message") {
             if let Some(rendered) = message_object.get("rendered") {
-                let build_log = BuildLog {
-                    id: *id,
-                    timestamp: *timestamp,
-                    message: rendered.as_str()?.to_string(),
-                };
-
-                return Some(build_log);
+                return Some(rendered.as_str()?.to_string());
             }
         }
     }

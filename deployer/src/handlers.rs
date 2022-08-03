@@ -6,7 +6,7 @@ use axum::routing::{get, Router};
 use axum::{extract::BodyStream, Json};
 use chrono::{TimeZone, Utc};
 use futures::TryStreamExt;
-use shuttle_common::{deployment, log};
+use shuttle_common::{deployment, log, service};
 use tower_http::trace::TraceLayer;
 use tracing::{debug, debug_span, error, field, Span};
 use uuid::Uuid;
@@ -63,8 +63,28 @@ async fn list_services(
 async fn get_service(
     Extension(persistence): Extension<Persistence>,
     Path(name): Path<String>,
-) -> Result<Json<Vec<Deployment>>> {
-    persistence.get_deployments(&name).await.map(Json)
+) -> Result<Json<service::Response>> {
+    let deployments = persistence
+        .get_deployments(&name)
+        .await?
+        .into_iter()
+        .map(Into::into)
+        .collect();
+    let resources = persistence
+        .get_service_resources(&name)
+        .await?
+        .into_iter()
+        .map(Into::into)
+        .collect();
+
+    let response = service::Response {
+        uri: format!("{name}.shuttleapp.rs"),
+        name,
+        deployments,
+        resources,
+    };
+
+    Ok(Json(response))
 }
 
 async fn post_service(

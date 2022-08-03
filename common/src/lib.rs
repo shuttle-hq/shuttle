@@ -2,6 +2,8 @@ pub mod database;
 pub mod deployment;
 pub mod log;
 pub mod project;
+pub mod resource;
+pub mod service;
 
 use std::{
     collections::BTreeMap,
@@ -10,6 +12,7 @@ use std::{
 
 use ::log::Level;
 use chrono::{DateTime, Utc};
+use resource::ResourceInfo;
 use rocket::Responder;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -108,6 +111,12 @@ pub struct DatabaseReadyInfo {
     port: String,
     address_private: String,
     address_public: String,
+}
+
+impl ResourceInfo for DatabaseReadyInfo {
+    fn connection_string_public(&self) -> String {
+        self.connection_string_public()
+    }
 }
 
 impl DatabaseReadyInfo {

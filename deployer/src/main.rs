@@ -64,7 +64,7 @@ async fn main() {
         .await
         .expect("failed to connect to provisioner");
 
-    let abstract_factory = AbstractProvisionerFactory::new(provisioner_client);
+    let abstract_factory = AbstractProvisionerFactory::new(provisioner_client, persistence.clone());
 
     let runtime_logger_factory = RuntimeLoggerFactory::new(persistence.get_log_sender());
 

@@ -10,7 +10,7 @@ use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use shuttle_common::project::ProjectName;
-use shuttle_common::{deployment, ApiKey, ApiUrl, DeploymentMeta, SHUTTLE_PROJECT_HEADER};
+use shuttle_common::{deployment, service, ApiKey, ApiUrl, DeploymentMeta, SHUTTLE_PROJECT_HEADER};
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
 use tracing::error;
@@ -65,12 +65,25 @@ pub(crate) async fn delete(
     Ok(())
 }
 
-pub(crate) async fn status(api_url: ApiUrl, api_key: &ApiKey, project: &ProjectName) -> Result<()> {
+pub(crate) async fn status(
+    mut api_url: ApiUrl,
+    api_key: &ApiKey,
+    project: &ProjectName,
+) -> Result<()> {
     let client = get_retry_client();
 
-    let deployment_meta = get_deployment_meta(api_url, api_key, project, &client).await?;
+    let _ = write!(api_url, "/services/{}", project);
 
-    println!("{}", deployment_meta);
+    let res: Response = client
+        .get(api_url)
+        .basic_auth(api_key.clone(), Some(""))
+        .send()
+        .await
+        .context("failed to get deployment metadata")?;
+
+    let service = to_api_result(res).await?;
+
+    println!("{}", service);
 
     Ok(())
 }
@@ -186,7 +199,7 @@ pub(crate) async fn deploy(
         }
     }
 
-    // TODO: print result
+    status(api_url, api_key, project).await?;
 
     Ok(res.state)
 }

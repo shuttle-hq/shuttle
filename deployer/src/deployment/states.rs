@@ -49,3 +49,18 @@ impl From<deployment::State> for State {
         }
     }
 }
+
+impl From<State> for deployment::State {
+    fn from(state: State) -> Self {
+        match state {
+            State::Queued => deployment::State::Queued,
+            State::Building => deployment::State::Building,
+            State::Built => deployment::State::Built,
+            State::Running => deployment::State::Running,
+            State::Completed => deployment::State::Completed,
+            State::Stopped => deployment::State::Stopped,
+            State::Crashed => deployment::State::Crashed,
+            State::Unknown => deployment::State::Unknown,
+        }
+    }
+}

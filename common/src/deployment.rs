@@ -2,6 +2,7 @@ use std::fmt::Display;
 
 use chrono::{DateTime, Utc};
 use colored::Colorize;
+use comfy_table::Color;
 use serde::{Deserialize, Serialize};
 use strum::Display;
 use uuid::Uuid;
@@ -41,5 +42,17 @@ impl Display for Response {
             self.name,
             self.state.to_string().cyan()
         )
+    }
+}
+
+impl State {
+    pub fn get_color(&self) -> Color {
+        match self {
+            State::Queued | State::Building | State::Built => Color::Cyan,
+            State::Running => Color::Green,
+            State::Completed | State::Stopped => Color::Blue,
+            State::Crashed => Color::Red,
+            State::Unknown => Color::Yellow,
+        }
     }
 }

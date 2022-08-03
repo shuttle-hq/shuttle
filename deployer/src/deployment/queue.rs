@@ -191,7 +191,10 @@ fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<()> {
 }
 
 #[instrument(skip(project_path, tx))]
-async fn build_deployment(project_path: &Path, tx: UnboundedSender<Message>) -> Result<PathBuf> {
+async fn build_deployment(
+    project_path: &Path,
+    tx: crossbeam_channel::Sender<Message>,
+) -> Result<PathBuf> {
     let so_path = build_crate(&project_path, tx)
         .await
         .map_err(|e| Error::Build(e.into()))?;

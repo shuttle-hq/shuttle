@@ -27,12 +27,7 @@ use tracing::{field::Visit, span, warn, Metadata, Subscriber};
 use tracing_subscriber::Layer;
 use uuid::Uuid;
 
-use crate::persistence::DeploymentState;
-
-use super::{
-    log::{self, Level},
-    State,
-};
+use crate::persistence::{self, DeploymentState, LogLevel, State};
 
 /// Records logs for the deployment progress
 pub trait LogRecorder: Clone + Send + 'static {
@@ -49,7 +44,7 @@ pub struct Log {
     pub state: State,
 
     /// Log level
-    pub level: Level,
+    pub level: LogLevel,
 
     /// Time log happened
     pub timestamp: DateTime<Utc>,
@@ -97,7 +92,7 @@ impl Log {
     }
 }
 
-impl From<Log> for log::Log {
+impl From<Log> for persistence::Log {
     fn from(log: Log) -> Self {
         Self {
             id: log.id,
@@ -247,7 +242,7 @@ struct ScopeDetails {
     state: State,
 }
 
-impl From<&tracing::Level> for Level {
+impl From<&tracing::Level> for LogLevel {
     fn from(level: &tracing::Level) -> Self {
         match *level {
             tracing::Level::TRACE => Self::Trace,
@@ -339,9 +334,12 @@ mod tests {
     use tracing_subscriber::prelude::*;
     use uuid::Uuid;
 
-    use crate::deployment::{
-        deploy_layer::LogType, provisioner_factory, runtime_logger, Built, DeploymentManager,
-        Queued, State,
+    use crate::{
+        deployment::{
+            deploy_layer::LogType, provisioner_factory, runtime_logger, Built, DeploymentManager,
+            Queued,
+        },
+        persistence::State,
     };
 
     use super::{DeployLayer, Log, LogRecorder};

@@ -1,7 +1,7 @@
 use super::deploy_layer::{Log, LogRecorder, LogType};
-use super::log::Level;
 use super::{Built, QueueReceiver, RunSender, State};
 use crate::error::{Error, Result};
+use crate::persistence::LogLevel;
 
 use cargo_metadata::Message;
 use chrono::Utc;
@@ -106,7 +106,7 @@ impl Queued {
                     Message::TextLine(line) => Log {
                         id,
                         state: State::Building,
-                        level: Level::Info,
+                        level: LogLevel::Info,
                         timestamp: Utc::now(),
                         file: None,
                         line: None,
@@ -116,7 +116,7 @@ impl Queued {
                     message => Log {
                         id,
                         state: State::Building,
-                        level: Level::Debug,
+                        level: LogLevel::Debug,
                         timestamp: Utc::now(),
                         file: None,
                         line: None,

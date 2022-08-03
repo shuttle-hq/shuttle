@@ -18,7 +18,7 @@ tower = { version = "0.4.12", features = ["make"] }
 tower-http = { version = "0.3.4", features = ["trace"] }
 axum = { version = "0.5.7", features = ["ws"] }
 bytes = "1.1.0"
-serde = { version = "1.0.137", features = ["derive"] }
+serde = "1.0.137"
 serde_json = "1.0.81"
 flate2 = "1.0.24"
 portpicker = "0.1.1"

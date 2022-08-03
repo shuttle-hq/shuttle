@@ -11,9 +11,9 @@ use tower_http::trace::TraceLayer;
 use tracing::{debug, debug_span, error, field, Span};
 use uuid::Uuid;
 
-use crate::deployment::{DeploymentManager, Log, Queued, State};
+use crate::deployment::{DeploymentManager, Queued};
 use crate::error::{Error, Result};
-use crate::persistence::{Deployment, Persistence};
+use crate::persistence::{Log, Persistence, State};
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -121,31 +121,37 @@ async fn delete_service(
     Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
     Path(name): Path<String>,
-) -> Result<Json<Vec<Deployment>>> {
+) -> Result<Json<Vec<deployment::Response>>> {
     let old_deployments = persistence.delete_service(&name).await?;
 
     for deployment in old_deployments.iter() {
         deployment_manager.kill(deployment.id).await;
     }
 
-    Ok(Json(old_deployments))
+    Ok(Json(old_deployments.into_iter().map(Into::into).collect()))
 }
 
 async fn get_deployment(
     Extension(persistence): Extension<Persistence>,
     Path(id): Path<Uuid>,
-) -> Result<Json<Option<Deployment>>> {
-    persistence.get_deployment(&id).await.map(Json)
+) -> Result<Json<Option<deployment::Response>>> {
+    persistence
+        .get_deployment(&id)
+        .await
+        .map(|d| Json(d.map(Into::into)))
 }
 
 async fn delete_deployment(
     Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
     Path(id): Path<Uuid>,
-) -> Result<Json<Option<Deployment>>> {
+) -> Result<Json<Option<deployment::Response>>> {
     deployment_manager.kill(id).await;
 
-    persistence.get_deployment(&id).await.map(Json)
+    persistence
+        .get_deployment(&id)
+        .await
+        .map(|d| Json(d.map(Into::into)))
 }
 
 async fn get_build_logs(

@@ -1,24 +1,27 @@
+mod deployment;
+mod log;
+mod resource;
+mod state;
+
 use crate::deployment::deploy_layer::{self, LogRecorder, LogType};
-use crate::deployment::{Log, State};
 use crate::error::Result;
 
-use std::borrow::Cow;
-use std::fmt::Display;
 use std::path::Path;
-use std::str::FromStr;
 
-use chrono::{DateTime, Utc};
 use serde_json::json;
-use shuttle_common::database;
-use shuttle_common::{deployment, log::StreamLog, resource};
+use shuttle_common::log::StreamLog;
 use sqlx::migrate::MigrateDatabase;
-use sqlx::sqlite::{Sqlite, SqliteArgumentValue, SqlitePool, SqliteValueRef};
-use sqlx::Database;
-use strum::{Display, EnumString};
+use sqlx::sqlite::{Sqlite, SqlitePool};
 use tokio::sync::broadcast::{self, Receiver, Sender};
 use tokio::task::JoinHandle;
 use tracing::error;
 use uuid::Uuid;
+
+pub use self::deployment::DeploymentState;
+use self::deployment::{Deployment, DeploymentRunnable};
+pub use self::log::{Level as LogLevel, Log};
+pub use self::resource::{Resource, ResourceRecorder, Type as ResourceType};
+pub use self::state::State;
 
 const DB_PATH: &str = "deployer.sqlite";
 
@@ -293,11 +296,6 @@ impl LogRecorder for Persistence {
 }
 
 #[async_trait::async_trait]
-pub trait ResourceRecorder: Clone + Send + Sync + 'static {
-    async fn insert_resource(&self, resource: &Resource) -> Result<()>;
-}
-
-#[async_trait::async_trait]
 impl ResourceRecorder for Persistence {
     async fn insert_resource(&self, resource: &Resource) -> Result<()> {
         sqlx::query("INSERT INTO resources (name, type, data) VALUES (?, ?, ?)")
@@ -311,217 +309,17 @@ impl ResourceRecorder for Persistence {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, sqlx::FromRow, serde::Serialize)]
-pub struct Deployment {
-    pub id: Uuid,
-    pub name: String,
-    pub state: State,
-    pub last_update: DateTime<Utc>,
-}
-
-impl From<&deployment::Response> for Deployment {
-    fn from(response: &deployment::Response) -> Self {
-        Self {
-            id: response.id,
-            name: response.name.clone(),
-            state: response.state.clone().into(),
-            last_update: response.last_update,
-        }
-    }
-}
-
-impl From<Deployment> for deployment::Response {
-    fn from(deployment: Deployment) -> Self {
-        deployment::Response {
-            id: deployment.id,
-            name: deployment.name,
-            state: deployment.state.into(),
-            last_update: deployment.last_update,
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct DeploymentState {
-    pub id: Uuid,
-    pub state: State,
-    pub last_update: DateTime<Utc>,
-}
-
-#[derive(sqlx::FromRow, Debug, PartialEq, Eq)]
-pub struct DeploymentRunnable {
-    pub id: Uuid,
-    pub name: String,
-}
-
-#[derive(sqlx::FromRow, Debug, Eq, PartialEq)]
-pub struct Resource {
-    pub name: String,
-    pub r#type: ResourceType,
-    pub data: serde_json::Value,
-}
-
-impl From<Resource> for resource::Response {
-    fn from(resource: Resource) -> Self {
-        resource::Response {
-            service_name: resource.name,
-            r#type: resource.r#type.into(),
-            data: resource.data,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ResourceType {
-    Database(DatabaseType),
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum DatabaseType {
-    AwsRds(AwsRdsType),
-    Shared,
-}
-
-#[derive(Clone, Copy, Debug, Display, EnumString, Eq, PartialEq)]
-#[strum(serialize_all = "lowercase")]
-pub enum AwsRdsType {
-    Postgres,
-    MySql,
-    MariaDB,
-}
-
-impl From<ResourceType> for resource::Type {
-    fn from(r#type: ResourceType) -> Self {
-        match r#type {
-            ResourceType::Database(r#type) => resource::Type::Database(r#type.into()),
-        }
-    }
-}
-
-impl From<DatabaseType> for database::Type {
-    fn from(r#type: DatabaseType) -> Self {
-        match r#type {
-            DatabaseType::AwsRds(rds_type) => database::Type::AwsRds(rds_type.into()),
-            DatabaseType::Shared => database::Type::Shared,
-        }
-    }
-}
-
-impl From<AwsRdsType> for database::AwsRdsEngine {
-    fn from(rds_type: AwsRdsType) -> Self {
-        match rds_type {
-            AwsRdsType::Postgres => database::AwsRdsEngine::Postgres,
-            AwsRdsType::MySql => database::AwsRdsEngine::MySql,
-            AwsRdsType::MariaDB => database::AwsRdsEngine::MariaDB,
-        }
-    }
-}
-
-impl From<database::Type> for DatabaseType {
-    fn from(r#type: database::Type) -> Self {
-        match r#type {
-            database::Type::AwsRds(rds_type) => DatabaseType::AwsRds(rds_type.into()),
-            database::Type::Shared => DatabaseType::Shared,
-        }
-    }
-}
-
-impl From<database::AwsRdsEngine> for AwsRdsType {
-    fn from(rds_type: database::AwsRdsEngine) -> Self {
-        match rds_type {
-            database::AwsRdsEngine::Postgres => AwsRdsType::Postgres,
-            database::AwsRdsEngine::MySql => AwsRdsType::MySql,
-            database::AwsRdsEngine::MariaDB => AwsRdsType::MariaDB,
-        }
-    }
-}
-
-impl Display for ResourceType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ResourceType::Database(db_type) => write!(f, "database::{db_type}"),
-        }
-    }
-}
-
-impl Display for DatabaseType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            DatabaseType::AwsRds(rds_type) => write!(f, "aws_rds::{rds_type}"),
-            DatabaseType::Shared => write!(f, "shared"),
-        }
-    }
-}
-
-impl FromStr for ResourceType {
-    type Err = String;
-
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        if let Some((prefix, rest)) = s.split_once("::") {
-            match prefix {
-                "database" => Ok(Self::Database(DatabaseType::from_str(rest)?)),
-                _ => Err("resource type is unknown".to_string()),
-            }
-        } else {
-            Err("resource type is unknown".to_string())
-        }
-    }
-}
-
-impl FromStr for DatabaseType {
-    type Err = String;
-
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        match s {
-            "shared" => Ok(Self::Shared),
-            s => {
-                if let Some((prefix, rest)) = s.split_once("::") {
-                    match prefix {
-                        "aws_rds" => Ok(Self::AwsRds(
-                            AwsRdsType::from_str(rest).map_err(|e| e.to_string())?,
-                        )),
-                        _ => Err("database type is unknown".to_string()),
-                    }
-                } else {
-                    Err("database type is unknown".to_string())
-                }
-            }
-        }
-    }
-}
-
-impl<DB: Database> sqlx::Type<DB> for ResourceType
-where
-    str: sqlx::Type<DB>,
-{
-    fn type_info() -> <DB as Database>::TypeInfo {
-        <str as sqlx::Type<DB>>::type_info()
-    }
-}
-
-impl<'q> sqlx::Encode<'q, Sqlite> for ResourceType {
-    fn encode_by_ref(&self, args: &mut Vec<SqliteArgumentValue<'q>>) -> sqlx::encode::IsNull {
-        args.push(SqliteArgumentValue::Text(Cow::Owned(self.to_string())));
-
-        sqlx::encode::IsNull::No
-    }
-}
-
-impl<'r> sqlx::Decode<'r, Sqlite> for ResourceType {
-    fn decode(value: SqliteValueRef<'r>) -> std::result::Result<Self, sqlx::error::BoxDynError> {
-        let value = <&str as sqlx::Decode<Sqlite>>::decode(value)?;
-
-        Self::from_str(value).map_err(Into::into)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use chrono::{TimeZone, Utc};
     use serde_json::json;
 
     use super::*;
-    use crate::deployment::log::Level;
+    use crate::persistence::{
+        deployment::{Deployment, DeploymentRunnable, DeploymentState},
+        log::{Level, Log},
+        state::State,
+    };
 
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_updates() {
@@ -798,17 +596,21 @@ mod tests {
 
         let resource1 = Resource {
             name: "foo".to_string(),
-            r#type: ResourceType::Database(DatabaseType::Shared),
+            r#type: ResourceType::Database(resource::DatabaseType::Shared),
             data: json!({"username": "root"}),
         };
         let resource2 = Resource {
             name: "foo".to_string(),
-            r#type: ResourceType::Database(DatabaseType::AwsRds(AwsRdsType::MariaDB)),
+            r#type: ResourceType::Database(resource::DatabaseType::AwsRds(
+                resource::database::AwsRdsType::MariaDB,
+            )),
             data: json!({"uri": "postgres://localhost"}),
         };
         let resource3 = Resource {
             name: "bar".to_string(),
-            r#type: ResourceType::Database(DatabaseType::AwsRds(AwsRdsType::Postgres)),
+            r#type: ResourceType::Database(resource::DatabaseType::AwsRds(
+                resource::database::AwsRdsType::Postgres,
+            )),
             data: json!({"username": "admin"}),
         };
 

@@ -3,7 +3,7 @@ use log::{Level, Metadata, Record};
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::deployment::State;
+use crate::persistence::{LogLevel, State};
 
 use super::deploy_layer;
 
@@ -68,7 +68,7 @@ impl log::Log for RuntimeLogger {
     fn flush(&self) {}
 }
 
-impl From<Level> for super::log::Level {
+impl From<Level> for LogLevel {
     fn from(level: Level) -> Self {
         match level {
             Level::Error => Self::Error,

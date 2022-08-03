@@ -15,3 +15,4 @@ rocket = "0.5.0-rc.2"
 serde = "1.0.137"
 serde_json = "1.0.81"
 uuid = { version = "1.1.1", features = ["v4", "serde"] }
+censor = "0.2.0"

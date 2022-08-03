@@ -257,21 +257,21 @@ impl Shuttle {
     }
 
     fn check_lib_version(cargo_doc: Document, server_version: &Version) -> Result<()> {
+        fn get_version_from_table<'a>(table: &'a impl TableLike) -> Result<&'a Item> {
+            table
+                .get("version")
+                .ok_or_else(|| anyhow!("Missing 'version' key"))
+        }
+
+        fn get_item_as_str(item: &Item) -> Result<&str> {
+            item.as_str()
+                .ok_or_else(|| anyhow!("Expected string, found {}", item))
+        }
+
         fn get_dependency_version_string<'a>(
             document: &'a Document,
             dependency_name: &str,
         ) -> Result<&'a str> {
-            fn get_table_key<'a>(table: &'a impl TableLike, key: &str) -> Result<&'a Item> {
-                table
-                    .get("version")
-                    .ok_or_else(|| anyhow!("Missing {} key", key))
-            }
-
-            fn get_item_as_str(item: &Item) -> Result<&str> {
-                item.as_str()
-                    .ok_or_else(|| anyhow!("Expected string, found {}", item))
-            }
-
             let entry = document
                 .get("dependencies")
                 .ok_or_else(|| anyhow!("Missing dependencies section in Cargo.toml"))?
@@ -283,9 +283,9 @@ impl Shuttle {
                         Err(anyhow!("Invalid entry for {}", dependency_name))
                     }
                     Item::Value(Value::InlineTable(table)) => {
-                        get_item_as_str(get_table_key(table, "version")?)
+                        get_item_as_str(get_version_from_table(table)?)
                     }
-                    Item::Table(table) => get_item_as_str(get_table_key(table, "version")?),
+                    Item::Table(table) => get_item_as_str(get_version_from_table(table)?),
                     item => get_item_as_str(item),
                 }
             } else {
@@ -308,6 +308,7 @@ impl Shuttle {
                 op: semver::Op::GreaterEq,
                 major: server_version.major,
                 minor: Some(server_version.minor),
+                // patch version is not a requirement
                 patch: None,
                 pre: semver::Prerelease::EMPTY,
             }],
@@ -389,7 +390,10 @@ pub enum CommandOutcome {
 mod tests {
     use crate::args::ProjectArgs;
     use crate::Shuttle;
+    use semver::Version;
     use std::path::PathBuf;
+    use std::str::FromStr;
+    use toml_edit::Document;
 
     fn path_from_workspace_root(path: &str) -> PathBuf {
         PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
@@ -425,35 +429,130 @@ mod tests {
         );
     }
 
-    #[test]
-    fn check_lib_version() {
-        use semver::Version;
-        use std::str::FromStr;
-        use toml_edit::Document;
+    mod check_lib_version {
+        use super::*;
 
-        let test_version = Version::parse("0.4.1").unwrap();
+        #[test]
+        fn invalid_manifests() {
+            Shuttle::check_lib_version(Document::new(), &Version::parse("0.4.1").unwrap())
+                .unwrap_err();
 
-        assert!(Shuttle::check_lib_version(Document::new(), &test_version).is_err());
-        assert!(Shuttle::check_lib_version(
-            Document::from_str("[dependencies]\nshuttle-service = \"0.3.1\"").unwrap(),
-            &test_version
-        )
-        .is_err());
-        assert!(Shuttle::check_lib_version(
-            Document::from_str("[dependencies]\nshuttle-service = \"0.4.1\"").unwrap(),
-            &test_version
-        )
-        .is_ok());
-        assert!(Shuttle::check_lib_version(
-            Document::from_str("[dependencies]\nshuttle-service = { version = \"0.4.1\" }")
+            Shuttle::check_lib_version(
+                Document::from_str("[dependencies]\nnot-shuttle-service = \"0.4.1\"").unwrap(),
+                &Version::parse("0.4.1").unwrap(),
+            )
+            .unwrap_err();
+
+            Shuttle::check_lib_version(
+                Document::from_str("[not-dependencies]\nshuttle-service = \"0.4.1\"").unwrap(),
+                &Version::parse("0.4.1").unwrap(),
+            )
+            .unwrap_err();
+
+            Shuttle::check_lib_version(
+                Document::from_str(
+                    "[dependencies]\nshuttle-service = { not-version = \"0.4.1\" } ",
+                )
                 .unwrap(),
-            &test_version
-        )
-        .is_ok());
-        assert!(Shuttle::check_lib_version(
-            Document::from_str("[dependencies.shuttle-service]\nversion = \"0.4.1\"").unwrap(),
-            &test_version
-        )
-        .is_ok());
+                &Version::parse("0.4.1").unwrap(),
+            )
+            .unwrap_err();
+        }
+
+        #[test]
+        fn valid_manifests() {
+            Shuttle::check_lib_version(
+                Document::from_str("[dependencies]\nshuttle-service = \"0.4.1\"").unwrap(),
+                &test_version,
+            )
+            .unwrap();
+            Shuttle::check_lib_version(
+                Document::from_str("[dependencies]\nshuttle-service = { version = \"0.4.1\" }")
+                    .unwrap(),
+                &test_version,
+            )
+            .unwrap();
+            Shuttle::check_lib_version(
+                Document::from_str("[dependencies.shuttle-service]\nversion = \"0.4.1\"").unwrap(),
+                &test_version,
+            )
+            .unwrap();
+        }
+
+        #[test]
+        fn invalid_versions() {
+            Shuttle::check_lib_version(
+                Document::from_str("[dependencies]\nshuttle-service = \"0.3.1\"").unwrap(),
+                &Version::parse("0.4.1").unwrap(),
+            )
+            .unwrap_err();
+
+            Shuttle::check_lib_version(
+                Document::from_str("[dependencies]\nshuttle-service = \"0.3.1\"").unwrap(),
+                &Version::parse("1").unwrap(),
+            )
+            .unwrap_err();
+
+            Shuttle::check_lib_version(
+                Document::from_str("[dependencies]\nshuttle-service = \"0.3.1\"").unwrap(),
+                &Version::parse("0.4").unwrap(),
+            )
+            .unwrap_err();
+        }
+
+        #[test]
+        fn valid_versions() {
+            let version_four = Version::parse("0.4").unwrap();
+
+            Shuttle::check_lib_version(
+                Document::from_str("[dependencies]\nshuttle-service = \"0.4\"").unwrap(),
+                &version_four,
+            )
+            .unwrap();
+
+            Shuttle::check_lib_version(
+                Document::from_str("[dependencies]\nshuttle-service = \"0.4.0\"").unwrap(),
+                &version_four,
+            )
+            .unwrap();
+
+            Shuttle::check_lib_version(
+                Document::from_str("[dependencies]\nshuttle-service = \"0.4.5\"").unwrap(),
+                &version_four,
+            )
+            .unwrap();
+
+            let version_four_point_one = Version::parse("0.4.3").unwrap();
+
+            Shuttle::check_lib_version(
+                Document::from_str("[dependencies]\nshuttle-service = \"0.4\"").unwrap(),
+                &version_four_point_one,
+            )
+            .unwrap();
+
+            Shuttle::check_lib_version(
+                Document::from_str("[dependencies]\nshuttle-service = \"0.4.1\"").unwrap(),
+                &version_four_point_one,
+            )
+            .unwrap();
+
+            Shuttle::check_lib_version(
+                Document::from_str("[dependencies]\nshuttle-service = \"0.4.5\"").unwrap(),
+                &version_four_point_one,
+            )
+            .unwrap();
+
+            Shuttle::check_lib_version(
+                Document::from_str("[dependencies]\nshuttle-service = \"0.5\"").unwrap(),
+                &version_four_point_one,
+            )
+            .unwrap();
+
+            Shuttle::check_lib_version(
+                Document::from_str("[dependencies]\nshuttle-service = \"2\"").unwrap(),
+                &version_four_point_one,
+            )
+            .unwrap();
+        }
     }
 }

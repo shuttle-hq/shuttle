@@ -13,7 +13,7 @@ use uuid::Uuid;
 
 use crate::deployment::{DeploymentManager, Queued};
 use crate::error::{Error, Result};
-use crate::persistence::{Log, Persistence, State};
+use crate::persistence::{Deployment, Log, Persistence, State};
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -96,14 +96,14 @@ async fn post_service(
 ) -> Result<Json<deployment::Response>> {
     let id = Uuid::new_v4();
 
-    let deployment = deployment::Response {
+    let deployment = Deployment {
         id,
         name: name.clone(),
-        state: deployment::State::Queued,
+        state: State::Queued,
         last_update: Utc::now(),
     };
 
-    persistence.insert_deployment(&deployment).await?;
+    persistence.insert_deployment(deployment.clone()).await?;
 
     let queued = Queued {
         id,
@@ -114,7 +114,7 @@ async fn post_service(
 
     deployment_manager.queue_push(queued).await;
 
-    Ok(Json(deployment))
+    Ok(Json(deployment.into()))
 }
 
 async fn delete_service(

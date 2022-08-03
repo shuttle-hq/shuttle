@@ -17,8 +17,8 @@ use tokio::task::JoinHandle;
 use tracing::error;
 use uuid::Uuid;
 
-pub use self::deployment::DeploymentState;
-use self::deployment::{Deployment, DeploymentRunnable};
+use self::deployment::DeploymentRunnable;
+pub use self::deployment::{Deployment, DeploymentState};
 pub use self::log::{Level as LogLevel, Log};
 pub use self::resource::{Resource, ResourceRecorder, Type as ResourceType};
 pub use self::state::State;

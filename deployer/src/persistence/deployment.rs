@@ -11,17 +11,6 @@ pub struct Deployment {
     pub last_update: DateTime<Utc>,
 }
 
-impl From<&shuttle_common::deployment::Response> for Deployment {
-    fn from(response: &shuttle_common::deployment::Response) -> Self {
-        Self {
-            id: response.id,
-            name: response.name.clone(),
-            state: response.state.clone().into(),
-            last_update: response.last_update,
-        }
-    }
-}
-
 impl From<Deployment> for shuttle_common::deployment::Response {
     fn from(deployment: Deployment) -> Self {
         shuttle_common::deployment::Response {

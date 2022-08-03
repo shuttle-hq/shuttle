@@ -1059,7 +1059,6 @@ dependencies = [
  "cargo_metadata 0.15.0",
  "chrono",
  "clap",
- "colored",
  "crossbeam-channel",
  "crossterm",
  "dirs",

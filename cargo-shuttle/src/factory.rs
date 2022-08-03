@@ -7,9 +7,9 @@ use bollard::{
     models::{CreateImageInfo, HostConfig, PortBinding, ProgressDetail},
     Docker,
 };
-use colored::Colorize;
 use crossterm::{
     cursor::{MoveDown, MoveUp},
+    style::Stylize,
     terminal::{Clear, ClearType},
     QueueableCommand,
 };

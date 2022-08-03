@@ -5,19 +5,13 @@ pub mod project;
 pub mod resource;
 pub mod service;
 
-use std::{
-    collections::BTreeMap,
-    fmt::{Display, Formatter},
-};
+use std::fmt::{Display, Formatter};
 
 use ::log::Level;
-use chrono::{DateTime, Utc};
 use resource::ResourceInfo;
 use rocket::Responder;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-
-use crate::project::ProjectName;
 
 pub const SHUTTLE_PROJECT_HEADER: &str = "Shuttle-Project";
 
@@ -32,75 +26,6 @@ pub type ApiUrl = String;
 pub type Host = String;
 pub type DeploymentId = Uuid;
 pub type Port = u16;
-
-/// Deployment metadata. This serves two purposes. Storing information
-/// used for the deployment process and also providing the client with
-/// information on the state of the deployment
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DeploymentMeta {
-    pub id: DeploymentId,
-    pub project: ProjectName,
-    pub state: DeploymentStateMeta,
-    pub host: String,
-    pub build_logs: Option<String>,
-    pub runtime_logs: BTreeMap<DateTime<Utc>, LogItem>,
-    pub database_deployment: Option<DatabaseReadyInfo>,
-    pub created_at: DateTime<Utc>,
-}
-
-impl DeploymentMeta {
-    pub fn queued(fqdn: &str, project: ProjectName) -> Self {
-        Self::new(fqdn, project, DeploymentStateMeta::Queued)
-    }
-
-    pub fn built(fqdn: &str, project: ProjectName) -> Self {
-        Self::new(fqdn, project, DeploymentStateMeta::Built)
-    }
-
-    fn new(fqdn: &str, project: ProjectName, state: DeploymentStateMeta) -> Self {
-        let host = Self::create_host(fqdn, &project);
-        Self {
-            id: Uuid::new_v4(),
-            project,
-            state,
-            host,
-            build_logs: None,
-            runtime_logs: BTreeMap::new(),
-            database_deployment: None,
-            created_at: Utc::now(),
-        }
-    }
-
-    pub fn create_host(fqdn: &str, project_name: &ProjectName) -> Host {
-        format!("{}.{}", project_name, fqdn)
-    }
-}
-
-impl Display for DeploymentMeta {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let db = {
-            if let Some(info) = &self.database_deployment {
-                format!(
-                    "\n        Database URI:       {}",
-                    info.connection_string_public()
-                )
-            } else {
-                "".to_string()
-            }
-        };
-        write!(
-            f,
-            r#"
-        Project:            {}
-        Deployment Id:      {}
-        Deployment Status:  {}
-        Host:               https://{}
-        Created At:         {}{}
-        "#,
-            self.project, self.id, self.state, self.host, self.created_at, db
-        )
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatabaseReadyInfo {
@@ -160,31 +85,6 @@ impl DatabaseReadyInfo {
             self.port,
             self.database_name
         )
-    }
-}
-
-/// A label used to represent the deployment state in `DeploymentMeta`
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum DeploymentStateMeta {
-    Queued,
-    Built,
-    Loaded,
-    Deployed,
-    Error(String),
-    Deleted,
-}
-
-impl Display for DeploymentStateMeta {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let s = match self {
-            DeploymentStateMeta::Queued => "QUEUED".to_string(),
-            DeploymentStateMeta::Built => "BUILT".to_string(),
-            DeploymentStateMeta::Loaded => "LOADED".to_string(),
-            DeploymentStateMeta::Deployed => "DEPLOYED".to_string(),
-            DeploymentStateMeta::Error(msg) => format!("ERROR: {}", &msg),
-            DeploymentStateMeta::Deleted => "DELETED".to_string(),
-        };
-        write!(f, "{}", s)
     }
 }
 

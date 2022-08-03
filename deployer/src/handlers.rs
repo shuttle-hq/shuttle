@@ -121,14 +121,28 @@ async fn delete_service(
     Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
     Path(name): Path<String>,
-) -> Result<Json<Vec<deployment::Response>>> {
+) -> Result<Json<service::Response>> {
     let old_deployments = persistence.delete_service(&name).await?;
 
     for deployment in old_deployments.iter() {
         deployment_manager.kill(deployment.id).await;
     }
 
-    Ok(Json(old_deployments.into_iter().map(Into::into).collect()))
+    let resources = persistence
+        .get_service_resources(&name)
+        .await?
+        .into_iter()
+        .map(Into::into)
+        .collect();
+
+    let response = service::Response {
+        uri: format!("{name}.shuttleapp.rs"),
+        name,
+        deployments: old_deployments.into_iter().map(Into::into).collect(),
+        resources,
+    };
+
+    Ok(Json(response))
 }
 
 async fn get_deployment(

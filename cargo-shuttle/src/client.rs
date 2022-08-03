@@ -4,18 +4,17 @@ use std::fs::File;
 use std::io::Read;
 
 use anyhow::{anyhow, Context, Result};
+use crossterm::style::Stylize;
 use futures::StreamExt;
 use reqwest::{Response, StatusCode};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use shuttle_common::project::ProjectName;
-use shuttle_common::{deployment, service, ApiKey, ApiUrl, DeploymentMeta, SHUTTLE_PROJECT_HEADER};
+use shuttle_common::{deployment, service, ApiKey, ApiUrl, SHUTTLE_PROJECT_HEADER};
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
 use tracing::error;
-
-use crate::print;
 
 pub(crate) async fn auth(mut api_url: ApiUrl, username: String) -> Result<ApiKey> {
     let client = get_retry_client();
@@ -50,17 +49,22 @@ pub(crate) async fn delete(
 ) -> Result<()> {
     let client = get_retry_client();
 
-    let _ = write!(api_url, "/projects/{}", project);
+    let _ = write!(api_url, "/services/{}", project);
     let res: Response = client
         .delete(api_url)
         .basic_auth(api_key, Some(""))
         .send()
         .await
-        .context("failed to delete deployment on the Shuttle server")?;
+        .context("failed to delete service on the Shuttle server")?;
 
-    let deployment_meta = to_api_result(res).await?;
+    let service = to_api_result(res).await?;
 
-    println!("{}", deployment_meta);
+    println!(
+        r#"{}
+{}"#,
+        "Successfully deleted service".bold(),
+        service
+    );
 
     Ok(())
 }
@@ -229,10 +233,10 @@ pub(crate) async fn secrets(
         .map(|_| ())
 }
 
-async fn to_api_result(res: Response) -> Result<DeploymentMeta> {
+async fn to_api_result(res: Response) -> Result<service::Response> {
     let text = res.text().await?;
-    serde_json::from_str::<DeploymentMeta>(&text).with_context(|| {
-        error!(text, "failed to parse deployment meta");
+    serde_json::from_str::<service::Response>(&text).with_context(|| {
+        error!(text, "failed to parse service data");
         "could not parse server response"
     })
 }

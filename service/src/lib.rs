@@ -235,6 +235,11 @@ pub use secrets::SecretStore;
 ))]
 pub mod aws;
 
+
+#[cfg(feature = "persist")]
+pub mod persist;
+
+
 #[cfg(feature = "codegen")]
 extern crate shuttle_codegen;
 #[cfg(feature = "codegen")]

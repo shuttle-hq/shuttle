@@ -4498,6 +4498,7 @@ dependencies = [
  "async-std",
  "async-trait",
  "axum",
+ "bincode",
  "cargo",
  "chrono",
  "futures",

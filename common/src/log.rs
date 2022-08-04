@@ -8,6 +8,8 @@ use uuid::Uuid;
 
 use crate::deployment::State;
 
+pub const STATE_MESSAGE: &str = "NEW STATE";
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct StreamLog {
     pub id: Uuid,
@@ -42,7 +44,7 @@ impl Display for Item {
         let datetime: DateTime<Local> = DateTime::from(self.timestamp);
 
         let message = match &self.fields {
-            serde_json::Value::String(str_value) if str_value == "NEW STATE" => {
+            serde_json::Value::String(str_value) if str_value == STATE_MESSAGE => {
                 write!(f, "\n")?;
                 format!("Entering {} state", self.state)
                     .bold()

@@ -9,7 +9,7 @@ use crate::error::Result;
 use std::path::Path;
 
 use serde_json::json;
-use shuttle_common::log::StreamLog;
+use shuttle_common::{log::StreamLog, STATE_MESSAGE};
 use sqlx::migrate::MigrateDatabase;
 use sqlx::sqlite::{Sqlite, SqlitePool};
 use tokio::sync::broadcast::{self, Receiver, Sender};
@@ -126,7 +126,7 @@ impl Persistence {
                                 level: log.level.clone(),
                                 file: log.file.clone(),
                                 line: log.line,
-                                fields: json!("NEW STATE"),
+                                fields: json!(STATE_MESSAGE),
                             },
                         )
                         .await

@@ -13,6 +13,8 @@ use rocket::Responder;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+pub use crate::log::STATE_MESSAGE;
+
 #[cfg(debug_assertions)]
 pub const API_URL_DEFAULT: &str = "http://localhost:8001";
 

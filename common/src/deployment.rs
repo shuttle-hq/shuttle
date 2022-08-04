@@ -1,8 +1,8 @@
 use std::fmt::Display;
 
 use chrono::{DateTime, Utc};
-use colored::Colorize;
 use comfy_table::Color;
+use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
 use strum::Display;
 use uuid::Uuid;
@@ -37,7 +37,7 @@ impl Display for Response {
             self.last_update
                 .format("%Y-%m-%dT%H:%M:%SZ")
                 .to_string()
-                .bright_black(),
+                .dim(),
             self.id,
             self.name,
             self.state.to_string().cyan()

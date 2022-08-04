@@ -9,7 +9,6 @@ description = "Common library for the shuttle platform (https://www.shuttle.rs/)
 [dependencies]
 anyhow = "1.0.57"
 chrono = { version = "0.4.19", features = ["serde"] }
-colored = "2.0.0"
 crossterm = "0.23.2"
 comfy-table = "6.0.0"
 lazy_static = "1.4.0"

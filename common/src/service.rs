@@ -1,16 +1,14 @@
-use std::fmt::Display;
-
-use colored::Colorize;
-use comfy_table::{
-    modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, Cell, CellAlignment, ContentArrangement,
-    Table,
-};
-use serde::{Deserialize, Serialize};
-
 use crate::{
     deployment,
     resource::{self, ResourceInfo},
 };
+use comfy_table::{
+    modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, Cell, CellAlignment, ContentArrangement,
+    Table,
+};
+use crossterm::style::Stylize;
+use serde::{Deserialize, Serialize};
+use std::fmt::Display;
 
 #[derive(Deserialize, Serialize)]
 pub struct Response {

@@ -7,7 +7,7 @@ use std::str;
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
 
-use colored::*;
+use crossterm::style::{Color, Stylize};
 use reqwest::blocking::RequestBuilder;
 
 use lazy_static::lazy_static;
@@ -117,8 +117,8 @@ pub fn spawn_and_log<D: std::fmt::Display, C: Into<Color>>(
     let color = color.into();
     let mut stdout = child.stdout.take().unwrap();
     let mut stderr = child.stderr.take().unwrap();
-    let stdout_target = format!("{} >>>", target).color(color);
-    let stderr_target = format!("{} >>>", target).bold().color(color);
+    let stdout_target = format!("{} >>>", target).with(color);
+    let stderr_target = format!("{} >>>", target).bold().with(color);
     std::thread::spawn(move || log_lines(&mut stdout, stdout_target));
     std::thread::spawn(move || log_lines(&mut stderr, stderr_target));
     child

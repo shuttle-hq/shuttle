@@ -98,7 +98,7 @@ impl Display for Item {
 impl Level {
     fn get_colored(&self) -> StyledContent<&str> {
         match self {
-            Level::Trace => "TRACE".dark_grey(),
+            Level::Trace => "TRACE".magenta(),
             Level::Debug => "DEBUG".blue(),
             Level::Info => " INFO".green(),
             Level::Warn => " WARN".yellow(),

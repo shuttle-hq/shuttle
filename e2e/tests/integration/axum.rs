@@ -1,10 +1,10 @@
-use colored::Color;
+use crossterm::style::Color;
 
 use crate::helpers;
 
 #[test]
 fn hello_world_axum() {
-    let client = helpers::Services::new_docker("hello-world (axum)", Color::Cyan);
+    let client = helpers::Services::new_docker("hello-world (axum)", Color::DarkGreen);
     client.deploy("axum/hello-world");
 
     let request_text = client

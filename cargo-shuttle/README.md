@@ -63,14 +63,14 @@ OPTIONS:
 
 SUBCOMMANDS:
     auth      create user credentials for the shuttle platform
-    delete    delete the latest deployment for a shuttle project
-    deploy    deploy a shuttle project
-    help      Prints this message or the help of the given subcommand(s)
-    init      create a new shuttle project
+    delete    delete this shuttle service
+    deploy    deploy a shuttle service
+    help      Print this message or the help of the given subcommand(s)
+    init      create a new shuttle service
     login     login to the shuttle platform
-    logs      view the logs of a shuttle project
-    run       run a shuttle project locally
-    status    view the status of a shuttle project
+    logs      view the logs of a shuttle service
+    run       run a shuttle service locally
+    status    view the status of a shuttle service
 ```
 
 ### Subcommand: `init`

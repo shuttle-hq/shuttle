@@ -28,6 +28,7 @@ pub fn make_router(
             "/services/:name",
             get(get_service).post(post_service).delete(delete_service),
         )
+        .route("/services/:name/summary", get(get_service_summary))
         .route(
             "/deployments/:id",
             get(get_deployment).delete(delete_deployment),
@@ -36,7 +37,8 @@ pub fn make_router(
             "/deployments/:id/build-logs-subscribe",
             get(get_build_logs_subscribe),
         )
-        .route("/deployments/:id/build-logs", get(get_build_logs))
+        .route("/deployments/:id/logs/build", get(get_build_logs))
+        .route("/deployments/:id/logs/runtime", get(get_runtime_logs))
         .route("/version", get(get_version))
         .layer(Extension(persistence))
         .layer(Extension(deployment_manager))
@@ -81,6 +83,31 @@ async fn get_service(
         uri: format!("{name}.shuttleapp.rs"),
         name,
         deployments,
+        resources,
+    };
+
+    Ok(Json(response))
+}
+
+async fn get_service_summary(
+    Extension(persistence): Extension<Persistence>,
+    Path(name): Path<String>,
+) -> Result<Json<service::Summary>> {
+    let deployment = persistence
+        .get_active_deployment(&name)
+        .await?
+        .map(Into::into);
+    let resources = persistence
+        .get_service_resources(&name)
+        .await?
+        .into_iter()
+        .map(Into::into)
+        .collect();
+
+    let response = service::Summary {
+        uri: format!("{name}.shuttleapp.rs"),
+        name,
+        deployment,
         resources,
     };
 
@@ -179,6 +206,21 @@ async fn get_build_logs(
             .into_iter()
             .filter(|log| matches!(log.state, State::Building))
             .filter_map(Log::into_stream_log)
+            .collect(),
+    ))
+}
+
+async fn get_runtime_logs(
+    Extension(persistence): Extension<Persistence>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Vec<log::Item>>> {
+    Ok(Json(
+        persistence
+            .get_deployment_logs(&id)
+            .await?
+            .into_iter()
+            .filter(|log| matches!(log.state, State::Running))
+            .map(Into::into)
             .collect(),
     ))
 }

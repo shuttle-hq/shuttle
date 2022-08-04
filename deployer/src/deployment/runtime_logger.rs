@@ -58,7 +58,13 @@ impl log::Log for RuntimeLogger {
                     timestamp: datetime,
                     file: None,
                     line: None,
-                    fields: json!({ "message": format!("{}", record.args()) }),
+                    fields: json!({
+                        "message": format!("{}", record.args()),
+                        "log.file": record.file(),
+                        "log.line": record.line(),
+                        "log.module_path": record.module_path(),
+                        "log.target": record.target()
+                    }),
                     r#type: deploy_layer::LogType::Event,
                 })
                 .expect("sending log should succeed");

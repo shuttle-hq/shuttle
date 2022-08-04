@@ -184,6 +184,15 @@ impl Persistence {
             .map_err(Into::into)
     }
 
+    pub async fn get_active_deployment(&self, name: &str) -> Result<Option<Deployment>> {
+        sqlx::query_as("SELECT * FROM deployments WHERE name = ? AND state = ?")
+            .bind(name)
+            .bind(State::Running)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(Into::into)
+    }
+
     pub async fn delete_service(&self, name: &str) -> Result<Vec<Deployment>> {
         let deployments = self.get_deployments(name).await?;
 
@@ -349,6 +358,50 @@ mod tests {
         let update = p.get_deployment(&id).await.unwrap().unwrap();
         assert_eq!(update.state, State::Built);
         assert_ne!(update.last_update, Utc.ymd(2022, 4, 25).and_hms(4, 43, 33));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn deployment_active() {
+        let (p, _) = Persistence::new_in_memory().await;
+
+        let deployment_crashed = Deployment {
+            id: Uuid::new_v4(),
+            name: "xyz".to_string(),
+            state: State::Crashed,
+            last_update: Utc.ymd(2022, 4, 25).and_hms(7, 29, 35),
+        };
+        let deployment_stopped = Deployment {
+            id: Uuid::new_v4(),
+            name: "xyz".to_string(),
+            state: State::Stopped,
+            last_update: Utc.ymd(2022, 4, 25).and_hms(7, 49, 35),
+        };
+        let deployment_other = Deployment {
+            id: Uuid::new_v4(),
+            name: "other".to_string(),
+            state: State::Running,
+            last_update: Utc.ymd(2022, 4, 25).and_hms(7, 39, 39),
+        };
+        let deployment_running = Deployment {
+            id: Uuid::new_v4(),
+            name: "xyz".to_string(),
+            state: State::Running,
+            last_update: Utc.ymd(2022, 4, 25).and_hms(7, 48, 29),
+        };
+
+        for deployment in [
+            &deployment_crashed,
+            &deployment_stopped,
+            &deployment_other,
+            &deployment_running,
+        ] {
+            p.insert_deployment(deployment.clone()).await.unwrap();
+        }
+
+        assert_eq!(
+            p.get_active_deployment("xyz").await.unwrap().unwrap(),
+            deployment_running
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]

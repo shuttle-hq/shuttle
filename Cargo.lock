@@ -4608,6 +4608,7 @@ dependencies = [
  "chrono",
  "colored",
  "comfy-table",
+ "crossterm",
  "lazy_static",
  "log",
  "rocket",

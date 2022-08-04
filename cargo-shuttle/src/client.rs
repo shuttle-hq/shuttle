@@ -11,10 +11,11 @@ use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use shuttle_common::project::ProjectName;
-use shuttle_common::{deployment, service, ApiKey, ApiUrl, SHUTTLE_PROJECT_HEADER};
+use shuttle_common::{deployment, log, service, ApiKey, ApiUrl, SHUTTLE_PROJECT_HEADER};
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
 use tracing::error;
+use uuid::Uuid;
 
 pub(crate) async fn auth(mut api_url: ApiUrl, username: String) -> Result<ApiKey> {
     let client = get_retry_client();
@@ -69,7 +70,7 @@ pub(crate) async fn delete(
     Ok(())
 }
 
-pub(crate) async fn status(
+pub(crate) async fn service_details(
     mut api_url: ApiUrl,
     api_key: &ApiKey,
     project: &ProjectName,
@@ -86,6 +87,39 @@ pub(crate) async fn status(
         .context("failed to get deployment metadata")?;
 
     let service = to_api_result(res).await?;
+
+    println!("{}", service);
+
+    Ok(())
+}
+
+pub(crate) async fn service_summary(
+    mut api_url: ApiUrl,
+    api_key: &ApiKey,
+    project: &ProjectName,
+) -> Result<service::Summary> {
+    let client = get_retry_client();
+
+    let _ = write!(api_url, "/services/{}/summary", project);
+
+    let res: Response = client
+        .get(api_url)
+        .basic_auth(api_key.clone(), Some(""))
+        .send()
+        .await
+        .context("failed to get deployment metadata")?;
+
+    let text = res.text().await?;
+    serde_json::from_str::<service::Summary>(&text)
+        .with_context(|| {
+            error!(text, "failed to parse service summary");
+            "could not parse server response"
+        })
+        .map_err(Into::into)
+}
+
+pub(crate) async fn status(api_url: ApiUrl, api_key: &ApiKey, project: &ProjectName) -> Result<()> {
+    let service = service_summary(api_url, api_key, project).await?;
 
     println!("{}", service);
 
@@ -116,25 +150,10 @@ pub(crate) async fn shuttle_version(mut api_url: ApiUrl) -> Result<String> {
     }
 }
 
-pub(crate) async fn logs(api_url: ApiUrl, api_key: &ApiKey, project: &ProjectName) -> Result<()> {
+pub(crate) async fn logs(mut api_url: ApiUrl, api_key: &ApiKey, id: &Uuid) -> Result<()> {
     let client = get_retry_client();
 
-    let deployment_meta = get_deployment_meta(api_url, api_key, project, &client).await?;
-
-    for (datetime, log_item) in deployment_meta.runtime_logs {
-        print::log(datetime, log_item);
-    }
-
-    Ok(())
-}
-
-async fn get_deployment_meta(
-    mut api_url: ApiUrl,
-    api_key: &ApiKey,
-    project: &ProjectName,
-    client: &ClientWithMiddleware,
-) -> Result<DeploymentMeta> {
-    let _ = write!(api_url, "/projects/{}", project);
+    let _ = write!(api_url, "/deployments/{id}/logs/runtime");
 
     let res: Response = client
         .get(api_url)
@@ -143,7 +162,17 @@ async fn get_deployment_meta(
         .await
         .context("failed to get deployment metadata")?;
 
-    to_api_result(res).await
+    let text = res.text().await?;
+    let logs = serde_json::from_str::<Vec<log::Item>>(&text).with_context(|| {
+        error!(text, "failed to parse logs");
+        "could not parse server response"
+    })?;
+
+    for item in logs.into_iter() {
+        println!("{item}");
+    }
+
+    Ok(())
 }
 
 fn get_retry_client() -> ClientWithMiddleware {

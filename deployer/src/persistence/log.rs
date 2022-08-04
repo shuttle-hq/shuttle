@@ -60,3 +60,29 @@ impl Log {
         })
     }
 }
+
+impl From<Log> for shuttle_common::log::Item {
+    fn from(log: Log) -> Self {
+        Self {
+            id: log.id,
+            state: log.state.into(),
+            timestamp: log.timestamp,
+            level: log.level.into(),
+            file: log.file,
+            line: log.line,
+            fields: log.fields,
+        }
+    }
+}
+
+impl From<Level> for shuttle_common::log::Level {
+    fn from(level: Level) -> Self {
+        match level {
+            Level::Trace => Self::Trace,
+            Level::Debug => Self::Debug,
+            Level::Info => Self::Info,
+            Level::Warn => Self::Warn,
+            Level::Error => Self::Error,
+        }
+    }
+}

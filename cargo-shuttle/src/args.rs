@@ -46,21 +46,21 @@ pub struct ProjectArgs {
 
 #[derive(Parser)]
 pub enum Command {
-    /// deploy a shuttle project
+    /// deploy a shuttle service
     Deploy(DeployArgs),
-    /// create a new shuttle project
+    /// create a new shuttle service
     Init(InitArgs),
-    /// view the status of a shuttle project
+    /// view the status of a shuttle service
     Status,
-    /// view the logs of a shuttle project
+    /// view the logs of a shuttle service
     Logs,
-    /// delete the latest deployment for a shuttle project
+    /// delete this shuttle service
     Delete,
     /// create user credentials for the shuttle platform
     Auth(AuthArgs),
     /// login to the shuttle platform
     Login(LoginArgs),
-    /// run a shuttle project locally
+    /// run a shuttle service locally
     Run(RunArgs),
 }
 
@@ -112,7 +112,7 @@ pub struct InitArgs {
     /// Initialize with poem framework
     #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "tower"])]
     pub poem: bool,
-    /// Path to initialize a new shuttle project
+    /// Path to initialize a new shuttle service
     #[clap(
         parse(try_from_os_str = parse_init_path),
         default_value = ".",

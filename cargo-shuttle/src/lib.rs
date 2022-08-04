@@ -163,13 +163,22 @@ impl Shuttle {
     }
 
     async fn logs(&self) -> Result<()> {
-        client::logs(
+        let summary = client::service_summary(
             self.ctx.api_url(),
             &self.ctx.api_key()?,
             self.ctx.project_name(),
         )
-        .await
-        .context("failed to get logs of deployment")
+        .await?;
+
+        if let Some(deployment) = summary.deployment {
+            client::logs(self.ctx.api_url(), &self.ctx.api_key()?, &deployment.id)
+                .await
+                .context("failed to get logs of deployment")
+        } else {
+            println!("{} has no running deployments", self.ctx.project_name());
+
+            Ok(())
+        }
     }
 
     async fn local_run(&self, run_args: RunArgs) -> Result<()> {

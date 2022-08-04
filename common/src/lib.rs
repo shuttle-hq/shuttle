@@ -13,8 +13,6 @@ use rocket::Responder;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-pub const SHUTTLE_PROJECT_HEADER: &str = "Shuttle-Project";
-
 #[cfg(debug_assertions)]
 pub const API_URL_DEFAULT: &str = "http://localhost:8001";
 

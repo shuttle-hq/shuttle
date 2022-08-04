@@ -11,7 +11,7 @@ use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use shuttle_common::project::ProjectName;
-use shuttle_common::{deployment, log, service, ApiKey, ApiUrl, SHUTTLE_PROJECT_HEADER};
+use shuttle_common::{deployment, log, service, ApiKey, ApiUrl};
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
 use tracing::error;
@@ -259,7 +259,6 @@ pub(crate) async fn secrets(
     client
         .post(api_url)
         .body(serde_json::to_string(&secrets)?)
-        .header(SHUTTLE_PROJECT_HEADER, serde_json::to_string(&project)?)
         .basic_auth(api_key.clone(), Some(""))
         .send()
         .await

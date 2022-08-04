@@ -187,9 +187,14 @@ pub(crate) async fn deploy(
     api_url: ApiUrl,
     api_key: &ApiKey,
     project: &ProjectName,
+    no_test: bool,
 ) -> Result<deployment::State> {
     let mut url = api_url.clone();
     let _ = write!(url, "/services/{}", project.as_str());
+
+    if no_test {
+        let _ = write!(url, "?no-test");
+    }
 
     let client = get_retry_client();
 

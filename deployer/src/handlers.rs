@@ -136,7 +136,7 @@ async fn post_service(
         id,
         name,
         data_stream: Box::pin(stream.map_err(Error::Streaming)),
-        will_run_tests: !params.contains_key("no-testing"),
+        will_run_tests: !params.contains_key("no-test"),
     };
 
     deployment_manager.queue_push(queued).await;

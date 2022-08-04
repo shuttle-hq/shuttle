@@ -152,11 +152,11 @@ impl Queued {
 
 impl fmt::Debug for Queued {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Queued {{ id: \"{}\", name: \"{}\", .. }}",
-            self.id, self.name
-        )
+        f.debug_struct("Queued")
+            .field("id", &self.id)
+            .field("name", &self.name)
+            .field("will_run_tests", &self.will_run_tests)
+            .finish_non_exhaustive()
     }
 }
 

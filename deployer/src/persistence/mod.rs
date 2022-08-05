@@ -76,7 +76,7 @@ impl Persistence {
                 name TEXT,         -- Name of the service this resource belongs to.
                 type TEXT,         -- Type of resource this is.
                 data TEXT,         -- Data about this resource.
-                PRIMARY KEY (name, data)
+                PRIMARY KEY (name, type)
             );
         ").execute(&pool).await.unwrap();
 
@@ -307,7 +307,7 @@ impl LogRecorder for Persistence {
 #[async_trait::async_trait]
 impl ResourceRecorder for Persistence {
     async fn insert_resource(&self, resource: &Resource) -> Result<()> {
-        sqlx::query("INSERT INTO resources (name, type, data) VALUES (?, ?, ?)")
+        sqlx::query("INSERT OR REPLACE INTO resources (name, type, data) VALUES (?, ?, ?)")
             .bind(&resource.name)
             .bind(resource.r#type)
             .bind(&resource.data)
@@ -666,13 +666,19 @@ mod tests {
             )),
             data: json!({"username": "admin"}),
         };
+        // This makes sure only the last instance of a type is saved (clashes with [resource1])
+        let resource4 = Resource {
+            name: "foo".to_string(),
+            r#type: ResourceType::Database(resource::DatabaseType::Shared),
+            data: json!({"username": "foo"}),
+        };
 
-        for resource in [&resource1, &resource2, &resource3] {
+        for resource in [&resource1, &resource2, &resource3, &resource4] {
             p.insert_resource(resource).await.unwrap();
         }
 
         let resources = p.get_service_resources("foo").await.unwrap();
 
-        assert_eq!(resources, vec![resource2, resource1]);
+        assert_eq!(resources, vec![resource2, resource4]);
     }
 }

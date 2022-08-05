@@ -23,12 +23,14 @@ use cargo_metadata::Message;
 use config::RequestContext;
 use crossterm::style::Stylize;
 use factory::LocalFactory;
+use futures::StreamExt;
 use semver::{Version, VersionReq};
 use shuttle_common::deployment;
 use shuttle_service::loader::{build_crate, Loader};
 use toml_edit::Document;
 use tracing::trace;
 
+use crate::client::Client;
 use crate::logger::Logger;
 
 pub struct Shuttle {
@@ -62,16 +64,19 @@ impl Shuttle {
 
         self.ctx.set_api_url(args.api_url);
 
+        let mut client = Client::new(self.ctx.api_url());
+        client.set_api_key(self.ctx.api_key());
+
         match args.cmd {
             Command::Deploy(deploy_args) => {
-                self.check_lib_version(args.project_args).await?;
-                return self.deploy(deploy_args).await;
+                self.check_lib_version(args.project_args, &client).await?;
+                return self.deploy(deploy_args, &client).await;
             }
             Command::Init(init_args) => self.init(init_args).await,
-            Command::Status => self.status().await,
-            Command::Logs => self.logs().await,
-            Command::Delete => self.delete().await,
-            Command::Auth(auth_args) => self.auth(auth_args).await,
+            Command::Status => self.status(&client).await,
+            Command::Logs => self.logs(&client).await,
+            Command::Delete => self.delete(&client).await,
+            Command::Auth(auth_args) => self.auth(auth_args, &client).await,
             Command::Login(login_args) => self.login(login_args).await,
             Command::Run(run_args) => self.local_run(run_args).await,
         }
@@ -133,51 +138,49 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn auth(&mut self, auth_args: AuthArgs) -> Result<()> {
-        let api_key = client::auth(self.ctx.api_url(), auth_args.username)
-            .await
-            .context("failed to retrieve api key")?;
+    async fn auth(&mut self, auth_args: AuthArgs, client: &Client) -> Result<()> {
+        let api_key = client.auth(auth_args.username).await?;
+
         self.ctx.set_api_key(api_key)?;
+
         Ok(())
     }
 
-    async fn delete(&self) -> Result<()> {
-        client::delete(
-            self.ctx.api_url(),
-            &self.ctx.api_key()?,
-            self.ctx.project_name(),
-        )
-        .await
-        .context("failed to delete deployment")
+    async fn delete(&self, client: &Client) -> Result<()> {
+        let service = client.delete_service(self.ctx.project_name()).await?;
+
+        println!(
+            r#"{}
+{}"#,
+            "Successfully deleted service".bold(),
+            service
+        );
+
+        Ok(())
     }
 
-    async fn status(&self) -> Result<()> {
-        client::status(
-            self.ctx.api_url(),
-            &self.ctx.api_key()?,
-            self.ctx.project_name(),
-        )
-        .await
-        .context("failed to get status of deployment")
+    async fn status(&self, client: &Client) -> Result<()> {
+        let summary = client.get_service_summary(self.ctx.project_name()).await?;
+
+        println!("{summary}");
+
+        Ok(())
     }
 
-    async fn logs(&self) -> Result<()> {
-        let summary = client::service_summary(
-            self.ctx.api_url(),
-            &self.ctx.api_key()?,
-            self.ctx.project_name(),
-        )
-        .await?;
+    async fn logs(&self, client: &Client) -> Result<()> {
+        let summary = client.get_service_summary(self.ctx.project_name()).await?;
 
         if let Some(deployment) = summary.deployment {
-            client::logs(self.ctx.api_url(), &self.ctx.api_key()?, &deployment.id)
-                .await
-                .context("failed to get logs of deployment")
+            let logs = client.get_runtime_logs(&deployment.id).await?;
+
+            for log in logs.into_iter() {
+                println!("{log}");
+            }
         } else {
             println!("{} has no running deployments", self.ctx.project_name());
-
-            Ok(())
         }
+
+        Ok(())
     }
 
     async fn local_run(&self, run_args: RunArgs) -> Result<()> {
@@ -233,39 +236,60 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn deploy(&self, args: DeployArgs) -> Result<CommandOutcome> {
+    async fn deploy(&self, args: DeployArgs, client: &Client) -> Result<CommandOutcome> {
         let package_file = self
             .run_cargo_package(args.allow_dirty)
             .context("failed to package cargo project")?;
 
-        let key = self.ctx.api_key()?;
+        let deployment = client
+            .deploy(package_file, self.ctx.project_name(), args.no_test)
+            .await?;
 
-        let state = client::deploy(
-            package_file,
-            self.ctx.api_url(),
-            &key,
-            self.ctx.project_name(),
-            args.no_test,
-        )
-        .await
-        .context("failed to deploy cargo project")?;
+        println!("");
+        println!("{deployment}");
 
-        client::secrets(
-            self.ctx.api_url(),
-            &key,
-            self.ctx.project_name(),
-            self.ctx.secrets(),
-        )
-        .await
-        .context("failed to set up secrets for deployment")?;
+        let mut stream = client.get_build_logs_ws(&deployment.id).await?;
 
-        Ok(match state {
-            deployment::State::Crashed => CommandOutcome::DeploymentFailure,
-            _ => CommandOutcome::Ok,
-        })
+        while let Some(Ok(msg)) = stream.next().await {
+            match msg {
+                tokio_tungstenite::tungstenite::Message::Text(line) => println!("{line}"),
+                _ => {}
+            }
+        }
+
+        let service = client.get_service_summary(self.ctx.project_name()).await?;
+
+        if let Some(ref new_deployment) = service.deployment {
+            if new_deployment.id != deployment.id {
+                println!(
+                    "Deployment has not entered the running state so kept previous deployment up"
+                );
+
+                return Ok(CommandOutcome::DeploymentFailure);
+            }
+
+            let key = self.ctx.api_key().unwrap();
+            client::secrets(
+                self.ctx.api_url(),
+                &key,
+                self.ctx.project_name(),
+                self.ctx.secrets(),
+            )
+            .await
+            .context("failed to set up secrets for deployment")?;
+
+            Ok(match new_deployment.state {
+                deployment::State::Crashed => CommandOutcome::DeploymentFailure,
+                _ => CommandOutcome::Ok,
+            })
+        } else {
+            println!("Deployment has not entered the running state");
+
+            Ok(CommandOutcome::DeploymentFailure)
+        }
     }
 
-    async fn check_lib_version(&self, project_args: ProjectArgs) -> Result<()> {
+    async fn check_lib_version(&self, project_args: ProjectArgs, client: &Client) -> Result<()> {
         let cargo_path = project_args.working_directory.join("Cargo.toml");
         let cargo_doc = read_to_string(cargo_path.clone())?.parse::<Document>()?;
         let current_shuttle_version = &cargo_doc["dependencies"]["shuttle-service"]["version"];
@@ -274,8 +298,7 @@ impl Shuttle {
             Err(error) => return Err(anyhow!("Your shuttle-service version ({}) is invalid and should follow the MAJOR.MINOR.PATCH semantic versioning format. Error given: {:?}", current_shuttle_version.as_str().unwrap(), error.to_string())),
         };
 
-        let server_version = client::shuttle_version(self.ctx.api_url()).await?;
-        let server_version = Version::parse(&server_version)?;
+        let server_version = client.get_shuttle_service_version().await?;
 
         let version_required = format!("{}.{}", server_version.major, server_version.minor);
         let server_semver = VersionReq::parse(&version_required)?;

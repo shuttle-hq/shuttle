@@ -4,175 +4,230 @@ use std::fs::File;
 use std::io::Read;
 
 use anyhow::{anyhow, Context, Result};
-use crossterm::style::Stylize;
-use futures::StreamExt;
-use reqwest::{Response, StatusCode};
+use reqwest::{Body, Response, StatusCode};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
+use semver::Version;
+use serde::Deserialize;
 use shuttle_common::project::ProjectName;
 use shuttle_common::{deployment, log, service, ApiKey, ApiUrl};
-use tokio_tungstenite::connect_async;
-use tokio_tungstenite::tungstenite::Message;
+use tokio::net::TcpStream;
+use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 use tracing::error;
 use uuid::Uuid;
 
-pub(crate) async fn auth(mut api_url: ApiUrl, username: String) -> Result<ApiKey> {
-    let client = get_retry_client();
+pub struct Client {
+    api_url: ApiUrl,
+    api_key: Option<ApiKey>,
+}
 
-    let _ = write!(api_url, "/users/{}", username);
-
-    let res: Response = client
-        .post(api_url)
-        .send()
-        .await
-        .context("failed to get API key from Shuttle server")?;
-
-    let response_status = res.status();
-    let response_text = res.text().await?;
-
-    if response_status == StatusCode::OK {
-        return Ok(response_text);
+impl Client {
+    pub fn new(api_url: ApiUrl) -> Self {
+        Self {
+            api_url,
+            api_key: None,
+        }
     }
 
-    error!(
-        text = response_text,
-        status = %response_status,
-        "failed to authenticate with server"
-    );
-    Err(anyhow!("failed to authenticate with server",))
-}
+    pub fn set_api_key(&mut self, api_key: Option<ApiKey>) {
+        self.api_key = api_key;
+    }
 
-pub(crate) async fn delete(
-    mut api_url: ApiUrl,
-    api_key: &ApiKey,
-    project: &ProjectName,
-) -> Result<()> {
-    let client = get_retry_client();
+    pub async fn auth(&self, username: String) -> Result<ApiKey> {
+        let path = format!("/users/{}", username);
 
-    let _ = write!(api_url, "/services/{}", project);
-    let res: Response = client
-        .delete(api_url)
-        .basic_auth(api_key, Some(""))
-        .send()
-        .await
-        .context("failed to delete service on the Shuttle server")?;
+        let response = self
+            .post(path, Option::<String>::None)
+            .await
+            .context("failed to get API key from Shuttle server")?;
 
-    let service = to_api_result(res).await?;
+        let response_status = response.status();
+        let response_text = response.text().await?;
 
-    println!(
-        r#"{}
-{}"#,
-        "Successfully deleted service".bold(),
-        service
-    );
+        if response_status == StatusCode::OK {
+            return Ok(response_text);
+        }
 
-    Ok(())
-}
-
-pub(crate) async fn service_details(
-    mut api_url: ApiUrl,
-    api_key: &ApiKey,
-    project: &ProjectName,
-) -> Result<()> {
-    let client = get_retry_client();
-
-    let _ = write!(api_url, "/services/{}", project);
-
-    let res: Response = client
-        .get(api_url)
-        .basic_auth(api_key.clone(), Some(""))
-        .send()
-        .await
-        .context("failed to get deployment metadata")?;
-
-    let service = to_api_result(res).await?;
-
-    println!("{}", service);
-
-    Ok(())
-}
-
-pub(crate) async fn service_summary(
-    mut api_url: ApiUrl,
-    api_key: &ApiKey,
-    project: &ProjectName,
-) -> Result<service::Summary> {
-    let client = get_retry_client();
-
-    let _ = write!(api_url, "/services/{}/summary", project);
-
-    let res: Response = client
-        .get(api_url)
-        .basic_auth(api_key.clone(), Some(""))
-        .send()
-        .await
-        .context("failed to get deployment metadata")?;
-
-    let text = res.text().await?;
-    serde_json::from_str::<service::Summary>(&text)
-        .with_context(|| {
-            error!(text, "failed to parse service summary");
-            "could not parse server response"
-        })
-        .map_err(Into::into)
-}
-
-pub(crate) async fn status(api_url: ApiUrl, api_key: &ApiKey, project: &ProjectName) -> Result<()> {
-    let service = service_summary(api_url, api_key, project).await?;
-
-    println!("{}", service);
-
-    Ok(())
-}
-
-pub(crate) async fn shuttle_version(mut api_url: ApiUrl) -> Result<String> {
-    let client = get_retry_client();
-    api_url.push_str("/version");
-
-    let res: Response = client
-        .get(api_url)
-        .send()
-        .await
-        .context("failed to get version from Shuttle server")?;
-
-    let response_status = res.status();
-
-    if response_status == StatusCode::OK {
-        Ok(res.text().await?)
-    } else {
         error!(
-            text = res.text().await?,
+            text = response_text,
             status = %response_status,
-            "failed to get shuttle version from server"
+            "failed to authenticate with server"
         );
-        Err(anyhow!("failed to get shuttle version from server"))
-    }
-}
-
-pub(crate) async fn logs(mut api_url: ApiUrl, api_key: &ApiKey, id: &Uuid) -> Result<()> {
-    let client = get_retry_client();
-
-    let _ = write!(api_url, "/deployments/{id}/logs/runtime");
-
-    let res: Response = client
-        .get(api_url)
-        .basic_auth(api_key.clone(), Some(""))
-        .send()
-        .await
-        .context("failed to get deployment metadata")?;
-
-    let text = res.text().await?;
-    let logs = serde_json::from_str::<Vec<log::Item>>(&text).with_context(|| {
-        error!(text, "failed to parse logs");
-        "could not parse server response"
-    })?;
-
-    for item in logs.into_iter() {
-        println!("{item}");
+        Err(anyhow!("failed to authenticate with server",))
     }
 
-    Ok(())
+    pub async fn deploy(
+        &self,
+        package_file: File,
+        project: &ProjectName,
+        no_test: bool,
+    ) -> Result<deployment::Response> {
+        let mut path = format!("/services/{}", project.as_str());
+
+        if no_test {
+            let _ = write!(path, "?no-test");
+        }
+
+        let mut package_file = package_file;
+        let mut package_content = Vec::new();
+        package_file
+            .read_to_end(&mut package_content)
+            .context("failed to convert package content to buf")?;
+
+        self.post(path, Some(package_content))
+            .await
+            .context("failed to send deployment to the Shuttle server")?
+            .json()
+            .await
+            .context("could not parse server response")
+    }
+
+    pub async fn get_build_logs_ws(
+        &self,
+        deployment_id: &Uuid,
+    ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>> {
+        let mut ws_url = self.api_url.clone().replace("http", "ws");
+        let _ = write!(
+            ws_url,
+            "/deployments/{}/build-logs-subscribe",
+            deployment_id
+        );
+
+        let (stream, _) = connect_async(ws_url).await.with_context(|| {
+            error!("failed to connect to build logs websocket");
+            "could not connect to build logs websocket"
+        })?;
+
+        Ok(stream)
+    }
+
+    pub async fn delete_service(&self, project: &ProjectName) -> Result<service::Response> {
+        let path = format!("/services/{}", project.as_str());
+
+        self.delete(path).await
+    }
+
+    pub async fn get_service_details(&self, project: &ProjectName) -> Result<service::Response> {
+        let path = format!("/services/{}", project.as_str());
+
+        self.get(path).await
+    }
+
+    pub async fn get_service_summary(&self, project: &ProjectName) -> Result<service::Summary> {
+        let path = format!("/services/{}/summary", project.as_str());
+
+        self.get(path).await
+    }
+
+    pub async fn get_shuttle_service_version(&self) -> Result<Version> {
+        let url = format!("{}/version", self.api_url);
+
+        let response = Self::get_retry_client()
+            .get(url)
+            .send()
+            .await
+            .context("failed to get version from Shuttle server")?;
+
+        let response_status = response.status();
+        let response_text = response.text().await?;
+
+        if response_status == StatusCode::OK {
+            Ok(Version::parse(&response_text)?)
+        } else {
+            error!(
+                text = response_text,
+                status = %response_status,
+                "failed to get shuttle version from server"
+            );
+            Err(anyhow!("failed to get shuttle version from server"))
+        }
+    }
+
+    pub async fn get_runtime_logs(&self, deployment_id: &Uuid) -> Result<Vec<log::Item>> {
+        let path = format!("/deployments/{}/logs/runtime", deployment_id);
+
+        self.get(path).await
+    }
+
+    pub async fn get_deployment_details(
+        &self,
+        deployment_id: &Uuid,
+    ) -> Result<deployment::Response> {
+        let path = format!("/deployments/{}", deployment_id);
+
+        self.get(path).await
+    }
+
+    async fn get<M>(&self, path: String) -> Result<M>
+    where
+        M: for<'de> Deserialize<'de>,
+    {
+        let url = format!("{}{}", self.api_url, path);
+
+        let mut builder = Self::get_retry_client().get(url);
+
+        if let Some(ref api_key) = self.api_key {
+            builder = builder.basic_auth::<&str, &str>(api_key, None);
+        }
+
+        builder
+            .send()
+            .await
+            .context("failed to make get request")?
+            .json()
+            .await
+            .context("could not parse server json response for get request")
+    }
+
+    async fn post<T: Into<Body>>(
+        &self,
+        path: String,
+        body: Option<T>,
+    ) -> Result<Response, reqwest_middleware::Error> {
+        let url = format!("{}{}", self.api_url, path);
+
+        let mut builder = Self::get_retry_client().post(url);
+
+        if let Some(ref api_key) = self.api_key {
+            builder = builder.basic_auth::<&str, &str>(api_key, None);
+        }
+
+        if let Some(body) = body {
+            builder = builder.body(body);
+        }
+
+        builder.send().await
+    }
+
+    async fn delete<M>(&self, path: String) -> Result<M>
+    where
+        M: for<'de> Deserialize<'de>,
+    {
+        let url = format!("{}{}", self.api_url, path);
+
+        let mut builder = Self::get_retry_client().delete(url);
+
+        if let Some(ref api_key) = self.api_key {
+            builder = builder.basic_auth::<&str, &str>(api_key, None);
+        }
+
+        builder
+            .send()
+            .await
+            .context("failed to make delete request")?
+            .json()
+            .await
+            .context("could not parse server json response for delete request")
+    }
+
+    fn get_retry_client() -> ClientWithMiddleware {
+        let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
+
+        ClientBuilder::new(reqwest::Client::new())
+            .with(RetryTransientMiddleware::new_with_policy(retry_policy))
+            .build()
+    }
 }
 
 fn get_retry_client() -> ClientWithMiddleware {
@@ -180,66 +235,6 @@ fn get_retry_client() -> ClientWithMiddleware {
     ClientBuilder::new(reqwest::Client::new())
         .with(RetryTransientMiddleware::new_with_policy(retry_policy))
         .build()
-}
-
-pub(crate) async fn deploy(
-    package_file: File,
-    api_url: ApiUrl,
-    api_key: &ApiKey,
-    project: &ProjectName,
-    no_test: bool,
-) -> Result<deployment::State> {
-    let mut url = api_url.clone();
-    let _ = write!(url, "/services/{}", project.as_str());
-
-    if no_test {
-        let _ = write!(url, "?no-test");
-    }
-
-    let client = get_retry_client();
-
-    let mut package_file = package_file;
-    let mut package_content = Vec::new();
-    package_file
-        .read_to_end(&mut package_content)
-        .context("failed to convert package content to buf")?;
-
-    let res: Response = client
-        .post(url)
-        .body(package_content)
-        .basic_auth(api_key.clone(), Some(""))
-        .send()
-        .await
-        .context("failed to send deployment to the Shuttle server")?;
-
-    let text = res.text().await?;
-    let res = serde_json::from_str::<deployment::Response>(&text).with_context(|| {
-        error!(text, "failed to parse deployment response");
-        "could not parse server response"
-    })?;
-
-    println!("");
-    println!("{res}");
-
-    let id = res.id;
-    let mut ws_url = api_url.clone().replace("http", "ws");
-    let _ = write!(ws_url, "/deployments/{}/build-logs-subscribe", id);
-
-    let (mut stream, _) = connect_async(ws_url).await.with_context(|| {
-        error!("failed to connect to build logs websocket");
-        "could not connect to build logs websocket"
-    })?;
-
-    while let Some(Ok(msg)) = stream.next().await {
-        match msg {
-            Message::Text(line) => println!("{line}"),
-            _ => {}
-        }
-    }
-
-    status(api_url, api_key, project).await?;
-
-    Ok(res.state)
 }
 
 pub(crate) async fn secrets(
@@ -264,12 +259,4 @@ pub(crate) async fn secrets(
         .await
         .context("failed to send deployment's secrets to the Shuttle server")
         .map(|_| ())
-}
-
-async fn to_api_result(res: Response) -> Result<service::Response> {
-    let text = res.text().await?;
-    serde_json::from_str::<service::Response>(&text).with_context(|| {
-        error!(text, "failed to parse service data");
-        "could not parse server response"
-    })
 }

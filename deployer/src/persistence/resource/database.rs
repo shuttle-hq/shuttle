@@ -75,10 +75,10 @@ impl FromStr for Type {
                         "aws_rds" => Ok(Self::AwsRds(
                             AwsRdsType::from_str(rest).map_err(|e| e.to_string())?,
                         )),
-                        _ => Err("database type is unknown".to_string()),
+                        _ => Err(format!("'{prefix}' is an unknown database type")),
                     }
                 } else {
-                    Err("database type is unknown".to_string())
+                    Err(format!("'{nested}' is an unknown database type"))
                 }
             }
         }

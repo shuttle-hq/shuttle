@@ -59,10 +59,10 @@ impl FromStr for Type {
         if let Some((prefix, rest)) = s.split_once("::") {
             match prefix {
                 "database" => Ok(Self::Database(DatabaseType::from_str(rest)?)),
-                _ => Err("resource type is unknown".to_string()),
+                _ => Err(format!("'{prefix}' is an unknown resource type")),
             }
         } else {
-            Err("resource type is unknown".to_string())
+            Err(format!("'{s}' is an unknown resource type"))
         }
     }
 }
@@ -89,5 +89,27 @@ impl<'r> sqlx::Decode<'r, Sqlite> for Type {
         let value = <&str as sqlx::Decode<Sqlite>>::decode(value)?;
 
         Self::from_str(value).map_err(Into::into)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use super::{database, Type};
+
+    #[test]
+    fn to_string_and_back() {
+        let inputs = [
+            Type::Database(database::Type::AwsRds(database::AwsRdsType::Postgres)),
+            Type::Database(database::Type::AwsRds(database::AwsRdsType::MySql)),
+            Type::Database(database::Type::AwsRds(database::AwsRdsType::MariaDB)),
+            Type::Database(database::Type::Shared),
+        ];
+
+        for input in inputs {
+            let actual = Type::from_str(&input.to_string()).unwrap();
+            assert_eq!(input, actual, ":{} should map back to itself", input);
+        }
     }
 }

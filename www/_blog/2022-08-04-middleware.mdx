@@ -14,7 +14,7 @@ In this post we will take a general look into what middleware is, the benefits o
 
 A web server generally provides responses to requests. Very often, the protocol of choice is HTTP. A handler (sometimes called a response callback) is a function which takes a request's data and returns a response. 
 
-Most server frameworks have a system called a 'router' which routes requests basde on various parameters - usually the URL path. In HTTP routing is typically a combination of the path and the request method (GET, POST, PUT etc.). The benefit of a router is that it allows splitting per path logic up, which makes building large systems with lots of endpoints easier to manage. 
+Most server frameworks have a system called a 'router' which routes requests based on various parameters - usually the URL path. In HTTP routing is typically a combination of the path and the request method (GET, POST, PUT etc.). The benefit of a router is that it allows splitting per path logic up, which makes building large systems with lots of endpoints easier to manage. 
 
 Individual path handlers are great, but sometimes you want logic which applies to a group of paths or indeed all paths. This is where **middleware** comes in. Unlike a handler, middleware is called on **every request and path** that it's registered on. Like handlers, middleware are functions.
 
@@ -52,7 +52,7 @@ Many routes may want user information. The incoming request contain user informa
 
 Information about which paths users are going to and when can be very useful. With logging middleware we can log and store request information for later analysis.
 
-Similar to logging is [*server response timings*](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Server-Timing). This is a field / http header, which is standardized for holding timing information about requests. Here our middleware can log the start time of a incoming *request* and and the end time on the *response*. Then the middleware can modify the outgoing response to include the timing. This header is often highlighted in developer tools, which can be useful while debugging. It can also be used in chunked / streamed responses where the header of a request might have already been sent by using [Trailer](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Trailer)s.
+Similar to logging is [*server response timings*](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Server-Timing). This is a field / http header, which is standardized for holding timing information about requests. Here our middleware can log the start time of an incoming *request* and the end time on the *response*. Then the middleware can modify the outgoing response to include the timing. This header is often highlighted in developer tools, which can be useful while debugging. It can also be used in chunked / streamed responses where the header of a request might have already been sent by using [Trailer](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Trailer)s.
 
 #### Compression and other response optimizations
 
@@ -98,7 +98,7 @@ Application::build()
 
 ### Separating out code
 
-The benefit of middleware *just* being functions is that can be separated out do different modules or even crates. Many 3rd party services may choose to expose there service as a middleware rather than a system, of complicated functions and having to deal with users passing the correct state into them.
+The benefit of middleware *just* being functions is that they can be separated out to different modules or even crates. Many 3rd party services may choose to expose their service as a middleware rather than a system of complicated functions, and having to deal with users passing the correct state into them.
 
 ```rust
     .add_middleware(hot_new_server_logging_framework_start_up::Middleware::new())
@@ -170,7 +170,7 @@ Similar to `on_request` this has mutable access to the response object (it also 
 
 #### General server hooks
 
-Rockets fairings go beyond request and responses and can act as hooks into application startup and closing:
+Rocket's fairings go beyond request and responses and can act as hooks into application startup and closing:
 
 - Ignite (`on_ignite`). Runs before starting the server. Can validate config values, set initial state or abort.
 - Liftoff (`on_liftoff`). After server has launched (started) "A liftoff callback can be a convenient hook for launching services related to the Rocket application being launched."
@@ -409,7 +409,7 @@ async fn me(
 }
 ```
 
-I was actually surprised when this worked, Axums handler parameter system is quite magic.
+I was actually surprised when this worked, Axum's handler parameter system is quite magic.
 
 ## Conclusion
 

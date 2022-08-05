@@ -5,6 +5,7 @@ use axum::http::{Request, Response};
 use axum::routing::{get, Router};
 use axum::{extract::BodyStream, Json};
 use chrono::{TimeZone, Utc};
+use fqdn::FQDN;
 use futures::TryStreamExt;
 use shuttle_common::{deployment, log, service};
 use tower_http::trace::TraceLayer;
@@ -21,6 +22,7 @@ use std::time::Duration;
 pub fn make_router(
     persistence: Persistence,
     deployment_manager: DeploymentManager,
+    proxy_fqdn: FQDN,
 ) -> Router<Body> {
     Router::new()
         .route("/services", get(list_services))
@@ -54,6 +56,7 @@ pub fn make_router(
                     },
                 ),
         )
+        .layer(Extension(proxy_fqdn))
 }
 
 async fn list_services(
@@ -80,7 +83,6 @@ async fn get_service(
         .collect();
 
     let response = service::Response {
-        uri: format!("{name}.shuttleapp.rs"),
         name,
         deployments,
         resources,
@@ -91,6 +93,7 @@ async fn get_service(
 
 async fn get_service_summary(
     Extension(persistence): Extension<Persistence>,
+    Extension(proxy_fqdn): Extension<FQDN>,
     Path(name): Path<String>,
 ) -> Result<Json<service::Summary>> {
     let deployment = persistence
@@ -105,7 +108,7 @@ async fn get_service_summary(
         .collect();
 
     let response = service::Summary {
-        uri: format!("{name}.shuttleapp.rs"),
+        uri: format!("https://{name}.{proxy_fqdn}"),
         name,
         deployment,
         resources,
@@ -163,7 +166,6 @@ async fn delete_service(
         .collect();
 
     let response = service::Response {
-        uri: format!("{name}.shuttleapp.rs"),
         name,
         deployments: old_deployments.into_iter().map(Into::into).collect(),
         resources,

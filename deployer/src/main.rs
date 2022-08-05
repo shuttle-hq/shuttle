@@ -82,7 +82,7 @@ async fn main() {
         deployment_manager.run_push(built).await;
     }
 
-    let router = handlers::make_router(persistence, deployment_manager);
+    let router = handlers::make_router(persistence, deployment_manager, args.proxy_fqdn);
     let make_service = router.into_make_service();
 
     info!("Binding to and listening at address: {}", addr);

@@ -15,7 +15,6 @@ pub struct Response {
     pub name: String,
     pub deployments: Vec<deployment::Response>,
     pub resources: Vec<resource::Response>,
-    pub uri: String,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -39,13 +38,25 @@ impl Display for Summary {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let deployment = if let Some(ref deployment) = self.deployment {
             format!(
-                "Deployment '{}' has been {} since {}\n\n",
+                r#"
+Service Name:  {}
+Deployment ID: {}
+Status:        {}
+Last Updated:  {}
+URI:           {}
+
+"#,
+                self.name,
                 deployment.id,
-                deployment.state.to_string().cyan(),
+                deployment
+                    .state
+                    .to_string()
+                    .with(deployment.state.get_color()),
                 deployment
                     .last_update
                     .format("%Y-%m-%dT%H:%M:%SZ")
-                    .to_string()
+                    .to_string(),
+                self.uri,
             )
         } else {
             format!(

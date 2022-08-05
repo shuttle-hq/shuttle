@@ -4621,6 +4621,7 @@ dependencies = [
  "crossbeam-channel",
  "ctor",
  "flate2",
+ "fqdn",
  "futures",
  "hex 0.4.3",
  "log",

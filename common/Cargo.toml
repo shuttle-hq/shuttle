@@ -12,7 +12,6 @@ chrono = { version = "0.4.19", features = ["serde"] }
 crossterm = "0.23.2"
 comfy-table = "6.0.0"
 lazy_static = "1.4.0"
-log = { version = "0.4.17", features = ["serde"] }
 rocket = "0.5.0-rc.2"
 serde = "1.0.137"
 serde_json = "1.0.81"

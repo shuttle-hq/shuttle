@@ -61,7 +61,7 @@ impl Log {
     }
 }
 
-impl From<Log> for shuttle_common::log::Item {
+impl From<Log> for shuttle_common::LogItem {
     fn from(log: Log) -> Self {
         Self {
             id: log.id,

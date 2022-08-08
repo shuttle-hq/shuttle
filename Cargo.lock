@@ -4598,7 +4598,6 @@ dependencies = [
  "comfy-table",
  "crossterm",
  "lazy_static",
- "log",
  "rocket",
  "serde",
  "serde_json",

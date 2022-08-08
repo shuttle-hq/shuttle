@@ -7,7 +7,7 @@ use axum::{extract::BodyStream, Json};
 use chrono::{TimeZone, Utc};
 use fqdn::FQDN;
 use futures::TryStreamExt;
-use shuttle_common::{deployment, log, service};
+use shuttle_common::{deployment, log, service, LogItem};
 use tower_http::trace::TraceLayer;
 use tracing::{debug, debug_span, error, field, Span};
 use uuid::Uuid;
@@ -219,7 +219,7 @@ async fn get_build_logs(
 async fn get_runtime_logs(
     Extension(persistence): Extension<Persistence>,
     Path(id): Path<Uuid>,
-) -> Result<Json<Vec<log::Item>>> {
+) -> Result<Json<Vec<LogItem>>> {
     Ok(Json(
         persistence
             .get_deployment_logs(&id)
@@ -335,7 +335,7 @@ async fn runtime_logs_websocket_handler(mut s: WebSocket, persistence: Persisten
         match log.state {
             State::Running => {
                 last_timestamp = log.timestamp;
-                let msg = serde_json::to_string(&shuttle_common::log::Item::from(log))
+                let msg = serde_json::to_string(&LogItem::from(log))
                     .expect("to convert log item to json");
                 let sent = s.send(ws::Message::Text(msg)).await;
 
@@ -359,7 +359,7 @@ async fn runtime_logs_websocket_handler(mut s: WebSocket, persistence: Persisten
         if log.id == id && log.timestamp > last_timestamp {
             match log.state {
                 State::Running => {
-                    let msg = serde_json::to_string(&shuttle_common::log::Item::from(log))
+                    let msg = serde_json::to_string(&LogItem::from(log))
                         .expect("to convert log item to json");
                     let sent = s.send(ws::Message::Text(msg)).await;
 

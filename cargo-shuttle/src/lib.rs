@@ -4,7 +4,6 @@ pub mod config;
 mod factory;
 mod init;
 mod logger;
-mod print;
 
 use std::fs::{read_to_string, File};
 use std::io::Write;

@@ -1,8 +1,6 @@
 use chrono::Utc;
-use log::{Metadata, Record};
-use shuttle_common::LogItem;
-
-use crate::print;
+use crossterm::style::{StyledContent, Stylize};
+use log::{Level, Metadata, Record};
 
 pub struct Logger;
 
@@ -14,15 +12,28 @@ impl log::Log for Logger {
     fn log(&self, record: &Record) {
         if self.enabled(record.metadata()) {
             let datetime = Utc::now();
-            let item = LogItem {
-                body: format!("{}", record.args()),
-                level: record.level(),
-                target: record.target().to_string(),
-            };
 
-            print::log(datetime, item);
+            println!(
+                "{}{} {:<5} {}{} {}",
+                "[".dark_grey(),
+                datetime.format("%Y-%m-%dT%H:%M:%SZ"),
+                get_colored_level(&record.level()),
+                record.target().to_string(),
+                "]".dark_grey(),
+                format!("{}", record.args())
+            );
         }
     }
 
     fn flush(&self) {}
+}
+
+fn get_colored_level(level: &Level) -> StyledContent<String> {
+    match level {
+        Level::Trace => level.to_string().dark_grey(),
+        Level::Debug => level.to_string().blue(),
+        Level::Info => level.to_string().green(),
+        Level::Warn => level.to_string().yellow(),
+        Level::Error => level.to_string().red(),
+    }
 }

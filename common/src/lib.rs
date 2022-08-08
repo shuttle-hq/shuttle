@@ -5,9 +5,10 @@ pub mod project;
 pub mod resource;
 pub mod service;
 
+pub use log::Item as LogItem;
+
 use std::fmt::{Display, Formatter};
 
-use ::log::Level;
 use resource::ResourceInfo;
 use rocket::Responder;
 use serde::{Deserialize, Serialize};
@@ -117,10 +118,3 @@ impl Display for DeploymentApiError {
 }
 
 impl std::error::Error for DeploymentApiError {}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct LogItem {
-    pub body: String,
-    pub level: Level,
-    pub target: String,
-}

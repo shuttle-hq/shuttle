@@ -21,7 +21,7 @@
 
 use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
-use shuttle_common::{deployment, log::StreamLog};
+use shuttle_common::{deployment, log::BuildLogStream};
 use std::str::FromStr;
 use tracing::{field::Visit, span, warn, Metadata, Subscriber};
 use tracing_subscriber::Layer;
@@ -62,7 +62,7 @@ pub struct Log {
 }
 
 impl Log {
-    pub fn to_stream_log(&self) -> Option<StreamLog> {
+    pub fn to_stream_log(&self) -> Option<BuildLogStream> {
         let (state, message) = match self.r#type {
             LogType::State => match self.state {
                 State::Queued => Some((deployment::State::Queued, None)),
@@ -83,7 +83,7 @@ impl Log {
             },
         }?;
 
-        Some(StreamLog {
+        Some(BuildLogStream {
             id: self.id,
             timestamp: self.timestamp,
             state,

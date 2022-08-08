@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde_json::Value;
-use shuttle_common::{deployment, log::StreamLog, STATE_MESSAGE};
+use shuttle_common::{deployment, log::BuildLogStream, STATE_MESSAGE};
 use uuid::Uuid;
 
 use super::{deploy_layer::extract_message, State};
@@ -26,7 +26,7 @@ pub enum Level {
 }
 
 impl Log {
-    pub fn into_stream_log(self) -> Option<StreamLog> {
+    pub fn into_build_log_stream(self) -> Option<BuildLogStream> {
         let (state, message) = if let Value::String(str_value) = &self.fields {
             if str_value == STATE_MESSAGE {
                 match self.state {
@@ -52,7 +52,7 @@ impl Log {
             }
         }?;
 
-        Some(StreamLog {
+        Some(BuildLogStream {
             id: self.id,
             timestamp: self.timestamp,
             state,

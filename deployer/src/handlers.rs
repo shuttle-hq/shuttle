@@ -204,14 +204,14 @@ async fn delete_deployment(
 async fn get_build_logs(
     Extension(persistence): Extension<Persistence>,
     Path(id): Path<Uuid>,
-) -> Result<Json<Vec<log::StreamLog>>> {
+) -> Result<Json<Vec<log::BuildLogStream>>> {
     Ok(Json(
         persistence
             .get_deployment_logs(&id)
             .await?
             .into_iter()
             .filter(|log| matches!(log.state, State::Building))
-            .filter_map(Log::into_stream_log)
+            .filter_map(Log::into_build_log_stream)
             .collect(),
     ))
 }
@@ -258,7 +258,7 @@ async fn build_logs_websocket_handler(mut s: WebSocket, persistence: Persistence
     };
     let mut last_timestamp = Utc.timestamp(0, 0);
 
-    for log in backlog.into_iter().filter_map(Log::into_stream_log) {
+    for log in backlog.into_iter().filter_map(Log::into_build_log_stream) {
         match (log.state, log.message) {
             (deployment::State::Building, Some(msg)) => {
                 let sent = s.send(ws::Message::Text(msg)).await;
@@ -281,7 +281,7 @@ async fn build_logs_websocket_handler(mut s: WebSocket, persistence: Persistence
 
     while let Ok(log) = log_recv.recv().await {
         if log.id == id && log.timestamp > last_timestamp {
-            if let Some(log) = persistence::Log::from(log).into_stream_log() {
+            if let Some(log) = persistence::Log::from(log).into_build_log_stream() {
                 match (log.state, log.message) {
                     (deployment::State::Building, Some(msg)) => {
                         let sent = s.send(ws::Message::Text(msg)).await;

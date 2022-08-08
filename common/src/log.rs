@@ -11,7 +11,7 @@ use crate::deployment::State;
 pub const STATE_MESSAGE: &str = "NEW STATE";
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct StreamLog {
+pub struct BuildLogStream {
     pub id: Uuid,
     pub state: State,
     pub message: Option<String>,

@@ -499,7 +499,7 @@ mod tests {
             fields: json!({"message": "job queued"}),
         };
 
-        p.insert_log(log.clone()).await.unwrap();
+        insert_log(&p.pool, log.clone()).await.unwrap();
 
         let logs = p.get_deployment_logs(&id).await.unwrap();
         assert!(!logs.is_empty(), "there should be one log");
@@ -540,9 +540,9 @@ mod tests {
             fields: json!({"message": "unused Result"}),
         };
 
-        p.insert_log(log_a1.clone()).await.unwrap();
-        p.insert_log(log_b).await.unwrap();
-        p.insert_log(log_a2.clone()).await.unwrap();
+        insert_log(&p.pool, log_a1.clone()).await.unwrap();
+        insert_log(&p.pool, log_b).await.unwrap();
+        insert_log(&p.pool, log_a2.clone()).await.unwrap();
 
         let logs = p.get_deployment_logs(&id_a).await.unwrap();
         assert!(!logs.is_empty(), "there should be three logs");

@@ -14,7 +14,7 @@ clap = { version = "3.1.18", features = ["derive", "env"] }
 fqdn = "0.1.9"
 prost = "0.10.4"
 rand = "0.8.5"
-sqlx = { version = "0.5.13", features = ["postgres", "runtime-tokio-native-tls"] }
+sqlx = { version = "0.6.0", features = ["postgres", "runtime-tokio-native-tls"] }
 thiserror = "1.0.31"
 tokio = { version = "1.19.2", features = ["macros", "rt-multi-thread"] }
 tonic = "0.7.2"

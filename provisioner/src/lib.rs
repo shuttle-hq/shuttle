@@ -35,7 +35,7 @@ impl MyProvisioner {
         let pool = PgPoolOptions::new()
             .min_connections(4)
             .max_connections(12)
-            .connect_timeout(Duration::from_secs(60))
+            .acquire_timeout(Duration::from_secs(60))
             .connect_lazy(db_uri)?;
 
         // Default timeout is too long so lowering it

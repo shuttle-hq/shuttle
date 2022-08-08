@@ -25,7 +25,7 @@ log = "0.4.17"
 rand = "0.8.5"
 rocket = { version = "0.5.0-rc.2", features = ["uuid", "serde_json", "json"] }
 serde = "1.0.137"
-sqlx = { version = "0.5.13", features = ["runtime-tokio-native-tls", "postgres"] }
+sqlx = { version = "0.6.0", features = ["runtime-tokio-native-tls", "postgres"] }
 tokio = { version = "1.19.2", features = ["full"] }
 toml = "0.5.9"
 tonic = "0.7.2"

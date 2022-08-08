@@ -268,6 +268,8 @@ impl Shuttle {
                 return Ok(CommandOutcome::DeploymentFailure);
             }
 
+            println!("{service}");
+
             let key = self.ctx.api_key().unwrap();
             client::secrets(
                 self.ctx.api_url(),

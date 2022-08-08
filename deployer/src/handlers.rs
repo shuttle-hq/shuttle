@@ -266,7 +266,7 @@ async fn websocket_handler(mut s: WebSocket, persistence: Persistence, id: Uuid)
                 }
             }
             (deployment::State::Building, None) => {}
-            (deployment::State::Queued, _) => {}
+            (deployment::State::Queued, _) | (deployment::State::Built, _) => {}
             _ => {
                 debug!("closing channel after reaching more than just build logs");
                 let _ = s.close().await;
@@ -286,7 +286,7 @@ async fn websocket_handler(mut s: WebSocket, persistence: Persistence, id: Uuid)
                         return;
                     }
                 }
-                (deployment::State::Queued, _) => {}
+                (deployment::State::Queued, _) | (deployment::State::Built, _) => {}
                 (deployment::State::Building, None) => {}
                 _ => break,
             }

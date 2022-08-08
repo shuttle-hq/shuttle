@@ -36,7 +36,7 @@ pub fn make_router(
             get(get_deployment).delete(delete_deployment),
         )
         .route(
-            "/deployments/:id/build-logs-subscribe",
+            "/ws/deployments/:id/logs/build",
             get(get_build_logs_subscribe),
         )
         .route("/deployments/:id/logs/build", get(get_build_logs))
@@ -232,10 +232,10 @@ async fn get_build_logs_subscribe(
     Path(id): Path<Uuid>,
     ws_upgrade: ws::WebSocketUpgrade,
 ) -> axum::response::Response {
-    ws_upgrade.on_upgrade(move |s| websocket_handler(s, persistence, id))
+    ws_upgrade.on_upgrade(move |s| build_logs_websocket_handler(s, persistence, id))
 }
 
-async fn websocket_handler(mut s: WebSocket, persistence: Persistence, id: Uuid) {
+async fn build_logs_websocket_handler(mut s: WebSocket, persistence: Persistence, id: Uuid) {
     let mut log_recv = persistence.get_stream_log_subscriber();
     let backlog = match persistence.get_deployment_logs(&id).await {
         Ok(backlog) => backlog,

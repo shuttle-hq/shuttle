@@ -29,7 +29,9 @@ use shuttle_common::deployment;
 use shuttle_service::loader::{build_crate, Loader};
 use toml_edit::Document;
 use tracing::trace;
+use uuid::Uuid;
 
+use crate::args::DeploymentCommand;
 use crate::client::Client;
 use crate::logger::Logger;
 
@@ -54,9 +56,10 @@ impl Shuttle {
         if matches!(
             args.cmd,
             Command::Deploy(..)
+                | Command::Deployment(..)
                 | Command::Delete
                 | Command::Status
-                | Command::Logs
+                | Command::Logs { .. }
                 | Command::Run(..)
         ) {
             self.load_project(&mut args.project_args)?;
@@ -74,7 +77,11 @@ impl Shuttle {
             }
             Command::Init(init_args) => self.init(init_args).await,
             Command::Status => self.status(&client).await,
-            Command::Logs => self.logs(&client).await,
+            Command::Logs { id, follow } => self.logs(&client, id, follow).await,
+            Command::Deployment(DeploymentCommand::List) => self.deployments_list(&client).await,
+            Command::Deployment(DeploymentCommand::Status { id }) => {
+                self.deployment_get(&client, id).await
+            }
             Command::Delete => self.delete(&client).await,
             Command::Auth(auth_args) => self.auth(auth_args, &client).await,
             Command::Login(login_args) => self.login(login_args).await,
@@ -167,18 +174,51 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn logs(&self, client: &Client) -> Result<()> {
-        let summary = client.get_service_summary(self.ctx.project_name()).await?;
+    async fn logs(&self, client: &Client, id: Option<Uuid>, follow: bool) -> Result<()> {
+        let id = if let Some(id) = id {
+            id
+        } else {
+            let summary = client.get_service_summary(self.ctx.project_name()).await?;
 
-        if let Some(deployment) = summary.deployment {
-            let logs = client.get_runtime_logs(&deployment.id).await?;
+            if let Some(deployment) = summary.deployment {
+                deployment.id
+            } else {
+                return Err(anyhow!("could not automatically find a running deployment for '{}'. Try passing a deployment ID manually", self.ctx.project_name()));
+            }
+        };
+
+        if follow {
+            let mut stream = client.get_runtime_logs_ws(&id).await?;
+
+            while let Some(Ok(msg)) = stream.next().await {
+                match msg {
+                    tokio_tungstenite::tungstenite::Message::Text(line) => println!("{line}"),
+                    _ => {}
+                }
+            }
+        } else {
+            let logs = client.get_runtime_logs(&id).await?;
 
             for log in logs.into_iter() {
                 println!("{log}");
             }
-        } else {
-            println!("{} has no running deployments", self.ctx.project_name());
         }
+
+        Ok(())
+    }
+
+    async fn deployments_list(&self, client: &Client) -> Result<()> {
+        let details = client.get_service_details(self.ctx.project_name()).await?;
+
+        println!("{details}");
+
+        Ok(())
+    }
+
+    async fn deployment_get(&self, client: &Client, deployment_id: Uuid) -> Result<()> {
+        let deployment = client.get_deployment_details(&deployment_id).await?;
+
+        println!("{deployment}");
 
         Ok(())
     }

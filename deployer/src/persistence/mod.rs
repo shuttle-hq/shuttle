@@ -230,10 +230,6 @@ impl Persistence {
             .map_err(Into::into)
     }
 
-    async fn insert_log(&self, log: impl Into<Log>) -> Result<()> {
-        insert_log(&self.pool, log).await
-    }
-
     pub(crate) async fn get_deployment_logs(&self, id: &Uuid) -> Result<Vec<Log>> {
         // TODO: stress this a bit
         get_deployment_logs(&self.pool, id).await

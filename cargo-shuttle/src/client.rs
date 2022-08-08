@@ -88,11 +88,7 @@ impl Client {
         deployment_id: &Uuid,
     ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>> {
         let mut ws_url = self.api_url.clone().replace("http", "ws");
-        let _ = write!(
-            ws_url,
-            "/deployments/{}/build-logs-subscribe",
-            deployment_id
-        );
+        let _ = write!(ws_url, "/ws/deployments/{}/logs/build", deployment_id);
 
         let (stream, _) = connect_async(ws_url).await.with_context(|| {
             error!("failed to connect to build logs websocket");

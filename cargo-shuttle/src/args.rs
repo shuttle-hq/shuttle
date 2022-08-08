@@ -7,6 +7,7 @@ use std::{
 
 use clap::Parser;
 use shuttle_common::project::ProjectName;
+use uuid::Uuid;
 
 #[derive(Parser)]
 #[clap(
@@ -48,12 +49,22 @@ pub struct ProjectArgs {
 pub enum Command {
     /// deploy a shuttle service
     Deploy(DeployArgs),
+    /// manage deployments of a shuttle service
+    #[clap(subcommand)]
+    Deployment(DeploymentCommand),
     /// create a new shuttle service
     Init(InitArgs),
     /// view the status of a shuttle service
     Status,
-    /// view the logs of a shuttle service
-    Logs,
+    /// view the logs of a deployment in this shuttle service
+    Logs {
+        /// Deployment ID to get logs for. Defaults to currently running deployment
+        id: Option<Uuid>,
+
+        #[clap(short, long)]
+        /// Follow log output
+        follow: bool,
+    },
     /// delete this shuttle service
     Delete,
     /// create user credentials for the shuttle platform
@@ -62,6 +73,17 @@ pub enum Command {
     Login(LoginArgs),
     /// run a shuttle service locally
     Run(RunArgs),
+}
+
+#[derive(Parser)]
+pub enum DeploymentCommand {
+    /// list all the deployments for a service
+    List,
+    /// view status of a deployment
+    Status {
+        /// ID of deployment to get status for
+        id: Uuid,
+    },
 }
 
 #[derive(Parser)]

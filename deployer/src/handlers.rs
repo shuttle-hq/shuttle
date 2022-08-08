@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 use crate::deployment::{DeploymentManager, Queued};
 use crate::error::{Error, Result};
-use crate::persistence::{Deployment, Log, Persistence, State};
+use crate::persistence::{self, Deployment, Log, Persistence, State};
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -40,6 +40,10 @@ pub fn make_router(
             get(get_build_logs_subscribe),
         )
         .route("/deployments/:id/logs/build", get(get_build_logs))
+        .route(
+            "/ws/deployments/:id/logs/runtime",
+            get(get_runtime_logs_subscribe),
+        )
         .route("/deployments/:id/logs/runtime", get(get_runtime_logs))
         .route("/version", get(get_version))
         .layer(Extension(persistence))
@@ -236,7 +240,7 @@ async fn get_build_logs_subscribe(
 }
 
 async fn build_logs_websocket_handler(mut s: WebSocket, persistence: Persistence, id: Uuid) {
-    let mut log_recv = persistence.get_stream_log_subscriber();
+    let mut log_recv = persistence.get_log_subscriber();
     let backlog = match persistence.get_deployment_logs(&id).await {
         Ok(backlog) => backlog,
         Err(error) => {
@@ -277,8 +281,86 @@ async fn build_logs_websocket_handler(mut s: WebSocket, persistence: Persistence
 
     while let Ok(log) = log_recv.recv().await {
         if log.id == id && log.timestamp > last_timestamp {
-            match (log.state, log.message) {
-                (deployment::State::Building, Some(msg)) => {
+            if let Some(log) = persistence::Log::from(log).into_stream_log() {
+                match (log.state, log.message) {
+                    (deployment::State::Building, Some(msg)) => {
+                        let sent = s.send(ws::Message::Text(msg)).await;
+
+                        // Client disconnected?
+                        if sent.is_err() {
+                            return;
+                        }
+                    }
+                    (deployment::State::Queued, _) | (deployment::State::Built, _) => {}
+                    (deployment::State::Building, None) => {}
+                    _ => break,
+                }
+            }
+        }
+    }
+
+    let _ = s.close().await;
+}
+
+async fn get_runtime_logs_subscribe(
+    Extension(persistence): Extension<Persistence>,
+    Path(id): Path<Uuid>,
+    ws_upgrade: ws::WebSocketUpgrade,
+) -> axum::response::Response {
+    ws_upgrade.on_upgrade(move |s| runtime_logs_websocket_handler(s, persistence, id))
+}
+
+async fn runtime_logs_websocket_handler(mut s: WebSocket, persistence: Persistence, id: Uuid) {
+    let mut log_recv = persistence.get_log_subscriber();
+    let backlog = match persistence.get_deployment_logs(&id).await {
+        Ok(backlog) => backlog,
+        Err(error) => {
+            error!(
+                error = &error as &dyn std::error::Error,
+                "failed to get backlog runtime logs"
+            );
+
+            let _ = s
+                .send(ws::Message::Text("failed to get runtime logs".to_string()))
+                .await;
+            let _ = s.close().await;
+            return;
+        }
+    };
+    let mut last_timestamp = Utc.timestamp(0, 0);
+    let mut last_state = State::Queued;
+
+    for log in backlog.into_iter() {
+        last_state = log.state;
+        match log.state {
+            State::Running => {
+                last_timestamp = log.timestamp;
+                let msg = serde_json::to_string(&shuttle_common::log::Item::from(log))
+                    .expect("to convert log item to json");
+                let sent = s.send(ws::Message::Text(msg)).await;
+
+                // Client disconnected?
+                if sent.is_err() {
+                    return;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if last_state != State::Running {
+        debug!("closing channel after reaching more than just running logs");
+        let _ = s.close().await;
+
+        return;
+    }
+
+    while let Ok(log) = log_recv.recv().await {
+        if log.id == id && log.timestamp > last_timestamp {
+            match log.state {
+                State::Running => {
+                    let msg = serde_json::to_string(&shuttle_common::log::Item::from(log))
+                        .expect("to convert log item to json");
                     let sent = s.send(ws::Message::Text(msg)).await;
 
                     // Client disconnected?
@@ -286,8 +368,7 @@ async fn build_logs_websocket_handler(mut s: WebSocket, persistence: Persistence
                         return;
                     }
                 }
-                (deployment::State::Queued, _) | (deployment::State::Built, _) => {}
-                (deployment::State::Building, None) => {}
+                State::Queued | State::Building | State::Built => {}
                 _ => break,
             }
         }

@@ -9,7 +9,7 @@ use crate::error::Result;
 use std::path::Path;
 
 use serde_json::json;
-use shuttle_common::{log::StreamLog, STATE_MESSAGE};
+use shuttle_common::STATE_MESSAGE;
 use sqlx::migrate::MigrateDatabase;
 use sqlx::sqlite::{Sqlite, SqlitePool};
 use tokio::sync::broadcast::{self, Receiver, Sender};
@@ -29,7 +29,7 @@ const DB_PATH: &str = "deployer.sqlite";
 pub struct Persistence {
     pool: SqlitePool,
     log_send: crossbeam_channel::Sender<deploy_layer::Log>,
-    stream_log_send: Sender<StreamLog>,
+    stream_log_send: Sender<deploy_layer::Log>,
 }
 
 impl Persistence {
@@ -93,18 +93,16 @@ impl Persistence {
         let handle = tokio::spawn(async move {
             while let Ok(log) = log_recv.recv() {
                 if stream_log_send_clone.receiver_count() > 0 {
-                    if let Some(stream_log) = log.to_stream_log() {
-                        stream_log_send_clone
-                            .send(stream_log)
-                            .unwrap_or_else(|error| {
-                                error!(
-                                    error = &error as &dyn std::error::Error,
-                                    "failed to broadcast log"
-                                );
+                    stream_log_send_clone
+                        .send(log.clone())
+                        .unwrap_or_else(|error| {
+                            error!(
+                                error = &error as &dyn std::error::Error,
+                                "failed to broadcast log"
+                            );
 
-                                0
-                            });
-                    }
+                            0
+                        });
                 }
 
                 match log.r#type {
@@ -235,7 +233,7 @@ impl Persistence {
         get_deployment_logs(&self.pool, id).await
     }
 
-    pub fn get_stream_log_subscriber(&self) -> Receiver<StreamLog> {
+    pub fn get_log_subscriber(&self) -> Receiver<deploy_layer::Log> {
         self.stream_log_send.subscribe()
     }
 

@@ -192,7 +192,11 @@ impl Shuttle {
 
             while let Some(Ok(msg)) = stream.next().await {
                 match msg {
-                    tokio_tungstenite::tungstenite::Message::Text(line) => println!("{line}"),
+                    tokio_tungstenite::tungstenite::Message::Text(line) => {
+                        let log_item: shuttle_common::log::Item =
+                            serde_json::from_str(&line).expect("to parse log line");
+                        println!("{log_item}")
+                    }
                     _ => {}
                 }
             }

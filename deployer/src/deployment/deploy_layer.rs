@@ -35,7 +35,7 @@ pub trait LogRecorder: Clone + Send + 'static {
 }
 
 /// An event or state transition log
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Log {
     /// Deployment id
     pub id: Uuid,
@@ -106,6 +106,20 @@ impl From<Log> for persistence::Log {
     }
 }
 
+impl From<Log> for shuttle_common::log::Item {
+    fn from(log: Log) -> Self {
+        Self {
+            id: log.id,
+            timestamp: log.timestamp,
+            state: log.state.into(),
+            level: log.level.into(),
+            file: log.file,
+            line: log.line,
+            fields: log.fields,
+        }
+    }
+}
+
 impl From<Log> for DeploymentState {
     fn from(log: Log) -> Self {
         Self {
@@ -132,7 +146,7 @@ pub fn extract_message(fields: &Value) -> Option<String> {
     None
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum LogType {
     Event,
     State,

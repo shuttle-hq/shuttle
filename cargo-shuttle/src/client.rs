@@ -146,6 +146,21 @@ impl Client {
         self.get(path).await
     }
 
+    pub async fn get_runtime_logs_ws(
+        &self,
+        deployment_id: &Uuid,
+    ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>> {
+        let mut ws_url = self.api_url.clone().replace("http", "ws");
+        let _ = write!(ws_url, "/ws/deployments/{}/logs/runtime", deployment_id);
+
+        let (stream, _) = connect_async(ws_url).await.with_context(|| {
+            error!("failed to connect to runtime logs websocket");
+            "could not connect to runtime logs websocket"
+        })?;
+
+        Ok(stream)
+    }
+
     pub async fn get_deployment_details(
         &self,
         deployment_id: &Uuid,

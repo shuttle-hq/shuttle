@@ -30,6 +30,7 @@ tide = { version = "0.16.0", optional = true }
 tokio = { version = "1.19.2", features = ["rt", "rt-multi-thread"] }
 tower = { version = "0.4.12", features = ["make"], optional = true }
 bincode = "1.2.1"
+serde = { version = "1.0", features = ["derive"] }
 
 # Tide does not have tokio support. So make sure async-std is compatible with tokio
 # https://github.com/http-rs/tide/issues/791

@@ -25,9 +25,10 @@ impl DummyFactory {
     }
 }
 
+// TODO: add tests for mongodb
 #[async_trait]
 impl Factory for DummyFactory {
-    async fn get_sql_connection_string(&mut self, _: database::Type) -> Result<String, Error> {
+    async fn get_db_connection_string(&mut self, _: database::Type) -> Result<String, Error> {
         let uri = if let Some(postgres_instance) = &self.postgres_instance {
             postgres_instance.get_uri()
         } else {

@@ -32,12 +32,14 @@ services:
     image: "${CONTAINER_REGISTRY}/provisioner:${PROVISIONER_TAG}"
     depends_on:
       - db
+      - mongodb
     environment:
       - RUST_LOG=${RUST_LOG}
     command:
       - "--ip=0.0.0.0"
       - "--port=8000"
       - "--shared-pg-uri=postgres://postgres:${POSTGRES_PASSWORD}@db:5432/postgres"
+      - "--shared-mongodb-uri=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@db:27017/admin"
       - "--internal-address=db"
       - "--fqdn=${DB_FQDN}"
   db:
@@ -45,3 +47,9 @@ services:
     restart: always
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+  mongodb:
+    image: mongo:5.0.10
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}

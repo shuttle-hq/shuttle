@@ -24,7 +24,7 @@ macro_rules! aws_engine {
 
                 async fn build(self, factory: &mut dyn Factory, runtime: &Runtime) -> Result<$pool_path, crate::Error> {
                     let connection_string = factory
-                        .get_sql_connection_string(Type::AwsRds(AwsRdsEngine::$struct_ident))
+                        .get_db_connection_string(Type::AwsRds(AwsRdsEngine::$struct_ident))
                         .await?;
 
                     // A sqlx Pool cannot cross runtime boundaries, so make sure to create the Pool on the service end

@@ -21,6 +21,10 @@ pub struct Args {
     #[clap(short, long, env = "PROVISIONER_PG_URI", hide_env_values = true)]
     pub shared_pg_uri: String,
 
+    /// URI to connect to MongoDb for managing shared DB resources
+    #[clap(short, long, env = "PROVISIONER_MONGODB_URI", hide_env_values = true)]
+    pub shared_mongodb_uri: String,
+
     /// Fully qualified domain name this provisioner instance is reachable at
     #[clap(long, env = "PROVISIONER_FQDN", parse(try_from_str = parse_fqdn))]
     pub fqdn: FQDN,

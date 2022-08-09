@@ -26,3 +26,10 @@ impl From<sqlx::Error> for Error {
         Error::Database(e.to_string())
     }
 }
+// TODO: does this have to be implemented manually?
+#[cfg(feature = "mongodb-integration")]
+impl From<mongodb::error::Error> for Error {
+    fn from(e: mongodb::error::Error) -> Self {
+        Error::Database(e.to_string())
+    }
+}

@@ -7,6 +7,8 @@ use rocket::request::FromParam;
 use serde::de::Error as DeError;
 use serde::{Deserialize, Deserializer, Serialize};
 
+use once_cell::sync::OnceCell;
+
 /// Project names should conform to valid Host segments (or labels)
 /// as per [IETF RFC 1123](https://datatracker.ietf.org/doc/html/rfc1123).
 /// Initially we'll implement a strict subset of the IETF RFC 1123, concretely:
@@ -57,12 +59,12 @@ impl ProjectName {
 
         fn is_profanity_free_and_not_reserved(hostname: &str) -> bool {
 
-            let mut reserved_words = HashSet::new();
-            // Reserved words can be easily added here. 
-            reserved_words.insert("shuttle.rs".to_string());
+            static INSTANCE: OnceCell<HashSet<String>> = OnceCell::new();
+            INSTANCE.get_or_init( ||
+                HashSet::from(["Shuttle.rs".to_string()])
+            );
 
-
-            let censor = Censor::Standard + Censor::Sex + Censor::Custom(reserved_words);
+            let censor = Censor::Standard + Censor::Sex + Censor::Custom(INSTANCE.get().expect("Reserved words not set").clone());
             return !censor.check(hostname);
         }
 
@@ -144,7 +146,7 @@ pub mod tests {
             ".invalid",
             "invalid.name",
             "invalid.name.",
-            "test-fuck-fuck",
+            "test-crap-fuck",
             "shuttle.rs"
         ] {
             let project_name = ProjectName::from_str(hostname);

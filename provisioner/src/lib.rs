@@ -205,7 +205,7 @@ impl MyProvisioner {
 
                     let change_password = doc! {
                         "updateUser": &username,
-                        "pwd": &password
+                        "pwd": &password,
                     };
                     db.run_command(change_password, None).await?;
 

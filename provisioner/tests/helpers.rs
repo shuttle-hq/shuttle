@@ -1,15 +1,18 @@
+use portpicker::pick_unused_port;
 use std::{
     process::Command,
     thread::sleep,
     time::{Duration, SystemTime},
 };
 
-use portpicker::pick_unused_port;
+const PG_CONTAINER_NAME: &'static str = "shuttle_provisioner_test_pg";
+const MONGODB_CONTAINER_NAME: &'static str = "shuttle_provisioner_test_mongodb";
 
 pub struct DockerInstance {
     pub container_name: &'static str,
     pub uri: String,
 }
+
 struct Config<'a> {
     container_name: &'a str,
     image: &'a str,
@@ -100,15 +103,15 @@ impl From<DbType> for Config<'_> {
     fn from(db_type: DbType) -> Self {
         match db_type {
             DbType::Postgres => Config {
-                container_name: "shuttle_provisioner_pg",
+                container_name: PG_CONTAINER_NAME,
                 image: "postgres:11",
                 engine: "postgres",
                 port: "5432",
                 env: vec!["POSTGRES_PASSWORD=password"],
-                is_ready_cmd: vec!["exec", "shuttle_provisioner_pg", "pg_isready"],
+                is_ready_cmd: vec!["exec", PG_CONTAINER_NAME, "pg_isready"],
             },
             DbType::MongoDb => Config {
-                container_name: "shuttle_provisioner_mongodb",
+                container_name: MONGODB_CONTAINER_NAME,
                 image: "mongo:5.0.10",
                 engine: "mongodb",
                 port: "27017",
@@ -118,7 +121,7 @@ impl From<DbType> for Config<'_> {
                 ],
                 is_ready_cmd: vec![
                     "exec",
-                    "shuttle_provisioner_mongodb",
+                    MONGODB_CONTAINER_NAME,
                     "mongosh",
                     "--quiet",
                     "--eval",
@@ -129,11 +132,12 @@ impl From<DbType> for Config<'_> {
     }
 }
 
+/// Execute queries in `psql` via `docker exec`
 pub fn exec_psql(query: &str) -> String {
     let output = Command::new("docker")
         .args([
             "exec",
-            "shuttle_provisioner_pg",
+            PG_CONTAINER_NAME,
             "psql",
             "--username",
             "postgres",
@@ -151,11 +155,13 @@ pub fn exec_psql(query: &str) -> String {
     String::from_utf8(output).unwrap().trim().to_string()
 }
 
+/// Execute commands in `mongosh` via `docker exec` against the provided `database_name`
+/// or against the `admin` database by default
 pub fn exec_mongosh(command: &str, database_name: Option<&str>) -> String {
     let output = Command::new("docker")
         .args([
             "exec",
-            "shuttle_provisioner_mongodb",
+            MONGODB_CONTAINER_NAME,
             "mongosh",
             "--quiet",
             "--username",

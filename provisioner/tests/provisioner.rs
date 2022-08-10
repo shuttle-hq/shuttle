@@ -1,14 +1,13 @@
 mod helpers;
 use ctor::dtor;
 use helpers::{exec_mongosh, exec_psql, DbType, DockerInstance};
-use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
+use serde_json::Value;
 use shuttle_proto::provisioner::shared;
 use shuttle_provisioner::MyProvisioner;
 
-lazy_static! {
-    static ref PG: DockerInstance = DockerInstance::new(DbType::Postgres);
-    static ref MONGODB: DockerInstance = DockerInstance::new(DbType::MongoDb);
-}
+static PG: Lazy<DockerInstance> = Lazy::new(|| DockerInstance::new(DbType::Postgres));
+static MONGODB: Lazy<DockerInstance> = Lazy::new(|| DockerInstance::new(DbType::MongoDb));
 
 #[dtor]
 fn cleanup() {
@@ -156,9 +155,8 @@ async fn shared_db_filled() {
     );
 }
 
-// TODO: more tests
 #[tokio::test]
-async fn request_shared_mongodb_with_private_role() {
+async fn shared_mongodb_role_does_not_exist() {
     let provisioner = MyProvisioner::new(
         &PG.uri,
         &MONGODB.uri,
@@ -169,20 +167,70 @@ async fn request_shared_mongodb_with_private_role() {
     .await
     .unwrap();
 
-    assert!(!exec_mongosh("'show dbs'", None).contains("mongodb-provisioner-test"));
+    let user = exec_mongosh("db.getUser(\"user-not_exist\")", Some("mongodb-not_exist"));
+    assert_eq!(user, "null");
 
     provisioner
-        .request_shared_db("provisioner-test", shared::Engine::Mongodb(String::new()))
+        .request_shared_db("not_exist", shared::Engine::Mongodb(String::new()))
         .await
         .unwrap();
 
-    // `show dbs` command doesn't show DBs without collections, so instead we run the
-    // `getUser` command in the new database
-    let show_users = exec_mongosh(
-        "db.getUser(\"user-provisioner-test\")",
-        Some("mongodb-provisioner-test"),
+    let user = exec_mongosh("db.getUser(\"user-not_exist\")", Some("mongodb-not_exist"));
+    assert!(user.contains("mongodb-not_exist.user-not_exist"));
+}
+
+#[tokio::test]
+async fn shared_mongodb_role_does_exist() {
+    let provisioner = MyProvisioner::new(
+        &PG.uri,
+        &MONGODB.uri,
+        "fqdn".to_string(),
+        "pg".to_string(),
+        "mongodb".to_string(),
+    )
+    .await
+    .unwrap();
+
+    exec_mongosh(
+        r#"db.createUser({ 
+            user: "user-exist", 
+            pwd: "secure_password", 
+            roles: [
+                { role: "readWrite", db: "mongodb-exist" }
+            ]
+        })"#,
+        Some("mongodb-exist"),
     );
 
-    assert!(show_users.contains("user-provisioner-test"));
-    assert!(show_users.contains("role: 'readWrite', db: 'mongodb-provisioner-test'"));
+    let user: Value = serde_json::from_str(&exec_mongosh(
+        r#"EJSON.stringify(db.getUser("user-exist", 
+            { showCredentials: true }
+        ))"#,
+        Some("mongodb-exist"),
+    ))
+    .unwrap();
+
+    // Extract the user's stored password hash key from the `getUser` output
+    let user_stored_key = &user["credentials"]["SCRAM-SHA-256"]["storedKey"];
+    assert_eq!(user["_id"], "mongodb-exist.user-exist");
+
+    provisioner
+        .request_shared_db("exist", shared::Engine::Mongodb(String::new()))
+        .await
+        .unwrap();
+
+    let user: Value = serde_json::from_str(&exec_mongosh(
+        r#"EJSON.stringify(db.getUser("user-exist", 
+            { showCredentials: true }
+        ))"#,
+        Some("mongodb-exist"),
+    ))
+    .unwrap();
+
+    // Make sure it's the same user
+    assert_eq!(user["_id"], "mongodb-exist.user-exist");
+
+    // Make sure password got cycled by comparing password hash keys
+    let user_cycled_key = &user["credentials"]["SCRAM-SHA-256"]["storedKey"];
+    assert_ne!(user_stored_key, user_cycled_key);
 }

@@ -42,10 +42,7 @@ impl std::fmt::Display for ProjectName {
 impl ProjectName {
     pub fn is_valid(hostname: &str) -> bool {
         fn is_valid_char(byte: u8) -> bool {
-            match byte {
-                b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'_' => true,
-                _ => false,
-            }
+            matches!(byte, b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'_')
         }
 
         let separators = ['-', '_'];

@@ -29,7 +29,8 @@ pub struct MyProvisioner {
     rds_client: aws_sdk_rds::Client,
     mongodb_client: mongodb::Client,
     fqdn: String,
-    internal_address: String,
+    internal_pg_address: String,
+    internal_mongodb_address: String,
 }
 
 impl MyProvisioner {
@@ -37,7 +38,8 @@ impl MyProvisioner {
         shared_pg_uri: &str,
         shared_mongodb_uri: &str,
         fqdn: String,
-        internal_address: String,
+        internal_pg_address: String,
+        internal_mongodb_address: String,
     ) -> Result<Self, Error> {
         let pool = PgPoolOptions::new()
             .min_connections(4)
@@ -66,7 +68,8 @@ impl MyProvisioner {
             rds_client,
             mongodb_client,
             fqdn,
-            internal_address,
+            internal_pg_address,
+            internal_mongodb_address,
         })
     }
 
@@ -85,7 +88,7 @@ impl MyProvisioner {
                     username,
                     password,
                     database_name,
-                    address_private: self.internal_address.clone(),
+                    address_private: self.internal_pg_address.clone(),
                     address_public: self.fqdn.clone(),
                     port: "5432".to_string(),
                 })
@@ -100,7 +103,7 @@ impl MyProvisioner {
                     username,
                     password,
                     database_name,
-                    address_private: self.internal_address.clone(),
+                    address_private: self.internal_mongodb_address.clone(),
                     address_public: self.fqdn.clone(),
                     port: "27017".to_string(),
                 })
@@ -175,6 +178,7 @@ impl MyProvisioner {
         let username = format!("user-{project_name}");
         let password = generate_password();
 
+        // TODO: is this fallible? test this
         // Get a handle to the DB, create it if it doesn't exist
         let db = self.mongodb_client.database(database_name);
 

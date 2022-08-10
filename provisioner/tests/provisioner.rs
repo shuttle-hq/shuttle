@@ -22,7 +22,8 @@ async fn shared_db_role_does_not_exist() {
         &PG.uri,
         &MONGODB.uri,
         "fqdn".to_string(),
-        "internal".to_string(),
+        "pg".to_string(),
+        "mongodb".to_string(),
     )
     .await
     .unwrap();
@@ -49,7 +50,8 @@ async fn shared_db_role_does_exist() {
         &PG.uri,
         &MONGODB.uri,
         "fqdn".to_string(),
-        "internal".to_string(),
+        "pg".to_string(),
+        "mongodb".to_string(),
     )
     .await
     .unwrap();
@@ -81,7 +83,8 @@ async fn injection_safe() {
         &PG.uri,
         &MONGODB.uri,
         "fqdn".to_string(),
-        "internal".to_string(),
+        "pg".to_string(),
+        "mongodb".to_string(),
     )
     .await
     .unwrap();
@@ -101,7 +104,8 @@ async fn shared_db_missing() {
         &PG.uri,
         &MONGODB.uri,
         "fqdn".to_string(),
-        "internal".to_string(),
+        "pg".to_string(),
+        "mongodb".to_string(),
     )
     .await
     .unwrap();
@@ -128,7 +132,8 @@ async fn shared_db_filled() {
         &PG.uri,
         &MONGODB.uri,
         "fqdn".to_string(),
-        "internal".to_string(),
+        "pg".to_string(),
+        "mongodb".to_string(),
     )
     .await
     .unwrap();
@@ -158,7 +163,8 @@ async fn request_shared_mongodb_with_private_role() {
         &PG.uri,
         &MONGODB.uri,
         "fqdn".to_string(),
-        "internal".to_string(),
+        "pg".to_string(),
+        "mongodb".to_string(),
     )
     .await
     .unwrap();

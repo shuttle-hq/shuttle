@@ -14,7 +14,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         shared_pg_uri,
         shared_mongodb_uri,
         fqdn,
-        internal_address,
+        internal_pg_address,
+        internal_mongodb_address,
     } = Args::parse();
     let addr = SocketAddr::new(ip, port);
 
@@ -22,7 +23,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         &shared_pg_uri,
         &shared_mongodb_uri,
         fqdn.to_string(),
-        internal_address,
+        internal_pg_address,
+        internal_mongodb_address,
     )
     .await
     .unwrap();

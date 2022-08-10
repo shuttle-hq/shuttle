@@ -313,16 +313,6 @@ impl Shuttle {
 
             println!("{service}");
 
-            let key = self.ctx.api_key().unwrap();
-            client::secrets(
-                self.ctx.api_url(),
-                &key,
-                self.ctx.project_name(),
-                self.ctx.secrets(),
-            )
-            .await
-            .context("failed to set up secrets for deployment")?;
-
             Ok(match new_deployment.state {
                 deployment::State::Crashed => CommandOutcome::DeploymentFailure,
                 _ => CommandOutcome::Ok,

@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fmt::Write;
 use std::fs::File;
 use std::io::Read;
@@ -239,35 +238,4 @@ impl Client {
             .with(RetryTransientMiddleware::new_with_policy(retry_policy))
             .build()
     }
-}
-
-fn get_retry_client() -> ClientWithMiddleware {
-    let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
-    ClientBuilder::new(reqwest::Client::new())
-        .with(RetryTransientMiddleware::new_with_policy(retry_policy))
-        .build()
-}
-
-pub(crate) async fn secrets(
-    mut api_url: ApiUrl,
-    api_key: &ApiKey,
-    project: &ProjectName,
-    secrets: HashMap<String, String>,
-) -> Result<()> {
-    if secrets.is_empty() {
-        return Ok(());
-    }
-
-    let _ = write!(api_url, "/projects/{}/secrets/", project.as_str());
-
-    let client = get_retry_client();
-
-    client
-        .post(api_url)
-        .body(serde_json::to_string(&secrets)?)
-        .basic_auth(api_key.clone(), Some(""))
-        .send()
-        .await
-        .context("failed to send deployment's secrets to the Shuttle server")
-        .map(|_| ())
 }

@@ -10,9 +10,9 @@ publish = false
 aws-config = "0.12"
 aws-sdk-rds = "0.12"
 aws-smithy-types = "0.42"
-mongodb = "2.3.0"
 clap = { version = "3.1.18", features = ["derive", "env"] }
 fqdn = "0.1.9"
+mongodb = "2.3.0"
 prost = "0.10.4"
 rand = "0.8.5"
 sqlx = { version = "0.5.13", features = ["postgres", "runtime-tokio-native-tls"] }

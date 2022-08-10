@@ -268,10 +268,7 @@ impl Shuttle {
                 .ok_or_else(|| anyhow!("Expected string, found {}", item))
         }
 
-        fn get_dependency_version_string<'a>(
-            document: &'a Document,
-            dependency_name: &str,
-        ) -> Result<&'a str> {
+        fn get_dependency_version_string<'a>(document: &'a Document) -> Result<&'a str> {
             let entry = document
                 .get("dependencies")
                 .ok_or_else(|| anyhow!("Missing dependencies section in Cargo.toml"))?
@@ -290,13 +287,12 @@ impl Shuttle {
                 }
             } else {
                 Err(anyhow!(
-                    "Missing {} dependency in Cargo.toml",
-                    dependency_name
+                    "Missing 'shuttle-service' dependency in Cargo.toml"
                 ))
             }
         }
 
-        let version_string = get_dependency_version_string(&cargo_doc, "shuttle-service")?;
+        let version_string = get_dependency_version_string(&cargo_doc)?;
 
         let service_semver = match Version::parse(version_string) {
             Ok(version) => version,
@@ -390,10 +386,7 @@ pub enum CommandOutcome {
 mod tests {
     use crate::args::ProjectArgs;
     use crate::Shuttle;
-    use semver::Version;
     use std::path::PathBuf;
-    use std::str::FromStr;
-    use toml_edit::Document;
 
     fn path_from_workspace_root(path: &str) -> PathBuf {
         PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
@@ -431,32 +424,62 @@ mod tests {
 
     mod check_lib_version {
         use super::*;
+        use semver::Version;
+        use std::str::FromStr;
+        use toml_edit::Document;
 
         #[test]
         fn invalid_manifests() {
-            Shuttle::check_lib_version(Document::new(), &Version::parse("0.4.1").unwrap())
-                .unwrap_err();
+            assert_eq!(
+                Shuttle::check_lib_version(Document::new(), &Version::parse("0.4.1").unwrap())
+                    .unwrap_err()
+                    .to_string(),
+                "Missing dependencies section in Cargo.toml"
+            );
 
-            Shuttle::check_lib_version(
-                Document::from_str("[dependencies]\nnot-shuttle-service = \"0.4.1\"").unwrap(),
-                &Version::parse("0.4.1").unwrap(),
-            )
-            .unwrap_err();
-
-            Shuttle::check_lib_version(
-                Document::from_str("[not-dependencies]\nshuttle-service = \"0.4.1\"").unwrap(),
-                &Version::parse("0.4.1").unwrap(),
-            )
-            .unwrap_err();
-
-            Shuttle::check_lib_version(
-                Document::from_str(
-                    "[dependencies]\nshuttle-service = { not-version = \"0.4.1\" } ",
+            assert_eq!(
+                Shuttle::check_lib_version(
+                    Document::from_str("[not-dependencies]\nshuttle-service = \"0.4.1\"").unwrap(),
+                    &Version::parse("0.4.1").unwrap(),
                 )
-                .unwrap(),
-                &Version::parse("0.4.1").unwrap(),
-            )
-            .unwrap_err();
+                .unwrap_err()
+                .to_string(),
+                "Missing dependencies section in Cargo.toml"
+            );
+
+            assert_eq!(
+                Shuttle::check_lib_version(
+                    Document::from_str("[dependencies]\nnot-shuttle-service = \"0.4.1\"").unwrap(),
+                    &Version::parse("0.4.1").unwrap(),
+                )
+                .unwrap_err()
+                .to_string(),
+                "Missing 'shuttle-service' dependency in Cargo.toml"
+            );
+
+            assert_eq!(
+                Shuttle::check_lib_version(
+                    Document::from_str(
+                        "[dependencies]\nshuttle-service = { not-version = \"0.4.1\" } ",
+                    )
+                    .unwrap(),
+                    &Version::parse("0.4.1").unwrap(),
+                )
+                .unwrap_err()
+                .to_string(),
+                "Missing 'version' key"
+            );
+
+            assert_eq!(
+                Shuttle::check_lib_version(
+                    Document::from_str("[dependencies]\nshuttle-service = { version = 100 } ",)
+                        .unwrap(),
+                    &Version::parse("0.4.1").unwrap(),
+                )
+                .unwrap_err()
+                .to_string(),
+                "Expected string, found 100"
+            );
         }
 
         #[test]
@@ -481,21 +504,27 @@ mod tests {
 
         #[test]
         fn invalid_versions() {
-            Shuttle::check_lib_version(
+            assert_eq!(Shuttle::check_lib_version(
+                Document::from_str("[dependencies]\nshuttle-service = \"red.green.blue\"").unwrap(),
+                &Version::parse("0.4.1").unwrap(),
+            )
+            .unwrap_err().to_string(), "Your shuttle-service version (red.green.blue) is invalid and should follow the MAJOR.MINOR.PATCH semantic versioning format. Error given: \"unexpected character 'r' while parsing major version number\"");
+
+            assert_eq!(Shuttle::check_lib_version(
                 Document::from_str("[dependencies]\nshuttle-service = \"0.3.1\"").unwrap(),
                 &Version::parse("0.4.1").unwrap(),
+            )
+            .unwrap_err().to_string(), "Your shuttle_service version is outdated. Update your shuttle_service version to 0.4.1 and try to deploy again");
+
+            Shuttle::check_lib_version(
+                Document::from_str("[dependencies]\nshuttle-service = \"0.3.1\"").unwrap(),
+                &Version::parse("0.4").unwrap(),
             )
             .unwrap_err();
 
             Shuttle::check_lib_version(
                 Document::from_str("[dependencies]\nshuttle-service = \"0.3.1\"").unwrap(),
                 &Version::parse("1").unwrap(),
-            )
-            .unwrap_err();
-
-            Shuttle::check_lib_version(
-                Document::from_str("[dependencies]\nshuttle-service = \"0.3.1\"").unwrap(),
-                &Version::parse("0.4").unwrap(),
             )
             .unwrap_err();
         }
@@ -522,35 +551,40 @@ mod tests {
             )
             .unwrap();
 
-            let version_four_point_one = Version::parse("0.4.3").unwrap();
+            let version_four_point_three = Version::parse("0.4.3").unwrap();
 
             Shuttle::check_lib_version(
                 Document::from_str("[dependencies]\nshuttle-service = \"0.4\"").unwrap(),
-                &version_four_point_one,
+                &version_four_point_three,
             )
             .unwrap();
 
             Shuttle::check_lib_version(
                 Document::from_str("[dependencies]\nshuttle-service = \"0.4.1\"").unwrap(),
-                &version_four_point_one,
+                &version_four_point_three,
             )
             .unwrap();
 
+            // Here the following checks pass because the logic checks whether the client version is greater than
+            // or equal to the server version (ignoring patch versions). It might be a error in the future if
+            // running a newer client on a older server is bad (and the logic changes to include a less than) but
+            // ignoring that for now.
+
             Shuttle::check_lib_version(
                 Document::from_str("[dependencies]\nshuttle-service = \"0.4.5\"").unwrap(),
-                &version_four_point_one,
+                &version_four_point_three,
             )
             .unwrap();
 
             Shuttle::check_lib_version(
                 Document::from_str("[dependencies]\nshuttle-service = \"0.5\"").unwrap(),
-                &version_four_point_one,
+                &version_four_point_three,
             )
             .unwrap();
 
             Shuttle::check_lib_version(
                 Document::from_str("[dependencies]\nshuttle-service = \"2\"").unwrap(),
-                &version_four_point_one,
+                &version_four_point_three,
             )
             .unwrap();
         }

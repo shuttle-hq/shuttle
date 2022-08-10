@@ -1,7 +1,7 @@
+use std::collections::HashSet;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
-use std::collections::HashSet;
 
 use rocket::request::FromParam;
 use serde::de::Error as DeError;
@@ -17,7 +17,7 @@ use once_cell::sync::OnceCell;
 /// - It is not empty.
 /// - It does not contain profanity.
 /// - It is not a reserved word.
-/// 
+///
 use censor::Censor;
 
 #[derive(Clone, Serialize, Debug, Eq, PartialEq)]
@@ -49,7 +49,6 @@ impl std::fmt::Display for ProjectName {
 
 impl ProjectName {
     pub fn is_valid(hostname: &str) -> bool {
-
         fn is_valid_char(byte: u8) -> bool {
             (b'a'..=b'z').contains(&byte)
                 || (b'A'..=b'Z').contains(&byte)
@@ -58,17 +57,18 @@ impl ProjectName {
         }
 
         fn is_profanity_free_and_not_reserved(hostname: &str) -> bool {
-
             static INSTANCE: OnceCell<HashSet<String>> = OnceCell::new();
-            INSTANCE.get_or_init( ||
-                HashSet::from(["Shuttle.rs".to_string()])
-            );
+            INSTANCE.get_or_init(|| HashSet::from(["Shuttle.rs".to_string()]));
 
-            let censor = Censor::Standard + Censor::Sex + Censor::Custom(INSTANCE.get().expect("Reserved words not set").clone());
+            let censor = Censor::Standard
+                + Censor::Sex
+                + Censor::Custom(INSTANCE.get().expect("Reserved words not set").clone());
             return !censor.check(hostname);
         }
 
-        !(hostname.bytes().any(|byte| !is_valid_char(byte) | !is_profanity_free_and_not_reserved(hostname))
+        !(hostname
+            .bytes()
+            .any(|byte| !is_valid_char(byte) | !is_profanity_free_and_not_reserved(hostname))
             || hostname.ends_with('-')
             || hostname.starts_with('-')
             || hostname.is_empty())
@@ -147,7 +147,7 @@ pub mod tests {
             "invalid.name",
             "invalid.name.",
             "test-crap-fuck",
-            "shuttle.rs"
+            "shuttle.rs",
         ] {
             let project_name = ProjectName::from_str(hostname);
             assert!(project_name.is_err(), "{:?} was ok", hostname);

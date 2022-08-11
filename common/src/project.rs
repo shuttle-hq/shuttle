@@ -63,12 +63,11 @@ impl ProjectName {
             let censor = Censor::Standard
                 + Censor::Sex
                 + Censor::Custom(INSTANCE.get().expect("Reserved words not set").clone());
-            return !censor.check(hostname);
+            !censor.check(hostname)
         }
 
-        !(hostname
-            .bytes()
-            .any(|byte| !is_valid_char(byte) | !is_profanity_free_and_not_reserved(hostname))
+        !(hostname.bytes().any(|byte| !is_valid_char(byte))
+            || !is_profanity_free_and_not_reserved(hostname)
             || hostname.ends_with('-')
             || hostname.starts_with('-')
             || hostname.is_empty())

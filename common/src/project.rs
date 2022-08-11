@@ -160,7 +160,7 @@ pub mod tests {
             "__dunder_like__",
             "__invalid",
             "invalid__",
-            "test-crap-fuck",
+            "test-crap-crap",
             "shuttle.rs",
         ] {
             let project_name = ProjectName::from_str(hostname);

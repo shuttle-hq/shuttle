@@ -9,8 +9,8 @@ use serde::{Deserialize, Deserializer, Serialize};
 /// Project names should conform to valid Host segments (or labels)
 /// as per [IETF RFC 1123](https://datatracker.ietf.org/doc/html/rfc1123).
 /// Initially we'll implement a strict subset of the IETF RFC 1123, concretely:
-/// - It does not start or end with `-`.
-/// - It does not contain any characters outside of the alphanumeric range, except for `-`.
+/// - It does not start or end with `-` or `_`.
+/// - It does not contain any characters outside of the alphanumeric range, except for `-` or '_'.
 /// - It is not empty.
 #[derive(Clone, Serialize, Debug, Eq, PartialEq)]
 pub struct ProjectName(String);
@@ -42,15 +42,14 @@ impl std::fmt::Display for ProjectName {
 impl ProjectName {
     pub fn is_valid(hostname: &str) -> bool {
         fn is_valid_char(byte: u8) -> bool {
-            (b'a'..=b'z').contains(&byte)
-                || (b'A'..=b'Z').contains(&byte)
-                || (b'0'..=b'9').contains(&byte)
-                || byte == b'-'
+            matches!(byte, b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'_')
         }
 
+        let separators = ['-', '_'];
+
         !(hostname.bytes().any(|byte| !is_valid_char(byte))
-            || hostname.ends_with('-')
-            || hostname.starts_with('-')
+            || hostname.ends_with(separators)
+            || hostname.starts_with(separators)
             || hostname.is_empty())
     }
 
@@ -88,8 +87,8 @@ impl Display for ProjectNameError {
                 f,
                 r#"
 `{}` is an invalid project name. project name must
-1. not start or end with `-`.
-2. not contain any characters outside of the alphanumeric range, except for `-`.
+1. start and end with alphanumeric characters.
+2. only contain characters inside of the alphanumeric range, except for `-`, or `_`.
 3. not be empty."#,
                 name
             ),
@@ -107,7 +106,20 @@ pub mod tests {
 
     #[test]
     fn valid_hostnames() {
-        for hostname in ["VaLiD-HoStNaMe", "50-name", "235235", "VaLid", "123"] {
+        for hostname in [
+            "VaLiD-HoStNaMe",
+            "50-name",
+            "235235",
+            "VaLid",
+            "123",
+            "s________e",
+            "snake_case",
+            "kebab-case",
+            "lowercase",
+            "UPPERCASE",
+            "CamelCase",
+            "pascalCase",
+        ] {
             let project_name = ProjectName::from_str(hostname);
             assert!(project_name.is_ok(), "{:?} was err", hostname);
         }
@@ -124,6 +136,9 @@ pub mod tests {
             ".invalid",
             "invalid.name",
             "invalid.name.",
+            "__dunder_like__",
+            "__invalid",
+            "invalid__",
         ] {
             let project_name = ProjectName::from_str(hostname);
             assert!(project_name.is_err(), "{:?} was ok", hostname);

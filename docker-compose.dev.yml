@@ -37,7 +37,6 @@ services:
         crate: shuttle-api
     image: "${CONTAINER_REGISTRY}/api:dev"
 
-  # TODO: add health check for mongodb here
   provisioner:
     entrypoint:
       - /bin/bash

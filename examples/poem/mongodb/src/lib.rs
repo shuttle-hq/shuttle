@@ -6,17 +6,29 @@ use poem::{
     get, handler,
     middleware::AddData,
     post,
-    web::{Data, Json, Path},
-    EndpointExt, Result, Route,
+    web::{Data, Json},
+    EndpointExt, FromRequest, Request, RequestBody, Result, Route,
 };
 use serde::{Deserialize, Serialize};
 
+#[derive(Deserialize)]
+struct ObjectIdGuard(ObjectId);
+
+#[poem::async_trait]
+impl<'a> FromRequest<'a> for ObjectIdGuard {
+    async fn from_request(req: &'a Request, _body: &mut RequestBody) -> Result<Self> {
+        let id = req.path_params::<String>()?;
+        let obj_id = ObjectId::parse_str(id).map_err(BadRequest)?;
+        Ok(ObjectIdGuard(obj_id))
+    }
+}
+
 #[handler]
 async fn retrieve(
-    Path(id): Path<String>,
+    id: ObjectIdGuard,
     collection: Data<&Collection<Todo>>,
 ) -> Result<Json<serde_json::Value>> {
-    let filter = doc! {"_id": ObjectId::parse_str(id).map_err(BadRequest)?};
+    let filter = doc! {"_id": id.0};
     let todo = collection
         .find_one(filter, None)
         .await

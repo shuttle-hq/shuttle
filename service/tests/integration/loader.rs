@@ -25,7 +25,6 @@ impl DummyFactory {
     }
 }
 
-// TODO: add tests for mongodb
 #[async_trait]
 impl Factory for DummyFactory {
     async fn get_db_connection_string(&mut self, _: database::Type) -> Result<String, Error> {

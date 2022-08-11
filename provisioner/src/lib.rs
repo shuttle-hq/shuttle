@@ -178,7 +178,6 @@ impl MyProvisioner {
         let username = format!("user-{project_name}");
         let password = generate_password();
 
-        // TODO: is this fallible? test this
         // Get a handle to the DB, create it if it doesn't exist
         let db = self.mongodb_client.database(database_name);
 

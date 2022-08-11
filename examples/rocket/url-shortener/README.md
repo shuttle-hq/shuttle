@@ -34,10 +34,10 @@ To deploy this app, check out the repository locally
 $ git clone https://github.com/getsynth/shuttle.git
 ```
 
-navigate to `examples/url-shortener`
+navigate to `examples/rocket/url-shortener`
 
 ```bash
-$ cd examples/url-shortener
+$ cd examples/rocket/url-shortener
 ```
 
 install shuttle

@@ -58,7 +58,7 @@ fn postgres_poem() {
 
 #[test]
 fn mongodb_poem() {
-    let client = helpers::Services::new_docker("mongo", Color::Green);
+    let client = helpers::Services::new_docker("mongo (poem)", Color::Green);
     client.deploy("poem/mongodb");
 
     // post todo and get its generated objectId

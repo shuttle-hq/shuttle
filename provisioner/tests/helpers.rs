@@ -5,8 +5,8 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-const PG_CONTAINER_NAME: &'static str = "shuttle_provisioner_test_pg";
-const MONGODB_CONTAINER_NAME: &'static str = "shuttle_provisioner_test_mongodb";
+const PG_CONTAINER_NAME: &str = "shuttle_provisioner_test_pg";
+const MONGODB_CONTAINER_NAME: &str = "shuttle_provisioner_test_mongodb";
 
 pub struct DockerInstance {
     pub container_name: &'static str,
@@ -41,18 +41,11 @@ impl DockerInstance {
         let host_port = pick_unused_port().unwrap();
         let port_binding = format!("{}:{}", host_port, port);
 
-        let mut args = vec![
-            "run",
-            "--rm",
-            "--name",
-            &container_name,
-            "-p",
-            &port_binding,
-        ];
+        let mut args = vec!["run", "--rm", "--name", container_name, "-p", &port_binding];
 
         args.extend(env.iter().flat_map(|e| ["-e", e]));
 
-        args.push(&image);
+        args.push(image);
 
         Command::new("docker").args(args).spawn().unwrap();
 
@@ -89,11 +82,11 @@ impl DockerInstance {
 
     pub fn cleanup(&self) {
         Command::new("docker")
-            .args(["stop", &self.container_name])
+            .args(["stop", self.container_name])
             .output()
             .expect("failed to stop provisioner test DB container");
         Command::new("docker")
-            .args(["rm", &self.container_name])
+            .args(["rm", self.container_name])
             .output()
             .expect("failed to remove provisioner test DB container");
     }

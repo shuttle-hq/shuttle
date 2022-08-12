@@ -16,7 +16,7 @@ message DatabaseRequest {
 message Shared {
   oneof engine {
     string postgres = 1;
-    string mongodb = 2;
+    string mongodb = 50;
   }
 }
 

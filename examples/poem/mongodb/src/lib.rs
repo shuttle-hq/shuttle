@@ -11,7 +11,6 @@ use poem::{
 };
 use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize)]
 struct ObjectIdGuard(ObjectId);
 
 #[poem::async_trait]
@@ -25,10 +24,10 @@ impl<'a> FromRequest<'a> for ObjectIdGuard {
 
 #[handler]
 async fn retrieve(
-    id: ObjectIdGuard,
+    ObjectIdGuard(id): ObjectIdGuard,
     collection: Data<&Collection<Todo>>,
 ) -> Result<Json<serde_json::Value>> {
-    let filter = doc! {"_id": id.0};
+    let filter = doc! {"_id": id};
     let todo = collection
         .find_one(filter, None)
         .await

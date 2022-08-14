@@ -59,6 +59,7 @@ impl ProjectName {
 
             let censor = Censor::Standard
                 + Censor::Sex
+                + Censor::Zealous
                 + Censor::Custom(INSTANCE.get().expect("Reserved words not set").clone());
             !censor.check(hostname)
         }

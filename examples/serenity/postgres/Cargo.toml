@@ -1,0 +1,10 @@
+[package]
+name = "serenity-postgres"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = "1.0"
+serenity = { version = "0.11.5", default-features = false, features = ["client", "gateway", "rustls_backend", "model"] }
+shuttle-service = { version = "0.4.1", features = ["sqlx-postgres", "bot-serenity"] }
+sqlx = { version = "0.5", features = ["runtime-tokio-native-tls", "postgres"] }

@@ -35,7 +35,7 @@ jobs:
   platform_tests:
     strategy:
       matrix:
-        crate: ["shuttle-provisioner", "shuttle-api", "cargo-shuttle"]
+        crate: ["shuttle-provisioner", "shuttle-api", "cargo-shuttle", "shuttle-common"]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2

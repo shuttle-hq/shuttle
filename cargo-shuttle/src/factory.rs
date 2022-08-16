@@ -156,6 +156,10 @@ impl Factory for LocalFactory {
 
         Ok(conn_str)
     }
+
+    fn get_project_name(&self) -> ProjectName {
+        self.project.clone()
+    }
 }
 
 impl LocalFactory {

@@ -27,10 +27,16 @@ impl ShuttleFactory {
     pub(crate) fn into_database_info(self) -> Option<DatabaseReadyInfo> {
         self.info
     }
+
 }
 
 #[async_trait]
 impl Factory for ShuttleFactory {
+
+    fn get_project_name(&self) -> ProjectName {
+        self.project_name.clone()
+    }
+
     async fn get_sql_connection_string(
         &mut self,
         db_type: Type,
@@ -60,4 +66,7 @@ impl Factory for ShuttleFactory {
         debug!("giving a sql connection string: {}", conn_str);
         Ok(conn_str)
     }
+
+    
+    
 }

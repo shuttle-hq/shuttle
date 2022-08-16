@@ -238,7 +238,7 @@ pub mod aws;
 // TODO - remove this when we have a better way to handle this
 // #[cfg(feature = "persist")]
 pub mod persist;
-pub use persist::Persist;
+pub use persist::PersistInstance;
 
 
 #[cfg(feature = "codegen")]
@@ -309,6 +309,9 @@ pub mod loader;
 /// An instance of factory is passed by the deployer as an argument to [Service::build][Service::build] in the initial phase of deployment.
 ///
 /// Also see the [main][main] macro.
+
+use shuttle_common::project::ProjectName;
+
 #[async_trait]
 pub trait Factory: Send + Sync {
     /// Declare that the [Service][Service] requires a Postgres database.
@@ -318,6 +321,8 @@ pub trait Factory: Send + Sync {
         &mut self,
         db_type: database::Type,
     ) -> Result<String, crate::Error>;
+
+    fn get_project_name(&self) -> ProjectName;
 }
 
 /// Used to get resources of type `T` from factories.

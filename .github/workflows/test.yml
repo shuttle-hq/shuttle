@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        features: ["web-axum", "web-rocket", "web-tide", "web-tower"]
+        features: ["web-axum", "web-rocket", "web-tide", "web-tower", "web-poem"]
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
@@ -35,7 +35,7 @@ jobs:
   platform_tests:
     strategy:
       matrix:
-        crate: ["shuttle-provisioner", "shuttle-api", "cargo-shuttle"]
+        crate: ["shuttle-provisioner", "shuttle-api", "cargo-shuttle", "shuttle-common"]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2

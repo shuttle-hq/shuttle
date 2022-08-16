@@ -31,6 +31,11 @@ variable "postgres_password" {
   description = "Root password for postgres instance"
 }
 
+variable "mongodb_password" {
+  type        = string
+  description = "Admin password for mongodb instance"
+}
+
 variable "proxy_container_port" {
   type        = number
   description = "Port reverse proxy will be reachable at"

@@ -34,6 +34,7 @@ module "shuttle" {
   pg_fqdn              = "pg.shuttle.rs"
   proxy_fqdn           = "shuttleapp.rs"
   postgres_password    = var.postgres_password
+  mongodb_password     = var.mongodb_password
   shuttle_admin_secret = var.shuttle_admin_secret
   instance_type        = "c6g.4xlarge"
 }

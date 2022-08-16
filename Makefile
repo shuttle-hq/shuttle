@@ -32,17 +32,23 @@ endif
 ifeq ($(PROD),true)
 DOCKER_COMPOSE_FILES=-f docker-compose.yml
 STACK=shuttle-prod
+APPS_FQDN=shuttleapp.rs
+DB_FQDN=pg.shuttle.rs
 CONTAINER_REGISTRY=public.ecr.aws/shuttle
 else
 DOCKER_COMPOSE_FILES=-f docker-compose.yml -f docker-compose.dev.yml
 STACK=shuttle-dev
+APPS_FQDN=unstable.shuttleapp.rs
+DB_FQDN=pg.unstable.shuttle.rs
 CONTAINER_REGISTRY=public.ecr.aws/q0k3o0d8
 endif
 
 POSTGRES_EXTRA_PATH?=./extras/postgres
 POSTGRES_TAG?=latest
 
-DOCKER_COMPOSE_ENV=CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) BACKEND_TAG=$(TAG) PROVISIONER_TAG=$(TAG)
+RUST_LOG?=debug
+
+DOCKER_COMPOSE_ENV=BACKEND_TAG=$(TAG) PROVISIONER_TAG=$(TAG) POSTGRES_TAG=latest APPS_FQDN=$(APPS_FQDN) DB_FQDN=$(DB_FQDN) POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) RUST_LOG=$(RUST_LOG) CONTAINER_REGISTRY=$(CONTAINER_REGISTRY)
 
 .PHONY: images clean src up down deploy docker-compose.rendered.yml shuttle-% postgres
 

@@ -1,6 +1,3 @@
-# TODO: replace with the public alias when ready
-CONTAINER_REGISTRY ?= public.ecr.aws/q0k3o0d8
-
 SRC_CRATES=api common codegen cargo-shuttle proto provisioner service
 SRC=$(shell find $(SRC_CRATES) -name "*.rs" -type f -not -path "**/target/*")
 
@@ -25,12 +22,21 @@ BUILDX_FLAGS=$(BUILDX_OP) $(PLATFORM_FLAGS) $(CACHE_FLAGS)
 
 TAG?=$(shell git describe --tags)
 
+DOCKER?=docker
+
+DOCKER_COMPOSE=$(sh which docker-compose)
+ifeq ($(DOCKER_COMPOSE),)
+DOCKER_COMPOSE=$(DOCKER) compose
+endif
+
 ifeq ($(PROD),true)
 DOCKER_COMPOSE_FILES=-f docker-compose.yml
 STACK=shuttle-prod
+CONTAINER_REGISTRY=public.ecr.aws/shuttle
 else
 DOCKER_COMPOSE_FILES=-f docker-compose.yml -f docker-compose.dev.yml
 STACK=shuttle-dev
+CONTAINER_REGISTRY=public.ecr.aws/q0k3o0d8
 endif
 
 POSTGRES_EXTRA_PATH?=./extras/postgres
@@ -38,13 +44,13 @@ POSTGRES_TAG?=latest
 
 DOCKER_COMPOSE_ENV=CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) BACKEND_TAG=$(TAG) PROVISIONER_TAG=$(TAG)
 
-.PHONY: images clean src up down deploy docker-compose.rendered.yml postgres
+.PHONY: images clean src up down deploy docker-compose.rendered.yml shuttle-% postgres
 
 clean:
 	rm .shuttle-*
 	rm docker-compose.rendered.yml
 
-images: .shuttle-provisioner .shuttle-api postgres
+images: shuttle-provisioner shuttle-api postgres
 
 postgres:
 	docker buildx build \
@@ -54,23 +60,19 @@ postgres:
 	       -f $(POSTGRES_EXTRA_PATH)/Containerfile \
 	       $(POSTGRES_EXTRA_PATH)
 
-api: .shuttle-api
-
-provisioner: .shuttle-provisioner
-
-up: images
-	$(DOCKER_COMPOSE_ENV) docker-compose $(DOCKER_COMPOSE_FILES) up -d
-
-down:
-	$(DOCKER_COMPOSE_ENV) docker-compose $(DOCKER_COMPOSE_FILES) down
-
-docker-compose.rendered.yml: docker-compose.yml
-	$(DOCKER_COMPOSE_ENV) docker-compose -f docker-compose.yml config > $@
+docker-compose.rendered.yml: docker-compose.yml docker-compose.dev.yml
+	$(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE) $(DOCKER_COMPOSE_FILES) config > $@
 
 deploy: docker-compose.rendered.yml
 	docker stack deploy -c $^ $(STACK)
 
-.shuttle-%: ${SRC} Cargo.lock
+up: docker-compose.rendered.yml
+	CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) $(DOCKER_COMPOSE) -f $^ up -d
+
+down: docker-compose.rendered.yml
+	CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) $(DOCKER_COMPOSE) -f $^ down
+
+shuttle-%: ${SRC} Cargo.lock
 	docker buildx build \
 	       --build-arg crate=shuttle-$(*) \
 	       --tag $(CONTAINER_REGISTRY)/$(*):$(COMMIT_SHA) \
@@ -79,4 +81,3 @@ deploy: docker-compose.rendered.yml
 	       $(BUILDX_FLAGS) \
 	       -f Containerfile \
 	       .
-	touch $@

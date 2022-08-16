@@ -63,11 +63,11 @@ postgres:
 docker-compose.rendered.yml: docker-compose.yml docker-compose.dev.yml
 	$(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE) $(DOCKER_COMPOSE_FILES) config > $@
 
-deploy: docker-compose.rendered.yml
-	docker stack deploy -c $^ $(STACK)
+deploy: docker-compose.rendered.yml images
+	docker stack deploy -c $< $(STACK)
 
-up: docker-compose.rendered.yml
-	CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) $(DOCKER_COMPOSE) -f $^ up -d
+up: docker-compose.rendered.yml images
+	CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) $(DOCKER_COMPOSE) -f $< up -d
 
 down: docker-compose.rendered.yml
 	CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) $(DOCKER_COMPOSE) -f $^ down

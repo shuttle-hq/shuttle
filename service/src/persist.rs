@@ -32,7 +32,7 @@ impl PersistInstance {
         let project_name = self.project_name.to_string();
         fs::create_dir_all(format!("shuttle_persist/{}", project_name))?;
         
-        let file = File::create(format!("shuttle_persist/{}/{}.json", project_name, key))?;
+        let file = File::create(format!("shuttle_persist/{}/{}.bin", project_name, key))?;
         let mut writer = BufWriter::new(file);
         Ok(serialize_into(&mut writer, &struc)?)
     }
@@ -42,7 +42,7 @@ impl PersistInstance {
         T: DeserializeOwned,
     {
         let project_name = self.project_name.to_string();
-        let file = File::open(format!("shuttle_persist/{}/{}.json", project_name, key)).unwrap();
+        let file = File::open(format!("shuttle_persist/{}/{}.bin", project_name, key)).unwrap();
         let reader = BufReader::new(file);
         Ok(bincode::deserialize_from(reader)?)
     }
@@ -70,18 +70,27 @@ impl ResourceBuilder<PersistInstance> for Persist {
 
 }
 
-// Create Test
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
-    // test the folder is created
     #[test]
     fn test_create_folder() {
         let project_name = ProjectName::from_str("test").unwrap();
         
         let path = format!("shuttle_persist/{}", project_name.to_string());
         assert!(fs::metadata(path).is_ok());
+    }
+
+    #[test]
+    fn test_save_and_load() {
+
+        let persist = PersistInstance {project_name: ProjectName::from_str("test").unwrap()};
+
+        persist.save("test", "test").unwrap();
+        let result: String = persist.load("test").unwrap();
+        assert_eq!(result, "test");
     }
 }
 

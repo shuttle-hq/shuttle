@@ -177,6 +177,11 @@ impl Services {
         I: IntoIterator<Item = &'s str>,
     {
         let mut run = Command::new(WORKSPACE_ROOT.join("target/debug/cargo-shuttle"));
+
+        if env::var("SHUTTLE_API_KEY").is_err() {
+            run.env("SHUTTLE_API_KEY", "test-key");
+        }
+
         run.args(args).current_dir(path);
         spawn_and_log(&mut run, &self.target, self.color)
     }

@@ -45,9 +45,11 @@ jobs:
             shuttle-service = { path = "$PWD/service" }
             EOF
 
+            # clean up a potential existing deployments before running
+            # the tests just in case the environment is not clean
             make down
-            docker volume create shuttle-backend-vol
-            cd e2e; BUILDX_CACHE=/tmp/cache/buildx SHUTTLE_API_KEY=test-key cargo test -- --nocapture
+
+            cd e2e; BUILDX_CACHE=/tmp/cache/buildx cargo test -- --nocapture
       - when:
           condition:
             equal: [ main, << pipeline.git.branch >> ]

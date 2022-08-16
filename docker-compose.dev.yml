@@ -27,8 +27,6 @@ services:
         done
 
         exec /usr/local/bin/service "$${@:0}"
-    volumes:
-      - .:/usr/src/shuttle
 
   provisioner:
     entrypoint:

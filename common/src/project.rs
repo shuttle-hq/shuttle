@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
@@ -6,12 +7,19 @@ use rocket::request::FromParam;
 use serde::de::Error as DeError;
 use serde::{Deserialize, Deserializer, Serialize};
 
+use once_cell::sync::OnceCell;
+
 /// Project names should conform to valid Host segments (or labels)
 /// as per [IETF RFC 1123](https://datatracker.ietf.org/doc/html/rfc1123).
 /// Initially we'll implement a strict subset of the IETF RFC 1123, concretely:
 /// - It does not start or end with `-` or `_`.
 /// - It does not contain any characters outside of the alphanumeric range, except for `-` or '_'.
 /// - It is not empty.
+/// - It does not contain profanity.
+/// - It is not a reserved word.
+///
+use censor::Censor;
+
 #[derive(Clone, Serialize, Debug, Eq, PartialEq)]
 pub struct ProjectName(String);
 
@@ -45,9 +53,22 @@ impl ProjectName {
             matches!(byte, b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'_')
         }
 
+        fn is_profanity_free_and_not_reserved(hostname: &str) -> bool {
+            static INSTANCE: OnceCell<HashSet<String>> = OnceCell::new();
+            INSTANCE.get_or_init(|| HashSet::from(["Shuttle.rs".to_string()]));
+
+            let censor = Censor::Standard
+                + Censor::Sex
+                + Censor::Zealous
+                + Censor::Custom(INSTANCE.get().expect("Reserved words not set").clone())
+                - "hell";
+            !censor.check(hostname)
+        }
+
         let separators = ['-', '_'];
 
         !(hostname.bytes().any(|byte| !is_valid_char(byte))
+            || !is_profanity_free_and_not_reserved(hostname)
             || hostname.ends_with(separators)
             || hostname.starts_with(separators)
             || hostname.is_empty())
@@ -89,7 +110,9 @@ impl Display for ProjectNameError {
 `{}` is an invalid project name. project name must
 1. start and end with alphanumeric characters.
 2. only contain characters inside of the alphanumeric range, except for `-`, or `_`.
-3. not be empty."#,
+3. not be empty.,
+4. not contain profanity.
+5. not be a reserved word."#,
                 name
             ),
         }
@@ -139,6 +162,8 @@ pub mod tests {
             "__dunder_like__",
             "__invalid",
             "invalid__",
+            "test-crap-crap",
+            "shuttle.rs",
         ] {
             let project_name = ProjectName::from_str(hostname);
             assert!(project_name.is_err(), "{:?} was ok", hostname);

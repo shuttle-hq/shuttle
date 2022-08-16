@@ -7,4 +7,4 @@ edition = "2021"
 
 [dependencies]
 poem = "1.3.35"
-shuttle-service = { version = "0.4.1", features = ["web-poem"] }
+shuttle-service = { version = "0.4.2", features = ["web-poem"] }

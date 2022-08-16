@@ -1065,7 +1065,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-shuttle"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1144,6 +1144,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2fff2a6927b3bb87f9595d67196a70493f627687a71d87a0d692242c33f58c11"
 dependencies = [
  "jobserver",
+]
+
+[[package]]
+name = "censor"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5563d2728feef9a6186acdd148bccbe850dad63c5ba55a3b3355abc9137cb3eb"
+dependencies = [
+ "once_cell",
 ]
 
 [[package]]
@@ -4591,7 +4600,7 @@ checksum = "45bb67a18fa91266cc7807181f62f9178a6873bfad7dc788c42e6430db40184f"
 
 [[package]]
 name = "shuttle-api"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "anyhow",
  "async-mutex",
@@ -4624,7 +4633,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-codegen"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "pretty_assertions",
  "proc-macro-error",
@@ -4636,12 +4645,14 @@ dependencies = [
 
 [[package]]
 name = "shuttle-common"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "anyhow",
+ "censor",
  "chrono",
  "lazy_static",
  "log",
+ "once_cell",
  "rocket",
  "serde",
  "serde_json",
@@ -4650,7 +4661,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-proto"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "prost",
  "shuttle-common",
@@ -4660,7 +4671,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-provisioner"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "aws-config",
  "aws-sdk-rds",
@@ -4686,7 +4697,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-service"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "anyhow",
  "async-std",

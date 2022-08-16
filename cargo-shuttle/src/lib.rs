@@ -272,12 +272,12 @@ impl Shuttle {
             let entry = document
                 .get("dependencies")
                 .ok_or_else(|| anyhow!("Missing dependencies section in Cargo.toml"))?
-                .get(dependency_name);
+                .get("shuttle-service");
 
             if let Some(entry) = entry {
                 match entry {
                     Item::ArrayOfTables(_) | Item::None => {
-                        Err(anyhow!("Invalid entry for {}", dependency_name))
+                        Err(anyhow!("Invalid entry for {}", "shuttle-service"))
                     }
                     Item::Value(Value::InlineTable(table)) => {
                         get_item_as_str(get_version_from_table(table)?)

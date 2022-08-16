@@ -24,7 +24,7 @@ TAG?=$(shell git describe --tags)
 
 DOCKER?=docker
 
-DOCKER_COMPOSE=$(sh which docker-compose)
+DOCKER_COMPOSE=$(shell which docker-compose)
 ifeq ($(DOCKER_COMPOSE),)
 DOCKER_COMPOSE=$(DOCKER) compose
 endif

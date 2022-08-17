@@ -129,6 +129,16 @@
         "code",
         "test"
       ]
+    },
+    {
+      "login": "marioidival",
+      "name": "Mario Idival",
+      "avatar_url": "https://avatars.githubusercontent.com/u/1129263?v=4",
+      "profile": "https://github.com/marioidival",
+      "contributions": [
+        "code",
+        "test"
+      ]
     }
   ],
   "contributorsPerLine": 7

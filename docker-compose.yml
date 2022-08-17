@@ -1,7 +1,6 @@
 version: "3"
 volumes:
   shuttle-backend-vol:
-    external: true
 services:
   api:
     image: "${CONTAINER_REGISTRY}/api:${BACKEND_TAG}"

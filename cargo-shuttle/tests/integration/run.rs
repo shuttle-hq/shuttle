@@ -23,12 +23,14 @@ async fn cargo_shuttle_run(working_directory: &str) -> u16 {
         cmd: Command::Run(run_args),
     });
 
+    let working_directory_clone = working_directory.clone();
+
     tokio::spawn(async move {
         sleep(Duration::from_secs(600)).await;
 
         println!(
             "run test for '{}' took too long. Did it fail to shutdown?",
-            working_directory.display()
+            working_directory_clone.display()
         );
         exit(1);
     });
@@ -42,6 +44,10 @@ async fn cargo_shuttle_run(working_directory: &str) -> u16 {
         .await)
         .is_err()
     {
+        println!(
+            "waiting for '{}' to start up...",
+            working_directory.display()
+        );
         sleep(Duration::from_millis(350)).await;
     }
 

@@ -67,9 +67,11 @@ impl DockerInstance {
                 .status;
 
             if status.success() {
+                println!("{is_ready_cmd:?} succeeded...");
                 return;
             }
 
+            println!("{is_ready_cmd:?} did not succeed this time...");
             sleep(Duration::from_millis(350));
 
             timeout = timeout

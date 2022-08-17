@@ -9,8 +9,8 @@
   <a href="https://github.com/getsynth/shuttle/search?l=rust">
     <img alt="language" src="https://img.shields.io/badge/language-Rust-orange.svg">
   </a>
-  <a href="https://github.com/getsynth/shuttle/actions">
-    <img alt="build status" src="https://img.shields.io/github/workflow/status/getsynth/shuttle/cargo-test"/>
+  <a href="https://circleci.com/gh/shuttle-hq/shuttle/">
+    <img alt="build status" src="https://circleci.com/gh/shuttle-hq/shuttle.svg?style=shield"/>
   </a>
   <a href="https://discord.gg/H33rRDTm3p">
     <img alt="discord" src="https://img.shields.io/discord/803236282088161321?logo=discord"/>

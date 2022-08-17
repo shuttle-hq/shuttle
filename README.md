@@ -145,6 +145,7 @@ Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/d
   </tr>
   <tr>
     <td align="center"><a href="https://github.com/Xavientois"><img src="https://avatars.githubusercontent.com/u/34867186?v=4?s=100" width="100px;" alt=""/><br /><sub><b>Xavientois</b></sub></a><br /><a href="https://github.com/shuttle-hq/shuttle/issues?q=author%3AXavientois" title="Bug reports">🐛</a> <a href="https://github.com/shuttle-hq/shuttle/commits?author=Xavientois" title="Code">💻</a> <a href="https://github.com/shuttle-hq/shuttle/commits?author=Xavientois" title="Tests">⚠️</a></td>
+    <td align="center"><a href="https://github.com/nahuakang"><img src="https://avatars.githubusercontent.com/u/18533347?v=4?s=100" width="100px;" alt=""/><br /><sub><b>Nahua</b></sub></a><br /><a href="https://github.com/shuttle-hq/shuttle/issues?q=author%3Anahuakang" title="Bug reports">🐛</a> <a href="https://github.com/shuttle-hq/shuttle/commits?author=nahuakang" title="Code">💻</a> <a href="https://github.com/shuttle-hq/shuttle/commits?author=nahuakang" title="Tests">⚠️</a></td>
   </tr>
 </table>
 

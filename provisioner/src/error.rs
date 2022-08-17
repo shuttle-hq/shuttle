@@ -17,8 +17,11 @@ pub enum Error {
     #[error("failed to create DB")]
     CreateDB(String),
 
-    #[error("unexpected error")]
-    Unexpected(#[from] sqlx::Error),
+    #[error("unexpected sqlx error")]
+    UnexpectedSqlx(#[from] sqlx::Error),
+
+    #[error("unexpected mongodb error")]
+    UnexpectedMongodb(#[from] mongodb::error::Error),
 
     #[error("failed to create RDS instance")]
     CreateRDSInstance(#[from] SdkError<CreateDBInstanceError>),

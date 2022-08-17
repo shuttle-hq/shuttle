@@ -15,7 +15,11 @@ use crossterm::{
 };
 use futures::StreamExt;
 use portpicker::pick_unused_port;
-use shuttle_common::{database::AwsRdsEngine, project::ProjectName, DatabaseReadyInfo};
+use shuttle_common::{
+    database::{AwsRdsEngine, SharedEngine},
+    project::ProjectName,
+    DatabaseReadyInfo,
+};
 use shuttle_service::{database::Type, error::CustomError, Factory};
 use std::{collections::HashMap, io::stdout, time::Duration};
 use tokio::time::sleep;
@@ -36,7 +40,7 @@ impl LocalFactory {
 
 #[async_trait]
 impl Factory for LocalFactory {
-    async fn get_sql_connection_string(
+    async fn get_db_connection_string(
         &mut self,
         db_type: Type,
     ) -> Result<String, shuttle_service::Error> {
@@ -293,7 +297,7 @@ struct EngineConfig {
 
 fn db_type_to_config(db_type: Type) -> EngineConfig {
     match db_type {
-        Type::Shared => EngineConfig {
+        Type::Shared(SharedEngine::Postgres) => EngineConfig {
             r#type: "shared_postgres".to_string(),
             image: "postgres:11".to_string(),
             engine: "postgres".to_string(),
@@ -306,6 +310,25 @@ fn db_type_to_config(db_type: Type) -> EngineConfig {
                 "/bin/sh".to_string(),
                 "-c".to_string(),
                 "pg_isready | grep 'accepting connections'".to_string(),
+            ],
+        },
+        Type::Shared(SharedEngine::MongoDb) => EngineConfig {
+            r#type: "shared_mongodb".to_string(),
+            image: "mongo:5.0.10".to_string(),
+            engine: "mongodb".to_string(),
+            username: "mongodb".to_string(),
+            password: "password".to_string(),
+            database_name: "admin".to_string(),
+            port: "27017/tcp".to_string(),
+            env: Some(vec![
+                "MONGO_INITDB_ROOT_USERNAME=mongodb".to_string(),
+                "MONGO_INITDB_ROOT_PASSWORD=password".to_string(),
+            ]),
+            is_ready_cmd: vec![
+                "mongosh".to_string(),
+                "--quiet".to_string(),
+                "--eval".to_string(),
+                "db".to_string(),
             ],
         },
         Type::AwsRds(AwsRdsEngine::Postgres) => EngineConfig {

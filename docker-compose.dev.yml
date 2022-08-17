@@ -42,13 +42,19 @@ services:
       - /bin/bash
       - -c
       - |
-        until </dev/tcp/db/5432
+        until </dev/tcp/pg/5432
         do
-          >&2 echo "DB is not available yet - sleeping"
+          >&2 echo "PG is not available yet - sleeping"
           sleep 1
         done
 
-        >&2 echo "DB is available - starting provisioner"
+        until </dev/tcp/mongodb/27017
+        do
+          >&2 echo "mongoDB is not available yet - sleeping"
+          sleep 1
+        done
+
+        >&2 echo "DBs are available - starting provisioner"
 
         exec /usr/local/bin/service "$${@:0}"
     build:

@@ -31,7 +31,7 @@ impl ShuttleFactory {
 
 #[async_trait]
 impl Factory for ShuttleFactory {
-    async fn get_sql_connection_string(
+    async fn get_db_connection_string(
         &mut self,
         db_type: Type,
     ) -> Result<String, shuttle_service::Error> {

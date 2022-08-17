@@ -6,7 +6,7 @@ pub mod provisioner {
     use std::fmt::Display;
 
     use shuttle_common::{
-        database::{self, AwsRdsEngine},
+        database::{self, AwsRdsEngine, SharedEngine},
         DatabaseReadyInfo,
     };
 
@@ -29,7 +29,15 @@ pub mod provisioner {
     impl From<database::Type> for database_request::DbType {
         fn from(db_type: database::Type) -> Self {
             match db_type {
-                database::Type::Shared => database_request::DbType::Shared(String::new()),
+                database::Type::Shared(engine) => {
+                    let engine = match engine {
+                        SharedEngine::Postgres => shared::Engine::Postgres(String::new()),
+                        SharedEngine::MongoDb => shared::Engine::Mongodb(String::new()),
+                    };
+                    database_request::DbType::Shared(Shared {
+                        engine: Some(engine),
+                    })
+                }
                 database::Type::AwsRds(engine) => {
                     let config = RdsConfig {};
                     let engine = match engine {

@@ -15,6 +15,8 @@ function publish-folder()
     cd $folder
     cargo publish
     cd ..
+
+    sleep 5
 }
 
 function main()

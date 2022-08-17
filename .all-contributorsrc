@@ -85,6 +85,18 @@
         "code",
         "test"
       ]
+    },
+    {
+      "login": "ivancernja",
+      "name": "Ivan",
+      "avatar_url": "https://avatars.githubusercontent.com/u/14149737?v=4",
+      "profile": "https://github.com/ivancernja",
+      "contributions": [
+        "blog",
+        "bug",
+        "code",
+        "test"
+      ]
     }
   ],
   "contributorsPerLine": 7

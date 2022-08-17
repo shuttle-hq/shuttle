@@ -1,156 +1,74 @@
-use portpicker::pick_unused_port;
-use std::{
-    process::Command,
-    thread::sleep,
-    time::{Duration, SystemTime},
-};
-
+mod helpers;
 use ctor::dtor;
-use lazy_static::lazy_static;
+use helpers::{exec_mongosh, exec_psql, DbType, DockerInstance};
+use once_cell::sync::Lazy;
+use serde_json::Value;
+use shuttle_proto::provisioner::shared;
 use shuttle_provisioner::MyProvisioner;
 
-lazy_static! {
-    static ref PG: DockerPG = DockerPG::new();
-}
+static PG: Lazy<DockerInstance> = Lazy::new(|| DockerInstance::new(DbType::Postgres));
+static MONGODB: Lazy<DockerInstance> = Lazy::new(|| DockerInstance::new(DbType::MongoDb));
 
 #[dtor]
 fn cleanup() {
     PG.cleanup();
-}
-
-struct DockerPG {
-    container_name: String,
-    uri: String,
-}
-
-impl DockerPG {
-    fn new() -> Self {
-        let container_name = "shuttle_provisioner_it";
-        let port = pick_unused_port().unwrap();
-
-        Command::new("docker")
-            .args([
-                "run",
-                "--rm",
-                "--name",
-                container_name,
-                "-e",
-                "POSTGRES_PASSWORD=password",
-                "-p",
-                &format!("{port}:5432"),
-                "postgres:11",
-            ])
-            .spawn()
-            .unwrap();
-
-        Self::wait_ready(container_name, Duration::from_secs(120));
-
-        // Postgres restarts, so wait for it to be ready after the restart
-        sleep(Duration::from_millis(500));
-        Self::wait_ready(container_name, Duration::from_secs(10));
-
-        Self {
-            container_name: container_name.to_string(),
-            uri: format!("postgres://postgres:password@localhost:{port}"),
-        }
-    }
-
-    fn wait_ready(container_name: &str, mut timeout: Duration) {
-        let mut now = SystemTime::now();
-        while !timeout.is_zero() {
-            let status = Command::new("docker")
-                .args(["exec", container_name, "pg_isready"])
-                .output()
-                .unwrap()
-                .status;
-
-            if status.success() {
-                println!("{container_name} is ready...");
-                return;
-            }
-
-            sleep(Duration::from_millis(350));
-
-            println!("waiting for {container_name} to be ready...");
-
-            timeout = timeout
-                .checked_sub(now.elapsed().unwrap())
-                .unwrap_or_default();
-            now = SystemTime::now();
-        }
-        panic!("timed out while waiting for provisioner DB to come up");
-    }
-
-    fn cleanup(&self) {
-        Command::new("docker")
-            .args(["stop", &self.container_name])
-            .output()
-            .expect("failed to stop provisioner test DB container");
-        Command::new("docker")
-            .args(["rm", &self.container_name])
-            .output()
-            .expect("failed to remove provisioner test DB container");
-    }
-}
-
-fn exec(query: &str) -> String {
-    let output = Command::new("docker")
-        .args([
-            "exec",
-            &PG.container_name,
-            "psql",
-            "--username",
-            "postgres",
-            "--tuples-only",
-            "--no-align",
-            "--field-separator",
-            ",",
-            "--command",
-            query,
-        ])
-        .output()
-        .unwrap()
-        .stdout;
-
-    String::from_utf8(output).unwrap().trim().to_string()
+    MONGODB.cleanup();
 }
 
 #[tokio::test]
 async fn shared_db_role_does_not_exist() {
-    let provisioner = MyProvisioner::new(&PG.uri, "fqdn".to_string(), "internal".to_string())
+    let provisioner = MyProvisioner::new(
+        &PG.uri,
+        &MONGODB.uri,
+        "fqdn".to_string(),
+        "pg".to_string(),
+        "mongodb".to_string(),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        exec_psql("SELECT rolname FROM pg_roles WHERE rolname = 'user-not_exist'",),
+        ""
+    );
+
+    provisioner
+        .request_shared_db("not_exist", shared::Engine::Postgres(String::new()))
         .await
         .unwrap();
 
     assert_eq!(
-        exec("SELECT rolname FROM pg_roles WHERE rolname = 'user-not_exist'"),
-        ""
-    );
-
-    provisioner.request_shared_db("not_exist").await.unwrap();
-
-    assert_eq!(
-        exec("SELECT rolname FROM pg_roles WHERE rolname = 'user-not_exist'"),
+        exec_psql("SELECT rolname FROM pg_roles WHERE rolname = 'user-not_exist'",),
         "user-not_exist"
     );
 }
 
 #[tokio::test]
 async fn shared_db_role_does_exist() {
-    let provisioner = MyProvisioner::new(&PG.uri, "fqdn".to_string(), "internal".to_string())
-        .await
-        .unwrap();
+    let provisioner = MyProvisioner::new(
+        &PG.uri,
+        &MONGODB.uri,
+        "fqdn".to_string(),
+        "pg".to_string(),
+        "mongodb".to_string(),
+    )
+    .await
+    .unwrap();
 
-    exec("CREATE ROLE \"user-exist\" WITH LOGIN PASSWORD 'temp'");
+    exec_psql("CREATE ROLE \"user-exist\" WITH LOGIN PASSWORD 'temp'");
     assert_eq!(
-        exec("SELECT passwd FROM pg_shadow WHERE usename = 'user-exist'"),
+        exec_psql("SELECT passwd FROM pg_shadow WHERE usename = 'user-exist'",),
         "md5d44ae85dd21bda2a4f9946217adea2cc"
     );
 
-    provisioner.request_shared_db("exist").await.unwrap();
+    provisioner
+        .request_shared_db("exist", shared::Engine::Postgres(String::new()))
+        .await
+        .unwrap();
 
     // Make sure password got cycled
     assert_ne!(
-        exec("SELECT passwd FROM pg_shadow WHERE usename = 'user-exist'"),
+        exec_psql("SELECT passwd FROM pg_shadow WHERE usename = 'user-exist'",),
         "md5d44ae85dd21bda2a4f9946217adea2cc"
     );
 }
@@ -160,52 +78,159 @@ async fn shared_db_role_does_exist() {
     expected = "CreateRole(\"error returned from database: cannot insert multiple commands into a prepared statement\""
 )]
 async fn injection_safe() {
-    let provisioner = MyProvisioner::new(&PG.uri, "fqdn".to_string(), "internal".to_string())
-        .await
-        .unwrap();
+    let provisioner = MyProvisioner::new(
+        &PG.uri,
+        &MONGODB.uri,
+        "fqdn".to_string(),
+        "pg".to_string(),
+        "mongodb".to_string(),
+    )
+    .await
+    .unwrap();
 
     provisioner
-        .request_shared_db("new\"; CREATE ROLE \"injected")
+        .request_shared_db(
+            "new\"; CREATE ROLE \"injected",
+            shared::Engine::Postgres(String::new()),
+        )
         .await
         .unwrap();
 }
 
 #[tokio::test]
 async fn shared_db_missing() {
-    let provisioner = MyProvisioner::new(&PG.uri, "fqdn".to_string(), "internal".to_string())
+    let provisioner = MyProvisioner::new(
+        &PG.uri,
+        &MONGODB.uri,
+        "fqdn".to_string(),
+        "pg".to_string(),
+        "mongodb".to_string(),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        exec_psql("SELECT datname FROM pg_database WHERE datname = 'db-missing'",),
+        ""
+    );
+
+    provisioner
+        .request_shared_db("missing", shared::Engine::Postgres(String::new()))
         .await
         .unwrap();
 
     assert_eq!(
-        exec("SELECT datname FROM pg_database WHERE datname = 'db-missing'"),
-        ""
-    );
-
-    provisioner.request_shared_db("missing").await.unwrap();
-
-    assert_eq!(
-        exec("SELECT datname FROM pg_database WHERE datname = 'db-missing'"),
+        exec_psql("SELECT datname FROM pg_database WHERE datname = 'db-missing'",),
         "db-missing"
     );
 }
 
 #[tokio::test]
 async fn shared_db_filled() {
-    let provisioner = MyProvisioner::new(&PG.uri, "fqdn".to_string(), "internal".to_string())
+    let provisioner = MyProvisioner::new(
+        &PG.uri,
+        &MONGODB.uri,
+        "fqdn".to_string(),
+        "pg".to_string(),
+        "mongodb".to_string(),
+    )
+    .await
+    .unwrap();
+
+    exec_psql("CREATE ROLE \"user-filled\" WITH LOGIN PASSWORD 'temp'");
+    exec_psql("CREATE DATABASE \"db-filled\" OWNER 'user-filled'");
+    assert_eq!(
+        exec_psql("SELECT datname FROM pg_database WHERE datname = 'db-filled'",),
+        "db-filled"
+    );
+
+    provisioner
+        .request_shared_db("filled", shared::Engine::Postgres(String::new()))
         .await
         .unwrap();
 
-    exec("CREATE ROLE \"user-filled\" WITH LOGIN PASSWORD 'temp'");
-    exec("CREATE DATABASE \"db-filled\" OWNER 'user-filled'");
     assert_eq!(
-        exec("SELECT datname FROM pg_database WHERE datname = 'db-filled'"),
+        exec_psql("SELECT datname FROM pg_database WHERE datname = 'db-filled'",),
         "db-filled"
     );
+}
 
-    provisioner.request_shared_db("filled").await.unwrap();
+#[tokio::test]
+async fn shared_mongodb_role_does_not_exist() {
+    let provisioner = MyProvisioner::new(
+        &PG.uri,
+        &MONGODB.uri,
+        "fqdn".to_string(),
+        "pg".to_string(),
+        "mongodb".to_string(),
+    )
+    .await
+    .unwrap();
 
-    assert_eq!(
-        exec("SELECT datname FROM pg_database WHERE datname = 'db-filled'"),
-        "db-filled"
+    let user = exec_mongosh("db.getUser(\"user-not_exist\")", Some("mongodb-not_exist"));
+    assert_eq!(user, "null");
+
+    provisioner
+        .request_shared_db("not_exist", shared::Engine::Mongodb(String::new()))
+        .await
+        .unwrap();
+
+    let user = exec_mongosh("db.getUser(\"user-not_exist\")", Some("mongodb-not_exist"));
+    assert!(user.contains("mongodb-not_exist.user-not_exist"));
+}
+
+#[tokio::test]
+async fn shared_mongodb_role_does_exist() {
+    let provisioner = MyProvisioner::new(
+        &PG.uri,
+        &MONGODB.uri,
+        "fqdn".to_string(),
+        "pg".to_string(),
+        "mongodb".to_string(),
+    )
+    .await
+    .unwrap();
+
+    exec_mongosh(
+        r#"db.createUser({ 
+            user: "user-exist", 
+            pwd: "secure_password", 
+            roles: [
+                { role: "readWrite", db: "mongodb-exist" }
+            ]
+        })"#,
+        Some("mongodb-exist"),
     );
+
+    let user: Value = serde_json::from_str(&exec_mongosh(
+        r#"EJSON.stringify(db.getUser("user-exist", 
+            { showCredentials: true }
+        ))"#,
+        Some("mongodb-exist"),
+    ))
+    .unwrap();
+
+    // Extract the user's stored password hash key from the `getUser` output
+    let user_stored_key = &user["credentials"]["SCRAM-SHA-256"]["storedKey"];
+    assert_eq!(user["_id"], "mongodb-exist.user-exist");
+
+    provisioner
+        .request_shared_db("exist", shared::Engine::Mongodb(String::new()))
+        .await
+        .unwrap();
+
+    let user: Value = serde_json::from_str(&exec_mongosh(
+        r#"EJSON.stringify(db.getUser("user-exist", 
+            { showCredentials: true }
+        ))"#,
+        Some("mongodb-exist"),
+    ))
+    .unwrap();
+
+    // Make sure it's the same user
+    assert_eq!(user["_id"], "mongodb-exist.user-exist");
+
+    // Make sure password got cycled by comparing password hash keys
+    let user_cycled_key = &user["credentials"]["SCRAM-SHA-256"]["storedKey"];
+    assert_ne!(user_stored_key, user_cycled_key);
 }

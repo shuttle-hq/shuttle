@@ -5,7 +5,7 @@
 #
 # Dependencies: git, cargo-edit, ripgrep
 
-set -uo pipefail
+set -ueo pipefail
 
 function update-cargo-versions()
 {
@@ -22,7 +22,12 @@ function update-examples-versions()
     for d in examples/*/*/;
     do
         cd "$d"
-        cargo add shuttle-service@$version
+
+        if [[ -f Cargo.toml ]]
+        then
+            cargo add shuttle-service@$version
+        fi
+
         cd ../../../
     done
 

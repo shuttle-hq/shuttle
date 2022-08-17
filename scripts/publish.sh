@@ -5,7 +5,7 @@
 #
 # Dependencies: git, ripgrep
 
-set -uo pipefail
+set -ueo pipefail
 
 function publish-folder()
 {
@@ -15,6 +15,8 @@ function publish-folder()
     cd $folder
     cargo publish
     cd ..
+
+    sleep 5
 }
 
 function main()
@@ -29,7 +31,7 @@ function main()
     publish-folder "cargo-shuttle"
 
     git tag "v$version"
-    git push "v$version"
+    git push upstream "v$version"
 
     echo "Success!! Now tell about it on Discord :D"
 }

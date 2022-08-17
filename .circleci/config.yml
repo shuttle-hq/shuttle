@@ -110,7 +110,7 @@ jobs:
       - run: |
           cargo clippy --tests \
                        --all-targets \
-                       --features="codegen,loader,sqlx-integration,sqlx-postgres,secrets,<< parameters.framework >>" \
+                       --features="codegen,loader,sqlx-integration,sqlx-postgres,mongodb-integration,secrets,<< parameters.framework >>" \
                        --no-deps -- \
                        --D warnings \
                        -A clippy::let-unit-value \

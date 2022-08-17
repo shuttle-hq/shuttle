@@ -26,3 +26,12 @@ impl From<sqlx::Error> for Error {
         Error::Database(e.to_string())
     }
 }
+
+// This is implemented manually as defining `Error::Database(#[from] mongodb::error::Error)` resulted in a
+// segfault even with a feature guard.
+#[cfg(feature = "mongodb-integration")]
+impl From<mongodb::error::Error> for Error {
+    fn from(e: mongodb::error::Error) -> Self {
+        Error::Database(e.to_string())
+    }
+}

@@ -23,6 +23,19 @@
         "review",
         "test"
       ]
+    },
+    {
+      "login": "christoshadjiaslanis",
+      "name": "Christos Hadjiaslanis",
+      "avatar_url": "https://avatars.githubusercontent.com/u/14791384?v=4",
+      "profile": "https://github.com/christoshadjiaslanis",
+      "contributions": [
+        "blog",
+        "code",
+        "review",
+        "test",
+        "video"
+      ]
     }
   ],
   "contributorsPerLine": 7

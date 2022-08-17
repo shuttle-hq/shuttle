@@ -45,6 +45,20 @@
       "contributions": [
         "content"
       ]
+    },
+    {
+      "login": "brokad",
+      "name": "Damien",
+      "avatar_url": "https://avatars.githubusercontent.com/u/13315034?v=4",
+      "profile": "https://github.com/brokad",
+      "contributions": [
+        "bug",
+        "code",
+        "doc",
+        "fundingFinding",
+        "review",
+        "test"
+      ]
     }
   ],
   "contributorsPerLine": 7

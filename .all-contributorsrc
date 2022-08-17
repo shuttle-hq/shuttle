@@ -171,6 +171,17 @@
         "bug",
         "doc"
       ]
+    },
+    {
+      "login": "alsuren",
+      "name": "David Laban",
+      "avatar_url": "https://avatars.githubusercontent.com/u/254647?v=4",
+      "profile": "http://alsuren.github.io/",
+      "contributions": [
+        "bug",
+        "code",
+        "test"
+      ]
     }
   ],
   "contributorsPerLine": 7

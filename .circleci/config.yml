@@ -88,7 +88,7 @@ commands:
 jobs:
   workspace-fmt:
     docker:
-      - image: cimg/rust:1.62.0
+      - image: cimg/rust:1.63.0
     steps:
       - checkout
       - restore-cargo-cache
@@ -103,7 +103,7 @@ jobs:
         description: "Framework to activate"
         type: string
     docker:
-      - image: cimg/rust:1.62.0
+      - image: cimg/rust:1.63.0
     steps:
       - checkout
       - restore-cargo-cache
@@ -122,7 +122,7 @@ jobs:
         description: "Path to crate external from workspace"
         type: string
     docker:
-      - image: cimg/rust:1.62.0
+      - image: cimg/rust:1.63.0
     steps:
       - checkout
       - restore-cargo-cache

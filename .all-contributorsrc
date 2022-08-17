@@ -202,6 +202,16 @@
         "code",
         "test"
       ]
+    },
+    {
+      "login": "nodard",
+      "name": "Nodar Daneliya",
+      "avatar_url": "https://avatars.githubusercontent.com/u/12720758?v=4",
+      "profile": "https://github.com/nodard",
+      "contributions": [
+        "business",
+        "fundingFinding"
+      ]
     }
   ],
   "contributorsPerLine": 7

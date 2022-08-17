@@ -75,6 +75,12 @@ resource "aws_lb_target_group_attachment" "postgres" {
   port             = var.postgres_container_port
 }
 
+resource "aws_lb_target_group_attachment" "mongodb" {
+  target_group_arn = aws_lb_target_group.mongodb.arn
+  target_id        = aws_instance.backend.id
+  port             = var.mongodb_container_port
+}
+
 data "aws_ami" "ubuntu" {
   most_recent = true
 

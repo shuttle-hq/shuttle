@@ -26,6 +26,12 @@ variable "postgres_container_port" {
   default     = 5432
 }
 
+variable "mongodb_container_port" {
+  type        = number
+  description = "Port Mongodb will be reachable at"
+  default     = 27017
+}
+
 variable "postgres_password" {
   type        = string
   description = "Root password for postgres instance"

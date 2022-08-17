@@ -191,6 +191,16 @@
       "contributions": [
         "content"
       ]
+    },
+    {
+      "login": "Butch78",
+      "name": "Matthew Aylward ",
+      "avatar_url": "https://avatars.githubusercontent.com/u/19205392?v=4",
+      "profile": "https://github.com/Butch78",
+      "contributions": [
+        "code",
+        "test"
+      ]
     }
   ],
   "contributorsPerLine": 7

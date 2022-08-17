@@ -4,6 +4,15 @@ orbs:
   docker-buildx: sensu/docker-buildx@1.1.1
   aws-ecr: circleci/aws-ecr@8.1.2
 
+executors:
+  docker-rust:
+    docker:
+      - image: cimg/rust:1.63.0
+  image-ubuntu:
+    machine:
+      image: ubuntu-2204:2022.04.1
+      docker_layer_caching: true
+
 # sscache steps are from this guide
 # https://medium.com/@edouard.oger/rust-caching-on-circleci-using-sccache-c996344f0115
 commands:
@@ -87,8 +96,7 @@ commands:
 
 jobs:
   workspace-fmt:
-    docker:
-      - image: cimg/rust:1.63.0
+    executor: docker-rust
     steps:
       - checkout
       - restore-cargo-cache
@@ -102,8 +110,7 @@ jobs:
       framework:
         description: "Framework to activate"
         type: string
-    docker:
-      - image: cimg/rust:1.63.0
+    executor: docker-rust
     steps:
       - checkout
       - restore-cargo-cache
@@ -121,8 +128,7 @@ jobs:
       path:
         description: "Path to crate external from workspace"
         type: string
-    docker:
-      - image: cimg/rust:1.63.0
+    executor: docker-rust
     steps:
       - checkout
       - restore-cargo-cache
@@ -141,8 +147,7 @@ jobs:
       - save-cargo-cache
   service-test:
     # Using an image since tests will start a docker container
-    machine:
-      image: ubuntu-2204:2022.04.1
+    executor: image-ubuntu
     steps:
       - install-rust
       - checkout
@@ -160,8 +165,7 @@ jobs:
         description: "Crate to test"
         type: string
     # Using an image since tests will start a docker container
-    machine:
-      image: ubuntu-2204:2022.04.1
+    executor: image-ubuntu
     steps:
       - install-rust
       - checkout
@@ -179,9 +183,7 @@ jobs:
       - save-cargo-cache
   e2e-test:
     resource_class: xlarge
-    machine:
-      image: ubuntu-2204:2022.04.1
-      docker_layer_caching: true
+    executor: image-ubuntu
     steps:
       - install-rust
       - checkout
@@ -206,9 +208,7 @@ jobs:
           when: always
   build-and-push:
     resource_class: xlarge
-    machine:
-      image: ubuntu-2204:2022.04.1
-      docker_layer_caching: true
+    executor: image-ubuntu
     steps:
       - checkout
       - restore-buildx-cache

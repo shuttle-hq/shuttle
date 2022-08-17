@@ -27,12 +27,6 @@ jobs:
           command: |
             export BUILDX_CACHE=/tmp/cache/buildx
             sudo mkdir -p $BUILDX_CACHE && sudo chown -R circleci:circleci $BUILDX_CACHE
-            make images
-      - save_cache:
-          paths:
-            - "/tmp/cache/buildx"
-          key: docker-buildx-{{ checksum "./Cargo.lock" }}
-          when: always
       - run:
           command: |
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
@@ -50,6 +44,11 @@ jobs:
             make down
 
             BUILDX_CACHE=/tmp/cache/buildx make test
+      - save_cache:
+          paths:
+            - "/tmp/cache/buildx"
+          key: docker-buildx-{{ checksum "./Cargo.lock" }}
+          when: always
       - when:
           condition:
             equal: [ main, << pipeline.git.branch >> ]

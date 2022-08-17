@@ -143,6 +143,9 @@ Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/d
     <td align="center"><a href="https://kaleidawave.github.io/"><img src="https://avatars.githubusercontent.com/u/26967284?v=4?s=100" width="100px;" alt=""/><br /><sub><b>Ben</b></sub></a><br /><a href="#blog-kaleidawave" title="Blogposts">📝</a> <a href="https://github.com/shuttle-hq/shuttle/issues?q=author%3Akaleidawave" title="Bug reports">🐛</a> <a href="https://github.com/shuttle-hq/shuttle/commits?author=kaleidawave" title="Code">💻</a> <a href="https://github.com/shuttle-hq/shuttle/commits?author=kaleidawave" title="Tests">⚠️</a></td>
     <td align="center"><a href="https://github.com/ivancernja"><img src="https://avatars.githubusercontent.com/u/14149737?v=4?s=100" width="100px;" alt=""/><br /><sub><b>Ivan</b></sub></a><br /><a href="#blog-ivancernja" title="Blogposts">📝</a> <a href="https://github.com/shuttle-hq/shuttle/issues?q=author%3Aivancernja" title="Bug reports">🐛</a> <a href="https://github.com/shuttle-hq/shuttle/commits?author=ivancernja" title="Code">💻</a> <a href="https://github.com/shuttle-hq/shuttle/commits?author=ivancernja" title="Tests">⚠️</a></td>
   </tr>
+  <tr>
+    <td align="center"><a href="https://github.com/Xavientois"><img src="https://avatars.githubusercontent.com/u/34867186?v=4?s=100" width="100px;" alt=""/><br /><sub><b>Xavientois</b></sub></a><br /><a href="https://github.com/shuttle-hq/shuttle/issues?q=author%3AXavientois" title="Bug reports">🐛</a> <a href="https://github.com/shuttle-hq/shuttle/commits?author=Xavientois" title="Code">💻</a> <a href="https://github.com/shuttle-hq/shuttle/commits?author=Xavientois" title="Tests">⚠️</a></td>
+  </tr>
 </table>
 
 <!-- markdownlint-restore -->

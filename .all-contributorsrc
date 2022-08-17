@@ -97,6 +97,17 @@
         "code",
         "test"
       ]
+    },
+    {
+      "login": "Xavientois",
+      "name": "Xavientois",
+      "avatar_url": "https://avatars.githubusercontent.com/u/34867186?v=4",
+      "profile": "https://github.com/Xavientois",
+      "contributions": [
+        "bug",
+        "code",
+        "test"
+      ]
     }
   ],
   "contributorsPerLine": 7

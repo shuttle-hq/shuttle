@@ -1,5 +1,8 @@
 pub mod provisioner {
+    // This clippy is disabled as per this prost comment
+    // https://github.com/tokio-rs/prost/issues/661#issuecomment-1156606409
     #![allow(clippy::derive_partial_eq_without_eq)]
+
     use std::fmt::Display;
 
     use shuttle_common::{

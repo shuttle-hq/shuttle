@@ -1,0 +1,29 @@
+{
+  "projectName": "shuttle",
+  "projectOwner": "shuttle-hq",
+  "repoType": "github",
+  "repoHost": "https://github.com",
+  "files": [
+    "README.md"
+  ],
+  "imageSize": 100,
+  "commit": true,
+  "commitConvention": "angular",
+  "contributors": [
+    {
+      "login": "chesedo",
+      "name": "Pieter",
+      "avatar_url": "https://avatars.githubusercontent.com/u/5367103?v=4",
+      "profile": "https://github.com/chesedo",
+      "contributions": [
+        "bug",
+        "code",
+        "example",
+        "mentoring",
+        "review",
+        "test"
+      ]
+    }
+  ],
+  "contributorsPerLine": 7
+}

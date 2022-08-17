@@ -182,6 +182,15 @@
         "code",
         "test"
       ]
+    },
+    {
+      "login": "lilianmoraru",
+      "name": "Lilian Anatolie Moraru",
+      "avatar_url": "https://avatars.githubusercontent.com/u/621738?v=4",
+      "profile": "https://github.com/lilianmoraru",
+      "contributions": [
+        "content"
+      ]
     }
   ],
   "contributorsPerLine": 7

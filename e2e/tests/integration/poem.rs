@@ -1,6 +1,6 @@
 use colored::Color;
 
-use crate::helpers;
+use crate::helpers::{self, APPS_FQDN};
 
 #[test]
 fn hello_world_poem() {
@@ -9,7 +9,7 @@ fn hello_world_poem() {
 
     let request_text = client
         .get("hello")
-        .header("Host", "hello-world-poem-app.localhost.local")
+        .header("Host", format!("hello-world-poem-app.{}", *APPS_FQDN))
         .send()
         .unwrap()
         .text()
@@ -26,7 +26,7 @@ fn postgres_poem() {
     let add_response = client
         .post("todo")
         .body("{\"note\": \"To the stars\"}")
-        .header("Host", "postgres-poem-app.localhost.local")
+        .header("Host", format!("postgres-poem-app.{}", *APPS_FQDN))
         .header("content-type", "application/json")
         .send()
         .unwrap()
@@ -37,7 +37,7 @@ fn postgres_poem() {
 
     let fetch_response: String = client
         .get("todo/1")
-        .header("Host", "postgres-poem-app.localhost.local")
+        .header("Host", format!("postgres-poem-app.{}", *APPS_FQDN))
         .send()
         .unwrap()
         .text()
@@ -47,7 +47,7 @@ fn postgres_poem() {
 
     let secret_response: String = client
         .get("secret")
-        .header("Host", "postgres-poem-app.localhost.local")
+        .header("Host", format!("postgres-poem-app.{}", *APPS_FQDN))
         .send()
         .unwrap()
         .text()

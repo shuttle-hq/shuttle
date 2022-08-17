@@ -30,7 +30,7 @@ DOCKER_COMPOSE=$(DOCKER) compose
 endif
 
 ifeq ($(POSTGRES_PASSWORD),)
-$(error The POSTGRES_PASSWORD env variable must be set)
+POSTGRES_PASSWORD=postgres
 endif
 
 ifeq ($(PROD),true)
@@ -54,7 +54,7 @@ RUST_LOG?=debug
 
 DOCKER_COMPOSE_ENV=BACKEND_TAG=$(TAG) PROVISIONER_TAG=$(TAG) POSTGRES_TAG=latest APPS_FQDN=$(APPS_FQDN) DB_FQDN=$(DB_FQDN) POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) RUST_LOG=$(RUST_LOG) CONTAINER_REGISTRY=$(CONTAINER_REGISTRY)
 
-.PHONY: images clean src up down deploy docker-compose.rendered.yml shuttle-% postgres
+.PHONY: images clean src up down deploy docker-compose.rendered.yml shuttle-% postgres docker-compose.rendered.yml test
 
 clean:
 	rm .shuttle-*
@@ -75,6 +75,9 @@ docker-compose.rendered.yml: docker-compose.yml docker-compose.dev.yml
 
 deploy: docker-compose.rendered.yml images
 	docker stack deploy -c $< $(STACK)
+
+test:
+	cd e2e; POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) APPS_FQDN=$(APPS_FQDN) cargo test -- --nocapture
 
 up: docker-compose.rendered.yml images
 	CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) $(DOCKER_COMPOSE) -f $< up -d

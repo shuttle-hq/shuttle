@@ -22,6 +22,8 @@ lazy_static! {
     static ref DOCKER: PathBuf = which::which("docker").unwrap();
     static ref MAKE: PathBuf = which::which("make").unwrap();
     static ref CARGO: PathBuf = which::which("cargo").unwrap();
+    static ref DB_FQDN: String = env::var("DB_FQDN").unwrap();
+    pub static ref APPS_FQDN: String = env::var("APPS_FQDN").unwrap();
     static ref LOCAL_UP: () = {
         println!(
             "

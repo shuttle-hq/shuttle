@@ -60,6 +60,19 @@
         "review",
         "test"
       ]
+    },
+    {
+      "login": "bmoxb",
+      "name": "Max",
+      "avatar_url": "https://avatars.githubusercontent.com/u/42641081?v=4",
+      "profile": "https://github.com/bmoxb",
+      "contributions": [
+        "bug",
+        "code",
+        "example",
+        "review",
+        "test"
+      ]
     }
   ],
   "contributorsPerLine": 7

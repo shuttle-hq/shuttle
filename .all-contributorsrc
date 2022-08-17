@@ -36,6 +36,15 @@
         "test",
         "video"
       ]
+    },
+    {
+      "login": "thecotne",
+      "name": "Tsotne Nazarashvili",
+      "avatar_url": "https://avatars.githubusercontent.com/u/1606993?v=4",
+      "profile": "https://github.com/thecotne",
+      "contributions": [
+        "content"
+      ]
     }
   ],
   "contributorsPerLine": 7

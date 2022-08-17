@@ -5,7 +5,7 @@ author: ben
 tags: [rust, tutorial, axum, sql]
 thumb: authentication-banner.png
 cover: authentication-banner.png
-date: "2022-08-15T15:00:00"
+date: "2022-08-17T15:00:00"
 ---
 
 Most websites have some kind of user system. But implementing authentication can be a bit complex. It requires several things working together.
@@ -22,7 +22,7 @@ This isn't verified to be secure, use it at your own risk!!
 
 ## Let's get started
 
-We first will install the cargo shuttle command for creating the project (and later for deployment). If you don't already have it you can install it with `cargo install cargo-shuttle`. We will first go to a new directory for our project and create a new Axum app with `cargo shuttle init --axum`. 
+First, we will install shuttle for creating the project (and later for deployment). If you don't already have it you can install it with `cargo install cargo-shuttle`. We will first go to a new directory for our project and create a new Axum app with `cargo shuttle init --axum`. 
 
 You should see the following in `src/lib.rs`:
 
@@ -113,7 +113,7 @@ async fn axum() -> shuttle_service::ShuttleAxum {
 
 ### Rendering views
 
-Now we have created our Tera instance we want it to be accessible to our get methods. To do this in Axum we add the extension as a parameter to our function. In Axum, an [Extension](https://docs.rs/axum/latest/axum/struct.Extension.html) is a unit struct. So to quickly pull out the templates we use destructuring (if you thought that syntax looks weird).
+Now we have created our Tera instance we want it to be accessible to our get methods. To do this in Axum, we add the extension as a parameter to our function. In Axum, an [Extension](https://docs.rs/axum/latest/axum/struct.Extension.html) is a unit struct. Rather than dealing with `.0` to access fields, we use destructuring in the parameter (if you thought that syntax looks weird).
 
 ```rust
 async fn index(
@@ -159,7 +159,7 @@ let router = Router::new()
     .layer(Extension(Arc::new(tera)));
 ```
 
-With our main service we can now test it locally with `cargo shuttle run` (go get `cargo install cargo-shuttle`).
+With our main service we can now test it locally with `cargo shuttle run`.
 
 ![](/images/blog/authentication-demo-screenshot.png)
 
@@ -237,7 +237,7 @@ async fn post_signup(
 
 #### Creating users and storing passwords safety
 
-When storing passwords in a database for security reasons we don't want them to be in the exact format as plain text. To transform them away from the plain text format we will use a [cryptographic hash function](https://en.wikipedia.org/wiki/Cryptographic_hash_function) from [pbkdf2](https://crates.io/crates/pbkdf2) (`cargo add pbkdf2`):
+When storing passwords in a database, for security reasons we don't want them to be in the exact format as plain text. To transform them away from the plain text format we will use a [cryptographic hash function](https://en.wikipedia.org/wiki/Cryptographic_hash_function) from [pbkdf2](https://crates.io/crates/pbkdf2) (`cargo add pbkdf2`):
 
 ```rust
 fn create_user(username: &str, password: &str, database: &Database) -> Result<i32, SignupError> {
@@ -334,7 +334,7 @@ async fn get_signup(
 }
 ```
 
-We can add `signup` to the tera instance and then add both the get and post handlers to the router by adding it to the chain:
+We can add `signup` to the Tera instance and then add both the get and post handlers to the router by adding it to the chain:
 
 ```rust
 .route("/signup", get(get_signup).post(post_signup))
@@ -342,19 +342,19 @@ We can add `signup` to the tera instance and then add both the get and post hand
 
 ### Sessions
 
-Once signed up we want to save the logged-in state. We don't want the user to have to send their username and password for every request they make.
+Once signed up, we want to save the logged-in state. We don't want the user to have to send their username and password for every request they make.
 
 ### Cookies and session tokens
 
-Cookies help store state between browser requests. When a response is sent down with [Set-Cookie](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie), then any subsequent requests the browser/client makes will send cookie information. We can then pull this information off of headers on requests on the server.
+Cookies help store the state between browser requests. When a response is sent down with [Set-Cookie](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie), then any subsequent requests the browser/client makes will send cookie information. We can then pull this information off of headers on requests on the server.
 
-Again these need to be safe. We don't want collisions/duplicates. We want it to be hard to guess. For these reasons, we will represent it as a 128-bit unsigned integer. This has 2^128 options, so a very low chance of a collision.
+Again, these need to be safe. We don't want collisions/duplicates. We want it to be hard to guess. For these reasons, we will represent it as a 128-bit unsigned integer. This has 2^128 options, so a very low chance of a collision.
 
-We want to generate a "session token". We want the tokens to be cryptographically secure. Given a session id, we don't want to be able to guess the next one. aka if we have a global u128 and I have session 40129 then I can get 40130. We will use the [ChaCha](https://crates.io/crates/rand_chacha) algorithm/crate (we will add `cargo add rand_core rand_chacha`). [We can see that it does implement the crypto marker trait confirming it is valid for cryptographic scenarios](https://docs.rs/rand_chacha/0.3.1/rand_chacha/struct.ChaCha8Rng.html#impl-CryptoRng).
+We want to generate a "session token". We want the tokens to be cryptographically secure. Given a session id, we don't want users to be able to find the next one. A simple globally incremented u128 wouldn't be secure because if I know I have *session 10* then I can send requests with *session 11* for the user who logged in after. With a cryptographically secure generator, there isn't a distinguishing pattern between subsequently generated tokens. We will use the [ChaCha](https://crates.io/crates/rand_chacha) algorithm/crate (we will add `cargo add rand_core rand_chacha`). [We can see that it does implement the crypto marker-trait confirming it is valid for cryptographic scenarios](https://docs.rs/rand_chacha/0.3.1/rand_chacha/struct.ChaCha8Rng.html#impl-CryptoRng).
 
 This is unlike [Pseudo-random number generators where you can predict the next *random* number given a start point and the algorithm](https://www.youtube.com/watch?v=-h_rj2-HP2E). This could be a problem if we have our token we can get the session token of the person who logged in after us really easy and thus impersonate them.
 
-To start the random we have to set up a seed. We will be doing something similar to the creation of the Tera instance. We must wrap it in an arc and a mutex because generating new identifiers requires mutable access. We now have the following main function:
+To initialize the random generator we use [SeedableRng::from_seed](https://docs.rs/rand_core/latest/rand_core/trait.SeedableRng.html#tymethod.from_seed). The seed in this case is an initial *state* for the generator. Here we use [OsRng.next_u64()](https://docs.rs/rand_core/latest/rand_core/struct.OsRng.html) which *retrieves randomness from the operating system* rather a seed. We will be doing something similar to the creation of the Tera instance. We must wrap it in an arc and a mutex because generating new identifiers requires mutable access. We now have the following main function:
 
 ```rust
 #[shuttle_service::main]
@@ -379,7 +379,7 @@ async fn axum(
 
 #### Adding sessions to signup
 
-As well as creating a user on signup we will create the session token for the newly signed-up user. We post it to the table with our `user_id`
+As well as creating a user on signup, we will create the session token for the newly signed-up user. We post it to the table with our `user_id`
 
 ```rust
 type Random = Arc<Mutex<ChaCha8Rng>>;
@@ -410,7 +410,7 @@ pub(crate) async fn new_session(
 
 In the full demo, we use the [new type pattern](https://www.shuttle.rs/blog/2022/07/28/patterns-with-rust-types#the-new-type-pattern) over a u128 to make this easier, but we will stick with a u128 type here.
 
-Now we have our token we need to package it into a cookie value. We will do it in the simplest way possible, using `.to_string()`. We will send a response that does two things, sets this new value and returns/redirects us back to the index page. We will create a utility function for doing this:
+Now we have our token, we need to package it into a cookie value. We will do it in the simplest way possible, using `.to_string()`. We will send a response that does two things, sets this new value and returns/redirects us back to the index page. We will create a utility function for doing this:
 
 ```rust
 fn set_cookie(session_token: &str) -> impl IntoResponse {
@@ -505,7 +505,7 @@ pub(crate) async fn auth<B>(
 
 Then we create a method on `AuthState` which makes the database request.
 
-Now we have the token we now need to make a query that gets user information. We can do that using SQL joins
+Now we have the user's token we need to get their information. We can do that using SQL joins
 
 ```rust
 impl AuthState {
@@ -560,7 +560,7 @@ async fn axum(
 
 #### Getting middleware and displaying our user info
 
-Modifying our index Tera template we can add an "if block" to show a status if the user is logged in.
+Modifying our index Tera template, we can add an "if block" to show a status if the user is logged in.
 
 ```html
 <!-- in "templates/index.html" -->
@@ -603,7 +603,7 @@ pub(crate) async fn logout_response() -> impl axum::response::IntoResponse {
 }
 ```
 
-For logging in we have a very similar logic for signup with pulling multipart information of a post request. Unlike signup, we don't want to create a new user. We want to check there is an existing user with a matching password and then create a new session:
+For logging in we have a very similar logic for signup with pulling multipart information of a post request. Unlike signup, we don't want to create a new user. We want to check the row with that username has a password that matches. If the credentials match then we create a new session:
 
 ```rust
 async fn post_login(
@@ -645,7 +645,7 @@ async fn post_login(
 }
 ```
 
-Then we refer back to the [signup section](#using-html-forms) and replicate the same HTML form and handler that renders Tera seen before but for a login screen. At the end of that we can add two new routes with three handlers completing the demo:
+Then we refer back to the [signup section](#using-html-forms) and replicate the same HTML form and handler that renders the Tera template as seen before but for a login screen. At the end of that we can add two new routes with three handlers completing the demo:
 
 ```rust
 #[shuttle_service::main]
@@ -666,19 +666,21 @@ async fn axum(
 
 ## Deployment
 
-This is great, we now have a full authenticated site. But we have no users, our friends can't log in on our localhost. We want to put it on the interwebs and with our set up shuttle service main function set up it is easy.
+This is great, we now have a site with signup and login functionality. But we have no users, our friends can't log in on our localhost. We want it live on the interwebs. Luckily we are using shuttle, so it is as simple as:
 
 `cargo shuttle deploy`
+
+Because of our `#[shuttle_service::main]` annotation and out-the-box Axum support our deployment doesn't need any prior config, it is instantly live!
 
 Now you can go ahead with these concepts and add functionality for listing and deleting users. [The full demo implements these if you are looking for clues](https://github.com/kaleidawave/axum-shuttle-postgres-authentication-demo).
 
 ## Thoughts building the tutorial and other ideas on where to take it
 
-This demo includes the minimum required for authentication. Hopefully, the concepts and snippets are useful for building it into an existing site or for starting a site that needs authentication. If you were to continue it would be as simple as more fields onto the user object or building relations with the id field on the user's table. I will leave it out with some of my thoughts and opinions while building the site as well as things you could try extending it with.
+This demo includes the minimum required for authentication. Hopefully, the concepts and snippets are useful for building it into an existing site or for starting a site that needs authentication. If you were to continue, it would be as simple as more fields onto the user object or building relations with the id field on the user's table. I will leave it out with some of my thoughts and opinions while building the site as well as things you could try extending it with.
 
 For templating Tera is great. I like how I separate the markup into external files rather than bundling it into `src/lib.rs`. Its API is easy to use and is well documented. However, it is quite a simple system. I had a few errors where I would rename or remove templates and because the template picker for rendering uses a map it can panic at runtime if the template does not exist. It would be nice if the system allowed checking that templates exist at compile time. The data sending works on serde serialization, which is a little bit more computation overhead than I would like. It also does not support streaming. With streaming, we could send a chunk of HTML that doesn't depend on database values first, and then we can add more content when the database transaction has gone through. If it supported streaming we could avoid the all-or-nothing pages with white page pauses and start connections to services like Google Fonts earlier. Let me know what your favorite templating engine is for Rust and whether it supports those features!
 
-For working with the database, sqlx has typed macros. I didn't use them here but for more complex queries you might prefer the type-checking behavior. Maybe 16 bytes for storing session tokens is a bit overkill. You also might want to try sharding that table if you have a lot of sessions or using a key-value store (such as Redis) might be simpler. We also didn't implement cleaning up the sessions table, if you were storing sessions using Redis you could use [EXPIRE command](https://redis.io/commands/expire/) to automatically remove old keys.
+For working with the database, sqlx has typed macros. I didn't use them here but for more complex queries you might prefer the type-checking behavior. Maybe 16 bytes for storing session tokens is a bit overkill. You also might want to try sharding that table if you have a lot of sessions or using a key-value store (such as Redis) might be simpler. We also didn't implement cleaning up the sessions table, if you were storing sessions using Redis you could use the [EXPIRE command](https://redis.io/commands/expire/) to automatically remove old keys.
 
 This blog post is powered by shuttle! The serverless platform built for Rust.
 

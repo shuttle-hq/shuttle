@@ -29,6 +29,10 @@ ifeq ($(DOCKER_COMPOSE),)
 DOCKER_COMPOSE=$(DOCKER) compose
 endif
 
+ifeq ($(POSTGRES_PASSWORD),)
+$(error The POSTGRES_PASSWORD env variable must be set)
+endif
+
 ifeq ($(PROD),true)
 DOCKER_COMPOSE_FILES=-f docker-compose.yml
 STACK=shuttle-prod

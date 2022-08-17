@@ -49,7 +49,7 @@ jobs:
             # the tests just in case the environment is not clean
             make down
 
-            cd e2e; BUILDX_CACHE=/tmp/cache/buildx cargo test -- --nocapture
+            cd e2e; BUILDX_CACHE=/tmp/cache/buildx POSTGRES_PASSWORD=postgres cargo test -- --nocapture
       - when:
           condition:
             equal: [ main, << pipeline.git.branch >> ]
@@ -61,7 +61,7 @@ jobs:
             - run:
                command: |
                  make clean
-                 PUSH=true BUILDX_CACHE=/tmp/cache/buildx PLATFORMS=linux/amd64,linux/arm64 make images
+                 PUSH=true BUILDX_CACHE=/tmp/cache/buildx PLATFORMS=linux/amd64 make images
       - save_cache:
           paths:
             - "/tmp/cache/buildx"

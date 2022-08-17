@@ -9,9 +9,9 @@ variable "api_fqdn" {
   description = "Fully qualified domain name where the api will be reachable at"
 }
 
-variable "pg_fqdn" {
+variable "db_fqdn" {
   type        = string
-  description = "Fully qualified domain name where the shared Postgres will be reachable at"
+  description = "Fully qualified domain name where the shared databases will be reachable at"
 }
 
 variable "instance_type" {

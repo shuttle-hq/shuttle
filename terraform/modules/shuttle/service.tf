@@ -152,7 +152,7 @@ locals {
     "${path.module}/systemd/system/shuttle-provisioner.service.tftpl",
     {
       docker_image     = local.docker_provisioner_image,
-      fqdn             = var.pg_fqdn,
+      fqdn             = var.db_fqdn,
       pg_password      = var.postgres_password,
       mongodb_password = var.mongodb_password,
     }

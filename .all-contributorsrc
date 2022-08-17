@@ -139,6 +139,17 @@
         "code",
         "test"
       ]
+    },
+    {
+      "login": "jmwill86",
+      "name": "jmwill86",
+      "avatar_url": "https://avatars.githubusercontent.com/u/19667780?v=4",
+      "profile": "https://thesnugco.com/",
+      "contributions": [
+        "bug",
+        "doc",
+        "test"
+      ]
     }
   ],
   "contributorsPerLine": 7

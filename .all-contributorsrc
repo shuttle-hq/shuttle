@@ -73,6 +73,18 @@
         "review",
         "test"
       ]
+    },
+    {
+      "login": "kaleidawave",
+      "name": "Ben",
+      "avatar_url": "https://avatars.githubusercontent.com/u/26967284?v=4",
+      "profile": "https://kaleidawave.github.io/",
+      "contributions": [
+        "blog",
+        "bug",
+        "code",
+        "test"
+      ]
     }
   ],
   "contributorsPerLine": 7

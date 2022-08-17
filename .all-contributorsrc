@@ -161,6 +161,16 @@
         "code",
         "test"
       ]
+    },
+    {
+      "login": "SonicZentropy",
+      "name": "Casey Bailey",
+      "avatar_url": "https://avatars.githubusercontent.com/u/12196028?v=4",
+      "profile": "https://github.com/SonicZentropy",
+      "contributions": [
+        "bug",
+        "doc"
+      ]
     }
   ],
   "contributorsPerLine": 7

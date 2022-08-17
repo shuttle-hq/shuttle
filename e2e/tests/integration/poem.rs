@@ -55,3 +55,33 @@ fn postgres_poem() {
 
     assert_eq!(secret_response, "the contents of my API key");
 }
+
+#[test]
+fn mongodb_poem() {
+    let client = helpers::Services::new_docker("mongo (poem)", Color::Green);
+    client.deploy("poem/mongodb");
+
+    // post todo and get its generated objectId
+    let add_response = client
+        .post("todo")
+        .body("{\"note\": \"To the stars\"}")
+        .header("Host", "mongodb-poem-app.localhost.local")
+        .header("content-type", "application/json")
+        .send()
+        .unwrap()
+        .text()
+        .unwrap();
+
+    // valid objectId is 24 char hex string
+    assert_eq!(add_response.len(), 24);
+
+    let fetch_response: String = client
+        .get(&format!("todo/{}", add_response))
+        .header("Host", "mongodb-poem-app.localhost.local")
+        .send()
+        .unwrap()
+        .text()
+        .unwrap();
+
+    assert_eq!(fetch_response, "{\"note\":\"To the stars\"}");
+}

@@ -23,7 +23,7 @@ async fn retrieve(Path(id): Path<i32>, state: Data<&PgPool>) -> Result<Json<Todo
 }
 
 #[handler]
-async fn add(data: Json<TodoNew>, state: Data<&PgPool>) -> Result<Json<Todo>> {
+async fn add(Json(data): Json<TodoNew>, state: Data<&PgPool>) -> Result<Json<Todo>> {
     let todo = sqlx::query_as("INSERT INTO todos(note) VALUES ($1) RETURNING id, note")
         .bind(&data.note)
         .fetch_one(state.0)

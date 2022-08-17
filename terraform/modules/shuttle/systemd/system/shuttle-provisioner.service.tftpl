@@ -1,7 +1,8 @@
 [Unit]
 Description=maintains the shuttle provisioner which creates and manages resources
 After=docker.socket
-After=shuttle-db.service
+After=shuttle-pg.service
+After=shuttle-mongodb.service
 
 [Service]
 Type=simple
@@ -17,9 +18,11 @@ ExecStart=/usr/bin/docker run --rm \
 			      ${docker_image}:latest \
                   --ip 0.0.0.0 \
                   --port 5001 \
-                  --shared-pg-uri postgres://postgres:${pg_password}@db:5432/postgres \
+                  --shared-pg-uri postgres://postgres:${pg_password}@pg:5432/postgres \
+                  --shared-mongodb-uri mongodb://admin:${mongodb_password}@mongodb:27017/admin \
                   --fqdn ${fqdn} \
-                  --internal-address provisioner
+                  --internal-pg-address pg \
+                  --internal-mongodb-address mongodb
 
 [Install]
 WantedBy=multi-user.target

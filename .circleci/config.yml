@@ -49,7 +49,7 @@ jobs:
             # the tests just in case the environment is not clean
             make down
 
-            cd e2e; BUILDX_CACHE=/tmp/cache/buildx make test
+            BUILDX_CACHE=/tmp/cache/buildx make test
       - when:
           condition:
             equal: [ main, << pipeline.git.branch >> ]

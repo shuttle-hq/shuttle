@@ -1,7 +1,8 @@
 [Unit]
 Description=maintains the shuttle provisioner which creates and manages resources
 After=docker.socket
-After=shuttle-db.service
+After=shuttle-pg.service
+After=shuttle-mongodb.service
 
 [Service]
 Type=simple

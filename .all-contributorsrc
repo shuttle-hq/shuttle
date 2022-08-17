@@ -34,7 +34,8 @@
         "code",
         "review",
         "test",
-        "video"
+        "video",
+        "bug"
       ]
     },
     {

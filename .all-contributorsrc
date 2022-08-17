@@ -9,6 +9,7 @@
   "imageSize": 100,
   "commit": true,
   "commitConvention": "angular",
+  "contributorsSortAlphabetically": true,
   "contributors": [
     {
       "login": "chesedo",

@@ -1,0 +1,219 @@
+{
+  "projectName": "shuttle",
+  "projectOwner": "shuttle-hq",
+  "repoType": "github",
+  "repoHost": "https://github.com",
+  "files": [
+    "README.md"
+  ],
+  "imageSize": 100,
+  "commit": true,
+  "commitConvention": "angular",
+  "contributorsSortAlphabetically": true,
+  "contributors": [
+    {
+      "login": "chesedo",
+      "name": "Pieter",
+      "avatar_url": "https://avatars.githubusercontent.com/u/5367103?v=4",
+      "profile": "https://github.com/chesedo",
+      "contributions": [
+        "bug",
+        "code",
+        "example",
+        "mentoring",
+        "review",
+        "test",
+        "doc"
+      ]
+    },
+    {
+      "login": "christoshadjiaslanis",
+      "name": "Christos Hadjiaslanis",
+      "avatar_url": "https://avatars.githubusercontent.com/u/14791384?v=4",
+      "profile": "https://github.com/christoshadjiaslanis",
+      "contributions": [
+        "blog",
+        "code",
+        "review",
+        "test",
+        "video",
+        "bug"
+      ]
+    },
+    {
+      "login": "thecotne",
+      "name": "Tsotne Nazarashvili",
+      "avatar_url": "https://avatars.githubusercontent.com/u/1606993?v=4",
+      "profile": "https://github.com/thecotne",
+      "contributions": [
+        "content"
+      ]
+    },
+    {
+      "login": "brokad",
+      "name": "Damien",
+      "avatar_url": "https://avatars.githubusercontent.com/u/13315034?v=4",
+      "profile": "https://github.com/brokad",
+      "contributions": [
+        "bug",
+        "code",
+        "doc",
+        "fundingFinding",
+        "review",
+        "test"
+      ]
+    },
+    {
+      "login": "bmoxb",
+      "name": "Max",
+      "avatar_url": "https://avatars.githubusercontent.com/u/42641081?v=4",
+      "profile": "https://github.com/bmoxb",
+      "contributions": [
+        "bug",
+        "code",
+        "example",
+        "review",
+        "test"
+      ]
+    },
+    {
+      "login": "kaleidawave",
+      "name": "Ben",
+      "avatar_url": "https://avatars.githubusercontent.com/u/26967284?v=4",
+      "profile": "https://kaleidawave.github.io/",
+      "contributions": [
+        "blog",
+        "bug",
+        "code",
+        "test"
+      ]
+    },
+    {
+      "login": "ivancernja",
+      "name": "Ivan",
+      "avatar_url": "https://avatars.githubusercontent.com/u/14149737?v=4",
+      "profile": "https://github.com/ivancernja",
+      "contributions": [
+        "blog",
+        "bug",
+        "code",
+        "test"
+      ]
+    },
+    {
+      "login": "Xavientois",
+      "name": "Xavientois",
+      "avatar_url": "https://avatars.githubusercontent.com/u/34867186?v=4",
+      "profile": "https://github.com/Xavientois",
+      "contributions": [
+        "bug",
+        "code",
+        "test"
+      ]
+    },
+    {
+      "login": "nahuakang",
+      "name": "Nahua",
+      "avatar_url": "https://avatars.githubusercontent.com/u/18533347?v=4",
+      "profile": "https://github.com/nahuakang",
+      "contributions": [
+        "bug",
+        "code",
+        "test"
+      ]
+    },
+    {
+      "login": "oddgrd",
+      "name": "Oddbjørn Grødem",
+      "avatar_url": "https://avatars.githubusercontent.com/u/29732646?v=4",
+      "profile": "https://github.com/oddgrd",
+      "contributions": [
+        "code",
+        "test"
+      ]
+    },
+    {
+      "login": "marioidival",
+      "name": "Mario Idival",
+      "avatar_url": "https://avatars.githubusercontent.com/u/1129263?v=4",
+      "profile": "https://github.com/marioidival",
+      "contributions": [
+        "code",
+        "test"
+      ]
+    },
+    {
+      "login": "jmwill86",
+      "name": "jmwill86",
+      "avatar_url": "https://avatars.githubusercontent.com/u/19667780?v=4",
+      "profile": "https://thesnugco.com/",
+      "contributions": [
+        "bug",
+        "doc",
+        "test",
+        "code"
+      ]
+    },
+    {
+      "login": "coszio",
+      "name": "Luis Cossío",
+      "avatar_url": "https://avatars.githubusercontent.com/u/62079184?v=4",
+      "profile": "https://github.com/coszio",
+      "contributions": [
+        "code",
+        "test"
+      ]
+    },
+    {
+      "login": "SonicZentropy",
+      "name": "Casey Bailey",
+      "avatar_url": "https://avatars.githubusercontent.com/u/12196028?v=4",
+      "profile": "https://github.com/SonicZentropy",
+      "contributions": [
+        "bug",
+        "doc"
+      ]
+    },
+    {
+      "login": "alsuren",
+      "name": "David Laban",
+      "avatar_url": "https://avatars.githubusercontent.com/u/254647?v=4",
+      "profile": "http://alsuren.github.io/",
+      "contributions": [
+        "bug",
+        "code",
+        "test"
+      ]
+    },
+    {
+      "login": "lilianmoraru",
+      "name": "Lilian Anatolie Moraru",
+      "avatar_url": "https://avatars.githubusercontent.com/u/621738?v=4",
+      "profile": "https://github.com/lilianmoraru",
+      "contributions": [
+        "content"
+      ]
+    },
+    {
+      "login": "Butch78",
+      "name": "Matthew Aylward ",
+      "avatar_url": "https://avatars.githubusercontent.com/u/19205392?v=4",
+      "profile": "https://github.com/Butch78",
+      "contributions": [
+        "code",
+        "test"
+      ]
+    },
+    {
+      "login": "nodard",
+      "name": "Nodar Daneliya",
+      "avatar_url": "https://avatars.githubusercontent.com/u/12720758?v=4",
+      "profile": "https://github.com/nodard",
+      "contributions": [
+        "business",
+        "fundingFinding"
+      ]
+    }
+  ],
+  "contributorsPerLine": 7
+}

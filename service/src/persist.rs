@@ -1,6 +1,6 @@
 use tokio::runtime::Runtime;
 
-use crate::{Factory, ResourceBuilder};
+use crate::{Factory, ResourceBuilder, error::CustomError};
 use async_trait::async_trait;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -9,15 +9,10 @@ use std::fs::File;
 use std::io::BufReader;
 use std::io::BufWriter;
 use std::fs;
-use std::str::FromStr;
 
-use bincode;
-use bincode::serialize_into;
+use bincode::{serialize_into, deserialize_from};
 
 use shuttle_common::project::ProjectName;
-
-use std::error::Error;
-
 
 
 pub struct Persist;
@@ -28,23 +23,23 @@ pub struct PersistInstance {
 
 impl PersistInstance {
 
-    pub fn save<T: Serialize>(&self, key: &str, struc: T) -> Result<(), Box<dyn Error>> {
+    pub fn save<T: Serialize>(&self, key: &str, struc: T) -> Result<(), crate::Error> {
         let project_name = self.project_name.to_string();
         fs::create_dir_all(format!("shuttle_persist/{}", project_name))?;
         
         let file = File::create(format!("shuttle_persist/{}/{}.bin", project_name, key))?;
         let mut writer = BufWriter::new(file);
-        Ok(serialize_into(&mut writer, &struc)?)
+        Ok(serialize_into(&mut writer, &struc).map_err(CustomError::new)?)
     }
 
-    pub fn load<T>(&self, key: &str) -> Result<T, Box<dyn Error>>
+    pub fn load<T>(&self, key: &str) -> Result<T, crate::Error>
     where
         T: DeserializeOwned,
     {
         let project_name = self.project_name.to_string();
         let file = File::open(format!("shuttle_persist/{}/{}.bin", project_name, key)).unwrap();
         let reader = BufReader::new(file);
-        Ok(bincode::deserialize_from(reader)?)
+        Ok(deserialize_from(reader).map_err(CustomError::new)?)
     }
 
 }   
@@ -67,19 +62,18 @@ impl ResourceBuilder<PersistInstance> for Persist {
         
     }
 
-
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
+    use std::{fs, str::FromStr};
+    use shuttle_common::project::ProjectName;
 
     #[test]
     fn test_create_folder() {
-        let project_name = ProjectName::from_str("test").unwrap();
         
-        let path = format!("shuttle_persist/{}", project_name.to_string());
+        let path = format!("shuttle_persist/{}", "test".to_string());
         assert!(fs::metadata(path).is_ok());
     }
 
@@ -92,5 +86,6 @@ mod tests {
         let result: String = persist.load("test").unwrap();
         assert_eq!(result, "test");
     }
+
 }
 

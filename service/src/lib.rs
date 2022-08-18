@@ -237,6 +237,7 @@ pub mod aws;
 
 // TODO - remove this when we have a better way to handle this
 // #[cfg(feature = "persist")]
+
 pub mod persist;
 pub use persist::PersistInstance;
 

@@ -1,4 +1,3 @@
-use std::env;
 use std::io::{self, stderr, stdout, BufRead, Write};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
@@ -6,11 +5,60 @@ use std::process::{Child, Command, ExitStatus, Output, Stdio};
 use std::str;
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
+use std::{env, path};
 
 use colored::*;
 use reqwest::blocking::RequestBuilder;
 
 use lazy_static::lazy_static;
+use tempdir::TempDir;
+
+/// The directory given to `cargo shuttle` run in the context of E2E
+/// testing
+pub enum TempCargoHome {
+    /// A directory managed by the caller, no patch applied
+    User(PathBuf),
+    /// A directory managed by this crate is created, applies the
+    /// patch as required
+    Managed(TempDir),
+}
+
+impl TempCargoHome {
+    /// Initialize a new `TempCargoHome` with a `shuttle-service`
+    /// patch unless `SHUTTLE_CARGO_HOME` is set, then use that. With
+    /// the latter, no patch is applied
+    pub fn from_env_or_new() -> Self {
+        match env::var("SHUTTLE_CARGO_HOME") {
+            Ok(path) => Self::User(path.into()),
+            Err(_) => {
+                let dir = TempDir::new("shuttle-tests").unwrap();
+
+                // Apply the `patch.crates-io` for `shuttle-service`
+                let mut config = std::fs::File::create(dir.path().join("config.toml")).unwrap();
+                write!(
+                    config,
+                    r#"[patch.crates-io]
+shuttle-service = {{ path = "{}" }}"#,
+                    WORKSPACE_ROOT.join("service").display()
+                )
+                .unwrap();
+
+                Self::Managed(dir)
+            }
+        }
+    }
+
+    pub fn path(&self) -> &Path {
+        match self {
+            Self::User(path) => path.as_path(),
+            Self::Managed(dir) => dir.path()
+        }
+    }
+
+    pub fn display(&self) -> path::Display<'_> {
+        self.path().display()
+    }
+}
 
 lazy_static! {
     static ref WORKSPACE_ROOT: PathBuf = {
@@ -24,6 +72,7 @@ lazy_static! {
     static ref CARGO: PathBuf = which::which("cargo").unwrap();
     static ref DB_FQDN: String = env::var("DB_FQDN").unwrap();
     pub static ref APPS_FQDN: String = env::var("APPS_FQDN").unwrap();
+    static ref CARGO_HOME: TempCargoHome = TempCargoHome::from_env_or_new();
     static ref LOCAL_UP: () = {
         println!(
             "
@@ -31,11 +80,13 @@ lazy_static! {
 docker: {}
 make: {}
 cargo: {}
+CARGO_HOME: {}
 ----------------------------------------------------------------------------------
 ",
             DOCKER.display(),
             MAKE.display(),
-            CARGO.display()
+            CARGO.display(),
+            CARGO_HOME.display()
         );
 
         Command::new(MAKE.as_os_str())
@@ -183,6 +234,8 @@ impl Services {
         if env::var("SHUTTLE_API_KEY").is_err() {
             run.env("SHUTTLE_API_KEY", "test-key");
         }
+
+        run.env("CARGO_HOME", CARGO_HOME.path());
 
         run.args(args).current_dir(path);
         spawn_and_log(&mut run, &self.target, self.color)

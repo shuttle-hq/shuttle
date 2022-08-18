@@ -65,7 +65,7 @@ fn mongodb_poem() {
     let add_response = client
         .post("todo")
         .body("{\"note\": \"To the stars\"}")
-        .header("Host", "mongodb-poem-app.localhost.local")
+        .header("Host", format!("mongodb-poem-app.{}", *APPS_FQDN))
         .header("content-type", "application/json")
         .send()
         .unwrap()
@@ -73,11 +73,11 @@ fn mongodb_poem() {
         .unwrap();
 
     // valid objectId is 24 char hex string
-    assert_eq!(add_response.len(), 24);
+    assert_eq!(add_response.len(), 24, "response length mismatch: got: {}", add_response);
 
     let fetch_response: String = client
         .get(&format!("todo/{}", add_response))
-        .header("Host", "mongodb-poem-app.localhost.local")
+        .header("Host", format!("mongodb-poem-app.{}", *APPS_FQDN))
         .send()
         .unwrap()
         .text()

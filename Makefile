@@ -77,7 +77,7 @@ deploy: docker-compose.rendered.yml images
 	docker stack deploy -c $< $(STACK)
 
 test:
-	cd e2e; POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) APPS_FQDN=$(APPS_FQDN) cargo test -- --nocapture
+	cd e2e; POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) APPS_FQDN=$(APPS_FQDN) cargo test $(CARGO_TEST_FLAGS) -- --nocapture
 
 up: docker-compose.rendered.yml images
 	CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) $(DOCKER_COMPOSE) -f $< up -d

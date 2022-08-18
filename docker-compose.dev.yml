@@ -27,15 +27,6 @@ services:
         done
 
         exec /usr/local/bin/service "$${@:0}"
-    volumes:
-      - .:/usr/src/shuttle
-
-    build:
-      context: .
-      dockerfile: Containerfile
-      args:
-        crate: shuttle-api
-    image: "${CONTAINER_REGISTRY}/api:dev"
 
   provisioner:
     entrypoint:
@@ -57,9 +48,3 @@ services:
         >&2 echo "DBs are available - starting provisioner"
 
         exec /usr/local/bin/service "$${@:0}"
-    build:
-      context: .
-      dockerfile: Containerfile
-      args:
-        crate: shuttle-provisioner
-    image: "${CONTAINER_REGISTRY}/provisioner:dev"

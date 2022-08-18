@@ -1,7 +1,6 @@
 version: "3"
 volumes:
   shuttle-backend-vol:
-    external: true
 services:
   api:
     image: "${CONTAINER_REGISTRY}/api:${BACKEND_TAG}"
@@ -17,6 +16,9 @@ services:
         condition: on-failure
         delay: 5s
         max_attempts: 3
+      placement:
+        constraints:
+          - node.hostname==controller
     environment:
       - SHUTTLE_USERS_TOML=/var/lib/shuttle/users.toml
       - RUST_LOG=${RUST_LOG}
@@ -44,13 +46,24 @@ services:
       - "--internal-pg-address=pg"
       - "--fqdn=${DB_FQDN}"
   pg:
-    image: "postgres"
+    image: "${CONTAINER_REGISTRY}/postgres:${POSTGRES_TAG}"
     restart: always
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - 8002:8000
+      - 5432:5432
+    deploy:
+      placement:
+        constraints:
+          - node.hostname==postgres
   mongodb:
     image: mongo:5.0.10
     restart: always
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+    deploy:
+      placement:
+        constraints:
+          - node.hostname==postgres

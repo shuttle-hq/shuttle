@@ -241,7 +241,6 @@ pub mod aws;
 pub mod persist;
 pub use persist::PersistInstance;
 
-
 #[cfg(feature = "codegen")]
 extern crate shuttle_codegen;
 #[cfg(feature = "codegen")]
@@ -310,7 +309,6 @@ pub mod loader;
 /// An instance of factory is passed by the deployer as an argument to [Service::build][Service::build] in the initial phase of deployment.
 ///
 /// Also see the [main][main] macro.
-
 use shuttle_common::project::ProjectName;
 
 #[async_trait]

@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-api"
-version = "0.4.2"
+version = "0.5.0"
 edition = "2021"
 publish = false
 
@@ -31,14 +31,14 @@ tonic = "0.7.2"
 uuid = { version = "1.1.1", features = ["v4"] }
 
 [dependencies.shuttle-common]
-version = "0.4.2"
+version = "0.5.0"
 path = "../common"
 
 [dependencies.shuttle-proto]
-version = "0.4.2"
+version = "0.5.0"
 path = "../proto"
 
 [dependencies.shuttle-service]
-version = "0.4.2"
+version = "0.5.0"
 path = "../service"
 features = ["loader", "secrets"]

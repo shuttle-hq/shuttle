@@ -76,6 +76,18 @@ resource "aws_lb_listener" "postgres" {
   }
 }
 
+resource "aws_lb_listener" "mongodb" {
+  load_balancer_arn = aws_lb.db.arn
+
+  port = "27017"
+
+  protocol = "TCP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.mongodb.arn
+  }
+}
 
 resource "aws_lb" "user" {
   name = "shuttleapp"
@@ -147,7 +159,7 @@ resource "aws_lb_target_group" "user" {
 }
 
 resource "aws_lb_target_group" "postgres" {
-  name = "shuttle-db-lb-tg-tcp"
+  name = "shuttle-postgres-lb-tg-tcp"
 
   // TODO: change me
   health_check {
@@ -157,6 +169,25 @@ resource "aws_lb_target_group" "postgres" {
   }
 
   port = var.postgres_container_port
+
+  protocol = "TCP"
+
+  vpc_id = aws_vpc.backend.id
+
+  target_type = "instance"
+}
+
+resource "aws_lb_target_group" "mongodb" {
+  name = "shuttle-mongodb-lb-tg-tcp"
+
+  // TODO: change me
+  health_check {
+    enabled = true
+    path    = "/status"
+    port    = var.api_container_port
+  }
+
+  port = var.mongodb_container_port
 
   protocol = "TCP"
 

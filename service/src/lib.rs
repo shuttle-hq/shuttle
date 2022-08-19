@@ -102,7 +102,7 @@
 //!
 //! ```toml
 //! shuttle-service = { version = "0.5.0", features = ["web-rocket", "sqlx-postgres"] }
-//! sqlx = { version = "0.5", features = ["runtime-tokio-native-tls", "postgres"] }
+//! sqlx = { version = "0.6.1", features = ["runtime-tokio-native-tls", "postgres"] }
 //! ```
 //!
 //! Now update the `#[shuttle_service::main]` function to take in a `PgPool`:

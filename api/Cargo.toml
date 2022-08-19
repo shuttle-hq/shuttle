@@ -5,17 +5,17 @@ edition = "2021"
 publish = false
 
 [dependencies]
-anyhow = "1.0.57"
-async-trait = "0.1.56"
+anyhow = "1.0.62"
+async-trait = "0.1.57"
 base64 = "0.13.0"
-cargo = "0.62.0"
-cargo-util = "0.1.2"
-chrono = "0.4.19"
-clap = { version = "3.1.18", features = ["derive"] }
+cargo = "0.64.0"
+cargo-util = "0.2.1"
+chrono = "0.4.22"
+clap = { version = "3.2.17", features = ["derive"] }
 env_logger = "0.9.0"
-fqdn = "0.1.9"
-futures = "0.3.21"
-hyper = { version = "0.14.19", features = ["client", "http1", "http2", "tcp" ] } # for reverse proxying
+fqdn = "0.2.2"
+futures = "0.3.23"
+hyper = { version = "0.14.20", features = ["client", "http1", "http2", "tcp" ] } # for reverse proxying
 # not great, but waiting for WebSocket changes to be merged
 hyper-reverse-proxy = { git = "https://github.com/chesedo/hyper-reverse-proxy", branch = "master" }
 lazy_static = "1.4.0"
@@ -23,12 +23,12 @@ libloading = "0.7.3"
 log = "0.4.17"
 rand = "0.8.5"
 rocket = { version = "0.5.0-rc.2", features = ["uuid", "serde_json", "json"] }
-serde = "1.0.137"
-sqlx = { version = "0.5.13", features = ["runtime-tokio-native-tls", "postgres"] }
-tokio = { version = "1.19.2", features = ["full"] }
+serde = "1.0.143"
+sqlx = { version = "0.6.1", features = ["runtime-tokio-native-tls", "postgres"] }
+tokio = { version = "1.20.1", features = ["full"] }
 toml = "0.5.9"
-tonic = "0.7.2"
-uuid = { version = "1.1.1", features = ["v4"] }
+tonic = "0.8.0"
+uuid = { version = "1.1.2", features = ["v4"] }
 
 [dependencies.shuttle-common]
 version = "0.5.0"

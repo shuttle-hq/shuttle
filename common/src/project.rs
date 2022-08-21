@@ -53,14 +53,10 @@ impl ProjectName {
 
         fn is_profanity_free_and_not_reserved(hostname: &str) -> bool {
             let reserved_words: HashSet<String> = HashSet::from(["Shuttle.rs".to_string()]);
-            let allowed_words: HashSet<String> = HashSet::from([
-                "ass".to_string(),
-                "sex".to_string(),
-            ]);
+            let allowed_words: HashSet<String> =
+                HashSet::from(["ass".to_string(), "sex".to_string()]);
 
-            let censor = Censor::Standard
-                + Censor::Sex
-                + Censor::Custom(reserved_words)
+            let censor = Censor::Standard + Censor::Sex + Censor::Custom(reserved_words)
                 - Censor::Custom(allowed_words);
             !censor.check(hostname)
         }
@@ -142,7 +138,7 @@ pub mod tests {
             "UPPERCASE",
             "CamelCase",
             "pascalCase",
-            "myassets"
+            "myassets",
         ] {
             let project_name = ProjectName::from_str(hostname);
             assert!(project_name.is_ok(), "{:?} was err", hostname);

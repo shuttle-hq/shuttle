@@ -7,8 +7,8 @@ edition = "2021"
 
 [dependencies]
 chrono = "0.4"
-jsonwebtoken = {version = "8", default-features = false }
+jsonwebtoken = { version = "8", default-features = false }
 lazy_static = "1.4"
-rocket = {version = "0.5.0-rc.1", features = ["json"] }
-serde = {version = "1.0", features = ["derive"] }
-shuttle-service = { version = "0.4.2", features = ["web-rocket"] }
+rocket = { version = "0.5.0-rc.1", features = ["json"] }
+serde = { version = "1.0", features = ["derive"] }
+shuttle-service = { version = "0.5.0", features = ["web-rocket"] }

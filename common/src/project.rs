@@ -1,8 +1,6 @@
-use std::collections::HashSet;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
-
 use rocket::request::FromParam;
 use serde::de::Error as DeError;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -16,7 +14,8 @@ use serde::{Deserialize, Deserializer, Serialize};
 /// - It does not contain profanity.
 /// - It is not a reserved word.
 ///
-use censor::Censor;
+
+use rustrict::{Censor, Type};
 
 #[derive(Clone, Serialize, Debug, Eq, PartialEq)]
 pub struct ProjectName(String);
@@ -51,20 +50,15 @@ impl ProjectName {
             matches!(byte, b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'_')
         }
 
-        fn is_profanity_free_and_not_reserved(hostname: &str) -> bool {
-            let reserved_words: HashSet<String> = HashSet::from(["Shuttle.rs".to_string()]);
-            let allowed_words: HashSet<String> =
-                HashSet::from(["ass".to_string(), "sex".to_string()]);
-
-            let censor = Censor::Standard + Censor::Sex + Censor::Custom(reserved_words)
-                - Censor::Custom(allowed_words);
-            !censor.check(hostname)
+        fn is_profanity_free(hostname: &str) -> bool {
+            let (_censored, analysis) = Censor::from_str(hostname).censor_and_analyze();
+            !analysis.is(Type::MODERATE_OR_HIGHER)
         }
 
         let separators = ['-', '_'];
 
         !(hostname.bytes().any(|byte| !is_valid_char(byte))
-            || !is_profanity_free_and_not_reserved(hostname)
+            || !is_profanity_free(hostname)
             || hostname.ends_with(separators)
             || hostname.starts_with(separators)
             || hostname.is_empty())
@@ -139,6 +133,9 @@ pub mod tests {
             "CamelCase",
             "pascalCase",
             "myassets",
+            "scunthorpe",
+            "dachterrasse",
+            "dachterasse"
         ] {
             let project_name = ProjectName::from_str(hostname);
             assert!(project_name.is_ok(), "{:?} was err", hostname);

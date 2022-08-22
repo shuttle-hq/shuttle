@@ -1138,15 +1138,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "censor"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5563d2728feef9a6186acdd148bccbe850dad63c5ba55a3b3355abc9137cb3eb"
-dependencies = [
- "once_cell",
-]
-
-[[package]]
 name = "cesu8"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1826,6 +1817,12 @@ name = "discard"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "212d0f5754cb6769937f4501cc0e67f4f4483c8d2c3e1e922ee9edbe4ab4c7c0"
+
+[[package]]
+name = "doc-comment"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fea41bba32d969b513997752735605054bc0dfa92b4c56bf1189f2e174be7a10"
 
 [[package]]
 name = "dotenv"
@@ -4311,6 +4308,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustrict"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8ab6d404f2f6170969bf27865e33d708cbfed94a3b5def842c77394178bd7881"
+dependencies = [
+ "bitflags",
+ "doc-comment",
+ "itertools",
+ "lazy_static",
+ "rustc-hash",
+ "strsim",
+ "unicode-normalization",
+ "unicode_categories",
+]
+
+[[package]]
 name = "rustversion"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4637,15 +4650,11 @@ dependencies = [
 name = "shuttle-common"
 version = "0.5.0"
 dependencies = [
- "anyhow",
- "censor",
  "chrono",
- "lazy_static",
  "log",
- "once_cell",
  "rocket",
+ "rustrict",
  "serde",
- "serde_json",
  "uuid 1.1.2",
 ]
 

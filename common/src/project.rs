@@ -132,7 +132,6 @@ pub mod tests {
             "CamelCase",
             "pascalCase",
             "myassets",
-            "scunthorpe",
             "dachterrasse",
         ] {
             let project_name = ProjectName::from_str(hostname);

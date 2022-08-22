@@ -14,11 +14,6 @@ use bincode::{deserialize_from, serialize_into};
 
 use shuttle_common::project::ProjectName;
 
-
-
-
-
-
 pub struct Persist;
 
 pub struct PersistInstance {
@@ -94,5 +89,4 @@ mod tests {
 
         assert!(persist.load::<String>("error").is_err());
     }
-
 }

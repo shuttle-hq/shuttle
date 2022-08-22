@@ -1,9 +1,9 @@
-use std::error::Error;
-use std::fmt::{Display, Formatter};
-use std::str::FromStr;
 use rocket::request::FromParam;
 use serde::de::Error as DeError;
 use serde::{Deserialize, Deserializer, Serialize};
+use std::error::Error;
+use std::fmt::{Display, Formatter};
+use std::str::FromStr;
 
 /// Project names should conform to valid Host segments (or labels)
 /// as per [IETF RFC 1123](https://datatracker.ietf.org/doc/html/rfc1123).
@@ -14,7 +14,6 @@ use serde::{Deserialize, Deserializer, Serialize};
 /// - It does not contain profanity.
 /// - It is not a reserved word.
 ///
-
 use rustrict::{Censor, Type};
 
 #[derive(Clone, Serialize, Debug, Eq, PartialEq)]

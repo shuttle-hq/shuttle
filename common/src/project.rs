@@ -135,7 +135,6 @@ pub mod tests {
             "myassets",
             "scunthorpe",
             "dachterrasse",
-            "dachterasse"
         ] {
             let project_name = ProjectName::from_str(hostname);
             assert!(project_name.is_ok(), "{:?} was err", hostname);

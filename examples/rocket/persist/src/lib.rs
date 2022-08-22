@@ -20,6 +20,12 @@ struct MyState {
     persist: PersistInstance,
 }
 
+// Example of Post request:
+// curl -X POST -H "Content-Type: application/json" -d '{"date":"2020-12-22", "temp_high":5, "temp_low":5, "precipitation": 5}' localhost:8000/
+
+// Example of Get request:
+// curl localhost:8000/2020-12-22
+
 
 // This enpoint is used to create a new weather record.
 #[post("/", data = "<data>")]

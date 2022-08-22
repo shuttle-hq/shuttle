@@ -14,6 +14,11 @@ use bincode::{deserialize_from, serialize_into};
 
 use shuttle_common::project::ProjectName;
 
+
+
+
+
+
 pub struct Persist;
 
 pub struct PersistInstance {
@@ -80,4 +85,14 @@ mod tests {
         let result: String = persist.load("test").unwrap();
         assert_eq!(result, "test");
     }
+
+    #[test]
+    fn test_load_error() {
+        let persist = PersistInstance {
+            project_name: ProjectName::from_str("test").unwrap(),
+        };
+
+        assert!(persist.load::<String>("error").is_err());
+    }
+
 }

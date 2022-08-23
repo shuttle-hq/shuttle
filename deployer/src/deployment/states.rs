@@ -5,13 +5,28 @@ use std::fmt;
 #[serde(rename_all = "lowercase")]
 #[repr(i32)]
 pub enum State {
+    /// Deployment is queued to be build
     Queued = 0,
+
+    /// Deployment is building, but is not done yet
     Building = 1,
+
+    /// Deployment is built, but has not been started yet
     Built = 2,
+
+    /// Deployment is running - ie. its thread is active
     Running = 3,
+
+    /// Deployment was running, but stopped running all by itself. This is expected for things like background workers
     Completed = 4,
+
+    /// Deployment was running, but has been stopped by the user.
     Stopped = 5,
+
+    /// Something in the deployment process failed
     Crashed = 6,
+
+    /// We never expect this state and entering this state should be considered a bug
     Unknown = 10,
 }
 

@@ -3,6 +3,7 @@ mod client;
 pub mod config;
 mod factory;
 mod init;
+mod logger;
 mod print;
 
 use std::fs::{read_to_string, File};
@@ -24,13 +25,13 @@ use colored::Colorize;
 use config::RequestContext;
 use factory::LocalFactory;
 use semver::{Version, VersionReq};
+use shuttle_common::DeploymentStateMeta;
 use shuttle_service::loader::{build_crate, Loader};
 use tokio::sync::mpsc::{self, UnboundedSender};
 use toml_edit::Document;
 use tracing::trace;
-use uuid::Uuid;
 
-use shuttle_common::DeploymentStateMeta;
+use crate::logger::Logger;
 
 pub struct Shuttle {
     ctx: RequestContext,
@@ -204,8 +205,6 @@ impl Shuttle {
 
         let mut factory = LocalFactory::new(self.ctx.project_name().clone())?;
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), run_args.port);
-        let deployment_id = Uuid::new_v4();
-        let (tx, mut rx) = mpsc::unbounded_channel();
 
         trace!("loading project");
         println!(
@@ -214,13 +213,8 @@ impl Shuttle {
             self.ctx.project_name(),
             addr
         );
-        let (handle, so) = loader.load(&mut factory, addr, tx, deployment_id).await?;
-
-        tokio::spawn(async move {
-            while let Some(log) = rx.recv().await {
-                print::log(log.datetime, log.item);
-            }
-        });
+        let logger = Box::new(Logger);
+        let (handle, so) = loader.load(&mut factory, addr, logger).await?;
 
         handle.await??;
 

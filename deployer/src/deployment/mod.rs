@@ -1,14 +1,18 @@
 pub mod deploy_layer;
 pub mod log;
+mod provisioner_factory;
 mod queue;
 mod run;
+mod runtime_logger;
 mod states;
 
 pub use states::State;
 
-pub use log::Log;
+pub use self::log::Log;
+pub use provisioner_factory::AbstractProvisionerFactory;
 pub use queue::Queued;
 pub use run::Built;
+pub use runtime_logger::RuntimeLoggerFactory;
 use tracing::instrument;
 
 use tokio::sync::{broadcast, mpsc};
@@ -29,11 +33,20 @@ pub struct DeploymentManager {
 impl DeploymentManager {
     /// Create a new deployment manager. Manages one or more 'pipelines' for
     /// processing service building, loading, and deployment.
-    pub fn new(log_recorder: impl LogRecorder) -> Self {
+    pub fn new(
+        abstract_factory: impl provisioner_factory::AbstractFactory,
+        runtime_logger_factory: impl runtime_logger::Factory,
+        build_log_recorder: impl LogRecorder,
+    ) -> Self {
         let (kill_send, _) = broadcast::channel(KILL_BUFFER_SIZE);
 
         DeploymentManager {
-            pipeline: Pipeline::new(kill_send.clone(), log_recorder),
+            pipeline: Pipeline::new(
+                kill_send.clone(),
+                abstract_factory,
+                runtime_logger_factory,
+                build_log_recorder,
+            ),
             kill_send,
         }
     }
@@ -80,14 +93,24 @@ impl Pipeline {
     /// executing/deploying built services. Two multi-producer, single consumer
     /// channels are also created which are for moving on-going service
     /// deployments between the aforementioned tasks.
-    fn new(kill_send: KillSender, log_recorder: impl LogRecorder) -> Pipeline {
+    fn new(
+        kill_send: KillSender,
+        abstract_factory: impl provisioner_factory::AbstractFactory,
+        runtime_logger_factory: impl runtime_logger::Factory,
+        build_log_recorder: impl LogRecorder,
+    ) -> Pipeline {
         let (queue_send, queue_recv) = mpsc::channel(QUEUE_BUFFER_SIZE);
         let (run_send, run_recv) = mpsc::channel(RUN_BUFFER_SIZE);
 
         let run_send_clone = run_send.clone();
 
-        tokio::spawn(queue::task(queue_recv, run_send_clone, log_recorder));
-        tokio::spawn(run::task(run_recv, kill_send));
+        tokio::spawn(queue::task(queue_recv, run_send_clone, build_log_recorder));
+        tokio::spawn(run::task(
+            run_recv,
+            kill_send,
+            abstract_factory,
+            runtime_logger_factory,
+        ));
 
         Pipeline {
             queue_send,

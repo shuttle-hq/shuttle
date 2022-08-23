@@ -12,8 +12,7 @@ use cargo::util::homedir;
 use cargo::Config;
 use cargo_metadata::Message;
 use libloading::{Library, Symbol};
-use log::trace;
-use shuttle_common::DeploymentId;
+use log::{error, trace};
 use thiserror::Error as ThisError;
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -21,10 +20,7 @@ use futures::FutureExt;
 
 use crate::error::CustomError;
 use crate::Bootstrapper;
-use crate::{
-    logger::{Log, Logger},
-    Error, Factory, ServeHandle,
-};
+use crate::{Error, Factory, ServeHandle};
 
 const ENTRYPOINT_SYMBOL_NAME: &[u8] = b"_create_service\0";
 
@@ -69,11 +65,9 @@ impl Loader {
         self,
         factory: &mut dyn Factory,
         addr: SocketAddr,
-        tx: UnboundedSender<Log>,
-        deployment_id: DeploymentId,
+        logger: Box<dyn log::Log>,
     ) -> Result<(ServeHandle, Library), Error> {
         let mut bootstrapper = self.bootstrapper;
-        let logger = Box::new(Logger::new(tx, deployment_id));
 
         AssertUnwindSafe(bootstrapper.bootstrap(factory, logger))
             .catch_unwind()
@@ -174,8 +168,16 @@ pub async fn build_crate(
     // This needs to be on a separate thread, else deployer will block (reason currently unknown :D)
     tokio::spawn(async move {
         for message in Message::parse_stream(read) {
-            let message = message.expect("to parse cargo message");
-            tx.send(message).expect("to send cargo message on channel");
+            match message {
+                Ok(message) => {
+                    if let Err(error) = tx.send(message) {
+                        error!("failed to send cargo message on channel: {error}");
+                    }
+                }
+                Err(error) => {
+                    error!("failed to parse cargo message: {error}");
+                }
+            }
         }
     });
 

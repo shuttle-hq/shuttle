@@ -1,15 +1,15 @@
 use crate::helpers::{loader::build_so_create_loader, sqlx::PostgresInstance};
 
+use log::Level;
 use shuttle_service::loader::LoaderError;
 use shuttle_service::{database, Error, Factory};
 
 use std::net::{Ipv4Addr, SocketAddr};
 use std::process::exit;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use async_trait::async_trait;
-use tokio::sync::mpsc;
-use uuid::Uuid;
 
 const RESOURCES_PATH: &str = "tests/resources";
 
@@ -23,6 +23,34 @@ impl DummyFactory {
             postgres_instance: None,
         }
     }
+}
+
+struct StubLogger {
+    logs: Arc<Mutex<Vec<(String, String, Level)>>>,
+}
+
+impl StubLogger {
+    fn new() -> Self {
+        Self {
+            logs: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+}
+
+impl log::Log for StubLogger {
+    fn enabled(&self, _metadata: &log::Metadata) -> bool {
+        true
+    }
+
+    fn log(&self, record: &log::Record) {
+        self.logs.lock().unwrap().push((
+            format!("{}", record.args()),
+            record.target().to_string(),
+            record.level(),
+        ))
+    }
+
+    fn flush(&self) {}
 }
 
 #[async_trait]
@@ -55,12 +83,8 @@ async fn sleep_async() {
 
     let mut factory = DummyFactory::new();
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
-    let deployment_id = Uuid::new_v4();
-    let (tx, _rx) = mpsc::unbounded_channel();
-    let (handler, _) = loader
-        .load(&mut factory, addr, tx, deployment_id)
-        .await
-        .unwrap();
+    let logger = Box::new(StubLogger::new());
+    let (handler, _) = loader.load(&mut factory, addr, logger).await.unwrap();
 
     // Give service some time to start up
     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -82,12 +106,8 @@ async fn sleep() {
 
     let mut factory = DummyFactory::new();
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
-    let deployment_id = Uuid::new_v4();
-    let (tx, _rx) = mpsc::unbounded_channel();
-    let (handler, _) = loader
-        .load(&mut factory, addr, tx, deployment_id)
-        .await
-        .unwrap();
+    let logger = Box::new(StubLogger::new());
+    let (handler, _) = loader.load(&mut factory, addr, logger).await.unwrap();
 
     // Give service some time to start up
     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -114,24 +134,18 @@ async fn sqlx_pool() {
     let mut factory = DummyFactory::new();
 
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
-    let deployment_id = Uuid::new_v4();
-    let (tx, mut rx) = mpsc::unbounded_channel();
-    let (handler, _) = loader
-        .load(&mut factory, addr, tx, deployment_id)
-        .await
-        .unwrap();
+    let logger = StubLogger::new();
+    let logs = logger.logs.clone();
+    let logger = Box::new(logger);
+    let (handler, _) = loader.load(&mut factory, addr, logger).await.unwrap();
 
     handler.await.unwrap().unwrap();
 
-    let log = rx.recv().await.unwrap();
-    assert_eq!(log.deployment_id, deployment_id);
-    assert!(
-        log.item.body.starts_with("/* SQLx ping */"),
-        "got: {}",
-        log.item.body
-    );
-    assert_eq!(log.item.target, "sqlx::query");
-    assert_eq!(log.item.level, log::Level::Info);
+    let logs = logs.lock().unwrap();
+    let log = logs.first().unwrap();
+    assert!(log.0.starts_with("/* SQLx ping */"), "got: {}", log.0);
+    assert_eq!(log.1, "sqlx::query");
+    assert_eq!(log.2, log::Level::Info);
 }
 
 #[tokio::test]
@@ -140,10 +154,9 @@ async fn build_panic() {
 
     let mut factory = DummyFactory::new();
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
-    let deployment_id = Uuid::new_v4();
-    let (tx, _) = mpsc::unbounded_channel();
+    let logger = Box::new(StubLogger::new());
 
-    if let Err(Error::BuildPanic(msg)) = loader.load(&mut factory, addr, tx, deployment_id).await {
+    if let Err(Error::BuildPanic(msg)) = loader.load(&mut factory, addr, logger).await {
         assert_eq!(&msg, "panic in build");
     } else {
         panic!("expected `Err(Error::BuildPanic(_))`");
@@ -156,13 +169,9 @@ async fn bind_panic() {
 
     let mut factory = DummyFactory::new();
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
-    let deployment_id = Uuid::new_v4();
-    let (tx, _) = mpsc::unbounded_channel();
+    let logger = Box::new(StubLogger::new());
 
-    let (handle, _) = loader
-        .load(&mut factory, addr, tx, deployment_id)
-        .await
-        .unwrap();
+    let (handle, _) = loader.load(&mut factory, addr, logger).await.unwrap();
 
     if let Err(Error::BindPanic(msg)) = handle.await.unwrap() {
         assert_eq!(&msg, "panic in bind");

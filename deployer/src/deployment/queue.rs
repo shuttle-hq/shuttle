@@ -30,7 +30,7 @@ use tokio::fs;
 const BUILDS_PATH: &str = "/tmp/shuttle-builds";
 
 /// The directory in which compiled '.so' files are stored.
-const LIBS_PATH: &str = "/tmp/shuttle-libs";
+pub const LIBS_PATH: &str = "/tmp/shuttle-libs";
 
 pub async fn task(mut recv: QueueReceiver, run_send: RunSender, log_recorder: impl LogRecorder) {
     info!("Queue task started");
@@ -53,15 +53,25 @@ pub async fn task(mut recv: QueueReceiver, run_send: RunSender, log_recorder: im
         tokio::spawn(async move {
             match queued.handle(log_recorder).await {
                 Ok(built) => promote_to_run(built, run_send_cloned).await,
-                Err(e) => error!("Error during building of deployment '{}' - {e}", id),
+                Err(err) => build_failed(&id, err),
             }
         });
     }
 }
 
+#[instrument(fields(id = %_id, state = %State::Crashed))]
+fn build_failed(_id: &Uuid, err: impl std::error::Error + 'static) {
+    error!(
+        error = &err as &dyn std::error::Error,
+        "service build encountered an error"
+    );
+}
+
 #[instrument(fields(id = %built.id, state = %State::Built))]
 async fn promote_to_run(built: Built, run_send: RunSender) {
-    run_send.send(built).await.unwrap();
+    if let Err(err) = run_send.send(built.clone()).await {
+        build_failed(&built.id, err);
+    }
 }
 
 pub struct Queued {
@@ -86,6 +96,7 @@ impl Queued {
         info!("Extracting received data");
 
         let project_path = PathBuf::from(BUILDS_PATH).join(&self.name);
+        fs::create_dir_all(project_path.clone()).await?;
 
         extract_tar_gz_data(vec.as_slice(), &project_path)?;
 
@@ -138,7 +149,10 @@ impl Queued {
 
         store_lib(LIBS_PATH, so_path, &self.id).await?;
 
-        let built = Built { id: self.id };
+        let built = Built {
+            id: self.id,
+            name: self.name,
+        };
 
         Ok(built)
     }
@@ -170,13 +184,14 @@ fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<()> {
 }
 
 fn run_pre_deploy_tests(project_path: impl AsRef<Path>) -> Result<()> {
-    let config = CargoConfig::default().unwrap();
+    let config = CargoConfig::default().map_err(|e| Error::Build(e.into()))?;
     let manifest_path = project_path.as_ref().join("Cargo.toml");
 
     let ws = Workspace::new(&manifest_path, &config).map_err(|e| Error::Build(e.into()))?;
 
     let opts = TestOptions {
-        compile_opts: CompileOptions::new(&config, CompileMode::Test).unwrap(),
+        compile_opts: CompileOptions::new(&config, CompileMode::Test)
+            .map_err(|e| Error::Build(e.into()))?,
         no_run: false,
         no_fail_fast: false,
     };
@@ -282,7 +297,6 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
         // Old '.so' file gone?
         assert!(!so_path.exists());
 
-        // Ensure marker file aligns with the '.so' file's new location:
         assert_eq!(
             fs::read_to_string(libs_p.join(id.to_string()))
                 .await

@@ -216,8 +216,6 @@ pub use tokio::runtime::Runtime;
 pub mod error;
 pub use error::Error;
 
-pub mod logger;
-
 pub use shuttle_common::database;
 
 #[cfg(feature = "sqlx-postgres")]

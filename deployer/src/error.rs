@@ -6,6 +6,7 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 
 use serde::{ser::SerializeMap, Serialize};
+use shuttle_service::loader::LoaderError;
 
 use cargo::util::errors::CargoTestError;
 
@@ -19,6 +20,12 @@ pub enum Error {
     InputOutput(#[from] io::Error),
     #[error("Build error: {0}")]
     Build(#[source] Box<dyn StdError + Send>),
+    #[error("Prepare to load error: {0}")]
+    PrepareLoad(String),
+    #[error("Load error: {0}")]
+    Load(#[from] LoaderError),
+    #[error("Run error: {0}")]
+    Run(#[from] shuttle_service::Error),
     #[error("Pre-deployment test failure: {0}")]
     PreDeployTestFailure(#[from] CargoTestError),
 }

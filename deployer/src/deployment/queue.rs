@@ -69,7 +69,9 @@ fn build_failed(_id: &Uuid, err: impl std::error::Error + 'static) {
 
 #[instrument(fields(id = %built.id, state = %State::Built))]
 async fn promote_to_run(built: Built, run_send: RunSender) {
-    run_send.send(built).await.unwrap();
+    if let Err(err) = run_send.send(built.clone()).await {
+        build_failed(&built.id, err);
+    }
 }
 
 pub struct Queued {
@@ -182,13 +184,14 @@ fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<()> {
 }
 
 fn run_pre_deploy_tests(project_path: impl AsRef<Path>) -> Result<()> {
-    let config = CargoConfig::default().unwrap();
+    let config = CargoConfig::default().map_err(|e| Error::Build(e.into()))?;
     let manifest_path = project_path.as_ref().join("Cargo.toml");
 
     let ws = Workspace::new(&manifest_path, &config).map_err(|e| Error::Build(e.into()))?;
 
     let opts = TestOptions {
-        compile_opts: CompileOptions::new(&config, CompileMode::Test).unwrap(),
+        compile_opts: CompileOptions::new(&config, CompileMode::Test)
+            .map_err(|e| Error::Build(e.into()))?,
         no_run: false,
         no_fail_fast: false,
     };

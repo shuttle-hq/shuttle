@@ -15,7 +15,7 @@ use super::{
     provisioner_factory, queue::LIBS_PATH, runtime_logger, KillReceiver, KillSender, RunReceiver,
     State,
 };
-use crate::error::Result;
+use crate::error::{Error, Result};
 
 /// Run a task which takes runnable deploys from a channel and starts them up with a factory provided by the
 /// abstract factory and a runtime logger provided by the logger factory
@@ -35,9 +35,27 @@ pub async fn task(
 
         let kill_recv = kill_send.subscribe();
 
-        let port = pick_unused_port().unwrap();
+        let port = match pick_unused_port() {
+            Some(port) => port,
+            None => {
+                start_crashed_cleanup(
+                    &id,
+                    Error::PrepareLoad(
+                        "could not find a free port to deploy service on".to_string(),
+                    ),
+                );
+                continue;
+            }
+        };
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
-        let mut factory = abstract_factory.get_factory(ProjectName::from_str(&built.name).unwrap());
+        let project_name = match ProjectName::from_str(&built.name) {
+            Ok(name) => name,
+            Err(err) => {
+                start_crashed_cleanup(&id, err);
+                continue;
+            }
+        };
+        let mut factory = abstract_factory.get_factory(project_name);
         let logger = logger_factory.get_logger(id);
         let cleanup = move |result: std::result::Result<
             std::result::Result<(), shuttle_service::Error>,
@@ -88,7 +106,7 @@ fn start_crashed_cleanup(_id: &Uuid, err: impl std::error::Error + 'static) {
     );
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Built {
     pub id: Uuid,
     pub name: String,
@@ -131,9 +149,11 @@ impl Built {
                 }
             }
 
-            library.close().unwrap();
-
-            cleanup(result);
+            if let Err(err) = library.close() {
+                crashed_cleanup(&self.id, err);
+            } else {
+                cleanup(result);
+            }
         });
 
         Ok(())

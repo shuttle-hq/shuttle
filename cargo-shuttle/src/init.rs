@@ -425,7 +425,10 @@ type GetDependencyVersionFn = fn(&str, &Path, &Url) -> String;
 /// Gets the latest version for a dependency of `crate_name`.
 /// This is a wrapper function for `cargo_edit::get_latest_dependency` function.
 fn get_latest_dependency_version(crate_name: &str, manifest_path: &Path, url: &Url) -> String {
-    let latest_version = get_latest_dependency(crate_name, false, manifest_path, Some(url))
+    // some crates need to be on the prerelease version
+    let flag_allow_prerelease = matches!(crate_name, "rocket");
+
+    let latest_version = get_latest_dependency(crate_name, flag_allow_prerelease, manifest_path, Some(url))
         .unwrap_or_else(|_| panic!("Could not query the latest version of {}", crate_name));
     let latest_version = latest_version
         .version()
@@ -724,5 +727,23 @@ mod shuttle_init_tests {
         "#};
 
         assert_eq!(cargo_toml.to_string(), expected);
+    }
+
+    #[test]
+    fn test_get_latest_dependency_version_rocket() {
+
+        let manifest_path = PathBuf::new();
+        
+        let url = Url::parse("https://github.com/rust-lang/crates.io-index").unwrap();
+
+        let version = get_latest_dependency_version("rocket", &manifest_path, &url);
+
+        let expected = get_latest_dependency("rocket", true, &manifest_path, Some(&url))
+            .expect("Could not query the latest version of rocket")
+            .version()
+            .expect("no shuttle-service version found")
+            .to_string();
+
+        assert_eq!(version, expected);
     }
 }

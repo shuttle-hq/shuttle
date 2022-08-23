@@ -44,7 +44,7 @@ impl MyProvisioner {
         let pool = PgPoolOptions::new()
             .min_connections(4)
             .max_connections(12)
-            .connect_timeout(Duration::from_secs(60))
+            .acquire_timeout(Duration::from_secs(60))
             .connect_lazy(shared_pg_uri)?;
 
         let mongodb_options = ClientOptions::parse(shared_mongodb_uri).await?;

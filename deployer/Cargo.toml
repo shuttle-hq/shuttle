@@ -14,6 +14,7 @@ log = "0.4.17"
 tokio = { version = "1.19.2", features = ["fs"] }
 sqlx = { version = "0.6.0", features = ["runtime-tokio-native-tls", "sqlite", "chrono", "json", "uuid"] }
 tower = { version = "0.4.12", features = ["make"] }
+tower-http = { version = "0.3.4", features = ["trace"] }
 axum = { version = "0.5.7", features = ["ws"] }
 bytes = "1.1.0"
 serde = { version = "1.0.137", features = ["derive"] }
@@ -24,6 +25,9 @@ tar = "0.4.38"
 rand = "0.8.5"
 tracing = "0.1.35"
 tracing-subscriber = { version = "0.3.11", features = ["env-filter"] }
+tracing-opentelemetry = "0.17.4"
+opentelemetry = { version = "0.17.0", features = ["rt-tokio"] }
+opentelemetry-datadog = { version = "0.5.0", features = ["reqwest-client"] }
 cargo = "0.62.0"
 uuid = { version = "1.1.2", features = ["v4"] }
 tonic = "0.7.2"

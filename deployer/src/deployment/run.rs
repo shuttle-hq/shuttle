@@ -6,7 +6,10 @@ use std::{
 
 use portpicker::pick_unused_port;
 use shuttle_common::project::ProjectName;
-use shuttle_service::{loader::Loader, Factory};
+use shuttle_service::{
+    loader::{LoadedService, Loader},
+    Factory,
+};
 use tokio::task::JoinError;
 use tracing::{debug, error, info, instrument};
 use uuid::Uuid;
@@ -113,7 +116,7 @@ pub struct Built {
 }
 
 impl Built {
-    #[instrument(skip(self, factory, logger, cleanup), fields(id = %self.id, state = %State::Running))]
+    #[instrument(name = "built_handle", skip(self, factory, logger, cleanup), fields(id = %self.id, state = %State::Running))]
     async fn handle(
         self,
         addr: SocketAddr,
@@ -124,10 +127,7 @@ impl Built {
             + Send
             + 'static,
     ) -> Result<()> {
-        let so_path = PathBuf::from(LIBS_PATH).join(self.id.to_string());
-        let loader = Loader::from_so_file(so_path)?;
-
-        let (mut handle, library) = loader.load(factory, addr, logger).await?;
+        let (mut handle, library) = load_deployment(&self.id, addr, factory, logger).await?;
 
         // Execute loaded service
         tokio::spawn(async move {
@@ -158,6 +158,19 @@ impl Built {
 
         Ok(())
     }
+}
+
+#[instrument(skip(id, addr, factory, logger))]
+async fn load_deployment(
+    id: &Uuid,
+    addr: SocketAddr,
+    factory: &mut dyn Factory,
+    logger: Box<dyn log::Log>,
+) -> Result<LoadedService> {
+    let so_path = PathBuf::from(LIBS_PATH).join(id.to_string());
+    let loader = Loader::from_so_file(so_path)?;
+
+    Ok(loader.load(factory, addr, logger).await?)
 }
 
 #[cfg(test)]

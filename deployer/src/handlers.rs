@@ -1,12 +1,14 @@
-use axum::body::Body;
-use axum::extract::ws::WebSocket;
-use axum::extract::{ws, Extension, Path, Query};
+use axum::body::{Body, BoxBody};
+use axum::extract::ws::{self, WebSocket};
+use axum::extract::{Extension, Path, Query};
+use axum::http::{Request, Response};
 use axum::routing::{get, Router};
 use axum::{extract::BodyStream, Json};
 use chrono::{TimeZone, Utc};
 use futures::TryStreamExt;
 use shuttle_common::BuildLog;
-use tracing::error;
+use tower_http::trace::TraceLayer;
+use tracing::{debug, debug_span, error, field, Span};
 use uuid::Uuid;
 
 use crate::deployment::{DeploymentManager, Queued, State};
@@ -14,6 +16,7 @@ use crate::error::{Error, Result};
 use crate::persistence::{Deployment, Persistence};
 
 use std::collections::HashMap;
+use std::time::Duration;
 
 pub fn make_router(
     persistence: Persistence,
@@ -36,6 +39,18 @@ pub fn make_router(
         .route("/deployments/:id/build-logs", get(get_build_logs))
         .layer(Extension(persistence))
         .layer(Extension(deployment_manager))
+        .layer(
+            TraceLayer::new_for_http()
+                .make_span_with(|request: &Request<Body>| {
+                    debug_span!("request", http.uri = %request.uri(), http.method = %request.method(), http.status_code = field::Empty)
+                })
+                .on_response(
+                    |response: &Response<BoxBody>, latency: Duration, span: &Span| {
+                        span.record("http.status_code", &response.status().as_u16());
+                        debug!(latency = format_args!("{} ns", latency.as_nanos()), "finished processing request");
+                    },
+                ),
+        )
 }
 
 async fn list_services(

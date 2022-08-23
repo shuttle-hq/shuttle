@@ -42,10 +42,16 @@ async fn main() {
         .unwrap();
 
     let (persistence, _) = Persistence::new().await;
+    let tracer = opentelemetry_datadog::new_pipeline()
+        .with_service_name("deployer")
+        .install_batch(opentelemetry::runtime::Tokio)
+        .unwrap();
+    let opentelemetry = tracing_opentelemetry::layer().with_tracer(tracer);
     tracing_subscriber::registry()
         .with(DeployLayer::new(persistence.clone()))
         .with(filter_layer)
         .with(fmt_layer)
+        .with(opentelemetry)
         .init();
 
     let provisioner_uri = Endpoint::try_from(format!(

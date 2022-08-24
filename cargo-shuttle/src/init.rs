@@ -415,7 +415,8 @@ fn set_inline_table_dependency_version(
     flag_allow_prerelease: bool,
     get_dependency_version_fn: GetDependencyVersionFn,
 ) {
-    let dependency_version = get_dependency_version_fn(crate_name, flag_allow_prerelease, manifest_path, url);
+    let dependency_version =
+        get_dependency_version_fn(crate_name, flag_allow_prerelease, manifest_path, url);
     dependencies[crate_name]["version"] = value(dependency_version);
 }
 

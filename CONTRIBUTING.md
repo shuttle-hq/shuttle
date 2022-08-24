@@ -13,7 +13,7 @@ You should now be ready to setup a local environment to test code changes to cor
 Build the required images with:
 
 ```bash
-$ docker-compose -f docker-compose.yml -f docker-compose.dev.yml build
+$ make images
 ```
 
 The images get built with [cargo-chef](https://github.com/LukeMathWalker/cargo-chef) and therefore support incremental builds (most of the time). So they will be much faster to re-build after an incremental change in your code - should you wish to deploy it locally straightaway.
@@ -24,11 +24,13 @@ Create a docker persistent volume with:
 $ docker volume create shuttle-backend-vol
 ```
 
-Finally, you can start a local deployment of shuttle with:
+Finally, you can start a local deployment of shuttle and the required containers with:
 
 ```bash
-$ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+$ make up
 ```
+
+Note: Other useful commands can be found within the [Makefile](https://github.com/shuttle-hq/shuttle/blob/main/Makefile).
 
 The API is now accessible on `localhost:8000` (for app proxies) and `localhost:8001` (for the control plane). When running `cargo run --bin cargo-shuttle` (in a debug build), the CLI will point itself to `localhost` for its API calls. The deployment parameters can be tweaked by changing values in the [.env](./.env) file.
 
@@ -85,7 +87,7 @@ shuttle has reasonable test coverage - and we are working on improving this
 every day. We encourage PRs to come with tests. If you're not sure about
 what a test should look like, feel free to [get in touch](https://discord.gg/H33rRDTm3p).
 
-To run the test suite - just run `cargo test -- --nocapture` at the root of the repository.
+To run the test suite - just run `make test` at the root of the repository.
 
 ## Committing
 

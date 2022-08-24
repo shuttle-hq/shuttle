@@ -37,6 +37,7 @@ impl ShuttleInit for ShuttleInitAxum {
             manifest_path,
             url,
             get_dependency_version_fn,
+            false,
         );
 
         set_inline_table_dependency_features(
@@ -50,6 +51,7 @@ impl ShuttleInit for ShuttleInitAxum {
             manifest_path,
             url,
             get_dependency_version_fn,
+            false,
         );
     }
 
@@ -88,6 +90,7 @@ impl ShuttleInit for ShuttleInitRocket {
             manifest_path,
             url,
             get_dependency_version_fn,
+            true,
         );
 
         set_inline_table_dependency_features(
@@ -138,6 +141,7 @@ impl ShuttleInit for ShuttleInitTide {
             manifest_path,
             url,
             get_dependency_version_fn,
+            false,
         );
     }
 
@@ -177,6 +181,7 @@ impl ShuttleInit for ShuttleInitPoem {
             manifest_path,
             url,
             get_dependency_version_fn,
+            false,
         );
     }
 
@@ -390,8 +395,10 @@ fn set_key_value_dependency_version(
     manifest_path: &Path,
     url: &Url,
     get_dependency_version_fn: GetDependencyVersionFn,
+    flag_allow_prerelease: bool,
 ) {
-    let dependency_version = get_dependency_version_fn(crate_name, manifest_path, url);
+    let dependency_version =
+        get_dependency_version_fn(crate_name, flag_allow_prerelease, manifest_path, url);
     dependencies[crate_name] = value(dependency_version);
 }
 
@@ -404,7 +411,7 @@ fn set_inline_table_dependency_version(
     url: &Url,
     get_dependency_version_fn: GetDependencyVersionFn,
 ) {
-    let dependency_version = get_dependency_version_fn(crate_name, manifest_path, url);
+    let dependency_version = get_dependency_version_fn(crate_name, false, manifest_path, url);
     dependencies[crate_name]["version"] = value(dependency_version);
 }
 
@@ -420,16 +427,19 @@ fn set_inline_table_dependency_features(
 }
 
 /// Abstract type for `get_latest_dependency_version` function.
-type GetDependencyVersionFn = fn(&str, &Path, &Url) -> String;
+type GetDependencyVersionFn = fn(&str, bool, &Path, &Url) -> String;
 
 /// Gets the latest version for a dependency of `crate_name`.
 /// This is a wrapper function for `cargo_edit::get_latest_dependency` function.
-fn get_latest_dependency_version(crate_name: &str, manifest_path: &Path, url: &Url) -> String {
-    // some crates need to be on the prerelease version
-    let flag_allow_prerelease = matches!(crate_name, "rocket");
-
-    let latest_version = get_latest_dependency(crate_name, flag_allow_prerelease, manifest_path, Some(url))
-        .unwrap_or_else(|_| panic!("Could not query the latest version of {}", crate_name));
+fn get_latest_dependency_version(
+    crate_name: &str,
+    flag_allow_prerelease: bool,
+    manifest_path: &Path,
+    url: &Url,
+) -> String {
+    let latest_version =
+        get_latest_dependency(crate_name, flag_allow_prerelease, manifest_path, Some(url))
+            .unwrap_or_else(|_| panic!("Could not query the latest version of {}", crate_name));
     let latest_version = latest_version
         .version()
         .expect("No latest shuttle-service version available");
@@ -481,6 +491,7 @@ mod shuttle_init_tests {
 
     fn mock_get_latest_dependency_version(
         _crate_name: &str,
+        _flag_allow_prerelease: bool,
         _manifest_path: &Path,
         _url: &Url,
     ) -> String {
@@ -562,6 +573,7 @@ mod shuttle_init_tests {
             &manifest_path,
             &url,
             mock_get_latest_dependency_version,
+            false,
         );
 
         let expected = indoc! {r#"
@@ -730,13 +742,21 @@ mod shuttle_init_tests {
     }
 
     #[test]
+    /// Makes sure that Rocket uses allow_prerelease flag when fetching the latest version
     fn test_get_latest_dependency_version_rocket() {
-
+        let mut cargo_toml = cargo_toml_factory();
+        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
         let manifest_path = PathBuf::new();
-        
         let url = Url::parse("https://github.com/rust-lang/crates.io-index").unwrap();
 
-        let version = get_latest_dependency_version("rocket", &manifest_path, &url);
+        ShuttleInitRocket.set_cargo_dependencies(
+            dependencies,
+            &manifest_path,
+            &url,
+            get_latest_dependency_version,
+        );
+
+        let version = dependencies["rocket"].as_str().unwrap();
 
         let expected = get_latest_dependency("rocket", true, &manifest_path, Some(&url))
             .expect("Could not query the latest version of rocket")

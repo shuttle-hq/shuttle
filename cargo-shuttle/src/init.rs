@@ -36,8 +36,8 @@ impl ShuttleInit for ShuttleInitAxum {
             dependencies,
             manifest_path,
             url,
-            get_dependency_version_fn,
             false,
+            get_dependency_version_fn,
         );
 
         set_inline_table_dependency_features(
@@ -50,8 +50,8 @@ impl ShuttleInit for ShuttleInitAxum {
             dependencies,
             manifest_path,
             url,
-            get_dependency_version_fn,
             false,
+            get_dependency_version_fn,
         );
     }
 
@@ -89,8 +89,8 @@ impl ShuttleInit for ShuttleInitRocket {
             dependencies,
             manifest_path,
             url,
-            get_dependency_version_fn,
             true,
+            get_dependency_version_fn,
         );
 
         set_inline_table_dependency_features(
@@ -140,8 +140,8 @@ impl ShuttleInit for ShuttleInitTide {
             dependencies,
             manifest_path,
             url,
-            get_dependency_version_fn,
             false,
+            get_dependency_version_fn,
         );
     }
 
@@ -180,8 +180,8 @@ impl ShuttleInit for ShuttleInitPoem {
             dependencies,
             manifest_path,
             url,
-            get_dependency_version_fn,
             false,
+            get_dependency_version_fn,
         );
     }
 
@@ -224,6 +224,7 @@ impl ShuttleInit for ShuttleInitTower {
             dependencies,
             manifest_path,
             url,
+            false,
             get_dependency_version_fn,
         );
 
@@ -234,6 +235,7 @@ impl ShuttleInit for ShuttleInitTower {
             dependencies,
             manifest_path,
             url,
+            false,
             get_dependency_version_fn,
         );
 
@@ -361,6 +363,7 @@ pub fn cargo_shuttle_init(path: PathBuf, framework: Box<dyn ShuttleInit>) -> Res
         &mut dependencies,
         &manifest_path,
         &url,
+        false,
         get_latest_dependency_version,
     );
 
@@ -394,8 +397,8 @@ fn set_key_value_dependency_version(
     dependencies: &mut Table,
     manifest_path: &Path,
     url: &Url,
-    get_dependency_version_fn: GetDependencyVersionFn,
     flag_allow_prerelease: bool,
+    get_dependency_version_fn: GetDependencyVersionFn,
 ) {
     let dependency_version =
         get_dependency_version_fn(crate_name, flag_allow_prerelease, manifest_path, url);
@@ -409,9 +412,10 @@ fn set_inline_table_dependency_version(
     dependencies: &mut Table,
     manifest_path: &Path,
     url: &Url,
+    flag_allow_prerelease: bool,
     get_dependency_version_fn: GetDependencyVersionFn,
 ) {
-    let dependency_version = get_dependency_version_fn(crate_name, false, manifest_path, url);
+    let dependency_version = get_dependency_version_fn(crate_name, flag_allow_prerelease, manifest_path, url);
     dependencies[crate_name]["version"] = value(dependency_version);
 }
 
@@ -549,6 +553,7 @@ mod shuttle_init_tests {
             dependencies,
             &manifest_path,
             &url,
+            false,
             mock_get_latest_dependency_version,
         );
 
@@ -572,8 +577,8 @@ mod shuttle_init_tests {
             dependencies,
             &manifest_path,
             &url,
-            mock_get_latest_dependency_version,
             false,
+            mock_get_latest_dependency_version,
         );
 
         let expected = indoc! {r#"
@@ -596,6 +601,7 @@ mod shuttle_init_tests {
             dependencies,
             &manifest_path,
             &url,
+            false,
             mock_get_latest_dependency_version,
         );
 
@@ -628,6 +634,7 @@ mod shuttle_init_tests {
             dependencies,
             &manifest_path,
             &url,
+            false,
             mock_get_latest_dependency_version,
         );
 
@@ -659,6 +666,7 @@ mod shuttle_init_tests {
             dependencies,
             &manifest_path,
             &url,
+            false,
             mock_get_latest_dependency_version,
         );
 
@@ -690,6 +698,7 @@ mod shuttle_init_tests {
             dependencies,
             &manifest_path,
             &url,
+            false,
             mock_get_latest_dependency_version,
         );
 
@@ -722,6 +731,7 @@ mod shuttle_init_tests {
             dependencies,
             &manifest_path,
             &url,
+            false,
             mock_get_latest_dependency_version,
         );
 

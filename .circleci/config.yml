@@ -7,7 +7,7 @@ orbs:
 executors:
   docker-rust:
     docker:
-      - image: cimg/rust:1.62.1
+      - image: cimg/rust:1.63.0
   image-ubuntu:
     machine:
       image: ubuntu-2204:2022.04.1
@@ -100,6 +100,7 @@ jobs:
     steps:
       - checkout
       - restore-cargo-cache
+      - run: sudo apt install -y protobuf-compiler
       - run: cargo fmt --all --check
       - run: cargo install cargo-sort
       - run: cargo sort --check --workspace
@@ -114,6 +115,7 @@ jobs:
     steps:
       - checkout
       - restore-cargo-cache
+      - run: sudo apt install -y protobuf-compiler
       - run: |
           cargo clippy --tests \
                        --all-targets \

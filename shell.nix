@@ -21,8 +21,10 @@ in
       grpcurl
       gh
       docker-compose
+      sccache
     ];
 
     PROTOC = "${protobuf}/bin/protoc";
     PROTOC_INCLUDE="${protobuf}/include";
+    RUSTC_WRAPPER="sccache";
   }

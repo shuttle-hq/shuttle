@@ -184,7 +184,10 @@ pub async fn rocket() -> Rocket<Build> {
     let deployment_manager = Arc::new(
         DeploymentSystem::new(
             Box::new(build_system),
-            args.proxy_fqdn.to_string(),
+            args.proxy_fqdn
+                .to_string()
+                .trim_end_matches('.')
+                .to_string(),
             args.provisioner_address,
             args.provisioner_port,
         )

@@ -1,6 +1,8 @@
+use once_cell::sync::OnceCell;
 use rocket::request::FromParam;
 use serde::de::Error as DeError;
 use serde::{Deserialize, Deserializer, Serialize};
+use std::collections::HashSet;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
@@ -54,9 +56,20 @@ impl ProjectName {
             !analysis.is(Type::MODERATE_OR_HIGHER)
         }
 
+        fn is_reserved(hostname: &str) -> bool {
+            static INSTANCE: OnceCell<HashSet<&str>> = OnceCell::new();
+            INSTANCE.get_or_init(|| HashSet::from(["shuttle.rs"]));
+
+            INSTANCE
+                .get()
+                .expect("Reserved words not set")
+                .contains(hostname)
+        }
+
         let separators = ['-', '_'];
 
         !(hostname.bytes().any(|byte| !is_valid_char(byte))
+            || is_reserved(hostname)
             || !is_profanity_free(hostname)
             || hostname.ends_with(separators)
             || hostname.starts_with(separators)

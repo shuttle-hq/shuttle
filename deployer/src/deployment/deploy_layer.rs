@@ -21,7 +21,7 @@
 
 use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
-use shuttle_common::{deployment, log::BuildLogStream};
+use shuttle_common::{deployment, log::BuildLogStream, STATE_MESSAGE};
 use std::str::FromStr;
 use tracing::{field::Visit, span, warn, Metadata, Subscriber};
 use tracing_subscriber::Layer;
@@ -97,6 +97,13 @@ impl Log {
 
 impl From<Log> for persistence::Log {
     fn from(log: Log) -> Self {
+        // Make sure state message is set for state logs
+        // This is used to know when the end of the build logs has been reached
+        let fields = match log.r#type {
+            LogType::Event => log.fields,
+            LogType::State => json!(STATE_MESSAGE),
+        };
+
         Self {
             id: log.id,
             timestamp: log.timestamp,
@@ -105,7 +112,7 @@ impl From<Log> for persistence::Log {
             file: log.file,
             line: log.line,
             target: log.target,
-            fields: log.fields,
+            fields,
         }
     }
 }

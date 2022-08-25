@@ -28,6 +28,7 @@ pub enum Level {
 
 impl Log {
     pub fn into_build_log_stream(self) -> Option<BuildLogStream> {
+        // Only state transition logs is a Value::String
         let (state, message) = if let Value::String(str_value) = &self.fields {
             if str_value == STATE_MESSAGE {
                 match self.state {

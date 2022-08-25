@@ -299,6 +299,7 @@ async fn build_logs_websocket_handler(mut s: WebSocket, persistence: Persistence
         }
     }
 
+    debug!("build log channel has reached its end");
     let _ = s.close().await;
 }
 

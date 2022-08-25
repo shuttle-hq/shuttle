@@ -1,13 +1,11 @@
+use once_cell::sync::OnceCell;
+use rocket::request::FromParam;
+use serde::de::Error as DeError;
+use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashSet;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
-
-use rocket::request::FromParam;
-use serde::de::Error as DeError;
-use serde::{Deserialize, Deserializer, Serialize};
-
-use once_cell::sync::OnceCell;
 
 /// Project names should conform to valid Host segments (or labels)
 /// as per [IETF RFC 1123](https://datatracker.ietf.org/doc/html/rfc1123).
@@ -18,7 +16,7 @@ use once_cell::sync::OnceCell;
 /// - It does not contain profanity.
 /// - It is not a reserved word.
 ///
-use censor::Censor;
+use rustrict::{Censor, Type};
 
 #[derive(Clone, Serialize, Debug, Eq, PartialEq)]
 pub struct ProjectName(String);
@@ -53,22 +51,26 @@ impl ProjectName {
             matches!(byte, b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'_')
         }
 
-        fn is_profanity_free_and_not_reserved(hostname: &str) -> bool {
-            static INSTANCE: OnceCell<HashSet<String>> = OnceCell::new();
-            INSTANCE.get_or_init(|| HashSet::from(["Shuttle.rs".to_string()]));
+        fn is_profanity_free(hostname: &str) -> bool {
+            let (_censored, analysis) = Censor::from_str(hostname).censor_and_analyze();
+            !analysis.is(Type::MODERATE_OR_HIGHER)
+        }
 
-            let censor = Censor::Standard
-                + Censor::Sex
-                + Censor::Zealous
-                + Censor::Custom(INSTANCE.get().expect("Reserved words not set").clone())
-                - "hell";
-            !censor.check(hostname)
+        fn is_reserved(hostname: &str) -> bool {
+            static INSTANCE: OnceCell<HashSet<&str>> = OnceCell::new();
+            INSTANCE.get_or_init(|| HashSet::from(["shuttle.rs"]));
+
+            INSTANCE
+                .get()
+                .expect("Reserved words not set")
+                .contains(hostname)
         }
 
         let separators = ['-', '_'];
 
         !(hostname.bytes().any(|byte| !is_valid_char(byte))
-            || !is_profanity_free_and_not_reserved(hostname)
+            || is_reserved(hostname)
+            || !is_profanity_free(hostname)
             || hostname.ends_with(separators)
             || hostname.starts_with(separators)
             || hostname.is_empty())
@@ -142,6 +144,8 @@ pub mod tests {
             "UPPERCASE",
             "CamelCase",
             "pascalCase",
+            "myassets",
+            "dachterrasse",
         ] {
             let project_name = ProjectName::from_str(hostname);
             assert!(project_name.is_ok(), "{:?} was err", hostname);
@@ -162,7 +166,7 @@ pub mod tests {
             "__dunder_like__",
             "__invalid",
             "invalid__",
-            "test-crap-crap",
+            "test-condom-condom",
             "shuttle.rs",
         ] {
             let project_name = ProjectName::from_str(hostname);

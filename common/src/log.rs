@@ -26,6 +26,7 @@ pub struct Item {
     pub level: Level,
     pub file: Option<String>,
     pub line: Option<u32>,
+    pub target: String,
     pub fields: serde_json::Value,
 }
 
@@ -53,14 +54,11 @@ impl Display for Item {
             }
             serde_json::Value::Object(map) => {
                 let mut simple = None;
-                let mut target = None;
                 let mut extra = vec![];
 
                 for (key, value) in map.iter() {
                     match key.as_str() {
                         "message" => simple = value.as_str(),
-                        "log.target" => target = value.as_str(),
-                        "log.file" | "log.line" | "log.module_path" => {}
                         _ => extra.push(format!("{key}={value}")),
                     }
                 }
@@ -71,8 +69,8 @@ impl Display for Item {
                     format!("{{{}}} ", extra.join(" "))
                 };
 
-                if let Some(target) = target {
-                    let target = format!("{target}:").dim();
+                if !self.target.is_empty() {
+                    let target = format!("{}:", self.target).dim();
                     write!(output, "{target} ")?;
                 }
 

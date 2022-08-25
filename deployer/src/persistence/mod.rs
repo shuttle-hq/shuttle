@@ -68,6 +68,7 @@ impl Persistence {
                 level TEXT,        -- The log level
                 file TEXT,         -- The file log took place in
                 line INTEGER,      -- The line log took place on
+                target TEXT,       -- The module log took place in
                 fields TEXT,       -- Log fields object.
                 PRIMARY KEY (id, timestamp)
             );
@@ -124,6 +125,7 @@ impl Persistence {
                                 level: log.level.clone(),
                                 file: log.file.clone(),
                                 line: log.line,
+                                target: String::new(),
                                 fields: json!(STATE_MESSAGE),
                             },
                         )
@@ -268,13 +270,14 @@ async fn get_deployment(pool: &SqlitePool, id: &Uuid) -> Result<Option<Deploymen
 async fn insert_log(pool: &SqlitePool, log: impl Into<Log>) -> Result<()> {
     let log = log.into();
 
-    sqlx::query("INSERT INTO logs (id, timestamp, state, level, file, line, fields) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    sqlx::query("INSERT INTO logs (id, timestamp, state, level, file, line, target, fields) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
         .bind(log.id)
         .bind(log.timestamp)
         .bind(log.state)
         .bind(log.level)
         .bind(log.file)
         .bind(log.line)
+        .bind(log.target)
         .bind(log.fields)
         .execute(pool)
         .await
@@ -496,6 +499,7 @@ mod tests {
             level: Level::Info,
             file: Some("queue.rs".to_string()),
             line: Some(12),
+            target: "tests::log_insert".to_string(),
             fields: json!({"message": "job queued"}),
         };
 
@@ -519,6 +523,7 @@ mod tests {
             level: Level::Info,
             file: Some("file.rs".to_string()),
             line: Some(5),
+            target: "tests::logs_for_deployment".to_string(),
             fields: json!({"message": "job queued"}),
         };
         let log_b = Log {
@@ -528,6 +533,7 @@ mod tests {
             level: Level::Info,
             file: Some("file.rs".to_string()),
             line: Some(5),
+            target: "tests::logs_for_deployment".to_string(),
             fields: json!({"message": "job queued"}),
         };
         let log_a2 = Log {
@@ -537,6 +543,7 @@ mod tests {
             level: Level::Warn,
             file: None,
             line: None,
+            target: String::new(),
             fields: json!({"message": "unused Result"}),
         };
 
@@ -550,7 +557,7 @@ mod tests {
         assert_eq!(logs, vec![log_a1, log_a2]);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn log_recorder_event() {
         let (p, handle) = Persistence::new_in_memory().await;
 
@@ -562,6 +569,7 @@ mod tests {
             level: Level::Info,
             file: Some("file.rs".to_string()),
             line: Some(5),
+            target: "tests::log_recorder_event".to_string(),
             fields: json!({"message": "job queued"}),
             r#type: deploy_layer::LogType::Event,
         };
@@ -606,6 +614,7 @@ mod tests {
             level: Level::Info,
             file: None,
             line: None,
+            target: String::new(),
             fields: serde_json::Value::Null,
             r#type: deploy_layer::LogType::State,
         };

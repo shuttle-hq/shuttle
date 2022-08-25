@@ -55,6 +55,9 @@ pub struct Log {
     /// Line in file event happened on
     pub line: Option<u32>,
 
+    /// Module log took place in
+    pub target: String,
+
     /// Extra structured log fields
     pub fields: serde_json::Value,
 
@@ -101,6 +104,7 @@ impl From<Log> for persistence::Log {
             level: log.level,
             file: log.file,
             line: log.line,
+            target: log.target,
             fields: log.fields,
         }
     }
@@ -115,6 +119,7 @@ impl From<Log> for shuttle_common::LogItem {
             level: log.level.into(),
             file: log.file,
             line: log.line,
+            target: log.target,
             fields: log.fields,
         }
     }
@@ -192,13 +197,35 @@ where
                 event.record(&mut visitor);
                 let metadata = event.metadata();
 
+                // Extract details from log::Log interface which is different from tracing
+                let target = if let Some(target) = visitor.0.remove("log.target") {
+                    target.as_str().unwrap_or_default().to_string()
+                } else {
+                    metadata.target().to_string()
+                };
+
+                let line = if let Some(line) = visitor.0.remove("log.line") {
+                    line.as_u64().and_then(|u| u32::try_from(u).ok())
+                } else {
+                    metadata.line()
+                };
+
+                let file = if let Some(file) = visitor.0.remove("log.file") {
+                    file.as_str().map(str::to_string)
+                } else {
+                    metadata.file().map(str::to_string)
+                };
+
+                visitor.0.remove("log.module_path");
+
                 self.recorder.record(Log {
                     id: details.id,
                     state: details.state,
                     level: metadata.level().into(),
                     timestamp: Utc::now(),
-                    file: metadata.file().map(str::to_string),
-                    line: metadata.line(),
+                    file,
+                    line,
+                    target,
                     fields: serde_json::Value::Object(visitor.0),
                     r#type: LogType::Event,
                 });
@@ -241,6 +268,7 @@ where
             timestamp: Utc::now(),
             file: metadata.file().map(str::to_string),
             line: metadata.line(),
+            target: metadata.target().to_string(),
             fields: Default::default(),
             r#type: LogType::State,
         });

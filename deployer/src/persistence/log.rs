@@ -13,6 +13,7 @@ pub struct Log {
     pub level: Level,
     pub file: Option<String>,
     pub line: Option<u32>,
+    pub target: String,
     pub fields: serde_json::Value,
 }
 
@@ -70,6 +71,7 @@ impl From<Log> for shuttle_common::LogItem {
             level: log.level.into(),
             file: log.file,
             line: log.line,
+            target: log.target,
             fields: log.fields,
         }
     }

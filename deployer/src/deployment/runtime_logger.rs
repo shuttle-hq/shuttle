@@ -56,14 +56,11 @@ impl log::Log for RuntimeLogger {
                     state: State::Running,
                     level: record.level().into(),
                     timestamp: datetime,
-                    file: None,
-                    line: None,
+                    file: record.file().map(String::from),
+                    line: record.line(),
+                    target: record.target().to_string(),
                     fields: json!({
                         "message": format!("{}", record.args()),
-                        "log.file": record.file(),
-                        "log.line": record.line(),
-                        "log.module_path": record.module_path(),
-                        "log.target": record.target()
                     }),
                     r#type: deploy_layer::LogType::Event,
                 })

@@ -11,6 +11,8 @@ use uuid::Uuid;
 
 #[derive(Parser)]
 #[clap(
+    version,
+    about,
     // Cargo passes in the subcommand name to the invoked executable. Use a
     // hidden, optional positional argument to deal with it.
     arg(clap::Arg::with_name("dummy")

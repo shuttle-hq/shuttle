@@ -67,7 +67,7 @@ impl Shuttle {
         self.ctx.set_api_url(args.api_url);
 
         let mut client = Client::new(self.ctx.api_url());
-        client.set_api_key(self.ctx.api_key());
+        client.set_api_key(self.ctx.api_key()?);
 
         match args.cmd {
             Command::Deploy(deploy_args) => {

@@ -29,8 +29,8 @@ impl Client {
         }
     }
 
-    pub fn set_api_key(&mut self, api_key: Option<ApiKey>) {
-        self.api_key = api_key;
+    pub fn set_api_key(&mut self, api_key: ApiKey) {
+        self.api_key = Some(api_key);
     }
 
     pub async fn auth(&self, username: String) -> Result<ApiKey> {

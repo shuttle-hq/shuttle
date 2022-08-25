@@ -202,7 +202,7 @@
 //!
 //! You can also [open an issue or a discussion on GitHub](https://github.com/getsynth/shuttle).
 //!
-
+use std::convert::Infallible;
 use std::future::Future;
 use std::net::SocketAddr;
 use std::pin::Pin;
@@ -457,6 +457,21 @@ where
 
 #[cfg(feature = "web-poem")]
 pub type ShuttlePoem<T> = Result<T, Error>;
+
+#[cfg(feature = "web-warp")]
+#[async_trait]
+impl<T> Service for T
+where
+    T: Send + Sync + warp::Filter,
+{
+    async fn bind(mut self: Box<Self>, addr: SocketAddr) -> Result<(), error::Error> {
+        warp::serve(&self).run(addr).await;
+        Ok(())
+    }
+}
+
+#[cfg(feature = "web-warp")]
+pub type ShuttleWarp<T> = Result<T, Error>;
 
 #[cfg(feature = "web-axum")]
 #[async_trait]

@@ -912,6 +912,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "buf_redux"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b953a6887648bb07a535631f2bc00fbdb2a2216f135552cb3f534ed136b9c07f"
+dependencies = [
+ "memchr",
+ "safemem",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2316,7 +2326,7 @@ dependencies = [
  "http",
  "httpdate",
  "mime",
- "sha-1",
+ "sha-1 0.10.0",
 ]
 
 [[package]]
@@ -3058,7 +3068,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_with",
- "sha-1",
+ "sha-1 0.10.0",
  "sha2 0.10.2",
  "socket2",
  "stringprep",
@@ -3100,6 +3110,24 @@ name = "multimap"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
+
+[[package]]
+name = "multipart"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "00dec633863867f29cb39df64a397cdf4a6354708ddd7759f70c7fb51c5f9182"
+dependencies = [
+ "buf_redux",
+ "httparse",
+ "log",
+ "mime",
+ "mime_guess",
+ "quick-error",
+ "rand 0.8.5",
+ "safemem",
+ "tempfile",
+ "twoway",
+]
 
 [[package]]
 name = "native-tls"
@@ -4337,6 +4365,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f3f6f92acf49d1b98f7a81226834412ada05458b7364277387724a237f062695"
 
 [[package]]
+name = "safemem"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ef703b7cb59335eae2eb93ceb664c0eb7ea6bf567079d843e09420219668e072"
+
+[[package]]
 name = "same-file"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4540,6 +4574,19 @@ dependencies = [
 
 [[package]]
 name = "sha-1"
+version = "0.9.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "99cd6713db3cf16b6c84e06321e049a9b9f699826e16096d23bbcc44d15d51a6"
+dependencies = [
+ "block-buffer 0.9.0",
+ "cfg-if 1.0.0",
+ "cpufeatures",
+ "digest 0.9.0",
+ "opaque-debug",
+]
+
+[[package]]
+name = "sha-1"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "028f48d513f9678cda28f6e4064755b3fbb2af6acd672f2c209b62323f7aea0f"
@@ -4729,6 +4776,7 @@ dependencies = [
  "tokio",
  "tower",
  "uuid 1.1.2",
+ "warp",
 ]
 
 [[package]]
@@ -4910,7 +4958,7 @@ dependencies = [
  "rsa",
  "serde",
  "serde_json",
- "sha-1",
+ "sha-1 0.10.0",
  "sha2 0.10.2",
  "smallvec",
  "sqlformat",
@@ -5423,6 +5471,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokio-tungstenite"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "511de3f85caf1c98983545490c3d09685fa8eb634e57eec22bb4db271f46cbd8"
+dependencies = [
+ "futures-util",
+ "log",
+ "pin-project",
+ "tokio",
+ "tungstenite",
+]
+
+[[package]]
 name = "tokio-util"
 version = "0.6.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5743,6 +5804,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "tungstenite"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a0b2d8558abd2e276b0a8df5c05a2ec762609344191e5fd23e292c910e9165b5"
+dependencies = [
+ "base64 0.13.0",
+ "byteorder",
+ "bytes 1.1.0",
+ "http",
+ "httparse",
+ "log",
+ "rand 0.8.5",
+ "sha-1 0.9.8",
+ "thiserror",
+ "url",
+ "utf-8",
+]
+
+[[package]]
+name = "twoway"
+version = "0.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "59b11b2b5241ba34be09c3cc85a36e56e48f9888862e19cedf23336d35316ed1"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "typed-builder"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5901,6 +5990,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68b90931029ab9b034b300b797048cf23723400aa757e8a2bfb9d748102f9821"
 
 [[package]]
+name = "utf-8"
+version = "0.7.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09cc8ee72d2a9becf2f2febe0205bbed8fc6615b7cb429ad062dc7b7ddd036a9"
+
+[[package]]
 name = "utf8parse"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6003,6 +6098,36 @@ checksum = "1ce8a968cb1cd110d136ff8b819a556d6fb6d919363c61534f6860c7eb172ba0"
 dependencies = [
  "log",
  "try-lock",
+]
+
+[[package]]
+name = "warp"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3cef4e1e9114a4b7f1ac799f16ce71c14de5778500c5450ec6b7b920c55b587e"
+dependencies = [
+ "bytes 1.1.0",
+ "futures-channel",
+ "futures-util",
+ "headers",
+ "http",
+ "hyper",
+ "log",
+ "mime",
+ "mime_guess",
+ "multipart",
+ "percent-encoding",
+ "pin-project",
+ "scoped-tls",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
+ "tokio",
+ "tokio-stream",
+ "tokio-tungstenite",
+ "tokio-util 0.6.10",
+ "tower-service",
+ "tracing",
 ]
 
 [[package]]

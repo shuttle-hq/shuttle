@@ -79,6 +79,8 @@ pub async fn task(
             {
                 start_crashed_cleanup(&id, err)
             }
+
+            info!("deployment done");
         });
     }
 }
@@ -129,6 +131,7 @@ impl Built {
     ) -> Result<()> {
         let (mut handle, library) = load_deployment(&self.id, addr, factory, logger).await?;
 
+        info!("got handle for deployment");
         // Execute loaded service
         tokio::spawn(async move {
             let result;

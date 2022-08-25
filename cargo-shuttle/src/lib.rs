@@ -302,6 +302,7 @@ impl Shuttle {
 
         let service = client.get_service_summary(self.ctx.project_name()).await?;
 
+        // A deployment will only exist if there is currently one in the running state
         if let Some(ref new_deployment) = service.deployment {
             if new_deployment.id != deployment.id {
                 println!(

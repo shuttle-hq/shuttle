@@ -18,7 +18,9 @@ pub enum Type {
     Database(database::Type),
 }
 
+/// Trait used to get information from all the resources we manage
 pub trait ResourceInfo {
+    /// String to connect to this resource from a public location
     fn connection_string_public(&self) -> String;
 }
 

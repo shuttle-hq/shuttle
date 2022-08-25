@@ -772,7 +772,7 @@ mod shuttle_init_tests {
         let expected = get_latest_dependency("rocket", true, &manifest_path, Some(&url))
             .expect("Could not query the latest version of rocket")
             .version()
-            .expect("no shuttle-service version found")
+            .expect("no rocket version found")
             .to_string();
 
         assert_eq!(version, expected);

@@ -266,7 +266,7 @@ impl Shuttle {
             self.ctx.project_name(),
             addr
         );
-        let logger = Box::new(Logger);
+        let logger = Box::new(Logger::new());
         let (handle, so) = loader.load(&mut factory, addr, logger).await?;
 
         handle.await??;

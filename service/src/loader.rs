@@ -11,10 +11,10 @@ use cargo::ops::{compile, CompileOptions};
 use cargo::util::homedir;
 use cargo::Config;
 use cargo_metadata::Message;
+use crossbeam_channel::Sender;
 use libloading::{Library, Symbol};
 use log::{error, trace};
 use thiserror::Error as ThisError;
-use tokio::sync::mpsc::UnboundedSender;
 
 use futures::FutureExt;
 
@@ -98,10 +98,7 @@ impl Loader {
 }
 
 /// Given a project directory path, builds the crate
-pub async fn build_crate(
-    project_path: &Path,
-    tx: UnboundedSender<Message>,
-) -> anyhow::Result<PathBuf> {
+pub async fn build_crate(project_path: &Path, tx: Sender<Message>) -> anyhow::Result<PathBuf> {
     let (read, write) = pipe::pipe();
     let project_path = project_path.to_owned();
 

@@ -15,6 +15,7 @@ axum = { version = "0.5.7", optional = true }
 cargo = { version = "0.62.0", optional = true }
 cargo_metadata = "0.15.0"
 chrono = "0.4.19"
+crossbeam-channel = "0.5.6"
 futures = { version = "0.3.21", features = ["std"] }
 hyper = { version = "0.14.19", features = ["server", "tcp", "http1"], optional = true }
 lazy_static = "1.4.0"

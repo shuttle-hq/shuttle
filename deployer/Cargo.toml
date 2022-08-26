@@ -8,7 +8,9 @@ description = "Service with instances created per project for handling the compl
 async-trait = "0.1.56"
 cargo_metadata = "0.15.0"
 chrono = "0.4.19"
+crossbeam-channel = "0.5.6"
 thiserror = "1.0.24"
+fqdn = "0.1.9"
 futures = "0.3.21"
 log = "0.4.17"
 tokio = { version = "1.19.2", features = ["fs"] }
@@ -17,12 +19,13 @@ tower = { version = "0.4.12", features = ["make"] }
 tower-http = { version = "0.3.4", features = ["trace"] }
 axum = { version = "0.5.7", features = ["ws"] }
 bytes = "1.1.0"
-serde = { version = "1.0.137", features = ["derive"] }
+serde = "1.0.137"
 serde_json = "1.0.81"
 flate2 = "1.0.24"
 portpicker = "0.1.1"
 tar = "0.4.38"
 rand = "0.8.5"
+strum = { version = "0.24.1", features = ["derive"] }
 tracing = "0.1.35"
 tracing-subscriber = { version = "0.3.11", features = ["env-filter"] }
 tracing-opentelemetry = "0.17.4"

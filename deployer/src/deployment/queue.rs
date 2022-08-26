@@ -1,13 +1,12 @@
 use super::deploy_layer::{Log, LogRecorder, LogType};
-use super::log::Level;
 use super::{Built, QueueReceiver, RunSender, State};
 use crate::error::{Error, Result};
+use crate::persistence::LogLevel;
 
 use cargo_metadata::Message;
 use chrono::Utc;
 use serde_json::json;
 use shuttle_service::loader::build_crate;
-use tokio::sync::mpsc::{self, UnboundedSender};
 use tracing::{debug, error, info, instrument};
 use uuid::Uuid;
 
@@ -97,34 +96,37 @@ impl Queued {
 
         info!("Building deployment");
 
-        let (tx, mut rx): (UnboundedSender<Message>, _) = mpsc::unbounded_channel();
+        let (tx, rx): (crossbeam_channel::Sender<Message>, _) = crossbeam_channel::bounded(0);
         let id = self.id;
         tokio::spawn(async move {
-            while let Some(message) = rx.recv().await {
+            while let Ok(message) = rx.recv() {
                 // TODO: change these to `info!(...)` as [valuable] support increases.
                 // Currently it is not possible to turn these serde `message`s into a `valuable`, but once it is the passing down of `log_recorder` should be removed.
-                match message {
-                    Message::TextLine(line) => log_recorder.record(Log {
+                let log = match message {
+                    Message::TextLine(line) => Log {
                         id,
                         state: State::Building,
-                        level: Level::Info,
+                        level: LogLevel::Info,
                         timestamp: Utc::now(),
                         file: None,
                         line: None,
+                        target: String::new(),
                         fields: json!({ "build_line": line }),
                         r#type: LogType::Event,
-                    }),
-                    message => log_recorder.record(Log {
+                    },
+                    message => Log {
                         id,
                         state: State::Building,
-                        level: Level::Debug,
+                        level: LogLevel::Debug,
                         timestamp: Utc::now(),
                         file: None,
                         line: None,
+                        target: String::new(),
                         fields: serde_json::to_value(message).unwrap(),
                         r#type: LogType::Event,
-                    }),
-                }
+                    },
+                };
+                log_recorder.record(log);
             }
         });
 
@@ -152,11 +154,11 @@ impl Queued {
 
 impl fmt::Debug for Queued {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Queued {{ id: \"{}\", name: \"{}\", .. }}",
-            self.id, self.name
-        )
+        f.debug_struct("Queued")
+            .field("id", &self.id)
+            .field("name", &self.name)
+            .field("will_run_tests", &self.will_run_tests)
+            .finish_non_exhaustive()
     }
 }
 
@@ -191,7 +193,10 @@ fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<()> {
 }
 
 #[instrument(skip(project_path, tx))]
-async fn build_deployment(project_path: &Path, tx: UnboundedSender<Message>) -> Result<PathBuf> {
+async fn build_deployment(
+    project_path: &Path,
+    tx: crossbeam_channel::Sender<Message>,
+) -> Result<PathBuf> {
     let so_path = build_crate(&project_path, tx)
         .await
         .map_err(|e| Error::Build(e.into()))?;

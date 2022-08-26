@@ -21,17 +21,13 @@
 
 use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
-use shuttle_common::BuildLog;
+use shuttle_common::{deployment, log::BuildLogStream, STATE_MESSAGE};
+use std::str::FromStr;
 use tracing::{field::Visit, span, warn, Metadata, Subscriber};
 use tracing_subscriber::Layer;
 use uuid::Uuid;
 
-use crate::persistence::DeploymentState;
-
-use super::{
-    log::{self, Level},
-    State,
-};
+use crate::persistence::{self, DeploymentState, LogLevel, State};
 
 /// Records logs for the deployment progress
 pub trait LogRecorder: Clone + Send + 'static {
@@ -39,7 +35,7 @@ pub trait LogRecorder: Clone + Send + 'static {
 }
 
 /// An event or state transition log
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Log {
     /// Deployment id
     pub id: Uuid,
@@ -48,7 +44,7 @@ pub struct Log {
     pub state: State,
 
     /// Log level
-    pub level: Level,
+    pub level: LogLevel,
 
     /// Time log happened
     pub timestamp: DateTime<Utc>,
@@ -59,6 +55,9 @@ pub struct Log {
     /// Line in file event happened on
     pub line: Option<u32>,
 
+    /// Module log took place in
+    pub target: String,
+
     /// Extra structured log fields
     pub fields: serde_json::Value,
 
@@ -66,13 +65,45 @@ pub struct Log {
 }
 
 impl Log {
-    pub fn to_build_log(&self) -> Option<BuildLog> {
-        to_build_log(&self.id, &self.timestamp, &self.fields)
+    pub fn to_stream_log(&self) -> Option<BuildLogStream> {
+        let (state, message) = match self.r#type {
+            LogType::State => match self.state {
+                State::Queued => Some((deployment::State::Queued, None)),
+                State::Building => Some((deployment::State::Building, None)),
+                State::Built => Some((deployment::State::Built, None)),
+                State::Running => Some((deployment::State::Running, None)),
+                State::Completed => Some((deployment::State::Completed, None)),
+                State::Stopped => Some((deployment::State::Stopped, None)),
+                State::Crashed => Some((deployment::State::Crashed, None)),
+                State::Unknown => Some((deployment::State::Unknown, None)),
+            },
+            LogType::Event => match self.state {
+                State::Building => {
+                    let msg = extract_message(&self.fields)?;
+                    Some((deployment::State::Building, Some(msg)))
+                }
+                _ => None,
+            },
+        }?;
+
+        Some(BuildLogStream {
+            id: self.id,
+            timestamp: self.timestamp,
+            state,
+            message,
+        })
     }
 }
 
-impl From<Log> for log::Log {
+impl From<Log> for persistence::Log {
     fn from(log: Log) -> Self {
+        // Make sure state message is set for state logs
+        // This is used to know when the end of the build logs has been reached
+        let fields = match log.r#type {
+            LogType::Event => log.fields,
+            LogType::State => json!(STATE_MESSAGE),
+        };
+
         Self {
             id: log.id,
             timestamp: log.timestamp,
@@ -80,6 +111,22 @@ impl From<Log> for log::Log {
             level: log.level,
             file: log.file,
             line: log.line,
+            target: log.target,
+            fields,
+        }
+    }
+}
+
+impl From<Log> for shuttle_common::LogItem {
+    fn from(log: Log) -> Self {
+        Self {
+            id: log.id,
+            timestamp: log.timestamp,
+            state: log.state.into(),
+            level: log.level.into(),
+            file: log.file,
+            line: log.line,
+            target: log.target,
             fields: log.fields,
         }
     }
@@ -95,27 +142,15 @@ impl From<Log> for DeploymentState {
     }
 }
 
-pub fn to_build_log(id: &Uuid, timestamp: &DateTime<Utc>, fields: &Value) -> Option<BuildLog> {
+pub fn extract_message(fields: &Value) -> Option<String> {
     if let Value::Object(ref map) = fields {
         if let Some(message) = map.get("build_line") {
-            let build_log = BuildLog {
-                id: *id,
-                timestamp: *timestamp,
-                message: message.as_str()?.to_string(),
-            };
-
-            return Some(build_log);
+            return Some(message.as_str()?.to_string());
         }
 
         if let Some(Value::Object(message_object)) = map.get("message") {
             if let Some(rendered) = message_object.get("rendered") {
-                let build_log = BuildLog {
-                    id: *id,
-                    timestamp: *timestamp,
-                    message: rendered.as_str()?.to_string(),
-                };
-
-                return Some(build_log);
+                return Some(rendered.as_str()?.to_string());
             }
         }
     }
@@ -123,7 +158,7 @@ pub fn to_build_log(id: &Uuid, timestamp: &DateTime<Utc>, fields: &Value) -> Opt
     None
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum LogType {
     Event,
     State,
@@ -169,13 +204,35 @@ where
                 event.record(&mut visitor);
                 let metadata = event.metadata();
 
+                // Extract details from log::Log interface which is different from tracing
+                let target = if let Some(target) = visitor.0.remove("log.target") {
+                    target.as_str().unwrap_or_default().to_string()
+                } else {
+                    metadata.target().to_string()
+                };
+
+                let line = if let Some(line) = visitor.0.remove("log.line") {
+                    line.as_u64().and_then(|u| u32::try_from(u).ok())
+                } else {
+                    metadata.line()
+                };
+
+                let file = if let Some(file) = visitor.0.remove("log.file") {
+                    file.as_str().map(str::to_string)
+                } else {
+                    metadata.file().map(str::to_string)
+                };
+
+                visitor.0.remove("log.module_path");
+
                 self.recorder.record(Log {
                     id: details.id,
                     state: details.state,
                     level: metadata.level().into(),
                     timestamp: Utc::now(),
-                    file: metadata.file().map(str::to_string),
-                    line: metadata.line(),
+                    file,
+                    line,
+                    target,
                     fields: serde_json::Value::Object(visitor.0),
                     r#type: LogType::Event,
                 });
@@ -218,6 +275,7 @@ where
             timestamp: Utc::now(),
             file: metadata.file().map(str::to_string),
             line: metadata.line(),
+            target: metadata.target().to_string(),
             fields: Default::default(),
             r#type: LogType::State,
         });
@@ -233,7 +291,7 @@ struct ScopeDetails {
     state: State,
 }
 
-impl From<&tracing::Level> for Level {
+impl From<&tracing::Level> for LogLevel {
     fn from(level: &tracing::Level) -> Self {
         match *level {
             tracing::Level::TRACE => Self::Trace,
@@ -268,7 +326,7 @@ impl NewStateVisitor {
 impl Visit for NewStateVisitor {
     fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
         if field.name() == Self::STATE_IDENT {
-            self.details.state = value.into();
+            self.details.state = State::from_str(&format!("{value:?}")).unwrap_or_default();
         }
         if field.name() == Self::ID_IDENT {
             self.details.id = Uuid::try_parse(&format!("{value:?}")).unwrap_or_default();
@@ -325,9 +383,12 @@ mod tests {
     use tracing_subscriber::prelude::*;
     use uuid::Uuid;
 
-    use crate::deployment::{
-        deploy_layer::LogType, provisioner_factory, runtime_logger, Built, DeploymentManager,
-        Queued, State,
+    use crate::{
+        deployment::{
+            deploy_layer::LogType, provisioner_factory, runtime_logger, Built, DeploymentManager,
+            Queued,
+        },
+        persistence::State,
     };
 
     use super::{DeployLayer, Log, LogRecorder};

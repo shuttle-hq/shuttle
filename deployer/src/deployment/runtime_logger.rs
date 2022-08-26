@@ -1,10 +1,9 @@
 use chrono::Utc;
 use log::{Level, Metadata, Record};
 use serde_json::json;
-use tokio::sync::mpsc::UnboundedSender;
 use uuid::Uuid;
 
-use crate::deployment::State;
+use crate::persistence::{LogLevel, State};
 
 use super::deploy_layer;
 
@@ -14,11 +13,11 @@ pub trait Factory: Send + 'static {
 
 /// Factory to create runtime loggers for deployments
 pub struct RuntimeLoggerFactory {
-    log_send: UnboundedSender<deploy_layer::Log>,
+    log_send: crossbeam_channel::Sender<deploy_layer::Log>,
 }
 
 impl RuntimeLoggerFactory {
-    pub fn new(log_send: UnboundedSender<deploy_layer::Log>) -> Self {
+    pub fn new(log_send: crossbeam_channel::Sender<deploy_layer::Log>) -> Self {
         Self { log_send }
     }
 }
@@ -33,11 +32,11 @@ impl Factory for RuntimeLoggerFactory {
 /// TODO: convert to a tracing subscriber
 pub struct RuntimeLogger {
     id: Uuid,
-    log_send: UnboundedSender<deploy_layer::Log>,
+    log_send: crossbeam_channel::Sender<deploy_layer::Log>,
 }
 
 impl RuntimeLogger {
-    pub(crate) fn new(id: Uuid, log_send: UnboundedSender<deploy_layer::Log>) -> Self {
+    pub(crate) fn new(id: Uuid, log_send: crossbeam_channel::Sender<deploy_layer::Log>) -> Self {
         Self { id, log_send }
     }
 }
@@ -57,9 +56,12 @@ impl log::Log for RuntimeLogger {
                     state: State::Running,
                     level: record.level().into(),
                     timestamp: datetime,
-                    file: None,
-                    line: None,
-                    fields: json!({ "message": format!("{}", record.args()) }),
+                    file: record.file().map(String::from),
+                    line: record.line(),
+                    target: record.target().to_string(),
+                    fields: json!({
+                        "message": format!("{}", record.args()),
+                    }),
                     r#type: deploy_layer::LogType::Event,
                 })
                 .expect("sending log should succeed");
@@ -69,7 +71,7 @@ impl log::Log for RuntimeLogger {
     fn flush(&self) {}
 }
 
-impl From<Level> for super::log::Level {
+impl From<Level> for LogLevel {
     fn from(level: Level) -> Self {
         match level {
             Level::Error => Self::Error,

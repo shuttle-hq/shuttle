@@ -50,27 +50,24 @@ Run `cargo-shuttle --help` to see the basic usage:
 USAGE:
     cargo-shuttle [OPTIONS] <SUBCOMMAND>
 
-FLAGS:
-    -h, --help       Prints help information
-    -V, --version    Prints version information
-
 OPTIONS:
-        --api-url <api-url>
-            Run this command against the api at the supplied url [env: SHUTTLE_API=]
-
-        --name <name>                              Specify the name of the project (overrides crate name)
-        --working-directory <working-directory>    Specify the working directory [default: .]
+        --api-url <API_URL>                        run this command against the api at the supplied url (allows targeting a custom deployed instance for this command only) [env: SHUTTLE_API=]
+    -h, --help                                     Print help information
+        --name <NAME>                              Specify the name of the project (overrides crate name)
+    -V, --version                                  Print version information
+        --working-directory <WORKING_DIRECTORY>    Specify the working directory [default: .]
 
 SUBCOMMANDS:
-    auth      create user credentials for the shuttle platform
-    delete    delete the latest deployment for a shuttle project
-    deploy    deploy a shuttle project
-    help      Prints this message or the help of the given subcommand(s)
-    init      create a new shuttle project
-    login     login to the shuttle platform
-    logs      view the logs of a shuttle project
-    run       run a shuttle project locally
-    status    view the status of a shuttle project
+    auth          create user credentials for the shuttle platform
+    delete        delete this shuttle service
+    deploy        deploy a shuttle service
+    deployment    manage deployments of a shuttle service
+    help          Print this message or the help of the given subcommand(s)
+    init          create a new shuttle service
+    login         login to the shuttle platform
+    logs          view the logs of a deployment in this shuttle service
+    run           run a shuttle service locally
+    status        view the status of a shuttle service
 ```
 
 ### Subcommand: `init`

@@ -1059,7 +1059,7 @@ dependencies = [
  "cargo_metadata 0.15.0",
  "chrono",
  "clap",
- "colored",
+ "crossbeam-channel",
  "crossterm",
  "dirs",
  "futures",
@@ -1077,6 +1077,7 @@ dependencies = [
  "tempfile",
  "test-context",
  "tokio",
+ "tokio-tungstenite",
  "tokiotest-httpserver",
  "toml",
  "toml_edit 0.14.4",
@@ -1250,17 +1251,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "colored"
-version = "2.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3616f750b84d8f0de8a58bda93e08e2a81ad3f523089b05f1dffecab48c6cbd"
-dependencies = [
- "atty",
- "lazy_static",
- "winapi",
-]
-
-[[package]]
 name = "combine"
 version = "4.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1268,6 +1258,18 @@ checksum = "2a604e93b79d1808327a6fca85a6f2d69de66461e7620f5a4cbf5fb4d1d7c948"
 dependencies = [
  "bytes 1.1.0",
  "memchr",
+]
+
+[[package]]
+name = "comfy-table"
+version = "6.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "121d8a5b0346092c18a4b2fd6f620d7a06f0eb7ac0a45860939a0884bc579c56"
+dependencies = [
+ "crossterm",
+ "strum",
+ "strum_macros",
+ "unicode-width",
 ]
 
 [[package]]
@@ -4593,11 +4595,13 @@ version = "0.4.1"
 dependencies = [
  "anyhow",
  "chrono",
+ "comfy-table",
+ "crossterm",
  "lazy_static",
- "log",
  "rocket",
  "serde",
  "serde_json",
+ "strum",
  "uuid",
 ]
 
@@ -4613,8 +4617,10 @@ dependencies = [
  "cargo_metadata 0.15.0",
  "chrono",
  "clap",
+ "crossbeam-channel",
  "ctor",
  "flate2",
+ "fqdn",
  "futures",
  "hex 0.4.3",
  "log",
@@ -4628,6 +4634,7 @@ dependencies = [
  "shuttle-proto",
  "shuttle-service",
  "sqlx 0.6.0",
+ "strum",
  "tar",
  "tempdir",
  "thiserror",
@@ -4686,6 +4693,7 @@ dependencies = [
  "cargo",
  "cargo_metadata 0.15.0",
  "chrono",
+ "crossbeam-channel",
  "futures",
  "hyper",
  "lazy_static",
@@ -5128,6 +5136,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
 
 [[package]]
+name = "strum"
+version = "0.24.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "063e6045c0e62079840579a7e47a355ae92f60eb74daaf156fb1e84ba164e63f"
+dependencies = [
+ "strum_macros",
+]
+
+[[package]]
+name = "strum_macros"
+version = "0.24.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4faebde00e8ff94316c01800f9054fd2ba77d30d9e922541913051d1d978918b"
+dependencies = [
+ "heck",
+ "proc-macro2",
+ "quote",
+ "rustversion",
+ "syn",
+]
+
+[[package]]
 name = "subprocess"
 version = "0.2.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5490,7 +5520,9 @@ checksum = "f714dd15bead90401d77e04243611caec13726c2408afd5b31901dfcdcb3b181"
 dependencies = [
  "futures-util",
  "log",
+ "native-tls",
  "tokio",
+ "tokio-native-tls",
  "tungstenite",
 ]
 
@@ -5807,6 +5839,7 @@ dependencies = [
  "http",
  "httparse",
  "log",
+ "native-tls",
  "rand 0.8.5",
  "sha-1",
  "thiserror",

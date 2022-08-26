@@ -1,4 +1,4 @@
-use colored::Color;
+use crossterm::style::Color;
 
 use crate::helpers;
 
@@ -20,7 +20,7 @@ fn hello_world_rocket() {
 
 #[test]
 fn postgres_rocket() {
-    let client = helpers::Services::new_docker("postgres", Color::Blue);
+    let client = helpers::Services::new_docker("postgres (rocket)", Color::Magenta);
     client.deploy("rocket/postgres");
 
     let add_response = client

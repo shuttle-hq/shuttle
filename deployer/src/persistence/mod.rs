@@ -1,27 +1,35 @@
+mod deployment;
+mod log;
+mod resource;
+mod state;
+
 use crate::deployment::deploy_layer::{self, LogRecorder, LogType};
-use crate::deployment::{Log, State};
 use crate::error::Result;
 
 use std::path::Path;
 
-use chrono::{DateTime, Utc};
 use serde_json::json;
-use shuttle_common::BuildLog;
+use shuttle_common::STATE_MESSAGE;
 use sqlx::migrate::MigrateDatabase;
 use sqlx::sqlite::{Sqlite, SqlitePool};
 use tokio::sync::broadcast::{self, Receiver, Sender};
-use tokio::sync::mpsc::{self, UnboundedSender};
 use tokio::task::JoinHandle;
 use tracing::error;
 use uuid::Uuid;
+
+use self::deployment::DeploymentRunnable;
+pub use self::deployment::{Deployment, DeploymentState};
+pub use self::log::{Level as LogLevel, Log};
+pub use self::resource::{Resource, ResourceRecorder, Type as ResourceType};
+pub use self::state::State;
 
 const DB_PATH: &str = "deployer.sqlite";
 
 #[derive(Clone)]
 pub struct Persistence {
     pool: SqlitePool,
-    log_send: UnboundedSender<deploy_layer::Log>,
-    build_log_send: Sender<BuildLog>,
+    log_send: crossbeam_channel::Sender<deploy_layer::Log>,
+    stream_log_send: Sender<deploy_layer::Log>,
 }
 
 impl Persistence {
@@ -49,51 +57,57 @@ impl Persistence {
             CREATE TABLE IF NOT EXISTS deployments (
                 id TEXT PRIMARY KEY, -- Identifier of the deployment.
                 name TEXT,           -- Name of the service being deployed.
-                state INTEGER,       -- Enum indicating the current state of the deployment.
+                state TEXT,          -- Enum indicating the current state of the deployment.
                 last_update INTEGER  -- Unix epoch of the last status update
             );
 
             CREATE TABLE IF NOT EXISTS logs (
                 id TEXT,           -- The deployment that this log line pertains to.
                 timestamp INTEGER, -- Unix epoch timestamp.
-                state INTEGER,     -- The state of the deployment at the time at which the log text was produced.
+                state TEXT,        -- The state of the deployment at the time at which the log text was produced.
                 level TEXT,        -- The log level
                 file TEXT,         -- The file log took place in
                 line INTEGER,      -- The line log took place on
+                target TEXT,       -- The module log took place in
                 fields TEXT,       -- Log fields object.
                 PRIMARY KEY (id, timestamp)
             );
+
+            CREATE TABLE IF NOT EXISTS resources (
+                name TEXT,         -- Name of the service this resource belongs to.
+                type TEXT,         -- Type of resource this is.
+                data TEXT,         -- Data about this resource.
+                PRIMARY KEY (name, type)
+            );
         ").execute(&pool).await.unwrap();
 
-        let (log_send, mut log_recv): (UnboundedSender<deploy_layer::Log>, _) =
-            mpsc::unbounded_channel();
+        let (log_send, log_recv): (crossbeam_channel::Sender<deploy_layer::Log>, _) =
+            crossbeam_channel::bounded(0);
 
-        let (build_log_send, _) = broadcast::channel(32);
-        let build_log_send_clone = build_log_send.clone();
+        let (stream_log_send, _) = broadcast::channel(32);
+        let stream_log_send_clone = stream_log_send.clone();
 
         let pool_cloned = pool.clone();
 
         // The logs are received on a non-async thread.
         // This moves them to an async thread
         let handle = tokio::spawn(async move {
-            while let Some(log) = log_recv.recv().await {
+            while let Ok(log) = log_recv.recv() {
+                if stream_log_send_clone.receiver_count() > 0 {
+                    stream_log_send_clone
+                        .send(log.clone())
+                        .unwrap_or_else(|error| {
+                            error!(
+                                error = &error as &dyn std::error::Error,
+                                "failed to broadcast log"
+                            );
+
+                            0
+                        });
+                }
+
                 match log.r#type {
                     LogType::Event => {
-                        if log.state == State::Building {
-                            if let Some(build_log) = log.to_build_log() {
-                                build_log_send_clone
-                                    .send(build_log)
-                                    .unwrap_or_else(|error| {
-                                        error!(
-                                            error = &error as &dyn std::error::Error,
-                                            "failed to broadcast build log"
-                                        );
-
-                                        0
-                                    });
-                            }
-                        }
-
                         insert_log(&pool_cloned, log).await.unwrap_or_else(|error| {
                             error!(
                                 error = &error as &dyn std::error::Error,
@@ -111,7 +125,8 @@ impl Persistence {
                                 level: log.level.clone(),
                                 file: log.file.clone(),
                                 line: log.line,
-                                fields: json!("NEW STATE"),
+                                target: String::new(),
+                                fields: json!(STATE_MESSAGE),
                             },
                         )
                         .await
@@ -137,7 +152,7 @@ impl Persistence {
         let persistence = Self {
             pool,
             log_send,
-            build_log_send,
+            stream_log_send,
         };
 
         (persistence, handle)
@@ -165,6 +180,15 @@ impl Persistence {
         sqlx::query_as("SELECT * FROM deployments WHERE name = ?")
             .bind(name)
             .fetch_all(&self.pool)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn get_active_deployment(&self, name: &str) -> Result<Option<Deployment>> {
+        sqlx::query_as("SELECT * FROM deployments WHERE name = ? AND state = ?")
+            .bind(name)
+            .bind(State::Running)
+            .fetch_optional(&self.pool)
             .await
             .map_err(Into::into)
     }
@@ -198,33 +222,24 @@ impl Persistence {
         .map_err(Into::into)
     }
 
-    async fn insert_log(&self, log: impl Into<Log>) -> Result<()> {
-        insert_log(&self.pool, log).await
+    pub async fn get_service_resources(&self, name: &str) -> Result<Vec<Resource>> {
+        sqlx::query_as(r#"SELECT * FROM resources WHERE name = ?"#)
+            .bind(name)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(Into::into)
     }
 
-    async fn get_deployment_logs(&self, id: &Uuid) -> Result<Vec<Log>> {
+    pub(crate) async fn get_deployment_logs(&self, id: &Uuid) -> Result<Vec<Log>> {
+        // TODO: stress this a bit
         get_deployment_logs(&self.pool, id).await
     }
 
-    pub fn get_build_log_subscriber(&self) -> Receiver<BuildLog> {
-        self.build_log_send.subscribe()
+    pub fn get_log_subscriber(&self) -> Receiver<deploy_layer::Log> {
+        self.stream_log_send.subscribe()
     }
 
-    pub async fn get_build_logs(&self, id: &Uuid) -> Result<Vec<BuildLog>> {
-        // TODO: stress this a bit
-        let logs: Vec<Log> =
-            sqlx::query_as("SELECT * FROM logs WHERE id = ? AND state = ? ORDER BY timestamp")
-                .bind(id)
-                .bind(State::Building)
-                .fetch_all(&self.pool)
-                .await?;
-
-        let logs = logs.into_iter().filter_map(Log::into_build_log).collect();
-
-        Ok(logs)
-    }
-
-    pub fn get_log_sender(&self) -> UnboundedSender<deploy_layer::Log> {
+    pub fn get_log_sender(&self) -> crossbeam_channel::Sender<deploy_layer::Log> {
         self.log_send.clone()
     }
 }
@@ -255,13 +270,14 @@ async fn get_deployment(pool: &SqlitePool, id: &Uuid) -> Result<Option<Deploymen
 async fn insert_log(pool: &SqlitePool, log: impl Into<Log>) -> Result<()> {
     let log = log.into();
 
-    sqlx::query("INSERT INTO logs (id, timestamp, state, level, file, line, fields) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    sqlx::query("INSERT INTO logs (id, timestamp, state, level, file, line, target, fields) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
         .bind(log.id)
         .bind(log.timestamp)
         .bind(log.state)
         .bind(log.level)
         .bind(log.file)
         .bind(log.line)
+        .bind(log.target)
         .bind(log.fields)
         .execute(pool)
         .await
@@ -285,25 +301,18 @@ impl LogRecorder for Persistence {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, serde::Serialize, sqlx::FromRow)]
-pub struct Deployment {
-    pub id: Uuid,
-    pub name: String,
-    pub state: State,
-    pub last_update: DateTime<Utc>,
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct DeploymentState {
-    pub id: Uuid,
-    pub state: State,
-    pub last_update: DateTime<Utc>,
-}
-
-#[derive(sqlx::FromRow, Debug, PartialEq, Eq)]
-pub struct DeploymentRunnable {
-    pub id: Uuid,
-    pub name: String,
+#[async_trait::async_trait]
+impl ResourceRecorder for Persistence {
+    async fn insert_resource(&self, resource: &Resource) -> Result<()> {
+        sqlx::query("INSERT OR REPLACE INTO resources (name, type, data) VALUES (?, ?, ?)")
+            .bind(&resource.name)
+            .bind(resource.r#type)
+            .bind(&resource.data)
+            .execute(&self.pool)
+            .await
+            .map(|_| ())
+            .map_err(Into::into)
+    }
 }
 
 #[cfg(test)]
@@ -312,9 +321,13 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::deployment::log::Level;
+    use crate::persistence::{
+        deployment::{Deployment, DeploymentRunnable, DeploymentState},
+        log::{Level, Log},
+        state::State,
+    };
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn deployment_updates() {
         let (p, _) = Persistence::new_in_memory().await;
 
@@ -344,7 +357,51 @@ mod tests {
         assert_ne!(update.last_update, Utc.ymd(2022, 4, 25).and_hms(4, 43, 33));
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn deployment_active() {
+        let (p, _) = Persistence::new_in_memory().await;
+
+        let deployment_crashed = Deployment {
+            id: Uuid::new_v4(),
+            name: "xyz".to_string(),
+            state: State::Crashed,
+            last_update: Utc.ymd(2022, 4, 25).and_hms(7, 29, 35),
+        };
+        let deployment_stopped = Deployment {
+            id: Uuid::new_v4(),
+            name: "xyz".to_string(),
+            state: State::Stopped,
+            last_update: Utc.ymd(2022, 4, 25).and_hms(7, 49, 35),
+        };
+        let deployment_other = Deployment {
+            id: Uuid::new_v4(),
+            name: "other".to_string(),
+            state: State::Running,
+            last_update: Utc.ymd(2022, 4, 25).and_hms(7, 39, 39),
+        };
+        let deployment_running = Deployment {
+            id: Uuid::new_v4(),
+            name: "xyz".to_string(),
+            state: State::Running,
+            last_update: Utc.ymd(2022, 4, 25).and_hms(7, 48, 29),
+        };
+
+        for deployment in [
+            &deployment_crashed,
+            &deployment_stopped,
+            &deployment_other,
+            &deployment_running,
+        ] {
+            p.insert_deployment(deployment.clone()).await.unwrap();
+        }
+
+        assert_eq!(
+            p.get_active_deployment("xyz").await.unwrap().unwrap(),
+            deployment_running
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn fetching_runnable_deployments() {
         let (p, _) = Persistence::new_in_memory().await;
 
@@ -402,7 +459,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn deployment_deletion() {
         let (p, _) = Persistence::new_in_memory().await;
 
@@ -430,7 +487,7 @@ mod tests {
         assert!(p.get_deployments("x").await.unwrap().is_empty());
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn log_insert() {
         let (p, _) = Persistence::new_in_memory().await;
 
@@ -442,10 +499,11 @@ mod tests {
             level: Level::Info,
             file: Some("queue.rs".to_string()),
             line: Some(12),
+            target: "tests::log_insert".to_string(),
             fields: json!({"message": "job queued"}),
         };
 
-        p.insert_log(log.clone()).await.unwrap();
+        insert_log(&p.pool, log.clone()).await.unwrap();
 
         let logs = p.get_deployment_logs(&id).await.unwrap();
         assert!(!logs.is_empty(), "there should be one log");
@@ -453,7 +511,7 @@ mod tests {
         assert_eq!(logs.first().unwrap(), &log);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn logs_for_deployment() {
         let (p, _) = Persistence::new_in_memory().await;
 
@@ -465,6 +523,7 @@ mod tests {
             level: Level::Info,
             file: Some("file.rs".to_string()),
             line: Some(5),
+            target: "tests::logs_for_deployment".to_string(),
             fields: json!({"message": "job queued"}),
         };
         let log_b = Log {
@@ -474,6 +533,7 @@ mod tests {
             level: Level::Info,
             file: Some("file.rs".to_string()),
             line: Some(5),
+            target: "tests::logs_for_deployment".to_string(),
             fields: json!({"message": "job queued"}),
         };
         let log_a2 = Log {
@@ -483,12 +543,13 @@ mod tests {
             level: Level::Warn,
             file: None,
             line: None,
+            target: String::new(),
             fields: json!({"message": "unused Result"}),
         };
 
-        p.insert_log(log_a1.clone()).await.unwrap();
-        p.insert_log(log_b).await.unwrap();
-        p.insert_log(log_a2.clone()).await.unwrap();
+        insert_log(&p.pool, log_a1.clone()).await.unwrap();
+        insert_log(&p.pool, log_b).await.unwrap();
+        insert_log(&p.pool, log_a2.clone()).await.unwrap();
 
         let logs = p.get_deployment_logs(&id_a).await.unwrap();
         assert!(!logs.is_empty(), "there should be three logs");
@@ -496,84 +557,7 @@ mod tests {
         assert_eq!(logs, vec![log_a1, log_a2]);
     }
 
-    #[tokio::test]
-    async fn get_build_logs() {
-        let (p, _) = Persistence::new_in_memory().await;
-        let id_a = Uuid::new_v4();
-        let id_b = Uuid::new_v4();
-        let log_a1 = Log {
-            id: id_a,
-            timestamp: Utc::now(),
-            state: State::Queued,
-            level: Level::Info,
-            file: Some("file.rs".to_string()),
-            line: Some(5),
-            fields: json!({"message": {"rendered": "job queued"}}),
-        };
-        let log_b1 = Log {
-            id: id_b,
-            timestamp: Utc::now(),
-            state: State::Queued,
-            level: Level::Info,
-            file: Some("file.rs".to_string()),
-            line: Some(5),
-            fields: json!({"message": "job queued"}),
-        };
-        let log_b2 = Log {
-            id: id_b,
-            timestamp: Utc::now(),
-            state: State::Building,
-            level: Level::Info,
-            file: Some("file.rs".to_string()),
-            line: Some(5),
-            fields: json!({"build_line": "Compiling axum v0.3.0"}),
-        };
-        let log_a2 = Log {
-            id: id_a,
-            timestamp: Utc::now(),
-            state: State::Building,
-            level: Level::Info,
-            file: None,
-            line: None,
-            fields: json!({"build_line": "Compiling rocket v0.5.0"}),
-        };
-        let log_a3 = Log {
-            id: id_a,
-            timestamp: Utc::now(),
-            state: State::Building,
-            level: Level::Warn,
-            file: None,
-            line: None,
-            fields: json!({"message": {"rendered": "unused Result"}}),
-        };
-
-        p.insert_log(log_a1).await.unwrap();
-        p.insert_log(log_b1).await.unwrap();
-        p.insert_log(log_b2).await.unwrap();
-        p.insert_log(log_a2.clone()).await.unwrap();
-        p.insert_log(log_a3.clone()).await.unwrap();
-
-        let logs = p.get_build_logs(&id_a).await.unwrap();
-        assert!(!logs.is_empty(), "there should be two logs");
-
-        assert_eq!(
-            logs,
-            vec![
-                BuildLog {
-                    id: id_a,
-                    timestamp: log_a2.timestamp,
-                    message: "Compiling rocket v0.5.0".to_string(),
-                },
-                BuildLog {
-                    id: id_a,
-                    timestamp: log_a3.timestamp,
-                    message: "unused Result".to_string(),
-                }
-            ]
-        );
-    }
-
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn log_recorder_event() {
         let (p, handle) = Persistence::new_in_memory().await;
 
@@ -585,6 +569,7 @@ mod tests {
             level: Level::Info,
             file: Some("file.rs".to_string()),
             line: Some(5),
+            target: "tests::log_recorder_event".to_string(),
             fields: json!({"message": "job queued"}),
             r#type: deploy_layer::LogType::Event,
         };
@@ -608,7 +593,7 @@ mod tests {
         assert_eq!(log.fields, json!({"message": "job queued"}));
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn log_recorder_state() {
         let (p, handle) = Persistence::new_in_memory().await;
 
@@ -629,6 +614,7 @@ mod tests {
             level: Level::Info,
             file: None,
             line: None,
+            target: String::new(),
             fields: serde_json::Value::Null,
             r#type: deploy_layer::LogType::State,
         };
@@ -658,5 +644,44 @@ mod tests {
                 last_update: Utc.ymd(2022, 4, 29).and_hms(2, 39, 59),
             }
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn deployment_resources() {
+        let (p, _) = Persistence::new_in_memory().await;
+
+        let resource1 = Resource {
+            name: "foo".to_string(),
+            r#type: ResourceType::Database(resource::DatabaseType::Shared),
+            data: json!({"username": "root"}),
+        };
+        let resource2 = Resource {
+            name: "foo".to_string(),
+            r#type: ResourceType::Database(resource::DatabaseType::AwsRds(
+                resource::database::AwsRdsType::MariaDB,
+            )),
+            data: json!({"uri": "postgres://localhost"}),
+        };
+        let resource3 = Resource {
+            name: "bar".to_string(),
+            r#type: ResourceType::Database(resource::DatabaseType::AwsRds(
+                resource::database::AwsRdsType::Postgres,
+            )),
+            data: json!({"username": "admin"}),
+        };
+        // This makes sure only the last instance of a type is saved (clashes with [resource1])
+        let resource4 = Resource {
+            name: "foo".to_string(),
+            r#type: ResourceType::Database(resource::DatabaseType::Shared),
+            data: json!({"username": "foo"}),
+        };
+
+        for resource in [&resource1, &resource2, &resource3, &resource4] {
+            p.insert_resource(resource).await.unwrap();
+        }
+
+        let resources = p.get_service_resources("foo").await.unwrap();
+
+        assert_eq!(resources, vec![resource2, resource4]);
     }
 }

@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -146,8 +145,6 @@ pub struct ProjectConfig {
     pub name: Option<ProjectName>,
 }
 
-pub type SecretsConfig = HashMap<String, String>;
-
 /// A handler for configuration files. The type parameter `M` is the [`ConfigManager`] which handles
 /// indirection around file location and serde. The type parameter `C` is the configuration content.
 ///
@@ -230,7 +227,6 @@ where
 pub struct RequestContext {
     global: Config<GlobalConfigManager, GlobalConfig>,
     project: Option<Config<LocalConfigManager, ProjectConfig>>,
-    secrets: Option<Config<LocalConfigManager, SecretsConfig>>,
     api_url: Option<String>,
 }
 
@@ -264,7 +260,6 @@ impl RequestContext {
         Ok(Self {
             global,
             project: None,
-            secrets: None,
             api_url: None,
         })
     }
@@ -275,17 +270,6 @@ impl RequestContext {
     /// file does not exist, or it has not set the `name` key then the `ProjectConfig` instance
     /// has `ProjectConfig.name = Some("crate-name")`.
     pub fn load_local(&mut self, project_args: &ProjectArgs) -> Result<()> {
-        // Secrets.toml
-        let secrets_manager =
-            LocalConfigManager::new(&project_args.working_directory, "Secrets.toml".to_string());
-        let mut secrets = Config::new(secrets_manager);
-
-        if secrets.exists() {
-            trace!("found secrets");
-            secrets.open()?;
-            self.secrets = Some(secrets);
-        }
-
         // Shuttle.toml
         let project = Self::get_local_config(project_args)?;
 
@@ -400,13 +384,6 @@ impl RequestContext {
             .name
             .as_ref()
             .unwrap()
-    }
-
-    pub fn secrets(&self) -> HashMap<String, String> {
-        self.secrets
-            .as_ref()
-            .and_then(|secrets| secrets.as_ref().cloned())
-            .unwrap_or_default()
     }
 }
 

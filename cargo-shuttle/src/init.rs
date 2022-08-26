@@ -330,7 +330,7 @@ pub fn cargo_init(path: PathBuf) -> Result<()> {
     let cargo_config = cargo::util::config::Config::default()?;
     let init_result = cargo::ops::init(&opts, &cargo_config)?;
 
-    // Mimick `cargo init` behavior and log status or error to shell
+    // Mimic `cargo init` behavior and log status or error to shell
     cargo_config
         .shell()
         .status("Created", format!("{} (shuttle) package", init_result))?;

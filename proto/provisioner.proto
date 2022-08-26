@@ -8,9 +8,16 @@ service Provisioner {
 message DatabaseRequest {
   string project_name = 1;
   oneof db_type {
-    string shared = 10;
+    Shared Shared = 10;
     AwsRds AwsRds = 11;
   };
+}
+
+message Shared {
+  oneof engine {
+    string postgres = 1;
+    string mongodb = 50;
+  }
 }
 
 message AwsRds {

@@ -4,18 +4,61 @@ orbs:
   docker-buildx: sensu/docker-buildx@1.1.1
   aws-ecr: circleci/aws-ecr@8.1.2
 
-jobs:
-  build-test-and-push:
-    resource_class: xlarge
+executors:
+  docker-rust:
+    docker:
+      - image: cimg/rust:1.63.0
+  image-ubuntu:
     machine:
       image: ubuntu-2204:2022.04.1
       docker_layer_caching: true
+
+# sscache steps are from this guide
+# https://medium.com/@edouard.oger/rust-caching-on-circleci-using-sccache-c996344f0115
+commands:
+  restore-cargo-cache:
     steps:
-      - checkout
+      # Restore cargo cache before installing anything with the cargo command (ie cargo install ...)
+      - restore_cache:
+          name: Restore cargo cache
+          keys:
+            - cargo-{{ checksum "Cargo.lock" }}
+      - run:
+          name: Install sccache
+          command: |
+            ls ~/.cargo/bin/sccache || cargo install sccache
+            # This configures Rust to use sccache.
+            echo 'export "RUSTC_WRAPPER"="sccache"' >> $BASH_ENV
+            sccache --version
+      - restore_cache:
+          name: Restore sccache cache
+          key: sccache-cache-{{ .Environment.CIRCLE_JOB }}
+  save-cargo-cache:
+    steps:
+      - run:
+          name: Sccache stats
+          command: sccache --show-stats
+      - save_cache:
+          name: Save sccache cache
+          # We use {{ epoch }} to always upload a fresh cache:
+          # Of course, restore_cache will not find this exact key,
+          # but it will fall back to the closest key (aka the most recent).
+          # See https://discuss.circleci.com/t/add-mechanism-to-update-existing-cache-key/9014/13
+          key: sccache-cache-{{ .Environment.CIRCLE_JOB }}-{{ epoch }}
+          paths:
+            - "~/.cache/sccache"
+      - save_cache:
+          name: Save cargo cache
+          key: cargo-{{ checksum "Cargo.lock" }}-{{ epoch }}
+          paths:
+            - ~/.cargo
+  restore-buildx-cache:
+    steps:
       - docker-buildx/install:
           version: 0.8.2
           qemu-user-static-version: 7.0.0-7
       - restore_cache:
+          name: Restore buildx cache
           keys:
             # Try lock cache first
             - docker-buildx-{{ checksum "./Cargo.lock" }}
@@ -24,54 +67,211 @@ jobs:
             # Fallback to main cache
             - docker-buildx-main
       - run:
-          command: |
-            export BUILDX_CACHE=/tmp/cache/buildx
-            sudo mkdir -p $BUILDX_CACHE && sudo chown -R circleci:circleci $BUILDX_CACHE
-            make images
+          name: Configure buildx cache
+          command: export BUILDX_CACHE=/tmp/cache/buildx
+  save-buildx-cache:
+    steps:
       - save_cache:
+          name: Save buildx cache
           paths:
             - "/tmp/cache/buildx"
-          key: docker-buildx-{{ checksum "./Cargo.lock" }}
+          key: docker-buildx-{{ checksum "./Cargo.lock" }}-{{ epoch }}
           when: always
+  apply-patches:
+    steps:
       - run:
+          name: Patch service
           command: |
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-      - run:
-          name: Run the E2E tests
-          command: |
-            mkdir -p ~/.cargo
             cat\<< EOF > ~/.cargo/config.toml
             [patch.crates-io]
             shuttle-service = { path = "$PWD/service" }
             EOF
+  install-rust:
+    steps:
+      - run:
+          name: Install Rust
+          command: |
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+            sudo apt update && sudo apt install -y libssl1.1
 
+jobs:
+  workspace-fmt:
+    executor: docker-rust
+    steps:
+      - checkout
+      - restore-cargo-cache
+      - run: sudo apt install -y protobuf-compiler
+      - run: cargo fmt --all --check
+      - run: cargo install cargo-sort
+      - run: cargo sort --check --workspace
+      - run: cargo check --workspace --all-targets
+      - save-cargo-cache
+  workspace-clippy:
+    parameters:
+      framework:
+        description: "Framework to activate"
+        type: string
+    executor: docker-rust
+    steps:
+      - checkout
+      - restore-cargo-cache
+      - run: sudo apt install -y protobuf-compiler
+      - run: |
+          cargo clippy --tests \
+                       --all-targets \
+                       --features="codegen,loader,sqlx-integration,sqlx-postgres,mongodb-integration,secrets,<< parameters.framework >>" \
+                       --no-deps -- \
+                       --D warnings \
+                       -A clippy::let-unit-value \
+                       -A clippy::format-push-string
+      - save-cargo-cache
+  check-standalone:
+    parameters:
+      path:
+        description: "Path to crate external from workspace"
+        type: string
+    executor: docker-rust
+    steps:
+      - checkout
+      - restore-cargo-cache
+      - apply-patches
+      - run: cargo fmt --all --check --manifest-path << parameters.path >>/Cargo.toml
+      - run: cargo install cargo-sort
+      - run: cargo sort --check << parameters.path >>
+      - run: |
+          cargo clippy --tests \
+                       --all-targets \
+                       --manifest-path << parameters.path >>/Cargo.toml \
+                       --no-deps -- \
+                       --D warnings \
+                       -A clippy::let-unit-value \
+                       -A clippy::format-push-string
+      - save-cargo-cache
+  service-test:
+    # Using an image since tests will start a docker container
+    executor: image-ubuntu
+    steps:
+      - install-rust
+      - checkout
+      - restore-cargo-cache
+      - run:
+          name: Run unit tests
+          command: cargo test --package shuttle-service --features="codegen,loader,secrets" --lib -- --nocapture
+      - run:
+          name: Run integration tests
+          command: cargo test --package shuttle-service --features="codegen,loader,secrets" --test '*' -- --nocapture
+      - save-cargo-cache
+  platform-test:
+    parameters:
+      crate:
+        description: "Crate to test"
+        type: string
+    # Using an image since tests will start a docker container
+    executor: image-ubuntu
+    steps:
+      - install-rust
+      - checkout
+      - restore-cargo-cache
+      - apply-patches
+      - run:
+          name: Run unit tests
+          command: cargo test --package << parameters.crate >> --all-features --lib -- --nocapture
+      - run:
+          name: Run integration tests
+          # Only run integration tests if there are any
+          command: |
+            set +o pipefail
+            (cargo test --package << parameters.crate >> --all-features --test '*' -- --list 2>&1 | grep -q "no test target matches pattern") && echo "nothing to test" || cargo test --package << parameters.crate >> --all-features --test '*' -- --nocapture
+      - save-cargo-cache
+  e2e-test:
+    resource_class: xlarge
+    executor: image-ubuntu
+    steps:
+      - install-rust
+      - checkout
+      - restore-buildx-cache
+      - run:
+          name: Make images for tests
+          command: |
+            sudo mkdir -p $BUILDX_CACHE && sudo chown -R circleci:circleci $BUILDX_CACHE
+            make images
+      - save-buildx-cache
+      - apply-patches
+      - run:
+          name: Run the E2E tests
+          command: |
+            # clean up a potential existing deployments before running
+            # the tests just in case the environment is not clean
             make down
-            docker volume create shuttle-backend-vol
-            cd e2e; BUILDX_CACHE=/tmp/cache/buildx SHUTTLE_API_KEY=test-key cargo test -- --nocapture
-      - when:
-          condition:
-            equal: [ main, << pipeline.git.branch >> ]
-          steps:
-            - aws-ecr/ecr-login:
-                aws-access-key-id: AWS_ACCESS_KEY_ID
-                aws-secret-access-key: AWS_SECRET_ACCESS_KEY
-                public-registry: true
-            - run:
-               command: |
-                 make clean
-                 PUSH=true BUILDX_CACHE=/tmp/cache/buildx PLATFORMS=linux/amd64,linux/arm64 make images
-      - save_cache:
-          paths:
-            - "/tmp/cache/buildx"
-          key: docker-buildx-{{ checksum "./Cargo.lock" }}
-          when: always
+
+            BUILDX_CACHE=/tmp/cache/buildx make test
       - save_cache:
           paths:
             - "/tmp/cache/buildx"
           key: docker-buildx-{{ .Branch }}
           when: always
+  build-and-push:
+    resource_class: xlarge
+    executor: image-ubuntu
+    steps:
+      - checkout
+      - restore-buildx-cache
+      - aws-ecr/ecr-login:
+          aws-access-key-id: AWS_ACCESS_KEY_ID
+          aws-secret-access-key: AWS_SECRET_ACCESS_KEY
+          public-registry: true
+      - run:
+          name: Make and push images
+          command: |
+            make clean
+            PUSH=true PLATFORMS=linux/amd64,linux/arm64 make images
+      - save-buildx-cache
+
 workflows:
   version: 2
-  build-test-and-push:
+  ci:
     jobs:
-      - build-test-and-push
+      - workspace-fmt
+      - workspace-clippy:
+          name: workspace-clippy-<< matrix.framework >>
+          requires:
+            - workspace-fmt
+          matrix:
+            parameters:
+              framework: ["web-axum", "web-rocket", "web-poem", "web-tide", "web-tower"]
+      - check-standalone:
+          matrix:
+            parameters:
+              path:
+                - examples/axum/hello-world
+                - examples/axum/websocket
+                - examples/poem/hello-world
+                - examples/poem/mongodb
+                - examples/poem/postgres
+                - examples/rocket/authentication
+                - examples/rocket/hello-world
+                - examples/rocket/postgres
+                - examples/rocket/url-shortener
+                - examples/tide/hello-world
+                - examples/tide/postgres
+                - examples/tower/hello-world
+      - service-test:
+          requires:
+            - workspace-clippy
+      - platform-test:
+          requires:
+            - workspace-clippy
+          matrix:
+            parameters:
+              crate: ["shuttle-api", "cargo-shuttle", "shuttle-codegen", "shuttle-common", "shuttle-proto", "shuttle-provisioner"]
+      - e2e-test:
+          requires:
+            - service-test
+            - platform-test
+            - check-standalone
+      - build-and-push:
+          requires:
+            - e2e-test
+          filters:
+            branches:
+              only: main

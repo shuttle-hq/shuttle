@@ -100,12 +100,12 @@ resource "aws_acm_certificate_validation" "api" {
   validation_record_fqdns = [for record in aws_route53_record.api : record.fqdn]
 }
 
-resource "aws_route53_zone" "pg" {
-  name = var.pg_fqdn
+resource "aws_route53_zone" "db" {
+  name = var.db_fqdn
 }
 
-resource "aws_acm_certificate" "pg" {
-  domain_name = var.pg_fqdn
+resource "aws_acm_certificate" "db" {
+  domain_name = var.db_fqdn
 
   validation_method = "DNS"
 
@@ -114,13 +114,13 @@ resource "aws_acm_certificate" "pg" {
   }
 }
 
-resource "aws_route53_record" "pg" {
+resource "aws_route53_record" "db" {
   for_each = {
-    for dvo in aws_acm_certificate.pg.domain_validation_options : dvo.domain_name => {
+    for dvo in aws_acm_certificate.db.domain_validation_options : dvo.domain_name => {
       name    = dvo.resource_record_name
       record  = dvo.resource_record_value
       type    = dvo.resource_record_type
-      zone_id = aws_route53_zone.pg.zone_id
+      zone_id = aws_route53_zone.db.zone_id
     }
   }
 
@@ -132,8 +132,8 @@ resource "aws_route53_record" "pg" {
   zone_id         = each.value.zone_id
 }
 
-resource "aws_route53_record" "pg_alias" {
-  zone_id = aws_route53_zone.pg.zone_id
+resource "aws_route53_record" "db_alias" {
+  zone_id = aws_route53_zone.db.zone_id
   name    = ""
   type    = "A"
 
@@ -144,7 +144,7 @@ resource "aws_route53_record" "pg_alias" {
   }
 }
 
-resource "aws_acm_certificate_validation" "pg" {
-  certificate_arn         = aws_acm_certificate.pg.arn
-  validation_record_fqdns = [for record in aws_route53_record.pg : record.fqdn]
+resource "aws_acm_certificate_validation" "db" {
+  certificate_arn         = aws_acm_certificate.db.arn
+  validation_record_fqdns = [for record in aws_route53_record.db : record.fqdn]
 }

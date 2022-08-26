@@ -21,14 +21,14 @@
 //! Now that shuttle is installed, you can create your first project using:
 //!
 //! ```bash
-//! cargo shuttle init --rocket my-rocket-app
+//! $ cargo shuttle init --rocket my-rocket-app
 //! ```
 //!
 //! By looking at the `Cargo.toml` file of the generated `my-rocket-app` project you will see it has been made to
 //! be a library crate with a `shuttle-service` dependency with the `web-rocket` feature on the `shuttle-service` dependency.
 //!
 //! ```toml
-//! shuttle-service = { version = "0.4.0", features = ["web-rocket"] }
+//! shuttle-service = { version = "0.5.0", features = ["web-rocket"] }
 //! ```
 //!
 //! A boilerplate code for your rocket project can also be found in `src/lib.rs`:
@@ -101,8 +101,8 @@
 //! Add the `sqlx-postgres` feature to the `shuttle-service` dependency, and add `sqlx` as a dependency with the `runtime-tokio-native-tls` and `postgres` features inside `Cargo.toml`:
 //!
 //! ```toml
-//! shuttle-service = { version = "0.4.0", features = ["web-rocket", "sqlx-postgres"] }
-//! sqlx = { version = "0.5", features = ["runtime-tokio-native-tls", "postgres"] }
+//! shuttle-service = { version = "0.5.0", features = ["web-rocket", "sqlx-postgres"] }
+//! sqlx = { version = "0.6.1", features = ["runtime-tokio-native-tls", "postgres"] }
 //! ```
 //!
 //! Now update the `#[shuttle_service::main]` function to take in a `PgPool`:
@@ -220,7 +220,7 @@ pub mod logger;
 
 pub use shuttle_common::database;
 
-#[cfg(feature = "sqlx-postgres")]
+#[cfg(any(feature = "sqlx-postgres", feature = "mongodb-integration",))]
 pub mod shared;
 
 #[cfg(feature = "secrets")]
@@ -263,6 +263,7 @@ extern crate shuttle_codegen;
 /// | `ShuttleRocket`                       | web-rocket   | [rocket](https://docs.rs/rocket/0.5.0-rc.2) | 0.5.0-rc.2 | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/rocket/hello-world) |
 /// | `ShuttleAxum`                         | web-axum     | [axum](https://docs.rs/axum/0.5)            | 0.5        | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/axum/hello-world)   |
 /// | `ShuttleTide`                         | web-tide     | [tide](https://docs.rs/tide/0.16.0)         | 0.16.0     | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/tide/hello-world)   |
+/// | `ShuttlePoem`                         | web-poem     | [poem](https://docs.rs/poem/1.3.35)         | 1.3.35     | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/poem/hello-world)   |
 /// | `Result<T, shuttle_service::Error>`   | web-tower    | [tower](https://docs.rs/tower/0.4.12)       | 0.14.12    | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/tower/hello-world)  |
 ///
 /// # Getting shuttle managed services
@@ -285,12 +286,14 @@ extern crate shuttle_codegen;
 /// ## shuttle managed dependencies
 /// The following dependencies can be managed by shuttle - remember to enable their feature flags for the `shuttle-service` dependency in `Cargo.toml` and configure them using an attribute annotation:
 ///
-/// | Argument type                                                       | Feature flag      | Attribute            | Dependency                                                                                         | Example                                                                          |
-/// | ------------------------------------------------------------------- | ----------------- | -------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-/// | [`PgPool`](https://docs.rs/sqlx/latest/sqlx/type.PgPool.html)       | sqlx-postgres     | `shared::Postgres`   | A shared PostgreSQL instance accessed using [sqlx](https://docs.rs/sqlx)                          | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/rocket/postgres) |
-/// | [`MySqlPool`](https://docs.rs/sqlx/latest/sqlx/type.MySqlPool.html) | sqlx-aws-mariadb  | `aws::rds::MariaDB`  | An AWS RDS MariaDB instance tied to your instance and accessed using [sqlx](https://docs.rs/sqlx)  |                                                                                  |
-/// | [`MySqlPool`](https://docs.rs/sqlx/latest/sqlx/type.MySqlPool.html) | sqlx-aws-mysql    | `aws::rds::MySql`    | An AWS RDS MySql instance tied to your instance and accessed using [sqlx](https://docs.rs/sqlx)    |                                                                                  |
-/// | [`PgPool`](https://docs.rs/sqlx/latest/sqlx/type.PgPool.html)       | sqlx-aws-postgres | `aws::rds::Postgres` | An AWS RDS Postgres instance tied to your instance and accessed using [sqlx](https://docs.rs/sqlx) | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/tide/postgres)   |
+
+/// | Argument type                                                            | Feature flag        | Attribute            | Dependency                                                                                         | Example                                                                          |
+/// | ------------------------------------------------------------------------ | ------------------- | -------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+/// | [`PgPool`](https://docs.rs/sqlx/latest/sqlx/type.PgPool.html)            | sqlx-postgres       | `shared::Postgres`   | A shared PostgresSQL instance accessed using [sqlx](https://docs.rs/sqlx)                          | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/rocket/postgres) |
+/// | [`Database`](https://docs.rs/mongodb/latest/mongodb/struct.Database.html)| mongodb-integration | `shared::MongoDb`    | A shared MongoDb database accessed using the [mongodb](https://docs.rs/mongodb) driver             | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/poem/mongodb)    |
+/// | [`MySqlPool`](https://docs.rs/sqlx/latest/sqlx/type.MySqlPool.html)      | sqlx-aws-mariadb    | `aws::rds::MariaDB`  | An AWS RDS MariaDB instance tied to your instance and accessed using [sqlx](https://docs.rs/sqlx)  |                                                                                  |
+/// | [`MySqlPool`](https://docs.rs/sqlx/latest/sqlx/type.MySqlPool.html)      | sqlx-aws-mysql      | `aws::rds::MySql`    | An AWS RDS MySql instance tied to your instance and accessed using [sqlx](https://docs.rs/sqlx)    |                                                                                  |
+/// | [`PgPool`](https://docs.rs/sqlx/latest/sqlx/type.PgPool.html)            | sqlx-aws-postgres   | `aws::rds::Postgres` | An AWS RDS Postgres instance tied to your instance and accessed using [sqlx](https://docs.rs/sqlx) | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/tide/postgres)   |
 pub use shuttle_codegen::main;
 use tokio::task::JoinHandle;
 
@@ -304,10 +307,10 @@ pub mod loader;
 /// Also see the [main][main] macro.
 #[async_trait]
 pub trait Factory: Send + Sync {
-    /// Declare that the [Service][Service] requires a Postgres database.
+    /// Declare that the [Service][Service] requires a database.
     ///
     /// Returns the connection string to the provisioned database.
-    async fn get_sql_connection_string(
+    async fn get_db_connection_string(
         &mut self,
         db_type: database::Type,
     ) -> Result<String, crate::Error>;
@@ -436,6 +439,25 @@ impl Service for rocket::Rocket<rocket::Build> {
 
 #[cfg(feature = "web-rocket")]
 pub type ShuttleRocket = Result<rocket::Rocket<rocket::Build>, Error>;
+
+#[cfg(feature = "web-poem")]
+#[async_trait]
+impl<T> Service for T
+where
+    T: poem::Endpoint + Sync + Send + 'static,
+{
+    async fn bind(mut self: Box<Self>, addr: SocketAddr) -> Result<(), error::Error> {
+        poem::Server::new(poem::listener::TcpListener::bind(addr))
+            .run(self)
+            .await
+            .map_err(error::CustomError::new)?;
+
+        Ok(())
+    }
+}
+
+#[cfg(feature = "web-poem")]
+pub type ShuttlePoem<T> = Result<T, Error>;
 
 #[cfg(feature = "web-axum")]
 #[async_trait]

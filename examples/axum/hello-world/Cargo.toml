@@ -7,5 +7,5 @@ edition = "2021"
 
 [dependencies]
 axum = "0.5"
-shuttle-service = { version = "0.4.0", features = ["web-axum"] }
+shuttle-service = { version = "0.5.0", features = ["web-axum"] }
 sync_wrapper = "0.1"

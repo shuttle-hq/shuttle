@@ -2,7 +2,10 @@ use serenity::async_trait;
 use serenity::model::channel::Message;
 use serenity::model::gateway::Ready;
 use serenity::prelude::*;
-use std::env;
+use shuttle_service::error::CustomError;
+use shuttle_service::SecretStore;
+use sqlx::PgPool;
+use tracing::{error, info};
 
 struct Bot;
 
@@ -10,26 +13,27 @@ struct Bot;
 impl EventHandler for Bot {
     async fn message(&self, ctx: Context, msg: Message) {
         if msg.content == "!hello" {
-            if let Err(why) = msg.channel_id.say(&ctx.http, "world!").await {
-                println!("Error sending message: {:?}", why);
+            if let Err(e) = msg.channel_id.say(&ctx.http, "world!").await {
+                error!("Error sending message: {:?}", e);
             }
         }
     }
 
     async fn ready(&self, _: Context, ready: Ready) {
-        println!("{} is connected!", ready.user.name);
+        info!("{} is connected!", ready.user.name);
     }
 }
 
 #[shuttle_service::main]
-async fn serenity() -> shuttle_service::ShuttleSerenity {
-    // Configure the client with your Discord bot token in the environment.
-    let token = std::env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
+async fn serenity(#[shared::Postgres] pool: PgPool) -> shuttle_service::ShuttleSerenity {
+    // Get the discord token set in `Secrets.toml` from the shared Postgres database
+    let token = pool
+        .get_secret("DISCORD_TOKEN")
+        .await
+        .map_err(CustomError::new)?;
 
     // Set gateway intents, which decides what events the bot will be notified about
-    let intents = GatewayIntents::GUILD_MESSAGES
-        | GatewayIntents::DIRECT_MESSAGES
-        | GatewayIntents::MESSAGE_CONTENT;
+    let intents = GatewayIntents::GUILD_MESSAGES | GatewayIntents::MESSAGE_CONTENT;
 
     let client = Client::builder(&token, intents)
         .event_handler(Bot)

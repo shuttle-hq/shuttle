@@ -2,8 +2,9 @@ use serenity::async_trait;
 use serenity::model::prelude::*;
 use serenity::prelude::*;
 use shuttle_service::error::CustomError;
+use shuttle_service::SecretStore;
 use sqlx::{Executor, FromRow, PgPool};
-use std::env;
+use tracing::info;
 
 struct Bot {
     database: PgPool,
@@ -76,14 +77,17 @@ impl EventHandler for Bot {
     }
 
     async fn ready(&self, _: Context, ready: Ready) {
-        println!("{} is connected!", ready.user.name);
+        info!("{} is connected!", ready.user.name);
     }
 }
 
 #[shuttle_service::main]
 async fn serenity(#[shared::Postgres] pool: PgPool) -> shuttle_service::ShuttleSerenity {
-    // Configure the client with your Discord bot token in the environment.
-    let token = std::env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
+    // Get the discord token set in `Secrets.toml` from the shared Postgres database
+    let token = pool
+        .get_secret("DISCORD_TOKEN")
+        .await
+        .map_err(CustomError::new)?;
 
     // Run the schema migration
     pool.execute(include_str!("../schema.sql"))

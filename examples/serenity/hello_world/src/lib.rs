@@ -1,3 +1,4 @@
+use log::{error, info};
 use serenity::async_trait;
 use serenity::model::channel::Message;
 use serenity::model::gateway::Ready;
@@ -5,7 +6,6 @@ use serenity::prelude::*;
 use shuttle_service::error::CustomError;
 use shuttle_service::SecretStore;
 use sqlx::PgPool;
-use tracing::{error, info};
 
 struct Bot;
 

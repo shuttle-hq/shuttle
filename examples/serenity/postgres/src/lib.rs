@@ -1,89 +1,139 @@
+use log::{error, info};
 use serenity::async_trait;
-use serenity::model::prelude::*;
+use serenity::model::application::command::CommandOptionType;
+use serenity::model::application::interaction::application_command::CommandDataOptionValue;
+use serenity::model::application::interaction::{Interaction, InteractionResponseType};
+use serenity::model::gateway::Ready;
+use serenity::model::id::GuildId;
 use serenity::prelude::*;
 use shuttle_service::error::CustomError;
 use shuttle_service::SecretStore;
-use sqlx::{Executor, FromRow, PgPool};
-use tracing::info;
+use sqlx::{Executor, PgPool};
+
+mod db;
 
 struct Bot {
     database: PgPool,
 }
 
-#[derive(FromRow)]
-struct Todo {
-    pub id: i32,
-    pub note: String,
-}
-
 #[async_trait]
 impl EventHandler for Bot {
-    async fn message(&self, ctx: Context, msg: Message) {
-        // The user_id of the user sending a command
-        let user_id = msg.author.id.0 as i64;
+    async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
+        let user_id: i64 = interaction
+            .clone()
+            .application_command()
+            .unwrap()
+            .user
+            .id
+            .into();
 
-        // Add a new todo using `~todo add <note>` and persist it in postgres
-        if let Some(note) = msg.content.strip_prefix("~todo add") {
-            let note = note.trim();
-            sqlx::query("INSERT INTO todos (note, user_id) VALUES ($1, $2)")
-                .bind(note)
-                .bind(user_id)
-                .execute(&self.database)
+        if let Interaction::ApplicationCommand(command) = interaction {
+            info!("Received command interaction: {:#?}", command);
+
+            let content = match command.data.name.as_str() {
+                "todo" => {
+                    let command = command.data.options.get(0).expect("Expected command");
+
+                    // if the todo subcommand has a CommandOption the command is either `add` or `complete`
+                    if let Some(subcommand) = command.options.get(0) {
+                        match subcommand.resolved.as_ref().expect("Valid subcommand") {
+                            CommandDataOptionValue::String(note) => {
+                                db::add(&self.database, &note, user_id)
+                                    .await
+                                    .unwrap_or("Please submit a valid note".to_string())
+                            }
+                            CommandDataOptionValue::Integer(index) => {
+                                db::complete(&self.database, index, user_id)
+                                    .await
+                                    .unwrap_or(
+                                        "Please submit a valid index from your todo list"
+                                            .to_string(),
+                                    )
+                            }
+                            _ => "Please enter a valid todo".to_string(),
+                        }
+                    // if the todo subcommand doesn't have a CommandOption the command is `list`
+                    } else {
+                        db::list(&self.database, user_id).await.unwrap()
+                    }
+                }
+                _ => "Command not implemented".to_string(),
+            };
+
+            if let Err(why) = command
+                .create_interaction_response(&ctx.http, |response| {
+                    response
+                        .kind(InteractionResponseType::ChannelMessageWithSource)
+                        .interaction_response_data(|message| message.content(content))
+                })
                 .await
-                .unwrap();
-
-            let response = format!("Added `{}` to your todo list", note);
-            msg.channel_id.say(&ctx, response).await.unwrap();
-
-        // Remove a todo by calling `~todo remove <index>` with the index of the todo you want to remove
-        // from the `~todo list` output
-        } else if let Some(todo_index) = msg.content.strip_prefix("~todo remove") {
-            let todo_index = todo_index.trim().parse::<i64>().unwrap() - 1;
-
-            let todo: Todo = sqlx::query_as(
-                "SELECT id, note FROM todos WHERE user_id = $1 ORDER BY id LIMIT 1 OFFSET $2",
-            )
-            .bind(user_id)
-            .bind(todo_index)
-            .fetch_one(&self.database)
-            .await
-            .unwrap();
-
-            sqlx::query("DELETE FROM todos WHERE id = $1")
-                .bind(todo.id)
-                .execute(&self.database)
-                .await
-                .unwrap();
-
-            let response = format!("Completed `{}`!", todo.note);
-            msg.channel_id.say(&ctx, response).await.unwrap();
-
-        // List the calling users todos using ´~todo list`
-        } else if msg.content.trim() == "~todo list" {
-            let todos: Vec<Todo> =
-                sqlx::query_as("SELECT note, id FROM todos WHERE user_id = $1 ORDER BY id")
-                    .bind(user_id)
-                    .fetch_all(&self.database)
-                    .await
-                    .unwrap();
-
-            let mut response = format!("You have {} pending todos:\n", todos.len());
-            for (i, todo) in todos.iter().enumerate() {
-                response += &format!("{}. {}\n", i + 1, todo.note);
+            {
+                error!("Cannot respond to slash command: {}", why);
             }
-
-            msg.channel_id.say(&ctx, response).await.unwrap();
         }
     }
 
-    async fn ready(&self, _: Context, ready: Ready) {
+    async fn ready(&self, ctx: Context, ready: Ready) {
         info!("{} is connected!", ready.user.name);
+
+        // Get the guild id set in `Secrets.toml` from the Postgres secrets storage
+        let guild_id = self
+            .database
+            .get_secret("GUILD_ID")
+            .await
+            .expect("guild_id is set in Secrets.toml");
+
+        let guild_id = GuildId(guild_id.parse().unwrap());
+
+        let _ = GuildId::set_application_commands(&guild_id, &ctx.http, |commands| {
+            commands.create_application_command(|command| {
+                command
+                    .name("todo")
+                    .description("Add, list and complete todos")
+                    .create_option(|option| {
+                        option
+                            .name("add")
+                            .description("Add a new todo")
+                            .kind(CommandOptionType::SubCommand)
+                            .create_sub_option(|option| {
+                                option
+                                    .name("note")
+                                    .description("The todo note to add")
+                                    .kind(CommandOptionType::String)
+                                    .min_length(2)
+                                    .max_length(100)
+                                    .required(true)
+                            })
+                    })
+                    .create_option(|option| {
+                        option
+                            .name("complete")
+                            .description("The todo to complete")
+                            .kind(CommandOptionType::SubCommand)
+                            .create_sub_option(|option| {
+                                option
+                                    .name("index")
+                                    .description("The index of the todo to complete")
+                                    .kind(CommandOptionType::Integer)
+                                    .min_int_value(1)
+                                    .required(true)
+                            })
+                    })
+                    .create_option(|option| {
+                        option
+                            .name("list")
+                            .description("List your todos")
+                            .kind(CommandOptionType::SubCommand)
+                    })
+            })
+        })
+        .await;
     }
 }
 
 #[shuttle_service::main]
 async fn serenity(#[shared::Postgres] pool: PgPool) -> shuttle_service::ShuttleSerenity {
-    // Get the discord token set in `Secrets.toml` from the shared Postgres database
+    // Get the discord token set in `Secrets.toml` from the Postgres secrets storage
     let token = pool
         .get_secret("DISCORD_TOKEN")
         .await
@@ -94,13 +144,8 @@ async fn serenity(#[shared::Postgres] pool: PgPool) -> shuttle_service::ShuttleS
         .await
         .map_err(CustomError::new)?;
 
-    // Set gateway intents, which decides what events the bot will be notified about
-    let intents = GatewayIntents::GUILD_MESSAGES
-        | GatewayIntents::DIRECT_MESSAGES
-        | GatewayIntents::MESSAGE_CONTENT;
-
     let bot = Bot { database: pool };
-    let client = Client::builder(&token, intents)
+    let client = Client::builder(&token, GatewayIntents::empty())
         .event_handler(bot)
         .await
         .expect("Err creating client");

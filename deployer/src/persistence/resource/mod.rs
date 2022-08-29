@@ -104,7 +104,8 @@ mod tests {
             Type::Database(database::Type::AwsRds(database::AwsRdsType::Postgres)),
             Type::Database(database::Type::AwsRds(database::AwsRdsType::MySql)),
             Type::Database(database::Type::AwsRds(database::AwsRdsType::MariaDB)),
-            Type::Database(database::Type::Shared),
+            Type::Database(database::Type::Shared(database::SharedType::Postgres)),
+            Type::Database(database::Type::Shared(database::SharedType::MongoDb)),
         ];
 
         for input in inputs {

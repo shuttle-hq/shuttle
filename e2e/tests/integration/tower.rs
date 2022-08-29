@@ -1,6 +1,6 @@
 use crossterm::style::Color;
 
-use crate::helpers;
+use crate::helpers::{self, APPS_FQDN};
 
 #[test]
 fn hello_world_tower() {
@@ -9,7 +9,7 @@ fn hello_world_tower() {
 
     let request_text = client
         .get("hello")
-        .header("Host", "hello-world-tower-app.localhost.local")
+        .header("Host", format!("hello-world-tower-app.{}", *APPS_FQDN))
         .send()
         .unwrap()
         .text()

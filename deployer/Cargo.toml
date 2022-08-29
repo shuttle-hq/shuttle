@@ -5,48 +5,48 @@ edition = "2021"
 description = "Service with instances created per project for handling the compliation, loading, and execution of Shuttle services"
 
 [dependencies]
+anyhow = "1.0.58"
 async-trait = "0.1.56"
-cargo_metadata = "0.15.0"
-chrono = "0.4.19"
-crossbeam-channel = "0.5.6"
-thiserror = "1.0.24"
-fqdn = "0.1.9"
-futures = "0.3.21"
-log = "0.4.17"
-tokio = { version = "1.19.2", features = ["fs"] }
-sqlx = { version = "0.6.0", features = ["runtime-tokio-native-tls", "sqlite", "chrono", "json", "uuid"] }
-tower = { version = "0.4.12", features = ["make"] }
-tower-http = { version = "0.3.4", features = ["trace"] }
 axum = { version = "0.5.7", features = ["ws"] }
 bytes = "1.1.0"
-serde = "1.0.137"
-serde_json = "1.0.81"
+cargo = "0.64.0"
+cargo_metadata = "0.15.0"
+chrono = "0.4.19"
+clap = { version = "3.2.8", features = ["derive"] }
+crossbeam-channel = "0.5.6"
 flate2 = "1.0.24"
-portpicker = "0.1.1"
-tar = "0.4.38"
-rand = "0.8.5"
-strum = { version = "0.24.1", features = ["derive"] }
-tracing = "0.1.35"
-tracing-subscriber = { version = "0.3.11", features = ["env-filter"] }
-tracing-opentelemetry = "0.17.4"
+fqdn = "0.2.2"
+futures = "0.3.21"
+log = "0.4.17"
 opentelemetry = { version = "0.17.0", features = ["rt-tokio"] }
 opentelemetry-datadog = { version = "0.5.0", features = ["reqwest-client"] }
-cargo = "0.62.0"
+portpicker = "0.1.1"
+rand = "0.8.5"
+serde = "1.0.137"
+serde_json = "1.0.81"
+sqlx = { version = "0.6.0", features = ["runtime-tokio-native-tls", "sqlite", "chrono", "json", "uuid"] }
+strum = { version = "0.24.1", features = ["derive"] }
+tar = "0.4.38"
+thiserror = "1.0.24"
+tokio = { version = "1.19.2", features = ["fs"] }
+tonic = "0.8.0"
+tower = { version = "0.4.12", features = ["make"] }
+tower-http = { version = "0.3.4", features = ["trace"] }
+tracing = "0.1.35"
+tracing-opentelemetry = "0.17.4"
+tracing-subscriber = { version = "0.3.11", features = ["env-filter"] }
 uuid = { version = "1.1.2", features = ["v4"] }
-tonic = "0.7.2"
-clap = { version = "3.2.8", features = ["derive"] }
-anyhow = "1.0.58"
 
 [dependencies.shuttle-common]
-version = "0.4.1"
+version = "0.5.0"
 path = "../common"
 
 [dependencies.shuttle-proto]
-version = "0.4.1"
+version = "0.5.0"
 path = "../proto"
 
 [dependencies.shuttle-service]
-version = "0.4.1"
+version = "0.5.0"
 path = "../service"
 features = ["loader"]
 

@@ -91,7 +91,7 @@ impl Claims {
     }
 
     /// Converts this claims into a token string
-    pub(crate) fn to_token(mut self) -> Result<String, Custom<String>> {
+    pub(crate) fn into_token(mut self) -> Result<String, Custom<String>> {
         let expiration = Utc::now()
             .checked_add_signed(*TOKEN_EXPIRATION)
             .expect("failed to create an expiration time")
@@ -128,7 +128,7 @@ mod tests {
     #[test]
     fn to_token_and_back() {
         let claim = Claims::from_name("test runner");
-        let token = claim.to_token().unwrap();
+        let token = claim.into_token().unwrap();
         let token = format!("Bearer {token}");
 
         let claim = Claims::from_authorization(&token).unwrap();

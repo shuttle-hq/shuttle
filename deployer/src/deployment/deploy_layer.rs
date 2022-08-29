@@ -470,7 +470,7 @@ mod tests {
 
     #[async_trait::async_trait]
     impl shuttle_service::Factory for StubProvisionerFactory {
-        async fn get_sql_connection_string(
+        async fn get_db_connection_string(
             &mut self,
             _db_type: shuttle_common::database::Type,
         ) -> Result<String, shuttle_service::Error> {

@@ -70,7 +70,7 @@ impl<R: ResourceRecorder> ProvisionerFactory<R> {
 
 #[async_trait]
 impl<R: ResourceRecorder> Factory for ProvisionerFactory<R> {
-    async fn get_sql_connection_string(
+    async fn get_db_connection_string(
         &mut self,
         db_type: database::Type,
     ) -> Result<String, shuttle_service::Error> {
@@ -107,7 +107,7 @@ impl<R: ResourceRecorder> Factory for ProvisionerFactory<R> {
 
         self.info = Some(info);
 
-        debug!("giving a sql connection string: {}", conn_str);
+        debug!("giving a DB connection string: {}", conn_str);
         Ok(conn_str)
     }
 }

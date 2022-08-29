@@ -1,6 +1,6 @@
 use crossterm::style::Color;
 
-use crate::helpers;
+use crate::helpers::{self, APPS_FQDN};
 
 #[test]
 fn hello_world_rocket() {
@@ -9,7 +9,7 @@ fn hello_world_rocket() {
 
     let request_text = client
         .get("hello")
-        .header("Host", "hello-world-rocket-app.localhost.local")
+        .header("Host", format!("hello-world-rocket-app.{}", *APPS_FQDN))
         .send()
         .unwrap()
         .text()
@@ -26,7 +26,7 @@ fn postgres_rocket() {
     let add_response = client
         .post("todo")
         .body("{\"note\": \"To the stars\"}")
-        .header("Host", "postgres-rocket-app.localhost.local")
+        .header("Host", format!("postgres-rocket-app.{}", *APPS_FQDN))
         .send()
         .unwrap()
         .text()
@@ -36,7 +36,7 @@ fn postgres_rocket() {
 
     let fetch_response: String = client
         .get("todo/1")
-        .header("Host", "postgres-rocket-app.localhost.local")
+        .header("Host", format!("postgres-rocket-app.{}", *APPS_FQDN))
         .send()
         .unwrap()
         .text()
@@ -46,7 +46,7 @@ fn postgres_rocket() {
 
     let secret_response: String = client
         .get("secret")
-        .header("Host", "postgres-rocket-app.localhost.local")
+        .header("Host", format!("postgres-rocket-app.{}", *APPS_FQDN))
         .send()
         .unwrap()
         .text()

@@ -652,7 +652,9 @@ mod tests {
 
         let resource1 = Resource {
             name: "foo".to_string(),
-            r#type: ResourceType::Database(resource::DatabaseType::Shared),
+            r#type: ResourceType::Database(resource::DatabaseType::Shared(
+                resource::database::SharedType::Postgres,
+            )),
             data: json!({"username": "root"}),
         };
         let resource2 = Resource {
@@ -672,7 +674,9 @@ mod tests {
         // This makes sure only the last instance of a type is saved (clashes with [resource1])
         let resource4 = Resource {
             name: "foo".to_string(),
-            r#type: ResourceType::Database(resource::DatabaseType::Shared),
+            r#type: ResourceType::Database(resource::DatabaseType::Shared(
+                resource::database::SharedType::Postgres,
+            )),
             data: json!({"username": "foo"}),
         };
 

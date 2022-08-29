@@ -55,7 +55,7 @@ impl log::Log for StubLogger {
 
 #[async_trait]
 impl Factory for DummyFactory {
-    async fn get_sql_connection_string(&mut self, _: database::Type) -> Result<String, Error> {
+    async fn get_db_connection_string(&mut self, _: database::Type) -> Result<String, Error> {
         let uri = if let Some(postgres_instance) = &self.postgres_instance {
             postgres_instance.get_uri()
         } else {
@@ -143,7 +143,7 @@ async fn sqlx_pool() {
 
     let logs = logs.lock().unwrap();
     let log = logs.first().unwrap();
-    assert!(log.0.starts_with("/* SQLx ping */"), "got: {}", log.0);
+    assert!(log.0.starts_with("SELECT 'Hello world';"), "got: {}", log.0);
     assert_eq!(log.1, "sqlx::query");
     assert_eq!(log.2, log::Level::Info);
 }

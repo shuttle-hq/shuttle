@@ -8,8 +8,8 @@ output "api_name_servers" {
   description = "Name servers (NS) for api zone"
 }
 
-output "pg_name_servers" {
-  value       = aws_route53_zone.pg.name_servers
+output "db_name_servers" {
+  value       = aws_route53_zone.db.name_servers
   description = "Name servers (NS) for pg zone"
 }
 

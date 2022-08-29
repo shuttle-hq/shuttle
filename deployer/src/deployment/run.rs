@@ -204,7 +204,7 @@ mod tests {
 
     #[async_trait::async_trait]
     impl Factory for StubFactory {
-        async fn get_sql_connection_string(
+        async fn get_db_connection_string(
             &mut self,
             _db_type: database::Type,
         ) -> core::result::Result<String, shuttle_service::Error> {

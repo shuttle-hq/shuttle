@@ -12,14 +12,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ip,
         port,
         shared_pg_uri,
+        shared_mongodb_uri,
         fqdn,
-        internal_address,
+        internal_pg_address,
+        internal_mongodb_address,
     } = Args::parse();
     let addr = SocketAddr::new(ip, port);
 
-    let provisioner = MyProvisioner::new(&shared_pg_uri, fqdn.to_string(), internal_address)
-        .await
-        .unwrap();
+    let provisioner = MyProvisioner::new(
+        &shared_pg_uri,
+        &shared_mongodb_uri,
+        fqdn.to_string(),
+        internal_pg_address,
+        internal_mongodb_address,
+    )
+    .await
+    .unwrap();
 
     println!("starting provisioner on {}", addr);
     Server::builder()

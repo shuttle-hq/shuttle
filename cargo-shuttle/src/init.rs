@@ -228,6 +228,7 @@ impl ShuttleInit for ShuttleInitSerenity {
             dependencies,
             manifest_path,
             url,
+            false,
             get_dependency_version_fn,
         );
 
@@ -236,6 +237,7 @@ impl ShuttleInit for ShuttleInitSerenity {
             dependencies,
             manifest_path,
             url,
+            false,
             get_dependency_version_fn,
         );
 
@@ -257,6 +259,7 @@ impl ShuttleInit for ShuttleInitSerenity {
             dependencies,
             manifest_path,
             url,
+            false,
             get_dependency_version_fn,
         );
 
@@ -887,6 +890,7 @@ mod shuttle_init_tests {
             dependencies,
             &manifest_path,
             &url,
+            false,
             mock_get_latest_dependency_version,
         );
 

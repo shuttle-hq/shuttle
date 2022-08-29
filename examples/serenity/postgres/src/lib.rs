@@ -38,17 +38,15 @@ impl EventHandler for Bot {
                     if let Some(subcommand) = command.options.get(0) {
                         match subcommand.resolved.as_ref().expect("Valid subcommand") {
                             CommandDataOptionValue::String(note) => {
-                                db::add(&self.database, &note, user_id)
-                                    .await
-                                    .unwrap_or("Please submit a valid note".to_string())
+                                db::add(&self.database, note, user_id).await.unwrap()
                             }
                             CommandDataOptionValue::Integer(index) => {
                                 db::complete(&self.database, index, user_id)
                                     .await
-                                    .unwrap_or(
+                                    .unwrap_or_else(|_| {
                                         "Please submit a valid index from your todo list"
-                                            .to_string(),
-                                    )
+                                            .to_string()
+                                    })
                             }
                             _ => "Please enter a valid todo".to_string(),
                         }

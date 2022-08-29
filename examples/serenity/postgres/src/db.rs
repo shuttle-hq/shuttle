@@ -1,4 +1,5 @@
 use sqlx::{FromRow, PgPool};
+use std::fmt::Write;
 
 #[derive(FromRow)]
 struct Todo {
@@ -46,7 +47,7 @@ pub(crate) async fn list(pool: &PgPool, user_id: i64) -> Result<String, sqlx::Er
 
     let mut response = format!("You have {} pending todos:\n", todos.len());
     for (i, todo) in todos.iter().enumerate() {
-        response += &format!("{}. {}\n", i + 1, todo.note);
+        writeln!(&mut response, "{}. {}", i + 1, todo.note).unwrap();
     }
 
     Ok(response)

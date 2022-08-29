@@ -216,7 +216,19 @@ impl ShuttleInit for ShuttleInitSerenity {
         set_inline_table_dependency_features(
             "shuttle-service",
             dependencies,
-            vec!["bot-serenity".to_string()],
+            vec![
+                "bot-serenity".to_string(),
+                "sqlx-postgres".to_string(),
+                "secrets".to_string(),
+            ],
+        );
+
+        set_key_value_dependency_version(
+            "log",
+            dependencies,
+            manifest_path,
+            url,
+            get_dependency_version_fn,
         );
 
         set_inline_table_dependency_version(
@@ -239,15 +251,35 @@ impl ShuttleInit for ShuttleInitSerenity {
                 "model".into(),
             ],
         );
+
+        set_inline_table_dependency_version(
+            "sqlx",
+            dependencies,
+            manifest_path,
+            url,
+            get_dependency_version_fn,
+        );
+
+        set_inline_table_dependency_features(
+            "sqlx",
+            dependencies,
+            vec![
+                "runtime-tokio-native-tls".to_string(),
+                "postgres".to_string(),
+            ],
+        );
     }
 
     fn get_boilerplate_code_for_framework(&self) -> &'static str {
         indoc! {r#"
+        use log::{error, info};
         use serenity::async_trait;
         use serenity::model::channel::Message;
         use serenity::model::gateway::Ready;
         use serenity::prelude::*;
-        use std::env;
+        use shuttle_service::error::CustomError;
+        use shuttle_service::SecretStore;
+        use sqlx::PgPool;
 
         struct Bot;
 
@@ -255,26 +287,27 @@ impl ShuttleInit for ShuttleInitSerenity {
         impl EventHandler for Bot {
             async fn message(&self, ctx: Context, msg: Message) {
                 if msg.content == "!hello" {
-                    if let Err(why) = msg.channel_id.say(&ctx.http, "world!").await {
-                        println!("Error sending message: {:?}", why);
+                    if let Err(e) = msg.channel_id.say(&ctx.http, "world!").await {
+                        error!("Error sending message: {:?}", e);
                     }
                 }
             }
 
             async fn ready(&self, _: Context, ready: Ready) {
-                println!("{} is connected!", ready.user.name);
+                info!("{} is connected!", ready.user.name);
             }
         }
 
         #[shuttle_service::main]
-        async fn serenity() -> shuttle_service::ShuttleSerenity {
-            // Configure the client with your Discord bot token in the environment.
-            let token = std::env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
+        async fn serenity(#[shared::Postgres] pool: PgPool) -> shuttle_service::ShuttleSerenity {
+            // Get the discord token set in `Secrets.toml` from the shared Postgres database
+            let token = pool
+                .get_secret("DISCORD_TOKEN")
+                .await
+                .map_err(CustomError::new)?;
 
             // Set gateway intents, which decides what events the bot will be notified about
-            let intents = GatewayIntents::GUILD_MESSAGES
-                | GatewayIntents::DIRECT_MESSAGES
-                | GatewayIntents::MESSAGE_CONTENT;
+            let intents = GatewayIntents::GUILD_MESSAGES | GatewayIntents::MESSAGE_CONTENT;
 
             let client = Client::builder(&token, intents)
                 .event_handler(Bot)
@@ -866,8 +899,10 @@ mod shuttle_init_tests {
 
         let expected = indoc! {r#"
             [dependencies]
-            shuttle-service = { version = "1.0", features = ["bot-serenity"] }
+            shuttle-service = { version = "1.0", features = ["bot-serenity", "sqlx-postgres", "secrets"] }
+            log = "1.0"
             serenity = { version = "1.0", default-features = false, features = ["client", "gateway", "rustls_backend", "model"] }
+            sqlx = { version = "1.0", features = ["runtime-tokio-native-tls", "postgres"] }
         "#};
 
         assert_eq!(cargo_toml.to_string(), expected);

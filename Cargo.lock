@@ -1095,6 +1095,7 @@ dependencies = [
  "serde_json",
  "shuttle-common",
  "shuttle-service",
+ "sqlx",
  "tempfile",
  "test-context",
  "tokio",

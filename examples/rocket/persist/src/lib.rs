@@ -2,8 +2,9 @@
 extern crate rocket;
 
 use rocket::response::status::BadRequest;
-use rocket::serde::{Deserialize, Serialize, json::Json};
+use rocket::serde::json::Json;
 use rocket::State;
+use serde::{Deserialize, Serialize};
 use shuttle_service::error::CustomError;
 
 use shuttle_service::PersistInstance;
@@ -20,33 +21,29 @@ struct MyState {
     persist: PersistInstance,
 }
 
-// Example of Post request:
-// curl -X POST -H "Content-Type: application/json" -d '{"date":"2020-12-22", "temp_high":5, "temp_low":5, "precipitation": 5}' localhost:8000/
-
-// Example of Get request:
-// curl localhost:8000/2020-12-22
-
-
-// This enpoint is used to create a new weather record.
 #[post("/", data = "<data>")]
 async fn add(
     data: Json<Weather>,
     state: &State<MyState>,
 ) -> Result<Json<Weather>, BadRequest<String>> {
-
     // Change data Json<Weather> to Weather
     let weather: Weather = data.into_inner();
 
     let state = state
         .persist
-        .save::<Weather>(format!("weather_{}", &weather.date.as_str()).as_str(), weather.clone())
+        .save::<Weather>(
+            format!("weather_{}", &weather.date.as_str()).as_str(),
+            weather.clone(),
+        )
         .map_err(|e| BadRequest(Some(e.to_string())))?;
     Ok(Json(weather))
 }
 
-// This endpoint is used to retrieve the weather data for a specific date.
 #[get("/<date>")]
-async fn retrieve(date: String, state: &State<MyState>) -> Result<Json<Weather>, BadRequest<String>> {
+async fn retrieve(
+    date: String,
+    state: &State<MyState>,
+) -> Result<Json<Weather>, BadRequest<String>> {
     let weather = state
         .persist
         .load::<Weather>(format!("weather_{}", &date).as_str())
@@ -54,17 +51,12 @@ async fn retrieve(date: String, state: &State<MyState>) -> Result<Json<Weather>,
     Ok(Json(weather))
 }
 
-
-
 #[shuttle_service::main]
 async fn rocket(#[persist::Persist] persist: PersistInstance) -> shuttle_service::ShuttleRocket {
-
     let state = MyState { persist };
     let rocket = rocket::build()
         .mount("/", routes![retrieve, add])
         .manage(state);
-    
 
     Ok(rocket)
 }
-

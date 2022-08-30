@@ -107,6 +107,9 @@ async fn sleep() {
 async fn sqlx_pool() {
     let loader = build_so_create_loader(RESOURCES_PATH, "sqlx-pool").unwrap();
 
+    // Make sure we'll get a log entry
+    std::env::set_var("RUST_LOG", "info");
+
     // Don't initialize a pre-existing PostgresInstance here because the `PostgresInstance::wait_for_connectable()`
     // code has `awaits` and we want to make sure they do not block inside `Service::build()`.
     // At the same time we also want to test the PgPool is created on the correct runtime (ie does not cause a

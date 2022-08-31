@@ -24,6 +24,7 @@ async fn cargo_shuttle_init(path: PathBuf) -> anyhow::Result<CommandOutcome> {
                 tide: false,
                 tower: false,
                 poem: false,
+                serenity: false,
                 path,
             }),
         })
@@ -47,6 +48,7 @@ async fn cargo_shuttle_init_framework(path: PathBuf) -> anyhow::Result<CommandOu
                 tide: false,
                 tower: false,
                 poem: false,
+                serenity: false,
                 path,
             }),
         })

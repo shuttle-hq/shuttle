@@ -4683,6 +4683,7 @@ dependencies = [
  "rocket",
  "rustrict",
  "serde",
+ "tracing",
  "uuid 1.1.2",
 ]
 
@@ -4751,6 +4752,8 @@ dependencies = [
  "tide",
  "tokio",
  "tower",
+ "tracing",
+ "tracing-subscriber",
  "uuid 1.1.2",
 ]
 

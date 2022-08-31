@@ -7,7 +7,6 @@ use std::{
 };
 
 use chrono::{DateTime, Utc};
-use log::Level;
 use rocket::Responder;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -210,6 +209,6 @@ impl std::error::Error for DeploymentApiError {}
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct LogItem {
     pub body: String,
-    pub level: Level,
+    pub level: String,
     pub target: String,
 }

@@ -1,6 +1,5 @@
 use chrono::{DateTime, Local, Utc};
 use colored::{ColoredString, Colorize};
-use log::Level;
 use shuttle_common::LogItem;
 
 pub fn log(datetime: DateTime<Utc>, log_item: LogItem) {
@@ -16,12 +15,14 @@ pub fn log(datetime: DateTime<Utc>, log_item: LogItem) {
     );
 }
 
-fn get_colored_level(level: &Level) -> ColoredString {
-    match level {
-        Level::Trace => level.to_string().bright_black(),
-        Level::Debug => level.to_string().blue(),
-        Level::Info => level.to_string().green(),
-        Level::Warn => level.to_string().yellow(),
-        Level::Error => level.to_string().red(),
-    }
+// fn get_colored_level(level: &Level) -> ColoredString {
+fn get_colored_level(level: &String) -> ColoredString {
+    level.green()
+    // match level {
+    //     Level::Trace => level.to_string().bright_black(),
+    //     Level::Debug => level.to_string().blue(),
+    //     Level::Info => level.to_string().green(),
+    //     Level::Warn => level.to_string().yellow(),
+    //     Level::Error => level.to_string().red(),
+    // }
 }

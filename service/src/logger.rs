@@ -1,9 +1,10 @@
 use std::{collections::HashMap, env, str::FromStr};
 
 use chrono::{DateTime, Utc};
-use log::{Level, Metadata, ParseLevelError, Record};
 use shuttle_common::{DeploymentId, LogItem};
 use tokio::sync::mpsc::UnboundedSender;
+use tracing::{Level, Subscriber, metadata::ParseLevelError};
+use tracing_subscriber::Layer;
 
 #[derive(Debug)]
 pub struct Log {
@@ -35,7 +36,7 @@ impl Logger {
                         if let Ok(level) = Level::from_str(item) {
                             Ok((String::new(), level))
                         } else {
-                            Ok((item.to_string(), Level::Trace))
+                            Ok((item.to_string(), Level::TRACE))
                         }
                     }
                 })
@@ -43,7 +44,7 @@ impl Logger {
 
             HashMap::from_iter(rust_log)
         } else {
-            HashMap::from([(String::new(), Level::Error)])
+            HashMap::from([(String::new(), Level::ERROR)])
         };
 
         Self {
@@ -54,35 +55,38 @@ impl Logger {
     }
 }
 
-impl log::Log for Logger {
-    fn enabled(&self, metadata: &Metadata) -> bool {
-        for (target, level) in self.filter.iter() {
-            if metadata.target().starts_with(target) && &metadata.level() <= level {
-                return true;
-            }
-        }
-
-        false
+impl<S> Layer<S> for Logger
+where
+    S: Subscriber,
+{
+    fn enabled(
+        &self,
+        metadata: &tracing::Metadata<'_>,
+        _ctx: tracing_subscriber::layer::Context<'_, S>,
+    ) -> bool {
+        metadata.level() <= &Level::INFO
     }
 
-    fn log(&self, record: &Record) {
-        if self.enabled(record.metadata()) {
-            let datetime = Utc::now();
-            let item = LogItem {
-                body: format!("{}", record.args()),
-                level: record.level(),
-                target: record.target().to_string(),
-            };
+    fn on_event(
+        &self,
+        event: &tracing::Event<'_>,
+        _ctx: tracing_subscriber::layer::Context<'_, S>,
+    ) {
+        let datetime = Utc::now();
+        let metadata = event.metadata();
 
-            self.tx
-                .send(Log {
-                    item,
-                    datetime,
-                    deployment_id: self.deployment_id,
-                })
-                .expect("sending log should succeed");
-        }
+        let item = LogItem {
+            body: format!("{:?}", event.fields()),
+            level: metadata.level().to_string(),
+            target: metadata.target().to_string(),
+        };
+
+        self.tx
+            .send(Log {
+                item,
+                datetime,
+                deployment_id: self.deployment_id,
+            })
+            .expect("sending log should succeed");
     }
-
-    fn flush(&self) {}
 }

@@ -72,7 +72,7 @@ impl Loader {
         deployment_id: DeploymentId,
     ) -> Result<(ServeHandle, Library), Error> {
         let mut bootstrapper = self.bootstrapper;
-        let logger = Box::new(Logger::new(tx, deployment_id));
+        let logger = Logger::new(tx, deployment_id);
 
         AssertUnwindSafe(bootstrapper.bootstrap(factory, logger))
             .catch_unwind()

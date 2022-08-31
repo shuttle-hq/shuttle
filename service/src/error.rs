@@ -18,15 +18,6 @@ pub enum Error {
 
 pub type CustomError = anyhow::Error;
 
-// This is implemented manually as defining `Error::Persist(#[from] bincode::Error)` causes the compiler to
-// complain that the error is not being handled.
-#[cfg(feature = "persist")]
-impl From<bincode::Error> for Error {
-    fn from(err: bincode::Error) -> Self {
-        Error::Bincode(err)
-    }
-}
-
 // This is implemented manually as defining `Error::Database(#[from] sqlx::Error)` resulted in a
 // segfault even with a feature guard.
 #[cfg(feature = "sqlx-postgres")]

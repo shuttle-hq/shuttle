@@ -9,4 +9,4 @@ edition = "2021"
 rocket = { version = "0.5.0-rc.1", features = ["json"] }
 serde = { version = "1.0", features = ["derive"] }
 sqlx = { version = "0.5", features = ["runtime-tokio-native-tls", "postgres"] }
-shuttle-service = { version = "0.5.0", features = ["sqlx-postgres", "secrets", "web-rocket"] }
+shuttle-service = { version = "0.5.0", features = ["web-rocket", "persist"] }

@@ -5,7 +5,6 @@ use rocket::response::status::BadRequest;
 use rocket::serde::json::Json;
 use rocket::State;
 use serde::{Deserialize, Serialize};
-use shuttle_service::error::CustomError;
 
 use shuttle_service::PersistInstance;
 
@@ -29,7 +28,7 @@ async fn add(
     // Change data Json<Weather> to Weather
     let weather: Weather = data.into_inner();
 
-    let state = state
+    let _state = state
         .persist
         .save::<Weather>(
             format!("weather_{}", &weather.date.as_str()).as_str(),

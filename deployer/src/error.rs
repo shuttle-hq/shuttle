@@ -12,8 +12,6 @@ use cargo::util::errors::CargoTestError;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    #[error("Database error: {0}")]
-    Database(#[from] sqlx::Error),
     #[error("Streaming error: {0}")]
     Streaming(#[source] axum::Error),
     #[error("Internal I/O error: {0}")]
@@ -28,6 +26,12 @@ pub enum Error {
     Run(#[from] shuttle_service::Error),
     #[error("Pre-deployment test failure: {0}")]
     PreDeployTestFailure(#[from] CargoTestError),
+    #[error("Failed to parse secrets: {0}")]
+    SecretsParse(#[from] toml::de::Error),
+    #[error("Failed to set secrets: {0}")]
+    SecretsSet(#[source] Box<dyn StdError + Send>),
+    #[error("Failed to parse secrets: {0}")]
+    Persistence(#[from] crate::persistence::PersistenceError),
 }
 
 impl Serialize for Error {

@@ -1083,7 +1083,7 @@ dependencies = [
  "chrono",
  "clap",
  "crossbeam-channel",
- "crossterm 0.25.0",
+ "crossterm",
  "dirs",
  "futures",
  "indoc",
@@ -1100,6 +1100,7 @@ dependencies = [
  "tempfile",
  "test-context",
  "tokio",
+ "tokio-tungstenite",
  "tokiotest-httpserver",
  "toml",
  "toml_edit",
@@ -1264,11 +1265,11 @@ dependencies = [
 
 [[package]]
 name = "comfy-table"
-version = "6.0.0"
+version = "6.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "121d8a5b0346092c18a4b2fd6f620d7a06f0eb7ac0a45860939a0884bc579c56"
+checksum = "85914173c2f558d61613bfbbf1911f14e630895087a7ed2fafc0f5319e1536e7"
 dependencies = [
- "crossterm 0.23.2",
+ "crossterm",
  "strum",
  "strum_macros",
  "unicode-width",
@@ -1513,22 +1514,6 @@ checksum = "7d82ee10ce34d7bc12c2122495e7593a9c41347ecdd64185af4ecf72cb1a7f83"
 dependencies = [
  "cfg-if 1.0.0",
  "once_cell",
-]
-
-[[package]]
-name = "crossterm"
-version = "0.23.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a2102ea4f781910f8a5b98dd061f4c2023f479ce7bb1236330099ceb5a93cf17"
-dependencies = [
- "bitflags",
- "crossterm_winapi",
- "libc",
- "mio",
- "parking_lot 0.12.1",
- "signal-hook",
- "signal-hook-mio",
- "winapi",
 ]
 
 [[package]]
@@ -4790,7 +4775,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "comfy-table",
- "crossterm 0.23.2",
+ "crossterm",
  "once_cell",
  "rocket",
  "rustrict",
@@ -4834,6 +4819,7 @@ dependencies = [
  "tempdir",
  "thiserror",
  "tokio",
+ "toml",
  "tonic",
  "tower",
  "tower-http 0.3.4",
@@ -5655,7 +5641,9 @@ checksum = "f714dd15bead90401d77e04243611caec13726c2408afd5b31901dfcdcb3b181"
 dependencies = [
  "futures-util",
  "log",
+ "native-tls",
  "tokio",
+ "tokio-native-tls",
  "tungstenite",
 ]
 
@@ -6006,6 +5994,7 @@ dependencies = [
  "http",
  "httparse",
  "log",
+ "native-tls",
  "rand 0.8.5",
  "sha-1",
  "thiserror",

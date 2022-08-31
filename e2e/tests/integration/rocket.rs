@@ -43,10 +43,15 @@ fn postgres_rocket() {
         .unwrap();
 
     assert_eq!(fetch_response, "{\"id\":1,\"note\":\"To the stars\"}");
+}
 
+#[test]
+fn secrets_rocket() {
+    let client = helpers::Services::new_docker("secrets (rocket)", Color::Magenta);
+    client.deploy("rocket/secrets");
     let secret_response: String = client
         .get("secret")
-        .header("Host", format!("postgres-rocket-app.{}", *APPS_FQDN))
+        .header("Host", format!("secrets-rocket-app.{}", *APPS_FQDN))
         .send()
         .unwrap()
         .text()

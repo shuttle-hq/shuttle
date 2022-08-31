@@ -44,16 +44,6 @@ fn postgres_poem() {
         .unwrap();
 
     assert_eq!(fetch_response, "{\"id\":1,\"note\":\"To the stars\"}");
-
-    let secret_response: String = client
-        .get("secret")
-        .header("Host", format!("postgres-poem-app.{}", *APPS_FQDN))
-        .send()
-        .unwrap()
-        .text()
-        .unwrap();
-
-    assert_eq!(secret_response, "the contents of my API key");
 }
 
 #[test]
@@ -73,7 +63,12 @@ fn mongodb_poem() {
         .unwrap();
 
     // valid objectId is 24 char hex string
-    assert_eq!(add_response.len(), 24, "response length mismatch: got: {}", add_response);
+    assert_eq!(
+        add_response.len(),
+        24,
+        "response length mismatch: got: {}",
+        add_response
+    );
 
     let fetch_response: String = client
         .get(&format!("todo/{}", add_response))

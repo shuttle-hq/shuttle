@@ -7,14 +7,14 @@ use axum::{extract::BodyStream, Json};
 use chrono::{TimeZone, Utc};
 use fqdn::FQDN;
 use futures::TryStreamExt;
-use shuttle_common::{deployment, log, service, LogItem};
+use shuttle_common::{deployment, log, secret, service, LogItem};
 use tower_http::trace::TraceLayer;
 use tracing::{debug, debug_span, error, field, Span};
 use uuid::Uuid;
 
 use crate::deployment::{DeploymentManager, Queued};
 use crate::error::{Error, Result};
-use crate::persistence::{self, Deployment, Log, Persistence, State};
+use crate::persistence::{self, Deployment, Log, Persistence, SecretGetter, State};
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -46,6 +46,10 @@ pub fn make_router(
         )
         .route("/deployments/:id/logs/runtime", get(get_runtime_logs))
         .route("/version", get(get_version))
+        .route(
+            "/secrets/:name",
+            get(get_secrets),
+        )
         .layer(Extension(persistence))
         .layer(Extension(deployment_manager))
         .layer(
@@ -66,7 +70,11 @@ pub fn make_router(
 async fn list_services(
     Extension(persistence): Extension<Persistence>,
 ) -> Result<Json<Vec<String>>> {
-    persistence.get_all_services().await.map(Json)
+    persistence
+        .get_all_services()
+        .await
+        .map(Json)
+        .map_err(Error::from)
 }
 
 async fn get_service(
@@ -85,11 +93,18 @@ async fn get_service(
         .into_iter()
         .map(Into::into)
         .collect();
+    let secrets = persistence
+        .get_secrets(&name)
+        .await?
+        .into_iter()
+        .map(Into::into)
+        .collect();
 
     let response = service::Response {
         name,
         deployments,
         resources,
+        secrets,
     };
 
     Ok(Json(response))
@@ -168,11 +183,18 @@ async fn delete_service(
         .into_iter()
         .map(Into::into)
         .collect();
+    let secrets = persistence
+        .get_secrets(&name)
+        .await?
+        .into_iter()
+        .map(Into::into)
+        .collect();
 
     let response = service::Response {
         name,
         deployments: old_deployments.into_iter().map(Into::into).collect(),
         resources,
+        secrets,
     };
 
     Ok(Json(response))
@@ -186,6 +208,7 @@ async fn get_deployment(
         .get_deployment(&id)
         .await
         .map(|d| Json(d.map(Into::into)))
+        .map_err(Error::from)
 }
 
 async fn delete_deployment(
@@ -199,6 +222,7 @@ async fn delete_deployment(
         .get_deployment(&id)
         .await
         .map(|d| Json(d.map(Into::into)))
+        .map_err(Error::from)
 }
 
 async fn get_build_logs(
@@ -380,4 +404,18 @@ async fn runtime_logs_websocket_handler(mut s: WebSocket, persistence: Persisten
 
 async fn get_version() -> String {
     shuttle_service::VERSION.to_string()
+}
+
+async fn get_secrets(
+    Extension(persistence): Extension<Persistence>,
+    Path(name): Path<String>,
+) -> Result<Json<Vec<secret::Response>>> {
+    let keys = persistence
+        .get_secrets(&name)
+        .await?
+        .into_iter()
+        .map(Into::into)
+        .collect();
+
+    Ok(Json(keys))
 }

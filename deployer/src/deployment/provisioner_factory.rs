@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use async_trait::async_trait;
 use shuttle_common::{database, project::ProjectName, DatabaseReadyInfo};
 use shuttle_proto::provisioner::{
@@ -7,7 +9,7 @@ use shuttle_service::Factory;
 use tonic::{transport::Channel, Request};
 use tracing::debug;
 
-use crate::persistence::{Resource, ResourceRecorder, ResourceType};
+use crate::persistence::{Resource, ResourceRecorder, ResourceType, SecretGetter};
 
 /// Trait to make it easy to get a factory (service locator) for each service being started
 pub trait AbstractFactory: Send + 'static {
@@ -19,57 +21,69 @@ pub trait AbstractFactory: Send + 'static {
 
 /// An abstract factory that makes factories which uses provisioner
 #[derive(Clone)]
-pub struct AbstractProvisionerFactory<R: ResourceRecorder> {
+pub struct AbstractProvisionerFactory<R: ResourceRecorder, S: SecretGetter> {
     provisioner_client: ProvisionerClient<Channel>,
     resource_recorder: R,
+    secret_getter: S,
 }
 
-impl<R: ResourceRecorder> AbstractFactory for AbstractProvisionerFactory<R> {
-    type Output = ProvisionerFactory<R>;
+impl<R: ResourceRecorder, S: SecretGetter> AbstractFactory for AbstractProvisionerFactory<R, S> {
+    type Output = ProvisionerFactory<R, S>;
 
     fn get_factory(&self, project_name: ProjectName) -> Self::Output {
         ProvisionerFactory::new(
             self.provisioner_client.clone(),
             project_name,
             self.resource_recorder.clone(),
+            self.secret_getter.clone(),
         )
     }
 }
 
-impl<R: ResourceRecorder> AbstractProvisionerFactory<R> {
-    pub fn new(provisioner_client: ProvisionerClient<Channel>, resource_recorder: R) -> Self {
+impl<R: ResourceRecorder, S: SecretGetter> AbstractProvisionerFactory<R, S> {
+    pub fn new(
+        provisioner_client: ProvisionerClient<Channel>,
+        resource_recorder: R,
+        secret_getter: S,
+    ) -> Self {
         Self {
             provisioner_client,
             resource_recorder,
+            secret_getter,
         }
     }
 }
 
 /// A factory (service locator) which goes through the provisioner crate
-pub struct ProvisionerFactory<R: ResourceRecorder> {
+pub struct ProvisionerFactory<R: ResourceRecorder, S: SecretGetter> {
     project_name: ProjectName,
     provisioner_client: ProvisionerClient<Channel>,
     info: Option<DatabaseReadyInfo>,
     resource_recorder: R,
+    secret_getter: S,
+    secrets: Option<BTreeMap<String, String>>,
 }
 
-impl<R: ResourceRecorder> ProvisionerFactory<R> {
+impl<R: ResourceRecorder, S: SecretGetter> ProvisionerFactory<R, S> {
     pub(crate) fn new(
         provisioner_client: ProvisionerClient<Channel>,
         project_name: ProjectName,
         resource_recorder: R,
+        secret_getter: S,
     ) -> Self {
         Self {
             provisioner_client,
             project_name,
             info: None,
             resource_recorder,
+            secret_getter,
+            secrets: None,
         }
     }
 }
 
 #[async_trait]
-impl<R: ResourceRecorder> Factory for ProvisionerFactory<R> {
+impl<R: ResourceRecorder, S: SecretGetter> Factory for ProvisionerFactory<R, S> {
     async fn get_db_connection_string(
         &mut self,
         db_type: database::Type,
@@ -109,5 +123,24 @@ impl<R: ResourceRecorder> Factory for ProvisionerFactory<R> {
 
         debug!("giving a DB connection string: {}", conn_str);
         Ok(conn_str)
+    }
+
+    async fn get_secrets(&mut self) -> Result<BTreeMap<String, String>, shuttle_service::Error> {
+        if let Some(ref secrets) = self.secrets {
+            Ok(secrets.clone())
+        } else {
+            let iter = self
+                .secret_getter
+                .get_secrets(&self.project_name.to_string())
+                .await
+                .map_err(shuttle_service::error::CustomError::new)?
+                .into_iter()
+                .map(|secret| (secret.key, secret.value));
+
+            let secrets = BTreeMap::from_iter(iter);
+            self.secrets = Some(secrets.clone());
+
+            Ok(secrets)
+        }
     }
 }

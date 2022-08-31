@@ -65,7 +65,7 @@ sqlx-aws-mysql = ["sqlx-integration", "sqlx/mysql"]
 sqlx-aws-mariadb = ["sqlx-integration", "sqlx/mysql"]
 
 mongodb-integration = ["mongodb"]
-secrets = ["sqlx-postgres"]
+secrets = []
 
 web-axum = ["axum", "sync_wrapper"]
 web-rocket = ["rocket"]

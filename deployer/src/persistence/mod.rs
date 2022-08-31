@@ -1,13 +1,16 @@
 mod deployment;
+mod error;
 mod log;
 mod resource;
+mod secret;
 mod state;
 
 use crate::deployment::deploy_layer::{self, LogRecorder, LogType};
-use crate::error::Result;
+use error::{Error, Result};
 
 use std::path::Path;
 
+use chrono::Utc;
 use serde_json::json;
 use shuttle_common::STATE_MESSAGE;
 use sqlx::migrate::MigrateDatabase;
@@ -19,8 +22,11 @@ use uuid::Uuid;
 
 use self::deployment::DeploymentRunnable;
 pub use self::deployment::{Deployment, DeploymentState};
+pub use self::error::Error as PersistenceError;
 pub use self::log::{Level as LogLevel, Log};
 pub use self::resource::{Resource, ResourceRecorder, Type as ResourceType};
+use self::secret::Secret;
+pub use self::secret::{SecretGetter, SecretRecorder};
 pub use self::state::State;
 
 const DB_PATH: &str = "deployer.sqlite";
@@ -78,6 +84,14 @@ impl Persistence {
                 type TEXT,         -- Type of resource this is.
                 data TEXT,         -- Data about this resource.
                 PRIMARY KEY (name, type)
+            );
+
+            CREATE TABLE IF NOT EXISTS secrets (
+                name TEXT,            -- Name of the service this secret belongs to.
+                key TEXT,             -- Key / name of this secret.
+                value TEXT,           -- The actual secret.
+                last_update INTEGER,  -- Unix epoch of the last secret update
+                PRIMARY KEY (name, key)
             );
         ").execute(&pool).await.unwrap();
 
@@ -169,7 +183,7 @@ impl Persistence {
             .execute(&self.pool)
             .await
             .map(|_| ())
-            .map_err(Into::into)
+            .map_err(Error::from)
     }
 
     pub async fn get_deployment(&self, id: &Uuid) -> Result<Option<Deployment>> {
@@ -181,7 +195,7 @@ impl Persistence {
             .bind(name)
             .fetch_all(&self.pool)
             .await
-            .map_err(Into::into)
+            .map_err(Error::from)
     }
 
     pub async fn get_active_deployment(&self, name: &str) -> Result<Option<Deployment>> {
@@ -190,7 +204,7 @@ impl Persistence {
             .bind(State::Running)
             .fetch_optional(&self.pool)
             .await
-            .map_err(Into::into)
+            .map_err(Error::from)
     }
 
     pub async fn delete_service(&self, name: &str) -> Result<Vec<Deployment>> {
@@ -208,7 +222,7 @@ impl Persistence {
         sqlx::query_as::<_, (String,)>("SELECT UNIQUE(name) FROM deployments")
             .fetch_all(&self.pool)
             .await
-            .map_err(Into::into)
+            .map_err(Error::from)
             .map(|vec| vec.into_iter().map(|t| t.0).collect())
     }
 
@@ -219,7 +233,7 @@ impl Persistence {
         .bind(State::Running)
         .fetch_all(&self.pool)
         .await
-        .map_err(Into::into)
+        .map_err(Error::from)
     }
 
     pub async fn get_service_resources(&self, name: &str) -> Result<Vec<Resource>> {
@@ -227,7 +241,7 @@ impl Persistence {
             .bind(name)
             .fetch_all(&self.pool)
             .await
-            .map_err(Into::into)
+            .map_err(Error::from)
     }
 
     pub(crate) async fn get_deployment_logs(&self, id: &Uuid) -> Result<Vec<Log>> {
@@ -256,7 +270,7 @@ async fn update_deployment(pool: &SqlitePool, state: impl Into<DeploymentState>)
         .execute(pool)
         .await
         .map(|_| ())
-        .map_err(Into::into)
+        .map_err(Error::from)
 }
 
 async fn get_deployment(pool: &SqlitePool, id: &Uuid) -> Result<Option<Deployment>> {
@@ -264,7 +278,7 @@ async fn get_deployment(pool: &SqlitePool, id: &Uuid) -> Result<Option<Deploymen
         .bind(id)
         .fetch_optional(pool)
         .await
-        .map_err(Into::into)
+        .map_err(Error::from)
 }
 
 async fn insert_log(pool: &SqlitePool, log: impl Into<Log>) -> Result<()> {
@@ -282,7 +296,7 @@ async fn insert_log(pool: &SqlitePool, log: impl Into<Log>) -> Result<()> {
         .execute(pool)
         .await
         .map(|_| ())
-        .map_err(Into::into)
+        .map_err(Error::from)
 }
 
 async fn get_deployment_logs(pool: &SqlitePool, id: &Uuid) -> Result<Vec<Log>> {
@@ -290,7 +304,7 @@ async fn get_deployment_logs(pool: &SqlitePool, id: &Uuid) -> Result<Vec<Log>> {
         .bind(id)
         .fetch_all(pool)
         .await
-        .map_err(Into::into)
+        .map_err(Error::from)
 }
 
 impl LogRecorder for Persistence {
@@ -303,6 +317,8 @@ impl LogRecorder for Persistence {
 
 #[async_trait::async_trait]
 impl ResourceRecorder for Persistence {
+    type Err = Error;
+
     async fn insert_resource(&self, resource: &Resource) -> Result<()> {
         sqlx::query("INSERT OR REPLACE INTO resources (name, type, data) VALUES (?, ?, ?)")
             .bind(&resource.name)
@@ -311,7 +327,39 @@ impl ResourceRecorder for Persistence {
             .execute(&self.pool)
             .await
             .map(|_| ())
-            .map_err(Into::into)
+            .map_err(Error::from)
+    }
+}
+
+#[async_trait::async_trait]
+impl SecretRecorder for Persistence {
+    type Err = Error;
+
+    async fn insert_secret(&self, name: &str, key: &str, value: &str) -> Result<()> {
+        sqlx::query(
+            "INSERT OR REPLACE INTO secrets (name, key, value, last_update) VALUES (?, ?, ?, ?)",
+        )
+        .bind(name)
+        .bind(key)
+        .bind(value)
+        .bind(Utc::now())
+        .execute(&self.pool)
+        .await
+        .map(|_| ())
+        .map_err(Error::from)
+    }
+}
+
+#[async_trait::async_trait]
+impl SecretGetter for Persistence {
+    type Err = Error;
+
+    async fn get_secrets(&self, name: &str) -> Result<Vec<Secret>> {
+        sqlx::query_as("SELECT * FROM secrets WHERE name = ? ORDER BY key")
+            .bind(name)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(Error::from)
     }
 }
 
@@ -687,5 +735,51 @@ mod tests {
         let resources = p.get_service_resources("foo").await.unwrap();
 
         assert_eq!(resources, vec![resource2, resource4]);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn secrets() {
+        let (p, _) = Persistence::new_in_memory().await;
+
+        p.insert_secret("test_service", "key1", "value1")
+            .await
+            .unwrap();
+        p.insert_secret("another_service", "key2", "value2")
+            .await
+            .unwrap();
+        p.insert_secret("test_service", "key3", "value3")
+            .await
+            .unwrap();
+        p.insert_secret("test_service", "key1", "value1_updated")
+            .await
+            .unwrap();
+
+        let actual: Vec<_> = p
+            .get_secrets("test_service")
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|mut i| {
+                // Reset dates for test
+                i.last_update = Default::default();
+                i
+            })
+            .collect();
+        let expected = vec![
+            Secret {
+                name: "test_service".to_string(),
+                key: "key1".to_string(),
+                value: "value1_updated".to_string(),
+                last_update: Default::default(),
+            },
+            Secret {
+                name: "test_service".to_string(),
+                key: "key3".to_string(),
+                value: "value3".to_string(),
+                last_update: Default::default(),
+            },
+        ];
+
+        assert_eq!(actual, expected);
     }
 }

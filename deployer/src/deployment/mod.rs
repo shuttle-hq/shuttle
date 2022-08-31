@@ -10,7 +10,7 @@ pub use run::Built;
 pub use runtime_logger::RuntimeLoggerFactory;
 use tracing::instrument;
 
-use crate::persistence::State;
+use crate::persistence::{SecretRecorder, State};
 use tokio::sync::{broadcast, mpsc};
 use uuid::Uuid;
 
@@ -33,6 +33,7 @@ impl DeploymentManager {
         abstract_factory: impl provisioner_factory::AbstractFactory,
         runtime_logger_factory: impl runtime_logger::Factory,
         build_log_recorder: impl LogRecorder,
+        secret_recorder: impl SecretRecorder,
     ) -> Self {
         let (kill_send, _) = broadcast::channel(KILL_BUFFER_SIZE);
 
@@ -42,6 +43,7 @@ impl DeploymentManager {
                 abstract_factory,
                 runtime_logger_factory,
                 build_log_recorder,
+                secret_recorder,
             ),
             kill_send,
         }
@@ -94,13 +96,19 @@ impl Pipeline {
         abstract_factory: impl provisioner_factory::AbstractFactory,
         runtime_logger_factory: impl runtime_logger::Factory,
         build_log_recorder: impl LogRecorder,
+        secret_recorder: impl SecretRecorder,
     ) -> Pipeline {
         let (queue_send, queue_recv) = mpsc::channel(QUEUE_BUFFER_SIZE);
         let (run_send, run_recv) = mpsc::channel(RUN_BUFFER_SIZE);
 
         let run_send_clone = run_send.clone();
 
-        tokio::spawn(queue::task(queue_recv, run_send_clone, build_log_recorder));
+        tokio::spawn(queue::task(
+            queue_recv,
+            run_send_clone,
+            build_log_recorder,
+            secret_recorder,
+        ));
         tokio::spawn(run::task(
             run_recv,
             kill_send,

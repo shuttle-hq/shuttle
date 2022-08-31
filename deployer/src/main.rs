@@ -64,13 +64,18 @@ async fn main() {
         .await
         .expect("failed to connect to provisioner");
 
-    let abstract_factory = AbstractProvisionerFactory::new(provisioner_client, persistence.clone());
+    let abstract_factory = AbstractProvisionerFactory::new(
+        provisioner_client,
+        persistence.clone(),
+        persistence.clone(),
+    );
 
     let runtime_logger_factory = RuntimeLoggerFactory::new(persistence.get_log_sender());
 
     let deployment_manager = DeploymentManager::new(
         abstract_factory,
         runtime_logger_factory,
+        persistence.clone(),
         persistence.clone(),
     );
 

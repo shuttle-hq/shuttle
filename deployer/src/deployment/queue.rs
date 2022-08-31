@@ -1,7 +1,7 @@
 use super::deploy_layer::{Log, LogRecorder, LogType};
 use super::{Built, QueueReceiver, RunSender, State};
 use crate::error::{Error, Result};
-use crate::persistence::LogLevel;
+use crate::persistence::{LogLevel, SecretRecorder};
 
 use cargo_metadata::Message;
 use chrono::Utc;
@@ -10,7 +10,9 @@ use shuttle_service::loader::build_crate;
 use tracing::{debug, error, info, instrument};
 use uuid::Uuid;
 
+use std::collections::BTreeMap;
 use std::fmt;
+use std::fs::remove_file;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
@@ -31,7 +33,12 @@ const BUILDS_PATH: &str = "/tmp/shuttle-builds";
 /// The directory in which compiled '.so' files are stored.
 pub const LIBS_PATH: &str = "/tmp/shuttle-libs";
 
-pub async fn task(mut recv: QueueReceiver, run_send: RunSender, log_recorder: impl LogRecorder) {
+pub async fn task(
+    mut recv: QueueReceiver,
+    run_send: RunSender,
+    log_recorder: impl LogRecorder,
+    secret_recorder: impl SecretRecorder,
+) {
     info!("Queue task started");
 
     fs::create_dir_all(BUILDS_PATH)
@@ -48,9 +55,10 @@ pub async fn task(mut recv: QueueReceiver, run_send: RunSender, log_recorder: im
 
         let run_send_cloned = run_send.clone();
         let log_recorder = log_recorder.clone();
+        let secret_recorder = secret_recorder.clone();
 
         tokio::spawn(async move {
-            match queued.handle(log_recorder).await {
+            match queued.handle(log_recorder, secret_recorder).await {
                 Ok(built) => promote_to_run(built, run_send_cloned).await,
                 Err(err) => build_failed(&id, err),
             }
@@ -81,8 +89,12 @@ pub struct Queued {
 }
 
 impl Queued {
-    #[instrument(name = "queued_handle", skip(self, log_recorder), fields(id = %self.id, state = %State::Building))]
-    async fn handle(self, log_recorder: impl LogRecorder) -> Result<Built> {
+    #[instrument(name = "queued_handle", skip(self, log_recorder, secret_recorder), fields(id = %self.id, state = %State::Building))]
+    async fn handle(
+        self,
+        log_recorder: impl LogRecorder,
+        secret_recorder: impl SecretRecorder,
+    ) -> Result<Built> {
         info!("Fetching POSTed data");
 
         let vec = extract_stream(self.data_stream).await?;
@@ -93,6 +105,9 @@ impl Queued {
         fs::create_dir_all(project_path.clone()).await?;
 
         extract_tar_gz_data(vec.as_slice(), &project_path)?;
+
+        let secrets = get_secrets(&project_path).await?;
+        set_secrets(secrets, &self.name, secret_recorder).await?;
 
         info!("Building deployment");
 
@@ -160,6 +175,41 @@ impl fmt::Debug for Queued {
             .field("will_run_tests", &self.will_run_tests)
             .finish_non_exhaustive()
     }
+}
+
+#[instrument(skip(project_path))]
+async fn get_secrets(project_path: &Path) -> Result<BTreeMap<String, String>> {
+    let secrets_file = project_path.join("Secrets.toml");
+
+    if secrets_file.exists() && secrets_file.is_file() {
+        let secrets_str = fs::read_to_string(secrets_file.clone()).await?;
+
+        let secrets: BTreeMap<String, String> = secrets_str.parse::<toml::Value>()?.try_into()?;
+
+        remove_file(secrets_file)?;
+
+        Ok(secrets)
+    } else {
+        Ok(Default::default())
+    }
+}
+
+#[instrument(skip(secrets, project_name, secret_recorder))]
+async fn set_secrets(
+    secrets: BTreeMap<String, String>,
+    project_name: &str,
+    secret_recorder: impl SecretRecorder,
+) -> Result<()> {
+    for (key, value) in secrets.into_iter() {
+        debug!(key, "setting secret");
+
+        secret_recorder
+            .insert_secret(project_name, &key, &value)
+            .await
+            .map_err(|e| Error::SecretsSet(Box::new(e)))?;
+    }
+
+    Ok(())
 }
 
 #[instrument(skip(data_stream))]
@@ -243,7 +293,7 @@ async fn store_lib(
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
+    use std::{collections::BTreeMap, fs::File, io::Write, path::Path};
 
     use tempdir::TempDir;
     use tokio::fs;
@@ -326,5 +376,22 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
                 .unwrap(),
             "barfoo"
         );
+    }
+
+    #[tokio::test]
+    async fn get_secrets() {
+        let temp = TempDir::new("secrets").unwrap();
+        let temp_p = temp.path();
+
+        let secret_p = temp_p.join("Secrets.toml");
+        let mut secret_file = File::create(secret_p.clone()).unwrap();
+        secret_file.write_all(b"KEY = 'value'").unwrap();
+
+        let actual = super::get_secrets(temp_p).await.unwrap();
+        let expected = BTreeMap::from([("KEY".to_string(), "value".to_string())]);
+
+        assert_eq!(actual, expected);
+
+        assert!(!secret_p.exists(), "the secrets file should be deleted");
     }
 }

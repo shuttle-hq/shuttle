@@ -58,7 +58,7 @@ edition = "2021"
 [lib]
 
 [dependencies]
-shuttle-service = { version = "0.5.0", features = ["web-rocket"] }
+shuttle-service = { version = "0.5.1", features = ["web-rocket"] }
 rocket = "0.4.11"
 ```
 

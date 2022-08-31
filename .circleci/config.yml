@@ -238,7 +238,7 @@ workflows:
             - workspace-fmt
           matrix:
             parameters:
-              framework: ["web-axum", "web-rocket", "web-poem", "web-tide", "web-tower"]
+              framework: ["web-axum", "web-rocket", "web-poem", "web-tide", "web-tower", "bot-serenity"]
       - check-standalone:
           matrix:
             parameters:
@@ -252,6 +252,8 @@ workflows:
                 - examples/rocket/hello-world
                 - examples/rocket/postgres
                 - examples/rocket/url-shortener
+                - examples/serenity/hello-world
+                - examples/serenity/postgres
                 - examples/tide/hello-world
                 - examples/tide/postgres
                 - examples/tower/hello-world

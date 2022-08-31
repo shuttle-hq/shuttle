@@ -3,7 +3,7 @@ use uuid::Uuid;
 
 use super::state::State;
 
-#[derive(Clone, Debug, PartialEq, sqlx::FromRow)]
+#[derive(Clone, Debug, Eq, PartialEq, sqlx::FromRow)]
 pub struct Deployment {
     pub id: Uuid,
     pub name: String,

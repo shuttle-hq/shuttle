@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use super::{deploy_layer::extract_message, State};
 
-#[derive(Clone, Debug, PartialEq, sqlx::FromRow)]
+#[derive(Clone, Debug, Eq, PartialEq, sqlx::FromRow)]
 pub struct Log {
     pub id: Uuid,
     pub timestamp: DateTime<Utc>,
@@ -17,7 +17,7 @@ pub struct Log {
     pub fields: serde_json::Value,
 }
 
-#[derive(Clone, Debug, PartialEq, sqlx::Type)]
+#[derive(Clone, Debug, Eq, PartialEq, sqlx::Type)]
 pub enum Level {
     Trace,
     Debug,

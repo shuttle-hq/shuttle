@@ -55,10 +55,7 @@ URI:           {}
                     .state
                     .to_string()
                     .with(deployment.state.get_color()),
-                deployment
-                    .last_update
-                    .format("%Y-%m-%dT%H:%M:%SZ")
-                    .to_string(),
+                deployment.last_update.format("%Y-%m-%dT%H:%M:%SZ"),
                 self.uri,
             )
         } else {

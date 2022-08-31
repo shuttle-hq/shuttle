@@ -357,19 +357,16 @@ async fn runtime_logs_websocket_handler(mut s: WebSocket, persistence: Persisten
 
     for log in backlog.into_iter() {
         last_state = log.state;
-        match log.state {
-            State::Running => {
-                last_timestamp = log.timestamp;
-                let msg = serde_json::to_string(&LogItem::from(log))
-                    .expect("to convert log item to json");
-                let sent = s.send(ws::Message::Text(msg)).await;
+        if log.state == State::Running {
+            last_timestamp = log.timestamp;
+            let msg =
+                serde_json::to_string(&LogItem::from(log)).expect("to convert log item to json");
+            let sent = s.send(ws::Message::Text(msg)).await;
 
-                // Client disconnected?
-                if sent.is_err() {
-                    return;
-                }
+            // Client disconnected?
+            if sent.is_err() {
+                return;
             }
-            _ => {}
         }
     }
 

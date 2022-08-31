@@ -35,7 +35,7 @@ pub trait LogRecorder: Clone + Send + 'static {
 }
 
 /// An event or state transition log
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Log {
     /// Deployment id
     pub id: Uuid,
@@ -158,7 +158,7 @@ pub fn extract_message(fields: &Value) -> Option<String> {
     None
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum LogType {
     Event,
     State,

@@ -247,7 +247,7 @@ async fn build_deployment(
     project_path: &Path,
     tx: crossbeam_channel::Sender<Message>,
 ) -> Result<PathBuf> {
-    let so_path = build_crate(&project_path, tx)
+    let so_path = build_crate(project_path, tx)
         .await
         .map_err(|e| Error::Build(e.into()))?;
 

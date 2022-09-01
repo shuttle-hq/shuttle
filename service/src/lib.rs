@@ -202,7 +202,6 @@
 //!
 //! You can also [open an issue or a discussion on GitHub](https://github.com/getsynth/shuttle).
 //!
-use std::convert::Infallible;
 use std::future::Future;
 use std::net::SocketAddr;
 use std::pin::Pin;
@@ -462,16 +461,27 @@ pub type ShuttlePoem<T> = Result<T, Error>;
 #[async_trait]
 impl<T> Service for T
 where
-    T: Send + Sync + warp::Filter,
+    //T: Send
+    //+ Sync
+    //+ Clone
+    //+ 'static
+    //+ tower::Service<hyper::Request<hyper::Body>, Response = hyper::Response<hyper::Body>>,
+    //T: Send + Sync + Clone + 'static + tower::Service<hyper::Request<hyper::Body>>,
+    T: Send + Sync + Clone + 'static + warp::Filter,
+    T::Extract: warp::reply::Reply,
+    //T::Error: warp::reject::Reject,
+    //T::Error: std::error::Error + Send + Sync,
+    //T::Future: std::future::Future + Send + Sync,
 {
     async fn bind(mut self: Box<Self>, addr: SocketAddr) -> Result<(), error::Error> {
-        warp::serve(&self).run(addr).await;
+        warp::serve(*self).run(addr).await;
         Ok(())
     }
 }
 
 #[cfg(feature = "web-warp")]
-pub type ShuttleWarp<T> = Result<T, Error>;
+pub type ShuttleWarp<T> = Result<warp::filters::BoxedFilter<T>, Error>;
+//pub type ShuttleWarp<T> = Result<T, Error>;
 
 #[cfg(feature = "web-axum")]
 #[async_trait]

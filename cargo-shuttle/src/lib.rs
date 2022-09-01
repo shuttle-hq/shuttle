@@ -24,6 +24,7 @@ use config::RequestContext;
 use factory::LocalFactory;
 use semver::{Version, VersionReq};
 use shuttle_service::loader::{build_crate, Loader};
+use shuttle_service::{Factory, SecretStore};
 use tokio::sync::mpsc;
 use toml_edit::Document;
 use uuid::Uuid;
@@ -192,6 +193,23 @@ impl Shuttle {
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), run_args.port);
         let deployment_id = Uuid::new_v4();
         let (tx, mut rx) = mpsc::unbounded_channel();
+
+        // Load secrets
+        let secrets = self.ctx.secrets();
+        if !secrets.is_empty() {
+            let conn_str = factory
+                .get_db_connection_string(shuttle_common::database::Type::Shared(
+                    shuttle_common::database::SharedEngine::Postgres,
+                ))
+                .await?;
+
+            let conn = sqlx::PgPool::connect(&conn_str).await?;
+
+            for (key, value) in secrets.iter() {
+                debug!("setting secret for {key}");
+                conn.set_secret(key, value).await?;
+            }
+        }
 
         trace!("loading project");
         println!(

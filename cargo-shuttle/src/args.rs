@@ -98,20 +98,23 @@ pub struct RunArgs {
 #[derive(Parser, Debug)]
 pub struct InitArgs {
     /// Initialize with axum framework
-    #[clap(long, conflicts_with_all = &["rocket", "tide", "tower", "poem", "warp"])]
+    #[clap(long, conflicts_with_all = &["rocket", "tide", "tower", "poem", "serenity", "warp"])]
     pub axum: bool,
     /// Initialize with actix-web framework
-    #[clap(long, conflicts_with_all = &["axum", "tide", "tower", "poem", "warp"])]
+    #[clap(long, conflicts_with_all = &["axum", "tide", "tower", "poem", "serenity", "warp"])]
     pub rocket: bool,
     /// Initialize with tide framework
-    #[clap(long, conflicts_with_all = &["axum", "rocket", "tower", "poem", "warp"])]
+    #[clap(long, conflicts_with_all = &["axum", "rocket", "tower", "poem", "serenity", "warp"])]
     pub tide: bool,
     /// Initialize with tower framework
-    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "poem", "warp"])]
+    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "poem", "serenity", "warp"])]
     pub tower: bool,
     /// Initialize with poem framework
-    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "tower", "warp"])]
+    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "tower", "serenity", "warp"])]
     pub poem: bool,
+    /// Initialize with serenity framework
+    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "tower", "poem", "warp"])]
+    pub serenity: bool,
     /// Initialize with warp framework
     #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "tower", "poem"])]
     pub warp: bool,

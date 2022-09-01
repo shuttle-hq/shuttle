@@ -12,7 +12,7 @@
 //! Shuttle is an open-source app platform that uses traits and annotations to configure your backend deployments.
 //!
 //! ## Usage
-//! Start by installing the [`cargo shuttle`](https://docs.rs/crate/cargo-shuttle/latest) subcommand by runnning the following in a terminal:
+//! Start by installing the [`cargo shuttle`](https://docs.rs/crate/cargo-shuttle/latest) subcommand by running the following in a terminal:
 //!
 //! ```bash
 //! $ cargo install cargo-shuttle
@@ -28,7 +28,7 @@
 //! be a library crate with a `shuttle-service` dependency with the `web-rocket` feature on the `shuttle-service` dependency.
 //!
 //! ```toml
-//! shuttle-service = { version = "0.5.0", features = ["web-rocket"] }
+//! shuttle-service = { version = "0.5.1", features = ["web-rocket"] }
 //! ```
 //!
 //! A boilerplate code for your rocket project can also be found in `src/lib.rs`:
@@ -101,7 +101,7 @@
 //! Add the `sqlx-postgres` feature to the `shuttle-service` dependency, and add `sqlx` as a dependency with the `runtime-tokio-native-tls` and `postgres` features inside `Cargo.toml`:
 //!
 //! ```toml
-//! shuttle-service = { version = "0.5.0", features = ["web-rocket", "sqlx-postgres"] }
+//! shuttle-service = { version = "0.5.1", features = ["web-rocket", "sqlx-postgres"] }
 //! sqlx = { version = "0.6.1", features = ["runtime-tokio-native-tls", "postgres"] }
 //! ```
 //!
@@ -285,9 +285,10 @@ extern crate shuttle_codegen;
 /// ## shuttle managed dependencies
 /// The following dependencies can be managed by shuttle - remember to enable their feature flags for the `shuttle-service` dependency in `Cargo.toml` and configure them using an attribute annotation:
 ///
+
 /// | Argument type                                                            | Feature flag        | Attribute            | Dependency                                                                                         | Example                                                                          |
 /// | ------------------------------------------------------------------------ | ------------------- | -------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-/// | [`PgPool`](https://docs.rs/sqlx/latest/sqlx/type.PgPool.html)            | sqlx-postgres       | `shared::Postgres`   | A shared PostgresSql instance accessed using [sqlx](https://docs.rs/sqlx)                          | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/rocket/postgres) |
+/// | [`PgPool`](https://docs.rs/sqlx/latest/sqlx/type.PgPool.html)            | sqlx-postgres       | `shared::Postgres`   | A shared PostgresSQL instance accessed using [sqlx](https://docs.rs/sqlx)                          | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/rocket/postgres) |
 /// | [`Database`](https://docs.rs/mongodb/latest/mongodb/struct.Database.html)| mongodb-integration | `shared::MongoDb`    | A shared MongoDb database accessed using the [mongodb](https://docs.rs/mongodb) driver             | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/poem/mongodb)    |
 /// | [`MySqlPool`](https://docs.rs/sqlx/latest/sqlx/type.MySqlPool.html)      | sqlx-aws-mariadb    | `aws::rds::MariaDB`  | An AWS RDS MariaDB instance tied to your instance and accessed using [sqlx](https://docs.rs/sqlx)  |                                                                                  |
 /// | [`MySqlPool`](https://docs.rs/sqlx/latest/sqlx/type.MySqlPool.html)      | sqlx-aws-mysql      | `aws::rds::MySql`    | An AWS RDS MySql instance tied to your instance and accessed using [sqlx](https://docs.rs/sqlx)    |                                                                                  |
@@ -539,5 +540,18 @@ where
         Ok(())
     }
 }
+
+#[cfg(feature = "bot-serenity")]
+#[async_trait]
+impl Service for serenity::Client {
+    async fn bind(mut self: Box<Self>, _addr: SocketAddr) -> Result<(), error::Error> {
+        self.start().await.map_err(error::CustomError::new)?;
+
+        Ok(())
+    }
+}
+
+#[cfg(feature = "bot-serenity")]
+pub type ShuttleSerenity = Result<serenity::Client, Error>;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

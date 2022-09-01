@@ -70,7 +70,7 @@ cool technology. You will find that people will be eager to assume good intent
 and forgive as long as you earn their trust.
 
 The enforcement policies listed above apply to all official shuttle venues;
-including [Discord channels](https://discord.gg/H33rRDTm3p) and
+including [Discord channels](https://discord.gg/shuttle) and
 [GitHub repositories under shuttle](https://github.com/shuttle-hq). For other
 projects adopting the shuttle Code of Conduct, please contact the maintainers of
 those projects for enforcement. If you wish to use this code of conduct for

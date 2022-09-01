@@ -7,7 +7,7 @@ description = "Service with instances created per project for handling the compl
 [dependencies]
 anyhow = "1.0.58"
 async-trait = "0.1.56"
-axum = { version = "0.5.7", features = ["ws"] }
+axum = { version = "0.5.7", features = ["headers", "ws"] }
 bytes = "1.1.0"
 cargo = "0.64.0"
 cargo_metadata = "0.15.0"

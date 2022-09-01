@@ -1,8 +1,10 @@
+mod admin;
+
 use axum::body::{Body, BoxBody};
 use axum::extract::ws::{self, WebSocket};
 use axum::extract::{Extension, Path, Query};
 use axum::http::{Request, Response};
-use axum::routing::{get, Router};
+use axum::routing::{get, post, Router};
 use axum::{extract::BodyStream, Json};
 use chrono::{TimeZone, Utc};
 use fqdn::FQDN;
@@ -19,12 +21,16 @@ use crate::persistence::{self, Deployment, Log, Persistence, SecretGetter, State
 use std::collections::HashMap;
 use std::time::Duration;
 
+use self::admin::{AdminGuard, AdminSecret};
+
 pub fn make_router(
     persistence: Persistence,
     deployment_manager: DeploymentManager,
     proxy_fqdn: FQDN,
+    admin_secret: String,
 ) -> Router<Body> {
     Router::new()
+        .route("/users/:name", post(get_or_create_user))
         .route("/services", get(list_services))
         .route(
             "/services/:name",
@@ -52,6 +58,8 @@ pub fn make_router(
         )
         .layer(Extension(persistence))
         .layer(Extension(deployment_manager))
+        .layer(Extension(proxy_fqdn))
+        .layer(Extension(AdminSecret(admin_secret)))
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(|request: &Request<Body>| {
@@ -64,7 +72,6 @@ pub fn make_router(
                     },
                 ),
         )
-        .layer(Extension(proxy_fqdn))
 }
 
 async fn list_services(
@@ -415,4 +422,16 @@ async fn get_secrets(
         .collect();
 
     Ok(Json(keys))
+}
+
+// TODO: move to gateway
+async fn get_or_create_user(
+    Extension(persistence): Extension<Persistence>,
+    Path(name): Path<String>,
+    _: AdminGuard,
+) -> Result<String> {
+    persistence
+        .get_or_create_user(&name)
+        .await
+        .map_err(Error::from)
 }

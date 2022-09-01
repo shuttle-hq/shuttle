@@ -36,7 +36,12 @@ pub async fn start(
         deployment_manager.run_push(built).await;
     }
 
-    let router = handlers::make_router(persistence, deployment_manager, args.proxy_fqdn);
+    let router = handlers::make_router(
+        persistence,
+        deployment_manager,
+        args.proxy_fqdn,
+        args.admin_secret,
+    );
     let make_service = router.into_make_service();
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 8001));

@@ -7,6 +7,7 @@ mod state;
 
 use crate::deployment::deploy_layer::{self, LogRecorder, LogType};
 use error::{Error, Result};
+use rand::Rng;
 
 use std::path::Path;
 
@@ -60,6 +61,11 @@ impl Persistence {
 
     async fn from_pool(pool: SqlitePool) -> (Self, JoinHandle<()>) {
         sqlx::query("
+            CREATE TABLE IF NOT EXISTS users (
+                id TEXT PRIMARY KEY, -- Identifier of the user.
+                name TEXT UNIQUE     -- Name of the user.
+            );
+
             CREATE TABLE IF NOT EXISTS deployments (
                 id TEXT PRIMARY KEY, -- Identifier of the deployment.
                 name TEXT,           -- Name of the service being deployed.
@@ -255,6 +261,32 @@ impl Persistence {
 
     pub fn get_log_sender(&self) -> crossbeam_channel::Sender<deploy_layer::Log> {
         self.log_send.clone()
+    }
+
+    // TODO: move to gateway
+    pub async fn get_or_create_user(&self, name: &str) -> Result<String> {
+        let id = sqlx::query_as::<_, (String,)>("SELECT id FROM users WHERE name = ?")
+            .bind(name)
+            .fetch_optional(&self.pool)
+            .await?;
+
+        if let Some((id,)) = id {
+            Ok(id)
+        } else {
+            let id = rand::thread_rng()
+                .sample_iter(&rand::distributions::Alphanumeric)
+                .take(16)
+                .map(char::from)
+                .collect::<String>();
+
+            sqlx::query("INSERT INTO users (id, name) VALUES (?, ?)")
+                .bind(&id)
+                .bind(name)
+                .execute(&self.pool)
+                .await?;
+
+            Ok(id)
+        }
     }
 }
 
@@ -781,5 +813,14 @@ mod tests {
         ];
 
         assert_eq!(actual, expected);
+    }
+
+    #[tokio::test]
+    async fn get_or_create_user() {
+        let (p, _) = Persistence::new_in_memory().await;
+        let initial = p.get_or_create_user("test-user").await.unwrap();
+        let next = p.get_or_create_user("test-user").await.unwrap();
+
+        assert_eq!(initial, next, "user id should stay the same");
     }
 }

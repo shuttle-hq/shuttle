@@ -263,7 +263,7 @@ workflows:
             - workspace-clippy
           matrix:
             parameters:
-              crate: ["shuttle-api", "cargo-shuttle", "shuttle-codegen", "shuttle-common", "shuttle-proto", "shuttle-provisioner"]
+              crate: ["shuttle-deployer", "cargo-shuttle", "shuttle-codegen", "shuttle-common", "shuttle-proto", "shuttle-provisioner"]
       - e2e-test:
           requires:
             - service-test

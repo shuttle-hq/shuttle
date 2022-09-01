@@ -21,20 +21,26 @@ use shuttle_common::{
     DatabaseReadyInfo,
 };
 use shuttle_service::{database::Type, error::CustomError, Factory};
-use std::{collections::HashMap, io::stdout, time::Duration};
+use std::{
+    collections::{BTreeMap, HashMap},
+    io::stdout,
+    time::Duration,
+};
 use tokio::time::sleep;
 use tracing::{error, trace};
 
 pub struct LocalFactory {
     docker: Docker,
     project: ProjectName,
+    secrets: BTreeMap<String, String>,
 }
 
 impl LocalFactory {
-    pub fn new(project: ProjectName) -> Result<Self> {
+    pub fn new(project: ProjectName, secrets: BTreeMap<String, String>) -> Result<Self> {
         Ok(Self {
             docker: Docker::connect_with_local_defaults()?,
             project,
+            secrets,
         })
     }
 }
@@ -160,6 +166,12 @@ impl Factory for LocalFactory {
         );
 
         Ok(conn_str)
+    }
+
+    async fn get_secrets(
+        &mut self,
+    ) -> Result<std::collections::BTreeMap<String, String>, shuttle_service::Error> {
+        Ok(self.secrets.clone())
     }
 }
 

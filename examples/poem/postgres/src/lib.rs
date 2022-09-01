@@ -8,7 +8,6 @@ use poem::{
 };
 use serde::{Deserialize, Serialize};
 use shuttle_service::error::CustomError;
-use shuttle_service::SecretStore;
 use sqlx::{Executor, FromRow, PgPool};
 
 #[handler]
@@ -33,12 +32,6 @@ async fn add(Json(data): Json<TodoNew>, state: Data<&PgPool>) -> Result<Json<Tod
     Ok(Json(todo))
 }
 
-#[handler]
-async fn secret(state: Data<&PgPool>) -> Result<String> {
-    // get secret defined in `Secrets.toml` file.
-    state.0.get_secret("MY_API_KEY").await.map_err(BadRequest)
-}
-
 #[shuttle_service::main]
 async fn main(
     #[shared::Postgres] pool: PgPool,
@@ -48,7 +41,6 @@ async fn main(
         .map_err(CustomError::new)?;
 
     let app = Route::new()
-        .at("/secret", get(secret))
         .at("/todo", post(add))
         .at("/todo/:id", get(retrieve))
         .with(AddData::new(pool));

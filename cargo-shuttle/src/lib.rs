@@ -5,6 +5,7 @@ mod factory;
 mod init;
 mod logger;
 
+use std::collections::BTreeMap;
 use std::fs::{read_to_string, File};
 use std::io::Write;
 use std::io::{self, stdout};
@@ -24,7 +25,7 @@ use crossterm::style::Stylize;
 use factory::LocalFactory;
 use futures::StreamExt;
 use semver::{Version, VersionReq};
-use shuttle_common::deployment;
+use shuttle_common::{deployment, secret};
 use shuttle_service::loader::{build_crate, Loader};
 use toml_edit::Document;
 use tracing::trace;
@@ -57,6 +58,7 @@ impl Shuttle {
             Command::Deploy(..)
                 | Command::Deployment(..)
                 | Command::Delete
+                | Command::Secrets
                 | Command::Status
                 | Command::Logs { .. }
                 | Command::Run(..)
@@ -82,6 +84,7 @@ impl Shuttle {
                 self.deployment_get(&client, id).await
             }
             Command::Delete => self.delete(&client).await,
+            Command::Secrets => self.secrets(&client).await,
             Command::Auth(auth_args) => self.auth(auth_args, &client).await,
             Command::Login(login_args) => self.login(login_args).await,
             Command::Run(run_args) => self.local_run(run_args).await,
@@ -173,6 +176,15 @@ impl Shuttle {
         Ok(())
     }
 
+    async fn secrets(&self, client: &Client) -> Result<()> {
+        let secrets = client.get_secrets(self.ctx.project_name()).await?;
+        let table = secret::get_table(&secrets);
+
+        println!("{table}");
+
+        Ok(())
+    }
+
     async fn logs(&self, client: &Client, id: Option<Uuid>, follow: bool) -> Result<()> {
         let id = if let Some(id) = id {
             id
@@ -190,13 +202,10 @@ impl Shuttle {
             let mut stream = client.get_runtime_logs_ws(&id).await?;
 
             while let Some(Ok(msg)) = stream.next().await {
-                match msg {
-                    tokio_tungstenite::tungstenite::Message::Text(line) => {
-                        let log_item: shuttle_common::log::Item =
-                            serde_json::from_str(&line).expect("to parse log line");
-                        println!("{log_item}")
-                    }
-                    _ => {}
+                if let tokio_tungstenite::tungstenite::Message::Text(line) = msg {
+                    let log_item: shuttle_common::log::Item =
+                        serde_json::from_str(&line).expect("to parse log line");
+                    println!("{log_item}")
                 }
             }
         } else {
@@ -254,9 +263,25 @@ impl Shuttle {
         );
         let so_path = build_crate(working_directory, tx).await?;
 
+        trace!("loading secrets");
+        let secrets_path = working_directory.join("Secrets.toml");
+
+        let secrets: BTreeMap<String, String> =
+            if let Ok(secrets_str) = read_to_string(secrets_path) {
+                let secrets: BTreeMap<String, String> =
+                    secrets_str.parse::<toml::Value>()?.try_into()?;
+
+                trace!(keys = ?secrets.keys(), "available secrets");
+
+                secrets
+            } else {
+                trace!("no Secrets.toml was found");
+                Default::default()
+            };
+
         let loader = Loader::from_so_file(so_path)?;
 
-        let mut factory = LocalFactory::new(self.ctx.project_name().clone())?;
+        let mut factory = LocalFactory::new(self.ctx.project_name().clone(), secrets)?;
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), run_args.port);
 
         trace!("loading project");
@@ -288,15 +313,14 @@ impl Shuttle {
             .deploy(package_file, self.ctx.project_name(), args.no_test)
             .await?;
 
-        println!("");
+        println!();
         println!("{deployment}");
 
         let mut stream = client.get_build_logs_ws(&deployment.id).await?;
 
         while let Some(Ok(msg)) = stream.next().await {
-            match msg {
-                tokio_tungstenite::tungstenite::Message::Text(line) => println!("{line}"),
-                _ => {}
+            if let tokio_tungstenite::tungstenite::Message::Text(line) = msg {
+                println!("{line}");
             }
         }
 

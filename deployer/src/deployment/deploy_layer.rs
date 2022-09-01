@@ -35,7 +35,7 @@ pub trait LogRecorder: Clone + Send + 'static {
 }
 
 /// An event or state transition log
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Log {
     /// Deployment id
     pub id: Uuid,
@@ -158,7 +158,7 @@ pub fn extract_message(fields: &Value) -> Option<String> {
     None
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum LogType {
     Event,
     State,
@@ -370,6 +370,7 @@ impl Visit for JsonVisitor {
 #[cfg(test)]
 mod tests {
     use std::{
+        collections::BTreeMap,
         fs::read_dir,
         sync::{Arc, Mutex},
         time::Duration,
@@ -388,7 +389,7 @@ mod tests {
             deploy_layer::LogType, provisioner_factory, runtime_logger, Built, DeploymentManager,
             Queued,
         },
-        persistence::State,
+        persistence::{SecretRecorder, State},
     };
 
     use super::{DeployLayer, Log, LogRecorder};
@@ -450,6 +451,20 @@ mod tests {
         }
     }
 
+    #[async_trait::async_trait]
+    impl SecretRecorder for Arc<Mutex<RecorderMock>> {
+        type Err = std::io::Error;
+
+        async fn insert_secret(
+            &self,
+            _name: &str,
+            _key: &str,
+            _value: &str,
+        ) -> Result<(), Self::Err> {
+            panic!("no tests should set secrets")
+        }
+    }
+
     impl<R: LogRecorder> LogRecorder for Arc<Mutex<R>> {
         fn record(&self, event: Log) {
             self.lock().unwrap().record(event);
@@ -475,6 +490,12 @@ mod tests {
             _db_type: shuttle_common::database::Type,
         ) -> Result<String, shuttle_service::Error> {
             panic!("did not expect any deploy_layer test to connect to the database")
+        }
+
+        async fn get_secrets(
+            &mut self,
+        ) -> Result<BTreeMap<String, String>, shuttle_service::Error> {
+            panic!("did not expect any deploy_layer test to get secrets")
         }
     }
 
@@ -503,6 +524,7 @@ mod tests {
         let deployment_manager = DeploymentManager::new(
             StubAbstractProvisionerFactory,
             StubRuntimeLoggerFactory,
+            RECORDER.clone(),
             RECORDER.clone(),
         );
 
@@ -601,6 +623,7 @@ mod tests {
             StubAbstractProvisionerFactory,
             StubRuntimeLoggerFactory,
             RECORDER.clone(),
+            RECORDER.clone(),
         );
 
         let queued = get_queue("self-stop");
@@ -667,6 +690,7 @@ mod tests {
         let deployment_manager = DeploymentManager::new(
             StubAbstractProvisionerFactory,
             StubRuntimeLoggerFactory,
+            RECORDER.clone(),
             RECORDER.clone(),
         );
 
@@ -735,6 +759,7 @@ mod tests {
             StubAbstractProvisionerFactory,
             StubRuntimeLoggerFactory,
             RECORDER.clone(),
+            RECORDER.clone(),
         );
 
         let queued = get_queue("main-panic");
@@ -802,6 +827,7 @@ mod tests {
             StubAbstractProvisionerFactory,
             StubRuntimeLoggerFactory,
             RECORDER.clone(),
+            RECORDER.clone(),
         );
 
         let id = Uuid::new_v4();
@@ -848,6 +874,7 @@ mod tests {
         let deployment_manager = DeploymentManager::new(
             StubAbstractProvisionerFactory,
             StubRuntimeLoggerFactory,
+            RECORDER.clone(),
             RECORDER.clone(),
         );
 

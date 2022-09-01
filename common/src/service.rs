@@ -1,6 +1,7 @@
 use crate::{
     deployment,
     resource::{self, ResourceInfo},
+    secret,
 };
 use comfy_table::{
     modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, Cell, CellAlignment, ContentArrangement,
@@ -15,6 +16,7 @@ pub struct Response {
     pub name: String,
     pub deployments: Vec<deployment::Response>,
     pub resources: Vec<resource::Response>,
+    pub secrets: Vec<secret::Response>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -29,8 +31,9 @@ impl Display for Response {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let deploys = get_deployments_table(&self.deployments, &self.name);
         let resources = get_resources_table(&self.resources);
+        let secrets = secret::get_table(&self.secrets);
 
-        write!(f, "{}{}", deploys, resources)
+        write!(f, "{}{}{}", deploys, resources, secrets)
     }
 }
 
@@ -52,10 +55,7 @@ URI:           {}
                     .state
                     .to_string()
                     .with(deployment.state.get_color()),
-                deployment
-                    .last_update
-                    .format("%Y-%m-%dT%H:%M:%SZ")
-                    .to_string(),
+                deployment.last_update.format("%Y-%m-%dT%H:%M:%SZ"),
                 self.uri,
             )
         } else {

@@ -69,6 +69,8 @@ pub enum Command {
     },
     /// delete this shuttle service
     Delete,
+    /// manage secrets for this shuttle service
+    Secrets,
     /// create user credentials for the shuttle platform
     Auth(AuthArgs),
     /// login to the shuttle platform

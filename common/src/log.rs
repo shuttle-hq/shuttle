@@ -46,7 +46,7 @@ impl Display for Item {
 
         let message = match &self.fields {
             serde_json::Value::String(str_value) if str_value == STATE_MESSAGE => {
-                write!(f, "\n")?;
+                writeln!(f)?;
                 format!("Entering {} state", self.state)
                     .bold()
                     .blue()

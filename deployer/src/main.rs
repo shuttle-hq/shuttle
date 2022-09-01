@@ -1,23 +1,12 @@
-mod args;
-mod deployment;
-mod error;
-mod handlers;
-mod persistence;
-
 use clap::Parser;
-use deployment::{Built, DeploymentManager};
-use persistence::Persistence;
+use shuttle_deployer::{
+    start, AbstractProvisionerFactory, Args, DeployLayer, Persistence, RuntimeLoggerFactory,
+};
 use shuttle_proto::provisioner::provisioner_client::ProvisionerClient;
 use tonic::transport::Endpoint;
-use tracing::{info, trace};
+use tracing::trace;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{fmt, EnvFilter};
-
-use std::net::SocketAddr;
-
-use crate::args::Args;
-use crate::deployment::deploy_layer::DeployLayer;
-use crate::deployment::{AbstractProvisionerFactory, RuntimeLoggerFactory};
 
 const SECRET_KEY: &str = "GATEWAY_SECRET";
 
@@ -33,8 +22,6 @@ async fn main() {
         )
     });
     trace!("{SECRET_KEY} = {gateway_secret}");
-
-    let addr = SocketAddr::from(([127, 0, 0, 1], 8001));
 
     let fmt_layer = fmt::layer();
     let filter_layer = EnvFilter::try_from_default_env()
@@ -64,31 +51,13 @@ async fn main() {
         .await
         .expect("failed to connect to provisioner");
 
-    let abstract_factory = AbstractProvisionerFactory::new(provisioner_client, persistence.clone());
-
-    let runtime_logger_factory = RuntimeLoggerFactory::new(persistence.get_log_sender());
-
-    let deployment_manager = DeploymentManager::new(
-        abstract_factory,
-        runtime_logger_factory,
+    let abstract_factory = AbstractProvisionerFactory::new(
+        provisioner_client,
+        persistence.clone(),
         persistence.clone(),
     );
 
-    for existing_deployment in persistence.get_all_runnable_deployments().await.unwrap() {
-        let built = Built {
-            id: existing_deployment.id,
-            name: existing_deployment.name,
-        };
-        deployment_manager.run_push(built).await;
-    }
+    let runtime_logger_factory = RuntimeLoggerFactory::new(persistence.get_log_sender());
 
-    let router = handlers::make_router(persistence, deployment_manager, args.proxy_fqdn);
-    let make_service = router.into_make_service();
-
-    info!("Binding to and listening at address: {}", addr);
-
-    axum::Server::bind(&addr)
-        .serve(make_service)
-        .await
-        .unwrap_or_else(|_| panic!("Failed to bind to address: {}", addr));
+    start(abstract_factory, runtime_logger_factory, persistence, args).await;
 }

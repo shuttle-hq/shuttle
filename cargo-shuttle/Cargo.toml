@@ -29,6 +29,7 @@ semver = "1.0.13"
 serde = { version = "1.0.143", features = ["derive"] }
 serde_json = "1.0.83"
 tokio = "1.20.1"
+tokio-tungstenite = { version = "0.17.2", features = ["native-tls"] }
 toml = "0.5.9"
 toml_edit = "0.14.4"
 tracing = "0.1.35"

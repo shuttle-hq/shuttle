@@ -203,6 +203,7 @@
 //! You can also [open an issue or a discussion on GitHub](https://github.com/getsynth/shuttle).
 //!
 
+use std::collections::BTreeMap;
 use std::future::Future;
 use std::net::SocketAddr;
 use std::pin::Pin;
@@ -224,7 +225,7 @@ pub mod shared;
 #[cfg(feature = "secrets")]
 pub mod secrets;
 #[cfg(feature = "secrets")]
-pub use secrets::SecretStore;
+pub use secrets::{SecretStore, Secrets};
 
 #[cfg(any(
     feature = "sqlx-aws-mariadb",
@@ -312,6 +313,9 @@ pub trait Factory: Send + Sync {
         &mut self,
         db_type: database::Type,
     ) -> Result<String, crate::Error>;
+
+    /// Get all the secrets for a service
+    async fn get_secrets(&mut self) -> Result<BTreeMap<String, String>, crate::Error>;
 }
 
 /// Used to get resources of type `T` from factories.

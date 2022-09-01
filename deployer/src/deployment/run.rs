@@ -179,6 +179,7 @@ async fn load_deployment(
 #[cfg(test)]
 mod tests {
     use std::{
+        collections::BTreeMap,
         net::{Ipv4Addr, SocketAddr},
         path::PathBuf,
         process::Command,
@@ -207,8 +208,14 @@ mod tests {
         async fn get_db_connection_string(
             &mut self,
             _db_type: database::Type,
-        ) -> core::result::Result<String, shuttle_service::Error> {
+        ) -> Result<String, shuttle_service::Error> {
             panic!("no run test should get an sql connection");
+        }
+
+        async fn get_secrets(
+            &mut self,
+        ) -> Result<BTreeMap<String, String>, shuttle_service::Error> {
+            panic!("no test should get any secrets");
         }
     }
 

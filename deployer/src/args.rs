@@ -9,13 +9,13 @@ use shuttle_common::Port;
 pub struct Args {
     /// Address to connect to the provisioning service
     #[clap(long)]
-    pub(crate) provisioner_address: String,
+    pub provisioner_address: String,
 
     /// Port provisioner is running on
     #[clap(long, default_value = "5000")]
-    pub(crate) provisioner_port: Port,
+    pub provisioner_port: Port,
 
     /// FQDN where the proxy can be reached at
     #[clap(long)]
-    pub(crate) proxy_fqdn: FQDN,
+    pub proxy_fqdn: FQDN,
 }

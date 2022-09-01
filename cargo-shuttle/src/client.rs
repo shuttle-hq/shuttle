@@ -10,7 +10,7 @@ use reqwest_retry::RetryTransientMiddleware;
 use semver::Version;
 use serde::Deserialize;
 use shuttle_common::project::ProjectName;
-use shuttle_common::{deployment, log, service, ApiKey, ApiUrl};
+use shuttle_common::{deployment, log, secret, service, ApiKey, ApiUrl};
 use tokio::net::TcpStream;
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 use tracing::error;
@@ -137,6 +137,12 @@ impl Client {
             );
             Err(anyhow!("failed to get shuttle version from server"))
         }
+    }
+
+    pub async fn get_secrets(&self, project: &ProjectName) -> Result<Vec<secret::Response>> {
+        let path = format!("/secrets/{}", project.as_str());
+
+        self.get(path).await
     }
 
     pub async fn get_runtime_logs(&self, deployment_id: &Uuid) -> Result<Vec<log::Item>> {

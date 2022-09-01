@@ -3,7 +3,7 @@ use crate::helpers::{loader::build_so_create_loader, sqlx::PostgresInstance};
 use log::Level;
 use shuttle_service::loader::LoaderError;
 use shuttle_service::{database, Error, Factory};
-
+use std::collections::BTreeMap;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::process::exit;
 use std::sync::{Arc, Mutex};
@@ -68,6 +68,10 @@ impl Factory for DummyFactory {
         };
 
         Ok(uri)
+    }
+
+    async fn get_secrets(&mut self) -> Result<BTreeMap<String, String>, Error> {
+        panic!("did not expect any loader test to get secrets")
     }
 }
 

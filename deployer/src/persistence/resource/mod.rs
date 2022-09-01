@@ -1,6 +1,5 @@
 pub mod database;
 
-use crate::error::Result;
 use sqlx::{
     sqlite::{SqliteArgumentValue, SqliteValueRef},
     Database, Sqlite,
@@ -11,7 +10,9 @@ pub use self::database::Type as DatabaseType;
 
 #[async_trait::async_trait]
 pub trait ResourceRecorder: Clone + Send + Sync + 'static {
-    async fn insert_resource(&self, resource: &Resource) -> Result<()>;
+    type Err: std::error::Error;
+
+    async fn insert_resource(&self, resource: &Resource) -> Result<(), Self::Err>;
 }
 
 #[derive(sqlx::FromRow, Debug, Eq, PartialEq)]
@@ -55,7 +56,7 @@ impl Display for Type {
 impl FromStr for Type {
     type Err = String;
 
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         if let Some((prefix, rest)) = s.split_once("::") {
             match prefix {
                 "database" => Ok(Self::Database(DatabaseType::from_str(rest)?)),
@@ -85,7 +86,7 @@ impl<'q> sqlx::Encode<'q, Sqlite> for Type {
 }
 
 impl<'r> sqlx::Decode<'r, Sqlite> for Type {
-    fn decode(value: SqliteValueRef<'r>) -> std::result::Result<Self, sqlx::error::BoxDynError> {
+    fn decode(value: SqliteValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
         let value = <&str as sqlx::Decode<Sqlite>>::decode(value)?;
 
         Self::from_str(value).map_err(Into::into)

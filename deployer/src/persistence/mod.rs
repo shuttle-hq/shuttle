@@ -8,7 +8,7 @@ mod state;
 mod user;
 
 use crate::deployment::deploy_layer::{self, LogRecorder, LogType};
-use crate::handlers::{ServiceAuthorizer, UserValidator};
+use crate::handlers::{DeploymentAuthorizer, ServiceAuthorizer, UserValidator};
 use error::{Error, Result};
 use rand::Rng;
 
@@ -475,10 +475,10 @@ impl UserValidator for Persistence {
 
 #[async_trait::async_trait]
 impl ServiceAuthorizer for Persistence {
-    async fn does_user_own(
+    async fn does_user_own_service(
         &self,
         api_key: &str,
-        service_name: String,
+        service_name: &str,
     ) -> crate::error::Result<Option<Service>> {
         sqlx::query_as("SELECT * FROM services WHERE user_id = ? AND name = ?")
             .bind(api_key)
@@ -487,6 +487,28 @@ impl ServiceAuthorizer for Persistence {
             .await
             .map_err(Error::from)
             .map_err(crate::error::Error::Persistence)
+    }
+}
+
+#[async_trait::async_trait]
+impl DeploymentAuthorizer for Persistence {
+    async fn does_user_own_deployment(
+        &self,
+        api_key: &str,
+        deployment_id: &Uuid,
+    ) -> crate::error::Result<Option<Deployment>> {
+        sqlx::query_as(
+            r#"SELECT d.id AS id, service_id, state, last_update
+                FROM deployments AS d
+                JOIN services AS s ON d.service_id = s.id
+                WHERE user_id = ? AND d.id = ?"#,
+        )
+        .bind(api_key)
+        .bind(deployment_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(Error::from)
+        .map_err(crate::error::Error::Persistence)
     }
 }
 
@@ -980,7 +1002,9 @@ mod tests {
 
         assert_eq!(
             Some(service.clone()),
-            p.does_user_own(&api_key, service.name).await.unwrap(),
+            p.does_user_own_service(&api_key, &service.name)
+                .await
+                .unwrap(),
         );
 
         p.delete_service(&service.id).await.unwrap();
@@ -989,6 +1013,47 @@ mod tests {
             .await
             .unwrap()
             .is_none());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn deployment_authorization() {
+        let (p, _) = Persistence::new_in_memory().await;
+        let service_id = Uuid::new_v4();
+        let api_key = add_user(&p.pool).await.unwrap();
+
+        sqlx::query("INSERT INTO services (id, name, user_id) VALUES (?, ?, ?)")
+            .bind(&service_id)
+            .bind("authorization-test-service")
+            .bind(&api_key)
+            .execute(&p.pool)
+            .await
+            .unwrap();
+
+        let deployment_id = Uuid::new_v4();
+        let last_update = Utc::now();
+
+        sqlx::query(
+            "INSERT INTO deployments (id, service_id, state, last_update) VALUES (?, ?, ?, ?)",
+        )
+        .bind(&deployment_id)
+        .bind(&service_id)
+        .bind(State::Running)
+        .bind(last_update)
+        .execute(&p.pool)
+        .await
+        .unwrap();
+
+        assert_eq!(
+            Some(Deployment {
+                id: deployment_id,
+                service_id,
+                state: State::Running,
+                last_update
+            }),
+            p.does_user_own_deployment(&api_key, &deployment_id)
+                .await
+                .unwrap(),
+        );
     }
 
     async fn add_deployment(pool: &SqlitePool) -> Result<Uuid> {

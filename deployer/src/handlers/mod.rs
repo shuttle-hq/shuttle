@@ -1,4 +1,5 @@
 mod admin;
+mod deployment;
 mod service;
 mod user;
 
@@ -11,7 +12,7 @@ use axum::{extract::BodyStream, Json};
 use chrono::{TimeZone, Utc};
 use fqdn::FQDN;
 use futures::TryStreamExt;
-use shuttle_common::{deployment, log, secret, LogItem};
+use shuttle_common::{log, secret, LogItem};
 use tower_http::trace::TraceLayer;
 use tracing::{debug, debug_span, error, field, Span};
 use uuid::Uuid;
@@ -25,6 +26,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use self::admin::{AdminGuard, AdminSecret};
+pub use self::deployment::DeploymentAuthorizer;
+use self::deployment::DeploymentGuard;
 pub use self::service::ServiceAuthorizer;
 use self::service::ServiceGuard;
 use self::user::UserGuard;
@@ -68,7 +71,8 @@ pub fn make_router(
         .layer(Extension(proxy_fqdn))
         .layer(Extension(AdminSecret(admin_secret)))
         .layer(&Extension::<Arc<dyn UserValidator>>(Arc::new(persistence.clone())))
-        .layer(&Extension::<Arc<dyn ServiceAuthorizer>>(Arc::new(persistence)))
+        .layer(&Extension::<Arc<dyn ServiceAuthorizer>>(Arc::new(persistence.clone())))
+        .layer(&Extension::<Arc<dyn DeploymentAuthorizer>>(Arc::new(persistence)))
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(|request: &Request<Body>| {
@@ -162,7 +166,7 @@ async fn post_service(
     Query(params): Query<HashMap<String, String>>,
     stream: BodyStream,
     user: UserGuard,
-) -> Result<Json<deployment::Response>> {
+) -> Result<Json<shuttle_common::deployment::Response>> {
     let service = persistence
         .get_or_create_service(&name, &user.api_key)
         .await?;
@@ -228,37 +232,27 @@ async fn delete_service(
 }
 
 async fn get_deployment(
-    Extension(persistence): Extension<Persistence>,
-    Path(id): Path<Uuid>,
-) -> Result<Json<Option<deployment::Response>>> {
-    persistence
-        .get_deployment(&id)
-        .await
-        .map(|d| Json(d.map(Into::into)))
-        .map_err(Error::from)
+    deployment_guard: DeploymentGuard,
+) -> Result<Json<shuttle_common::deployment::Response>> {
+    Ok(Json(deployment_guard.into()))
 }
 
 async fn delete_deployment(
-    Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
-    Path(id): Path<Uuid>,
-) -> Result<Json<Option<deployment::Response>>> {
-    deployment_manager.kill(id).await;
+    deployment_guard: DeploymentGuard,
+) -> Result<Json<shuttle_common::deployment::Response>> {
+    deployment_manager.kill(deployment_guard.id).await;
 
-    persistence
-        .get_deployment(&id)
-        .await
-        .map(|d| Json(d.map(Into::into)))
-        .map_err(Error::from)
+    Ok(Json(deployment_guard.into()))
 }
 
 async fn get_build_logs(
     Extension(persistence): Extension<Persistence>,
-    Path(id): Path<Uuid>,
+    deployment_guard: DeploymentGuard,
 ) -> Result<Json<Vec<log::BuildLogStream>>> {
     Ok(Json(
         persistence
-            .get_deployment_logs(&id)
+            .get_deployment_logs(&deployment_guard.id)
             .await?
             .into_iter()
             .filter(|log| matches!(log.state, State::Building))
@@ -269,11 +263,11 @@ async fn get_build_logs(
 
 async fn get_runtime_logs(
     Extension(persistence): Extension<Persistence>,
-    Path(id): Path<Uuid>,
+    deployment_guard: DeploymentGuard,
 ) -> Result<Json<Vec<LogItem>>> {
     Ok(Json(
         persistence
-            .get_deployment_logs(&id)
+            .get_deployment_logs(&deployment_guard.id)
             .await?
             .into_iter()
             .filter(|log| matches!(log.state, State::Running))
@@ -284,10 +278,11 @@ async fn get_runtime_logs(
 
 async fn get_build_logs_subscribe(
     Extension(persistence): Extension<Persistence>,
-    Path(id): Path<Uuid>,
+    deployment_guard: DeploymentGuard,
     ws_upgrade: ws::WebSocketUpgrade,
 ) -> axum::response::Response {
-    ws_upgrade.on_upgrade(move |s| build_logs_websocket_handler(s, persistence, id))
+    ws_upgrade
+        .on_upgrade(move |s| build_logs_websocket_handler(s, persistence, deployment_guard.id))
 }
 
 async fn build_logs_websocket_handler(mut s: WebSocket, persistence: Persistence, id: Uuid) {
@@ -311,7 +306,7 @@ async fn build_logs_websocket_handler(mut s: WebSocket, persistence: Persistence
 
     for log in backlog.into_iter().filter_map(Log::into_build_log_stream) {
         match (log.state, log.message) {
-            (deployment::State::Building, Some(msg)) => {
+            (shuttle_common::deployment::State::Building, Some(msg)) => {
                 let sent = s.send(ws::Message::Text(msg)).await;
                 last_timestamp = log.timestamp;
 
@@ -320,8 +315,9 @@ async fn build_logs_websocket_handler(mut s: WebSocket, persistence: Persistence
                     return;
                 }
             }
-            (deployment::State::Building, None) => {}
-            (deployment::State::Queued, _) | (deployment::State::Built, _) => {}
+            (shuttle_common::deployment::State::Building, None) => {}
+            (shuttle_common::deployment::State::Queued, _)
+            | (shuttle_common::deployment::State::Built, _) => {}
             _ => {
                 debug!("closing channel after reaching more than just build logs");
                 let _ = s.close().await;
@@ -334,7 +330,7 @@ async fn build_logs_websocket_handler(mut s: WebSocket, persistence: Persistence
         if log.id == id && log.timestamp > last_timestamp {
             if let Some(log) = persistence::Log::from(log).into_build_log_stream() {
                 match (log.state, log.message) {
-                    (deployment::State::Building, Some(msg)) => {
+                    (shuttle_common::deployment::State::Building, Some(msg)) => {
                         let sent = s.send(ws::Message::Text(msg)).await;
 
                         // Client disconnected?
@@ -342,8 +338,9 @@ async fn build_logs_websocket_handler(mut s: WebSocket, persistence: Persistence
                             return;
                         }
                     }
-                    (deployment::State::Queued, _) | (deployment::State::Built, _) => {}
-                    (deployment::State::Building, None) => {}
+                    (shuttle_common::deployment::State::Queued, _)
+                    | (shuttle_common::deployment::State::Built, _) => {}
+                    (shuttle_common::deployment::State::Building, None) => {}
                     _ => break,
                 }
             }
@@ -356,10 +353,11 @@ async fn build_logs_websocket_handler(mut s: WebSocket, persistence: Persistence
 
 async fn get_runtime_logs_subscribe(
     Extension(persistence): Extension<Persistence>,
-    Path(id): Path<Uuid>,
+    deployment_guard: DeploymentGuard,
     ws_upgrade: ws::WebSocketUpgrade,
 ) -> axum::response::Response {
-    ws_upgrade.on_upgrade(move |s| runtime_logs_websocket_handler(s, persistence, id))
+    ws_upgrade
+        .on_upgrade(move |s| runtime_logs_websocket_handler(s, persistence, deployment_guard.id))
 }
 
 async fn runtime_logs_websocket_handler(mut s: WebSocket, persistence: Persistence, id: Uuid) {

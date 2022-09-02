@@ -13,7 +13,7 @@ use serde::Serialize;
 /// Guard used to make sure a request has a valid api key set on the Basic Auth
 ///
 /// *Note*
-/// This guard requires the [Arc<dyn UserValidatior>] extension to be set
+/// This guard requires the [Arc<dyn UserValidator>] extension to be set
 pub struct UserGuard {
     pub api_key: String,
 }

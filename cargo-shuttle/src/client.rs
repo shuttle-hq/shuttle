@@ -3,6 +3,8 @@ use std::fs::File;
 use std::io::Read;
 
 use anyhow::{anyhow, Context, Result};
+use http_auth_basic::Credentials;
+use reqwest::header::AUTHORIZATION;
 use reqwest::{Body, Response, StatusCode};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::policies::ExponentialBackoff;
@@ -12,6 +14,7 @@ use serde::Deserialize;
 use shuttle_common::project::ProjectName;
 use shuttle_common::{deployment, log, secret, service, ApiKey, ApiUrl};
 use tokio::net::TcpStream;
+use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 use tracing::error;
 use uuid::Uuid;
@@ -89,7 +92,16 @@ impl Client {
         let mut ws_url = self.api_url.clone().replace("http", "ws");
         let _ = write!(ws_url, "/ws/deployments/{}/logs/build", deployment_id);
 
-        let (stream, _) = connect_async(ws_url).await.with_context(|| {
+        let mut request = ws_url.into_client_request()?;
+
+        if let Some(ref api_key) = self.api_key {
+            let cred = Credentials::new(api_key, "");
+            request
+                .headers_mut()
+                .append(AUTHORIZATION, cred.as_http_header().parse()?);
+        }
+
+        let (stream, _) = connect_async(request).await.with_context(|| {
             error!("failed to connect to build logs websocket");
             "could not connect to build logs websocket"
         })?;
@@ -158,7 +170,16 @@ impl Client {
         let mut ws_url = self.api_url.clone().replace("http", "ws");
         let _ = write!(ws_url, "/ws/deployments/{}/logs/runtime", deployment_id);
 
-        let (stream, _) = connect_async(ws_url).await.with_context(|| {
+        let mut request = ws_url.into_client_request()?;
+
+        if let Some(ref api_key) = self.api_key {
+            let cred = Credentials::new(api_key, "");
+            request
+                .headers_mut()
+                .append(AUTHORIZATION, cred.as_http_header().parse()?);
+        }
+
+        let (stream, _) = connect_async(request).await.with_context(|| {
             error!("failed to connect to runtime logs websocket");
             "could not connect to runtime logs websocket"
         })?;

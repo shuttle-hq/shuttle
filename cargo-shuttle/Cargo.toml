@@ -21,6 +21,7 @@ dirs = "4.0.0"
 futures = "0.3.23"
 indoc = "1.0.7"
 log = "0.4.17"
+http-auth-basic = "0.3.3"
 portpicker = "0.1.1"
 reqwest = { version = "0.11.11", features = ["json"] }
 reqwest-middleware = "0.1.6"

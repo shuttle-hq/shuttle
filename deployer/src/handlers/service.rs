@@ -15,7 +15,7 @@ use super::user::UserGuard;
 /// Guard used to make sure a request has a valid api key set on the Basic Auth and that it owns a service
 ///
 /// *Note*
-/// This guard requires the [Arc<dyn ServiceValidatior>] extension to be set
+/// This guard requires the [Arc<dyn ServiceAuthorizer>] extension to be set
 pub struct ServiceGuard {
     pub id: Uuid,
     pub name: String,
@@ -51,10 +51,10 @@ where
         let user_authorizer = req
             .extensions()
             .get::<Arc<dyn ServiceAuthorizer>>()
-            .expect("Arc<dyn ServiceValidator> to be available on extensions");
+            .expect("Arc<dyn ServiceAuthorizer> to be available on extensions");
 
         if let Some(user) = user_authorizer
-            .does_user_own(&user_guard.api_key, service_name)
+            .does_user_own_service(&user_guard.api_key, &service_name)
             .await
             .map_err(|e| {
                 (
@@ -84,7 +84,11 @@ pub struct ServiceGuardError {
 
 #[async_trait::async_trait]
 pub trait ServiceAuthorizer: Sync + Send {
-    async fn does_user_own(&self, api_key: &str, service_name: String) -> Result<Option<Service>>;
+    async fn does_user_own_service(
+        &self,
+        api_key: &str,
+        service_name: &str,
+    ) -> Result<Option<Service>>;
 }
 
 impl From<Service> for ServiceGuard {

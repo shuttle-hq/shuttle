@@ -5,8 +5,10 @@ mod resource;
 mod secret;
 mod service;
 mod state;
+mod user;
 
 use crate::deployment::deploy_layer::{self, LogRecorder, LogType};
+use crate::handlers::UserValidator;
 use error::{Error, Result};
 use rand::Rng;
 
@@ -31,6 +33,7 @@ use self::secret::Secret;
 pub use self::secret::{SecretGetter, SecretRecorder};
 use self::service::Service;
 pub use self::state::State;
+pub use self::user::User;
 
 const DB_PATH: &str = "deployer.sqlite";
 
@@ -64,15 +67,15 @@ impl Persistence {
     async fn from_pool(pool: SqlitePool) -> (Self, JoinHandle<()>) {
         sqlx::query("
             CREATE TABLE IF NOT EXISTS users (
-                id TEXT PRIMARY KEY, -- Identifier of the user.
-                name TEXT UNIQUE     -- Name of the user.
+                api_key TEXT PRIMARY KEY, -- API key of the user.
+                gh_username TEXT UNIQUE   -- GitHub username of the user.
             );
 
             CREATE TABLE IF NOT EXISTS services (
                 id TEXT PRIMARY KEY, -- Identifier of the service.
                 name TEXT UNIQUE,    -- Name of the service.
                 user_id TEXT,        -- Name of the service.
-                FOREIGN KEY(user_id) REFERENCES users(id)
+                FOREIGN KEY(user_id) REFERENCES users(api_key)
             );
 
             CREATE TABLE IF NOT EXISTS deployments (
@@ -228,12 +231,25 @@ impl Persistence {
             .map_err(Error::from)
     }
 
-    pub async fn get_service(&self, id: &Uuid) -> Result<Option<Service>> {
-        sqlx::query_as("SELECT * FROM services WHERE id = ?")
-            .bind(id)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(Error::from)
+    pub async fn get_or_create_service(&self, name: &str, user_id: &str) -> Result<Service> {
+        if let Some(service) = self.get_service_by_name(name).await? {
+            Ok(service)
+        } else {
+            let service = Service {
+                id: Uuid::new_v4(),
+                name: name.to_string(),
+                user_id: user_id.to_string(),
+            };
+
+            sqlx::query("INSERT INTO services (id, name, user_id) VALUES (?, ?, ?)")
+                .bind(service.id)
+                .bind(&service.name)
+                .bind(&service.user_id)
+                .execute(&self.pool)
+                .await?;
+
+            Ok(service)
+        }
     }
 
     pub async fn get_service_by_name(&self, name: &str) -> Result<Option<Service>> {
@@ -245,7 +261,7 @@ impl Persistence {
     }
 
     pub async fn delete_service(&self, id: &Uuid) -> Result<()> {
-        sqlx::query("DELETE FROM service WHERE id = ?")
+        sqlx::query("DELETE FROM services WHERE id = ?")
             .bind(id)
             .execute(&self.pool)
             .await
@@ -253,7 +269,10 @@ impl Persistence {
             .map_err(Error::from)
     }
 
-    pub async fn delete_service_deployments(&self, service_id: &Uuid) -> Result<Vec<Deployment>> {
+    pub async fn delete_deployments_by_service_id(
+        &self,
+        service_id: &Uuid,
+    ) -> Result<Vec<Deployment>> {
         let deployments = self.get_deployments(service_id).await?;
 
         let _ = sqlx::query("DELETE FROM deployments WHERE service_id = ?")
@@ -308,28 +327,31 @@ impl Persistence {
     }
 
     // TODO: move to gateway
-    pub async fn get_or_create_user(&self, name: &str) -> Result<String> {
-        let id = sqlx::query_as::<_, (String,)>("SELECT id FROM users WHERE name = ?")
-            .bind(name)
+    pub async fn get_or_create_user(&self, gh_username: &str) -> Result<User> {
+        let user = sqlx::query_as("SELECT * FROM users WHERE gh_username = ?")
+            .bind(gh_username)
             .fetch_optional(&self.pool)
             .await?;
 
-        if let Some((id,)) = id {
-            Ok(id)
+        if let Some(user) = user {
+            Ok(user)
         } else {
-            let id = rand::thread_rng()
+            let api_key = rand::thread_rng()
                 .sample_iter(&rand::distributions::Alphanumeric)
                 .take(16)
                 .map(char::from)
                 .collect::<String>();
 
-            sqlx::query("INSERT INTO users (id, name) VALUES (?, ?)")
-                .bind(&id)
-                .bind(name)
+            sqlx::query("INSERT INTO users (api_key, gh_username) VALUES (?, ?)")
+                .bind(&api_key)
+                .bind(gh_username)
                 .execute(&self.pool)
                 .await?;
 
-            Ok(id)
+            Ok(User {
+                api_key,
+                gh_username: gh_username.to_string(),
+            })
         }
     }
 }
@@ -436,6 +458,18 @@ impl SecretGetter for Persistence {
             .fetch_all(&self.pool)
             .await
             .map_err(Error::from)
+    }
+}
+
+#[async_trait::async_trait]
+impl UserValidator for Persistence {
+    async fn is_user_valid(&self, api_key: &str) -> crate::error::Result<Option<User>> {
+        sqlx::query_as("SELECT * FROM users WHERE api_key = ?")
+            .bind(api_key)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(Error::from)
+            .map_err(crate::error::Error::Persistence)
     }
 }
 
@@ -620,11 +654,18 @@ mod tests {
         }
 
         assert!(!p.get_deployments(&service_id).await.unwrap().is_empty());
-        // assert_eq!(p.delete_service(&service_id).await.unwrap(), deployments);
+
+        // This should error since deployments are linked to this service
+        p.delete_service(&service_id).await.unwrap_err();
         assert_eq!(
-            p.delete_service_deployments(&service_id).await.unwrap(),
+            p.delete_deployments_by_service_id(&service_id)
+                .await
+                .unwrap(),
             deployments
         );
+
+        // It should not be safe to delete
+        p.delete_service(&service_id).await.unwrap();
         assert!(p.get_deployments(&service_id).await.unwrap().is_empty());
     }
 
@@ -892,6 +933,37 @@ mod tests {
         assert_eq!(initial, next, "user id should stay the same");
     }
 
+    #[tokio::test(flavor = "multi_thread")]
+    async fn service() {
+        let (p, _) = Persistence::new_in_memory().await;
+        let api_key = add_user(&p.pool).await.unwrap();
+
+        let service = p
+            .get_or_create_service("dummy-service", &api_key)
+            .await
+            .unwrap();
+        let service2 = p
+            .get_or_create_service("dummy-service", &api_key)
+            .await
+            .unwrap();
+
+        assert_eq!(service, service2, "service should only be added once");
+
+        let get_result = p
+            .get_service_by_name("dummy-service")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(service, get_result);
+
+        p.delete_service(&service.id).await.unwrap();
+        assert!(p
+            .get_service_by_name("dummy-service")
+            .await
+            .unwrap()
+            .is_none());
+    }
+
     async fn add_deployment(pool: &SqlitePool) -> Result<Uuid> {
         let service_id = add_service(pool).await?;
         let deployment_id = Uuid::new_v4();
@@ -915,21 +987,28 @@ mod tests {
 
     async fn add_service_named(pool: &SqlitePool, name: &str) -> Result<Uuid> {
         let service_id = Uuid::new_v4();
-        let user_id = Uuid::new_v4();
+        let api_key = add_user(pool).await?;
 
-        sqlx::query("INSERT INTO users (id, name) VALUES (?, ?)")
-            .bind(&user_id)
-            .bind(get_random_name())
-            .execute(pool)
-            .await?;
         sqlx::query("INSERT INTO services (id, name, user_id) VALUES (?, ?, ?)")
             .bind(&service_id)
             .bind(name)
-            .bind(&user_id)
+            .bind(&api_key)
             .execute(pool)
             .await?;
 
         Ok(service_id)
+    }
+
+    async fn add_user(pool: &SqlitePool) -> Result<String> {
+        let api_key = get_random_name();
+
+        sqlx::query("INSERT INTO users (api_key, gh_username) VALUES (?, ?)")
+            .bind(&api_key)
+            .bind(get_random_name())
+            .execute(pool)
+            .await?;
+
+        Ok(api_key)
     }
 
     fn get_random_name() -> String {

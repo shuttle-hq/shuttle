@@ -16,7 +16,7 @@ use uuid::Uuid;
 pub struct Response {
     pub id: Uuid,
     pub name: String,
-    pub user_id: Uuid,
+    pub user_id: String,
 }
 
 #[derive(Deserialize, Serialize)]

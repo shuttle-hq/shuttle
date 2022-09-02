@@ -310,7 +310,7 @@ struct NewStateVisitor {
 }
 
 impl NewStateVisitor {
-    /// Field containing the deployment name identifier
+    /// Field containing the deployment identifier
     const ID_IDENT: &'static str = "id";
 
     /// Field containing the deployment state identifier

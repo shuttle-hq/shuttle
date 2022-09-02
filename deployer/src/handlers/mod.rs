@@ -1,4 +1,5 @@
 mod admin;
+mod user;
 
 use axum::body::{Body, BoxBody};
 use axum::extract::ws::{self, WebSocket};
@@ -19,9 +20,12 @@ use crate::error::{Error, Result};
 use crate::persistence::{self, Deployment, Log, Persistence, SecretGetter, State};
 
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 
 use self::admin::{AdminGuard, AdminSecret};
+use self::user::UserGuard;
+pub use self::user::UserValidator;
 
 pub fn make_router(
     persistence: Persistence,
@@ -53,13 +57,14 @@ pub fn make_router(
         .route("/deployments/:id/logs/runtime", get(get_runtime_logs))
         .route("/version", get(get_version))
         .route(
-            "/secrets/:service_id",
+            "/secrets/:service_name",
             get(get_secrets),
         )
-        .layer(Extension(persistence))
+        .layer(Extension(persistence.clone()))
         .layer(Extension(deployment_manager))
         .layer(Extension(proxy_fqdn))
         .layer(Extension(AdminSecret(admin_secret)))
+        .layer(&Extension::<Arc<dyn UserValidator>>(Arc::new(persistence)))
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(|request: &Request<Body>| {
@@ -160,33 +165,33 @@ async fn post_service(
     Path(name): Path<String>,
     Query(params): Query<HashMap<String, String>>,
     stream: BodyStream,
+    user: UserGuard,
 ) -> Result<Json<deployment::Response>> {
-    if let Some(service) = persistence.get_service_by_name(&name).await? {
-        let id = Uuid::new_v4();
+    let service = persistence
+        .get_or_create_service(&name, &user.api_key)
+        .await?;
+    let id = Uuid::new_v4();
 
-        let deployment = Deployment {
-            id,
-            service_id: service.id,
-            state: State::Queued,
-            last_update: Utc::now(),
-        };
+    let deployment = Deployment {
+        id,
+        service_id: service.id,
+        state: State::Queued,
+        last_update: Utc::now(),
+    };
 
-        persistence.insert_deployment(deployment.clone()).await?;
+    persistence.insert_deployment(deployment.clone()).await?;
 
-        let queued = Queued {
-            id,
-            service_name: service.name,
-            service_id: service.id,
-            data_stream: Box::pin(stream.map_err(Error::Streaming)),
-            will_run_tests: !params.contains_key("no-test"),
-        };
+    let queued = Queued {
+        id,
+        service_name: service.name,
+        service_id: service.id,
+        data_stream: Box::pin(stream.map_err(Error::Streaming)),
+        will_run_tests: !params.contains_key("no-test"),
+    };
 
-        deployment_manager.queue_push(queued).await;
+    deployment_manager.queue_push(queued).await;
 
-        Ok(Json(deployment.into()))
-    } else {
-        Err(Error::NotFound)
-    }
+    Ok(Json(deployment.into()))
 }
 
 async fn delete_service(
@@ -196,7 +201,9 @@ async fn delete_service(
 ) -> Result<Json<service::Detailed>> {
     if let Some(service) = persistence.get_service_by_name(&name).await? {
         persistence.delete_service(&service.id).await?;
-        let old_deployments = persistence.delete_service_deployments(&service.id).await?;
+        let old_deployments = persistence
+            .delete_deployments_by_service_id(&service.id)
+            .await?;
 
         for deployment in old_deployments.iter() {
             deployment_manager.kill(deployment.id).await;
@@ -452,11 +459,12 @@ async fn get_secrets(
 // TODO: move to gateway
 async fn get_or_create_user(
     Extension(persistence): Extension<Persistence>,
-    Path(name): Path<String>,
+    Path(api_key): Path<String>,
     _: AdminGuard,
 ) -> Result<String> {
     persistence
-        .get_or_create_user(&name)
+        .get_or_create_user(&api_key)
         .await
+        .map(|user| user.api_key)
         .map_err(Error::from)
 }

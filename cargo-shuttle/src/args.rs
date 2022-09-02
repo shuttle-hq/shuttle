@@ -116,7 +116,7 @@ pub struct InitArgs {
     #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "tower", "poem", "warp"])]
     pub serenity: bool,
     /// Initialize with warp framework
-    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "tower", "poem"])]
+    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "tower", "poem", "serenity"])]
     pub warp: bool,
     /// Path to initialize a new shuttle project
     #[clap(

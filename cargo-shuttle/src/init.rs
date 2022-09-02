@@ -683,7 +683,9 @@ mod shuttle_init_tests {
 
     #[test]
     fn test_get_framework_via_get_boilerplate_code() {
-        let frameworks = vec!["axum", "rocket", "tide", "tower", "poem", "warp"];
+        let frameworks = vec![
+            "axum", "rocket", "tide", "tower", "poem", "serenity", "warp",
+        ];
         let framework_inits: Vec<Box<dyn ShuttleInit>> = vec![
             Box::new(ShuttleInitAxum),
             Box::new(ShuttleInitRocket),

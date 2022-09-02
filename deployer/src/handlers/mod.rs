@@ -76,7 +76,7 @@ pub fn make_router(
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(|request: &Request<Body>| {
-                    debug_span!("request", http.uri = %request.uri(), http.method = %request.method(), http.status_code = field::Empty)
+                    debug_span!("request", http.uri = %request.uri(), http.method = %request.method(), http.status_code = field::Empty, api_key = field::Empty)
                 })
                 .on_response(
                     |response: &Response<BoxBody>, latency: Duration, span: &Span| {

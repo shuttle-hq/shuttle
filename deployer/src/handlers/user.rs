@@ -9,6 +9,7 @@ use axum::{
     Json, TypedHeader,
 };
 use serde::Serialize;
+use tracing::Span;
 
 /// Guard used to make sure a request has a valid api key set on the Basic Auth
 ///
@@ -56,6 +57,8 @@ where
                 )
             })?
         {
+            // Record api_key for tracing purposes
+            Span::current().record("api_key", &user.api_key);
             Ok(user.into())
         } else {
             Err((

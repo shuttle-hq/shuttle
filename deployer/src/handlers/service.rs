@@ -53,7 +53,7 @@ where
             .get::<Arc<dyn ServiceAuthorizer>>()
             .expect("Arc<dyn ServiceAuthorizer> to be available on extensions");
 
-        if let Some(user) = user_authorizer
+        if let Some(service) = user_authorizer
             .does_user_own_service(&user_guard.api_key, &service_name)
             .await
             .map_err(|e| {
@@ -65,7 +65,7 @@ where
                 )
             })?
         {
-            Ok(user.into())
+            Ok(service.into())
         } else {
             Err((
                 StatusCode::FORBIDDEN,

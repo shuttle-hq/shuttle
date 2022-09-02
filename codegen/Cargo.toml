@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-codegen"
-version = "0.5.0"
+version = "0.5.1"
 edition = "2021"
 license = "Apache-2.0"
 description = "Proc-macro code generator for the shuttle.rs service"
@@ -10,11 +10,11 @@ description = "Proc-macro code generator for the shuttle.rs service"
 proc-macro = true
 
 [dependencies]
-proc-macro-error = "1.0"
-proc-macro2 = "1.0.39"
-quote = "1.0.18"
-syn = { version = "1.0.96", features = ["full", "extra-traits"] }
+proc-macro-error = "1.0.4"
+proc-macro2 = "1.0.43"
+quote = "1.0.21"
+syn = { version = "1.0.99", features = ["full", "extra-traits"] }
 
 [dev-dependencies]
 pretty_assertions = "1.2.1"
-trybuild = "1.0"
+trybuild = "1.0.64"

@@ -8,5 +8,5 @@ edition = "2021"
 [dependencies]
 poem = "1.3.35"
 serde = "1.0"
-shuttle-service = { version = "0.5.0", features = ["sqlx-postgres", "secrets", "web-poem"] }
-sqlx = { version = "0.5", features = ["runtime-tokio-native-tls", "postgres"] }
+shuttle-service = { version = "0.5.1", features = ["sqlx-postgres", "secrets", "web-poem"] }
+sqlx = { version = "0.6", features = ["runtime-tokio-native-tls", "postgres"] }

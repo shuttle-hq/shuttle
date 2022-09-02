@@ -7,8 +7,8 @@ edition = "2021"
 
 [dependencies]
 nanoid = "0.4"
-rocket = { version = "0.5.0-rc.1", features = ["json"] }
+rocket = { version = "0.5.0-rc.2", features = ["json"] }
 serde = "1.0"
-shuttle-service = { version = "0.5.0", features = ["sqlx-postgres", "web-rocket"] }
-sqlx = { version = "0.5", features = ["runtime-tokio-native-tls", "postgres"] }
+shuttle-service = { version = "0.5.1", features = ["sqlx-postgres", "web-rocket"] }
+sqlx = { version = "0.6", features = ["runtime-tokio-native-tls", "postgres"] }
 url = "2.2"

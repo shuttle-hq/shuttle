@@ -36,6 +36,7 @@ impl ShuttleInit for ShuttleInitAxum {
             dependencies,
             manifest_path,
             url,
+            false,
             get_dependency_version_fn,
         );
 
@@ -49,6 +50,7 @@ impl ShuttleInit for ShuttleInitAxum {
             dependencies,
             manifest_path,
             url,
+            false,
             get_dependency_version_fn,
         );
     }
@@ -87,6 +89,7 @@ impl ShuttleInit for ShuttleInitRocket {
             dependencies,
             manifest_path,
             url,
+            true,
             get_dependency_version_fn,
         );
 
@@ -137,6 +140,7 @@ impl ShuttleInit for ShuttleInitTide {
             dependencies,
             manifest_path,
             url,
+            false,
             get_dependency_version_fn,
         );
     }
@@ -176,6 +180,7 @@ impl ShuttleInit for ShuttleInitPoem {
             dependencies,
             manifest_path,
             url,
+            false,
             get_dependency_version_fn,
         );
     }
@@ -194,6 +199,125 @@ impl ShuttleInit for ShuttleInitPoem {
             let app = Route::new().at("/hello", get(hello_world));
     
             Ok(app)
+        }"#}
+    }
+}
+
+pub struct ShuttleInitSerenity;
+
+impl ShuttleInit for ShuttleInitSerenity {
+    fn set_cargo_dependencies(
+        &self,
+        dependencies: &mut Table,
+        manifest_path: &Path,
+        url: &Url,
+        get_dependency_version_fn: GetDependencyVersionFn,
+    ) {
+        set_inline_table_dependency_features(
+            "shuttle-service",
+            dependencies,
+            vec![
+                "bot-serenity".to_string(),
+                "sqlx-postgres".to_string(),
+                "secrets".to_string(),
+            ],
+        );
+
+        set_key_value_dependency_version(
+            "log",
+            dependencies,
+            manifest_path,
+            url,
+            false,
+            get_dependency_version_fn,
+        );
+
+        set_inline_table_dependency_version(
+            "serenity",
+            dependencies,
+            manifest_path,
+            url,
+            false,
+            get_dependency_version_fn,
+        );
+
+        dependencies["serenity"]["default-features"] = value(false);
+
+        set_inline_table_dependency_features(
+            "serenity",
+            dependencies,
+            vec![
+                "client".into(),
+                "gateway".into(),
+                "rustls_backend".into(),
+                "model".into(),
+            ],
+        );
+
+        set_inline_table_dependency_version(
+            "sqlx",
+            dependencies,
+            manifest_path,
+            url,
+            false,
+            get_dependency_version_fn,
+        );
+
+        set_inline_table_dependency_features(
+            "sqlx",
+            dependencies,
+            vec![
+                "runtime-tokio-native-tls".to_string(),
+                "postgres".to_string(),
+            ],
+        );
+    }
+
+    fn get_boilerplate_code_for_framework(&self) -> &'static str {
+        indoc! {r#"
+        use log::{error, info};
+        use serenity::async_trait;
+        use serenity::model::channel::Message;
+        use serenity::model::gateway::Ready;
+        use serenity::prelude::*;
+        use shuttle_service::error::CustomError;
+        use shuttle_service::SecretStore;
+        use sqlx::PgPool;
+
+        struct Bot;
+
+        #[async_trait]
+        impl EventHandler for Bot {
+            async fn message(&self, ctx: Context, msg: Message) {
+                if msg.content == "!hello" {
+                    if let Err(e) = msg.channel_id.say(&ctx.http, "world!").await {
+                        error!("Error sending message: {:?}", e);
+                    }
+                }
+            }
+
+            async fn ready(&self, _: Context, ready: Ready) {
+                info!("{} is connected!", ready.user.name);
+            }
+        }
+
+        #[shuttle_service::main]
+        async fn serenity(#[shared::Postgres] pool: PgPool) -> shuttle_service::ShuttleSerenity {
+            // Get the discord token set in `Secrets.toml` from the shared Postgres database
+            let token = pool
+                .get_secret("DISCORD_TOKEN")
+                .await
+                .map_err(CustomError::new)?;
+
+            // Set gateway intents, which decides what events the bot will be notified about
+            let intents = GatewayIntents::GUILD_MESSAGES | GatewayIntents::MESSAGE_CONTENT;
+
+            let client = Client::builder(&token, intents)
+                .event_handler(Bot)
+                .await
+                .expect("Err creating client");
+
+            Ok(client)
         }"#}
     }
 }
@@ -219,6 +343,7 @@ impl ShuttleInit for ShuttleInitTower {
             dependencies,
             manifest_path,
             url,
+            false,
             get_dependency_version_fn,
         );
 
@@ -229,6 +354,7 @@ impl ShuttleInit for ShuttleInitTower {
             dependencies,
             manifest_path,
             url,
+            false,
             get_dependency_version_fn,
         );
 
@@ -314,6 +440,10 @@ pub fn get_framework(init_args: &InitArgs) -> Box<dyn ShuttleInit> {
         return Box::new(ShuttleInitPoem);
     }
 
+    if init_args.serenity {
+        return Box::new(ShuttleInitSerenity);
+    }
+
     Box::new(ShuttleInitNoOp)
 }
 
@@ -323,7 +453,7 @@ pub fn cargo_init(path: PathBuf) -> Result<()> {
     let cargo_config = cargo::util::config::Config::default()?;
     let init_result = cargo::ops::init(&opts, &cargo_config)?;
 
-    // Mimick `cargo init` behavior and log status or error to shell
+    // Mimic `cargo init` behavior and log status or error to shell
     cargo_config
         .shell()
         .status("Created", format!("{} (shuttle) package", init_result))?;
@@ -356,6 +486,7 @@ pub fn cargo_shuttle_init(path: PathBuf, framework: Box<dyn ShuttleInit>) -> Res
         &mut dependencies,
         &manifest_path,
         &url,
+        false,
         get_latest_dependency_version,
     );
 
@@ -389,9 +520,11 @@ fn set_key_value_dependency_version(
     dependencies: &mut Table,
     manifest_path: &Path,
     url: &Url,
+    flag_allow_prerelease: bool,
     get_dependency_version_fn: GetDependencyVersionFn,
 ) {
-    let dependency_version = get_dependency_version_fn(crate_name, manifest_path, url);
+    let dependency_version =
+        get_dependency_version_fn(crate_name, flag_allow_prerelease, manifest_path, url);
     dependencies[crate_name] = value(dependency_version);
 }
 
@@ -402,9 +535,11 @@ fn set_inline_table_dependency_version(
     dependencies: &mut Table,
     manifest_path: &Path,
     url: &Url,
+    flag_allow_prerelease: bool,
     get_dependency_version_fn: GetDependencyVersionFn,
 ) {
-    let dependency_version = get_dependency_version_fn(crate_name, manifest_path, url);
+    let dependency_version =
+        get_dependency_version_fn(crate_name, flag_allow_prerelease, manifest_path, url);
     dependencies[crate_name]["version"] = value(dependency_version);
 }
 
@@ -420,13 +555,19 @@ fn set_inline_table_dependency_features(
 }
 
 /// Abstract type for `get_latest_dependency_version` function.
-type GetDependencyVersionFn = fn(&str, &Path, &Url) -> String;
+type GetDependencyVersionFn = fn(&str, bool, &Path, &Url) -> String;
 
 /// Gets the latest version for a dependency of `crate_name`.
 /// This is a wrapper function for `cargo_edit::get_latest_dependency` function.
-fn get_latest_dependency_version(crate_name: &str, manifest_path: &Path, url: &Url) -> String {
-    let latest_version = get_latest_dependency(crate_name, false, manifest_path, Some(url))
-        .unwrap_or_else(|_| panic!("Could not query the latest version of {}", crate_name));
+fn get_latest_dependency_version(
+    crate_name: &str,
+    flag_allow_prerelease: bool,
+    manifest_path: &Path,
+    url: &Url,
+) -> String {
+    let latest_version =
+        get_latest_dependency(crate_name, flag_allow_prerelease, manifest_path, Some(url))
+            .unwrap_or_else(|_| panic!("Could not query the latest version of {}", crate_name));
     let latest_version = latest_version
         .version()
         .expect("No latest shuttle-service version available");
@@ -453,6 +594,7 @@ mod shuttle_init_tests {
             tide: false,
             tower: false,
             poem: false,
+            serenity: false,
             path: PathBuf::new(),
         };
 
@@ -462,6 +604,7 @@ mod shuttle_init_tests {
             "tide" => init_args.tide = true,
             "tower" => init_args.tower = true,
             "poem" => init_args.poem = true,
+            "serenity" => init_args.serenity = true,
             _ => unreachable!(),
         }
 
@@ -478,6 +621,7 @@ mod shuttle_init_tests {
 
     fn mock_get_latest_dependency_version(
         _crate_name: &str,
+        _flag_allow_prerelease: bool,
         _manifest_path: &Path,
         _url: &Url,
     ) -> String {
@@ -493,6 +637,7 @@ mod shuttle_init_tests {
             Box::new(ShuttleInitTide),
             Box::new(ShuttleInitTower),
             Box::new(ShuttleInitPoem),
+            Box::new(ShuttleInitSerenity),
         ];
 
         for (framework, expected_framework_init) in frameworks.into_iter().zip(framework_inits) {
@@ -535,6 +680,7 @@ mod shuttle_init_tests {
             dependencies,
             &manifest_path,
             &url,
+            false,
             mock_get_latest_dependency_version,
         );
 
@@ -558,6 +704,7 @@ mod shuttle_init_tests {
             dependencies,
             &manifest_path,
             &url,
+            false,
             mock_get_latest_dependency_version,
         );
 
@@ -581,6 +728,7 @@ mod shuttle_init_tests {
             dependencies,
             &manifest_path,
             &url,
+            false,
             mock_get_latest_dependency_version,
         );
 
@@ -613,6 +761,7 @@ mod shuttle_init_tests {
             dependencies,
             &manifest_path,
             &url,
+            false,
             mock_get_latest_dependency_version,
         );
 
@@ -644,6 +793,7 @@ mod shuttle_init_tests {
             dependencies,
             &manifest_path,
             &url,
+            false,
             mock_get_latest_dependency_version,
         );
 
@@ -675,6 +825,7 @@ mod shuttle_init_tests {
             dependencies,
             &manifest_path,
             &url,
+            false,
             mock_get_latest_dependency_version,
         );
 
@@ -707,6 +858,7 @@ mod shuttle_init_tests {
             dependencies,
             &manifest_path,
             &url,
+            false,
             mock_get_latest_dependency_version,
         );
 
@@ -724,5 +876,65 @@ mod shuttle_init_tests {
         "#};
 
         assert_eq!(cargo_toml.to_string(), expected);
+    }
+
+    #[test]
+    fn test_set_cargo_dependencies_serenity() {
+        let mut cargo_toml = cargo_toml_factory();
+        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
+        let manifest_path = PathBuf::new();
+        let url = Url::parse("https://shuttle.rs").unwrap();
+
+        set_inline_table_dependency_version(
+            "shuttle-service",
+            dependencies,
+            &manifest_path,
+            &url,
+            false,
+            mock_get_latest_dependency_version,
+        );
+
+        ShuttleInitSerenity.set_cargo_dependencies(
+            dependencies,
+            &manifest_path,
+            &url,
+            mock_get_latest_dependency_version,
+        );
+
+        let expected = indoc! {r#"
+            [dependencies]
+            shuttle-service = { version = "1.0", features = ["bot-serenity", "sqlx-postgres", "secrets"] }
+            log = "1.0"
+            serenity = { version = "1.0", default-features = false, features = ["client", "gateway", "rustls_backend", "model"] }
+            sqlx = { version = "1.0", features = ["runtime-tokio-native-tls", "postgres"] }
+        "#};
+
+        assert_eq!(cargo_toml.to_string(), expected);
+    }
+
+    #[test]
+    /// Makes sure that Rocket uses allow_prerelease flag when fetching the latest version
+    fn test_get_latest_dependency_version_rocket() {
+        let mut cargo_toml = cargo_toml_factory();
+        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
+        let manifest_path = PathBuf::new();
+        let url = Url::parse("https://github.com/rust-lang/crates.io-index").unwrap();
+
+        ShuttleInitRocket.set_cargo_dependencies(
+            dependencies,
+            &manifest_path,
+            &url,
+            get_latest_dependency_version,
+        );
+
+        let version = dependencies["rocket"].as_str().unwrap();
+
+        let expected = get_latest_dependency("rocket", true, &manifest_path, Some(&url))
+            .expect("Could not query the latest version of rocket")
+            .version()
+            .expect("no rocket version found")
+            .to_string();
+
+        assert_eq!(version, expected);
     }
 }

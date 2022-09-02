@@ -53,7 +53,7 @@ pub fn make_router(
         .route("/deployments/:id/logs/runtime", get(get_runtime_logs))
         .route("/version", get(get_version))
         .route(
-            "/secrets/:name",
+            "/secrets/:service_id",
             get(get_secrets),
         )
         .layer(Extension(persistence))
@@ -76,45 +76,52 @@ pub fn make_router(
 
 async fn list_services(
     Extension(persistence): Extension<Persistence>,
-) -> Result<Json<Vec<String>>> {
-    persistence
+) -> Result<Json<Vec<service::Response>>> {
+    let services = persistence
         .get_all_services()
-        .await
-        .map(Json)
-        .map_err(Error::from)
+        .await?
+        .into_iter()
+        .map(Into::into)
+        .collect();
+
+    Ok(Json(services))
 }
 
 async fn get_service(
     Extension(persistence): Extension<Persistence>,
     Path(name): Path<String>,
-) -> Result<Json<service::Response>> {
-    let deployments = persistence
-        .get_deployments(&name)
-        .await?
-        .into_iter()
-        .map(Into::into)
-        .collect();
-    let resources = persistence
-        .get_service_resources(&name)
-        .await?
-        .into_iter()
-        .map(Into::into)
-        .collect();
-    let secrets = persistence
-        .get_secrets(&name)
-        .await?
-        .into_iter()
-        .map(Into::into)
-        .collect();
+) -> Result<Json<service::Detailed>> {
+    if let Some(service) = persistence.get_service_by_name(&name).await? {
+        let deployments = persistence
+            .get_deployments(&service.id)
+            .await?
+            .into_iter()
+            .map(Into::into)
+            .collect();
+        let resources = persistence
+            .get_service_resources(&service.id)
+            .await?
+            .into_iter()
+            .map(Into::into)
+            .collect();
+        let secrets = persistence
+            .get_secrets(&service.id)
+            .await?
+            .into_iter()
+            .map(Into::into)
+            .collect();
 
-    let response = service::Response {
-        name,
-        deployments,
-        resources,
-        secrets,
-    };
+        let response = service::Detailed {
+            name: service.name,
+            deployments,
+            resources,
+            secrets,
+        };
 
-    Ok(Json(response))
+        Ok(Json(response))
+    } else {
+        Err(Error::NotFound)
+    }
 }
 
 async fn get_service_summary(
@@ -122,25 +129,29 @@ async fn get_service_summary(
     Extension(proxy_fqdn): Extension<FQDN>,
     Path(name): Path<String>,
 ) -> Result<Json<service::Summary>> {
-    let deployment = persistence
-        .get_active_deployment(&name)
-        .await?
-        .map(Into::into);
-    let resources = persistence
-        .get_service_resources(&name)
-        .await?
-        .into_iter()
-        .map(Into::into)
-        .collect();
+    if let Some(service) = persistence.get_service_by_name(&name).await? {
+        let deployment = persistence
+            .get_active_deployment(&service.id)
+            .await?
+            .map(Into::into);
+        let resources = persistence
+            .get_service_resources(&service.id)
+            .await?
+            .into_iter()
+            .map(Into::into)
+            .collect();
 
-    let response = service::Summary {
-        uri: format!("https://{name}.{proxy_fqdn}"),
-        name,
-        deployment,
-        resources,
-    };
+        let response = service::Summary {
+            uri: format!("https://{name}.{proxy_fqdn}"),
+            name,
+            deployment,
+            resources,
+        };
 
-    Ok(Json(response))
+        Ok(Json(response))
+    } else {
+        Err(Error::NotFound)
+    }
 }
 
 async fn post_service(
@@ -150,61 +161,71 @@ async fn post_service(
     Query(params): Query<HashMap<String, String>>,
     stream: BodyStream,
 ) -> Result<Json<deployment::Response>> {
-    let id = Uuid::new_v4();
+    if let Some(service) = persistence.get_service_by_name(&name).await? {
+        let id = Uuid::new_v4();
 
-    let deployment = Deployment {
-        id,
-        name: name.clone(),
-        state: State::Queued,
-        last_update: Utc::now(),
-    };
+        let deployment = Deployment {
+            id,
+            service_id: service.id,
+            state: State::Queued,
+            last_update: Utc::now(),
+        };
 
-    persistence.insert_deployment(deployment.clone()).await?;
+        persistence.insert_deployment(deployment.clone()).await?;
 
-    let queued = Queued {
-        id,
-        name,
-        data_stream: Box::pin(stream.map_err(Error::Streaming)),
-        will_run_tests: !params.contains_key("no-test"),
-    };
+        let queued = Queued {
+            id,
+            service_name: service.name,
+            service_id: service.id,
+            data_stream: Box::pin(stream.map_err(Error::Streaming)),
+            will_run_tests: !params.contains_key("no-test"),
+        };
 
-    deployment_manager.queue_push(queued).await;
+        deployment_manager.queue_push(queued).await;
 
-    Ok(Json(deployment.into()))
+        Ok(Json(deployment.into()))
+    } else {
+        Err(Error::NotFound)
+    }
 }
 
 async fn delete_service(
     Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
     Path(name): Path<String>,
-) -> Result<Json<service::Response>> {
-    let old_deployments = persistence.delete_service(&name).await?;
+) -> Result<Json<service::Detailed>> {
+    if let Some(service) = persistence.get_service_by_name(&name).await? {
+        persistence.delete_service(&service.id).await?;
+        let old_deployments = persistence.delete_service_deployments(&service.id).await?;
 
-    for deployment in old_deployments.iter() {
-        deployment_manager.kill(deployment.id).await;
+        for deployment in old_deployments.iter() {
+            deployment_manager.kill(deployment.id).await;
+        }
+
+        let resources = persistence
+            .get_service_resources(&service.id)
+            .await?
+            .into_iter()
+            .map(Into::into)
+            .collect();
+        let secrets = persistence
+            .get_secrets(&service.id)
+            .await?
+            .into_iter()
+            .map(Into::into)
+            .collect();
+
+        let response = service::Detailed {
+            name: service.name,
+            deployments: old_deployments.into_iter().map(Into::into).collect(),
+            resources,
+            secrets,
+        };
+
+        Ok(Json(response))
+    } else {
+        Err(Error::NotFound)
     }
-
-    let resources = persistence
-        .get_service_resources(&name)
-        .await?
-        .into_iter()
-        .map(Into::into)
-        .collect();
-    let secrets = persistence
-        .get_secrets(&name)
-        .await?
-        .into_iter()
-        .map(Into::into)
-        .collect();
-
-    let response = service::Response {
-        name,
-        deployments: old_deployments.into_iter().map(Into::into).collect(),
-        resources,
-        secrets,
-    };
-
-    Ok(Json(response))
 }
 
 async fn get_deployment(
@@ -414,14 +435,18 @@ async fn get_secrets(
     Extension(persistence): Extension<Persistence>,
     Path(name): Path<String>,
 ) -> Result<Json<Vec<secret::Response>>> {
-    let keys = persistence
-        .get_secrets(&name)
-        .await?
-        .into_iter()
-        .map(Into::into)
-        .collect();
+    if let Some(service) = persistence.get_service_by_name(&name).await? {
+        let keys = persistence
+            .get_secrets(&service.id)
+            .await?
+            .into_iter()
+            .map(Into::into)
+            .collect();
 
-    Ok(Json(keys))
+        Ok(Json(keys))
+    } else {
+        Err(Error::NotFound)
+    }
 }
 
 // TODO: move to gateway

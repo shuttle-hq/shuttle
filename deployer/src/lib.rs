@@ -31,7 +31,8 @@ pub async fn start(
     for existing_deployment in persistence.get_all_runnable_deployments().await.unwrap() {
         let built = Built {
             id: existing_deployment.id,
-            name: existing_deployment.name,
+            service_name: existing_deployment.service_name,
+            service_id: existing_deployment.service_id,
         };
         deployment_manager.run_push(built).await;
     }

@@ -83,7 +83,8 @@ async fn promote_to_run(built: Built, run_send: RunSender) {
 
 pub struct Queued {
     pub id: Uuid,
-    pub name: String,
+    pub service_name: String,
+    pub service_id: Uuid,
     pub data_stream: Pin<Box<dyn Stream<Item = Result<Bytes>> + Send + Sync>>,
     pub will_run_tests: bool,
 }
@@ -101,13 +102,13 @@ impl Queued {
 
         info!("Extracting received data");
 
-        let project_path = PathBuf::from(BUILDS_PATH).join(&self.name);
+        let project_path = PathBuf::from(BUILDS_PATH).join(&self.service_name);
         fs::create_dir_all(project_path.clone()).await?;
 
         extract_tar_gz_data(vec.as_slice(), &project_path)?;
 
         let secrets = get_secrets(&project_path).await?;
-        set_secrets(secrets, &self.name, secret_recorder).await?;
+        set_secrets(secrets, &self.service_id, secret_recorder).await?;
 
         info!("Building deployment");
 
@@ -160,7 +161,8 @@ impl Queued {
 
         let built = Built {
             id: self.id,
-            name: self.name,
+            service_name: self.service_name,
+            service_id: self.service_id,
         };
 
         Ok(built)
@@ -171,7 +173,8 @@ impl fmt::Debug for Queued {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Queued")
             .field("id", &self.id)
-            .field("name", &self.name)
+            .field("service_name", &self.service_name)
+            .field("service_id", &self.service_id)
             .field("will_run_tests", &self.will_run_tests)
             .finish_non_exhaustive()
     }
@@ -194,17 +197,17 @@ async fn get_secrets(project_path: &Path) -> Result<BTreeMap<String, String>> {
     }
 }
 
-#[instrument(skip(secrets, project_name, secret_recorder))]
+#[instrument(skip(secrets, service_id, secret_recorder))]
 async fn set_secrets(
     secrets: BTreeMap<String, String>,
-    project_name: &str,
+    service_id: &Uuid,
     secret_recorder: impl SecretRecorder,
 ) -> Result<()> {
     for (key, value) in secrets.into_iter() {
         debug!(key, "setting secret");
 
         secret_recorder
-            .insert_secret(project_name, &key, &value)
+            .insert_secret(service_id, &key, &value)
             .await
             .map_err(|e| Error::SecretsSet(Box::new(e)))?;
     }

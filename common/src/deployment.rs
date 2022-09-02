@@ -10,7 +10,7 @@ use uuid::Uuid;
 #[derive(Deserialize, Serialize)]
 pub struct Response {
     pub id: Uuid,
-    pub name: String,
+    pub service_id: Uuid,
     pub state: State,
     pub last_update: DateTime<Utc>,
 }
@@ -33,13 +33,12 @@ impl Display for Response {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{} deployment '{}' for {} is {}",
+            "{} deployment '{}' is {}",
             self.last_update
                 .format("%Y-%m-%dT%H:%M:%SZ")
                 .to_string()
                 .dim(),
             self.id,
-            self.name,
             self.state.to_string().cyan()
         )
     }

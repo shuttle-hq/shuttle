@@ -51,14 +51,14 @@ pub async fn task(
             }
         };
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
-        let project_name = match ProjectName::from_str(&built.name) {
+        let project_name = match ProjectName::from_str(&built.service_name) {
             Ok(name) => name,
             Err(err) => {
                 start_crashed_cleanup(&id, err);
                 continue;
             }
         };
-        let mut factory = abstract_factory.get_factory(project_name);
+        let mut factory = abstract_factory.get_factory(project_name, built.service_id);
         let logger = logger_factory.get_logger(id);
         let cleanup = move |result: std::result::Result<
             std::result::Result<(), shuttle_service::Error>,
@@ -114,7 +114,8 @@ fn start_crashed_cleanup(_id: &Uuid, err: impl std::error::Error + 'static) {
 #[derive(Clone, Debug)]
 pub struct Built {
     pub id: Uuid,
-    pub name: String,
+    pub service_name: String,
+    pub service_id: Uuid,
 }
 
 impl Built {
@@ -364,7 +365,8 @@ mod tests {
     async fn missing_so() {
         let built = Built {
             id: Uuid::new_v4(),
-            name: "test".to_string(),
+            service_name: "test".to_string(),
+            service_id: Uuid::new_v4(),
         };
         let (_kill_send, kill_recv) = broadcast::channel(1);
 
@@ -414,7 +416,8 @@ mod tests {
 
         Built {
             id,
-            name: crate_name.to_string(),
+            service_name: crate_name.to_string(),
+            service_id: Uuid::new_v4(),
         }
     }
 }

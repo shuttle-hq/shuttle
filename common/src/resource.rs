@@ -2,12 +2,13 @@ use std::fmt::Display;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use uuid::Uuid;
 
 use crate::{database, DatabaseReadyInfo};
 
 #[derive(Deserialize, Serialize)]
 pub struct Response {
-    pub service_name: String,
+    pub service_id: Uuid,
     pub r#type: Type,
     pub data: Value,
 }

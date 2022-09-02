@@ -3,6 +3,7 @@ mod error;
 mod log;
 mod resource;
 mod secret;
+mod service;
 mod state;
 
 use crate::deployment::deploy_layer::{self, LogRecorder, LogType};
@@ -28,6 +29,7 @@ pub use self::log::{Level as LogLevel, Log};
 pub use self::resource::{Resource, ResourceRecorder, Type as ResourceType};
 use self::secret::Secret;
 pub use self::secret::{SecretGetter, SecretRecorder};
+use self::service::Service;
 pub use self::state::State;
 
 const DB_PATH: &str = "deployer.sqlite";
@@ -66,11 +68,19 @@ impl Persistence {
                 name TEXT UNIQUE     -- Name of the user.
             );
 
+            CREATE TABLE IF NOT EXISTS services (
+                id TEXT PRIMARY KEY, -- Identifier of the service.
+                name TEXT UNIQUE,    -- Name of the service.
+                user_id TEXT,        -- Name of the service.
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            );
+
             CREATE TABLE IF NOT EXISTS deployments (
                 id TEXT PRIMARY KEY, -- Identifier of the deployment.
-                name TEXT,           -- Name of the service being deployed.
+                service_id TEXT,     -- Identifier of the service this deployment belongs to.
                 state TEXT,          -- Enum indicating the current state of the deployment.
-                last_update INTEGER  -- Unix epoch of the last status update
+                last_update INTEGER, -- Unix epoch of the last status update
+                FOREIGN KEY(service_id) REFERENCES services(id)
             );
 
             CREATE TABLE IF NOT EXISTS logs (
@@ -82,22 +92,25 @@ impl Persistence {
                 line INTEGER,      -- The line log took place on
                 target TEXT,       -- The module log took place in
                 fields TEXT,       -- Log fields object.
-                PRIMARY KEY (id, timestamp)
+                PRIMARY KEY (id, timestamp),
+                FOREIGN KEY(id) REFERENCES deployments(id)
             );
 
             CREATE TABLE IF NOT EXISTS resources (
-                name TEXT,         -- Name of the service this resource belongs to.
+                service_id TEXT,   -- Identifier of the service this resource belongs to.
                 type TEXT,         -- Type of resource this is.
                 data TEXT,         -- Data about this resource.
-                PRIMARY KEY (name, type)
+                PRIMARY KEY (service_id, type),
+                FOREIGN KEY(service_id) REFERENCES services(id)
             );
 
             CREATE TABLE IF NOT EXISTS secrets (
-                name TEXT,            -- Name of the service this secret belongs to.
+                service_id TEXT,      -- Identifier of the service this secret belongs to.
                 key TEXT,             -- Key / name of this secret.
                 value TEXT,           -- The actual secret.
                 last_update INTEGER,  -- Unix epoch of the last secret update
-                PRIMARY KEY (name, key)
+                PRIMARY KEY (service_id, key),
+                FOREIGN KEY(service_id) REFERENCES services(id)
             );
         ").execute(&pool).await.unwrap();
 
@@ -181,60 +194,91 @@ impl Persistence {
     pub async fn insert_deployment(&self, deployment: impl Into<Deployment>) -> Result<()> {
         let deployment = deployment.into();
 
-        sqlx::query("INSERT INTO deployments (id, name, state, last_update) VALUES (?, ?, ?, ?)")
-            .bind(deployment.id)
-            .bind(deployment.name)
-            .bind(deployment.state)
-            .bind(deployment.last_update)
-            .execute(&self.pool)
-            .await
-            .map(|_| ())
-            .map_err(Error::from)
+        sqlx::query(
+            "INSERT INTO deployments (id, service_id, state, last_update) VALUES (?, ?, ?, ?)",
+        )
+        .bind(deployment.id)
+        .bind(deployment.service_id)
+        .bind(deployment.state)
+        .bind(deployment.last_update)
+        .execute(&self.pool)
+        .await
+        .map(|_| ())
+        .map_err(Error::from)
     }
 
     pub async fn get_deployment(&self, id: &Uuid) -> Result<Option<Deployment>> {
         get_deployment(&self.pool, id).await
     }
 
-    pub async fn get_deployments(&self, name: &str) -> Result<Vec<Deployment>> {
-        sqlx::query_as("SELECT * FROM deployments WHERE name = ?")
-            .bind(name)
+    pub async fn get_deployments(&self, service_id: &Uuid) -> Result<Vec<Deployment>> {
+        sqlx::query_as("SELECT * FROM deployments WHERE service_id = ?")
+            .bind(service_id)
             .fetch_all(&self.pool)
             .await
             .map_err(Error::from)
     }
 
-    pub async fn get_active_deployment(&self, name: &str) -> Result<Option<Deployment>> {
-        sqlx::query_as("SELECT * FROM deployments WHERE name = ? AND state = ?")
-            .bind(name)
+    pub async fn get_active_deployment(&self, service_id: &Uuid) -> Result<Option<Deployment>> {
+        sqlx::query_as("SELECT * FROM deployments WHERE service_id = ? AND state = ?")
+            .bind(service_id)
             .bind(State::Running)
             .fetch_optional(&self.pool)
             .await
             .map_err(Error::from)
     }
 
-    pub async fn delete_service(&self, name: &str) -> Result<Vec<Deployment>> {
-        let deployments = self.get_deployments(name).await?;
+    pub async fn get_service(&self, id: &Uuid) -> Result<Option<Service>> {
+        sqlx::query_as("SELECT * FROM services WHERE id = ?")
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(Error::from)
+    }
 
-        let _ = sqlx::query("DELETE FROM deployments WHERE name = ?")
+    pub async fn get_service_by_name(&self, name: &str) -> Result<Option<Service>> {
+        sqlx::query_as("SELECT * FROM services WHERE name = ?")
             .bind(name)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(Error::from)
+    }
+
+    pub async fn delete_service(&self, id: &Uuid) -> Result<()> {
+        sqlx::query("DELETE FROM service WHERE id = ?")
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .map(|_| ())
+            .map_err(Error::from)
+    }
+
+    pub async fn delete_service_deployments(&self, service_id: &Uuid) -> Result<Vec<Deployment>> {
+        let deployments = self.get_deployments(service_id).await?;
+
+        let _ = sqlx::query("DELETE FROM deployments WHERE service_id = ?")
+            .bind(service_id)
             .execute(&self.pool)
             .await;
 
         Ok(deployments)
     }
 
-    pub async fn get_all_services(&self) -> Result<Vec<String>> {
-        sqlx::query_as::<_, (String,)>("SELECT UNIQUE(name) FROM deployments")
+    pub async fn get_all_services(&self) -> Result<Vec<Service>> {
+        sqlx::query_as("SELECT * FROM services")
             .fetch_all(&self.pool)
             .await
             .map_err(Error::from)
-            .map(|vec| vec.into_iter().map(|t| t.0).collect())
     }
 
     pub async fn get_all_runnable_deployments(&self) -> Result<Vec<DeploymentRunnable>> {
         sqlx::query_as(
-            r#"SELECT id, name, max(last_update) as last_update FROM deployments WHERE state = ? GROUP BY name"#,
+            r#"SELECT d.id, service_id, s.name AS service_name, max(last_update) as last_update
+                FROM deployments AS d
+                JOIN services AS s ON s.id = d.service_id
+                WHERE state = ?
+                GROUP BY service_id
+                ORDER BY last_update"#,
         )
         .bind(State::Running)
         .fetch_all(&self.pool)
@@ -242,9 +286,9 @@ impl Persistence {
         .map_err(Error::from)
     }
 
-    pub async fn get_service_resources(&self, name: &str) -> Result<Vec<Resource>> {
-        sqlx::query_as(r#"SELECT * FROM resources WHERE name = ?"#)
-            .bind(name)
+    pub async fn get_service_resources(&self, service_id: &Uuid) -> Result<Vec<Resource>> {
+        sqlx::query_as(r#"SELECT * FROM resources WHERE service_id = ?"#)
+            .bind(service_id)
             .fetch_all(&self.pool)
             .await
             .map_err(Error::from)
@@ -352,8 +396,8 @@ impl ResourceRecorder for Persistence {
     type Err = Error;
 
     async fn insert_resource(&self, resource: &Resource) -> Result<()> {
-        sqlx::query("INSERT OR REPLACE INTO resources (name, type, data) VALUES (?, ?, ?)")
-            .bind(&resource.name)
+        sqlx::query("INSERT OR REPLACE INTO resources (service_id, type, data) VALUES (?, ?, ?)")
+            .bind(&resource.service_id)
             .bind(resource.r#type)
             .bind(&resource.data)
             .execute(&self.pool)
@@ -367,11 +411,11 @@ impl ResourceRecorder for Persistence {
 impl SecretRecorder for Persistence {
     type Err = Error;
 
-    async fn insert_secret(&self, name: &str, key: &str, value: &str) -> Result<()> {
+    async fn insert_secret(&self, service_id: &Uuid, key: &str, value: &str) -> Result<()> {
         sqlx::query(
-            "INSERT OR REPLACE INTO secrets (name, key, value, last_update) VALUES (?, ?, ?, ?)",
+            "INSERT OR REPLACE INTO secrets (service_id, key, value, last_update) VALUES (?, ?, ?, ?)",
         )
-        .bind(name)
+        .bind(service_id)
         .bind(key)
         .bind(value)
         .bind(Utc::now())
@@ -386,9 +430,9 @@ impl SecretRecorder for Persistence {
 impl SecretGetter for Persistence {
     type Err = Error;
 
-    async fn get_secrets(&self, name: &str) -> Result<Vec<Secret>> {
-        sqlx::query_as("SELECT * FROM secrets WHERE name = ? ORDER BY key")
-            .bind(name)
+    async fn get_secrets(&self, service_id: &Uuid) -> Result<Vec<Secret>> {
+        sqlx::query_as("SELECT * FROM secrets WHERE service_id = ? ORDER BY key")
+            .bind(service_id)
             .fetch_all(&self.pool)
             .await
             .map_err(Error::from)
@@ -410,11 +454,12 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_updates() {
         let (p, _) = Persistence::new_in_memory().await;
+        let service_id = add_service(&p.pool).await.unwrap();
 
         let id = Uuid::new_v4();
         let deployment = Deployment {
             id,
-            name: "abc".to_string(),
+            service_id,
             state: State::Queued,
             last_update: Utc.ymd(2022, 4, 25).and_hms(4, 43, 33),
         };
@@ -441,27 +486,30 @@ mod tests {
     async fn deployment_active() {
         let (p, _) = Persistence::new_in_memory().await;
 
+        let xyz_id = add_service(&p.pool).await.unwrap();
+        let service_id = add_service(&p.pool).await.unwrap();
+
         let deployment_crashed = Deployment {
             id: Uuid::new_v4(),
-            name: "xyz".to_string(),
+            service_id: xyz_id,
             state: State::Crashed,
             last_update: Utc.ymd(2022, 4, 25).and_hms(7, 29, 35),
         };
         let deployment_stopped = Deployment {
             id: Uuid::new_v4(),
-            name: "xyz".to_string(),
+            service_id: xyz_id,
             state: State::Stopped,
             last_update: Utc.ymd(2022, 4, 25).and_hms(7, 49, 35),
         };
         let deployment_other = Deployment {
             id: Uuid::new_v4(),
-            name: "other".to_string(),
+            service_id,
             state: State::Running,
             last_update: Utc.ymd(2022, 4, 25).and_hms(7, 39, 39),
         };
         let deployment_running = Deployment {
             id: Uuid::new_v4(),
-            name: "xyz".to_string(),
+            service_id: xyz_id,
             state: State::Running,
             last_update: Utc.ymd(2022, 4, 25).and_hms(7, 48, 29),
         };
@@ -476,7 +524,7 @@ mod tests {
         }
 
         assert_eq!(
-            p.get_active_deployment("xyz").await.unwrap().unwrap(),
+            p.get_active_deployment(&xyz_id).await.unwrap().unwrap(),
             deployment_running
         );
     }
@@ -485,37 +533,42 @@ mod tests {
     async fn fetching_runnable_deployments() {
         let (p, _) = Persistence::new_in_memory().await;
 
-        let id_bar = Uuid::new_v4();
-        let id_foo2 = Uuid::new_v4();
+        let bar_id = add_service_named(&p.pool, "bar").await.unwrap();
+        let foo_id = add_service_named(&p.pool, "foo").await.unwrap();
+        let service_id = add_service(&p.pool).await.unwrap();
+        let service_id2 = add_service(&p.pool).await.unwrap();
+
+        let id_1 = Uuid::new_v4();
+        let id_2 = Uuid::new_v4();
 
         for deployment in [
             Deployment {
                 id: Uuid::new_v4(),
-                name: "abc".to_string(),
+                service_id,
                 state: State::Built,
                 last_update: Utc.ymd(2022, 4, 25).and_hms(4, 29, 33),
             },
             Deployment {
                 id: Uuid::new_v4(),
-                name: "foo".to_string(),
+                service_id: foo_id,
                 state: State::Running,
                 last_update: Utc.ymd(2022, 4, 25).and_hms(4, 29, 44),
             },
             Deployment {
-                id: id_bar,
-                name: "bar".to_string(),
+                id: id_1,
+                service_id: bar_id,
                 state: State::Running,
                 last_update: Utc.ymd(2022, 4, 25).and_hms(4, 33, 48),
             },
             Deployment {
                 id: Uuid::new_v4(),
-                name: "def".to_string(),
+                service_id: service_id2,
                 state: State::Crashed,
                 last_update: Utc.ymd(2022, 4, 25).and_hms(4, 38, 52),
             },
             Deployment {
-                id: id_foo2,
-                name: "foo".to_string(),
+                id: id_2,
+                service_id: foo_id,
                 state: State::Running,
                 last_update: Utc.ymd(2022, 4, 25).and_hms(4, 42, 32),
             },
@@ -528,12 +581,14 @@ mod tests {
             runnable,
             [
                 DeploymentRunnable {
-                    id: id_bar,
-                    name: "bar".to_string(),
+                    id: id_1,
+                    service_name: "bar".to_string(),
+                    service_id: bar_id,
                 },
                 DeploymentRunnable {
-                    id: id_foo2,
-                    name: "foo".to_string(),
+                    id: id_2,
+                    service_name: "foo".to_string(),
+                    service_id: foo_id,
                 },
             ]
         );
@@ -543,16 +598,18 @@ mod tests {
     async fn deployment_deletion() {
         let (p, _) = Persistence::new_in_memory().await;
 
+        let service_id = add_service(&p.pool).await.unwrap();
+
         let deployments = [
             Deployment {
                 id: Uuid::new_v4(),
-                name: "x".to_string(),
+                service_id,
                 state: State::Running,
                 last_update: Utc::now(),
             },
             Deployment {
                 id: Uuid::new_v4(),
-                name: "x".to_string(),
+                service_id,
                 state: State::Running,
                 last_update: Utc::now(),
             },
@@ -562,18 +619,22 @@ mod tests {
             p.insert_deployment(deployment.clone()).await.unwrap();
         }
 
-        assert!(!p.get_deployments("x").await.unwrap().is_empty());
-        assert_eq!(p.delete_service("x").await.unwrap(), deployments);
-        assert!(p.get_deployments("x").await.unwrap().is_empty());
+        assert!(!p.get_deployments(&service_id).await.unwrap().is_empty());
+        // assert_eq!(p.delete_service(&service_id).await.unwrap(), deployments);
+        assert_eq!(
+            p.delete_service_deployments(&service_id).await.unwrap(),
+            deployments
+        );
+        assert!(p.get_deployments(&service_id).await.unwrap().is_empty());
     }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn log_insert() {
         let (p, _) = Persistence::new_in_memory().await;
+        let deployment_id = add_deployment(&p.pool).await.unwrap();
 
-        let id = Uuid::new_v4();
         let log = Log {
-            id,
+            id: deployment_id,
             timestamp: Utc::now(),
             state: State::Queued,
             level: Level::Info,
@@ -585,7 +646,7 @@ mod tests {
 
         insert_log(&p.pool, log.clone()).await.unwrap();
 
-        let logs = p.get_deployment_logs(&id).await.unwrap();
+        let logs = p.get_deployment_logs(&deployment_id).await.unwrap();
         assert!(!logs.is_empty(), "there should be one log");
 
         assert_eq!(logs.first().unwrap(), &log);
@@ -594,10 +655,11 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn logs_for_deployment() {
         let (p, _) = Persistence::new_in_memory().await;
+        let deployment_a = add_deployment(&p.pool).await.unwrap();
+        let deployment_b = add_deployment(&p.pool).await.unwrap();
 
-        let id_a = Uuid::new_v4();
         let log_a1 = Log {
-            id: id_a,
+            id: deployment_a,
             timestamp: Utc::now(),
             state: State::Queued,
             level: Level::Info,
@@ -607,7 +669,7 @@ mod tests {
             fields: json!({"message": "job queued"}),
         };
         let log_b = Log {
-            id: Uuid::new_v4(),
+            id: deployment_b,
             timestamp: Utc::now(),
             state: State::Queued,
             level: Level::Info,
@@ -617,7 +679,7 @@ mod tests {
             fields: json!({"message": "job queued"}),
         };
         let log_a2 = Log {
-            id: id_a,
+            id: deployment_a,
             timestamp: Utc::now(),
             state: State::Building,
             level: Level::Warn,
@@ -627,12 +689,12 @@ mod tests {
             fields: json!({"message": "unused Result"}),
         };
 
-        insert_log(&p.pool, log_a1.clone()).await.unwrap();
-        insert_log(&p.pool, log_b).await.unwrap();
-        insert_log(&p.pool, log_a2.clone()).await.unwrap();
+        for log in [log_a1.clone(), log_b, log_a2.clone()] {
+            insert_log(&p.pool, log).await.unwrap();
+        }
 
-        let logs = p.get_deployment_logs(&id_a).await.unwrap();
-        assert!(!logs.is_empty(), "there should be three logs");
+        let logs = p.get_deployment_logs(&deployment_a).await.unwrap();
+        assert!(!logs.is_empty(), "there should be two logs");
 
         assert_eq!(logs, vec![log_a1, log_a2]);
     }
@@ -640,10 +702,10 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn log_recorder_event() {
         let (p, handle) = Persistence::new_in_memory().await;
+        let deployment_id = add_deployment(&p.pool).await.unwrap();
 
-        let id = Uuid::new_v4();
         let event = deploy_layer::Log {
-            id,
+            id: deployment_id,
             timestamp: Utc::now(),
             state: State::Queued,
             level: Level::Info,
@@ -660,12 +722,12 @@ mod tests {
         drop(p.log_send);
         assert!(handle.await.is_ok());
 
-        let logs = get_deployment_logs(&p.pool, &id).await.unwrap();
+        let logs = get_deployment_logs(&p.pool, &deployment_id).await.unwrap();
 
         assert!(!logs.is_empty(), "there should be one log");
 
         let log = logs.first().unwrap();
-        assert_eq!(log.id, id);
+        assert_eq!(log.id, deployment_id);
         assert_eq!(log.state, State::Queued);
         assert_eq!(log.level, Level::Info);
         assert_eq!(log.file, Some("file.rs".to_string()));
@@ -678,11 +740,12 @@ mod tests {
         let (p, handle) = Persistence::new_in_memory().await;
 
         let id = Uuid::new_v4();
+        let service_id = add_service(&p.pool).await.unwrap();
 
         p.insert_deployment(Deployment {
             id,
-            name: "z".to_string(),
-            state: State::Queued,
+            service_id,
+            state: State::Queued, // Should be different from the state recorded below
             last_update: Utc.ymd(2022, 4, 29).and_hms(2, 39, 39),
         })
         .await
@@ -719,7 +782,7 @@ mod tests {
             get_deployment(&p.pool, &id).await.unwrap().unwrap(),
             Deployment {
                 id,
-                name: "z".to_string(),
+                service_id,
                 state: State::Running,
                 last_update: Utc.ymd(2022, 4, 29).and_hms(2, 39, 59),
             }
@@ -729,23 +792,25 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_resources() {
         let (p, _) = Persistence::new_in_memory().await;
+        let service_id = add_service(&p.pool).await.unwrap();
+        let service_id2 = add_service(&p.pool).await.unwrap();
 
         let resource1 = Resource {
-            name: "foo".to_string(),
+            service_id,
             r#type: ResourceType::Database(resource::DatabaseType::Shared(
                 resource::database::SharedType::Postgres,
             )),
             data: json!({"username": "root"}),
         };
         let resource2 = Resource {
-            name: "foo".to_string(),
+            service_id,
             r#type: ResourceType::Database(resource::DatabaseType::AwsRds(
                 resource::database::AwsRdsType::MariaDB,
             )),
             data: json!({"uri": "postgres://localhost"}),
         };
         let resource3 = Resource {
-            name: "bar".to_string(),
+            service_id: service_id2,
             r#type: ResourceType::Database(resource::DatabaseType::AwsRds(
                 resource::database::AwsRdsType::Postgres,
             )),
@@ -753,7 +818,7 @@ mod tests {
         };
         // This makes sure only the last instance of a type is saved (clashes with [resource1])
         let resource4 = Resource {
-            name: "foo".to_string(),
+            service_id,
             r#type: ResourceType::Database(resource::DatabaseType::Shared(
                 resource::database::SharedType::Postgres,
             )),
@@ -764,7 +829,7 @@ mod tests {
             p.insert_resource(resource).await.unwrap();
         }
 
-        let resources = p.get_service_resources("foo").await.unwrap();
+        let resources = p.get_service_resources(&service_id).await.unwrap();
 
         assert_eq!(resources, vec![resource2, resource4]);
     }
@@ -773,21 +838,24 @@ mod tests {
     async fn secrets() {
         let (p, _) = Persistence::new_in_memory().await;
 
-        p.insert_secret("test_service", "key1", "value1")
+        let service_id = add_service(&p.pool).await.unwrap();
+        let service_id2 = add_service(&p.pool).await.unwrap();
+
+        p.insert_secret(&service_id, "key1", "value1")
             .await
             .unwrap();
-        p.insert_secret("another_service", "key2", "value2")
+        p.insert_secret(&service_id2, "key2", "value2")
             .await
             .unwrap();
-        p.insert_secret("test_service", "key3", "value3")
+        p.insert_secret(&service_id, "key3", "value3")
             .await
             .unwrap();
-        p.insert_secret("test_service", "key1", "value1_updated")
+        p.insert_secret(&service_id, "key1", "value1_updated")
             .await
             .unwrap();
 
         let actual: Vec<_> = p
-            .get_secrets("test_service")
+            .get_secrets(&service_id)
             .await
             .unwrap()
             .into_iter()
@@ -799,13 +867,13 @@ mod tests {
             .collect();
         let expected = vec![
             Secret {
-                name: "test_service".to_string(),
+                service_id,
                 key: "key1".to_string(),
                 value: "value1_updated".to_string(),
                 last_update: Default::default(),
             },
             Secret {
-                name: "test_service".to_string(),
+                service_id,
                 key: "key3".to_string(),
                 value: "value3".to_string(),
                 last_update: Default::default(),
@@ -815,12 +883,60 @@ mod tests {
         assert_eq!(actual, expected);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn get_or_create_user() {
         let (p, _) = Persistence::new_in_memory().await;
         let initial = p.get_or_create_user("test-user").await.unwrap();
         let next = p.get_or_create_user("test-user").await.unwrap();
 
         assert_eq!(initial, next, "user id should stay the same");
+    }
+
+    async fn add_deployment(pool: &SqlitePool) -> Result<Uuid> {
+        let service_id = add_service(pool).await?;
+        let deployment_id = Uuid::new_v4();
+
+        sqlx::query(
+            "INSERT INTO deployments (id, service_id, state, last_update) VALUES (?, ?, ?, ?)",
+        )
+        .bind(&deployment_id)
+        .bind(&service_id)
+        .bind(State::Running)
+        .bind(Utc::now())
+        .execute(pool)
+        .await?;
+
+        Ok(deployment_id)
+    }
+
+    async fn add_service(pool: &SqlitePool) -> Result<Uuid> {
+        add_service_named(pool, &get_random_name()).await
+    }
+
+    async fn add_service_named(pool: &SqlitePool, name: &str) -> Result<Uuid> {
+        let service_id = Uuid::new_v4();
+        let user_id = Uuid::new_v4();
+
+        sqlx::query("INSERT INTO users (id, name) VALUES (?, ?)")
+            .bind(&user_id)
+            .bind(get_random_name())
+            .execute(pool)
+            .await?;
+        sqlx::query("INSERT INTO services (id, name, user_id) VALUES (?, ?, ?)")
+            .bind(&service_id)
+            .bind(name)
+            .bind(&user_id)
+            .execute(pool)
+            .await?;
+
+        Ok(service_id)
+    }
+
+    fn get_random_name() -> String {
+        rand::thread_rng()
+            .sample_iter(&rand::distributions::Alphanumeric)
+            .take(12)
+            .map(char::from)
+            .collect::<String>()
     }
 }

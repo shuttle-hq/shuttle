@@ -97,13 +97,13 @@ impl Client {
         Ok(stream)
     }
 
-    pub async fn delete_service(&self, project: &ProjectName) -> Result<service::Response> {
+    pub async fn delete_service(&self, project: &ProjectName) -> Result<service::Detailed> {
         let path = format!("/services/{}", project.as_str());
 
         self.delete(path).await
     }
 
-    pub async fn get_service_details(&self, project: &ProjectName) -> Result<service::Response> {
+    pub async fn get_service_details(&self, project: &ProjectName) -> Result<service::Detailed> {
         let path = format!("/services/{}", project.as_str());
 
         self.get(path).await

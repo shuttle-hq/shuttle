@@ -5,6 +5,7 @@ use sqlx::{
     Database, Sqlite,
 };
 use std::{borrow::Cow, fmt::Display, str::FromStr};
+use uuid::Uuid;
 
 pub use self::database::Type as DatabaseType;
 
@@ -17,7 +18,7 @@ pub trait ResourceRecorder: Clone + Send + Sync + 'static {
 
 #[derive(sqlx::FromRow, Debug, Eq, PartialEq)]
 pub struct Resource {
-    pub name: String,
+    pub service_id: Uuid,
     pub r#type: Type,
     pub data: serde_json::Value,
 }
@@ -25,7 +26,7 @@ pub struct Resource {
 impl From<Resource> for shuttle_common::resource::Response {
     fn from(resource: Resource) -> Self {
         shuttle_common::resource::Response {
-            service_name: resource.name,
+            service_id: resource.service_id,
             r#type: resource.r#type.into(),
             data: resource.data,
         }

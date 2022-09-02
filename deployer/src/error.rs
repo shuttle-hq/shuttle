@@ -33,8 +33,6 @@ pub enum Error {
     SecretsSet(#[source] Box<dyn StdError + Send>),
     #[error("Failed to parse secrets: {0}")]
     Persistence(#[from] crate::persistence::PersistenceError),
-    #[error("Not found")]
-    NotFound,
 }
 
 impl Serialize for Error {
@@ -51,13 +49,8 @@ impl Serialize for Error {
 
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
-        let status_code = match self {
-            Self::NotFound => StatusCode::NOT_FOUND,
-            _ => StatusCode::INTERNAL_SERVER_ERROR,
-        };
-
         (
-            status_code,
+            StatusCode::INTERNAL_SERVER_ERROR,
             [(
                 header::CONTENT_TYPE,
                 HeaderValue::from_static("application/json"),

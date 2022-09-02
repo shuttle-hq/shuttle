@@ -8,7 +8,7 @@ mod state;
 mod user;
 
 use crate::deployment::deploy_layer::{self, LogRecorder, LogType};
-use crate::handlers::UserValidator;
+use crate::handlers::{ServiceAuthorizer, UserValidator};
 use error::{Error, Result};
 use rand::Rng;
 
@@ -31,7 +31,7 @@ pub use self::log::{Level as LogLevel, Log};
 pub use self::resource::{Resource, ResourceRecorder, Type as ResourceType};
 use self::secret::Secret;
 pub use self::secret::{SecretGetter, SecretRecorder};
-use self::service::Service;
+pub use self::service::Service;
 pub use self::state::State;
 pub use self::user::User;
 
@@ -252,7 +252,7 @@ impl Persistence {
         }
     }
 
-    pub async fn get_service_by_name(&self, name: &str) -> Result<Option<Service>> {
+    async fn get_service_by_name(&self, name: &str) -> Result<Option<Service>> {
         sqlx::query_as("SELECT * FROM services WHERE name = ?")
             .bind(name)
             .fetch_optional(&self.pool)
@@ -466,6 +466,23 @@ impl UserValidator for Persistence {
     async fn is_user_valid(&self, api_key: &str) -> crate::error::Result<Option<User>> {
         sqlx::query_as("SELECT * FROM users WHERE api_key = ?")
             .bind(api_key)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(Error::from)
+            .map_err(crate::error::Error::Persistence)
+    }
+}
+
+#[async_trait::async_trait]
+impl ServiceAuthorizer for Persistence {
+    async fn does_user_own(
+        &self,
+        api_key: &str,
+        service_name: String,
+    ) -> crate::error::Result<Option<Service>> {
+        sqlx::query_as("SELECT * FROM services WHERE user_id = ? AND name = ?")
+            .bind(api_key)
+            .bind(service_name)
             .fetch_optional(&self.pool)
             .await
             .map_err(Error::from)
@@ -931,6 +948,11 @@ mod tests {
         let next = p.get_or_create_user("test-user").await.unwrap();
 
         assert_eq!(initial, next, "user id should stay the same");
+
+        assert_eq!(
+            Some(initial.clone()),
+            p.is_user_valid(&initial.api_key).await.unwrap(),
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -955,6 +977,11 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(service, get_result);
+
+        assert_eq!(
+            Some(service.clone()),
+            p.does_user_own(&api_key, service.name).await.unwrap(),
+        );
 
         p.delete_service(&service.id).await.unwrap();
         assert!(p

@@ -89,24 +89,9 @@ impl Client {
         &self,
         deployment_id: &Uuid,
     ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>> {
-        let mut ws_url = self.api_url.clone().replace("http", "ws");
-        let _ = write!(ws_url, "/ws/deployments/{}/logs/build", deployment_id);
+        let path = format!("/ws/deployments/{}/logs/build", deployment_id);
 
-        let mut request = ws_url.into_client_request()?;
-
-        if let Some(ref api_key) = self.api_key {
-            let cred = Credentials::new(api_key, "");
-            request
-                .headers_mut()
-                .append(AUTHORIZATION, cred.as_http_header().parse()?);
-        }
-
-        let (stream, _) = connect_async(request).await.with_context(|| {
-            error!("failed to connect to build logs websocket");
-            "could not connect to build logs websocket"
-        })?;
-
-        Ok(stream)
+        self.ws_get(path).await
     }
 
     pub async fn delete_service(&self, project: &ProjectName) -> Result<service::Detailed> {
@@ -167,24 +152,9 @@ impl Client {
         &self,
         deployment_id: &Uuid,
     ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>> {
-        let mut ws_url = self.api_url.clone().replace("http", "ws");
-        let _ = write!(ws_url, "/ws/deployments/{}/logs/runtime", deployment_id);
+        let path = format!("/ws/deployments/{}/logs/runtime", deployment_id);
 
-        let mut request = ws_url.into_client_request()?;
-
-        if let Some(ref api_key) = self.api_key {
-            let cred = Credentials::new(api_key, "");
-            request
-                .headers_mut()
-                .append(AUTHORIZATION, cred.as_http_header().parse()?);
-        }
-
-        let (stream, _) = connect_async(request).await.with_context(|| {
-            error!("failed to connect to runtime logs websocket");
-            "could not connect to runtime logs websocket"
-        })?;
-
-        Ok(stream)
+        self.ws_get(path).await
     }
 
     pub async fn get_deployment_details(
@@ -194,6 +164,26 @@ impl Client {
         let path = format!("/deployments/{}", deployment_id);
 
         self.get(path).await
+    }
+
+    async fn ws_get(&self, path: String) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>> {
+        let ws_scheme = self.api_url.clone().replace("http", "ws");
+        let url = format!("{}{}", ws_scheme, path);
+        let mut request = url.into_client_request()?;
+
+        if let Some(ref api_key) = self.api_key {
+            let cred = Credentials::new(api_key, "");
+            request
+                .headers_mut()
+                .append(AUTHORIZATION, cred.as_http_header().parse()?);
+        }
+
+        let (stream, _) = connect_async(request).await.with_context(|| {
+            error!("failed to connect to websocket");
+            "could not connect to websocket"
+        })?;
+
+        Ok(stream)
     }
 
     async fn get<M>(&self, path: String) -> Result<M>

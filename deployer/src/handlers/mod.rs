@@ -199,7 +199,6 @@ async fn delete_service(
     Extension(deployment_manager): Extension<DeploymentManager>,
     service_guard: ServiceGuard,
 ) -> Result<Json<shuttle_common::service::Detailed>> {
-    persistence.delete_service(&service_guard.id).await?;
     let old_deployments = persistence
         .delete_deployments_by_service_id(&service_guard.id)
         .await?;
@@ -220,6 +219,8 @@ async fn delete_service(
         .into_iter()
         .map(Into::into)
         .collect();
+
+    persistence.delete_service(&service_guard.id).await?;
 
     let response = shuttle_common::service::Detailed {
         name: service_guard.name,

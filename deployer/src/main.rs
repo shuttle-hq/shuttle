@@ -8,20 +8,13 @@ use tracing::trace;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{fmt, EnvFilter};
 
-const SECRET_KEY: &str = "GATEWAY_SECRET";
-
 // The `multi_thread` is needed to prevent a deadlock in shutlte_service::loader::build_crate() which spawns two threads
 // Without this, both threads just don't start up
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
     let args = Args::parse();
-    let gateway_secret = std::env::var(SECRET_KEY).unwrap_or_else(|_| {
-        panic!(
-            "No gateway secret specified with environment variable {}",
-            SECRET_KEY
-        )
-    });
-    trace!("{SECRET_KEY} = {gateway_secret}");
+
+    trace!(args = ?args, "parsed args");
 
     let fmt_layer = fmt::layer();
     let filter_layer = EnvFilter::try_from_default_env()

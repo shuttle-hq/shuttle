@@ -1,13 +1,18 @@
+mod admin;
+mod deployment;
+mod service;
+mod user;
+
 use axum::body::{Body, BoxBody};
 use axum::extract::ws::{self, WebSocket};
 use axum::extract::{Extension, Path, Query};
 use axum::http::{Request, Response};
-use axum::routing::{get, Router};
+use axum::routing::{get, post, Router};
 use axum::{extract::BodyStream, Json};
 use chrono::{TimeZone, Utc};
 use fqdn::FQDN;
 use futures::TryStreamExt;
-use shuttle_common::{deployment, log, secret, service, LogItem};
+use shuttle_common::{log, secret, LogItem};
 use tower_http::trace::TraceLayer;
 use tracing::{debug, debug_span, error, field, Span};
 use uuid::Uuid;
@@ -17,14 +22,25 @@ use crate::error::{Error, Result};
 use crate::persistence::{self, Deployment, Log, Persistence, SecretGetter, State};
 
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
+
+use self::admin::{AdminGuard, AdminSecret};
+pub use self::deployment::DeploymentAuthorizer;
+use self::deployment::DeploymentGuard;
+pub use self::service::ServiceAuthorizer;
+use self::service::ServiceGuard;
+use self::user::UserGuard;
+pub use self::user::UserValidator;
 
 pub fn make_router(
     persistence: Persistence,
     deployment_manager: DeploymentManager,
     proxy_fqdn: FQDN,
+    admin_secret: String,
 ) -> Router<Body> {
     Router::new()
+        .route("/users/:name", post(get_or_create_user))
         .route("/services", get(list_services))
         .route(
             "/services/:name",
@@ -47,15 +63,20 @@ pub fn make_router(
         .route("/deployments/:id/logs/runtime", get(get_runtime_logs))
         .route("/version", get(get_version))
         .route(
-            "/secrets/:name",
+            "/secrets/:service_name",
             get(get_secrets),
         )
-        .layer(Extension(persistence))
+        .layer(Extension(persistence.clone()))
         .layer(Extension(deployment_manager))
+        .layer(Extension(proxy_fqdn))
+        .layer(Extension(AdminSecret(admin_secret)))
+        .layer(&Extension::<Arc<dyn UserValidator>>(Arc::new(persistence.clone())))
+        .layer(&Extension::<Arc<dyn ServiceAuthorizer>>(Arc::new(persistence.clone())))
+        .layer(&Extension::<Arc<dyn DeploymentAuthorizer>>(Arc::new(persistence)))
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(|request: &Request<Body>| {
-                    debug_span!("request", http.uri = %request.uri(), http.method = %request.method(), http.status_code = field::Empty)
+                    debug_span!("request", http.uri = %request.uri(), http.method = %request.method(), http.status_code = field::Empty, api_key = field::Empty)
                 })
                 .on_response(
                     |response: &Response<BoxBody>, latency: Duration, span: &Span| {
@@ -64,44 +85,46 @@ pub fn make_router(
                     },
                 ),
         )
-        .layer(Extension(proxy_fqdn))
 }
 
 async fn list_services(
     Extension(persistence): Extension<Persistence>,
-) -> Result<Json<Vec<String>>> {
-    persistence
+) -> Result<Json<Vec<shuttle_common::service::Response>>> {
+    let services = persistence
         .get_all_services()
-        .await
-        .map(Json)
-        .map_err(Error::from)
+        .await?
+        .into_iter()
+        .map(Into::into)
+        .collect();
+
+    Ok(Json(services))
 }
 
 async fn get_service(
     Extension(persistence): Extension<Persistence>,
-    Path(name): Path<String>,
-) -> Result<Json<service::Response>> {
+    service_guard: ServiceGuard,
+) -> Result<Json<shuttle_common::service::Detailed>> {
     let deployments = persistence
-        .get_deployments(&name)
+        .get_deployments(&service_guard.id)
         .await?
         .into_iter()
         .map(Into::into)
         .collect();
     let resources = persistence
-        .get_service_resources(&name)
+        .get_service_resources(&service_guard.id)
         .await?
         .into_iter()
         .map(Into::into)
         .collect();
     let secrets = persistence
-        .get_secrets(&name)
+        .get_secrets(&service_guard.id)
         .await?
         .into_iter()
         .map(Into::into)
         .collect();
 
-    let response = service::Response {
-        name,
+    let response = shuttle_common::service::Detailed {
+        name: service_guard.name,
         deployments,
         resources,
         secrets,
@@ -113,22 +136,22 @@ async fn get_service(
 async fn get_service_summary(
     Extension(persistence): Extension<Persistence>,
     Extension(proxy_fqdn): Extension<FQDN>,
-    Path(name): Path<String>,
-) -> Result<Json<service::Summary>> {
+    service_guard: ServiceGuard,
+) -> Result<Json<shuttle_common::service::Summary>> {
     let deployment = persistence
-        .get_active_deployment(&name)
+        .get_active_deployment(&service_guard.id)
         .await?
         .map(Into::into);
     let resources = persistence
-        .get_service_resources(&name)
+        .get_service_resources(&service_guard.id)
         .await?
         .into_iter()
         .map(Into::into)
         .collect();
 
-    let response = service::Summary {
-        uri: format!("https://{name}.{proxy_fqdn}"),
-        name,
+    let response = shuttle_common::service::Summary {
+        uri: format!("https://{}.{proxy_fqdn}", service_guard.name),
+        name: service_guard.name,
         deployment,
         resources,
     };
@@ -142,12 +165,16 @@ async fn post_service(
     Path(name): Path<String>,
     Query(params): Query<HashMap<String, String>>,
     stream: BodyStream,
-) -> Result<Json<deployment::Response>> {
+    user: UserGuard,
+) -> Result<Json<shuttle_common::deployment::Response>> {
+    let service = persistence
+        .get_or_create_service(&name, &user.api_key)
+        .await?;
     let id = Uuid::new_v4();
 
     let deployment = Deployment {
         id,
-        name: name.clone(),
+        service_id: service.id,
         state: State::Queued,
         last_update: Utc::now(),
     };
@@ -156,7 +183,8 @@ async fn post_service(
 
     let queued = Queued {
         id,
-        name,
+        service_name: service.name,
+        service_id: service.id,
         data_stream: Box::pin(stream.map_err(Error::Streaming)),
         will_run_tests: !params.contains_key("no-test"),
     };
@@ -169,29 +197,33 @@ async fn post_service(
 async fn delete_service(
     Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
-    Path(name): Path<String>,
-) -> Result<Json<service::Response>> {
-    let old_deployments = persistence.delete_service(&name).await?;
+    service_guard: ServiceGuard,
+) -> Result<Json<shuttle_common::service::Detailed>> {
+    let old_deployments = persistence
+        .delete_deployments_by_service_id(&service_guard.id)
+        .await?;
 
     for deployment in old_deployments.iter() {
         deployment_manager.kill(deployment.id).await;
     }
 
     let resources = persistence
-        .get_service_resources(&name)
+        .get_service_resources(&service_guard.id)
         .await?
         .into_iter()
         .map(Into::into)
         .collect();
     let secrets = persistence
-        .get_secrets(&name)
+        .get_secrets(&service_guard.id)
         .await?
         .into_iter()
         .map(Into::into)
         .collect();
 
-    let response = service::Response {
-        name,
+    persistence.delete_service(&service_guard.id).await?;
+
+    let response = shuttle_common::service::Detailed {
+        name: service_guard.name,
         deployments: old_deployments.into_iter().map(Into::into).collect(),
         resources,
         secrets,
@@ -201,37 +233,27 @@ async fn delete_service(
 }
 
 async fn get_deployment(
-    Extension(persistence): Extension<Persistence>,
-    Path(id): Path<Uuid>,
-) -> Result<Json<Option<deployment::Response>>> {
-    persistence
-        .get_deployment(&id)
-        .await
-        .map(|d| Json(d.map(Into::into)))
-        .map_err(Error::from)
+    deployment_guard: DeploymentGuard,
+) -> Result<Json<shuttle_common::deployment::Response>> {
+    Ok(Json(deployment_guard.into()))
 }
 
 async fn delete_deployment(
-    Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
-    Path(id): Path<Uuid>,
-) -> Result<Json<Option<deployment::Response>>> {
-    deployment_manager.kill(id).await;
+    deployment_guard: DeploymentGuard,
+) -> Result<Json<shuttle_common::deployment::Response>> {
+    deployment_manager.kill(deployment_guard.id).await;
 
-    persistence
-        .get_deployment(&id)
-        .await
-        .map(|d| Json(d.map(Into::into)))
-        .map_err(Error::from)
+    Ok(Json(deployment_guard.into()))
 }
 
 async fn get_build_logs(
     Extension(persistence): Extension<Persistence>,
-    Path(id): Path<Uuid>,
+    deployment_guard: DeploymentGuard,
 ) -> Result<Json<Vec<log::BuildLogStream>>> {
     Ok(Json(
         persistence
-            .get_deployment_logs(&id)
+            .get_deployment_logs(&deployment_guard.id)
             .await?
             .into_iter()
             .filter(|log| matches!(log.state, State::Building))
@@ -242,11 +264,11 @@ async fn get_build_logs(
 
 async fn get_runtime_logs(
     Extension(persistence): Extension<Persistence>,
-    Path(id): Path<Uuid>,
+    deployment_guard: DeploymentGuard,
 ) -> Result<Json<Vec<LogItem>>> {
     Ok(Json(
         persistence
-            .get_deployment_logs(&id)
+            .get_deployment_logs(&deployment_guard.id)
             .await?
             .into_iter()
             .filter(|log| matches!(log.state, State::Running))
@@ -257,10 +279,11 @@ async fn get_runtime_logs(
 
 async fn get_build_logs_subscribe(
     Extension(persistence): Extension<Persistence>,
-    Path(id): Path<Uuid>,
+    deployment_guard: DeploymentGuard,
     ws_upgrade: ws::WebSocketUpgrade,
 ) -> axum::response::Response {
-    ws_upgrade.on_upgrade(move |s| build_logs_websocket_handler(s, persistence, id))
+    ws_upgrade
+        .on_upgrade(move |s| build_logs_websocket_handler(s, persistence, deployment_guard.id))
 }
 
 async fn build_logs_websocket_handler(mut s: WebSocket, persistence: Persistence, id: Uuid) {
@@ -284,7 +307,7 @@ async fn build_logs_websocket_handler(mut s: WebSocket, persistence: Persistence
 
     for log in backlog.into_iter().filter_map(Log::into_build_log_stream) {
         match (log.state, log.message) {
-            (deployment::State::Building, Some(msg)) => {
+            (shuttle_common::deployment::State::Building, Some(msg)) => {
                 let sent = s.send(ws::Message::Text(msg)).await;
                 last_timestamp = log.timestamp;
 
@@ -293,8 +316,9 @@ async fn build_logs_websocket_handler(mut s: WebSocket, persistence: Persistence
                     return;
                 }
             }
-            (deployment::State::Building, None) => {}
-            (deployment::State::Queued, _) | (deployment::State::Built, _) => {}
+            (shuttle_common::deployment::State::Building, None) => {}
+            (shuttle_common::deployment::State::Queued, _)
+            | (shuttle_common::deployment::State::Built, _) => {}
             _ => {
                 debug!("closing channel after reaching more than just build logs");
                 let _ = s.close().await;
@@ -307,7 +331,7 @@ async fn build_logs_websocket_handler(mut s: WebSocket, persistence: Persistence
         if log.id == id && log.timestamp > last_timestamp {
             if let Some(log) = persistence::Log::from(log).into_build_log_stream() {
                 match (log.state, log.message) {
-                    (deployment::State::Building, Some(msg)) => {
+                    (shuttle_common::deployment::State::Building, Some(msg)) => {
                         let sent = s.send(ws::Message::Text(msg)).await;
 
                         // Client disconnected?
@@ -315,8 +339,9 @@ async fn build_logs_websocket_handler(mut s: WebSocket, persistence: Persistence
                             return;
                         }
                     }
-                    (deployment::State::Queued, _) | (deployment::State::Built, _) => {}
-                    (deployment::State::Building, None) => {}
+                    (shuttle_common::deployment::State::Queued, _)
+                    | (shuttle_common::deployment::State::Built, _) => {}
+                    (shuttle_common::deployment::State::Building, None) => {}
                     _ => break,
                 }
             }
@@ -329,10 +354,11 @@ async fn build_logs_websocket_handler(mut s: WebSocket, persistence: Persistence
 
 async fn get_runtime_logs_subscribe(
     Extension(persistence): Extension<Persistence>,
-    Path(id): Path<Uuid>,
+    deployment_guard: DeploymentGuard,
     ws_upgrade: ws::WebSocketUpgrade,
 ) -> axum::response::Response {
-    ws_upgrade.on_upgrade(move |s| runtime_logs_websocket_handler(s, persistence, id))
+    ws_upgrade
+        .on_upgrade(move |s| runtime_logs_websocket_handler(s, persistence, deployment_guard.id))
 }
 
 async fn runtime_logs_websocket_handler(mut s: WebSocket, persistence: Persistence, id: Uuid) {
@@ -405,14 +431,27 @@ async fn get_version() -> String {
 
 async fn get_secrets(
     Extension(persistence): Extension<Persistence>,
-    Path(name): Path<String>,
+    service_guard: ServiceGuard,
 ) -> Result<Json<Vec<secret::Response>>> {
     let keys = persistence
-        .get_secrets(&name)
+        .get_secrets(&service_guard.id)
         .await?
         .into_iter()
         .map(Into::into)
         .collect();
 
     Ok(Json(keys))
+}
+
+// TODO: move to gateway
+async fn get_or_create_user(
+    Extension(persistence): Extension<Persistence>,
+    Path(api_key): Path<String>,
+    _: AdminGuard,
+) -> Result<String> {
+    persistence
+        .get_or_create_user(&api_key)
+        .await
+        .map(|user| user.api_key)
+        .map_err(Error::from)
 }

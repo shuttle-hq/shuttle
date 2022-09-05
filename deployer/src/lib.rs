@@ -31,12 +31,18 @@ pub async fn start(
     for existing_deployment in persistence.get_all_runnable_deployments().await.unwrap() {
         let built = Built {
             id: existing_deployment.id,
-            name: existing_deployment.name,
+            service_name: existing_deployment.service_name,
+            service_id: existing_deployment.service_id,
         };
         deployment_manager.run_push(built).await;
     }
 
-    let router = handlers::make_router(persistence, deployment_manager, args.proxy_fqdn);
+    let router = handlers::make_router(
+        persistence,
+        deployment_manager,
+        args.proxy_fqdn,
+        args.admin_secret,
+    );
     let make_service = router.into_make_service();
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 8001));

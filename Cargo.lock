@@ -703,6 +703,7 @@ dependencies = [
  "bitflags",
  "bytes 1.1.0",
  "futures-util",
+ "headers",
  "http",
  "http-body",
  "hyper",
@@ -1086,6 +1087,7 @@ dependencies = [
  "crossterm",
  "dirs",
  "futures",
+ "http-auth-basic",
  "indoc",
  "log",
  "portpicker",
@@ -2459,6 +2461,15 @@ dependencies = [
  "bytes 1.1.0",
  "fnv",
  "itoa",
+]
+
+[[package]]
+name = "http-auth-basic"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd2e17aacf7f4a2428def798e2ff4f4f883c0987bdaf47dd5c8bc027bc9f1ebc"
+dependencies = [
+ "base64 0.13.0",
 ]
 
 [[package]]

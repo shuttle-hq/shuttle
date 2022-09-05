@@ -310,7 +310,7 @@ struct NewStateVisitor {
 }
 
 impl NewStateVisitor {
-    /// Field containing the deployment name identifier
+    /// Field containing the deployment identifier
     const ID_IDENT: &'static str = "id";
 
     /// Field containing the deployment state identifier
@@ -457,7 +457,7 @@ mod tests {
 
         async fn insert_secret(
             &self,
-            _name: &str,
+            _service_id: &Uuid,
             _key: &str,
             _value: &str,
         ) -> Result<(), Self::Err> {
@@ -476,7 +476,11 @@ mod tests {
     impl provisioner_factory::AbstractFactory for StubAbstractProvisionerFactory {
         type Output = StubProvisionerFactory;
 
-        fn get_factory(&self, _project_name: shuttle_common::project::ProjectName) -> Self::Output {
+        fn get_factory(
+            &self,
+            _project_name: shuttle_common::project::ProjectName,
+            _service_id: Uuid,
+        ) -> Self::Output {
             StubProvisionerFactory
         }
     }
@@ -834,7 +838,8 @@ mod tests {
         deployment_manager
             .run_push(Built {
                 id,
-                name: "run-test".to_string(),
+                service_name: "run-test".to_string(),
+                service_id: Uuid::new_v4(),
             })
             .await;
 
@@ -882,7 +887,8 @@ mod tests {
         deployment_manager
             .queue_push(Queued {
                 id,
-                name: "nil_id".to_string(),
+                service_name: "nil_id".to_string(),
+                service_id: Uuid::new_v4(),
                 data_stream: Box::pin(async { Ok(Bytes::from("violets are red")) }.into_stream()),
                 will_run_tests: false,
             })
@@ -922,7 +928,8 @@ mod tests {
 
         Queued {
             id: Uuid::new_v4(),
-            name: format!("deploy-layer-{name}"),
+            service_name: format!("deploy-layer-{name}"),
+            service_id: Uuid::new_v4(),
             data_stream: Box::pin(async { Ok(Bytes::from(bytes)) }.into_stream()),
             will_run_tests: false,
         }

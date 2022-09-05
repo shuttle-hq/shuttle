@@ -10,9 +10,17 @@ use comfy_table::{
 use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
+use uuid::Uuid;
 
 #[derive(Deserialize, Serialize)]
 pub struct Response {
+    pub id: Uuid,
+    pub name: String,
+    pub user_id: String,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct Detailed {
     pub name: String,
     pub deployments: Vec<deployment::Response>,
     pub resources: Vec<resource::Response>,
@@ -27,7 +35,7 @@ pub struct Summary {
     pub uri: String,
 }
 
-impl Display for Response {
+impl Display for Detailed {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let deploys = get_deployments_table(&self.deployments, &self.name);
         let resources = get_resources_table(&self.resources);

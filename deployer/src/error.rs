@@ -6,6 +6,7 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 
 use serde::{ser::SerializeMap, Serialize};
+use serde_json::json;
 use shuttle_service::loader::LoaderError;
 
 use cargo::util::errors::CargoTestError;
@@ -54,7 +55,7 @@ impl IntoResponse for Error {
                 header::CONTENT_TYPE,
                 HeaderValue::from_static("application/json"),
             )],
-            Json(self),
+            Json(json!({ "message": self })),
         )
             .into_response()
     }

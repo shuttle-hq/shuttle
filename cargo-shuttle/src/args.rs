@@ -52,7 +52,7 @@ pub enum Command {
     Init(InitArgs),
     /// view the status of a shuttle project
     Status,
-    /// Update Cargo shuttle 
+    /// Update Cargo shuttle
     UpdateShuttle,
     /// view the logs of a shuttle project
     Logs,

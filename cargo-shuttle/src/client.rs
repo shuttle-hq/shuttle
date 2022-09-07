@@ -62,7 +62,7 @@ pub(crate) async fn delete(
     Ok(())
 }
 
-pub(crate)async fn update_shuttle() -> Result<()> {
+pub(crate) async fn update_shuttle() -> Result<()> {
     // run this command: "cargo install cargo-shuttle"
 
     clap::command!("cargo", "install", "cargo-shuttle").run()?;

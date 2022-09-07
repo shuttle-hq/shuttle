@@ -62,6 +62,14 @@ pub(crate) async fn delete(
     Ok(())
 }
 
+pub(crate)async fn update_shuttle() -> Result<()> {
+    // run this command: "cargo install cargo-shuttle"
+
+    clap::command!("cargo", "install", "cargo-shuttle").run()?;
+
+    Ok(())
+}
+
 pub(crate) async fn status(api_url: ApiUrl, api_key: &ApiKey, project: &ProjectName) -> Result<()> {
     let client = get_retry_client();
 

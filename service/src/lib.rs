@@ -194,11 +194,11 @@
 //!
 //! Just keep in mind that there may be some kinks that require us to take all deployments down once in a while. In certain circumstances we may also have to delete all the data associated with those deployments.
 //!
-//! To stay updated with the release status of shuttle, [join our Discord](https://discord.gg/H33rRDTm3p)!
+//! To stay updated with the release status of shuttle, [join our Discord](https://discord.gg/shuttle)!
 //!
 //! ## Join Discord
 //!
-//! If you have any questions, [join our Discord server](https://discord.gg/H33rRDTm3p). There's always someone on there that can help!
+//! If you have any questions, [join our Discord server](https://discord.gg/shuttle). There's always someone on there that can help!
 //!
 //! You can also [open an issue or a discussion on GitHub](https://github.com/getsynth/shuttle).
 //!

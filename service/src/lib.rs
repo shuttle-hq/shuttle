@@ -477,6 +477,21 @@ impl Service for sync_wrapper::SyncWrapper<axum::Router> {
 #[cfg(feature = "web-axum")]
 pub type ShuttleAxum = Result<sync_wrapper::SyncWrapper<axum::Router>, Error>;
 
+#[cfg(feature = "web-salvo")]
+#[async_trait]
+impl Service for salvo::Router {
+    async fn bind(mut self: Box<Self>, addr: SocketAddr) -> Result<(), error::Error> {
+        salvo::Server::new(salvo::listener::TcpListener::bind(&addr))
+            .serve(self)
+            .await;
+
+        Ok(())
+    }
+}
+
+#[cfg(feature = "web-salvo")]
+pub type ShuttleSalvo = Result<salvo::Router, Error>;
+
 #[cfg(feature = "web-tide")]
 #[async_trait]
 impl<T> Service for tide::Server<T>

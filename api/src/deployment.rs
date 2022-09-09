@@ -163,16 +163,24 @@ impl Deployment {
                         meta.project.clone(),
                     );
                     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
-                    match loader.load(&mut factory, addr, run_logs_tx, meta.id).await {
+
+                    let load_result = loader.load(&mut factory, addr, run_logs_tx, meta.id).await;
+
+                    // Even in case `load_result.is_err()`, we want to
+                    // make sure `self.meta` reflects the latest of
+                    // the state that was achieved through the
+                    // phase. Otherwise we end up in a situation where
+                    // a DB was provisioned, but the `meta` does not
+                    // know about it.
+                    self.meta.write().await.database_deployment = factory.into_database_info();
+
+                    match load_result {
                         Err(e) => {
                             debug!("{}: factory phase FAILED: {:?}", meta.project, e);
                             DeploymentState::Error(e.into())
                         }
                         Ok((handle, so)) => {
                             debug!("{}: factory phase DONE", meta.project);
-                            self.meta.write().await.database_deployment =
-                                factory.into_database_info();
-
                             // Remove stale active deployments
                             if let Some(stale_id) = context.router.promote(meta.host, meta.id).await
                             {

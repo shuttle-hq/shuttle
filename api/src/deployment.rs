@@ -172,8 +172,7 @@ impl Deployment {
                     // phase. Otherwise we end up in a situation where
                     // a DB was provisioned, but the `meta` does not
                     // know about it.
-                    self.meta.write().await.database_deployment =
-                        factory.into_database_info();
+                    self.meta.write().await.database_deployment = factory.into_database_info();
 
                     match load_result {
                         Err(e) => {

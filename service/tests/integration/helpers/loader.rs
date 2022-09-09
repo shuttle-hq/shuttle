@@ -7,7 +7,7 @@ pub fn build_so_create_loader(resources: &str, crate_name: &str) -> Result<Loade
     let crate_dir: PathBuf = [resources, crate_name].iter().collect();
 
     Command::new("cargo")
-        .args(["build", "--release"])
+        .args(["build", "--release", "--color", "always"])
         .current_dir(&crate_dir)
         .spawn()
         .unwrap()

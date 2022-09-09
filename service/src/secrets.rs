@@ -56,7 +56,7 @@ where
             .and_then(|m_one| {
                 m_one.ok_or_else(|| {
                     Error::Secret(format!(
-                        "Secret `{key}` not found in service environment. If you have made changes to your `Secret.toml` file recently, try deploying again to make sure changes are applied correctly."
+                        "Secret `{key}` not found in service environment. If you have made changes to your `Secrets.toml` file recently, try deploying again to make sure changes are applied correctly."
                     ))
                 })
             })

@@ -57,24 +57,6 @@ EOF
   }
 }
 
-resource "aws_lb_target_group_attachment" "api" {
-  target_group_arn = aws_lb_target_group.api.arn
-  target_id        = aws_instance.backend.id
-  port             = var.api_container_port
-}
-
-resource "aws_lb_target_group_attachment" "user" {
-  target_group_arn = aws_lb_target_group.user.arn
-  target_id        = aws_instance.backend.id
-  port             = var.proxy_container_port
-}
-
-resource "aws_lb_target_group_attachment" "postgres" {
-  target_group_arn = aws_lb_target_group.postgres.arn
-  target_id        = aws_instance.backend.id
-  port             = var.postgres_container_port
-}
-
 data "aws_ami" "ubuntu" {
   most_recent = true
 
@@ -140,16 +122,29 @@ locals {
       docker_image         = local.docker_backend_image,
       shuttle_admin_secret = var.shuttle_admin_secret,
       proxy_fqdn           = var.proxy_fqdn,
-      shuttle_initial_key  = random_string.initial_key.result
     }
   )
   shuttle_provisioner_content = templatefile(
     "${path.module}/systemd/system/shuttle-provisioner.service.tftpl",
     {
-      data_dir     = local.data_dir,
-      docker_image = local.docker_provisioner_image,
-      pg_password  = var.postgres_password,
-      fqdn         = var.pg_fqdn
+      docker_image     = local.docker_provisioner_image,
+      fqdn             = var.db_fqdn,
+      pg_password      = var.postgres_password,
+      mongodb_password = var.mongodb_password,
+    }
+  )
+  shuttle_pg_content = templatefile(
+    "${path.module}/systemd/system/shuttle-pg.service.tftpl",
+    {
+      data_dir    = local.data_dir,
+      pg_password = var.postgres_password,
+    }
+  )
+  shuttle_mongodb_content = templatefile(
+    "${path.module}/systemd/system/shuttle-mongodb.service.tftpl",
+    {
+      data_dir         = local.data_dir,
+      mongodb_password = var.mongodb_password,
     }
   )
 }
@@ -166,6 +161,8 @@ data "cloudinit_config" "backend" {
         opt_shuttle_content         = base64encode(local.opt_shuttle_content),
         shuttle_backend_content     = base64encode(local.shuttle_backend_content)
         shuttle_provisioner_content = base64encode(local.shuttle_provisioner_content)
+        shuttle_pg_content          = base64encode(local.shuttle_pg_content)
+        shuttle_mongodb_content     = base64encode(local.shuttle_mongodb_content)
       }
     )
     filename = "cloud-config.yaml"

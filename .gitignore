@@ -22,3 +22,9 @@ Cargo.lock
 **/.terraform*
 
 e2e/users.toml
+
+# direnv cache directory
+.direnv/
+
+.shuttle-*
+docker-compose.rendered.yml

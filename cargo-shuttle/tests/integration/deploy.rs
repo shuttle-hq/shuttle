@@ -1,26 +1,27 @@
 use std::path::Path;
 
-use cargo_shuttle::{Args, Command, DeployArgs, ProjectArgs, Shuttle};
-use futures::Future;
+use cargo_shuttle::{Args, Command, CommandOutcome, DeployArgs, ProjectArgs, Shuttle};
 use reqwest::StatusCode;
 use test_context::test_context;
 use tokiotest_httpserver::{handler::HandlerBuilder, HttpTestContext};
 
 /// creates a `cargo-shuttle` deploy instance with some reasonable defaults set.
-fn cargo_shuttle_deploy(path: &str, api_url: String) -> impl Future<Output = anyhow::Result<()>> {
+async fn cargo_shuttle_deploy(path: &str, api_url: String) -> anyhow::Result<CommandOutcome> {
     let working_directory = Path::new(path).to_path_buf();
 
-    Shuttle::new().run(Args {
-        api_url: Some(api_url),
-        project_args: ProjectArgs {
-            working_directory,
-            name: None,
-        },
-        cmd: Command::Deploy(DeployArgs {
-            allow_dirty: false,
-            no_test: false,
-        }),
-    })
+    Shuttle::new()
+        .run(Args {
+            api_url: Some(api_url),
+            project_args: ProjectArgs {
+                working_directory,
+                name: None,
+            },
+            cmd: Command::Deploy(DeployArgs {
+                allow_dirty: false,
+                no_test: false,
+            }),
+        })
+        .await
 }
 
 #[should_panic(

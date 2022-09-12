@@ -8,32 +8,63 @@ Raising [issues](https://github.com/shuttle-hq/shuttle/issues) is encouraged. We
 You can use Docker and docker-compose to test shuttle locally during development. See the [Docker install](https://docs.docker.com/get-docker/)
 and [docker-compose install](https://docs.docker.com/compose/install/) instructions if you do not have them installed already.
 
-You should now be set to run shuttle locally as follow:
+You should now be ready to setup a local environment to test code changes to core `shuttle` packages as follows:
+
+Build the required images with:
 
 ```bash
-# clone the repo
-git clone git@github.com:shuttle-hq/shuttle.git
+$ make images
+```
 
-# cd into the repo
-cd shuttle
+The images get built with [cargo-chef](https://github.com/LukeMathWalker/cargo-chef) and therefore support incremental builds (most of the time). So they will be much faster to re-build after an incremental change in your code - should you wish to deploy it locally straight away.
 
-# start the shuttle services
-docker-compose up --build
+Create a docker persistent volume with:
 
-# login to shuttle service in a new terminal window
-cd path/to/shuttle/repo
-cargo run --bin cargo-shuttle -- login --api-key "ci-test"
+```bash
+$ docker volume create shuttle-backend-vol
+```
 
-# cd into one of the examples
+Finally, you can start a local deployment of shuttle and the required containers with:
+
+```bash
+$ make up
+```
+
+Note: Other useful commands can be found within the [Makefile](https://github.com/shuttle-hq/shuttle/blob/main/Makefile).
+
+The API is now accessible on `localhost:8000` (for app proxies) and `localhost:8001` (for the control plane). When running `cargo run --bin cargo-shuttle` (in a debug build), the CLI will point itself to `localhost` for its API calls. The deployment parameters can be tweaked by changing values in the [.env](./.env) file.
+
+In order to test local changes to the `shuttle-service` crate, you may want to add the below to a `.cargo/config.toml` file. (See [Overriding Dependencies](https://doc.rust-lang.org/cargo/reference/overriding-dependencies.html) for more)
+
+``` toml
+[patch.crates-io]
+shuttle-service = { path = "[base]/shuttle/service" }
+```
+
+Login to shuttle service in a new terminal window from the main shuttle directory:
+
+```bash
+cargo run --bin cargo-shuttle -- login --api-key "test-key"
+```
+
+cd into one of the examples:
+
+```bash
 cd examples/rocket/hello-world/
+```
 
-# deploy the example
+Deploy the example:
+
+```bash
 # the --manifest-path is used to locate the root of the shuttle workspace
 cargo run --manifest-path ../../../Cargo.toml --bin cargo-shuttle -- deploy
+```
 
-# test if the deploy is working
+Test if the deploy is working:
+
+```bash
 # (the Host header should match the Host from the deploy output)
-curl --header "Host: hello-world-rocket-app.teste.rs" localhost:8000/hello
+curl --header "Host: {app}.localhost.local" localhost:8000/hello
 ```
 ### Using Podman instead of Docker
 If you are using Podman over Docker, then expose a rootless socket of Podman using the following command:
@@ -56,7 +87,7 @@ shuttle has reasonable test coverage - and we are working on improving this
 every day. We encourage PRs to come with tests. If you're not sure about
 what a test should look like, feel free to [get in touch](https://discord.gg/H33rRDTm3p).
 
-To run the test suite - just run `cargo test -- --nocapture` at the root of the repository.
+To run the test suite - just run `make test` at the root of the repository.
 
 ## Committing
 

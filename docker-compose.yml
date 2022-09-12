@@ -1,24 +1,69 @@
 version: "3"
+volumes:
+  shuttle-backend-vol:
 services:
-  app:
-    build:
-      context: .
-      dockerfile: api/Containerfile.dev
-    ports:
-      - "8001:8001"
-      - "8000:8000"
+  api:
+    image: "${CONTAINER_REGISTRY}/api:${BACKEND_TAG}"
     volumes:
-      - ./api/users.toml:/config/users.toml
-      - /tmp/shuttle/crates:/var/lib/shuttle/crates
+      - shuttle-backend-vol:/var/lib/shuttle/
+    depends_on:
+      - provisioner
+    ports:
+      - 8000:8000
+      - 8001:8001
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      placement:
+        constraints:
+          - node.hostname==controller
     environment:
-      - SHUTTLE_USERS_TOML=/config/users.toml
-      - SHUTTLE_ADMIN_SECRET=admin-pass
-      - PROXY_FQDN=teste.rs
-      - PROVISIONER_ADDRESS=provisioner
+      - SHUTTLE_USERS_TOML=/var/lib/shuttle/users.toml
+      - RUST_LOG=${RUST_LOG}
+    command:
+      - "--path=/var/lib/shuttle/crates"
+      - "--bind-addr=0.0.0.0"
+      - "--api-port=8001"
+      - "--proxy-port=8000"
+      - "--proxy-fqdn=${APPS_FQDN}"
+      - "--provisioner-address=provisioner"
+      - "--provisioner-port=8000"
   provisioner:
-    build:
-      context: .
-      dockerfile: provisioner/Containerfile.dev
+    image: "${CONTAINER_REGISTRY}/provisioner:${PROVISIONER_TAG}"
+    depends_on:
+      - pg
+      - mongodb
     environment:
-      - FQDN=unreacable
-      - PORT=5001
+      - RUST_LOG=${RUST_LOG}
+    command:
+      - "--ip=0.0.0.0"
+      - "--port=8000"
+      - "--shared-pg-uri=postgres://postgres:${POSTGRES_PASSWORD}@pg:5432/postgres"
+      - "--shared-mongodb-uri=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongodb:27017/admin"
+      - "--internal-mongodb-address=mongodb"
+      - "--internal-pg-address=pg"
+      - "--fqdn=${DB_FQDN}"
+  pg:
+    image: "${CONTAINER_REGISTRY}/postgres:${POSTGRES_TAG}"
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - 8002:8000
+      - 5432:5432
+    deploy:
+      placement:
+        constraints:
+          - node.hostname==postgres
+  mongodb:
+    image: mongo:5.0.10
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+    deploy:
+      placement:
+        constraints:
+          - node.hostname==postgres

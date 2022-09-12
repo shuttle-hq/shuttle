@@ -6,6 +6,6 @@ edition = "2021"
 [lib]
 
 [dependencies]
-shuttle-service = { version = "0.3.3", features = ["web-tower"] }
-tower = { version = "0.4", features = ["full"] }
 hyper = { version = "0.14", features = ["full"] }
+shuttle-service = { version = "0.5.2", features = ["web-tower"] }
+tower = { version = "0.4", features = ["full"] }

@@ -1,0 +1,14 @@
+[package]
+name = "url-shortener"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+
+[dependencies]
+nanoid = "0.4"
+rocket = { version = "0.5.0-rc.2", features = ["json"] }
+serde = "1.0"
+shuttle-service = { version = "0.5.2", features = ["sqlx-postgres", "web-rocket"] }
+sqlx = { version = "0.6", features = ["runtime-tokio-native-tls", "postgres"] }
+url = "2.2"

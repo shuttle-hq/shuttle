@@ -8,8 +8,8 @@ output "api_name_servers" {
   description = "Name servers (NS) for api zone"
 }
 
-output "pg_name_servers" {
-  value       = aws_route53_zone.pg.name_servers
+output "db_name_servers" {
+  value       = aws_route53_zone.db.name_servers
   description = "Name servers (NS) for pg zone"
 }
 
@@ -26,9 +26,4 @@ output "api_content_host" {
 output "user_content_host" {
   value       = aws_lb.user.dns_name
   description = "URL for user proxy load balancer"
-}
-
-output "initial_user_key" {
-  value       = random_string.initial_key.result
-  description = "Key given to the initial shuttle user"
 }

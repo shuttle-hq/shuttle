@@ -60,6 +60,16 @@ write_files:
     path: /lib/systemd/system/shuttle-provisioner.service
     owner: root:root
     permissions: "0644"
+  - encoding: b64
+    content: ${shuttle_pg_content}
+    path: /lib/systemd/system/shuttle-pg.service
+    owner: root:root
+    permissions: "0644"
+  - encoding: b64
+    content: ${shuttle_mongodb_content}
+    path: /lib/systemd/system/shuttle-mongodb.service
+    owner: root:root
+    permissions: "0644"
 
 power_state:
   mode: reboot
@@ -69,5 +79,7 @@ runcmd:
   - docker network inspect shuttle-net || docker network create --driver bridge shuttle-net
   - [systemctl, daemon-reload]
   - [systemctl, enable, "opt-shuttle.mount"]
-  - [systemctl, enable, "shuttle-backend.service"]
+  - [systemctl, enable, "shuttle-pg.service"]
+  - [systemctl, enable, "shuttle-mongodb.service"]
   - [systemctl, enable, "shuttle-provisioner.service"]
+  - [systemctl, enable, "shuttle-backend.service"]

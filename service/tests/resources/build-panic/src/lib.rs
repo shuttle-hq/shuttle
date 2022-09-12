@@ -1,45 +1,18 @@
-use async_trait::async_trait;
+use shuttle_service::Service;
 
-use shuttle_service::{Error, Factory, IntoService, Runtime, ServeHandle, Service};
+struct MyService;
 
-#[macro_use]
-extern crate shuttle_service;
-
-#[derive(Default)]
-struct Builder;
-
-impl IntoService for Builder {
-    type Service = MyService;
-
-    fn into_service(self) -> Self::Service {
-        MyService {
-            runtime: Runtime::new().unwrap(),
-        }
-    }
-}
-
-struct MyService {
-    runtime: Runtime,
-}
-
-#[async_trait]
+#[shuttle_service::async_trait]
 impl Service for MyService {
-    async fn build(
-        &mut self,
-        _factory: &mut dyn Factory,
-        _logger: Box<dyn log::Log>,
-    ) -> Result<(), Error> {
-        panic!("panic in build");
-    }
-
-    fn bind(
-        &mut self,
+    async fn bind(
+        mut self: Box<Self>,
         _: std::net::SocketAddr,
-    ) -> Result<ServeHandle, shuttle_service::error::Error> {
-        let handle = self.runtime.spawn(async move { Ok(()) });
-
-        Ok(handle)
+    ) -> Result<(), shuttle_service::Error> {
+        Ok(())
     }
 }
 
-declare_service!(Builder, Builder::default);
+#[shuttle_service::main]
+async fn build_panic() -> Result<MyService, shuttle_service::Error> {
+    panic!("panic in build");
+}

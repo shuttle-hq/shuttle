@@ -1,8 +1,8 @@
 use async_trait::async_trait;
-use proto::provisioner::{
+use shuttle_common::{project::ProjectName, DatabaseReadyInfo};
+use shuttle_proto::provisioner::{
     database_request::DbType, provisioner_client::ProvisionerClient, DatabaseRequest,
 };
-use shuttle_common::{project::ProjectName, DatabaseReadyInfo};
 use shuttle_service::{database::Type, Factory};
 use tonic::{transport::Channel, Request};
 
@@ -31,7 +31,7 @@ impl ShuttleFactory {
 
 #[async_trait]
 impl Factory for ShuttleFactory {
-    async fn get_sql_connection_string(
+    async fn get_db_connection_string(
         &mut self,
         db_type: Type,
     ) -> Result<String, shuttle_service::Error> {

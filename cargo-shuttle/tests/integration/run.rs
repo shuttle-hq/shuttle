@@ -15,7 +15,7 @@ async fn cargo_shuttle_run(working_directory: &str) -> u16 {
     let run_args = RunArgs { port };
 
     let runner = Shuttle::new().run(Args {
-        api_url: Some("network support is intentionally broken in tests".to_string()),
+        api_url: Some("http://shuttle.invalid:80".to_string()),
         project_args: ProjectArgs {
             working_directory: working_directory.clone(),
             name: None,
@@ -23,12 +23,14 @@ async fn cargo_shuttle_run(working_directory: &str) -> u16 {
         cmd: Command::Run(run_args),
     });
 
+    let working_directory_clone = working_directory.clone();
+
     tokio::spawn(async move {
-        sleep(Duration::from_secs(180)).await;
+        sleep(Duration::from_secs(600)).await;
 
         println!(
             "run test for '{}' took too long. Did it fail to shutdown?",
-            working_directory.display()
+            working_directory_clone.display()
         );
         exit(1);
     });
@@ -42,6 +44,10 @@ async fn cargo_shuttle_run(working_directory: &str) -> u16 {
         .await)
         .is_err()
     {
+        println!(
+            "waiting for '{}' to start up...",
+            working_directory.display()
+        );
         sleep(Duration::from_millis(350)).await;
     }
 
@@ -92,6 +98,17 @@ async fn rocket_postgres() {
         .unwrap();
 
     assert_eq!(request_text, "{\"id\":1,\"note\":\"Deploy to shuttle\"}");
+
+    let request_text = client
+        .get(format!("http://localhost:{port}/secret"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+
+    assert_eq!(request_text, "the contents of my API key");
 }
 
 #[tokio::test]
@@ -196,4 +213,84 @@ async fn tower_hello_world() {
         .unwrap();
 
     assert_eq!(request_text, "Hello, world!");
+}
+
+#[tokio::test]
+async fn poem_hello_world() {
+    let port = cargo_shuttle_run("../examples/poem/hello-world").await;
+
+    let request_text = reqwest::Client::new()
+        .get(format!("http://localhost:{port}/hello"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+
+    assert_eq!(request_text, "Hello, world!");
+}
+
+// This example uses a shared Postgres. Thus local runs should create a docker container for it.
+#[tokio::test]
+async fn poem_postgres() {
+    let port = cargo_shuttle_run("../examples/poem/postgres").await;
+    let client = reqwest::Client::new();
+
+    let post_text = client
+        .post(format!("http://localhost:{port}/todo"))
+        .body("{\"note\": \"Deploy to shuttle\"}")
+        .header("content-type", "application/json")
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+
+    assert_eq!(post_text, "{\"id\":1,\"note\":\"Deploy to shuttle\"}");
+
+    let request_text = client
+        .get(format!("http://localhost:{port}/todo/1"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+
+    assert_eq!(request_text, "{\"id\":1,\"note\":\"Deploy to shuttle\"}");
+}
+
+// This example uses a shared MongoDb. Thus local runs should create a docker container for it.
+#[tokio::test]
+async fn poem_mongodb() {
+    let port = cargo_shuttle_run("../examples/poem/mongodb").await;
+    let client = reqwest::Client::new();
+
+    // Post a todo note and get the persisted todo objectId
+    let post_text = client
+        .post(format!("http://localhost:{port}/todo"))
+        .body("{\"note\": \"Deploy to shuttle\"}")
+        .header("content-type", "application/json")
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+
+    // Valid objectId is 24 char hex string
+    assert_eq!(post_text.len(), 24);
+
+    let request_text = client
+        .get(format!("http://localhost:{port}/todo/{post_text}"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+
+    assert_eq!(request_text, "{\"note\":\"Deploy to shuttle\"}");
 }

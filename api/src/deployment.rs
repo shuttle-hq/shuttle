@@ -12,6 +12,7 @@ use futures::prelude::*;
 use libloading::Library;
 use rocket::data::ByteUnit;
 use rocket::{tokio, Data};
+use semver::VersionReq;
 use shuttle_common::project::ProjectName;
 use shuttle_common::{
     DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, LogItem, Port,
@@ -123,7 +124,7 @@ impl Deployment {
                         .build(
                             &queued.crate_bytes,
                             meta.project.as_str(),
-                            &context.shuttle_version,
+                            &context.version_req,
                             Box::new(console_writer),
                         )
                         .await
@@ -297,7 +298,7 @@ pub(crate) struct DeploymentSystem {
     job_queue: JobQueue,
     router: Arc<Router>,
     fqdn: String,
-    pub(crate) shuttle_version: String,
+    version_req: VersionReq,
 }
 
 const JOB_QUEUE_SIZE: usize = 200;
@@ -348,7 +349,7 @@ pub(crate) struct Context {
     build_system: Box<dyn BuildSystem>,
     deployments: Arc<RwLock<Deployments>>,
     provisioner_client: ProvisionerClient<Channel>,
-    shuttle_version: String,
+    version_req: VersionReq,
 }
 
 impl DeploymentSystem {
@@ -357,7 +358,7 @@ impl DeploymentSystem {
         fqdn: String,
         provisioner_address: String,
         provisioner_port: Port,
-        shuttle_version: String,
+        version_req: VersionReq,
     ) -> Self {
         let router: Arc<Router> = Default::default();
         let (tx, mut rx) = mpsc::unbounded_channel::<Log>();
@@ -393,7 +394,7 @@ impl DeploymentSystem {
             build_system,
             deployments: deployments.clone(),
             provisioner_client,
-            shuttle_version: shuttle_version.clone(),
+            version_req: version_req.clone(),
         };
 
         let job_queue = JobQueue::new(context, tx).await;
@@ -409,7 +410,7 @@ impl DeploymentSystem {
             job_queue,
             router,
             fqdn,
-            shuttle_version,
+            version_req,
         }
     }
 
@@ -561,6 +562,10 @@ impl DeploymentSystem {
         .filter(|is_active| future::ready(*is_active))
         .count()
         .await
+    }
+
+    pub(crate) fn version_req(&self) -> &VersionReq {
+        &self.version_req
     }
 
     /// Main way to interface with the deployment manager.

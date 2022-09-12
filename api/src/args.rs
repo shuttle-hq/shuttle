@@ -4,6 +4,8 @@ use std::str::FromStr;
 
 use clap::Parser;
 use fqdn::FQDN;
+use semver::VersionReq;
+
 use shuttle_common::Port;
 
 #[derive(Parser)]
@@ -30,12 +32,13 @@ pub struct Args {
     /// Port provisioner is reachable at
     #[clap(long, default_value = "5001")]
     pub(crate) provisioner_port: Port,
-    #[structopt(
+    /// A `shuttle-service` version requirement for services that are
+    /// allowed be deployed on this instance
+    #[clap(
         long,
-        about = "MSSV - Minimum supported Shuttle Version",
-        default_value = shuttle_service::VERSION
+        default_value = env!("SHUTTLE_SERVICE_VERSION_REQ")
     )]
-    pub(crate) shuttle_version: semver::Version,
+    pub(crate) version_req: VersionReq,
 }
 
 fn parse_fqdn(src: &str) -> Result<FQDN, String> {

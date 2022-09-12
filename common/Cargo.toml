@@ -17,3 +17,5 @@ rocket = "0.5.0-rc.2"
 rustrict = "0.5.0"
 serde = "1.0.137"
 uuid = { version = "1.1.1", features = ["v4", "serde"] }
+semver = "1.0.13"
+regex = "1.6.0"

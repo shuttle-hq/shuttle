@@ -55,7 +55,7 @@ async fn status() -> String {
 
 #[get("/version")]
 async fn version() -> String {
-    String::from(shuttle_service::VERSION)
+    shuttle_service::VERSION.to_string()
 }
 
 #[get("/<_>/deployments/<id>")]
@@ -190,6 +190,7 @@ pub async fn rocket() -> Rocket<Build> {
                 .to_string(),
             args.provisioner_address,
             args.provisioner_port,
+            args.version_req
         )
         .await,
     );

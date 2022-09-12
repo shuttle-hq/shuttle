@@ -9,7 +9,6 @@ fn main() {
     .unwrap();
     println!(
         "cargo:rustc-env=SHUTTLE_SERVICE_VERSION_REQ=^{}.{}",
-        version.major,
-        version.minor,
+        version.major, version.minor,
     );
 }

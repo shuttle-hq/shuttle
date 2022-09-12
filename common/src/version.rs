@@ -3,15 +3,13 @@ use std::process::Command;
 
 use semver::Version;
 
-use anyhow::{anyhow, Result, Context};
+use anyhow::{anyhow, Context, Result};
 
 lazy_static::lazy_static! {
     pub static ref SEMVER_REGEX: regex::Regex = regex::Regex::new(r"shuttle-service v(([0-9]+)\.([0-9]+)\.([0-9]+)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+)?)").unwrap();
 }
 
-pub fn get_shuttle_service_from_user_crate<P: AsRef<Path>>(
-    manifest_path: P,
-) -> Result<Version> {
+pub fn get_shuttle_service_from_user_crate<P: AsRef<Path>>(manifest_path: P) -> Result<Version> {
     let output = Command::new("cargo")
         .args(["tree", "--manifest-path"])
         .arg(manifest_path.as_ref())

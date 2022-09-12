@@ -190,7 +190,7 @@ pub async fn rocket() -> Rocket<Build> {
                 .to_string(),
             args.provisioner_address,
             args.provisioner_port,
-            args.version_req
+            args.version_req,
         )
         .await,
     );

@@ -463,13 +463,13 @@ impl SecretGetter for Persistence {
 
 #[async_trait::async_trait]
 impl UserValidator for Persistence {
-    async fn is_user_valid(&self, api_key: &str) -> crate::error::Result<Option<User>> {
+    async fn is_user_valid(&self, api_key: &str) -> crate::handlers::Result<Option<User>> {
         sqlx::query_as("SELECT * FROM users WHERE api_key = ?")
             .bind(api_key)
             .fetch_optional(&self.pool)
             .await
             .map_err(Error::from)
-            .map_err(crate::error::Error::Persistence)
+            .map_err(crate::handlers::Error::Persistence)
     }
 }
 
@@ -479,14 +479,14 @@ impl ServiceAuthorizer for Persistence {
         &self,
         api_key: &str,
         service_name: &str,
-    ) -> crate::error::Result<Option<Service>> {
+    ) -> crate::handlers::Result<Option<Service>> {
         sqlx::query_as("SELECT * FROM services WHERE user_id = ? AND name = ?")
             .bind(api_key)
             .bind(service_name)
             .fetch_optional(&self.pool)
             .await
             .map_err(Error::from)
-            .map_err(crate::error::Error::Persistence)
+            .map_err(crate::handlers::Error::Persistence)
     }
 }
 
@@ -496,7 +496,7 @@ impl DeploymentAuthorizer for Persistence {
         &self,
         api_key: &str,
         deployment_id: &Uuid,
-    ) -> crate::error::Result<Option<Deployment>> {
+    ) -> crate::handlers::Result<Option<Deployment>> {
         sqlx::query_as(
             r#"SELECT d.id AS id, service_id, state, last_update
                 FROM deployments AS d
@@ -508,7 +508,7 @@ impl DeploymentAuthorizer for Persistence {
         .fetch_optional(&self.pool)
         .await
         .map_err(Error::from)
-        .map_err(crate::error::Error::Persistence)
+        .map_err(crate::handlers::Error::Persistence)
     }
 }
 

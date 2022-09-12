@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{error::Result, persistence::Service};
+use crate::persistence::Service;
 use async_trait::async_trait;
 use axum::{
     extract::{FromRequest, Path},
@@ -88,7 +88,7 @@ pub trait ServiceAuthorizer: Sync + Send {
         &self,
         api_key: &str,
         service_name: &str,
-    ) -> Result<Option<Service>>;
+    ) -> super::Result<Option<Service>>;
 }
 
 impl From<Service> for ServiceGuard {

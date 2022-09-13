@@ -74,7 +74,7 @@ impl Persistence {
             CREATE TABLE IF NOT EXISTS services (
                 id TEXT PRIMARY KEY, -- Identifier of the service.
                 name TEXT UNIQUE,    -- Name of the service.
-                user_id TEXT,        -- Name of the service.
+                user_id TEXT,        -- Identifier of the user the service belongs to.
                 FOREIGN KEY(user_id) REFERENCES users(api_key)
             );
 

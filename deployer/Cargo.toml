@@ -2,7 +2,7 @@
 name = "shuttle-deployer"
 version = "0.1.0"
 edition = "2021"
-description = "Service with instances created per project for handling the compliation, loading, and execution of Shuttle services"
+description = "Service with instances created per project for handling the compilation, loading, and execution of Shuttle services"
 
 [dependencies]
 anyhow = "1.0.58"

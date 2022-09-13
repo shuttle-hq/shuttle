@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use async_trait::async_trait;
-use shuttle_common::{database, project::ProjectName, DatabaseReadyInfo};
+use shuttle_common::{database, project::ProjectName as ServiceName, DatabaseReadyInfo};
 use shuttle_proto::provisioner::{
     database_request::DbType, provisioner_client::ProvisionerClient, DatabaseRequest,
 };
@@ -16,8 +16,8 @@ use crate::persistence::{Resource, ResourceRecorder, ResourceType, SecretGetter}
 pub trait AbstractFactory: Send + 'static {
     type Output: Factory;
 
-    /// Get a factory for a specific project
-    fn get_factory(&self, project_name: ProjectName, service_id: Uuid) -> Self::Output;
+    /// Get a factory for a specific service
+    fn get_factory(&self, service_name: ServiceName, service_id: Uuid) -> Self::Output;
 }
 
 /// An abstract factory that makes factories which uses provisioner
@@ -31,10 +31,10 @@ pub struct AbstractProvisionerFactory<R: ResourceRecorder, S: SecretGetter> {
 impl<R: ResourceRecorder, S: SecretGetter> AbstractFactory for AbstractProvisionerFactory<R, S> {
     type Output = ProvisionerFactory<R, S>;
 
-    fn get_factory(&self, project_name: ProjectName, service_id: Uuid) -> Self::Output {
+    fn get_factory(&self, service_name: ServiceName, service_id: Uuid) -> Self::Output {
         ProvisionerFactory::new(
             self.provisioner_client.clone(),
-            project_name,
+            service_name,
             service_id,
             self.resource_recorder.clone(),
             self.secret_getter.clone(),
@@ -58,7 +58,7 @@ impl<R: ResourceRecorder, S: SecretGetter> AbstractProvisionerFactory<R, S> {
 
 /// A factory (service locator) which goes through the provisioner crate
 pub struct ProvisionerFactory<R: ResourceRecorder, S: SecretGetter> {
-    project_name: ProjectName,
+    service_name: ServiceName,
     service_id: Uuid,
     provisioner_client: ProvisionerClient<Channel>,
     info: Option<DatabaseReadyInfo>,
@@ -70,14 +70,14 @@ pub struct ProvisionerFactory<R: ResourceRecorder, S: SecretGetter> {
 impl<R: ResourceRecorder, S: SecretGetter> ProvisionerFactory<R, S> {
     pub(crate) fn new(
         provisioner_client: ProvisionerClient<Channel>,
-        project_name: ProjectName,
+        service_name: ServiceName,
         service_id: Uuid,
         resource_recorder: R,
         secret_getter: S,
     ) -> Self {
         Self {
             provisioner_client,
-            project_name,
+            service_name,
             service_id,
             info: None,
             resource_recorder,
@@ -101,7 +101,7 @@ impl<R: ResourceRecorder, S: SecretGetter> Factory for ProvisionerFactory<R, S> 
         let db_type: DbType = db_type.into();
 
         let request = Request::new(DatabaseRequest {
-            project_name: self.project_name.to_string(),
+            project_name: self.service_name.to_string(),
             db_type: Some(db_type),
         });
 

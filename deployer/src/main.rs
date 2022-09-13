@@ -8,7 +8,7 @@ use tracing::trace;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{fmt, EnvFilter};
 
-// The `multi_thread` is needed to prevent a deadlock in shutlte_service::loader::build_crate() which spawns two threads
+// The `multi_thread` is needed to prevent a deadlock in shuttle_service::loader::build_crate() which spawns two threads
 // Without this, both threads just don't start up
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {

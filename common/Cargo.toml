@@ -19,4 +19,3 @@ rustrict = "0.5.0"
 semver = "1.0.13"
 serde = "1.0.137"
 uuid = { version = "1.1.1", features = ["v4", "serde"] }
-regex = "1.6.0"

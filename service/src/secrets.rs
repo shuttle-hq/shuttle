@@ -48,12 +48,19 @@ where
         self.execute(sqlx::query(Self::CREATE_TABLE_QUERY)).await?;
 
         let key = check_and_lower_secret_key(key)?;
-        let query = sqlx::query(Self::GET_QUERY).bind(key);
+        let query = sqlx::query(Self::GET_QUERY).bind(&key);
 
-        self.fetch_one(query)
+        self.fetch_optional(query)
             .await
-            .map(|row| row.get(0))
             .map_err(Error::from)
+            .and_then(|m_one| {
+                m_one.ok_or_else(|| {
+                    Error::Secret(format!(
+                        "Secret `{key}` not found in service environment. If you have made changes to your `Secrets.toml` file recently, try deploying again to make sure changes are applied correctly."
+                    ))
+                })
+            })
+            .map(|one| one.get(0))
     }
 
     /// Create (or overwrite if already present) a key/value secret in the database. Will error if

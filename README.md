@@ -58,7 +58,7 @@ edition = "2021"
 [lib]
 
 [dependencies]
-shuttle-service = { version = "0.5.1", features = ["web-rocket"] }
+shuttle-service = { version = "0.5.2", features = ["web-rocket"] }
 rocket = "0.4.11"
 ```
 
@@ -112,7 +112,7 @@ If you have any requests or suggestions feel free to open an issue.
 
 - [Community Forum](https://github.com/getsynth/shuttle/discussions). Best for: help with building, discussion about best practices.
 - [GitHub Issues](https://github.com/getsynth/shuttle/issues). Best for: bugs and errors you encounter using Shuttle.
-- [Discord](https://discord.gg/H33rRDTm3p). Best for: sharing your applications and hanging out with the community.
+- [Discord](https://discord.gg/shuttle). Best for: sharing your applications and hanging out with the community.
 - [Twitter](https://twitter.com/shuttle_dev). Best for: keeping up with announcements and releases
 
 ## Status

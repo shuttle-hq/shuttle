@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-service"
-version = "0.5.1"
+version = "0.5.2"
 edition = "2021"
 license = "Apache-2.0"
 description = "Service traits and macros to deploy on the shuttle platform (https://www.shuttle.rs/)"
@@ -41,7 +41,7 @@ version = "1.12.0"
 features = ["tokio1"]
 
 [dependencies.shuttle-codegen]
-version = "0.5.1"
+version = "0.5.2"
 path = "../codegen"
 optional = true
 
@@ -50,7 +50,7 @@ portpicker = "0.1.1"
 uuid = { version = "1.1.2", features = ["v4"] }
 
 [dependencies.shuttle-common]
-version = "0.5.1"
+version = "0.5.2"
 path = "../common"
 
 [features]

@@ -223,8 +223,7 @@ jobs:
       - run:
           name: Make and push images
           command: |
-            make clean
-            PUSH=true PLATFORMS=linux/amd64,linux/arm64 make images
+            PUSH=true PLATFORMS=linux/amd64 make images
       - save-buildx-cache
 
 workflows:

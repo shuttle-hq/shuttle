@@ -28,7 +28,7 @@
 //! be a library crate with a `shuttle-service` dependency with the `web-rocket` feature on the `shuttle-service` dependency.
 //!
 //! ```toml
-//! shuttle-service = { version = "0.5.1", features = ["web-rocket"] }
+//! shuttle-service = { version = "0.5.2", features = ["web-rocket"] }
 //! ```
 //!
 //! A boilerplate code for your rocket project can also be found in `src/lib.rs`:
@@ -101,7 +101,7 @@
 //! Add the `sqlx-postgres` feature to the `shuttle-service` dependency, and add `sqlx` as a dependency with the `runtime-tokio-native-tls` and `postgres` features inside `Cargo.toml`:
 //!
 //! ```toml
-//! shuttle-service = { version = "0.5.1", features = ["web-rocket", "sqlx-postgres"] }
+//! shuttle-service = { version = "0.5.2", features = ["web-rocket", "sqlx-postgres"] }
 //! sqlx = { version = "0.6.1", features = ["runtime-tokio-native-tls", "postgres"] }
 //! ```
 //!
@@ -194,11 +194,11 @@
 //!
 //! Just keep in mind that there may be some kinks that require us to take all deployments down once in a while. In certain circumstances we may also have to delete all the data associated with those deployments.
 //!
-//! To stay updated with the release status of shuttle, [join our Discord](https://discord.gg/H33rRDTm3p)!
+//! To stay updated with the release status of shuttle, [join our Discord](https://discord.gg/shuttle)!
 //!
 //! ## Join Discord
 //!
-//! If you have any questions, [join our Discord server](https://discord.gg/H33rRDTm3p). There's always someone on there that can help!
+//! If you have any questions, [join our Discord server](https://discord.gg/shuttle). There's always someone on there that can help!
 //!
 //! You can also [open an issue or a discussion on GitHub](https://github.com/getsynth/shuttle).
 //!

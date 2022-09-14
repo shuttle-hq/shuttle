@@ -203,6 +203,50 @@ impl ShuttleInit for ShuttleInitPoem {
     }
 }
 
+pub struct ShuttleInitSalvo;
+
+impl ShuttleInit for ShuttleInitSalvo {
+    fn set_cargo_dependencies(
+        &self,
+        dependencies: &mut Table,
+        manifest_path: &Path,
+        url: &Url,
+        get_dependency_version_fn: GetDependencyVersionFn,
+    ) {
+        set_inline_table_dependency_features(
+            "shuttle-service",
+            dependencies,
+            vec!["web-salvo".to_string()],
+        );
+
+        set_key_value_dependency_version(
+            "salvo",
+            dependencies,
+            manifest_path,
+            url,
+            false,
+            get_dependency_version_fn,
+        );
+    }
+
+    fn get_boilerplate_code_for_framework(&self) -> &'static str {
+        indoc! {r#"
+        use salvo::prelude::*;
+
+        #[handler]
+        async fn hello_world(res: &mut Response) {
+            res.render(Text::Plain("Hello, World!"));
+        }
+
+        #[shuttle_service::main]
+        async fn salvo() -> shuttle_service::ShuttleSalvo {
+            let router = Router::new().get(hello_world);
+
+            Ok(router)
+        }"#}
+    }
+}
+
 pub struct ShuttleInitSerenity;
 
 impl ShuttleInit for ShuttleInitSerenity {
@@ -873,6 +917,38 @@ mod shuttle_init_tests {
             [dependencies]
             shuttle-service = { version = "1.0", features = ["web-poem"] }
             poem = "1.0"
+        "#};
+
+        assert_eq!(cargo_toml.to_string(), expected);
+    }
+
+    #[test]
+    fn test_set_cargo_dependencies_salvo() {
+        let mut cargo_toml = cargo_toml_factory();
+        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
+        let manifest_path = PathBuf::new();
+        let url = Url::parse("https://shuttle.rs").unwrap();
+
+        set_inline_table_dependency_version(
+            "shuttle-service",
+            dependencies,
+            &manifest_path,
+            &url,
+            false,
+            mock_get_latest_dependency_version,
+        );
+
+        ShuttleInitSalvo.set_cargo_dependencies(
+            dependencies,
+            &manifest_path,
+            &url,
+            mock_get_latest_dependency_version,
+        );
+
+        let expected = indoc! {r#"
+            [dependencies]
+            shuttle-service = { version = "1.0", features = ["web-salvo"] }
+            salvo = "1.0"
         "#};
 
         assert_eq!(cargo_toml.to_string(), expected);

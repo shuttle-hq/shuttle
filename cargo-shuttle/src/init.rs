@@ -638,6 +638,7 @@ mod shuttle_init_tests {
             tide: false,
             tower: false,
             poem: false,
+            salvo: false,
             serenity: false,
             path: PathBuf::new(),
         };
@@ -648,6 +649,7 @@ mod shuttle_init_tests {
             "tide" => init_args.tide = true,
             "tower" => init_args.tower = true,
             "poem" => init_args.poem = true,
+            "salvo" => init_args.salvo = true,
             "serenity" => init_args.serenity = true,
             _ => unreachable!(),
         }

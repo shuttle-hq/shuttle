@@ -6,5 +6,5 @@ edition = "2021"
 [lib]
 
 [dependencies]
-salvo = "0.34.2"
+salvo = "0.34.3"
 shuttle-service = { version = "0.5.2", features = ["web-salvo"] }

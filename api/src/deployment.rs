@@ -298,7 +298,6 @@ pub(crate) struct DeploymentSystem {
     job_queue: JobQueue,
     router: Arc<Router>,
     fqdn: String,
-    version_req: VersionReq,
 }
 
 const JOB_QUEUE_SIZE: usize = 200;
@@ -394,7 +393,7 @@ impl DeploymentSystem {
             build_system,
             deployments: deployments.clone(),
             provisioner_client,
-            version_req: version_req.clone(),
+            version_req
         };
 
         let job_queue = JobQueue::new(context, tx).await;
@@ -409,8 +408,7 @@ impl DeploymentSystem {
             deployments,
             job_queue,
             router,
-            fqdn,
-            version_req,
+            fqdn
         }
     }
 
@@ -562,10 +560,6 @@ impl DeploymentSystem {
         .filter(|is_active| future::ready(*is_active))
         .count()
         .await
-    }
-
-    pub(crate) fn version_req(&self) -> &VersionReq {
-        &self.version_req
     }
 
     /// Main way to interface with the deployment manager.

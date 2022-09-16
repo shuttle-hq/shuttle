@@ -20,7 +20,8 @@ impl Serialize for Error {
     {
         let mut map = serializer.serialize_map(Some(2))?;
         map.serialize_entry("type", &format!("{:?}", self))?;
-        map.serialize_entry("msg", &self.source().unwrap().to_string())?;
+        // use the error source if available, if not use display implementation
+        map.serialize_entry("msg", &self.source().unwrap_or(self).to_string())?;
         map.end()
     }
 }

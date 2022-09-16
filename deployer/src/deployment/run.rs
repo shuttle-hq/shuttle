@@ -5,7 +5,7 @@ use std::{
 };
 
 use portpicker::pick_unused_port;
-use shuttle_common::project::ProjectName;
+use shuttle_common::project::ProjectName as ServiceName;
 use shuttle_service::{
     loader::{LoadedService, Loader},
     Factory,
@@ -51,14 +51,14 @@ pub async fn task(
             }
         };
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
-        let project_name = match ProjectName::from_str(&built.service_name) {
+        let service_name = match ServiceName::from_str(&built.service_name) {
             Ok(name) => name,
             Err(err) => {
                 start_crashed_cleanup(&id, err);
                 continue;
             }
         };
-        let mut factory = abstract_factory.get_factory(project_name, built.service_id);
+        let mut factory = abstract_factory.get_factory(service_name, built.service_id);
         let logger = logger_factory.get_logger(id);
         let cleanup = move |result: std::result::Result<
             std::result::Result<(), shuttle_service::Error>,

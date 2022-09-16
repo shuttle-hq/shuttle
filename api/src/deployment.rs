@@ -393,7 +393,7 @@ impl DeploymentSystem {
             build_system,
             deployments: deployments.clone(),
             provisioner_client,
-            version_req
+            version_req,
         };
 
         let job_queue = JobQueue::new(context, tx).await;
@@ -408,7 +408,7 @@ impl DeploymentSystem {
             deployments,
             job_queue,
             router,
-            fqdn
+            fqdn,
         }
     }
 

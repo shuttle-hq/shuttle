@@ -1,12 +1,6 @@
 use std::error::Error as StdError;
 use std::io;
 
-use axum::http::{header, HeaderValue, StatusCode};
-use axum::response::{IntoResponse, Response};
-use axum::Json;
-
-use serde::{ser::SerializeMap, Serialize};
-use serde_json::json;
 use shuttle_service::loader::LoaderError;
 
 use cargo::util::errors::CargoTestError;
@@ -31,34 +25,6 @@ pub enum Error {
     SecretsParse(#[from] toml::de::Error),
     #[error("Failed to set secrets: {0}")]
     SecretsSet(#[source] Box<dyn StdError + Send>),
-    #[error("Failed to parse secrets: {0}")]
-    Persistence(#[from] crate::persistence::PersistenceError),
-}
-
-impl Serialize for Error {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let mut map = serializer.serialize_map(Some(2))?;
-        map.serialize_entry("type", &format!("{:?}", self))?;
-        map.serialize_entry("msg", &self.source().unwrap().to_string())?;
-        map.end()
-    }
-}
-
-impl IntoResponse for Error {
-    fn into_response(self) -> Response {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            [(
-                header::CONTENT_TYPE,
-                HeaderValue::from_static("application/json"),
-            )],
-            Json(json!({ "message": self })),
-        )
-            .into_response()
-    }
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

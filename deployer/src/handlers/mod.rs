@@ -1,5 +1,6 @@
 mod admin;
 mod deployment;
+mod error;
 mod service;
 mod user;
 
@@ -18,7 +19,6 @@ use tracing::{debug, debug_span, error, field, Span};
 use uuid::Uuid;
 
 use crate::deployment::{DeploymentManager, Queued};
-use crate::error::{Error, Result};
 use crate::persistence::{self, Deployment, Log, Persistence, SecretGetter, State};
 
 use std::collections::HashMap;
@@ -32,6 +32,7 @@ pub use self::service::ServiceAuthorizer;
 use self::service::ServiceGuard;
 use self::user::UserGuard;
 pub use self::user::UserValidator;
+pub use {self::error::Error, self::error::Result};
 
 pub fn make_router(
     persistence: Persistence,
@@ -185,7 +186,7 @@ async fn post_service(
         id,
         service_name: service.name,
         service_id: service.id,
-        data_stream: Box::pin(stream.map_err(Error::Streaming)),
+        data_stream: Box::pin(stream.map_err(crate::error::Error::Streaming)),
         will_run_tests: !params.contains_key("no-test"),
     };
 

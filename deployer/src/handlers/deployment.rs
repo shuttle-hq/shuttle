@@ -1,9 +1,6 @@
 use std::sync::Arc;
 
-use crate::{
-    error::Result,
-    persistence::{Deployment, State},
-};
+use crate::persistence::{Deployment, State};
 use async_trait::async_trait;
 use axum::{
     extract::{FromRequest, Path},
@@ -15,7 +12,6 @@ use serde::Serialize;
 use uuid::Uuid;
 
 use super::user::UserGuard;
-
 /// Guard used to make sure a request has a valid api key set on the Basic Auth and that it owns a service's deployment
 ///
 /// *Note*
@@ -94,7 +90,7 @@ pub trait DeploymentAuthorizer: Sync + Send {
         &self,
         api_key: &str,
         deployment_id: &Uuid,
-    ) -> Result<Option<Deployment>>;
+    ) -> super::Result<Option<Deployment>>;
 }
 
 impl From<Deployment> for DeploymentGuard {

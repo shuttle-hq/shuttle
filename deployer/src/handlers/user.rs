@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{error::Result, persistence::User};
+use crate::persistence::User;
 use async_trait::async_trait;
 use axum::{
     extract::FromRequest,
@@ -78,7 +78,7 @@ pub struct UserGuardError {
 
 #[async_trait::async_trait]
 pub trait UserValidator: Sync + Send {
-    async fn is_user_valid(&self, api_key: &str) -> Result<Option<User>>;
+    async fn is_user_valid(&self, api_key: &str) -> super::Result<Option<User>>;
 }
 
 impl From<User> for UserGuard {

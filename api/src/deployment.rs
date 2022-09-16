@@ -12,6 +12,7 @@ use futures::prelude::*;
 use libloading::Library;
 use rocket::data::ByteUnit;
 use rocket::{tokio, Data};
+use semver::VersionReq;
 use shuttle_common::project::ProjectName;
 use shuttle_common::{
     DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, LogItem, Port,
@@ -123,6 +124,7 @@ impl Deployment {
                         .build(
                             &queued.crate_bytes,
                             meta.project.as_str(),
+                            &context.version_req,
                             Box::new(console_writer),
                         )
                         .await
@@ -346,6 +348,7 @@ pub(crate) struct Context {
     build_system: Box<dyn BuildSystem>,
     deployments: Arc<RwLock<Deployments>>,
     provisioner_client: ProvisionerClient<Channel>,
+    version_req: VersionReq,
 }
 
 impl DeploymentSystem {
@@ -354,6 +357,7 @@ impl DeploymentSystem {
         fqdn: String,
         provisioner_address: String,
         provisioner_port: Port,
+        version_req: VersionReq,
     ) -> Self {
         let router: Arc<Router> = Default::default();
         let (tx, mut rx) = mpsc::unbounded_channel::<Log>();
@@ -389,6 +393,7 @@ impl DeploymentSystem {
             build_system,
             deployments: deployments.clone(),
             provisioner_client,
+            version_req,
         };
 
         let job_queue = JobQueue::new(context, tx).await;

@@ -11,6 +11,7 @@ import {
   SITE_DESCRIPTION,
   SITE_URL,
   TWITTER_HANDLE,
+  GA_MEASUREMENT_ID,
 } from "../lib/constants";
 import AnnouncementBar, {
   AnnouncementBarIsClosedProvider,
@@ -23,12 +24,14 @@ import Footer from "../components/Footer";
 import Header from "../components/Header";
 import { config } from "@fortawesome/fontawesome-svg-core";
 import Script from "next/script";
+import { setupGoogleAnalytics } from "../lib/gtag";
 
 config.autoAddCss = false;
 
 export default function App({ Component, pageProps }: AppProps) {
   const router = useRouter();
   useEffect(() => setupMixpanel(router));
+  useEffect(() => setupGoogleAnalytics(router));
   const { user } = pageProps;
 
   return (
@@ -38,6 +41,26 @@ export default function App({ Component, pageProps }: AppProps) {
           <Head>
             <title>{SITE_TITLE}</title>
           </Head>
+          {/* Global Site Tag (gtag.js) - Google Analytics */}
+          <Script
+            strategy="afterInteractive"
+            src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
+          />
+          <Script
+            id="gtag-init"
+            strategy="afterInteractive"
+            dangerouslySetInnerHTML={{
+              __html: `
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+
+            gtag('config', '${GA_MEASUREMENT_ID}', {
+              page_path: window.location.pathname,
+            });
+          `,
+            }}
+          />
           <Script
             strategy="afterInteractive"
             dangerouslySetInnerHTML={{

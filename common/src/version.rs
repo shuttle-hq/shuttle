@@ -23,6 +23,8 @@ pub fn get_shuttle_service_from_user_crate<P: AsRef<Path>>(manifest_path: P) -> 
             "--format",
             "{p}",
         ])
+        .arg("--color")
+        .arg("always")
         .output()
         .unwrap();
 

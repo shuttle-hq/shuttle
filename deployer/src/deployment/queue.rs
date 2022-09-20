@@ -129,6 +129,7 @@ impl Queued {
                         target: String::new(),
                         fields: json!({ "build_line": line }),
                         r#type: LogType::Event,
+                        address: None,
                     },
                     message => Log {
                         id,
@@ -140,6 +141,7 @@ impl Queued {
                         target: String::new(),
                         fields: serde_json::to_value(message).unwrap(),
                         r#type: LogType::Event,
+                        address: None,
                     },
                 };
                 log_recorder.record(log);

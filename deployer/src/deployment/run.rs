@@ -122,7 +122,7 @@ impl Built {
     #[instrument(name = "built_handle", skip(self, factory, logger, cleanup), fields(id = %self.id, state = %State::Running))]
     async fn handle(
         self,
-        addr: SocketAddr,
+        address: SocketAddr,
         factory: &mut dyn Factory,
         logger: Box<dyn log::Log>,
         mut kill_recv: KillReceiver,
@@ -130,7 +130,7 @@ impl Built {
             + Send
             + 'static,
     ) -> Result<()> {
-        let (mut handle, library) = load_deployment(&self.id, addr, factory, logger).await?;
+        let (mut handle, library) = load_deployment(&self.id, address, factory, logger).await?;
 
         info!("got handle for deployment");
         // Execute loaded service

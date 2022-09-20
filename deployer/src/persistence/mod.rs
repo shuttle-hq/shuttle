@@ -83,6 +83,7 @@ impl Persistence {
                 service_id TEXT,     -- Identifier of the service this deployment belongs to.
                 state TEXT,          -- Enum indicating the current state of the deployment.
                 last_update INTEGER, -- Unix epoch of the last status update
+                address TEXT,        -- Address a running deployment is active on
                 FOREIGN KEY(service_id) REFERENCES services(id)
             );
 
@@ -198,12 +199,13 @@ impl Persistence {
         let deployment = deployment.into();
 
         sqlx::query(
-            "INSERT INTO deployments (id, service_id, state, last_update) VALUES (?, ?, ?, ?)",
+            "INSERT INTO deployments (id, service_id, state, last_update, address) VALUES (?, ?, ?, ?, ?)",
         )
         .bind(deployment.id)
         .bind(deployment.service_id)
         .bind(deployment.state)
         .bind(deployment.last_update)
+        .bind(deployment.address.map(|socket| socket.to_string()))
         .execute(&self.pool)
         .await
         .map(|_| ())
@@ -361,9 +363,10 @@ async fn update_deployment(pool: &SqlitePool, state: impl Into<DeploymentState>)
 
     // TODO: Handle moving to 'active_deployments' table for State::Running.
 
-    sqlx::query("UPDATE deployments SET state = ?, last_update = ? WHERE id = ?")
+    sqlx::query("UPDATE deployments SET state = ?, last_update = ?, address = ? WHERE id = ?")
         .bind(state.state)
         .bind(state.last_update)
+        .bind(state.address.map(|socket| socket.to_string()))
         .bind(state.id)
         .execute(pool)
         .await
@@ -498,7 +501,7 @@ impl DeploymentAuthorizer for Persistence {
         deployment_id: &Uuid,
     ) -> crate::handlers::Result<Option<Deployment>> {
         sqlx::query_as(
-            r#"SELECT d.id AS id, service_id, state, last_update
+            r#"SELECT d.id AS id, service_id, state, last_update, d.address
                 FROM deployments AS d
                 JOIN services AS s ON d.service_id = s.id
                 WHERE user_id = ? AND d.id = ?"#,
@@ -514,6 +517,8 @@ impl DeploymentAuthorizer for Persistence {
 
 #[cfg(test)]
 mod tests {
+    use std::net::{Ipv4Addr, SocketAddr};
+
     use chrono::{TimeZone, Utc};
     use serde_json::json;
 
@@ -535,6 +540,7 @@ mod tests {
             service_id,
             state: State::Queued,
             last_update: Utc.ymd(2022, 4, 25).and_hms(4, 43, 33),
+            address: None,
         };
 
         p.insert_deployment(deployment.clone()).await.unwrap();
@@ -546,6 +552,7 @@ mod tests {
                 id,
                 state: State::Built,
                 last_update: Utc::now(),
+                address: None,
             },
         )
         .await
@@ -567,24 +574,28 @@ mod tests {
             service_id: xyz_id,
             state: State::Crashed,
             last_update: Utc.ymd(2022, 4, 25).and_hms(7, 29, 35),
+            address: None,
         };
         let deployment_stopped = Deployment {
             id: Uuid::new_v4(),
             service_id: xyz_id,
             state: State::Stopped,
             last_update: Utc.ymd(2022, 4, 25).and_hms(7, 49, 35),
+            address: None,
         };
         let deployment_other = Deployment {
             id: Uuid::new_v4(),
             service_id,
             state: State::Running,
             last_update: Utc.ymd(2022, 4, 25).and_hms(7, 39, 39),
+            address: None,
         };
         let deployment_running = Deployment {
             id: Uuid::new_v4(),
             service_id: xyz_id,
             state: State::Running,
             last_update: Utc.ymd(2022, 4, 25).and_hms(7, 48, 29),
+            address: Some(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 9876)),
         };
 
         for deployment in [
@@ -620,30 +631,35 @@ mod tests {
                 service_id,
                 state: State::Built,
                 last_update: Utc.ymd(2022, 4, 25).and_hms(4, 29, 33),
+                address: None,
             },
             Deployment {
                 id: Uuid::new_v4(),
                 service_id: foo_id,
                 state: State::Running,
                 last_update: Utc.ymd(2022, 4, 25).and_hms(4, 29, 44),
+                address: None,
             },
             Deployment {
                 id: id_1,
                 service_id: bar_id,
                 state: State::Running,
                 last_update: Utc.ymd(2022, 4, 25).and_hms(4, 33, 48),
+                address: None,
             },
             Deployment {
                 id: Uuid::new_v4(),
                 service_id: service_id2,
                 state: State::Crashed,
                 last_update: Utc.ymd(2022, 4, 25).and_hms(4, 38, 52),
+                address: None,
             },
             Deployment {
                 id: id_2,
                 service_id: foo_id,
                 state: State::Running,
                 last_update: Utc.ymd(2022, 4, 25).and_hms(4, 42, 32),
+                address: None,
             },
         ] {
             p.insert_deployment(deployment).await.unwrap();
@@ -679,12 +695,14 @@ mod tests {
                 service_id,
                 state: State::Running,
                 last_update: Utc::now(),
+                address: None,
             },
             Deployment {
                 id: Uuid::new_v4(),
                 service_id,
                 state: State::Running,
                 last_update: Utc::now(),
+                address: None,
             },
         ];
 
@@ -794,6 +812,7 @@ mod tests {
             target: "tests::log_recorder_event".to_string(),
             fields: json!({"message": "job queued"}),
             r#type: deploy_layer::LogType::Event,
+            address: None,
         };
 
         p.record(event);
@@ -827,6 +846,7 @@ mod tests {
             service_id,
             state: State::Queued, // Should be different from the state recorded below
             last_update: Utc.ymd(2022, 4, 29).and_hms(2, 39, 39),
+            address: None,
         })
         .await
         .unwrap();
@@ -840,6 +860,7 @@ mod tests {
             target: String::new(),
             fields: serde_json::Value::Null,
             r#type: deploy_layer::LogType::State,
+            address: Some("127.0.0.1:12345".to_string()),
         };
 
         p.record(state);
@@ -865,6 +886,7 @@ mod tests {
                 service_id,
                 state: State::Running,
                 last_update: Utc.ymd(2022, 4, 29).and_hms(2, 39, 59),
+                address: Some(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 12345)),
             }
         );
     }
@@ -1048,7 +1070,8 @@ mod tests {
                 id: deployment_id,
                 service_id,
                 state: State::Running,
-                last_update
+                last_update,
+                address: None,
             }),
             p.does_user_own_deployment(&api_key, &deployment_id)
                 .await

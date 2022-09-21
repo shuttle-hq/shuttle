@@ -1,3 +1,5 @@
+use std::net::SocketAddr;
+
 use clap::Parser;
 use fqdn::FQDN;
 use shuttle_common::Port;
@@ -18,6 +20,14 @@ pub struct Args {
     /// FQDN where the proxy can be reached at
     #[clap(long)]
     pub proxy_fqdn: FQDN,
+
+    /// Address to bind API to
+    #[clap(long, default_value = "0.0.0.0:8001")]
+    pub api_address: SocketAddr,
+
+    /// Address to bind proxy to
+    #[clap(long, default_value = "0.0.0.0:8000")]
+    pub proxy_address: SocketAddr,
 
     /// Secret that will be used to perform admin tasks on this deployer
     #[clap(long)]

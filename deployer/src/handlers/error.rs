@@ -11,6 +11,12 @@ use serde_json::json;
 pub enum Error {
     #[error("Persistence failure: {0}")]
     Persistence(#[from] crate::persistence::PersistenceError),
+    #[error("Failed to convert {from} to {to}")]
+    Convert {
+        from: String,
+        to: String,
+        message: String,
+    },
 }
 
 impl Serialize for Error {

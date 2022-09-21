@@ -119,7 +119,7 @@ pub struct Built {
 }
 
 impl Built {
-    #[instrument(name = "built_handle", skip(self, factory, logger, cleanup), fields(id = %self.id, state = %State::Running))]
+    #[instrument(name = "built_handle", skip(self, factory, logger, kill_recv, cleanup), fields(id = %self.id, state = %State::Running))]
     async fn handle(
         self,
         address: SocketAddr,

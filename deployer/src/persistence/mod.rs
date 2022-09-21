@@ -9,10 +9,13 @@ mod user;
 
 use crate::deployment::deploy_layer::{self, LogRecorder, LogType};
 use crate::handlers::{DeploymentAuthorizer, ServiceAuthorizer, UserValidator};
+use crate::proxy::AddressGetter;
 use error::{Error, Result};
 use rand::Rng;
 
+use std::net::SocketAddr;
 use std::path::Path;
+use std::str::FromStr;
 
 use chrono::Utc;
 use serde_json::json;
@@ -512,6 +515,37 @@ impl DeploymentAuthorizer for Persistence {
         .await
         .map_err(Error::from)
         .map_err(crate::handlers::Error::Persistence)
+    }
+}
+
+#[async_trait::async_trait]
+impl AddressGetter for Persistence {
+    async fn from_host(&self, host: &str) -> crate::handlers::Result<Option<std::net::SocketAddr>> {
+        let address_str = sqlx::query_as::<_, (String,)>(
+            r#"SELECT d.address
+                FROM deployments AS d
+                JOIN services AS s ON d.service_id = s.id
+                WHERE s.name = ? AND d.state = ?
+                ORDER BY d.last_update"#,
+        )
+        .bind(host)
+        .bind(State::Running)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(Error::from)
+        .map_err(crate::handlers::Error::Persistence)?;
+
+        if let Some((address_str,)) = address_str {
+            SocketAddr::from_str(&address_str).map(Some).map_err(|err| {
+                crate::handlers::Error::Convert {
+                    from: "String".to_string(),
+                    to: "SocketAddr".to_string(),
+                    message: err.to_string(),
+                }
+            })
+        } else {
+            Ok(None)
+        }
     }
 }
 
@@ -1076,6 +1110,43 @@ mod tests {
             p.does_user_own_deployment(&api_key, &deployment_id)
                 .await
                 .unwrap(),
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn from_host() {
+        let (p, _) = Persistence::new_in_memory().await;
+        let service_id = add_service_named(&p.pool, "service-name").await.unwrap();
+        let service_other_id = add_service_named(&p.pool, "other-name").await.unwrap();
+
+        sqlx::query(
+            "INSERT INTO deployments (id, service_id, state, last_update, address) VALUES (?, ?, ?, ?, ?), (?, ?, ?, ?, ?), (?, ?, ?, ?, ?)",
+        )
+        // This running item should match
+        .bind(Uuid::new_v4())
+        .bind(&service_id)
+        .bind(State::Running)
+        .bind(Utc::now())
+        .bind("10.0.0.5:12356")
+        // A stopped item should not match
+        .bind(Uuid::new_v4())
+        .bind(&service_id)
+        .bind(State::Stopped)
+        .bind(Utc::now())
+        .bind("10.0.0.5:9876")
+        // Another service should not match
+        .bind(Uuid::new_v4())
+        .bind(&service_other_id)
+        .bind(State::Running)
+        .bind(Utc::now())
+        .bind("10.0.0.5:5678")
+        .execute(&p.pool)
+        .await
+        .unwrap();
+
+        assert_eq!(
+            SocketAddr::from(([10, 0, 0, 5], 12356)),
+            p.from_host("service-name").await.unwrap().unwrap(),
         );
     }
 

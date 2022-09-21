@@ -1,8 +1,10 @@
 use clap::Parser;
 use shuttle_deployer::{
-    start, AbstractProvisionerFactory, Args, DeployLayer, Persistence, RuntimeLoggerFactory,
+    start, start_proxy, AbstractProvisionerFactory, Args, DeployLayer, Persistence,
+    RuntimeLoggerFactory,
 };
 use shuttle_proto::provisioner::provisioner_client::ProvisionerClient;
+use tokio::select;
 use tonic::transport::Endpoint;
 use tracing::trace;
 use tracing_subscriber::prelude::*;
@@ -52,5 +54,8 @@ async fn main() {
 
     let runtime_logger_factory = RuntimeLoggerFactory::new(persistence.get_log_sender());
 
-    start(abstract_factory, runtime_logger_factory, persistence, args).await;
+    select! {
+        _ = start_proxy(args.proxy_address, persistence.clone()) => {},
+        _ = start(abstract_factory, runtime_logger_factory, persistence, args) => {},
+    }
 }

@@ -19,6 +19,7 @@ static SERVER_HEADER: Lazy<HeaderValue> = Lazy::new(|| "shuttle.rs".parse().unwr
 
 pub async fn handle(
     remote_address: SocketAddr,
+    fqdn: String,
     req: Request<Body>,
     address_getter: impl AddressGetter,
 ) -> Result<Response<Body>, Infallible> {
@@ -32,7 +33,18 @@ pub async fn handle(
         }
     };
 
-    let proxy_address = match address_getter.from_host(&host).await {
+    let service = match host.strip_suffix(&fqdn) {
+        Some(service) => service,
+
+        None => {
+            return Ok(Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body(Body::from("this domain is not served by proxy"))
+                .unwrap());
+        }
+    };
+
+    let proxy_address = match address_getter.from_service(service).await {
         Ok(Some(address)) => address,
         Ok(None) => {
             let response_body = format!("could not find service for host: {}", host);
@@ -57,10 +69,10 @@ pub async fn handle(
         Err(error) => {
             match error {
                 ProxyError::InvalidUri(e) => {
-                    error!(error = %e, "error while handling request in reverse proxy");
+                    error!(error = %e, "error while handling request in reverse proxy: 'invalid uri'");
                 }
                 ProxyError::HyperError(e) => {
-                    error!(error = %e, "error while handling request in reverse proxy");
+                    error!(error = %e, "error while handling request in reverse proxy: 'hyper error'");
                 }
                 ProxyError::ForwardHeaderError => {
                     error!("error while handling request in reverse proxy: 'fwd header error'");
@@ -79,7 +91,8 @@ pub async fn handle(
 
 #[async_trait]
 pub trait AddressGetter: Clone + Send + Sync + 'static {
-    async fn from_host(&self, host: &str) -> crate::handlers::Result<Option<SocketAddr>>;
+    async fn from_service(&self, service_name: &str)
+        -> crate::handlers::Result<Option<SocketAddr>>;
 }
 
 async fn reverse_proxy(
@@ -87,7 +100,8 @@ async fn reverse_proxy(
     service_address: &str,
     req: Request<Body>,
 ) -> Result<Response<Body>, ProxyError> {
-    let mut response = PROXY_CLIENT.call(remote_ip, service_address, req).await?;
+    let forward_uri = format!("http://{service_address}");
+    let mut response = PROXY_CLIENT.call(remote_ip, &forward_uri, req).await?;
 
     response.headers_mut().insert(SERVER, SERVER_HEADER.clone());
 

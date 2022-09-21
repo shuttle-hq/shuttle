@@ -6,6 +6,7 @@ pub use deployment::{
     runtime_logger::RuntimeLoggerFactory,
 };
 use deployment::{provisioner_factory, runtime_logger, Built, DeploymentManager};
+use fqdn::FQDN;
 use hyper::{
     server::conn::AddrStream,
     service::{make_service_fn, service_fn},
@@ -59,14 +60,19 @@ pub async fn start(
         .unwrap_or_else(|_| panic!("Failed to bind to address: {}", args.api_address));
 }
 
-pub async fn start_proxy(proxy_address: SocketAddr, address_getter: impl AddressGetter) {
+pub async fn start_proxy(
+    proxy_address: SocketAddr,
+    fqdn: FQDN,
+    address_getter: impl AddressGetter,
+) {
     let make_service = make_service_fn(|socket: &AddrStream| {
         let remote_address = socket.remote_addr();
+        let fqdn = format!(".{}", fqdn.to_string().trim_end_matches('.'));
         let address_getter = address_getter.clone();
 
         async move {
             Ok::<_, Infallible>(service_fn(move |req| {
-                proxy::handle(remote_address, req, address_getter.clone())
+                proxy::handle(remote_address, fqdn.clone(), req, address_getter.clone())
             }))
         }
     });

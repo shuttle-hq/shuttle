@@ -520,7 +520,10 @@ impl DeploymentAuthorizer for Persistence {
 
 #[async_trait::async_trait]
 impl AddressGetter for Persistence {
-    async fn from_host(&self, host: &str) -> crate::handlers::Result<Option<std::net::SocketAddr>> {
+    async fn from_service(
+        &self,
+        service_name: &str,
+    ) -> crate::handlers::Result<Option<std::net::SocketAddr>> {
         let address_str = sqlx::query_as::<_, (String,)>(
             r#"SELECT d.address
                 FROM deployments AS d
@@ -528,7 +531,7 @@ impl AddressGetter for Persistence {
                 WHERE s.name = ? AND d.state = ?
                 ORDER BY d.last_update"#,
         )
-        .bind(host)
+        .bind(service_name)
         .bind(State::Running)
         .fetch_optional(&self.pool)
         .await
@@ -1146,7 +1149,7 @@ mod tests {
 
         assert_eq!(
             SocketAddr::from(([10, 0, 0, 5], 12356)),
-            p.from_host("service-name").await.unwrap().unwrap(),
+            p.from_service("service-name").await.unwrap().unwrap(),
         );
     }
 

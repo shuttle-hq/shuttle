@@ -55,7 +55,7 @@ async fn main() {
     let runtime_logger_factory = RuntimeLoggerFactory::new(persistence.get_log_sender());
 
     select! {
-        _ = start_proxy(args.proxy_address, persistence.clone()) => {},
+        _ = start_proxy(args.proxy_address, args.proxy_fqdn.clone(), persistence.clone()) => {},
         _ = start(abstract_factory, runtime_logger_factory, persistence, args) => {},
     }
 }

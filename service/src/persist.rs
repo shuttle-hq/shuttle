@@ -8,6 +8,7 @@ use std::fs;
 use std::fs::File;
 use std::io::BufReader;
 use std::io::BufWriter;
+use std::path::PathBuf;
 use thiserror::Error;
 use tokio::runtime::Runtime;
 
@@ -31,12 +32,10 @@ pub struct PersistInstance {
 
 impl PersistInstance {
     pub fn save<T: Serialize>(&self, key: &str, struc: T) -> Result<(), PersistError> {
-        let project_name = self.project_name.to_string();
-        fs::create_dir_all(format!("shuttle_persist/{}", project_name))
-            .map_err(PersistError::CreateFolder)?;
+        let storage_folder = self.get_storage_folder();
+        fs::create_dir_all(storage_folder).map_err(PersistError::CreateFolder)?;
 
-        let file = File::create(format!("shuttle_persist/{}/{}.bin", project_name, key))
-            .map_err(PersistError::Open)?;
+        let file = self.get_storage_file(key)?;
         let mut writer = BufWriter::new(file);
         Ok(serialize_into(&mut writer, &struc).map_err(PersistError::Serialize))?
     }
@@ -45,11 +44,19 @@ impl PersistInstance {
     where
         T: DeserializeOwned,
     {
-        let project_name = self.project_name.to_string();
-        let file = File::open(format!("shuttle_persist/{}/{}.bin", project_name, key))
-            .map_err(PersistError::Open)?;
+        let file = self.get_storage_file(key)?;
         let reader = BufReader::new(file);
         Ok(deserialize_from(reader).map_err(PersistError::Deserialize))?
+    }
+
+    fn get_storage_folder(&self) -> PathBuf {
+        ["shuttle_persist", self.project_name].iter().collect()
+    }
+
+    fn get_storage_file(&self, key: &str) -> Result<File, PersistError> {
+        let path = self.get_storage_folder().push(format!("{key}.bin"));
+
+        File::create(path).map_err(PersistError::Open)
     }
 }
 

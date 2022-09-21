@@ -2,15 +2,19 @@ import { faClipboard } from "@fortawesome/free-regular-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import ReactTooltip from "react-tooltip";
 import NoSsr from "./NoSsr";
-import mixpanel from "mixpanel-browser";
-
+import { gtagEvent } from "../lib/gtag";
 type CodeProps = {
   readonly id: string;
   readonly code: string;
 };
 
-const copyToClipboard = (code) => {
-  mixpanel.track("Copied Code");
+const copyToClipboard = (code: string, id: string) => {
+  gtagEvent({
+    action: "copy_install_script",
+    category: "Code",
+    label: "Copied Install Script",
+    value: id,
+  });
 
   navigator.clipboard.writeText(code);
 };
@@ -42,7 +46,7 @@ export default function Code({ code, id }: CodeProps) {
           id={id}
           place="top"
           effect="float"
-          afterShow={() => copyToClipboard(code)}
+          afterShow={() => copyToClipboard(code, id)}
         >
           <b>Copied to clipboard!</b>
         </ReactTooltip>

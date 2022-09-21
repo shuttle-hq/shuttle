@@ -3,9 +3,11 @@ import { GA_MEASUREMENT_ID } from "./constants";
 
 // https://developers.google.com/analytics/devguides/collection/ga4/event-parameters?client_type=gtag#set-up-every-event
 export const pageview = (url: string) => {
-  window.gtag("config", GA_MEASUREMENT_ID, {
-    page_path: url,
-  });
+  if (window && window.gtag) {
+    window.gtag("config", GA_MEASUREMENT_ID, {
+      page_path: url,
+    });
+  }
 };
 
 interface GtagEvent {
@@ -16,11 +18,13 @@ interface GtagEvent {
 }
 // https://developers.google.com/analytics/devguides/collection/ga4/events?client_type=gtag
 export const gtagEvent = ({ action, category, label, value }: GtagEvent) => {
-  window.gtag("event", action, {
-    event_category: category,
-    event_label: label,
-    value: value,
-  });
+  if (window && window.gtag) {
+    window.gtag("event", action, {
+      event_category: category,
+      event_label: label,
+      value: value,
+    });
+  }
 };
 
 export const setupGoogleAnalytics = (router: NextRouter) => {

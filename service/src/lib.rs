@@ -235,9 +235,6 @@ pub use secrets::SecretStore;
 ))]
 pub mod aws;
 
-// TODO - remove this when we have a better way to handle this
-// #[cfg(feature = "persist")]
-
 #[cfg(feature = "persist")]
 pub mod persist;
 #[cfg(feature = "persist")]

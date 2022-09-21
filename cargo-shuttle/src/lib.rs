@@ -288,7 +288,7 @@ impl Shuttle {
             Ok(())
         } else {
             Err(anyhow!(
-                "Your shuttle_service version is outdated. Update your shuttle_service version to {} and try to deploy again",
+                "Your shuttle-service version is outdated. Update your shuttle-service version to {} and try to deploy again",
                 &server_version,
             ))
         }

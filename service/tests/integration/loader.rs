@@ -1,7 +1,9 @@
 use crate::helpers::{loader::build_so_create_loader, sqlx::PostgresInstance};
 
+use shuttle_common::project::ProjectName;
 use shuttle_service::loader::LoaderError;
 use shuttle_service::{database, Error, Factory};
+use std::str::FromStr;
 
 use std::net::{Ipv4Addr, SocketAddr};
 use std::process::exit;
@@ -15,18 +17,24 @@ const RESOURCES_PATH: &str = "tests/resources";
 
 struct DummyFactory {
     postgres_instance: Option<PostgresInstance>,
+    project_name: ProjectName,
 }
 
 impl DummyFactory {
     fn new() -> Self {
         Self {
             postgres_instance: None,
+            project_name: ProjectName::from_str("test").unwrap(),
         }
     }
 }
 
 #[async_trait]
 impl Factory for DummyFactory {
+    fn get_project_name(&self) -> ProjectName {
+        self.project_name.clone()
+    }
+
     async fn get_db_connection_string(&mut self, _: database::Type) -> Result<String, Error> {
         let uri = if let Some(postgres_instance) = &self.postgres_instance {
             postgres_instance.get_uri()

@@ -1,5 +1,6 @@
 pub mod database;
 pub mod project;
+pub mod version;
 
 use std::{
     collections::BTreeMap,

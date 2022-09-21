@@ -208,7 +208,11 @@ impl std::error::Error for DeploymentApiError {}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct LogItem {
-    pub body: String,
     pub level: String,
+    pub file: Option<String>,
+    pub line: Option<u32>,
     pub target: String,
+
+    // Serialized version of the fields
+    pub fields: Vec<u8>,
 }

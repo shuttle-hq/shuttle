@@ -154,7 +154,7 @@ impl ToTokens for Wrapper {
                 #extra_imports
 
                 runtime.spawn_blocking(move || {
-                    let fmt_layer = shuttle_service::tracing_subscriber::fmt::layer();
+                    
                     let filter_layer =
                         shuttle_service::tracing_subscriber::EnvFilter::try_from_default_env()
                             .or_else(|_| shuttle_service::tracing_subscriber::EnvFilter::try_new("INFO"))
@@ -163,9 +163,7 @@ impl ToTokens for Wrapper {
                     shuttle_service::tracing_subscriber::registry()
                         .with(filter_layer)
                         .with(logger)
-                        .with(fmt_layer) // TODO: eventually remove 'fmt_layer` once `log_layer` is done
-                        .init(); // .init() sets the subscriber as the global default and also adds a compatibility layer for `log::Record`s
-
+                        .init(); // this sets the subscriber as the global default and also adds a compatibility layer for capturing `log::Record`s
                 })
                 .await
                 .map_err(|e| {

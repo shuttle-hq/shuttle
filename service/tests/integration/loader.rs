@@ -128,10 +128,15 @@ async fn sqlx_pool() {
 
     let log = rx.recv().await.unwrap();
     assert_eq!(log.deployment_id, deployment_id);
+
+    let fields: serde_json::Map<String, serde_json::Value> =   
+        serde_json::from_slice(&log.item.fields).unwrap();
+
+    let message = fields["message"].as_str().unwrap();
     assert!(
-        log.item.body.starts_with("SELECT 'Hello world';"),
+        message.starts_with("SELECT 'Hello world';"),
         "got: {}",
-        log.item.body
+        message
     );
     assert_eq!(log.item.target, "sqlx::query");
     assert_eq!(log.item.level, "info");

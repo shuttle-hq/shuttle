@@ -21,14 +21,14 @@
 
 # shuttle
 
-[Shuttle](https://www.shuttle.rs/) is a serverless platform for Rust which makes it really easy to 
-deploy your web-apps.
+[Shuttle](https://www.shuttle.rs/) is Rust-native cloud development platform that lets you deploy your Rust apps for free.
 
 Shuttle is built for productivity, reliability and performance:
 - Zero-Configuration support for Rust using annotations
 - Automatic resource provisioning (databases, caches, subdomains, etc.) via [Infrastructure-From-Code](https://www.shuttle.rs/blog/2022/05/09/ifc)
 - First-class support for popular Rust frameworks ([Rocket](https://github.com/shuttle-hq/shuttle/tree/main/examples/rocket/hello-world), [Axum](https://github.com/shuttle-hq/shuttle/tree/main/examples/axum/hello-world), 
-  [Tide](https://github.com/shuttle-hq/shuttle/tree/main/examples/tide/hello-world) and [Tower](https://github.com/shuttle-hq/shuttle/tree/main/examples/tower/hello-world))
+  [Tide](https://github.com/shuttle-hq/shuttle/tree/main/examples/tide/hello-world), [Poem](https://github.com/shuttle-hq/shuttle/tree/main/examples/poem/hello-world) and [Tower](https://github.com/shuttle-hq/shuttle/tree/main/examples/tower/hello-world))
+- Support for deploying Discord bots using [Serenity](https://github.com/shuttle-hq/shuttle/tree/main/examples/serenity/hello-world)
 - Scalable hosting (with optional self-hosting)
 
 
@@ -41,10 +41,10 @@ $ cargo install cargo-shuttle
 $ cargo shuttle login
 ```
 
-Create your first shuttle app with `rocket` framework:
+Create your first shuttle app with the `axum` framework:
 
 ```bash
-$ cargo shuttle init --rocket hello-world
+$ cargo shuttle init --axum hello-world
 ```
 
 Your `Cargo.toml` should look like:
@@ -58,27 +58,28 @@ edition = "2021"
 [lib]
 
 [dependencies]
-shuttle-service = { version = "0.5.1", features = ["web-rocket"] }
-rocket = "0.4.11"
+axum = "0.5"
+shuttle-service = { version = "0.5.2", features = ["web-axum"] }
+sync_wrapper = "0.1"
 ```
 
 
 Your shuttle app in `lib.rs` should look like:
 
 ```rust
-#[macro_use]
-extern crate rocket;
+use axum::{routing::get, Router};
+use sync_wrapper::SyncWrapper;
 
-#[get("/")]
-fn index() -> &'static str {
+async fn hello_world() -> &'static str {
     "Hello, world!"
 }
 
 #[shuttle_service::main]
-async fn rocket() -> shuttle_service::ShuttleRocket {
-    let rocket = rocket::build().mount("/hello", routes![index]);
+async fn axum() -> shuttle_service::ShuttleAxum {
+    let router = Router::new().route("/hello", get(hello_world));
+    let sync_wrapper = SyncWrapper::new(router);
 
-    Ok(rocket)
+    Ok(sync_wrapper)
 }
 ```
 
@@ -110,9 +111,9 @@ If you have any requests or suggestions feel free to open an issue.
 
 ## Community & Support
 
-- [Community Forum](https://github.com/getsynth/shuttle/discussions). Best for: help with building, discussion about best practices.
-- [GitHub Issues](https://github.com/getsynth/shuttle/issues). Best for: bugs and errors you encounter using Shuttle.
-- [Discord](https://discord.gg/H33rRDTm3p). Best for: sharing your applications and hanging out with the community.
+- [Community Forum](https://github.com/shuttle-hq/shuttle/discussions). Best for: help with building, discussion about best practices.
+- [GitHub Issues](https://github.com/shuttle-hq/shuttle/issues). Best for: bugs and errors you encounter using Shuttle.
+- [Discord](https://discord.gg/shuttle). Best for: sharing your applications and hanging out with the community.
 - [Twitter](https://twitter.com/shuttle_dev). Best for: keeping up with announcements and releases
 
 ## Status

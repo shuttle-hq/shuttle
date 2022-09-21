@@ -1,0 +1,486 @@
+---
+title: Building a Discord bot in Rust
+description: A tutorial on building and deploying an interactive bot in Rust with Serenity & shuttle
+author: ben
+tags: [rust, tutorial]
+thumb: discord-bot-thumbnail.png
+cover: discord-bot-thumbnail.png
+date: "2022-09-14T15:00:00"
+---
+
+In this post, we will look at a simple way to add custom functionality to a Discord server using a bot written in Rust. We will first register a bot with Discord, then go about how to create a Serenity application that will later run on shuttle. Finally, we will make the bot do something useful, writing some Rust code to get information from an external service.
+
+The full code can be found in [this repository](https://github.com/kaleidawave/discord-weather-bot).
+
+### Registering our bot
+
+Before we start making our bot, we need to register it for Discord. We do that by going to [https://discord.com/developers/applications](https://discord.com/developers/applications) and creating a new application.
+
+![](/images/blog/discord-bot-screenshots/application-registration.png)
+
+The application process is also used for adding functionality to Discord but we will be only using the bot offering. Fill in the basic details and you should get to the following screen:
+
+![](/images/blog/discord-bot-screenshots/application_id.png)
+
+You want to copy the Application ID and have it handy, because we will use it to add our bot to a test server.
+
+Next, we want to create a bot. You can set its public username here:
+
+![](/images/blog/discord-bot-screenshots/bot-name.png)
+
+You want to click the reset token and copy this value (we will use it in a later step). This value represents the username and password as a single value that Discord uses to authenticate that our server is the one controlling the bot. You want to keep this value secret.
+
+You also want to tick the `MESSAGE CONTENT INTENT` setting so it can read the commands input.
+
+To add the bot to the server we will test on, we can use the following URL (replace `*application_id*` in the URL with the ID you copied beforehand):
+
+```tsx
+https://discord.com/oauth2/authorize?client_id=*application_id*&scope=bot&permissions=8
+```
+
+Here, we create it with `permissions=8` so that it can do everything on the server. If you are adding to another server, select only the permissions it needs.
+
+We now have a bot on our server:
+
+![](/images/blog/discord-bot-screenshots/bot-is-offline.png)
+
+Oh, they’re offline 😢
+
+## Getting a bot online
+
+At this moment, our bot is not running because there is no code. We will have to write it and run it before we can start interacting with it.
+
+### [Serenity](https://docs.rs/serenity/latest/serenity/index.html)
+
+Serenity is a library for writing Discord bots (and communicating with the Discord API). We can create a new Serenity project which is readily deployable on shuttle with: `cargo shuttle init --serenity`
+
+If you don’t have shuttle yet, you can install it with `cargo install cargo-shuttle`. Afterwards, run the following in an empty directory:
+
+```
+cargo shuttle init --serenity
+```
+
+After running it you, should see the following generated in `src/lib.rs`:
+
+```rust
+use log::{error, info};
+use serenity::async_trait;
+use serenity::model::channel::Message;
+use serenity::model::gateway::Ready;
+use serenity::prelude::*;
+use shuttle_service::error::CustomError;
+use shuttle_service::SecretStore;
+use sqlx::PgPool;
+
+struct Bot;
+
+#[async_trait]
+impl EventHandler for Bot {
+    async fn message(&self, ctx: Context, msg: Message) {
+        if msg.content == "!hello" {
+            if let Err(e) = msg.channel_id.say(&ctx.http, "world!").await {
+                error!("Error sending message: {:?}", e);
+            }
+        }
+    }
+
+    async fn ready(&self, _: Context, ready: Ready) {
+        info!("{} is connected!", ready.user.name);
+    }
+}
+
+#[shuttle_service::main]
+async fn serenity(#[shared::Postgres] pool: PgPool) -> shuttle_service::ShuttleSerenity {
+    // Get the discord token set in `Secrets.toml` from the shared Postgres database
+    let token = pool
+        .get_secret("DISCORD_TOKEN")
+        .await
+        .map_err(CustomError::new)?;
+
+    // Set gateway intents, which decides what events the bot will be notified about
+    let intents = GatewayIntents::GUILD_MESSAGES | GatewayIntents::MESSAGE_CONTENT;
+
+    let client = Client::builder(&token, intents)
+        .event_handler(Bot)
+        .await
+        .expect("Err creating client");
+
+    Ok(client)
+}
+```
+
+### Building an interaction for our bot
+
+We want to call our bot when chatting in a text channel. Discord enables this with [slash commands](https://discord.com/blog/slash-commands-are-here).
+
+Slash commands can be server-specific (servers are named as `guilds` in Discords API documentation) or application specific (across all servers the bot is in). For testing, we will only enable it on a single guild/server. This is because the application-wide commands can take an hour to fully register whereas the guild/server specific ones are instant, so we can test the new commands immediately.
+
+You can copy the guild ID by right-clicking here on the server name and click `copy ID` ([you will need developer mode enabled to do this](https://www.howtogeek.com/714348/how-to-enable-or-disable-developer-mode-on-discord/)):
+
+![](/images/blog/discord-bot-screenshots/guild-id.png)
+
+Now that we have the information for setup, we can start writing our bot and its commands.
+
+We will first get rid of the `async fn message` hook as we won’t be using it in this example. In the `ready` hook we will call `set_application_commands` with a `GuildId` to register a command with Discord. Here we register a `hello` command with a description and no parameters (Discord refers to these as options).
+
+```rust
+#[async_trait]
+impl EventHandler for Bot {
+    async fn ready(&self, ctx: Context, ready: Ready) {
+        info!("{} is connected!", ready.user.name);
+
+        let guild_id = GuildId(*your guild id*);
+
+        let commands = GuildId::set_application_commands(&guild_id, &ctx.http, |commands| {
+            commands.create_application_command(|command| { command.name("hello").description("Say hello") })
+        }).await.unwrap();
+
+        info!("{:#?}", commands);
+    }
+}
+```
+
+> Serenity has a bit of a different way of registering commands using a callback. If you are working on a larger command application, [poise](https://docs.rs/poise/latest/poise/) (which builds on Serenity) might be better suited.
+> 
+
+With our command registered, we will now add a hook for when these commands are called using `interaction_create`.
+
+```rust
+#[async_trait]
+impl EventHandler for Bot {
+    async fn ready(&self, ctx: Context, ready: Ready) {
+        // ...
+    }
+
+    async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
+        if let Interaction::ApplicationCommand(command) = interaction {
+            let response_content = match command.data.name.as_str() {
+                "hello" => "hello".to_owned(),
+                command => unreachable!("Unknown command: {}", command),
+            };
+
+            let create_interaction_response =
+                command.create_interaction_response(&ctx.http, |response| {
+                    response
+                        .kind(InteractionResponseType::ChannelMessageWithSource)
+                        .interaction_response_data(|message| message.content(response_content))
+                });
+
+            if let Err(why) = create_interaction_response.await {
+                eprintln!("Cannot respond to slash command: {}", why);
+            }
+        }
+    }
+}
+```
+
+### Trying it out
+
+Now with the code written we can test it locally. Before we do that we have to authenticate the bot with Discord. We do this with the value we got from "Reset Token" on the bot screen in one of the previous steps. To register a secret with shuttle we create a `Secrets.toml` file with a key value pair. This pair is read by the `pool.get_secret("DISCORD_TOKEN")` call in the `ready` hook:
+
+```
+# Secrets.toml
+DISCORD_TOKEN="*your discord token*"
+DISCORD_GUILD_ID="*the guild we are testing on*"
+```
+
+> Currently *secrets* are stored using shuttle's database Postgres offering (thus why the parameter on main is `PgPool`). Therefore during local testing you need access to a Postgres database. Shuttle's local runner does this using Docker which will require [Docker desktop](https://community.chocolatey.org/packages/docker-desktop/2.1.0.3) being locally installed to use the Secrets locally. **This is is subject to change in the future so that it doesn't require Docker for local secrets.** There is also a known issue with deploying Secrets on Windows so if you have problems [consult the Discord](https://discord.gg/shuttle).
+
+`cargo shuttle run`
+
+We should see that our bot now displays as online:
+
+![](/images/blog/discord-bot-screenshots/bot-is-online.png)
+
+When typing, we should see our command come up with its description:
+
+![](/images/blog/discord-bot-screenshots/command-description.png)
+
+Our bot should respond with "hello" to our command:
+
+![](/images/blog/discord-bot-screenshots/command-result.png)
+
+Wow! Let’s make our bot do something a little more useful.
+
+### Making the bot do something
+
+[There is plenty of free APIs](https://github.com/public-apis/public-apis) that can be used for getting information on a variety of topics.
+
+For this demo, we are going to build a bot that gives a forecast for a location. I used the [AccuWeather API](https://developer.accuweather.com/) for this demo. If you are following this tutorial 1:1 you can go and register an application to get an access key. If you are using a different API this is still the sort of process you would follow.
+
+To get a forecast using the API requires two requests:
+
+1. Get a location ID for a named location
+2. Get the forecast at the location ID
+
+The API requires making network requests and it returns a JSON response. We can make the requests with `cargo add reqwest -F json` and deserialize the results to structures using serde, with `cargo add serde`. We will then have a function that chains the two requests together and deserializes the forecast to a readable result.
+
+> You can skip some of the boilerplate by using [direct access on untyped values](https://docs.rs/serde_json/latest/serde_json/#operating-on-untyped-json-values). But we will opt for the better strongly typed structured approach.
+
+Here we type some of the structures returned by the API and add `#[derive(Deserialize)]` so they can be decoded from JSON. All the keys are in *`PascalCase`* so we use the `#[serde(rename_all = "PascalCase")]` helper attribute to stay aligned with Rust standards. Some are completely different from the Rust field name so we use `#[serde(alias = ...)]` on the field to set its matching JSON representation.
+
+```rust
+// In weather.rs
+use serde::Deserialize;
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "PascalCase")]
+pub struct Location {
+    key: String,
+    localized_name: String,
+    country: Country,
+}
+
+impl Display for Location {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}, {}", self.localized_name, self.country.id)
+    }
+}
+
+#[derive(Deserialize, Debug)]
+pub struct Country {
+    #[serde(alias = "ID")]
+    pub id: String,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "PascalCase")]
+pub struct Forecast {
+    pub headline: Headline,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct Headline {
+    #[serde(alias = "Text")]
+    pub overview: String,
+}
+```
+
+> The above skips [a lot of the fields returned by the API](https://developer.accuweather.com/accuweather-forecast-api/apis/get/forecasts/v1/daily/1day/%7BlocationKey%7D), only opting for the ones we will use in this demo. If you wanted to type all the fields you could try the new [type from JSON feature in rust-analyzer](https://rust-analyzer.github.io/thisweek/2022/08/15/changelog-142.html#new-features) to avoid having to write as much.
+
+Our location request call also fails if the search we put in returns no places. We will create an intermediate type that represents this case and implements `std::error::Error`:
+
+```rust
+// Again in weather.rs
+use std::fmt::Display;
+
+#[derive(Debug)]
+pub struct CouldNotFindLocation {
+    place: String,
+}
+
+impl Display for CouldNotFindLocation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Could not find location '{}'", self.place)
+    }
+}
+
+impl std::error::Error for CouldNotFindLocation {}
+```
+
+Now with all the types written, we create a new `async` function that, given a place and a client, will return the forecast along with the location:
+
+```rust
+// Again in weather.rs
+pub async fn get_forecast(
+    place: &str,
+		api_key: &str,
+    client: &Client,
+) -> Result<(Location, Forecast), Box<dyn std::error::Error>> {
+		// Endpoints we will use
+    const LOCATION_REQUEST: &str = "http://dataservice.accuweather.com/locations/v1/cities/search";
+    const DAY_REQUEST: &str = "http://dataservice.accuweather.com/forecasts/v1/daily/1day/";
+
+		// The URL to call combined with our API_KEY and the place (via the q search parameter)
+    let url = format!("{}?apikey={}&q={}", LOCATION_REQUEST, api_key, place);
+		// Make the request we will call
+    let request = client.get(url).build().unwrap();
+		// Execute the request and await a JSON result that will be converted to a
+		// vector of locations
+    let resp = client
+        .execute(request)
+        .await?
+        .json::<Vec<Location>>()
+        .await?;
+
+		// Get the first location. If empty respond with the above declared
+		// `CouldNotFindLocation` error type
+    let first_location = resp
+        .into_iter()
+        .next()
+        .ok_or_else(|| CouldNotFindLocation {
+            place: place.to_owned(),
+        })?;
+
+		// Now have the location combine the key/identifier with the URL 
+    let url = format!("{}{}?apikey={}", DAY_REQUEST, first_location.key, api_key);
+
+		let request = client.get(url).build().unwrap();
+    let forecast = client
+        .execute(request)
+        .await?
+        .json::<Forecast>()
+        .await?;
+
+		// Combine the location with the foreact
+    Ok((first_location, forecast))
+}
+```
+
+Now we have a function to get the weather, **given a `reqwest` client and a place**, we can wire that into the bots logic.
+
+### Setting up the reqwest client
+
+Our `get_forecast` requires a `reqwest` Client and the weather API key. We will add some fields to our bot for holding this data and initialize this in the `shuttle_service::main` function. Using the secrets feature we can get our weather API key:
+
+```rust
+// In lib.rs
+struct Bot {
+    weather_api_key: String,
+    client: reqwest::Client,
+		discord_guild_id: GuildId,
+}
+
+#[shuttle_service::main]
+async fn serenity(#[shared::Postgres] pool: PgPool) -> shuttle_service::ShuttleSerenity {
+    // Get the discord token set in `Secrets.toml` from the shared Postgres database
+    let token = pool
+        .get_secret("DISCORD_TOKEN")
+        .await
+        .map_err(CustomError::new)?;
+
+    let weather_api_key = pool
+        .get_secret("WEATHER_API_KEY")
+        .await
+        .map_err(CustomError::new)?;
+
+		let discord_guild_id = pool
+        .get_secret("DISCORD_GUILD_ID")
+        .await
+        .map_err(CustomError::new)?;
+
+    // Set gateway intents, which decides what events the bot will be notified about
+    let intents = GatewayIntents::GUILD_MESSAGES | GatewayIntents::MESSAGE_CONTENT;
+
+    let client = Client::builder(&token, intents)
+        .event_handler(Bot {
+            weather_api_key,
+            client: reqwest::Client::new(),
+						discord_guild_id: GuildId(discord_guild_id.parse().unwrap())
+        })
+        .await
+        .expect("Err creating client");
+
+    Ok(client)
+}
+```
+
+### Registering a /weather command
+
+We will add our new command with a place option/parameter. Back in the `ready` hook, we can add an additional command alongside the existing `hello` command:
+
+```rust
+let commands = GuildId::set_application_commands(&guild_id, &ctx.http, |commands| {
+    commands
+        .create_application_command(|command| { command.name("hello").description("Say hello") })
+        .create_application_command(|command| {
+            command
+                .name("weather")
+                .description("Display the weather")
+                .create_option(|option| {
+                    option
+                        .name("place")
+                        .description("City to lookup forecast")
+                        .kind(CommandOptionType::String)
+                        .required(true)
+                })
+        })
+}).await.unwrap();
+```
+
+Discord allows us to set the expected type and whether it is required. Here, the place needs to be a string and is required.
+
+Now in the interaction handler, we can add a new branch to the match tree. We pull out the option/argument corresponding to `place` and extract its value. Because of the restrictions made when setting the option we can assume that it is well-formed (unless Discord sends a bad request) and thus the unwraps here. After we have the arguments of the command we call the `get_forecast` function and format the results into a string to return.
+
+```rust
+"weather" => {
+    let argument = command
+        .data
+        .options
+        .iter()
+        .find(|opt| opt.name == "place")
+        .cloned();
+
+    let value = argument.unwrap().value.unwrap();
+    let place = value.as_str().unwrap();
+    let result = weather::get_forecast(place).await;		
+
+    match result {
+        Ok((location, forecast)) => format!(
+            "Forecast: {} in {}",
+            forecast.headline.overview, location
+        ),
+        Err(err) => {
+            format!("Err: {}", err)
+        }
+    }
+}
+```
+
+### Running
+
+Now, we have these additional secrets we are using and we will add them to the `Secrets.toml` file:
+
+```toml
+# In Secrets.toml
+# Existing secrets:
+DISCORD_TOKEN="***"
+DISCORD_GUILD_ID="***"
+# New secret
+WEATHER_API_KEY="***"
+```
+
+With the secrets added, we can run the server:
+
+`cargo shuttle run`
+
+While typing, we should see our command come up with the options/parameters:
+
+![](/images/blog/discord-bot-screenshots/weather-input.png)
+
+Entering “Paris” as the place we get a result with a forecast:
+
+![](/images/blog/discord-bot-screenshots/weather-forecast.png)
+
+And entering a location that isn’t registered returns an error, thanks to the error handling we added to the `get_forecast` function:
+
+![](/images/blog/discord-bot-screenshots/weather-error.png)
+
+### Deploying on shuttle
+
+With all of that setup, it is really easy to get your bot hosted and running without having to run your PC 24/7.
+
+Just write:
+
+`cargo shuttle deploy`
+
+And you are good to go. Easy-pease, right?
+
+You could now take this idea even further:
+
+- Use a different API, to create a bot that can return [funny facts](https://asli-fun-fact-api.herokuapp.com/) or return [new spaceflights](https://spaceflightnewsapi.net/)
+- Maybe you could use one of shuttle's provided databases to remember certain information about a user
+- Expand on the weather forecast idea by adding more advanced options and follow-ups to command options
+- Use the [localization information](https://discord.com/developers/docs/interactions/application-commands#localization) to return information in other languages
+
+---
+
+This blog post is powered by shuttle! If you have any questions, or want to provide feedback, join our [Discord server](https://discord.gg/shuttle)!
+
+## [Shuttle](https://www.shuttle.rs/): The Rust-native, open source, cloud development platform.
+
+Deploying and managing your Rust web apps can be an expensive, anxious and time consuming process.
+
+If you want a batteries included and ops-free experience, [try out Shuttle](https://github.com/shuttle-hq/shuttle).
+
+<hr styles="margin-top: 10px"/>

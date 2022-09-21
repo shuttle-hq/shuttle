@@ -35,7 +35,8 @@ impl PersistInstance {
         let storage_folder = self.get_storage_folder();
         fs::create_dir_all(storage_folder).map_err(PersistError::CreateFolder)?;
 
-        let file = self.get_storage_file(key)?;
+        let file_path = self.get_storage_file(key);
+        let file = File::create(file_path).map_err(PersistError::Open)?;
         let mut writer = BufWriter::new(file);
         Ok(serialize_into(&mut writer, &struc).map_err(PersistError::Serialize))?
     }
@@ -44,19 +45,23 @@ impl PersistInstance {
     where
         T: DeserializeOwned,
     {
-        let file = self.get_storage_file(key)?;
+        let file_path = self.get_storage_file(key);
+        let file = File::open(file_path).map_err(PersistError::Open)?;
         let reader = BufReader::new(file);
         Ok(deserialize_from(reader).map_err(PersistError::Deserialize))?
     }
 
     fn get_storage_folder(&self) -> PathBuf {
-        ["shuttle_persist", self.project_name].iter().collect()
+        ["shuttle_persist", &self.project_name.to_string()]
+            .iter()
+            .collect()
     }
 
-    fn get_storage_file(&self, key: &str) -> Result<File, PersistError> {
-        let path = self.get_storage_folder().push(format!("{key}.bin"));
+    fn get_storage_file(&self, key: &str) -> PathBuf {
+        let mut path = self.get_storage_folder();
+        path.push(format!("{key}.bin"));
 
-        File::create(path).map_err(PersistError::Open)
+        path
     }
 }
 
@@ -81,7 +86,7 @@ impl ResourceBuilder<PersistInstance> for Persist {
 mod tests {
     use super::*;
     use shuttle_common::project::ProjectName;
-    use std::{fs, str::FromStr};
+    use std::str::FromStr;
 
     #[test]
     fn test_save_and_load() {

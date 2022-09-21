@@ -4,7 +4,6 @@ import React, { useEffect } from "react";
 import { useRouter } from "next/router";
 import Head from "next/head";
 import { DefaultSeo } from "next-seo";
-import { setupMixpanel } from "../lib/mixpanel";
 import {
   APP_NAME,
   SITE_TITLE,
@@ -30,7 +29,6 @@ config.autoAddCss = false;
 
 export default function App({ Component, pageProps }: AppProps) {
   const router = useRouter();
-  useEffect(() => setupMixpanel(router));
   useEffect(() => setupGoogleAnalytics(router));
   const { user } = pageProps;
 
@@ -56,7 +54,7 @@ export default function App({ Component, pageProps }: AppProps) {
             gtag('js', new Date());
 
             gtag('config', '${GA_MEASUREMENT_ID}', {
-              page_path: window.location.pathname,
+              page_path: window.location.pathname
             });
           `,
             }}

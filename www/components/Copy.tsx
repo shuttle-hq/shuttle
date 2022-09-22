@@ -5,7 +5,7 @@ import { gtagEvent } from "../lib/gtag";
 
 interface Props {
   readonly code: string;
-  readonly name: string;
+  readonly name?: string;
 }
 
 export default function Copy({ code, name }: Props) {

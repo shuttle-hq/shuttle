@@ -45,7 +45,7 @@ export default function App({ Component, pageProps }: AppProps) {
             src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
           />
           <Script
-            id="gtag-init"
+            id="google-analytics"
             strategy="afterInteractive"
             dangerouslySetInnerHTML={{
               __html: `
@@ -54,7 +54,7 @@ export default function App({ Component, pageProps }: AppProps) {
             gtag('js', new Date());
 
             gtag('config', '${GA_MEASUREMENT_ID}', {
-              page_path: window.location.pathname
+              page_path: window.location.pathname,
             });
           `,
             }}

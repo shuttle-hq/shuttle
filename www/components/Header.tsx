@@ -4,7 +4,6 @@ import { SHUTTLE_DOCS_URL } from "../lib/constants";
 import ExternalLink from "./ExternalLink";
 import ThemeSwitch from "./ThemeSwitch";
 import NoSsr from "./NoSsr";
-import mixpanel from "mixpanel-browser";
 import LoginButton from "./LoginButton";
 
 const navigation = [
@@ -23,7 +22,7 @@ export default function Header() {
       <nav className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8" aria-label="Top">
         <div className="flex w-full items-center justify-between py-3">
           <div className="flex items-center">
-            <InternalLink href="/" mixpanelEvent="Shuttle Home">
+            <InternalLink href="/">
               <div className="relative m-auto flex">
                 <img
                   className="h-8 w-auto"
@@ -42,7 +41,7 @@ export default function Header() {
                     key={link.name}
                     href={link.href}
                     className="text-base font-medium text-slate-600 hover:text-slate-900 dark:text-gray-200 hover:dark:text-white"
-                    mixpanelEvent={link.name}
+                    // mixpanelEvent={link.name}
                   >
                     {link.name}
                   </InternalLink>
@@ -51,7 +50,7 @@ export default function Header() {
                     key={link.name}
                     href={link.href}
                     className="text-base font-medium text-slate-600 hover:text-slate-900 dark:text-gray-200 hover:dark:text-white"
-                    mixpanelEvent={link.name}
+                    // mixpanelEvent={link.name}
                   >
                     {link.name}
                   </ExternalLink>
@@ -74,8 +73,8 @@ export default function Header() {
                 key={link.name}
                 href={link.href}
                 className="text-base font-medium dark:text-gray-200 hover:dark:text-white"
-                onClick={() => void mixpanel.track(link.name)}
-                mixpanelEvent={link.name}
+                // onClick={() => void mixpanel.track(link.name)}
+                // mixpanelEvent={link.name}
               >
                 {link.name}
               </InternalLink>
@@ -84,7 +83,7 @@ export default function Header() {
                 key={link.name}
                 href={link.href}
                 className="text-base font-medium dark:text-gray-200 hover:dark:text-white"
-                mixpanelEvent={link.name}
+                // mixpanelEvent={link.name}
               >
                 {link.name}
               </ExternalLink>

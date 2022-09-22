@@ -129,6 +129,7 @@ impl Queued {
                         target: String::new(),
                         fields: json!({ "build_line": line }),
                         r#type: LogType::Event,
+                        address: None,
                     },
                     message => Log {
                         id,
@@ -140,6 +141,7 @@ impl Queued {
                         target: String::new(),
                         fields: serde_json::to_value(message).unwrap(),
                         r#type: LogType::Event,
+                        address: None,
                     },
                 };
                 log_recorder.record(log);
@@ -239,7 +241,9 @@ fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<()> {
     for entry in archive.entries()? {
         let mut entry = entry?;
         let path: PathBuf = entry.path()?.components().skip(1).collect();
-        entry.unpack(dest.as_ref().join(path))?;
+        let dst: PathBuf = dest.as_ref().join(path);
+        std::fs::create_dir_all(dst.parent().unwrap())?;
+        entry.unpack(dst)?;
     }
 
     Ok(())

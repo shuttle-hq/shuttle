@@ -178,6 +178,7 @@ async fn post_service(
         service_id: service.id,
         state: State::Queued,
         last_update: Utc::now(),
+        address: None,
     };
 
     persistence.insert_deployment(deployment.clone()).await?;

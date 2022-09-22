@@ -1,4 +1,4 @@
-use std::net::SocketAddr;
+use std::{convert::Infallible, net::SocketAddr};
 
 pub use args::Args;
 pub use deployment::{
@@ -6,14 +6,21 @@ pub use deployment::{
     runtime_logger::RuntimeLoggerFactory,
 };
 use deployment::{provisioner_factory, runtime_logger, Built, DeploymentManager};
+use fqdn::FQDN;
+use hyper::{
+    server::conn::AddrStream,
+    service::{make_service_fn, service_fn},
+};
 pub use persistence::Persistence;
-use tracing::info;
+use proxy::AddressGetter;
+use tracing::{error, info};
 
 mod args;
 mod deployment;
 mod error;
 mod handlers;
 mod persistence;
+mod proxy;
 
 pub async fn start(
     abstract_factory: impl provisioner_factory::AbstractFactory,
@@ -45,12 +52,37 @@ pub async fn start(
     );
     let make_service = router.into_make_service();
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], 8001));
+    info!("Binding to and listening at address: {}", args.api_address);
 
-    info!("Binding to and listening at address: {}", addr);
-
-    axum::Server::bind(&addr)
+    axum::Server::bind(&args.api_address)
         .serve(make_service)
         .await
-        .unwrap_or_else(|_| panic!("Failed to bind to address: {}", addr));
+        .unwrap_or_else(|_| panic!("Failed to bind to address: {}", args.api_address));
+}
+
+pub async fn start_proxy(
+    proxy_address: SocketAddr,
+    fqdn: FQDN,
+    address_getter: impl AddressGetter,
+) {
+    let make_service = make_service_fn(|socket: &AddrStream| {
+        let remote_address = socket.remote_addr();
+        let fqdn = format!(".{}", fqdn.to_string().trim_end_matches('.'));
+        let address_getter = address_getter.clone();
+
+        async move {
+            Ok::<_, Infallible>(service_fn(move |req| {
+                proxy::handle(remote_address, fqdn.clone(), req, address_getter.clone())
+            }))
+        }
+    });
+
+    let server = hyper::Server::bind(&proxy_address).serve(make_service);
+
+    info!("Starting proxy server on: {}", proxy_address);
+
+    if let Err(e) = server.await {
+        error!(error = %e, "proxy died, killing process...");
+        std::process::exit(1);
+    }
 }

@@ -2566,6 +2566,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "hyper-reverse-proxy"
+version = "0.5.2-dev"
+source = "git+https://github.com/chesedo/hyper-reverse-proxy?branch=master#a4deffef77685b37fda7224ae678d3d9f00d391e"
+dependencies = [
+ "hyper",
+ "lazy_static",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "hyper-rustls"
 version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3318,9 +3329,9 @@ dependencies = [
 
 [[package]]
 name = "once_cell"
-version = "1.13.1"
+version = "1.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "074864da206b4973b84eb91683020dbefd6a8c3f0f38e054d93954e891935e4e"
+checksum = "2f7254b99e31cad77da24b08ebf628882739a608578bb1bcdfc1f9c21260d7c0"
 
 [[package]]
 name = "opaque-debug"
@@ -4814,7 +4825,10 @@ dependencies = [
  "fqdn",
  "futures",
  "hex 0.4.3",
+ "hyper",
+ "hyper-reverse-proxy",
  "log",
+ "once_cell",
  "opentelemetry",
  "opentelemetry-datadog",
  "portpicker",

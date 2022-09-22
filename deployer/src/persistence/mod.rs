@@ -9,10 +9,13 @@ mod user;
 
 use crate::deployment::deploy_layer::{self, LogRecorder, LogType};
 use crate::handlers::{DeploymentAuthorizer, ServiceAuthorizer, UserValidator};
+use crate::proxy::AddressGetter;
 use error::{Error, Result};
 use rand::Rng;
 
+use std::net::SocketAddr;
 use std::path::Path;
+use std::str::FromStr;
 
 use chrono::Utc;
 use serde_json::json;
@@ -21,7 +24,7 @@ use sqlx::migrate::MigrateDatabase;
 use sqlx::sqlite::{Sqlite, SqlitePool};
 use tokio::sync::broadcast::{self, Receiver, Sender};
 use tokio::task::JoinHandle;
-use tracing::error;
+use tracing::{error, instrument};
 use uuid::Uuid;
 
 use self::deployment::DeploymentRunnable;
@@ -83,6 +86,7 @@ impl Persistence {
                 service_id TEXT,     -- Identifier of the service this deployment belongs to.
                 state TEXT,          -- Enum indicating the current state of the deployment.
                 last_update INTEGER, -- Unix epoch of the last status update
+                address TEXT,        -- Address a running deployment is active on
                 FOREIGN KEY(service_id) REFERENCES services(id)
             );
 
@@ -198,12 +202,13 @@ impl Persistence {
         let deployment = deployment.into();
 
         sqlx::query(
-            "INSERT INTO deployments (id, service_id, state, last_update) VALUES (?, ?, ?, ?)",
+            "INSERT INTO deployments (id, service_id, state, last_update, address) VALUES (?, ?, ?, ?, ?)",
         )
         .bind(deployment.id)
         .bind(deployment.service_id)
         .bind(deployment.state)
         .bind(deployment.last_update)
+        .bind(deployment.address.map(|socket| socket.to_string()))
         .execute(&self.pool)
         .await
         .map(|_| ())
@@ -361,9 +366,10 @@ async fn update_deployment(pool: &SqlitePool, state: impl Into<DeploymentState>)
 
     // TODO: Handle moving to 'active_deployments' table for State::Running.
 
-    sqlx::query("UPDATE deployments SET state = ?, last_update = ? WHERE id = ?")
+    sqlx::query("UPDATE deployments SET state = ?, last_update = ?, address = ? WHERE id = ?")
         .bind(state.state)
         .bind(state.last_update)
+        .bind(state.address.map(|socket| socket.to_string()))
         .bind(state.id)
         .execute(pool)
         .await
@@ -498,7 +504,7 @@ impl DeploymentAuthorizer for Persistence {
         deployment_id: &Uuid,
     ) -> crate::handlers::Result<Option<Deployment>> {
         sqlx::query_as(
-            r#"SELECT d.id AS id, service_id, state, last_update
+            r#"SELECT d.id AS id, service_id, state, last_update, d.address
                 FROM deployments AS d
                 JOIN services AS s ON d.service_id = s.id
                 WHERE user_id = ? AND d.id = ?"#,
@@ -512,8 +518,45 @@ impl DeploymentAuthorizer for Persistence {
     }
 }
 
+#[async_trait::async_trait]
+impl AddressGetter for Persistence {
+    #[instrument(skip(self))]
+    async fn get_address_for_service(
+        &self,
+        service_name: &str,
+    ) -> crate::handlers::Result<Option<std::net::SocketAddr>> {
+        let address_str = sqlx::query_as::<_, (String,)>(
+            r#"SELECT d.address
+                FROM deployments AS d
+                JOIN services AS s ON d.service_id = s.id
+                WHERE s.name = ? AND d.state = ?
+                ORDER BY d.last_update"#,
+        )
+        .bind(service_name)
+        .bind(State::Running)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(Error::from)
+        .map_err(crate::handlers::Error::Persistence)?;
+
+        if let Some((address_str,)) = address_str {
+            SocketAddr::from_str(&address_str).map(Some).map_err(|err| {
+                crate::handlers::Error::Convert {
+                    from: "String".to_string(),
+                    to: "SocketAddr".to_string(),
+                    message: err.to_string(),
+                }
+            })
+        } else {
+            Ok(None)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use std::net::{Ipv4Addr, SocketAddr};
+
     use chrono::{TimeZone, Utc};
     use serde_json::json;
 
@@ -535,6 +578,7 @@ mod tests {
             service_id,
             state: State::Queued,
             last_update: Utc.ymd(2022, 4, 25).and_hms(4, 43, 33),
+            address: None,
         };
 
         p.insert_deployment(deployment.clone()).await.unwrap();
@@ -546,6 +590,7 @@ mod tests {
                 id,
                 state: State::Built,
                 last_update: Utc::now(),
+                address: None,
             },
         )
         .await
@@ -567,24 +612,28 @@ mod tests {
             service_id: xyz_id,
             state: State::Crashed,
             last_update: Utc.ymd(2022, 4, 25).and_hms(7, 29, 35),
+            address: None,
         };
         let deployment_stopped = Deployment {
             id: Uuid::new_v4(),
             service_id: xyz_id,
             state: State::Stopped,
             last_update: Utc.ymd(2022, 4, 25).and_hms(7, 49, 35),
+            address: None,
         };
         let deployment_other = Deployment {
             id: Uuid::new_v4(),
             service_id,
             state: State::Running,
             last_update: Utc.ymd(2022, 4, 25).and_hms(7, 39, 39),
+            address: None,
         };
         let deployment_running = Deployment {
             id: Uuid::new_v4(),
             service_id: xyz_id,
             state: State::Running,
             last_update: Utc.ymd(2022, 4, 25).and_hms(7, 48, 29),
+            address: Some(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 9876)),
         };
 
         for deployment in [
@@ -620,30 +669,35 @@ mod tests {
                 service_id,
                 state: State::Built,
                 last_update: Utc.ymd(2022, 4, 25).and_hms(4, 29, 33),
+                address: None,
             },
             Deployment {
                 id: Uuid::new_v4(),
                 service_id: foo_id,
                 state: State::Running,
                 last_update: Utc.ymd(2022, 4, 25).and_hms(4, 29, 44),
+                address: None,
             },
             Deployment {
                 id: id_1,
                 service_id: bar_id,
                 state: State::Running,
                 last_update: Utc.ymd(2022, 4, 25).and_hms(4, 33, 48),
+                address: None,
             },
             Deployment {
                 id: Uuid::new_v4(),
                 service_id: service_id2,
                 state: State::Crashed,
                 last_update: Utc.ymd(2022, 4, 25).and_hms(4, 38, 52),
+                address: None,
             },
             Deployment {
                 id: id_2,
                 service_id: foo_id,
                 state: State::Running,
                 last_update: Utc.ymd(2022, 4, 25).and_hms(4, 42, 32),
+                address: None,
             },
         ] {
             p.insert_deployment(deployment).await.unwrap();
@@ -679,12 +733,14 @@ mod tests {
                 service_id,
                 state: State::Running,
                 last_update: Utc::now(),
+                address: None,
             },
             Deployment {
                 id: Uuid::new_v4(),
                 service_id,
                 state: State::Running,
                 last_update: Utc::now(),
+                address: None,
             },
         ];
 
@@ -794,6 +850,7 @@ mod tests {
             target: "tests::log_recorder_event".to_string(),
             fields: json!({"message": "job queued"}),
             r#type: deploy_layer::LogType::Event,
+            address: None,
         };
 
         p.record(event);
@@ -827,6 +884,7 @@ mod tests {
             service_id,
             state: State::Queued, // Should be different from the state recorded below
             last_update: Utc.ymd(2022, 4, 29).and_hms(2, 39, 39),
+            address: None,
         })
         .await
         .unwrap();
@@ -840,6 +898,7 @@ mod tests {
             target: String::new(),
             fields: serde_json::Value::Null,
             r#type: deploy_layer::LogType::State,
+            address: Some("127.0.0.1:12345".to_string()),
         };
 
         p.record(state);
@@ -865,6 +924,7 @@ mod tests {
                 service_id,
                 state: State::Running,
                 last_update: Utc.ymd(2022, 4, 29).and_hms(2, 39, 59),
+                address: Some(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 12345)),
             }
         );
     }
@@ -1048,10 +1108,51 @@ mod tests {
                 id: deployment_id,
                 service_id,
                 state: State::Running,
-                last_update
+                last_update,
+                address: None,
             }),
             p.does_user_own_deployment(&api_key, &deployment_id)
                 .await
+                .unwrap(),
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn address_getter() {
+        let (p, _) = Persistence::new_in_memory().await;
+        let service_id = add_service_named(&p.pool, "service-name").await.unwrap();
+        let service_other_id = add_service_named(&p.pool, "other-name").await.unwrap();
+
+        sqlx::query(
+            "INSERT INTO deployments (id, service_id, state, last_update, address) VALUES (?, ?, ?, ?, ?), (?, ?, ?, ?, ?), (?, ?, ?, ?, ?)",
+        )
+        // This running item should match
+        .bind(Uuid::new_v4())
+        .bind(&service_id)
+        .bind(State::Running)
+        .bind(Utc::now())
+        .bind("10.0.0.5:12356")
+        // A stopped item should not match
+        .bind(Uuid::new_v4())
+        .bind(&service_id)
+        .bind(State::Stopped)
+        .bind(Utc::now())
+        .bind("10.0.0.5:9876")
+        // Another service should not match
+        .bind(Uuid::new_v4())
+        .bind(&service_other_id)
+        .bind(State::Running)
+        .bind(Utc::now())
+        .bind("10.0.0.5:5678")
+        .execute(&p.pool)
+        .await
+        .unwrap();
+
+        assert_eq!(
+            SocketAddr::from(([10, 0, 0, 5], 12356)),
+            p.get_address_for_service("service-name")
+                .await
+                .unwrap()
                 .unwrap(),
         );
     }

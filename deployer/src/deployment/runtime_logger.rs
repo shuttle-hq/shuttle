@@ -63,6 +63,7 @@ impl log::Log for RuntimeLogger {
                         "message": format!("{}", record.args()),
                     }),
                     r#type: deploy_layer::LogType::Event,
+                    address: None,
                 })
                 .expect("sending log should succeed");
         }

@@ -48,7 +48,7 @@ pub async fn handle(
     // Record current service for tracing purposes
     Span::current().record("service", &service);
 
-    let proxy_address = match address_getter.from_service(service).await {
+    let proxy_address = match address_getter.get_address_for_service(service).await {
         Ok(Some(address)) => address,
         Ok(None) => {
             let response_body = format!("could not find service for host: {}", host);
@@ -98,8 +98,10 @@ pub async fn handle(
 
 #[async_trait]
 pub trait AddressGetter: Clone + Send + Sync + 'static {
-    async fn from_service(&self, service_name: &str)
-        -> crate::handlers::Result<Option<SocketAddr>>;
+    async fn get_address_for_service(
+        &self,
+        service_name: &str,
+    ) -> crate::handlers::Result<Option<SocketAddr>>;
 }
 
 #[instrument(skip(req))]

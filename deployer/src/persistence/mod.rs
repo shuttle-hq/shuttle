@@ -521,7 +521,7 @@ impl DeploymentAuthorizer for Persistence {
 #[async_trait::async_trait]
 impl AddressGetter for Persistence {
     #[instrument(skip(self))]
-    async fn from_service(
+    async fn get_address_for_service(
         &self,
         service_name: &str,
     ) -> crate::handlers::Result<Option<std::net::SocketAddr>> {
@@ -1118,7 +1118,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn from_service() {
+    async fn address_getter() {
         let (p, _) = Persistence::new_in_memory().await;
         let service_id = add_service_named(&p.pool, "service-name").await.unwrap();
         let service_other_id = add_service_named(&p.pool, "other-name").await.unwrap();
@@ -1150,7 +1150,10 @@ mod tests {
 
         assert_eq!(
             SocketAddr::from(([10, 0, 0, 5], 12356)),
-            p.from_service("service-name").await.unwrap().unwrap(),
+            p.get_address_for_service("service-name")
+                .await
+                .unwrap()
+                .unwrap(),
         );
     }
 

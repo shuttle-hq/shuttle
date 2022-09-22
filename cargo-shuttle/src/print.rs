@@ -30,7 +30,7 @@ fn get_colored_level(level: &String) -> ColoredString {
         "INFO" => level.green(),
         "WARN" => level.yellow(),
         "ERROR" => level.red(),
-        _ => level.bright_black() // TODO: should this panic?
+        _ => level.bright_black(), // TODO: should this panic?
     }
 }
 

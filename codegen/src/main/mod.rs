@@ -154,7 +154,7 @@ impl ToTokens for Wrapper {
                 #extra_imports
 
                 runtime.spawn_blocking(move || {
-                    
+
                     let filter_layer =
                         shuttle_service::tracing_subscriber::EnvFilter::try_from_default_env()
                             .or_else(|_| shuttle_service::tracing_subscriber::EnvFilter::try_new("INFO"))

@@ -1,10 +1,7 @@
-use std::{collections::HashMap, env, str::FromStr};
-
 use chrono::{DateTime, Utc};
 use serde_json::json;
 use shuttle_common::{DeploymentId, LogItem};
-use tokio::sync::mpsc::UnboundedSender;
-use tracing::{field::Visit, metadata::ParseLevelError, Level, Subscriber};
+use tracing::{field::Visit, Subscriber};
 use tracing_subscriber::Layer;
 
 #[derive(Debug)]
@@ -16,43 +13,12 @@ pub struct Log {
 
 pub struct Logger {
     deployment_id: DeploymentId,
-    tx: UnboundedSender<Log>,
-    filter: HashMap<String, Level>,
+    tx: crossbeam_channel::Sender<Log>,
 }
 
 impl Logger {
-    pub fn new(tx: UnboundedSender<Log>, deployment_id: DeploymentId) -> Self {
-        let filter = if let Ok(rust_log) = env::var("RUST_LOG") {
-            let rust_log = rust_log
-                .split(',')
-                .map(|item| {
-                    // Try to get target and level if both are set
-                    if let Some((target, level)) = item.split_once('=') {
-                        Result::<(String, Level), ParseLevelError>::Ok((
-                            target.to_string(),
-                            Level::from_str(level)?,
-                        ))
-                    } else {
-                        // Ok only target or level is set, but which is it
-                        if let Ok(level) = Level::from_str(item) {
-                            Ok((String::new(), level))
-                        } else {
-                            Ok((item.to_string(), Level::TRACE))
-                        }
-                    }
-                })
-                .filter_map(Result::ok);
-
-            HashMap::from_iter(rust_log)
-        } else {
-            HashMap::from([(String::new(), Level::ERROR)])
-        };
-
-        Self {
-            tx,
-            deployment_id,
-            filter,
-        }
+    pub fn new(tx: crossbeam_channel::Sender<Log>, deployment_id: DeploymentId) -> Self {
+        Self { tx, deployment_id }
     }
 }
 
@@ -60,14 +26,6 @@ impl<S> Layer<S> for Logger
 where
     S: Subscriber,
 {
-    fn enabled(
-        &self,
-        metadata: &tracing::Metadata<'_>,
-        _ctx: tracing_subscriber::layer::Context<'_, S>,
-    ) -> bool {
-        metadata.level() <= &Level::INFO
-    }
-
     fn on_event(
         &self,
         event: &tracing::Event<'_>,
@@ -81,7 +39,8 @@ where
             event.record(&mut visitor);
 
             // drop log metadata as it is included in the other LogItem fields (target, file, line...)
-            let fields: serde_json::Map<String, serde_json::Value> = visitor.0
+            let fields: serde_json::Map<String, serde_json::Value> = visitor
+                .0
                 .into_iter()
                 .filter(|(field, _)| !field.starts_with("log."))
                 .collect();
@@ -104,7 +63,6 @@ where
             .expect("sending log should succeed");
     }
 }
-
 
 // Boilerplate for extracting the fields from the event
 #[derive(Default)]

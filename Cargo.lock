@@ -1156,6 +1156,7 @@ dependencies = [
  "chrono",
  "clap",
  "colored",
+ "crossbeam-channel",
  "crossterm",
  "dirs",
  "env_logger",
@@ -1543,9 +1544,9 @@ dependencies = [
 
 [[package]]
 name = "crossbeam-channel"
-version = "0.5.5"
+version = "0.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c02a4d71819009c192cf4872265391563fd6a84c81ff2c0f2a7026ca4c1d85c"
+checksum = "c2dd04ddaf88237dc3b8d8f9a3c1004b506b54b3313403944054d23c0870c521"
 dependencies = [
  "cfg-if 1.0.0",
  "crossbeam-utils",
@@ -4911,6 +4912,7 @@ dependencies = [
  "cargo-util",
  "chrono",
  "clap",
+ "crossbeam-channel",
  "env_logger",
  "fqdn",
  "futures",
@@ -4954,13 +4956,13 @@ dependencies = [
  "censor",
  "chrono",
  "lazy_static",
- "log",
  "once_cell",
  "regex",
  "rocket",
  "rustrict",
  "semver 1.0.13",
  "serde",
+ "serde_json",
  "tracing",
  "uuid 1.1.2",
 ]
@@ -5012,6 +5014,7 @@ dependencies = [
  "bincode",
  "cargo",
  "chrono",
+ "crossbeam-channel",
  "futures",
  "hyper",
  "lazy_static",
@@ -5025,6 +5028,7 @@ dependencies = [
  "rocket",
  "salvo",
  "serde",
+ "serde_json",
  "serenity",
  "shuttle-codegen",
  "shuttle-common",

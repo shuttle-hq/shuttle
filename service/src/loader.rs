@@ -14,7 +14,6 @@ use libloading::{Library, Symbol};
 use log::trace;
 use shuttle_common::DeploymentId;
 use thiserror::Error as ThisError;
-use tokio::sync::mpsc::UnboundedSender;
 
 use futures::FutureExt;
 
@@ -68,7 +67,7 @@ impl Loader {
         self,
         factory: &mut dyn Factory,
         addr: SocketAddr,
-        tx: UnboundedSender<Log>,
+        tx: crossbeam_channel::Sender<Log>,
         deployment_id: DeploymentId,
     ) -> Result<(ServeHandle, Library), Error> {
         let mut bootstrapper = self.bootstrapper;

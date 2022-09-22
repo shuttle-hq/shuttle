@@ -37,6 +37,7 @@ tower = { version = "0.4.13", features = ["make"], optional = true }
 tracing = "0.1.36"
 tracing-subscriber = { version = "0.3.15", features = ["env-filter"] }
 serde_json = "1.0.85"
+crossbeam-channel = "0.5.6"
 
 # Tide does not have tokio support. So make sure async-std is compatible with tokio
 # https://github.com/http-rs/tide/issues/791

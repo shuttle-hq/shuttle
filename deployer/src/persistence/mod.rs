@@ -1118,7 +1118,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn from_host() {
+    async fn from_service() {
         let (p, _) = Persistence::new_in_memory().await;
         let service_id = add_service_named(&p.pool, "service-name").await.unwrap();
         let service_other_id = add_service_named(&p.pool, "other-name").await.unwrap();

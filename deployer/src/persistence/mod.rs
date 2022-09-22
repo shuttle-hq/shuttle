@@ -24,7 +24,7 @@ use sqlx::migrate::MigrateDatabase;
 use sqlx::sqlite::{Sqlite, SqlitePool};
 use tokio::sync::broadcast::{self, Receiver, Sender};
 use tokio::task::JoinHandle;
-use tracing::error;
+use tracing::{error, instrument};
 use uuid::Uuid;
 
 use self::deployment::DeploymentRunnable;
@@ -520,6 +520,7 @@ impl DeploymentAuthorizer for Persistence {
 
 #[async_trait::async_trait]
 impl AddressGetter for Persistence {
+    #[instrument(skip(self))]
     async fn from_service(
         &self,
         service_name: &str,

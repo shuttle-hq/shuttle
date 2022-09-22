@@ -11,12 +11,13 @@ use hyper::{
 };
 use hyper_reverse_proxy::{ProxyError, ReverseProxy};
 use once_cell::sync::Lazy;
-use tracing::error;
+use tracing::{error, field, instrument, Span};
 
 static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
     Lazy::new(|| ReverseProxy::new(Client::new()));
 static SERVER_HEADER: Lazy<HeaderValue> = Lazy::new(|| "shuttle.rs".parse().unwrap());
 
+#[instrument(name = "proxy_request", skip(address_getter), fields(http.method = %req.method(), http.uri = %req.uri(), http.status_code = field::Empty, service = field::Empty))]
 pub async fn handle(
     remote_address: SocketAddr,
     fqdn: String,
@@ -44,6 +45,9 @@ pub async fn handle(
         }
     };
 
+    // Record current service for tracing purposes
+    Span::current().record("service", &service);
+
     let proxy_address = match address_getter.from_service(service).await {
         Ok(Some(address)) => address,
         Ok(None) => {
@@ -65,7 +69,10 @@ pub async fn handle(
     };
 
     match reverse_proxy(remote_address.ip(), &proxy_address.to_string(), req).await {
-        Ok(response) => Ok(response),
+        Ok(response) => {
+            Span::current().record("http.status_code", &response.status().as_u16());
+            Ok(response)
+        }
         Err(error) => {
             match error {
                 ProxyError::InvalidUri(e) => {
@@ -95,6 +102,7 @@ pub trait AddressGetter: Clone + Send + Sync + 'static {
         -> crate::handlers::Result<Option<SocketAddr>>;
 }
 
+#[instrument(skip(req))]
 async fn reverse_proxy(
     remote_ip: IpAddr,
     service_address: &str,

@@ -79,6 +79,7 @@ export default function CodeSnippets() {
             </div>
           </div>
           <CodeBlock
+            name={tabs[activeTab].name}
             language={tabs[activeTab].language}
             showLineNumbers={tabs[activeTab].showLineNumbers}
             code={tabs[activeTab].code}

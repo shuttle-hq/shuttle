@@ -7,7 +7,9 @@ use regex::Regex;
 use shuttle_service::{error::CustomError, Error};
 use sqlx::postgres::PgArguments;
 use sqlx::query::Query;
-use sqlx::{ColumnIndex, Database, Decode, Execute, Executor, Postgres, Row, Type};
+use sqlx::{
+    ColumnIndex, Database, Decode, Encode, Execute, Executor, IntoArguments, Postgres, Row, Type,
+};
 
 fn check_and_lower_secret_key(key: &str) -> Result<String, Error> {
     lazy_static! {
@@ -25,11 +27,13 @@ fn check_and_lower_secret_key(key: &str) -> Result<String, Error> {
 /// should you prefer). The table in question is created if it is found to not exist every time
 /// either [`SecretStore::get_secret`] or [`SecretStore::set_secret`] is called.
 #[async_trait]
-pub trait SecretStore<DB>
+pub trait SecretStore<DB, Args>
 where
-    DB: Database,
+    DB: Database<Arguments = Args>,
+    Args: for<'q> IntoArguments<'q, DB>,
     for<'c> &'c Self: Executor<'c, Database = DB>,
-    for<'c> String: Decode<'c, DB> + Type<DB>,
+    for<'c> String: Decode<'c, DB> + Encode<'c, DB> + Type<DB>,
+    for<'c> &'c str: Decode<'c, DB> + Encode<'c, DB> + Type<DB>,
     for<'c> usize: ColumnIndex<<DB as Database>::Row>,
     for<'c> Query<'c, Postgres, PgArguments>: Execute<'c, DB>,
 {
@@ -47,16 +51,21 @@ where
             .map_err(CustomError::new)
             .map_err(Error::from)?;
 
-        let key = check_and_lower_secret_key(key)
-            .map_err(CustomError::new)
-            .map_err(Error::from)?;
-        let query = sqlx::query(Self::GET_QUERY).bind(key);
+        let key = check_and_lower_secret_key(key)?;
+        let query = sqlx::query(Self::GET_QUERY).bind(&key);
 
-        self.fetch_one(query)
+        self.fetch_optional(query)
             .await
-            .map(|row| row.get(0))
             .map_err(CustomError::new)
             .map_err(Error::from)
+            .and_then(|m_one| {
+                m_one.ok_or_else(|| {
+                    Error::Secret(format!(
+                        "Secret `{key}` not found in service environment. If you have made changes to your `Secrets.toml` file recently, try deploying again to make sure changes are applied correctly."
+                    ))
+                })
+            })
+            .map(|one| one.get(0))
     }
 
     /// Create (or overwrite if already present) a key/value secret in the database. Will error if
@@ -80,7 +89,7 @@ where
 }
 
 #[async_trait]
-impl SecretStore<sqlx::Postgres> for sqlx::PgPool {
+impl SecretStore<sqlx::Postgres, PgArguments> for sqlx::PgPool {
     const GET_QUERY: &'static str = "SELECT value FROM secrets WHERE key = $1";
     const SET_QUERY: &'static str = "INSERT INTO secrets (key, value) VALUES ($1, $2)
                                      ON CONFLICT (key) DO UPDATE SET value = $2";

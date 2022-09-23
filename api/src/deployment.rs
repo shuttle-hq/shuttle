@@ -12,6 +12,7 @@ use futures::prelude::*;
 use libloading::Library;
 use rocket::data::ByteUnit;
 use rocket::{tokio, Data};
+use semver::VersionReq;
 use shuttle_common::project::ProjectName;
 use shuttle_common::{
     DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, LogItem, Port,
@@ -123,6 +124,7 @@ impl Deployment {
                         .build(
                             &queued.crate_bytes,
                             meta.project.as_str(),
+                            &context.version_req,
                             Box::new(console_writer),
                         )
                         .await
@@ -163,16 +165,24 @@ impl Deployment {
                         meta.project.clone(),
                     );
                     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
-                    match loader.load(&mut factory, addr, run_logs_tx, meta.id).await {
+
+                    let load_result = loader.load(&mut factory, addr, run_logs_tx, meta.id).await;
+
+                    // Even in case `load_result.is_err()`, we want to
+                    // make sure `self.meta` reflects the latest of
+                    // the state that was achieved through the
+                    // phase. Otherwise we end up in a situation where
+                    // a DB was provisioned, but the `meta` does not
+                    // know about it.
+                    self.meta.write().await.database_deployment = factory.into_database_info();
+
+                    match load_result {
                         Err(e) => {
                             debug!("{}: factory phase FAILED: {:?}", meta.project, e);
                             DeploymentState::Error(e.into())
                         }
                         Ok((handle, so)) => {
                             debug!("{}: factory phase DONE", meta.project);
-                            self.meta.write().await.database_deployment =
-                                factory.into_database_info();
-
                             // Remove stale active deployments
                             if let Some(stale_id) = context.router.promote(meta.host, meta.id).await
                             {
@@ -338,6 +348,7 @@ pub(crate) struct Context {
     build_system: Box<dyn BuildSystem>,
     deployments: Arc<RwLock<Deployments>>,
     provisioner_client: ProvisionerClient<Channel>,
+    version_req: VersionReq,
 }
 
 impl DeploymentSystem {
@@ -346,6 +357,7 @@ impl DeploymentSystem {
         fqdn: String,
         provisioner_address: String,
         provisioner_port: Port,
+        version_req: VersionReq,
     ) -> Self {
         let router: Arc<Router> = Default::default();
         let (tx, mut rx) = mpsc::unbounded_channel::<Log>();
@@ -381,6 +393,7 @@ impl DeploymentSystem {
             build_system,
             deployments: deployments.clone(),
             provisioner_client,
+            version_req,
         };
 
         let job_queue = JobQueue::new(context, tx).await;

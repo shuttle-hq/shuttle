@@ -1,7 +1,9 @@
 use crate::helpers::{loader::build_so_create_loader, sqlx::PostgresInstance};
 
+use shuttle_common::project::ProjectName;
 use shuttle_service::loader::LoaderError;
 use shuttle_service::{database, Error, Factory};
+use std::str::FromStr;
 
 use std::net::{Ipv4Addr, SocketAddr};
 use std::process::exit;
@@ -15,19 +17,25 @@ const RESOURCES_PATH: &str = "tests/resources";
 
 struct DummyFactory {
     postgres_instance: Option<PostgresInstance>,
+    project_name: ProjectName,
 }
 
 impl DummyFactory {
     fn new() -> Self {
         Self {
             postgres_instance: None,
+            project_name: ProjectName::from_str("test").unwrap(),
         }
     }
 }
 
 #[async_trait]
 impl Factory for DummyFactory {
-    async fn get_sql_connection_string(&mut self, _: database::Type) -> Result<String, Error> {
+    fn get_project_name(&self) -> ProjectName {
+        self.project_name.clone()
+    }
+
+    async fn get_db_connection_string(&mut self, _: database::Type) -> Result<String, Error> {
         let uri = if let Some(postgres_instance) = &self.postgres_instance {
             postgres_instance.get_uri()
         } else {
@@ -107,6 +115,9 @@ async fn sleep() {
 async fn sqlx_pool() {
     let loader = build_so_create_loader(RESOURCES_PATH, "sqlx-pool").unwrap();
 
+    // Make sure we'll get a log entry
+    std::env::set_var("RUST_LOG", "info");
+
     // Don't initialize a pre-existing PostgresInstance here because the `PostgresInstance::wait_for_connectable()`
     // code has `awaits` and we want to make sure they do not block inside `Service::build()`.
     // At the same time we also want to test the PgPool is created on the correct runtime (ie does not cause a
@@ -126,7 +137,7 @@ async fn sqlx_pool() {
     let log = rx.recv().await.unwrap();
     assert_eq!(log.deployment_id, deployment_id);
     assert!(
-        log.item.body.starts_with("/* SQLx ping */"),
+        log.item.body.starts_with("SELECT 'Hello world';"),
         "got: {}",
         log.item.body
     );

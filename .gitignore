@@ -18,10 +18,13 @@ Cargo.lock
 .DS_Store
 
 # Terraform
-**/secret*
+**/secrets.tfvar
 **/.terraform*
 
 e2e/users.toml
 
 # direnv cache directory
 .direnv/
+
+.shuttle-*
+docker-compose.rendered.yml

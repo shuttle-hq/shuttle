@@ -1,7 +1,6 @@
 version: "3"
 volumes:
   shuttle-backend-vol:
-    external: true
 services:
   api:
     image: "${CONTAINER_REGISTRY}/api:${BACKEND_TAG}"
@@ -17,6 +16,9 @@ services:
         condition: on-failure
         delay: 5s
         max_attempts: 3
+      placement:
+        constraints:
+          - node.hostname==controller
     environment:
       - SHUTTLE_USERS_TOML=/var/lib/shuttle/users.toml
       - RUST_LOG=${RUST_LOG}
@@ -31,17 +33,37 @@ services:
   provisioner:
     image: "${CONTAINER_REGISTRY}/provisioner:${PROVISIONER_TAG}"
     depends_on:
-      - db
+      - pg
+      - mongodb
     environment:
       - RUST_LOG=${RUST_LOG}
     command:
       - "--ip=0.0.0.0"
       - "--port=8000"
-      - "--shared-pg-uri=postgres://postgres:${POSTGRES_PASSWORD}@db:5432/postgres"
-      - "--internal-address=db"
+      - "--shared-pg-uri=postgres://postgres:${POSTGRES_PASSWORD}@pg:5432/postgres"
+      - "--shared-mongodb-uri=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongodb:27017/admin"
+      - "--internal-mongodb-address=mongodb"
+      - "--internal-pg-address=pg"
       - "--fqdn=${DB_FQDN}"
-  db:
-    image: "postgres"
+  pg:
+    image: "${CONTAINER_REGISTRY}/postgres:${POSTGRES_TAG}"
     restart: always
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - 8002:8000
+      - 5432:5432
+    deploy:
+      placement:
+        constraints:
+          - node.hostname==postgres
+  mongodb:
+    image: mongo:5.0.10
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+    deploy:
+      placement:
+        constraints:
+          - node.hostname==postgres

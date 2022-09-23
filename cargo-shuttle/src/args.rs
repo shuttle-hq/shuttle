@@ -98,17 +98,26 @@ pub struct RunArgs {
 #[derive(Parser, Debug)]
 pub struct InitArgs {
     /// Initialize with axum framework
-    #[clap(long, conflicts_with_all = &["rocket", "tide", "tower"])]
+    #[clap(long, conflicts_with_all = &["rocket", "tide", "tower", "poem", "serenity", "salvo"])]
     pub axum: bool,
     /// Initialize with actix-web framework
-    #[clap(long, conflicts_with_all = &["axum", "tide", "tower"])]
+    #[clap(long, conflicts_with_all = &["axum", "tide", "tower", "poem", "serenity", "salvo"])]
     pub rocket: bool,
     /// Initialize with tide framework
-    #[clap(long, conflicts_with_all = &["axum", "rocket", "tower"])]
+    #[clap(long, conflicts_with_all = &["axum", "rocket", "tower", "poem", "serenity", "salvo"])]
     pub tide: bool,
     /// Initialize with tower framework
-    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide"])]
+    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "poem", "serenity", "salvo"])]
     pub tower: bool,
+    /// Initialize with poem framework
+    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "tower", "serenity", "salvo"])]
+    pub poem: bool,
+    /// Initialize with salvo framework
+    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "tower", "poem", "serenity"])]
+    pub salvo: bool,
+    /// Initialize with serenity framework
+    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "tower", "poem", "salvo"])]
+    pub serenity: bool,
     /// Path to initialize a new shuttle project
     #[clap(
         parse(try_from_os_str = parse_init_path),

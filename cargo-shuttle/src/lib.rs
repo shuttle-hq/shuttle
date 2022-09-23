@@ -24,6 +24,7 @@ use config::RequestContext;
 use factory::LocalFactory;
 use semver::{Version, VersionReq};
 use shuttle_service::loader::{build_crate, Loader};
+use shuttle_service::{Factory, SecretStore};
 use tokio::sync::mpsc;
 use toml_edit::Document;
 use uuid::Uuid;
@@ -193,6 +194,23 @@ impl Shuttle {
         let deployment_id = Uuid::new_v4();
         let (tx, mut rx) = mpsc::unbounded_channel();
 
+        // Load secrets
+        let secrets = self.ctx.secrets();
+        if !secrets.is_empty() {
+            let conn_str = factory
+                .get_db_connection_string(shuttle_common::database::Type::Shared(
+                    shuttle_common::database::SharedEngine::Postgres,
+                ))
+                .await?;
+
+            let conn = sqlx::PgPool::connect(&conn_str).await?;
+
+            for (key, value) in secrets.iter() {
+                debug!("setting secret for {key}");
+                conn.set_secret(key, value).await?;
+            }
+        }
+
         trace!("loading project");
         println!(
             "\n{:>12} {} on http://{}",
@@ -270,7 +288,7 @@ impl Shuttle {
             Ok(())
         } else {
             Err(anyhow!(
-                "Your shuttle_service version is outdated. Update your shuttle_service version to {} and try to deploy again",
+                "Your shuttle-service version is outdated. Update your shuttle-service version to {} and try to deploy again",
                 &server_version,
             ))
         }

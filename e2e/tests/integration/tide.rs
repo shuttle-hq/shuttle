@@ -1,6 +1,6 @@
 use colored::Color;
 
-use crate::helpers;
+use crate::helpers::{self, APPS_FQDN};
 
 #[test]
 fn hello_world_tide() {
@@ -9,7 +9,7 @@ fn hello_world_tide() {
 
     let request_text = client
         .get("hello")
-        .header("Host", "hello-world-tide-app.localhost.local")
+        .header("Host", format!("hello-world-tide-app.{}", *APPS_FQDN))
         .send()
         .unwrap()
         .text()

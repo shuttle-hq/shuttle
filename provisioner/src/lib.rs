@@ -5,11 +5,12 @@ use aws_config::timeout;
 use aws_sdk_rds::{error::ModifyDBInstanceErrorKind, model::DbInstance, types::SdkError, Client};
 use aws_smithy_types::tristate::TriState;
 pub use error::Error;
+use mongodb::{bson::doc, options::ClientOptions};
 use rand::Rng;
 use shuttle_proto::provisioner::provisioner_server::Provisioner;
 pub use shuttle_proto::provisioner::provisioner_server::ProvisionerServer;
 use shuttle_proto::provisioner::{
-    aws_rds, database_request::DbType, AwsRds, DatabaseRequest, DatabaseResponse,
+    aws_rds, database_request::DbType, shared, AwsRds, DatabaseRequest, DatabaseResponse, Shared,
 };
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use tokio::time::sleep;
@@ -26,17 +27,28 @@ const RDS_SUBNET_GROUP: &str = "shuttle_rds";
 pub struct MyProvisioner {
     pool: PgPool,
     rds_client: aws_sdk_rds::Client,
+    mongodb_client: mongodb::Client,
     fqdn: String,
-    internal_address: String,
+    internal_pg_address: String,
+    internal_mongodb_address: String,
 }
 
 impl MyProvisioner {
-    pub async fn new(db_uri: &str, fqdn: String, internal_address: String) -> sqlx::Result<Self> {
+    pub async fn new(
+        shared_pg_uri: &str,
+        shared_mongodb_uri: &str,
+        fqdn: String,
+        internal_pg_address: String,
+        internal_mongodb_address: String,
+    ) -> Result<Self, Error> {
         let pool = PgPoolOptions::new()
             .min_connections(4)
             .max_connections(12)
-            .connect_timeout(Duration::from_secs(60))
-            .connect_lazy(db_uri)?;
+            .acquire_timeout(Duration::from_secs(60))
+            .connect_lazy(shared_pg_uri)?;
+
+        let mongodb_options = ClientOptions::parse(shared_mongodb_uri).await?;
+        let mongodb_client = mongodb::Client::with_options(mongodb_options)?;
 
         // Default timeout is too long so lowering it
         let api_timeout_config = timeout::Api::new()
@@ -54,27 +66,52 @@ impl MyProvisioner {
         Ok(Self {
             pool,
             rds_client,
+            mongodb_client,
             fqdn,
-            internal_address,
+            internal_pg_address,
+            internal_mongodb_address,
         })
     }
 
-    pub async fn request_shared_db(&self, project_name: &str) -> Result<DatabaseResponse, Error> {
-        let (username, password) = self.shared_role(project_name).await?;
-        let database_name = self.shared_db(project_name, &username).await?;
+    pub async fn request_shared_db(
+        &self,
+        project_name: &str,
+        engine: shared::Engine,
+    ) -> Result<DatabaseResponse, Error> {
+        match engine {
+            shared::Engine::Postgres(_) => {
+                let (username, password) = self.shared_pg_role(project_name).await?;
+                let database_name = self.shared_pg(project_name, &username).await?;
 
-        Ok(DatabaseResponse {
-            engine: "postgres".to_string(),
-            username,
-            password,
-            database_name,
-            address_private: self.internal_address.clone(),
-            address_public: self.fqdn.clone(),
-            port: "5432".to_string(),
-        })
+                Ok(DatabaseResponse {
+                    engine: "postgres".to_string(),
+                    username,
+                    password,
+                    database_name,
+                    address_private: self.internal_pg_address.clone(),
+                    address_public: self.fqdn.clone(),
+                    port: "5432".to_string(),
+                })
+            }
+            shared::Engine::Mongodb(_) => {
+                let database_name = format!("mongodb-{project_name}");
+                let (username, password) =
+                    self.shared_mongodb(project_name, &database_name).await?;
+
+                Ok(DatabaseResponse {
+                    engine: "mongodb".to_string(),
+                    username,
+                    password,
+                    database_name,
+                    address_private: self.internal_mongodb_address.clone(),
+                    address_public: self.fqdn.clone(),
+                    port: "27017".to_string(),
+                })
+            }
+        }
     }
 
-    async fn shared_role(&self, project_name: &str) -> Result<(String, String), Error> {
+    async fn shared_pg_role(&self, project_name: &str) -> Result<(String, String), Error> {
         let username = format!("user-{project_name}");
         let password = generate_password();
 
@@ -110,7 +147,7 @@ impl MyProvisioner {
         Ok((username, password))
     }
 
-    async fn shared_db(&self, project_name: &str, username: &str) -> Result<String, Error> {
+    async fn shared_pg(&self, project_name: &str, username: &str) -> Result<String, Error> {
         let database_name = format!("db-{project_name}");
 
         let matching_db = sqlx::query("SELECT datname FROM pg_database WHERE datname = $1")
@@ -131,6 +168,52 @@ impl MyProvisioner {
         }
 
         Ok(database_name)
+    }
+
+    async fn shared_mongodb(
+        &self,
+        project_name: &str,
+        database_name: &str,
+    ) -> Result<(String, String), Error> {
+        let username = format!("user-{project_name}");
+        let password = generate_password();
+
+        // Get a handle to the DB, create it if it doesn't exist
+        let db = self.mongodb_client.database(database_name);
+
+        // Create a new user if it doesn't already exist and assign them
+        // permissions to read and write to their own database only
+        let new_user = doc! {
+            "createUser": &username,
+            "pwd": &password,
+            "roles": [
+                {"role": "readWrite", "db": database_name}
+            ]
+        };
+        let result = db.run_command(new_user, None).await;
+
+        match result {
+            Ok(_) => {
+                info!("new user created");
+                Ok((username, password))
+            }
+            Err(e) => {
+                // If user already exists (error code: 51003) cycle their password
+                if e.to_string().contains("51003") {
+                    info!("cycling password of user");
+
+                    let change_password = doc! {
+                        "updateUser": &username,
+                        "pwd": &password,
+                    };
+                    db.run_command(change_password, None).await?;
+
+                    Ok((username, password))
+                } else {
+                    Err(Error::UnexpectedMongodb(e))
+                }
+            }
+        }
     }
 
     async fn request_aws_rds(
@@ -229,7 +312,10 @@ impl Provisioner for MyProvisioner {
         let db_type = request.db_type.unwrap();
 
         let reply = match db_type {
-            DbType::Shared(_) => self.request_shared_db(&request.project_name).await?,
+            DbType::Shared(Shared { engine }) => {
+                self.request_shared_db(&request.project_name, engine.expect("oneof to be set"))
+                    .await?
+            }
             DbType::AwsRds(AwsRds { engine }) => {
                 self.request_aws_rds(&request.project_name, engine.expect("oneof to be set"))
                     .await?

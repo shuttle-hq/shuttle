@@ -8,7 +8,6 @@ export default function ExternalLink({
   return (
     <a
       {...props}
-      // todo: add custom event for ext links? they are automatically tracked
       target={target ?? "_blank"}
       rel={rel ?? "noopener noreferrer"}
       href={href}

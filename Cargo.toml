@@ -10,5 +10,6 @@ members = [
 ]
 exclude = [
   "e2e",
+  "gateway",
   "examples"
 ]

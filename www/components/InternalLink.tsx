@@ -10,7 +10,6 @@ export default function InternalLink({
   passHref,
   prefetch,
   locale,
-  // mixpanelEvent,
   ...props
 }: JSX.IntrinsicElements["a"] & LinkProps): JSX.Element {
   const router = useRouter();

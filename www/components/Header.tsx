@@ -41,7 +41,6 @@ export default function Header() {
                     key={link.name}
                     href={link.href}
                     className="text-base font-medium text-slate-600 hover:text-slate-900 dark:text-gray-200 hover:dark:text-white"
-                    // mixpanelEvent={link.name}
                   >
                     {link.name}
                   </InternalLink>
@@ -50,7 +49,6 @@ export default function Header() {
                     key={link.name}
                     href={link.href}
                     className="text-base font-medium text-slate-600 hover:text-slate-900 dark:text-gray-200 hover:dark:text-white"
-                    // mixpanelEvent={link.name}
                   >
                     {link.name}
                   </ExternalLink>
@@ -73,8 +71,6 @@ export default function Header() {
                 key={link.name}
                 href={link.href}
                 className="text-base font-medium dark:text-gray-200 hover:dark:text-white"
-                // onClick={() => void mixpanel.track(link.name)}
-                // mixpanelEvent={link.name}
               >
                 {link.name}
               </InternalLink>
@@ -83,7 +79,6 @@ export default function Header() {
                 key={link.name}
                 href={link.href}
                 className="text-base font-medium dark:text-gray-200 hover:dark:text-white"
-                // mixpanelEvent={link.name}
               >
                 {link.name}
               </ExternalLink>

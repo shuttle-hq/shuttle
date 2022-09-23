@@ -39,6 +39,20 @@ export default function App({ Component, pageProps }: AppProps) {
           <Head>
             <title>{SITE_TITLE}</title>
           </Head>
+          <Script
+            id="krunchdata-analytics"
+            strategy="afterInteractive"
+            dangerouslySetInnerHTML={{
+              __html: `
+              var script = document.createElement("script"); 
+              script.src = "https://app.krunchdata.io/assets/js/k.js"; 
+              script.dataset.api = "https://app.krunchdata.io/traffic/web/record"; 
+              script.dataset.id = "+pPt5ByH17wHAsiBQt81sT2mcnCKbAJT1ERg9+IRMFfedUlpkU+m/jRF1/TppjZl";
+              document.head.appendChild(script); 
+              console.log("added Krunch script to head");
+              `,
+            }}
+          />
           {/* Global Site Tag (gtag.js) - Google Analytics */}
           <Script
             strategy="afterInteractive"

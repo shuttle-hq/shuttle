@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-common"
-version = "0.5.0"
+version = "0.5.2"
 edition = "2021"
 license = "Apache-2.0"
 description = "Common library for the shuttle platform (https://www.shuttle.rs/)"
@@ -12,8 +12,10 @@ chrono = { version = "0.4.22", features = ["serde"] }
 comfy-table = "6.1.0"
 crossterm = "0.25.0"
 once_cell = "1.13.1"
+regex = "1.6.0"
 rocket = "0.5.0-rc.2"
 rustrict = "0.5.0"
+semver = "1.0.13"
 serde = "1.0.137"
 serde_json = "1.0.81"
 strum = { version = "0.24.1", features = ["derive"] }

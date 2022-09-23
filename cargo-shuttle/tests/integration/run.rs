@@ -110,6 +110,17 @@ async fn rocket_postgres() {
         .unwrap();
 
     assert_eq!(request_text, "{\"id\":1,\"note\":\"Deploy to shuttle\"}");
+
+    let request_text = client
+        .get(format!("http://localhost:{port}/secret"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+
+    assert_eq!(request_text, "the contents of my API key");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -294,4 +305,20 @@ async fn poem_mongodb() {
         .unwrap();
 
     assert_eq!(request_text, "{\"note\":\"Deploy to shuttle\"}");
+}
+
+#[tokio::test]
+async fn salvo_hello_world() {
+    let port = cargo_shuttle_run("../examples/salvo/hello-world").await;
+
+    let request_text = reqwest::Client::new()
+        .get(format!("http://localhost:{port}/hello"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+
+    assert_eq!(request_text, "Hello, world!");
 }

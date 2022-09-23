@@ -119,7 +119,7 @@ jobs:
       - run: |
           cargo clippy --tests \
                        --all-targets \
-                       --features="codegen,loader,sqlx-integration,sqlx-postgres,mongodb-integration,secrets,<< parameters.framework >>" \
+                       --features="codegen,loader,persist,sqlx-integration,sqlx-postgres,sqlx-aws-postgres,mongodb-integration,secrets,<< parameters.framework >>" \
                        --no-deps -- \
                        --D warnings \
                        -A clippy::let-unit-value \
@@ -156,10 +156,10 @@ jobs:
       - restore-cargo-cache
       - run:
           name: Run unit tests
-          command: cargo test --package shuttle-service --features="codegen,loader,secrets" --lib -- --nocapture
+          command: cargo test --package shuttle-service --features="codegen,loader,persist,secrets,sqlx-postgres" --lib -- --nocapture
       - run:
           name: Run integration tests
-          command: cargo test --package shuttle-service --features="codegen,loader,secrets" --test '*' -- --nocapture
+          command: cargo test --package shuttle-service --features="codegen,loader,persist,secrets,sqlx-postgres" --test '*' -- --nocapture
       - save-cargo-cache
   platform-test:
     parameters:
@@ -223,8 +223,7 @@ jobs:
       - run:
           name: Make and push images
           command: |
-            make clean
-            PUSH=true PLATFORMS=linux/amd64,linux/arm64 make images
+            PUSH=true PLATFORMS=linux/amd64 make images
       - save-buildx-cache
 
 workflows:
@@ -238,7 +237,7 @@ workflows:
             - workspace-fmt
           matrix:
             parameters:
-              framework: ["web-axum", "web-rocket", "web-poem", "web-tide", "web-tower"]
+              framework: ["web-axum", "web-rocket", "web-poem", "web-tide", "web-tower", "web-salvo", "bot-serenity"]
       - check-standalone:
           matrix:
             parameters:
@@ -252,6 +251,9 @@ workflows:
                 - examples/rocket/hello-world
                 - examples/rocket/postgres
                 - examples/rocket/url-shortener
+                - examples/salvo/hello-world
+                - examples/serenity/hello-world
+                - examples/serenity/postgres
                 - examples/tide/hello-world
                 - examples/tide/postgres
                 - examples/tower/hello-world

@@ -2,10 +2,11 @@ use crate::helpers::{loader::build_so_create_loader, sqlx::PostgresInstance};
 
 use log::Level;
 use shuttle_service::loader::LoaderError;
-use shuttle_service::{database, Error, Factory};
+use shuttle_service::{database, Error, Factory, ServiceName};
 use std::collections::BTreeMap;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::process::exit;
+use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -15,12 +16,14 @@ const RESOURCES_PATH: &str = "tests/resources";
 
 struct DummyFactory {
     postgres_instance: Option<PostgresInstance>,
+    service_name: ServiceName,
 }
 
 impl DummyFactory {
     fn new() -> Self {
         Self {
             postgres_instance: None,
+            service_name: ServiceName::from_str("test").unwrap(),
         }
     }
 }
@@ -55,6 +58,10 @@ impl log::Log for StubLogger {
 
 #[async_trait]
 impl Factory for DummyFactory {
+    fn get_service_name(&self) -> ServiceName {
+        self.service_name.clone()
+    }
+
     async fn get_db_connection_string(&mut self, _: database::Type) -> Result<String, Error> {
         let uri = if let Some(postgres_instance) = &self.postgres_instance {
             postgres_instance.get_uri()

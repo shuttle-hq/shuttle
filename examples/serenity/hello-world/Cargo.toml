@@ -1,0 +1,12 @@
+[package]
+name = "hello-world"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+
+[dependencies]
+log = "0.4.17"
+serenity = { version = "0.11.5", default-features = false, features = ["client", "gateway", "rustls_backend", "model"] }
+shuttle-service = { version = "0.5.2", features = ["bot-serenity", "secrets", "sqlx-postgres"] }
+sqlx = { version = "0.6", features = ["runtime-tokio-native-tls", "postgres"] }

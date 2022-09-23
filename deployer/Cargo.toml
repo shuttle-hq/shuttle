@@ -43,15 +43,15 @@ tracing-subscriber = { version = "0.3.11", features = ["env-filter"] }
 uuid = { version = "1.1.2", features = ["v4"] }
 
 [dependencies.shuttle-common]
-version = "0.5.0"
+version = "0.5.2"
 path = "../common"
 
 [dependencies.shuttle-proto]
-version = "0.5.0"
+version = "0.5.2"
 path = "../proto"
 
 [dependencies.shuttle-service]
-version = "0.5.0"
+version = "0.5.2"
 path = "../service"
 features = ["loader"]
 

@@ -54,7 +54,7 @@ RUST_LOG?=debug
 
 DOCKER_COMPOSE_ENV=BACKEND_TAG=$(TAG) PROVISIONER_TAG=$(TAG) POSTGRES_TAG=latest APPS_FQDN=$(APPS_FQDN) DB_FQDN=$(DB_FQDN) POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) RUST_LOG=$(RUST_LOG) CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) MONGO_INITDB_ROOT_USERNAME=$(MONGO_INITDB_ROOT_USERNAME) MONGO_INITDB_ROOT_PASSWORD=$(MONGO_INITDB_ROOT_PASSWORD)
 
-.PHONY: images clean src up down deploy docker-compose.rendered.yml shuttle-% postgres docker-compose.rendered.yml test
+.PHONY: images clean src up down deploy shuttle-% postgres test
 
 clean:
 	rm .shuttle-*

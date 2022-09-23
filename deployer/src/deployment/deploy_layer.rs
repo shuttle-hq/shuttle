@@ -525,6 +525,10 @@ mod tests {
         ) -> Result<BTreeMap<String, String>, shuttle_service::Error> {
             panic!("did not expect any deploy_layer test to get secrets")
         }
+
+        fn get_service_name(&self) -> shuttle_service::ServiceName {
+            panic!("did not expect any deploy_layer test to get the service name")
+        }
     }
 
     struct StubRuntimeLoggerFactory;

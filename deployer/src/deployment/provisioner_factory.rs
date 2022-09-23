@@ -1,11 +1,11 @@
 use std::collections::BTreeMap;
 
 use async_trait::async_trait;
-use shuttle_common::{database, project::ProjectName as ServiceName, DatabaseReadyInfo};
+use shuttle_common::{database, DatabaseReadyInfo};
 use shuttle_proto::provisioner::{
     database_request::DbType, provisioner_client::ProvisionerClient, DatabaseRequest,
 };
-use shuttle_service::Factory;
+use shuttle_service::{Factory, ServiceName};
 use tonic::{transport::Channel, Request};
 use tracing::debug;
 use uuid::Uuid;
@@ -147,5 +147,9 @@ impl<R: ResourceRecorder, S: SecretGetter> Factory for ProvisionerFactory<R, S> 
 
             Ok(secrets)
         }
+    }
+
+    fn get_service_name(&self) -> ServiceName {
+        self.service_name.clone()
     }
 }

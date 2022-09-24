@@ -38,12 +38,7 @@ where
             let mut visitor = JsonVisitor::default();
             event.record(&mut visitor);
 
-            // drop log metadata as it is included in the other LogItem fields (target, file, line...)
-            let fields: serde_json::Map<String, serde_json::Value> = visitor
-                .0
-                .into_iter()
-                .filter(|(field, _)| !field.starts_with("log."))
-                .collect();
+            let fields = visitor.0;
 
             LogItem {
                 level: metadata.level().to_string(),
@@ -68,32 +63,38 @@ where
 #[derive(Default)]
 struct JsonVisitor(serde_json::Map<String, serde_json::Value>);
 
+impl JsonVisitor {
+    /// Ignores log metadata as it is included in the other LogItem fields (target, file, line...)
+    fn filter_insert(&mut self, field: &tracing::field::Field, value: serde_json::Value) {
+        if !field.name().starts_with("log.") {
+            self.0.insert(field.name().to_string(), json!(value));
+        }
+    }
+}
 impl Visit for JsonVisitor {
     fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
-        self.0.insert(field.name().to_string(), json!(value));
+        self.filter_insert(field, json!(value));
     }
     fn record_bool(&mut self, field: &tracing::field::Field, value: bool) {
-        self.0.insert(field.name().to_string(), json!(value));
+        self.filter_insert(field, json!(value));
     }
     fn record_u64(&mut self, field: &tracing::field::Field, value: u64) {
-        self.0.insert(field.name().to_string(), json!(value));
+        self.filter_insert(field, json!(value));
     }
     fn record_i64(&mut self, field: &tracing::field::Field, value: i64) {
-        self.0.insert(field.name().to_string(), json!(value));
+        self.filter_insert(field, json!(value));
     }
     fn record_f64(&mut self, field: &tracing::field::Field, value: f64) {
-        self.0.insert(field.name().to_string(), json!(value));
+        self.filter_insert(field, json!(value));
     }
     fn record_error(
         &mut self,
         field: &tracing::field::Field,
         value: &(dyn std::error::Error + 'static),
     ) {
-        self.0
-            .insert(field.name().to_string(), json!(value.to_string()));
+        self.filter_insert(field, json!(value.to_string()));
     }
     fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
-        self.0
-            .insert(field.name().to_string(), json!(format!("{value:?}")));
+        self.filter_insert(field, json!(format!("{value:?}")));
     }
 }

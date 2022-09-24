@@ -7,6 +7,7 @@ use rocket::tokio;
 use rocket::tokio::io::AsyncWriteExt;
 use semver::VersionReq;
 use uuid::Uuid;
+use shuttle_common::BuildConfig;
 
 use shuttle_common::version::get_shuttle_service_from_user_crate;
 use shuttle_service::loader::build_crate;
@@ -31,6 +32,7 @@ pub(crate) trait BuildSystem: Send + Sync {
         project: &str,
         version_req: &VersionReq,
         buf: Box<dyn std::io::Write + Send>,
+        build_config: &BuildConfig
     ) -> Result<Build>;
 
     fn fs_root(&self) -> PathBuf;
@@ -79,6 +81,7 @@ impl BuildSystem for FsBuildSystem {
         project_name: &str,
         version_req: &VersionReq,
         buf: Box<dyn std::io::Write + Send>,
+        build_config: &BuildConfig
     ) -> Result<Build> {
         // project path
         let project_path = self.project_path(project_name)?;
@@ -106,7 +109,7 @@ impl BuildSystem for FsBuildSystem {
         check_shuttle_version(&project_path, version_req)?;
 
         // run cargo build (--debug for now)
-        let so_path = build_crate(&project_path, buf)?;
+        let so_path = build_crate(&project_path, buf, &build_config.profile)?;
 
         // create uniquely named so file to satisfy `libloading`
         let so_path = create_unique_named_so_file(&project_path, &so_path)?;

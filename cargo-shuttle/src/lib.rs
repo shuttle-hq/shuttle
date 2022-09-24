@@ -15,7 +15,7 @@ use std::rc::Rc;
 use anyhow::{anyhow, Context, Result};
 pub use args::{Args, Command, DeployArgs, InitArgs, ProjectArgs, RunArgs};
 use args::{AuthArgs, LoginArgs};
-use cargo::core::compiler::CompileMode;
+use cargo::core::compiler::{CompileMode};
 use cargo::core::resolver::CliFeatures;
 use cargo::core::Workspace;
 use cargo::ops::{CompileOptions, PackageOpts, Packages, TestOptions};
@@ -32,7 +32,7 @@ use uuid::Uuid;
 #[macro_use]
 extern crate log;
 
-use shuttle_common::DeploymentStateMeta;
+use shuttle_common::{BuildConfig, BuildProfile, DeploymentStateMeta};
 
 pub struct Shuttle {
     ctx: RequestContext,
@@ -186,7 +186,8 @@ impl Shuttle {
             "Building".bold().green(),
             working_directory.display()
         );
-        let so_path = build_crate(working_directory, buf)?;
+
+        let so_path = build_crate(working_directory, buf, BuildProfile::Debug)?;
         let loader = Loader::from_so_file(so_path)?;
 
         let mut factory = LocalFactory::new(self.ctx.project_name().clone())?;
@@ -245,11 +246,19 @@ impl Shuttle {
 
         let key = self.ctx.api_key()?;
 
+        let build_config = BuildConfig {
+            profile: match args.release {
+                true => BuildProfile::Release,
+                false => BuildProfile::Debug
+            }
+        };
+
         let state_meta = client::deploy(
             package_file,
             self.ctx.api_url(),
             &key,
             self.ctx.project_name(),
+            &build_config
         )
         .await
         .context("failed to deploy cargo project")?;

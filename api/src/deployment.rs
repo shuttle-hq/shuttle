@@ -14,9 +14,7 @@ use rocket::data::ByteUnit;
 use rocket::{tokio, Data};
 use semver::VersionReq;
 use shuttle_common::project::ProjectName;
-use shuttle_common::{
-    DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, LogItem, Port,
-};
+use shuttle_common::{BuildConfig, DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, LogItem, Port};
 use shuttle_proto::provisioner::provisioner_client::ProvisionerClient;
 use shuttle_service::loader::Loader;
 use shuttle_service::logger::Log;
@@ -52,10 +50,10 @@ impl Deployment {
         }
     }
 
-    fn from_bytes(fqdn: &str, project: ProjectName, crate_bytes: Vec<u8>) -> Self {
+    fn from_bytes(fqdn: &str, project: ProjectName, crate_bytes: Vec<u8>, build_config: BuildConfig) -> Self {
         Self {
             meta: Arc::new(RwLock::new(DeploymentMeta::queued(fqdn, project))),
-            state: RwLock::new(DeploymentState::queued(crate_bytes)),
+            state: RwLock::new(DeploymentState::queued(crate_bytes, build_config)),
         }
     }
 
@@ -126,6 +124,7 @@ impl Deployment {
                             meta.project.as_str(),
                             &context.version_req,
                             Box::new(console_writer),
+                            &queued.build_config
                         )
                         .await
                     {
@@ -568,6 +567,7 @@ impl DeploymentSystem {
         &self,
         crate_file: Data<'_>,
         project: ProjectName,
+        build_config: BuildConfig
     ) -> Result<DeploymentMeta, DeploymentApiError> {
         // Assumes that only `::Deployed` deployments are blocking a thread.
         if self.num_active().await >= MAX_DEPLOYS {
@@ -585,7 +585,12 @@ impl DeploymentSystem {
             })?
             .to_vec();
 
-        let deployment = Arc::new(Deployment::from_bytes(&self.fqdn, project, crate_bytes));
+        let deployment = Arc::new(Deployment::from_bytes(
+            &self.fqdn,
+            project,
+            crate_bytes,
+            build_config
+        ));
 
         let info = deployment.meta().await;
 
@@ -636,8 +641,8 @@ impl DeploymentState {
         std::mem::replace(self, DeploymentState::Deleted)
     }
 
-    fn queued(crate_bytes: Vec<u8>) -> Self {
-        Self::Queued(QueuedState { crate_bytes })
+    fn queued(crate_bytes: Vec<u8>, build_config: BuildConfig) -> Self {
+        Self::Queued(QueuedState { crate_bytes, build_config })
     }
 
     fn built(build: Build) -> Self {
@@ -666,6 +671,7 @@ impl DeploymentState {
 
 struct QueuedState {
     crate_bytes: Vec<u8>,
+    build_config: BuildConfig
 }
 
 struct BuiltState {

@@ -12,7 +12,7 @@ use cargo::util::homedir;
 use cargo::Config;
 use libloading::{Library, Symbol};
 use log::trace;
-use shuttle_common::DeploymentId;
+use shuttle_common::{BuildProfile, DeploymentId};
 use thiserror::Error as ThisError;
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -101,7 +101,7 @@ impl Loader {
 }
 
 /// Given a project directory path, builds the crate
-pub fn build_crate(project_path: &Path, buf: Box<dyn std::io::Write>) -> anyhow::Result<PathBuf> {
+pub fn build_crate(project_path: &Path, buf: Box<dyn std::io::Write>, build_profile: &BuildProfile) -> anyhow::Result<PathBuf> {
     let mut shell = Shell::from_write(buf);
     shell.set_verbosity(Verbosity::Normal);
 
@@ -114,7 +114,9 @@ pub fn build_crate(project_path: &Path, buf: Box<dyn std::io::Write>) -> anyhow:
         )
     })?;
 
-    let config = Config::new(shell, cwd, homedir);
+    let mut config = Config::new(shell, cwd, homedir);
+
+
     let manifest_path = project_path.join("Cargo.toml");
 
     let mut ws = Workspace::new(&manifest_path, &config)?;

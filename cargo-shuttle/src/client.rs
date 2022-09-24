@@ -10,7 +10,7 @@ use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use shuttle_common::project::ProjectName;
-use shuttle_common::{ApiKey, ApiUrl, DeploymentMeta, DeploymentStateMeta, SHUTTLE_PROJECT_HEADER};
+use shuttle_common::{ApiKey, ApiUrl, BuildConfig, DeploymentMeta, DeploymentStateMeta, SHUTTLE_BUILD_CONFIG_HEADER};
 use tokio::time::sleep;
 
 use crate::print;
@@ -137,6 +137,7 @@ pub(crate) async fn deploy(
     api_url: ApiUrl,
     api_key: &ApiKey,
     project: &ProjectName,
+    build_config: &BuildConfig
 ) -> Result<DeploymentStateMeta> {
     let mut url = api_url.clone();
     let _ = write!(url, "/projects/{}", project.as_str());
@@ -152,7 +153,10 @@ pub(crate) async fn deploy(
     let res: Response = client
         .post(url)
         .body(package_content)
-        .header(SHUTTLE_PROJECT_HEADER, serde_json::to_string(&project)?)
+        // at some point we should package all metadata for the deploy command
+        // into a single header with a large JSON configuration object.
+        // Doing this now would introduce breaking changes.
+        .header(SHUTTLE_BUILD_CONFIG_HEADER, serde_json::to_string(build_config)?)
         .basic_auth(api_key.clone(), Some(""))
         .send()
         .await
@@ -197,7 +201,6 @@ pub(crate) async fn secrets(
     client
         .post(api_url)
         .body(serde_json::to_string(&secrets)?)
-        .header(SHUTTLE_PROJECT_HEADER, serde_json::to_string(&project)?)
         .basic_auth(api_key.clone(), Some(""))
         .send()
         .await

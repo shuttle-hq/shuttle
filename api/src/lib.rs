@@ -24,7 +24,7 @@ use factory::ShuttleFactory;
 use rocket::serde::json::Json;
 use rocket::{tokio, Build, Data, Rocket, State};
 use shuttle_common::project::ProjectName;
-use shuttle_common::{DeploymentApiError, DeploymentMeta, Port};
+use shuttle_common::{BuildConfig, DeploymentApiError, DeploymentMeta, Port};
 use shuttle_service::SecretStore;
 use uuid::Uuid;
 
@@ -118,6 +118,7 @@ async fn create_project(
     crate_file: Data<'_>,
     project_name: ProjectName,
     user: User,
+    build_config: BuildConfig
 ) -> ApiResult<DeploymentMeta, DeploymentApiError> {
     info!("[CREATE_PROJECT, {}, {}]", &user.name, &project_name);
 
@@ -130,7 +131,7 @@ async fn create_project(
     }
     let deployment = state
         .deployment_manager
-        .deploy(crate_file, project_name)
+        .deploy(crate_file, project_name, build_config)
         .await?;
     Ok(Json(deployment))
 }

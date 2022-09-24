@@ -4907,8 +4907,6 @@ dependencies = [
  "anyhow",
  "async-trait",
  "base64 0.13.0",
- "cargo",
- "cargo-util",
  "chrono",
  "clap",
  "env_logger",
@@ -4961,6 +4959,7 @@ dependencies = [
  "rustrict",
  "semver 1.0.13",
  "serde",
+ "serde_json",
  "uuid 1.1.2",
 ]
 

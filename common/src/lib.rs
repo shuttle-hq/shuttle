@@ -9,13 +9,47 @@ use std::{
 
 use chrono::{DateTime, Utc};
 use log::Level;
-use rocket::Responder;
+use rocket::request::{FromRequest, Outcome};
+use rocket::{Request, Responder};
+use rocket::http::Status;
+use rocket::outcome::IntoOutcome;
+use rocket::async_trait;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::project::ProjectName;
 
-pub const SHUTTLE_PROJECT_HEADER: &str = "Shuttle-Project";
+
+pub const SHUTTLE_BUILD_CONFIG_HEADER: &str = "Shuttle-Build-Config";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum BuildProfile {
+    Debug,
+    Release
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BuildConfig {
+    pub profile: BuildProfile
+}
+
+#[async_trait]
+impl<'r> FromRequest<'r> for BuildConfig {
+    type Error = ();
+
+    async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
+        let build_config_header_value = request.headers().get_one(SHUTTLE_BUILD_CONFIG_HEADER);
+
+        match build_config_header_value {
+            Some(build_config_header_value) => {
+                serde_json::from_str(build_config_header_value)
+                    .map_err(|_| ())
+                    .into_outcome(Status::BadRequest)
+            }
+            None => Outcome::Failure((Status::BadRequest, ()))
+        }
+    }
+}
 
 #[cfg(debug_assertions)]
 pub const API_URL_DEFAULT: &str = "http://localhost:8001";

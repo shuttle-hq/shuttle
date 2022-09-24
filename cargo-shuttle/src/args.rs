@@ -86,6 +86,9 @@ pub struct DeployArgs {
     /// allows pre-deploy tests to be skipped
     #[clap(long)]
     pub no_test: bool,
+    /// builds artifacts in release mode with optimizations
+    #[clap(long)]
+    pub release: bool,
 }
 
 #[derive(Parser, Debug)]

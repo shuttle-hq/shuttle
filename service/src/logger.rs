@@ -98,3 +98,36 @@ impl Visit for JsonVisitor {
         self.filter_insert(field, json!(format!("{value:?}")));
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use tracing_subscriber::prelude::*;
+
+    #[test]
+    fn logging() {
+        let (s, r) = crossbeam_channel::unbounded();
+
+        let logger = Logger::new(s, Default::default());
+
+        tracing_subscriber::registry().with(logger).init();
+
+        tracing::debug!("this is");
+        tracing::info!("hi");
+        tracing::warn!("from");
+        tracing::error!("logger");
+
+        let logs = r
+            .try_iter()
+            .map(|log| {
+                let fields: serde_json::Map<String, serde_json::Value> =
+                    serde_json::from_slice(&log.item.fields).unwrap();
+
+                fields["message"].as_str().unwrap().to_owned()
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(logs, vec!["this is", "hi", "from", "logger",]);
+    }
+}

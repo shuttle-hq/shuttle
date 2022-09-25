@@ -32,20 +32,18 @@ where
         _ctx: tracing_subscriber::layer::Context<'_, S>,
     ) {
         let datetime = Utc::now();
-        let metadata = event.metadata();
 
         let item = {
+            let metadata = event.metadata();
             let mut visitor = JsonVisitor::default();
             event.record(&mut visitor);
-
-            let fields = visitor.0;
-
+            
             LogItem {
                 level: metadata.level().to_string(),
                 file: metadata.file().map(str::to_string),
                 line: metadata.line(),
                 target: metadata.target().to_string(),
-                fields: serde_json::to_vec(&fields).unwrap(),
+                fields: serde_json::to_vec(&visitor.0).unwrap(),
             }
         };
 

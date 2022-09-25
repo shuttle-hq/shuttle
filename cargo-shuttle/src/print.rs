@@ -38,9 +38,7 @@ fn get_colored_level(level: &String) -> ColoredString {
 fn fmt_fields(fields: &serde_json::Map<String, serde_json::Value>) -> String {
     fields
         .iter()
-        .map(|(field, value)| {
-            format!("{}={}", field.italic(), value)
-        })
+        .map(|(field, value)| format!("{}={}", field.italic(), value))
         .collect::<Vec<_>>()
         .join(" ")
 }

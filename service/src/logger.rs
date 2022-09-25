@@ -36,8 +36,9 @@ where
         let item = {
             let metadata = event.metadata();
             let mut visitor = JsonVisitor::default();
+
             event.record(&mut visitor);
-            
+
             LogItem {
                 level: metadata.level().to_string(),
                 file: metadata.file().map(str::to_string),

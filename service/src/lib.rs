@@ -371,13 +371,14 @@ pub type StateBuilder<T> =
 /// tokio runtime.
 pub type Binder = for<'a> fn(Box<dyn Service>, SocketAddr, &'a Runtime) -> ServeHandle;
 
+// Make sure every crate used in this struct has its version pinned down to prevent segmentation faults when crossing the FFI.
+// Your future self will thank you!
+// See https://github.com/shuttle-hq/shuttle/pull/348
 #[allow(dead_code)]
 pub struct Bootstrapper {
     service: Option<Box<dyn Service>>,
     builder: Option<StateBuilder<Box<dyn Service>>>,
     binder: Binder,
-    // Do you have time on your hands? If yes, then move this field higher and spend endless hours debugging the segmentation fault
-    // It seems that the [Runtime] changes in size when crossing the FFI which misaligns all fields after it
     runtime: Option<Runtime>,
 }
 

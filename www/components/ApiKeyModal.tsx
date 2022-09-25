@@ -4,7 +4,6 @@ import { XIcon } from "@heroicons/react/outline";
 import { createStateContext } from "react-use";
 import { useUser } from "@auth0/nextjs-auth0";
 import Code from "./Code";
-import mixpanel from "mixpanel-browser";
 import { DISCORD_URL } from "../lib/constants";
 import ExternalLink from "./ExternalLink";
 

@@ -51,12 +51,6 @@ async fn main() -> io::Result<()> {
 
     let api = make_api(Arc::clone(&gateway));
 
-    #[cfg(feature = "compat_v0_3")]
-    let api = {
-        let api_v0_3 = shuttle_gateway::api::v0_3::make_api(Arc::clone(&gateway));
-        api_v0_3.nest("/v0.4", api)
-    };
-
     let api_handle = tokio::spawn(axum::Server::bind(&args.control).serve(api.into_make_service()));
 
     let proxy = make_proxy(gateway);

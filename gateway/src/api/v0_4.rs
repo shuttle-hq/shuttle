@@ -1,39 +1,23 @@
 use std::sync::Arc;
+use std::time::Duration;
 
-use axum::body::Body;
-use axum::extract::{
-    Extension,
-    Path
-};
+use axum::body::{Body, BoxBody};
+use axum::extract::{Extension, Path};
 use axum::http::Request;
 use axum::response::Response;
-use axum::routing::{
-    any,
-    get
-};
-use axum::{
-    Json as AxumJson,
-    Router
-};
-
-use crate::auth::{
-    Admin,
-    ScopedUser,
-    User
-};
+use axum::routing::{any, get};
+use axum::{Json as AxumJson, Router};
+use tower_http::trace::TraceLayer;
 use tracing::{debug, debug_span, field, Span};
+
+use crate::auth::{Admin, ScopedUser, User};
 use crate::project::Project;
-use crate::{
-    AccountName,
-    Error,
-    GatewayService,
-    ProjectName
-};
+use crate::{AccountName, Error, GatewayService, ProjectName};
 
 async fn get_user(
     Extension(service): Extension<Arc<GatewayService>>,
     Path(account_name): Path<AccountName>,
-    _: Admin
+    _: Admin,
 ) -> Result<AxumJson<User>, Error> {
     service
         .user_from_account_name(account_name)
@@ -44,14 +28,14 @@ async fn get_user(
 async fn post_user(
     Extension(service): Extension<Arc<GatewayService>>,
     Path(account_name): Path<AccountName>,
-    _: Admin
+    _: Admin,
 ) -> Result<AxumJson<User>, Error> {
     service.create_user(account_name).await.map(AxumJson)
 }
 
 async fn get_project(
     Extension(service): Extension<Arc<GatewayService>>,
-    ScopedUser { scope, .. }: ScopedUser
+    ScopedUser { scope, .. }: ScopedUser,
 ) -> Result<AxumJson<Project>, Error> {
     service.find_project(&scope).await.map(AxumJson)
 }
@@ -59,7 +43,7 @@ async fn get_project(
 async fn post_project(
     Extension(service): Extension<Arc<GatewayService>>,
     User { name, .. }: User,
-    Path(project): Path<ProjectName>
+    Path(project): Path<ProjectName>,
 ) -> Result<AxumJson<Project>, Error> {
     service.create_project(project, name).await.map(AxumJson)
 }
@@ -68,9 +52,9 @@ async fn delete_project(
     Extension(service): Extension<Arc<GatewayService>>,
     ScopedUser {
         scope: _,
-        user: User { name, .. }
+        user: User { name, .. },
     }: ScopedUser,
-    Path(project): Path<ProjectName>
+    Path(project): Path<ProjectName>,
 ) -> Result<(), Error> {
     service.destroy_project(project, name).await
 }
@@ -79,7 +63,7 @@ async fn route_project(
     Extension(service): Extension<Arc<GatewayService>>,
     ScopedUser { scope, .. }: ScopedUser,
     Path((_, route)): Path<(String, String)>,
-    req: Request<Body>
+    req: Request<Body>,
 ) -> Result<Response<Body>, Error> {
     service.route(&scope, Path(route), req).await
 }
@@ -93,6 +77,18 @@ pub fn make_api(service: Arc<GatewayService>) -> Router<Body> {
         .route("/users/:account_name", get(get_user).post(post_user))
         .route("/projects/:project/*any", any(route_project))
         .layer(Extension(service))
+        .layer(
+            TraceLayer::new_for_http()
+                .make_span_with(|request: &Request<Body>| {
+                    debug_span!("request", http.uri = %request.uri(), http.method = %request.method(), http.status_code = field::Empty, api_key = field::Empty)
+                })
+                .on_response(
+                    |response: &Response<BoxBody>, latency: Duration, span: &Span| {
+                        span.record("http.status_code", &response.status().as_u16());
+                        debug!(latency = format_args!("{} ns", latency.as_nanos()), "finished processing request");
+                    },
+                ),
+        )
 }
 
 #[cfg(test)]
@@ -109,10 +105,7 @@ pub mod tests {
 
     use super::*;
     use crate::service::GatewayService;
-    use crate::tests::{
-        RequestBuilderExt,
-        World
-    };
+    use crate::tests::{RequestBuilderExt, World};
     use crate::worker::Work;
 
     #[tokio::test]

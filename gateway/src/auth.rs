@@ -2,31 +2,14 @@ use std::fmt::Formatter;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use axum::extract::{
-    Extension,
-    FromRequest,
-    Path,
-    RequestParts,
-    TypedHeader
-};
+use axum::extract::{Extension, FromRequest, Path, RequestParts, TypedHeader};
 use axum::headers::authorization::Basic;
 use axum::headers::Authorization;
-use rand::distributions::{
-    Alphanumeric,
-    DistString
-};
-use serde::{
-    Deserialize,
-    Serialize
-};
+use rand::distributions::{Alphanumeric, DistString};
+use serde::{Deserialize, Serialize};
 
 use crate::service::GatewayService;
-use crate::{
-    AccountName,
-    Error,
-    ErrorKind,
-    ProjectName
-};
+use crate::{AccountName, Error, ErrorKind, ProjectName};
 
 #[derive(Clone, Debug, sqlx::Type, PartialEq, Hash, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -42,7 +25,7 @@ impl Key {
 #[async_trait]
 impl<B> FromRequest<B> for Key
 where
-    B: Send
+    B: Send,
 {
     type Rejection = Error;
 
@@ -50,7 +33,7 @@ where
         TypedHeader::<Authorization<Basic>>::from_request(req)
             .await
             .map_err(|_| Error::from(ErrorKind::KeyMissing))
-            .and_then(|TypedHeader(Authorization(basic))| basic.password().parse())
+            .and_then(|TypedHeader(Authorization(basic))| basic.password().trim().parse())
     }
 }
 
@@ -89,13 +72,13 @@ pub struct User {
     pub projects: Vec<ProjectName>,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     #[serde(default = "FALSE")]
-    pub super_user: bool
+    pub super_user: bool,
 }
 
 #[async_trait]
 impl<B> FromRequest<B> for User
 where
-    B: Send
+    B: Send,
 {
     type Rejection = Error;
 
@@ -108,7 +91,7 @@ where
             .user_from_key(key)
             .await
             // Absord any error into `Unauthorized`
-            .map_err(|_| Error::from_kind(ErrorKind::Unauthorized))?;
+            .map_err(|e| Error::source(ErrorKind::Unauthorized, e))?;
         Ok(user)
     }
 }
@@ -120,13 +103,13 @@ where
 /// by [`ScopedUser::name`].
 pub struct ScopedUser {
     pub user: User,
-    pub scope: ProjectName
+    pub scope: ProjectName,
 }
 
 #[async_trait]
 impl<B> FromRequest<B> for ScopedUser
 where
-    B: Send
+    B: Send,
 {
     type Rejection = Error;
 
@@ -137,7 +120,7 @@ where
             Err(_) => Path::<(ProjectName, String)>::from_request(req)
                 .await
                 .map(|Path((p, _))| p)
-                .unwrap()
+                .unwrap(),
         };
         if user.super_user || user.projects.contains(&scope) {
             Ok(Self { user, scope })
@@ -148,13 +131,13 @@ where
 }
 
 pub struct Admin {
-    pub user: User
+    pub user: User,
 }
 
 #[async_trait]
 impl<B> FromRequest<B> for Admin
 where
-    B: Send
+    B: Send,
 {
     type Rejection = Error;
 

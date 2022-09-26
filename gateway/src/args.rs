@@ -26,5 +26,5 @@ pub struct Args {
     pub network_name: String,
     /// Uri to the `.sqlite` file used to store state
     #[clap(long, default_value = "./gateway.sqlite")]
-    pub state: String
+    pub state: String,
 }

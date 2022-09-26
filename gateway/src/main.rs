@@ -46,7 +46,7 @@ async fn main() -> io::Result<()> {
         worker
             .start()
             .map_ok(|_| info!("worker terminated successfully"))
-            .map_err(|err| error!("worker error: {}", err))
+            .map_err(|err| error!("worker error: {}", err)),
     );
 
     let api = make_api(Arc::clone(&gateway));

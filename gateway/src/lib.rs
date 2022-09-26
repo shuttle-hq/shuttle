@@ -9,30 +9,15 @@ use std::pin::Pin;
 use std::str::FromStr;
 
 use axum::http::StatusCode;
-use axum::response::{
-    IntoResponse,
-    Response
-};
+use axum::response::{IntoResponse, Response};
 use axum::Json;
 use bollard::Docker;
-use convert_case::{
-    Case,
-    Casing
-};
+use convert_case::{Case, Casing};
 use futures::prelude::*;
 use lazy_static::lazy_static;
 use regex::Regex;
-use serde::{
-    Deserialize,
-    Deserializer,
-    Serialize
-};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::json;
-
-use crate::service::{
-    ContainerSettings,
-    GatewayService
-};
 use tracing::error;
 
 pub mod api;
@@ -42,6 +27,8 @@ pub mod project;
 pub mod proxy;
 pub mod service;
 pub mod worker;
+
+use crate::service::{ContainerSettings, GatewayService};
 
 lazy_static! {
     static ref PROJECT_REGEX: Regex = Regex::new("^[a-zA-Z0-9\\-_]{3,64}$").unwrap();
@@ -63,7 +50,7 @@ pub enum ErrorKind {
     ProjectUnavailable,
     InvalidOperation,
     Internal,
-    NotReady
+    NotReady,
 }
 
 impl std::fmt::Display for ErrorKind {
@@ -84,14 +71,14 @@ impl std::fmt::Display for ErrorKind {
 #[derive(Debug)]
 pub struct Error {
     kind: ErrorKind,
-    source: Option<Box<dyn StdError + Sync + Send + 'static>>
+    source: Option<Box<dyn StdError + Sync + Send + 'static>>,
 }
 
 impl Error {
     pub fn source<E: StdError + Sync + Send + 'static>(kind: ErrorKind, err: E) -> Self {
         Self {
             kind,
-            source: Some(Box::new(err))
+            source: Some(Box::new(err)),
         }
     }
 
@@ -100,8 +87,8 @@ impl Error {
             kind,
             source: Some(Box::new(io::Error::new(
                 io::ErrorKind::Other,
-                message.as_ref().to_string()
-            )))
+                message.as_ref().to_string(),
+            ))),
         }
     }
 
@@ -139,15 +126,15 @@ impl IntoResponse for Error {
             ErrorKind::InvalidProjectName => (StatusCode::BAD_REQUEST, "invalid project name"),
             ErrorKind::InvalidOperation => (
                 StatusCode::BAD_REQUEST,
-                "the requested operation is invalid"
+                "the requested operation is invalid",
             ),
             ErrorKind::ProjectAlreadyExists => (
                 StatusCode::BAD_REQUEST,
-                "a project with the same name already exists"
+                "a project with the same name already exists",
             ),
             ErrorKind::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
             ErrorKind::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
-            ErrorKind::NotReady => (StatusCode::INTERNAL_SERVER_ERROR, "not ready yet")
+            ErrorKind::NotReady => (StatusCode::INTERNAL_SERVER_ERROR, "not ready yet"),
         };
         (status, Json(json!({ "error": error_message }))).into_response()
     }
@@ -173,7 +160,7 @@ pub struct ProjectName(pub String);
 impl<'de> Deserialize<'de> for ProjectName {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: Deserializer<'de>
+        D: Deserializer<'de>,
     {
         String::deserialize(deserializer)?
             .parse()
@@ -220,7 +207,7 @@ impl std::fmt::Display for AccountName {
 impl<'de> Deserialize<'de> for AccountName {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: Deserializer<'de>
+        D: Deserializer<'de>,
     {
         String::deserialize(deserializer)?
             .parse()
@@ -264,7 +251,7 @@ pub trait State<'c>: Send + Sized + Clone {
 /// failures
 pub trait EndState<'c>
 where
-    Self: State<'c, Error = Infallible, Next = Self>
+    Self: State<'c, Error = Infallible, Next = Self>,
 {
     type ErrorVariant;
 
@@ -283,7 +270,7 @@ pub trait EndStateExt<'c>: EndState<'c> {
     fn into_stream<Ctx>(self, ctx: Ctx) -> StateTryStream<'c, Self, Self::ErrorVariant>
     where
         Self: 'c,
-        Ctx: 'c + Context<'c>
+        Ctx: 'c + Context<'c>,
     {
         Box::pin(stream::try_unfold((self, ctx), |(state, ctx)| async move {
             state
@@ -300,14 +287,14 @@ impl<'c, S> EndStateExt<'c> for S where S: EndState<'c> {}
 
 pub trait IntoEndState<'c, E>
 where
-    E: EndState<'c>
+    E: EndState<'c>,
 {
     fn into_end_state(self) -> Result<E, Infallible>;
 }
 
 impl<'c, E, S, Err> IntoEndState<'c, E> for Result<S, Err>
 where
-    E: EndState<'c> + From<S> + From<Err>
+    E: EndState<'c> + From<S> + From<Err>,
 {
     fn into_end_state(self) -> Result<E, Infallible> {
         self.map(|s| E::from(s)).or_else(|err| Ok(E::from(err)))
@@ -329,34 +316,17 @@ pub mod tests {
     use std::sync::Arc;
     use std::time::Duration;
 
-    use anyhow::{
-        anyhow,
-        Context as AnyhowContext
-    };
+    use anyhow::{anyhow, Context as AnyhowContext};
     use axum::headers::Authorization;
     use bollard::Docker;
     use futures::prelude::*;
     use hyper::client::HttpConnector;
     use hyper::http::uri::Scheme;
     use hyper::http::Uri;
-    use hyper::{
-        Body,
-        Client as HyperClient,
-        Request,
-        Response,
-        StatusCode
-    };
+    use hyper::{Body, Client as HyperClient, Request, Response, StatusCode};
     use log::info;
-    use rand::distributions::{
-        Alphanumeric,
-        DistString,
-        Distribution,
-        Uniform
-    };
-    use shuttle_common::{
-        DeploymentMeta,
-        DeploymentStateMeta
-    };
+    use rand::distributions::{Alphanumeric, DistString, Distribution, Uniform};
+    use shuttle_common::{DeploymentMeta, DeploymentStateMeta};
     use tempfile::NamedTempFile;
     use tokio::sync::mpsc::channel;
 
@@ -365,15 +335,9 @@ pub mod tests {
     use crate::auth::User;
     use crate::project::Project;
     use crate::proxy::make_proxy;
-    use crate::service::{
-        ContainerSettings,
-        GatewayService
-    };
+    use crate::service::{ContainerSettings, GatewayService};
     use crate::worker::Worker;
-    use crate::{
-        Context,
-        EndState
-    };
+    use crate::{Context, EndState};
 
     macro_rules! value_block_helper {
         ($next:ident, $block:block) => {
@@ -472,12 +436,7 @@ pub mod tests {
         }};
     }
 
-    pub(crate) use {
-        assert_err_kind,
-        assert_matches,
-        assert_stream_matches,
-        value_block_helper
-    };
+    pub(crate) use {assert_err_kind, assert_matches, assert_stream_matches, value_block_helper};
 
     mod request_builder_ext {
         pub trait Sealed {}
@@ -518,14 +477,14 @@ pub mod tests {
 
     pub struct Client<C = HttpConnector, B = Body> {
         target: SocketAddr,
-        hyper: Option<HyperClient<C, B>>
+        hyper: Option<HyperClient<C, B>>,
     }
 
     impl<C, B> Client<C, B> {
         pub fn new<A: Into<SocketAddr>>(target: A) -> Self {
             Self {
                 target: target.into(),
-                hyper: None
+                hyper: None,
             }
         }
 
@@ -538,7 +497,7 @@ pub mod tests {
     impl Client<HttpConnector, Body> {
         pub async fn request(
             &self,
-            mut req: Request<Body>
+            mut req: Request<Body>,
         ) -> Result<Response<Vec<u8>>, hyper::Error> {
             if req.uri().authority().is_none() {
                 let mut uri = req.uri().clone().into_parts();
@@ -570,14 +529,14 @@ pub mod tests {
         docker: Docker,
         settings: ContainerSettings,
         args: Args,
-        hyper: HyperClient<HttpConnector, Body>
+        hyper: HyperClient<HttpConnector, Body>,
     }
 
     #[derive(Clone, Copy)]
     pub struct WorldContext<'c> {
         pub docker: &'c Docker,
         pub container_settings: &'c ContainerSettings,
-        pub hyper: &'c HyperClient<HttpConnector, Body>
+        pub hyper: &'c HyperClient<HttpConnector, Body>,
     }
 
     impl World {
@@ -617,7 +576,7 @@ pub mod tests {
                 prefix,
                 provisioner_host,
                 network_name,
-                state: state.path().to_str().unwrap().to_string()
+                state: state.path().to_str().unwrap().to_string(),
             };
 
             let settings = ContainerSettings::builder(&docker).from_args(&args).await;
@@ -629,7 +588,7 @@ pub mod tests {
                 docker,
                 settings,
                 args,
-                hyper
+                hyper,
             }
         }
 
@@ -647,7 +606,7 @@ pub mod tests {
             WorldContext {
                 docker: &self.docker,
                 container_settings: &self.settings,
-                hyper: &self.hyper
+                hyper: &self.hyper,
             }
         }
     }
@@ -714,7 +673,7 @@ pub mod tests {
                 Request::post("/users/trinity")
                     .with_header(&Authorization::basic("", key.as_str()))
                     .body(Body::empty())
-                    .unwrap()
+                    .unwrap(),
             )
             .map_ok(|resp| {
                 assert_eq!(resp.status(), StatusCode::OK);
@@ -730,7 +689,7 @@ pub mod tests {
                 Request::post("/projects/matrix")
                     .with_header(&authorization)
                     .body(Body::empty())
-                    .unwrap()
+                    .unwrap(),
             )
             .map_ok(|resp| {
                 assert_eq!(resp.status(), StatusCode::OK);
@@ -768,7 +727,7 @@ pub mod tests {
                 Request::get("/projects/matrix/status")
                     .with_header(&authorization)
                     .body(Body::empty())
-                    .unwrap()
+                    .unwrap(),
             )
             .map_ok(|resp| assert_eq!(resp.status(), StatusCode::OK))
             .await
@@ -813,7 +772,7 @@ pub mod tests {
                 Request::get("/hello")
                     .header("Host", "matrix.shuttleapp.rs")
                     .body(Body::empty())
-                    .unwrap()
+                    .unwrap(),
             )
             .map_ok(|resp| {
                 assert_eq!(resp.status(), StatusCode::OK);
@@ -831,7 +790,7 @@ pub mod tests {
                 Request::delete("/projects/matrix")
                     .with_header(&authorization)
                     .body(Body::empty())
-                    .unwrap()
+                    .unwrap(),
             )
             .map_ok(|resp| assert_eq!(resp.status(), StatusCode::OK))
             .await

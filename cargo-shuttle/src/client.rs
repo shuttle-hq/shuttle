@@ -3,25 +3,45 @@ use std::fs::File;
 use std::io::Read;
 
 use anyhow::{anyhow, Context, Result};
+use async_trait::async_trait;
 use http_auth_basic::Credentials;
 use reqwest::header::AUTHORIZATION;
 use reqwest::{Body, Response, StatusCode};
-use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
+use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, RequestBuilder};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use semver::Version;
+use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use shuttle_common::project::ProjectName;
 use shuttle_common::{deployment, log, secret, service, ApiKey, ApiUrl};
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
-use tracing::error;
+use tracing::{error, trace};
 use uuid::Uuid;
 
 pub struct Client {
     api_url: ApiUrl,
     api_key: Option<ApiKey>,
+}
+
+#[async_trait]
+trait ToJson {
+    async fn to_json<T: DeserializeOwned>(self) -> Result<T>;
+}
+
+#[async_trait]
+impl ToJson for Response {
+    async fn to_json<T: DeserializeOwned>(self) -> Result<T> {
+        let full = self.bytes().await?;
+
+        trace!(
+            response = std::str::from_utf8(&full).unwrap_or_default(),
+            "parsing response to json"
+        );
+        serde_json::from_slice(&full).context("failed to parse response to JSON")
+    }
 }
 
 impl Client {
@@ -80,9 +100,8 @@ impl Client {
         self.post(path, Some(package_content))
             .await
             .context("failed to send deployment to the Shuttle server")?
-            .json()
+            .to_json()
             .await
-            .context("could not parse server response")
     }
 
     pub async fn get_build_logs_ws(
@@ -194,15 +213,13 @@ impl Client {
 
         let mut builder = Self::get_retry_client().get(url);
 
-        if let Some(ref api_key) = self.api_key {
-            builder = builder.basic_auth::<&str, &str>(api_key, None);
-        }
+        builder = self.set_builder_auth(builder);
 
         builder
             .send()
             .await
             .context("failed to make get request")?
-            .json()
+            .to_json()
             .await
             .context("could not parse server json response for get request")
     }
@@ -216,9 +233,7 @@ impl Client {
 
         let mut builder = Self::get_retry_client().post(url);
 
-        if let Some(ref api_key) = self.api_key {
-            builder = builder.basic_auth::<&str, &str>(api_key, None);
-        }
+        builder = self.set_builder_auth(builder);
 
         if let Some(body) = body {
             builder = builder.body(body);
@@ -235,17 +250,23 @@ impl Client {
 
         let mut builder = Self::get_retry_client().delete(url);
 
-        if let Some(ref api_key) = self.api_key {
-            builder = builder.basic_auth::<&str, &str>(api_key, None);
-        }
+        builder = self.set_builder_auth(builder);
 
         builder
             .send()
             .await
             .context("failed to make delete request")?
-            .json()
+            .to_json()
             .await
             .context("could not parse server json response for delete request")
+    }
+
+    fn set_builder_auth(&self, builder: RequestBuilder) -> RequestBuilder {
+        if let Some(ref api_key) = self.api_key {
+            builder.basic_auth::<&str, &str>("", Some(api_key))
+        } else {
+            builder
+        }
     }
 
     fn get_retry_client() -> ClientWithMiddleware {

@@ -26,8 +26,9 @@ hyper = { version = "0.14.19", features = [ "stream" ] }
 hyper-reverse-proxy = "0.5.1"
 axum = { version = "0.5.8", features = [ "headers" ] }
 tower = { version = "0.4.13", features = [ "steer" ] }
+tower-http = { version = "0.3.4", features = ["trace"] }
 
-bollard = "0.12"
+bollard = "0.13"
 
 chrono = "0.4"
 

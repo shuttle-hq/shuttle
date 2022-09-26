@@ -40,8 +40,7 @@ pub struct ContainerSettingsBuilder<'d> {
     prefix: Option<String>,
     image: Option<String>,
     provisioner: Option<String>,
-    network: Option<String>,
-    network_is_name: bool,
+    network_name: Option<String>,
 }
 
 impl<'d> ContainerSettingsBuilder<'d> {
@@ -51,8 +50,7 @@ impl<'d> ContainerSettingsBuilder<'d> {
             prefix: None,
             image: None,
             provisioner: None,
-            network: None,
-            network_is_name: true,
+            network_name: None,
         }
     }
 
@@ -88,13 +86,7 @@ impl<'d> ContainerSettingsBuilder<'d> {
     }
 
     pub fn network_name<S: ToString>(mut self, name: S) -> Self {
-        self.network = Some(name.to_string());
-        self
-    }
-
-    pub fn network_id<S: ToString>(mut self, id: S) -> Self {
-        self.network_is_name = false;
-        self.network = Some(id.to_string());
+        self.network_name = Some(name.to_string());
         self
     }
 
@@ -129,16 +121,15 @@ impl<'d> ContainerSettingsBuilder<'d> {
         let image = self.image.take().unwrap();
         let provisioner_host = self.provisioner.take().unwrap();
 
-        let mut network = self.network.take().unwrap();
-        if self.network_is_name {
-            network = self.resolve_network_id(&network).await;
-        }
+        let network_name = self.network_name.take().unwrap();
+        let network_id = self.resolve_network_id(&network_name).await;
 
         ContainerSettings {
             prefix,
             image,
             provisioner_host,
-            network_id: network,
+            network_name,
+            network_id,
         }
     }
 }
@@ -147,6 +138,7 @@ pub struct ContainerSettings {
     pub prefix: String,
     pub image: String,
     pub provisioner_host: String,
+    pub network_name: String,
     pub network_id: String,
 }
 
@@ -225,14 +217,13 @@ impl GatewayService {
         } in self.iter_projects().await.expect("could not list projects")
         {
             match work.refresh(&self.context()).await {
-                Ok(work) => self
-                    .send(
-                        project_name,
-                        account_name,
-                        work,
-                    )
-                    .await?,
-                Err(err) => error!("could not refresh state for user=`{account_name}` project=`{project_name}`: {}. Skipping it for now.", err)
+                Ok(work) => self.send(project_name, account_name, work).await?,
+                Err(err) => error!(
+                    error = %err,
+                    %account_name,
+                    %project_name,
+                    "could not refresh state. Skipping it for now.",
+                ),
             }
         }
 

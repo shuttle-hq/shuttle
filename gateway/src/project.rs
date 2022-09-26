@@ -80,7 +80,7 @@ impl Refresh for ContainerInspectResponse {
 
 impl From<DockerError> for Error {
     fn from(err: DockerError) -> Self {
-        error!("internal Docker error: {err}");
+        error!(error = %err, "internal Docker error");
         Self::source(ErrorKind::Internal, err)
     }
 }
@@ -317,6 +317,7 @@ impl ProjectCreating {
             image,
             prefix,
             provisioner_host,
+            network_name,
             network_id,
             ..
         } = ctx.container_settings();
@@ -334,27 +335,30 @@ impl ProjectCreating {
         let container_config: ContainerConfig = deserialize_json!({
             "Image": image,
             "Hostname": format!("{prefix}{project_name}"),
-            "Env": [
-                "PROXY_PORT=8000",
-                format!("API_PORT={RUNTIME_API_PORT}"),
-                "PG_PORT=5432",
-                "PG_DATA=/opt/shuttle/postgres",
-                format!("SHUTTLE_INITIAL_KEY={initial_key}"),
-                format!("PROVISIONER_ADDRESS={provisioner_host}"),
-                "SHUTTLE_USERS_TOML=/opt/shuttle/users.toml",
-                "COPY_PG_CONF=/opt/shuttle/conf/postgres",
-                "PROXY_FQDN=shuttleapp.rs"
-            ],
             "Labels": {
                 "shuttle_prefix": prefix
-            }
+            },
+            "Cmd": [
+                "--admin-secret",
+                initial_key,
+                "--api-address",
+                format!("0.0.0.0:{RUNTIME_API_PORT}"),
+                "--provisioner-address",
+                provisioner_host,
+                "--provisioner-port",
+                "8000",
+                "--proxy-address",
+                "0.0.0.0:8000",
+                "--proxy-fqdn",
+                "shuttleapp.rs",
+            ],
         });
 
         let mut config = Config::<String>::from(container_config);
 
         config.networking_config = deserialize_json!({
             "EndpointsConfig": {
-                self.container_name(ctx): {
+                network_name: {
                     "NetworkID": network_id
                 }
             }
@@ -657,7 +661,7 @@ impl std::error::Error for ProjectError {}
 
 impl From<DockerError> for ProjectError {
     fn from(err: DockerError) -> Self {
-        error!("an internal DockerError had to yield a ProjectError: {err}");
+        error!(error = %err, "an internal DockerError had to yield a ProjectError");
         Self {
             kind: ProjectErrorKind::Internal,
             message: format!("{}", err),

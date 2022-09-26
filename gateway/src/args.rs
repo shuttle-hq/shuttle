@@ -11,7 +11,7 @@ pub struct Args {
     #[clap(long, default_value = "127.0.0.1:8000")]
     pub user: SocketAddr,
     /// Default image to deploy user runtimes into
-    #[clap(long, default_value = "public.ecr.aws/shuttle/backend:latest")]
+    #[clap(long, default_value = "public.ecr.aws/shuttle/deployer:latest")]
     pub image: String,
     /// Prefix to add to the name of all docker resources managed by
     /// this service

@@ -24,6 +24,7 @@ use serde::{
     Serialize
 };
 use tokio::time;
+use tracing::{debug, error};
 
 use crate::{
     ContainerSettings,

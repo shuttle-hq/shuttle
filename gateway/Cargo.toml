@@ -38,10 +38,11 @@ rand = "0.8.5"
 
 convert_case = "0.5.0"
 
-env_logger = "0.9.0"
-log = "0.4.14"
+shuttle-common = { version = "0.5.2", path = "../common" }
 
-shuttle-common = { version = "0.3", path = "../common" }
+tracing = "0.1.35"
+tracing-opentelemetry = "0.17.4"
+tracing-subscriber = { version = "0.3.11", features = ["env-filter"] }
 
 [dev-dependencies]
 anyhow = "1"

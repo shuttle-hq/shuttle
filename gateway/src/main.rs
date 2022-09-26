@@ -1,23 +1,36 @@
-use std::io;
-use std::sync::Arc;
-
 use clap::Parser;
 use futures::prelude::*;
-use log::{
-    error,
-    info
-};
 use shuttle_gateway::api::make_api;
 use shuttle_gateway::args::Args;
 use shuttle_gateway::proxy::make_proxy;
 use shuttle_gateway::service::GatewayService;
 use shuttle_gateway::worker::Worker;
+use std::io;
+use std::sync::Arc;
+use tracing::{error, info, trace};
+use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    env_logger::init();
-
     let args = Args::parse();
+
+    trace!(args = ?args, "parsed args");
+
+    let fmt_layer = fmt::layer();
+    let filter_layer = EnvFilter::try_from_default_env()
+        .or_else(|_| EnvFilter::try_new("info"))
+        .unwrap();
+
+    // let tracer = opentelemetry_datadog::new_pipeline()
+    //     .with_service_name("deployer")
+    //     .install_batch(opentelemetry::runtime::Tokio)
+    //     .unwrap();
+    // let opentelemetry = tracing_opentelemetry::layer().with_tracer(tracer);
+    tracing_subscriber::registry()
+        .with(filter_layer)
+        .with(fmt_layer)
+        // .with(opentelemetry)
+        .init();
 
     let gateway = Arc::new(GatewayService::init(args.clone()).await);
 

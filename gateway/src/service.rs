@@ -34,6 +34,7 @@ use sqlx::{
 };
 use tokio::sync::mpsc::Sender;
 use tokio::sync::Mutex;
+use tracing::{debug, error, info};
 
 use crate::args::Args;
 use crate::auth::{

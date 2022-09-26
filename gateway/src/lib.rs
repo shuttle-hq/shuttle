@@ -1,9 +1,6 @@
 #[macro_use]
 extern crate async_trait;
 
-#[macro_use]
-extern crate log;
-
 use std::convert::Infallible;
 use std::error::Error as StdError;
 use std::fmt::Formatter;
@@ -36,6 +33,7 @@ use crate::service::{
     ContainerSettings,
     GatewayService
 };
+use tracing::error;
 
 pub mod api;
 pub mod args;
@@ -124,6 +122,8 @@ impl From<ErrorKind> for Error {
 
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
+        error!(error = %self, "request had an error");
+
         let (status, error_message) = match self.kind {
             ErrorKind::Internal => (StatusCode::INTERNAL_SERVER_ERROR, "internal server error"),
             ErrorKind::KeyMissing => (StatusCode::UNAUTHORIZED, "request is missing a key"),

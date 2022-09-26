@@ -10,7 +10,6 @@ use reqwest::{Body, Response, StatusCode};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, RequestBuilder};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
-use semver::Version;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use shuttle_common::project::ProjectName;
@@ -129,30 +128,6 @@ impl Client {
         let path = format!("/projects/{}/summary", project.as_str());
 
         self.get(path).await
-    }
-
-    pub async fn get_shuttle_service_version(&self) -> Result<Version> {
-        let url = format!("{}/version", self.api_url);
-
-        let response = Self::get_retry_client()
-            .get(url)
-            .send()
-            .await
-            .context("failed to get version from Shuttle server")?;
-
-        let response_status = response.status();
-        let response_text = response.text().await?;
-
-        if response_status == StatusCode::OK {
-            Ok(Version::parse(&response_text)?)
-        } else {
-            error!(
-                text = response_text,
-                status = %response_status,
-                "failed to get shuttle version from server"
-            );
-            Err(anyhow!("failed to get shuttle version from server"))
-        }
     }
 
     pub async fn get_secrets(&self, project: &ProjectName) -> Result<Vec<secret::Response>> {

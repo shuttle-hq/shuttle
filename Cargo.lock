@@ -1179,7 +1179,6 @@ dependencies = [
  "reqwest",
  "reqwest-middleware",
  "reqwest-retry",
- "semver 1.0.13",
  "serde",
  "serde_json",
  "shuttle-common",

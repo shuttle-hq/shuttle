@@ -85,7 +85,7 @@ impl Client {
         project: &ProjectName,
         no_test: bool,
     ) -> Result<deployment::Response> {
-        let mut path = format!("/services/{}", project.as_str());
+        let mut path = format!("/projects/{}", project.as_str());
 
         if no_test {
             let _ = write!(path, "?no-test");
@@ -114,19 +114,19 @@ impl Client {
     }
 
     pub async fn delete_service(&self, project: &ProjectName) -> Result<service::Detailed> {
-        let path = format!("/services/{}", project.as_str());
+        let path = format!("/projects/{}", project.as_str());
 
         self.delete(path).await
     }
 
     pub async fn get_service_details(&self, project: &ProjectName) -> Result<service::Detailed> {
-        let path = format!("/services/{}", project.as_str());
+        let path = format!("/projects/{}", project.as_str());
 
         self.get(path).await
     }
 
     pub async fn get_service_summary(&self, project: &ProjectName) -> Result<service::Summary> {
-        let path = format!("/services/{}/summary", project.as_str());
+        let path = format!("/projects/{}/summary", project.as_str());
 
         self.get(path).await
     }

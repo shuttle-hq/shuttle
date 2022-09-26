@@ -432,13 +432,14 @@ impl Service for rocket::Rocket<rocket::Build> {
             ..rocket::config::Shutdown::default()
         };
 
-        let config = rocket::Config {
-            address: addr.ip(),
-            port: addr.port(),
-            log_level: rocket::config::LogLevel::Off,
-            shutdown,
-            ..Default::default()
-        };
+        let config = self
+            .figment()
+            .clone()
+            .merge((rocket::Config::ADDRESS, addr.ip()))
+            .merge((rocket::Config::PORT, addr.port()))
+            .merge((rocket::Config::LOG_LEVEL, rocket::config::LogLevel::Off))
+            .merge((rocket::Config::SHUTDOWN, shutdown));
+
         let _rocket = self
             .configure(config)
             .launch()

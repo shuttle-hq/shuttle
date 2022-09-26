@@ -14,7 +14,7 @@ use axum::Json;
 use bollard::Docker;
 use convert_case::{Case, Casing};
 use futures::prelude::*;
-use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::json;
@@ -30,9 +30,7 @@ pub mod worker;
 
 use crate::service::{ContainerSettings, GatewayService};
 
-lazy_static! {
-    static ref PROJECT_REGEX: Regex = Regex::new("^[a-zA-Z0-9\\-_]{3,64}$").unwrap();
-}
+static PROJECT_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new("^[a-zA-Z0-9\\-_]{3,64}$").unwrap());
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorKind {

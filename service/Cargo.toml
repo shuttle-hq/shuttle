@@ -19,7 +19,6 @@ chrono = "0.4.22"
 crossbeam-channel = "0.5.6"
 futures = { version = "0.3.23", features = ["std"] }
 hyper = { version = "0.14.20", features = ["server", "tcp", "http1"], optional = true }
-lazy_static = "1.4.0"
 libloading = { version = "0.7.3", optional = true }
 log = "0.4.17"
 mongodb = { version = "2.3.0", optional = true }

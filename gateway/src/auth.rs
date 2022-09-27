@@ -122,7 +122,9 @@ where
                 .map(|Path((p, _))| p)
                 .unwrap(),
         };
-        if user.super_user || user.projects.contains(&scope) {
+        if user.projects.is_empty() {
+            Err(Error::from(ErrorKind::ProjectNotFound))
+        } else if user.super_user || user.projects.contains(&scope) {
             Ok(Self { user, scope })
         } else {
             Err(Error::from(ErrorKind::Forbidden))

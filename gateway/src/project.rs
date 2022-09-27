@@ -175,6 +175,22 @@ impl Project {
     }
 }
 
+impl From<Project> for shuttle_common::project::State {
+    fn from(project: Project) -> Self {
+        match project {
+            Project::Creating(_) => Self::Creating,
+            Project::Starting(_) => Self::Starting,
+            Project::Started(_) => Self::Started,
+            Project::Ready(_) => Self::Ready,
+            Project::Stopping(_) => Self::Stopping,
+            Project::Stopped(_) => Self::Stopped,
+            Project::Destroying(_) => Self::Destroying,
+            Project::Destroyed(_) => Self::Destroyed,
+            Project::Errored(_) => Self::Errored,
+        }
+    }
+}
+
 #[async_trait]
 impl<'c> State<'c> for Project {
     type Next = Self;

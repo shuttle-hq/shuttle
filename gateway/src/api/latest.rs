@@ -7,11 +7,11 @@ use axum::http::Request;
 use axum::response::Response;
 use axum::routing::{any, get};
 use axum::{Json as AxumJson, Router};
+use shuttle_common::project;
 use tower_http::trace::TraceLayer;
 use tracing::{debug, debug_span, field, Span};
 
 use crate::auth::{Admin, ScopedUser, User};
-use crate::project::Project;
 use crate::{AccountName, Error, GatewayService, ProjectName};
 
 async fn get_user(
@@ -36,16 +36,28 @@ async fn post_user(
 async fn get_project(
     Extension(service): Extension<Arc<GatewayService>>,
     ScopedUser { scope, .. }: ScopedUser,
-) -> Result<AxumJson<Project>, Error> {
-    service.find_project(&scope).await.map(AxumJson)
+) -> Result<AxumJson<project::Response>, Error> {
+    let state = service.find_project(&scope).await?.into();
+    let response = project::Response {
+        name: scope.to_string(),
+        state,
+    };
+
+    Ok(AxumJson(response))
 }
 
 async fn post_project(
     Extension(service): Extension<Arc<GatewayService>>,
     User { name, .. }: User,
     Path(project): Path<ProjectName>,
-) -> Result<AxumJson<Project>, Error> {
-    service.create_project(project, name).await.map(AxumJson)
+) -> Result<AxumJson<project::Response>, Error> {
+    let state = service.create_project(project.clone(), name).await?.into();
+    let response = project::Response {
+        name: project.to_string(),
+        state,
+    };
+
+    Ok(AxumJson(response))
 }
 
 async fn delete_project(

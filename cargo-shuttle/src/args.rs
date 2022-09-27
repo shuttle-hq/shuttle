@@ -77,6 +77,9 @@ pub enum Command {
     Login(LoginArgs),
     /// run a shuttle service locally
     Run(RunArgs),
+    /// manage a project on shuttle
+    #[clap(subcommand)]
+    Project(ProjectCommand),
 }
 
 #[derive(Parser)]
@@ -88,6 +91,16 @@ pub enum DeploymentCommand {
         /// ID of deployment to get status for
         id: Uuid,
     },
+}
+
+#[derive(Parser)]
+pub enum ProjectCommand {
+    /// create an environment for this project on shuttle
+    New,
+    /// remove this project environment from shuttle
+    Rm,
+    /// show the status of this project's environment on shuttle
+    Status,
 }
 
 #[derive(Parser)]

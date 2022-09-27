@@ -11,7 +11,7 @@ use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
-use shuttle_common::project::ProjectName;
+use shuttle_common::project::{self, ProjectName};
 use shuttle_common::{deployment, log, secret, service, ApiKey, ApiUrl};
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
@@ -127,6 +127,29 @@ impl Client {
         let path = format!("/projects/{}/summary", project.as_str());
 
         self.get(path).await
+    }
+
+    pub async fn create_project(&self, project: &ProjectName) -> Result<project::Response> {
+        let path = format!("/projects/{}", project.as_str());
+
+        self.post(path, Option::<String>::None)
+            .await
+            .context("failed to make create project request")?
+            .to_json()
+            .await
+            .context("could not parse server json response for create project request")
+    }
+
+    pub async fn get_project(&self, project: &ProjectName) -> Result<project::Response> {
+        let path = format!("/projects/{}", project.as_str());
+
+        self.get(path).await
+    }
+
+    pub async fn delete_project(&self, project: &ProjectName) -> Result<()> {
+        let path = format!("/projects/{}", project.as_str());
+
+        self.delete(path).await
     }
 
     pub async fn get_secrets(&self, project: &ProjectName) -> Result<Vec<secret::Response>> {

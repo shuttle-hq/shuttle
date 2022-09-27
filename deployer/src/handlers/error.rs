@@ -17,6 +17,8 @@ pub enum Error {
         to: String,
         message: String,
     },
+    #[error("record could not be found")]
+    NotFound,
 }
 
 impl Serialize for Error {
@@ -34,8 +36,13 @@ impl Serialize for Error {
 
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
+        let code = match self {
+            Error::NotFound => StatusCode::NOT_FOUND,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+
         (
-            StatusCode::INTERNAL_SERVER_ERROR,
+            code,
             [(
                 header::CONTENT_TYPE,
                 HeaderValue::from_static("application/json"),

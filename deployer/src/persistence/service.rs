@@ -5,7 +5,6 @@ use uuid::Uuid;
 pub struct Service {
     pub id: Uuid,
     pub name: String,
-    pub user_id: String,
 }
 
 impl From<Service> for service::Response {
@@ -13,7 +12,6 @@ impl From<Service> for service::Response {
         Self {
             id: service.id,
             name: service.name,
-            user_id: service.user_id,
         }
     }
 }

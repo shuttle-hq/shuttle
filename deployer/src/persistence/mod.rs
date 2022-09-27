@@ -8,10 +8,8 @@ mod state;
 mod user;
 
 use crate::deployment::deploy_layer::{self, LogRecorder, LogType};
-use crate::handlers::{DeploymentAuthorizer, ServiceAuthorizer, UserValidator};
 use crate::proxy::AddressGetter;
 use error::{Error, Result};
-use rand::Rng;
 
 use std::net::SocketAddr;
 use std::path::Path;
@@ -69,16 +67,9 @@ impl Persistence {
 
     async fn from_pool(pool: SqlitePool) -> (Self, JoinHandle<()>) {
         sqlx::query("
-            CREATE TABLE IF NOT EXISTS users (
-                api_key TEXT PRIMARY KEY, -- API key of the user.
-                gh_username TEXT UNIQUE   -- GitHub username of the user.
-            );
-
             CREATE TABLE IF NOT EXISTS services (
                 id TEXT PRIMARY KEY, -- Identifier of the service.
-                name TEXT UNIQUE,    -- Name of the service.
-                user_id TEXT,        -- Identifier of the user the service belongs to.
-                FOREIGN KEY(user_id) REFERENCES users(api_key)
+                name TEXT UNIQUE     -- Name of the service.
             );
 
             CREATE TABLE IF NOT EXISTS deployments (
@@ -236,20 +227,18 @@ impl Persistence {
             .map_err(Error::from)
     }
 
-    pub async fn get_or_create_service(&self, name: &str, user_id: &str) -> Result<Service> {
+    pub async fn get_or_create_service(&self, name: &str) -> Result<Service> {
         if let Some(service) = self.get_service_by_name(name).await? {
             Ok(service)
         } else {
             let service = Service {
                 id: Uuid::new_v4(),
                 name: name.to_string(),
-                user_id: user_id.to_string(),
             };
 
-            sqlx::query("INSERT INTO services (id, name, user_id) VALUES (?, ?, ?)")
+            sqlx::query("INSERT INTO services (id, name) VALUES (?, ?)")
                 .bind(service.id)
                 .bind(&service.name)
-                .bind(&service.user_id)
                 .execute(&self.pool)
                 .await?;
 
@@ -257,7 +246,7 @@ impl Persistence {
         }
     }
 
-    async fn get_service_by_name(&self, name: &str) -> Result<Option<Service>> {
+    pub async fn get_service_by_name(&self, name: &str) -> Result<Option<Service>> {
         sqlx::query_as("SELECT * FROM services WHERE name = ?")
             .bind(name)
             .fetch_optional(&self.pool)
@@ -329,35 +318,6 @@ impl Persistence {
 
     pub fn get_log_sender(&self) -> crossbeam_channel::Sender<deploy_layer::Log> {
         self.log_send.clone()
-    }
-
-    // TODO: move to gateway
-    pub async fn get_or_create_user(&self, gh_username: &str) -> Result<User> {
-        let user = sqlx::query_as("SELECT * FROM users WHERE gh_username = ?")
-            .bind(gh_username)
-            .fetch_optional(&self.pool)
-            .await?;
-
-        if let Some(user) = user {
-            Ok(user)
-        } else {
-            let api_key = rand::thread_rng()
-                .sample_iter(&rand::distributions::Alphanumeric)
-                .take(16)
-                .map(char::from)
-                .collect::<String>();
-
-            sqlx::query("INSERT INTO users (api_key, gh_username) VALUES (?, ?)")
-                .bind(&api_key)
-                .bind(gh_username)
-                .execute(&self.pool)
-                .await?;
-
-            Ok(User {
-                api_key,
-                gh_username: gh_username.to_string(),
-            })
-        }
     }
 }
 
@@ -468,57 +428,6 @@ impl SecretGetter for Persistence {
 }
 
 #[async_trait::async_trait]
-impl UserValidator for Persistence {
-    async fn is_user_valid(&self, api_key: &str) -> crate::handlers::Result<Option<User>> {
-        sqlx::query_as("SELECT * FROM users WHERE api_key = ?")
-            .bind(api_key)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(Error::from)
-            .map_err(crate::handlers::Error::Persistence)
-    }
-}
-
-#[async_trait::async_trait]
-impl ServiceAuthorizer for Persistence {
-    async fn does_user_own_service(
-        &self,
-        api_key: &str,
-        service_name: &str,
-    ) -> crate::handlers::Result<Option<Service>> {
-        sqlx::query_as("SELECT * FROM services WHERE user_id = ? AND name = ?")
-            .bind(api_key)
-            .bind(service_name)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(Error::from)
-            .map_err(crate::handlers::Error::Persistence)
-    }
-}
-
-#[async_trait::async_trait]
-impl DeploymentAuthorizer for Persistence {
-    async fn does_user_own_deployment(
-        &self,
-        api_key: &str,
-        deployment_id: &Uuid,
-    ) -> crate::handlers::Result<Option<Deployment>> {
-        sqlx::query_as(
-            r#"SELECT d.id AS id, service_id, state, last_update, d.address
-                FROM deployments AS d
-                JOIN services AS s ON d.service_id = s.id
-                WHERE user_id = ? AND d.id = ?"#,
-        )
-        .bind(api_key)
-        .bind(deployment_id)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(Error::from)
-        .map_err(crate::handlers::Error::Persistence)
-    }
-}
-
-#[async_trait::async_trait]
 impl AddressGetter for Persistence {
     #[instrument(skip(self))]
     async fn get_address_for_service(
@@ -558,6 +467,7 @@ mod tests {
     use std::net::{Ipv4Addr, SocketAddr};
 
     use chrono::{TimeZone, Utc};
+    use rand::Rng;
     use serde_json::json;
 
     use super::*;
@@ -1024,32 +934,11 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn get_or_create_user() {
-        let (p, _) = Persistence::new_in_memory().await;
-        let initial = p.get_or_create_user("test-user").await.unwrap();
-        let next = p.get_or_create_user("test-user").await.unwrap();
-
-        assert_eq!(initial, next, "user id should stay the same");
-
-        assert_eq!(
-            Some(initial.clone()),
-            p.is_user_valid(&initial.api_key).await.unwrap(),
-        );
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
     async fn service() {
         let (p, _) = Persistence::new_in_memory().await;
-        let api_key = add_user(&p.pool).await.unwrap();
 
-        let service = p
-            .get_or_create_service("dummy-service", &api_key)
-            .await
-            .unwrap();
-        let service2 = p
-            .get_or_create_service("dummy-service", &api_key)
-            .await
-            .unwrap();
+        let service = p.get_or_create_service("dummy-service").await.unwrap();
+        let service2 = p.get_or_create_service("dummy-service").await.unwrap();
 
         assert_eq!(service, service2, "service should only be added once");
 
@@ -1060,61 +949,12 @@ mod tests {
             .unwrap();
         assert_eq!(service, get_result);
 
-        assert_eq!(
-            Some(service.clone()),
-            p.does_user_own_service(&api_key, &service.name)
-                .await
-                .unwrap(),
-        );
-
         p.delete_service(&service.id).await.unwrap();
         assert!(p
             .get_service_by_name("dummy-service")
             .await
             .unwrap()
             .is_none());
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn deployment_authorization() {
-        let (p, _) = Persistence::new_in_memory().await;
-        let service_id = Uuid::new_v4();
-        let api_key = add_user(&p.pool).await.unwrap();
-
-        sqlx::query("INSERT INTO services (id, name, user_id) VALUES (?, ?, ?)")
-            .bind(&service_id)
-            .bind("authorization-test-service")
-            .bind(&api_key)
-            .execute(&p.pool)
-            .await
-            .unwrap();
-
-        let deployment_id = Uuid::new_v4();
-        let last_update = Utc::now();
-
-        sqlx::query(
-            "INSERT INTO deployments (id, service_id, state, last_update) VALUES (?, ?, ?, ?)",
-        )
-        .bind(&deployment_id)
-        .bind(&service_id)
-        .bind(State::Running)
-        .bind(last_update)
-        .execute(&p.pool)
-        .await
-        .unwrap();
-
-        assert_eq!(
-            Some(Deployment {
-                id: deployment_id,
-                service_id,
-                state: State::Running,
-                last_update,
-                address: None,
-            }),
-            p.does_user_own_deployment(&api_key, &deployment_id)
-                .await
-                .unwrap(),
-        );
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -1180,28 +1020,14 @@ mod tests {
 
     async fn add_service_named(pool: &SqlitePool, name: &str) -> Result<Uuid> {
         let service_id = Uuid::new_v4();
-        let api_key = add_user(pool).await?;
 
-        sqlx::query("INSERT INTO services (id, name, user_id) VALUES (?, ?, ?)")
+        sqlx::query("INSERT INTO services (id, name) VALUES (?, ?)")
             .bind(&service_id)
             .bind(name)
-            .bind(&api_key)
             .execute(pool)
             .await?;
 
         Ok(service_id)
-    }
-
-    async fn add_user(pool: &SqlitePool) -> Result<String> {
-        let api_key = get_random_name();
-
-        sqlx::query("INSERT INTO users (api_key, gh_username) VALUES (?, ?)")
-            .bind(&api_key)
-            .bind(get_random_name())
-            .execute(pool)
-            .await?;
-
-        Ok(api_key)
     }
 
     fn get_random_name() -> String {

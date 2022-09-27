@@ -322,11 +322,11 @@ pub mod tests {
     use hyper::http::uri::Scheme;
     use hyper::http::Uri;
     use hyper::{Body, Client as HyperClient, Request, Response, StatusCode};
-    use log::info;
     use rand::distributions::{Alphanumeric, DistString, Distribution, Uniform};
     use shuttle_common::{DeploymentMeta, DeploymentStateMeta};
     use tempfile::NamedTempFile;
     use tokio::sync::mpsc::channel;
+    use tracing::info;
 
     use crate::api::make_api;
     use crate::args::Args;

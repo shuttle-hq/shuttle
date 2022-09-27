@@ -143,10 +143,7 @@ where
 
     async fn from_request(req: &mut RequestParts<B>) -> Result<Self, Self::Rejection> {
         let user = User::from_request(req).await?;
-        let service = Extension::<Arc<GatewayService>>::from_request(req)
-            .await
-            .unwrap();
-        if service.is_super_user(&user.name).await? {
+        if user.super_user {
             Ok(Self { user })
         } else {
             Err(Error::from(ErrorKind::Forbidden))

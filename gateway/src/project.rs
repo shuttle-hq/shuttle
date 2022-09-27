@@ -202,6 +202,7 @@ impl<'c> State<'c> for Project {
 
         if let Ok(Self::Errored(errored)) = &mut new {
             errored.ctx = Some(Box::new(previous));
+            error!(error = ?errored, "state for project errored");
         }
 
         let new_state = new.as_ref().unwrap().state();

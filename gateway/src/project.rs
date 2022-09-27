@@ -353,6 +353,14 @@ impl ProjectCreating {
                 "--proxy-fqdn",
                 "shuttleapp.rs",
             ],
+            "Env": [
+                "RUST_LOG=shuttle_deployer,shuttle_service,sqlx",
+            ],
+            "Healthcheck": {
+                "Interval": 5_000_000_000i64,
+                "Timeout": 5_000_000_000i64,
+                "Test": ["CMD", "curl", "localhost:8001/status"],
+            },
         });
 
         let mut config = Config::<String>::from(container_config);

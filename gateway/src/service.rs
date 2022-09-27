@@ -574,6 +574,8 @@ impl<'c> Context<'c> for GatewayContext<'c> {
 #[cfg(test)]
 pub mod tests {
 
+    use std::str::FromStr;
+
     use futures::Future;
     use tokio::sync::mpsc::channel;
     use tokio::task::JoinHandle;
@@ -594,7 +596,7 @@ pub mod tests {
         );
 
         assert_err_kind!(
-            svc.user_from_key(Key("123".to_string())).await,
+            svc.user_from_key(Key::from_str("123").unwrap()).await,
             ErrorKind::UserNotFound
         );
 

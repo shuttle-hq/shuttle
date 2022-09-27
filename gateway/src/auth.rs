@@ -14,7 +14,7 @@ use crate::{AccountName, Error, ErrorKind, ProjectName};
 #[derive(Clone, Debug, sqlx::Type, PartialEq, Hash, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
 #[sqlx(transparent)]
-pub struct Key(pub String);
+pub struct Key(String);
 
 impl Key {
     pub fn as_str(&self) -> &str {

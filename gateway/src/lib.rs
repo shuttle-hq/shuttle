@@ -153,7 +153,7 @@ impl StdError for Error {}
 
 #[derive(Debug, sqlx::Type, Serialize, Clone, PartialEq, Eq)]
 #[sqlx(transparent)]
-pub struct ProjectName(pub String);
+pub struct ProjectName(String);
 
 impl<'de> Deserialize<'de> for ProjectName {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -186,7 +186,7 @@ impl std::fmt::Display for ProjectName {
 
 #[derive(Debug, Clone, PartialEq, Eq, sqlx::Type, Serialize)]
 #[sqlx(transparent)]
-pub struct AccountName(pub String);
+pub struct AccountName(String);
 
 impl FromStr for AccountName {
     type Err = Error;

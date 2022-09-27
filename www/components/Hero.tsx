@@ -57,7 +57,6 @@ export default function Hero() {
               <ExternalLink
                 className="rounded bg-brand-900 py-3 px-8 font-bold text-white transition hover:bg-brand-700"
                 href={SHUTTLE_DOCS_URL}
-                target="_self"
               >
                 Get Started
               </ExternalLink>

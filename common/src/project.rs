@@ -1,7 +1,7 @@
 use comfy_table::Color;
 use crossterm::style::Stylize;
 use once_cell::sync::OnceCell;
-use rocket::request::FromParam;
+// use rocket::request::FromParam;
 use serde::de::Error as DeError;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashSet;
@@ -34,13 +34,13 @@ impl<'de> Deserialize<'de> for ProjectName {
     }
 }
 
-impl<'a> FromParam<'a> for ProjectName {
-    type Error = ProjectNameError;
+// impl<'a> FromParam<'a> for ProjectName {
+//     type Error = ProjectNameError;
 
-    fn from_param(param: &'a str) -> Result<Self, Self::Error> {
-        param.parse()
-    }
-}
+//     fn from_param(param: &'a str) -> Result<Self, Self::Error> {
+//         param.parse()
+//     }
+// }
 
 impl std::fmt::Display for ProjectName {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {

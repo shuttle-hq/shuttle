@@ -1,21 +1,30 @@
 pub mod database;
+#[cfg(any(feature = "crossterm", feature = "comfy-table"))]
 pub mod deployment;
+#[cfg(any(feature = "crossterm", feature = "comfy-table"))]
 pub mod log;
 pub mod project;
 pub mod resource;
+#[cfg(any(feature = "crossterm", feature = "comfy-table"))]
 pub mod secret;
+#[cfg(any(feature = "crossterm", feature = "comfy-table"))]
 pub mod service;
 pub mod user;
 
+#[cfg(feature = "anyhow")]
+pub mod version;
+
+#[cfg(any(feature = "crossterm", feature = "comfy-table"))]
 pub use log::Item as LogItem;
 
-use std::fmt::{Display, Formatter};
+// use std::fmt::{Display, Formatter};
 
 use resource::ResourceInfo;
-use rocket::Responder;
+// use rocket::Responder;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+#[cfg(any(feature = "crossterm", feature = "comfy-table"))]
 pub use crate::log::STATE_MESSAGE;
 
 #[cfg(debug_assertions)]
@@ -91,32 +100,32 @@ impl DatabaseReadyInfo {
     }
 }
 
-// TODO: Determine error handling strategy - error types or just use `anyhow`?
-#[derive(Debug, Clone, Serialize, Deserialize, Responder)]
-#[response(content_type = "json")]
-pub enum DeploymentApiError {
-    #[response(status = 500)]
-    Internal(String),
-    #[response(status = 503)]
-    Unavailable(String),
-    #[response(status = 404)]
-    NotFound(String),
-    #[response(status = 400)]
-    BadRequest(String),
-    #[response(status = 409)]
-    ProjectAlreadyExists(String),
-}
+// // TODO: Determine error handling strategy - error types or just use `anyhow`?
+// #[derive(Debug, Clone, Serialize, Deserialize, Responder)]
+// #[response(content_type = "json")]
+// pub enum DeploymentApiError {
+//     #[response(status = 500)]
+//     Internal(String),
+//     #[response(status = 503)]
+//     Unavailable(String),
+//     #[response(status = 404)]
+//     NotFound(String),
+//     #[response(status = 400)]
+//     BadRequest(String),
+//     #[response(status = 409)]
+//     ProjectAlreadyExists(String),
+// }
 
-impl Display for DeploymentApiError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            DeploymentApiError::Internal(s) => write!(f, "internal: {}", s),
-            DeploymentApiError::Unavailable(s) => write!(f, "unavailable: {}", s),
-            DeploymentApiError::NotFound(s) => write!(f, "not found: {}", s),
-            DeploymentApiError::BadRequest(s) => write!(f, "bad request: {}", s),
-            DeploymentApiError::ProjectAlreadyExists(s) => write!(f, "conflict: {}", s),
-        }
-    }
-}
+// impl Display for DeploymentApiError {
+//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+//         match self {
+//             DeploymentApiError::Internal(s) => write!(f, "internal: {}", s),
+//             DeploymentApiError::Unavailable(s) => write!(f, "unavailable: {}", s),
+//             DeploymentApiError::NotFound(s) => write!(f, "not found: {}", s),
+//             DeploymentApiError::BadRequest(s) => write!(f, "bad request: {}", s),
+//             DeploymentApiError::ProjectAlreadyExists(s) => write!(f, "conflict: {}", s),
+//         }
+//     }
+// }
 
-impl std::error::Error for DeploymentApiError {}
+// impl std::error::Error for DeploymentApiError {}

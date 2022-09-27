@@ -41,6 +41,7 @@ webbrowser = "0.7.1"
 
 [dependencies.shuttle-common]
 version = "0.5.2"
+features = ["full"]
 path = "../common"
 
 [dependencies.shuttle-secrets]

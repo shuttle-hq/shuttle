@@ -4,8 +4,7 @@ use std::io::Read;
 
 use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
-use http_auth_basic::Credentials;
-use reqwest::header::AUTHORIZATION;
+use headers::{Authorization, HeaderMapExt};
 use reqwest::{Body, Response, StatusCode};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, RequestBuilder};
 use reqwest_retry::policies::ExponentialBackoff;
@@ -166,10 +165,8 @@ impl Client {
         let mut request = url.into_client_request()?;
 
         if let Some(ref api_key) = self.api_key {
-            let cred = Credentials::new(api_key, "");
-            request
-                .headers_mut()
-                .append(AUTHORIZATION, cred.as_http_header().parse()?);
+            let auth_header = Authorization::bearer(&api_key)?;
+            request.headers_mut().typed_insert(auth_header);
         }
 
         let (stream, _) = connect_async(request).await.with_context(|| {
@@ -238,7 +235,7 @@ impl Client {
 
     fn set_builder_auth(&self, builder: RequestBuilder) -> RequestBuilder {
         if let Some(ref api_key) = self.api_key {
-            builder.basic_auth::<&str, &str>("", Some(api_key))
+            builder.bearer_auth(api_key)
         } else {
             builder
         }

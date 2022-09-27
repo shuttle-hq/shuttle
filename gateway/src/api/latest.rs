@@ -62,10 +62,9 @@ async fn delete_project(
 async fn route_project(
     Extension(service): Extension<Arc<GatewayService>>,
     ScopedUser { scope, .. }: ScopedUser,
-    Path((_, route)): Path<(String, String)>,
     req: Request<Body>,
 ) -> Result<Response<Body>, Error> {
-    service.route(&scope, Path(route), req).await
+    service.route(&scope, req).await
 }
 
 pub fn make_api(service: Arc<GatewayService>) -> Router<Body> {
@@ -147,7 +146,7 @@ pub mod tests {
             .await
             .unwrap();
 
-        let authorization = Authorization::basic("", neo.key.as_str());
+        let authorization = Authorization::bearer(neo.key.as_str()).unwrap();
 
         router
             .call(create_project("matrix").with_header(&authorization))
@@ -207,7 +206,7 @@ pub mod tests {
 
         let trinity = service.create_user("trinity".parse().unwrap()).await?;
 
-        let authorization = Authorization::basic("", trinity.key.as_str());
+        let authorization = Authorization::bearer(trinity.key.as_str()).unwrap();
 
         router
             .call(get_project("reloaded").with_header(&authorization))
@@ -285,7 +284,7 @@ pub mod tests {
             .await
             .unwrap();
 
-        let authorization = Authorization::basic("", user.key.as_str());
+        let authorization = Authorization::bearer(user.key.as_str()).unwrap();
 
         router
             .call(get_neo().with_header(&authorization))

@@ -3,9 +3,7 @@ use std::path::Path as StdPath;
 use std::sync::Arc;
 
 use axum::body::Body;
-use axum::extract::Path;
-use axum::headers::authorization::Basic;
-use axum::headers::{Authorization, Header};
+use axum::headers::{Authorization, HeaderMapExt};
 use axum::http::Request;
 use axum::response::Response;
 use bollard::network::ListNetworksOptions;
@@ -274,7 +272,6 @@ impl GatewayService {
     pub async fn route(
         &self,
         project_name: &ProjectName,
-        Path(mut route): Path<String>,
         mut req: Request<Body>,
     ) -> Result<Response<Body>, Error> {
         let target_ip = self
@@ -284,33 +281,13 @@ impl GatewayService {
             .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotReady))?;
 
         let control_key = self.control_key_from_project_name(project_name).await?;
-
-        // TODO I don't understand the API for `headers`: it gives an
-        // impl. of `Header` which can only be encoded in something
-        // that `Extend<HeaderValue>` but `HeaderMap` only impls
-        // `Extend<(HeaderName, HeaderValue)>` (as one would expect),
-        // therefore why the ugly hack below.
-        {
-            let auth_header = Authorization::basic(&control_key, "");
-            let auth_header_name = Authorization::<Basic>::name();
-            let mut auth = vec![];
-            auth_header.encode(&mut auth);
-            let headers = req.headers_mut();
-            headers.remove(auth_header_name);
-            headers.append(auth_header_name, auth.pop().unwrap());
-        }
-
-        if !route.starts_with("/") {
-            route = format!("/{route}");
-        }
-
-        //route = format!("/projects/{project_name}{route}");
-
-        *req.uri_mut() = route.parse().unwrap();
+        let auth_header = Authorization::bearer(&control_key)
+            .map_err(|e| Error::source(ErrorKind::KeyMalformed, e))?;
+        req.headers_mut().typed_insert(auth_header);
 
         let target_url = format!("http://{target_ip}:8001");
 
-        debug!("routing control: {target_url}");
+        debug!(target_url, "routing control");
 
         let resp = hyper_reverse_proxy::call("127.0.0.1".parse().unwrap(), &target_url, req)
             .await

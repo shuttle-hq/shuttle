@@ -669,7 +669,7 @@ pub mod tests {
         let User { key, .. } = api_client
             .request(
                 Request::post("/users/trinity")
-                    .with_header(&Authorization::basic("", key.as_str()))
+                    .with_header(&Authorization::bearer(key.as_str()).unwrap())
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -680,7 +680,7 @@ pub mod tests {
             .await
             .unwrap();
 
-        let authorization = Authorization::basic("", key.as_str());
+        let authorization = Authorization::bearer(key.as_str()).unwrap();
 
         api_client
             .request(

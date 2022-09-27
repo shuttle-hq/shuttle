@@ -3,7 +3,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use axum::extract::{Extension, FromRequest, Path, RequestParts, TypedHeader};
-use axum::headers::authorization::Basic;
+use axum::headers::authorization::Bearer;
 use axum::headers::Authorization;
 use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Serialize};
@@ -30,10 +30,10 @@ where
     type Rejection = Error;
 
     async fn from_request(req: &mut RequestParts<B>) -> Result<Self, Self::Rejection> {
-        TypedHeader::<Authorization<Basic>>::from_request(req)
+        TypedHeader::<Authorization<Bearer>>::from_request(req)
             .await
             .map_err(|_| Error::from(ErrorKind::KeyMissing))
-            .and_then(|TypedHeader(Authorization(basic))| basic.password().trim().parse())
+            .and_then(|TypedHeader(Authorization(bearer))| bearer.token().trim().parse())
     }
 }
 

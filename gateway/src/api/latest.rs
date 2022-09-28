@@ -7,7 +7,7 @@ use axum::http::Request;
 use axum::response::Response;
 use axum::routing::{any, get};
 use axum::{Json as AxumJson, Router};
-use shuttle_common::project;
+use shuttle_common::{project, user};
 use tower_http::trace::TraceLayer;
 use tracing::{debug, debug_span, field, Span};
 
@@ -18,19 +18,20 @@ async fn get_user(
     Extension(service): Extension<Arc<GatewayService>>,
     Path(account_name): Path<AccountName>,
     _: Admin,
-) -> Result<AxumJson<User>, Error> {
-    service
-        .user_from_account_name(account_name)
-        .await
-        .map(AxumJson)
+) -> Result<AxumJson<user::Response>, Error> {
+    let user = service.user_from_account_name(account_name).await?;
+
+    Ok(AxumJson(user.into()))
 }
 
 async fn post_user(
     Extension(service): Extension<Arc<GatewayService>>,
     Path(account_name): Path<AccountName>,
     _: Admin,
-) -> Result<AxumJson<User>, Error> {
-    service.create_user(account_name).await.map(AxumJson)
+) -> Result<AxumJson<user::Response>, Error> {
+    let user = service.create_user(account_name).await?;
+
+    Ok(AxumJson(user.into()))
 }
 
 async fn get_project(

@@ -96,6 +96,20 @@ where
     }
 }
 
+impl From<User> for shuttle_common::user::Response {
+    fn from(user: User) -> Self {
+        Self {
+            name: user.name.to_string(),
+            key: user.key.to_string(),
+            projects: user
+                .projects
+                .into_iter()
+                .map(|name| name.to_string())
+                .collect(),
+        }
+    }
+}
+
 /// A wrapper for a guard that validates a user's API key *and*
 /// scopes the request to a project they own.
 ///

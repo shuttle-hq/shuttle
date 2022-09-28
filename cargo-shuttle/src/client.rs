@@ -2,17 +2,17 @@ use std::fmt::Write;
 use std::fs::File;
 use std::io::Read;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use async_trait::async_trait;
 use headers::{Authorization, HeaderMapExt};
-use reqwest::{Body, Response, StatusCode};
+use reqwest::{Body, Response};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, RequestBuilder};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use shuttle_common::project::{self, ProjectName};
-use shuttle_common::{deployment, log, secret, service, ApiKey, ApiUrl};
+use shuttle_common::{deployment, log, secret, service, user, ApiKey, ApiUrl};
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
@@ -54,27 +54,15 @@ impl Client {
         self.api_key = Some(api_key);
     }
 
-    pub async fn auth(&self, username: String) -> Result<ApiKey> {
+    pub async fn auth(&self, username: String) -> Result<user::Response> {
         let path = format!("/users/{}", username);
 
-        let response = self
-            .post(path, Option::<String>::None)
+        self.post(path, Option::<String>::None)
             .await
-            .context("failed to get API key from Shuttle server")?;
-
-        let response_status = response.status();
-        let response_text = response.text().await?;
-
-        if response_status == StatusCode::OK {
-            return Ok(response_text);
-        }
-
-        error!(
-            text = response_text,
-            status = %response_status,
-            "failed to authenticate with server"
-        );
-        Err(anyhow!("failed to authenticate with server",))
+            .context("failed to get API key from Shuttle server")?
+            .to_json()
+            .await
+            .context("could not parse server json response for create project request")
     }
 
     pub async fn deploy(

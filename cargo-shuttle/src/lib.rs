@@ -149,9 +149,12 @@ impl Shuttle {
     }
 
     async fn auth(&mut self, auth_args: AuthArgs, client: &Client) -> Result<()> {
-        let api_key = client.auth(auth_args.username).await?;
+        let user = client.auth(auth_args.username).await?;
 
-        self.ctx.set_api_key(api_key)?;
+        self.ctx.set_api_key(user.key)?;
+
+        println!("User authorized!!!");
+        println!("Run `cargo shuttle init --help` next");
 
         Ok(())
     }

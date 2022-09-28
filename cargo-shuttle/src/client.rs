@@ -83,7 +83,11 @@ impl Client {
         project: &ProjectName,
         no_test: bool,
     ) -> Result<deployment::Response> {
-        let mut path = format!("/projects/{}", project.as_str());
+        let mut path = format!(
+            "/projects/{}/services/{}",
+            project.as_str(),
+            project.as_str()
+        );
 
         if no_test {
             let _ = write!(path, "?no-test");
@@ -104,27 +108,44 @@ impl Client {
 
     pub async fn get_build_logs_ws(
         &self,
+        project: &ProjectName,
         deployment_id: &Uuid,
     ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>> {
-        let path = format!("/ws/deployments/{}/logs/build", deployment_id);
+        let path = format!(
+            "/projects/{}/ws/deployments/{}/logs/build",
+            project.as_str(),
+            deployment_id
+        );
 
         self.ws_get(path).await
     }
 
     pub async fn delete_service(&self, project: &ProjectName) -> Result<service::Detailed> {
-        let path = format!("/projects/{}", project.as_str());
+        let path = format!(
+            "/projects/{}/services/{}",
+            project.as_str(),
+            project.as_str()
+        );
 
         self.delete(path).await
     }
 
     pub async fn get_service_details(&self, project: &ProjectName) -> Result<service::Detailed> {
-        let path = format!("/projects/{}", project.as_str());
+        let path = format!(
+            "/projects/{}/services/{}",
+            project.as_str(),
+            project.as_str()
+        );
 
         self.get(path).await
     }
 
     pub async fn get_service_summary(&self, project: &ProjectName) -> Result<service::Summary> {
-        let path = format!("/projects/{}/summary", project.as_str());
+        let path = format!(
+            "/projects/{}/services/{}/summary",
+            project.as_str(),
+            project.as_str()
+        );
 
         self.get(path).await
     }
@@ -153,31 +174,53 @@ impl Client {
     }
 
     pub async fn get_secrets(&self, project: &ProjectName) -> Result<Vec<secret::Response>> {
-        let path = format!("/secrets/{}", project.as_str());
+        let path = format!(
+            "/projects/{}/secrets/{}",
+            project.as_str(),
+            project.as_str()
+        );
 
         self.get(path).await
     }
 
-    pub async fn get_runtime_logs(&self, deployment_id: &Uuid) -> Result<Vec<log::Item>> {
-        let path = format!("/deployments/{}/logs/runtime", deployment_id);
+    pub async fn get_runtime_logs(
+        &self,
+        project: &ProjectName,
+        deployment_id: &Uuid,
+    ) -> Result<Vec<log::Item>> {
+        let path = format!(
+            "/projects/{}/deployments/{}/logs/runtime",
+            project.as_str(),
+            deployment_id
+        );
 
         self.get(path).await
     }
 
     pub async fn get_runtime_logs_ws(
         &self,
+        project: &ProjectName,
         deployment_id: &Uuid,
     ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>> {
-        let path = format!("/ws/deployments/{}/logs/runtime", deployment_id);
+        let path = format!(
+            "/projects/{}/ws/deployments/{}/logs/runtime",
+            project.as_str(),
+            deployment_id
+        );
 
         self.ws_get(path).await
     }
 
     pub async fn get_deployment_details(
         &self,
+        project: &ProjectName,
         deployment_id: &Uuid,
     ) -> Result<deployment::Response> {
-        let path = format!("/deployments/{}", deployment_id);
+        let path = format!(
+            "/projects/{}/deployments/{}",
+            project.as_str(),
+            deployment_id
+        );
 
         self.get(path).await
     }

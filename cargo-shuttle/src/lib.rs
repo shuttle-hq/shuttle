@@ -200,7 +200,9 @@ impl Shuttle {
         };
 
         if follow {
-            let mut stream = client.get_runtime_logs_ws(&id).await?;
+            let mut stream = client
+                .get_runtime_logs_ws(self.ctx.project_name(), &id)
+                .await?;
 
             while let Some(Ok(msg)) = stream.next().await {
                 if let tokio_tungstenite::tungstenite::Message::Text(line) = msg {
@@ -210,7 +212,9 @@ impl Shuttle {
                 }
             }
         } else {
-            let logs = client.get_runtime_logs(&id).await?;
+            let logs = client
+                .get_runtime_logs(self.ctx.project_name(), &id)
+                .await?;
 
             for log in logs.into_iter() {
                 println!("{log}");
@@ -229,7 +233,9 @@ impl Shuttle {
     }
 
     async fn deployment_get(&self, client: &Client, deployment_id: Uuid) -> Result<()> {
-        let deployment = client.get_deployment_details(&deployment_id).await?;
+        let deployment = client
+            .get_deployment_details(self.ctx.project_name(), &deployment_id)
+            .await?;
 
         println!("{deployment}");
 
@@ -317,7 +323,9 @@ impl Shuttle {
         println!();
         println!("{deployment}");
 
-        let mut stream = client.get_build_logs_ws(&deployment.id).await?;
+        let mut stream = client
+            .get_build_logs_ws(self.ctx.project_name(), &deployment.id)
+            .await?;
 
         while let Some(Ok(msg)) = stream.next().await {
             if let tokio_tungstenite::tungstenite::Message::Text(line) = msg {

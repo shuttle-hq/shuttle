@@ -368,12 +368,12 @@ mod tests {
         let actual = Wrapper::from_item_fn(&mut input);
         let expected_ident: Ident = parse_quote!(complex);
         let expected_inputs: Vec<Input> = vec![Input {
-                    ident: parse_quote!(pool),
+            ident: parse_quote!(pool),
             builder: Builder {
-                        path: parse_quote!(shared::Postgres),
-                        options: Default::default(),
-                    },
-                }];
+                path: parse_quote!(shared::Postgres),
+                options: Default::default(),
+            },
+        }];
 
         assert_eq!(actual.fn_ident, expected_ident);
         assert_eq!(actual.fn_inputs, expected_inputs);

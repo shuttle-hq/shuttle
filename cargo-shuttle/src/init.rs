@@ -519,12 +519,16 @@ pub fn cargo_shuttle_init(path: PathBuf, framework: Box<dyn ShuttleInit>) -> Res
     // Create an empty `[lib]` table
     cargo_doc["lib"] = Item::Table(Table::new());
 
+    // Add publish: false to avoid accidental `cargo publish`
+    cargo_doc["package"]["publish"] = value(false);
+
     // Create `[dependencies]` table
     let mut dependencies = Table::new();
 
     // Set "shuttle-service" version to `[dependencies]` table
     let manifest_path = find(Some(path.as_path())).unwrap();
     let url = registry_url(manifest_path.as_path(), None).expect("Could not find registry URL");
+
     set_inline_table_dependency_version(
         "shuttle-service",
         &mut dependencies,
@@ -544,6 +548,7 @@ pub fn cargo_shuttle_init(path: PathBuf, framework: Box<dyn ShuttleInit>) -> Res
 
     // Truncate Cargo.toml and write the updated `Document` to it
     let mut cargo_toml = File::create(cargo_toml_path)?;
+
     cargo_doc["dependencies"] = Item::Table(dependencies);
     cargo_toml.write_all(cargo_doc.to_string().as_bytes())?;
 

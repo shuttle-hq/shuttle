@@ -1,27 +1,25 @@
 pub mod database;
-#[cfg(feature = "full")]
+#[cfg(feature = "deployment")]
 pub mod deployment;
-#[cfg(feature = "full")]
+#[cfg(feature = "log")]
 pub mod log;
 pub mod project;
 pub mod resource;
-#[cfg(feature = "full")]
+#[cfg(feature = "secret")]
 pub mod secret;
-#[cfg(feature = "full")]
+#[cfg(feature = "service")]
 pub mod service;
 pub mod user;
-
-#[cfg(feature = "full")]
+#[cfg(feature = "version")]
 pub mod version;
-
-#[cfg(feature = "full")]
+#[cfg(feature = "log")]
 pub use log::Item as LogItem;
 
 use resource::ResourceInfo;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-#[cfg(feature = "full")]
+#[cfg(feature = "log")]
 pub use crate::log::STATE_MESSAGE;
 
 #[cfg(debug_assertions)]

@@ -1,4 +1,6 @@
+#[cfg(feature = "display")]
 use comfy_table::Color;
+#[cfg(feature = "display")]
 use crossterm::style::Stylize;
 use once_cell::sync::OnceCell;
 use serde::de::Error as DeError;
@@ -138,6 +140,7 @@ pub enum State {
     Errored,
 }
 
+#[cfg(feature = "display")]
 impl Display for Response {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -149,6 +152,7 @@ impl Display for Response {
     }
 }
 
+#[cfg(feature = "display")]
 impl State {
     pub fn get_color(&self) -> Color {
         match self {

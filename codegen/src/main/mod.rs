@@ -154,7 +154,6 @@ impl ToTokens for Wrapper {
                 #extra_imports
 
                 runtime.spawn_blocking(move || {
-
                     let filter_layer =
                         shuttle_service::tracing_subscriber::EnvFilter::try_from_default_env()
                             .or_else(|_| shuttle_service::tracing_subscriber::EnvFilter::try_new("INFO"))
@@ -242,12 +241,19 @@ mod tests {
             async fn __shuttle_wrapper(
                 _factory: &mut dyn shuttle_service::Factory,
                 runtime: &shuttle_service::Runtime,
-                logger: Box<dyn shuttle_service::log::Log>,
+                logger: shuttle_service::logger::Logger,
             ) -> Result<Box<dyn shuttle_service::Service>, shuttle_service::Error> {
+                use shuttle_service::tracing_subscriber::prelude::*;
                 runtime.spawn_blocking(move || {
-                    shuttle_service::log::set_boxed_logger(logger)
-                        .map(|()| shuttle_service::log::set_max_level(shuttle_service::log::LevelFilter::Info))
-                        .expect("logger set should succeed");
+                    let filter_layer =
+                        shuttle_service::tracing_subscriber::EnvFilter::try_from_default_env()
+                            .or_else(|_| shuttle_service::tracing_subscriber::EnvFilter::try_new("INFO"))
+                            .unwrap();
+
+                    shuttle_service::tracing_subscriber::registry()
+                        .with(filter_layer)
+                        .with(logger)
+                        .init(); // this sets the subscriber as the global default and also adds a compatibility layer for capturing `log::Record`s
                 })
                 .await
                 .map_err(|e| {
@@ -338,14 +344,21 @@ mod tests {
             async fn __shuttle_wrapper(
                 factory: &mut dyn shuttle_service::Factory,
                 runtime: &shuttle_service::Runtime,
-                logger: Box<dyn shuttle_service::log::Log>,
+                logger: shuttle_service::logger::Logger,
             ) -> Result<Box<dyn shuttle_service::Service>, shuttle_service::Error> {
+                use shuttle_service::tracing_subscriber::prelude::*;
                 use shuttle_service::ResourceBuilder;
 
                 runtime.spawn_blocking(move || {
-                    shuttle_service::log::set_boxed_logger(logger)
-                        .map(|()| shuttle_service::log::set_max_level(shuttle_service::log::LevelFilter::Info))
-                        .expect("logger set should succeed");
+                    let filter_layer =
+                        shuttle_service::tracing_subscriber::EnvFilter::try_from_default_env()
+                            .or_else(|_| shuttle_service::tracing_subscriber::EnvFilter::try_new("INFO"))
+                            .unwrap();
+
+                    shuttle_service::tracing_subscriber::registry()
+                        .with(filter_layer)
+                        .with(logger)
+                        .init(); // this sets the subscriber as the global default and also adds a compatibility layer for capturing `log::Record`s
                 })
                 .await
                 .map_err(|e| {

@@ -8,14 +8,20 @@ use axum::body::HttpBody;
 use axum::response::{IntoResponse, Response};
 use futures::prelude::*;
 use hyper::body::Body;
+use hyper::client::connect::dns::GaiResolver;
+use hyper::client::HttpConnector;
 use hyper::server::conn::AddrStream;
-use hyper::Request;
+use hyper::{Client, Request};
+use hyper_reverse_proxy::ReverseProxy;
+use once_cell::sync::Lazy;
 use tower::Service;
 
 use crate::service::GatewayService;
 use crate::{Error, ErrorKind, ProjectName};
 
 const SHUTTLEAPP_SUFFIX: &'static str = ".shuttleapp.rs";
+static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
+    Lazy::new(|| ReverseProxy::new(Client::new()));
 
 pub struct ProxyService {
     gateway: Arc<GatewayService>,
@@ -60,7 +66,8 @@ impl Service<Request<Body>> for ProxyService {
 
                 let target_url = format!("http://{}:{}", target_ip, 8000);
 
-                let proxy = hyper_reverse_proxy::call(remote_addr, &target_url, req)
+                let proxy = PROXY_CLIENT
+                    .call(remote_addr, &target_url, req)
                     .await
                     .map_err(|_| Error::from_kind(ErrorKind::ProjectUnavailable))?;
 

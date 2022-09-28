@@ -11,7 +11,7 @@ use hyper::{
 };
 use hyper_reverse_proxy::{ProxyError, ReverseProxy};
 use once_cell::sync::Lazy;
-use tracing::{error, field, instrument, Span};
+use tracing::{error, field, instrument, trace, Span};
 
 static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
     Lazy::new(|| ReverseProxy::new(Client::new()));
@@ -27,6 +27,7 @@ pub async fn handle(
     let host = match req.headers().get(HOST) {
         Some(host) => host.to_str().unwrap_or_default().to_owned(),
         None => {
+            trace!("proxy request has to host header");
             return Ok(Response::builder()
                 .status(StatusCode::BAD_REQUEST)
                 .body(Body::empty())
@@ -38,6 +39,7 @@ pub async fn handle(
         Some(service) => service,
 
         None => {
+            trace!(host, "proxy won't serve foreign domain");
             return Ok(Response::builder()
                 .status(StatusCode::BAD_REQUEST)
                 .body(Body::from("this domain is not served by proxy"))
@@ -51,6 +53,7 @@ pub async fn handle(
     let proxy_address = match address_getter.get_address_for_service(service).await {
         Ok(Some(address)) => address,
         Ok(None) => {
+            trace!(host, "host not found on this server");
             let response_body = format!("could not find service for host: {}", host);
             return Ok(Response::builder()
                 .status(StatusCode::NOT_FOUND)

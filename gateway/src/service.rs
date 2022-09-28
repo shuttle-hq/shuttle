@@ -8,6 +8,11 @@ use axum::http::Request;
 use axum::response::Response;
 use bollard::network::ListNetworksOptions;
 use bollard::Docker;
+use hyper::client::connect::dns::GaiResolver;
+use hyper::client::HttpConnector;
+use hyper::Client;
+use hyper_reverse_proxy::ReverseProxy;
+use once_cell::sync::Lazy;
 use rand::distributions::{Alphanumeric, DistString};
 use sqlx::error::DatabaseError;
 use sqlx::migrate::{MigrateDatabase, Migrator};
@@ -24,6 +29,8 @@ use crate::project::{self, Project};
 use crate::worker::Work;
 use crate::{AccountName, Context, Error, ErrorKind, ProjectName, Refresh, Service};
 
+static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
+    Lazy::new(|| ReverseProxy::new(Client::new()));
 static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
 impl From<SqlxError> for Error {
@@ -289,7 +296,8 @@ impl GatewayService {
 
         debug!(target_url, "routing control");
 
-        let resp = hyper_reverse_proxy::call("127.0.0.1".parse().unwrap(), &target_url, req)
+        let resp = PROXY_CLIENT
+            .call("127.0.0.1".parse().unwrap(), &target_url, req)
             .await
             .map_err(|_| Error::from_kind(ErrorKind::ProjectUnavailable))?;
 

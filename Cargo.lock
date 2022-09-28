@@ -2754,6 +2754,17 @@ dependencies = [
 [[package]]
 name = "hyper-reverse-proxy"
 version = "0.5.2-dev"
+source = "git+https://github.com/chesedo/hyper-reverse-proxy?branch=bug/host_header#5f82b7dffe940abf896fe47dadf6c8e87ddc670b"
+dependencies = [
+ "hyper",
+ "lazy_static",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "hyper-reverse-proxy"
+version = "0.5.2-dev"
 source = "git+https://github.com/chesedo/hyper-reverse-proxy?branch=master#a4deffef77685b37fda7224ae678d3d9f00d391e"
 dependencies = [
  "hyper",
@@ -5168,7 +5179,7 @@ dependencies = [
  "futures",
  "hex 0.4.3",
  "hyper",
- "hyper-reverse-proxy",
+ "hyper-reverse-proxy 0.5.2-dev (git+https://github.com/chesedo/hyper-reverse-proxy?branch=master)",
  "log",
  "once_cell",
  "opentelemetry",
@@ -5212,7 +5223,7 @@ dependencies = [
  "futures",
  "http",
  "hyper",
- "hyper-reverse-proxy",
+ "hyper-reverse-proxy 0.5.2-dev (git+https://github.com/chesedo/hyper-reverse-proxy?branch=bug/host_header)",
  "once_cell",
  "portpicker",
  "rand 0.8.5",

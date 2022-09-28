@@ -40,9 +40,9 @@ impl FromRow<'_, SqliteRow> for Deployment {
     }
 }
 
-impl From<Deployment> for shuttle_common::deployment::Response {
+impl From<Deployment> for shuttle_common::models::deployment::Response {
     fn from(deployment: Deployment) -> Self {
-        shuttle_common::deployment::Response {
+        shuttle_common::models::deployment::Response {
             id: deployment.id,
             service_id: deployment.service_id,
             state: deployment.state.into(),

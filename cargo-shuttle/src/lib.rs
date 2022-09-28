@@ -23,7 +23,7 @@ use config::RequestContext;
 use crossterm::style::Stylize;
 use factory::LocalFactory;
 use futures::StreamExt;
-use shuttle_common::{deployment, secret};
+use shuttle_common::{models::deployment, secret};
 use shuttle_service::loader::{build_crate, Loader};
 use shuttle_service::Logger;
 use tokio::sync::mpsc;

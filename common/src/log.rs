@@ -6,7 +6,7 @@ use crossterm::style::{StyledContent, Stylize};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::deployment::State;
+use crate::models::deployment::State;
 
 pub const STATE_MESSAGE: &str = "NEW STATE";
 

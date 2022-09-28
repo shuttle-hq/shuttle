@@ -1,5 +1,5 @@
 use crate::{
-    deployment,
+    models::deployment,
     resource::{self, ResourceInfo},
     secret,
 };

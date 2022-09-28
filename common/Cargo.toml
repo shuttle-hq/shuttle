@@ -25,17 +25,18 @@ uuid = { version = "1.1.1", features = ["v4", "serde"] }
 [features]
 default = []
 full = [
-    "deployment",
     "log",
     "secret",
     "service",
-    "version"
+    "version",
+    "models"
 ]
 
-display = ["crossterm", "comfy-table"]
+models = ["display", "chrono"]
 
-deployment = ["display", "chrono"]
+display = ["crossterm", "comfy-table"]
+version = ["anyhow", "semver", "regex"]
+
 log = ["crossterm"]
 secret = ["display"]
 service = ["display"]
-version = ["anyhow", "semver", "regex"]

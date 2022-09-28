@@ -160,7 +160,7 @@ async fn post_service(
     Path((_project_name, service_name)): Path<(String, String)>,
     Query(params): Query<HashMap<String, String>>,
     stream: BodyStream,
-) -> Result<Json<shuttle_common::deployment::Response>> {
+) -> Result<Json<shuttle_common::models::deployment::Response>> {
     let service = persistence.get_or_create_service(&service_name).await?;
     let id = Uuid::new_v4();
 
@@ -232,7 +232,7 @@ async fn delete_service(
 async fn get_deployment(
     Extension(persistence): Extension<Persistence>,
     Path((_project_name, deployment_id)): Path<(String, Uuid)>,
-) -> Result<Json<shuttle_common::deployment::Response>> {
+) -> Result<Json<shuttle_common::models::deployment::Response>> {
     if let Some(deployment) = persistence.get_deployment(&deployment_id).await? {
         Ok(Json(deployment.into()))
     } else {
@@ -244,7 +244,7 @@ async fn delete_deployment(
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(persistence): Extension<Persistence>,
     Path((_project_name, deployment_id)): Path<(String, Uuid)>,
-) -> Result<Json<shuttle_common::deployment::Response>> {
+) -> Result<Json<shuttle_common::models::deployment::Response>> {
     if let Some(deployment) = persistence.get_deployment(&deployment_id).await? {
         deployment_manager.kill(deployment.id).await;
 

@@ -1,15 +1,14 @@
 pub mod database;
-#[cfg(feature = "deployment")]
-pub mod deployment;
 #[cfg(feature = "log")]
 pub mod log;
+#[cfg(feature = "models")]
+pub mod models;
 pub mod project;
 pub mod resource;
 #[cfg(feature = "secret")]
 pub mod secret;
 #[cfg(feature = "service")]
 pub mod service;
-pub mod user;
 #[cfg(feature = "version")]
 pub mod version;
 #[cfg(feature = "log")]

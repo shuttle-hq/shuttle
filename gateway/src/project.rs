@@ -31,18 +31,6 @@ macro_rules! safe_unwrap {
     }
 }
 
-macro_rules! safe_unwrap_mut {
-    {$fst:ident$(.$attr:ident$(($ex:expr))?)+} => {
-        $fst$(
-            .$attr$(($ex))?
-                .as_mut()
-                .ok_or_else(|| ProjectError::internal(
-                    concat!("container state object is malformed at attribute: ", stringify!($attr))
-                ))?
-        )+
-    }
-}
-
 macro_rules! deserialize_json {
     {$ty:ty: $($json:tt)+} => {{
         let __ty_json = serde_json::json!($($json)+);

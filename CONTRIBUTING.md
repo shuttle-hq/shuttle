@@ -18,20 +18,13 @@ $ make images
 
 The images get built with [cargo-chef](https://github.com/LukeMathWalker/cargo-chef) and therefore support incremental builds (most of the time). So they will be much faster to re-build after an incremental change in your code - should you wish to deploy it locally straight away.
 
-Create docker persistent volumes with:
-
-```bash
-$ docker volume create shuttle-backend-vol
-$ docker volume create shuttle-cargo-registry-vol
-```
-
-Finally, you can start a local deployment of shuttle and the required containers with:
+You can now start a local deployment of shuttle and the required containers with:
 
 ```bash
 $ make up
 ```
 
-Note: Other useful commands can be found within the [Makefile](https://github.com/shuttle-hq/shuttle/blob/main/Makefile).
+*Note*: Other useful commands can be found within the [Makefile](https://github.com/shuttle-hq/shuttle/blob/main/Makefile).
 
 The API is now accessible on `localhost:8000` (for app proxies) and `localhost:8001` (for the control plane). When running `cargo run --bin cargo-shuttle` (in a debug build), the CLI will point itself to `localhost` for its API calls. The deployment parameters can be tweaked by changing values in the [.env](./.env) file.
 
@@ -67,6 +60,23 @@ Test if the deploy is working:
 # (the Host header should match the Host from the deploy output)
 curl --header "Host: {app}.localhost.local" localhost:8000/hello
 ```
+
+### Testing deployer only
+The steps outlined above starts all the services used by shuttle locally (ie. both `gateway` and `deployer`). However, sometimes you will want to quickly test changes to `deployer` only. To do this replace `make up` with the following:
+
+```bash
+docker-compose -f docker-compose.rendered.yml up provisioner
+```
+
+This prevents `gateway` from starting up. Now you can start deployer only using:
+
+```bash
+provisioner_address=$(docker inspect --format '{{(index .NetworkSettings.Networks "shuttle_default").IPAddress}}' shuttle_prod_hello-world-rocket-app_run)
+cargo run -p shuttle-deployer -- --provisioner-address $provisioner_address --provisioner-port 8000 --proxy-fqdn local.rs --admin-secret test-key
+```
+
+The `--admin-secret` can safely be changed to your api-key to make testing easier.
+
 ### Using Podman instead of Docker
 If you are using Podman over Docker, then expose a rootless socket of Podman using the following command:
 
@@ -81,6 +91,8 @@ export DOCKER_HOST=unix:///tmp/podman.sock
 ```
 
 shuttle can now be run locally using the steps shown earlier.
+
+*NOTE*: Testing the `gateway` with a rootless Podman does not work since Podman does not allow access to the `deployer` containers via IP address!
 
 ## Running Tests
 
@@ -103,9 +115,9 @@ The folders in this repository relate to each other as follow:
 
 ```mermaid
 graph BT
-    classDef default fill:#1f1f1f,stroke-width:0;
-    classDef binary fill:#f25100,font-weight:bold,stroke-width:0;
-    classDef external fill:#343434,font-style:italic,stroke:#f25100;
+    classDef default fill:#1f1f1f,stroke-width:0,color:white;
+    classDef binary fill:#f25100,font-weight:bolder,stroke-width:0,color:white;
+    classDef external fill:#343434,font-style:italic,stroke:#f25100,color:white;
 
     deployer:::binary
     cargo-shuttle:::binary
@@ -115,23 +127,26 @@ graph BT
     proto
     provisioner:::binary
     service
+    gateway:::binary
     user([user service]):::external
+    gateway --> common
+    gateway -.->|starts instances| deployer
     deployer --> proto
     deployer -.->|calls| provisioner
     service ---> common
     deployer --> common
     cargo-shuttle --->|"features = ['loader']"| service
-    deployer -->|"features = ['loader', 'secrets']"| service
+    deployer -->|"features = ['loader']"| service
     cargo-shuttle --> common
     service --> codegen
     proto ---> common
     provisioner --> proto
-    e2e -.->|starts up| deployer
+    e2e -.->|starts up| gateway
     e2e -.->|calls| cargo-shuttle
     user -->|"features = ['codegen']"| service
 ```
 
-First, `provisioner`, `deployer`, and `cargo-shuttle` are binary crates with `provisioner` and `deployer` being backend services. The `cargo-shuttle` binary is the `cargo shuttle` command used by users.
+First, `provisioner`, `gateway`, `deployer`, and `cargo-shuttle` are binary crates with `provisioner`, `gateway` and `deployer` being backend services. The `cargo-shuttle` binary is the `cargo shuttle` command used by users.
 
 The rest are the following libraries:
 - `common` contains shared models and functions used by the other libraries and binaries.

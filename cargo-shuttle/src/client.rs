@@ -2,18 +2,17 @@ use std::fmt::Write;
 use std::fs::File;
 use std::io::Read;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use async_trait::async_trait;
-use http_auth_basic::Credentials;
-use reqwest::header::AUTHORIZATION;
-use reqwest::{Body, Response, StatusCode};
+use headers::{Authorization, HeaderMapExt};
+use reqwest::{Body, Response};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, RequestBuilder};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
-use shuttle_common::project::ProjectName;
-use shuttle_common::{deployment, log, secret, service, ApiKey, ApiUrl};
+use shuttle_common::project::{self, ProjectName};
+use shuttle_common::{deployment, log, secret, service, user, ApiKey, ApiUrl};
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
@@ -55,27 +54,15 @@ impl Client {
         self.api_key = Some(api_key);
     }
 
-    pub async fn auth(&self, username: String) -> Result<ApiKey> {
+    pub async fn auth(&self, username: String) -> Result<user::Response> {
         let path = format!("/users/{}", username);
 
-        let response = self
-            .post(path, Option::<String>::None)
+        self.post(path, Option::<String>::None)
             .await
-            .context("failed to get API key from Shuttle server")?;
-
-        let response_status = response.status();
-        let response_text = response.text().await?;
-
-        if response_status == StatusCode::OK {
-            return Ok(response_text);
-        }
-
-        error!(
-            text = response_text,
-            status = %response_status,
-            "failed to authenticate with server"
-        );
-        Err(anyhow!("failed to authenticate with server",))
+            .context("failed to get API key from Shuttle server")?
+            .to_json()
+            .await
+            .context("could not parse server json response for create project request")
     }
 
     pub async fn deploy(
@@ -84,7 +71,11 @@ impl Client {
         project: &ProjectName,
         no_test: bool,
     ) -> Result<deployment::Response> {
-        let mut path = format!("/projects/{}", project.as_str());
+        let mut path = format!(
+            "/projects/{}/services/{}",
+            project.as_str(),
+            project.as_str()
+        );
 
         if no_test {
             let _ = write!(path, "?no-test");
@@ -105,57 +96,119 @@ impl Client {
 
     pub async fn get_build_logs_ws(
         &self,
+        project: &ProjectName,
         deployment_id: &Uuid,
     ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>> {
-        let path = format!("/ws/deployments/{}/logs/build", deployment_id);
+        let path = format!(
+            "/projects/{}/ws/deployments/{}/logs/build",
+            project.as_str(),
+            deployment_id
+        );
 
         self.ws_get(path).await
     }
 
     pub async fn delete_service(&self, project: &ProjectName) -> Result<service::Detailed> {
-        let path = format!("/projects/{}", project.as_str());
+        let path = format!(
+            "/projects/{}/services/{}",
+            project.as_str(),
+            project.as_str()
+        );
 
         self.delete(path).await
     }
 
     pub async fn get_service_details(&self, project: &ProjectName) -> Result<service::Detailed> {
-        let path = format!("/projects/{}", project.as_str());
+        let path = format!(
+            "/projects/{}/services/{}",
+            project.as_str(),
+            project.as_str()
+        );
 
         self.get(path).await
     }
 
     pub async fn get_service_summary(&self, project: &ProjectName) -> Result<service::Summary> {
-        let path = format!("/projects/{}/summary", project.as_str());
+        let path = format!(
+            "/projects/{}/services/{}/summary",
+            project.as_str(),
+            project.as_str()
+        );
 
         self.get(path).await
+    }
+
+    pub async fn create_project(&self, project: &ProjectName) -> Result<project::Response> {
+        let path = format!("/projects/{}", project.as_str());
+
+        self.post(path, Option::<String>::None)
+            .await
+            .context("failed to make create project request")?
+            .to_json()
+            .await
+            .context("could not parse server json response for create project request")
+    }
+
+    pub async fn get_project(&self, project: &ProjectName) -> Result<project::Response> {
+        let path = format!("/projects/{}", project.as_str());
+
+        self.get(path).await
+    }
+
+    pub async fn delete_project(&self, project: &ProjectName) -> Result<()> {
+        let path = format!("/projects/{}", project.as_str());
+
+        self.delete(path).await
     }
 
     pub async fn get_secrets(&self, project: &ProjectName) -> Result<Vec<secret::Response>> {
-        let path = format!("/secrets/{}", project.as_str());
+        let path = format!(
+            "/projects/{}/secrets/{}",
+            project.as_str(),
+            project.as_str()
+        );
 
         self.get(path).await
     }
 
-    pub async fn get_runtime_logs(&self, deployment_id: &Uuid) -> Result<Vec<log::Item>> {
-        let path = format!("/deployments/{}/logs/runtime", deployment_id);
+    pub async fn get_runtime_logs(
+        &self,
+        project: &ProjectName,
+        deployment_id: &Uuid,
+    ) -> Result<Vec<log::Item>> {
+        let path = format!(
+            "/projects/{}/deployments/{}/logs/runtime",
+            project.as_str(),
+            deployment_id
+        );
 
         self.get(path).await
     }
 
     pub async fn get_runtime_logs_ws(
         &self,
+        project: &ProjectName,
         deployment_id: &Uuid,
     ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>> {
-        let path = format!("/ws/deployments/{}/logs/runtime", deployment_id);
+        let path = format!(
+            "/projects/{}/ws/deployments/{}/logs/runtime",
+            project.as_str(),
+            deployment_id
+        );
 
         self.ws_get(path).await
     }
 
     pub async fn get_deployment_details(
         &self,
+        project: &ProjectName,
         deployment_id: &Uuid,
     ) -> Result<deployment::Response> {
-        let path = format!("/deployments/{}", deployment_id);
+        let path = format!(
+            "/projects/{}/deployments/{}",
+            project.as_str(),
+            deployment_id
+        );
 
         self.get(path).await
     }
@@ -166,10 +219,8 @@ impl Client {
         let mut request = url.into_client_request()?;
 
         if let Some(ref api_key) = self.api_key {
-            let cred = Credentials::new(api_key, "");
-            request
-                .headers_mut()
-                .append(AUTHORIZATION, cred.as_http_header().parse()?);
+            let auth_header = Authorization::bearer(&api_key)?;
+            request.headers_mut().typed_insert(auth_header);
         }
 
         let (stream, _) = connect_async(request).await.with_context(|| {
@@ -238,7 +289,7 @@ impl Client {
 
     fn set_builder_auth(&self, builder: RequestBuilder) -> RequestBuilder {
         if let Some(ref api_key) = self.api_key {
-            builder.basic_auth::<&str, &str>("", Some(api_key))
+            builder.bearer_auth(api_key)
         } else {
             builder
         }

@@ -3,13 +3,16 @@ use std::path::Path as StdPath;
 use std::sync::Arc;
 
 use axum::body::Body;
-use axum::extract::Path;
-use axum::headers::authorization::Basic;
-use axum::headers::{Authorization, Header};
+use axum::headers::{Authorization, HeaderMapExt};
 use axum::http::Request;
 use axum::response::Response;
 use bollard::network::ListNetworksOptions;
 use bollard::Docker;
+use hyper::client::connect::dns::GaiResolver;
+use hyper::client::HttpConnector;
+use hyper::Client;
+use hyper_reverse_proxy::ReverseProxy;
+use once_cell::sync::Lazy;
 use rand::distributions::{Alphanumeric, DistString};
 use sqlx::error::DatabaseError;
 use sqlx::migrate::{MigrateDatabase, Migrator};
@@ -26,6 +29,8 @@ use crate::project::{self, Project};
 use crate::worker::Work;
 use crate::{AccountName, Context, Error, ErrorKind, ProjectName, Refresh, Service};
 
+static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
+    Lazy::new(|| ReverseProxy::new(Client::new()));
 static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
 impl From<SqlxError> for Error {
@@ -274,7 +279,6 @@ impl GatewayService {
     pub async fn route(
         &self,
         project_name: &ProjectName,
-        Path(mut route): Path<String>,
         mut req: Request<Body>,
     ) -> Result<Response<Body>, Error> {
         let target_ip = self
@@ -284,35 +288,16 @@ impl GatewayService {
             .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotReady))?;
 
         let control_key = self.control_key_from_project_name(project_name).await?;
-
-        // TODO I don't understand the API for `headers`: it gives an
-        // impl. of `Header` which can only be encoded in something
-        // that `Extend<HeaderValue>` but `HeaderMap` only impls
-        // `Extend<(HeaderName, HeaderValue)>` (as one would expect),
-        // therefore why the ugly hack below.
-        {
-            let auth_header = Authorization::basic(&control_key, "");
-            let auth_header_name = Authorization::<Basic>::name();
-            let mut auth = vec![];
-            auth_header.encode(&mut auth);
-            let headers = req.headers_mut();
-            headers.remove(auth_header_name);
-            headers.append(auth_header_name, auth.pop().unwrap());
-        }
-
-        if !route.starts_with("/") {
-            route = format!("/{route}");
-        }
-
-        //route = format!("/projects/{project_name}{route}");
-
-        *req.uri_mut() = route.parse().unwrap();
+        let auth_header = Authorization::bearer(&control_key)
+            .map_err(|e| Error::source(ErrorKind::KeyMalformed, e))?;
+        req.headers_mut().typed_insert(auth_header);
 
         let target_url = format!("http://{target_ip}:8001");
 
-        debug!("routing control: {target_url}");
+        debug!(target_url, "routing control");
 
-        let resp = hyper_reverse_proxy::call("127.0.0.1".parse().unwrap(), &target_url, req)
+        let resp = PROXY_CLIENT
+            .call("127.0.0.1".parse().unwrap(), &target_url, req)
             .await
             .map_err(|_| Error::from_kind(ErrorKind::ProjectUnavailable))?;
 
@@ -574,6 +559,8 @@ impl<'c> Context<'c> for GatewayContext<'c> {
 #[cfg(test)]
 pub mod tests {
 
+    use std::str::FromStr;
+
     use futures::Future;
     use tokio::sync::mpsc::channel;
     use tokio::task::JoinHandle;
@@ -594,7 +581,7 @@ pub mod tests {
         );
 
         assert_err_kind!(
-            svc.user_from_key(Key("123".to_string())).await,
+            svc.user_from_key(Key::from_str("123").unwrap()).await,
             ErrorKind::UserNotFound
         );
 

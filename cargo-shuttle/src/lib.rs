@@ -29,7 +29,7 @@ use shuttle_service::loader::{build_crate, Loader};
 use tracing::trace;
 use uuid::Uuid;
 
-use crate::args::DeploymentCommand;
+use crate::args::{DeploymentCommand, ProjectCommand};
 use crate::client::Client;
 use crate::logger::Logger;
 
@@ -55,6 +55,7 @@ impl Shuttle {
             args.cmd,
             Command::Deploy(..)
                 | Command::Deployment(..)
+                | Command::Project(..)
                 | Command::Delete
                 | Command::Secrets
                 | Command::Status
@@ -85,6 +86,9 @@ impl Shuttle {
             Command::Auth(auth_args) => self.auth(auth_args, &client).await,
             Command::Login(login_args) => self.login(login_args).await,
             Command::Run(run_args) => self.local_run(run_args).await,
+            Command::Project(ProjectCommand::New) => self.project_create(&client).await,
+            Command::Project(ProjectCommand::Status) => self.project_status(&client).await,
+            Command::Project(ProjectCommand::Rm) => self.project_delete(&client).await,
         }
         .map(|_| CommandOutcome::Ok)
     }
@@ -145,9 +149,12 @@ impl Shuttle {
     }
 
     async fn auth(&mut self, auth_args: AuthArgs, client: &Client) -> Result<()> {
-        let api_key = client.auth(auth_args.username).await?;
+        let user = client.auth(auth_args.username).await?;
 
-        self.ctx.set_api_key(api_key)?;
+        self.ctx.set_api_key(user.key)?;
+
+        println!("User authorized!!!");
+        println!("Run `cargo shuttle init --help` next");
 
         Ok(())
     }
@@ -196,7 +203,9 @@ impl Shuttle {
         };
 
         if follow {
-            let mut stream = client.get_runtime_logs_ws(&id).await?;
+            let mut stream = client
+                .get_runtime_logs_ws(self.ctx.project_name(), &id)
+                .await?;
 
             while let Some(Ok(msg)) = stream.next().await {
                 if let tokio_tungstenite::tungstenite::Message::Text(line) = msg {
@@ -206,7 +215,9 @@ impl Shuttle {
                 }
             }
         } else {
-            let logs = client.get_runtime_logs(&id).await?;
+            let logs = client
+                .get_runtime_logs(self.ctx.project_name(), &id)
+                .await?;
 
             for log in logs.into_iter() {
                 println!("{log}");
@@ -225,7 +236,9 @@ impl Shuttle {
     }
 
     async fn deployment_get(&self, client: &Client, deployment_id: Uuid) -> Result<()> {
-        let deployment = client.get_deployment_details(&deployment_id).await?;
+        let deployment = client
+            .get_deployment_details(self.ctx.project_name(), &deployment_id)
+            .await?;
 
         println!("{deployment}");
 
@@ -313,7 +326,9 @@ impl Shuttle {
         println!();
         println!("{deployment}");
 
-        let mut stream = client.get_build_logs_ws(&deployment.id).await?;
+        let mut stream = client
+            .get_build_logs_ws(self.ctx.project_name(), &deployment.id)
+            .await?;
 
         while let Some(Ok(msg)) = stream.next().await {
             if let tokio_tungstenite::tungstenite::Message::Text(line) = msg {
@@ -344,6 +359,30 @@ impl Shuttle {
 
             Ok(CommandOutcome::DeploymentFailure)
         }
+    }
+
+    async fn project_create(&self, client: &Client) -> Result<()> {
+        let project = client.create_project(self.ctx.project_name()).await?;
+
+        println!("{project}");
+
+        Ok(())
+    }
+
+    async fn project_status(&self, client: &Client) -> Result<()> {
+        let project = client.get_project(self.ctx.project_name()).await?;
+
+        println!("{project}");
+
+        Ok(())
+    }
+
+    async fn project_delete(&self, client: &Client) -> Result<()> {
+        client.delete_project(self.ctx.project_name()).await?;
+
+        println!("Project has been deleted");
+
+        Ok(())
     }
 
     // Packages the cargo project and returns a File to that file

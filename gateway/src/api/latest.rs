@@ -7,45 +7,58 @@ use axum::http::Request;
 use axum::response::Response;
 use axum::routing::{any, get};
 use axum::{Json as AxumJson, Router};
+use shuttle_common::{project, user};
 use tower_http::trace::TraceLayer;
 use tracing::{debug, debug_span, field, Span};
 
 use crate::auth::{Admin, ScopedUser, User};
-use crate::project::Project;
 use crate::{AccountName, Error, GatewayService, ProjectName};
 
 async fn get_user(
     Extension(service): Extension<Arc<GatewayService>>,
     Path(account_name): Path<AccountName>,
     _: Admin,
-) -> Result<AxumJson<User>, Error> {
-    service
-        .user_from_account_name(account_name)
-        .await
-        .map(AxumJson)
+) -> Result<AxumJson<user::Response>, Error> {
+    let user = service.user_from_account_name(account_name).await?;
+
+    Ok(AxumJson(user.into()))
 }
 
 async fn post_user(
     Extension(service): Extension<Arc<GatewayService>>,
     Path(account_name): Path<AccountName>,
     _: Admin,
-) -> Result<AxumJson<User>, Error> {
-    service.create_user(account_name).await.map(AxumJson)
+) -> Result<AxumJson<user::Response>, Error> {
+    let user = service.create_user(account_name).await?;
+
+    Ok(AxumJson(user.into()))
 }
 
 async fn get_project(
     Extension(service): Extension<Arc<GatewayService>>,
     ScopedUser { scope, .. }: ScopedUser,
-) -> Result<AxumJson<Project>, Error> {
-    service.find_project(&scope).await.map(AxumJson)
+) -> Result<AxumJson<project::Response>, Error> {
+    let state = service.find_project(&scope).await?.into();
+    let response = project::Response {
+        name: scope.to_string(),
+        state,
+    };
+
+    Ok(AxumJson(response))
 }
 
 async fn post_project(
     Extension(service): Extension<Arc<GatewayService>>,
     User { name, .. }: User,
     Path(project): Path<ProjectName>,
-) -> Result<AxumJson<Project>, Error> {
-    service.create_project(project, name).await.map(AxumJson)
+) -> Result<AxumJson<project::Response>, Error> {
+    let state = service.create_project(project.clone(), name).await?.into();
+    let response = project::Response {
+        name: project.to_string(),
+        state,
+    };
+
+    Ok(AxumJson(response))
 }
 
 async fn delete_project(
@@ -62,10 +75,9 @@ async fn delete_project(
 async fn route_project(
     Extension(service): Extension<Arc<GatewayService>>,
     ScopedUser { scope, .. }: ScopedUser,
-    Path((_, route)): Path<(String, String)>,
     req: Request<Body>,
 ) -> Result<Response<Body>, Error> {
-    service.route(&scope, Path(route), req).await
+    service.route(&scope, req).await
 }
 
 pub fn make_api(service: Arc<GatewayService>) -> Router<Body> {
@@ -147,7 +159,7 @@ pub mod tests {
             .await
             .unwrap();
 
-        let authorization = Authorization::basic("", neo.key.as_str());
+        let authorization = Authorization::bearer(neo.key.as_str()).unwrap();
 
         router
             .call(create_project("matrix").with_header(&authorization))
@@ -207,7 +219,7 @@ pub mod tests {
 
         let trinity = service.create_user("trinity".parse().unwrap()).await?;
 
-        let authorization = Authorization::basic("", trinity.key.as_str());
+        let authorization = Authorization::bearer(trinity.key.as_str()).unwrap();
 
         router
             .call(get_project("reloaded").with_header(&authorization))
@@ -285,7 +297,7 @@ pub mod tests {
             .await
             .unwrap();
 
-        let authorization = Authorization::basic("", user.key.as_str());
+        let authorization = Authorization::bearer(user.key.as_str()).unwrap();
 
         router
             .call(get_neo().with_header(&authorization))

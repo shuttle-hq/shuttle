@@ -31,18 +31,6 @@ macro_rules! safe_unwrap {
     }
 }
 
-macro_rules! safe_unwrap_mut {
-    {$fst:ident$(.$attr:ident$(($ex:expr))?)+} => {
-        $fst$(
-            .$attr$(($ex))?
-                .as_mut()
-                .ok_or_else(|| ProjectError::internal(
-                    concat!("container state object is malformed at attribute: ", stringify!($attr))
-                ))?
-        )+
-    }
-}
-
 macro_rules! deserialize_json {
     {$ty:ty: $($json:tt)+} => {{
         let __ty_json = serde_json::json!($($json)+);
@@ -175,6 +163,22 @@ impl Project {
     }
 }
 
+impl From<Project> for shuttle_common::project::State {
+    fn from(project: Project) -> Self {
+        match project {
+            Project::Creating(_) => Self::Creating,
+            Project::Starting(_) => Self::Starting,
+            Project::Started(_) => Self::Started,
+            Project::Ready(_) => Self::Ready,
+            Project::Stopping(_) => Self::Stopping,
+            Project::Stopped(_) => Self::Stopped,
+            Project::Destroying(_) => Self::Destroying,
+            Project::Destroyed(_) => Self::Destroyed,
+            Project::Errored(_) => Self::Errored,
+        }
+    }
+}
+
 #[async_trait]
 impl<'c> State<'c> for Project {
     type Next = Self;
@@ -202,6 +206,7 @@ impl<'c> State<'c> for Project {
 
         if let Ok(Self::Errored(errored)) = &mut new {
             errored.ctx = Some(Box::new(previous));
+            error!(error = ?errored, "state for project errored");
         }
 
         let new_state = new.as_ref().unwrap().state();
@@ -352,6 +357,14 @@ impl ProjectCreating {
                 "--proxy-fqdn",
                 "shuttleapp.rs",
             ],
+            "Env": [
+                "RUST_LOG=shuttle_deployer,shuttle_service,sqlx",
+            ],
+            "Healthcheck": {
+                "Interval": 5_000_000_000i64,
+                "Timeout": 5_000_000_000i64,
+                "Test": ["CMD", "curl", "localhost:8001/status"],
+            },
         });
 
         let mut config = Config::<String>::from(container_config);
@@ -516,20 +529,16 @@ pub struct Service {
 }
 
 impl Service {
-    pub fn from_container(mut container: ContainerInspectResponse) -> Result<Self, ProjectError> {
+    pub fn from_container(container: ContainerInspectResponse) -> Result<Self, ProjectError> {
         let container_name = safe_unwrap!(container.name.strip_prefix("/")).to_string();
 
         let resource_name = safe_unwrap!(container_name.strip_suffix("_run")).to_string();
 
-        let target = safe_unwrap_mut!(
-            container
-                .network_settings
-                .networks
-                .remove(&container_name)
-                .ip_address
-        )
-        .parse()
-        .unwrap();
+        let network = safe_unwrap!(container.network_settings.networks)
+            .values()
+            .next()
+            .ok_or_else(|| ProjectError::internal("project was not linked to a network"))?;
+        let target = safe_unwrap!(network.ip_address).parse().unwrap();
 
         Ok(Self {
             name: resource_name,

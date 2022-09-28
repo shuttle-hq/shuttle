@@ -3,7 +3,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use axum::extract::{Extension, FromRequest, Path, RequestParts, TypedHeader};
-use axum::headers::authorization::Basic;
+use axum::headers::authorization::Bearer;
 use axum::headers::Authorization;
 use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Serialize};
@@ -14,7 +14,7 @@ use crate::{AccountName, Error, ErrorKind, ProjectName};
 #[derive(Clone, Debug, sqlx::Type, PartialEq, Hash, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
 #[sqlx(transparent)]
-pub struct Key(pub String);
+pub struct Key(String);
 
 impl Key {
     pub fn as_str(&self) -> &str {
@@ -30,10 +30,10 @@ where
     type Rejection = Error;
 
     async fn from_request(req: &mut RequestParts<B>) -> Result<Self, Self::Rejection> {
-        TypedHeader::<Authorization<Basic>>::from_request(req)
+        TypedHeader::<Authorization<Bearer>>::from_request(req)
             .await
             .map_err(|_| Error::from(ErrorKind::KeyMissing))
-            .and_then(|TypedHeader(Authorization(basic))| basic.password().trim().parse())
+            .and_then(|TypedHeader(Authorization(bearer))| bearer.token().trim().parse())
     }
 }
 
@@ -96,6 +96,20 @@ where
     }
 }
 
+impl From<User> for shuttle_common::user::Response {
+    fn from(user: User) -> Self {
+        Self {
+            name: user.name.to_string(),
+            key: user.key.to_string(),
+            projects: user
+                .projects
+                .into_iter()
+                .map(|name| name.to_string())
+                .collect(),
+        }
+    }
+}
+
 /// A wrapper for a guard that validates a user's API key *and*
 /// scopes the request to a project they own.
 ///
@@ -122,7 +136,9 @@ where
                 .map(|Path((p, _))| p)
                 .unwrap(),
         };
-        if user.super_user || user.projects.contains(&scope) {
+        if user.projects.is_empty() {
+            Err(Error::from(ErrorKind::ProjectNotFound))
+        } else if user.super_user || user.projects.contains(&scope) {
             Ok(Self { user, scope })
         } else {
             Err(Error::from(ErrorKind::Forbidden))
@@ -143,10 +159,7 @@ where
 
     async fn from_request(req: &mut RequestParts<B>) -> Result<Self, Self::Rejection> {
         let user = User::from_request(req).await?;
-        let service = Extension::<Arc<GatewayService>>::from_request(req)
-            .await
-            .unwrap();
-        if service.is_super_user(&user.name).await? {
+        if user.super_user {
             Ok(Self { user })
         } else {
             Err(Error::from(ErrorKind::Forbidden))

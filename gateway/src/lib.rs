@@ -153,7 +153,7 @@ impl StdError for Error {}
 
 #[derive(Debug, sqlx::Type, Serialize, Clone, PartialEq, Eq)]
 #[sqlx(transparent)]
-pub struct ProjectName(pub String);
+pub struct ProjectName(String);
 
 impl<'de> Deserialize<'de> for ProjectName {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -186,7 +186,7 @@ impl std::fmt::Display for ProjectName {
 
 #[derive(Debug, Clone, PartialEq, Eq, sqlx::Type, Serialize)]
 #[sqlx(transparent)]
-pub struct AccountName(pub String);
+pub struct AccountName(String);
 
 impl FromStr for AccountName {
     type Err = Error;
@@ -322,11 +322,11 @@ pub mod tests {
     use hyper::http::uri::Scheme;
     use hyper::http::Uri;
     use hyper::{Body, Client as HyperClient, Request, Response, StatusCode};
-    use log::info;
     use rand::distributions::{Alphanumeric, DistString, Distribution, Uniform};
     use shuttle_common::{DeploymentMeta, DeploymentStateMeta};
     use tempfile::NamedTempFile;
     use tokio::sync::mpsc::channel;
+    use tracing::info;
 
     use crate::api::make_api;
     use crate::args::Args;
@@ -669,7 +669,7 @@ pub mod tests {
         let User { key, .. } = api_client
             .request(
                 Request::post("/users/trinity")
-                    .with_header(&Authorization::basic("", key.as_str()))
+                    .with_header(&Authorization::bearer(key.as_str()).unwrap())
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -680,7 +680,7 @@ pub mod tests {
             .await
             .unwrap();
 
-        let authorization = Authorization::basic("", key.as_str());
+        let authorization = Authorization::bearer(key.as_str()).unwrap();
 
         api_client
             .request(

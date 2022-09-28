@@ -21,15 +21,15 @@ async fn main() -> io::Result<()> {
         .or_else(|_| EnvFilter::try_new("info"))
         .unwrap();
 
-    // let tracer = opentelemetry_datadog::new_pipeline()
-    //     .with_service_name("deployer")
-    //     .install_batch(opentelemetry::runtime::Tokio)
-    //     .unwrap();
-    // let opentelemetry = tracing_opentelemetry::layer().with_tracer(tracer);
+    let tracer = opentelemetry_datadog::new_pipeline()
+        .with_service_name("gateway")
+        .install_batch(opentelemetry::runtime::Tokio)
+        .unwrap();
+    let opentelemetry = tracing_opentelemetry::layer().with_tracer(tracer);
     tracing_subscriber::registry()
         .with(filter_layer)
         .with(fmt_layer)
-        // .with(opentelemetry)
+        .with(opentelemetry)
         .init();
 
     let gateway = Arc::new(GatewayService::init(args.clone()).await);

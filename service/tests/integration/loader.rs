@@ -145,8 +145,8 @@ async fn sqlx_pool() {
         "got: {}",
         message
     );
-    assert_eq!(log.item.target, "sqlx::query");
-    assert_eq!(log.item.level, "info");
+    assert_eq!(log.item.target, "log");
+    assert_eq!(log.item.level, "INFO");
 }
 
 #[tokio::test]

@@ -15,6 +15,7 @@ axum = { version = "0.5.15", optional = true }
 bincode = { version = "1.2.1", optional = true }
 cargo = { version = "0.64.0", optional = true }
 chrono = "0.4.22"
+crossbeam-channel = "0.5.6"
 futures = { version = "0.3.23", features = ["std"] }
 hyper = { version = "0.14.20", features = ["server", "tcp", "http1"], optional = true }
 lazy_static = "1.4.0"
@@ -27,6 +28,7 @@ regex = "1.6.0"
 rocket = { version = "0.5.0-rc.2", optional = true }
 salvo = { version = "0.34.3", optional = true }
 serde = { version = "1.0", optional = true }
+serde_json = "1.0.85"
 serenity = { version = "0.11.5", default-features = false, features = ["client", "gateway", "rustls_backend", "model"], optional = true }
 sqlx = { version = "0.6.1", optional = true }
 sync_wrapper = { version = "0.1.1", optional = true }
@@ -36,8 +38,6 @@ tokio = { version = "=1.20.1", features = ["rt", "rt-multi-thread"] }
 tower = { version = "0.4.13", features = ["make"], optional = true }
 tracing = "0.1.36"
 tracing-subscriber = { version = "0.3.15", features = ["env-filter"] }
-serde_json = "1.0.85"
-crossbeam-channel = "0.5.6"
 
 # Tide does not have tokio support. So make sure async-std is compatible with tokio
 # https://github.com/http-rs/tide/issues/791

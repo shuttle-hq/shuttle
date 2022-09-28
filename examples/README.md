@@ -13,7 +13,7 @@ $ git clone https://github.com/shuttle-hq/shuttle.git
 navigate to an example root folder
 
 ```bash
-$ cd examples/rocket/hello-world
+$ cd examples/axum/hello-world
 ```
 
 Pick a project name that is something unique - in shuttle,

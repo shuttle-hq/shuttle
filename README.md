@@ -97,11 +97,19 @@ $ cargo shuttle deploy
         Database URI:       postgres://***:***@pg.shuttle.rs/db-hello-world
 ```
 
-For the full documentation, visit [docs.rs/shuttle-service](https://docs.rs/shuttle-service)
+For the full documentation, visit [docs.rs/shuttle-service](https://docs.rs/shuttle-service).
+
+For more examples, check out [shuttle examples](https://github.com/shuttle-hq/shuttle/tree/main/examples).
 
 ## Contributing to shuttle
 
-If you want to setup a local environment to test code changes to core `shuttle` packages, or want to contribute to the project see [CONTRIBUTING.md](./CONTRIBUTING.md)
+Contributing to shuttle is highly encouraged!
+
+If you want to setup a local environment to test code changes to core `shuttle` packages, or want to contribute to the project see [CONTRIBUTING.md](./CONTRIBUTING.md). 
+
+Even if you are not planning to submit any code; joining our [Discord server](https://discord.gg/shuttle) and providing feedback helps us a lot!
+
+You can also ⭐ this repo to show your interest & support.
 
 ## Roadmap
 
@@ -114,7 +122,7 @@ If you have any requests or suggestions feel free to open an issue.
 - [Community Forum](https://github.com/shuttle-hq/shuttle/discussions). Best for: help with building, discussion about best practices.
 - [GitHub Issues](https://github.com/shuttle-hq/shuttle/issues). Best for: bugs and errors you encounter using Shuttle.
 - [Discord](https://discord.gg/shuttle). Best for: sharing your applications and hanging out with the community.
-- [Twitter](https://twitter.com/shuttle_dev). Best for: keeping up with announcements and releases
+- [Twitter](https://twitter.com/shuttle_dev). Best for: keeping up with announcements and releases.
 
 ## Status
 

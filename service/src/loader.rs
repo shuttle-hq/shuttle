@@ -10,6 +10,7 @@ use cargo::core::{Shell, Verbosity, Workspace};
 use cargo::ops::{compile, CompileOptions};
 use cargo::util::homedir;
 use cargo::Config;
+use cargo::util::interning::InternedString;
 use libloading::{Library, Symbol};
 use log::trace;
 use shuttle_common::{BuildProfile, DeploymentId};
@@ -154,7 +155,19 @@ pub fn build_crate(project_path: &Path, buf: Box<dyn std::io::Write>, build_prof
         }
     }
 
-    let opts = CompileOptions::new(&config, CompileMode::Build)?;
+
+
+    let mut opts = CompileOptions::new(&config, CompileMode::Build)?;
+
+    match build_profile {
+        BuildProfile::Debug => {
+            opts.build_config.requested_profile = InternedString::new("dev");
+        }
+        BuildProfile::Release => {
+            opts.build_config.requested_profile = InternedString::new("release");
+        }
+    }
+
     let compilation = compile(&ws, &opts)?;
 
     Ok(compilation.cdylibs[0].path.clone())

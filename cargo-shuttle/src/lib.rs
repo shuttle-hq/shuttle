@@ -187,7 +187,7 @@ impl Shuttle {
             working_directory.display()
         );
 
-        let so_path = build_crate(working_directory, buf, BuildProfile::Debug)?;
+        let so_path = build_crate(working_directory, buf, &BuildProfile::Debug)?;
         let loader = Loader::from_so_file(so_path)?;
 
         let mut factory = LocalFactory::new(self.ctx.project_name().clone())?;

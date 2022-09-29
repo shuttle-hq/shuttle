@@ -152,7 +152,7 @@ jobs:
                        --D warnings \
                        -A clippy::let-unit-value \
                        -A clippy::format-push-string
-      - run: cargo test --all-features
+      - run: cargo test --all-features --manifest-path << parameters.path >>/Cargo.toml -- --nocapture
       - save-cargo-cache
   service-test:
     # Using an image since tests will start a docker container

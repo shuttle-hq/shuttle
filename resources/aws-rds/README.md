@@ -13,5 +13,5 @@ Add `shuttle-aws-rds` to the dependencies for your service. Every engine is behi
 | MySql    | mysql        | shuttle_aws_rds::MySql    |
 | MariaDB  | mariadb      | shuttle_aws_rds::MariaDB  |
 
-An example using the Tide framework can be found on [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/tide/postgres)
+An example using the Tide framework can be found on [GitHub](https://github.com/shuttle-hq/shuttle/tree/main/examples/tide/postgres)
 

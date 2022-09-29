@@ -1,12 +1,12 @@
 <p align="center">
-<img width="300" src="https://raw.githubusercontent.com/getsynth/shuttle/master/assets/logo-rectangle-transparent.png"/>
+<img width="300" src="https://raw.githubusercontent.com/shuttle-hq/shuttle/master/assets/logo-rectangle-transparent.png"/>
 </p>
 <br>
 <p align=center>
   <a href="https://docs.rs/shuttle-service">
     <img alt="docs" src="https://img.shields.io/badge/doc-reference-orange">
   </a>
-  <a href="https://github.com/getsynth/shuttle/search?l=rust">
+  <a href="https://github.com/shuttle-hq/shuttle/search?l=rust">
     <img alt="language" src="https://img.shields.io/badge/language-Rust-orange.svg">
   </a>
   <a href="https://circleci.com/gh/shuttle-hq/shuttle/">

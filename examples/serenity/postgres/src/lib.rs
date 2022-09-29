@@ -6,8 +6,7 @@ use serenity::model::application::interaction::{Interaction, InteractionResponse
 use serenity::model::gateway::Ready;
 use serenity::model::id::GuildId;
 use serenity::prelude::*;
-use shuttle_secrets::SecretStore;
-use shuttle_service::error::CustomError;
+use shuttle_service::SecretStore;
 use sqlx::{Executor, PgPool};
 use tracing::{error, info};
 
@@ -146,7 +145,7 @@ async fn serenity(
     // Run the schema migration
     pool.execute(include_str!("../schema.sql"))
         .await
-        .map_err(CustomError::new)?;
+        .context("failed to run migrations")?;
 
     let bot = Bot {
         database: pool,

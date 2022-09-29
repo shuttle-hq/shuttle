@@ -270,17 +270,7 @@ extern crate shuttle_codegen;
 /// }
 /// ```
 ///
-/// ## shuttle managed resources
-/// The following resources can be managed by shuttle - remember to enable their feature flags for the `shuttle-service` dependency in `Cargo.toml` and configure them using an attribute annotation:
-///
-
-/// | Argument type                                                            | Feature flag        | Attribute            | Dependency                                                                                         | Example                                                                          |
-/// | ------------------------------------------------------------------------ | ------------------- | -------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-/// | [`PgPool`](https://docs.rs/sqlx/latest/sqlx/type.PgPool.html)            | sqlx-postgres       | `shared::Postgres`   | A shared PostgresSQL instance accessed using [sqlx](https://docs.rs/sqlx)                          | [GitHub](https://github.com/shuttle-hq/shuttle/tree/main/examples/rocket/postgres) |
-/// | [`Database`](https://docs.rs/mongodb/latest/mongodb/struct.Database.html)| mongodb-integration | `shared::MongoDb`    | A shared MongoDb database accessed using the [mongodb](https://docs.rs/mongodb) driver             | [GitHub](https://github.com/shuttle-hq/shuttle/tree/main/examples/poem/mongodb)    |
-/// | [`MySqlPool`](https://docs.rs/sqlx/latest/sqlx/type.MySqlPool.html)      | sqlx-aws-mariadb    | `aws::rds::MariaDB`  | An AWS RDS MariaDB instance tied to your instance and accessed using [sqlx](https://docs.rs/sqlx)  |                                                                                  |
-/// | [`MySqlPool`](https://docs.rs/sqlx/latest/sqlx/type.MySqlPool.html)      | sqlx-aws-mysql      | `aws::rds::MySql`    | An AWS RDS MySql instance tied to your instance and accessed using [sqlx](https://docs.rs/sqlx)    |                                                                                  |
-/// | [`PgPool`](https://docs.rs/sqlx/latest/sqlx/type.PgPool.html)            | sqlx-aws-postgres   | `aws::rds::Postgres` | An AWS RDS Postgres instance tied to your instance and accessed using [sqlx](https://docs.rs/sqlx) | [GitHub](https://github.com/shuttle-hq/shuttle/tree/main/examples/tide/postgres)   |
+/// More [shuttle managed resources can be found here](https://github.com/shuttle-hq/shuttle/tree/main/resources)
 pub use shuttle_codegen::main;
 use tokio::task::JoinHandle;
 
@@ -309,9 +299,69 @@ pub trait Factory: Send + Sync {
 
 /// Used to get resources of type `T` from factories.
 ///
-/// This is mainly meant for consumption by our code generator and should generally not be implemented by users.
-/// Some resources cannot cross the boundary between the api runtime and the runtime of services. These resources
-/// should be created on the passed in runtime.
+/// This is mainly meant for consumption by our code generator and should generally not be called by users.
+///
+/// ## Creating your own managed resource
+/// You may want to create your own managed resource by implementing this trait for some builder `B` to construct resource `T`. [`Factory`] can be used to provision resources
+/// on shuttle's servers if your resource will need any.
+///
+/// The biggest thing to look out for is that your resource object might panic when it crosses the boundary between the shuttle's backend runtime and the runtime
+/// of services. These resources should be created on the passed in `runtime` for this trait to prevent these panics.
+///
+/// Your resource will be available on a [shuttle_service::main][main] function as follow:
+/// ```
+/// #[shuttle_service::main]
+/// async fn my_service([custom_resource_crate::namespace::B] custom_resource: T)
+///     -> shuttle_service::ShuttleAxum {}
+/// ```
+///
+/// Here `custom_resource_crate::namespace` is the crate and namespace to a builder `B` that implements [`ResourceBuilder`] to create resource `T`.
+///
+/// ### Example
+/// ```
+/// pub struct Builder {
+///     name: String,
+/// }
+///
+/// pub struct Resource {
+///     name: String,
+/// }
+///
+/// impl Builder {
+///     /// Name to give resource
+///     pub fn name(self, name: &str) -> Self {
+///         self.name = name.to_string();
+///
+///         self
+///     }
+/// }
+///
+/// #[async_trait]
+/// impl ResourceBuilder<Resource> for Builder {
+///     fn new() -> Self {
+///         Self {
+///             name: String::new(),
+///         }
+///     }
+///
+///     async fn build(
+///         self,
+///         factory: &mut dyn Factory,
+///         _runtime: &Runtime,
+///     ) -> Result<Resource, shuttle_service::Error> {
+///         Ok(Resource { name: self.name })
+///     }
+/// }
+/// ```
+///
+/// Then using this resource in a service:
+/// ```
+/// #[shuttle_service::main]
+/// async fn my_service(
+///     [custom_resource_crate::Builder(name = "John")] resource: custom_resource_crate::Resource
+/// )
+///     -> shuttle_service::ShuttleAxum {}
+/// ```
 #[async_trait]
 pub trait ResourceBuilder<T> {
     fn new() -> Self;

@@ -145,6 +145,7 @@ jobs:
       - run: |
           cargo clippy --tests \
                        --all-targets \
+                       --all-features \
                        --manifest-path << parameters.path >>/Cargo.toml \
                        --no-deps -- \
                        --D warnings \

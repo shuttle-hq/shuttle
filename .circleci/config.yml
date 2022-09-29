@@ -163,10 +163,10 @@ jobs:
       - restore-cargo-cache
       - run:
           name: Run unit tests
-          command: cargo test --package shuttle-service --features="codegen,loader,persist,secrets,sqlx-postgres" --lib -- --nocapture
+          command: cargo test --package shuttle-service --features="codegen,loader" --lib -- --nocapture
       - run:
           name: Run integration tests
-          command: cargo test --package shuttle-service --features="codegen,loader,persist,secrets,sqlx-postgres" --test '*' -- --nocapture
+          command: cargo test --package shuttle-service --features="codegen,loader" --test '*' -- --nocapture
       - save-cargo-cache
   platform-test:
     parameters:

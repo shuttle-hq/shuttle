@@ -10,7 +10,6 @@ pub struct Postgres;
 
 #[cfg(feature = "postgres")]
 /// Get an `sqlx::PgPool` from any factory
-#[cfg(feature = "sqlx-postgres")]
 #[async_trait]
 impl ResourceBuilder<sqlx::PgPool> for Postgres {
     fn new() -> Self {
@@ -43,11 +42,11 @@ impl ResourceBuilder<sqlx::PgPool> for Postgres {
     }
 }
 
-#[cfg(feature = "mongodb-integration")]
+#[cfg(feature = "mongodb")]
 pub struct MongoDb;
 
 /// Get a `mongodb::Database` from any factory
-#[cfg(feature = "mongodb-integration")]
+#[cfg(feature = "mongodb")]
 #[async_trait]
 impl ResourceBuilder<mongodb::Database> for MongoDb {
     fn new() -> Self {

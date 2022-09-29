@@ -220,9 +220,6 @@ pub mod logger;
 
 pub use shuttle_common::database;
 
-#[cfg(any(feature = "mongodb-integration"))]
-pub mod shared;
-
 #[cfg(feature = "codegen")]
 extern crate shuttle_codegen;
 #[cfg(feature = "codegen")]

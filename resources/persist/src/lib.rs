@@ -1,9 +1,9 @@
-use crate::{Factory, ResourceBuilder};
 use async_trait::async_trait;
 use bincode::{deserialize_from, serialize_into, Error as BincodeError};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use shuttle_common::project::ProjectName;
+use shuttle_service::{Factory, ResourceBuilder};
 use std::fs;
 use std::fs::File;
 use std::io::BufReader;
@@ -75,7 +75,7 @@ impl ResourceBuilder<PersistInstance> for Persist {
         self,
         factory: &mut dyn Factory,
         _runtime: &Runtime,
-    ) -> Result<PersistInstance, crate::Error> {
+    ) -> Result<PersistInstance, shuttle_service::Error> {
         Ok(PersistInstance {
             project_name: factory.get_project_name(),
         })

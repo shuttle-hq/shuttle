@@ -98,7 +98,7 @@ fn check_return_type(signature: &Signature) {
     match &signature.output {
         ReturnType::Default => emit_error!(
             signature,
-            "shuttle_ervice::main functions need to return a service";
+            "shuttle_service::main functions need to return a service";
             hint = "See the docs for services with first class support";
             doc = "https://docs.rs/shuttle-service/latest/shuttle_service/attr.main.html#shuttle-supported-services"
         ),
@@ -173,7 +173,7 @@ impl ToTokens for Wrapper {
                     })?;
 
 
-                #(let #fn_inputs = shuttle_service::#fn_inputs_builder::new().build(#factory_ident, runtime).await?;)*
+                #(let #fn_inputs = #fn_inputs_builder::new().build(#factory_ident, runtime).await?;)*
 
                 runtime.spawn(async {
                     #fn_ident(#(#fn_inputs),*)

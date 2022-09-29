@@ -1,25 +1,6 @@
 version: "3"
 
 services:
-  deployer:
-    entrypoint:
-      - /bin/bash
-      - -c
-      - |
-        mkdir -p $$CARGO_HOME
-        cat<<EOF > $$CARGO_HOME/config.toml
-        [patch.crates-io]
-        shuttle-service = { path = "/usr/src/shuttle/service" }
-        EOF
-
-        until </dev/tcp/provisioner/8000
-        do
-          >&2 echo "provisioner is not available yet - sleeping"
-          sleep 1
-        done
-
-        exec /usr/local/bin/service "$${@:0}"
-
   provisioner:
     entrypoint:
       - /bin/bash

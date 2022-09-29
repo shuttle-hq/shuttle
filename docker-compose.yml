@@ -1,13 +1,13 @@
 version: "3"
 volumes:
-  shuttle-backend-vol:
-  shuttle-cargo-registry-vol:
+  shuttle-gateway-vol:
+    name: shuttle-gateway-vol
+networks:
+  shuttle-user-net:
+    name: shuttle-user-net
 services:
-  deployer:
-    image: "${CONTAINER_REGISTRY}/deployer:${BACKEND_TAG}"
-    volumes:
-      - shuttle-backend-vol:/tmp/shuttle-builds/
-      - shuttle-cargo-registry-vol:/usr/local/cargo/registry/
+  gateway:
+    image: "${CONTAINER_REGISTRY}/gateway:${BACKEND_TAG}"
     depends_on:
       - provisioner
     ports:
@@ -21,18 +21,23 @@ services:
       placement:
         constraints:
           - node.hostname==controller
+    networks:
+      shuttle-user-net:
+    volumes:
+      - shuttle-gateway-vol:/var/lib/shuttle
+      # This image needs to run highly privileged in order to
+      # orchestrate user runtimes safely
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - RUST_LOG=${RUST_LOG}
-      - CARGO_HOME=/usr/local/cargo
-      - GATEWAY_SECRET=tmp
     command:
-      - "--path=/var/lib/shuttle/crates"
-      - "--bind-addr=0.0.0.0"
-      - "--api-port=8001"
-      - "--proxy-port=8000"
-      - "--proxy-fqdn=${APPS_FQDN}"
-      - "--provisioner-address=provisioner"
-      - "--provisioner-port=8000"
+      - "--control=0.0.0.0:8001"
+      - "--user=0.0.0.0:8000"
+      - "--image=${CONTAINER_REGISTRY}/deployer:${BACKEND_TAG}"
+      - "--prefix=shuttle_"
+      - "--network-name=shuttle-user-net"
+      - "--provisioner-host=provisioner"
+      - "--state=/var/lib/shuttle/gateway.sqlite"
   provisioner:
     image: "${CONTAINER_REGISTRY}/provisioner:${PROVISIONER_TAG}"
     depends_on:
@@ -40,6 +45,8 @@ services:
       - mongodb
     environment:
       - RUST_LOG=${RUST_LOG}
+    networks:
+      shuttle-user-net:
     command:
       - "--ip=0.0.0.0"
       - "--port=8000"
@@ -53,6 +60,8 @@ services:
     restart: always
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    networks:
+      shuttle-user-net:
     ports:
       - 8002:8000
       - 5432:5432
@@ -63,6 +72,8 @@ services:
   mongodb:
     image: mongo:5.0.10
     restart: always
+    networks:
+      shuttle-user-net:
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}

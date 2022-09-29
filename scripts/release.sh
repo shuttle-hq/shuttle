@@ -38,6 +38,25 @@ function update-examples-versions()
     git commit -am "docs: v$version"
 }
 
+function update-resources-versions()
+{
+    local version=$1
+
+    for d in resources/*/;
+    do
+        cd "$d"
+
+        if [[ -f Cargo.toml ]]
+        then
+            cargo add shuttle-service@$version
+        fi
+
+        cd ../../
+    done
+
+    git commit -am "chore: resources v$version"
+}
+
 function main()
 {
     version=$1
@@ -48,6 +67,7 @@ function main()
     git checkout -b "chore/v$version"
 
     update-cargo-versions $version
+    update-resources-versions $version
     update-examples-versions $version
 
     echo "Success!! You can now merge this branch"

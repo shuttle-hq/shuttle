@@ -123,7 +123,7 @@ jobs:
       - run: |
           cargo clippy --tests \
                        --all-targets \
-                       --features="codegen,loader,persist,sqlx-integration,sqlx-postgres,sqlx-aws-postgres,mongodb-integration,secrets,<< parameters.framework >>" \
+                       --features="codegen,loader,<< parameters.framework >>" \
                        --no-deps -- \
                        --D warnings \
                        -A clippy::let-unit-value \
@@ -150,6 +150,7 @@ jobs:
                        --D warnings \
                        -A clippy::let-unit-value \
                        -A clippy::format-push-string
+      - run: cargo test --all-features
       - save-cargo-cache
   service-test:
     # Using an image since tests will start a docker container
@@ -261,6 +262,11 @@ workflows:
                 - examples/tide/hello-world
                 - examples/tide/postgres
                 - examples/tower/hello-world
+
+                - resources/aws-rds
+                - resources/persist
+                - resources/secrets
+                - resources/shared-db
       - service-test:
           requires:
             - workspace-clippy

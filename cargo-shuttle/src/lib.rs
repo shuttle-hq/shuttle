@@ -23,7 +23,7 @@ use config::RequestContext;
 use crossterm::style::Stylize;
 use factory::LocalFactory;
 use futures::StreamExt;
-use shuttle_common::{models::deployment, secret};
+use shuttle_common::models::{deployment, secret};
 use shuttle_service::loader::{build_crate, Loader};
 use shuttle_service::Logger;
 use tokio::sync::mpsc;
@@ -209,7 +209,7 @@ impl Shuttle {
 
             while let Some(Ok(msg)) = stream.next().await {
                 if let tokio_tungstenite::tungstenite::Message::Text(line) = msg {
-                    let log_item: shuttle_common::log::Item =
+                    let log_item: shuttle_common::LogItem =
                         serde_json::from_str(&line).expect("to parse log line");
                     println!("{log_item}")
                 }

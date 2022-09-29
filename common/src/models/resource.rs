@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::{database, DatabaseReadyInfo};
+use crate::{database, DatabaseReadyInfo, ResourceInfo};
 
 #[derive(Deserialize, Serialize)]
 pub struct Response {
@@ -17,12 +17,6 @@ pub struct Response {
 #[serde(rename_all = "lowercase")]
 pub enum Type {
     Database(database::Type),
-}
-
-/// Trait used to get information from all the resources we manage
-pub trait ResourceInfo {
-    /// String to connect to this resource from a public location
-    fn connection_string_public(&self) -> String;
 }
 
 impl Response {

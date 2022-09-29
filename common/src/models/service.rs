@@ -1,8 +1,5 @@
-use crate::{
-    models::deployment,
-    resource::{self, ResourceInfo},
-    secret,
-};
+use crate::models::{deployment, resource, secret};
+use crate::ResourceInfo;
 use comfy_table::{
     modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, Cell, CellAlignment, ContentArrangement,
     Table,

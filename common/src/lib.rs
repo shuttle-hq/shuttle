@@ -1,25 +1,13 @@
 pub mod database;
-#[cfg(feature = "log")]
-pub mod log;
 #[cfg(feature = "models")]
 pub mod models;
 pub mod project;
-pub mod resource;
-#[cfg(feature = "secret")]
-pub mod secret;
-#[cfg(feature = "service")]
-pub mod service;
 #[cfg(feature = "version")]
 pub mod version;
-#[cfg(feature = "log")]
-pub use log::Item as LogItem;
-
-use resource::ResourceInfo;
+#[cfg(feature = "models")]
+pub use models::log::{Item as LogItem, STATE_MESSAGE};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-
-#[cfg(feature = "log")]
-pub use crate::log::STATE_MESSAGE;
 
 #[cfg(debug_assertions)]
 pub const API_URL_DEFAULT: &str = "http://localhost:8001";
@@ -42,6 +30,12 @@ pub struct DatabaseReadyInfo {
     port: String,
     address_private: String,
     address_public: String,
+}
+
+/// Trait used to get information from all the resources we manage
+pub trait ResourceInfo {
+    /// String to connect to this resource from a public location
+    fn connection_string_public(&self) -> String;
 }
 
 impl ResourceInfo for DatabaseReadyInfo {

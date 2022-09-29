@@ -21,7 +21,8 @@
 
 use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
-use shuttle_common::{deployment, log::BuildLogStream, STATE_MESSAGE};
+use shuttle_common::models::{deployment, log::BuildLogStream};
+use shuttle_common::STATE_MESSAGE;
 use std::{net::SocketAddr, str::FromStr};
 use tracing::{error, field::Visit, span, warn, Metadata, Subscriber};
 use tracing_subscriber::Layer;

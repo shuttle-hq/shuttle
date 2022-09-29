@@ -30,7 +30,7 @@ pub struct Secret {
     pub last_update: DateTime<Utc>,
 }
 
-impl From<Secret> for shuttle_common::secret::Response {
+impl From<Secret> for shuttle_common::models::secret::Response {
     fn from(secret: Secret) -> Self {
         Self {
             key: secret.key,

@@ -23,9 +23,9 @@ pub struct Resource {
     pub data: serde_json::Value,
 }
 
-impl From<Resource> for shuttle_common::resource::Response {
+impl From<Resource> for shuttle_common::models::resource::Response {
     fn from(resource: Resource) -> Self {
-        shuttle_common::resource::Response {
+        shuttle_common::models::resource::Response {
             service_id: resource.service_id,
             r#type: resource.r#type.into(),
             data: resource.data,
@@ -38,7 +38,7 @@ pub enum Type {
     Database(DatabaseType),
 }
 
-impl From<Type> for shuttle_common::resource::Type {
+impl From<Type> for shuttle_common::models::resource::Type {
     fn from(r#type: Type) -> Self {
         match r#type {
             Type::Database(r#type) => Self::Database(r#type.into()),

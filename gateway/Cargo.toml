@@ -34,7 +34,6 @@ tracing-subscriber = { version = "0.3.11", features = ["env-filter"] }
 
 [dependencies.shuttle-common]
 version = "0.5.2"
-features = ["full"]
 path = "../common"
 
 [dev-dependencies]

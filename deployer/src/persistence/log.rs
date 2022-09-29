@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde_json::Value;
-use shuttle_common::{deployment, log::BuildLogStream, STATE_MESSAGE};
+use shuttle_common::models::{deployment, log::BuildLogStream};
+use shuttle_common::STATE_MESSAGE;
 use uuid::Uuid;
 
 use super::{deploy_layer::extract_message, State};
@@ -78,7 +79,7 @@ impl From<Log> for shuttle_common::LogItem {
     }
 }
 
-impl From<Level> for shuttle_common::log::Level {
+impl From<Level> for shuttle_common::models::log::Level {
     fn from(level: Level) -> Self {
         match level {
             Level::Trace => Self::Trace,

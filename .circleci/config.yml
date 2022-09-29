@@ -85,9 +85,9 @@ commands:
             cat\<< EOF > ~/.cargo/config.toml
             [patch.crates-io]
             shuttle-service = { path = "$PWD/service" }
-            shuttle-aws-rds = { path = "$PWD/services/aws-rds" }
-            shuttle-shared-db = { path = "$PWD/services/shared-db" }
-            shuttle-secrets = { path = "$PWD/services/secrets" }
+            shuttle-aws-rds = { path = "$PWD/resources/aws-rds" }
+            shuttle-shared-db = { path = "$PWD/resources/shared-db" }
+            shuttle-secrets = { path = "$PWD/resources/secrets" }
             EOF
   install-rust:
     steps:

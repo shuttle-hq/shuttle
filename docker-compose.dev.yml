@@ -18,9 +18,9 @@ services:
         cat<<EOF > $$CARGO_HOME/config.toml
         [patch.crates-io]
         shuttle-service = { path = "/usr/src/shuttle/service" }
-        shuttle-aws-rds = { path = "/usr/src/shuttle/services/aws-rds" }
-        shuttle-shared-db = { path = "/usr/src/shuttle/services/shared-db" }
-        shuttle-secrets = { path = "/usr/src/shuttle/services/secrets" }
+        shuttle-aws-rds = { path = "/usr/src/shuttle/resources/aws-rds" }
+        shuttle-shared-db = { path = "/usr/src/shuttle/resources/shared-db" }
+        shuttle-secrets = { path = "/usr/src/shuttle/resources/secrets" }
         EOF
 
         until </dev/tcp/provisioner/8000

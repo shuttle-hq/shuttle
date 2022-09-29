@@ -10,5 +10,5 @@ crate-type = ["cdylib"]
 
 [dependencies]
 shuttle-service = { path = "../../../", features = ["sqlx-postgres"] }
-shuttle-shared-db = { path = "../../../../services/shared-db", features = ["postgres"] }
+shuttle-shared-db = { path = "../../../../resources/shared-db", features = ["postgres"] }
 sqlx = { version = "0.6", features = [ "runtime-tokio-native-tls" ] }

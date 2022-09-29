@@ -1,10 +1,10 @@
 #![doc(
-    html_logo_url = "https://raw.githubusercontent.com/getsynth/shuttle/main/resources/logo-square-transparent.png",
-    html_favicon_url = "https://raw.githubusercontent.com/getsynth/shuttle/main/resources/favicon.ico"
+    html_logo_url = "https://raw.githubusercontent.com/getsynth/shuttle/main/assets/logo-square-transparent.png",
+    html_favicon_url = "https://raw.githubusercontent.com/getsynth/shuttle/main/assets/favicon.ico"
 )]
 //! # Shuttle - Deploy Rust apps with a single Cargo subcommand
 //! <div style="display: flex; margin-top: 30px; margin-bottom: 30px;">
-//! <img src="https://raw.githubusercontent.com/getsynth/shuttle/main/resources/logo-rectangle-transparent.png" width="400px" style="margin-left: auto; margin-right: auto;"/>
+//! <img src="https://raw.githubusercontent.com/getsynth/shuttle/main/assets/logo-rectangle-transparent.png" width="400px" style="margin-left: auto; margin-right: auto;"/>
 //! </div>
 //!
 //! Hello, and welcome to the <span style="font-family: Sans-Serif;"><a href="https://shuttle.rs">shuttle</a></span> API documentation!
@@ -136,7 +136,7 @@
 //!
 //! For deploys, shuttle will provision a database for your application and connect it to the `PgPool` on your behalf.
 //!
-//! To learn more about shuttle managed services, see [shuttle_service::main][main#getting-shuttle-managed-services].
+//! To learn more about shuttle managed resources, see [shuttle_service::main][main#getting-shuttle-managed-resources].
 //!
 //! ## Configuration
 //!
@@ -228,7 +228,7 @@ extern crate shuttle_codegen;
 #[cfg(feature = "codegen")]
 /// Helper macro that generates the entrypoint required by any service - likely the only macro you need in this crate.
 ///
-/// # Without shuttle managed services
+/// # Without shuttle managed resources
 /// The simplest usage is when your service does not require any shuttle managed resources, so you only need to return a shuttle supported service:
 ///
 /// ```rust,no_run
@@ -256,8 +256,8 @@ extern crate shuttle_codegen;
 /// | `Result<T, shuttle_service::Error>`   | web-tower    | [tower](https://docs.rs/tower/0.4.12)       | 0.14.12    | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/tower/hello-world)    |
 /// | `ShuttleSerenity`                     | bot-serenity | [serenity](https://docs.rs/serenity/0.11.5) | 0.11.5     | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/serenity/hello-world) |
 ///
-/// # Getting shuttle managed services
-/// Shuttle is able to manage service dependencies for you. These services are passed in as inputs to your `#[shuttle_service::main]` function and are configured using attributes:
+/// # Getting shuttle managed resources
+/// Shuttle is able to manage resource dependencies for you. These resources are passed in as inputs to your `#[shuttle_service::main]` function and are configured using attributes:
 /// ```rust,no_run
 /// use sqlx::PgPool;
 /// use shuttle_service::ShuttleRocket;
@@ -273,8 +273,8 @@ extern crate shuttle_codegen;
 /// }
 /// ```
 ///
-/// ## shuttle managed dependencies
-/// The following dependencies can be managed by shuttle - remember to enable their feature flags for the `shuttle-service` dependency in `Cargo.toml` and configure them using an attribute annotation:
+/// ## shuttle managed resources
+/// The following resources can be managed by shuttle - remember to enable their feature flags for the `shuttle-service` dependency in `Cargo.toml` and configure them using an attribute annotation:
 ///
 
 /// | Argument type                                                            | Feature flag        | Attribute            | Dependency                                                                                         | Example                                                                          |
@@ -284,7 +284,6 @@ extern crate shuttle_codegen;
 /// | [`MySqlPool`](https://docs.rs/sqlx/latest/sqlx/type.MySqlPool.html)      | sqlx-aws-mariadb    | `aws::rds::MariaDB`  | An AWS RDS MariaDB instance tied to your instance and accessed using [sqlx](https://docs.rs/sqlx)  |                                                                                  |
 /// | [`MySqlPool`](https://docs.rs/sqlx/latest/sqlx/type.MySqlPool.html)      | sqlx-aws-mysql      | `aws::rds::MySql`    | An AWS RDS MySql instance tied to your instance and accessed using [sqlx](https://docs.rs/sqlx)    |                                                                                  |
 /// | [`PgPool`](https://docs.rs/sqlx/latest/sqlx/type.PgPool.html)            | sqlx-aws-postgres   | `aws::rds::Postgres` | An AWS RDS Postgres instance tied to your instance and accessed using [sqlx](https://docs.rs/sqlx) | [GitHub](https://github.com/getsynth/shuttle/tree/main/examples/tide/postgres)   |
-
 pub use shuttle_codegen::main;
 use tokio::task::JoinHandle;
 

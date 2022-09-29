@@ -1,5 +1,5 @@
 <p align="center">
-<img width="300" src="https://raw.githubusercontent.com/getsynth/shuttle/master/resources/logo-rectangle-transparent.png"/>
+<img width="300" src="https://raw.githubusercontent.com/getsynth/shuttle/master/assets/logo-rectangle-transparent.png"/>
 </p>
 <br>
 <p align=center>

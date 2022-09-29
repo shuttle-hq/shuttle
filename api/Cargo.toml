@@ -45,7 +45,7 @@ path = "../proto"
 
 [dependencies.shuttle-secrets]
 version = "0.5.2"
-path = "../services/secrets"
+path = "../resources/secrets"
 
 [dependencies.shuttle-service]
 version = "0.5.2"

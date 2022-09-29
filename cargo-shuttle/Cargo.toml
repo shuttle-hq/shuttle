@@ -48,7 +48,7 @@ features = ["loader"]
 
 [dependencies.shuttle-secrets]
 version = "0.5.2"
-path = "../services/secrets"
+path = "../resources/secrets"
 
 [dev-dependencies]
 tempfile = "3.3.0"

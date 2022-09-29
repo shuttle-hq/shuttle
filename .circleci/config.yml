@@ -138,6 +138,7 @@ jobs:
     steps:
       - checkout
       - restore-cargo-cache
+      - run: sudo apt install -y protobuf-compiler
       - apply-patches
       - run: cargo fmt --all --check --manifest-path << parameters.path >>/Cargo.toml
       - run: cargo install cargo-sort

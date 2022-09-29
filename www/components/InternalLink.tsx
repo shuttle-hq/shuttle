@@ -1,10 +1,5 @@
 import Link, { LinkProps } from "next/link";
 import { useRouter } from "next/router";
-import mixpanel from "mixpanel-browser";
-
-interface Props {
-  readonly mixpanelEvent?: string;
-}
 
 export default function InternalLink({
   href,
@@ -15,9 +10,8 @@ export default function InternalLink({
   passHref,
   prefetch,
   locale,
-  mixpanelEvent,
   ...props
-}: JSX.IntrinsicElements["a"] & LinkProps & Props): JSX.Element {
+}: JSX.IntrinsicElements["a"] & LinkProps): JSX.Element {
   const router = useRouter();
 
   if (!href) {
@@ -38,8 +32,6 @@ export default function InternalLink({
       <a
         {...props}
         onClick={(e) => {
-          mixpanelEvent && mixpanel.track(mixpanelEvent);
-
           if (router.pathname === href) {
             e.preventDefault();
 

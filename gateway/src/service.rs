@@ -21,7 +21,7 @@ use tokio::sync::mpsc::Sender;
 use tokio::sync::Mutex;
 use tracing::{debug, error};
 
-use crate::args::StartCommand;
+use crate::args::StartArgs;
 use crate::auth::{Key, User};
 use crate::project::{self, Project};
 use crate::worker::Work;
@@ -56,8 +56,8 @@ impl<'d> ContainerSettingsBuilder<'d> {
         }
     }
 
-    pub async fn from_args(self, args: &StartCommand) -> ContainerSettings {
-        let StartCommand {
+    pub async fn from_args(self, args: &StartArgs) -> ContainerSettings {
+        let StartArgs {
             prefix,
             network_name,
             provisioner_host,
@@ -179,7 +179,7 @@ impl GatewayService {
     ///
     /// * `args` - The [`Args`] with which the service was
     /// started. Will be passed as [`Context`] to workers and state.
-    pub async fn init(args: StartCommand, db: SqlitePool) -> Self {
+    pub async fn init(args: StartArgs, db: SqlitePool) -> Self {
         let docker = Docker::connect_with_local_defaults().unwrap();
 
         let container_settings = ContainerSettings::builder(&docker).from_args(&args).await;

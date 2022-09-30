@@ -5,7 +5,7 @@ use shuttle_gateway::auth::Key;
 use shuttle_gateway::proxy::make_proxy;
 use shuttle_gateway::service::GatewayService;
 use shuttle_gateway::worker::Worker;
-use shuttle_gateway::{api::make_api, args::StartCommand};
+use shuttle_gateway::{api::make_api, args::StartArgs};
 use sqlx::migrate::{MigrateDatabase, Migrator};
 use sqlx::{query, Sqlite, SqlitePool};
 use std::io;
@@ -58,7 +58,7 @@ async fn main() -> io::Result<()> {
     }
 }
 
-async fn start(db: SqlitePool, args: StartCommand) -> io::Result<()> {
+async fn start(db: SqlitePool, args: StartArgs) -> io::Result<()> {
     let gateway = Arc::new(GatewayService::init(args.clone(), db).await);
 
     let worker = Worker::new(Arc::clone(&gateway));

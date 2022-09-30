@@ -16,12 +16,12 @@ pub struct Args {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    Start(StartCommand),
+    Start(StartArgs),
     Init(InitArgs),
 }
 
 #[derive(clap::Args, Debug, Clone)]
-pub struct StartCommand {
+pub struct StartArgs {
     /// Address to bind the control plane to
     #[arg(long, default_value = "127.0.0.1:8001")]
     pub control: SocketAddr,

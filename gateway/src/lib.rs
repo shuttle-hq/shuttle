@@ -323,17 +323,17 @@ pub mod tests {
     use hyper::http::Uri;
     use hyper::{Body, Client as HyperClient, Request, Response, StatusCode};
     use rand::distributions::{Alphanumeric, DistString, Distribution, Uniform};
-    use shuttle_common::{DeploymentMeta, DeploymentStateMeta};
-    use tempfile::NamedTempFile;
+    use shuttle_common::service;
+    use sqlx::SqlitePool;
     use tokio::sync::mpsc::channel;
     use tracing::info;
 
     use crate::api::make_api;
-    use crate::args::Args;
+    use crate::args::StartArgs;
     use crate::auth::User;
     use crate::project::Project;
     use crate::proxy::make_proxy;
-    use crate::service::{ContainerSettings, GatewayService};
+    use crate::service::{ContainerSettings, GatewayService, MIGRATIONS};
     use crate::worker::Worker;
     use crate::{Context, EndState};
 
@@ -523,11 +523,11 @@ pub mod tests {
     }
 
     pub struct World {
-        _state: NamedTempFile,
         docker: Docker,
         settings: ContainerSettings,
-        args: Args,
+        args: StartArgs,
         hyper: HyperClient<HttpConnector, Body>,
+        pool: SqlitePool,
     }
 
     #[derive(Clone, Copy)]
@@ -539,7 +539,7 @@ pub mod tests {
 
     impl World {
         pub async fn new() -> Self {
-            let docker = Docker::connect_with_http_defaults().unwrap();
+            let docker = Docker::connect_with_local_defaults().unwrap();
 
             docker
                 .list_images::<&str>(None)
@@ -565,33 +565,37 @@ pub mod tests {
 
             let provisioner_host = "provisioner".to_string();
 
-            let state = NamedTempFile::new().unwrap();
-
-            let args = Args {
+            let args = StartArgs {
                 control,
                 user,
                 image,
                 prefix,
                 provisioner_host,
                 network_name,
-                state: state.path().to_str().unwrap().to_string(),
             };
 
             let settings = ContainerSettings::builder(&docker).from_args(&args).await;
 
             let hyper = HyperClient::builder().build(HttpConnector::new());
 
+            let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+            MIGRATIONS.run(&pool).await.unwrap();
+
             Self {
-                _state: state,
                 docker,
                 settings,
                 args,
                 hyper,
+                pool,
             }
         }
 
-        pub fn args(&self) -> Args {
+        pub fn args(&self) -> StartArgs {
             self.args.clone()
+        }
+
+        pub fn pool(&self) -> SqlitePool {
+            self.pool.clone()
         }
 
         pub fn client<A: Into<SocketAddr>>(&self, addr: A) -> Client {
@@ -622,7 +626,7 @@ pub mod tests {
     #[tokio::test]
     async fn end_to_end() {
         let world = World::new().await;
-        let service = Arc::new(GatewayService::init(world.args()).await);
+        let service = Arc::new(GatewayService::init(world.args(), world.pool()).await);
         let worker = Worker::new(Arc::clone(&service));
 
         let (log_out, mut log_in) = channel(256);
@@ -747,9 +751,9 @@ pub mod tests {
             .unwrap();
 
         timed_loop!(wait: 1, max: 600, {
-            let meta: DeploymentMeta = api_client
+            let service: service::Summary = api_client
                 .request(
-                    Request::get("/projects/matrix/projects/matrix")
+                    Request::get("/projects/matrix/projects/matrix/summary")
                         .with_header(&authorization)
                         .body(Body::empty())
                         .unwrap(),
@@ -760,7 +764,7 @@ pub mod tests {
                 })
                 .await
                 .unwrap();
-            if matches!(meta.state, DeploymentStateMeta::Deployed) {
+            if service.deployment.is_some() {
                 break;
             }
         });

@@ -738,7 +738,7 @@ pub mod tests {
                 let mut data = Vec::new();
                 let mut f = std::fs::File::open("tests/hello_world.crate").unwrap();
                 f.read_to_end(&mut data).unwrap();
-                Request::post("/projects/matrix/projects/matrix")
+                Request::post("/projects/matrix/services/matrix")
                     .with_header(&authorization)
                     .body(Body::from(data))
                     .unwrap()
@@ -750,7 +750,7 @@ pub mod tests {
         timed_loop!(wait: 1, max: 600, {
             let service: service::Summary = api_client
                 .request(
-                    Request::get("/projects/matrix/projects/matrix/summary")
+                    Request::get("/projects/matrix/services/matrix/summary")
                         .with_header(&authorization)
                         .body(Body::empty())
                         .unwrap(),

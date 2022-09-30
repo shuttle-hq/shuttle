@@ -223,14 +223,14 @@ pub mod tests {
 
         router
             .call(get_project("reloaded").with_header(&authorization))
-            .map_ok(|resp| assert_eq!(resp.status(), StatusCode::FORBIDDEN))
+            .map_ok(|resp| assert_eq!(resp.status(), StatusCode::NOT_FOUND))
             .await
             .unwrap();
 
         router
             .call(delete_project("reloaded").with_header(&authorization))
             .map_ok(|resp| {
-                assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+                assert_eq!(resp.status(), StatusCode::NOT_FOUND);
             })
             .await
             .unwrap();

@@ -363,7 +363,7 @@ impl ProjectCreating {
             "Healthcheck": {
                 "Interval": 5_000_000_000i64,
                 "Timeout": 5_000_000_000i64,
-                "Test": ["CMD", "curl", "localhost:8001/status"],
+                "Test": ["CMD", "curl", format!("localhost:8001/projects/{project_name}/status")],
             },
         });
 
@@ -779,7 +779,11 @@ pub mod tests {
         let client = world.client(target_addr);
 
         client
-            .request(Request::get("/status").body(Body::empty()).unwrap())
+            .request(
+                Request::get("/projects/my-project-test/status")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .map_ok(|resp| assert_eq!(resp.status(), StatusCode::OK))
             .await
             .unwrap();

@@ -1,10 +1,9 @@
 version: "3"
 volumes:
-  shuttle-gateway-vol:
-    name: shuttle-gateway-vol
+  gateway-vol:
+  postgres-vol:
 networks:
-  shuttle-user-net:
-    name: shuttle-user-net
+  user-net:
 services:
   gateway:
     image: "${CONTAINER_REGISTRY}/gateway:${BACKEND_TAG}"
@@ -22,9 +21,9 @@ services:
         constraints:
           - node.hostname==controller
     networks:
-      shuttle-user-net:
+      user-net:
     volumes:
-      - shuttle-gateway-vol:/var/lib/shuttle
+      - gateway-vol:/var/lib/shuttle
       # This image needs to run highly privileged in order to
       # orchestrate user runtimes safely
       - /var/run/docker.sock:/var/run/docker.sock
@@ -35,33 +34,43 @@ services:
       - "--user=0.0.0.0:8000"
       - "--image=${CONTAINER_REGISTRY}/deployer:${BACKEND_TAG}"
       - "--prefix=shuttle_"
-      - "--network-name=shuttle-user-net"
+      - "--network-name=${STACK}_user-net"
       - "--provisioner-host=provisioner"
       - "--state=/var/lib/shuttle/gateway.sqlite"
   provisioner:
     image: "${CONTAINER_REGISTRY}/provisioner:${PROVISIONER_TAG}"
     depends_on:
-      - pg
+      - postgres
       - mongodb
     environment:
       - RUST_LOG=${RUST_LOG}
     networks:
-      shuttle-user-net:
+      user-net:
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      placement:
+        constraints:
+          - node.hostname==provisioner
     command:
       - "--ip=0.0.0.0"
       - "--port=8000"
-      - "--shared-pg-uri=postgres://postgres:${POSTGRES_PASSWORD}@pg:5432/postgres"
+      - "--shared-pg-uri=postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/postgres"
       - "--shared-mongodb-uri=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongodb:27017/admin"
       - "--internal-mongodb-address=mongodb"
-      - "--internal-pg-address=pg"
+      - "--internal-pg-address=postgres"
       - "--fqdn=${DB_FQDN}"
-  pg:
+  postgres:
     image: "${CONTAINER_REGISTRY}/postgres:${POSTGRES_TAG}"
     restart: always
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     networks:
-      shuttle-user-net:
+      user-net:
+    volumes:
+      - postgres-vol:/var/lib/postgresql/data
     ports:
       - 8002:8000
       - 5432:5432
@@ -73,7 +82,7 @@ services:
     image: mongo:5.0.10
     restart: always
     networks:
-      shuttle-user-net:
+      user-net:
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}

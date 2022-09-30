@@ -684,8 +684,11 @@ pub mod tests {
         update_project.await.unwrap();
 
         assert!(matches!(
-            svc.find_project(&matrix).await.unwrap(),
-            Project::Destroyed(_)
+            svc.find_project(&matrix).await,
+            Err(Error {
+                kind: ErrorKind::ProjectNotFound,
+                ..
+            })
         ));
 
         Ok(())

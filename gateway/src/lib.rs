@@ -323,7 +323,7 @@ pub mod tests {
     use hyper::http::Uri;
     use hyper::{Body, Client as HyperClient, Request, Response, StatusCode};
     use rand::distributions::{Alphanumeric, DistString, Distribution, Uniform};
-    use shuttle_common::service;
+    use shuttle_common::{project, service};
     use sqlx::SqlitePool;
     use tokio::sync::mpsc::channel;
     use tracing::info;
@@ -335,7 +335,7 @@ pub mod tests {
     use crate::proxy::make_proxy;
     use crate::service::{ContainerSettings, GatewayService, MIGRATIONS};
     use crate::worker::Worker;
-    use crate::{Context, EndState};
+    use crate::Context;
 
     macro_rules! value_block_helper {
         ($next:ident, $block:block) => {
@@ -558,7 +558,7 @@ pub mod tests {
             );
 
             let image = env::var("SHUTTLE_TESTS_RUNTIME_IMAGE")
-                .unwrap_or("public.ecr.aws/shuttle/backend:latest".to_string());
+                .unwrap_or("public.ecr.aws/shuttle/deployer:latest".to_string());
 
             let network_name =
                 env::var("SHUTTLE_TESTS_NETWORK").unwrap_or("shuttle_default".to_string());
@@ -700,7 +700,7 @@ pub mod tests {
             .unwrap();
 
         let _ = timed_loop!(wait: 1, max: 12, {
-            let project: Project = api_client
+            let project: project::Response = api_client
                 .request(
                     Request::get("/projects/matrix")
                         .with_header(&authorization)
@@ -714,11 +714,8 @@ pub mod tests {
                 .await
                 .unwrap();
 
-            // Equivalent to `::Ready(_)`
-            if let Some(target_ip) = project.target_addr().unwrap() {
-                break target_ip;
-            } else if project.is_done() {
-                panic!("project finished without providing an IP: {:#?}", project);
+            if project.state == project::State::Ready {
+                break;
             }
 
             tokio::time::sleep(Duration::from_secs(1)).await;

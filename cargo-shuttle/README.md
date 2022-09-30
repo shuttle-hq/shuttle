@@ -7,7 +7,7 @@
     <img alt="language" src="https://img.shields.io/badge/language-Rust-orange.svg">
   </a>
   <a href="https://github.com/shuttle-hq/shuttle/actions">
-    <img alt="build status" src="https://img.shields.io/github/workflow/status/getsynth/shuttle/cargo-test"/>
+    <img alt="build status" src="https://img.shields.io/github/workflow/status/shuttle-hq/shuttle/cargo-test"/>
   </a>
   <a href="https://discord.gg/H33rRDTm3p">
     <img alt="discord" src="https://img.shields.io/discord/803236282088161321?logo=discord"/>
@@ -93,7 +93,7 @@ $ cargo shuttle init --rocket my-rocket-app
 
 This should generate the following dependency in `Cargo.toml`:
 ```toml
-shuttle-service = { version = "0.5.1", features = ["web-rocket"] }
+shuttle-service = { version = "0.5.2", features = ["web-rocket"] }
 ```
 
 The following boilerplate code should be generated into `src/lib.rs`:

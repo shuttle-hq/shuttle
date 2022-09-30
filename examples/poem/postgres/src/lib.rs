@@ -7,8 +7,8 @@ use poem::{
     EndpointExt, Result, Route,
 };
 use serde::{Deserialize, Serialize};
+use shuttle_secrets::SecretStore;
 use shuttle_service::error::CustomError;
-use shuttle_service::SecretStore;
 use sqlx::{Executor, FromRow, PgPool};
 
 #[handler]
@@ -41,7 +41,7 @@ async fn secret(state: Data<&PgPool>) -> Result<String> {
 
 #[shuttle_service::main]
 async fn main(
-    #[shared::Postgres] pool: PgPool,
+    #[shuttle_shared_db::Postgres] pool: PgPool,
 ) -> shuttle_service::ShuttlePoem<impl poem::Endpoint> {
     pool.execute(include_str!("../schema.sql"))
         .await

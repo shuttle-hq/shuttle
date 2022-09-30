@@ -6,7 +6,7 @@ use rocket::serde::json::Json;
 use rocket::State;
 use serde::{Deserialize, Serialize};
 
-use shuttle_service::PersistInstance;
+use shuttle_persist::PersistInstance;
 
 #[derive(Serialize, Deserialize, Clone)]
 struct Weather {
@@ -51,7 +51,9 @@ async fn retrieve(
 }
 
 #[shuttle_service::main]
-async fn rocket(#[persist::Persist] persist: PersistInstance) -> shuttle_service::ShuttleRocket {
+async fn rocket(
+    #[shuttle_persist::Persist] persist: PersistInstance,
+) -> shuttle_service::ShuttleRocket {
     let state = MyState { persist };
     let rocket = rocket::build()
         .mount("/", routes![retrieve, add])

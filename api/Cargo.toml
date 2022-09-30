@@ -43,7 +43,11 @@ path = "../common"
 version = "0.5.2"
 path = "../proto"
 
+[dependencies.shuttle-secrets]
+version = "0.5.2"
+path = "../resources/secrets"
+
 [dependencies.shuttle-service]
 version = "0.5.2"
 path = "../service"
-features = ["loader", "secrets"]
+features = ["loader"]

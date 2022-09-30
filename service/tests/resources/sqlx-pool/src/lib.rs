@@ -7,7 +7,9 @@ struct PoolService {
 }
 
 #[shuttle_service::main]
-async fn init(#[shared::Postgres] pool: PgPool) -> Result<PoolService, shuttle_service::Error> {
+async fn init(
+    #[shuttle_shared_db::Postgres] pool: PgPool,
+) -> Result<PoolService, shuttle_service::Error> {
     Ok(PoolService { pool })
 }
 

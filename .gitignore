@@ -18,7 +18,7 @@ Cargo.lock
 .DS_Store
 
 # Terraform
-**/secret*
+**/secrets.tfvar
 **/.terraform*
 
 e2e/users.toml

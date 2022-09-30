@@ -2,6 +2,8 @@ use std::net::SocketAddr;
 
 use clap::{Parser, Subcommand};
 
+use crate::auth::Key;
+
 #[derive(Parser, Debug)]
 pub struct Args {
     /// Uri to the `.sqlite` file used to store state
@@ -15,6 +17,7 @@ pub struct Args {
 #[derive(Subcommand, Debug)]
 pub enum Commands {
     Start(StartCommand),
+    Init(InitArgs),
 }
 
 #[derive(clap::Args, Debug, Clone)]
@@ -39,4 +42,14 @@ pub struct StartCommand {
     /// The Docker Network name in which to deploy user runtimes
     #[clap(long, default_value = "shuttle_default")]
     pub network_name: String,
+}
+
+#[derive(clap::Args, Debug, Clone)]
+pub struct InitArgs {
+    /// Name of initial account to create
+    #[clap(long)]
+    pub name: String,
+    /// Key to assign to initial account
+    #[clap(long)]
+    pub key: Option<Key>,
 }

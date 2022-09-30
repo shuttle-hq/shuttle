@@ -71,7 +71,7 @@ postgres:
 	       $(POSTGRES_EXTRA_PATH)
 
 docker-compose.rendered.yml: docker-compose.yml docker-compose.dev.yml
-	$(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE) $(DOCKER_COMPOSE_FILES) config --no-normalize > $@
+	$(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE) $(DOCKER_COMPOSE_FILES) -p $(STACK) config > $@
 
 deploy: docker-compose.yml
 	$(DOCKER_COMPOSE_ENV) docker stack deploy -c $< $(STACK)
@@ -80,10 +80,10 @@ test:
 	cd e2e; POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) APPS_FQDN=$(APPS_FQDN) cargo test $(CARGO_TEST_FLAGS) -- --nocapture
 
 up: docker-compose.rendered.yml images
-	CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) $(DOCKER_COMPOSE) -f $< up -d
+	CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) $(DOCKER_COMPOSE) -f $< -p $(STACK) up -d
 
 down: docker-compose.rendered.yml
-	CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) $(DOCKER_COMPOSE) -f $^ down
+	CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) $(DOCKER_COMPOSE) -f $< -p $(STACK) down
 
 shuttle-%: ${SRC} Cargo.lock
 	docker buildx build \

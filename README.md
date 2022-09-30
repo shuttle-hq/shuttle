@@ -21,7 +21,7 @@
 
 # shuttle
 
-[Shuttle](https://www.shuttle.rs/) is Rust-native cloud development platform that lets you deploy your Rust apps for free.
+[Shuttle](https://www.shuttle.rs/) is a Rust-native cloud development platform that lets you deploy your Rust apps for free.
 
 Shuttle is built for productivity, reliability and performance:
 - Zero-Configuration support for Rust using annotations

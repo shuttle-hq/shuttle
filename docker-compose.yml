@@ -30,13 +30,14 @@ services:
     environment:
       - RUST_LOG=${RUST_LOG}
     command:
+      - "--state=/var/lib/shuttle/gateway.sqlite"
+      - "start"
       - "--control=0.0.0.0:8001"
       - "--user=0.0.0.0:8000"
       - "--image=${CONTAINER_REGISTRY}/deployer:${BACKEND_TAG}"
       - "--prefix=shuttle_"
       - "--network-name=${STACK}_user-net"
       - "--provisioner-host=provisioner"
-      - "--state=/var/lib/shuttle/gateway.sqlite"
   provisioner:
     image: "${CONTAINER_REGISTRY}/provisioner:${PROVISIONER_TAG}"
     depends_on:

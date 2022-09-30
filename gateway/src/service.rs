@@ -318,11 +318,16 @@ impl GatewayService {
         project_name: &ProjectName,
         project: &Project,
     ) -> Result<(), Error> {
-        query("UPDATE projects SET project_state = ?1 WHERE project_name = ?2")
-            .bind(&SqlxJson(project))
-            .bind(project_name)
-            .execute(&self.db)
-            .await?;
+        let query = match project {
+            Project::Destroyed(_) => {
+                query("DELETE FROM projects WHERE project_name = ?1").bind(project_name)
+            }
+            _ => query("UPDATE projects SET project_state = ?1 WHERE project_name = ?2")
+                .bind(SqlxJson(project))
+                .bind(project_name),
+        };
+
+        query.execute(&self.db).await?;
         Ok(())
     }
 

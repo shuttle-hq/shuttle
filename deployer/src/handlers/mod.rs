@@ -60,7 +60,7 @@ pub fn make_router(
         .layer(Extension(proxy_fqdn))
         .layer(RequireAuthorizationLayer::bearer(&admin_secret))
         // This route should be below the auth bearer since it does not need authentication
-        .route("/status", get(get_status))
+        .route("/projects/:project_name/status", get(get_status))
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(|request: &Request<Body>| {

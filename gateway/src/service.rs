@@ -14,6 +14,7 @@ use hyper_reverse_proxy::ReverseProxy;
 use once_cell::sync::Lazy;
 use rand::distributions::{Alphanumeric, DistString};
 use sqlx::error::DatabaseError;
+use sqlx::migrate::Migrator;
 use sqlx::sqlite::SqlitePool;
 use sqlx::types::Json as SqlxJson;
 use sqlx::{query, Error as SqlxError, Row};
@@ -27,6 +28,7 @@ use crate::project::{self, Project};
 use crate::worker::Work;
 use crate::{AccountName, Context, Error, ErrorKind, ProjectName, Refresh, Service};
 
+pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
     Lazy::new(|| ReverseProxy::new(Client::new()));
 
@@ -318,11 +320,16 @@ impl GatewayService {
         project_name: &ProjectName,
         project: &Project,
     ) -> Result<(), Error> {
-        query("UPDATE projects SET project_state = ?1 WHERE project_name = ?2")
-            .bind(&SqlxJson(project))
-            .bind(project_name)
-            .execute(&self.db)
-            .await?;
+        let query = match project {
+            Project::Destroyed(_) => {
+                query("DELETE FROM projects WHERE project_name = ?1").bind(project_name)
+            }
+            _ => query("UPDATE projects SET project_state = ?1 WHERE project_name = ?2")
+                .bind(SqlxJson(project))
+                .bind(project_name),
+        };
+
+        query.execute(&self.db).await?;
         Ok(())
     }
 
@@ -554,7 +561,7 @@ pub mod tests {
     #[tokio::test]
     async fn service_create_find_user() -> anyhow::Result<()> {
         let world = World::new().await;
-        let svc = GatewayService::init(world.args()).await;
+        let svc = GatewayService::init(world.args(), world.pool()).await;
 
         let account_name: AccountName = "test_user_123".parse()?;
 
@@ -621,7 +628,7 @@ pub mod tests {
     #[tokio::test]
     async fn service_create_find_delete_project() -> anyhow::Result<()> {
         let world = World::new().await;
-        let svc = Arc::new(GatewayService::init(world.args()).await);
+        let svc = Arc::new(GatewayService::init(world.args(), world.pool()).await);
 
         let neo: AccountName = "neo".parse().unwrap();
         let matrix: ProjectName = "matrix".parse().unwrap();
@@ -677,8 +684,11 @@ pub mod tests {
         update_project.await.unwrap();
 
         assert!(matches!(
-            svc.find_project(&matrix).await.unwrap(),
-            Project::Destroyed(_)
+            svc.find_project(&matrix).await,
+            Err(Error {
+                kind: ErrorKind::ProjectNotFound,
+                ..
+            })
         ));
 
         Ok(())

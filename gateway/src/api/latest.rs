@@ -123,7 +123,7 @@ pub mod tests {
     #[tokio::test]
     async fn api_create_get_delete_projects() -> anyhow::Result<()> {
         let world = World::new().await;
-        let service = Arc::new(GatewayService::init(world.args()).await);
+        let service = Arc::new(GatewayService::init(world.args(), world.pool()).await);
 
         let (sender, mut receiver) = channel::<Work>(256);
         tokio::spawn(async move {
@@ -223,14 +223,14 @@ pub mod tests {
 
         router
             .call(get_project("reloaded").with_header(&authorization))
-            .map_ok(|resp| assert_eq!(resp.status(), StatusCode::FORBIDDEN))
+            .map_ok(|resp| assert_eq!(resp.status(), StatusCode::NOT_FOUND))
             .await
             .unwrap();
 
         router
             .call(delete_project("reloaded").with_header(&authorization))
             .map_ok(|resp| {
-                assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+                assert_eq!(resp.status(), StatusCode::NOT_FOUND);
             })
             .await
             .unwrap();
@@ -259,7 +259,7 @@ pub mod tests {
     #[tokio::test]
     async fn api_create_get_users() -> anyhow::Result<()> {
         let world = World::new().await;
-        let service = Arc::new(GatewayService::init(world.args()).await);
+        let service = Arc::new(GatewayService::init(world.args(), world.pool()).await);
 
         let mut router = make_api(Arc::clone(&service));
 

@@ -132,7 +132,7 @@ pub struct Response {
     pub state: State,
 }
 
-#[derive(Clone, Debug, Deserialize, Display, Serialize)]
+#[derive(Clone, Debug, Deserialize, Display, Serialize, Eq, PartialEq)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum State {

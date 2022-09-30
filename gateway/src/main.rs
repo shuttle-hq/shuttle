@@ -1,10 +1,10 @@
 use clap::Parser;
 use futures::prelude::*;
-use shuttle_gateway::api::make_api;
-use shuttle_gateway::args::Args;
+use shuttle_gateway::args::{Args, Commands};
 use shuttle_gateway::proxy::make_proxy;
 use shuttle_gateway::service::GatewayService;
 use shuttle_gateway::worker::Worker;
+use shuttle_gateway::{api::make_api, args::StartCommand};
 use std::io;
 use std::sync::Arc;
 use tracing::{error, info, trace};
@@ -32,7 +32,13 @@ async fn main() -> io::Result<()> {
         .with(opentelemetry)
         .init();
 
-    let gateway = Arc::new(GatewayService::init(args.clone()).await);
+    match args.command {
+        Commands::Start(start_args) => start(&args.state, start_args).await,
+    }
+}
+
+async fn start(state: &str, args: StartCommand) -> io::Result<()> {
+    let gateway = Arc::new(GatewayService::init(args.clone(), state).await);
 
     let worker = Worker::new(Arc::clone(&gateway));
     gateway.set_sender(Some(worker.sender())).await.unwrap();

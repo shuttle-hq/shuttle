@@ -1,9 +1,24 @@
 use std::net::SocketAddr;
 
-use clap::Parser;
+use clap::{Parser, Subcommand};
 
-#[derive(Parser, Debug, Clone)]
+#[derive(Parser, Debug)]
 pub struct Args {
+    /// Uri to the `.sqlite` file used to store state
+    #[clap(long, default_value = "./gateway.sqlite")]
+    pub state: String,
+
+    #[command(subcommand)]
+    pub command: Commands,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum Commands {
+    Start(StartCommand),
+}
+
+#[derive(clap::Args, Debug, Clone)]
+pub struct StartCommand {
     /// Address to bind the control plane to
     #[clap(long, default_value = "127.0.0.1:8001")]
     pub control: SocketAddr,
@@ -24,7 +39,4 @@ pub struct Args {
     /// The Docker Network name in which to deploy user runtimes
     #[clap(long, default_value = "shuttle_default")]
     pub network_name: String,
-    /// Uri to the `.sqlite` file used to store state
-    #[clap(long, default_value = "./gateway.sqlite")]
-    pub state: String,
 }

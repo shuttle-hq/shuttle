@@ -23,7 +23,7 @@ use tokio::sync::mpsc::Sender;
 use tokio::sync::Mutex;
 use tracing::{debug, error, info};
 
-use crate::args::Args;
+use crate::args::StartCommand;
 use crate::auth::{Key, User};
 use crate::project::{self, Project};
 use crate::worker::Work;
@@ -59,8 +59,8 @@ impl<'d> ContainerSettingsBuilder<'d> {
         }
     }
 
-    pub async fn from_args(self, args: &Args) -> ContainerSettings {
-        let Args {
+    pub async fn from_args(self, args: &StartCommand) -> ContainerSettings {
+        let StartCommand {
             prefix,
             network_name,
             provisioner_host,
@@ -182,16 +182,14 @@ impl GatewayService {
     ///
     /// * `args` - The [`Args`] with which the service was
     /// started. Will be passed as [`Context`] to workers and state.
-    pub async fn init(args: Args) -> Self {
+    pub async fn init(args: StartCommand, state: &str) -> Self {
         let docker = Docker::connect_with_local_defaults().unwrap();
 
         let container_settings = ContainerSettings::builder(&docker).from_args(&args).await;
 
         let provider = GatewayContextProvider::new(docker, container_settings);
 
-        let state = args.state;
-
-        if !StdPath::new(&state).exists() {
+        if !StdPath::new(state).exists() {
             Sqlite::create_database(&state).await.unwrap();
         }
 

@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::path::Path as StdPath;
 use std::sync::Arc;
 
 use axum::body::Body;
@@ -15,15 +14,14 @@ use hyper_reverse_proxy::ReverseProxy;
 use once_cell::sync::Lazy;
 use rand::distributions::{Alphanumeric, DistString};
 use sqlx::error::DatabaseError;
-use sqlx::migrate::{MigrateDatabase, Migrator};
-use sqlx::sqlite::{Sqlite, SqlitePool};
+use sqlx::sqlite::SqlitePool;
 use sqlx::types::Json as SqlxJson;
 use sqlx::{query, Error as SqlxError, Row};
 use tokio::sync::mpsc::Sender;
 use tokio::sync::Mutex;
-use tracing::{debug, error, info};
+use tracing::{debug, error};
 
-use crate::args::Args;
+use crate::args::StartArgs;
 use crate::auth::{Key, User};
 use crate::project::{self, Project};
 use crate::worker::Work;
@@ -31,7 +29,6 @@ use crate::{AccountName, Context, Error, ErrorKind, ProjectName, Refresh, Servic
 
 static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
     Lazy::new(|| ReverseProxy::new(Client::new()));
-static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
 impl From<SqlxError> for Error {
     fn from(err: SqlxError) -> Self {
@@ -59,8 +56,8 @@ impl<'d> ContainerSettingsBuilder<'d> {
         }
     }
 
-    pub async fn from_args(self, args: &Args) -> ContainerSettings {
-        let Args {
+    pub async fn from_args(self, args: &StartArgs) -> ContainerSettings {
+        let StartArgs {
             prefix,
             network_name,
             provisioner_host,
@@ -182,26 +179,12 @@ impl GatewayService {
     ///
     /// * `args` - The [`Args`] with which the service was
     /// started. Will be passed as [`Context`] to workers and state.
-    pub async fn init(args: Args) -> Self {
+    pub async fn init(args: StartArgs, db: SqlitePool) -> Self {
         let docker = Docker::connect_with_local_defaults().unwrap();
 
         let container_settings = ContainerSettings::builder(&docker).from_args(&args).await;
 
         let provider = GatewayContextProvider::new(docker, container_settings);
-
-        let state = args.state;
-
-        if !StdPath::new(&state).exists() {
-            Sqlite::create_database(&state).await.unwrap();
-        }
-
-        info!(
-            "state db: {}",
-            std::fs::canonicalize(&state).unwrap().to_string_lossy()
-        );
-        let db = SqlitePool::connect(&state).await.unwrap();
-
-        MIGRATIONS.run(&db).await.unwrap();
 
         let sender = Mutex::new(None);
 

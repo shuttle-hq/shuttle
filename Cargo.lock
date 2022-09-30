@@ -1066,7 +1066,7 @@ dependencies = [
  "bytesize",
  "cargo-platform",
  "cargo-util",
- "clap",
+ "clap 3.2.17",
  "crates-io",
  "crossbeam-utils",
  "curl",
@@ -1124,7 +1124,7 @@ checksum = "a055abd7d5cdb5a4e0aad89962b2f172eaad613374056cab74124ff2cf978ea7"
 dependencies = [
  "anyhow",
  "cargo_metadata",
- "clap",
+ "clap 3.2.17",
  "concolor-control",
  "crates-index",
  "dirs-next",
@@ -1167,7 +1167,7 @@ dependencies = [
  "cargo-edit",
  "cargo_metadata",
  "chrono",
- "clap",
+ "clap 3.2.17",
  "crossbeam-channel",
  "crossterm",
  "dirs",
@@ -1307,14 +1307,29 @@ checksum = "29e724a68d9319343bb3328c9cc2dfde263f4b3142ee1059a9980580171c954b"
 dependencies = [
  "atty",
  "bitflags",
- "clap_derive",
- "clap_lex",
+ "clap_derive 3.2.17",
+ "clap_lex 0.2.4",
  "indexmap",
  "once_cell",
  "strsim",
  "termcolor",
  "terminal_size",
  "textwrap",
+]
+
+[[package]]
+name = "clap"
+version = "4.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f78ad8e84aa8e8aa3e821857be40eb4b925ff232de430d4dd2ae6aa058cbd92"
+dependencies = [
+ "atty",
+ "bitflags",
+ "clap_derive 4.0.1",
+ "clap_lex 0.3.0",
+ "once_cell",
+ "strsim",
+ "termcolor",
 ]
 
 [[package]]
@@ -1331,10 +1346,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "clap_derive"
+version = "4.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ca689d7434ce44517a12a89456b2be4d1ea1cafcd8f581978c03d45f5a5c12a7"
+dependencies = [
+ "heck",
+ "proc-macro-error",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "clap_lex"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2850f2f5a82cbf437dd5af4d49848fbdfc27c157c3d010345776f952765261c5"
+dependencies = [
+ "os_str_bytes",
+]
+
+[[package]]
+name = "clap_lex"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d4198f73e42b4936b35b5bb248d81d2b595ecb170da0bac7655c54eedfa8da8"
 dependencies = [
  "os_str_bytes",
 ]
@@ -5171,7 +5208,7 @@ dependencies = [
  "cargo",
  "cargo_metadata",
  "chrono",
- "clap",
+ "clap 3.2.17",
  "crossbeam-channel",
  "ctor",
  "flate2",
@@ -5217,7 +5254,7 @@ dependencies = [
  "base64 0.13.0",
  "bollard",
  "chrono",
- "clap",
+ "clap 4.0.4",
  "colored",
  "convert_case",
  "futures",
@@ -5261,7 +5298,7 @@ dependencies = [
  "aws-config",
  "aws-sdk-rds",
  "aws-smithy-types",
- "clap",
+ "clap 3.2.17",
  "ctor",
  "fqdn",
  "mongodb",

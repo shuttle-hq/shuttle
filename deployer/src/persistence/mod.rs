@@ -8,6 +8,7 @@ mod state;
 mod user;
 
 use crate::deployment::deploy_layer::{self, LogRecorder, LogType};
+use crate::deployment::ActiveDeploymentsGetter;
 use crate::proxy::AddressGetter;
 use error::{Error, Result};
 
@@ -459,6 +460,30 @@ impl AddressGetter for Persistence {
         } else {
             Ok(None)
         }
+    }
+}
+
+#[async_trait::async_trait]
+impl ActiveDeploymentsGetter for Persistence {
+    type Err = Error;
+
+    async fn get_active_deployments(
+        &self,
+        service_id: &Uuid,
+    ) -> std::result::Result<Vec<Uuid>, Self::Err> {
+        let ids: Vec<_> = sqlx::query_as::<_, Deployment>(
+            "SELECT * FROM deployments WHERE service_id = ? AND state = ?",
+        )
+        .bind(service_id)
+        .bind(State::Running)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(Error::from)?
+        .into_iter()
+        .map(|deployment| deployment.id)
+        .collect();
+
+        Ok(ids)
     }
 }
 
@@ -995,6 +1020,58 @@ mod tests {
                 .unwrap()
                 .unwrap(),
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn active_deployment_getter() {
+        let (p, _) = Persistence::new_in_memory().await;
+        let service_id = add_service_named(&p.pool, "service-name").await.unwrap();
+        let id_1 = Uuid::new_v4();
+        let id_2 = Uuid::new_v4();
+
+        for deployment in [
+            Deployment {
+                id: Uuid::new_v4(),
+                service_id,
+                state: State::Built,
+                last_update: Utc.ymd(2022, 4, 25).and_hms(4, 29, 33),
+                address: None,
+            },
+            Deployment {
+                id: Uuid::new_v4(),
+                service_id,
+                state: State::Stopped,
+                last_update: Utc.ymd(2022, 4, 25).and_hms(4, 29, 44),
+                address: None,
+            },
+            Deployment {
+                id: id_1,
+                service_id,
+                state: State::Running,
+                last_update: Utc.ymd(2022, 4, 25).and_hms(4, 33, 48),
+                address: None,
+            },
+            Deployment {
+                id: Uuid::new_v4(),
+                service_id,
+                state: State::Crashed,
+                last_update: Utc.ymd(2022, 4, 25).and_hms(4, 38, 52),
+                address: None,
+            },
+            Deployment {
+                id: id_2,
+                service_id,
+                state: State::Running,
+                last_update: Utc.ymd(2022, 4, 25).and_hms(4, 42, 32),
+                address: None,
+            },
+        ] {
+            p.insert_deployment(deployment).await.unwrap();
+        }
+
+        let actual = p.get_active_deployments(&service_id).await.unwrap();
+
+        assert_eq!(actual, vec![id_1, id_2]);
     }
 
     async fn add_deployment(pool: &SqlitePool) -> Result<Uuid> {

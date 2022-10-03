@@ -37,13 +37,13 @@ ifeq ($(PROD),true)
 DOCKER_COMPOSE_FILES=-f docker-compose.yml
 STACK=shuttle-prod
 APPS_FQDN=shuttleapp.rs
-DB_FQDN=pg.shuttle.rs
+DB_FQDN=postgres.shuttle.rs
 CONTAINER_REGISTRY=public.ecr.aws/shuttle
 else
 DOCKER_COMPOSE_FILES=-f docker-compose.yml -f docker-compose.dev.yml
 STACK=shuttle-dev
 APPS_FQDN=unstable.shuttleapp.rs
-DB_FQDN=pg.unstable.shuttle.rs
+DB_FQDN=postgres.unstable.shuttle.rs
 CONTAINER_REGISTRY=public.ecr.aws/shuttle-dev
 endif
 

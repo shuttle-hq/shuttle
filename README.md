@@ -94,7 +94,7 @@ $ cargo shuttle deploy
         Deployment Status:  DEPLOYED
         Host:               hello-world.shuttleapp.rs
         Created At:         2022-04-01 08:32:34.412602556 UTC
-        Database URI:       postgres://***:***@pg.shuttle.rs/db-hello-world
+        Database URI:       postgres://***:***@postgres.shuttle.rs/db-hello-world
 ```
 
 For the full documentation, visit [docs.rs/shuttle-service](https://docs.rs/shuttle-service)

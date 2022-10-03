@@ -11,7 +11,7 @@ Restart=always
 ExecStartPre=/usr/bin/docker pull postgres:11
 ExecStart=/usr/bin/docker run --rm \
 			      --network shuttle-net \
-			      --name pg \
+			      --name postgres \
 			      -p 5432:5432 \
 			      -e POSTGRES_PASSWORD=${pg_password} \
 			      -e PG_DATA=/opt/shuttle/postgres \

@@ -287,11 +287,10 @@ impl Persistence {
 
     pub async fn get_all_runnable_deployments(&self) -> Result<Vec<DeploymentRunnable>> {
         sqlx::query_as(
-            r#"SELECT d.id, service_id, s.name AS service_name, max(last_update) as last_update
+            r#"SELECT d.id, service_id, s.name AS service_name
                 FROM deployments AS d
                 JOIN services AS s ON s.id = d.service_id
                 WHERE state = ?
-                GROUP BY service_id
                 ORDER BY last_update"#,
         )
         .bind(State::Running)
@@ -597,6 +596,7 @@ mod tests {
 
         let id_1 = Uuid::new_v4();
         let id_2 = Uuid::new_v4();
+        let id_3 = Uuid::new_v4();
 
         for deployment in [
             Deployment {
@@ -607,14 +607,14 @@ mod tests {
                 address: None,
             },
             Deployment {
-                id: Uuid::new_v4(),
+                id: id_1,
                 service_id: foo_id,
                 state: State::Running,
                 last_update: Utc.ymd(2022, 4, 25).and_hms(4, 29, 44),
                 address: None,
             },
             Deployment {
-                id: id_1,
+                id: id_2,
                 service_id: bar_id,
                 state: State::Running,
                 last_update: Utc.ymd(2022, 4, 25).and_hms(4, 33, 48),
@@ -628,7 +628,7 @@ mod tests {
                 address: None,
             },
             Deployment {
-                id: id_2,
+                id: id_3,
                 service_id: foo_id,
                 state: State::Running,
                 last_update: Utc.ymd(2022, 4, 25).and_hms(4, 42, 32),
@@ -644,11 +644,16 @@ mod tests {
             [
                 DeploymentRunnable {
                     id: id_1,
+                    service_name: "foo".to_string(),
+                    service_id: foo_id,
+                },
+                DeploymentRunnable {
+                    id: id_2,
                     service_name: "bar".to_string(),
                     service_id: bar_id,
                 },
                 DeploymentRunnable {
-                    id: id_2,
+                    id: id_3,
                     service_name: "foo".to_string(),
                     service_id: foo_id,
                 },

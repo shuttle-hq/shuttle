@@ -118,7 +118,9 @@ async fn kill_old_deployments(
         .filter(|old_id| old_id != &deployment_id)
     {
         trace!(%old_id, "stopping old deployment");
-        kill_send.send(old_id).expect("to kill old deployments");
+        kill_send
+            .send(old_id)
+            .map_err(|e| Error::OldCleanup(Box::new(e)))?;
     }
 
     Ok(())

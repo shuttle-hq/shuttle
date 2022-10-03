@@ -25,6 +25,8 @@ pub enum Error {
     SecretsParse(#[from] toml::de::Error),
     #[error("Failed to set secrets: {0}")]
     SecretsSet(#[source] Box<dyn StdError + Send>),
+    #[error("Failed to cleanup old deployments: {0}")]
+    OldCleanup(#[source] Box<dyn StdError + Send>),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

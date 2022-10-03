@@ -6,7 +6,7 @@
 //!
 //! This is very similar to Aspect Oriented Programming where we use the annotations from the function to trigger the recording of a new state.
 //! This annotation is a [#[instrument]](https://docs.rs/tracing-attributes/latest/tracing_attributes/attr.instrument.html) with an `id` and `state` field as follow:
-//! ```
+//! ```no-test
 //! #[instrument(fields(id = %built.id, state = %State::Built))]
 //! pub async fn new_state_fn(built: Built) {
 //!     // Get built ready for starting
@@ -408,8 +408,8 @@ mod tests {
 
     use crate::{
         deployment::{
-            deploy_layer::LogType, provisioner_factory, runtime_logger, Built, DeploymentManager,
-            Queued,
+            deploy_layer::LogType, provisioner_factory, runtime_logger, ActiveDeploymentsGetter,
+            Built, DeploymentManager, Queued,
         },
         persistence::{SecretRecorder, State},
     };
@@ -551,6 +551,21 @@ mod tests {
         fn flush(&self) {}
     }
 
+    #[derive(Clone)]
+    struct StubActiveDeploymentGetter;
+
+    #[async_trait::async_trait]
+    impl ActiveDeploymentsGetter for StubActiveDeploymentGetter {
+        type Err = std::io::Error;
+
+        async fn get_active_deployments(
+            &self,
+            _service_id: &Uuid,
+        ) -> std::result::Result<Vec<Uuid>, Self::Err> {
+            Ok(vec![])
+        }
+    }
+
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_to_be_queued() {
         let deployment_manager = DeploymentManager::new(
@@ -558,6 +573,7 @@ mod tests {
             StubRuntimeLoggerFactory,
             RECORDER.clone(),
             RECORDER.clone(),
+            StubActiveDeploymentGetter,
         );
 
         let queued = get_queue("sleep-async");
@@ -665,6 +681,7 @@ mod tests {
             StubRuntimeLoggerFactory,
             RECORDER.clone(),
             RECORDER.clone(),
+            StubActiveDeploymentGetter,
         );
 
         let queued = get_queue("self-stop");
@@ -738,6 +755,7 @@ mod tests {
             StubRuntimeLoggerFactory,
             RECORDER.clone(),
             RECORDER.clone(),
+            StubActiveDeploymentGetter,
         );
 
         let queued = get_queue("bind-panic");
@@ -811,6 +829,7 @@ mod tests {
             StubRuntimeLoggerFactory,
             RECORDER.clone(),
             RECORDER.clone(),
+            StubActiveDeploymentGetter,
         );
 
         let queued = get_queue("main-panic");
@@ -884,6 +903,7 @@ mod tests {
             StubRuntimeLoggerFactory,
             RECORDER.clone(),
             RECORDER.clone(),
+            StubActiveDeploymentGetter,
         );
 
         let id = Uuid::new_v4();
@@ -936,6 +956,7 @@ mod tests {
             StubRuntimeLoggerFactory,
             RECORDER.clone(),
             RECORDER.clone(),
+            StubActiveDeploymentGetter,
         );
 
         let id = Uuid::nil();

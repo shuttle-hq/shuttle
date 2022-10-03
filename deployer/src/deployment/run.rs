@@ -4,6 +4,7 @@ use std::{
     str::FromStr,
 };
 
+use async_trait::async_trait;
 use portpicker::pick_unused_port;
 use shuttle_common::project::ProjectName as ServiceName;
 use shuttle_service::{
@@ -11,7 +12,7 @@ use shuttle_service::{
     Factory,
 };
 use tokio::task::JoinError;
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, error, info, instrument, trace};
 use uuid::Uuid;
 
 use super::{
@@ -28,6 +29,7 @@ pub async fn task(
     kill_send: KillSender,
     abstract_factory: impl provisioner_factory::AbstractFactory,
     logger_factory: impl runtime_logger::Factory,
+    active_deployment_getter: impl ActiveDeploymentsGetter,
 ) {
     info!("Run task started");
 
@@ -36,6 +38,7 @@ pub async fn task(
 
         info!("Built deployment at the front of run queue: {id}");
 
+        let kill_send = kill_send.clone();
         let kill_recv = kill_send.subscribe();
 
         let port = match pick_unused_port() {
@@ -60,6 +63,13 @@ pub async fn task(
         };
         let mut factory = abstract_factory.get_factory(service_name, built.service_id);
         let logger = logger_factory.get_logger(id);
+
+        let old_deployments_killer = kill_old_deployments(
+            built.service_id.clone(),
+            id.clone(),
+            active_deployment_getter.clone(),
+            kill_send,
+        );
         let cleanup = move |result: std::result::Result<
             std::result::Result<(), shuttle_service::Error>,
             JoinError,
@@ -74,7 +84,14 @@ pub async fn task(
 
         tokio::spawn(async move {
             if let Err(err) = built
-                .handle(addr, &mut factory, logger, kill_recv, cleanup)
+                .handle(
+                    addr,
+                    &mut factory,
+                    logger,
+                    kill_recv,
+                    old_deployments_killer,
+                    cleanup,
+                )
                 .await
             {
                 start_crashed_cleanup(&id, err)
@@ -83,6 +100,30 @@ pub async fn task(
             info!("deployment done");
         });
     }
+}
+
+#[instrument(skip(active_deployment_getter, kill_send))]
+async fn kill_old_deployments(
+    service_id: Uuid,
+    deployment_id: Uuid,
+    active_deployment_getter: impl ActiveDeploymentsGetter,
+    kill_send: KillSender,
+) -> Result<()> {
+    for old_id in active_deployment_getter
+        .clone()
+        .get_active_deployments(&service_id)
+        .await
+        .map_err(|e| Error::OldCleanup(Box::new(e)))?
+        .into_iter()
+        .filter(|old_id| old_id != &deployment_id)
+    {
+        trace!(%old_id, "stopping old deployment");
+        kill_send
+            .send(old_id)
+            .map_err(|e| Error::OldCleanup(Box::new(e)))?;
+    }
+
+    Ok(())
 }
 
 #[instrument(fields(id = %_id, state = %State::Completed))]
@@ -111,6 +152,16 @@ fn start_crashed_cleanup(_id: &Uuid, err: impl std::error::Error + 'static) {
     );
 }
 
+#[async_trait]
+pub trait ActiveDeploymentsGetter: Clone + Send + Sync + 'static {
+    type Err: std::error::Error + Send;
+
+    async fn get_active_deployments(
+        &self,
+        service_id: &Uuid,
+    ) -> std::result::Result<Vec<Uuid>, Self::Err>;
+}
+
 #[derive(Clone, Debug)]
 pub struct Built {
     pub id: Uuid,
@@ -119,18 +170,21 @@ pub struct Built {
 }
 
 impl Built {
-    #[instrument(name = "built_handle", skip(self, factory, logger, kill_recv, cleanup), fields(id = %self.id, state = %State::Running))]
+    #[instrument(name = "built_handle", skip(self, factory, logger, kill_recv, kill_old_deployments, cleanup), fields(id = %self.id, state = %State::Running))]
     async fn handle(
         self,
         address: SocketAddr,
         factory: &mut dyn Factory,
         logger: Box<dyn log::Log>,
         mut kill_recv: KillReceiver,
+        kill_old_deployments: impl futures::Future<Output = Result<()>>,
         cleanup: impl FnOnce(std::result::Result<std::result::Result<(), shuttle_service::Error>, JoinError>)
             + Send
             + 'static,
     ) -> Result<()> {
         let (mut handle, library) = load_deployment(&self.id, address, factory, logger).await?;
+
+        kill_old_deployments.await?;
 
         info!("got handle for deployment");
         // Execute loaded service
@@ -235,6 +289,10 @@ mod tests {
         fn flush(&self) {}
     }
 
+    async fn kill_old_deployments() -> crate::error::Result<()> {
+        Ok(())
+    }
+
     // This test uses the kill signal to make sure a service does stop when asked to
     #[tokio::test]
     async fn can_be_killed() {
@@ -259,7 +317,14 @@ mod tests {
         let logger = Box::new(StubLogger);
 
         built
-            .handle(addr, &mut factory, logger, kill_recv, handle_cleanup)
+            .handle(
+                addr,
+                &mut factory,
+                logger,
+                kill_recv,
+                kill_old_deployments(),
+                handle_cleanup,
+            )
             .await
             .unwrap();
 
@@ -299,7 +364,14 @@ mod tests {
         let logger = Box::new(StubLogger);
 
         built
-            .handle(addr, &mut factory, logger, kill_recv, handle_cleanup)
+            .handle(
+                addr,
+                &mut factory,
+                logger,
+                kill_recv,
+                kill_old_deployments(),
+                handle_cleanup,
+            )
             .await
             .unwrap();
 
@@ -333,7 +405,14 @@ mod tests {
         let logger = Box::new(StubLogger);
 
         built
-            .handle(addr, &mut factory, logger, kill_recv, handle_cleanup)
+            .handle(
+                addr,
+                &mut factory,
+                logger,
+                kill_recv,
+                kill_old_deployments(),
+                handle_cleanup,
+            )
             .await
             .unwrap();
 
@@ -355,7 +434,14 @@ mod tests {
         let logger = Box::new(StubLogger);
 
         let result = built
-            .handle(addr, &mut factory, logger, kill_recv, handle_cleanup)
+            .handle(
+                addr,
+                &mut factory,
+                logger,
+                kill_recv,
+                kill_old_deployments(),
+                handle_cleanup,
+            )
             .await;
 
         assert!(
@@ -380,7 +466,14 @@ mod tests {
         let logger = Box::new(StubLogger);
 
         let result = built
-            .handle(addr, &mut factory, logger, kill_recv, handle_cleanup)
+            .handle(
+                addr,
+                &mut factory,
+                logger,
+                kill_recv,
+                kill_old_deployments(),
+                handle_cleanup,
+            )
             .await;
 
         assert!(

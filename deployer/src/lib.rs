@@ -33,6 +33,7 @@ pub async fn start(
         runtime_logger_factory,
         persistence.clone(),
         persistence.clone(),
+        persistence.clone(),
     );
 
     for existing_deployment in persistence.get_all_runnable_deployments().await.unwrap() {

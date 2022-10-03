@@ -5,7 +5,7 @@ mod run;
 pub mod runtime_logger;
 
 pub use queue::Queued;
-pub use run::Built;
+pub use run::{ActiveDeploymentsGetter, Built};
 use tracing::instrument;
 
 use crate::persistence::{SecretRecorder, State};
@@ -32,6 +32,7 @@ impl DeploymentManager {
         runtime_logger_factory: impl runtime_logger::Factory,
         build_log_recorder: impl LogRecorder,
         secret_recorder: impl SecretRecorder,
+        active_deployment_getter: impl ActiveDeploymentsGetter,
     ) -> Self {
         let (kill_send, _) = broadcast::channel(KILL_BUFFER_SIZE);
 
@@ -42,6 +43,7 @@ impl DeploymentManager {
                 runtime_logger_factory,
                 build_log_recorder,
                 secret_recorder,
+                active_deployment_getter,
             ),
             kill_send,
         }
@@ -64,7 +66,7 @@ impl DeploymentManager {
     }
 }
 
-/// ```
+/// ```no-test
 /// queue channel   all deployments here are State::Queued
 ///       |
 ///       v
@@ -95,6 +97,7 @@ impl Pipeline {
         runtime_logger_factory: impl runtime_logger::Factory,
         build_log_recorder: impl LogRecorder,
         secret_recorder: impl SecretRecorder,
+        active_deployment_getter: impl ActiveDeploymentsGetter,
     ) -> Pipeline {
         let (queue_send, queue_recv) = mpsc::channel(QUEUE_BUFFER_SIZE);
         let (run_send, run_recv) = mpsc::channel(RUN_BUFFER_SIZE);
@@ -112,6 +115,7 @@ impl Pipeline {
             kill_send,
             abstract_factory,
             runtime_logger_factory,
+            active_deployment_getter,
         ));
 
         Pipeline {

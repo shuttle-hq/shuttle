@@ -18,10 +18,10 @@ ExecStart=/usr/bin/docker run --rm \
 			      ${docker_image}:latest \
                   --ip 0.0.0.0 \
                   --port 5001 \
-                  --shared-pg-uri postgres://postgres:${pg_password}@postgres:5432/postgres \
+                  --shared-pg-uri postgres://postgres:${pg_password}@pg:5432/postgres \
                   --shared-mongodb-uri mongodb://admin:${mongodb_password}@mongodb:27017/admin \
                   --fqdn ${fqdn} \
-                  --internal-pg-address postgres \
+                  --internal-pg-address pg \
                   --internal-mongodb-address mongodb
 
 [Install]

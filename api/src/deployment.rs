@@ -21,7 +21,6 @@ use shuttle_proto::provisioner::provisioner_client::ProvisionerClient;
 use shuttle_service::loader::Loader;
 use shuttle_service::logger::Log;
 use shuttle_service::ServeHandle;
-use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::{mpsc, RwLock};
 use tonic::transport::{Channel, Endpoint};
 
@@ -108,7 +107,11 @@ impl Deployment {
 
     /// Tries to advance the deployment one stage. Does nothing if the deployment
     /// is in a terminal state.
-    pub(crate) async fn advance(&self, context: &Context, run_logs_tx: UnboundedSender<Log>) {
+    pub(crate) async fn advance(
+        &self,
+        context: &Context,
+        run_logs_tx: crossbeam_channel::Sender<Log>,
+    ) {
         {
             trace!("waiting to get write on the state");
             let meta = self.meta().await;
@@ -307,7 +310,7 @@ struct JobQueue {
 }
 
 impl JobQueue {
-    async fn new(context: Context, run_logs_tx: UnboundedSender<Log>) -> Self {
+    async fn new(context: Context, run_logs_tx: crossbeam_channel::Sender<Log>) -> Self {
         let (send, mut recv) = mpsc::channel::<Arc<Deployment>>(JOB_QUEUE_SIZE);
 
         log::debug!("starting job processor task");
@@ -360,7 +363,7 @@ impl DeploymentSystem {
         version_req: VersionReq,
     ) -> Self {
         let router: Arc<Router> = Default::default();
-        let (tx, mut rx) = mpsc::unbounded_channel::<Log>();
+        let (tx, rx) = crossbeam_channel::unbounded::<Log>();
 
         let deployments = Arc::new(RwLock::new(
             Self::initialise_from_fs(&build_system.fs_root(), &fqdn).await,
@@ -369,7 +372,7 @@ impl DeploymentSystem {
         let deployments_log = deployments.clone();
 
         tokio::spawn(async move {
-            while let Some(log) = rx.recv().await {
+            while let Ok(log) = rx.recv() {
                 let mut deployments_log = deployments_log.write().await;
 
                 if let Some(deployment) = deployments_log.get_mut(&log.deployment_id) {

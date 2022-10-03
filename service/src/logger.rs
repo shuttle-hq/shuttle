@@ -1,9 +1,8 @@
-use std::{collections::HashMap, env, str::FromStr};
-
 use chrono::{DateTime, Utc};
-use log::{Level, Metadata, ParseLevelError, Record};
+use serde_json::json;
 use shuttle_common::{DeploymentId, LogItem};
-use tokio::sync::mpsc::UnboundedSender;
+use tracing::{field::Visit, Subscriber};
+use tracing_subscriber::Layer;
 
 #[derive(Debug)]
 pub struct Log {
@@ -14,75 +13,120 @@ pub struct Log {
 
 pub struct Logger {
     deployment_id: DeploymentId,
-    tx: UnboundedSender<Log>,
-    filter: HashMap<String, Level>,
+    tx: crossbeam_channel::Sender<Log>,
 }
 
 impl Logger {
-    pub fn new(tx: UnboundedSender<Log>, deployment_id: DeploymentId) -> Self {
-        let filter = if let Ok(rust_log) = env::var("RUST_LOG") {
-            let rust_log = rust_log
-                .split(',')
-                .map(|item| {
-                    // Try to get target and level if both are set
-                    if let Some((target, level)) = item.split_once('=') {
-                        Result::<(String, Level), ParseLevelError>::Ok((
-                            target.to_string(),
-                            Level::from_str(level)?,
-                        ))
-                    } else {
-                        // Ok only target or level is set, but which is it
-                        if let Ok(level) = Level::from_str(item) {
-                            Ok((String::new(), level))
-                        } else {
-                            Ok((item.to_string(), Level::Trace))
-                        }
-                    }
-                })
-                .filter_map(Result::ok);
-
-            HashMap::from_iter(rust_log)
-        } else {
-            HashMap::from([(String::new(), Level::Error)])
-        };
-
-        Self {
-            tx,
-            deployment_id,
-            filter,
-        }
+    pub fn new(tx: crossbeam_channel::Sender<Log>, deployment_id: DeploymentId) -> Self {
+        Self { tx, deployment_id }
     }
 }
 
-impl log::Log for Logger {
-    fn enabled(&self, metadata: &Metadata) -> bool {
-        for (target, level) in self.filter.iter() {
-            if metadata.target().starts_with(target) && &metadata.level() <= level {
-                return true;
+impl<S> Layer<S> for Logger
+where
+    S: Subscriber,
+{
+    fn on_event(
+        &self,
+        event: &tracing::Event<'_>,
+        _ctx: tracing_subscriber::layer::Context<'_, S>,
+    ) {
+        let datetime = Utc::now();
+
+        let item = {
+            let metadata = event.metadata();
+            let mut visitor = JsonVisitor::default();
+
+            event.record(&mut visitor);
+
+            LogItem {
+                level: metadata.level().to_string(),
+                file: metadata.file().map(str::to_string),
+                line: metadata.line(),
+                target: metadata.target().to_string(),
+                fields: serde_json::to_vec(&visitor.0).unwrap(),
             }
-        }
+        };
 
-        false
+        self.tx
+            .send(Log {
+                item,
+                datetime,
+                deployment_id: self.deployment_id,
+            })
+            .expect("sending log should succeed");
     }
+}
 
-    fn log(&self, record: &Record) {
-        if self.enabled(record.metadata()) {
-            let datetime = Utc::now();
-            let item = LogItem {
-                body: format!("{}", record.args()),
-                level: record.level(),
-                target: record.target().to_string(),
-            };
+// Boilerplate for extracting the fields from the event
+#[derive(Default)]
+struct JsonVisitor(serde_json::Map<String, serde_json::Value>);
 
-            self.tx
-                .send(Log {
-                    item,
-                    datetime,
-                    deployment_id: self.deployment_id,
-                })
-                .expect("sending log should succeed");
+impl JsonVisitor {
+    /// Ignores log metadata as it is included in the other LogItem fields (target, file, line...)
+    fn filter_insert(&mut self, field: &tracing::field::Field, value: serde_json::Value) {
+        if !field.name().starts_with("log.") {
+            self.0.insert(field.name().to_string(), json!(value));
         }
     }
+}
+impl Visit for JsonVisitor {
+    fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
+        self.filter_insert(field, json!(value));
+    }
+    fn record_bool(&mut self, field: &tracing::field::Field, value: bool) {
+        self.filter_insert(field, json!(value));
+    }
+    fn record_u64(&mut self, field: &tracing::field::Field, value: u64) {
+        self.filter_insert(field, json!(value));
+    }
+    fn record_i64(&mut self, field: &tracing::field::Field, value: i64) {
+        self.filter_insert(field, json!(value));
+    }
+    fn record_f64(&mut self, field: &tracing::field::Field, value: f64) {
+        self.filter_insert(field, json!(value));
+    }
+    fn record_error(
+        &mut self,
+        field: &tracing::field::Field,
+        value: &(dyn std::error::Error + 'static),
+    ) {
+        self.filter_insert(field, json!(value.to_string()));
+    }
+    fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+        self.filter_insert(field, json!(format!("{value:?}")));
+    }
+}
 
-    fn flush(&self) {}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use tracing_subscriber::prelude::*;
+
+    #[test]
+    fn logging() {
+        let (s, r) = crossbeam_channel::unbounded();
+
+        let logger = Logger::new(s, Default::default());
+
+        tracing_subscriber::registry().with(logger).init();
+
+        tracing::debug!("this is");
+        tracing::info!("hi");
+        tracing::warn!("from");
+        tracing::error!("logger");
+
+        let logs = r
+            .try_iter()
+            .map(|log| {
+                let fields: serde_json::Map<String, serde_json::Value> =
+                    serde_json::from_slice(&log.item.fields).unwrap();
+
+                fields["message"].as_str().unwrap().to_owned()
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(logs, vec!["this is", "hi", "from", "logger",]);
+    }
 }

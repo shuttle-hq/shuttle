@@ -6,7 +6,7 @@ services:
       - /bin/bash
       - -c
       - |
-        until </dev/tcp/pg/5432
+        until </dev/tcp/postgres/5432
         do
           >&2 echo "PG is not available yet - sleeping"
           sleep 1

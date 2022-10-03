@@ -18,15 +18,13 @@ use sqlx::migrate::Migrator;
 use sqlx::sqlite::SqlitePool;
 use sqlx::types::Json as SqlxJson;
 use sqlx::{query, Error as SqlxError, Row};
-use tokio::sync::mpsc::Sender;
-use tokio::sync::Mutex;
-use tracing::{debug, error};
+use tracing::debug;
 
 use crate::args::StartArgs;
 use crate::auth::{Key, User};
 use crate::project::{self, Project};
 use crate::worker::Work;
-use crate::{AccountName, Context, Error, ErrorKind, ProjectName, Refresh, Service};
+use crate::{AccountName, Context, Error, ErrorKind, ProjectName, Service};
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
@@ -173,7 +171,6 @@ impl GatewayContextProvider {
 pub struct GatewayService {
     provider: GatewayContextProvider,
     db: SqlitePool,
-    sender: Mutex<Option<Sender<Work>>>,
 }
 
 impl GatewayService {
@@ -188,77 +185,7 @@ impl GatewayService {
 
         let provider = GatewayContextProvider::new(docker, container_settings);
 
-        let sender = Mutex::new(None);
-
-        Self {
-            provider,
-            db,
-            sender,
-        }
-    }
-
-    /// Goes through all projects, refreshing their state and queuing
-    /// them up to be advanced if appropriate
-    pub async fn refresh(&self) -> Result<(), Error> {
-        for Work {
-            project_name,
-            account_name,
-            work,
-        } in self.iter_projects().await.expect("could not list projects")
-        {
-            match work.refresh(&self.context()).await {
-                Ok(work) => self.send(project_name, account_name, work).await?,
-                Err(err) => error!(
-                    error = %err,
-                    %account_name,
-                    %project_name,
-                    "could not refresh state. Skipping it for now.",
-                ),
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Set the [`Sender`] to which [`Work`] will be submitted. If
-    /// `sender` is `None`, no further work will be submitted.
-    pub async fn set_sender(&self, sender: Option<Sender<Work>>) -> Result<(), Error> {
-        *self.sender.lock().await = sender;
-        Ok(())
-    }
-
-    /// Send [`Work`] to the [`Sender`] set with
-    /// [`set_sender`](GatewayService::set_sender).
-    ///
-    /// # Returns
-    /// If none has been set (or if the channel has been closed),
-    /// returns an [`ErrorKind::NotReady`] error.
-    pub async fn send(
-        &self,
-        project_name: ProjectName,
-        account_name: AccountName,
-        work: Project,
-    ) -> Result<(), Error> {
-        let work = Work {
-            project_name,
-            account_name,
-            work,
-        };
-
-        let mut lock = self.sender.lock().await;
-
-        if let Some(sender) = lock.as_ref() {
-            match sender.send(work).await {
-                Ok(_) => return Ok(()),
-                Err(err) => {
-                    error!("work send error: {err}");
-                    // receiving end was dropped or stopped
-                    *lock = None;
-                }
-            }
-        }
-
-        Err(Error::from_kind(ErrorKind::NotReady))
+        Self { provider, db }
     }
 
     pub async fn route(
@@ -289,7 +216,7 @@ impl GatewayService {
         Ok(resp)
     }
 
-    async fn iter_projects(&self) -> Result<impl Iterator<Item = Work>, Error> {
+    pub async fn iter_projects(&self) -> Result<impl Iterator<Item = Work>, Error> {
         let iter = query("SELECT * FROM projects")
             .fetch_all(&self.db)
             .await?
@@ -457,7 +384,7 @@ impl GatewayService {
         &self,
         project_name: ProjectName,
         account_name: AccountName,
-    ) -> Result<Project, Error> {
+    ) -> Result<Work, Error> {
         let initial_key = Alphanumeric.sample_string(&mut rand::thread_rng(), 32);
 
         let project = SqlxJson(Project::Creating(project::ProjectCreating::new(
@@ -486,22 +413,25 @@ impl GatewayService {
 
         let project = project.0;
 
-        self.send(project_name, account_name, project.clone())
-            .await?;
-
-        Ok(project)
+        Ok(Work {
+            project_name,
+            account_name,
+            work: project,
+        })
     }
 
     pub async fn destroy_project(
         &self,
         project_name: ProjectName,
         account_name: AccountName,
-    ) -> Result<(), Error> {
+    ) -> Result<Work, Error> {
         let project = self.find_project(&project_name).await?.destroy()?;
 
-        self.send(project_name, account_name, project).await?;
-
-        Ok(())
+        Ok(Work {
+            project_name,
+            account_name,
+            work: project,
+        })
     }
 
     fn context<'c>(&'c self) -> GatewayContext<'c> {
@@ -522,7 +452,7 @@ impl<'c> Service<'c> for Arc<GatewayService> {
     }
 
     async fn update(
-        &mut self,
+        &self,
         Work {
             project_name, work, ..
         }: &Self::State,
@@ -550,10 +480,6 @@ impl<'c> Context<'c> for GatewayContext<'c> {
 pub mod tests {
 
     use std::str::FromStr;
-
-    use futures::Future;
-    use tokio::sync::mpsc::channel;
-    use tokio::task::JoinHandle;
 
     use super::*;
     use crate::tests::{assert_err_kind, World};
@@ -609,22 +535,6 @@ pub mod tests {
         Ok(())
     }
 
-    async fn capture_work<S, C, Fut>(svc: S, mut capture: C) -> JoinHandle<()>
-    where
-        S: AsRef<GatewayService>,
-        C: FnMut(Work) -> Fut + Send + 'static,
-        Fut: Future<Output = ()> + Send,
-    {
-        let (sender, mut receiver) = channel::<Work>(256);
-        let handle = tokio::spawn(async move {
-            while let Some(work) = receiver.recv().await {
-                capture(work).await
-            }
-        });
-        svc.as_ref().set_sender(Some(sender)).await.unwrap();
-        handle
-    }
-
     #[tokio::test]
     async fn service_create_find_delete_project() -> anyhow::Result<()> {
         let world = World::new().await;
@@ -642,46 +552,25 @@ pub mod tests {
 
         svc.create_user(neo.clone()).await.unwrap();
 
-        capture_work(&svc, {
-            let matrix = matrix.clone();
-            move |work| {
-                let matrix = matrix.clone();
-                async move {
-                    assert!(creating_same_project_name(&work.work, &matrix));
-                }
-            }
-        })
-        .await;
-
-        let project = svc
+        let work = svc
             .create_project(matrix.clone(), neo.clone())
             .await
             .unwrap();
+
+        // work work work work
+        let project = work.work;
 
         assert!(creating_same_project_name(&project, &matrix));
 
         assert_eq!(svc.find_project(&matrix).await.unwrap(), project);
 
-        let update_project = capture_work(&svc, {
-            let svc = Arc::clone(&svc);
-            let matrix = matrix.clone();
-            move |work| {
-                let svc = Arc::clone(&svc);
-                let matrix = matrix.clone();
-                async move {
-                    assert!(matches!(&work.work, Project::Destroyed(_)));
-                    svc.update_project(&matrix, &work.work).await.unwrap();
-                }
-            }
-        })
-        .await;
+        let work = svc.destroy_project(matrix.clone(), neo).await.unwrap();
 
-        svc.destroy_project(matrix.clone(), neo).await.unwrap();
+        let project = work.work;
 
-        // Which drops the only sender, thus breaking the work loop
-        svc.set_sender(None).await.unwrap();
+        assert!(matches!(&project, Project::Destroyed(_)));
 
-        update_project.await.unwrap();
+        svc.update_project(&matrix, &project).await.unwrap();
 
         assert!(matches!(
             svc.find_project(&matrix).await,

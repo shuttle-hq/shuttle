@@ -8,10 +8,12 @@ use axum::response::Response;
 use axum::routing::{any, get};
 use axum::{Json as AxumJson, Router};
 use shuttle_common::{project, user};
+use tokio::sync::mpsc::Sender;
 use tower_http::trace::TraceLayer;
 use tracing::{debug, debug_span, field, Span};
 
 use crate::auth::{Admin, ScopedUser, User};
+use crate::worker::Work;
 use crate::{AccountName, Error, GatewayService, ProjectName};
 
 async fn get_user(
@@ -49,27 +51,34 @@ async fn get_project(
 
 async fn post_project(
     Extension(service): Extension<Arc<GatewayService>>,
+    Extension(sender): Extension<Sender<Work>>,
     User { name, .. }: User,
     Path(project): Path<ProjectName>,
 ) -> Result<AxumJson<project::Response>, Error> {
-    let state = service.create_project(project.clone(), name).await?.into();
-    let response = project::Response {
-        name: project.to_string(),
-        state,
-    };
+    let work = service.create_project(project.clone(), name).await?;
+
+    let name = work.project_name.to_string();
+    let state = work.work.clone().into();
+
+    sender.send(work).await?;
+
+    let response = project::Response { name, state };
 
     Ok(AxumJson(response))
 }
 
 async fn delete_project(
     Extension(service): Extension<Arc<GatewayService>>,
+    Extension(sender): Extension<Sender<Work>>,
     ScopedUser {
         scope: _,
         user: User { name, .. },
     }: ScopedUser,
     Path(project): Path<ProjectName>,
 ) -> Result<(), Error> {
-    service.destroy_project(project, name).await
+    let work = service.destroy_project(project, name).await?;
+
+    sender.send(work).await.map_err(Error::from)
 }
 
 async fn route_project(
@@ -80,7 +89,7 @@ async fn route_project(
     service.route(&scope, req).await
 }
 
-pub fn make_api(service: Arc<GatewayService>) -> Router<Body> {
+pub fn make_api(service: Arc<GatewayService>, sender: Sender<Work>) -> Router<Body> {
     Router::<Body>::new()
         .route(
             "/projects/:project",
@@ -89,6 +98,7 @@ pub fn make_api(service: Arc<GatewayService>) -> Router<Body> {
         .route("/users/:account_name", get(get_user).post(post_user))
         .route("/projects/:project/*any", any(route_project))
         .layer(Extension(service))
+        .layer(Extension(sender))
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(|request: &Request<Body>| {
@@ -131,9 +141,8 @@ pub mod tests {
                 // do not do any work with inbound requests
             }
         });
-        service.set_sender(Some(sender)).await.unwrap();
 
-        let mut router = make_api(Arc::clone(&service));
+        let mut router = make_api(Arc::clone(&service), sender);
 
         let neo = service.create_user("neo".parse().unwrap()).await?;
 
@@ -261,7 +270,14 @@ pub mod tests {
         let world = World::new().await;
         let service = Arc::new(GatewayService::init(world.args(), world.pool()).await);
 
-        let mut router = make_api(Arc::clone(&service));
+        let (sender, mut receiver) = channel::<Work>(256);
+        tokio::spawn(async move {
+            while let Some(_) = receiver.recv().await {
+                // do not do any work with inbound requests
+            }
+        });
+
+        let mut router = make_api(Arc::clone(&service), sender);
 
         let get_neo = || {
             Request::builder()

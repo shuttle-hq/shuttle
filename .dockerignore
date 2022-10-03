@@ -5,4 +5,5 @@ examples/
 **/.cargo/
 **/docker/
 **/*.md
+!**/README.md
 Makefile

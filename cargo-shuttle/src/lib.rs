@@ -23,8 +23,9 @@ use colored::Colorize;
 use config::RequestContext;
 use factory::LocalFactory;
 use semver::{Version, VersionReq};
+use shuttle_secrets::SecretStore;
 use shuttle_service::loader::{build_crate, Loader};
-use shuttle_service::{Factory, SecretStore};
+use shuttle_service::Factory;
 use toml_edit::Document;
 use uuid::Uuid;
 

@@ -55,7 +55,7 @@ async fn add(Json(todo): Json<Todo>, collection: Data<&Collection<Todo>>) -> Res
 
 #[shuttle_service::main]
 async fn main(
-    #[shared::MongoDb] db: Database,
+    #[shuttle_shared_db::MongoDb] db: Database,
 ) -> shuttle_service::ShuttlePoem<impl poem::Endpoint> {
     let collection = db.collection::<Todo>("todos");
 

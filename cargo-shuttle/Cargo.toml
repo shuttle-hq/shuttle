@@ -4,7 +4,7 @@ version = "0.5.2"
 edition = "2021"
 license = "Apache-2.0"
 description = "A cargo command for the shuttle platform (https://www.shuttle.rs/)"
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+homepage = "https://www.shuttle.rs"
 
 [dependencies]
 anyhow = "1.0.62"
@@ -42,10 +42,14 @@ webbrowser = "0.7.1"
 version = "0.5.2"
 path = "../common"
 
+[dependencies.shuttle-secrets]
+version = "0.5.2"
+path = "../resources/secrets"
+
 [dependencies.shuttle-service]
 version = "0.5.2"
 path = "../service"
-features = ["loader", "secrets"]
+features = ["loader"]
 
 [dev-dependencies]
 tempfile = "3.3.0"

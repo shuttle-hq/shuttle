@@ -1,6 +1,6 @@
 pub mod helpers;
 
-#[cfg(all(feature = "sqlx-postgres", feature = "loader"))]
+#[cfg(feature = "loader")]
 mod loader;
 
 #[cfg(feature = "loader")]

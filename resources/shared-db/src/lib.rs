@@ -1,13 +1,15 @@
+#![doc = include_str!("../README.md")]
+
 use tokio::runtime::Runtime;
 
-use crate::{database, error::CustomError, Factory, ResourceBuilder};
 use async_trait::async_trait;
+use shuttle_service::{database, error::CustomError, Error, Factory, ResourceBuilder};
 
-#[cfg(feature = "sqlx-postgres")]
+#[cfg(feature = "postgres")]
 pub struct Postgres;
 
+#[cfg(feature = "postgres")]
 /// Get an `sqlx::PgPool` from any factory
-#[cfg(feature = "sqlx-postgres")]
 #[async_trait]
 impl ResourceBuilder<sqlx::PgPool> for Postgres {
     fn new() -> Self {
@@ -18,7 +20,7 @@ impl ResourceBuilder<sqlx::PgPool> for Postgres {
         self,
         factory: &mut dyn Factory,
         runtime: &Runtime,
-    ) -> Result<sqlx::PgPool, crate::Error> {
+    ) -> Result<sqlx::PgPool, Error> {
         let connection_string = factory
             .get_db_connection_string(database::Type::Shared(database::SharedEngine::Postgres))
             .await?;
@@ -40,11 +42,11 @@ impl ResourceBuilder<sqlx::PgPool> for Postgres {
     }
 }
 
-#[cfg(feature = "mongodb-integration")]
+#[cfg(feature = "mongodb")]
 pub struct MongoDb;
 
 /// Get a `mongodb::Database` from any factory
-#[cfg(feature = "mongodb-integration")]
+#[cfg(feature = "mongodb")]
 #[async_trait]
 impl ResourceBuilder<mongodb::Database> for MongoDb {
     fn new() -> Self {

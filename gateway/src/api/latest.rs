@@ -38,6 +38,8 @@ async fn get_project(
     Extension(service): Extension<Arc<GatewayService>>,
     ScopedUser { scope, .. }: ScopedUser,
 ) -> Result<AxumJson<project::Response>, Error> {
+    let _ = service.refresh_project(&scope).await?;
+    // tokio::time::sleep(Duration::from_millis(50)).await;
     let state = service.find_project(&scope).await?.into();
     let response = project::Response {
         name: scope.to_string(),

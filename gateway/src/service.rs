@@ -220,6 +220,37 @@ impl GatewayService {
         Ok(())
     }
 
+    /// Refreshes the state of a single project, and queues them up
+    /// to be advanced if appropriate
+    pub async fn refresh_project(&self, project_name: &ProjectName) -> Result<(), Error> {
+        let Work {
+            project_name,
+            account_name,
+            work,
+        } = query("SELECT * FROM projects WHERE project_name=?1")
+            .bind(project_name)
+            .fetch_optional(&self.db)
+            .await?
+            .map(|row| Work {
+                project_name: row.get("project_name"),
+                work: row.get::<SqlxJson<Project>, _>("project_state").0,
+                account_name: row.get("account_name"),
+            })
+            .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotFound))?;
+
+        match work.refresh(&self.context()).await {
+            Ok(work) => self.send(project_name, account_name, work).await?,
+            Err(err) => error!(
+                error = %err,
+                %account_name,
+                %project_name,
+                "could not refresh state. Skipping it for now.",
+            ),
+        }
+
+        Ok(())
+    }
+
     /// Set the [`Sender`] to which [`Work`] will be submitted. If
     /// `sender` is `None`, no further work will be submitted.
     pub async fn set_sender(&self, sender: Option<Sender<Work>>) -> Result<(), Error> {

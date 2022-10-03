@@ -6,7 +6,7 @@
 //!
 //! This is very similar to Aspect Oriented Programming where we use the annotations from the function to trigger the recording of a new state.
 //! This annotation is a [#[instrument]](https://docs.rs/tracing-attributes/latest/tracing_attributes/attr.instrument.html) with an `id` and `state` field as follow:
-//! ```
+//! ```no-test
 //! #[instrument(fields(id = %built.id, state = %State::Built))]
 //! pub async fn new_state_fn(built: Built) {
 //!     // Get built ready for starting

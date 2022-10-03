@@ -66,7 +66,7 @@ impl DeploymentManager {
     }
 }
 
-/// ```
+/// ```no-test
 /// queue channel   all deployments here are State::Queued
 ///       |
 ///       v

@@ -11,9 +11,9 @@ use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
-use shuttle_common::models::{deployment, log, project, secret, service, user};
+use shuttle_common::models::{deployment, project, secret, service, user};
 use shuttle_common::project::ProjectName;
-use shuttle_common::{ApiKey, ApiUrl};
+use shuttle_common::{ApiKey, ApiUrl, LogItem};
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
@@ -176,7 +176,7 @@ impl Client {
         &self,
         project: &ProjectName,
         deployment_id: &Uuid,
-    ) -> Result<Vec<log::Item>> {
+    ) -> Result<Vec<LogItem>> {
         let path = format!(
             "/projects/{}/deployments/{}/logs/runtime",
             project.as_str(),

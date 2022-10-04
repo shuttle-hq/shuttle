@@ -4,8 +4,9 @@ use chrono::{DateTime, Utc};
 use comfy_table::Color;
 use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
-use strum::Display;
 use uuid::Uuid;
+
+use crate::deployment::State;
 
 #[derive(Deserialize, Serialize)]
 pub struct Response {
@@ -13,20 +14,6 @@ pub struct Response {
     pub service_id: Uuid,
     pub state: State,
     pub last_update: DateTime<Utc>,
-}
-
-#[derive(Clone, Debug, Deserialize, Display, Serialize)]
-#[serde(rename_all = "lowercase")]
-#[strum(serialize_all = "lowercase")]
-pub enum State {
-    Queued,
-    Building,
-    Built,
-    Running,
-    Completed,
-    Stopped,
-    Crashed,
-    Unknown,
 }
 
 impl Display for Response {

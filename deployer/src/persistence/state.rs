@@ -34,7 +34,7 @@ impl Default for State {
     }
 }
 
-impl From<State> for shuttle_common::models::deployment::State {
+impl From<State> for shuttle_common::deployment::State {
     fn from(state: State) -> Self {
         match state {
             State::Queued => Self::Queued,

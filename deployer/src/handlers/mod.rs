@@ -9,7 +9,7 @@ use axum::{extract::BodyStream, Json};
 use chrono::{TimeZone, Utc};
 use fqdn::FQDN;
 use futures::TryStreamExt;
-use shuttle_common::models::{log, secret};
+use shuttle_common::models::secret;
 use shuttle_common::LogItem;
 use tower_http::auth::RequireAuthorizationLayer;
 use tower_http::trace::TraceLayer;
@@ -258,7 +258,7 @@ async fn delete_deployment(
 async fn get_build_logs(
     Extension(persistence): Extension<Persistence>,
     Path((_project_name, deployment_id)): Path<(String, Uuid)>,
-) -> Result<Json<Vec<log::BuildLogStream>>> {
+) -> Result<Json<Vec<shuttle_common::log::BuildLogStream>>> {
     if let Some(deployment) = persistence.get_deployment(&deployment_id).await? {
         Ok(Json(
             persistence
@@ -322,7 +322,7 @@ async fn build_logs_websocket_handler(mut s: WebSocket, persistence: Persistence
 
     for log in backlog.into_iter().filter_map(Log::into_build_log_stream) {
         match (log.state, log.message) {
-            (shuttle_common::models::deployment::State::Building, Some(msg)) => {
+            (shuttle_common::deployment::State::Building, Some(msg)) => {
                 let sent = s.send(ws::Message::Text(msg)).await;
                 last_timestamp = log.timestamp;
 
@@ -331,9 +331,9 @@ async fn build_logs_websocket_handler(mut s: WebSocket, persistence: Persistence
                     return;
                 }
             }
-            (shuttle_common::models::deployment::State::Building, None) => {}
-            (shuttle_common::models::deployment::State::Queued, _)
-            | (shuttle_common::models::deployment::State::Built, _) => {}
+            (shuttle_common::deployment::State::Building, None) => {}
+            (shuttle_common::deployment::State::Queued, _)
+            | (shuttle_common::deployment::State::Built, _) => {}
             _ => {
                 debug!("closing channel after reaching more than just build logs");
                 let _ = s.close().await;
@@ -346,7 +346,7 @@ async fn build_logs_websocket_handler(mut s: WebSocket, persistence: Persistence
         if log.id == id && log.timestamp > last_timestamp {
             if let Some(log) = persistence::Log::from(log).into_build_log_stream() {
                 match (log.state, log.message) {
-                    (shuttle_common::models::deployment::State::Building, Some(msg)) => {
+                    (shuttle_common::deployment::State::Building, Some(msg)) => {
                         let sent = s.send(ws::Message::Text(msg)).await;
 
                         // Client disconnected?
@@ -354,9 +354,9 @@ async fn build_logs_websocket_handler(mut s: WebSocket, persistence: Persistence
                             return;
                         }
                     }
-                    (shuttle_common::models::deployment::State::Queued, _)
-                    | (shuttle_common::models::deployment::State::Built, _) => {}
-                    (shuttle_common::models::deployment::State::Building, None) => {}
+                    (shuttle_common::deployment::State::Queued, _)
+                    | (shuttle_common::deployment::State::Built, _) => {}
+                    (shuttle_common::deployment::State::Building, None) => {}
                     _ => break,
                 }
             }

@@ -23,7 +23,7 @@ use config::RequestContext;
 use crossterm::style::Stylize;
 use factory::LocalFactory;
 use futures::StreamExt;
-use shuttle_common::models::{deployment, secret};
+use shuttle_common::models::secret;
 use shuttle_service::loader::{build_crate, Loader};
 use shuttle_service::Logger;
 use tokio::sync::mpsc;
@@ -360,7 +360,7 @@ impl Shuttle {
             println!("{service}");
 
             Ok(match new_deployment.state {
-                deployment::State::Crashed => CommandOutcome::DeploymentFailure,
+                shuttle_common::deployment::State::Crashed => CommandOutcome::DeploymentFailure,
                 _ => CommandOutcome::Ok,
             })
         } else {

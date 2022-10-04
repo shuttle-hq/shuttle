@@ -1,13 +1,17 @@
 pub mod database;
+pub mod deployment;
+pub mod log;
 #[cfg(feature = "models")]
 pub mod models;
 pub mod project;
 #[cfg(feature = "version")]
 pub mod version;
-#[cfg(feature = "models")]
-pub use models::log::{Item as LogItem, STATE_MESSAGE};
+
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+
+pub use log::Item as LogItem;
+pub use log::STATE_MESSAGE;
 
 #[cfg(debug_assertions)]
 pub const API_URL_DEFAULT: &str = "http://localhost:8001";

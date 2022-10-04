@@ -73,7 +73,7 @@ impl From<Log> for shuttle_common::LogItem {
             file: log.file,
             line: log.line,
             target: log.target,
-            fields: log.fields,
+            fields: serde_json::to_vec(&log.fields).unwrap(),
         }
     }
 }
@@ -86,6 +86,18 @@ impl From<Level> for shuttle_common::log::Level {
             Level::Info => Self::Info,
             Level::Warn => Self::Warn,
             Level::Error => Self::Error,
+        }
+    }
+}
+
+impl From<shuttle_common::log::Level> for Level {
+    fn from(level: shuttle_common::log::Level) -> Self {
+        match level {
+            shuttle_common::log::Level::Trace => Self::Trace,
+            shuttle_common::log::Level::Debug => Self::Debug,
+            shuttle_common::log::Level::Info => Self::Info,
+            shuttle_common::log::Level::Warn => Self::Warn,
+            shuttle_common::log::Level::Error => Self::Error,
         }
     }
 }

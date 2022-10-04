@@ -22,14 +22,20 @@ interface Props {
   readonly language: string;
   readonly code: string;
   readonly showLineNumbers?: boolean;
+  readonly name: string;
 }
 
-export default function CodeBlock({ code, language, showLineNumbers }: Props) {
+export default function CodeBlock({
+  code,
+  language,
+  showLineNumbers,
+  name,
+}: Props) {
   useWindowSize();
 
   return (
     <div className="relative my-2 rounded bg-[#282C34] p-4 shadow-lg">
-      <Copy code={code}></Copy>
+      <Copy code={code} name={name}></Copy>
 
       <HeightMagic>
         <SyntaxHighlighter

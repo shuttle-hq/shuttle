@@ -13,13 +13,13 @@ use cargo::Config;
 use cargo_metadata::Message;
 use crossbeam_channel::Sender;
 use libloading::{Library, Symbol};
-use log::{error, trace};
 use thiserror::Error as ThisError;
+use tracing::{error, trace};
 
 use futures::FutureExt;
 
 use crate::error::CustomError;
-use crate::Bootstrapper;
+use crate::{logger, Bootstrapper};
 use crate::{Error, Factory, ServeHandle};
 
 const ENTRYPOINT_SYMBOL_NAME: &[u8] = b"_create_service\0";
@@ -43,9 +43,9 @@ pub struct Loader {
 
 impl Loader {
     /// Dynamically load from a `.so` file a value of a type implementing the
-    /// [`Service`] trait. Relies on the `.so` library having an ``extern "C"`
-    /// function called [`ENTRYPOINT_SYMBOL_NAME`], likely automatically generated
-    /// using the [`shuttle_service::main`] macro.
+    /// [`Service`][crate::Service] trait. Relies on the `.so` library having an `extern "C"`
+    /// function called `ENTRYPOINT_SYMBOL_NAME`, likely automatically generated
+    /// using the [`shuttle_service::main`][crate::main] macro.
     pub fn from_so_file<P: AsRef<OsStr>>(so_path: P) -> Result<Self, LoaderError> {
         trace!("loading {:?}", so_path.as_ref().to_str());
         unsafe {
@@ -67,7 +67,7 @@ impl Loader {
         self,
         factory: &mut dyn Factory,
         addr: SocketAddr,
-        logger: Box<dyn log::Log>,
+        logger: logger::Logger,
     ) -> Result<LoadedService, Error> {
         let mut bootstrapper = self.bootstrapper;
 

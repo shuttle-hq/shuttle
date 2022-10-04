@@ -9,9 +9,9 @@ export const SITE_URL = "https://shuttle.rs/";
 
 export const TWITTER_HANDLE = "@shuttle_dev";
 
-export const MIXPANEL_TOKEN = "ea13713300ea92e06107f27762512e57";
+export const GA_MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
 
-export const GITHUB_URL = "https://github.com/getsynth/shuttle";
+export const GITHUB_URL = "https://github.com/shuttle-hq/shuttle";
 export const DISCORD_URL = "https://discord.gg/shuttle";
 export const TWITTER_URL = "https://twitter.com/shuttle_dev";
 export const SHUTTLE_DOCS_URL =

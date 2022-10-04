@@ -2,7 +2,8 @@ use std::collections::BTreeMap;
 
 use async_trait::async_trait;
 
-use crate::ResourceBuilder;
+use shuttle_service::{Error, Factory, ResourceBuilder};
+use tokio::runtime::Runtime;
 
 pub struct Secrets;
 
@@ -15,9 +16,9 @@ impl ResourceBuilder<SecretStore> for Secrets {
 
     async fn build(
         self,
-        factory: &mut dyn crate::Factory,
-        _runtime: &tokio::runtime::Runtime,
-    ) -> Result<SecretStore, crate::Error> {
+        factory: &mut dyn Factory,
+        _runtime: &Runtime,
+    ) -> Result<SecretStore, Error> {
         let secrets = factory.get_secrets().await?;
 
         Ok(SecretStore { secrets })

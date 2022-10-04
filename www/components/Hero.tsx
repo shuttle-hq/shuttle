@@ -58,7 +58,6 @@ export default function Hero() {
                 className="rounded bg-brand-900 py-3 px-8 font-bold text-white transition hover:bg-brand-700"
                 href={SHUTTLE_DOCS_URL}
                 target="_self"
-                mixpanelEvent="Get Started"
               >
                 Get Started
               </ExternalLink>
@@ -66,7 +65,6 @@ export default function Hero() {
               <ExternalLink
                 className="rounded bg-brand-purple1 py-3 px-8 font-bold text-white transition hover:brightness-125"
                 href={DISCORD_URL}
-                mixpanelEvent="Join Discord"
               >
                 Join Discord
               </ExternalLink>

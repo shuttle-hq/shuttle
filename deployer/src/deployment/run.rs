@@ -9,7 +9,7 @@ use portpicker::pick_unused_port;
 use shuttle_common::project::ProjectName as ServiceName;
 use shuttle_service::{
     loader::{LoadedService, Loader},
-    Factory,
+    Factory, Logger,
 };
 use tokio::task::JoinError;
 use tracing::{debug, error, info, instrument, trace};
@@ -175,7 +175,7 @@ impl Built {
         self,
         address: SocketAddr,
         factory: &mut dyn Factory,
-        logger: Box<dyn log::Log>,
+        logger: Logger,
         mut kill_recv: KillReceiver,
         kill_old_deployments: impl futures::Future<Output = Result<()>>,
         cleanup: impl FnOnce(std::result::Result<std::result::Result<(), shuttle_service::Error>, JoinError>)
@@ -223,7 +223,7 @@ async fn load_deployment(
     id: &Uuid,
     addr: SocketAddr,
     factory: &mut dyn Factory,
-    logger: Box<dyn log::Log>,
+    logger: Logger,
 ) -> Result<LoadedService> {
     let so_path = PathBuf::from(LIBS_PATH).join(id.to_string());
     let loader = Loader::from_so_file(so_path)?;
@@ -242,7 +242,7 @@ mod tests {
     };
 
     use shuttle_common::database;
-    use shuttle_service::Factory;
+    use shuttle_service::{Factory, Logger};
     use tokio::{
         sync::{broadcast, oneshot},
         task::JoinError,
@@ -278,15 +278,16 @@ mod tests {
         }
     }
 
-    struct StubLogger;
-    impl log::Log for StubLogger {
-        fn enabled(&self, _metadata: &log::Metadata) -> bool {
-            false
-        }
+    fn get_logger(id: Uuid) -> Logger {
+        let (tx, rx) = crossbeam_channel::bounded(0);
 
-        fn log(&self, _record: &log::Record) {}
+        tokio::spawn(async move {
+            while let Ok(log) = rx.recv() {
+                println!("{log}");
+            }
+        });
 
-        fn flush(&self) {}
+        Logger::new(tx, id)
     }
 
     async fn kill_old_deployments() -> crate::error::Result<()> {
@@ -294,7 +295,7 @@ mod tests {
     }
 
     // This test uses the kill signal to make sure a service does stop when asked to
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn can_be_killed() {
         let built = make_so_and_built("sleep-async");
         let id = built.id;
@@ -314,7 +315,7 @@ mod tests {
         };
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
         let mut factory = StubFactory;
-        let logger = Box::new(StubLogger);
+        let logger = get_logger(built.id);
 
         built
             .handle(
@@ -341,7 +342,7 @@ mod tests {
     }
 
     // This test does not use a kill signal to stop the service. Rather the service decided to stop on its own without errors
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn self_stop() {
         let built = make_so_and_built("sleep-async");
         let (_kill_send, kill_recv) = broadcast::channel(1);
@@ -361,7 +362,7 @@ mod tests {
         };
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
         let mut factory = StubFactory;
-        let logger = Box::new(StubLogger);
+        let logger = get_logger(built.id);
 
         built
             .handle(
@@ -382,7 +383,7 @@ mod tests {
     }
 
     // Test for panics in Service::bind
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn panic_in_bind() {
         let built = make_so_and_built("bind-panic");
         let (_kill_send, kill_recv) = broadcast::channel(1);
@@ -402,7 +403,7 @@ mod tests {
         };
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
         let mut factory = StubFactory;
-        let logger = Box::new(StubLogger);
+        let logger = get_logger(built.id);
 
         built
             .handle(
@@ -423,7 +424,7 @@ mod tests {
     }
 
     // Test for panics in the main function
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn panic_in_main() {
         let built = make_so_and_built("main-panic");
         let (_kill_send, kill_recv) = broadcast::channel(1);
@@ -431,7 +432,7 @@ mod tests {
         let handle_cleanup = |_result| panic!("the service shouldn't even start");
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
         let mut factory = StubFactory;
-        let logger = Box::new(StubLogger);
+        let logger = get_logger(built.id);
 
         let result = built
             .handle(
@@ -451,7 +452,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn missing_so() {
         let built = Built {
             id: Uuid::new_v4(),
@@ -463,7 +464,7 @@ mod tests {
         let handle_cleanup = |_result| panic!("no service means no cleanup");
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
         let mut factory = StubFactory;
-        let logger = Box::new(StubLogger);
+        let logger = get_logger(built.id);
 
         let result = built
             .handle(

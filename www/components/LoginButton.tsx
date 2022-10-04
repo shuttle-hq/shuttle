@@ -1,6 +1,6 @@
 import { useApiKeyModalState } from "./ApiKeyModal";
 import { useUser } from "@auth0/nextjs-auth0";
-import mixpanel from "mixpanel-browser";
+import { gtagEvent } from "../lib/gtag";
 
 export default function LoginButton() {
   const { user, error, isLoading } = useUser();
@@ -15,7 +15,13 @@ export default function LoginButton() {
       <button
         className={className}
         onClick={() => {
-          mixpanel.track(label);
+          gtagEvent({
+            action: "login_click",
+            category: "Login",
+            label: "Existing Session Login",
+            // todo: track api-key?
+            // value: api-key,
+          });
 
           setOpen(true);
         }}
@@ -27,10 +33,16 @@ export default function LoginButton() {
 
   return (
     <a
-      className={className}
       href="/login"
-      ref={(el) => {
-        el && mixpanel.track_links(el, label);
+      className={className}
+      onClick={() => {
+        gtagEvent({
+          action: "new_login_click",
+          category: "Login",
+          label: "New Session Login",
+          // todo: track api-key?
+          // value: api-key,
+        });
       }}
     >
       {label}

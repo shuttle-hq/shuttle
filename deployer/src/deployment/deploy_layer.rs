@@ -129,7 +129,7 @@ impl From<Log> for shuttle_common::LogItem {
             file: log.file,
             line: log.line,
             target: log.target,
-            fields: log.fields,
+            fields: serde_json::to_vec(&log.fields).unwrap(),
         }
     }
 }
@@ -402,6 +402,7 @@ mod tests {
     use ctor::ctor;
     use flate2::{write::GzEncoder, Compression};
     use futures::FutureExt;
+    use shuttle_service::Logger;
     use tokio::{select, time::sleep};
     use tracing_subscriber::prelude::*;
     use uuid::Uuid;
@@ -534,21 +535,17 @@ mod tests {
     struct StubRuntimeLoggerFactory;
 
     impl runtime_logger::Factory for StubRuntimeLoggerFactory {
-        fn get_logger(&self, _id: Uuid) -> Box<dyn log::Log> {
-            Box::new(StubRuntimeLogger)
+        fn get_logger(&self, id: Uuid) -> Logger {
+            let (tx, rx) = crossbeam_channel::unbounded();
+
+            tokio::spawn(async move {
+                while let Ok(log) = rx.recv() {
+                    println!("{log}")
+                }
+            });
+
+            Logger::new(tx, id)
         }
-    }
-
-    struct StubRuntimeLogger;
-
-    impl log::Log for StubRuntimeLogger {
-        fn enabled(&self, _metadata: &log::Metadata) -> bool {
-            false
-        }
-
-        fn log(&self, _record: &log::Record) {}
-
-        fn flush(&self) {}
     }
 
     #[derive(Clone)]

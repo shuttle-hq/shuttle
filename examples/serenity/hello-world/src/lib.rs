@@ -3,8 +3,8 @@ use serenity::async_trait;
 use serenity::model::channel::Message;
 use serenity::model::gateway::Ready;
 use serenity::prelude::*;
+use shuttle_secrets::SecretStore;
 use shuttle_service::error::CustomError;
-use shuttle_service::SecretStore;
 use sqlx::PgPool;
 
 struct Bot;
@@ -25,7 +25,7 @@ impl EventHandler for Bot {
 }
 
 #[shuttle_service::main]
-async fn serenity(#[shared::Postgres] pool: PgPool) -> shuttle_service::ShuttleSerenity {
+async fn serenity(#[shuttle_shared_db::Postgres] pool: PgPool) -> shuttle_service::ShuttleSerenity {
     // Get the discord token set in `Secrets.toml` from the shared Postgres database
     let token = pool
         .get_secret("DISCORD_TOKEN")

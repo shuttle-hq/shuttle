@@ -307,7 +307,7 @@ async fn poem_mongodb() {
     assert_eq!(request_text, "{\"note\":\"Deploy to shuttle\"}");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn salvo_hello_world() {
     let port = cargo_shuttle_run("../examples/salvo/hello-world").await;
 

@@ -1,0 +1,21 @@
+[package]
+name = "shuttle-aws-rds"
+version = "0.5.2"
+edition = "2021"
+license = "Apache-2.0"
+description = "Plugin to provision AWS RDS resources"
+keywords = ["shuttle-service", "rds"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+async-trait = "0.1.56"
+paste = "1.0.7"
+shuttle-service = { path = "../../service", version = "0.5.2", default-features = false }
+sqlx = { version = "0.6.0", features = ["runtime-tokio-native-tls"] }
+tokio = { version = "1.19.2", features = ["rt"] }
+
+[features]
+postgres = ["sqlx/postgres"]
+mysql = ["sqlx/mysql"]
+mariadb = ["sqlx/mysql"]

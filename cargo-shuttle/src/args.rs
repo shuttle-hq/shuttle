@@ -157,7 +157,7 @@ pub struct InitArgs {
     /// Initialize with serenity framework
     #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "tower", "poem", "salvo"])]
     pub serenity: bool,
-    /// Path to initialize a new shuttle service
+    /// Path to initialize a new shuttle project
     #[clap(
         parse(try_from_os_str = parse_init_path),
         default_value = ".",

@@ -11,7 +11,7 @@ axum = { version = "0.5.7", features = ["ws"] }
 bytes = "1.1.0"
 cargo = "0.64.0"
 cargo_metadata = "0.15.0"
-chrono = "0.4.19"
+chrono = "0.4.22"
 clap = { version = "3.2.8", features = ["derive"] }
 crossbeam-channel = "0.5.6"
 flate2 = "1.0.24"
@@ -20,7 +20,6 @@ futures = "0.3.21"
 hyper = { version = "0.14.20", features = ["client", "http1", "http2", "tcp" ] }
 # not great, but waiting for WebSocket changes to be merged
 hyper-reverse-proxy = { git = "https://github.com/chesedo/hyper-reverse-proxy", branch = "master" }
-log = "0.4.17"
 once_cell = "1.14.0"
 opentelemetry = { version = "0.17.0", features = ["rt-tokio"] }
 opentelemetry-datadog = { version = "0.5.0", features = ["reqwest-client"] }

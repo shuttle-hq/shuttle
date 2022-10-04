@@ -27,7 +27,7 @@ pub struct Item {
     pub file: Option<String>,
     pub line: Option<u32>,
     pub target: String,
-    pub fields: serde_json::Value,
+    pub fields: Vec<u8>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -44,7 +44,7 @@ impl Display for Item {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let datetime: DateTime<Local> = DateTime::from(self.timestamp);
 
-        let message = match &self.fields {
+        let message = match serde_json::from_slice(&self.fields).unwrap() {
             serde_json::Value::String(str_value) if str_value == STATE_MESSAGE => {
                 writeln!(f)?;
                 format!("Entering {} state", self.state)
@@ -101,6 +101,18 @@ impl Level {
             Level::Info => " INFO".green(),
             Level::Warn => " WARN".yellow(),
             Level::Error => "ERROR".red(),
+        }
+    }
+}
+
+impl From<&tracing::Level> for Level {
+    fn from(level: &tracing::Level) -> Self {
+        match *level {
+            tracing::Level::ERROR => Self::Error,
+            tracing::Level::WARN => Self::Warn,
+            tracing::Level::INFO => Self::Info,
+            tracing::Level::DEBUG => Self::Debug,
+            tracing::Level::TRACE => Self::Trace,
         }
     }
 }

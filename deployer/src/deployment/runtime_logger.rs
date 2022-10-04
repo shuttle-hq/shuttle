@@ -1,14 +1,12 @@
-use chrono::Utc;
-use log::{Level, Metadata, Record};
-use serde_json::json;
+use crossbeam_channel::Sender;
+use shuttle_common::LogItem;
+use shuttle_service::Logger;
 use uuid::Uuid;
 
-use crate::persistence::{LogLevel, State};
-
-use super::deploy_layer;
+use super::deploy_layer::{self, LogType};
 
 pub trait Factory: Send + 'static {
-    fn get_logger(&self, id: Uuid) -> Box<dyn log::Log>;
+    fn get_logger(&self, id: Uuid) -> Logger;
 }
 
 /// Factory to create runtime loggers for deployments
@@ -23,63 +21,34 @@ impl RuntimeLoggerFactory {
 }
 
 impl Factory for RuntimeLoggerFactory {
-    fn get_logger(&self, id: Uuid) -> Box<dyn log::Log> {
-        Box::new(RuntimeLogger::new(id, self.log_send.clone()))
+    fn get_logger(&self, id: Uuid) -> Logger {
+        let (tx, rx): (Sender<LogItem>, _) = crossbeam_channel::bounded(0);
+
+        let sender = self.log_send.clone();
+
+        tokio::spawn(async move {
+            while let Ok(log) = rx.recv() {
+                sender.send(log.into()).expect("to send log to persistence");
+            }
+        });
+
+        Logger::new(tx, id)
     }
 }
 
-/// Captures and redirects runtime logs for a deploy
-/// TODO: convert to a tracing subscriber
-pub struct RuntimeLogger {
-    id: Uuid,
-    log_send: crossbeam_channel::Sender<deploy_layer::Log>,
-}
-
-impl RuntimeLogger {
-    pub(crate) fn new(id: Uuid, log_send: crossbeam_channel::Sender<deploy_layer::Log>) -> Self {
-        Self { id, log_send }
-    }
-}
-
-impl log::Log for RuntimeLogger {
-    fn enabled(&self, metadata: &Metadata) -> bool {
-        metadata.level() <= Level::Info
-    }
-
-    fn log(&self, record: &Record) {
-        if self.enabled(record.metadata()) {
-            let datetime = Utc::now();
-
-            self.log_send
-                .send(deploy_layer::Log {
-                    id: self.id,
-                    state: State::Running,
-                    level: record.level().into(),
-                    timestamp: datetime,
-                    file: record.file().map(String::from),
-                    line: record.line(),
-                    target: record.target().to_string(),
-                    fields: json!({
-                        "message": format!("{}", record.args()),
-                    }),
-                    r#type: deploy_layer::LogType::Event,
-                    address: None,
-                })
-                .expect("sending log should succeed");
-        }
-    }
-
-    fn flush(&self) {}
-}
-
-impl From<Level> for LogLevel {
-    fn from(level: Level) -> Self {
-        match level {
-            Level::Error => Self::Error,
-            Level::Warn => Self::Warn,
-            Level::Info => Self::Info,
-            Level::Debug => Self::Debug,
-            Level::Trace => Self::Trace,
+impl From<LogItem> for deploy_layer::Log {
+    fn from(log: LogItem) -> Self {
+        Self {
+            id: log.id,
+            state: log.state.into(),
+            level: log.level.into(),
+            timestamp: log.timestamp,
+            file: log.file,
+            line: log.line,
+            target: log.target,
+            fields: serde_json::from_slice(&log.fields).unwrap(),
+            r#type: LogType::Event,
+            address: None,
         }
     }
 }

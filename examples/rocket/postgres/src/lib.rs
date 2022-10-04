@@ -5,6 +5,7 @@ use rocket::response::status::BadRequest;
 use rocket::serde::json::Json;
 use rocket::State;
 use serde::{Deserialize, Serialize};
+use shuttle_secrets::SecretStore;
 use shuttle_service::error::CustomError;
 use sqlx::{Executor, FromRow, PgPool};
 
@@ -38,7 +39,7 @@ struct MyState {
 }
 
 #[shuttle_service::main]
-async fn rocket(#[shared::Postgres] pool: PgPool) -> shuttle_service::ShuttleRocket {
+async fn rocket(#[shuttle_shared_db::Postgres] pool: PgPool) -> shuttle_service::ShuttleRocket {
     pool.execute(include_str!("../schema.sql"))
         .await
         .map_err(CustomError::new)?;

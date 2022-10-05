@@ -1,14 +1,15 @@
 use crate::helpers::{loader::build_so_create_loader, sqlx::PostgresInstance};
 
-use log::Level;
+use shuttle_common::log::Level;
+use shuttle_common::LogItem;
 use shuttle_service::loader::LoaderError;
-use shuttle_service::{database, Error, Factory, ServiceName};
+use shuttle_service::{database, Error, Factory, Logger, ServiceName};
 use std::collections::BTreeMap;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::process::exit;
 use std::str::FromStr;
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use tokio::sync::mpsc::{self, UnboundedReceiver};
 
 use async_trait::async_trait;
 
@@ -28,32 +29,11 @@ impl DummyFactory {
     }
 }
 
-struct StubLogger {
-    logs: Arc<Mutex<Vec<(String, String, Level)>>>,
-}
+fn get_logger() -> (Logger, UnboundedReceiver<LogItem>) {
+    let (tx, rx) = mpsc::unbounded_channel();
+    let logger = Logger::new(tx, Default::default());
 
-impl StubLogger {
-    fn new() -> Self {
-        Self {
-            logs: Arc::new(Mutex::new(Vec::new())),
-        }
-    }
-}
-
-impl log::Log for StubLogger {
-    fn enabled(&self, _metadata: &log::Metadata) -> bool {
-        true
-    }
-
-    fn log(&self, record: &log::Record) {
-        self.logs.lock().unwrap().push((
-            format!("{}", record.args()),
-            record.target().to_string(),
-            record.level(),
-        ))
-    }
-
-    fn flush(&self) {}
+    (logger, rx)
 }
 
 #[async_trait]
@@ -94,7 +74,7 @@ async fn sleep_async() {
 
     let mut factory = DummyFactory::new();
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
-    let logger = Box::new(StubLogger::new());
+    let (logger, _rx) = get_logger();
     let (handler, _) = loader.load(&mut factory, addr, logger).await.unwrap();
 
     // Give service some time to start up
@@ -117,7 +97,7 @@ async fn sleep() {
 
     let mut factory = DummyFactory::new();
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
-    let logger = Box::new(StubLogger::new());
+    let (logger, _rx) = get_logger();
     let (handler, _) = loader.load(&mut factory, addr, logger).await.unwrap();
 
     // Give service some time to start up
@@ -148,18 +128,27 @@ async fn sqlx_pool() {
     let mut factory = DummyFactory::new();
 
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
-    let logger = StubLogger::new();
-    let logs = logger.logs.clone();
-    let logger = Box::new(logger);
+    let (logger, mut rx) = get_logger();
     let (handler, _) = loader.load(&mut factory, addr, logger).await.unwrap();
 
     handler.await.unwrap().unwrap();
 
-    let logs = logs.lock().unwrap();
-    let log = logs.first().unwrap();
-    assert!(log.0.starts_with("SELECT 'Hello world';"), "got: {}", log.0);
-    assert_eq!(log.1, "sqlx::query");
-    assert_eq!(log.2, log::Level::Info);
+    let log = rx.recv().await.unwrap();
+    let value = serde_json::from_slice::<serde_json::Value>(&log.fields).unwrap();
+    let message = value
+        .as_object()
+        .unwrap()
+        .get("message")
+        .unwrap()
+        .as_str()
+        .unwrap();
+    assert!(
+        message.starts_with("SELECT 'Hello world';"),
+        "got: {}",
+        message
+    );
+    assert_eq!(log.target, "sqlx::query");
+    assert_eq!(log.level, Level::Info);
 }
 
 #[tokio::test]
@@ -168,7 +157,7 @@ async fn build_panic() {
 
     let mut factory = DummyFactory::new();
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
-    let logger = Box::new(StubLogger::new());
+    let (logger, _rx) = get_logger();
 
     if let Err(Error::BuildPanic(msg)) = loader.load(&mut factory, addr, logger).await {
         assert_eq!(&msg, "panic in build");
@@ -183,7 +172,7 @@ async fn bind_panic() {
 
     let mut factory = DummyFactory::new();
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
-    let logger = Box::new(StubLogger::new());
+    let (logger, _rx) = get_logger();
 
     let (handle, _) = loader.load(&mut factory, addr, logger).await.unwrap();
 

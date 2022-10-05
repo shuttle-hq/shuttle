@@ -244,7 +244,7 @@ mod tests {
     use shuttle_common::database;
     use shuttle_service::{Factory, Logger};
     use tokio::{
-        sync::{broadcast, oneshot},
+        sync::{broadcast, mpsc, oneshot},
         task::JoinError,
         time::sleep,
     };
@@ -279,10 +279,10 @@ mod tests {
     }
 
     fn get_logger(id: Uuid) -> Logger {
-        let (tx, rx) = crossbeam_channel::bounded(0);
+        let (tx, mut rx) = mpsc::unbounded_channel();
 
         tokio::spawn(async move {
-            while let Ok(log) = rx.recv() {
+            while let Some(log) = rx.recv().await {
                 println!("{log}");
             }
         });

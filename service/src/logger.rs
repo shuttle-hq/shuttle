@@ -1,16 +1,17 @@
 use chrono::Utc;
 use serde_json::json;
 use shuttle_common::{deployment::State, DeploymentId, LogItem};
+use tokio::sync::mpsc::UnboundedSender;
 use tracing::{field::Visit, Subscriber};
 use tracing_subscriber::Layer;
 
 pub struct Logger {
     deployment_id: DeploymentId,
-    tx: crossbeam_channel::Sender<LogItem>,
+    tx: UnboundedSender<LogItem>,
 }
 
 impl Logger {
-    pub fn new(tx: crossbeam_channel::Sender<LogItem>, deployment_id: DeploymentId) -> Self {
+    pub fn new(tx: UnboundedSender<LogItem>, deployment_id: DeploymentId) -> Self {
         Self { tx, deployment_id }
     }
 }
@@ -92,11 +93,13 @@ impl Visit for JsonVisitor {
 mod tests {
     use super::*;
 
+    use shuttle_common::log::Level;
+    use tokio::sync::mpsc;
     use tracing_subscriber::prelude::*;
 
     #[test]
     fn logging() {
-        let (s, r) = crossbeam_channel::unbounded();
+        let (s, mut r) = mpsc::unbounded_channel();
 
         let logger = Logger::new(s, Default::default());
 
@@ -107,16 +110,30 @@ mod tests {
         tracing::warn!("from");
         tracing::error!("logger");
 
-        let logs = r
-            .try_iter()
-            .map(|log| {
-                let fields: serde_json::Map<String, serde_json::Value> =
-                    serde_json::from_slice(&log.item.fields).unwrap();
+        assert_eq!(
+            r.blocking_recv().map(to_tuple),
+            Some(("this is".to_string(), Level::Debug))
+        );
+        assert_eq!(
+            r.blocking_recv().map(to_tuple),
+            Some(("hi".to_string(), Level::Info))
+        );
+        assert_eq!(
+            r.blocking_recv().map(to_tuple),
+            Some(("from".to_string(), Level::Warn))
+        );
+        assert_eq!(
+            r.blocking_recv().map(to_tuple),
+            Some(("logger".to_string(), Level::Error))
+        );
+    }
 
-                fields["message"].as_str().unwrap().to_owned()
-            })
-            .collect::<Vec<_>>();
+    fn to_tuple(log: LogItem) -> (String, Level) {
+        let fields: serde_json::Map<String, serde_json::Value> =
+            serde_json::from_slice(&log.fields).unwrap();
 
-        assert_eq!(logs, vec!["this is", "hi", "from", "logger",]);
+        let message = fields["message"].as_str().unwrap().to_owned();
+
+        (message, log.level)
     }
 }

@@ -19,6 +19,7 @@ use regex::Regex;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::json;
 use tracing::error;
+use tokio::sync::mpsc::error::SendError;
 
 pub mod api;
 pub mod args;
@@ -105,6 +106,12 @@ impl From<ErrorKind> for Error {
     }
 }
 
+impl<T> From<SendError<T>> for Error {
+    fn from(_: SendError<T>) -> Self {
+        Self::from(ErrorKind::NotReady)
+    }
+}
+
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
         error!(error = %self, "request had an error");
@@ -132,7 +139,7 @@ impl IntoResponse for Error {
             ),
             ErrorKind::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
             ErrorKind::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
-            ErrorKind::NotReady => (StatusCode::INTERNAL_SERVER_ERROR, "not ready yet"),
+            ErrorKind::NotReady => (StatusCode::INTERNAL_SERVER_ERROR, "service not ready"),
         };
         (status, Json(json!({ "error": error_message }))).into_response()
     }
@@ -231,7 +238,7 @@ pub trait Service<'c> {
     fn context(&'c self) -> Self::Context;
 
     /// Commit a state update to persistence
-    async fn update(&mut self, state: &Self::State) -> Result<(), Self::Error>;
+    async fn update(&self, state: &Self::State) -> Result<(), Self::Error>;
 }
 
 /// A generic state which can, when provided with a [`Context`], do
@@ -640,7 +647,6 @@ pub mod tests {
                 info!("work channel closed");
             }
         });
-        service.set_sender(Some(log_out)).await.unwrap();
 
         let base_port = loop {
             let port = portpicker::pick_unused_port().unwrap();
@@ -649,7 +655,7 @@ pub mod tests {
             }
         };
 
-        let api = make_api(Arc::clone(&service));
+        let api = make_api(Arc::clone(&service), log_out);
         let api_addr = format!("127.0.0.1:{}", base_port).parse().unwrap();
         let serve_api = hyper::Server::bind(&api_addr).serve(api.into_make_service());
         let api_client = world.client(api_addr.clone());

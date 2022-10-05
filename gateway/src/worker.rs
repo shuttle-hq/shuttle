@@ -1,16 +1,37 @@
 use std::fmt::Debug;
+use std::sync::Arc;
 
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tracing::info;
 
 use crate::project::Project;
-use crate::{AccountName, Context, EndState, Error, ProjectName, Service, State};
+use crate::service::GatewayService;
+use crate::{
+    AccountName, Context, EndState, Error, ProjectName, Refresh, Service, State,
+};
 
+#[must_use]
 #[derive(Debug, Clone)]
 pub struct Work<W = Project> {
     pub project_name: ProjectName,
     pub account_name: AccountName,
     pub work: W,
+}
+
+#[async_trait]
+impl<W> Refresh for Work<W>
+where
+    W: Refresh + Send,
+{
+    type Error = W::Error;
+
+    async fn refresh<'c, C: Context<'c>>(self, ctx: &C) -> Result<Self, Self::Error> {
+        Ok(Self {
+            project_name: self.project_name,
+            account_name: self.account_name,
+            work: self.work.refresh(ctx).await?,
+        })
+    }
 }
 
 #[async_trait]
@@ -50,8 +71,8 @@ where
     }
 }
 
-pub struct Worker<Svc, W> {
-    pub service: Svc,
+pub struct Worker<Svc = Arc<GatewayService>, W = Work> {
+    service: Svc,
     send: Option<Sender<W>>,
     recv: Receiver<W>,
 }
@@ -68,13 +89,13 @@ where
             recv,
         }
     }
-}
 
-impl<Svc, W> Worker<Svc, W> {
+    /// Returns a [Sender] to push work to this worker.
+    ///
     /// # Panics
-    /// If this worker has already been started before.
+    /// If this worker has already started.
     pub fn sender(&self) -> Sender<W> {
-        self.send.as_ref().unwrap().clone()
+        Sender::clone(self.send.as_ref().unwrap())
     }
 }
 
@@ -86,10 +107,14 @@ where
     /// Starts the worker, waiting and processing elements from the
     /// queue until the last sending end for the channel is dropped,
     /// at which point this future resolves.
+    ///
+    /// # Panics
+    /// If this worker has already started.
     pub async fn start(mut self) -> Result<Self, Error> {
-        // Drop our sender to prevent a deadlock if this is the last
-        // one for this channel
-        let _ = self.send.take();
+        // Drop the self-sender owned by this worker to prevent a
+        // deadlock if all the other senders have already been dropped
+        // at this point.
+        let _ = self.send.take().unwrap();
 
         while let Some(mut work) = self.recv.recv().await {
             loop {
@@ -120,19 +145,20 @@ pub mod tests {
     use std::convert::Infallible;
 
     use anyhow::anyhow;
+    use tokio::sync::Mutex;
 
     use super::*;
     use crate::tests::{World, WorldContext};
 
     pub struct DummyService<S> {
         world: World,
-        state: Option<S>,
+        state: Mutex<Option<S>>
     }
 
     impl DummyService<()> {
         pub async fn new<S>() -> DummyService<S> {
             let world = World::new().await;
-            DummyService { world, state: None }
+            DummyService { world, state: Mutex::new(None) }
         }
     }
 
@@ -151,8 +177,9 @@ pub mod tests {
             self.world.context()
         }
 
-        async fn update(&mut self, state: &Self::State) -> Result<(), Self::Error> {
-            self.state = Some(state.clone());
+        async fn update(&self, state: &Self::State) -> Result<(), Self::Error> {
+            let mut lock = self.state.lock().await;
+            *lock = Some(Self::State::clone(state));
             Ok(())
         }
     }
@@ -220,11 +247,11 @@ pub mod tests {
         } = worker.start().await.unwrap();
 
         assert_eq!(
-            state,
+            *state.lock().await,
             Some(FiniteState {
                 count: 42,
                 max_count: 42
             })
-        )
+        );
     }
 }

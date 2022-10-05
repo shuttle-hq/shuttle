@@ -1,10 +1,11 @@
 use clap::Parser;
 use futures::prelude::*;
+use shuttle_gateway::{Service, Refresh};
 use shuttle_gateway::args::{Args, Commands, InitArgs};
 use shuttle_gateway::auth::Key;
 use shuttle_gateway::proxy::make_proxy;
 use shuttle_gateway::service::{GatewayService, MIGRATIONS};
-use shuttle_gateway::worker::Worker;
+use shuttle_gateway::worker::{Worker, Work};
 use shuttle_gateway::{api::make_api, args::StartArgs};
 use sqlx::migrate::MigrateDatabase;
 use sqlx::{query, Sqlite, SqlitePool};
@@ -60,12 +61,31 @@ async fn start(db: SqlitePool, args: StartArgs) -> io::Result<()> {
     let gateway = Arc::new(GatewayService::init(args.clone(), db).await);
 
     let worker = Worker::new(Arc::clone(&gateway));
-    gateway.set_sender(Some(worker.sender())).await.unwrap();
-    gateway
-        .refresh()
-        .map_err(|err| error!("failed to refresh state at startup: {err}"))
+
+    let sender = worker.sender();
+
+    for Work {
+        project_name,
+        account_name,
+        work,
+    } in gateway
+        .iter_projects()
         .await
-        .unwrap();
+        .expect("could not list projects")
+    {
+        match work.refresh(&gateway.context()).await {
+            Ok(work) => sender.send(Work { account_name, project_name, work }).await.unwrap(),
+            Err(err) => {
+                error!(
+                    error = %err,
+                    %account_name,
+                    %project_name,
+                    "could not refresh state. Skipping it for now.",
+                );
+                panic!("could not refresh state");  
+            },
+        }
+    }
 
     let worker_handle = tokio::spawn(
         worker
@@ -74,7 +94,7 @@ async fn start(db: SqlitePool, args: StartArgs) -> io::Result<()> {
             .map_err(|err| error!("worker error: {}", err)),
     );
 
-    let api = make_api(Arc::clone(&gateway));
+    let api = make_api(Arc::clone(&gateway), sender);
 
     let api_handle = tokio::spawn(axum::Server::bind(&args.control).serve(api.into_make_service()));
 

@@ -7,6 +7,8 @@ use axum::http::Request;
 use axum::response::Response;
 use axum::routing::{any, get};
 use axum::{Json as AxumJson, Router};
+use http::StatusCode;
+use serde::{Deserialize, Serialize};
 use shuttle_common::{project, user};
 use tokio::sync::mpsc::Sender;
 use tower_http::trace::TraceLayer;
@@ -15,6 +17,32 @@ use tracing::{debug, debug_span, field, Span};
 use crate::auth::{Admin, ScopedUser, User};
 use crate::worker::Work;
 use crate::{AccountName, Error, GatewayService, ProjectName};
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum GatewayStatus {
+    Healthy,
+    Unhealthy,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct StatusResponse {
+    status: GatewayStatus,
+}
+
+impl StatusResponse {
+    pub fn healthy() -> Self {
+        Self {
+            status: GatewayStatus::Healthy,
+        }
+    }
+
+    pub fn unhealthy() -> Self {
+        Self {
+            status: GatewayStatus::Unhealthy,
+        }
+    }
+}
 
 async fn get_user(
     Extension(service): Extension<Arc<GatewayService>>,
@@ -89,8 +117,29 @@ async fn route_project(
     service.route(&scope, req).await
 }
 
+async fn get_status(Extension(sender): Extension<Sender<Work>>) -> Response<Body> {
+    let (status, body) = if !sender.is_closed() && sender.capacity() > 0 {
+        (StatusCode::OK, StatusResponse::healthy())
+    } else {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            StatusResponse::unhealthy(),
+        )
+    };
+
+    let body = serde_json::to_vec(&body).unwrap();
+    Response::builder()
+        .status(status)
+        .body(body.into())
+        .unwrap()
+}
+
 pub fn make_api(service: Arc<GatewayService>, sender: Sender<Work>) -> Router<Body> {
     Router::<Body>::new()
+        .route(
+            "/",
+            get(get_status)
+        )
         .route(
             "/projects/:project",
             get(get_project).delete(delete_project).post(post_project)
@@ -123,6 +172,7 @@ pub mod tests {
     use futures::TryFutureExt;
     use hyper::StatusCode;
     use tokio::sync::mpsc::channel;
+    use tokio::sync::oneshot;
     use tower::Service;
 
     use super::*;
@@ -352,5 +402,67 @@ pub mod tests {
             .unwrap();
 
         Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn status() {
+        let world = World::new().await;
+        let service = Arc::new(GatewayService::init(world.args(), world.pool()).await);
+
+        let (sender, mut receiver) = channel::<Work>(1);
+        let (ctl_send, ctl_recv) = oneshot::channel();
+        let (done_send, done_recv) = oneshot::channel();
+        let worker = tokio::spawn(async move {
+            let mut done_send = Some(done_send);
+            // do not process until instructed
+            ctl_recv.await.unwrap();
+
+            while let Some(_) = receiver.recv().await {
+                done_send.take().unwrap().send(()).unwrap();
+                // do nothing
+            }
+        });
+
+        let mut router = make_api(Arc::clone(&service), sender.clone());
+
+        let get_status = || {
+            Request::builder()
+                .method("GET")
+                .uri("/")
+                .body(Body::empty())
+                .unwrap()
+        };
+
+        let resp = router.call(get_status()).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let neo: AccountName = "neo".parse().unwrap();
+        let matrix: ProjectName = "matrix".parse().unwrap();
+
+        let neo = service.create_user(neo).await.unwrap();
+        let authorization = Authorization::bearer(neo.key.as_str()).unwrap();
+
+        let create_project = Request::builder()
+            .method("POST")
+            .uri(format!("/projects/{matrix}"))
+            .body(Body::empty())
+            .unwrap()
+            .with_header(&authorization);
+
+        router.call(create_project).await.unwrap();
+
+        let resp = router.call(get_status()).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
+
+        ctl_send.send(()).unwrap();
+        done_recv.await.unwrap();
+
+        let resp = router.call(get_status()).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        worker.abort();
+
+        let resp = router.call(get_status()).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
     }
 }

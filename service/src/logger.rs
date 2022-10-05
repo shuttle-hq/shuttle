@@ -38,10 +38,10 @@ where
                 state: State::Running,
                 level: metadata.level().into(),
                 timestamp: datetime,
-                file: metadata.file().map(str::to_string),
-                line: metadata.line(),
-                target: metadata.target().to_string(),
-                fields: serde_json::to_vec(&visitor.0).unwrap(),
+                file: visitor.file.or(metadata.file().map(str::to_string)),
+                line: visitor.line.or(metadata.line()),
+                target: visitor.target.unwrap_or(metadata.target().to_string()),
+                fields: serde_json::to_vec(&visitor.fields).unwrap(),
             }
         };
 
@@ -51,13 +51,24 @@ where
 
 // Boilerplate for extracting the fields from the event
 #[derive(Default)]
-struct JsonVisitor(serde_json::Map<String, serde_json::Value>);
+struct JsonVisitor {
+    fields: serde_json::Map<String, serde_json::Value>,
+    target: Option<String>,
+    file: Option<String>,
+    line: Option<u32>,
+}
 
 impl JsonVisitor {
     /// Ignores log metadata as it is included in the other LogItem fields (target, file, line...)
     fn filter_insert(&mut self, field: &tracing::field::Field, value: serde_json::Value) {
-        if !field.name().starts_with("log.") {
-            self.0.insert(field.name().to_string(), json!(value));
+        match field.name() {
+            "log.line" => self.line = value.as_u64().map(|u| u as u32),
+            "log.target" => self.target = value.as_str().map(ToOwned::to_owned),
+            "log.file" => self.file = value.as_str().map(ToOwned::to_owned),
+            "log.module_path" => {}
+            name => {
+                self.fields.insert(name.to_string(), json!(value));
+            }
         }
     }
 }

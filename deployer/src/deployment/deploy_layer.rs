@@ -403,7 +403,7 @@ mod tests {
     use flate2::{write::GzEncoder, Compression};
     use futures::FutureExt;
     use shuttle_service::Logger;
-    use tokio::{select, time::sleep};
+    use tokio::{select, sync::mpsc, time::sleep};
     use tracing_subscriber::prelude::*;
     use uuid::Uuid;
 
@@ -536,10 +536,10 @@ mod tests {
 
     impl runtime_logger::Factory for StubRuntimeLoggerFactory {
         fn get_logger(&self, id: Uuid) -> Logger {
-            let (tx, rx) = crossbeam_channel::unbounded();
+            let (tx, mut rx) = mpsc::unbounded_channel();
 
             tokio::spawn(async move {
-                while let Ok(log) = rx.recv() {
+                while let Some(log) = rx.recv().await {
                     println!("{log}")
                 }
             });

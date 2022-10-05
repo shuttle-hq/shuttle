@@ -244,7 +244,7 @@ mod tests {
     use shuttle_common::database;
     use shuttle_service::{Factory, Logger};
     use tokio::{
-        sync::{broadcast, oneshot},
+        sync::{broadcast, mpsc, oneshot},
         task::JoinError,
         time::sleep,
     };
@@ -279,10 +279,10 @@ mod tests {
     }
 
     fn get_logger(id: Uuid) -> Logger {
-        let (tx, rx) = crossbeam_channel::bounded(0);
+        let (tx, mut rx) = mpsc::unbounded_channel();
 
         tokio::spawn(async move {
-            while let Ok(log) = rx.recv() {
+            while let Some(log) = rx.recv().await {
                 println!("{log}");
             }
         });
@@ -295,7 +295,7 @@ mod tests {
     }
 
     // This test uses the kill signal to make sure a service does stop when asked to
-    #[tokio::test(flavor = "multi_thread")]
+    #[tokio::test]
     async fn can_be_killed() {
         let built = make_so_and_built("sleep-async");
         let id = built.id;
@@ -342,7 +342,7 @@ mod tests {
     }
 
     // This test does not use a kill signal to stop the service. Rather the service decided to stop on its own without errors
-    #[tokio::test(flavor = "multi_thread")]
+    #[tokio::test]
     async fn self_stop() {
         let built = make_so_and_built("sleep-async");
         let (_kill_send, kill_recv) = broadcast::channel(1);
@@ -383,7 +383,7 @@ mod tests {
     }
 
     // Test for panics in Service::bind
-    #[tokio::test(flavor = "multi_thread")]
+    #[tokio::test]
     async fn panic_in_bind() {
         let built = make_so_and_built("bind-panic");
         let (_kill_send, kill_recv) = broadcast::channel(1);
@@ -424,7 +424,7 @@ mod tests {
     }
 
     // Test for panics in the main function
-    #[tokio::test(flavor = "multi_thread")]
+    #[tokio::test]
     async fn panic_in_main() {
         let built = make_so_and_built("main-panic");
         let (_kill_send, kill_recv) = broadcast::channel(1);
@@ -452,7 +452,7 @@ mod tests {
         );
     }
 
-    #[tokio::test(flavor = "multi_thread")]
+    #[tokio::test]
     async fn missing_so() {
         let built = Built {
             id: Uuid::new_v4(),

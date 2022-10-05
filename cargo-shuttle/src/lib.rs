@@ -26,6 +26,7 @@ use futures::StreamExt;
 use shuttle_common::{deployment, secret};
 use shuttle_service::loader::{build_crate, Loader};
 use shuttle_service::Logger;
+use tokio::sync::mpsc;
 use tracing::trace;
 use uuid::Uuid;
 
@@ -300,10 +301,10 @@ impl Shuttle {
             self.ctx.project_name(),
             addr
         );
-        let (tx, rx) = crossbeam_channel::bounded(0);
+        let (tx, mut rx) = mpsc::unbounded_channel();
 
         tokio::spawn(async move {
-            while let Ok(log) = rx.recv() {
+            while let Some(log) = rx.recv().await {
                 println!("{log}");
             }
         });

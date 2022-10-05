@@ -1,6 +1,6 @@
-use crossbeam_channel::Sender;
 use shuttle_common::LogItem;
 use shuttle_service::Logger;
+use tokio::sync::mpsc::{self, UnboundedSender};
 use uuid::Uuid;
 
 use super::deploy_layer::{self, LogType};
@@ -22,12 +22,12 @@ impl RuntimeLoggerFactory {
 
 impl Factory for RuntimeLoggerFactory {
     fn get_logger(&self, id: Uuid) -> Logger {
-        let (tx, rx): (Sender<LogItem>, _) = crossbeam_channel::bounded(0);
+        let (tx, mut rx): (UnboundedSender<LogItem>, _) = mpsc::unbounded_channel();
 
         let sender = self.log_send.clone();
 
         tokio::spawn(async move {
-            while let Ok(log) = rx.recv() {
+            while let Some(log) = rx.recv().await {
                 sender.send(log.into()).expect("to send log to persistence");
             }
         });

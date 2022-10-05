@@ -27,7 +27,7 @@ pub enum PersistError {
 pub struct Persist;
 
 pub struct PersistInstance {
-    project_name: ProjectName,
+    service_name: ProjectName,
 }
 
 impl PersistInstance {
@@ -52,7 +52,7 @@ impl PersistInstance {
     }
 
     fn get_storage_folder(&self) -> PathBuf {
-        ["shuttle_persist", &self.project_name.to_string()]
+        ["shuttle_persist", &self.service_name.to_string()]
             .iter()
             .collect()
     }
@@ -77,7 +77,7 @@ impl ResourceBuilder<PersistInstance> for Persist {
         _runtime: &Runtime,
     ) -> Result<PersistInstance, shuttle_service::Error> {
         Ok(PersistInstance {
-            project_name: factory.get_project_name(),
+            service_name: factory.get_service_name(),
         })
     }
 }
@@ -91,7 +91,7 @@ mod tests {
     #[test]
     fn test_save_and_load() {
         let persist = PersistInstance {
-            project_name: ProjectName::from_str("test").unwrap(),
+            service_name: ProjectName::from_str("test").unwrap(),
         };
 
         persist.save("test", "test").unwrap();
@@ -102,7 +102,7 @@ mod tests {
     #[test]
     fn test_load_error() {
         let persist = PersistInstance {
-            project_name: ProjectName::from_str("test").unwrap(),
+            service_name: ProjectName::from_str("test").unwrap(),
         };
 
         // unwrapp error

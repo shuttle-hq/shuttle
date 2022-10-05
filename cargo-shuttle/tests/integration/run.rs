@@ -110,17 +110,6 @@ async fn rocket_postgres() {
         .unwrap();
 
     assert_eq!(request_text, "{\"id\":1,\"note\":\"Deploy to shuttle\"}");
-
-    let request_text = client
-        .get(format!("http://localhost:{port}/secret"))
-        .send()
-        .await
-        .unwrap()
-        .text()
-        .await
-        .unwrap();
-
-    assert_eq!(request_text, "the contents of my API key");
 }
 
 #[tokio::test(flavor = "multi_thread")]

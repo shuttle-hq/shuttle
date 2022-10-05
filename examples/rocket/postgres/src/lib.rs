@@ -5,7 +5,6 @@ use rocket::response::status::BadRequest;
 use rocket::serde::json::Json;
 use rocket::State;
 use serde::{Deserialize, Serialize};
-use shuttle_secrets::SecretStore;
 use shuttle_service::error::CustomError;
 use sqlx::{Executor, FromRow, PgPool};
 

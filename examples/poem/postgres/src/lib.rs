@@ -7,7 +7,6 @@ use poem::{
     EndpointExt, Result, Route,
 };
 use serde::{Deserialize, Serialize};
-use shuttle_secrets::SecretStore;
 use shuttle_service::error::CustomError;
 use sqlx::{Executor, FromRow, PgPool};
 

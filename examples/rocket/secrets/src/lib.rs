@@ -4,7 +4,7 @@ extern crate rocket;
 use anyhow::anyhow;
 use rocket::response::status::BadRequest;
 use rocket::State;
-use shuttle_service::SecretStore;
+use shuttle_secrets::SecretStore;
 
 #[get("/secret")]
 async fn secret(state: &State<MyState>) -> Result<String, BadRequest<String>> {
@@ -16,7 +16,9 @@ struct MyState {
 }
 
 #[shuttle_service::main]
-async fn rocket(#[Secrets] secret_store: SecretStore) -> shuttle_service::ShuttleRocket {
+async fn rocket(
+    #[shuttle_secrets::Secrets] secret_store: SecretStore,
+) -> shuttle_service::ShuttleRocket {
     // get secret defined in `Secrets.toml` file.
     let secret = if let Some(secret) = secret_store.get("MY_API_KEY") {
         secret

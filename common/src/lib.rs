@@ -36,18 +36,6 @@ pub struct DatabaseReadyInfo {
     address_public: String,
 }
 
-/// Trait used to get information from all the resources we manage
-pub trait ResourceInfo {
-    /// String to connect to this resource from a public location
-    fn connection_string_public(&self) -> String;
-}
-
-impl ResourceInfo for DatabaseReadyInfo {
-    fn connection_string_public(&self) -> String {
-        self.connection_string_public()
-    }
-}
-
 impl DatabaseReadyInfo {
     pub fn new(
         engine: String,

@@ -1,5 +1,8 @@
-use crate::models::{deployment, resource, secret};
-use crate::ResourceInfo;
+use crate::{
+    models::{deployment, resource, resource::ResourceInfo, secret},
+    DatabaseReadyInfo,
+};
+
 use comfy_table::{
     modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, Cell, CellAlignment, ContentArrangement,
     Table,
@@ -29,6 +32,12 @@ pub struct Summary {
     pub deployment: Option<deployment::Response>,
     pub resources: Vec<resource::Response>,
     pub uri: String,
+}
+
+impl ResourceInfo for DatabaseReadyInfo {
+    fn connection_string_public(&self) -> String {
+        self.connection_string_public()
+    }
 }
 
 impl Display for Detailed {

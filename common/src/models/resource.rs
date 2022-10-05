@@ -4,13 +4,19 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::{database, DatabaseReadyInfo, ResourceInfo};
+use crate::{database, DatabaseReadyInfo};
 
 #[derive(Deserialize, Serialize)]
 pub struct Response {
     pub service_id: Uuid,
     pub r#type: Type,
     pub data: Value,
+}
+
+/// Trait used to get information from all the resources we manage
+pub trait ResourceInfo {
+    /// String to connect to this resource from a public location
+    fn connection_string_public(&self) -> String;
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

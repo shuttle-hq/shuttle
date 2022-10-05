@@ -15,7 +15,7 @@ once_cell = "1.13.1"
 regex = { version = "1.6.0", optional = true }
 rustrict = "0.5.0"
 semver = { version = "1.0.13", optional = true }
-serde = "1.0.137"
+serde = { version = "1.0.143", features = ["derive"] }
 serde_json = { version = "1.0.85", optional = true }
 strum = { version = "0.24.1", features = ["derive"] }
 tracing = "0.1.36"
@@ -24,5 +24,6 @@ uuid = { version = "1.1.1", features = ["v4", "serde"] }
 [features]
 default = ["models", "version"]
 
-models = ["comfy-table", "crossterm", "serde_json"]
+models = ["display", "serde_json"]
+display = ["comfy-table", "crossterm"]
 version = ["anyhow", "semver", "regex"]

@@ -149,7 +149,7 @@ impl Queued {
         });
 
         let project_path = project_path.canonicalize()?;
-        let so_path = build_deployment(&project_path, tx).await?;
+        let so_path = build_deployment(self.id, &project_path, tx).await?;
 
         if self.will_run_tests {
             info!("Running deployment's unit tests");
@@ -251,10 +251,11 @@ fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<()> {
 
 #[instrument(skip(project_path, tx))]
 async fn build_deployment(
+    deployment_id: Uuid,
     project_path: &Path,
     tx: crossbeam_channel::Sender<Message>,
 ) -> Result<PathBuf> {
-    let so_path = build_crate(project_path, tx)
+    let so_path = build_crate(deployment_id, project_path, tx)
         .await
         .map_err(|e| Error::Build(e.into()))?;
 

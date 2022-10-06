@@ -85,7 +85,7 @@ pub struct BuildLogStream {
     pub timestamp: DateTime<Utc>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum Level {
     Trace,

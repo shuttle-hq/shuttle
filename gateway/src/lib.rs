@@ -18,8 +18,8 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::json;
-use tracing::error;
 use tokio::sync::mpsc::error::SendError;
+use tracing::error;
 
 pub mod api;
 pub mod args;

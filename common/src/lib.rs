@@ -6,7 +6,6 @@ pub mod resource;
 pub mod secret;
 pub mod service;
 pub mod user;
-pub mod version;
 
 pub use log::Item as LogItem;
 

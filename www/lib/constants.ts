@@ -15,4 +15,4 @@ export const GITHUB_URL = "https://github.com/shuttle-hq/shuttle";
 export const DISCORD_URL = "https://discord.gg/shuttle";
 export const TWITTER_URL = "https://twitter.com/shuttle_dev";
 export const SHUTTLE_DOCS_URL =
-  "https://docs.rs/shuttle-service/latest/shuttle_service/";
+  "https://docs.shuttle.rs/";

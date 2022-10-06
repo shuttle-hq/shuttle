@@ -591,3 +591,4 @@ impl Service for serenity::Client {
 pub type ShuttleSerenity = Result<serenity::Client, Error>;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+pub const NAME: &str = env!("CARGO_PKG_NAME");

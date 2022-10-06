@@ -1093,7 +1093,7 @@ dependencies = [
  "percent-encoding",
  "rustc-workspace-hack",
  "rustfix",
- "semver 1.0.13",
+ "semver 1.0.14",
  "serde",
  "serde_ignored",
  "serde_json",
@@ -1130,7 +1130,7 @@ dependencies = [
  "native-tls",
  "pathdiff",
  "regex",
- "semver 1.0.13",
+ "semver 1.0.14",
  "serde",
  "serde_derive",
  "serde_json",
@@ -1223,7 +1223,7 @@ checksum = "3abb7553d5b9b8421c6de7cb02606ff15e0c6eea7d8eadd75ef013fd636bec36"
 dependencies = [
  "camino",
  "cargo-platform",
- "semver 1.0.13",
+ "semver 1.0.14",
  "serde",
  "serde_json",
 ]
@@ -1546,7 +1546,7 @@ dependencies = [
  "num_cpus",
  "rayon",
  "rustc-hash",
- "semver 1.0.13",
+ "semver 1.0.14",
  "serde",
  "serde_derive",
  "serde_json",
@@ -4546,7 +4546,7 @@ version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bfa0f585226d2e68097d4f95d113b15b83a82e819ab25717ec0590d9584ef366"
 dependencies = [
- "semver 1.0.13",
+ "semver 1.0.14",
 ]
 
 [[package]]
@@ -4804,9 +4804,9 @@ dependencies = [
 
 [[package]]
 name = "semver"
-version = "1.0.13"
+version = "1.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "93f6841e709003d68bb2deee8c343572bf446003ec20a583e76f7b15cebf3711"
+checksum = "e25dfac463d778e353db5be2449d1cce89bd6fd23c9f1ea21310ce6e5a1b29c4"
 dependencies = [
  "serde",
 ]
@@ -5051,15 +5051,12 @@ dependencies = [
 name = "shuttle-common"
 version = "0.5.2"
 dependencies = [
- "anyhow",
  "chrono",
  "comfy-table",
  "crossterm",
  "once_cell",
- "regex",
  "rocket",
  "rustrict",
- "semver 1.0.13",
  "serde",
  "serde_json",
  "strum",

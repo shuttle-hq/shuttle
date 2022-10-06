@@ -8,7 +8,7 @@ use anyhow::{anyhow, Context};
 use cargo::core::compiler::{CompileMode, MessageFormat};
 use cargo::core::{PackageId, Shell, Verbosity, Workspace};
 use cargo::ops::{compile, CompileOptions};
-use cargo::util::homedir;
+use cargo::util::{homedir, ToSemver};
 use cargo::Config;
 use cargo_metadata::Message;
 use crossbeam_channel::Sender;
@@ -20,7 +20,7 @@ use futures::FutureExt;
 use uuid::Uuid;
 
 use crate::error::CustomError;
-use crate::{logger, Bootstrapper};
+use crate::{logger, Bootstrapper, NAME, VERSION};
 use crate::{Error, Factory, ServeHandle};
 
 const ENTRYPOINT_SYMBOL_NAME: &[u8] = b"_create_service\0";
@@ -158,6 +158,23 @@ pub async fn build_crate(
             )
             .unwrap(),
         );
+
+        // Version check
+        let valid_version = VERSION.to_semver().unwrap();
+
+        let version_req = summary
+            .dependencies()
+            .iter()
+            .filter(|dependency| dependency.package_name() == NAME)
+            .next()
+            .unwrap()
+            .version_req();
+
+        if !version_req.matches(&valid_version) {
+            return Err(anyhow!(
+            "the version of `shuttle-service` specified as a dependency to this service ({version_req}) is not supported by this instance ({valid_version}); try updating `shuttle-service` to the latest version available and deploy"
+        ));
+        }
 
         // Ensure `panic = "abort"` is not set:
         if let Some(profiles) = ws.profiles() {

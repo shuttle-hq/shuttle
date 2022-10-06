@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context};
 use cargo::core::compiler::{CompileMode, MessageFormat};
-use cargo::core::{Shell, Verbosity, Workspace};
+use cargo::core::{PackageId, Shell, Verbosity, Workspace};
 use cargo::ops::{compile, CompileOptions};
 use cargo::util::homedir;
 use cargo::Config;
@@ -17,6 +17,7 @@ use thiserror::Error as ThisError;
 use tracing::{error, trace};
 
 use futures::FutureExt;
+use uuid::Uuid;
 
 use crate::error::CustomError;
 use crate::{logger, Bootstrapper};
@@ -98,7 +99,11 @@ impl Loader {
 }
 
 /// Given a project directory path, builds the crate
-pub async fn build_crate(project_path: &Path, tx: Sender<Message>) -> anyhow::Result<PathBuf> {
+pub async fn build_crate(
+    deployment_id: Uuid,
+    project_path: &Path,
+    tx: Sender<Message>,
+) -> anyhow::Result<PathBuf> {
     let (read, write) = pipe::pipe();
     let project_path = project_path.to_owned();
 
@@ -120,7 +125,6 @@ pub async fn build_crate(project_path: &Path, tx: Sender<Message>) -> anyhow::Re
         let mut ws = Workspace::new(&manifest_path, &config)?;
 
         // Ensure a 'cdylib' will be built:
-
         let current = ws.current_mut().map_err(|_| anyhow!("A Shuttle project cannot have a virtual manifest file - please ensure your Cargo.toml file specifies it as a library."))?;
         if let Some(target) = current
             .manifest_mut()
@@ -142,8 +146,20 @@ pub async fn build_crate(project_path: &Path, tx: Sender<Message>) -> anyhow::Re
         ));
         }
 
-        // Ensure `panic = "abort"` is not set:
+        // Ensure name is unique. Without this `tracing`/`log` crashes because the global subscriber is somehow "already set"
+        // TODO: remove this when getting rid of the FFI
+        let summary = current.manifest_mut().summary_mut();
+        let old_package_id = summary.package_id();
+        *summary = summary.clone().override_id(
+            PackageId::new(
+                format!("{}-{deployment_id}", old_package_id.name()),
+                old_package_id.version(),
+                old_package_id.source_id(),
+            )
+            .unwrap(),
+        );
 
+        // Ensure `panic = "abort"` is not set:
         if let Some(profiles) = ws.profiles() {
             for profile in profiles.get_all().values() {
                 if profile.panic.as_deref() == Some("abort") {

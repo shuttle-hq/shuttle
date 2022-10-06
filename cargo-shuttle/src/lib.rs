@@ -264,6 +264,7 @@ impl Shuttle {
         });
 
         let working_directory = self.ctx.working_directory();
+        let id = Default::default();
 
         trace!("building project");
         println!(
@@ -271,7 +272,7 @@ impl Shuttle {
             "Building".bold().green(),
             working_directory.display()
         );
-        let so_path = build_crate(working_directory, tx).await?;
+        let so_path = build_crate(id, working_directory, tx).await?;
 
         trace!("loading secrets");
         let secrets_path = working_directory.join("Secrets.toml");
@@ -309,7 +310,7 @@ impl Shuttle {
             }
         });
 
-        let logger = Logger::new(tx, Default::default());
+        let logger = Logger::new(tx, id);
         let (handle, so) = loader.load(&mut factory, addr, logger).await?;
 
         handle.await??;

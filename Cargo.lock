@@ -5055,7 +5055,6 @@ dependencies = [
  "comfy-table",
  "crossterm",
  "once_cell",
- "regex",
  "rustrict",
  "serde",
  "serde_json",

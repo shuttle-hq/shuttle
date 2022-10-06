@@ -4,8 +4,6 @@ pub mod log;
 #[cfg(feature = "models")]
 pub mod models;
 pub mod project;
-#[cfg(feature = "version")]
-pub mod version;
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;

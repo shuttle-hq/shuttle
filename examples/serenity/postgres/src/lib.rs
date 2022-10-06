@@ -1,5 +1,4 @@
 use anyhow::Context as _;
-use log::{error, info};
 use serenity::async_trait;
 use serenity::model::application::command::CommandOptionType;
 use serenity::model::application::interaction::application_command::CommandDataOptionValue;
@@ -7,7 +6,7 @@ use serenity::model::application::interaction::{Interaction, InteractionResponse
 use serenity::model::gateway::Ready;
 use serenity::model::id::GuildId;
 use serenity::prelude::*;
-use shuttle_service::SecretStore;
+use shuttle_secrets::SecretStore;
 use sqlx::{Executor, PgPool};
 use tracing::{error, info};
 
@@ -132,11 +131,11 @@ async fn serenity(
     // Get the discord token set in `Secrets.toml`
     let token = secret_store
         .get("DISCORD_TOKEN")
-        .context("token was not found")?;
+        .context("'DISCORD_TOKEN' was not found")?;
     // Get the guild_id set in `Secrets.toml`
     let guild_id = secret_store
         .get("GUILD_ID")
-        .context("guild id was not found")?;
+        .context("'GUILD_ID' was not found")?;
 
     // Run the schema migration
     pool.execute(include_str!("../schema.sql"))

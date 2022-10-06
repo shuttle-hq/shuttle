@@ -6,13 +6,14 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context};
 use cargo::core::compiler::{CompileMode, MessageFormat};
-use cargo::core::{PackageId, Shell, Verbosity, Workspace};
+use cargo::core::{Manifest, PackageId, Shell, Summary, Verbosity, Workspace};
 use cargo::ops::{compile, CompileOptions};
 use cargo::util::{homedir, ToSemver};
 use cargo::Config;
 use cargo_metadata::Message;
 use crossbeam_channel::Sender;
 use libloading::{Library, Symbol};
+use pipe::PipeWriter;
 use thiserror::Error as ThisError;
 use tracing::{error, trace};
 
@@ -108,90 +109,20 @@ pub async fn build_crate(
     let project_path = project_path.to_owned();
 
     let handle = tokio::spawn(async move {
-        let mut shell = Shell::from_write(Box::new(write));
-        shell.set_verbosity(Verbosity::Normal);
-        let cwd = std::env::current_dir()
-            .with_context(|| "couldn't get the current directory of the process")?;
-        let homedir = homedir(&cwd).ok_or_else(|| {
-            anyhow!(
-                "Cargo couldn't find your home directory. \
-                 This probably means that $HOME was not set."
-            )
-        })?;
-
-        let config = Config::new(shell, cwd, homedir);
+        let config = get_config(write)?;
         let manifest_path = project_path.join("Cargo.toml");
-
         let mut ws = Workspace::new(&manifest_path, &config)?;
 
-        // Ensure a 'cdylib' will be built:
         let current = ws.current_mut().map_err(|_| anyhow!("A Shuttle project cannot have a virtual manifest file - please ensure your Cargo.toml file specifies it as a library."))?;
-        if let Some(target) = current
-            .manifest_mut()
-            .targets_mut()
-            .iter_mut()
-            .find(|target| target.is_lib())
-        {
-            if !target.is_cdylib() {
-                *target = cargo::core::manifest::Target::lib_target(
-                    target.name(),
-                    vec![cargo::core::compiler::CrateType::Cdylib],
-                    target.src_path().path().unwrap().to_path_buf(),
-                    target.edition(),
-                );
-            }
-        } else {
-            return Err(anyhow!(
-            "Your Shuttle project must be a library. Please add `[lib]` to your Cargo.toml file."
-        ));
-        }
+        let manifest = current.manifest_mut();
+        ensure_cdylib(manifest)?;
 
-        // Ensure name is unique. Without this `tracing`/`log` crashes because the global subscriber is somehow "already set"
-        // TODO: remove this when getting rid of the FFI
         let summary = current.manifest_mut().summary_mut();
-        let old_package_id = summary.package_id();
-        *summary = summary.clone().override_id(
-            PackageId::new(
-                format!("{}-{deployment_id}", old_package_id.name()),
-                old_package_id.version(),
-                old_package_id.source_id(),
-            )
-            .unwrap(),
-        );
+        make_name_unique(summary, deployment_id);
+        check_version(summary)?;
+        check_no_panic(&ws)?;
 
-        // Version check
-        let valid_version = VERSION.to_semver().unwrap();
-
-        let version_req = summary
-            .dependencies()
-            .iter()
-            .filter(|dependency| dependency.package_name() == NAME)
-            .next()
-            .unwrap()
-            .version_req();
-
-        if !version_req.matches(&valid_version) {
-            return Err(anyhow!(
-            "the version of `shuttle-service` specified as a dependency to this service ({version_req}) is not supported by this instance ({valid_version}); try updating `shuttle-service` to the latest version available and deploy"
-        ));
-        }
-
-        // Ensure `panic = "abort"` is not set:
-        if let Some(profiles) = ws.profiles() {
-            for profile in profiles.get_all().values() {
-                if profile.panic.as_deref() == Some("abort") {
-                    return Err(anyhow!("Your Shuttle project cannot have panics that abort. Please ensure your Cargo.toml does not contain `panic = \"abort\"` for any profiles."));
-                }
-            }
-        }
-
-        let mut opts = CompileOptions::new(&config, CompileMode::Build)?;
-        opts.build_config.message_format = MessageFormat::Json {
-            render_diagnostics: false,
-            short: false,
-            ansi: false,
-        };
-
+        let opts = get_compile_options(&config)?;
         let compilation = compile(&ws, &opts);
 
         Ok(compilation?.cdylibs[0].path.clone())
@@ -214,6 +145,106 @@ pub async fn build_crate(
     });
 
     handle.await?
+}
+
+/// Get the default compile config with output redirected to writer
+fn get_config(writer: PipeWriter) -> anyhow::Result<Config> {
+    let mut shell = Shell::from_write(Box::new(writer));
+    shell.set_verbosity(Verbosity::Normal);
+    let cwd = std::env::current_dir()
+        .with_context(|| "couldn't get the current directory of the process")?;
+    let homedir = homedir(&cwd).ok_or_else(|| {
+        anyhow!(
+            "Cargo couldn't find your home directory. \
+                 This probably means that $HOME was not set."
+        )
+    })?;
+
+    Ok(Config::new(shell, cwd, homedir))
+}
+
+/// Get options to compile in build mode
+fn get_compile_options(config: &Config) -> anyhow::Result<CompileOptions> {
+    let mut opts = CompileOptions::new(&config, CompileMode::Build)?;
+    opts.build_config.message_format = MessageFormat::Json {
+        render_diagnostics: false,
+        short: false,
+        ansi: false,
+    };
+
+    Ok(opts)
+}
+
+/// Make sure "cdylib" is set, else set it if possible
+fn ensure_cdylib(manifest: &mut Manifest) -> anyhow::Result<()> {
+    if let Some(target) = manifest
+        .targets_mut()
+        .iter_mut()
+        .find(|target| target.is_lib())
+    {
+        if !target.is_cdylib() {
+            *target = cargo::core::manifest::Target::lib_target(
+                target.name(),
+                vec![cargo::core::compiler::CrateType::Cdylib],
+                target.src_path().path().unwrap().to_path_buf(),
+                target.edition(),
+            );
+        }
+
+        Ok(())
+    } else {
+        Err(anyhow!(
+            "Your Shuttle project must be a library. Please add `[lib]` to your Cargo.toml file."
+        ))
+    }
+}
+
+/// Ensure name is unique. Without this `tracing`/`log` crashes because the global subscriber is somehow "already set"
+// TODO: remove this when getting rid of the FFI
+fn make_name_unique(summary: &mut Summary, deployment_id: Uuid) {
+    let old_package_id = summary.package_id();
+    *summary = summary.clone().override_id(
+        PackageId::new(
+            format!("{}-{deployment_id}", old_package_id.name()),
+            old_package_id.version(),
+            old_package_id.source_id(),
+        )
+        .unwrap(),
+    );
+}
+
+/// Check that the crate being build is compatible with this version of loader
+fn check_version(summary: &Summary) -> anyhow::Result<()> {
+    let valid_version = VERSION.to_semver().unwrap();
+
+    let version_req = summary
+        .dependencies()
+        .iter()
+        .filter(|dependency| dependency.package_name() == NAME)
+        .next()
+        .unwrap()
+        .version_req();
+
+    if version_req.matches(&valid_version) {
+        Ok(())
+    } else {
+        Err(anyhow!(
+            "the version of `shuttle-service` specified as a dependency to this service ({version_req}) is not supported by this instance ({valid_version}); try updating `shuttle-service` to the latest version available and deploy"
+        ))
+    }
+}
+
+/// Ensure `panic = "abort"` is not set:
+fn check_no_panic(ws: &Workspace) -> anyhow::Result<()> {
+    if let Some(profiles) = ws.profiles() {
+        for profile in profiles.get_all().values() {
+            if profile.panic.as_deref() == Some("abort") {
+                return Err(anyhow!("Your Shuttle project cannot have panics that abort. Please ensure your Cargo.toml does not contain `panic = \"abort\"` for any profiles."));
+            }
+        }
+    }
+
+    Ok(())
 }
 
 fn map_any_to_panic_string(a: Box<dyn Any>) -> String {

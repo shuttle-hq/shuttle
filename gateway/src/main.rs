@@ -109,7 +109,7 @@ async fn start(db: SqlitePool, args: StartArgs) -> io::Result<()> {
 
     let proxy_handle = tokio::spawn(hyper::Server::bind(&args.user).serve(proxy));
 
-    let _ = tokio::select!(
+    tokio::select!(
         _ = worker_handle => info!("worker handle finished"),
         _ = api_handle => info!("api handle finished"),
         _ = proxy_handle => info!("proxy handle finished"),

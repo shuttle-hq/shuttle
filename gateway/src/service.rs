@@ -113,9 +113,7 @@ impl<'d> ContainerSettingsBuilder<'d> {
                     }
                 })
             })
-            .expect(&format!(
-                "cannot find a Docker network with name=`{network_name}`"
-            ))
+            .unwrap_or_else(|| panic!("cannot find a Docker network with name=`{network_name}`"))
     }
 
     pub async fn build(mut self) -> ContainerSettings {
@@ -145,7 +143,7 @@ pub struct ContainerSettings {
 }
 
 impl ContainerSettings {
-    pub fn builder<'d>(docker: &'d Docker) -> ContainerSettingsBuilder<'d> {
+    pub fn builder(docker: &Docker) -> ContainerSettingsBuilder {
         ContainerSettingsBuilder::new(docker)
     }
 }
@@ -160,7 +158,7 @@ impl GatewayContextProvider {
         Self { docker, settings }
     }
 
-    pub fn context<'c>(&'c self) -> GatewayContext {
+    pub fn context(&self) -> GatewayContext {
         GatewayContext {
             docker: &self.docker,
             settings: &self.settings,
@@ -324,17 +322,17 @@ impl GatewayService {
             .bind(&key)
             .execute(&self.db)
             .await
-            .or_else(|err| {
+            .map_err(|err| {
                 // If the error is a broken PK constraint, this is a
                 // project name clash
                 if let Some(db_err) = err.as_database_error() {
                     if db_err.code().unwrap() == "1555" {
                         // SQLITE_CONSTRAINT_PRIMARYKEY
-                        return Err(Error::from_kind(ErrorKind::UserAlreadyExists));
+                        return Error::from_kind(ErrorKind::UserAlreadyExists);
                     }
                 }
                 // Otherwise this is internal
-                return Err(err.into());
+                err.into()
             })?;
         Ok(User {
             name,
@@ -399,16 +397,16 @@ impl GatewayService {
             .bind(&project)
             .execute(&self.db)
             .await
-            .or_else(|err| {
+            .map_err(|err| {
                 // If the error is a broken PK constraint, this is a
                 // project name clash
                 if let Some(db_err_code) = err.as_database_error().and_then(DatabaseError::code) {
                     if db_err_code == "1555" {  // SQLITE_CONSTRAINT_PRIMARYKEY
-                        return Err(Error::from_kind(ErrorKind::ProjectAlreadyExists))
+                        return Error::from_kind(ErrorKind::ProjectAlreadyExists)
                     }
                 }
                 // Otherwise this is internal
-                return Err(err.into())
+                err.into()
             })?;
 
         let project = project.0;
@@ -434,7 +432,7 @@ impl GatewayService {
         })
     }
 
-    fn context<'c>(&'c self) -> GatewayContext<'c> {
+    fn context(&self) -> GatewayContext {
         self.provider.context()
     }
 }

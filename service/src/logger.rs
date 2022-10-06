@@ -38,9 +38,11 @@ where
                 state: State::Running,
                 level: metadata.level().into(),
                 timestamp: datetime,
-                file: visitor.file.or(metadata.file().map(str::to_string)),
-                line: visitor.line.or(metadata.line()),
-                target: visitor.target.unwrap_or(metadata.target().to_string()),
+                file: visitor.file.or_else(|| metadata.file().map(str::to_string)),
+                line: visitor.line.or_else(|| metadata.line()),
+                target: visitor
+                    .target
+                    .unwrap_or_else(|| metadata.target().to_string()),
                 fields: serde_json::to_vec(&visitor.fields).unwrap(),
             }
         };

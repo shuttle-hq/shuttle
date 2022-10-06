@@ -120,7 +120,7 @@ impl Project {
 
     pub fn target_ip(&self) -> Result<Option<IpAddr>, Error> {
         match self.clone() {
-            Self::Ready(project_ready) => Ok(Some(project_ready.target_ip().clone())),
+            Self::Ready(project_ready) => Ok(Some(*project_ready.target_ip())),
             _ => Ok(None), // not ready
         }
     }
@@ -522,7 +522,7 @@ impl ProjectReady {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Service {
     name: String,
     target: IpAddr,
@@ -603,12 +603,12 @@ impl<'c> State<'c> for ProjectDestroying {
     async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error> {
         let container_id = self.container.id.as_ref().unwrap();
         ctx.docker()
-            .stop_container(&container_id, Some(StopContainerOptions { t: 1 }))
+            .stop_container(container_id, Some(StopContainerOptions { t: 1 }))
             .await
             .unwrap_or(());
         ctx.docker()
             .remove_container(
-                &container_id,
+                container_id,
                 Some(RemoveContainerOptions {
                     force: true,
                     ..Default::default()
@@ -637,7 +637,7 @@ impl<'c> State<'c> for ProjectDestroyed {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ProjectErrorKind {
     Internal,
 }

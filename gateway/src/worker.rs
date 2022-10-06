@@ -185,7 +185,7 @@ pub mod tests {
         }
     }
 
-    #[derive(Debug, PartialEq, Clone)]
+    #[derive(Debug, PartialEq, Eq, Clone)]
     pub struct FiniteState {
         count: usize,
         max_count: usize,

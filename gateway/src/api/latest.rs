@@ -187,7 +187,7 @@ pub mod tests {
 
         let (sender, mut receiver) = channel::<Work>(256);
         tokio::spawn(async move {
-            while let Some(_) = receiver.recv().await {
+            while receiver.recv().await.is_some() {
                 // do not do any work with inbound requests
             }
         });
@@ -322,7 +322,7 @@ pub mod tests {
 
         let (sender, mut receiver) = channel::<Work>(256);
         tokio::spawn(async move {
-            while let Some(_) = receiver.recv().await {
+            while receiver.recv().await.is_some() {
                 // do not do any work with inbound requests
             }
         });
@@ -417,7 +417,7 @@ pub mod tests {
             // do not process until instructed
             ctl_recv.await.unwrap();
 
-            while let Some(_) = receiver.recv().await {
+            while receiver.recv().await.is_some() {
                 done_send.take().unwrap().send(()).unwrap();
                 // do nothing
             }

@@ -165,7 +165,7 @@ fn get_config(writer: PipeWriter) -> anyhow::Result<Config> {
 
 /// Get options to compile in build mode
 fn get_compile_options(config: &Config) -> anyhow::Result<CompileOptions> {
-    let mut opts = CompileOptions::new(&config, CompileMode::Build)?;
+    let mut opts = CompileOptions::new(config, CompileMode::Build)?;
     opts.build_config.message_format = MessageFormat::Json {
         render_diagnostics: false,
         short: false,
@@ -220,8 +220,7 @@ fn check_version(summary: &Summary) -> anyhow::Result<()> {
     let version_req = summary
         .dependencies()
         .iter()
-        .filter(|dependency| dependency.package_name() == NAME)
-        .next()
+        .find(|dependency| dependency.package_name() == NAME)
         .unwrap()
         .version_req();
 

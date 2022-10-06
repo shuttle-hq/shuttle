@@ -54,7 +54,6 @@ pub fn make_router(
             "/projects/:project_name/secrets/:service_name",
             get(get_secrets),
         )
-        .route("/projects/:project_name/version", get(get_version))
         .layer(Extension(persistence))
         .layer(Extension(deployment_manager))
         .layer(Extension(proxy_fqdn))
@@ -437,10 +436,6 @@ async fn runtime_logs_websocket_handler(mut s: WebSocket, persistence: Persisten
     }
 
     let _ = s.close().await;
-}
-
-async fn get_version() -> String {
-    shuttle_service::VERSION.to_string()
 }
 
 async fn get_secrets(

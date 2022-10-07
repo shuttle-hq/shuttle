@@ -26,7 +26,7 @@ opentelemetry-datadog = { version = "0.5.0", features = ["reqwest-client"] }
 portpicker = "0.1.1"
 serde = "1.0.137"
 serde_json = "1.0.81"
-sqlx = { version = "0.6.0", features = ["runtime-tokio-native-tls", "sqlite", "chrono", "json", "uuid"] }
+sqlx = { version = "0.6.0", features = ["runtime-tokio-native-tls", "sqlite", "chrono", "json", "migrate", "uuid"] }
 strum = { version = "0.24.1", features = ["derive"] }
 tar = "0.4.38"
 thiserror = "1.0.24"

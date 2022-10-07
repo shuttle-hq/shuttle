@@ -65,30 +65,39 @@ impl Shuttle {
             self.load_project(&mut args.project_args)?;
         }
 
-        self.ctx.set_api_url(args.api_url);
-
-        let mut client = Client::new(self.ctx.api_url());
-        client.set_api_key(self.ctx.api_key()?);
-
         match args.cmd {
-            Command::Deploy(deploy_args) => {
-                return self.deploy(deploy_args, &client).await;
-            }
             Command::Init(init_args) => self.init(init_args).await,
-            Command::Status => self.status(&client).await,
-            Command::Logs { id, follow } => self.logs(&client, id, follow).await,
-            Command::Deployment(DeploymentCommand::List) => self.deployments_list(&client).await,
-            Command::Deployment(DeploymentCommand::Status { id }) => {
-                self.deployment_get(&client, id).await
-            }
-            Command::Delete => self.delete(&client).await,
-            Command::Secrets => self.secrets(&client).await,
-            Command::Auth(auth_args) => self.auth(auth_args, &client).await,
             Command::Login(login_args) => self.login(login_args).await,
             Command::Run(run_args) => self.local_run(run_args).await,
-            Command::Project(ProjectCommand::New) => self.project_create(&client).await,
-            Command::Project(ProjectCommand::Status) => self.project_status(&client).await,
-            Command::Project(ProjectCommand::Rm) => self.project_delete(&client).await,
+            need_client => {
+                self.ctx.set_api_url(args.api_url);
+
+                let mut client = Client::new(self.ctx.api_url());
+                client.set_api_key(self.ctx.api_key()?);
+
+                match need_client {
+                    Command::Deploy(deploy_args) => {
+                        return self.deploy(deploy_args, &client).await;
+                    }
+                    Command::Status => self.status(&client).await,
+                    Command::Logs { id, follow } => self.logs(&client, id, follow).await,
+                    Command::Deployment(DeploymentCommand::List) => {
+                        self.deployments_list(&client).await
+                    }
+                    Command::Deployment(DeploymentCommand::Status { id }) => {
+                        self.deployment_get(&client, id).await
+                    }
+                    Command::Delete => self.delete(&client).await,
+                    Command::Secrets => self.secrets(&client).await,
+                    Command::Auth(auth_args) => self.auth(auth_args, &client).await,
+                    Command::Project(ProjectCommand::New) => self.project_create(&client).await,
+                    Command::Project(ProjectCommand::Status) => self.project_status(&client).await,
+                    Command::Project(ProjectCommand::Rm) => self.project_delete(&client).await,
+                    _ => {
+                        unreachable!("commands that don't need a client have already been matched")
+                    }
+                }
+            }
         }
         .map(|_| CommandOutcome::Ok)
     }

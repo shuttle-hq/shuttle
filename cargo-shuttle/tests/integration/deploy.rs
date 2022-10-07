@@ -24,25 +24,6 @@ async fn cargo_shuttle_deploy(path: &str, api_url: String) -> anyhow::Result<Com
         .await
 }
 
-#[should_panic(
-    expected = "Your shuttle-service version is outdated. Update your shuttle-service version to 1.2.5 and try to deploy again"
-)]
-#[test_context(HttpTestContext)]
-#[tokio::test]
-async fn deploy_when_version_is_outdated(ctx: &mut HttpTestContext) {
-    ctx.add(
-        HandlerBuilder::new("/test/version")
-            .status_code(StatusCode::OK)
-            .response("1.2.5".into())
-            .build(),
-    );
-    let api_url = ctx.uri("/test").to_string();
-
-    cargo_shuttle_deploy("../examples/rocket/hello-world", api_url)
-        .await
-        .unwrap();
-}
-
 #[should_panic(expected = "not an absolute path")]
 #[test_context(HttpTestContext)]
 #[tokio::test]

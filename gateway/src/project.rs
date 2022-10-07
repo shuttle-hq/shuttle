@@ -357,6 +357,10 @@ impl ProjectCreating {
                 "0.0.0.0:8000",
                 "--proxy-fqdn",
                 fqdn,
+                "--artifacts-path",
+                "/opt/shuttle",
+                "--state",
+                "/opt/shuttle/deployer.sqlite",
             ],
             "Env": [
                 "RUST_LOG=shuttle_deployer,shuttle_service,sqlx",

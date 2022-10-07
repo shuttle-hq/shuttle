@@ -9,6 +9,10 @@ use shuttle_common::Port;
 #[derive(Debug, Parser)]
 #[clap(author, version, about)]
 pub struct Args {
+    /// Uri to the `.sqlite` file used to store state
+    #[clap(long, default_value = "./deployer.sqlite")]
+    pub state: String,
+
     /// Address to connect to the provisioning service
     #[clap(long)]
     pub provisioner_address: String,

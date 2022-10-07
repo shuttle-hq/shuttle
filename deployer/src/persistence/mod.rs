@@ -23,7 +23,7 @@ use sqlx::migrate::MigrateDatabase;
 use sqlx::sqlite::{Sqlite, SqlitePool};
 use tokio::sync::broadcast::{self, Receiver, Sender};
 use tokio::task::JoinHandle;
-use tracing::{error, instrument};
+use tracing::{error, info, instrument};
 use uuid::Uuid;
 
 use self::deployment::DeploymentRunnable;
@@ -37,8 +37,6 @@ pub use self::service::Service;
 pub use self::state::State;
 pub use self::user::User;
 
-const DB_PATH: &str = "deployer.sqlite";
-
 #[derive(Clone)]
 pub struct Persistence {
     pool: SqlitePool,
@@ -51,12 +49,17 @@ impl Persistence {
     /// function creates all necessary tables and sets up a database connection
     /// pool - new connections should be made by cloning [`Persistence`] rather
     /// than repeatedly calling [`Persistence::new`].
-    pub async fn new() -> (Self, JoinHandle<()>) {
-        if !Path::new(DB_PATH).exists() {
-            Sqlite::create_database(DB_PATH).await.unwrap();
+    pub async fn new(path: &str) -> (Self, JoinHandle<()>) {
+        if !Path::new(path).exists() {
+            Sqlite::create_database(path).await.unwrap();
         }
 
-        let pool = SqlitePool::connect(DB_PATH).await.unwrap();
+        info!(
+            "state db: {}",
+            std::fs::canonicalize(path).unwrap().to_string_lossy()
+        );
+
+        let pool = SqlitePool::connect(path).await.unwrap();
         Self::from_pool(pool).await
     }
 

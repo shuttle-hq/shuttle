@@ -6,9 +6,7 @@ use tracing::info;
 
 use crate::project::Project;
 use crate::service::GatewayService;
-use crate::{
-    AccountName, Context, EndState, Error, ProjectName, Refresh, Service, State,
-};
+use crate::{AccountName, Context, EndState, Error, ProjectName, Refresh, Service, State};
 
 #[must_use]
 #[derive(Debug, Clone)]
@@ -152,13 +150,16 @@ pub mod tests {
 
     pub struct DummyService<S> {
         world: World,
-        state: Mutex<Option<S>>
+        state: Mutex<Option<S>>,
     }
 
     impl DummyService<()> {
         pub async fn new<S>() -> DummyService<S> {
             let world = World::new().await;
-            DummyService { world, state: Mutex::new(None) }
+            DummyService {
+                world,
+                state: Mutex::new(None),
+            }
         }
     }
 
@@ -184,7 +185,7 @@ pub mod tests {
         }
     }
 
-    #[derive(Debug, PartialEq, Clone)]
+    #[derive(Debug, PartialEq, Eq, Clone)]
     pub struct FiniteState {
         count: usize,
         max_count: usize,

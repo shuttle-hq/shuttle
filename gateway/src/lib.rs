@@ -18,8 +18,8 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::json;
-use tracing::error;
 use tokio::sync::mpsc::error::SendError;
+use tracing::error;
 
 pub mod api;
 pub mod args;
@@ -169,7 +169,7 @@ impl<'de> Deserialize<'de> for ProjectName {
     {
         String::deserialize(deserializer)?
             .parse()
-            .map_err(|err| <D::Error as serde::de::Error>::custom(err))
+            .map_err(<D::Error as serde::de::Error>::custom)
     }
 }
 
@@ -565,10 +565,10 @@ pub mod tests {
             );
 
             let image = env::var("SHUTTLE_TESTS_RUNTIME_IMAGE")
-                .unwrap_or("public.ecr.aws/shuttle/deployer:latest".to_string());
+                .unwrap_or_else(|_| "public.ecr.aws/shuttle/deployer:latest".to_string());
 
             let network_name =
-                env::var("SHUTTLE_TESTS_NETWORK").unwrap_or("shuttle_default".to_string());
+                env::var("SHUTTLE_TESTS_NETWORK").unwrap_or_else(|_| "shuttle_default".to_string());
 
             let provisioner_host = "provisioner".to_string();
 
@@ -611,7 +611,7 @@ pub mod tests {
     }
 
     impl World {
-        pub fn context<'c>(&'c self) -> WorldContext<'c> {
+        pub fn context(&self) -> WorldContext {
             WorldContext {
                 docker: &self.docker,
                 container_settings: &self.settings,
@@ -658,12 +658,12 @@ pub mod tests {
         let api = make_api(Arc::clone(&service), log_out);
         let api_addr = format!("127.0.0.1:{}", base_port).parse().unwrap();
         let serve_api = hyper::Server::bind(&api_addr).serve(api.into_make_service());
-        let api_client = world.client(api_addr.clone());
+        let api_client = world.client(api_addr);
 
         let proxy = make_proxy(Arc::clone(&service));
         let proxy_addr = format!("127.0.0.1:{}", base_port + 1).parse().unwrap();
         let serve_proxy = hyper::Server::bind(&proxy_addr).serve(proxy);
-        let proxy_client = world.client(proxy_addr.clone());
+        let proxy_client = world.client(proxy_addr);
 
         let _gateway = tokio::spawn(async move {
             tokio::select! {
@@ -705,7 +705,7 @@ pub mod tests {
             .await
             .unwrap();
 
-        let _ = timed_loop!(wait: 1, max: 12, {
+        timed_loop!(wait: 1, max: 12, {
             let project: project::Response = api_client
                 .request(
                     Request::get("/projects/matrix")

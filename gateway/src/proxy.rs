@@ -19,7 +19,7 @@ use tower::Service;
 use crate::service::GatewayService;
 use crate::{Error, ErrorKind, ProjectName};
 
-const SHUTTLEAPP_SUFFIX: &'static str = ".shuttleapp.rs";
+const SHUTTLEAPP_SUFFIX: &str = ".shuttleapp.rs";
 static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
     Lazy::new(|| ReverseProxy::new(Client::new()));
 
@@ -39,7 +39,7 @@ impl Service<Request<Body>> for ProxyService {
     }
 
     fn call(&mut self, req: Request<Body>) -> Self::Future {
-        let remote_addr = self.remote_addr.ip().clone();
+        let remote_addr = self.remote_addr.ip();
         let gateway = Arc::clone(&self.gateway);
         Box::pin(
             async move {
@@ -48,7 +48,7 @@ impl Service<Request<Body>> for ProxyService {
                     .get("Host")
                     .map(|head| head.to_str().unwrap())
                     .and_then(|host| {
-                        host.strip_suffix(".")
+                        host.strip_suffix('.')
                             .unwrap_or(host)
                             .strip_suffix(SHUTTLEAPP_SUFFIX)
                     })

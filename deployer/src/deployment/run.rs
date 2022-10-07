@@ -65,8 +65,8 @@ pub async fn task(
         let logger = logger_factory.get_logger(id);
 
         let old_deployments_killer = kill_old_deployments(
-            built.service_id.clone(),
-            id.clone(),
+            built.service_id,
+            id,
             active_deployment_getter.clone(),
             kill_send,
         );

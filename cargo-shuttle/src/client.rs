@@ -219,7 +219,7 @@ impl Client {
         let mut request = url.into_client_request()?;
 
         if let Some(ref api_key) = self.api_key {
-            let auth_header = Authorization::bearer(&api_key)?;
+            let auth_header = Authorization::bearer(api_key)?;
             request.headers_mut().typed_insert(auth_header);
         }
 

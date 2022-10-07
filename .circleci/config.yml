@@ -212,7 +212,7 @@ jobs:
             make down
             make up
 
-            cargo test --package shuttle-gateway --all-features --lib -- --nocapture
+            SHUTTLE_TESTS_NETWORK=shuttle-dev_user-net SHUTTLE_TESTS_RUNTIME_IMAGE=public.ecr.aws/shuttle-dev/deployer:latest cargo test --package shuttle-gateway --all-features --lib -- --nocapture
 
             BUILDX_CACHE=/tmp/cache/buildx make test
       - save_cache:

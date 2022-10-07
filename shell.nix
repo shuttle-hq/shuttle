@@ -23,6 +23,7 @@ in
       docker-compose
       datadog-agent
       sccache
+      sqlite
     ];
 
     PROTOC = "${protobuf}/bin/protoc";

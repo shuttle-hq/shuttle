@@ -1,6 +1,7 @@
 use std::net::SocketAddr;
 
 use clap::{Parser, Subcommand};
+use fqdn::FQDN;
 
 use crate::auth::Key;
 
@@ -42,6 +43,9 @@ pub struct StartArgs {
     /// The Docker Network name in which to deploy user runtimes
     #[arg(long, default_value = "shuttle_default")]
     pub network_name: String,
+    /// FQDN where the proxy can be reached at
+    #[arg(long)]
+    pub proxy_fqdn: FQDN,
 }
 
 #[derive(clap::Args, Debug, Clone)]

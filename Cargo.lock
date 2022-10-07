@@ -5123,6 +5123,7 @@ dependencies = [
  "clap 4.0.4",
  "colored",
  "convert_case",
+ "fqdn",
  "futures",
  "http",
  "hyper",

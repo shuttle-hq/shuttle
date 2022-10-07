@@ -43,16 +43,18 @@ pub struct ContainerSettingsBuilder<'d> {
     image: Option<String>,
     provisioner: Option<String>,
     network_name: Option<String>,
+    fqdn: String,
 }
 
 impl<'d> ContainerSettingsBuilder<'d> {
-    pub fn new(docker: &'d Docker) -> Self {
+    pub fn new(docker: &'d Docker, fqdn: String) -> Self {
         Self {
             docker,
             prefix: None,
             image: None,
             provisioner: None,
             network_name: None,
+            fqdn,
         }
     }
 
@@ -123,6 +125,7 @@ impl<'d> ContainerSettingsBuilder<'d> {
 
         let network_name = self.network_name.take().unwrap();
         let network_id = self.resolve_network_id(&network_name).await;
+        let fqdn = self.fqdn;
 
         ContainerSettings {
             prefix,
@@ -130,6 +133,7 @@ impl<'d> ContainerSettingsBuilder<'d> {
             provisioner_host,
             network_name,
             network_id,
+            fqdn,
         }
     }
 }
@@ -140,11 +144,12 @@ pub struct ContainerSettings {
     pub provisioner_host: String,
     pub network_name: String,
     pub network_id: String,
+    pub fqdn: String,
 }
 
 impl ContainerSettings {
-    pub fn builder(docker: &Docker) -> ContainerSettingsBuilder {
-        ContainerSettingsBuilder::new(docker)
+    pub fn builder(docker: &Docker, fqdn: String) -> ContainerSettingsBuilder {
+        ContainerSettingsBuilder::new(docker, fqdn)
     }
 }
 
@@ -176,10 +181,12 @@ impl GatewayService {
     ///
     /// * `args` - The [`Args`] with which the service was
     /// started. Will be passed as [`Context`] to workers and state.
-    pub async fn init(args: StartArgs, db: SqlitePool) -> Self {
+    pub async fn init(args: StartArgs, fqdn: String, db: SqlitePool) -> Self {
         let docker = Docker::connect_with_local_defaults().unwrap();
 
-        let container_settings = ContainerSettings::builder(&docker).from_args(&args).await;
+        let container_settings = ContainerSettings::builder(&docker, fqdn)
+            .from_args(&args)
+            .await;
 
         let provider = GatewayContextProvider::new(docker, container_settings);
 
@@ -485,7 +492,7 @@ pub mod tests {
     #[tokio::test]
     async fn service_create_find_user() -> anyhow::Result<()> {
         let world = World::new().await;
-        let svc = GatewayService::init(world.args(), world.pool()).await;
+        let svc = GatewayService::init(world.args(), world.fqdn(), world.pool()).await;
 
         let account_name: AccountName = "test_user_123".parse()?;
 
@@ -536,7 +543,7 @@ pub mod tests {
     #[tokio::test]
     async fn service_create_find_delete_project() -> anyhow::Result<()> {
         let world = World::new().await;
-        let svc = Arc::new(GatewayService::init(world.args(), world.pool()).await);
+        let svc = Arc::new(GatewayService::init(world.args(), world.fqdn(), world.pool()).await);
 
         let neo: AccountName = "neo".parse().unwrap();
         let matrix: ProjectName = "matrix".parse().unwrap();

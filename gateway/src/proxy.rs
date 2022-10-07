@@ -19,13 +19,13 @@ use tower::Service;
 use crate::service::GatewayService;
 use crate::{Error, ErrorKind, ProjectName};
 
-const SHUTTLEAPP_SUFFIX: &str = ".shuttleapp.rs";
 static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
     Lazy::new(|| ReverseProxy::new(Client::new()));
 
 pub struct ProxyService {
     gateway: Arc<GatewayService>,
     remote_addr: SocketAddr,
+    fqdn: String,
 }
 
 impl Service<Request<Body>> for ProxyService {
@@ -41,17 +41,14 @@ impl Service<Request<Body>> for ProxyService {
     fn call(&mut self, req: Request<Body>) -> Self::Future {
         let remote_addr = self.remote_addr.ip();
         let gateway = Arc::clone(&self.gateway);
+        let fqdn = self.fqdn.clone();
         Box::pin(
             async move {
                 let project_str = req
                     .headers()
                     .get("Host")
                     .map(|head| head.to_str().unwrap())
-                    .and_then(|host| {
-                        host.strip_suffix('.')
-                            .unwrap_or(host)
-                            .strip_suffix(SHUTTLEAPP_SUFFIX)
-                    })
+                    .and_then(|host| host.strip_suffix('.').unwrap_or(host).strip_suffix(&fqdn))
                     .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotFound))?;
 
                 let project_name: ProjectName = project_str
@@ -82,6 +79,7 @@ impl Service<Request<Body>> for ProxyService {
 
 pub struct MakeProxyService {
     gateway: Arc<GatewayService>,
+    fqdn: String,
 }
 
 impl<'r> Service<&'r AddrStream> for MakeProxyService {
@@ -97,15 +95,20 @@ impl<'r> Service<&'r AddrStream> for MakeProxyService {
     fn call(&mut self, target: &'r AddrStream) -> Self::Future {
         let gateway = Arc::clone(&self.gateway);
         let remote_addr = target.remote_addr();
+        let fqdn = self.fqdn.clone();
         Box::pin(async move {
             Ok(ProxyService {
                 remote_addr,
                 gateway,
+                fqdn,
             })
         })
     }
 }
 
-pub fn make_proxy(gateway: Arc<GatewayService>) -> MakeProxyService {
-    MakeProxyService { gateway }
+pub fn make_proxy(gateway: Arc<GatewayService>, fqdn: String) -> MakeProxyService {
+    MakeProxyService {
+        gateway,
+        fqdn: format!(".{fqdn}"),
+    }
 }

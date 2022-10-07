@@ -1,4 +1,3 @@
-mod deploy;
 mod init;
 mod run;
 

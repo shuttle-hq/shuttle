@@ -174,7 +174,8 @@ pub struct Built {
 }
 
 impl Built {
-    #[instrument(name = "built_handle", skip(self, factory, logger, kill_recv, kill_old_deployments, cleanup), fields(id = %self.id, state = %State::Running))]
+    #[instrument(name = "built_handle", skip(self, libs_path, factory, logger, kill_recv, kill_old_deployments, cleanup), fields(id = %self.id, state = %State::Running))]
+    #[allow(clippy::too_many_arguments)]
     async fn handle(
         self,
         address: SocketAddr,

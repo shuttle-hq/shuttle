@@ -217,12 +217,15 @@ fn make_name_unique(summary: &mut Summary, deployment_id: Uuid) {
 fn check_version(summary: &Summary) -> anyhow::Result<()> {
     let valid_version = VERSION.to_semver().unwrap();
 
-    let version_req = summary
+    let version_req = if let Some(shuttle) = summary
         .dependencies()
         .iter()
         .find(|dependency| dependency.package_name() == NAME)
-        .unwrap()
-        .version_req();
+    {
+        shuttle.version_req()
+    } else {
+        return Err(anyhow!("this crate does not use the shutte service"));
+    };
 
     if version_req.matches(&valid_version) {
         Ok(())

@@ -1,9 +1,11 @@
-version: "3"
+version: "3.5"
 volumes:
   gateway-vol:
   postgres-vol:
 networks:
   user-net:
+    driver: overlay
+    attachable: true
 services:
   gateway:
     image: "${CONTAINER_REGISTRY}/gateway:${BACKEND_TAG}"

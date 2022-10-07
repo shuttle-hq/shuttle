@@ -1,14 +1,10 @@
-use comfy_table::Color;
-use crossterm::style::Stylize;
 use once_cell::sync::OnceCell;
-use rocket::request::FromParam;
 use serde::de::Error as DeError;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashSet;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
-use strum::Display;
 
 /// Project names should conform to valid Host segments (or labels)
 /// as per [IETF RFC 1123](https://datatracker.ietf.org/doc/html/rfc1123).
@@ -31,14 +27,6 @@ impl<'de> Deserialize<'de> for ProjectName {
     {
         let s: String = String::deserialize(deserializer)?;
         s.parse().map_err(DeError::custom)
-    }
-}
-
-impl<'a> FromParam<'a> for ProjectName {
-    type Error = ProjectNameError;
-
-    fn from_param(param: &'a str) -> Result<Self, Self::Error> {
-        param.parse()
     }
 }
 
@@ -125,49 +113,6 @@ impl Display for ProjectNameError {
 }
 
 impl Error for ProjectNameError {}
-
-#[derive(Deserialize, Serialize)]
-pub struct Response {
-    pub name: String,
-    pub state: State,
-}
-
-#[derive(Clone, Debug, Deserialize, Display, Serialize, Eq, PartialEq)]
-#[serde(rename_all = "lowercase")]
-#[strum(serialize_all = "lowercase")]
-pub enum State {
-    Creating,
-    Starting,
-    Started,
-    Ready,
-    Stopping,
-    Stopped,
-    Destroying,
-    Destroyed,
-    Errored,
-}
-
-impl Display for Response {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "project '{}' is {}",
-            self.name,
-            self.state.to_string().with(self.state.get_color())
-        )
-    }
-}
-
-impl State {
-    pub fn get_color(&self) -> Color {
-        match self {
-            State::Creating | State::Starting | State::Started => Color::Cyan,
-            State::Ready => Color::Green,
-            State::Stopped | State::Stopping | State::Destroying | State::Destroyed => Color::Blue,
-            State::Errored => Color::Red,
-        }
-    }
-}
 
 /// Test examples taken from a [Pop-OS project](https://github.com/pop-os/hostname-validator/blob/master/src/lib.rs)
 /// and modified to our use case

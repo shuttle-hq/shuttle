@@ -163,7 +163,7 @@ impl Project {
     }
 }
 
-impl From<Project> for shuttle_common::project::State {
+impl From<Project> for shuttle_common::models::project::State {
     fn from(project: Project) -> Self {
         match project {
             Project::Creating(_) => Self::Creating,

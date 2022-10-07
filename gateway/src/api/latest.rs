@@ -9,7 +9,7 @@ use axum::routing::{any, get};
 use axum::{Json as AxumJson, Router};
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
-use shuttle_common::{project, user};
+use shuttle_common::models::{project, user};
 use tokio::sync::mpsc::Sender;
 use tower_http::trace::TraceLayer;
 use tracing::{debug, debug_span, field, Span};

@@ -1,4 +1,4 @@
-use anyhow::anyhow;
+use anyhow::Context as _;
 use serenity::async_trait;
 use serenity::model::application::command::CommandOptionType;
 use serenity::model::application::interaction::application_command::CommandDataOptionValue;
@@ -7,7 +7,6 @@ use serenity::model::gateway::Ready;
 use serenity::model::id::GuildId;
 use serenity::prelude::*;
 use shuttle_secrets::SecretStore;
-use shuttle_service::error::CustomError;
 use sqlx::{Executor, PgPool};
 use tracing::{error, info};
 
@@ -129,24 +128,19 @@ async fn serenity(
     #[shuttle_shared_db::Postgres] pool: PgPool,
     #[shuttle_secrets::Secrets] secret_store: SecretStore,
 ) -> shuttle_service::ShuttleSerenity {
-    // Get the discord token set in `Secrets.toml` from the Postgres secrets storage
-    let token = if let Some(token) = secret_store.get("DISCORD_TOKEN") {
-        token
-    } else {
-        return Err(anyhow!("'DISCORD_TOKEN' was not found").into());
-    };
-
-    // Get the guild id set in `Secrets.toml` from the Postgres secrets storage
-    let guild_id = if let Some(guild_id) = secret_store.get("GUILD_ID") {
-        guild_id
-    } else {
-        return Err(anyhow!("'GUILD_ID' was not found").into());
-    };
+    // Get the discord token set in `Secrets.toml`
+    let token = secret_store
+        .get("DISCORD_TOKEN")
+        .context("'DISCORD_TOKEN' was not found")?;
+    // Get the guild_id set in `Secrets.toml`
+    let guild_id = secret_store
+        .get("GUILD_ID")
+        .context("'GUILD_ID' was not found")?;
 
     // Run the schema migration
     pool.execute(include_str!("../schema.sql"))
         .await
-        .map_err(CustomError::new)?;
+        .context("failed to run migrations")?;
 
     let bot = Bot {
         database: pool,

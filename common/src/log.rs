@@ -1,7 +1,8 @@
-use std::fmt::Display;
+#[cfg(feature = "display")]
 use std::fmt::Write;
 
-use chrono::{DateTime, Local, Utc};
+use chrono::{DateTime, Utc};
+#[cfg(feature = "display")]
 use crossterm::style::{StyledContent, Stylize};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -9,14 +10,6 @@ use uuid::Uuid;
 use crate::deployment::State;
 
 pub const STATE_MESSAGE: &str = "NEW STATE";
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct BuildLogStream {
-    pub id: Uuid,
-    pub state: State,
-    pub message: Option<String>,
-    pub timestamp: DateTime<Utc>,
-}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Item {
@@ -30,19 +23,10 @@ pub struct Item {
     pub fields: Vec<u8>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum Level {
-    Trace,
-    Debug,
-    Info,
-    Warn,
-    Error,
-}
-
-impl Display for Item {
+#[cfg(feature = "display")]
+impl std::fmt::Display for Item {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let datetime: DateTime<Local> = DateTime::from(self.timestamp);
+        let datetime: chrono::DateTime<chrono::Local> = DateTime::from(self.timestamp);
 
         let message = match serde_json::from_slice(&self.fields).unwrap() {
             serde_json::Value::String(str_value) if str_value == STATE_MESSAGE => {
@@ -93,6 +77,25 @@ impl Display for Item {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct BuildLogStream {
+    pub id: Uuid,
+    pub state: State,
+    pub message: Option<String>,
+    pub timestamp: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum Level {
+    Trace,
+    Debug,
+    Info,
+    Warn,
+    Error,
+}
+
+#[cfg(feature = "display")]
 impl Level {
     fn get_colored(&self) -> StyledContent<&str> {
         match self {

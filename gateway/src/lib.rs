@@ -330,7 +330,7 @@ pub mod tests {
     use hyper::http::Uri;
     use hyper::{Body, Client as HyperClient, Request, Response, StatusCode};
     use rand::distributions::{Alphanumeric, DistString, Distribution, Uniform};
-    use shuttle_common::{project, service};
+    use shuttle_common::models::{project, service};
     use sqlx::SqlitePool;
     use tokio::sync::mpsc::channel;
     use tracing::info;

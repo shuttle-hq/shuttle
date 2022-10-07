@@ -9,7 +9,8 @@ use axum::{extract::BodyStream, Json};
 use chrono::{TimeZone, Utc};
 use fqdn::FQDN;
 use futures::TryStreamExt;
-use shuttle_common::{log, secret, LogItem};
+use shuttle_common::models::secret;
+use shuttle_common::LogItem;
 use tower_http::auth::RequireAuthorizationLayer;
 use tower_http::trace::TraceLayer;
 use tracing::{debug, debug_span, error, field, Span};
@@ -76,7 +77,7 @@ pub fn make_router(
 
 async fn list_services(
     Extension(persistence): Extension<Persistence>,
-) -> Result<Json<Vec<shuttle_common::service::Response>>> {
+) -> Result<Json<Vec<shuttle_common::models::service::Response>>> {
     let services = persistence
         .get_all_services()
         .await?
@@ -90,7 +91,7 @@ async fn list_services(
 async fn get_service(
     Extension(persistence): Extension<Persistence>,
     Path((_project_name, service_name)): Path<(String, String)>,
-) -> Result<Json<shuttle_common::service::Detailed>> {
+) -> Result<Json<shuttle_common::models::service::Detailed>> {
     if let Some(service) = persistence.get_service_by_name(&service_name).await? {
         let deployments = persistence
             .get_deployments(&service.id)
@@ -111,7 +112,7 @@ async fn get_service(
             .map(Into::into)
             .collect();
 
-        let response = shuttle_common::service::Detailed {
+        let response = shuttle_common::models::service::Detailed {
             name: service.name,
             deployments,
             resources,
@@ -128,7 +129,7 @@ async fn get_service_summary(
     Extension(persistence): Extension<Persistence>,
     Extension(proxy_fqdn): Extension<FQDN>,
     Path((project_name, service_name)): Path<(String, String)>,
-) -> Result<Json<shuttle_common::service::Summary>> {
+) -> Result<Json<shuttle_common::models::service::Summary>> {
     if let Some(service) = persistence.get_service_by_name(&service_name).await? {
         let deployment = persistence
             .get_active_deployment(&service.id)
@@ -141,7 +142,7 @@ async fn get_service_summary(
             .map(Into::into)
             .collect();
 
-        let response = shuttle_common::service::Summary {
+        let response = shuttle_common::models::service::Summary {
             uri: format!("https://{}.{proxy_fqdn}", project_name),
             name: service.name,
             deployment,
@@ -160,7 +161,7 @@ async fn post_service(
     Path((_project_name, service_name)): Path<(String, String)>,
     Query(params): Query<HashMap<String, String>>,
     stream: BodyStream,
-) -> Result<Json<shuttle_common::deployment::Response>> {
+) -> Result<Json<shuttle_common::models::deployment::Response>> {
     let service = persistence.get_or_create_service(&service_name).await?;
     let id = Uuid::new_v4();
 
@@ -191,7 +192,7 @@ async fn delete_service(
     Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
     Path((_project_name, service_name)): Path<(String, String)>,
-) -> Result<Json<shuttle_common::service::Detailed>> {
+) -> Result<Json<shuttle_common::models::service::Detailed>> {
     if let Some(service) = persistence.get_service_by_name(&service_name).await? {
         let old_deployments = persistence
             .delete_deployments_by_service_id(&service.id)
@@ -216,7 +217,7 @@ async fn delete_service(
 
         persistence.delete_service(&service.id).await?;
 
-        let response = shuttle_common::service::Detailed {
+        let response = shuttle_common::models::service::Detailed {
             name: service.name,
             deployments: old_deployments.into_iter().map(Into::into).collect(),
             resources,
@@ -232,7 +233,7 @@ async fn delete_service(
 async fn get_deployment(
     Extension(persistence): Extension<Persistence>,
     Path((_project_name, deployment_id)): Path<(String, Uuid)>,
-) -> Result<Json<shuttle_common::deployment::Response>> {
+) -> Result<Json<shuttle_common::models::deployment::Response>> {
     if let Some(deployment) = persistence.get_deployment(&deployment_id).await? {
         Ok(Json(deployment.into()))
     } else {
@@ -244,7 +245,7 @@ async fn delete_deployment(
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(persistence): Extension<Persistence>,
     Path((_project_name, deployment_id)): Path<(String, Uuid)>,
-) -> Result<Json<shuttle_common::deployment::Response>> {
+) -> Result<Json<shuttle_common::models::deployment::Response>> {
     if let Some(deployment) = persistence.get_deployment(&deployment_id).await? {
         deployment_manager.kill(deployment.id).await;
 
@@ -257,7 +258,7 @@ async fn delete_deployment(
 async fn get_build_logs(
     Extension(persistence): Extension<Persistence>,
     Path((_project_name, deployment_id)): Path<(String, Uuid)>,
-) -> Result<Json<Vec<log::BuildLogStream>>> {
+) -> Result<Json<Vec<shuttle_common::log::BuildLogStream>>> {
     if let Some(deployment) = persistence.get_deployment(&deployment_id).await? {
         Ok(Json(
             persistence

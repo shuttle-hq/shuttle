@@ -1,4 +1,4 @@
-use shuttle_common::service;
+use shuttle_common::models::service;
 use uuid::Uuid;
 
 #[derive(Clone, Debug, Eq, PartialEq, sqlx::FromRow)]

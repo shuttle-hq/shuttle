@@ -13,16 +13,16 @@ pub struct Response {
     pub data: Value,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Type {
-    Database(database::Type),
-}
-
 /// Trait used to get information from all the resources we manage
 pub trait ResourceInfo {
     /// String to connect to this resource from a public location
     fn connection_string_public(&self) -> String;
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Type {
+    Database(database::Type),
 }
 
 impl Response {

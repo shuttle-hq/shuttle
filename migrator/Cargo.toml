@@ -6,4 +6,5 @@ edition = "2021"
 [workspace]
 
 [dependencies]
+rand = "0.8.5"
 toml = "0.5.9"

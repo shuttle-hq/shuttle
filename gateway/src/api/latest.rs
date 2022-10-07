@@ -183,7 +183,8 @@ pub mod tests {
     #[tokio::test]
     async fn api_create_get_delete_projects() -> anyhow::Result<()> {
         let world = World::new().await;
-        let service = Arc::new(GatewayService::init(world.args(), world.pool()).await);
+        let service =
+            Arc::new(GatewayService::init(world.args(), world.fqdn(), world.pool()).await);
 
         let (sender, mut receiver) = channel::<Work>(256);
         tokio::spawn(async move {
@@ -318,7 +319,8 @@ pub mod tests {
     #[tokio::test]
     async fn api_create_get_users() -> anyhow::Result<()> {
         let world = World::new().await;
-        let service = Arc::new(GatewayService::init(world.args(), world.pool()).await);
+        let service =
+            Arc::new(GatewayService::init(world.args(), world.fqdn(), world.pool()).await);
 
         let (sender, mut receiver) = channel::<Work>(256);
         tokio::spawn(async move {
@@ -407,7 +409,8 @@ pub mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn status() {
         let world = World::new().await;
-        let service = Arc::new(GatewayService::init(world.args(), world.pool()).await);
+        let service =
+            Arc::new(GatewayService::init(world.args(), world.fqdn(), world.pool()).await);
 
         let (sender, mut receiver) = channel::<Work>(1);
         let (ctl_send, ctl_recv) = oneshot::channel();

@@ -39,7 +39,7 @@ services:
       - gateway-vol:/var/lib/shuttle
       # This image needs to run highly privileged in order to
       # orchestrate user runtimes safely
-      - /var/run/docker.sock:/var/run/docker-host.sock
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - RUST_LOG=${RUST_LOG}
     command:
@@ -50,8 +50,9 @@ services:
       - "--image=${CONTAINER_REGISTRY}/deployer:${BACKEND_TAG}"
       - "--prefix=shuttle_"
       - "--network-name=${STACK}_user-net"
-      - "--docker-host=/var/run/docker-host.sock"
+      - "--docker-host=/var/run/docker.sock"
       - "--provisioner-host=provisioner"
+      - "--proxy-fqdn=${APPS_FQDN}"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001"]
       interval: 1m

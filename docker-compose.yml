@@ -40,6 +40,7 @@ services:
       - "--prefix=shuttle_"
       - "--network-name=${STACK}_user-net"
       - "--provisioner-host=provisioner"
+      - "--proxy-fqdn=${APPS_FQDN}"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001"]
       interval: 1m

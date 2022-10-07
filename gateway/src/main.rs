@@ -58,7 +58,12 @@ async fn main() -> io::Result<()> {
 }
 
 async fn start(db: SqlitePool, args: StartArgs) -> io::Result<()> {
-    let gateway = Arc::new(GatewayService::init(args.clone(), db).await);
+    let fqdn = args
+        .proxy_fqdn
+        .to_string()
+        .trim_end_matches('.')
+        .to_string();
+    let gateway = Arc::new(GatewayService::init(args.clone(), fqdn.clone(), db).await);
 
     let worker = Worker::new(Arc::clone(&gateway));
 
@@ -105,7 +110,7 @@ async fn start(db: SqlitePool, args: StartArgs) -> io::Result<()> {
 
     let api_handle = tokio::spawn(axum::Server::bind(&args.control).serve(api.into_make_service()));
 
-    let proxy = make_proxy(gateway);
+    let proxy = make_proxy(gateway, fqdn);
 
     let proxy_handle = tokio::spawn(hyper::Server::bind(&args.user).serve(proxy));
 

@@ -318,12 +318,14 @@ pub mod tests {
     use std::env;
     use std::io::Read;
     use std::net::SocketAddr;
+    use std::str::FromStr;
     use std::sync::Arc;
     use std::time::Duration;
 
     use anyhow::{anyhow, Context as AnyhowContext};
     use axum::headers::Authorization;
     use bollard::Docker;
+    use fqdn::FQDN;
     use futures::prelude::*;
     use hyper::client::HttpConnector;
     use hyper::http::uri::Scheme;
@@ -535,6 +537,7 @@ pub mod tests {
         args: StartArgs,
         hyper: HyperClient<HttpConnector, Body>,
         pool: SqlitePool,
+        fqdn: String,
     }
 
     #[derive(Clone, Copy)]
@@ -542,11 +545,13 @@ pub mod tests {
         pub docker: &'c Docker,
         pub container_settings: &'c ContainerSettings,
         pub hyper: &'c HyperClient<HttpConnector, Body>,
+        pub fqdn: &'c str,
     }
 
     impl World {
         pub async fn new() -> Self {
             let docker = Docker::connect_with_local_defaults().unwrap();
+            let fqdn = "test.shuttleapp.rs".to_string();
 
             docker
                 .list_images::<&str>(None)
@@ -579,9 +584,12 @@ pub mod tests {
                 prefix,
                 provisioner_host,
                 network_name,
+                proxy_fqdn: FQDN::from_str(&fqdn).unwrap(),
             };
 
-            let settings = ContainerSettings::builder(&docker).from_args(&args).await;
+            let settings = ContainerSettings::builder(&docker, fqdn.clone())
+                .from_args(&args)
+                .await;
 
             let hyper = HyperClient::builder().build(HttpConnector::new());
 
@@ -594,6 +602,7 @@ pub mod tests {
                 args,
                 hyper,
                 pool,
+                fqdn,
             }
         }
 
@@ -608,6 +617,10 @@ pub mod tests {
         pub fn client<A: Into<SocketAddr>>(&self, addr: A) -> Client {
             Client::new(addr).with_hyper_client(self.hyper.clone())
         }
+
+        pub fn fqdn(&self) -> String {
+            self.fqdn.clone()
+        }
     }
 
     impl World {
@@ -616,6 +629,7 @@ pub mod tests {
                 docker: &self.docker,
                 container_settings: &self.settings,
                 hyper: &self.hyper,
+                fqdn: &self.fqdn,
             }
         }
     }
@@ -633,7 +647,8 @@ pub mod tests {
     #[tokio::test]
     async fn end_to_end() {
         let world = World::new().await;
-        let service = Arc::new(GatewayService::init(world.args(), world.pool()).await);
+        let service =
+            Arc::new(GatewayService::init(world.args(), world.fqdn(), world.pool()).await);
         let worker = Worker::new(Arc::clone(&service));
 
         let (log_out, mut log_in) = channel(256);
@@ -660,7 +675,7 @@ pub mod tests {
         let serve_api = hyper::Server::bind(&api_addr).serve(api.into_make_service());
         let api_client = world.client(api_addr);
 
-        let proxy = make_proxy(Arc::clone(&service));
+        let proxy = make_proxy(Arc::clone(&service), world.fqdn());
         let proxy_addr = format!("127.0.0.1:{}", base_port + 1).parse().unwrap();
         let serve_proxy = hyper::Server::bind(&proxy_addr).serve(proxy);
         let proxy_client = world.client(proxy_addr);
@@ -775,7 +790,7 @@ pub mod tests {
         proxy_client
             .request(
                 Request::get("/hello")
-                    .header("Host", "matrix.shuttleapp.rs")
+                    .header("Host", "matrix.test.shuttleapp.rs")
                     .body(Body::empty())
                     .unwrap(),
             )

@@ -1,4 +1,4 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr, path::PathBuf};
 
 use clap::Parser;
 use fqdn::FQDN;
@@ -32,4 +32,8 @@ pub struct Args {
     /// Secret that will be used to perform admin tasks on this deployer
     #[clap(long)]
     pub admin_secret: String,
+
+    /// Uri to folder to store all artifacts
+    #[clap(long, default_value = "/tmp")]
+    pub artifacts_path: PathBuf,
 }

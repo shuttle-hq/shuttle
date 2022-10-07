@@ -4,6 +4,8 @@ mod queue;
 mod run;
 pub mod runtime_logger;
 
+use std::path::PathBuf;
+
 pub use queue::Queued;
 pub use run::{ActiveDeploymentsGetter, Built};
 use tracing::instrument;
@@ -33,6 +35,7 @@ impl DeploymentManager {
         build_log_recorder: impl LogRecorder,
         secret_recorder: impl SecretRecorder,
         active_deployment_getter: impl ActiveDeploymentsGetter,
+        artifacts_path: PathBuf,
     ) -> Self {
         let (kill_send, _) = broadcast::channel(KILL_BUFFER_SIZE);
 
@@ -44,6 +47,7 @@ impl DeploymentManager {
                 build_log_recorder,
                 secret_recorder,
                 active_deployment_getter,
+                artifacts_path,
             ),
             kill_send,
         }
@@ -98,6 +102,7 @@ impl Pipeline {
         build_log_recorder: impl LogRecorder,
         secret_recorder: impl SecretRecorder,
         active_deployment_getter: impl ActiveDeploymentsGetter,
+        artifacts_path: PathBuf,
     ) -> Pipeline {
         let (queue_send, queue_recv) = mpsc::channel(QUEUE_BUFFER_SIZE);
         let (run_send, run_recv) = mpsc::channel(RUN_BUFFER_SIZE);
@@ -109,6 +114,7 @@ impl Pipeline {
             run_send_clone,
             build_log_recorder,
             secret_recorder,
+            artifacts_path.clone(),
         ));
         tokio::spawn(run::task(
             run_recv,
@@ -116,6 +122,7 @@ impl Pipeline {
             abstract_factory,
             runtime_logger_factory,
             active_deployment_getter,
+            artifacts_path,
         ));
 
         Pipeline {

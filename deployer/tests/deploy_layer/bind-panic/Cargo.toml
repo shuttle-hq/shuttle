@@ -11,4 +11,4 @@ crate-type = ["cdylib"]
 [workspace]
 
 [dependencies]
-shuttle-service = "0.4.1"
+shuttle-service = "0.5.2"

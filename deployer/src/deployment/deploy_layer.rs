@@ -395,6 +395,7 @@ mod tests {
     use std::{
         collections::BTreeMap,
         fs::read_dir,
+        path::PathBuf,
         sync::{Arc, Mutex},
         time::Duration,
     };
@@ -572,6 +573,7 @@ mod tests {
             RECORDER.clone(),
             RECORDER.clone(),
             StubActiveDeploymentGetter,
+            PathBuf::from("/tmp"),
         );
 
         let queued = get_queue("sleep-async");
@@ -680,6 +682,7 @@ mod tests {
             RECORDER.clone(),
             RECORDER.clone(),
             StubActiveDeploymentGetter,
+            PathBuf::from("/tmp"),
         );
 
         let queued = get_queue("self-stop");
@@ -754,6 +757,7 @@ mod tests {
             RECORDER.clone(),
             RECORDER.clone(),
             StubActiveDeploymentGetter,
+            PathBuf::from("/tmp"),
         );
 
         let queued = get_queue("bind-panic");
@@ -828,6 +832,7 @@ mod tests {
             RECORDER.clone(),
             RECORDER.clone(),
             StubActiveDeploymentGetter,
+            PathBuf::from("/tmp"),
         );
 
         let queued = get_queue("main-panic");
@@ -902,6 +907,7 @@ mod tests {
             RECORDER.clone(),
             RECORDER.clone(),
             StubActiveDeploymentGetter,
+            PathBuf::from("/tmp"),
         );
 
         let id = Uuid::new_v4();
@@ -955,6 +961,7 @@ mod tests {
             RECORDER.clone(),
             RECORDER.clone(),
             StubActiveDeploymentGetter,
+            PathBuf::from("/tmp"),
         );
 
         let id = Uuid::nil();

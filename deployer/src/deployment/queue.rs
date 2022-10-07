@@ -27,24 +27,25 @@ use futures::{Stream, StreamExt};
 use tar::Archive;
 use tokio::fs;
 
-/// Path of the directory that contains extracted service Cargo projects.
-const BUILDS_PATH: &str = "/tmp/shuttle-builds";
-
-/// The directory in which compiled '.so' files are stored.
-pub const LIBS_PATH: &str = "/tmp/shuttle-libs";
-
 pub async fn task(
     mut recv: QueueReceiver,
     run_send: RunSender,
     log_recorder: impl LogRecorder,
     secret_recorder: impl SecretRecorder,
+    artifacts_path: PathBuf,
 ) {
     info!("Queue task started");
 
-    fs::create_dir_all(BUILDS_PATH)
+    // Path of the directory that contains extracted service Cargo projects.
+    let builds_path = artifacts_path.join("shuttle-builds");
+
+    // The directory in which compiled '.so' files are stored.
+    let libs_path = artifacts_path.join("shuttle-libs");
+
+    fs::create_dir_all(&builds_path)
         .await
         .expect("could not create builds directory");
-    fs::create_dir_all(LIBS_PATH)
+    fs::create_dir_all(&libs_path)
         .await
         .expect("could not create libs directory");
 
@@ -56,9 +57,14 @@ pub async fn task(
         let run_send_cloned = run_send.clone();
         let log_recorder = log_recorder.clone();
         let secret_recorder = secret_recorder.clone();
+        let builds_path = builds_path.clone();
+        let libs_path = libs_path.clone();
 
         tokio::spawn(async move {
-            match queued.handle(log_recorder, secret_recorder).await {
+            match queued
+                .handle(builds_path, libs_path, log_recorder, secret_recorder)
+                .await
+            {
                 Ok(built) => promote_to_run(built, run_send_cloned).await,
                 Err(err) => build_failed(&id, err),
             }
@@ -90,9 +96,11 @@ pub struct Queued {
 }
 
 impl Queued {
-    #[instrument(name = "queued_handle", skip(self, log_recorder, secret_recorder), fields(id = %self.id, state = %State::Building))]
+    #[instrument(name = "queued_handle", skip(self, builds_path, libs_path, log_recorder, secret_recorder), fields(id = %self.id, state = %State::Building))]
     async fn handle(
         self,
+        builds_path: PathBuf,
+        libs_path: PathBuf,
         log_recorder: impl LogRecorder,
         secret_recorder: impl SecretRecorder,
     ) -> Result<Built> {
@@ -102,7 +110,7 @@ impl Queued {
 
         info!("Extracting received data");
 
-        let project_path = PathBuf::from(BUILDS_PATH).join(&self.service_name);
+        let project_path = builds_path.join(&self.service_name);
         fs::create_dir_all(project_path.clone()).await?;
 
         extract_tar_gz_data(vec.as_slice(), &project_path)?;
@@ -159,7 +167,7 @@ impl Queued {
 
         info!("Moving built library");
 
-        store_lib(LIBS_PATH, so_path, &self.id).await?;
+        store_lib(libs_path, so_path, &self.id).await?;
 
         let built = Built {
             id: self.id,

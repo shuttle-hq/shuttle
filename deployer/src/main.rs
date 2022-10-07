@@ -23,7 +23,7 @@ async fn main() {
         .or_else(|_| EnvFilter::try_new("info"))
         .unwrap();
 
-    let (persistence, _) = Persistence::new().await;
+    let (persistence, _) = Persistence::new(&args.state).await;
     let tracer = opentelemetry_datadog::new_pipeline()
         .with_service_name("deployer")
         .install_batch(opentelemetry::runtime::Tokio)

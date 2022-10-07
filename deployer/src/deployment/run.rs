@@ -15,10 +15,7 @@ use tokio::task::JoinError;
 use tracing::{debug, error, info, instrument, trace};
 use uuid::Uuid;
 
-use super::{
-    provisioner_factory, queue::LIBS_PATH, runtime_logger, KillReceiver, KillSender, RunReceiver,
-    State,
-};
+use super::{provisioner_factory, runtime_logger, KillReceiver, KillSender, RunReceiver, State};
 use crate::error::{Error, Result};
 
 /// Run a task which takes runnable deploys from a channel and starts them up with a factory provided by the
@@ -30,8 +27,12 @@ pub async fn task(
     abstract_factory: impl provisioner_factory::AbstractFactory,
     logger_factory: impl runtime_logger::Factory,
     active_deployment_getter: impl ActiveDeploymentsGetter,
+    artifacts_path: PathBuf,
 ) {
     info!("Run task started");
+
+    // The directory in which compiled '.so' files are stored.
+    let libs_path = artifacts_path.join("shuttle-libs");
 
     while let Some(built) = recv.recv().await {
         let id = built.id;
@@ -82,10 +83,13 @@ pub async fn task(
             Err(err) => start_crashed_cleanup(&id, err),
         };
 
+        let libs_path = libs_path.clone();
+
         tokio::spawn(async move {
             if let Err(err) = built
                 .handle(
                     addr,
+                    libs_path,
                     &mut factory,
                     logger,
                     kill_recv,
@@ -174,6 +178,7 @@ impl Built {
     async fn handle(
         self,
         address: SocketAddr,
+        libs_path: PathBuf,
         factory: &mut dyn Factory,
         logger: Logger,
         mut kill_recv: KillReceiver,
@@ -182,7 +187,8 @@ impl Built {
             + Send
             + 'static,
     ) -> Result<()> {
-        let (mut handle, library) = load_deployment(&self.id, address, factory, logger).await?;
+        let (mut handle, library) =
+            load_deployment(&self.id, address, libs_path, factory, logger).await?;
 
         kill_old_deployments.await?;
 
@@ -218,14 +224,15 @@ impl Built {
     }
 }
 
-#[instrument(skip(id, addr, factory, logger))]
+#[instrument(skip(id, addr, libs_path, factory, logger))]
 async fn load_deployment(
     id: &Uuid,
     addr: SocketAddr,
+    libs_path: PathBuf,
     factory: &mut dyn Factory,
     logger: Logger,
 ) -> Result<LoadedService> {
-    let so_path = PathBuf::from(LIBS_PATH).join(id.to_string());
+    let so_path = libs_path.join(id.to_string());
     let loader = Loader::from_so_file(so_path)?;
 
     Ok(loader.load(factory, addr, logger).await?)
@@ -235,6 +242,7 @@ async fn load_deployment(
 mod tests {
     use std::{
         collections::BTreeMap,
+        fs,
         net::{Ipv4Addr, SocketAddr},
         path::PathBuf,
         process::Command,
@@ -250,11 +258,12 @@ mod tests {
     };
     use uuid::Uuid;
 
-    use crate::{deployment::queue::LIBS_PATH, error::Error};
+    use crate::error::Error;
 
     use super::Built;
 
     const RESOURCES_PATH: &str = "tests/resources";
+    const LIBS_PATH: &str = "/tmp/shuttle-libs-tests";
 
     struct StubFactory;
 
@@ -320,6 +329,7 @@ mod tests {
         built
             .handle(
                 addr,
+                PathBuf::from(LIBS_PATH),
                 &mut factory,
                 logger,
                 kill_recv,
@@ -367,6 +377,7 @@ mod tests {
         built
             .handle(
                 addr,
+                PathBuf::from(LIBS_PATH),
                 &mut factory,
                 logger,
                 kill_recv,
@@ -408,6 +419,7 @@ mod tests {
         built
             .handle(
                 addr,
+                PathBuf::from(LIBS_PATH),
                 &mut factory,
                 logger,
                 kill_recv,
@@ -437,6 +449,7 @@ mod tests {
         let result = built
             .handle(
                 addr,
+                PathBuf::from(LIBS_PATH),
                 &mut factory,
                 logger,
                 kill_recv,
@@ -469,6 +482,7 @@ mod tests {
         let result = built
             .handle(
                 addr,
+                PathBuf::from(LIBS_PATH),
                 &mut factory,
                 logger,
                 kill_recv,
@@ -508,7 +522,10 @@ mod tests {
 
         let id = Uuid::new_v4();
         let so_path = crate_dir.join("target/release").join(lib_name);
-        let new_so_path = PathBuf::from(LIBS_PATH).join(id.to_string());
+        let libs_path = PathBuf::from(LIBS_PATH);
+        fs::create_dir_all(&libs_path).unwrap();
+
+        let new_so_path = libs_path.join(id.to_string());
 
         std::fs::copy(so_path, new_so_path).unwrap();
 

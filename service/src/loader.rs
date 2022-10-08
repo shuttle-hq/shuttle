@@ -14,7 +14,6 @@ use libloading::{Library, Symbol};
 use log::trace;
 use shuttle_common::DeploymentId;
 use thiserror::Error as ThisError;
-use tokio::sync::mpsc::UnboundedSender;
 
 use futures::FutureExt;
 
@@ -44,9 +43,9 @@ pub struct Loader {
 
 impl Loader {
     /// Dynamically load from a `.so` file a value of a type implementing the
-    /// [`Service`] trait. Relies on the `.so` library having an ``extern "C"`
-    /// function called [`ENTRYPOINT_SYMBOL_NAME`], likely automatically generated
-    /// using the [`shuttle_service::main`] macro.
+    /// [`Service`][crate::Service] trait. Relies on the `.so` library having an `extern "C"`
+    /// function called `ENTRYPOINT_SYMBOL_NAME`, likely automatically generated
+    /// using the [`shuttle_service::main`][crate::main] macro.
     pub fn from_so_file<P: AsRef<OsStr>>(so_path: P) -> Result<Self, LoaderError> {
         trace!("loading {:?}", so_path.as_ref().to_str());
         unsafe {
@@ -68,11 +67,11 @@ impl Loader {
         self,
         factory: &mut dyn Factory,
         addr: SocketAddr,
-        tx: UnboundedSender<Log>,
+        tx: crossbeam_channel::Sender<Log>,
         deployment_id: DeploymentId,
     ) -> Result<(ServeHandle, Library), Error> {
         let mut bootstrapper = self.bootstrapper;
-        let logger = Box::new(Logger::new(tx, deployment_id));
+        let logger = Logger::new(tx, deployment_id);
 
         AssertUnwindSafe(bootstrapper.bootstrap(factory, logger))
             .catch_unwind()

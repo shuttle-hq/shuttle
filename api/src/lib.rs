@@ -25,7 +25,7 @@ use rocket::serde::json::Json;
 use rocket::{tokio, Build, Data, Rocket, State};
 use shuttle_common::project::ProjectName;
 use shuttle_common::{DeploymentApiError, DeploymentMeta, Port};
-use shuttle_service::SecretStore;
+use shuttle_secrets::SecretStore;
 use uuid::Uuid;
 
 use crate::args::Args;
@@ -55,7 +55,7 @@ async fn status() -> String {
 
 #[get("/version")]
 async fn version() -> String {
-    String::from(shuttle_service::VERSION)
+    shuttle_service::VERSION.to_string()
 }
 
 #[get("/<_>/deployments/<id>")]
@@ -190,6 +190,7 @@ pub async fn rocket() -> Rocket<Build> {
                 .to_string(),
             args.provisioner_address,
             args.provisioner_port,
+            args.version_req,
         )
         .await,
     );

@@ -54,7 +54,7 @@ async fn cargo_shuttle_run(working_directory: &str) -> u16 {
     port
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn rocket_hello_world() {
     let port = cargo_shuttle_run("../examples/rocket/hello-world").await;
 
@@ -71,7 +71,7 @@ async fn rocket_hello_world() {
 }
 
 // This example uses a shared Postgres. Thus local runs should create a docker container for it.
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn rocket_postgres() {
     let port = cargo_shuttle_run("../examples/rocket/postgres").await;
     let client = reqwest::Client::new();
@@ -111,7 +111,7 @@ async fn rocket_postgres() {
     assert_eq!(request_text, "the contents of my API key");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn rocket_authentication() {
     let port = cargo_shuttle_run("../examples/rocket/authentication").await;
     let client = reqwest::Client::new();
@@ -167,7 +167,7 @@ async fn rocket_authentication() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn axum_hello_world() {
     let port = cargo_shuttle_run("../examples/axum/hello-world").await;
 
@@ -183,7 +183,7 @@ async fn axum_hello_world() {
     assert_eq!(request_text, "Hello, world!");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn tide_hello_world() {
     let port = cargo_shuttle_run("../examples/tide/hello-world").await;
 
@@ -199,7 +199,7 @@ async fn tide_hello_world() {
     assert_eq!(request_text, "Hello, world!");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn tower_hello_world() {
     let port = cargo_shuttle_run("../examples/tower/hello-world").await;
 
@@ -215,7 +215,7 @@ async fn tower_hello_world() {
     assert_eq!(request_text, "Hello, world!");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn poem_hello_world() {
     let port = cargo_shuttle_run("../examples/poem/hello-world").await;
 
@@ -232,7 +232,7 @@ async fn poem_hello_world() {
 }
 
 // This example uses a shared Postgres. Thus local runs should create a docker container for it.
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn poem_postgres() {
     let port = cargo_shuttle_run("../examples/poem/postgres").await;
     let client = reqwest::Client::new();
@@ -263,7 +263,7 @@ async fn poem_postgres() {
 }
 
 // This example uses a shared MongoDb. Thus local runs should create a docker container for it.
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn poem_mongodb() {
     let port = cargo_shuttle_run("../examples/poem/mongodb").await;
     let client = reqwest::Client::new();
@@ -293,4 +293,20 @@ async fn poem_mongodb() {
         .unwrap();
 
     assert_eq!(request_text, "{\"note\":\"Deploy to shuttle\"}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn salvo_hello_world() {
+    let port = cargo_shuttle_run("../examples/salvo/hello-world").await;
+
+    let request_text = reqwest::Client::new()
+        .get(format!("http://localhost:{port}/hello"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+
+    assert_eq!(request_text, "Hello, world!");
 }

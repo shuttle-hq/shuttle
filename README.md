@@ -1,12 +1,12 @@
 <p align="center">
-<img width="300" src="https://raw.githubusercontent.com/getsynth/shuttle/master/resources/logo-rectangle-transparent.png"/>
+<img width="300" src="https://raw.githubusercontent.com/shuttle-hq/shuttle/master/assets/logo-rectangle-transparent.png"/>
 </p>
 <br>
 <p align=center>
   <a href="https://docs.rs/shuttle-service">
     <img alt="docs" src="https://img.shields.io/badge/doc-reference-orange">
   </a>
-  <a href="https://github.com/getsynth/shuttle/search?l=rust">
+  <a href="https://github.com/shuttle-hq/shuttle/search?l=rust">
     <img alt="language" src="https://img.shields.io/badge/language-Rust-orange.svg">
   </a>
   <a href="https://circleci.com/gh/shuttle-hq/shuttle/">
@@ -21,68 +21,46 @@
 
 # shuttle
 
-[Shuttle](https://www.shuttle.rs/) is a serverless platform for Rust which makes it really easy to 
-deploy your web-apps.
+[Shuttle](https://www.shuttle.rs/) is a Rust-native cloud development platform that lets you deploy your Rust apps for free.
 
 Shuttle is built for productivity, reliability and performance:
 - Zero-Configuration support for Rust using annotations
 - Automatic resource provisioning (databases, caches, subdomains, etc.) via [Infrastructure-From-Code](https://www.shuttle.rs/blog/2022/05/09/ifc)
-- First-class support for popular Rust frameworks ([Rocket](https://github.com/shuttle-hq/shuttle/tree/main/examples/rocket/hello-world), [Axum](https://github.com/shuttle-hq/shuttle/tree/main/examples/axum/hello-world), 
-  [Tide](https://github.com/shuttle-hq/shuttle/tree/main/examples/tide/hello-world) and [Tower](https://github.com/shuttle-hq/shuttle/tree/main/examples/tower/hello-world))
+- First-class support for popular Rust frameworks ([Rocket](https://docs.shuttle.rs/guide/rocket-examples.html), [Axum](https://docs.shuttle.rs/guide/axum-examples.html), 
+  [Tide](https://docs.shuttle.rs/guide/tide-examples.html), [Poem](https://docs.shuttle.rs/guide/poem-examples.html) and [Tower](https://docs.shuttle.rs/guide/tower-examples.html))
+- Support for deploying Discord bots using [Serenity](https://docs.shuttle.rs/guide/serenity-examples.html)
 - Scalable hosting (with optional self-hosting)
 
+📖 Check out our documentation to get started quickly: [docs.shuttle.rs](https://docs.shuttle.rs)
+
+⭐ If you find shuttle interesting, consider starring this repo to help spread the word.
+
+🙋‍♂️ If you have any questions, join our [Discord](https://discord.gg/shuttle) server.
 
 ## Getting Started
 
-First download the Shuttle cargo extension and login:
+Run the following command to install shuttle:
 
 ```bash
-$ cargo install cargo-shuttle
-$ cargo shuttle login
+cargo install cargo-shuttle
 ```
 
-Create your first shuttle app with `rocket` framework:
+And then login:
 
 ```bash
-$ cargo shuttle init --rocket hello-world
+cargo shuttle login
 ```
 
-Your `Cargo.toml` should look like:
-
-```toml
-[package]
-name = "hello-world"
-version = "0.1.0"
-edition = "2021"
-
-[lib]
-
-[dependencies]
-shuttle-service = { version = "0.5.1", features = ["web-rocket"] }
-rocket = "0.4.11"
+To initialize your project, simply write:
+```bash
+cargo shuttle init --axum hello-world
+```
+And to deploy it, write:
+```bash
+cargo shuttle deploy
 ```
 
-
-Your shuttle app in `lib.rs` should look like:
-
-```rust
-#[macro_use]
-extern crate rocket;
-
-#[get("/")]
-fn index() -> &'static str {
-    "Hello, world!"
-}
-
-#[shuttle_service::main]
-async fn rocket() -> shuttle_service::ShuttleRocket {
-    let rocket = rocket::build().mount("/hello", routes![index]);
-
-    Ok(rocket)
-}
-```
-
-Deploy:
+And that's... it.
 
 ```bash
 $ cargo shuttle deploy
@@ -93,14 +71,18 @@ $ cargo shuttle deploy
         Deployment Status:  DEPLOYED
         Host:               hello-world.shuttleapp.rs
         Created At:         2022-04-01 08:32:34.412602556 UTC
-        Database URI:       postgres://***:***@pg.shuttle.rs/db-hello-world
 ```
 
-For the full documentation, visit [docs.rs/shuttle-service](https://docs.rs/shuttle-service)
+Feel free to build on-top of the generated `hello-world` boilerplate or take a stab at one of our [examples](https://docs.shuttle.rs/guide/axum-examples.html#hello-world).
 
+For the full documentation, visit [our docs](https://docs.shuttle.rs).
 ## Contributing to shuttle
 
-If you want to setup a local environment to test code changes to core `shuttle` packages, or want to contribute to the project see [CONTRIBUTING.md](./CONTRIBUTING.md)
+Contributing to shuttle is highly encouraged!
+
+If you want to setup a local environment to test code changes to core `shuttle` packages, or want to contribute to the project check out [our docs](https://docs.shuttle.rs/guide/contribute.html). 
+
+Even if you are not planning to submit any code; joining our [Discord server](https://discord.gg/shuttle) and providing feedback helps us a lot!
 
 ## Roadmap
 
@@ -110,10 +92,10 @@ If you have any requests or suggestions feel free to open an issue.
 
 ## Community & Support
 
-- [Community Forum](https://github.com/getsynth/shuttle/discussions). Best for: help with building, discussion about best practices.
-- [GitHub Issues](https://github.com/getsynth/shuttle/issues). Best for: bugs and errors you encounter using Shuttle.
-- [Discord](https://discord.gg/H33rRDTm3p). Best for: sharing your applications and hanging out with the community.
-- [Twitter](https://twitter.com/shuttle_dev). Best for: keeping up with announcements and releases
+- [Community Forum](https://github.com/shuttle-hq/shuttle/discussions). Best for: help with building, discussion about best practices.
+- [GitHub Issues](https://github.com/shuttle-hq/shuttle/issues). Best for: bugs and errors you encounter using Shuttle.
+- [Discord](https://discord.gg/shuttle). Best for: sharing your applications and hanging out with the community.
+- [Twitter](https://twitter.com/shuttle_dev). Best for: keeping up with announcements and releases.
 
 ## Status
 

@@ -98,25 +98,28 @@ pub struct RunArgs {
 #[derive(Parser, Debug)]
 pub struct InitArgs {
     /// Initialize with axum framework
-    #[clap(long, conflicts_with_all = &["rocket", "tide", "tower", "poem", "serenity", "warp"])]
+    #[clap(long, conflicts_with_all = &["rocket", "tide", "tower", "poem", "serenity", "warp", "salvo"])]
     pub axum: bool,
     /// Initialize with actix-web framework
-    #[clap(long, conflicts_with_all = &["axum", "tide", "tower", "poem", "serenity", "warp"])]
+    #[clap(long, conflicts_with_all = &["axum", "tide", "tower", "poem", "serenity", "warp", "salvo"])]
     pub rocket: bool,
     /// Initialize with tide framework
-    #[clap(long, conflicts_with_all = &["axum", "rocket", "tower", "poem", "serenity", "warp"])]
+    #[clap(long, conflicts_with_all = &["axum", "rocket", "tower", "poem", "serenity", "warp", "salvo"])]
     pub tide: bool,
     /// Initialize with tower framework
-    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "poem", "serenity", "warp"])]
+    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "poem", "serenity", "warp", "salvo"])]
     pub tower: bool,
     /// Initialize with poem framework
-    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "tower", "serenity", "warp"])]
+    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "tower", "serenity", "warp", "salvo"])]
     pub poem: bool,
+    /// Initialize with salvo framework
+    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "tower", "poem", "serenity"])]
+    pub salvo: bool,
     /// Initialize with serenity framework
-    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "tower", "poem", "warp"])]
+    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "tower", "poem", "salvo"])]
     pub serenity: bool,
     /// Initialize with warp framework
-    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "tower", "poem", "serenity"])]
+    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "tower", "poem", "serenity", "salvo"])]
     pub warp: bool,
     /// Path to initialize a new shuttle project
     #[clap(

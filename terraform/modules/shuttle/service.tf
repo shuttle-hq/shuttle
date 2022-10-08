@@ -57,30 +57,6 @@ EOF
   }
 }
 
-resource "aws_lb_target_group_attachment" "api" {
-  target_group_arn = aws_lb_target_group.api.arn
-  target_id        = aws_instance.backend.id
-  port             = var.api_container_port
-}
-
-resource "aws_lb_target_group_attachment" "user" {
-  target_group_arn = aws_lb_target_group.user.arn
-  target_id        = aws_instance.backend.id
-  port             = var.proxy_container_port
-}
-
-resource "aws_lb_target_group_attachment" "postgres" {
-  target_group_arn = aws_lb_target_group.postgres.arn
-  target_id        = aws_instance.backend.id
-  port             = var.postgres_container_port
-}
-
-resource "aws_lb_target_group_attachment" "mongodb" {
-  target_group_arn = aws_lb_target_group.mongodb.arn
-  target_id        = aws_instance.backend.id
-  port             = var.mongodb_container_port
-}
-
 data "aws_ami" "ubuntu" {
   most_recent = true
 

@@ -29,7 +29,7 @@ struct MyState {
 }
 
 #[shuttle_service::main]
-async fn tide(#[aws::rds::Postgres] pool: PgPool) -> ShuttleTide<MyState> {
+async fn tide(#[shuttle_aws_rds::Postgres] pool: PgPool) -> ShuttleTide<MyState> {
     pool.execute(include_str!("../schema.sql"))
         .await
         .map_err(CustomError::new)?;

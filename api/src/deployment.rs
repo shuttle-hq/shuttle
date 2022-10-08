@@ -12,6 +12,7 @@ use futures::prelude::*;
 use libloading::Library;
 use rocket::data::ByteUnit;
 use rocket::{tokio, Data};
+use semver::VersionReq;
 use shuttle_common::project::ProjectName;
 use shuttle_common::{
     DeploymentApiError, DeploymentId, DeploymentMeta, DeploymentStateMeta, Host, LogItem, Port,
@@ -20,7 +21,6 @@ use shuttle_proto::provisioner::provisioner_client::ProvisionerClient;
 use shuttle_service::loader::Loader;
 use shuttle_service::logger::Log;
 use shuttle_service::ServeHandle;
-use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::{mpsc, RwLock};
 use tonic::transport::{Channel, Endpoint};
 
@@ -107,7 +107,11 @@ impl Deployment {
 
     /// Tries to advance the deployment one stage. Does nothing if the deployment
     /// is in a terminal state.
-    pub(crate) async fn advance(&self, context: &Context, run_logs_tx: UnboundedSender<Log>) {
+    pub(crate) async fn advance(
+        &self,
+        context: &Context,
+        run_logs_tx: crossbeam_channel::Sender<Log>,
+    ) {
         {
             trace!("waiting to get write on the state");
             let meta = self.meta().await;
@@ -123,6 +127,7 @@ impl Deployment {
                         .build(
                             &queued.crate_bytes,
                             meta.project.as_str(),
+                            &context.version_req,
                             Box::new(console_writer),
                         )
                         .await
@@ -163,16 +168,24 @@ impl Deployment {
                         meta.project.clone(),
                     );
                     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
-                    match loader.load(&mut factory, addr, run_logs_tx, meta.id).await {
+
+                    let load_result = loader.load(&mut factory, addr, run_logs_tx, meta.id).await;
+
+                    // Even in case `load_result.is_err()`, we want to
+                    // make sure `self.meta` reflects the latest of
+                    // the state that was achieved through the
+                    // phase. Otherwise we end up in a situation where
+                    // a DB was provisioned, but the `meta` does not
+                    // know about it.
+                    self.meta.write().await.database_deployment = factory.into_database_info();
+
+                    match load_result {
                         Err(e) => {
                             debug!("{}: factory phase FAILED: {:?}", meta.project, e);
                             DeploymentState::Error(e.into())
                         }
                         Ok((handle, so)) => {
                             debug!("{}: factory phase DONE", meta.project);
-                            self.meta.write().await.database_deployment =
-                                factory.into_database_info();
-
                             // Remove stale active deployments
                             if let Some(stale_id) = context.router.promote(meta.host, meta.id).await
                             {
@@ -297,7 +310,7 @@ struct JobQueue {
 }
 
 impl JobQueue {
-    async fn new(context: Context, run_logs_tx: UnboundedSender<Log>) -> Self {
+    async fn new(context: Context, run_logs_tx: crossbeam_channel::Sender<Log>) -> Self {
         let (send, mut recv) = mpsc::channel::<Arc<Deployment>>(JOB_QUEUE_SIZE);
 
         log::debug!("starting job processor task");
@@ -338,6 +351,7 @@ pub(crate) struct Context {
     build_system: Box<dyn BuildSystem>,
     deployments: Arc<RwLock<Deployments>>,
     provisioner_client: ProvisionerClient<Channel>,
+    version_req: VersionReq,
 }
 
 impl DeploymentSystem {
@@ -346,9 +360,10 @@ impl DeploymentSystem {
         fqdn: String,
         provisioner_address: String,
         provisioner_port: Port,
+        version_req: VersionReq,
     ) -> Self {
         let router: Arc<Router> = Default::default();
-        let (tx, mut rx) = mpsc::unbounded_channel::<Log>();
+        let (tx, rx) = crossbeam_channel::unbounded::<Log>();
 
         let deployments = Arc::new(RwLock::new(
             Self::initialise_from_fs(&build_system.fs_root(), &fqdn).await,
@@ -357,7 +372,7 @@ impl DeploymentSystem {
         let deployments_log = deployments.clone();
 
         tokio::spawn(async move {
-            while let Some(log) = rx.recv().await {
+            while let Ok(log) = rx.recv() {
                 let mut deployments_log = deployments_log.write().await;
 
                 if let Some(deployment) = deployments_log.get_mut(&log.deployment_id) {
@@ -381,6 +396,7 @@ impl DeploymentSystem {
             build_system,
             deployments: deployments.clone(),
             provisioner_client,
+            version_req,
         };
 
         let job_queue = JobQueue::new(context, tx).await;

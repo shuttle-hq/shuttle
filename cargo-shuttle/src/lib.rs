@@ -23,9 +23,9 @@ use colored::Colorize;
 use config::RequestContext;
 use factory::LocalFactory;
 use semver::{Version, VersionReq};
+use shuttle_secrets::SecretStore;
 use shuttle_service::loader::{build_crate, Loader};
-use shuttle_service::{Factory, SecretStore};
-use tokio::sync::mpsc;
+use shuttle_service::Factory;
 use toml_edit::Document;
 use uuid::Uuid;
 
@@ -192,7 +192,7 @@ impl Shuttle {
         let mut factory = LocalFactory::new(self.ctx.project_name().clone())?;
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), run_args.port);
         let deployment_id = Uuid::new_v4();
-        let (tx, mut rx) = mpsc::unbounded_channel();
+        let (tx, rx) = crossbeam_channel::unbounded();
 
         // Load secrets
         let secrets = self.ctx.secrets();
@@ -221,7 +221,7 @@ impl Shuttle {
         let (handle, so) = loader.load(&mut factory, addr, tx, deployment_id).await?;
 
         tokio::spawn(async move {
-            while let Some(log) = rx.recv().await {
+            while let Ok(log) = rx.recv() {
                 print::log(log.datetime, log.item);
             }
         });
@@ -288,7 +288,7 @@ impl Shuttle {
             Ok(())
         } else {
             Err(anyhow!(
-                "Your shuttle_service version is outdated. Update your shuttle_service version to {} and try to deploy again",
+                "Your shuttle-service version is outdated. Update your shuttle-service version to {} and try to deploy again",
                 &server_version,
             ))
         }

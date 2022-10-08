@@ -85,6 +85,10 @@ commands:
             cat\<< EOF > ~/.cargo/config.toml
             [patch.crates-io]
             shuttle-service = { path = "$PWD/service" }
+            shuttle-aws-rds = { path = "$PWD/resources/aws-rds" }
+            shuttle-persist = { path = "$PWD/resources/persist" }
+            shuttle-shared-db = { path = "$PWD/resources/shared-db" }
+            shuttle-secrets = { path = "$PWD/resources/secrets" }
             EOF
   install-rust:
     steps:
@@ -119,7 +123,7 @@ jobs:
       - run: |
           cargo clippy --tests \
                        --all-targets \
-                       --features="codegen,loader,sqlx-integration,sqlx-postgres,mongodb-integration,secrets,<< parameters.framework >>" \
+                       --features="codegen,loader,<< parameters.framework >>" \
                        --no-deps -- \
                        --D warnings \
                        -A clippy::let-unit-value \
@@ -134,6 +138,7 @@ jobs:
     steps:
       - checkout
       - restore-cargo-cache
+      - run: sudo apt install -y protobuf-compiler
       - apply-patches
       - run: cargo fmt --all --check --manifest-path << parameters.path >>/Cargo.toml
       - run: cargo install cargo-sort
@@ -141,11 +146,13 @@ jobs:
       - run: |
           cargo clippy --tests \
                        --all-targets \
+                       --all-features \
                        --manifest-path << parameters.path >>/Cargo.toml \
                        --no-deps -- \
                        --D warnings \
                        -A clippy::let-unit-value \
                        -A clippy::format-push-string
+      - run: cargo test --all-features --manifest-path << parameters.path >>/Cargo.toml -- --nocapture
       - save-cargo-cache
   service-test:
     # Using an image since tests will start a docker container
@@ -156,10 +163,10 @@ jobs:
       - restore-cargo-cache
       - run:
           name: Run unit tests
-          command: cargo test --package shuttle-service --features="codegen,loader,secrets" --lib -- --nocapture
+          command: cargo test --package shuttle-service --features="codegen,loader" --lib -- --nocapture
       - run:
           name: Run integration tests
-          command: cargo test --package shuttle-service --features="codegen,loader,secrets" --test '*' -- --nocapture
+          command: cargo test --package shuttle-service --features="codegen,loader" --test '*' -- --nocapture
       - save-cargo-cache
   platform-test:
     parameters:
@@ -223,8 +230,7 @@ jobs:
       - run:
           name: Make and push images
           command: |
-            make clean
-            PUSH=true PLATFORMS=linux/amd64,linux/arm64 make images
+            PUSH=true PLATFORMS=linux/amd64 make images
       - save-buildx-cache
 
 workflows:
@@ -238,7 +244,7 @@ workflows:
             - workspace-fmt
           matrix:
             parameters:
-              framework: ["web-axum", "web-rocket", "web-poem", "web-tide", "web-tower", "web-warp", "bot-serenity"]
+              framework: ["web-axum", "web-rocket", "web-poem", "web-tide", "web-tower","web-warp", "web-salvo", "bot-serenity"]
       - check-standalone:
           matrix:
             parameters:
@@ -252,11 +258,17 @@ workflows:
                 - examples/rocket/hello-world
                 - examples/rocket/postgres
                 - examples/rocket/url-shortener
+                - examples/salvo/hello-world
                 - examples/serenity/hello-world
                 - examples/serenity/postgres
                 - examples/tide/hello-world
                 - examples/tide/postgres
                 - examples/tower/hello-world
+
+                - resources/aws-rds
+                - resources/persist
+                - resources/secrets
+                - resources/shared-db
       - service-test:
           requires:
             - workspace-clippy

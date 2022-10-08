@@ -9,5 +9,7 @@ edition = "2021"
 log = "0.4.17"
 serde = "1.0"
 serenity = { version = "0.11.5", default-features = false, features = ["client", "gateway", "rustls_backend", "model"] }
-shuttle-service = { version = "0.5.1", features = ["bot-serenity", "secrets", "sqlx-postgres"] }
+shuttle-secrets = "0.5.2"
+shuttle-service = { version = "0.5.2", features = ["bot-serenity"] }
+shuttle-shared-db = { version = "0.5.2", features = ["postgres"] }
 sqlx = { version = "0.6", features = ["runtime-tokio-native-tls", "postgres"] }

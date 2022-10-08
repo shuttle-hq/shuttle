@@ -2,6 +2,7 @@
 name = 'ci'
 projects = [
     'websocket-axum-app',
+    'hello-world-salvo-app',
     'authentication-rocket-app',
     'hello-world-axum-app',
     'hello-world-poem-app',

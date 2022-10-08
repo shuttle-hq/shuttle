@@ -15,7 +15,7 @@ use tower_http::trace::TraceLayer;
 use tracing::{debug, debug_span, field, Span};
 
 use crate::auth::{Admin, ScopedUser, User};
-use crate::worker::Work;
+use crate::task::{self, BoxedTask};
 use crate::{AccountName, Error, GatewayService, ProjectName};
 
 #[derive(Serialize, Deserialize)]
@@ -79,39 +79,52 @@ async fn get_project(
 
 async fn post_project(
     Extension(service): Extension<Arc<GatewayService>>,
-    Extension(sender): Extension<Sender<Work>>,
+    Extension(sender): Extension<Sender<BoxedTask>>,
     User { name, .. }: User,
     Path(project): Path<ProjectName>,
 ) -> Result<AxumJson<project::Response>, Error> {
-    let work = service.create_project(project.clone(), name).await?;
+    let state = service
+        .create_project(project.clone(), name.clone())
+        .await?;
 
-    let name = work.project_name.to_string();
-    let state = work.work.clone().into();
+    service
+        .new_task()
+        .project(project.clone())
+        .account(name.clone())
+        .send(&sender)
+        .await?;
 
-    sender.send(work).await?;
-
-    let response = project::Response { name, state };
+    let response = project::Response {
+        name: project.to_string(),
+        state: state.into(),
+    };
 
     Ok(AxumJson(response))
 }
 
 async fn delete_project(
     Extension(service): Extension<Arc<GatewayService>>,
-    Extension(sender): Extension<Sender<Work>>,
+    Extension(sender): Extension<Sender<BoxedTask>>,
     ScopedUser {
         scope: _,
         user: User { name, .. },
     }: ScopedUser,
     Path(project): Path<ProjectName>,
 ) -> Result<AxumJson<project::Response>, Error> {
-    let work = service.destroy_project(project, name).await?;
+    let project_name = project.clone();
 
-    let name = work.project_name.to_string();
-    let state = work.work.clone().into();
+    service
+        .new_task()
+        .project(project)
+        .account(name)
+        .and_then(task::destroy())
+        .send(&sender)
+        .await?;
 
-    sender.send(work).await?;
-
-    let response = project::Response { name, state };
+    let response = project::Response {
+        name: project_name.to_string(),
+        state: shuttle_common::models::project::State::Destroying,
+    };
     Ok(AxumJson(response))
 }
 
@@ -123,7 +136,7 @@ async fn route_project(
     service.route(&scope, req).await
 }
 
-async fn get_status(Extension(sender): Extension<Sender<Work>>) -> Response<Body> {
+async fn get_status(Extension(sender): Extension<Sender<BoxedTask>>) -> Response<Body> {
     let (status, body) = if !sender.is_closed() && sender.capacity() > 0 {
         (StatusCode::OK, StatusResponse::healthy())
     } else {
@@ -140,8 +153,9 @@ async fn get_status(Extension(sender): Extension<Sender<Work>>) -> Response<Body
         .unwrap()
 }
 
-pub fn make_api(service: Arc<GatewayService>, sender: Sender<Work>) -> Router<Body> {
+pub fn make_api(service: Arc<GatewayService>, sender: Sender<BoxedTask>) -> Router<Body> {
     debug!("making api route");
+
     Router::<Body>::new()
         .route(
             "/",
@@ -185,14 +199,13 @@ pub mod tests {
     use super::*;
     use crate::service::GatewayService;
     use crate::tests::{RequestBuilderExt, World};
-    use crate::worker::Work;
 
     #[tokio::test]
     async fn api_create_get_delete_projects() -> anyhow::Result<()> {
         let world = World::new().await;
         let service = Arc::new(GatewayService::init(world.args(), world.pool()).await);
 
-        let (sender, mut receiver) = channel::<Work>(256);
+        let (sender, mut receiver) = channel::<BoxedTask>(256);
         tokio::spawn(async move {
             while receiver.recv().await.is_some() {
                 // do not do any work with inbound requests
@@ -327,7 +340,7 @@ pub mod tests {
         let world = World::new().await;
         let service = Arc::new(GatewayService::init(world.args(), world.pool()).await);
 
-        let (sender, mut receiver) = channel::<Work>(256);
+        let (sender, mut receiver) = channel::<BoxedTask>(256);
         tokio::spawn(async move {
             while receiver.recv().await.is_some() {
                 // do not do any work with inbound requests
@@ -416,7 +429,7 @@ pub mod tests {
         let world = World::new().await;
         let service = Arc::new(GatewayService::init(world.args(), world.pool()).await);
 
-        let (sender, mut receiver) = channel::<Work>(1);
+        let (sender, mut receiver) = channel::<BoxedTask>(1);
         let (ctl_send, ctl_recv) = oneshot::channel();
         let (done_send, done_recv) = oneshot::channel();
         let worker = tokio::spawn(async move {
@@ -468,6 +481,7 @@ pub mod tests {
         assert_eq!(resp.status(), StatusCode::OK);
 
         worker.abort();
+        let _ = worker.await;
 
         let resp = router.call(get_status()).await.unwrap();
         assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);

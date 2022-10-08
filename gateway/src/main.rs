@@ -3,16 +3,18 @@ use futures::prelude::*;
 use opentelemetry::global;
 use shuttle_gateway::args::{Args, Commands, ExecCmd, ExecCmds, InitArgs};
 use shuttle_gateway::auth::Key;
+use shuttle_gateway::project;
 use shuttle_gateway::proxy::make_proxy;
 use shuttle_gateway::service::{GatewayService, MIGRATIONS};
-use shuttle_gateway::worker::{Work, Worker};
+use shuttle_gateway::task;
+use shuttle_gateway::worker::Worker;
 use shuttle_gateway::{api::make_api, args::StartArgs};
-use shuttle_gateway::{project, Refresh, Service};
 use sqlx::migrate::MigrateDatabase;
 use sqlx::{query, Sqlite, SqlitePool};
 use std::io;
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Duration;
 use tracing::{debug, error, info, trace};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
@@ -71,43 +73,26 @@ async fn start(db: SqlitePool, args: StartArgs) -> io::Result<()> {
         .to_string();
     let gateway = Arc::new(GatewayService::init(args.context.clone(), db).await);
 
-    let worker = Worker::new(Arc::clone(&gateway));
+    let worker = Worker::new();
 
     let sender = worker.sender();
 
-    let gateway_clone = gateway.clone();
-    let sender_clone = sender.clone();
-
-    tokio::spawn(async move {
-        for Work {
-            project_name,
-            account_name,
-            work,
-        } in gateway_clone
-            .iter_projects()
+    for (project_name, account_name) in gateway
+        .iter_projects()
+        .await
+        .expect("could not list projects")
+    {
+        gateway
+            .clone()
+            .new_task()
+            .project(project_name)
+            .account(account_name)
+            .and_then(task::refresh())
+            .send(&sender)
             .await
-            .expect("could not list projects")
-        {
-            match work.refresh(&gateway_clone.context()).await {
-                Ok(work) => sender_clone
-                    .send(Work {
-                        account_name,
-                        project_name,
-                        work,
-                    })
-                    .await
-                    .unwrap(),
-                Err(err) => {
-                    error!(
-                        error = %err,
-                        %account_name,
-                        %project_name,
-                        "could not refresh state. Skipping it for now.",
-                    );
-                }
-            }
-        }
-    });
+            .ok()
+            .unwrap();
+    }
 
     let worker_handle = tokio::spawn(
         worker
@@ -115,6 +100,29 @@ async fn start(db: SqlitePool, args: StartArgs) -> io::Result<()> {
             .map_ok(|_| info!("worker terminated successfully"))
             .map_err(|err| error!("worker error: {}", err)),
     );
+
+    // Every 60secs go over all `::Ready` projects and check their
+    // health
+    let ambulance_handle = tokio::spawn({
+        let gateway = Arc::clone(&gateway);
+        let sender = sender.clone();
+        async move {
+            loop {
+                tokio::time::sleep(Duration::from_secs(60)).await;
+                if let Ok(projects) = gateway.iter_projects().await {
+                    for (project_name, account_name) in projects {
+                        let _ = gateway
+                            .new_task()
+                            .project(project_name)
+                            .account(account_name)
+                            .and_then(task::check_health())
+                            .send(&sender)
+                            .await;
+                    }
+                }
+            }
+        }
+    });
 
     let api = make_api(Arc::clone(&gateway), sender);
 
@@ -128,8 +136,9 @@ async fn start(db: SqlitePool, args: StartArgs) -> io::Result<()> {
 
     tokio::select!(
         _ = worker_handle => info!("worker handle finished"),
-        _ = api_handle => info!("api handle finished"),
-        _ = proxy_handle => info!("proxy handle finished"),
+        _ = api_handle => error!("api handle finished"),
+        _ = proxy_handle => error!("proxy handle finished"),
+        _ = ambulance_handle => error!("ambulance handle finished"),
     );
 
     Ok(())

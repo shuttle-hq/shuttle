@@ -1,4 +1,4 @@
-version: "3.5"
+version: "3.7"
 volumes:
   gateway-vol:
   postgres-vol:
@@ -6,6 +6,10 @@ networks:
   user-net:
     driver: overlay
     attachable: true
+    ipam:
+      driver: default
+      config:
+        - subnet: 10.99.0.0/24
 services:
   gateway:
     image: "${CONTAINER_REGISTRY}/gateway:${BACKEND_TAG}"
@@ -19,6 +23,13 @@ services:
         condition: on-failure
         delay: 5s
         max_attempts: 3
+      update_config:
+        order: start-first
+        failure_action: rollback
+        delay: 10s
+      rollback_config:
+        parallelism: 0
+        order: stop-first
       placement:
         constraints:
           - node.hostname==controller
@@ -39,6 +50,7 @@ services:
       - "--image=${CONTAINER_REGISTRY}/deployer:${BACKEND_TAG}"
       - "--prefix=shuttle_"
       - "--network-name=${STACK}_user-net"
+      - "--docker-host=/var/run/docker.sock"
       - "--provisioner-host=provisioner"
       - "--proxy-fqdn=${APPS_FQDN}"
     healthcheck:
@@ -61,6 +73,13 @@ services:
         condition: on-failure
         delay: 5s
         max_attempts: 3
+      update_config:
+        order: start-first
+        failure_action: rollback
+        delay: 10s
+      rollback_config:
+        parallelism: 0
+        order: stop-first
       placement:
         constraints:
           - node.hostname==provisioner

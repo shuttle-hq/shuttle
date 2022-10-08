@@ -6,7 +6,7 @@ use axum::headers::{Authorization, HeaderMapExt};
 use axum::http::Request;
 use axum::response::Response;
 use bollard::network::ListNetworksOptions;
-use bollard::Docker;
+use bollard::{Docker, API_DEFAULT_VERSION};
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
 use hyper::Client;
@@ -182,7 +182,7 @@ impl GatewayService {
     /// * `args` - The [`Args`] with which the service was
     /// started. Will be passed as [`Context`] to workers and state.
     pub async fn init(args: StartArgs, fqdn: String, db: SqlitePool) -> Self {
-        let docker = Docker::connect_with_local_defaults().unwrap();
+        let docker = Docker::connect_with_unix(&args.docker_host, 60, API_DEFAULT_VERSION).unwrap();
 
         let container_settings = ContainerSettings::builder(&docker, fqdn)
             .from_args(&args)

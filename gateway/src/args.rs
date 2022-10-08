@@ -40,6 +40,9 @@ pub struct StartArgs {
     /// the provisioner service
     #[arg(long, default_value = "provisioner")]
     pub provisioner_host: String,
+    /// The path to the docker daemon socket
+    #[arg(long, default_value = "/var/run/docker.sock")]
+    pub docker_host: String,
     /// The Docker Network name in which to deploy user runtimes
     #[arg(long, default_value = "shuttle_default")]
     pub network_name: String,

@@ -4,7 +4,7 @@ use crate::helpers::{self, APPS_FQDN};
 
 #[test]
 fn hello_world_tower() {
-    let client = helpers::Services::new_docker("hello-world (tower)", Color::Yellow);
+    let client = helpers::Services::new_docker("hello-world (tower)", Color::DarkYellow);
     client.deploy("tower/hello-world");
 
     let request_text = client

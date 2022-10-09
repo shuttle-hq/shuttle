@@ -51,7 +51,7 @@ shuttle-service = {{ path = "{}" }}"#,
     pub fn path(&self) -> &Path {
         match self {
             Self::User(path) => path.as_path(),
-            Self::Managed(dir) => dir.path()
+            Self::Managed(dir) => dir.path(),
         }
     }
 
@@ -100,6 +100,27 @@ CARGO_HOME: {}
             .current_dir(WORKSPACE_ROOT.as_path())
             .output()
             .ensure_success("failed to `cargo build --bin cargo-shuttle`");
+
+        let admin_key = if let Ok(key) = env::var("SHUTTLE_API_KEY") {
+            key
+        } else {
+            "test-key".to_string()
+        };
+
+        Command::new(DOCKER.as_os_str())
+            .args([
+                "exec",
+                "shuttle-dev_gateway_1",
+                "/usr/local/bin/service",
+                "--state=/var/lib/shuttle/gateway.sqlite",
+                "init",
+                "--name",
+                "admin",
+                "--key",
+                &admin_key,
+            ])
+            .output()
+            .ensure_success("failed to create admin user on gateway");
     };
 }
 
@@ -206,13 +227,14 @@ impl Services {
         let _ = *LOCAL_UP;
         let service = Self::new_free(target, color);
         service.wait_ready(Duration::from_secs(15));
+
         service
     }
 
     pub fn wait_ready(&self, mut timeout: Duration) {
         let mut now = SystemTime::now();
         while !timeout.is_zero() {
-            match reqwest::blocking::get(format!("http://{}/status", self.api_addr)) {
+            match reqwest::blocking::get(format!("http://{}", self.api_addr)) {
                 Ok(resp) if resp.status().is_success() => return,
                 _ => sleep(Duration::from_secs(1)),
             }
@@ -221,7 +243,35 @@ impl Services {
                 .unwrap_or_default();
             now = SystemTime::now();
         }
-        panic!("timed out while waiting for api to /status OK");
+        panic!("timed out while waiting for api to / OK");
+    }
+
+    pub fn wait_deployer_ready(&self, project_path: &str, mut timeout: Duration) {
+        let mut now = SystemTime::now();
+        while !timeout.is_zero() {
+            let mut run = Command::new(WORKSPACE_ROOT.join("target/debug/cargo-shuttle"));
+
+            if env::var("SHUTTLE_API_KEY").is_err() {
+                run.env("SHUTTLE_API_KEY", "test-key");
+            }
+
+            run.env("CARGO_HOME", CARGO_HOME.path());
+            run.args(["project", "status"])
+                .current_dir(WORKSPACE_ROOT.join("examples").join(project_path));
+            let stdout = run.output().unwrap().stdout;
+            let stdout = String::from_utf8(stdout).unwrap();
+
+            if stdout.contains("ready") {
+                return;
+            } else {
+                sleep(Duration::from_secs(1));
+            }
+            timeout = timeout
+                .checked_sub(now.elapsed().unwrap())
+                .unwrap_or_default();
+            now = SystemTime::now();
+        }
+        panic!("timed out while waiting for deployer to be ready");
     }
 
     pub fn run_client<'s, I, P>(&self, args: I, path: P) -> Child
@@ -242,6 +292,15 @@ impl Services {
     }
 
     pub fn deploy(&self, project_path: &str) {
+        self.run_client(
+            ["project", "new"],
+            WORKSPACE_ROOT.join("examples").join(project_path),
+        )
+        .wait()
+        .ensure_success("failed to run deploy");
+
+        self.wait_deployer_ready(project_path, Duration::from_secs(10));
+
         self.run_client(
             ["deploy", "--allow-dirty"],
             WORKSPACE_ROOT.join("examples").join(project_path),

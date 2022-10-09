@@ -340,7 +340,6 @@ pub mod tests {
     use crate::api::make_api;
     use crate::args::StartArgs;
     use crate::auth::User;
-    use crate::project::Project;
     use crate::proxy::make_proxy;
     use crate::service::{ContainerSettings, GatewayService, MIGRATIONS};
     use crate::worker::Worker;
@@ -816,21 +815,18 @@ pub mod tests {
             .await
             .unwrap();
 
-        timed_loop!(wait: 1, max: 12, {
-            let project: Project = api_client
+        timed_loop!(wait: 1, max: 20, {
+            let resp = api_client
                 .request(
                     Request::get("/projects/matrix")
                         .with_header(&authorization)
                         .body(Body::empty())
                         .unwrap(),
                 )
-                .map_ok(|resp| {
-                    assert_eq!(resp.status(), StatusCode::OK);
-                    serde_json::from_slice(resp.body()).unwrap()
-                })
                 .await
                 .unwrap();
-            if matches!(project, Project::Destroyed(_)) {
+            println!("{resp:?}");
+            if matches!(resp.status(), StatusCode::NOT_FOUND) {
                 break;
             }
         });

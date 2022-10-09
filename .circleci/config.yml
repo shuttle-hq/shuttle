@@ -210,7 +210,7 @@ jobs:
             # clean up a potential existing deployments before running
             # the tests just in case the environment is not clean
             make down
-            make up
+            BUILDX_CACHE=/tmp/cache/buildx make up
 
             SHUTTLE_TESTS_NETWORK=shuttle-dev_user-net SHUTTLE_TESTS_RUNTIME_IMAGE=public.ecr.aws/shuttle-dev/deployer:latest cargo test --package shuttle-gateway --all-features --lib -- --nocapture
 

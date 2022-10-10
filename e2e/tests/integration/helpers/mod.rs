@@ -233,6 +233,11 @@ impl Services {
         let service = Self::new_free(target, color);
         service.wait_ready(Duration::from_secs(15));
 
+        // Make sure provisioner is ready, else deployers will fail to start up
+        service.wait_postgres_ready(Duration::from_secs(15));
+        service.wait_mongodb_ready(Duration::from_secs(15));
+        sleep(Duration::from_secs(5));
+
         service
     }
 
@@ -248,7 +253,69 @@ impl Services {
                 .unwrap_or_default();
             now = SystemTime::now();
         }
-        panic!("timed out while waiting for api to / OK");
+        panic!("timed out while waiting for gateway to / OK");
+    }
+
+    pub fn wait_postgres_ready(&self, mut timeout: Duration) {
+        let mut now = SystemTime::now();
+        while !timeout.is_zero() {
+            let output = Command::new(DOCKER.as_os_str())
+                .args([
+                    "compose",
+                    "--file",
+                    "docker-compose.rendered.yml",
+                    "--project-name",
+                    "shuttle-dev",
+                    "exec",
+                    "postgres",
+                    "pg_isready",
+                ])
+                .output()
+                .unwrap();
+
+            if output.status.success() {
+                return;
+            } else {
+                sleep(Duration::from_secs(1));
+            }
+            timeout = timeout
+                .checked_sub(now.elapsed().unwrap())
+                .unwrap_or_default();
+            now = SystemTime::now();
+        }
+        panic!("timed out while waiting for postgres to be ready");
+    }
+
+    pub fn wait_mongodb_ready(&self, mut timeout: Duration) {
+        let mut now = SystemTime::now();
+        while !timeout.is_zero() {
+            let output = Command::new(DOCKER.as_os_str())
+                .args([
+                    "compose",
+                    "--file",
+                    "docker-compose.rendered.yml",
+                    "--project-name",
+                    "shuttle-dev",
+                    "exec",
+                    "mongodb",
+                    "mongo",
+                    "--eval",
+                    "print(\"accepting connections\")",
+                ])
+                .output()
+                .unwrap();
+
+            if output.status.success() {
+                return;
+            } else {
+                sleep(Duration::from_secs(1));
+            }
+            timeout = timeout
+                .checked_sub(now.elapsed().unwrap())
+                .unwrap_or_default();
+            now = SystemTime::now();
+        }
+        panic!("timed out while waiting for mongodb to be ready");
     }
 
     pub fn wait_deployer_ready(&self, project_path: &str, mut timeout: Duration) {

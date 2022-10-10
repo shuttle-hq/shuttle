@@ -86,27 +86,16 @@ impl Persistence {
         // This moves them to an async thread
         let handle = tokio::spawn(async move {
             while let Ok(log) = log_recv.recv() {
-                if stream_log_send_clone.receiver_count() > 0 {
-                    stream_log_send_clone
-                        .send(log.clone())
-                        .unwrap_or_else(|error| {
-                            error!(
-                                error = &error as &dyn std::error::Error,
-                                "failed to broadcast log"
-                            );
-
-                            0
-                        });
-                }
-
                 match log.r#type {
                     LogType::Event => {
-                        insert_log(&pool_cloned, log).await.unwrap_or_else(|error| {
-                            error!(
-                                error = &error as &dyn std::error::Error,
-                                "failed to insert event log"
-                            )
-                        });
+                        insert_log(&pool_cloned, log.clone())
+                            .await
+                            .unwrap_or_else(|error| {
+                                error!(
+                                    error = &error as &dyn std::error::Error,
+                                    "failed to insert event log"
+                                )
+                            });
                     }
                     LogType::State => {
                         insert_log(
@@ -129,7 +118,7 @@ impl Persistence {
                                 "failed to insert state log"
                             )
                         });
-                        update_deployment(&pool_cloned, log)
+                        update_deployment(&pool_cloned, log.clone())
                             .await
                             .unwrap_or_else(|error| {
                                 error!(
@@ -139,6 +128,17 @@ impl Persistence {
                             });
                     }
                 };
+
+                if stream_log_send_clone.receiver_count() > 0 {
+                    stream_log_send_clone.send(log).unwrap_or_else(|error| {
+                        error!(
+                            error = &error as &dyn std::error::Error,
+                            "failed to broadcast log"
+                        );
+
+                        0
+                    });
+                }
             }
         });
 

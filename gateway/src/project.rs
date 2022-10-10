@@ -363,7 +363,7 @@ impl ProjectCreating {
                 "/opt/shuttle/deployer.sqlite",
             ],
             "Env": [
-                "RUST_LOG=shuttle_deployer,shuttle_service,sqlx",
+                "RUST_LOG=debug",
             ],
             "Healthcheck": {
                 "Interval": 5_000_000_000i64,

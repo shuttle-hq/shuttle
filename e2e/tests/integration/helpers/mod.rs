@@ -109,8 +109,13 @@ CARGO_HOME: {}
 
         Command::new(DOCKER.as_os_str())
             .args([
+                "compose",
+                "--file",
+                "docker-compose.rendered.yml",
+                "--project-name",
+                "shuttle-dev",
                 "exec",
-                "shuttle-dev_gateway_1",
+                "gateway",
                 "/usr/local/bin/service",
                 "--state=/var/lib/shuttle/gateway.sqlite",
                 "init",

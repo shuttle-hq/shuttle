@@ -12,6 +12,9 @@ pub enum State {
     /// Deployment is built, but has not been started yet
     Built,
 
+    /// Deployment is being loaded and resources are provisioned
+    Loading,
+
     /// Deployment is running - ie. its thread is active
     Running,
 
@@ -40,6 +43,7 @@ impl From<State> for shuttle_common::deployment::State {
             State::Queued => Self::Queued,
             State::Building => Self::Building,
             State::Built => Self::Built,
+            State::Loading => Self::Loading,
             State::Running => Self::Running,
             State::Completed => Self::Completed,
             State::Stopped => Self::Stopped,
@@ -55,6 +59,7 @@ impl From<shuttle_common::deployment::State> for State {
             shuttle_common::deployment::State::Queued => Self::Queued,
             shuttle_common::deployment::State::Building => Self::Building,
             shuttle_common::deployment::State::Built => Self::Built,
+            shuttle_common::deployment::State::Loading => Self::Loading,
             shuttle_common::deployment::State::Running => Self::Running,
             shuttle_common::deployment::State::Completed => Self::Completed,
             shuttle_common::deployment::State::Stopped => Self::Stopped,

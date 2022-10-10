@@ -36,6 +36,7 @@ impl Log {
                     State::Queued => Some((shuttle_common::deployment::State::Queued, None)),
                     State::Building => Some((shuttle_common::deployment::State::Building, None)),
                     State::Built => Some((shuttle_common::deployment::State::Built, None)),
+                    State::Loading => Some((shuttle_common::deployment::State::Loading, None)),
                     State::Running => Some((shuttle_common::deployment::State::Running, None)),
                     State::Completed => Some((shuttle_common::deployment::State::Completed, None)),
                     State::Stopped => Some((shuttle_common::deployment::State::Stopped, None)),

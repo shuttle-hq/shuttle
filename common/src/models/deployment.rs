@@ -34,7 +34,7 @@ impl Display for Response {
 impl State {
     pub fn get_color(&self) -> Color {
         match self {
-            State::Queued | State::Building | State::Built => Color::Cyan,
+            State::Queued | State::Building | State::Built | State::Loading => Color::Cyan,
             State::Running => Color::Green,
             State::Completed | State::Stopped => Color::Blue,
             State::Crashed => Color::Red,

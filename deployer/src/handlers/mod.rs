@@ -357,7 +357,7 @@ async fn build_logs_websocket_handler(mut s: WebSocket, persistence: Persistence
                     }
                     (shuttle_common::deployment::State::Queued, _)
                     | (shuttle_common::deployment::State::Built, _)
-                    | (shuttle_common::deployment::State::Loading) => {}
+                    | (shuttle_common::deployment::State::Loading, _) => {}
                     (shuttle_common::deployment::State::Building, None) => {}
                     _ => break,
                 }

@@ -38,8 +38,16 @@ impl TempCargoHome {
                 write!(
                     config,
                     r#"[patch.crates-io]
-shuttle-service = {{ path = "{}" }}"#,
-                    WORKSPACE_ROOT.join("service").display()
+shuttle-service = {{ path = "{}" }}
+shuttle-aws-rds = {{ path = "{}" }}
+shuttle-persist = {{ path = "{}" }}
+shuttle-shared-db = {{ path = "{}" }}
+shuttle-secrets = {{ path = "{}" }}"#,
+                    WORKSPACE_ROOT.join("service").display(),
+                    WORKSPACE_ROOT.join("resources").join("aws-rds").display(),
+                    WORKSPACE_ROOT.join("resources").join("persist").display(),
+                    WORKSPACE_ROOT.join("resources").join("shared-db").display(),
+                    WORKSPACE_ROOT.join("resources").join("secrets").display(),
                 )
                 .unwrap();
 

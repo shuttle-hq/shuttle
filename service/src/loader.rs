@@ -148,7 +148,7 @@ pub async fn build_crate(
 }
 
 /// Get the default compile config with output redirected to writer
-fn get_config(writer: PipeWriter) -> anyhow::Result<Config> {
+pub fn get_config(writer: PipeWriter) -> anyhow::Result<Config> {
     let mut shell = Shell::from_write(Box::new(writer));
     shell.set_verbosity(Verbosity::Normal);
     let cwd = std::env::current_dir()

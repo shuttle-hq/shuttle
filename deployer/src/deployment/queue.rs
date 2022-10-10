@@ -5,8 +5,9 @@ use crate::persistence::{LogLevel, SecretRecorder};
 
 use cargo_metadata::Message;
 use chrono::Utc;
+use crossbeam_channel::Sender;
 use serde_json::json;
-use shuttle_service::loader::build_crate;
+use shuttle_service::loader::{build_crate, get_config};
 use tracing::{debug, error, info, instrument};
 use uuid::Uuid;
 
@@ -18,10 +19,9 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 
 use bytes::{BufMut, Bytes};
-use cargo::core::compiler::CompileMode;
+use cargo::core::compiler::{CompileMode, MessageFormat};
 use cargo::core::Workspace;
 use cargo::ops::{CompileOptions, TestOptions};
-use cargo::util::config::Config as CargoConfig;
 use flate2::read::GzDecoder;
 use futures::{Stream, StreamExt};
 use tar::Archive;
@@ -157,12 +157,17 @@ impl Queued {
         });
 
         let project_path = project_path.canonicalize()?;
-        let so_path = build_deployment(self.id, &project_path, tx).await?;
+        let so_path = build_deployment(self.id, &project_path, tx.clone()).await?;
 
         if self.will_run_tests {
-            info!("Running deployment's unit tests");
+            info!(
+                build_line = "Running tests before starting up",
+                "Running deployment's unit tests"
+            );
 
-            run_pre_deploy_tests(&project_path)?;
+            run_pre_deploy_tests(&project_path, tx)
+                .await
+                .map_err(|e| Error::Build(e.into()))?;
         }
 
         info!("Moving built library");
@@ -271,26 +276,55 @@ async fn build_deployment(
 }
 
 #[instrument(skip(project_path))]
-fn run_pre_deploy_tests(project_path: impl AsRef<Path>) -> Result<()> {
-    let config = CargoConfig::default().map_err(|e| Error::Build(e.into()))?;
-    let manifest_path = project_path.as_ref().join("Cargo.toml");
+async fn run_pre_deploy_tests(project_path: &Path, tx: Sender<Message>) -> anyhow::Result<()> {
+    let (read, write) = pipe::pipe();
+    let project_path = project_path.to_owned();
 
-    let ws = Workspace::new(&manifest_path, &config).map_err(|e| Error::Build(e.into()))?;
+    let handle = tokio::spawn(async move {
+        let config = get_config(write)?;
+        let manifest_path = project_path.join("Cargo.toml");
 
-    let opts = TestOptions {
-        compile_opts: CompileOptions::new(&config, CompileMode::Test)
-            .map_err(|e| Error::Build(e.into()))?,
-        no_run: false,
-        no_fail_fast: false,
-    };
+        let ws = Workspace::new(&manifest_path, &config)?;
 
-    let test_failures =
-        cargo::ops::run_tests(&ws, &opts, &[]).map_err(|e| Error::Build(e.into()))?;
+        let mut compile_opts = CompileOptions::new(&config, CompileMode::Test)?;
 
-    match test_failures {
-        Some(failures) => Err(failures.into()),
-        None => Ok(()),
-    }
+        compile_opts.build_config.message_format = MessageFormat::Json {
+            render_diagnostics: false,
+            short: false,
+            ansi: false,
+        };
+
+        let opts = TestOptions {
+            compile_opts,
+            no_run: false,
+            no_fail_fast: false,
+        };
+
+        let test_failures = cargo::ops::run_tests(&ws, &opts, &[])?;
+
+        match test_failures {
+            Some(failures) => Err(failures.into()),
+            None => Ok(()),
+        }
+    });
+
+    // This needs to be on a separate thread, else deployer will block (reason currently unknown :D)
+    tokio::spawn(async move {
+        for message in Message::parse_stream(read) {
+            match message {
+                Ok(message) => {
+                    if let Err(error) = tx.send(message) {
+                        error!("failed to send cargo message on channel: {error}");
+                    }
+                }
+                Err(error) => {
+                    error!("failed to parse cargo message: {error}");
+                }
+            }
+        }
+    });
+
+    handle.await?
 }
 
 /// Store 'so' file in the libs folder

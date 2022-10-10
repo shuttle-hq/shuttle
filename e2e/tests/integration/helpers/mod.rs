@@ -375,7 +375,7 @@ impl Services {
         .wait()
         .ensure_success("failed to run deploy");
 
-        self.wait_deployer_ready(project_path, Duration::from_secs(10));
+        self.wait_deployer_ready(project_path, Duration::from_secs(120));
 
         self.run_client(
             ["deploy", "--allow-dirty"],

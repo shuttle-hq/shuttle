@@ -259,21 +259,23 @@ impl Services {
     pub fn wait_postgres_ready(&self, mut timeout: Duration) {
         let mut now = SystemTime::now();
         while !timeout.is_zero() {
-            let output = Command::new(DOCKER.as_os_str())
-                .args([
-                    "compose",
-                    "--file",
-                    "docker-compose.rendered.yml",
-                    "--project-name",
-                    "shuttle-dev",
-                    "exec",
-                    "postgres",
-                    "pg_isready",
-                ])
-                .output()
-                .unwrap();
+            let mut run = Command::new(DOCKER.as_os_str());
+            run.args([
+                "compose",
+                "--file",
+                "docker-compose.rendered.yml",
+                "--project-name",
+                "shuttle-dev",
+                "exec",
+                "postgres",
+                "pg_isready",
+            ]);
 
-            if output.status.success() {
+            if spawn_and_log(&mut run, &self.target, self.color)
+                .wait()
+                .unwrap()
+                .success()
+            {
                 return;
             } else {
                 sleep(Duration::from_secs(1));
@@ -289,23 +291,25 @@ impl Services {
     pub fn wait_mongodb_ready(&self, mut timeout: Duration) {
         let mut now = SystemTime::now();
         while !timeout.is_zero() {
-            let output = Command::new(DOCKER.as_os_str())
-                .args([
-                    "compose",
-                    "--file",
-                    "docker-compose.rendered.yml",
-                    "--project-name",
-                    "shuttle-dev",
-                    "exec",
-                    "mongodb",
-                    "mongo",
-                    "--eval",
-                    "print(\"accepting connections\")",
-                ])
-                .output()
-                .unwrap();
+            let mut run = Command::new(DOCKER.as_os_str());
+            run.args([
+                "compose",
+                "--file",
+                "docker-compose.rendered.yml",
+                "--project-name",
+                "shuttle-dev",
+                "exec",
+                "mongodb",
+                "mongo",
+                "--eval",
+                "print(\"accepting connections\")",
+            ]);
 
-            if output.status.success() {
+            if spawn_and_log(&mut run, &self.target, self.color)
+                .wait()
+                .unwrap()
+                .success()
+            {
                 return;
             } else {
                 sleep(Duration::from_secs(1));

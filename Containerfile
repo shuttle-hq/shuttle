@@ -24,6 +24,7 @@ RUN cargo build --bin ${crate}
 FROM rust:1.63.0-buster as shuttle-common
 RUN apt-get update &&\
     apt-get install -y curl
+RUN rustup component add rust-src
 COPY --from=cache /build/ /usr/src/shuttle/
 
 FROM shuttle-common

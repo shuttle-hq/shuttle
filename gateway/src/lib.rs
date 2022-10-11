@@ -582,8 +582,11 @@ pub mod tests {
 
             let provisioner_host = "provisioner".to_string();
 
+            let docker_host = "/var/run/docker.sock".to_string();
+
             let args = StartArgs {
                 control,
+                docker_host,
                 user,
                 image,
                 prefix,

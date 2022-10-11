@@ -194,16 +194,17 @@ impl Built {
 
         info!("got handle for deployment");
         // Execute loaded service
-        tokio::spawn(run(self.id, service, kill_recv, cleanup));
+        tokio::spawn(run(self.id, service, address, kill_recv, cleanup));
 
         Ok(())
     }
 }
 
-#[instrument(skip(service, kill_recv, cleanup), fields(state = %State::Running))]
+#[instrument(skip(service, kill_recv, cleanup), fields(address = ?_address, state = %State::Running))]
 async fn run(
     id: Uuid,
     service: LoadedService,
+    _address: SocketAddr,
     mut kill_recv: KillReceiver,
     cleanup: impl FnOnce(std::result::Result<std::result::Result<(), shuttle_service::Error>, JoinError>)
         + Send

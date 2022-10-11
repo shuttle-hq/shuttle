@@ -624,7 +624,7 @@ mod tests {
                         StateLog {
                             id,
                             state: State::Running,
-                            has_address: false,
+                            has_address: true,
                         },
                     ]
                 );
@@ -674,7 +674,7 @@ mod tests {
                 StateLog {
                     id,
                     state: State::Running,
-                    has_address: false,
+                    has_address: true,
                 },
                 StateLog {
                     id,
@@ -743,7 +743,7 @@ mod tests {
                         StateLog {
                             id,
                             state: State::Running,
-                            has_address: false,
+                            has_address: true,
                         },
                         StateLog {
                             id,
@@ -823,7 +823,7 @@ mod tests {
                         StateLog {
                             id,
                             state: State::Running,
-                            has_address: false,
+                            has_address: true,
                         },
                         StateLog {
                             id,

@@ -216,6 +216,22 @@ async fn tower_hello_world() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn warp_hello_world() {
+    let port = cargo_shuttle_run("../examples/warp/hello-world").await;
+
+    let request_text = reqwest::Client::new()
+        .get(format!("http://localhost:{port}/hello"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+
+    assert_eq!(request_text, "Hello, world!");
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn poem_hello_world() {
     let port = cargo_shuttle_run("../examples/poem/hello-world").await;
 

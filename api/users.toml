@@ -1,15 +1,16 @@
 [test-key]
 name = 'ci'
 projects = [
-    'hello-world-rocket-app',
-    'postgres-rocket-app',
-    'hello-world-axum-app',
     'websocket-axum-app',
     'hello-world-salvo-app',
     'authentication-rocket-app',
+    'hello-world-axum-app',
+    'hello-world-poem-app',
+    'hello-world-rocket-app',
     'hello-world-tide-app',
     'hello-world-tower-app',
+    'hello-world-warp-app',
+    'postgres-poem-app',
+    'postgres-rocket-app',
     'postgres-tide-app',
-    'hello-world-poem-app',
-    'postgres-poem-app'
 ]

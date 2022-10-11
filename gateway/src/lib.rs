@@ -17,7 +17,7 @@ use futures::prelude::*;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Deserializer, Serialize};
-use serde_json::json;
+use shuttle_common::models::error::ApiError;
 use tokio::sync::mpsc::error::SendError;
 use tracing::error;
 
@@ -141,7 +141,13 @@ impl IntoResponse for Error {
             ErrorKind::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
             ErrorKind::NotReady => (StatusCode::INTERNAL_SERVER_ERROR, "service not ready"),
         };
-        (status, Json(json!({ "error": error_message }))).into_response()
+        (
+            status,
+            Json(ApiError {
+                message: error_message.to_string(),
+            }),
+        )
+            .into_response()
     }
 }
 
@@ -576,8 +582,11 @@ pub mod tests {
 
             let provisioner_host = "provisioner".to_string();
 
+            let docker_host = "/var/run/docker.sock".to_string();
+
             let args = StartArgs {
                 control,
+                docker_host,
                 user,
                 image,
                 prefix,

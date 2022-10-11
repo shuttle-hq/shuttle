@@ -103,10 +103,16 @@ async fn delete_project(
         user: User { name, .. },
     }: ScopedUser,
     Path(project): Path<ProjectName>,
-) -> Result<(), Error> {
+) -> Result<AxumJson<project::Response>, Error> {
     let work = service.destroy_project(project, name).await?;
 
-    sender.send(work).await.map_err(Error::from)
+    let name = work.project_name.to_string();
+    let state = work.work.clone().into();
+
+    sender.send(work).await?;
+
+    let response = project::Response { name, state };
+    Ok(AxumJson(response))
 }
 
 async fn route_project(

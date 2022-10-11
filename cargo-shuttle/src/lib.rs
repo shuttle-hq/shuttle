@@ -396,9 +396,9 @@ impl Shuttle {
     }
 
     async fn project_delete(&self, client: &Client) -> Result<()> {
-        client.delete_project(self.ctx.project_name()).await?;
+        let project = client.delete_project(self.ctx.project_name()).await?;
 
-        println!("Project has been deleted");
+        println!("{project}");
 
         Ok(())
     }

@@ -11,7 +11,7 @@ use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
-use shuttle_common::models::{deployment, project, secret, service, user};
+use shuttle_common::models::{deployment, error, project, secret, service, user};
 use shuttle_common::project::ProjectName;
 use shuttle_common::{ApiKey, ApiUrl, LogItem};
 use tokio::net::TcpStream;
@@ -39,7 +39,17 @@ impl ToJson for Response {
             response = std::str::from_utf8(&full).unwrap_or_default(),
             "parsing response to json"
         );
-        serde_json::from_slice(&full).context("failed to parse response to JSON")
+        // try to deserialize into calling function response model
+        match serde_json::from_slice(&full) {
+            Ok(res) => Ok(res),
+            Err(_) => {
+                // if that doesn't work, try to deserialize into common error type
+                let res: error::ApiError =
+                    serde_json::from_slice(&full).context("failed to parse response to JSON")?;
+
+                Err(res.into())
+            }
+        }
     }
 }
 
@@ -63,7 +73,6 @@ impl Client {
             .context("failed to get API key from Shuttle server")?
             .to_json()
             .await
-            .context("could not parse server json response for create project request")
     }
 
     pub async fn deploy(
@@ -147,7 +156,6 @@ impl Client {
             .context("failed to make create project request")?
             .to_json()
             .await
-            .context("could not parse server json response for create project request")
     }
 
     pub async fn get_project(&self, project: &ProjectName) -> Result<project::Response> {
@@ -156,7 +164,7 @@ impl Client {
         self.get(path).await
     }
 
-    pub async fn delete_project(&self, project: &ProjectName) -> Result<()> {
+    pub async fn delete_project(&self, project: &ProjectName) -> Result<project::Response> {
         let path = format!("/projects/{}", project.as_str());
 
         self.delete(path).await
@@ -248,7 +256,6 @@ impl Client {
             .context("failed to make get request")?
             .to_json()
             .await
-            .context("could not parse server json response for get request")
     }
 
     async fn post<T: Into<Body>>(
@@ -285,7 +292,6 @@ impl Client {
             .context("failed to make delete request")?
             .to_json()
             .await
-            .context("could not parse server json response for delete request")
     }
 
     fn set_builder_auth(&self, builder: RequestBuilder) -> RequestBuilder {

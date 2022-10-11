@@ -5,7 +5,7 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 
 use serde::{ser::SerializeMap, Serialize};
-use serde_json::json;
+use shuttle_common::models::error::ApiError;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -47,7 +47,9 @@ impl IntoResponse for Error {
                 header::CONTENT_TYPE,
                 HeaderValue::from_static("application/json"),
             )],
-            Json(json!({ "message": self })),
+            Json(ApiError {
+                message: self.to_string(),
+            }),
         )
             .into_response()
     }

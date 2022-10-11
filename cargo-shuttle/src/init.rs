@@ -454,20 +454,12 @@ impl ShuttleInit for ShuttleInitWarp {
         url: &Url,
         get_dependency_version_fn: GetDependencyVersionFn,
     ) {
-        set_key_value_dependency_version(
-            "warp",
-            dependencies,
-            manifest_path,
-            url,
-            false,
-            get_dependency_version_fn,
-        );
-
         set_inline_table_dependency_features(
             "shuttle-service",
             dependencies,
             vec!["web-warp".to_string()],
         );
+
         set_key_value_dependency_version(
             "warp",
             dependencies,

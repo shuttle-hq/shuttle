@@ -29,6 +29,3 @@ e2e/users.toml
 
 .shuttle-*
 docker-compose.rendered.yml
-
-# Env variables
-.cargo/

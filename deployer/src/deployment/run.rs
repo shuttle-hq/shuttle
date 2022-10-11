@@ -210,6 +210,7 @@ async fn run(
         + Send
         + 'static,
 ) {
+    info!("starting up service");
     let (mut handle, library) = service;
     let result;
     loop {

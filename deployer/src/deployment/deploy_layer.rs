@@ -74,6 +74,7 @@ impl Log {
                 State::Queued => Some((shuttle_common::deployment::State::Queued, None)),
                 State::Building => Some((shuttle_common::deployment::State::Building, None)),
                 State::Built => Some((shuttle_common::deployment::State::Built, None)),
+                State::Loading => Some((shuttle_common::deployment::State::Loading, None)),
                 State::Running => Some((shuttle_common::deployment::State::Running, None)),
                 State::Completed => Some((shuttle_common::deployment::State::Completed, None)),
                 State::Stopped => Some((shuttle_common::deployment::State::Stopped, None)),
@@ -585,7 +586,7 @@ mod tests {
                 let recorder = RECORDER.lock().unwrap();
                 let states = recorder.get_deployment_states(&id);
 
-                if states.len() < 4 {
+                if states.len() < 5 {
                     drop(recorder); // Don't block
                     sleep(Duration::from_millis(350)).await;
                     continue;
@@ -593,7 +594,7 @@ mod tests {
 
                 assert_eq!(
                     states.len(),
-                    4,
+                    5,
                     "did not expect these states:\n\t{states:#?}"
                 );
 
@@ -614,6 +615,11 @@ mod tests {
                             id,
                             state: State::Built,
                             has_address: false,
+                        },
+                        StateLog {
+                            id,
+                            state: State::Loading,
+                            has_address: true,
                         },
                         StateLog {
                             id,
@@ -662,6 +668,11 @@ mod tests {
                 },
                 StateLog {
                     id,
+                    state: State::Loading,
+                    has_address: true,
+                },
+                StateLog {
+                    id,
                     state: State::Running,
                     has_address: true,
                 },
@@ -694,7 +705,7 @@ mod tests {
                 let recorder = RECORDER.lock().unwrap();
                 let states = recorder.get_deployment_states(&id);
 
-                if states.len() < 5 {
+                if states.len() < 6 {
                     drop(recorder); // Don't block
                     sleep(Duration::from_millis(350)).await;
                     continue;
@@ -702,7 +713,7 @@ mod tests {
 
                 assert_eq!(
                     states.len(),
-                    5,
+                    6,
                     "did not expect these states:\n\t{states:#?}"
                 );
 
@@ -723,6 +734,11 @@ mod tests {
                             id,
                             state: State::Built,
                             has_address: false,
+                        },
+                        StateLog {
+                            id,
+                            state: State::Loading,
+                            has_address: true,
                         },
                         StateLog {
                             id,
@@ -769,7 +785,7 @@ mod tests {
                 let recorder = RECORDER.lock().unwrap();
                 let states = recorder.get_deployment_states(&id);
 
-                if states.len() < 5 {
+                if states.len() < 6 {
                     drop(recorder); // Don't block
                     sleep(Duration::from_millis(350)).await;
                     continue;
@@ -777,7 +793,7 @@ mod tests {
 
                 assert_eq!(
                     states.len(),
-                    5,
+                    6,
                     "did not expect these states:\n\t{states:#?}"
                 );
 
@@ -798,6 +814,11 @@ mod tests {
                             id,
                             state: State::Built,
                             has_address: false,
+                        },
+                        StateLog {
+                            id,
+                            state: State::Loading,
+                            has_address: true,
                         },
                         StateLog {
                             id,
@@ -876,7 +897,7 @@ mod tests {
                         },
                         StateLog {
                             id,
-                            state: State::Running,
+                            state: State::Loading,
                             has_address: true,
                         },
                         StateLog {
@@ -941,7 +962,7 @@ mod tests {
                 },
                 StateLog {
                     id,
-                    state: State::Running,
+                    state: State::Loading,
                     has_address: true,
                 },
                 StateLog {

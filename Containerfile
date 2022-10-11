@@ -24,6 +24,7 @@ RUN cargo build --bin ${crate}
 FROM rust:1.63.0-buster as shuttle-common
 RUN apt-get update &&\
     apt-get install -y curl
+RUN rustup component add rust-src
 COPY --from=cache /build/ /usr/src/shuttle/
 
 FROM shuttle-common
@@ -31,6 +32,10 @@ ARG crate
 SHELL ["/bin/bash", "-c"]
 RUN mkdir -p $CARGO_HOME; \
 echo $'[patch.crates-io] \n\
-shuttle-service = { path = "/usr/src/shuttle/service" }' > $CARGO_HOME/config.toml
+shuttle-service = { path = "/usr/src/shuttle/service" } \n\
+shuttle-aws-rds = { path = "/usr/src/shuttle/resources/aws-rds" } \n\
+shuttle-persist = { path = "/usr/src/shuttle/resources/persist" } \n\
+shuttle-shared-db = { path = "/usr/src/shuttle/resources/shared-db" } \n\
+shuttle-secrets = { path = "/usr/src/shuttle/resources/secrets" }' > $CARGO_HOME/config.toml
 COPY --from=builder /build/target/debug/${crate} /usr/local/bin/service
 ENTRYPOINT ["/usr/local/bin/service"]

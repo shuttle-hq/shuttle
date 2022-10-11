@@ -4,7 +4,7 @@ use crate::helpers::{self, APPS_FQDN};
 
 #[test]
 fn hello_world_axum() {
-    let client = helpers::Services::new_docker("hello-world (axum)", Color::DarkGreen);
+    let client = helpers::Services::new_docker("hello-world (axum)", Color::Green);
     client.deploy("axum/hello-world");
 
     let request_text = client

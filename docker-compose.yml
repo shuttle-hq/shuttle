@@ -4,7 +4,6 @@ volumes:
   postgres-vol:
 networks:
   user-net:
-    driver: overlay
     attachable: true
     ipam:
       driver: default

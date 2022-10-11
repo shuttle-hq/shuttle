@@ -174,53 +174,66 @@ pub struct Built {
 }
 
 impl Built {
-    #[instrument(name = "built_handle", skip(self, factory, logger, kill_recv, kill_old_deployments, cleanup), fields(id = %self.id, state = %State::Running))]
+    #[instrument(name = "built_handle", skip(self, libs_path, factory, logger, kill_recv, kill_old_deployments, cleanup), fields(id = %self.id, state = %State::Loading))]
+    #[allow(clippy::too_many_arguments)]
     async fn handle(
         self,
         address: SocketAddr,
         libs_path: PathBuf,
         factory: &mut dyn Factory,
         logger: Logger,
-        mut kill_recv: KillReceiver,
+        kill_recv: KillReceiver,
         kill_old_deployments: impl futures::Future<Output = Result<()>>,
         cleanup: impl FnOnce(std::result::Result<std::result::Result<(), shuttle_service::Error>, JoinError>)
             + Send
             + 'static,
     ) -> Result<()> {
-        let (mut handle, library) =
-            load_deployment(&self.id, address, libs_path, factory, logger).await?;
+        let service = load_deployment(&self.id, address, libs_path, factory, logger).await?;
 
         kill_old_deployments.await?;
 
         info!("got handle for deployment");
         // Execute loaded service
-        tokio::spawn(async move {
-            let result;
-            loop {
-                tokio::select! {
-                     Ok(id) = kill_recv.recv() => {
-                         if id == self.id {
-                             debug!("deployment '{id}' killed");
-                             handle.abort();
-                             result = handle.await;
-                             break;
-                         }
-                     }
-                     rsl = &mut handle => {
-                         result = rsl;
-                         break;
-                     }
-                }
-            }
-
-            if let Err(err) = library.close() {
-                crashed_cleanup(&self.id, err);
-            } else {
-                cleanup(result);
-            }
-        });
+        tokio::spawn(run(self.id, service, address, kill_recv, cleanup));
 
         Ok(())
+    }
+}
+
+#[instrument(skip(service, kill_recv, cleanup), fields(address = ?_address, state = %State::Running))]
+async fn run(
+    id: Uuid,
+    service: LoadedService,
+    _address: SocketAddr,
+    mut kill_recv: KillReceiver,
+    cleanup: impl FnOnce(std::result::Result<std::result::Result<(), shuttle_service::Error>, JoinError>)
+        + Send
+        + 'static,
+) {
+    info!("starting up service");
+    let (mut handle, library) = service;
+    let result;
+    loop {
+        tokio::select! {
+             Ok(kill_id) = kill_recv.recv() => {
+                 if kill_id == id {
+                     debug!("deployment '{id}' killed");
+                     handle.abort();
+                     result = handle.await;
+                     break;
+                 }
+             }
+             rsl = &mut handle => {
+                 result = rsl;
+                 break;
+             }
+        }
+    }
+
+    if let Err(err) = library.close() {
+        crashed_cleanup(&id, err);
+    } else {
+        cleanup(result);
     }
 }
 

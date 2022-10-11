@@ -8,6 +8,7 @@ pub enum State {
     Queued,
     Building,
     Built,
+    Loading,
     Running,
     Completed,
     Stopped,

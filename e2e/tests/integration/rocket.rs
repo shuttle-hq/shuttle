@@ -4,7 +4,7 @@ use crate::helpers::{self, APPS_FQDN};
 
 #[test]
 fn hello_world_rocket() {
-    let client = helpers::Services::new_docker("hello-world (rocket)", Color::Green);
+    let client = helpers::Services::new_docker("hello-world (rocket)", Color::DarkMagenta);
     client.deploy("rocket/hello-world");
 
     let request_text = client
@@ -47,7 +47,7 @@ fn postgres_rocket() {
 
 #[test]
 fn secrets_rocket() {
-    let client = helpers::Services::new_docker("secrets (rocket)", Color::Magenta);
+    let client = helpers::Services::new_docker("secrets (rocket)", Color::Red);
     client.deploy("rocket/secrets");
     let secret_response: String = client
         .get("secret")

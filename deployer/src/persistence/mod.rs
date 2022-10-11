@@ -75,7 +75,7 @@ impl Persistence {
         MIGRATIONS.run(&pool).await.unwrap();
 
         let (log_send, log_recv): (crossbeam_channel::Sender<deploy_layer::Log>, _) =
-            crossbeam_channel::bounded(128);
+            crossbeam_channel::bounded(0);
 
         let (stream_log_send, _) = broadcast::channel(32);
         let stream_log_send_clone = stream_log_send.clone();

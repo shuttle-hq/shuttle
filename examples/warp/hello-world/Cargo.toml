@@ -6,5 +6,5 @@ edition = "2021"
 [lib]
 
 [dependencies]
-shuttle-service = { version = "0.5.0", features = ["web-warp"] }
+shuttle-service = { version = "0.5.2", features = ["web-warp"] }
 warp = "0.3.2"

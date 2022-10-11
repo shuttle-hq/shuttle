@@ -113,10 +113,10 @@ pub struct InitArgs {
     #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "tower", "serenity", "warp", "salvo"])]
     pub poem: bool,
     /// Initialize with salvo framework
-    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "tower", "poem", "serenity"])]
+    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "tower", "poem", "warp", "serenity"])]
     pub salvo: bool,
     /// Initialize with serenity framework
-    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "tower", "poem", "salvo"])]
+    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "tower", "poem", "warp", "salvo"])]
     pub serenity: bool,
     /// Initialize with warp framework
     #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "tower", "poem", "serenity", "salvo"])]

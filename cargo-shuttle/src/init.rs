@@ -531,6 +531,10 @@ pub fn get_framework(init_args: &InitArgs) -> Box<dyn ShuttleInit> {
         return Box::new(ShuttleInitPoem);
     }
 
+    if init_args.salvo {
+        return Box::new(ShuttleInitSalvo);
+    }
+
     if init_args.serenity {
         return Box::new(ShuttleInitSerenity);
     }
@@ -730,7 +734,7 @@ mod shuttle_init_tests {
     #[test]
     fn test_get_framework_via_get_boilerplate_code() {
         let frameworks = vec![
-            "axum", "rocket", "tide", "tower", "poem", "serenity", "warp",
+            "axum", "rocket", "tide", "tower", "poem", "salvo", "serenity", "warp",
         ];
         let framework_inits: Vec<Box<dyn ShuttleInit>> = vec![
             Box::new(ShuttleInitAxum),
@@ -738,6 +742,7 @@ mod shuttle_init_tests {
             Box::new(ShuttleInitTide),
             Box::new(ShuttleInitTower),
             Box::new(ShuttleInitPoem),
+            Box::new(ShuttleInitSalvo),
             Box::new(ShuttleInitSerenity),
             Box::new(ShuttleInitWarp),
         ];

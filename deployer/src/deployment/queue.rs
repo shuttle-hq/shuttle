@@ -394,7 +394,7 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));
         let (tx, rx) = crossbeam_channel::unbounded();
 
-        tokio::spawn(async move { while let Ok(_) = rx.recv() {} });
+        tokio::spawn(async move { while rx.recv().is_ok() {} });
 
         let failure_project_path = root.join("tests/resources/tests-fail");
         assert!(matches!(

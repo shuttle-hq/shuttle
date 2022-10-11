@@ -1,6 +1,6 @@
 use super::deploy_layer::{Log, LogRecorder, LogType};
 use super::{Built, QueueReceiver, RunSender, State};
-use crate::error::{Error, Result};
+use crate::error::{Error, Result, TestError};
 use crate::persistence::{LogLevel, SecretRecorder};
 
 use cargo_metadata::Message;
@@ -165,9 +165,7 @@ impl Queued {
                 "Running deployment's unit tests"
             );
 
-            run_pre_deploy_tests(&project_path, tx)
-                .await
-                .map_err(|e| Error::Build(e.into()))?;
+            run_pre_deploy_tests(&project_path, tx).await?;
         }
 
         info!("Moving built library");
@@ -275,8 +273,11 @@ async fn build_deployment(
     Ok(so_path)
 }
 
-#[instrument(skip(project_path))]
-async fn run_pre_deploy_tests(project_path: &Path, tx: Sender<Message>) -> anyhow::Result<()> {
+#[instrument(skip(project_path, tx))]
+async fn run_pre_deploy_tests(
+    project_path: &Path,
+    tx: Sender<Message>,
+) -> std::result::Result<(), TestError> {
     let (read, write) = pipe::pipe();
     let project_path = project_path.to_owned();
 
@@ -349,7 +350,7 @@ mod tests {
     use tokio::fs;
     use uuid::Uuid;
 
-    use crate::error::Error;
+    use crate::error::TestError;
 
     #[tokio::test]
     async fn extract_tar_gz_data() {
@@ -388,18 +389,23 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
         super::extract_tar_gz_data(test_data.as_slice(), &p).unwrap();
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn run_pre_deploy_tests() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let (tx, rx) = crossbeam_channel::unbounded();
+
+        tokio::spawn(async move { while let Ok(_) = rx.recv() {} });
 
         let failure_project_path = root.join("tests/resources/tests-fail");
         assert!(matches!(
-            super::run_pre_deploy_tests(failure_project_path),
-            Err(Error::PreDeployTestFailure(_))
+            super::run_pre_deploy_tests(&failure_project_path, tx.clone()).await,
+            Err(TestError::Failed(_))
         ));
 
         let pass_project_path = root.join("tests/resources/tests-pass");
-        super::run_pre_deploy_tests(pass_project_path).unwrap();
+        super::run_pre_deploy_tests(&pass_project_path, tx)
+            .await
+            .unwrap();
     }
 
     #[tokio::test]

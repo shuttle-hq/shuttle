@@ -28,6 +28,7 @@ async fn main() -> io::Result<()> {
 
     let tracer = opentelemetry_datadog::new_pipeline()
         .with_service_name("gateway")
+        .with_agent_endpoint("http://datadog-agent:8126")
         .install_batch(opentelemetry::runtime::Tokio)
         .unwrap();
     let opentelemetry = tracing_opentelemetry::layer().with_tracer(tracer);

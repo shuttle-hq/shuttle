@@ -95,7 +95,6 @@ async fn start(db: SqlitePool, args: StartArgs) -> io::Result<()> {
                     %project_name,
                     "could not refresh state. Skipping it for now.",
                 );
-                panic!("could not refresh state");
             }
         }
     }

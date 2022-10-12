@@ -343,6 +343,7 @@ impl Shuttle {
 
         println!();
         println!("{deployment}");
+        println!("Waiting for deployment...");
 
         let mut stream = client
             .get_build_logs_ws(self.ctx.project_name(), &deployment.id)

@@ -200,7 +200,7 @@ impl Built {
     }
 }
 
-#[instrument(skip(service, kill_recv, cleanup), fields(address = ?_address, state = %State::Running))]
+#[instrument(skip(service, kill_recv, cleanup), fields(address = %_address, state = %State::Running))]
 async fn run(
     id: Uuid,
     service: LoadedService,

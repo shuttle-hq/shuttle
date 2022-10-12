@@ -123,7 +123,10 @@ impl IntoResponse for Error {
             ErrorKind::BadHost => (StatusCode::BAD_REQUEST, "the 'Host' header is invalid"),
             ErrorKind::UserNotFound => (StatusCode::NOT_FOUND, "user not found"),
             ErrorKind::UserAlreadyExists => (StatusCode::BAD_REQUEST, "user already exists"),
-            ErrorKind::ProjectNotFound => (StatusCode::NOT_FOUND, "project not found"),
+            ErrorKind::ProjectNotFound => (
+                StatusCode::NOT_FOUND,
+                "project not found. Run `cargo shuttle project new` to create a new project.",
+            ),
             ErrorKind::ProjectNotReady => (StatusCode::SERVICE_UNAVAILABLE, "project not ready"),
             ErrorKind::ProjectUnavailable => {
                 (StatusCode::BAD_GATEWAY, "project returned invalid response")
@@ -137,7 +140,10 @@ impl IntoResponse for Error {
                 StatusCode::BAD_REQUEST,
                 "a project with the same name already exists",
             ),
-            ErrorKind::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
+            ErrorKind::Unauthorized => (
+                StatusCode::UNAUTHORIZED,
+                "unauthorized. Run `cargo shuttle login` to login.",
+            ),
             ErrorKind::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
             ErrorKind::NotReady => (StatusCode::INTERNAL_SERVER_ERROR, "service not ready"),
         };
@@ -145,6 +151,7 @@ impl IntoResponse for Error {
             status,
             Json(ApiError {
                 message: error_message.to_string(),
+                status_code: status.as_u16(),
             }),
         )
             .into_response()

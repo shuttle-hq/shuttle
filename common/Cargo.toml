@@ -14,6 +14,7 @@ once_cell = "1.13.1"
 rustrict = "0.5.0"
 serde = { version = "1.0.143", features = ["derive"] }
 serde_json = { version = "1.0.85", optional = true }
+http = { version = "0.2.8", optional = true }
 strum = { version = "0.24.1", features = ["derive"] }
 tracing = "0.1.36"
 uuid = { version = "1.1.1", features = ["v4", "serde"] }
@@ -21,5 +22,5 @@ uuid = { version = "1.1.1", features = ["v4", "serde"] }
 [features]
 default = ["models"]
 
-models = ["display", "serde_json"]
+models = ["display", "serde_json", "http"]
 display = ["comfy-table", "crossterm"]

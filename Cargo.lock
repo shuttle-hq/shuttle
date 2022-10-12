@@ -5054,6 +5054,7 @@ dependencies = [
  "chrono",
  "comfy-table",
  "crossterm",
+ "http",
  "once_cell",
  "rustrict",
  "serde",

@@ -1,5 +1,7 @@
 use std::fmt::{Display, Formatter};
 
+use comfy_table::Color;
+use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -9,7 +11,7 @@ pub struct ApiError {
 
 impl Display for ApiError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.message)
+        write!(f, "{}", self.message.to_string().with(Color::Red))
     }
 }
 

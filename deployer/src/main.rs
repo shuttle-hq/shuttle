@@ -26,6 +26,7 @@ async fn main() {
     let (persistence, _) = Persistence::new(&args.state).await;
     let tracer = opentelemetry_datadog::new_pipeline()
         .with_service_name("deployer")
+        .with_agent_endpoint("http://datadog-agent:8126")
         .install_batch(opentelemetry::runtime::Tokio)
         .unwrap();
     let opentelemetry = tracing_opentelemetry::layer().with_tracer(tracer);

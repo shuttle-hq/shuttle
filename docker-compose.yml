@@ -118,3 +118,20 @@ services:
       placement:
         constraints:
           - node.hostname==postgres
+  datadog-agent:
+    image: datadog/agent
+    restart: always
+    networks:
+      user-net:
+    volumes:
+      # Pull docker stats
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - DD_APM_ENABLED=true
+      - DD_APM_NON_LOCAL_TRAFFIC=true
+      - DD_SITE=datadoghq.eu
+      - DD_API_KEY=${DD_API_KEY}
+    deploy:
+      placement:
+        constraints:
+          - node.hostname==controller

@@ -260,15 +260,11 @@ impl ShuttleInit for ShuttleInitSerenity {
         set_inline_table_dependency_features(
             "shuttle-service",
             dependencies,
-            vec![
-                "bot-serenity".to_string(),
-                "sqlx-postgres".to_string(),
-                "secrets".to_string(),
-            ],
+            vec!["bot-serenity".to_string()],
         );
 
         set_key_value_dependency_version(
-            "log",
+            "anyhow",
             dependencies,
             manifest_path,
             url,
@@ -298,8 +294,8 @@ impl ShuttleInit for ShuttleInitSerenity {
             ],
         );
 
-        set_inline_table_dependency_version(
-            "sqlx",
+        set_key_value_dependency_version(
+            "shuttle-secrets",
             dependencies,
             manifest_path,
             url,
@@ -307,26 +303,25 @@ impl ShuttleInit for ShuttleInitSerenity {
             get_dependency_version_fn,
         );
 
-        set_inline_table_dependency_features(
-            "sqlx",
+        set_key_value_dependency_version(
+            "tracing",
             dependencies,
-            vec![
-                "runtime-tokio-native-tls".to_string(),
-                "postgres".to_string(),
-            ],
+            manifest_path,
+            url,
+            false,
+            get_dependency_version_fn,
         );
     }
 
     fn get_boilerplate_code_for_framework(&self) -> &'static str {
         indoc! {r#"
-        use log::{error, info};
+        use anyhow::anyhow;
         use serenity::async_trait;
         use serenity::model::channel::Message;
         use serenity::model::gateway::Ready;
         use serenity::prelude::*;
-        use shuttle_service::error::CustomError;
-        use shuttle_service::SecretStore;
-        use sqlx::PgPool;
+        use shuttle_secrets::SecretStore;
+        use tracing::{error, info};
 
         struct Bot;
 
@@ -346,12 +341,15 @@ impl ShuttleInit for ShuttleInitSerenity {
         }
 
         #[shuttle_service::main]
-        async fn serenity(#[shared::Postgres] pool: PgPool) -> shuttle_service::ShuttleSerenity {
-            // Get the discord token set in `Secrets.toml` from the shared Postgres database
-            let token = pool
-                .get_secret("DISCORD_TOKEN")
-                .await
-                .map_err(CustomError::new)?;
+        async fn serenity(
+            #[shuttle_secrets::Secrets] secret_store: SecretStore,
+        ) -> shuttle_service::ShuttleSerenity {
+            // Get the discord token set in `Secrets.toml`
+            let token = if let Some(token) = secret_store.get("DISCORD_TOKEN") {
+                token
+            } else {
+                return Err(anyhow!("'DISCORD_TOKEN' was not found").into());
+            };
 
             // Set gateway intents, which decides what events the bot will be notified about
             let intents = GatewayIntents::GUILD_MESSAGES | GatewayIntents::MESSAGE_CONTENT;
@@ -981,10 +979,11 @@ mod shuttle_init_tests {
 
         let expected = indoc! {r#"
             [dependencies]
-            shuttle-service = { version = "1.0", features = ["bot-serenity", "sqlx-postgres", "secrets"] }
-            log = "1.0"
+            shuttle-service = { version = "1.0", features = ["bot-serenity"] }
+            anyhow = "1.0"
             serenity = { version = "1.0", default-features = false, features = ["client", "gateway", "rustls_backend", "model"] }
-            sqlx = { version = "1.0", features = ["runtime-tokio-native-tls", "postgres"] }
+            shuttle-secrets = "1.0"
+            tracing = "1.0"
         "#};
 
         assert_eq!(cargo_toml.to_string(), expected);

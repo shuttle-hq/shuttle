@@ -150,6 +150,7 @@ $ cargo shuttle login --api-key your-api-key-from-browser
 To deploy your shuttle project to the cloud, run:
 
 ```sh
+$ cargo shuttle project new
 $ cargo shuttle deploy
 ```
 

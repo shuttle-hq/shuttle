@@ -24,6 +24,7 @@ And a `Claims` object can also be converted to a token using `to_token()`.
 After logging into shuttle, use the following command to deploy this example:
 
 ```sh
+$ cargo shuttle project new
 $ cargo shuttle deploy
 ```
 

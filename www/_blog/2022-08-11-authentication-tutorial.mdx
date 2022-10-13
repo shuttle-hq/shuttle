@@ -668,7 +668,7 @@ async fn axum(
 
 This is great, we now have a site with signup and login functionality. But we have no users, our friends can't log in on our localhost. We want it live on the interwebs. Luckily we are using shuttle, so it is as simple as:
 
-`cargo shuttle deploy`
+`cargo shuttle project new` and `cargo shuttle deploy`
 
 Because of our `#[shuttle_service::main]` annotation and out-the-box Axum support our deployment doesn't need any prior config, it is instantly live!
 

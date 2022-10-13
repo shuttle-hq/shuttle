@@ -85,6 +85,7 @@
 //!
 //! ```bash
 //! $ cargo shuttle project new
+//! $ cargo shuttle project status // until the project is "ready"
 //! ```
 //!
 //! Then, deploy the service with:
@@ -158,7 +159,7 @@
 //!
 //! If the `name` key is not specified, the service's name will be the same as the crate's name.
 //!
-//! Alternatively, you can override the project name on the command-line, by passing the --name argument:
+//! Alternatively, you can override the project name on the command-line, by passing the --name argument to any subcommand like so:
 //!
 //! ```bash
 //! cargo shuttle deploy --name=$PROJECT_NAME

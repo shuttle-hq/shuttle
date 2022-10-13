@@ -505,6 +505,22 @@ where
 #[cfg(feature = "web-poem")]
 pub type ShuttlePoem<T> = Result<T, Error>;
 
+#[cfg(feature = "web-warp")]
+#[async_trait]
+impl<T> Service for T
+where
+    T: Send + Sync + Clone + 'static + warp::Filter,
+    T::Extract: warp::reply::Reply,
+{
+    async fn bind(mut self: Box<Self>, addr: SocketAddr) -> Result<(), error::Error> {
+        warp::serve(*self).run(addr).await;
+        Ok(())
+    }
+}
+
+#[cfg(feature = "web-warp")]
+pub type ShuttleWarp<T> = Result<warp::filters::BoxedFilter<T>, Error>;
+
 #[cfg(feature = "web-axum")]
 #[async_trait]
 impl Service for sync_wrapper::SyncWrapper<axum::Router> {

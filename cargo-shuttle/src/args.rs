@@ -137,26 +137,29 @@ pub struct RunArgs {
 #[derive(Parser, Debug)]
 pub struct InitArgs {
     /// Initialize with axum framework
-    #[clap(long, conflicts_with_all = &["rocket", "tide", "tower", "poem", "serenity", "salvo"])]
+    #[clap(long, conflicts_with_all = &["rocket", "tide", "tower", "poem", "serenity", "warp", "salvo"])]
     pub axum: bool,
     /// Initialize with rocket framework
-    #[clap(long, conflicts_with_all = &["axum", "tide", "tower", "poem", "serenity", "salvo"])]
+    #[clap(long, conflicts_with_all = &["axum", "tide", "tower", "poem", "serenity", "warp", "salvo"])]
     pub rocket: bool,
     /// Initialize with tide framework
-    #[clap(long, conflicts_with_all = &["axum", "rocket", "tower", "poem", "serenity", "salvo"])]
+    #[clap(long, conflicts_with_all = &["axum", "rocket", "tower", "poem", "serenity", "warp", "salvo"])]
     pub tide: bool,
     /// Initialize with tower framework
-    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "poem", "serenity", "salvo"])]
+    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "poem", "serenity", "warp", "salvo"])]
     pub tower: bool,
     /// Initialize with poem framework
-    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "tower", "serenity", "salvo"])]
+    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "tower", "serenity", "warp", "salvo"])]
     pub poem: bool,
     /// Initialize with salvo framework
-    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "tower", "poem", "serenity"])]
+    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "tower", "poem", "warp", "serenity"])]
     pub salvo: bool,
     /// Initialize with serenity framework
-    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "tower", "poem", "salvo"])]
+    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "tower", "poem", "warp", "salvo"])]
     pub serenity: bool,
+    /// Initialize with warp framework
+    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "tower", "poem", "serenity", "salvo"])]
+    pub warp: bool,
     /// Path to initialize a new shuttle project
     #[clap(
         parse(try_from_os_str = parse_init_path),

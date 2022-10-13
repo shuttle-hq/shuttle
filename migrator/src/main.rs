@@ -1,8 +1,10 @@
 use rand::distributions::{Alphanumeric, DistString};
+use shuttle_common::project::ProjectName;
 use std::{
     env::args,
     fmt::{Display, Formatter},
     fs,
+    str::FromStr,
 };
 
 fn main() {
@@ -25,7 +27,7 @@ fn main() {
 struct User {
     key: String,
     name: String,
-    projects: Vec<String>,
+    projects: Vec<ProjectName>,
 }
 
 impl From<(&String, &toml::Value)> for User {
@@ -44,7 +46,20 @@ impl From<(&String, &toml::Value)> for User {
                     .as_array()
                     .expect("projects to be an array")
                     .iter()
-                    .map(|value| value.as_str().expect("project to be a string").to_string())
+                    .map(|value| value.as_str().expect("project to be a string"))
+                    .filter_map(|project_name| match project_name.len() {
+                        3..=64 => match ProjectName::from_str(project_name) {
+                            Ok(project_name) => Some(project_name),
+                            Err(err) => {
+                                eprintln!("{err}");
+                                None
+                            }
+                        },
+                        _ => {
+                            eprintln!("project name is too long/short: {project_name}");
+                            None
+                        }
+                    })
                     .collect();
 
                 (name, projects)
@@ -128,7 +143,7 @@ projects = [
             User {
                 key: "key2".to_string(),
                 name: "name2".to_string(),
-                projects: vec!["project1".to_string(), "project2".to_string()],
+                projects: vec!["project1".parse().unwrap(), "project2".parse().unwrap()],
             },
         ];
 
@@ -140,7 +155,7 @@ projects = [
         let input = User {
             key: "key".to_string(),
             name: "name".to_string(),
-            projects: vec!["project1".to_string(), "project2".to_string()],
+            projects: vec!["project1".parse().unwrap(), "project2".parse().unwrap()],
         };
 
         let actual = input.to_string();

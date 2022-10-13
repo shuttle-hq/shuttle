@@ -7,4 +7,5 @@ edition = "2021"
 
 [dependencies]
 rand = "0.8.5"
+shuttle-common = { path = "../common" }
 toml = "0.5.9"

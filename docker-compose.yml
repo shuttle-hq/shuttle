@@ -55,8 +55,8 @@ services:
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001"]
       interval: 1m
-      timeout: 5s
-      retries: 3
+      timeout: 15s
+      retries: 15
       #start_period: 30s
   provisioner:
     image: "${CONTAINER_REGISTRY}/provisioner:${PROVISIONER_TAG}"

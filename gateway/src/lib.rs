@@ -8,16 +8,14 @@ use std::io;
 use std::pin::Pin;
 use std::str::FromStr;
 
-use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use bollard::Docker;
-use convert_case::{Case, Casing};
 use futures::prelude::*;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Deserializer, Serialize};
-use shuttle_common::models::error::ApiError;
+use shuttle_common::models::error::{ApiError, ErrorKind};
 use tokio::sync::mpsc::error::SendError;
 use tracing::error;
 
@@ -32,32 +30,6 @@ pub mod worker;
 use crate::service::{ContainerSettings, GatewayService};
 
 static PROJECT_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new("^[a-zA-Z0-9\\-_]{3,64}$").unwrap());
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ErrorKind {
-    KeyMissing,
-    BadHost,
-    KeyMalformed,
-    Unauthorized,
-    Forbidden,
-    UserNotFound,
-    UserAlreadyExists,
-    ProjectNotFound,
-    InvalidProjectName,
-    ProjectAlreadyExists,
-    ProjectNotReady,
-    ProjectUnavailable,
-    InvalidOperation,
-    Internal,
-    NotReady,
-}
-
-impl std::fmt::Display for ErrorKind {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let formatted = format!("{:?}", self).to_case(Case::Snake);
-        write!(f, "{}", formatted)
-    }
-}
 
 /// Server-side errors that do not have to do with the user runtime
 /// should be [`Error`]s.
@@ -116,38 +88,9 @@ impl IntoResponse for Error {
     fn into_response(self) -> Response {
         error!(error = %self, "request had an error");
 
-        let (status, error_message) = match self.kind {
-            ErrorKind::Internal => (StatusCode::INTERNAL_SERVER_ERROR, "internal server error"),
-            ErrorKind::KeyMissing => (StatusCode::UNAUTHORIZED, "request is missing a key"),
-            ErrorKind::KeyMalformed => (StatusCode::BAD_REQUEST, "request has an invalid key"),
-            ErrorKind::BadHost => (StatusCode::BAD_REQUEST, "the 'Host' header is invalid"),
-            ErrorKind::UserNotFound => (StatusCode::NOT_FOUND, "user not found"),
-            ErrorKind::UserAlreadyExists => (StatusCode::BAD_REQUEST, "user already exists"),
-            ErrorKind::ProjectNotFound => (StatusCode::NOT_FOUND, "project not found"),
-            ErrorKind::ProjectNotReady => (StatusCode::SERVICE_UNAVAILABLE, "project not ready"),
-            ErrorKind::ProjectUnavailable => {
-                (StatusCode::BAD_GATEWAY, "project returned invalid response")
-            }
-            ErrorKind::InvalidProjectName => (StatusCode::BAD_REQUEST, "invalid project name"),
-            ErrorKind::InvalidOperation => (
-                StatusCode::BAD_REQUEST,
-                "the requested operation is invalid",
-            ),
-            ErrorKind::ProjectAlreadyExists => (
-                StatusCode::BAD_REQUEST,
-                "a project with the same name already exists",
-            ),
-            ErrorKind::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
-            ErrorKind::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
-            ErrorKind::NotReady => (StatusCode::INTERNAL_SERVER_ERROR, "service not ready"),
-        };
-        (
-            status,
-            Json(ApiError {
-                message: error_message.to_string(),
-            }),
-        )
-            .into_response()
+        let error: ApiError = self.kind.into();
+
+        (error.status(), Json(error)).into_response()
     }
 }
 

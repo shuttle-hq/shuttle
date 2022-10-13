@@ -90,7 +90,7 @@ $ cargo shuttle init --rocket my-rocket-app
 
 This should generate the following dependency in `Cargo.toml`:
 ```toml
-shuttle-service = { version = "0.5.2", features = ["web-rocket"] }
+shuttle-service = { version = "0.6.0", features = ["web-rocket"] }
 ```
 
 The following boilerplate code should be generated into `src/lib.rs`:
@@ -150,6 +150,7 @@ $ cargo shuttle login --api-key your-api-key-from-browser
 To deploy your shuttle project to the cloud, run:
 
 ```sh
+$ cargo shuttle project new
 $ cargo shuttle deploy
 ```
 

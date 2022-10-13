@@ -1,6 +1,6 @@
 [package]
 name = "cargo-shuttle"
-version = "0.5.2"
+version = "0.6.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "A cargo command for the shuttle platform (https://www.shuttle.rs/)"
@@ -29,7 +29,7 @@ reqwest-retry = "0.1.5"
 serde = { version = "1.0.143", features = ["derive"] }
 serde_json = "1.0.83"
 sqlx = { version = "0.6.1", features = ["runtime-tokio-native-tls", "postgres"] }
-tokio = "1.20.1"
+tokio = { version = "1.20.1", features = ["macros"] }
 tokio-tungstenite = { version = "0.17.2", features = ["native-tls"] }
 toml = "0.5.9"
 toml_edit = "0.14.4"
@@ -40,15 +40,15 @@ uuid = { version = "1.1.2", features = ["v4"] }
 webbrowser = "0.7.1"
 
 [dependencies.shuttle-common]
-version = "0.5.2"
+version = "0.6.0"
 path = "../common"
 
 [dependencies.shuttle-secrets]
-version = "0.5.2"
+version = "0.6.0"
 path = "../resources/secrets"
 
 [dependencies.shuttle-service]
-version = "0.5.2"
+version = "0.6.0"
 path = "../service"
 features = ["loader"]
 

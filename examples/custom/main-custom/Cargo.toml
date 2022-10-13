@@ -6,4 +6,4 @@ edition = "2021"
 [lib]
 
 [dependencies]
-shuttle-service = "0.5.1"
+shuttle-service = "0.6.0"

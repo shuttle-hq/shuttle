@@ -2,7 +2,7 @@ use std::fmt::Debug;
 use std::sync::Arc;
 
 use tokio::sync::mpsc::{channel, Receiver, Sender};
-use tracing::info;
+use tracing::{debug, info};
 
 use crate::project::Project;
 use crate::service::GatewayService;
@@ -80,7 +80,7 @@ where
     W: Send,
 {
     pub fn new(service: Svc) -> Self {
-        let (send, recv) = channel(256);
+        let (send, recv) = channel(32);
         Self {
             service,
             send: Some(send),
@@ -113,8 +113,10 @@ where
         // deadlock if all the other senders have already been dropped
         // at this point.
         let _ = self.send.take().unwrap();
+        debug!("starting worker");
 
         while let Some(mut work) = self.recv.recv().await {
+            debug!(?work, "received work");
             loop {
                 work = {
                     let context = self.service.context();
@@ -130,6 +132,8 @@ where
 
                 if work.is_done() {
                     break;
+                } else {
+                    debug!(?work, "work not done yet");
                 }
             }
         }

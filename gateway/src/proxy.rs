@@ -15,6 +15,7 @@ use hyper::{Client, Request};
 use hyper_reverse_proxy::ReverseProxy;
 use once_cell::sync::Lazy;
 use tower::Service;
+use tracing::debug;
 
 use crate::service::GatewayService;
 use crate::{Error, ErrorKind, ProjectName};
@@ -107,6 +108,8 @@ impl<'r> Service<&'r AddrStream> for MakeProxyService {
 }
 
 pub fn make_proxy(gateway: Arc<GatewayService>, fqdn: String) -> MakeProxyService {
+    debug!("making proxy");
+
     MakeProxyService {
         gateway,
         fqdn: format!(".{fqdn}"),

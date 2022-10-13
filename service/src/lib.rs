@@ -18,8 +18,7 @@
 //! $ cargo install cargo-shuttle
 //! ```
 //!
-//! Now that shuttle is installed, you can create your first project using:
-//!
+//! Now that shuttle is installed, you can initialize a project with Rocket boilerplate:
 //! ```bash
 //! $ cargo shuttle init --rocket my-rocket-app
 //! ```
@@ -28,7 +27,7 @@
 //! be a library crate with a `shuttle-service` dependency with the `web-rocket` feature on the `shuttle-service` dependency.
 //!
 //! ```toml
-//! shuttle-service = { version = "0.5.2", features = ["web-rocket"] }
+//! shuttle-service = { version = "0.6.0", features = ["web-rocket"] }
 //! ```
 //!
 //! A boilerplate code for your rocket project can also be found in `src/lib.rs`:
@@ -81,6 +80,13 @@
 //!
 //! this will open a browser window and prompt you to connect using your GitHub account.
 //!
+//! Before you can deploy, you have to create a project. This will start a deployer container for your
+//! project under the hood, ensuring isolation from other users' projects.
+//!
+//! ```bash
+//! $ cargo shuttle project new
+//! ```
+//!
 //! Then, deploy the service with:
 //!
 //! ```bash
@@ -101,7 +107,7 @@
 //! Add `shuttle-shared-db` as a dependency with the `postgres` feature, and add `sqlx` as a dependency with the `runtime-tokio-native-tls` and `postgres` features inside `Cargo.toml`:
 //!
 //! ```toml
-//! shuttle-shared-db = { version = "0.5.2", features = ["postgres"] }
+//! shuttle-shared-db = { version = "0.6.0", features = ["postgres"] }
 //! sqlx = { version = "0.6.1", features = ["runtime-tokio-native-tls", "postgres"] }
 //! ```
 //!
@@ -284,7 +290,7 @@ pub use shuttle_common::project::ProjectName as ServiceName;
 
 /// Factories can be used to request the provisioning of additional resources (like databases).
 ///
-/// An instance of factory is passed by the deployer as an argument to [Service::build][Service::build] in the initial phase of deployment.
+/// An instance of factory is passed by the deployer as an argument to [ResourceBuilder::build][ResourceBuilder::build] in the initial phase of deployment.
 ///
 /// Also see the [main][main] macro.
 #[async_trait]

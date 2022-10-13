@@ -141,6 +141,7 @@ async fn get_status(Extension(sender): Extension<Sender<Work>>) -> Response<Body
 }
 
 pub fn make_api(service: Arc<GatewayService>, sender: Sender<Work>) -> Router<Body> {
+    debug!("making api route");
     Router::<Body>::new()
         .route(
             "/",

@@ -12,10 +12,10 @@ use sqlx::{query, Sqlite, SqlitePool};
 use std::io;
 use std::path::Path;
 use std::sync::Arc;
-use tracing::{error, info, trace};
+use tracing::{debug, error, info, trace};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread")]
 async fn main() -> io::Result<()> {
     let args = Args::parse();
 
@@ -70,34 +70,39 @@ async fn start(db: SqlitePool, args: StartArgs) -> io::Result<()> {
 
     let sender = worker.sender();
 
-    for Work {
-        project_name,
-        account_name,
-        work,
-    } in gateway
-        .iter_projects()
-        .await
-        .expect("could not list projects")
-    {
-        match work.refresh(&gateway.context()).await {
-            Ok(work) => sender
-                .send(Work {
-                    account_name,
-                    project_name,
-                    work,
-                })
-                .await
-                .unwrap(),
-            Err(err) => {
-                error!(
-                    error = %err,
-                    %account_name,
-                    %project_name,
-                    "could not refresh state. Skipping it for now.",
-                );
+    let gateway_clone = gateway.clone();
+    let sender_clone = sender.clone();
+
+    tokio::spawn(async move {
+        for Work {
+            project_name,
+            account_name,
+            work,
+        } in gateway_clone
+            .iter_projects()
+            .await
+            .expect("could not list projects")
+        {
+            match work.refresh(&gateway_clone.context()).await {
+                Ok(work) => sender_clone
+                    .send(Work {
+                        account_name,
+                        project_name,
+                        work,
+                    })
+                    .await
+                    .unwrap(),
+                Err(err) => {
+                    error!(
+                        error = %err,
+                        %account_name,
+                        %project_name,
+                        "could not refresh state. Skipping it for now.",
+                    );
+                }
             }
         }
-    }
+    });
 
     let worker_handle = tokio::spawn(
         worker
@@ -113,6 +118,8 @@ async fn start(db: SqlitePool, args: StartArgs) -> io::Result<()> {
     let proxy = make_proxy(gateway, fqdn);
 
     let proxy_handle = tokio::spawn(hyper::Server::bind(&args.user).serve(proxy));
+
+    debug!("starting up all services");
 
     tokio::select!(
         _ = worker_handle => info!("worker handle finished"),

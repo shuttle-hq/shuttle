@@ -21,6 +21,7 @@ in
       grpcurl
       gh
       docker-compose
+      docker
       datadog-agent
       sccache
       sqlite

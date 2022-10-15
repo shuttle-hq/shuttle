@@ -1,12 +1,19 @@
-import { handleAuth, handleCallback, handleLogin } from "@auth0/nextjs-auth0";
-import { getApiKey } from "../../../lib/shuttle-api";
+import {handleAuth, handleCallback, handleLogin} from "@auth0/nextjs-auth0";
+import shuttle, {Error} from "../../../lib/shuttle";
 
 async function afterCallback(req, res, session, state) {
-  try {
-    session.user.api_key = await getApiKey(session.user.sub.replace("|", "-"));
-  } catch (err) {
-    console.error(err);
-  }
+  const shuttlified = session.user.sub.replace("|", "-");
+
+  const user = await shuttle.get_user(shuttlified).catch((err) => {
+    if ((err as Error).status === 404) {
+      console.log(`user ${shuttlified} does not exist, creating`);
+      return shuttle.create_user(shuttlified);
+    } else {
+      return Promise.reject(err);
+    }
+  });
+
+  session.user.api_key = user.key;
 
   return session;
 }

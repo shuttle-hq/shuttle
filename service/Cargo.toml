@@ -34,6 +34,7 @@ tokio = { version = "=1.20.1", features = ["rt", "rt-multi-thread"] }
 tower = { version = "0.4.13", features = ["make"], optional = true }
 tracing = "0.1.36"
 tracing-subscriber = { version = "0.3.15", features = ["env-filter"] }
+warp = { version = "0.3.2", optional = true }
 
 # Tide does not have tokio support. So make sure async-std is compatible with tokio
 # https://github.com/http-rs/tide/issues/791
@@ -68,3 +69,4 @@ web-poem = ["poem"]
 web-salvo = ["salvo"]
 
 bot-serenity = ["serenity"]
+web-warp = ["warp"]

@@ -444,6 +444,45 @@ impl ShuttleInit for ShuttleInitTower {
     }
 }
 
+pub struct ShuttleInitWarp;
+
+impl ShuttleInit for ShuttleInitWarp {
+    fn set_cargo_dependencies(
+        &self,
+        dependencies: &mut Table,
+        manifest_path: &Path,
+        url: &Url,
+        get_dependency_version_fn: GetDependencyVersionFn,
+    ) {
+        set_inline_table_dependency_features(
+            "shuttle-service",
+            dependencies,
+            vec!["web-warp".to_string()],
+        );
+
+        set_key_value_dependency_version(
+            "warp",
+            dependencies,
+            manifest_path,
+            url,
+            false,
+            get_dependency_version_fn,
+        );
+    }
+
+    fn get_boilerplate_code_for_framework(&self) -> &'static str {
+        indoc! {r#"
+            use warp::Filter;
+            use warp::Reply;
+
+            #[shuttle_service::main]
+            async fn warp() -> shuttle_service::ShuttleWarp<(impl Reply,)> {
+                let route = warp::any().map(|| "Hello, World");
+                Ok(route.boxed())
+        }"#}
+    }
+}
+
 pub struct ShuttleInitNoOp;
 impl ShuttleInit for ShuttleInitNoOp {
     fn set_cargo_dependencies(
@@ -484,8 +523,16 @@ pub fn get_framework(init_args: &InitArgs) -> Box<dyn ShuttleInit> {
         return Box::new(ShuttleInitPoem);
     }
 
+    if init_args.salvo {
+        return Box::new(ShuttleInitSalvo);
+    }
+
     if init_args.serenity {
         return Box::new(ShuttleInitSerenity);
+    }
+
+    if init_args.warp {
+        return Box::new(ShuttleInitWarp);
     }
 
     Box::new(ShuttleInitNoOp)
@@ -640,6 +687,7 @@ mod shuttle_init_tests {
             poem: false,
             salvo: false,
             serenity: false,
+            warp: false,
             path: PathBuf::new(),
         };
 
@@ -651,6 +699,7 @@ mod shuttle_init_tests {
             "poem" => init_args.poem = true,
             "salvo" => init_args.salvo = true,
             "serenity" => init_args.serenity = true,
+            "warp" => init_args.warp = true,
             _ => unreachable!(),
         }
 
@@ -676,14 +725,18 @@ mod shuttle_init_tests {
 
     #[test]
     fn test_get_framework_via_get_boilerplate_code() {
-        let frameworks = vec!["axum", "rocket", "tide", "tower", "poem"];
+        let frameworks = vec![
+            "axum", "rocket", "tide", "tower", "poem", "salvo", "serenity", "warp",
+        ];
         let framework_inits: Vec<Box<dyn ShuttleInit>> = vec![
             Box::new(ShuttleInitAxum),
             Box::new(ShuttleInitRocket),
             Box::new(ShuttleInitTide),
             Box::new(ShuttleInitTower),
             Box::new(ShuttleInitPoem),
+            Box::new(ShuttleInitSalvo),
             Box::new(ShuttleInitSerenity),
+            Box::new(ShuttleInitWarp),
         ];
 
         for (framework, expected_framework_init) in frameworks.into_iter().zip(framework_inits) {
@@ -985,6 +1038,38 @@ mod shuttle_init_tests {
             log = "1.0"
             serenity = { version = "1.0", default-features = false, features = ["client", "gateway", "rustls_backend", "model"] }
             sqlx = { version = "1.0", features = ["runtime-tokio-native-tls", "postgres"] }
+        "#};
+
+        assert_eq!(cargo_toml.to_string(), expected);
+    }
+
+    #[test]
+    fn test_set_cargo_dependencies_warp() {
+        let mut cargo_toml = cargo_toml_factory();
+        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
+        let manifest_path = PathBuf::new();
+        let url = Url::parse("https://shuttle.rs").unwrap();
+
+        set_inline_table_dependency_version(
+            "shuttle-service",
+            dependencies,
+            &manifest_path,
+            &url,
+            false,
+            mock_get_latest_dependency_version,
+        );
+
+        ShuttleInitWarp.set_cargo_dependencies(
+            dependencies,
+            &manifest_path,
+            &url,
+            mock_get_latest_dependency_version,
+        );
+
+        let expected = indoc! {r#"
+            [dependencies]
+            shuttle-service = { version = "1.0", features = ["web-warp"] }
+            warp = "1.0"
         "#};
 
         assert_eq!(cargo_toml.to_string(), expected);

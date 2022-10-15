@@ -244,7 +244,7 @@ workflows:
             - workspace-fmt
           matrix:
             parameters:
-              framework: ["web-axum", "web-rocket", "web-poem", "web-tide", "web-tower", "web-salvo", "bot-serenity"]
+              framework: ["web-axum", "web-rocket", "web-poem", "web-tide", "web-tower","web-warp", "web-salvo", "bot-serenity"]
       - check-standalone:
           matrix:
             parameters:

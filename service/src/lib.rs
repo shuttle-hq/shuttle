@@ -561,6 +561,22 @@ impl Service for salvo::Router {
 #[cfg(feature = "web-salvo")]
 pub type ShuttleSalvo = Result<salvo::Router, Error>;
 
+#[cfg(feature = "web-thruster")]
+#[async_trait]
+impl<T> Service for T
+where
+    T: thruster::ThrusterServer + Sync + Send + 'static,
+{
+    async fn bind(mut self: Box<Self>, addr: SocketAddr) -> Result<(), error::Error> {
+        self.build(&addr.ip().to_string(), addr.port()).await;
+
+        Ok(())
+    }
+}
+
+#[cfg(feature = "web-thruster")]
+pub type ShuttleThruster<T> = Result<T, Error>;
+
 #[cfg(feature = "web-tide")]
 #[async_trait]
 impl<T> Service for tide::Server<T>

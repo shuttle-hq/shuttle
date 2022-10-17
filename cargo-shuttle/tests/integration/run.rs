@@ -327,3 +327,19 @@ async fn salvo_hello_world() {
 
     assert_eq!(request_text, "Hello, world!");
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn thruster_hello_world() {
+    let port = cargo_shuttle_run("../examples/thruster/hello-world").await;
+
+    let request_text = reqwest::Client::new()
+        .get(format!("http://localhost:{port}/hello"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+
+    assert_eq!(request_text, "Hello, World!");
+}

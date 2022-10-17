@@ -13,7 +13,7 @@ use shuttle_common::models::secret;
 use shuttle_common::LogItem;
 use tower_http::auth::RequireAuthorizationLayer;
 use tower_http::trace::TraceLayer;
-use tracing::{debug, debug_span, error, field, Span};
+use tracing::{debug, debug_span, error, field, trace, Span};
 use uuid::Uuid;
 
 use crate::deployment::{DeploymentManager, Queued};

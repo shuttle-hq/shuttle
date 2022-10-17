@@ -23,7 +23,7 @@ use sqlx::migrate::{MigrateDatabase, Migrator};
 use sqlx::sqlite::{Sqlite, SqlitePool};
 use tokio::sync::broadcast::{self, Receiver, Sender};
 use tokio::task::JoinHandle;
-use tracing::{error, info, instrument};
+use tracing::{error, info, instrument, trace};
 use uuid::Uuid;
 
 use self::deployment::DeploymentRunnable;
@@ -86,6 +86,7 @@ impl Persistence {
         // This moves them to an async thread
         let handle = tokio::spawn(async move {
             while let Ok(log) = log_recv.recv() {
+                trace!(?log, "persistence received got log");
                 match log.r#type {
                     LogType::Event => {
                         insert_log(&pool_cloned, log.clone())
@@ -129,7 +130,10 @@ impl Persistence {
                     }
                 };
 
-                if stream_log_send_clone.receiver_count() > 0 {
+                let receiver_count = stream_log_send_clone.receiver_count();
+                trace!(?log, receiver_count, "sending log to broadcast stream");
+
+                if receiver_count > 0 {
                     stream_log_send_clone.send(log).unwrap_or_else(|error| {
                         error!(
                             error = &error as &dyn std::error::Error,

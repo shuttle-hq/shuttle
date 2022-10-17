@@ -8,7 +8,7 @@ use chrono::Utc;
 use crossbeam_channel::Sender;
 use serde_json::json;
 use shuttle_service::loader::{build_crate, get_config};
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, error, info, instrument, trace};
 use uuid::Uuid;
 
 use std::collections::BTreeMap;
@@ -124,6 +124,7 @@ impl Queued {
         let id = self.id;
         tokio::spawn(async move {
             while let Ok(message) = rx.recv() {
+                trace!(?message, "received cargo message");
                 // TODO: change these to `info!(...)` as [valuable] support increases.
                 // Currently it is not possible to turn these serde `message`s into a `valuable`, but once it is the passing down of `log_recorder` should be removed.
                 let log = match message {

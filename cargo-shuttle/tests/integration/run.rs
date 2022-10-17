@@ -229,7 +229,7 @@ async fn warp_hello_world() {
         .await
         .unwrap();
 
-    assert_eq!(request_text, "Hello, world!");
+    assert_eq!(request_text, "Hello, World!");
 }
 
 #[tokio::test(flavor = "multi_thread")]

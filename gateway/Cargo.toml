@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-gateway"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 publish = false
 
@@ -33,7 +33,7 @@ tracing-opentelemetry = "0.17.4"
 tracing-subscriber = { version = "0.3.11", features = ["env-filter"] }
 
 [dependencies.shuttle-common]
-version = "0.6.0"
+version = "0.7.0"
 path = "../common"
 
 [dev-dependencies]

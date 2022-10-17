@@ -2,6 +2,7 @@ import { useForm, ValidationError } from "@formspree/react";
 import {
   CONTRIBUTING_URL,
   DISCORD_URL,
+  FORMSPREE_ENDPOINT,
   GITHUB_URL,
   TWITTER_URL,
 } from "../lib/constants";
@@ -14,7 +15,7 @@ const links = [
   { name: "🐦 following us on twitter", href: TWITTER_URL },
 ];
 export default function SignupForm() {
-  const [state, handleSubmit] = useForm("xwkzneyj");
+  const [state, handleSubmit] = useForm(FORMSPREE_ENDPOINT);
   if (state.succeeded) {
     return (
       <div className="mb-4 lg:col-span-5">
@@ -46,13 +47,13 @@ export default function SignupForm() {
         id="email"
         type="email"
         name="email"
-        placeholder="Enter your Email"
-        className="text-m mt-3 block w-full rounded rounded border border-gray-300 bg-slate-300 p-4 text-gray-900 hover:border-brand-orange1 focus:border-brand-orange1 focus:ring-brand-orange1 dark:border-gray-600 dark:bg-gray-500 dark:text-white dark:placeholder-gray-400 dark:focus:border-brand-orange1 dark:focus:ring-brand-orange1"
+        placeholder={`hello@shuttle.rs`}
+        className="text-m mt-3 block w-full rounded rounded border border-gray-300 bg-slate-300 p-4 text-slate-700 text-gray-900 hover:border-brand-orange1 focus:border-brand-orange1 focus:ring-brand-orange1 dark:border-gray-600 dark:bg-gray-500 dark:text-white dark:placeholder-gray-400 dark:focus:border-brand-orange1 dark:focus:ring-brand-orange1"
       />
       <ValidationError prefix="Email" field="email" errors={state.errors} />
       <button
         type="submit"
-        className="mt-4 rounded bg-brand-900 py-3 px-8 font-bold text-white transition hover:bg-brand-700"
+        className="mt-6 rounded bg-brand-900 py-3 px-8 font-bold text-white transition hover:bg-brand-700"
         disabled={state.submitting}
       >
         Sign Up

@@ -21,7 +21,6 @@
 
 use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
-use shuttle_common::log::BuildLogStream;
 use shuttle_common::STATE_MESSAGE;
 use std::{net::SocketAddr, str::FromStr};
 use tracing::{error, field::Visit, span, warn, Metadata, Subscriber};
@@ -65,38 +64,6 @@ pub struct Log {
     pub r#type: LogType,
 
     pub address: Option<String>,
-}
-
-impl Log {
-    pub fn to_stream_log(&self) -> Option<BuildLogStream> {
-        let (state, message) = match self.r#type {
-            LogType::State => match self.state {
-                State::Queued => Some((shuttle_common::deployment::State::Queued, None)),
-                State::Building => Some((shuttle_common::deployment::State::Building, None)),
-                State::Built => Some((shuttle_common::deployment::State::Built, None)),
-                State::Loading => Some((shuttle_common::deployment::State::Loading, None)),
-                State::Running => Some((shuttle_common::deployment::State::Running, None)),
-                State::Completed => Some((shuttle_common::deployment::State::Completed, None)),
-                State::Stopped => Some((shuttle_common::deployment::State::Stopped, None)),
-                State::Crashed => Some((shuttle_common::deployment::State::Crashed, None)),
-                State::Unknown => Some((shuttle_common::deployment::State::Unknown, None)),
-            },
-            LogType::Event => match self.state {
-                State::Building => {
-                    let msg = extract_message(&self.fields)?;
-                    Some((shuttle_common::deployment::State::Building, Some(msg)))
-                }
-                _ => None,
-            },
-        }?;
-
-        Some(BuildLogStream {
-            id: self.id,
-            timestamp: self.timestamp,
-            state,
-            message,
-        })
-    }
 }
 
 impl From<Log> for persistence::Log {

@@ -105,20 +105,6 @@ impl Client {
             .await
     }
 
-    pub async fn get_build_logs_ws(
-        &self,
-        project: &ProjectName,
-        deployment_id: &Uuid,
-    ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>> {
-        let path = format!(
-            "/projects/{}/ws/deployments/{}/logs/build",
-            project.as_str(),
-            deployment_id
-        );
-
-        self.ws_get(path).await
-    }
-
     pub async fn delete_service(&self, project: &ProjectName) -> Result<service::Detailed> {
         let path = format!(
             "/projects/{}/services/{}",
@@ -181,13 +167,13 @@ impl Client {
         self.get(path).await
     }
 
-    pub async fn get_runtime_logs(
+    pub async fn get_logs(
         &self,
         project: &ProjectName,
         deployment_id: &Uuid,
     ) -> Result<Vec<LogItem>> {
         let path = format!(
-            "/projects/{}/deployments/{}/logs/runtime",
+            "/projects/{}/deployments/{}/logs",
             project.as_str(),
             deployment_id
         );
@@ -195,13 +181,13 @@ impl Client {
         self.get(path).await
     }
 
-    pub async fn get_runtime_logs_ws(
+    pub async fn get_logs_ws(
         &self,
         project: &ProjectName,
         deployment_id: &Uuid,
     ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>> {
         let path = format!(
-            "/projects/{}/ws/deployments/{}/logs/runtime",
+            "/projects/{}/ws/deployments/{}/logs",
             project.as_str(),
             deployment_id
         );

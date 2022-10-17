@@ -109,6 +109,7 @@ pub async fn build_crate(
     let project_path = project_path.to_owned();
 
     let handle = tokio::spawn(async move {
+        trace!("started thread to build crate");
         let config = get_config(write)?;
         let manifest_path = project_path.join("Cargo.toml");
         let mut ws = Workspace::new(&manifest_path, &config)?;
@@ -130,7 +131,9 @@ pub async fn build_crate(
 
     // This needs to be on a separate thread, else deployer will block (reason currently unknown :D)
     tokio::spawn(async move {
+        trace!("started thread to to capture build output stream");
         for message in Message::parse_stream(read) {
+            trace!(?message, "parsed cargo message");
             match message {
                 Ok(message) => {
                     if let Err(error) = tx.send(message) {
@@ -231,7 +234,7 @@ fn check_version(summary: &Summary) -> anyhow::Result<()> {
         Ok(())
     } else {
         Err(anyhow!(
-            "the version of `shuttle-service` specified as a dependency to this service ({version_req}) is not supported by this instance ({valid_version}); try updating `shuttle-service` to the latest version available and deploy"
+            "the version of `shuttle-service` specified as a dependency to this service ({version_req}) is not supported by this project instance ({valid_version}); try updating `shuttle-service` to '{valid_version}' or update the project instance using `cargo shuttle project rm` and `cargo shuttle project new`"
         ))
     }
 }

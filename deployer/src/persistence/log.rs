@@ -1,10 +1,9 @@
 use chrono::{DateTime, Utc};
-use serde_json::Value;
-use shuttle_common::log::BuildLogStream;
+use serde_json::{json, Value};
 use shuttle_common::STATE_MESSAGE;
 use uuid::Uuid;
 
-use super::{deploy_layer::extract_message, State};
+use super::State;
 
 #[derive(Clone, Debug, Eq, PartialEq, sqlx::FromRow)]
 pub struct Log {
@@ -27,41 +26,32 @@ pub enum Level {
     Error,
 }
 
-impl Log {
-    pub fn into_build_log_stream(self) -> Option<BuildLogStream> {
-        // Only state transition logs is a Value::String
-        let (state, message) = if let Value::String(str_value) = &self.fields {
-            if str_value == STATE_MESSAGE {
-                match self.state {
-                    State::Queued => Some((shuttle_common::deployment::State::Queued, None)),
-                    State::Building => Some((shuttle_common::deployment::State::Building, None)),
-                    State::Built => Some((shuttle_common::deployment::State::Built, None)),
-                    State::Loading => Some((shuttle_common::deployment::State::Loading, None)),
-                    State::Running => Some((shuttle_common::deployment::State::Running, None)),
-                    State::Completed => Some((shuttle_common::deployment::State::Completed, None)),
-                    State::Stopped => Some((shuttle_common::deployment::State::Stopped, None)),
-                    State::Crashed => Some((shuttle_common::deployment::State::Crashed, None)),
-                    State::Unknown => Some((shuttle_common::deployment::State::Unknown, None)),
+impl From<Log> for Option<shuttle_common::LogItem> {
+    fn from(log: Log) -> Self {
+        if log.state == State::Building {
+            if let Value::String(str_value) = &log.fields {
+                if str_value == STATE_MESSAGE {
+                    return Some(log.into());
                 }
             } else {
-                None
-            }
-        } else {
-            match self.state {
-                State::Building => {
-                    let msg = extract_message(&self.fields)?;
-                    Some((shuttle_common::deployment::State::Building, Some(msg)))
-                }
-                _ => None,
-            }
-        }?;
+                let msg = extract_message(&log.fields)?;
 
-        Some(BuildLogStream {
-            id: self.id,
-            timestamp: self.timestamp,
-            state,
-            message,
-        })
+                let item = shuttle_common::LogItem {
+                    id: log.id,
+                    state: log.state.into(),
+                    timestamp: log.timestamp,
+                    level: log.level.into(),
+                    file: log.file,
+                    line: log.line,
+                    target: log.target,
+                    fields: serde_json::to_vec(&json!({ "message": msg })).unwrap(),
+                };
+
+                return Some(item);
+            }
+        }
+
+        Some(log.into())
     }
 }
 
@@ -102,4 +92,26 @@ impl From<shuttle_common::log::Level> for Level {
             shuttle_common::log::Level::Error => Self::Error,
         }
     }
+}
+
+fn extract_message(fields: &Value) -> Option<String> {
+    if let Value::Object(ref map) = fields {
+        if let Some(message) = map.get("build_line") {
+            return Some(message.as_str()?.to_string());
+        }
+
+        if let Some(message) = map.get("message") {
+            match message {
+                Value::Object(message_object) => {
+                    if let Some(rendered) = message_object.get("rendered") {
+                        return Some(rendered.as_str()?.to_string());
+                    }
+                }
+                Value::String(mes_str) => return Some(mes_str.to_string()),
+                _ => {}
+            }
+        }
+    }
+
+    None
 }

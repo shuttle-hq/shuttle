@@ -77,14 +77,6 @@ impl std::fmt::Display for Item {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct BuildLogStream {
-    pub id: Uuid,
-    pub state: State,
-    pub message: Option<String>,
-    pub timestamp: DateTime<Utc>,
-}
-
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum Level {

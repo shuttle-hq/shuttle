@@ -7,7 +7,7 @@ use shuttle_proto::provisioner::{
 };
 use shuttle_service::{Factory, ServiceName};
 use tonic::{transport::Channel, Request};
-use tracing::debug;
+use tracing::{debug, info, trace};
 use uuid::Uuid;
 
 use crate::persistence::{Resource, ResourceRecorder, ResourceType, SecretGetter};
@@ -93,7 +93,10 @@ impl<R: ResourceRecorder, S: SecretGetter> Factory for ProvisionerFactory<R, S> 
         &mut self,
         db_type: database::Type,
     ) -> Result<String, shuttle_service::Error> {
+        info!("Provisioning a {db_type} on the shuttle servers. This can take a while...");
+
         if let Some(ref info) = self.info {
+            debug!("A database has already been provisioned for this deployment, so reusing it");
             return Ok(info.connection_string_private());
         }
 
@@ -126,14 +129,17 @@ impl<R: ResourceRecorder, S: SecretGetter> Factory for ProvisionerFactory<R, S> 
 
         self.info = Some(info);
 
-        debug!("giving a DB connection string: {}", conn_str);
+        info!("Done provisioning database");
+        trace!("giving a DB connection string: {}", conn_str);
         Ok(conn_str)
     }
 
     async fn get_secrets(&mut self) -> Result<BTreeMap<String, String>, shuttle_service::Error> {
         if let Some(ref secrets) = self.secrets {
+            debug!("Returning previously fetched secrets");
             Ok(secrets.clone())
         } else {
+            info!("Fetching secrets for deployment");
             let iter = self
                 .secret_getter
                 .get_secrets(&self.service_id)
@@ -145,6 +151,7 @@ impl<R: ResourceRecorder, S: SecretGetter> Factory for ProvisionerFactory<R, S> 
             let secrets = BTreeMap::from_iter(iter);
             self.secrets = Some(secrets.clone());
 
+            info!("Done fetching secrets");
             Ok(secrets)
         }
     }

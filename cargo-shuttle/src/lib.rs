@@ -212,9 +212,7 @@ impl Shuttle {
         };
 
         if follow {
-            let mut stream = client
-                .get_runtime_logs_ws(self.ctx.project_name(), &id)
-                .await?;
+            let mut stream = client.get_logs_ws(self.ctx.project_name(), &id).await?;
 
             while let Some(Ok(msg)) = stream.next().await {
                 if let tokio_tungstenite::tungstenite::Message::Text(line) = msg {
@@ -224,9 +222,7 @@ impl Shuttle {
                 }
             }
         } else {
-            let logs = client
-                .get_runtime_logs(self.ctx.project_name(), &id)
-                .await?;
+            let logs = client.get_logs(self.ctx.project_name(), &id).await?;
 
             for log in logs.into_iter() {
                 println!("{log}");
@@ -341,17 +337,37 @@ impl Shuttle {
             .deploy(package_file, self.ctx.project_name(), args.no_test)
             .await?;
 
-        println!();
-        println!("{deployment}");
-        println!("Waiting for deployment...");
-
         let mut stream = client
-            .get_build_logs_ws(self.ctx.project_name(), &deployment.id)
+            .get_logs_ws(self.ctx.project_name(), &deployment.id)
             .await?;
 
         while let Some(Ok(msg)) = stream.next().await {
             if let tokio_tungstenite::tungstenite::Message::Text(line) = msg {
-                println!("{line}");
+                let log_item: shuttle_common::LogItem =
+                    serde_json::from_str(&line).expect("to parse log line");
+
+                match log_item.state {
+                    shuttle_common::deployment::State::Queued
+                    | shuttle_common::deployment::State::Building
+                    | shuttle_common::deployment::State::Built
+                    | shuttle_common::deployment::State::Loading => {
+                        println!("{log_item}");
+                    }
+                    shuttle_common::deployment::State::Crashed => {
+                        println!();
+                        println!("{}", "Deployment crashed".red());
+                        println!("Run the following for more details");
+                        println!();
+                        print!("cargo shuttle logs {}", deployment.id);
+                        println!();
+
+                        return Ok(CommandOutcome::DeploymentFailure);
+                    }
+                    shuttle_common::deployment::State::Running
+                    | shuttle_common::deployment::State::Completed
+                    | shuttle_common::deployment::State::Stopped
+                    | shuttle_common::deployment::State::Unknown => break,
+                }
             }
         }
 
@@ -359,14 +375,6 @@ impl Shuttle {
 
         // A deployment will only exist if there is currently one in the running state
         if let Some(ref new_deployment) = service.deployment {
-            if new_deployment.id != deployment.id {
-                println!(
-                    "Deployment has not entered the running state so kept previous deployment up"
-                );
-
-                return Ok(CommandOutcome::DeploymentFailure);
-            }
-
             println!("{service}");
 
             Ok(match new_deployment.state {

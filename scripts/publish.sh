@@ -28,11 +28,11 @@ function main()
     publish-folder "common"
     publish-folder "codegen"
     publish-folder "service"
+    publish-folder "resources/secrets"
     publish-folder "cargo-shuttle"
 
     publish-folder "resources/aws-rds"
     publish-folder "resources/persist"
-    publish-folder "resources/secrets"
     publish-folder "resources/shared-db"
 
     git tag "v$version"

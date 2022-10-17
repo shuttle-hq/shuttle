@@ -197,7 +197,7 @@ impl ShuttleInit for ShuttleInitPoem {
         #[shuttle_service::main]
         async fn poem() -> shuttle_service::ShuttlePoem<impl poem::Endpoint> {
             let app = Route::new().at("/hello", get(hello_world));
-    
+
             Ok(app)
         }"#}
     }
@@ -481,6 +481,61 @@ impl ShuttleInit for ShuttleInitWarp {
     }
 }
 
+pub struct ShuttleInitThruster;
+
+impl ShuttleInit for ShuttleInitThruster {
+    fn set_cargo_dependencies(
+        &self,
+        dependencies: &mut Table,
+        manifest_path: &Path,
+        url: &Url,
+        get_dependency_version_fn: GetDependencyVersionFn,
+    ) {
+        set_inline_table_dependency_features(
+            "shuttle-service",
+            dependencies,
+            vec!["web-thruster".to_string()],
+        );
+
+        set_inline_table_dependency_version(
+            "thruster",
+            dependencies,
+            manifest_path,
+            url,
+            false,
+            get_dependency_version_fn,
+        );
+
+        set_inline_table_dependency_features(
+            "thruster",
+            dependencies,
+            vec!["hyper_server".to_string()],
+        );
+    }
+
+    fn get_boilerplate_code_for_framework(&self) -> &'static str {
+        indoc! {r#"
+        use thruster::{
+            context::basic_hyper_context::{generate_context, BasicHyperContext as Ctx, HyperRequest},
+            m, middleware_fn, App, HyperServer, MiddlewareNext, MiddlewareResult, ThrusterServer,
+        };
+
+        #[middleware_fn]
+        async fn hello(mut context: Ctx, _next: MiddlewareNext<Ctx>) -> MiddlewareResult<Ctx> {
+            context.body("Hello, World!");
+            Ok(context)
+        }
+
+        #[shuttle_service::main]
+        async fn thruster() -> shuttle_service::ShuttleThruster<HyperServer<Ctx, ()>> {
+            Ok(HyperServer::new(
+                App::<HyperRequest, Ctx, ()>::create(generate_context, ()).get("/hello", m![hello]),
+            ))
+        }
+        "#}
+    }
+}
+
 pub struct ShuttleInitNoOp;
 impl ShuttleInit for ShuttleInitNoOp {
     fn set_cargo_dependencies(
@@ -531,6 +586,10 @@ pub fn get_framework(init_args: &InitArgs) -> Box<dyn ShuttleInit> {
 
     if init_args.warp {
         return Box::new(ShuttleInitWarp);
+    }
+
+    if init_args.thruster {
+        return Box::new(ShuttleInitThruster);
     }
 
     Box::new(ShuttleInitNoOp)
@@ -691,6 +750,7 @@ mod shuttle_init_tests {
             salvo: false,
             serenity: false,
             warp: false,
+            thruster: false,
             path: PathBuf::new(),
         };
 
@@ -703,6 +763,7 @@ mod shuttle_init_tests {
             "salvo" => init_args.salvo = true,
             "serenity" => init_args.serenity = true,
             "warp" => init_args.warp = true,
+            "thruster" => init_args.thruster = true,
             _ => unreachable!(),
         }
 
@@ -729,7 +790,7 @@ mod shuttle_init_tests {
     #[test]
     fn test_get_framework_via_get_boilerplate_code() {
         let frameworks = vec![
-            "axum", "rocket", "tide", "tower", "poem", "salvo", "serenity", "warp",
+            "axum", "rocket", "tide", "tower", "poem", "salvo", "serenity", "warp", "thruster",
         ];
         let framework_inits: Vec<Box<dyn ShuttleInit>> = vec![
             Box::new(ShuttleInitAxum),
@@ -740,6 +801,7 @@ mod shuttle_init_tests {
             Box::new(ShuttleInitSalvo),
             Box::new(ShuttleInitSerenity),
             Box::new(ShuttleInitWarp),
+            Box::new(ShuttleInitThruster),
         ];
 
         for (framework, expected_framework_init) in frameworks.into_iter().zip(framework_inits) {
@@ -1074,6 +1136,38 @@ mod shuttle_init_tests {
             [dependencies]
             shuttle-service = { version = "1.0", features = ["web-warp"] }
             warp = "1.0"
+        "#};
+
+        assert_eq!(cargo_toml.to_string(), expected);
+    }
+
+    #[test]
+    fn test_set_cargo_dependencies_thruster() {
+        let mut cargo_toml = cargo_toml_factory();
+        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
+        let manifest_path = PathBuf::new();
+        let url = Url::parse("https://shuttle.rs").unwrap();
+
+        set_inline_table_dependency_version(
+            "shuttle-service",
+            dependencies,
+            &manifest_path,
+            &url,
+            false,
+            mock_get_latest_dependency_version,
+        );
+
+        ShuttleInitThruster.set_cargo_dependencies(
+            dependencies,
+            &manifest_path,
+            &url,
+            mock_get_latest_dependency_version,
+        );
+
+        let expected = indoc! {r#"
+            [dependencies]
+            shuttle-service = { version = "1.0", features = ["web-thruster"] }
+            thruster = { version = "1.0", features = ["hyper_server"] }
         "#};
 
         assert_eq!(cargo_toml.to_string(), expected);

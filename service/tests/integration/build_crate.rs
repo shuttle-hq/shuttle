@@ -6,7 +6,7 @@ use shuttle_service::loader::build_crate;
 async fn not_shuttle() {
     let (tx, _) = crossbeam_channel::unbounded();
     let project_path = format!("{}/tests/resources/not-shuttle", env!("CARGO_MANIFEST_DIR"));
-    let so_path = build_crate(Default::default(), Path::new(&project_path), tx)
+    let so_path = build_crate(Default::default(), Path::new(&project_path), false, tx)
         .await
         .unwrap();
 
@@ -27,7 +27,7 @@ async fn not_shuttle() {
 async fn not_lib() {
     let (tx, _) = crossbeam_channel::unbounded();
     let project_path = format!("{}/tests/resources/not-lib", env!("CARGO_MANIFEST_DIR"));
-    build_crate(Default::default(), Path::new(&project_path), tx)
+    build_crate(Default::default(), Path::new(&project_path), false, tx)
         .await
         .unwrap();
 }
@@ -37,7 +37,7 @@ async fn not_cdylib() {
     let (tx, _) = crossbeam_channel::unbounded();
     let project_path = format!("{}/tests/resources/not-cdylib", env!("CARGO_MANIFEST_DIR"));
     assert!(
-        build_crate(Default::default(), Path::new(&project_path), tx)
+        build_crate(Default::default(), Path::new(&project_path), false, tx)
             .await
             .is_ok()
     );
@@ -51,7 +51,7 @@ async fn is_cdylib() {
     let (tx, _) = crossbeam_channel::unbounded();
     let project_path = format!("{}/tests/resources/is-cdylib", env!("CARGO_MANIFEST_DIR"));
     assert!(
-        build_crate(Default::default(), Path::new(&project_path), tx)
+        build_crate(Default::default(), Path::new(&project_path), false, tx)
             .await
             .is_ok()
     );
@@ -68,7 +68,7 @@ async fn not_found() {
         "{}/tests/resources/non-existing",
         env!("CARGO_MANIFEST_DIR")
     );
-    build_crate(Default::default(), Path::new(&project_path), tx)
+    build_crate(Default::default(), Path::new(&project_path), false, tx)
         .await
         .unwrap();
 }

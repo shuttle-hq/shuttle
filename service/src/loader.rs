@@ -8,6 +8,7 @@ use anyhow::{anyhow, Context};
 use cargo::core::compiler::{CompileMode, MessageFormat};
 use cargo::core::{Manifest, PackageId, Shell, Summary, Verbosity, Workspace};
 use cargo::ops::{compile, CompileOptions};
+use cargo::util::interning::InternedString;
 use cargo::util::{homedir, ToSemver};
 use cargo::Config;
 use cargo_metadata::Message;
@@ -103,6 +104,7 @@ impl Loader {
 pub async fn build_crate(
     deployment_id: Uuid,
     project_path: &Path,
+    release_mode: bool,
     tx: Sender<Message>,
 ) -> anyhow::Result<PathBuf> {
     let (read, write) = pipe::pipe();
@@ -123,7 +125,7 @@ pub async fn build_crate(
         check_version(summary)?;
         check_no_panic(&ws)?;
 
-        let opts = get_compile_options(&config)?;
+        let opts = get_compile_options(&config, release_mode)?;
         let compilation = compile(&ws, &opts);
 
         Ok(compilation?.cdylibs[0].path.clone())
@@ -167,12 +169,18 @@ pub fn get_config(writer: PipeWriter) -> anyhow::Result<Config> {
 }
 
 /// Get options to compile in build mode
-fn get_compile_options(config: &Config) -> anyhow::Result<CompileOptions> {
+fn get_compile_options(config: &Config, release_mode: bool) -> anyhow::Result<CompileOptions> {
     let mut opts = CompileOptions::new(config, CompileMode::Build)?;
     opts.build_config.message_format = MessageFormat::Json {
         render_diagnostics: false,
         short: false,
         ansi: false,
+    };
+
+    opts.build_config.requested_profile = if release_mode {
+        InternedString::new("release")
+    } else {
+        InternedString::new("dev")
     };
 
     Ok(opts)

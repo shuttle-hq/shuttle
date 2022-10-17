@@ -1,0 +1,59 @@
+---
+title: "Salvo"
+description:
+  "Salvo is an extremely simple and powerful Rust web backend framework. Only
+  basic Rust knowledge is required to develop backend services."
+---
+
+## Hello world!
+
+Simple 'Hello world' app using Salvo.
+
+Create a new directory (`mkdir`) and move into it (`cd`) -- afterwards, execute
+the following command to initialize shuttle inside with the Salvo boilerplate.
+
+```bash
+cargo shuttle init --salvo
+```
+
+Make sure that your `cargo.toml` file looks as the one below -- having the right
+dependencies is key!
+
+```toml cargo.toml
+[package]
+name = "hello-world"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+
+[dependencies]
+salvo = "0.34.3"
+shuttle-service = { version = "0.5.2", features = ["web-salvo"] }
+```
+
+Your `lib.rs` should look like this:
+
+```rust lib.rs
+use salvo::prelude::*;
+
+#[handler]
+async fn hello_world(res: &mut Response) {
+    res.render(Text::Plain("Hello, world!"));
+}
+
+#[shuttle_service::main]
+async fn salvo() -> shuttle_service::ShuttleSalvo {
+    let router = Router::with_path("hello").get(hello_world);
+
+    Ok(router)
+}
+```
+
+Finally, to deploy your app, all you need to do is:
+
+```bash
+cargo shuttle deploy
+```
+
+And your app is live! 🎉🎉🎉

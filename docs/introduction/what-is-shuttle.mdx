@@ -1,0 +1,47 @@
+---
+title: "What is shuttle?"
+description: "Shuttle is a Rust-native cloud development platform that let's you deploy your app while also taking care of all of your infrastructure."
+---
+
+A simple cargo command packages up your application, ships it to the shuttle
+build cluster where it's incrementally compiled and automatically served on a
+unique subdomain.
+
+Shuttle uses simple but powerful annotations to understand your dependencies.
+Infrastructure dependencies like databases or key-value stores are spun up for
+you and everything is automatically wired together from the get-go.
+
+It is built for productivity, reliability and performance:
+
+- Zero-Configuration support for Rust using annotations
+- Automatic resource provisioning (databases, caches, subdomains, etc.) via
+  [Infrastructure-From-Code](https://github.com/shuttle-hq/shuttle/tree/main/examples/rocket/hello-world)
+- First-class support for popular Rust frameworks -
+  [Rocket](https://github.com/shuttle-hq/shuttle/tree/main/examples/axum/hello-world),
+  [Axum](https://github.com/shuttle-hq/shuttle/tree/main/examples/axum/hello-world),
+  [Tide](https://github.com/shuttle-hq/shuttle/tree/main/examples/tide/hello-world),
+  [Poem](https://github.com/shuttle-hq/shuttle/tree/main/examples/poem/hello-world)
+  and
+  [Tower](https://github.com/shuttle-hq/shuttle/tree/main/examples/tower/hello-world)
+- Support for deploying Discord bots using
+  [Serenity](https://github.com/shuttle-hq/shuttle/tree/main/examples/serenity/hello-world)
+- Scalable hosting (with optional self-hosting)
+
+## Infrastructure from Code
+
+We've already developed an annotation based system that enables Rust apps to be
+deployed with a one-liner, as well as dependencies like databases being
+provisioned through static analysis in real-time.
+
+```rust
+#[shuttle_service::main]
+async fn rocket(
+    #[shared::Postgres] pool: PgPool, // automatic db provisioning + hands you back an authenticated connection pool
+) -> Result<...> {
+    // application code
+}
+```
+
+In this future, infrastructure can be defined directly from code. Not in the “Infrastructure as Code” kind of way though, but in the way that the code that developers write implicitly defines infrastructure. What your code actually needs in terms of infrastructure is inferred as you build your application, instead of you having to think upfront about what infrastructure piece is needed and how to wire it up.
+
+This setup is also breaking the boundaries that keep containers isolated from each other (and thus make it difficult to orchestrate them), without necessarily getting rid of the paradigm of containers. It should not force you into any specific way of writing applications, but just be an extension of your workflow.

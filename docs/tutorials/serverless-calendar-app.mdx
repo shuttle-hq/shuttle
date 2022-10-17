@@ -1,0 +1,404 @@
+---
+title: "Serverless Calendar App"
+---
+
+> written by [Matthias Endler](https://endler.dev/)
+
+Every once in a while my buddies and I meet for dinner. I value these evenings,
+but the worst part is scheduling these events!
+
+- We send out a message to the group.
+- We wait for a response.
+- We decide on a date.
+- Someone sends out a calendar invite.
+- Things finally happen.
+
+None of that is fun _except_ for the dinner.
+
+Being the reasonable person you are, you would think: "Why don't you just use a
+scheduling app?".
+
+I have tried many of them. None of them are any good. They are all..._too much_!
+
+Just let me send out an invite and whoever wants can show up.
+
+- I _don't_ want to have to create an account for your
+  calendar/scheduling/whatever app.
+- I _don't_ want to have to add my friends.
+- I _don't_ want to have to add my friends' friends.
+- I _don't_ want to have to add my friends' friends' friends.
+- You get the idea: I just want to send out an invite and get no response from
+  you.
+
+### The nerdy, introvert engineer's solution
+
+💡 What we definitely need is yet another calendar app which allows us to create
+events and send out an invite with a link to that event! You probably didn't see
+that coming now, did you?
+
+Oh, and I don't want to use Google Calendar to create the event because
+[I](https://www.businessinsider.com/google-users-locked-out-after-years-2020-10)
+[don't](https://killedbygoogle.com/)
+[trust them](https://github.com/tycrek/degoogle).
+
+Like any reasonable person, I wanted a way to create calendar entries from my
+_terminal_.
+
+That's how I pitched the idea to my buddies last time. The answer was: "I don't
+know, sounds like a solution in search of a problem." But you know what they
+say: Never ask a starfish for directions.
+
+### Show, don't tell
+
+That night I went home and built a website that would create a calendar entry
+from `GET` parameters.
+
+It allows you to create a calendar event from the convenience of your command
+line:
+
+```bash
+> curl https://zerocal.shuttleapp.rs?start=2022-11-04+20:00&duration=3h&title=Birthday&description=paaarty
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:ICALENDAR-RS
+CALSCALE:GREGORIAN
+BEGIN:VEVENT
+DTSTAMP:20221002T123149Z
+CLASS:CONFIDENTIAL
+DESCRIPTION:paaarty
+DTEND:20221002T133149Z
+DTSTART:20221002T123149Z
+SUMMARY:Birthday
+UID:c99dd4bb-5c35-4d61-9c46-7a471de0e7f4
+END:VEVENT
+END:VCALENDAR
+```
+
+You can then save that to a file and open it with your calendar app.
+
+```bash
+curl https://zerocal.shuttleapp.rs?start=2022-11-04+20:00&duration=3h&title=Birthday&description=paaarty > birthday.ics
+open birthday.ics
+```
+
+In a sense, it's a "serverless calendar app", haha. There is no state on the
+server, it just generates a calendar event on the fly and returns it.
+
+### How I built it
+
+You probably noticed that the URL contains "shuttleapp.rs". That's because I'm
+using [shuttle.rs](https://github.com/shuttle-hq/shuttle) to host the website.
+
+Shuttle is a hosting service for Rust projects and I wanted to try it out for a
+long time.
+
+To initialize the project using the awesome
+[axum](https://github.com/tokio-rs/axum) web framework, I've used
+
+```bash
+cargo install cargo-shuttle
+cargo shuttle init --axum --name zerocal zerocal
+```
+
+and I was greeted with everything I needed to get started:
+
+```rust
+use axum::{routing::get, Router};
+use sync_wrapper::SyncWrapper;
+
+async fn hello_world() -> &'static str {
+  "Hello, world!"
+}
+
+#[shuttle_service::main]
+async fn axum() -> shuttle_service::ShuttleAxum {
+  let router = Router::new().route("/hello", get(hello_world));
+  let sync_wrapper = SyncWrapper::new(router);
+
+  Ok(sync_wrapper)
+}
+```
+
+Let's quickly commit the changes:
+
+```bash
+git add .gitignore Cargo.toml src/
+git commit -m "Hello World"
+```
+
+To deploy the code, I needed to sign up for a shuttle account. This can be done
+over at https://www.shuttle.rs/login.
+
+It will ask you to authorize it to access your Github account.
+
+Then:
+
+```bash
+cargo shuttle login
+```
+
+and finally:
+
+```bash
+cargo shuttle deploy
+```
+
+Now let's head over to https://zerocal.shuttleapp.rs:
+
+Hello World! Deploying the first version took less than 5 minutes. Nice! We're
+all set for our custom calendar app.
+
+### Writing the app
+
+To create the calendar event, I used the
+[icalendar](https://github.com/hoodie/icalendar-rs) crate (shout out to
+[hoodie](https://github.com/hoodie) for creating this nice library!).
+[iCalendar](https://en.wikipedia.org/wiki/ICalendar) is a standard for creating
+calendar events that is supported by most calendar apps.
+
+```bash
+cargo add icalendar
+cargo add chrono # For date and time parsing
+```
+
+Let's create a demo calendar event:
+
+```
+let event = Event::new()
+  .summary("test event")
+  .description("here I have something really important to do")
+  .starts(Utc::now())
+  .ends(Utc::now() + Duration::days(1))
+  .done();
+```
+
+Simple enough.
+
+### How to return a file!?
+
+Now that we have a calendar event, we need to return it to the user. But how do
+we return it as a file?
+
+There's an example of how to return a file dynamically in axum
+[here](https://github.com/tokio-rs/axum/discussions/608).
+
+```rust
+async fn calendar() -> impl IntoResponse {
+  let ical = Calendar::new()
+    .push(
+      // add an event
+      Event::new()
+        .summary("It works! 😀")
+        .description("Meeting with the Rust community")
+        .starts(Utc::now() + Duration::hours(1))
+        .ends(Utc::now() + Duration::hours(2))
+        .done(),
+    )
+    .done();
+
+  CalendarResponse(ical)
+}
+```
+
+Some interesting things to note here:
+
+- Every calendar file is a collection of events so we wrap the event in a
+  `Calendar` object, which represents the collection.
+- `impl IntoResponse` is a trait that allows us to return any type that
+  implements it.
+- `CalendarResponse` is a
+  [newtype wrapper](https://rust-unofficial.github.io/patterns/patterns/behavioural/newtype.html)
+  around Calendar that implements IntoResponse.
+
+Here is the `CalendarResponse` implementation:
+
+```rust
+/// Newtype wrapper around Calendar for `IntoResponse` impl
+#[derive(Debug)]
+pub struct CalendarResponse(pub Calendar);
+
+impl IntoResponse for CalendarResponse {
+  fn into_response(self) -> Response {
+    let mut res = Response::new(boxed(Full::from(self.0.to_string())));
+    res.headers_mut().insert(
+      header::CONTENT_TYPE,
+      HeaderValue::from_static("text/calendar"),
+    );
+    res
+  }
+}
+```
+
+We just create a new `Response` object and set the `Content-Type` header to the
+correct MIME type for iCalendar files: `text/calendar`. Then we return the
+response.
+
+### Add date parsing
+
+This part is a bit hacky, so feel free to glance over it. We need to parse the
+date and duration from the query string. I used
+[dateparser](https://docs.rs/dateparser/latest/dateparser/), because it supports
+sooo many different
+[date formats](https://docs.rs/dateparser/latest/dateparser/#accepted-date-formats).
+
+```rust
+async fn calendar(Query(params): Query<HashMap<String, String>>) -> impl IntoResponse {
+  let mut event = Event::new();
+  event.class(Class::Confidential);
+
+  if let Some(title) = params.get("title") {
+    event.summary(title);
+  } else {
+    event.summary(DEFAULT_EVENT_TITLE);
+  }
+  if let Some(description) = params.get("description") {
+    event.description(description);
+  } else {
+    event.description("Powered by zerocal.shuttleapp.rs");
+  }
+
+  if let Some(start) = params.get("start") {
+    let start = dateparser::parse(start).unwrap();
+    event.starts(start);
+    if let Some(duration) = params.get("duration") {
+      let duration = humantime::parse_duration(duration).unwrap();
+      let duration = chrono::Duration::from_std(duration).unwrap();
+      event.ends(start + duration);
+    }
+  }
+
+  if let Some(end) = params.get("end") {
+    let end = dateparser::parse(end).unwrap();
+    event.ends(end);
+    if let Some(duration) = params.get("duration") {
+      if params.get("start").is_none() {
+        let duration = humantime::parse_duration(duration).unwrap();
+        let duration = chrono::Duration::from_std(duration).unwrap();
+        event.starts(end - duration);
+      }
+    }
+  }
+
+  let ical = Calendar::new().push(event.done()).done();
+
+  CalendarResponse(ical)
+}
+```
+
+Would be nice to support more date formats like now and tomorrow, but I'll leave
+that for another time.
+
+Let's test it:
+
+```rust
+> cargo shuttle run # This starts a local dev server
+> curl 127.0.0.1:8000?start=2022-11-04+20:00&duration=3h&title=Birthday&description=Party
+*🤖 bleep bloop, calendar file created*
+```
+
+Nice, it works!
+
+Opening it in the browser creates a new event in the calendar:
+
+![][/images/serverless-calendar-app-1.png]
+
+And for all the odd people who don't use a terminal to create a calendar event,
+let's also add a form to the website.
+
+### Add a form
+
+```html
+<form>
+  <table>
+    <tr>
+      <td>
+        <label for="title">Event Title</label>
+      </td>
+      <td>
+        <input type="text" id="title" name="title" value="Birthday" />
+      </td>
+    </tr>
+    <tr>
+      <td>
+        <label for="desc">Description</label>
+      </td>
+      <td>
+        <input type="text" id="desc" name="desc" value="Party" />
+      </td>
+    </tr>
+    <tr>
+      <td><label for="start">Start</label></td>
+      <td>
+        <input type="datetime-local" id="start" name="start" />
+      </td>
+    </tr>
+    <tr>
+      <td><label for="end">End</label></td>
+      <td>
+        <input type="datetime-local" id="end" name="end" />
+      </td>
+    </tr>
+  </table>
+</form>
+```
+
+I modified the calendar function a bit to return the form if the query string is
+empty:
+
+```rust
+async fn calendar(Query(params): Query<HashMap<String, String>>) -> impl IntoResponse {
+  // if query is empty, show form
+  if params.is_empty() {
+    return Response::builder()
+      .status(200)
+      .body(boxed(Full::from(include_str!("../static/index.html"))))
+      .unwrap();
+  }
+
+  // ...
+}
+```
+
+After some more tweaking, we got ourselves a nice little form in all of its web
+1.0 glory.
+
+![Serverless Calendar app][/images/serverless-calendar-app-2.png]
+
+And that's it! We now have a little web app that can create calendar events.
+Well, almost. We still need to deploy it.
+
+### Deploying
+
+```bash
+cargo shuttle deploy
+```
+
+Right, that's all. It's that easy. Thanks to the folks over at
+[shuttle.rs](https://github.com/shuttle-hq/shuttle) for making this possible.
+
+The calendar app is now available at https://zerocal.shuttleapp.rs.
+
+Now I can finally send my friends a link to a calendar event for our next pub
+crawl. They'll surely appreciate it.yeahyeah
+
+### From zero to calendar in 100 lines of Rust
+
+Boy it feels great to be writing plain HTML again. Building little apps never
+gets old.
+
+Check out the source code on [GitHub](https://github.com/mre/zerocal) and help
+me make it better! 🙏
+
+Here are some ideas:
+
+- Add support for more human-readable date formats (e.g. `now`, `tomorrow`).
+- Add support for recurring events. Add support for timezones.
+- Add location support (e.g. `location=Berlin` or
+  `location=https://zoom.us/test`). Add Google calendar short-links
+  (`https://calendar.google.com/calendar/render?action=TEMPLATE&dates=20221003T224500Z%2F20221003T224500Z&details=&location=&text=`).
+- Add example bash command to create a calendar event from the command line.
+- Shorten the URL (e.g.
+  `zerocal.shuttleapp.rs/2022-11-04T20:00/3h/Birthday/Party`)?
+
+Check out the [issue tracker](https://github.com/mre/zerocal) and feel free to
+open a PR!

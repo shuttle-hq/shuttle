@@ -1,0 +1,81 @@
+---
+title: "Tower"
+description:
+  "Tower is a library of modular and reusable components for building robust
+  networking clients and servers."
+---
+
+## Hello world!
+
+Simple 'Hello world' app using Tower.
+
+Create a new directory (`mkdir`) and move into it (`cd`) -- afterwards, execute
+the following command to initialize shuttle inside with the Tower boilerplate.
+
+```bash
+cargo shuttle init --tower
+```
+
+Make sure that your `cargo.toml` file looks as the one below -- having the right
+dependencies is key!
+
+```toml cargo.toml
+[package]
+name = "hello-world"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+
+[dependencies]
+hyper = { version = "0.14", features = ["full"] }
+shuttle-service = { version = "0.5.2", features = ["web-tower"] }
+tower = { version = "0.4", features = ["full"] }
+```
+
+Your `lib.rs` should look like this:
+
+```rust lib.rs
+use std::convert::Infallible;
+use std::future::Future;
+use std::pin::Pin;
+use std::task::{Context, Poll};
+
+#[derive(Clone)]
+struct HelloWorld;
+
+impl tower::Service<hyper::Request<hyper::Body>> for HelloWorld {
+    type Response = hyper::Response<hyper::Body>;
+    type Error = Infallible;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + Sync>>;
+
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, _req: hyper::Request<hyper::Body>) -> Self::Future {
+        let body = hyper::Body::from("Hello, world!");
+        let resp = hyper::Response::builder()
+            .status(200)
+            .body(body)
+            .expect("Unable to create the `hyper::Response` object");
+
+        let fut = async { Ok(resp) };
+
+        Box::pin(fut)
+    }
+}
+
+#[shuttle_service::main]
+async fn tower() -> Result<HelloWorld, shuttle_service::Error> {
+    Ok(HelloWorld)
+}
+```
+
+Finally, to deploy your app, all you need to do is:
+
+```bash
+cargo shuttle deploy
+```
+
+And your app is live! 🎉🎉🎉

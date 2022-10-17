@@ -1,0 +1,84 @@
+{
+  "name": "Shuttle",
+  "logo": {
+    "light": "/images/logo/light.png",
+    "dark": "/images/logo/dark.png"
+  },
+  "favicon": "/favicon.png",
+  "colors": {
+    "primary": "#F25100",
+    "light": "#F09050",
+    "dark": "#C34100",
+    "ultraLight": "#F8E9DF",
+    "ultraDark": "#9D3400"
+  },
+  "topbarLinks": [
+    {
+      "name": "shuttle.rs",
+      "url": "https://www.shuttle.rs"
+    }
+  ],
+  "topbarCtaButton": {
+    "name": "Log In",
+    "url": "https://www.shuttle.rs/login"
+  },
+  "anchors": [
+    {
+      "name": "API Docs",
+      "icon": "rectangle-terminal",
+      "url": "https://docs.rs/shuttle-service/latest/shuttle_service/"
+    }
+  ],
+  "navigation": [
+    {
+      "group": "Welcome",
+      "pages": [
+        "introduction/welcome",
+        "introduction/what-is-shuttle",
+        "introduction/installation",
+        "introduction/quick-start"
+      ]
+    },
+    {
+      "group": "Examples",
+      "pages": [
+        "examples/axum",
+        "examples/poem",
+        "examples/rocket",
+        "examples/salvo",
+        "examples/serenity",
+        "examples/tide",
+        "examples/tower"
+      ]
+    },
+    {
+      "group": "Tutorials",
+      "pages": [
+        "tutorials/discord-weather-forecast",
+        "tutorials/url-shortener",
+        "tutorials/authentication",
+        "tutorials/serverless-calendar-app"
+      ]
+    },
+    {
+      "group": "Development",
+      "pages": ["development/managed-dependencies"]
+    },
+    {
+      "group": "Community",
+      "pages": [
+        "community/get-involved",
+        "community/contribute",
+        "community/open-source"
+      ]
+    }
+  ],
+  "footerSocials": {
+    "twitter": "https://twitter.com/shuttle_dev",
+    "discord": "https://discord.com/invite/shuttle"
+  },
+  "classes": {
+    "anchors": "group-hover:bg-gradient-to-tr from-[#F53F2E] to-[#E9D739]",
+    "activeAnchors": "bg-gradient-to-tr"
+  }
+}

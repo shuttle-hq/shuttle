@@ -1,0 +1,348 @@
+---
+title: "Axum"
+description:
+  "Axum is a web application framework that focuses on ergonomics and
+  modularity."
+---
+
+## Hello world!
+
+Simple 'Hello world' app using Axum.
+
+Create a new directory (`mkdir`) and move into it (`cd`) -- afterwards, execute
+the following command to initialize shuttle inside with the Axum boilerplate.
+
+```bash
+cargo shuttle init --axum
+```
+
+Make sure that your `cargo.toml` file looks as the one below -- having the right
+dependencies is key!
+
+```rust cargo.toml
+[package]
+name = "hello-world"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+
+[dependencies]
+axum = "0.5"
+shuttle-service = { version = "0.5.2", features = ["web-axum"] }
+sync_wrapper = "0.1"
+```
+
+Your `lib.rs` should look like this:
+
+```rust lib.rs
+use axum::{routing::get, Router};
+use sync_wrapper::SyncWrapper;
+
+async fn hello_world() -> &'static str {
+    "Hello, world!"
+}
+
+#[shuttle_service::main]
+async fn axum() -> shuttle_service::ShuttleAxum {
+    let router = Router::new().route("/hello", get(hello_world));
+    let sync_wrapper = SyncWrapper::new(router);
+
+    Ok(sync_wrapper)
+}
+```
+
+Finally, to deploy your app, all you need to do is:
+
+```bash
+cargo shuttle deploy
+```
+
+And your app is live! 🎉🎉🎉
+
+## Websocket
+
+A websocket example using Axum.
+
+> A WebSocket is a bidirectional, full-duplex protocol that is used in the same
+> scenario of client-server communication, unlike HTTP it starts from ws:// or
+> wss://. It is a stateful protocol, which means the connection between client
+> and server will keep alive until it is terminated by either party (client or
+> server).
+
+Create a new directory (`mkdir`) and move into it (`cd`) -- afterwards, execute
+the following command to initialize shuttle inside with the Axum boilerplate.
+
+```bash
+cargo shuttle init --axum
+```
+
+Make sure that your `cargo.toml` file looks as the one below -- having the right
+dependencies is key!
+
+```rust cargo.toml
+[package]
+name = "hello-world"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+
+[dependencies]
+axum = "0.5"
+shuttle-service = { version = "0.5.2", features = ["web-axum"] }
+sync_wrapper = "0.1"
+```
+
+Your `lib.rs` should look like this:
+
+```rust lib.rs
+use std::{sync::Arc, time::Duration};
+
+use axum::{
+    extract::{
+        ws::{Message, WebSocket},
+        WebSocketUpgrade,
+    },
+    response::{Html, IntoResponse},
+    routing::get,
+    Extension, Router,
+};
+use chrono::{DateTime, Utc};
+use futures::{SinkExt, StreamExt};
+use hyper::{Client, Uri};
+use hyper_tls::HttpsConnector;
+use serde::Serialize;
+use shuttle_service::ShuttleAxum;
+use sync_wrapper::SyncWrapper;
+use tokio::{
+    sync::{watch, Mutex},
+    time::sleep,
+};
+
+struct State {
+    clients_count: usize,
+    rx: watch::Receiver<Message>,
+}
+
+const PAUSE_SECS: u64 = 15;
+const STATUS_URI: &str = "https://api.shuttle.rs/status";
+
+#[derive(Serialize)]
+struct Response {
+    clients_count: usize,
+    datetime: DateTime<Utc>,
+    is_up: bool,
+}
+
+#[shuttle_service::main]
+async fn main() -> ShuttleAxum {
+    let (tx, rx) = watch::channel(Message::Text("{}".to_string()));
+
+    let state = Arc::new(Mutex::new(State {
+        clients_count: 0,
+        rx,
+    }));
+
+    // Spawn a thread to continually check the status of the api
+    let state_send = state.clone();
+    tokio::spawn(async move {
+        let duration = Duration::from_secs(PAUSE_SECS);
+        let https = HttpsConnector::new();
+        let client = Client::builder().build::<_, hyper::Body>(https);
+        let uri: Uri = STATUS_URI.parse().unwrap();
+
+        loop {
+            let is_up = client.get(uri.clone()).await;
+            let is_up = is_up.is_ok();
+
+            let response = Response {
+                clients_count: state_send.lock().await.clients_count,
+                datetime: Utc::now(),
+                is_up,
+            };
+            let msg = serde_json::to_string(&response).unwrap();
+
+            if tx.send(Message::Text(msg)).is_err() {
+                break;
+            }
+
+            sleep(duration).await;
+        }
+    });
+
+    let router = Router::new()
+        .route("/", get(index))
+        .route("/websocket", get(websocket_handler))
+        .layer(Extension(state));
+
+    let sync_wrapper = SyncWrapper::new(router);
+
+    Ok(sync_wrapper)
+}
+
+async fn websocket_handler(
+    ws: WebSocketUpgrade,
+    Extension(state): Extension<Arc<Mutex<State>>>,
+) -> impl IntoResponse {
+    ws.on_upgrade(|socket| websocket(socket, state))
+}
+
+async fn websocket(stream: WebSocket, state: Arc<Mutex<State>>) {
+    // By splitting we can send and receive at the same time.
+    let (mut sender, mut receiver) = stream.split();
+
+    let mut rx = {
+        let mut state = state.lock().await;
+        state.clients_count += 1;
+        state.rx.clone()
+    };
+
+    // This task will receive watch messages and forward it to this connected client.
+    let mut send_task = tokio::spawn(async move {
+        while let Ok(()) = rx.changed().await {
+            let msg = rx.borrow().clone();
+
+            if sender.send(msg).await.is_err() {
+                break;
+            }
+        }
+    });
+
+    // This task will receive messages from this client.
+    let mut recv_task = tokio::spawn(async move {
+        while let Some(Ok(Message::Text(text))) = receiver.next().await {
+            println!("this example does not read any messages, but got: {text}");
+        }
+    });
+
+    // If any one of the tasks exit, abort the other.
+    tokio::select! {
+        _ = (&mut send_task) => recv_task.abort(),
+        _ = (&mut recv_task) => send_task.abort(),
+    };
+
+    // This client disconnected
+    state.lock().await.clients_count -= 1;
+}
+
+async fn index() -> Html<&'static str> {
+    Html(include_str!("../index.html"))
+}
+```
+
+And your `index.html` should look like this:
+
+```html index.html
+<!DOCTYPE html>
+<html lang="en" class="bg-gray-600">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Websocket status page</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body
+    class="flex justify-around items-center h-screen w-screen m-0 text-center"
+  >
+    <div
+      class="flex max-w-sm flex-col overflow-hidden rounded-lg transition blur-md"
+    >
+      <div class="flex-shrink-0 bg-gray-800 text-slate-50 p-5">
+        Current API status
+      </div>
+      <div
+        id="is_ok"
+        class="flex flex-1 flex-col justify-between p-6 bg-gray-500 text-xl font-bold uppercase"
+      ></div>
+    </div>
+    <div
+      class="flex max-w-sm flex-col overflow-hidden rounded-lg transition blur-md"
+    >
+      <div class="flex-shrink-0 bg-gray-800 text-slate-50 p-5">
+        Last check time
+      </div>
+      <div
+        id="datetime"
+        class="flex flex-1 flex-col justify-between p-6 bg-gray-500 text-xl font-bold"
+      ></div>
+    </div>
+    <div
+      class="flex max-w-sm flex-col overflow-hidden rounded-lg transition blur-md"
+    >
+      <div class="flex-shrink-0 bg-gray-800 text-slate-50 p-5">
+        Clients watching
+      </div>
+      <div
+        id="clients_count"
+        class="flex flex-1 flex-col justify-between p-6 bg-gray-500 text-xl font-bold"
+      ></div>
+    </div>
+
+    <button
+      id="open"
+      class="absolute text-2xl bg-gray-800 text-slate-50 p-2 rounded shadow-lg shadow-slate-800 hover:shadow-md scale-105 hover:scale-100 transition"
+    >
+      Open connection
+    </button>
+
+    <script type="text/javascript">
+      const is_ok = document.querySelector("#is_ok");
+      const datetime = document.querySelector("#datetime");
+      const clients_count = document.querySelector("#clients_count");
+      const button = document.querySelector("button");
+
+      function track() {
+        const websocket = new WebSocket(
+          `wss://${window.location.host}/websocket`
+        );
+
+        websocket.onopen = () => {
+          console.log("connection opened");
+          document
+            .querySelectorAll("body > div")
+            .forEach((e) => e.classList.remove("blur-md"));
+          document.querySelector("body > button").classList.add("hidden");
+        };
+
+        websocket.onclose = () => {
+          console.log("connection closed");
+          document
+            .querySelectorAll("body > div")
+            .forEach((e) => e.classList.add("blur-md"));
+          document.querySelector("body > button").classList.remove("hidden");
+        };
+
+        websocket.onmessage = (e) => {
+          const response = JSON.parse(e.data);
+
+          if (response.is_up) {
+            is_ok.textContent = "up";
+            is_ok.classList.add("text-green-600");
+            is_ok.classList.remove("text-rose-700");
+          } else {
+            is_ok.textContent = "down";
+            is_ok.classList.add("text-rose-700");
+            is_ok.classList.remove("text-green-600");
+          }
+
+          datetime.textContent = new Date(response.datetime).toLocaleString();
+          clients_count.textContent = response.clients_count;
+        };
+      }
+
+      track();
+      button.addEventListener("click", track);
+    </script>
+  </body>
+</html>
+```
+
+Finally, to deploy your app, all you need to do is:
+
+```bash
+cargo shuttle deploy
+```
+
+And your app is live! 🎉🎉🎉

@@ -1,0 +1,833 @@
+---
+title: "Authentication"
+---
+
+Most websites have some kind of user system. But implementing authentication can
+be a bit complex. It requires several things working together.
+
+Making sure the system is secure is daunting. How do we know others cannot
+easily log into accounts and make edits on other people's behalf? And building
+stateful systems is difficult.
+
+Today we will look at a minimal implementation in Rust. For this demo we won't
+be using a specific authentication library, instead writing from scratch using
+our own database and backend API.
+
+We will be walking through implementing the system including a frontend for
+interacting with it. We will be using Axum for routing and other handling logic.
+The [source code](https://github.com/kaleidawave/axum-shuttle-postgres-authentication-demo)
+for this tutorial can be found here (opens new window). We will then deploy the
+code on shuttle, which will handle running the server and giving us access to a
+Postgres server.
+
+To prevent this post from being an hour long, some things are skipped over (such
+as error handling) and so might not match up one-to-one with the tutorial. This
+post also assumes basic knowledge of HTML, web servers, databases and Rust.
+
+This isn't verified to be secure, use it at your own risk!!
+
+### Let's get started
+
+First, we will install shuttle for creating the project (and later for deployment). If you don't already have it you can install it with `cargo install cargo-shuttle`. We will first go to a new directory for our project and create a new Axum app with `cargo shuttle init --axum`.
+
+You should see the following in `src/lib.rs`:
+
+```rust
+use axum::{routing::get, Router}; use sync_wrapper::SyncWrapper;
+
+async fn hello_world() -> &'static str { "Hello, world!" }
+
+#[shuttle_service::main] async fn axum() -> shuttle_service::ShuttleAxum { let
+router = Router::new().route("/hello", get(hello_world)); let sync_wrapper =
+SyncWrapper::new(router);
+
+    Ok(sync_wrapper)
+
+}
+```
+
+### Templates
+
+For generating HTML we will be using [Tera](https://tera.netlify.app/docs), so
+we can go ahead and add this with `cargo add tera`. We will store all our
+`templates` in a template directory in the project root.
+
+We want a general layout for our site, so we create a base layout. In our base
+layout, we can add specific tags that will apply to all pages such as a
+[Google font](https://fonts.google.com/). With this layout all the content will
+be injected in place of `{% block content %}{% endblock content %}`:
+
+```html
+<!-- in "templates/base.html" -->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Title</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Karla:wght@500&display=swap"
+      rel="stylesheet"
+    />
+    <link href="/styles.css" rel="stylesheet" />
+  </head>
+  <body>
+    {% block content %}{% endblock content %}
+  </body>
+</html>
+```
+
+And now we can create our first page that will be displayed under the `/` path
+
+```html
+<!-- in "templates/index.html" -->
+{% extends "base.html" %} {% block content %}
+<h1>Hello world</h1>
+{% endblock content %}
+```
+
+Now we have our template, we need to register it under a Tera instance. Tera has
+a nice
+[filesystem-based registration system](https://docs.rs/tera/1.16.0/tera/struct.Tera.html#method.new),
+but we will use the
+[`include_str!`](https://doc.rust-lang.org/std/macro.include_str.html) macro so
+that the content is in the binary. This way we don't have to deal with the
+complexities of a filesystem at runtime. We register both templates so that the
+`index` page knows about `base.html`.
+
+```rust
+let mut tera = Tera::default();
+tera.add_raw_templates(vec![
+    ("base.html", include_str!("../templates/base.html")),
+    ("index", include_str!("../templates/index.html")),
+])
+.unwrap();
+```
+
+We add it via an [Extension](https://docs.rs/axum/latest/axum/struct.Extension.html)(wrapped in `Arc` so that extension cloning does not deep clone all the templates)
+
+```rust
+#[shuttle_service::main]
+async fn axum() -> shuttle_service::ShuttleAxum {
+    let mut tera = Tera::default();
+    tera.add_raw_templates(vec![
+        ("base.html", include_str!("../templates/base.html")),
+        ("index", include_str!("../templates/index.html")),
+    ])
+    .unwrap();
+
+    let router = Router::new()
+        .route("/hello", get(hello_world))
+        .layer(Extension(Arc::new(tera)));
+
+    let sync_wrapper = SyncWrapper::new(router);
+    Ok(sync_wrapper)
+}
+```
+
+### Rendering views
+
+Now we have created our Tera instance we want it to be accessible to our get
+methods. To do this in Axum, we add the extension as a parameter to our
+function. In Axum, an
+[Extension](https://docs.rs/axum/latest/axum/struct.Extension.html) is a unit
+struct. Rather than dealing with .0 to access fields, we use destructuring in
+the parameter (if you thought that syntax looks weird).
+
+```rust
+async fn index(
+    Extension(templates): Extension<Templates>,
+) -> impl IntoResponse {
+    Html(templates.render("index", &Context::new()).unwrap())
+}
+```
+
+### Serving assets
+
+We can create a `public/styles.css` file
+
+```css
+body {
+  font-family: "Karla", sans-serif;
+  font-size: 12pt;
+}
+```
+
+And easily create a new endpoint for it to be served from:
+
+```rust
+async fn styles() -> impl IntoResponse {
+    Response::builder()
+        .status(http::StatusCode::OK)
+        .header("Content-Type", "text/css")
+        .body(include_str!("../public/styles.css").to_owned())
+        .unwrap()
+}
+```
+
+Here we again are using `include_str!` to not have to worry about the filesystem
+at runtime.
+[ServeDir](https://docs.rs/tower-http/latest/tower_http/services/struct.ServeDir.html)is
+an alternative if you have a filesystem at runtime. You can use this method for
+other static assets like JavaScript and favicons.
+
+### Running
+
+We will add our two new routes to the router (and remove the default "hello
+world" one) to get:
+
+```rust
+let router = Router::new()
+    .route("/", get(index))
+    .route("/styles.css", get(styles))
+    .layer(Extension(Arc::new(tera)));
+```
+
+With our main service we can now test it locally with `cargo shuttle run`.
+
+Nice!
+
+### Adding users
+
+We will start with a user's table in SQL.
+([this is defined in schema.sql](https://github.com/kaleidawave/axum-shuttle-postgres-authentication-demo/blob/main/schema.sql)).
+
+```sql
+CREATE TABLE users (
+    id integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    username text NOT NULL UNIQUE,
+    password text NOT NULL
+);
+```
+
+The `id` is generated by the database using a sequence. The `id` is a primary
+key, which we will use to reference users. It is better to use a fixed value
+field for identification rather than using something like the `username` field
+because you may add the ability to change usernames, which can leave things
+pointing to the wrong places.
+
+### Registering our database Before our app can use the database we have to add
+
+sqlx with some features: `cargo add sqlx -F postgres runtime-tokio-native-tls`.
+We will also enable the Postgres feature for shuttle with
+`cargo add shuttle-service -F sqlx-postgres`.
+
+Now back in the code we add a parameter with
+`#[shuttle_shared_db::Postgres] pool: Database`. The
+`#[shuttle_shared_db::Postgres]` annotation tells shuttle to provision a
+Postgres database using the
+[infrastructure from code design](https://www.shuttle.rs/blog/2022/05/09/ifc).
+
+```rust
+type Database = sqlx::PgPool;
+
+#[shuttle_service::main]
+async fn axum(
+    #[shuttle_shared_db::Postgres] pool: Database
+) -> ShuttleAxum {
+    // Build tera as before
+
+    let router = Router::new()
+        .route("/", get(index))
+        .route("/styles.css", get(styles))
+        .layer(Extension(Arc::new(tera)))
+        .layer(pool);
+
+    // Wrap and return router as before
+}
+```
+
+### Signup
+
+For getting users into our database, we will create a post handler. In our
+handler, we will parse data using multipart.
+[I wrote a simple parser for multipart that we will use here](https://github.com/kaleidawave/axum-shuttle-postgres-authentication-demo/blob/main/src/utils.rs#L45-L64).
+The below example contains some error handling that we will ignore for now.
+
+```rust
+async fn post_signup(
+    Extension(database): Extension<Database>,
+    multipart: Multipart,
+) -> impl IntoResponse {
+    let data = parse_multipart(multipart)
+        .await
+        .map_err(|err| error_page(&err))?;
+
+    if let (Some(username), Some(password), Some(confirm_password)) = (
+        data.get("username"),
+        data.get("password"),
+        data.get("confirm_password"),
+    ) {
+        if password != confirm_password {
+            return Err(error_page(&SignupError::PasswordsDoNotMatch));
+        }
+
+        let user_id = create_user(username, password, database);
+
+        Ok(todo!())
+    } else {
+        Err(error_page(&SignupError::MissingDetails))
+    }
+}
+```
+
+### Creating users and storing passwords safety
+
+When storing passwords in a database, for security reasons we don't want them to
+be in the exact format as plain text. To transform them away from the plain text
+format we will use a
+[cryptographic hash function](https://en.wikipedia.org/wiki/Cryptographic_hash_function)from
+[pbkdf2](https://crates.io/crates/pbkdf2)(cargo add pbkdf2):
+
+```rust
+fn create_user(username: &str, password: &str, database: &Database) -> Result<i32, SignupError> {
+    let salt = SaltString::generate(&mut OsRng);
+    // Hash password to PHC string ($pbkdf2-sha256$...)
+    let hashed_password = Pbkdf2.hash_password(password.as_bytes(), &salt).unwrap().to_string();
+
+    // ...
+}
+```
+
+With hashing, if someone gets the value in the password field they cannot find
+out the actual password value. The only thing this value allows is whether a
+plain text password matches this value. And with
+[salting](<https://en.wikipedia.org/wiki/Salt_(cryptography)>) different names
+are encoded differently. Here all these passwords were registered as "password",
+but they have different values in the database because of salting.
+
+```sql
+postgres=> select * from users;
+ id | username |                                            password
+----+----------+------------------------------------------------------------------------------------------------
+  1 | user1    | $pbkdf2-sha256$i=10000,l=32$uC5/1ngPBs176UkRjDbrJg$mPZhv4FfC6HAfdCVHW/djgOT9xHVAlbuHJ8Lqu7R0eU
+  2 | user2    | $pbkdf2-sha256$i=10000,l=32$4mHGcEhTCT7SD48EouZwhg$A/L3TuK/Osq6l41EumohoZsVCknb/wiaym57Og0Oigs
+  3 | user3    | $pbkdf2-sha256$i=10000,l=32$lHJfNN7oJTabvSHfukjVgA$2rlvCjQKjs94ZvANlo9se+1ChzFVu+B22im6f2J0W9w
+(3 rows)
+```
+
+With the following simple database query and our hashed password, we can insert
+users.
+
+```rust
+fn create_user(username: &str, password: &str, database: &Database) -> Result<i32, SignupError> {
+    // ...
+
+    const INSERT_QUERY: &str =
+        "INSERT INTO users (username, password) VALUES ($1, $2) RETURNING id;";
+
+    let fetch_one = sqlx::query_as(INSERT_QUERY)
+        .bind(username)
+        .bind(hashed_password)
+        .fetch_one(database)
+        .await;
+
+    // ...
+}
+```
+
+And we can handle the response and get the new user id with the following:
+
+```rust
+fn create_user(username: &str, password: &str, database: &Database) -> Result<i32, SignupError> {
+    // ...
+
+    match fetch_one {
+        Ok((user_id,)) => Ok(user_id),
+        Err(sqlx::Error::Database(database))
+            if database.constraint() == Some("users_username_key") =>
+        {
+            return Err(SignupError::UsernameExists);
+        }
+        Err(err) => {
+            return Err(SignupError::InternalError);
+        }
+    }
+}
+```
+
+Great now we have the signup handler written, let's create a way to invoke it in
+the UI.
+
+### Using HTML forms
+
+To invoke the endpoint with multipart we will use an HTML form.
+
+```html
+<!-- in "templates/signup.html" -->
+{% extends "base.html" %} {% block content %}
+<form action="/signup" enctype="multipart/form-data" method="post">
+  <label for="username">Username</label>
+  <input
+    type="text"
+    name="username"
+    id="username"
+    minlength="1"
+    maxlength="20"
+    pattern="[0-9a-z]+"
+    required
+  />
+  <label for="password">Password</label>
+  <input type="password" name="password" id="password" required />
+  <label for="confirm_password">Confirm Password</label>
+  <input
+    type="password"
+    name="confirm_password"
+    id="confirm_password"
+    required
+  />
+  <input type="submit" value="Signup" />
+</form>
+{% endblock content %}
+```
+
+Notice the action and method that correspond to the route we just added. Notice
+also the `enctype` being multipart, which matches what we are parsing in the
+handler. The above has a few attributes to do some client-side validation, but
+[in the full demo it is also handled on the server](https://github.com/kaleidawave/axum-shuttle-postgres-authentication-demo/blob/ba71a914055f312636581f5e82172b1078e7b9eb/src/authentication.rs#L124-L133).
+
+We create a handler for this markup in the same way as done for our index with:
+
+```rust
+async fn get_signup(
+    Extension(templates): Extension<Templates>,
+) -> impl IntoResponse {
+    Html(templates.render("signup", &Context::new()).unwrap())
+}
+```
+
+We can add `signup` to the Tera instance and then add both the get and post
+handlers to the router by adding it to the chain:
+
+```rust
+.route("/signup", get(get_signup).post(post_signup))
+```
+
+### Sessions
+
+Once signed up, we want to save the logged-in state. We don't want the user to
+have to send their username and password for every request they make.
+
+### Cookies and session tokens
+
+Cookies help store the state between browser requests. When a response is sent
+down with
+[Set-Cookie](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie),
+then any subsequent requests the browser/client makes will send cookie
+information. We can then pull this information off of headers on requests on the
+server.
+
+Again, these need to be safe. We don't want collisions/duplicates. We want it to
+be hard to guess. For these reasons, we will represent it as a 128-bit unsigned
+integer. This has 2^128 options, so a very low chance of a collision.
+
+We want to generate a "session token". We want the tokens to be
+cryptographically secure. Given a session id, we don't want users to be able to
+find the next one. A simple globally incremented u128 wouldn't be secure because
+if I know I have session 10 then I can send requests with session 11 for the
+user who logged in after. With a cryptographically secure generator, there isn't
+a distinguishing pattern between subsequently generated tokens. We will use the
+[ChaCha](https://crates.io/crates/rand_chacha) algorithm/crate (we will add
+cargo add rand_core rand_chacha).
+[We can see that it does implement the crypto marker-trait confirming it is valid for cryptographic scenarios](https://docs.rs/rand_chacha/0.3.1/rand_chacha/struct.ChaCha8Rng.html#impl-CryptoRng).
+
+This is unlike
+[Pseudo-random number generators where you can predict the next random number given a start point and the algorithm](https://www.youtube.com/watch?v=-h_rj2-HP2E&ab_channel=PwnFunction).
+This could be a problem if we have our token we can get the session token of the
+person who logged in after us really easy and thus impersonate them.
+
+To initialize the random generator we use
+[SeedableRng::from_seed](https://docs.rs/rand_core/latest/rand_core/trait.SeedableRng.html#tymethod.from_seed).
+The seed in this case is an initial state for the generator. Here we use
+[OsRng.next_u64()](https://docs.rs/rand_core/latest/rand_core/struct.OsRng.html)which
+retrieves randomness from the operating system rather a seed. We will be doing
+something similar to the creation of the Tera instance. We must wrap it in an
+arc and a mutex because generating new identifiers requires mutable access. We
+now have the following main function:
+
+```rust
+#[shuttle_service::main]
+async fn axum(
+    #[shuttle_shared_db::Postgres] pool: Database
+) -> ShuttleAxum {
+    // Build tera as before
+
+    let random = ChaCha8Rng::seed_from_u64(OsRng.next_u64())
+
+    let router = Router::new()
+        .route("/", get(index))
+        .route("/styles.css", get(styles))
+        .route("/signup", get(get_signup).post(post_signup))
+        .layer(Extension(Arc::new(tera)))
+        .layer(pool)
+        .layer(Extension(Arc::new(Mutex::new(random))));
+
+    // Wrap and return router as before
+}
+```
+
+### Adding sessions to signup
+
+As well as creating a user on signup, we will create the session token for the
+newly signed-up user. We post it to the table with our `user_id`
+
+```rust
+type Random = Arc<Mutex<ChaCha8Rng>>;
+
+pub(crate) async fn new_session(
+    database: &Database,
+    random: Random,
+    user_id: i32
+) -> String {
+    const QUERY: &str = "INSERT INTO sessions (session_token, user_id) VALUES ($1, $2);";
+
+    let mut u128_pool = [0u8; 16];
+    random.lock().unwrap().fill_bytes(&mut u128_pool);
+
+    // endian doesn't matter here
+    let session_token = u128::from_le_bytes(u128_pool);
+
+    let _result = sqlx::query(QUERY)
+        .bind(&session_token.to_le_bytes().to_vec())
+        .bind(user_id)
+        .execute(database)
+        .await
+        .unwrap();
+
+    session_token
+}
+```
+
+In the full demo, we use the
+[new type pattern](https://www.shuttle.rs/blog/2022/07/28/patterns-with-rust-types#the-new-type-pattern)over
+a u128 to make this easier, but we will stick with a u128 type here.
+
+Now we have our token, we need to package it into a cookie value. We will do it
+in the simplest way possible, using `.to_string()`. We will send a response that
+does two things, sets this new value and returns/redirects us back to the index
+page. We will create a utility function for doing this:
+
+```rust
+fn set_cookie(session_token: &str) -> impl IntoResponse {
+    http::Response::builder()
+        .status(http::StatusCode::SEE_OTHER)
+        .header("Location", "/")
+        .header("Set-Cookie", format!("session_token={}; Max-Age=999999", session_token))
+        .body(http_body::Empty::new())
+        .unwrap()
+}
+```
+
+Now we can complete our signup handler by adding random as a parameter and
+returning our set cookie response.
+
+```rust
+async fn post_signup(
+    Extension(database): Extension<Database>,
+    Extension(random): Extension<Random>,
+    multipart: Multipart,
+) -> impl IntoResponse {
+    let data = parse_multipart(multipart)
+        .await
+        .map_err(|err| error_page(&err))?;
+
+    if let (Some(username), Some(password), Some(confirm_password)) = (
+        data.get("username"),
+        data.get("password"),
+        data.get("confirm_password"),
+    ) {
+        if password != confirm_password {
+            return Err(error_page(&SignupError::PasswordsDoNotMatch));
+        }
+
+        let user_id = create_user(username, password, &database);
+
+        let session_token = new_session(database, random, user_id);
+
+        Ok(set_cookie(&session_token))
+    } else {
+        Err(error_page(&SignupError::MissingDetails))
+    }
+}
+let session_token = new_session(database, random, user_id);
+```
+
+### Using the session token
+
+Great so now we have a token/identifier for a _session_. Now we can use this as
+a key to get information about users.
+
+We can pull the cookie value using the following spaghetti of iterators and
+options:
+
+```rust
+let session_token = req
+    .headers()
+    .get_all("Cookie")
+    .iter()
+    .filter_map(|cookie| {
+        cookie
+            .to_str()
+            .ok()
+            .and_then(|cookie| cookie.parse::<cookie::Cookie>().ok())
+    })
+    .find_map(|cookie| {
+        (cookie.name() == USER_COOKIE_NAME).then(move || cookie.value().to_owned())
+    })
+    .and_then(|cookie_value| cookie_value.parse::<u128>().ok());
+```
+
+### Auth middleware
+
+In the last post, we went into detail about middleware.
+[You can read more about it in more detail there](https://www.shuttle.rs/blog/2022/08/04/middleware).
+
+In our middleware, we will get a little fancy and make the user pulling lazy.
+This is so that requests that don't need user data don't have to make a database
+trip. Rather than adding our user straight onto the request, we split things
+apart. We first create an AuthState which contains the session token, the
+database, and a placeholder for our user (Option \<User\>)
+
+```rust
+#[derive(Clone)]
+pub(crate) struct AuthState(Option<(u128, Option<User>, Database)>);
+
+pub(crate) async fn auth<B>(
+    mut req: http::Request<B>,
+    next: axum::middleware::Next<B>,
+    database: Database,
+) -> axum::response::Response {
+    let session_token = /* cookie logic from above */;
+
+    req.extensions_mut()
+        .insert(AuthState(session_token.map(|v| (v, None, database))));
+
+    next.run(req).await
+}
+```
+
+Then we create a method on `AuthState` which makes the database request.
+
+Now we have the user's token we need to get their information. We can do that
+using SQL joins
+
+```rust
+impl AuthState {
+    pub async fn get_user(&mut self) -> Option<&User> {
+        let (session_token, store, database) = self.0.as_mut()?;
+        if store.is_none() {
+            const QUERY: &str =
+                "SELECT id, username FROM users JOIN sessions ON user_id = id WHERE session_token = $1;";
+
+            let user: Option<(i32, String)> = sqlx::query_as(QUERY)
+                .bind(&session_token.to_le_bytes().to_vec())
+                .fetch_optional(&*database)
+                .await
+                .unwrap();
+
+            if let Some((_id, username)) = user {
+                *store = Some(User { username });
+            }
+        }
+        store.as_ref()
+    }
+}
+```
+
+Here we cache the user internally using an Option. With the caching in place if
+another middleware gets the user and then a different handler tries to get the
+user it results in one database request, not two!
+
+We can add the middleware to our chain using:
+
+```rust
+#[shuttle_service::main]
+async fn axum(
+    #[shuttle_shared_db::Postgres] pool: Database
+) -> ShuttleAxum {
+    // tera and random creation as before
+
+    let middleware_database = database.clone();
+
+    let router = Router::new()
+        .route("/", get(index))
+        .route("/styles.css", get(styles))
+        .route("/signup", get(get_signup).post(post_signup))
+        .layer(axum::middleware::from_fn(move |req, next| {
+            auth(req, next, middleware_database.clone())
+        }))
+        .layer(Extension(Arc::new(tera)))
+        .layer(pool)
+        .layer(Extension(Arc::new(Mutex::new(random))));
+
+    // Wrap and return router as before
+}
+```
+
+### Getting middleware and displaying our user info
+
+Modifying our index Tera template, we can add an "if block" to show a status if
+the user is logged in.
+
+```html
+<!-- in "templates/index.html" -->
+{% extends "base.html" %} {% block content %}
+<h1>Hello world</h1>
+{% if username %}
+<h3>Logged in: {{ username }}</h3>
+{% endif %} {% endblock content %}
+```
+
+Using our middleware in requests is easy in Axum by including a reference to it
+in the parameters. We then add the username to the context for it to be rendered
+on the page.
+
+```rust
+async fn index(
+    Extension(current_user): Extension<AuthState>,
+    Extension(templates): Extension<Templates>,
+) -> impl IntoResponse {
+    let mut context = Context::new();
+    if let Some(user) = current_user.get_user().await {
+        context.insert("username", &user.username);
+    }
+    Html(templates.render("index", &context).unwrap())
+}
+```
+
+### Logging in and logging out
+
+Great we can signup and that now puts us in a session. We may want to log out
+and drop the session. This is very simple to do by returning a response with the
+cookie `Max-Age` set to 0.
+
+```rust
+pub(crate) async fn logout_response() -> impl axum::response::IntoResponse {
+    Response::builder()
+        .status(http::StatusCode::SEE_OTHER)
+        .header("Location", "/")
+        .header("Set-Cookie", "session_token=_; Max-Age=0")
+        .body(Empty::new())
+        .unwrap()
+}
+```
+
+For logging in we have a very similar logic for signup with pulling multipart
+information of a post request. Unlike signup, we don't want to create a new
+user. We want to check the row with that username has a password that matches.
+If the credentials match then we create a new session:
+
+```rust
+async fn post_login(
+    Extension(database): Extension<Database>,
+    multipart: Multipart,
+) -> impl IntoResponse {
+    let data = parse_multipart(multipart)
+        .await
+        .map_err(|err| error_page(&err))?;
+
+    if let (Some(username), Some(password)) = (data.get("username"), data.get("password")) {
+        const LOGIN_QUERY: &str = "SELECT id, password FROM users WHERE users.username = $1;";
+
+        let row: Option<(i32, String)> = sqlx::query_as(LOGIN_QUERY)
+            .bind(username)
+            .fetch_optional(database)
+            .await
+            .unwrap();
+
+        let (user_id, hashed_password) = if let Some(row) = row {
+            row
+        } else {
+            return Err(LoginError::UserDoesNotExist);
+        };
+
+        // Verify password against PHC string
+        let parsed_hash = PasswordHash::new(&hashed_password).unwrap();
+        if let Err(_err) = Pbkdf2.verify_password(password.as_bytes(), &parsed_hash) {
+            return Err(LoginError::WrongPassword);
+        }
+
+        let session_token = new_session(database, random, user_id);
+
+
+        Ok(set_cookie(&session_token))
+    } else {
+        Err(error_page(&LoginError::NoData))
+    }
+}
+```
+
+Then we refer back to the
+[signup section](https://docs.shuttle.rs/guide/authentication-tutorial.html#using-html-forms)
+and replicate the same HTML form and handler that renders the Tera template as
+seen before but for a login screen. At the end of that we can add two new routes
+with three handlers completing the demo:
+
+```rust
+#[shuttle_service::main]
+async fn axum(
+    #[shuttle_shared_db::Postgres] pool: Database
+) -> ShuttleAxum {
+    // tera, middleware and random creation as before
+
+    let router = Router::new()
+        // ...
+        .route("/logout", post(logout_response))
+        .route("/login", get(get_login).post(post_login))
+        // ...
+
+    // Wrap and return router as before
+}
+```
+
+### Deployment
+
+This is great, we now have a site with signup and login functionality. But we
+have no users, our friends can't log in on our localhost. We want it live on the
+interwebs. Luckily we are using shuttle, so it is as simple as:
+
+`cargo shuttle deploy`
+
+Because of our `#[shuttle_service::main]` annotation and out-the-box Axum
+support our deployment doesn't need any prior config, it is instantly live!
+
+Now you can go ahead with these concepts and add functionality for listing and
+deleting users.
+[The full demo implements these if you are looking for clues](https://github.com/kaleidawave/axum-shuttle-postgres-authentication-demo).
+
+### Thoughts building the tutorial and other ideas on where to take it
+
+This demo includes the minimum required for authentication. Hopefully, the
+concepts and snippets are useful for building it into an existing site or for
+starting a site that needs authentication. If you were to continue, it would be
+as simple as more fields onto the user object or building relations with the id
+field on the user's table. I will leave it out with some of my thoughts and
+opinions while building the site as well as things you could try extending it
+with.
+
+For templating Tera is great. I like how I separate the markup into external
+files rather than bundling it into `src/lib.rs`. Its API is easy to use and is
+well documented. However, it is quite a simple system. I had a few errors where
+I would rename or remove templates and because the template picker for rendering
+uses a map it can panic at runtime if the template does not exist. It would be
+nice if the system allowed checking that templates exist at compile time. The
+data sending works on serde serialization, which is a little bit more
+computation overhead than I would like. It also does not support streaming. With
+streaming, we could send a chunk of HTML that doesn't depend on database values
+first, and then we can add more content when the database transaction has gone
+through. If it supported streaming we could avoid the all-or-nothing pages with
+white page pauses and start connections to services like Google Fonts earlier.
+Let me know what your favorite templating engine is for Rust and whether it
+supports those features!
+
+For working with the database, sqlx has typed macros. I didn't use them here but
+for more complex queries you might prefer the type-checking behavior. Maybe 16
+bytes for storing session tokens is a bit overkill. You also might want to try
+sharding that table if you have a lot of sessions or using a key-value store
+(such as Redis) might be simpler. We also didn't implement cleaning up the
+sessions table, if you were storing sessions using Redis you could use the
+[EXPIRE command](https://redis.io/commands/expire/)to automatically remove old
+keys.

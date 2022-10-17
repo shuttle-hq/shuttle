@@ -14,5 +14,6 @@ export const GA_MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
 export const GITHUB_URL = "https://github.com/shuttle-hq/shuttle";
 export const DISCORD_URL = "https://discord.gg/shuttle";
 export const TWITTER_URL = "https://twitter.com/shuttle_dev";
-export const SHUTTLE_DOCS_URL =
-  "https://docs.shuttle.rs/";
+export const SHUTTLE_DOCS_URL = "https://docs.shuttle.rs/";
+export const CONTRIBUTING_URL =
+  "https://github.com/shuttle-hq/shuttle/blob/main/CONTRIBUTING.md";

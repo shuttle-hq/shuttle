@@ -359,6 +359,7 @@ impl Shuttle {
                         println!("Run the following for more details");
                         println!();
                         print!("cargo shuttle logs {}", deployment.id);
+                        println!();
 
                         return Ok(CommandOutcome::DeploymentFailure);
                     }

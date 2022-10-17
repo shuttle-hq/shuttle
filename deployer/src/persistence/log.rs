@@ -3,7 +3,7 @@ use serde_json::{json, Value};
 use shuttle_common::STATE_MESSAGE;
 use uuid::Uuid;
 
-use super::{deploy_layer::extract_message, State};
+use super::State;
 
 #[derive(Clone, Debug, Eq, PartialEq, sqlx::FromRow)]
 pub struct Log {
@@ -92,4 +92,26 @@ impl From<shuttle_common::log::Level> for Level {
             shuttle_common::log::Level::Error => Self::Error,
         }
     }
+}
+
+fn extract_message(fields: &Value) -> Option<String> {
+    if let Value::Object(ref map) = fields {
+        if let Some(message) = map.get("build_line") {
+            return Some(message.as_str()?.to_string());
+        }
+
+        if let Some(message) = map.get("message") {
+            match message {
+                Value::Object(message_object) => {
+                    if let Some(rendered) = message_object.get("rendered") {
+                        return Some(rendered.as_str()?.to_string());
+                    }
+                }
+                Value::String(mes_str) => return Some(mes_str.to_string()),
+                _ => {}
+            }
+        }
+    }
+
+    None
 }

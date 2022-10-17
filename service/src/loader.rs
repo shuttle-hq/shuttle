@@ -234,7 +234,7 @@ fn check_version(summary: &Summary) -> anyhow::Result<()> {
         Ok(())
     } else {
         Err(anyhow!(
-            "the version of `shuttle-service` specified as a dependency to this service ({version_req}) is not supported by this instance ({valid_version}); try updating `shuttle-service` to the latest version available and deploy"
+            "the version of `shuttle-service` specified as a dependency to this service ({version_req}) is not supported by this project instance ({valid_version}); try updating `shuttle-service` to '{valid_version}' or update the project instance using `cargo shuttle project rm` and `cargo shuttle project new`"
         ))
     }
 }

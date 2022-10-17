@@ -20,7 +20,7 @@
 //! **Warning** Don't log out sensitive info in functions with these annotations
 
 use chrono::{DateTime, Utc};
-use serde_json::{json, Value};
+use serde_json::json;
 use shuttle_common::STATE_MESSAGE;
 use std::{net::SocketAddr, str::FromStr};
 use tracing::{error, field::Visit, span, warn, Metadata, Subscriber};
@@ -124,22 +124,6 @@ impl From<Log> for DeploymentState {
             address,
         }
     }
-}
-
-pub fn extract_message(fields: &Value) -> Option<String> {
-    if let Value::Object(ref map) = fields {
-        if let Some(message) = map.get("build_line") {
-            return Some(message.as_str()?.to_string());
-        }
-
-        if let Some(Value::Object(message_object)) = map.get("message") {
-            if let Some(rendered) = message_object.get("rendered") {
-                return Some(rendered.as_str()?.to_string());
-            }
-        }
-    }
-
-    None
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

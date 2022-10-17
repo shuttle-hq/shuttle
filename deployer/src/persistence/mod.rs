@@ -77,7 +77,7 @@ impl Persistence {
         let (log_send, log_recv): (crossbeam_channel::Sender<deploy_layer::Log>, _) =
             crossbeam_channel::bounded(0);
 
-        let (stream_log_send, _) = broadcast::channel(32);
+        let (stream_log_send, _) = broadcast::channel(1);
         let stream_log_send_clone = stream_log_send.clone();
 
         let pool_cloned = pool.clone();

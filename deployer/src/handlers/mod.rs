@@ -309,6 +309,8 @@ async fn logs_websocket_handler(mut s: WebSocket, persistence: Persistence, id: 
     }
 
     while let Ok(log) = log_recv.recv().await {
+        trace!(?log, "received log from broadcast channel");
+
         if log.id == id && log.timestamp > last_timestamp {
             if let Some(log_item) = Option::<LogItem>::from(Log::from(log)) {
                 let msg = serde_json::to_string(&log_item).expect("to convert log item to json");

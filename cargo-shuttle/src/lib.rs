@@ -350,9 +350,17 @@ impl Shuttle {
                     shuttle_common::deployment::State::Queued
                     | shuttle_common::deployment::State::Building
                     | shuttle_common::deployment::State::Built
-                    | shuttle_common::deployment::State::Loading
-                    | shuttle_common::deployment::State::Crashed => {
+                    | shuttle_common::deployment::State::Loading => {
                         println!("{log_item}");
+                    }
+                    shuttle_common::deployment::State::Crashed => {
+                        println!();
+                        println!("{}", "Deployment crashed".red());
+                        println!("Run the following for more details");
+                        println!();
+                        print!("cargo shuttle logs {}", deployment.id);
+
+                        return Ok(CommandOutcome::DeploymentFailure);
                     }
                     shuttle_common::deployment::State::Running
                     | shuttle_common::deployment::State::Completed
@@ -366,14 +374,6 @@ impl Shuttle {
 
         // A deployment will only exist if there is currently one in the running state
         if let Some(ref new_deployment) = service.deployment {
-            if new_deployment.id != deployment.id {
-                println!(
-                    "Deployment has not entered the running state so kept previous deployment up"
-                );
-
-                return Ok(CommandOutcome::DeploymentFailure);
-            }
-
             println!("{service}");
 
             Ok(match new_deployment.state {

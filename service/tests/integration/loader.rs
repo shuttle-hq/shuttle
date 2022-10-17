@@ -1,37 +1,45 @@
 use crate::helpers::{loader::build_so_create_loader, sqlx::PostgresInstance};
 
-use shuttle_common::project::ProjectName;
+use shuttle_common::log::Level;
+use shuttle_common::LogItem;
 use shuttle_service::loader::LoaderError;
-use shuttle_service::{database, Error, Factory};
-use std::str::FromStr;
-
+use shuttle_service::{database, Error, Factory, Logger, ServiceName};
+use std::collections::BTreeMap;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::process::exit;
+use std::str::FromStr;
 use std::time::Duration;
+use tokio::sync::mpsc::{self, UnboundedReceiver};
 
 use async_trait::async_trait;
-use uuid::Uuid;
 
 const RESOURCES_PATH: &str = "tests/resources";
 
 struct DummyFactory {
     postgres_instance: Option<PostgresInstance>,
-    project_name: ProjectName,
+    service_name: ServiceName,
 }
 
 impl DummyFactory {
     fn new() -> Self {
         Self {
             postgres_instance: None,
-            project_name: ProjectName::from_str("test").unwrap(),
+            service_name: ServiceName::from_str("test").unwrap(),
         }
     }
 }
 
+fn get_logger() -> (Logger, UnboundedReceiver<LogItem>) {
+    let (tx, rx) = mpsc::unbounded_channel();
+    let logger = Logger::new(tx, Default::default());
+
+    (logger, rx)
+}
+
 #[async_trait]
 impl Factory for DummyFactory {
-    fn get_project_name(&self) -> ProjectName {
-        self.project_name.clone()
+    fn get_service_name(&self) -> ServiceName {
+        self.service_name.clone()
     }
 
     async fn get_db_connection_string(&mut self, _: database::Type) -> Result<String, Error> {
@@ -48,6 +56,10 @@ impl Factory for DummyFactory {
 
         Ok(uri)
     }
+
+    async fn get_secrets(&mut self) -> Result<BTreeMap<String, String>, Error> {
+        panic!("did not expect any loader test to get secrets")
+    }
 }
 
 #[test]
@@ -62,12 +74,8 @@ async fn sleep_async() {
 
     let mut factory = DummyFactory::new();
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
-    let deployment_id = Uuid::new_v4();
-    let (tx, _) = crossbeam_channel::unbounded();
-    let (handler, _) = loader
-        .load(&mut factory, addr, tx, deployment_id)
-        .await
-        .unwrap();
+    let (logger, _rx) = get_logger();
+    let (handler, _) = loader.load(&mut factory, addr, logger).await.unwrap();
 
     // Give service some time to start up
     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -89,12 +97,8 @@ async fn sleep() {
 
     let mut factory = DummyFactory::new();
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
-    let deployment_id = Uuid::new_v4();
-    let (tx, _) = crossbeam_channel::unbounded();
-    let (handler, _) = loader
-        .load(&mut factory, addr, tx, deployment_id)
-        .await
-        .unwrap();
+    let (logger, _rx) = get_logger();
+    let (handler, _) = loader.load(&mut factory, addr, logger).await.unwrap();
 
     // Give service some time to start up
     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -124,29 +128,27 @@ async fn sqlx_pool() {
     let mut factory = DummyFactory::new();
 
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
-    let deployment_id = Uuid::new_v4();
-    let (tx, rx) = crossbeam_channel::unbounded();
-    let (handler, _) = loader
-        .load(&mut factory, addr, tx, deployment_id)
-        .await
-        .unwrap();
+    let (logger, mut rx) = get_logger();
+    let (handler, _) = loader.load(&mut factory, addr, logger).await.unwrap();
 
     handler.await.unwrap().unwrap();
 
-    let log = rx.recv().unwrap();
-    assert_eq!(log.deployment_id, deployment_id);
-
-    let fields: serde_json::Map<String, serde_json::Value> =
-        serde_json::from_slice(&log.item.fields).unwrap();
-
-    let message = fields["message"].as_str().unwrap();
+    let log = rx.recv().await.unwrap();
+    let value = serde_json::from_slice::<serde_json::Value>(&log.fields).unwrap();
+    let message = value
+        .as_object()
+        .unwrap()
+        .get("message")
+        .unwrap()
+        .as_str()
+        .unwrap();
     assert!(
         message.starts_with("SELECT 'Hello world';"),
         "got: {}",
         message
     );
-    assert_eq!(log.item.target, "log");
-    assert_eq!(log.item.level, "INFO");
+    assert_eq!(log.target, "sqlx::query");
+    assert_eq!(log.level, Level::Info);
 }
 
 #[tokio::test]
@@ -155,10 +157,9 @@ async fn build_panic() {
 
     let mut factory = DummyFactory::new();
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
-    let deployment_id = Uuid::new_v4();
-    let (tx, _) = crossbeam_channel::unbounded();
+    let (logger, _rx) = get_logger();
 
-    if let Err(Error::BuildPanic(msg)) = loader.load(&mut factory, addr, tx, deployment_id).await {
+    if let Err(Error::BuildPanic(msg)) = loader.load(&mut factory, addr, logger).await {
         assert_eq!(&msg, "panic in build");
     } else {
         panic!("expected `Err(Error::BuildPanic(_))`");
@@ -171,13 +172,9 @@ async fn bind_panic() {
 
     let mut factory = DummyFactory::new();
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
-    let deployment_id = Uuid::new_v4();
-    let (tx, _) = crossbeam_channel::unbounded();
+    let (logger, _rx) = get_logger();
 
-    let (handle, _) = loader
-        .load(&mut factory, addr, tx, deployment_id)
-        .await
-        .unwrap();
+    let (handle, _) = loader.load(&mut factory, addr, logger).await.unwrap();
 
     if let Err(Error::BindPanic(msg)) = handle.await.unwrap() {
         assert_eq!(&msg, "panic in bind");

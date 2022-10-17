@@ -11,7 +11,7 @@ in
       pkg-config
     ];
     buildInputs = with nixpkgs; [
-      latest.rustChannels.stable.rust
+      (rustChannelOf{ channel = "1.63.0"; }).rust
       rust-analyzer
       cargo-watch
       terraform
@@ -21,7 +21,10 @@ in
       grpcurl
       gh
       docker-compose
+      docker
+      datadog-agent
       sccache
+      sqlite
     ];
 
     PROTOC = "${protobuf}/bin/protoc";

@@ -210,6 +210,9 @@ jobs:
             # clean up a potential existing deployments before running
             # the tests just in case the environment is not clean
             make down
+            BUILDX_CACHE=/tmp/cache/buildx make up
+
+            SHUTTLE_TESTS_NETWORK=shuttle-dev_user-net SHUTTLE_TESTS_RUNTIME_IMAGE=public.ecr.aws/shuttle-dev/deployer:latest cargo test --package shuttle-gateway --all-features --lib -- --nocapture
 
             BUILDX_CACHE=/tmp/cache/buildx make test
       - save_cache:
@@ -277,7 +280,7 @@ workflows:
             - workspace-clippy
           matrix:
             parameters:
-              crate: ["shuttle-api", "cargo-shuttle", "shuttle-codegen", "shuttle-common", "shuttle-proto", "shuttle-provisioner"]
+              crate: ["shuttle-deployer", "cargo-shuttle", "shuttle-codegen", "shuttle-common", "shuttle-proto", "shuttle-provisioner"]
       - e2e-test:
           requires:
             - service-test

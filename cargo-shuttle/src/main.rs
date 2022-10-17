@@ -2,9 +2,9 @@ use anyhow::Result;
 use cargo_shuttle::{Args, CommandOutcome, Shuttle};
 use clap::Parser;
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
-    env_logger::init();
+    tracing_subscriber::fmt::init();
 
     let result = Shuttle::new().run(Args::parse()).await;
 

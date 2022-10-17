@@ -1,5 +1,4 @@
 use once_cell::sync::OnceCell;
-use rocket::request::FromParam;
 use serde::de::Error as DeError;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashSet;
@@ -28,14 +27,6 @@ impl<'de> Deserialize<'de> for ProjectName {
     {
         let s: String = String::deserialize(deserializer)?;
         s.parse().map_err(DeError::custom)
-    }
-}
-
-impl<'a> FromParam<'a> for ProjectName {
-    type Error = ProjectNameError;
-
-    fn from_param(param: &'a str) -> Result<Self, Self::Error> {
-        param.parse()
     }
 }
 

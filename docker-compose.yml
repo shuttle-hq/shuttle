@@ -1,11 +1,17 @@
-version: "3"
+version: "3.7"
 volumes:
-  shuttle-backend-vol:
+  gateway-vol:
+  postgres-vol:
+networks:
+  user-net:
+    attachable: true
+    ipam:
+      driver: default
+      config:
+        - subnet: 10.99.0.0/24
 services:
-  api:
-    image: "${CONTAINER_REGISTRY}/api:${BACKEND_TAG}"
-    volumes:
-      - shuttle-backend-vol:/var/lib/shuttle/
+  gateway:
+    image: "${CONTAINER_REGISTRY}/gateway:${BACKEND_TAG}"
     depends_on:
       - provisioner
     ports:
@@ -16,40 +22,83 @@ services:
         condition: on-failure
         delay: 5s
         max_attempts: 3
+      update_config:
+        order: start-first
+        failure_action: rollback
+        delay: 10s
+      rollback_config:
+        parallelism: 0
+        order: stop-first
       placement:
         constraints:
           - node.hostname==controller
+    networks:
+      user-net:
+    volumes:
+      - gateway-vol:/var/lib/shuttle
+      # This image needs to run highly privileged in order to
+      # orchestrate user runtimes safely
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
-      - SHUTTLE_USERS_TOML=/var/lib/shuttle/users.toml
       - RUST_LOG=${RUST_LOG}
     command:
-      - "--path=/var/lib/shuttle/crates"
-      - "--bind-addr=0.0.0.0"
-      - "--api-port=8001"
-      - "--proxy-port=8000"
+      - "--state=/var/lib/shuttle/gateway.sqlite"
+      - "start"
+      - "--control=0.0.0.0:8001"
+      - "--user=0.0.0.0:8000"
+      - "--image=${CONTAINER_REGISTRY}/deployer:${BACKEND_TAG}"
+      - "--prefix=shuttle_"
+      - "--network-name=${STACK}_user-net"
+      - "--docker-host=/var/run/docker.sock"
+      - "--provisioner-host=provisioner"
       - "--proxy-fqdn=${APPS_FQDN}"
-      - "--provisioner-address=provisioner"
-      - "--provisioner-port=8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001"]
+      interval: 1m
+      timeout: 15s
+      retries: 15
+      #start_period: 30s
   provisioner:
     image: "${CONTAINER_REGISTRY}/provisioner:${PROVISIONER_TAG}"
     depends_on:
-      - pg
+      - postgres
       - mongodb
     environment:
       - RUST_LOG=${RUST_LOG}
+    networks:
+      user-net:
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        order: start-first
+        failure_action: rollback
+        delay: 10s
+      rollback_config:
+        parallelism: 0
+        order: stop-first
+      placement:
+        constraints:
+          - node.hostname==provisioner
     command:
       - "--ip=0.0.0.0"
       - "--port=8000"
-      - "--shared-pg-uri=postgres://postgres:${POSTGRES_PASSWORD}@pg:5432/postgres"
+      - "--shared-pg-uri=postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/postgres"
       - "--shared-mongodb-uri=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongodb:27017/admin"
       - "--internal-mongodb-address=mongodb"
-      - "--internal-pg-address=pg"
+      - "--internal-pg-address=postgres"
       - "--fqdn=${DB_FQDN}"
-  pg:
+  postgres:
     image: "${CONTAINER_REGISTRY}/postgres:${POSTGRES_TAG}"
     restart: always
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    networks:
+      user-net:
+    volumes:
+      - postgres-vol:/var/lib/postgresql/data
     ports:
       - 8002:8000
       - 5432:5432
@@ -60,6 +109,8 @@ services:
   mongodb:
     image: mongo:5.0.10
     restart: always
+    networks:
+      user-net:
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
@@ -67,3 +118,20 @@ services:
       placement:
         constraints:
           - node.hostname==postgres
+  datadog-agent:
+    image: datadog/agent
+    restart: always
+    networks:
+      user-net:
+    volumes:
+      # Pull docker stats
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - DD_APM_ENABLED=true
+      - DD_APM_NON_LOCAL_TRAFFIC=true
+      - DD_SITE=datadoghq.eu
+      - DD_API_KEY=${DD_API_KEY}
+    deploy:
+      placement:
+        constraints:
+          - node.hostname==controller

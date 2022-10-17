@@ -7,7 +7,7 @@ use std::thread::sleep;
 use std::time::{Duration, SystemTime};
 use std::{env, path};
 
-use colored::*;
+use crossterm::style::{Color, Stylize};
 use reqwest::blocking::RequestBuilder;
 
 use lazy_static::lazy_static;
@@ -38,8 +38,16 @@ impl TempCargoHome {
                 write!(
                     config,
                     r#"[patch.crates-io]
-shuttle-service = {{ path = "{}" }}"#,
-                    WORKSPACE_ROOT.join("service").display()
+shuttle-service = {{ path = "{}" }}
+shuttle-aws-rds = {{ path = "{}" }}
+shuttle-persist = {{ path = "{}" }}
+shuttle-shared-db = {{ path = "{}" }}
+shuttle-secrets = {{ path = "{}" }}"#,
+                    WORKSPACE_ROOT.join("service").display(),
+                    WORKSPACE_ROOT.join("resources").join("aws-rds").display(),
+                    WORKSPACE_ROOT.join("resources").join("persist").display(),
+                    WORKSPACE_ROOT.join("resources").join("shared-db").display(),
+                    WORKSPACE_ROOT.join("resources").join("secrets").display(),
                 )
                 .unwrap();
 
@@ -51,7 +59,7 @@ shuttle-service = {{ path = "{}" }}"#,
     pub fn path(&self) -> &Path {
         match self {
             Self::User(path) => path.as_path(),
-            Self::Managed(dir) => dir.path()
+            Self::Managed(dir) => dir.path(),
         }
     }
 
@@ -100,6 +108,32 @@ CARGO_HOME: {}
             .current_dir(WORKSPACE_ROOT.as_path())
             .output()
             .ensure_success("failed to `cargo build --bin cargo-shuttle`");
+
+        let admin_key = if let Ok(key) = env::var("SHUTTLE_API_KEY") {
+            key
+        } else {
+            "test-key".to_string()
+        };
+
+        Command::new(DOCKER.as_os_str())
+            .args([
+                "compose",
+                "--file",
+                "docker-compose.rendered.yml",
+                "--project-name",
+                "shuttle-dev",
+                "exec",
+                "gateway",
+                "/usr/local/bin/service",
+                "--state=/var/lib/shuttle/gateway.sqlite",
+                "init",
+                "--name",
+                "admin",
+                "--key",
+                &admin_key,
+            ])
+            .output()
+            .ensure_success("failed to create admin user on gateway");
     };
 }
 
@@ -170,8 +204,8 @@ pub fn spawn_and_log<D: std::fmt::Display, C: Into<Color>>(
     let color = color.into();
     let mut stdout = child.stdout.take().unwrap();
     let mut stderr = child.stderr.take().unwrap();
-    let stdout_target = format!("{} >>>", target).color(color);
-    let stderr_target = format!("{} >>>", target).bold().color(color);
+    let stdout_target = format!("{} >>>", target).with(color);
+    let stderr_target = format!("{} >>>", target).bold().with(color);
     std::thread::spawn(move || log_lines(&mut stdout, stdout_target));
     std::thread::spawn(move || log_lines(&mut stderr, stderr_target));
     child
@@ -206,13 +240,19 @@ impl Services {
         let _ = *LOCAL_UP;
         let service = Self::new_free(target, color);
         service.wait_ready(Duration::from_secs(15));
+
+        // Make sure provisioner is ready, else deployers will fail to start up
+        service.wait_postgres_ready(Duration::from_secs(15));
+        service.wait_mongodb_ready(Duration::from_secs(15));
+        sleep(Duration::from_secs(5));
+
         service
     }
 
     pub fn wait_ready(&self, mut timeout: Duration) {
         let mut now = SystemTime::now();
         while !timeout.is_zero() {
-            match reqwest::blocking::get(format!("http://{}/status", self.api_addr)) {
+            match reqwest::blocking::get(format!("http://{}", self.api_addr)) {
                 Ok(resp) if resp.status().is_success() => return,
                 _ => sleep(Duration::from_secs(1)),
             }
@@ -221,7 +261,101 @@ impl Services {
                 .unwrap_or_default();
             now = SystemTime::now();
         }
-        panic!("timed out while waiting for api to /status OK");
+        panic!("timed out while waiting for gateway to / OK");
+    }
+
+    pub fn wait_postgres_ready(&self, mut timeout: Duration) {
+        let mut now = SystemTime::now();
+        while !timeout.is_zero() {
+            let mut run = Command::new(DOCKER.as_os_str());
+            run.args([
+                "compose",
+                "--file",
+                "docker-compose.rendered.yml",
+                "--project-name",
+                "shuttle-dev",
+                "exec",
+                "postgres",
+                "pg_isready",
+            ]);
+
+            if spawn_and_log(&mut run, &self.target, self.color)
+                .wait()
+                .unwrap()
+                .success()
+            {
+                return;
+            } else {
+                sleep(Duration::from_secs(1));
+            }
+            timeout = timeout
+                .checked_sub(now.elapsed().unwrap())
+                .unwrap_or_default();
+            now = SystemTime::now();
+        }
+        panic!("timed out while waiting for postgres to be ready");
+    }
+
+    pub fn wait_mongodb_ready(&self, mut timeout: Duration) {
+        let mut now = SystemTime::now();
+        while !timeout.is_zero() {
+            let mut run = Command::new(DOCKER.as_os_str());
+            run.args([
+                "compose",
+                "--file",
+                "docker-compose.rendered.yml",
+                "--project-name",
+                "shuttle-dev",
+                "exec",
+                "mongodb",
+                "mongo",
+                "--eval",
+                "print(\"accepting connections\")",
+            ]);
+
+            if spawn_and_log(&mut run, &self.target, self.color)
+                .wait()
+                .unwrap()
+                .success()
+            {
+                return;
+            } else {
+                sleep(Duration::from_secs(1));
+            }
+            timeout = timeout
+                .checked_sub(now.elapsed().unwrap())
+                .unwrap_or_default();
+            now = SystemTime::now();
+        }
+        panic!("timed out while waiting for mongodb to be ready");
+    }
+
+    pub fn wait_deployer_ready(&self, project_path: &str, mut timeout: Duration) {
+        let mut now = SystemTime::now();
+        while !timeout.is_zero() {
+            let mut run = Command::new(WORKSPACE_ROOT.join("target/debug/cargo-shuttle"));
+
+            if env::var("SHUTTLE_API_KEY").is_err() {
+                run.env("SHUTTLE_API_KEY", "test-key");
+            }
+
+            run.env("CARGO_HOME", CARGO_HOME.path());
+            run.args(["project", "status"])
+                .current_dir(WORKSPACE_ROOT.join("examples").join(project_path));
+            let stdout = run.output().unwrap().stdout;
+            let stdout = String::from_utf8(stdout).unwrap();
+
+            if stdout.contains("ready") {
+                return;
+            } else {
+                sleep(Duration::from_secs(1));
+            }
+            timeout = timeout
+                .checked_sub(now.elapsed().unwrap())
+                .unwrap_or_default();
+            now = SystemTime::now();
+        }
+        panic!("timed out while waiting for deployer to be ready");
     }
 
     pub fn run_client<'s, I, P>(&self, args: I, path: P) -> Child
@@ -242,6 +376,15 @@ impl Services {
     }
 
     pub fn deploy(&self, project_path: &str) {
+        self.run_client(
+            ["project", "new"],
+            WORKSPACE_ROOT.join("examples").join(project_path),
+        )
+        .wait()
+        .ensure_success("failed to run deploy");
+
+        self.wait_deployer_ready(project_path, Duration::from_secs(120));
+
         self.run_client(
             ["deploy", "--allow-dirty"],
             WORKSPACE_ROOT.join("examples").join(project_path),

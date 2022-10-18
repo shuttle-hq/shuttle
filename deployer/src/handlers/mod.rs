@@ -185,6 +185,7 @@ async fn post_service(
         service_id: service.id,
         data,
         will_run_tests: !params.contains_key("no-test"),
+        tracing_context: Default::default(),
     };
 
     deployment_manager.queue_push(queued).await;

@@ -1,10 +1,12 @@
 use std::{
+    collections::HashMap,
     net::{Ipv4Addr, SocketAddr},
     path::PathBuf,
     str::FromStr,
 };
 
 use async_trait::async_trait;
+use opentelemetry::global;
 use portpicker::pick_unused_port;
 use shuttle_common::project::ProjectName as ServiceName;
 use shuttle_service::{
@@ -12,7 +14,8 @@ use shuttle_service::{
     Factory, Logger,
 };
 use tokio::task::JoinError;
-use tracing::{debug, error, info, instrument, trace};
+use tracing::{debug, debug_span, error, info, instrument, trace, Instrument};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
 use super::{provisioner_factory, runtime_logger, KillReceiver, KillSender, RunReceiver, State};
@@ -95,22 +98,32 @@ pub async fn task(
         let libs_path = libs_path.clone();
 
         tokio::spawn(async move {
-            if let Err(err) = built
-                .handle(
-                    addr,
-                    libs_path,
-                    &mut factory,
-                    logger,
-                    kill_recv,
-                    old_deployments_killer,
-                    cleanup,
-                )
-                .await
-            {
-                start_crashed_cleanup(&id, err)
-            }
+            let parent_cx = global::get_text_map_propagator(|propagator| {
+                propagator.extract(&built.tracing_context)
+            });
+            let span = debug_span!("runner");
+            span.set_parent(parent_cx);
 
-            info!("deployment done");
+            async move {
+                if let Err(err) = built
+                    .handle(
+                        addr,
+                        libs_path,
+                        &mut factory,
+                        logger,
+                        kill_recv,
+                        old_deployments_killer,
+                        cleanup,
+                    )
+                    .await
+                {
+                    start_crashed_cleanup(&id, err)
+                }
+
+                info!("deployment done");
+            }
+            .instrument(span)
+            .await
         });
     }
 }
@@ -139,17 +152,17 @@ async fn kill_old_deployments(
     Ok(())
 }
 
-#[instrument(fields(id = %_id, state = %State::Completed))]
+#[instrument(skip(_id), fields(id = %_id, state = %State::Completed))]
 fn completed_cleanup(_id: &Uuid) {
     info!("service finished all on its own");
 }
 
-#[instrument(fields(id = %_id, state = %State::Stopped))]
+#[instrument(skip(_id), fields(id = %_id, state = %State::Stopped))]
 fn stopped_cleanup(_id: &Uuid) {
     info!("service was stopped by the user");
 }
 
-#[instrument(fields(id = %_id, state = %State::Crashed))]
+#[instrument(skip(_id), fields(id = %_id, state = %State::Crashed))]
 fn crashed_cleanup(_id: &Uuid, err: impl std::error::Error + 'static) {
     error!(
         error = &err as &dyn std::error::Error,
@@ -157,7 +170,7 @@ fn crashed_cleanup(_id: &Uuid, err: impl std::error::Error + 'static) {
     );
 }
 
-#[instrument(fields(id = %_id, state = %State::Crashed))]
+#[instrument(skip(_id), fields(id = %_id, state = %State::Crashed))]
 fn start_crashed_cleanup(_id: &Uuid, err: impl std::error::Error + 'static) {
     error!(
         error = &err as &dyn std::error::Error,
@@ -180,10 +193,11 @@ pub struct Built {
     pub id: Uuid,
     pub service_name: String,
     pub service_id: Uuid,
+    pub tracing_context: HashMap<String, String>,
 }
 
 impl Built {
-    #[instrument(name = "built_handle", skip(self, libs_path, factory, logger, kill_recv, kill_old_deployments, cleanup), fields(id = %self.id, state = %State::Loading))]
+    #[instrument(skip(self, libs_path, factory, logger, kill_recv, kill_old_deployments, cleanup), fields(id = %self.id, state = %State::Loading))]
     #[allow(clippy::too_many_arguments)]
     async fn handle(
         self,
@@ -493,6 +507,7 @@ mod tests {
             id: Uuid::new_v4(),
             service_name: "test".to_string(),
             service_id: Uuid::new_v4(),
+            tracing_context: Default::default(),
         };
         let (_kill_send, kill_recv) = broadcast::channel(1);
 
@@ -555,6 +570,7 @@ mod tests {
             id,
             service_name: crate_name.to_string(),
             service_id: Uuid::new_v4(),
+            tracing_context: Default::default(),
         }
     }
 }

@@ -12,6 +12,7 @@ async fn cargo_shuttle_init(path: PathBuf) -> anyhow::Result<CommandOutcome> {
     let working_directory = Path::new(".").to_path_buf();
 
     Shuttle::new()
+        .unwrap()
         .run(Args {
             api_url: Some("http://shuttle.invalid:80".to_string()),
             project_args: ProjectArgs {
@@ -39,6 +40,7 @@ async fn cargo_shuttle_init_framework(path: PathBuf) -> anyhow::Result<CommandOu
     let working_directory = Path::new(".").to_path_buf();
 
     Shuttle::new()
+        .unwrap()
         .run(Args {
             api_url: Some("http://shuttle.invalid:80".to_string()),
             project_args: ProjectArgs {

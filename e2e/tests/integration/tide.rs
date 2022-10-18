@@ -1,10 +1,10 @@
-use colored::Color;
+use crossterm::style::Color;
 
 use crate::helpers::{self, APPS_FQDN};
 
 #[test]
 fn hello_world_tide() {
-    let client = helpers::Services::new_docker("hello-world (tide)", Color::Cyan);
+    let client = helpers::Services::new_docker("hello-world (tide)", Color::DarkYellow);
     client.deploy("tide/hello-world");
 
     let request_text = client

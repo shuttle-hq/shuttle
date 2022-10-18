@@ -1,23 +1,17 @@
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use serde_json::json;
-use shuttle_common::{DeploymentId, LogItem};
+use shuttle_common::{deployment::State, DeploymentId, LogItem};
+use tokio::sync::mpsc::UnboundedSender;
 use tracing::{field::Visit, Subscriber};
 use tracing_subscriber::Layer;
 
-#[derive(Debug)]
-pub struct Log {
-    pub deployment_id: DeploymentId,
-    pub datetime: DateTime<Utc>,
-    pub item: LogItem,
-}
-
 pub struct Logger {
     deployment_id: DeploymentId,
-    tx: crossbeam_channel::Sender<Log>,
+    tx: UnboundedSender<LogItem>,
 }
 
 impl Logger {
-    pub fn new(tx: crossbeam_channel::Sender<Log>, deployment_id: DeploymentId) -> Self {
+    pub fn new(tx: UnboundedSender<LogItem>, deployment_id: DeploymentId) -> Self {
         Self { tx, deployment_id }
     }
 }
@@ -40,33 +34,43 @@ where
             event.record(&mut visitor);
 
             LogItem {
-                level: metadata.level().to_string(),
-                file: metadata.file().map(str::to_string),
-                line: metadata.line(),
-                target: metadata.target().to_string(),
-                fields: serde_json::to_vec(&visitor.0).unwrap(),
+                id: self.deployment_id,
+                state: State::Running,
+                level: metadata.level().into(),
+                timestamp: datetime,
+                file: visitor.file.or_else(|| metadata.file().map(str::to_string)),
+                line: visitor.line.or_else(|| metadata.line()),
+                target: visitor
+                    .target
+                    .unwrap_or_else(|| metadata.target().to_string()),
+                fields: serde_json::to_vec(&visitor.fields).unwrap(),
             }
         };
 
-        self.tx
-            .send(Log {
-                item,
-                datetime,
-                deployment_id: self.deployment_id,
-            })
-            .expect("sending log should succeed");
+        self.tx.send(item).expect("sending log should succeed");
     }
 }
 
 // Boilerplate for extracting the fields from the event
 #[derive(Default)]
-struct JsonVisitor(serde_json::Map<String, serde_json::Value>);
+struct JsonVisitor {
+    fields: serde_json::Map<String, serde_json::Value>,
+    target: Option<String>,
+    file: Option<String>,
+    line: Option<u32>,
+}
 
 impl JsonVisitor {
     /// Ignores log metadata as it is included in the other LogItem fields (target, file, line...)
     fn filter_insert(&mut self, field: &tracing::field::Field, value: serde_json::Value) {
-        if !field.name().starts_with("log.") {
-            self.0.insert(field.name().to_string(), json!(value));
+        match field.name() {
+            "log.line" => self.line = value.as_u64().map(|u| u as u32),
+            "log.target" => self.target = value.as_str().map(ToOwned::to_owned),
+            "log.file" => self.file = value.as_str().map(ToOwned::to_owned),
+            "log.module_path" => {}
+            name => {
+                self.fields.insert(name.to_string(), json!(value));
+            }
         }
     }
 }
@@ -102,11 +106,13 @@ impl Visit for JsonVisitor {
 mod tests {
     use super::*;
 
+    use shuttle_common::log::Level;
+    use tokio::sync::mpsc;
     use tracing_subscriber::prelude::*;
 
     #[test]
     fn logging() {
-        let (s, r) = crossbeam_channel::unbounded();
+        let (s, mut r) = mpsc::unbounded_channel();
 
         let logger = Logger::new(s, Default::default());
 
@@ -117,16 +123,30 @@ mod tests {
         tracing::warn!("from");
         tracing::error!("logger");
 
-        let logs = r
-            .try_iter()
-            .map(|log| {
-                let fields: serde_json::Map<String, serde_json::Value> =
-                    serde_json::from_slice(&log.item.fields).unwrap();
+        assert_eq!(
+            r.blocking_recv().map(to_tuple),
+            Some(("this is".to_string(), Level::Debug))
+        );
+        assert_eq!(
+            r.blocking_recv().map(to_tuple),
+            Some(("hi".to_string(), Level::Info))
+        );
+        assert_eq!(
+            r.blocking_recv().map(to_tuple),
+            Some(("from".to_string(), Level::Warn))
+        );
+        assert_eq!(
+            r.blocking_recv().map(to_tuple),
+            Some(("logger".to_string(), Level::Error))
+        );
+    }
 
-                fields["message"].as_str().unwrap().to_owned()
-            })
-            .collect::<Vec<_>>();
+    fn to_tuple(log: LogItem) -> (String, Level) {
+        let fields: serde_json::Map<String, serde_json::Value> =
+            serde_json::from_slice(&log.fields).unwrap();
 
-        assert_eq!(logs, vec!["this is", "hi", "from", "logger",]);
+        let message = fields["message"].as_str().unwrap().to_owned();
+
+        (message, log.level)
     }
 }

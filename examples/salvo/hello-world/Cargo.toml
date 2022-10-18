@@ -7,4 +7,4 @@ edition = "2021"
 
 [dependencies]
 salvo = "0.34.3"
-shuttle-service = { version = "0.5.2", features = ["web-salvo"] }
+shuttle-service = { version = "0.7.0", features = ["web-salvo"] }

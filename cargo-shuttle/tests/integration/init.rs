@@ -27,6 +27,7 @@ async fn cargo_shuttle_init(path: PathBuf) -> anyhow::Result<CommandOutcome> {
                 salvo: false,
                 serenity: false,
                 warp: false,
+                thruster: false,
                 path,
             }),
         })
@@ -53,6 +54,7 @@ async fn cargo_shuttle_init_framework(path: PathBuf) -> anyhow::Result<CommandOu
                 salvo: false,
                 serenity: false,
                 warp: false,
+                thruster: false,
                 path,
             }),
         })
@@ -93,16 +95,16 @@ async fn framework_init() {
     let expected = indoc! {r#"
     #[macro_use]
     extern crate rocket;
-    
+
     #[get("/")]
     fn index() -> &'static str {
         "Hello, world!"
     }
-    
+
     #[shuttle_service::main]
     async fn rocket() -> shuttle_service::ShuttleRocket {
         let rocket = rocket::build().mount("/hello", routes![index]);
-    
+
         Ok(rocket)
     }"#};
 

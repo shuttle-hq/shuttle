@@ -1,25 +1,14 @@
-use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use shuttle_service::loader::build_crate;
 
-struct DummyWriter {}
-
-impl Write for DummyWriter {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        Ok(buf.len())
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
-    }
-}
-
-#[test]
-fn not_shuttle() {
-    let buf = Box::new(DummyWriter {});
+#[tokio::test(flavor = "multi_thread")]
+async fn not_shuttle() {
+    let (tx, _) = crossbeam_channel::unbounded();
     let project_path = format!("{}/tests/resources/not-shuttle", env!("CARGO_MANIFEST_DIR"));
-    let so_path = build_crate(Path::new(&project_path), buf).unwrap();
+    let so_path = build_crate(Default::default(), Path::new(&project_path), false, tx)
+        .await
+        .unwrap();
 
     assert!(
         so_path
@@ -31,43 +20,55 @@ fn not_shuttle() {
     );
 }
 
-#[test]
+#[tokio::test]
 #[should_panic(
     expected = "Your Shuttle project must be a library. Please add `[lib]` to your Cargo.toml file."
 )]
-fn not_lib() {
-    let buf = Box::new(DummyWriter {});
+async fn not_lib() {
+    let (tx, _) = crossbeam_channel::unbounded();
     let project_path = format!("{}/tests/resources/not-lib", env!("CARGO_MANIFEST_DIR"));
-    build_crate(Path::new(&project_path), buf).unwrap();
+    build_crate(Default::default(), Path::new(&project_path), false, tx)
+        .await
+        .unwrap();
 }
 
-#[test]
-fn not_cdylib() {
-    let buf = Box::new(DummyWriter {});
+#[tokio::test(flavor = "multi_thread")]
+async fn not_cdylib() {
+    let (tx, _) = crossbeam_channel::unbounded();
     let project_path = format!("{}/tests/resources/not-cdylib", env!("CARGO_MANIFEST_DIR"));
-    assert!(build_crate(Path::new(&project_path), buf).is_ok());
+    assert!(
+        build_crate(Default::default(), Path::new(&project_path), false, tx)
+            .await
+            .is_ok()
+    );
     assert!(PathBuf::from(project_path)
         .join("target/debug/libnot_cdylib.so")
         .exists());
 }
 
-#[test]
-fn is_cdylib() {
-    let buf = Box::new(DummyWriter {});
+#[tokio::test(flavor = "multi_thread")]
+async fn is_cdylib() {
+    let (tx, _) = crossbeam_channel::unbounded();
     let project_path = format!("{}/tests/resources/is-cdylib", env!("CARGO_MANIFEST_DIR"));
-    assert!(build_crate(Path::new(&project_path), buf).is_ok());
+    assert!(
+        build_crate(Default::default(), Path::new(&project_path), false, tx)
+            .await
+            .is_ok()
+    );
     assert!(PathBuf::from(project_path)
         .join("target/debug/libis_cdylib.so")
         .exists());
 }
 
-#[test]
+#[tokio::test]
 #[should_panic(expected = "failed to read")]
-fn not_found() {
-    let buf = Box::new(DummyWriter {});
+async fn not_found() {
+    let (tx, _) = crossbeam_channel::unbounded();
     let project_path = format!(
         "{}/tests/resources/non-existing",
         env!("CARGO_MANIFEST_DIR")
     );
-    build_crate(Path::new(&project_path), buf).unwrap();
+    build_crate(Default::default(), Path::new(&project_path), false, tx)
+        .await
+        .unwrap();
 }

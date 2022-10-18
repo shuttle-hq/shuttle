@@ -1,4 +1,4 @@
-use log::{error, info};
+use anyhow::Context as _;
 use serenity::async_trait;
 use serenity::model::application::command::CommandOptionType;
 use serenity::model::application::interaction::application_command::CommandDataOptionValue;
@@ -7,13 +7,14 @@ use serenity::model::gateway::Ready;
 use serenity::model::id::GuildId;
 use serenity::prelude::*;
 use shuttle_secrets::SecretStore;
-use shuttle_service::error::CustomError;
 use sqlx::{Executor, PgPool};
+use tracing::{error, info};
 
 mod db;
 
 struct Bot {
     database: PgPool,
+    guild_id: String,
 }
 
 #[async_trait]
@@ -74,14 +75,7 @@ impl EventHandler for Bot {
     async fn ready(&self, ctx: Context, ready: Ready) {
         info!("{} is connected!", ready.user.name);
 
-        // Get the guild id set in `Secrets.toml` from the Postgres secrets storage
-        let guild_id = self
-            .database
-            .get_secret("GUILD_ID")
-            .await
-            .expect("guild_id is set in Secrets.toml");
-
-        let guild_id = GuildId(guild_id.parse().unwrap());
+        let guild_id = GuildId(self.guild_id.parse().unwrap());
 
         let _ = GuildId::set_application_commands(&guild_id, &ctx.http, |commands| {
             commands.create_application_command(|command| {
@@ -130,19 +124,28 @@ impl EventHandler for Bot {
 }
 
 #[shuttle_service::main]
-async fn serenity(#[shuttle_shared_db::Postgres] pool: PgPool) -> shuttle_service::ShuttleSerenity {
-    // Get the discord token set in `Secrets.toml` from the Postgres secrets storage
-    let token = pool
-        .get_secret("DISCORD_TOKEN")
-        .await
-        .map_err(CustomError::new)?;
+async fn serenity(
+    #[shuttle_shared_db::Postgres] pool: PgPool,
+    #[shuttle_secrets::Secrets] secret_store: SecretStore,
+) -> shuttle_service::ShuttleSerenity {
+    // Get the discord token set in `Secrets.toml`
+    let token = secret_store
+        .get("DISCORD_TOKEN")
+        .context("'DISCORD_TOKEN' was not found")?;
+    // Get the guild_id set in `Secrets.toml`
+    let guild_id = secret_store
+        .get("GUILD_ID")
+        .context("'GUILD_ID' was not found")?;
 
     // Run the schema migration
     pool.execute(include_str!("../schema.sql"))
         .await
-        .map_err(CustomError::new)?;
+        .context("failed to run migrations")?;
 
-    let bot = Bot { database: pool };
+    let bot = Bot {
+        database: pool,
+        guild_id,
+    };
     let client = Client::builder(&token, GatewayIntents::empty())
         .event_handler(bot)
         .await

@@ -1,9 +1,10 @@
 [workspace]
 members = [
-  "api",
   "cargo-shuttle",
   "codegen",
   "common",
+  "deployer",
+  "gateway",
   "proto",
   "provisioner",
   "service"

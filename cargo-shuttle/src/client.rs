@@ -1,225 +1,299 @@
-use std::collections::HashMap;
 use std::fmt::Write;
 use std::fs::File;
 use std::io::Read;
-use std::time::Duration;
 
-use anyhow::{anyhow, Context, Result};
-use reqwest::{Response, StatusCode};
-use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
+use anyhow::{Context, Result};
+use async_trait::async_trait;
+use headers::{Authorization, HeaderMapExt};
+use reqwest::{Body, Response};
+use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, RequestBuilder};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
+use serde::de::DeserializeOwned;
+use serde::Deserialize;
+use shuttle_common::models::{deployment, error, project, secret, service, user};
 use shuttle_common::project::ProjectName;
-use shuttle_common::{ApiKey, ApiUrl, DeploymentMeta, DeploymentStateMeta, SHUTTLE_PROJECT_HEADER};
-use tokio::time::sleep;
+use shuttle_common::{ApiKey, ApiUrl, LogItem};
+use tokio::net::TcpStream;
+use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
+use tracing::{error, trace};
+use uuid::Uuid;
 
-use crate::print;
-
-pub(crate) async fn auth(mut api_url: ApiUrl, username: String) -> Result<ApiKey> {
-    let client = get_retry_client();
-
-    let _ = write!(api_url, "/users/{}", username);
-
-    let res: Response = client
-        .post(api_url)
-        .send()
-        .await
-        .context("failed to get API key from Shuttle server")?;
-
-    let response_status = res.status();
-    let response_text = res.text().await?;
-
-    if response_status == StatusCode::OK {
-        return Ok(response_text);
-    }
-
-    Err(anyhow!(
-        "status: {}, body: {}",
-        response_status,
-        response_text
-    ))
-}
-
-pub(crate) async fn delete(
-    mut api_url: ApiUrl,
-    api_key: &ApiKey,
-    project: &ProjectName,
-) -> Result<()> {
-    let client = get_retry_client();
-
-    let _ = write!(api_url, "/projects/{}", project);
-    let res: Response = client
-        .delete(api_url)
-        .basic_auth(api_key, Some(""))
-        .send()
-        .await
-        .context("failed to delete deployment on the Shuttle server")?;
-
-    let deployment_meta = to_api_result(res).await?;
-
-    println!("{}", deployment_meta);
-
-    Ok(())
-}
-
-pub(crate) async fn status(api_url: ApiUrl, api_key: &ApiKey, project: &ProjectName) -> Result<()> {
-    let client = get_retry_client();
-
-    let deployment_meta = get_deployment_meta(api_url, api_key, project, &client).await?;
-
-    println!("{}", deployment_meta);
-
-    Ok(())
-}
-
-pub(crate) async fn shuttle_version(mut api_url: ApiUrl) -> Result<String> {
-    let client = get_retry_client();
-    api_url.push_str("/version");
-
-    let res: Response = client
-        .get(api_url)
-        .send()
-        .await
-        .context("failed to get version from Shuttle server")?;
-
-    let response_status = res.status();
-
-    if response_status == StatusCode::OK {
-        Ok(res.text().await?)
-    } else {
-        Err(anyhow!(
-            "status: {}, body: {}",
-            response_status,
-            res.text().await?
-        ))
-    }
-}
-
-pub(crate) async fn logs(api_url: ApiUrl, api_key: &ApiKey, project: &ProjectName) -> Result<()> {
-    let client = get_retry_client();
-
-    let deployment_meta = get_deployment_meta(api_url, api_key, project, &client).await?;
-
-    for (datetime, log_item) in deployment_meta.runtime_logs {
-        print::log(datetime, log_item);
-    }
-
-    Ok(())
-}
-
-async fn get_deployment_meta(
-    mut api_url: ApiUrl,
-    api_key: &ApiKey,
-    project: &ProjectName,
-    client: &ClientWithMiddleware,
-) -> Result<DeploymentMeta> {
-    let _ = write!(api_url, "/projects/{}", project);
-
-    let res: Response = client
-        .get(api_url)
-        .basic_auth(api_key.clone(), Some(""))
-        .send()
-        .await
-        .context("failed to get deployment metadata")?;
-
-    to_api_result(res).await
-}
-
-fn get_retry_client() -> ClientWithMiddleware {
-    let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
-    ClientBuilder::new(reqwest::Client::new())
-        .with(RetryTransientMiddleware::new_with_policy(retry_policy))
-        .build()
-}
-
-pub(crate) async fn deploy(
-    package_file: File,
+pub struct Client {
     api_url: ApiUrl,
-    api_key: &ApiKey,
-    project: &ProjectName,
-) -> Result<DeploymentStateMeta> {
-    let mut url = api_url.clone();
-    let _ = write!(url, "/projects/{}", project.as_str());
-
-    let client = get_retry_client();
-
-    let mut package_file = package_file;
-    let mut package_content = Vec::new();
-    package_file
-        .read_to_end(&mut package_content)
-        .context("failed to convert package content to buf")?;
-
-    let res: Response = client
-        .post(url)
-        .body(package_content)
-        .header(SHUTTLE_PROJECT_HEADER, serde_json::to_string(&project)?)
-        .basic_auth(api_key.clone(), Some(""))
-        .send()
-        .await
-        .context("failed to send deployment to the Shuttle server")?;
-
-    let mut deployment_meta = to_api_result(res).await?;
-
-    let mut log_pos = 0;
-
-    while !matches!(
-        deployment_meta.state,
-        DeploymentStateMeta::Deployed | DeploymentStateMeta::Error(_)
-    ) {
-        print_log(&deployment_meta.build_logs, &mut log_pos);
-
-        sleep(Duration::from_millis(350)).await;
-
-        deployment_meta = get_deployment_meta(api_url.clone(), api_key, project, &client).await?;
-    }
-
-    print_log(&deployment_meta.build_logs, &mut log_pos);
-
-    println!("{}", &deployment_meta);
-
-    Ok(deployment_meta.state)
+    api_key: Option<ApiKey>,
 }
 
-pub(crate) async fn secrets(
-    mut api_url: ApiUrl,
-    api_key: &ApiKey,
-    project: &ProjectName,
-    secrets: HashMap<String, String>,
-) -> Result<()> {
-    if secrets.is_empty() {
-        return Ok(());
-    }
-
-    let _ = write!(api_url, "/projects/{}/secrets/", project.as_str());
-
-    let client = get_retry_client();
-
-    client
-        .post(api_url)
-        .body(serde_json::to_string(&secrets)?)
-        .header(SHUTTLE_PROJECT_HEADER, serde_json::to_string(&project)?)
-        .basic_auth(api_key.clone(), Some(""))
-        .send()
-        .await
-        .context("failed to send deployment's secrets to the Shuttle server")
-        .map(|_| ())
+#[async_trait]
+trait ToJson {
+    async fn to_json<T: DeserializeOwned>(self) -> Result<T>;
 }
 
-fn print_log(logs: &Option<String>, log_pos: &mut usize) {
-    if let Some(logs) = logs {
-        let new = &logs[*log_pos..];
+#[async_trait]
+impl ToJson for Response {
+    async fn to_json<T: DeserializeOwned>(self) -> Result<T> {
+        let full = self.bytes().await?;
 
-        if !new.is_empty() {
-            *log_pos = logs.len();
-            print!("{}", new);
+        trace!(
+            response = std::str::from_utf8(&full).unwrap_or_default(),
+            "parsing response to json"
+        );
+        // try to deserialize into calling function response model
+        match serde_json::from_slice(&full) {
+            Ok(res) => Ok(res),
+            Err(_) => {
+                trace!("parsing response to common error");
+                // if that doesn't work, try to deserialize into common error type
+                let res: error::ApiError =
+                    serde_json::from_slice(&full).context("failed to parse response to JSON")?;
+
+                Err(res.into())
+            }
         }
     }
 }
 
-async fn to_api_result(res: Response) -> Result<DeploymentMeta> {
-    let text = res.text().await?;
-    match serde_json::from_str::<DeploymentMeta>(&text) {
-        Ok(meta) => Ok(meta),
-        Err(_) => Err(anyhow!("{}", text)),
+impl Client {
+    pub fn new(api_url: ApiUrl) -> Self {
+        Self {
+            api_url,
+            api_key: None,
+        }
+    }
+
+    pub fn set_api_key(&mut self, api_key: ApiKey) {
+        self.api_key = Some(api_key);
+    }
+
+    pub async fn auth(&self, username: String) -> Result<user::Response> {
+        let path = format!("/users/{}", username);
+
+        self.post(path, Option::<String>::None)
+            .await
+            .context("failed to get API key from Shuttle server")?
+            .to_json()
+            .await
+    }
+
+    pub async fn deploy(
+        &self,
+        package_file: File,
+        project: &ProjectName,
+        no_test: bool,
+    ) -> Result<deployment::Response> {
+        let mut path = format!(
+            "/projects/{}/services/{}",
+            project.as_str(),
+            project.as_str()
+        );
+
+        if no_test {
+            let _ = write!(path, "?no-test");
+        }
+
+        let mut package_file = package_file;
+        let mut package_content = Vec::new();
+        package_file
+            .read_to_end(&mut package_content)
+            .context("failed to convert package content to buf")?;
+
+        self.post(path, Some(package_content))
+            .await
+            .context("failed to send deployment to the Shuttle server")?
+            .to_json()
+            .await
+    }
+
+    pub async fn delete_service(&self, project: &ProjectName) -> Result<service::Detailed> {
+        let path = format!(
+            "/projects/{}/services/{}",
+            project.as_str(),
+            project.as_str()
+        );
+
+        self.delete(path).await
+    }
+
+    pub async fn get_service_details(&self, project: &ProjectName) -> Result<service::Detailed> {
+        let path = format!(
+            "/projects/{}/services/{}",
+            project.as_str(),
+            project.as_str()
+        );
+
+        self.get(path).await
+    }
+
+    pub async fn get_service_summary(&self, project: &ProjectName) -> Result<service::Summary> {
+        let path = format!(
+            "/projects/{}/services/{}/summary",
+            project.as_str(),
+            project.as_str()
+        );
+
+        self.get(path).await
+    }
+
+    pub async fn create_project(&self, project: &ProjectName) -> Result<project::Response> {
+        let path = format!("/projects/{}", project.as_str());
+
+        self.post(path, Option::<String>::None)
+            .await
+            .context("failed to make create project request")?
+            .to_json()
+            .await
+    }
+
+    pub async fn get_project(&self, project: &ProjectName) -> Result<project::Response> {
+        let path = format!("/projects/{}", project.as_str());
+
+        self.get(path).await
+    }
+
+    pub async fn delete_project(&self, project: &ProjectName) -> Result<project::Response> {
+        let path = format!("/projects/{}", project.as_str());
+
+        self.delete(path).await
+    }
+
+    pub async fn get_secrets(&self, project: &ProjectName) -> Result<Vec<secret::Response>> {
+        let path = format!(
+            "/projects/{}/secrets/{}",
+            project.as_str(),
+            project.as_str()
+        );
+
+        self.get(path).await
+    }
+
+    pub async fn get_logs(
+        &self,
+        project: &ProjectName,
+        deployment_id: &Uuid,
+    ) -> Result<Vec<LogItem>> {
+        let path = format!(
+            "/projects/{}/deployments/{}/logs",
+            project.as_str(),
+            deployment_id
+        );
+
+        self.get(path).await
+    }
+
+    pub async fn get_logs_ws(
+        &self,
+        project: &ProjectName,
+        deployment_id: &Uuid,
+    ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>> {
+        let path = format!(
+            "/projects/{}/ws/deployments/{}/logs",
+            project.as_str(),
+            deployment_id
+        );
+
+        self.ws_get(path).await
+    }
+
+    pub async fn get_deployment_details(
+        &self,
+        project: &ProjectName,
+        deployment_id: &Uuid,
+    ) -> Result<deployment::Response> {
+        let path = format!(
+            "/projects/{}/deployments/{}",
+            project.as_str(),
+            deployment_id
+        );
+
+        self.get(path).await
+    }
+
+    async fn ws_get(&self, path: String) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>> {
+        let ws_scheme = self.api_url.clone().replace("http", "ws");
+        let url = format!("{}{}", ws_scheme, path);
+        let mut request = url.into_client_request()?;
+
+        if let Some(ref api_key) = self.api_key {
+            let auth_header = Authorization::bearer(api_key)?;
+            request.headers_mut().typed_insert(auth_header);
+        }
+
+        let (stream, _) = connect_async(request).await.with_context(|| {
+            error!("failed to connect to websocket");
+            "could not connect to websocket"
+        })?;
+
+        Ok(stream)
+    }
+
+    async fn get<M>(&self, path: String) -> Result<M>
+    where
+        M: for<'de> Deserialize<'de>,
+    {
+        let url = format!("{}{}", self.api_url, path);
+
+        let mut builder = Self::get_retry_client().get(url);
+
+        builder = self.set_builder_auth(builder);
+
+        builder
+            .send()
+            .await
+            .context("failed to make get request")?
+            .to_json()
+            .await
+    }
+
+    async fn post<T: Into<Body>>(
+        &self,
+        path: String,
+        body: Option<T>,
+    ) -> Result<Response, reqwest_middleware::Error> {
+        let url = format!("{}{}", self.api_url, path);
+
+        let mut builder = Self::get_retry_client().post(url);
+
+        builder = self.set_builder_auth(builder);
+
+        if let Some(body) = body {
+            builder = builder.body(body);
+        }
+
+        builder.send().await
+    }
+
+    async fn delete<M>(&self, path: String) -> Result<M>
+    where
+        M: for<'de> Deserialize<'de>,
+    {
+        let url = format!("{}{}", self.api_url, path);
+
+        let mut builder = Self::get_retry_client().delete(url);
+
+        builder = self.set_builder_auth(builder);
+
+        builder
+            .send()
+            .await
+            .context("failed to make delete request")?
+            .to_json()
+            .await
+    }
+
+    fn set_builder_auth(&self, builder: RequestBuilder) -> RequestBuilder {
+        if let Some(ref api_key) = self.api_key {
+            builder.bearer_auth(api_key)
+        } else {
+            builder
+        }
+    }
+
+    fn get_retry_client() -> ClientWithMiddleware {
+        let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
+
+        ClientBuilder::new(reqwest::Client::new())
+            .with(RetryTransientMiddleware::new_with_policy(retry_policy))
+            .build()
     }
 }

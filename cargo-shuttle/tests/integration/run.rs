@@ -6,10 +6,6 @@ use tokio::time::sleep;
 
 /// creates a `cargo-shuttle` run instance with some reasonable defaults set.
 async fn cargo_shuttle_run(working_directory: &str) -> u16 {
-    let _ = env_logger::builder()
-        .filter_module("cargo_shuttle", log::LevelFilter::Trace)
-        .is_test(true)
-        .try_init();
     let working_directory = canonicalize(working_directory).unwrap();
     let port = pick_unused_port().unwrap();
     let run_args = RunArgs { port };
@@ -70,6 +66,22 @@ async fn rocket_hello_world() {
     assert_eq!(request_text, "Hello, world!");
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn rocket_secrets() {
+    let port = cargo_shuttle_run("../examples/rocket/secrets").await;
+
+    let request_text = reqwest::Client::new()
+        .get(format!("http://localhost:{port}/secret"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+
+    assert_eq!(request_text, "the contents of my API key");
+}
+
 // This example uses a shared Postgres. Thus local runs should create a docker container for it.
 #[tokio::test(flavor = "multi_thread")]
 async fn rocket_postgres() {
@@ -98,17 +110,6 @@ async fn rocket_postgres() {
         .unwrap();
 
     assert_eq!(request_text, "{\"id\":1,\"note\":\"Deploy to shuttle\"}");
-
-    let request_text = client
-        .get(format!("http://localhost:{port}/secret"))
-        .send()
-        .await
-        .unwrap()
-        .text()
-        .await
-        .unwrap();
-
-    assert_eq!(request_text, "the contents of my API key");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -228,7 +229,7 @@ async fn warp_hello_world() {
         .await
         .unwrap();
 
-    assert_eq!(request_text, "Hello, world!");
+    assert_eq!(request_text, "Hello, World!");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -325,4 +326,20 @@ async fn salvo_hello_world() {
         .unwrap();
 
     assert_eq!(request_text, "Hello, world!");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn thruster_hello_world() {
+    let port = cargo_shuttle_run("../examples/thruster/hello-world").await;
+
+    let request_text = reqwest::Client::new()
+        .get(format!("http://localhost:{port}/hello"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+
+    assert_eq!(request_text, "Hello, World!");
 }

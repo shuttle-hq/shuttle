@@ -7,9 +7,9 @@ use bollard::{
     models::{CreateImageInfo, HostConfig, PortBinding, ProgressDetail},
     Docker,
 };
-use colored::Colorize;
 use crossterm::{
     cursor::{MoveDown, MoveUp},
+    style::Stylize,
     terminal::{Clear, ClearType},
     QueueableCommand,
 };
@@ -17,23 +17,29 @@ use futures::StreamExt;
 use portpicker::pick_unused_port;
 use shuttle_common::{
     database::{AwsRdsEngine, SharedEngine},
-    project::ProjectName,
     DatabaseReadyInfo,
 };
-use shuttle_service::{database::Type, error::CustomError, Factory};
-use std::{collections::HashMap, io::stdout, time::Duration};
+use shuttle_service::{database::Type, error::CustomError, Factory, ServiceName};
+use std::{
+    collections::{BTreeMap, HashMap},
+    io::stdout,
+    time::Duration,
+};
 use tokio::time::sleep;
+use tracing::{error, trace};
 
 pub struct LocalFactory {
     docker: Docker,
-    project: ProjectName,
+    service_name: ServiceName,
+    secrets: BTreeMap<String, String>,
 }
 
 impl LocalFactory {
-    pub fn new(project: ProjectName) -> Result<Self> {
+    pub fn new(service_name: ServiceName, secrets: BTreeMap<String, String>) -> Result<Self> {
         Ok(Self {
             docker: Docker::connect_with_local_defaults()?,
-            project,
+            service_name,
+            secrets,
         })
     }
 }
@@ -44,7 +50,7 @@ impl Factory for LocalFactory {
         &mut self,
         db_type: Type,
     ) -> Result<String, shuttle_service::Error> {
-        trace!("getting sql string for project '{}'", self.project);
+        trace!("getting sql string for service '{}'", self.service_name);
 
         let EngineConfig {
             r#type,
@@ -57,7 +63,7 @@ impl Factory for LocalFactory {
             env,
             is_ready_cmd,
         } = db_type_to_config(db_type);
-        let container_name = format!("shuttle_{}_{}", self.project, r#type);
+        let container_name = format!("shuttle_{}_{}", self.service_name, r#type);
 
         let container = match self.docker.inspect_container(&container_name, None).await {
             Ok(container) => {
@@ -161,8 +167,14 @@ impl Factory for LocalFactory {
         Ok(conn_str)
     }
 
-    fn get_project_name(&self) -> ProjectName {
-        self.project.clone()
+    async fn get_secrets(
+        &mut self,
+    ) -> Result<std::collections::BTreeMap<String, String>, shuttle_service::Error> {
+        Ok(self.secrets.clone())
+    }
+
+    fn get_service_name(&self) -> ServiceName {
+        self.service_name.clone()
     }
 }
 

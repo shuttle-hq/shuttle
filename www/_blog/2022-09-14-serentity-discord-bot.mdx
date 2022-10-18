@@ -63,14 +63,13 @@ cargo shuttle init --serenity
 After running it you, should see the following generated in `src/lib.rs`:
 
 ```rust
-use log::{error, info};
+use anyhow::anyhow;
 use serenity::async_trait;
 use serenity::model::channel::Message;
 use serenity::model::gateway::Ready;
 use serenity::prelude::*;
-use shuttle_service::error::CustomError;
-use shuttle_service::SecretStore;
-use sqlx::PgPool;
+use shuttle_secrets::SecretStore;
+use tracing::{error, info};
 
 struct Bot;
 
@@ -90,12 +89,15 @@ impl EventHandler for Bot {
 }
 
 #[shuttle_service::main]
-async fn serenity(#[shared::Postgres] pool: PgPool) -> shuttle_service::ShuttleSerenity {
-    // Get the discord token set in `Secrets.toml` from the shared Postgres database
-    let token = pool
-        .get_secret("DISCORD_TOKEN")
-        .await
-        .map_err(CustomError::new)?;
+async fn serenity(
+    #[shuttle_secrets::Secrets] secret_store: SecretStore,
+) -> shuttle_service::ShuttleSerenity {
+    // Get the discord token set in `Secrets.toml`
+    let token = if let Some(token) = secret_store.get("DISCORD_TOKEN") {
+        token
+    } else {
+        return Err(anyhow!("'DISCORD_TOKEN' was not found").into());
+    };
 
     // Set gateway intents, which decides what events the bot will be notified about
     let intents = GatewayIntents::GUILD_MESSAGES | GatewayIntents::MESSAGE_CONTENT;
@@ -176,15 +178,13 @@ impl EventHandler for Bot {
 
 ### Trying it out
 
-Now with the code written we can test it locally. Before we do that we have to authenticate the bot with Discord. We do this with the value we got from "Reset Token" on the bot screen in one of the previous steps. To register a secret with shuttle we create a `Secrets.toml` file with a key value pair. This pair is read by the `pool.get_secret("DISCORD_TOKEN")` call in the `ready` hook:
+Now with the code written we can test it locally. Before we do that we have to authenticate the bot with Discord. We do this with the value we got from "Reset Token" on the bot screen in one of the previous steps. To register a secret with shuttle we create a `Secrets.toml` file with a key value pair. This pair is read by the `secret_store.get("DISCORD_TOKEN")` call in the `ready` hook:
 
 ```
 # Secrets.toml
 DISCORD_TOKEN="*your discord token*"
 DISCORD_GUILD_ID="*the guild we are testing on*"
 ```
-
-> Currently *secrets* are stored using shuttle's database Postgres offering (thus why the parameter on main is `PgPool`). Therefore during local testing you need access to a Postgres database. Shuttle's local runner does this using Docker which will require [Docker desktop](https://community.chocolatey.org/packages/docker-desktop/2.1.0.3) being locally installed to use the Secrets locally. **This is is subject to change in the future so that it doesn't require Docker for local secrets.** There is also a known issue with deploying Secrets on Windows so if you have problems [consult the Discord](https://discord.gg/shuttle).
 
 `cargo shuttle run`
 
@@ -338,26 +338,23 @@ Our `get_forecast` requires a `reqwest` Client and the weather API key. We will 
 struct Bot {
     weather_api_key: String,
     client: reqwest::Client,
-		discord_guild_id: GuildId,
+	discord_guild_id: GuildId,
 }
 
 #[shuttle_service::main]
-async fn serenity(#[shared::Postgres] pool: PgPool) -> shuttle_service::ShuttleSerenity {
-    // Get the discord token set in `Secrets.toml` from the shared Postgres database
-    let token = pool
-        .get_secret("DISCORD_TOKEN")
-        .await
-        .map_err(CustomError::new)?;
+async fn serenity(#[shuttle_secrets::Secrets] secret_store: SecretStore) -> shuttle_service::ShuttleSerenity {
+    // Get the discord token set in `Secrets.toml`
+    let token = secret_store
+        .get("DISCORD_TOKEN")
+        .context("'DISCORD_TOKEN' was not found")?;
 
-    let weather_api_key = pool
-        .get_secret("WEATHER_API_KEY")
-        .await
-        .map_err(CustomError::new)?;
+    let weather_api_key = secret_store
+        .get("WEATHER_API_KEY")
+        .context("'WEATHER_API_KEY' was not found")?;
 
-		let discord_guild_id = pool
-        .get_secret("DISCORD_GUILD_ID")
-        .await
-        .map_err(CustomError::new)?;
+	let discord_guild_id = secret_store
+        .get("DISCORD_GUILD_ID")
+        .context("'DISCORD_GUILD_ID' was not found")?;
 
     // Set gateway intents, which decides what events the bot will be notified about
     let intents = GatewayIntents::GUILD_MESSAGES | GatewayIntents::MESSAGE_CONTENT;
@@ -366,7 +363,7 @@ async fn serenity(#[shared::Postgres] pool: PgPool) -> shuttle_service::ShuttleS
         .event_handler(Bot {
             weather_api_key,
             client: reqwest::Client::new(),
-						discord_guild_id: GuildId(discord_guild_id.parse().unwrap())
+			discord_guild_id: GuildId(discord_guild_id.parse().unwrap())
         })
         .await
         .expect("Err creating client");
@@ -460,9 +457,14 @@ And entering a location that isn’t registered returns an error, thanks to the 
 
 With all of that setup, it is really easy to get your bot hosted and running without having to run your PC 24/7.
 
-Just write:
-
-`cargo shuttle deploy`
+Create a project, this will start an isolated deployer container for you under the hood:
+```bash
+cargo shuttle project new
+```
+Finally, to deploy your app, all you need to do is:
+```bash
+cargo shuttle deploy
+```
 
 And you are good to go. Easy-pease, right?
 

@@ -5,24 +5,25 @@ use std::panic::AssertUnwindSafe;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context};
-use cargo::core::compiler::CompileMode;
-use cargo::core::{Shell, Verbosity, Workspace};
+use cargo::core::compiler::{CompileMode, MessageFormat};
+use cargo::core::{Manifest, PackageId, Shell, Summary, Verbosity, Workspace};
 use cargo::ops::{compile, CompileOptions};
-use cargo::util::homedir;
+use cargo::util::interning::InternedString;
+use cargo::util::{homedir, ToSemver};
 use cargo::Config;
+use cargo_metadata::Message;
+use crossbeam_channel::Sender;
 use libloading::{Library, Symbol};
-use log::trace;
-use shuttle_common::DeploymentId;
+use pipe::PipeWriter;
 use thiserror::Error as ThisError;
+use tracing::{error, trace};
 
 use futures::FutureExt;
+use uuid::Uuid;
 
 use crate::error::CustomError;
-use crate::Bootstrapper;
-use crate::{
-    logger::{Log, Logger},
-    Error, Factory, ServeHandle,
-};
+use crate::{logger, Bootstrapper, NAME, VERSION};
+use crate::{Error, Factory, ServeHandle};
 
 const ENTRYPOINT_SYMBOL_NAME: &[u8] = b"_create_service\0";
 
@@ -35,6 +36,8 @@ pub enum LoaderError {
     #[error("failed to find the shuttle entrypoint. Did you use the provided shuttle macros?")]
     GetEntrypoint(libloading::Error),
 }
+
+pub type LoadedService = (ServeHandle, Library);
 
 pub struct Loader {
     bootstrapper: Bootstrapper,
@@ -67,11 +70,9 @@ impl Loader {
         self,
         factory: &mut dyn Factory,
         addr: SocketAddr,
-        tx: crossbeam_channel::Sender<Log>,
-        deployment_id: DeploymentId,
-    ) -> Result<(ServeHandle, Library), Error> {
+        logger: logger::Logger,
+    ) -> Result<LoadedService, Error> {
         let mut bootstrapper = self.bootstrapper;
-        let logger = Logger::new(tx, deployment_id);
 
         AssertUnwindSafe(bootstrapper.bootstrap(factory, logger))
             .catch_unwind()
@@ -100,10 +101,61 @@ impl Loader {
 }
 
 /// Given a project directory path, builds the crate
-pub fn build_crate(project_path: &Path, buf: Box<dyn std::io::Write>) -> anyhow::Result<PathBuf> {
-    let mut shell = Shell::from_write(buf);
-    shell.set_verbosity(Verbosity::Normal);
+pub async fn build_crate(
+    deployment_id: Uuid,
+    project_path: &Path,
+    release_mode: bool,
+    tx: Sender<Message>,
+) -> anyhow::Result<PathBuf> {
+    let (read, write) = pipe::pipe();
+    let project_path = project_path.to_owned();
 
+    let handle = tokio::spawn(async move {
+        trace!("started thread to build crate");
+        let config = get_config(write)?;
+        let manifest_path = project_path.join("Cargo.toml");
+        let mut ws = Workspace::new(&manifest_path, &config)?;
+
+        let current = ws.current_mut().map_err(|_| anyhow!("A Shuttle project cannot have a virtual manifest file - please ensure your Cargo.toml file specifies it as a library."))?;
+        let manifest = current.manifest_mut();
+        ensure_cdylib(manifest)?;
+
+        let summary = current.manifest_mut().summary_mut();
+        make_name_unique(summary, deployment_id);
+        check_version(summary)?;
+        check_no_panic(&ws)?;
+
+        let opts = get_compile_options(&config, release_mode)?;
+        let compilation = compile(&ws, &opts);
+
+        Ok(compilation?.cdylibs[0].path.clone())
+    });
+
+    // This needs to be on a separate thread, else deployer will block (reason currently unknown :D)
+    tokio::spawn(async move {
+        trace!("started thread to to capture build output stream");
+        for message in Message::parse_stream(read) {
+            trace!(?message, "parsed cargo message");
+            match message {
+                Ok(message) => {
+                    if let Err(error) = tx.send(message) {
+                        error!("failed to send cargo message on channel: {error}");
+                    }
+                }
+                Err(error) => {
+                    error!("failed to parse cargo message: {error}");
+                }
+            }
+        }
+    });
+
+    handle.await?
+}
+
+/// Get the default compile config with output redirected to writer
+pub fn get_config(writer: PipeWriter) -> anyhow::Result<Config> {
+    let mut shell = Shell::from_write(Box::new(writer));
+    shell.set_verbosity(Verbosity::Normal);
     let cwd = std::env::current_dir()
         .with_context(|| "couldn't get the current directory of the process")?;
     let homedir = homedir(&cwd).ok_or_else(|| {
@@ -113,16 +165,30 @@ pub fn build_crate(project_path: &Path, buf: Box<dyn std::io::Write>) -> anyhow:
         )
     })?;
 
-    let config = Config::new(shell, cwd, homedir);
-    let manifest_path = project_path.join("Cargo.toml");
+    Ok(Config::new(shell, cwd, homedir))
+}
 
-    let mut ws = Workspace::new(&manifest_path, &config)?;
+/// Get options to compile in build mode
+fn get_compile_options(config: &Config, release_mode: bool) -> anyhow::Result<CompileOptions> {
+    let mut opts = CompileOptions::new(config, CompileMode::Build)?;
+    opts.build_config.message_format = MessageFormat::Json {
+        render_diagnostics: false,
+        short: false,
+        ansi: false,
+    };
 
-    // Ensure a 'cdylib' will be built:
+    opts.build_config.requested_profile = if release_mode {
+        InternedString::new("release")
+    } else {
+        InternedString::new("dev")
+    };
 
-    let current = ws.current_mut().map_err(|_| anyhow!("A Shuttle project cannot have a virtual manifest file - please ensure your Cargo.toml file specifies it as a library."))?;
-    if let Some(target) = current
-        .manifest_mut()
+    Ok(opts)
+}
+
+/// Make sure "cdylib" is set, else set it if possible
+fn ensure_cdylib(manifest: &mut Manifest) -> anyhow::Result<()> {
+    if let Some(target) = manifest
         .targets_mut()
         .iter_mut()
         .find(|target| target.is_lib())
@@ -135,14 +201,54 @@ pub fn build_crate(project_path: &Path, buf: Box<dyn std::io::Write>) -> anyhow:
                 target.edition(),
             );
         }
+
+        Ok(())
     } else {
-        return Err(anyhow!(
+        Err(anyhow!(
             "Your Shuttle project must be a library. Please add `[lib]` to your Cargo.toml file."
-        ));
+        ))
     }
+}
 
-    // Ensure `panic = "abort"` is not set:
+/// Ensure name is unique. Without this `tracing`/`log` crashes because the global subscriber is somehow "already set"
+// TODO: remove this when getting rid of the FFI
+fn make_name_unique(summary: &mut Summary, deployment_id: Uuid) {
+    let old_package_id = summary.package_id();
+    *summary = summary.clone().override_id(
+        PackageId::new(
+            format!("{}-{deployment_id}", old_package_id.name()),
+            old_package_id.version(),
+            old_package_id.source_id(),
+        )
+        .unwrap(),
+    );
+}
 
+/// Check that the crate being build is compatible with this version of loader
+fn check_version(summary: &Summary) -> anyhow::Result<()> {
+    let valid_version = VERSION.to_semver().unwrap();
+
+    let version_req = if let Some(shuttle) = summary
+        .dependencies()
+        .iter()
+        .find(|dependency| dependency.package_name() == NAME)
+    {
+        shuttle.version_req()
+    } else {
+        return Err(anyhow!("this crate does not use the shutte service"));
+    };
+
+    if version_req.matches(&valid_version) {
+        Ok(())
+    } else {
+        Err(anyhow!(
+            "the version of `shuttle-service` specified as a dependency to this service ({version_req}) is not supported by this project instance ({valid_version}); try updating `shuttle-service` to '{valid_version}' or update the project instance using `cargo shuttle project rm` and `cargo shuttle project new`"
+        ))
+    }
+}
+
+/// Ensure `panic = "abort"` is not set:
+fn check_no_panic(ws: &Workspace) -> anyhow::Result<()> {
     if let Some(profiles) = ws.profiles() {
         for profile in profiles.get_all().values() {
             if profile.panic.as_deref() == Some("abort") {
@@ -151,10 +257,7 @@ pub fn build_crate(project_path: &Path, buf: Box<dyn std::io::Write>) -> anyhow:
         }
     }
 
-    let opts = CompileOptions::new(&config, CompileMode::Build)?;
-    let compilation = compile(&ws, &opts)?;
-
-    Ok(compilation.cdylibs[0].path.clone())
+    Ok(())
 }
 
 fn map_any_to_panic_string(a: Box<dyn Any>) -> String {

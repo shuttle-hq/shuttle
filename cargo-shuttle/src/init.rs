@@ -197,7 +197,7 @@ impl ShuttleInit for ShuttleInitPoem {
         #[shuttle_service::main]
         async fn poem() -> shuttle_service::ShuttlePoem<impl poem::Endpoint> {
             let app = Route::new().at("/hello", get(hello_world));
-    
+
             Ok(app)
         }"#}
     }
@@ -260,15 +260,11 @@ impl ShuttleInit for ShuttleInitSerenity {
         set_inline_table_dependency_features(
             "shuttle-service",
             dependencies,
-            vec![
-                "bot-serenity".to_string(),
-                "sqlx-postgres".to_string(),
-                "secrets".to_string(),
-            ],
+            vec!["bot-serenity".to_string()],
         );
 
         set_key_value_dependency_version(
-            "log",
+            "anyhow",
             dependencies,
             manifest_path,
             url,
@@ -298,8 +294,8 @@ impl ShuttleInit for ShuttleInitSerenity {
             ],
         );
 
-        set_inline_table_dependency_version(
-            "sqlx",
+        set_key_value_dependency_version(
+            "shuttle-secrets",
             dependencies,
             manifest_path,
             url,
@@ -307,26 +303,25 @@ impl ShuttleInit for ShuttleInitSerenity {
             get_dependency_version_fn,
         );
 
-        set_inline_table_dependency_features(
-            "sqlx",
+        set_key_value_dependency_version(
+            "tracing",
             dependencies,
-            vec![
-                "runtime-tokio-native-tls".to_string(),
-                "postgres".to_string(),
-            ],
+            manifest_path,
+            url,
+            false,
+            get_dependency_version_fn,
         );
     }
 
     fn get_boilerplate_code_for_framework(&self) -> &'static str {
         indoc! {r#"
-        use log::{error, info};
+        use anyhow::anyhow;
         use serenity::async_trait;
         use serenity::model::channel::Message;
         use serenity::model::gateway::Ready;
         use serenity::prelude::*;
-        use shuttle_service::error::CustomError;
-        use shuttle_service::SecretStore;
-        use sqlx::PgPool;
+        use shuttle_secrets::SecretStore;
+        use tracing::{error, info};
 
         struct Bot;
 
@@ -346,12 +341,15 @@ impl ShuttleInit for ShuttleInitSerenity {
         }
 
         #[shuttle_service::main]
-        async fn serenity(#[shared::Postgres] pool: PgPool) -> shuttle_service::ShuttleSerenity {
-            // Get the discord token set in `Secrets.toml` from the shared Postgres database
-            let token = pool
-                .get_secret("DISCORD_TOKEN")
-                .await
-                .map_err(CustomError::new)?;
+        async fn serenity(
+            #[shuttle_secrets::Secrets] secret_store: SecretStore,
+        ) -> shuttle_service::ShuttleSerenity {
+            // Get the discord token set in `Secrets.toml`
+            let token = if let Some(token) = secret_store.get("DISCORD_TOKEN") {
+                token
+            } else {
+                return Err(anyhow!("'DISCORD_TOKEN' was not found").into());
+            };
 
             // Set gateway intents, which decides what events the bot will be notified about
             let intents = GatewayIntents::GUILD_MESSAGES | GatewayIntents::MESSAGE_CONTENT;
@@ -483,6 +481,61 @@ impl ShuttleInit for ShuttleInitWarp {
     }
 }
 
+pub struct ShuttleInitThruster;
+
+impl ShuttleInit for ShuttleInitThruster {
+    fn set_cargo_dependencies(
+        &self,
+        dependencies: &mut Table,
+        manifest_path: &Path,
+        url: &Url,
+        get_dependency_version_fn: GetDependencyVersionFn,
+    ) {
+        set_inline_table_dependency_features(
+            "shuttle-service",
+            dependencies,
+            vec!["web-thruster".to_string()],
+        );
+
+        set_inline_table_dependency_version(
+            "thruster",
+            dependencies,
+            manifest_path,
+            url,
+            false,
+            get_dependency_version_fn,
+        );
+
+        set_inline_table_dependency_features(
+            "thruster",
+            dependencies,
+            vec!["hyper_server".to_string()],
+        );
+    }
+
+    fn get_boilerplate_code_for_framework(&self) -> &'static str {
+        indoc! {r#"
+        use thruster::{
+            context::basic_hyper_context::{generate_context, BasicHyperContext as Ctx, HyperRequest},
+            m, middleware_fn, App, HyperServer, MiddlewareNext, MiddlewareResult, ThrusterServer,
+        };
+
+        #[middleware_fn]
+        async fn hello(mut context: Ctx, _next: MiddlewareNext<Ctx>) -> MiddlewareResult<Ctx> {
+            context.body("Hello, World!");
+            Ok(context)
+        }
+
+        #[shuttle_service::main]
+        async fn thruster() -> shuttle_service::ShuttleThruster<HyperServer<Ctx, ()>> {
+            Ok(HyperServer::new(
+                App::<HyperRequest, Ctx, ()>::create(generate_context, ()).get("/hello", m![hello]),
+            ))
+        }
+        "#}
+    }
+}
+
 pub struct ShuttleInitNoOp;
 impl ShuttleInit for ShuttleInitNoOp {
     fn set_cargo_dependencies(
@@ -535,6 +588,10 @@ pub fn get_framework(init_args: &InitArgs) -> Box<dyn ShuttleInit> {
         return Box::new(ShuttleInitWarp);
     }
 
+    if init_args.thruster {
+        return Box::new(ShuttleInitThruster);
+    }
+
     Box::new(ShuttleInitNoOp)
 }
 
@@ -566,12 +623,16 @@ pub fn cargo_shuttle_init(path: PathBuf, framework: Box<dyn ShuttleInit>) -> Res
     // Create an empty `[lib]` table
     cargo_doc["lib"] = Item::Table(Table::new());
 
+    // Add publish: false to avoid accidental `cargo publish`
+    cargo_doc["package"]["publish"] = value(false);
+
     // Create `[dependencies]` table
     let mut dependencies = Table::new();
 
     // Set "shuttle-service" version to `[dependencies]` table
     let manifest_path = find(Some(path.as_path())).unwrap();
     let url = registry_url(manifest_path.as_path(), None).expect("Could not find registry URL");
+
     set_inline_table_dependency_version(
         "shuttle-service",
         &mut dependencies,
@@ -591,6 +652,7 @@ pub fn cargo_shuttle_init(path: PathBuf, framework: Box<dyn ShuttleInit>) -> Res
 
     // Truncate Cargo.toml and write the updated `Document` to it
     let mut cargo_toml = File::create(cargo_toml_path)?;
+
     cargo_doc["dependencies"] = Item::Table(dependencies);
     cargo_toml.write_all(cargo_doc.to_string().as_bytes())?;
 
@@ -688,6 +750,7 @@ mod shuttle_init_tests {
             salvo: false,
             serenity: false,
             warp: false,
+            thruster: false,
             path: PathBuf::new(),
         };
 
@@ -700,6 +763,7 @@ mod shuttle_init_tests {
             "salvo" => init_args.salvo = true,
             "serenity" => init_args.serenity = true,
             "warp" => init_args.warp = true,
+            "thruster" => init_args.thruster = true,
             _ => unreachable!(),
         }
 
@@ -726,7 +790,7 @@ mod shuttle_init_tests {
     #[test]
     fn test_get_framework_via_get_boilerplate_code() {
         let frameworks = vec![
-            "axum", "rocket", "tide", "tower", "poem", "salvo", "serenity", "warp",
+            "axum", "rocket", "tide", "tower", "poem", "salvo", "serenity", "warp", "thruster",
         ];
         let framework_inits: Vec<Box<dyn ShuttleInit>> = vec![
             Box::new(ShuttleInitAxum),
@@ -737,6 +801,7 @@ mod shuttle_init_tests {
             Box::new(ShuttleInitSalvo),
             Box::new(ShuttleInitSerenity),
             Box::new(ShuttleInitWarp),
+            Box::new(ShuttleInitThruster),
         ];
 
         for (framework, expected_framework_init) in frameworks.into_iter().zip(framework_inits) {
@@ -1034,10 +1099,11 @@ mod shuttle_init_tests {
 
         let expected = indoc! {r#"
             [dependencies]
-            shuttle-service = { version = "1.0", features = ["bot-serenity", "sqlx-postgres", "secrets"] }
-            log = "1.0"
+            shuttle-service = { version = "1.0", features = ["bot-serenity"] }
+            anyhow = "1.0"
             serenity = { version = "1.0", default-features = false, features = ["client", "gateway", "rustls_backend", "model"] }
-            sqlx = { version = "1.0", features = ["runtime-tokio-native-tls", "postgres"] }
+            shuttle-secrets = "1.0"
+            tracing = "1.0"
         "#};
 
         assert_eq!(cargo_toml.to_string(), expected);
@@ -1070,6 +1136,38 @@ mod shuttle_init_tests {
             [dependencies]
             shuttle-service = { version = "1.0", features = ["web-warp"] }
             warp = "1.0"
+        "#};
+
+        assert_eq!(cargo_toml.to_string(), expected);
+    }
+
+    #[test]
+    fn test_set_cargo_dependencies_thruster() {
+        let mut cargo_toml = cargo_toml_factory();
+        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
+        let manifest_path = PathBuf::new();
+        let url = Url::parse("https://shuttle.rs").unwrap();
+
+        set_inline_table_dependency_version(
+            "shuttle-service",
+            dependencies,
+            &manifest_path,
+            &url,
+            false,
+            mock_get_latest_dependency_version,
+        );
+
+        ShuttleInitThruster.set_cargo_dependencies(
+            dependencies,
+            &manifest_path,
+            &url,
+            mock_get_latest_dependency_version,
+        );
+
+        let expected = indoc! {r#"
+            [dependencies]
+            shuttle-service = { version = "1.0", features = ["web-thruster"] }
+            thruster = { version = "1.0", features = ["hyper_server"] }
         "#};
 
         assert_eq!(cargo_toml.to_string(), expected);

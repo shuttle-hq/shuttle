@@ -1,10 +1,10 @@
-use colored::Color;
+use crossterm::style::Color;
 
 use crate::helpers::{self, APPS_FQDN};
 
 #[test]
 fn hello_world_rocket() {
-    let client = helpers::Services::new_docker("hello-world (rocket)", Color::Green);
+    let client = helpers::Services::new_docker("hello-world (rocket)", Color::DarkMagenta);
     client.deploy("rocket/hello-world");
 
     let request_text = client
@@ -20,7 +20,7 @@ fn hello_world_rocket() {
 
 #[test]
 fn postgres_rocket() {
-    let client = helpers::Services::new_docker("postgres", Color::Blue);
+    let client = helpers::Services::new_docker("postgres (rocket)", Color::Magenta);
     client.deploy("rocket/postgres");
 
     let add_response = client
@@ -43,10 +43,15 @@ fn postgres_rocket() {
         .unwrap();
 
     assert_eq!(fetch_response, "{\"id\":1,\"note\":\"To the stars\"}");
+}
 
+#[test]
+fn secrets_rocket() {
+    let client = helpers::Services::new_docker("secrets (rocket)", Color::Red);
+    client.deploy("rocket/secrets");
     let secret_response: String = client
         .get("secret")
-        .header("Host", format!("postgres-rocket-app.{}", *APPS_FQDN))
+        .header("Host", format!("secrets-rocket-app.{}", *APPS_FQDN))
         .send()
         .unwrap()
         .text()

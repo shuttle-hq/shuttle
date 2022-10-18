@@ -1,0 +1,17 @@
+[package]
+name = "postgres"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+hyper = "0.14.20"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0" }
+shuttle-aws-rds = { version = "0.7.0", features = ["postgres"] }
+shuttle-service = { version = "0.7.0", features = ["web-thruster"] }
+sqlx = { version = "0.6", features = ["runtime-tokio-native-tls", "postgres"] }
+thruster = { version = "1.2.6", features = ["hyper_server"] }

@@ -7,6 +7,7 @@ use axum::headers::authorization::Bearer;
 use axum::headers::Authorization;
 use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Serialize};
+use tracing::Span;
 
 use crate::service::GatewayService;
 use crate::{AccountName, Error, ErrorKind, ProjectName};
@@ -92,6 +93,10 @@ where
             .await
             // Absord any error into `Unauthorized`
             .map_err(|e| Error::source(ErrorKind::Unauthorized, e))?;
+
+        // Record current account name for tracing purposes
+        Span::current().record("account.name", &user.name.to_string());
+
         Ok(user)
     }
 }

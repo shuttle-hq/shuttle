@@ -366,7 +366,7 @@ impl ProjectCreating {
                 "RUST_LOG=debug",
             ],
             "Healthcheck": {
-                "Interval": 60_000_000_000i64, // Every minute
+                "Interval": 1_000_000_000i64, // Every second
                 "Timeout": 15_000_000_000i64, // 15 seconds
                 "Test": ["CMD", "curl", format!("localhost:8001/projects/{project_name}/status")],
             },

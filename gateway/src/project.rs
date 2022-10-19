@@ -606,23 +606,51 @@ impl<'c> State<'c> for ProjectDestroying {
     type Error = ProjectError;
 
     async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error> {
-        let container_id = self.container.id.as_ref().unwrap();
+        let Self { container } = self;
+
+        let container_id = safe_unwrap!(container.id);
         ctx.docker()
             .stop_container(container_id, Some(StopContainerOptions { t: 1 }))
             .await
-            .unwrap_or(());
+            .unwrap_or_else(|err| {
+                error!(
+                    error = &err as &dyn std::error::Error,
+                    "failed to stop container"
+                );
+                ()
+            });
         ctx.docker()
             .remove_container(
                 container_id,
                 Some(RemoveContainerOptions {
                     force: true,
+                    v: true, // Remove the user volumes with the container
                     ..Default::default()
                 }),
             )
             .await
-            .unwrap_or(());
+            .unwrap_or_else(|err| {
+                error!(
+                    error = &err as &dyn std::error::Error,
+                    "failed to remove container"
+                );
+                ()
+            });
+
+        let volume_name = safe_unwrap!(container.host_config.mounts.get(0).source);
+        ctx.docker()
+            .remove_volume(volume_name, None)
+            .await
+            .unwrap_or_else(|err| {
+                error!(
+                    error = &err as &dyn std::error::Error,
+                    "failed to remove volume"
+                );
+                ()
+            });
+
         Ok(Self::Next {
-            destroyed: Some(self.container),
+            destroyed: Some(container),
         })
     }
 }
@@ -703,7 +731,10 @@ impl<'c> State<'c> for ProjectError {
 #[cfg(test)]
 pub mod tests {
 
+    use std::collections::HashMap;
+
     use bollard::models::{ContainerState, Health};
+    use bollard::volume::ListVolumesOptions;
     use futures::prelude::*;
     use hyper::{Body, Request, StatusCode};
 
@@ -815,6 +846,25 @@ pub mod tests {
             Ok(Project::Destroyed(ProjectDestroyed { destroyed: _ })),
         )
         .unwrap();
+
+        // Make sure user volume gets removed
+        let volume = ctx
+            .docker()
+            .list_volumes(Some(ListVolumesOptions {
+                filters: HashMap::from([(
+                    "name".to_string(),
+                    vec![format!(
+                        "{}my-project-test_vol",
+                        ctx.container_settings().prefix
+                    )],
+                )]),
+            }))
+            .await;
+
+        assert!(
+            volume.unwrap().volumes.unwrap().is_empty(),
+            "user volume should be deleted"
+        );
 
         Ok(())
     }

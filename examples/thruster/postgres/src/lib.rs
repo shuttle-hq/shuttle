@@ -2,7 +2,10 @@ use serde::{Deserialize, Serialize};
 use shuttle_service::error::CustomError;
 use sqlx::{Executor, FromRow, PgPool};
 use thruster::{
-    context::{hyper_request::HyperRequest, typed_hyper_context::TypedHyperContext},
+    context::{
+        context_ext::ContextExt, hyper_request::HyperRequest,
+        typed_hyper_context::TypedHyperContext,
+    },
     errors::{ErrorSet, ThrusterError},
     m, middleware_fn, App, Context, HyperServer, MiddlewareNext, MiddlewareResult, ThrusterServer,
 };
@@ -41,7 +44,7 @@ fn generate_context(request: HyperRequest, state: &ServerConfig, _path: &str) ->
 #[middleware_fn]
 async fn retrieve(mut context: Ctx, _next: MiddlewareNext<Ctx>) -> MiddlewareResult<Ctx> {
     let id: i32 = context
-        .query_params
+        .params()
         .get("id")
         .ok_or_else(|| {
             ThrusterError::parsing_error(
@@ -49,6 +52,7 @@ async fn retrieve(mut context: Ctx, _next: MiddlewareNext<Ctx>) -> MiddlewareRes
                 "id is required",
             )
         })?
+        .param
         .parse()
         .map_err(|_e| {
             ThrusterError::parsing_error(
@@ -71,19 +75,16 @@ async fn retrieve(mut context: Ctx, _next: MiddlewareNext<Ctx>) -> MiddlewareRes
 }
 
 #[middleware_fn]
-async fn add(context: Ctx, _next: MiddlewareNext<Ctx>) -> MiddlewareResult<Ctx> {
+async fn add(mut context: Ctx, _next: MiddlewareNext<Ctx>) -> MiddlewareResult<Ctx> {
     let extra = context.extra.clone();
 
-    let (body, mut context) = context
-        .get_body()
+    let todo_req = context
+        .get_json::<TodoNew>()
         .await
         .map_err(|_e| ThrusterError::generic_error(Ctx::new_without_request(extra)))?;
-    let data: TodoNew = serde_json::from_str(&body).map_err(|_e| {
-        ThrusterError::generic_error(Ctx::new_without_request(context.extra.clone()))
-    })?;
 
     let todo: Todo = sqlx::query_as("INSERT INTO todos(note) VALUES ($1) RETURNING id, note")
-        .bind(&data.note)
+        .bind(&todo_req.note)
         .fetch_one(&context.extra.pool)
         .await
         .map_err(|_e| {

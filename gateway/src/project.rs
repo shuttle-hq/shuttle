@@ -721,29 +721,23 @@ pub mod exec {
         {
             let project_name: String = row.get("project_name");
             let project_state = row.get::<SqlxJson<Project>, _>("project_state").0;
-            match project_state {
-                Project::Errored(ProjectError { ctx: Some(ctx), .. }) => {
-                    if let Some(container) = ctx.container() {
-                        if let Ok(container) = docker
-                            .inspect_container(container.id.as_ref().unwrap(), None)
-                            .await
-                        {
-                            match container.state {
-                                Some(ContainerState {
-                                    status: Some(ContainerStateStatusEnum::EXITED),
-                                    ..
-                                }) => {
-                                    mutations.insert(
-                                        project_name,
-                                        Project::Stopped(ProjectStopped { container }),
-                                    );
-                                }
-                                _ => {}
-                            }
+            if let Project::Errored(ProjectError { ctx: Some(ctx), .. }) = project_state {
+                if let Some(container) = ctx.container() {
+                    if let Ok(container) = docker
+                        .inspect_container(container.id.as_ref().unwrap(), None)
+                        .await
+                    {
+                        if let Some(ContainerState {
+                            status: Some(ContainerStateStatusEnum::EXITED),
+                            ..
+                        }) = container.state {
+                            mutations.insert(
+                                project_name,
+                                Project::Stopped(ProjectStopped { container }),
+                            );
                         }
                     }
                 }
-                _ => {}
             }
         }
 

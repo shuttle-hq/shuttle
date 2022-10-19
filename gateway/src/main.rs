@@ -1,12 +1,13 @@
+use bollard::Docker;
 use clap::Parser;
 use futures::prelude::*;
-use shuttle_gateway::args::{Args, Commands, InitArgs};
+use shuttle_gateway::args::{Args, Commands, InitArgs, ExecCmd};
 use shuttle_gateway::auth::Key;
 use shuttle_gateway::proxy::make_proxy;
 use shuttle_gateway::service::{GatewayService, MIGRATIONS};
 use shuttle_gateway::worker::{Work, Worker};
 use shuttle_gateway::{api::make_api, args::StartArgs};
-use shuttle_gateway::{Refresh, Service};
+use shuttle_gateway::{Refresh, Service, project};
 use sqlx::migrate::MigrateDatabase;
 use sqlx::{query, Sqlite, SqlitePool};
 use std::io;
@@ -55,6 +56,7 @@ async fn main() -> io::Result<()> {
     match args.command {
         Commands::Start(start_args) => start(db, start_args).await,
         Commands::Init(init_args) => init(db, init_args).await,
+        Commands::Exec(exec_cmd) => exec(db, exec_cmd).await,
     }
 }
 
@@ -144,5 +146,15 @@ async fn init(db: SqlitePool, args: InitArgs) -> io::Result<()> {
         .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
     println!("`{}` created as super user with key: {key}", args.name);
+    Ok(())
+}
+
+async fn exec(db: SqlitePool, exec_cmd: ExecCmd) -> io::Result<()> {
+    let docker = Docker::connect_with_local_defaults().unwrap();
+
+    match exec_cmd {
+        ExecCmd::Revive => project::exec::revive(db, docker).await
+    };
+
     Ok(())
 }

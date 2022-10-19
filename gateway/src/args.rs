@@ -19,6 +19,8 @@ pub struct Args {
 pub enum Commands {
     Start(StartArgs),
     Init(InitArgs),
+    #[command(subcommand)]
+    Exec(ExecCmd),
 }
 
 #[derive(clap::Args, Debug, Clone)]
@@ -60,3 +62,9 @@ pub struct InitArgs {
     #[arg(long)]
     pub key: Option<Key>,
 }
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum ExecCmd {
+    Revive
+}
+

@@ -131,6 +131,10 @@ impl Project {
             .map(|target_ip| SocketAddr::new(target_ip, RUNTIME_API_PORT)))
     }
 
+    pub fn is_error(&self) -> bool {
+        matches!(self, Self::Errored(..))
+    }
+
     pub fn state(&self) -> &'static str {
         match self {
             Self::Started(_) => "started",
@@ -697,6 +701,57 @@ impl<'c> State<'c> for ProjectError {
 
     async fn next<C: Context<'c>>(self, _ctx: &C) -> Result<Self::Next, Self::Error> {
         Ok(self)
+    }
+}
+
+pub mod exec {
+    use std::collections::HashMap;
+
+    use bollard::{Docker, service::ContainerState};
+    use sqlx::{query, types::Json as SqlxJson, Row, SqlitePool};
+
+    use super::*;
+
+    pub async fn revive(db: SqlitePool, docker: Docker) {
+        let mut mutations = HashMap::new();
+        for row in query("SELECT * FROM projects")
+            .fetch_all(&db)
+            .await
+            .unwrap()
+        {
+            let project_name: String = row.get("project_name");
+            let project_state = row.get::<SqlxJson<Project>, _>("project_state").0;
+            match project_state {
+                Project::Errored(ProjectError { ctx: Some(ctx), .. }) => {
+                    if let Some(container) = ctx.container() {
+                        if let Ok(container) = docker
+                            .inspect_container(container.id.as_ref().unwrap(), None)
+                            .await
+                        {
+                            match container.state {
+                                Some(ContainerState { status: Some(ContainerStateStatusEnum::EXITED), .. }) => {
+                                    mutations.insert(
+                                        project_name,
+                                        Project::Stopped(ProjectStopped { container }),
+                                    );
+                                },
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        for (project_name, project_state) in mutations {
+            query("UPDATE projects SET project_state = ?1 WHERE project_name = ?2")
+                .bind(SqlxJson(project_state))
+                .bind(project_name)
+                .execute(&db)
+                .await
+                .unwrap();
+        }
     }
 }
 

@@ -1,13 +1,13 @@
 use bollard::Docker;
 use clap::Parser;
 use futures::prelude::*;
-use shuttle_gateway::args::{Args, Commands, InitArgs, ExecCmd};
+use shuttle_gateway::args::{Args, Commands, ExecCmd, InitArgs};
 use shuttle_gateway::auth::Key;
 use shuttle_gateway::proxy::make_proxy;
 use shuttle_gateway::service::{GatewayService, MIGRATIONS};
 use shuttle_gateway::worker::{Work, Worker};
 use shuttle_gateway::{api::make_api, args::StartArgs};
-use shuttle_gateway::{Refresh, Service, project};
+use shuttle_gateway::{project, Refresh, Service};
 use sqlx::migrate::MigrateDatabase;
 use sqlx::{query, Sqlite, SqlitePool};
 use std::io;
@@ -153,7 +153,7 @@ async fn exec(db: SqlitePool, exec_cmd: ExecCmd) -> io::Result<()> {
     let docker = Docker::connect_with_local_defaults().unwrap();
 
     match exec_cmd {
-        ExecCmd::Revive => project::exec::revive(db, docker).await
+        ExecCmd::Revive => project::exec::revive(db, docker).await,
     };
 
     Ok(())

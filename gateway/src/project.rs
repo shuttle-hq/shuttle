@@ -707,7 +707,7 @@ impl<'c> State<'c> for ProjectError {
 pub mod exec {
     use std::collections::HashMap;
 
-    use bollard::{Docker, service::ContainerState};
+    use bollard::{service::ContainerState, Docker};
     use sqlx::{query, types::Json as SqlxJson, Row, SqlitePool};
 
     use super::*;
@@ -729,12 +729,15 @@ pub mod exec {
                             .await
                         {
                             match container.state {
-                                Some(ContainerState { status: Some(ContainerStateStatusEnum::EXITED), .. }) => {
+                                Some(ContainerState {
+                                    status: Some(ContainerStateStatusEnum::EXITED),
+                                    ..
+                                }) => {
                                     mutations.insert(
                                         project_name,
                                         Project::Stopped(ProjectStopped { container }),
                                     );
-                                },
+                                }
                                 _ => {}
                             }
                         }

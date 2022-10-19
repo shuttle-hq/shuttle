@@ -65,6 +65,5 @@ pub struct InitArgs {
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum ExecCmd {
-    Revive
+    Revive,
 }
-

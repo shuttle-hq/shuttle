@@ -42,22 +42,48 @@ export default function SignupForm() {
     );
   }
   return (
-    <form onSubmit={handleSubmit}>
-      <input
-        id="email"
-        type="email"
-        name="email"
-        placeholder={`hello@shuttle.rs`}
-        className="text-m mt-3 block w-full rounded rounded border border-gray-300 bg-slate-300 p-4 text-slate-700 text-gray-900 hover:border-brand-orange1 focus:border-brand-orange1 focus:ring-brand-orange1 dark:border-gray-600 dark:bg-gray-500 dark:text-white dark:placeholder-gray-400 dark:focus:border-brand-orange1 dark:focus:ring-brand-orange1"
-      />
-      <ValidationError prefix="Email" field="email" errors={state.errors} />
-      <button
-        type="submit"
-        className="mt-6 rounded bg-brand-900 py-3 px-8 font-bold text-white transition hover:bg-brand-700"
-        disabled={state.submitting}
-      >
-        Sign Up
-      </button>
-    </form>
+    <>
+      <div className="mb-4 max-w-lg lg:col-span-5">
+        <p className="mt-3 text-lg text-slate-500 dark:text-gray-300 sm:mt-4">
+          Lorem ipsum dolor.
+        </p>
+
+        <p className="mt-3 text-lg text-slate-500 dark:text-gray-300 sm:mt-4">
+          Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla a
+          placerat nisi. Mauris quis congue purus. Nullam orci est, laoreet
+          venenatis mi quis, consectetur semper ligula. Sed id augue bibendum,
+          finibus felis eget, ultrices eros. Donec feugiat sed lacus id
+          faucibus. Cras vitae efficitur lectus.
+        </p>
+
+        <p className="mt-3 text-lg text-slate-500 dark:text-gray-300 sm:mt-4">
+          Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla a
+          placerat nisi. Mauris quis congue purus. Nullam orci est, laoreet
+          venenatis mi quis, consectetur semper ligula. Sed id augue bibendum,
+          finibus felis eget, ultrices eros. Donec feugiat sed lacus id
+          faucibus. Cras vitae efficitur lectus.
+        </p>
+        <p className="mt-3 text-lg text-slate-500 dark:text-gray-300 sm:mt-4">
+          Lorem ipsum dolor.
+        </p>
+      </div>
+      <form onSubmit={handleSubmit} className="align-center flex flex-col">
+        <input
+          id="email"
+          type="email"
+          name="email"
+          placeholder={`hello@shuttle.rs`}
+          className="text-m mt-3 block w-full max-w-sm self-center rounded rounded border border-gray-300 bg-slate-300 p-4 text-slate-700 text-gray-900 hover:border-brand-orange1 focus:border-brand-orange1 focus:ring-brand-orange1 dark:border-gray-600 dark:bg-gray-500 dark:text-white dark:placeholder-gray-400 dark:focus:border-brand-orange1 dark:focus:ring-brand-orange1"
+        />
+        <ValidationError prefix="Email" field="email" errors={state.errors} />
+        <button
+          type="submit"
+          className="mt-6 self-center rounded bg-brand-900 py-3 px-8 font-bold text-white transition hover:bg-brand-700"
+          disabled={state.submitting}
+        >
+          Sign Up
+        </button>
+      </form>
+    </>
   );
 }

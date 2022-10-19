@@ -485,10 +485,11 @@ impl<'c> State<'c> for ProjectStarted {
             let service = Service::from_container(container.clone())?;
             Ok(Self::Next::Ready(ProjectReady { container, service }))
         } else {
-            let started_at = chrono::DateTime::parse_from_rfc3339(safe_unwrap!(container.state.started_at))
-                .map_err(|_err| {
-                    ProjectError::internal("invalid `started_at` response from Docker daemon")
-                })?;
+            let started_at =
+                chrono::DateTime::parse_from_rfc3339(safe_unwrap!(container.state.started_at))
+                    .map_err(|_err| {
+                        ProjectError::internal("invalid `started_at` response from Docker daemon")
+                    })?;
             let now = chrono::offset::Utc::now();
             if started_at + chrono::Duration::seconds(120) < now {
                 return Err(ProjectError::internal(

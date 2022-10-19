@@ -100,7 +100,7 @@ export default function Footer() {
           </ExternalLink>
         ))}
       </div>
-
+      {/* 
       <div className="mx-auto max-w-2xl py-20 px-4 text-center sm:py-28 sm:px-6 lg:px-8">
         <h2 className="text-3xl font-extrabold tracking-tight dark:text-gray-200 sm:text-4xl">
           Let's make Rust the next language of cloud-native
@@ -123,31 +123,9 @@ export default function Footer() {
             </ExternalLink>
           ))}
         </div>
-      </div>
-
-      {/* <div className="mx-auto max-w-6xl py-12 px-4 sm:px-6 md:py-16 lg:px-8 lg:py-20">
-        <h2 className="text-3xl font-extrabold tracking-tight dark:text-gray-200 sm:text-4xl">
-          <span className="block">Ready to dive in?</span>
-          <span className="block dark:text-gray-300">
-            Start your free trial today.
-          </span>
-        </h2>
-        <div className="mt-8 flex justify-start gap-4">
-          <ExternalLink
-            className="rounded dark:bg-brand-900 py-3 px-8 font-bold dark:text-white transition hover:dark:bg-brand-700"
-            href={SHUTTLE_DOCS_URL}
-          >
-            Get Started
-          </ExternalLink>
-
-          <ExternalLink
-            className="rounded dark:bg-brand-purple1 py-3 px-8 font-bold dark:text-white transition hover:brightness-125"
-            href={DISCORD_URL}
-          >
-            Join Discord
-          </ExternalLink>
-        </div>
       </div> */}
+
+      {/* <Socials /> */}
 
       <footer className="mx-auto max-w-6xl py-12 px-4 sm:px-6 lg:px-8">
         <div className="-m-4 flex flex-wrap justify-between pb-8">

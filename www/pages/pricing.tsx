@@ -4,6 +4,7 @@ import classnames from "classnames";
 import { DISCORD_URL } from "../lib/constants";
 import ExternalLink from "../components/ExternalLink";
 import LoginButton from "../components/LoginButton";
+import Socials from "../components/Socials";
 
 const tiers = [
   {
@@ -114,167 +115,170 @@ const sections = [
 
 export default function Pricing() {
   return (
-    <div className="dark:bg-dark-700 dark:text-gray-200">
-      <div className="mx-auto max-w-6xl py-16 px-4 sm:py-24 sm:px-6 lg:px-8">
-        {/* xs to lg */}
-        <div className="mx-auto max-w-2xl space-y-16 lg:hidden">
-          {tiers.map((tier, tierIdx) => (
-            <section key={tier.name}>
-              <div className="mb-8 px-4">
-                <h2 className="text-lg font-medium leading-6 dark:text-gray-200">
-                  {tier.name}
-                </h2>
-                <p className="mt-4">{tier.price}</p>
-                <p className="mt-4 mb-4 text-sm dark:text-gray-300">
-                  {tier.description}
-                </p>
-                <tier.BuyButton />
-              </div>
+    <>
+      <div className="dark:bg-dark-700 dark:text-gray-200">
+        <div className="mx-auto max-w-6xl py-16 px-4 sm:py-24 sm:px-6 lg:px-8">
+          {/* xs to lg */}
+          <div className="mx-auto max-w-2xl space-y-16 lg:hidden">
+            {tiers.map((tier, tierIdx) => (
+              <section key={tier.name}>
+                <div className="mb-8 px-4">
+                  <h2 className="text-lg font-medium leading-6 dark:text-gray-200">
+                    {tier.name}
+                  </h2>
+                  <p className="mt-4">{tier.price}</p>
+                  <p className="mt-4 mb-4 text-sm dark:text-gray-300">
+                    {tier.description}
+                  </p>
+                  <tier.BuyButton />
+                </div>
 
-              {sections.map((section) => (
-                <table key={section.name} className="w-full">
-                  <caption className="border-t bg-slate-200 py-3 px-4 text-left text-sm font-medium dark:border-dark-500 dark:bg-gray-500 dark:text-gray-200">
-                    {section.name}
-                  </caption>
-                  <thead>
+                {sections.map((section) => (
+                  <table key={section.name} className="w-full">
+                    <caption className="border-t bg-slate-200 py-3 px-4 text-left text-sm font-medium dark:border-dark-500 dark:bg-gray-500 dark:text-gray-200">
+                      {section.name}
+                    </caption>
+                    <thead>
+                      <tr>
+                        <th className="sr-only" scope="col">
+                          Feature
+                        </th>
+                        <th className="sr-only" scope="col">
+                          Included
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-dark-500">
+                      {section.features.map((feature) => (
+                        <tr
+                          key={feature.name}
+                          className="border-t dark:border-dark-500"
+                        >
+                          <th
+                            className="py-5 px-4 text-left text-sm font-normal dark:text-gray-300"
+                            scope="row"
+                          >
+                            {feature.name}
+                          </th>
+                          <td className="py-5 pr-4">
+                            <span className="block text-right text-sm">
+                              {feature.tiers[tier.name]}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ))}
+
+                <div
+                  className={classnames(
+                    tierIdx < tiers.length - 1 ? "border-b py-5" : "pt-5",
+                    "border-t px-4 dark:border-dark-500"
+                  )}
+                >
+                  <tier.BuyButton />
+                </div>
+              </section>
+            ))}
+          </div>
+
+          {/* lg+ */}
+          <div className="hidden lg:block">
+            <table className="h-px w-full table-fixed">
+              <caption className="sr-only">Pricing plan comparison</caption>
+              <thead>
+                <tr>
+                  <th
+                    className={`w-1/${
+                      tiers.length + 1
+                    } px-6 pb-4 text-left text-sm font-medium dark:text-gray-200`}
+                    scope="col"
+                  >
+                    <span className="sr-only">Feature by</span>
+                    <span>Plans</span>
+                  </th>
+                  {tiers.map((tier) => (
+                    <th
+                      key={tier.name}
+                      className={`w-1/${
+                        tiers.length + 1
+                      } px-6 pb-4 text-left text-lg font-medium leading-6 dark:text-gray-200`}
+                      scope="col"
+                    >
+                      {tier.name}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-dark-500 border-t dark:border-dark-500">
+                <tr>
+                  <th
+                    className="py-8 px-6 text-left align-top text-sm font-medium dark:text-gray-200"
+                    scope="row"
+                  >
+                    Pricing
+                  </th>
+                  {tiers.map((tier) => (
+                    <td key={tier.name} className="h-full py-8 px-6 align-top">
+                      <div className="relative table h-full">
+                        <p>{tier.price}</p>
+                        <p className="mt-4 mb-4 text-sm dark:text-gray-300">
+                          {tier.description}
+                        </p>
+                        <tier.BuyButton />
+                      </div>
+                    </td>
+                  ))}
+                </tr>
+                {sections.map((section) => (
+                  <Fragment key={section.name}>
                     <tr>
-                      <th className="sr-only" scope="col">
-                        Feature
-                      </th>
-                      <th className="sr-only" scope="col">
-                        Included
+                      <th
+                        className="bg-slate-200 py-3 pl-6 text-left text-sm font-medium dark:bg-gray-500 dark:text-gray-200"
+                        colSpan={tiers.length + 1}
+                        scope="colgroup"
+                      >
+                        {section.name}
                       </th>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-dark-500">
                     {section.features.map((feature) => (
-                      <tr
-                        key={feature.name}
-                        className="border-t dark:border-dark-500"
-                      >
+                      <tr key={feature.name}>
                         <th
-                          className="py-5 px-4 text-left text-sm font-normal dark:text-gray-300"
+                          className="py-5 px-6 text-left text-sm font-normal dark:text-gray-300"
                           scope="row"
                         >
                           {feature.name}
                         </th>
-                        <td className="py-5 pr-4">
-                          <span className="block text-right text-sm">
-                            {feature.tiers[tier.name]}
-                          </span>
-                        </td>
+                        {tiers.map((tier) => (
+                          <td key={tier.name} className="py-5 px-6">
+                            <span className="block text-sm">
+                              {feature.tiers[tier.name]}
+                            </span>
+                          </td>
+                        ))}
                       </tr>
                     ))}
-                  </tbody>
-                </table>
-              ))}
-
-              <div
-                className={classnames(
-                  tierIdx < tiers.length - 1 ? "border-b py-5" : "pt-5",
-                  "border-t px-4 dark:border-dark-500"
-                )}
-              >
-                <tier.BuyButton />
-              </div>
-            </section>
-          ))}
-        </div>
-
-        {/* lg+ */}
-        <div className="hidden lg:block">
-          <table className="h-px w-full table-fixed">
-            <caption className="sr-only">Pricing plan comparison</caption>
-            <thead>
-              <tr>
-                <th
-                  className={`w-1/${
-                    tiers.length + 1
-                  } px-6 pb-4 text-left text-sm font-medium dark:text-gray-200`}
-                  scope="col"
-                >
-                  <span className="sr-only">Feature by</span>
-                  <span>Plans</span>
-                </th>
-                {tiers.map((tier) => (
-                  <th
-                    key={tier.name}
-                    className={`w-1/${
-                      tiers.length + 1
-                    } px-6 pb-4 text-left text-lg font-medium leading-6 dark:text-gray-200`}
-                    scope="col"
-                  >
-                    {tier.name}
+                  </Fragment>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t dark:border-dark-500">
+                  <th className="sr-only" scope="row">
+                    Choose your plan
                   </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-dark-500 border-t dark:border-dark-500">
-              <tr>
-                <th
-                  className="py-8 px-6 text-left align-top text-sm font-medium dark:text-gray-200"
-                  scope="row"
-                >
-                  Pricing
-                </th>
-                {tiers.map((tier) => (
-                  <td key={tier.name} className="h-full py-8 px-6 align-top">
-                    <div className="relative table h-full">
-                      <p>{tier.price}</p>
-                      <p className="mt-4 mb-4 text-sm dark:text-gray-300">
-                        {tier.description}
-                      </p>
+                  {tiers.map((tier) => (
+                    <td key={tier.name} className="px-6 pt-5">
                       <tier.BuyButton />
-                    </div>
-                  </td>
-                ))}
-              </tr>
-              {sections.map((section) => (
-                <Fragment key={section.name}>
-                  <tr>
-                    <th
-                      className="bg-slate-200 py-3 pl-6 text-left text-sm font-medium dark:bg-gray-500 dark:text-gray-200"
-                      colSpan={tiers.length + 1}
-                      scope="colgroup"
-                    >
-                      {section.name}
-                    </th>
-                  </tr>
-                  {section.features.map((feature) => (
-                    <tr key={feature.name}>
-                      <th
-                        className="py-5 px-6 text-left text-sm font-normal dark:text-gray-300"
-                        scope="row"
-                      >
-                        {feature.name}
-                      </th>
-                      {tiers.map((tier) => (
-                        <td key={tier.name} className="py-5 px-6">
-                          <span className="block text-sm">
-                            {feature.tiers[tier.name]}
-                          </span>
-                        </td>
-                      ))}
-                    </tr>
+                    </td>
                   ))}
-                </Fragment>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="border-t dark:border-dark-500">
-                <th className="sr-only" scope="row">
-                  Choose your plan
-                </th>
-                {tiers.map((tier) => (
-                  <td key={tier.name} className="px-6 pt-5">
-                    <tier.BuyButton />
-                  </td>
-                ))}
-              </tr>
-            </tfoot>
-          </table>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
         </div>
       </div>
-    </div>
+      <Socials />
+    </>
   );
 }

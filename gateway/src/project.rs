@@ -705,50 +705,58 @@ impl<'c> State<'c> for ProjectError {
 }
 
 pub mod exec {
-    use std::collections::HashMap;
+    use bollard::service::ContainerState;
 
-    use bollard::{service::ContainerState, Docker};
-    use sqlx::{query, types::Json as SqlxJson, Row, SqlitePool};
+    use crate::{
+        service::GatewayService,
+        worker::{do_work, Work},
+    };
 
     use super::*;
 
-    pub async fn revive(db: SqlitePool, docker: Docker) {
-        let mut mutations = HashMap::new();
-        for row in query("SELECT * FROM projects")
-            .fetch_all(&db)
+    pub async fn revive(gateway: GatewayService) -> Result<(), ProjectError> {
+        let mut mutations = Vec::new();
+
+        for Work {
+            project_name,
+            account_name,
+            work,
+        } in gateway
+            .iter_projects()
             .await
-            .unwrap()
+            .expect("could not list projects")
         {
-            let project_name: String = row.get("project_name");
-            let project_state = row.get::<SqlxJson<Project>, _>("project_state").0;
-            if let Project::Errored(ProjectError { ctx: Some(ctx), .. }) = project_state {
+            if let Project::Errored(ProjectError { ctx: Some(ctx), .. }) = work {
                 if let Some(container) = ctx.container() {
-                    if let Ok(container) = docker
-                        .inspect_container(container.id.as_ref().unwrap(), None)
+                    if let Ok(container) = gateway
+                        .context()
+                        .docker()
+                        .inspect_container(safe_unwrap!(container.id), None)
                         .await
                     {
                         if let Some(ContainerState {
                             status: Some(ContainerStateStatusEnum::EXITED),
                             ..
-                        }) = container.state {
-                            mutations.insert(
+                        }) = container.state
+                        {
+                            mutations.push(Work {
                                 project_name,
-                                Project::Stopped(ProjectStopped { container }),
-                            );
+                                account_name,
+                                work: Project::Stopped(ProjectStopped { container }),
+                            });
                         }
                     }
                 }
             }
         }
 
-        for (project_name, project_state) in mutations {
-            query("UPDATE projects SET project_state = ?1 WHERE project_name = ?2")
-                .bind(SqlxJson(project_state))
-                .bind(project_name)
-                .execute(&db)
-                .await
-                .unwrap();
+        for work in mutations {
+            debug!(?work, "project will be revived");
+
+            do_work(work, &gateway).await;
         }
+
+        Ok(())
     }
 }
 

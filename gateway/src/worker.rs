@@ -115,30 +115,42 @@ where
         let _ = self.send.take().unwrap();
         debug!("starting worker");
 
-        while let Some(mut work) = self.recv.recv().await {
+        while let Some(work) = self.recv.recv().await {
             debug!(?work, "received work");
-            loop {
-                work = {
-                    let context = self.service.context();
-
-                    // Safety: EndState's transitions are Infallible
-                    work.next(&context).await.unwrap()
-                };
-
-                match self.service.update(&work).await {
-                    Ok(_) => {}
-                    Err(err) => info!("failed to update a state: {}\nstate: {:?}", err, work),
-                };
-
-                if work.is_done() {
-                    break;
-                } else {
-                    debug!(?work, "work not done yet");
-                }
-            }
+            do_work(work, &self.service).await;
         }
 
         Ok(self)
+    }
+}
+
+pub async fn do_work<
+    'c,
+    E: std::fmt::Display,
+    S: Service<'c, State = W, Error = E>,
+    W: EndState<'c> + Debug,
+>(
+    mut work: W,
+    service: &'c S,
+) {
+    loop {
+        work = {
+            let context = service.context();
+
+            // Safety: EndState's transitions are Infallible
+            work.next(&context).await.unwrap()
+        };
+
+        match service.update(&work).await {
+            Ok(_) => {}
+            Err(err) => info!("failed to update a state: {}\nstate: {:?}", err, work),
+        };
+
+        if work.is_done() {
+            break;
+        } else {
+            debug!(?work, "work not done yet");
+        }
     }
 }
 

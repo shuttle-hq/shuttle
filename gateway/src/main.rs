@@ -1,7 +1,6 @@
-use bollard::Docker;
 use clap::Parser;
 use futures::prelude::*;
-use shuttle_gateway::args::{Args, Commands, ExecCmd, InitArgs};
+use shuttle_gateway::args::{Args, Commands, ExecCmd, ExecCmds, InitArgs};
 use shuttle_gateway::auth::Key;
 use shuttle_gateway::proxy::make_proxy;
 use shuttle_gateway::service::{GatewayService, MIGRATIONS};
@@ -62,11 +61,12 @@ async fn main() -> io::Result<()> {
 
 async fn start(db: SqlitePool, args: StartArgs) -> io::Result<()> {
     let fqdn = args
+        .context
         .proxy_fqdn
         .to_string()
         .trim_end_matches('.')
         .to_string();
-    let gateway = Arc::new(GatewayService::init(args.clone(), fqdn.clone(), db).await);
+    let gateway = Arc::new(GatewayService::init(args.context.clone(), fqdn.clone(), db).await);
 
     let worker = Worker::new(Arc::clone(&gateway));
 
@@ -149,11 +149,19 @@ async fn init(db: SqlitePool, args: InitArgs) -> io::Result<()> {
     Ok(())
 }
 
-async fn exec(db: SqlitePool, exec_cmd: ExecCmd) -> io::Result<()> {
-    let docker = Docker::connect_with_local_defaults().unwrap();
+async fn exec(db: SqlitePool, exec_cmd: ExecCmds) -> io::Result<()> {
+    let fqdn = exec_cmd
+        .context
+        .proxy_fqdn
+        .to_string()
+        .trim_end_matches('.')
+        .to_string();
+    let gateway = GatewayService::init(exec_cmd.context.clone(), fqdn.clone(), db).await;
 
-    match exec_cmd {
-        ExecCmd::Revive => project::exec::revive(db, docker).await,
+    match exec_cmd.command {
+        ExecCmd::Revive => project::exec::revive(gateway)
+            .await
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?,
     };
 
     Ok(())

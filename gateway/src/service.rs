@@ -20,7 +20,7 @@ use sqlx::types::Json as SqlxJson;
 use sqlx::{query, Error as SqlxError, Row};
 use tracing::debug;
 
-use crate::args::StartArgs;
+use crate::args::ContextArgs;
 use crate::auth::{Key, User};
 use crate::project::{self, Project};
 use crate::worker::Work;
@@ -58,8 +58,8 @@ impl<'d> ContainerSettingsBuilder<'d> {
         }
     }
 
-    pub async fn from_args(self, args: &StartArgs) -> ContainerSettings {
-        let StartArgs {
+    pub async fn from_args(self, args: &ContextArgs) -> ContainerSettings {
+        let ContextArgs {
             prefix,
             network_name,
             provisioner_host,
@@ -181,7 +181,7 @@ impl GatewayService {
     ///
     /// * `args` - The [`Args`] with which the service was
     /// started. Will be passed as [`Context`] to workers and state.
-    pub async fn init(args: StartArgs, fqdn: String, db: SqlitePool) -> Self {
+    pub async fn init(args: ContextArgs, fqdn: String, db: SqlitePool) -> Self {
         let docker = Docker::connect_with_unix(&args.docker_host, 60, API_DEFAULT_VERSION).unwrap();
 
         let container_settings = ContainerSettings::builder(&docker, fqdn)
@@ -439,8 +439,30 @@ impl GatewayService {
         })
     }
 
-    fn context(&self) -> GatewayContext {
+    pub fn context(&self) -> GatewayContext {
         self.provider.context()
+    }
+}
+
+#[async_trait]
+impl<'c> Service<'c> for GatewayService {
+    type Context = GatewayContext<'c>;
+
+    type State = Work<Project>;
+
+    type Error = Error;
+
+    fn context(&'c self) -> Self::Context {
+        GatewayService::context(self)
+    }
+
+    async fn update(
+        &self,
+        Work {
+            project_name, work, ..
+        }: &Self::State,
+    ) -> Result<(), Self::Error> {
+        self.update_project(project_name, work).await
     }
 }
 

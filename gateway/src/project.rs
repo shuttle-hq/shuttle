@@ -387,7 +387,9 @@ impl ProjectCreating {
                 "Target": "/opt/shuttle",
                 "Source": format!("{prefix}{project_name}_vol"),
                 "Type": "volume"
-            }]
+            }],
+            "Memory": 6442450000i64, // 6 GiB hard limit
+            "MemoryReservation": 4295000000i64, // 4 GiB soft limit, applied if host is low on memory
         });
 
         debug!(

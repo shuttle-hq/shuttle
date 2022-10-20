@@ -367,8 +367,8 @@ impl ProjectCreating {
             ],
             "Healthcheck": {
                 "Interval": 60_000_000_000i64, // Every minute
-                "Timeout": 15_000_000_000i64, // 15 seconds
-                "Test": ["CMD", "curl", format!("localhost:8001/projects/{project_name}/status")],
+                "Timeout": 15_000_000_000i64, // 15 seconds. Should match the --max-time below
+                "Test": ["CMD", "curl", "--max-time=15", format!("localhost:8001/projects/{project_name}/status")],
             },
         });
 

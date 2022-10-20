@@ -366,7 +366,7 @@ impl ProjectCreating {
                 "RUST_LOG=debug",
             ],
             "Healthcheck": {
-                "Interval": 60_000_000_000i64, // Every minute
+                "Interval": 1_000_000_000i64, // Every second
                 "Timeout": 15_000_000_000i64, // 15 seconds
                 "Test": ["CMD", "curl", format!("localhost:8001/projects/{project_name}/status")],
             },
@@ -485,12 +485,13 @@ impl<'c> State<'c> for ProjectStarted {
             let service = Service::from_container(container.clone())?;
             Ok(Self::Next::Ready(ProjectReady { container, service }))
         } else {
-            let created = chrono::DateTime::parse_from_rfc3339(safe_unwrap!(container.created))
-                .map_err(|_err| {
-                    ProjectError::internal("invalid `created` response from Docker daemon")
-                })?;
+            let started_at =
+                chrono::DateTime::parse_from_rfc3339(safe_unwrap!(container.state.started_at))
+                    .map_err(|_err| {
+                        ProjectError::internal("invalid `started_at` response from Docker daemon")
+                    })?;
             let now = chrono::offset::Utc::now();
-            if created + chrono::Duration::seconds(120) < now {
+            if started_at + chrono::Duration::seconds(120) < now {
                 return Err(ProjectError::internal(
                     "project did not become healthy in time",
                 ));

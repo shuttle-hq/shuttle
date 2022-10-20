@@ -1,4 +1,4 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr, time::Duration};
 
 use clap::Parser;
 use shuttle_provisioner::{Args, MyProvisioner, ProvisionerServer};
@@ -31,6 +31,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("starting provisioner on {}", addr);
     Server::builder()
+        .http2_keepalive_interval(Some(Duration::from_secs(30))) // Prevent deployer clients from loosing connection #ENG-219
         .add_service(ProvisionerServer::new(provisioner))
         .serve(addr)
         .await?;

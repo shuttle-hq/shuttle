@@ -452,15 +452,17 @@ mod tests {
 
     struct StubAbstractProvisionerFactory;
 
+    #[async_trait::async_trait]
     impl provisioner_factory::AbstractFactory for StubAbstractProvisionerFactory {
         type Output = StubProvisionerFactory;
+        type Error = std::io::Error;
 
-        fn get_factory(
+        async fn get_factory(
             &self,
             _project_name: shuttle_common::project::ProjectName,
             _service_id: Uuid,
-        ) -> Self::Output {
-            StubProvisionerFactory
+        ) -> Result<Self::Output, Self::Error> {
+            Ok(StubProvisionerFactory)
         }
     }
 

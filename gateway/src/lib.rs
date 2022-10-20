@@ -287,7 +287,7 @@ pub mod tests {
     use tracing::info;
 
     use crate::api::make_api;
-    use crate::args::StartArgs;
+    use crate::args::{ContextArgs, StartArgs};
     use crate::auth::User;
     use crate::proxy::make_proxy;
     use crate::service::{ContainerSettings, GatewayService, MIGRATIONS};
@@ -529,17 +529,19 @@ pub mod tests {
 
             let args = StartArgs {
                 control,
-                docker_host,
                 user,
-                image,
-                prefix,
-                provisioner_host,
-                network_name,
-                proxy_fqdn: FQDN::from_str(&fqdn).unwrap(),
+                context: ContextArgs {
+                    docker_host,
+                    image,
+                    prefix,
+                    provisioner_host,
+                    network_name,
+                    proxy_fqdn: FQDN::from_str(&fqdn).unwrap(),
+                },
             };
 
             let settings = ContainerSettings::builder(&docker, fqdn.clone())
-                .from_args(&args)
+                .from_args(&args.context)
                 .await;
 
             let hyper = HyperClient::builder().build(HttpConnector::new());
@@ -557,8 +559,8 @@ pub mod tests {
             }
         }
 
-        pub fn args(&self) -> StartArgs {
-            self.args.clone()
+        pub fn args(&self) -> ContextArgs {
+            self.args.context.clone()
         }
 
         pub fn pool(&self) -> SqlitePool {

@@ -131,10 +131,6 @@ impl Project {
             .map(|target_ip| SocketAddr::new(target_ip, RUNTIME_API_PORT)))
     }
 
-    pub fn is_error(&self) -> bool {
-        matches!(self, Self::Errored(..))
-    }
-
     pub fn state(&self) -> &'static str {
         match self {
             Self::Started(_) => "started",

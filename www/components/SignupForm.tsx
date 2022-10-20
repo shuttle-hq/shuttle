@@ -7,7 +7,7 @@ import {
   TWITTER_URL,
 } from "../lib/constants";
 import ExternalLink from "./ExternalLink";
-
+import Image from "next/image";
 const links = [
   { name: "💻 contributing to shuttle", href: CONTRIBUTING_URL },
   { name: "⭐️ starring the repository", href: GITHUB_URL },
@@ -16,12 +16,13 @@ const links = [
 ];
 export default function SignupForm() {
   const [state, handleSubmit] = useForm(FORMSPREE_ENDPOINT);
+
   if (state.succeeded) {
     return (
       <div className="mb-4 lg:col-span-5">
         <p className="mt-3 text-lg text-slate-500 dark:text-gray-300 sm:mt-4">
-          Thank you for registering your interest in the shuttle-next closed
-          beta.
+          Thank you for registering your interest in the next iteration of
+          shuttle.
         </p>
         <p className="mt-3 text-lg text-slate-500 dark:text-gray-300 sm:mt-4">
           If you are looking for a way to support shuttle in the meantime, you
@@ -43,29 +44,34 @@ export default function SignupForm() {
   }
   return (
     <>
-      <div className="mb-4 max-w-lg lg:col-span-5">
-        <p className="mt-3 text-lg text-slate-500 dark:text-gray-300 sm:mt-4">
-          Lorem ipsum dolor.
-        </p>
-
-        <p className="mt-3 text-lg text-slate-500 dark:text-gray-300 sm:mt-4">
-          Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla a
-          placerat nisi. Mauris quis congue purus. Nullam orci est, laoreet
-          venenatis mi quis, consectetur semper ligula. Sed id augue bibendum,
-          finibus felis eget, ultrices eros. Donec feugiat sed lacus id
-          faucibus. Cras vitae efficitur lectus.
-        </p>
-
-        <p className="mt-3 text-lg text-slate-500 dark:text-gray-300 sm:mt-4">
-          Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla a
-          placerat nisi. Mauris quis congue purus. Nullam orci est, laoreet
-          venenatis mi quis, consectetur semper ligula. Sed id augue bibendum,
-          finibus felis eget, ultrices eros. Donec feugiat sed lacus id
-          faucibus. Cras vitae efficitur lectus.
-        </p>
-        <p className="mt-3 text-lg text-slate-500 dark:text-gray-300 sm:mt-4">
-          Lorem ipsum dolor.
-        </p>
+      <div
+        id="code-snippets"
+        className="mx-auto max-w-6xl px-4 pt-5 pb-20 sm:px-6 lg:px-8 lg:pt-4 lg:pb-4"
+      >
+        <div className="grid w-full grid-cols-1 gap-4 lg:grid-cols-12">
+          <div className="mb-4 max-w-lg lg:col-span-5">
+            <p className="mt-3 text-lg text-slate-500 dark:text-gray-300 sm:mt-4">
+              Lorem ipsum dolor.
+            </p>
+            <p className="mt-3 text-lg text-slate-500 dark:text-gray-300 sm:mt-4">
+              Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla a
+              placerat nisi. Mauris quis congue purus. Nullam orci est, laoreet
+              venenatis mi quis, consectetur semper ligula. Sed id augue
+              bibendum, finibus felis eget, ultrices eros. Donec feugiat sed
+              lacus id faucibus. Cras vitae efficitur lectus.
+            </p>
+          </div>
+          <div className="lg:col-span-7">
+            <div className="relative top-1/2 mx-auto max-w-xs -translate-y-1/2">
+              <Image
+                src={"/images/fuse.gif"}
+                layout="responsive"
+                height="100%"
+                width="100%"
+              />
+            </div>
+          </div>
+        </div>
       </div>
       <form onSubmit={handleSubmit} className="align-center flex flex-col">
         <input

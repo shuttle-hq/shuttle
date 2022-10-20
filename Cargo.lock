@@ -1191,6 +1191,7 @@ dependencies = [
  "cargo_metadata",
  "chrono",
  "clap 3.2.17",
+ "clap_complete",
  "crossbeam-channel",
  "crossterm",
  "dirs",
@@ -1355,6 +1356,15 @@ dependencies = [
  "once_cell",
  "strsim",
  "termcolor",
+]
+
+[[package]]
+name = "clap_complete"
+version = "3.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f7a2e0a962c45ce25afce14220bc24f9dade0a1787f185cecf96bfba7847cd8"
+dependencies = [
+ "clap 3.2.17",
 ]
 
 [[package]]

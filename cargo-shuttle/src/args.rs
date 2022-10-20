@@ -6,6 +6,7 @@ use std::{
 };
 
 use clap::Parser;
+use clap_complete::Shell;
 use shuttle_common::project::ProjectName;
 use uuid::Uuid;
 
@@ -56,6 +57,15 @@ pub enum Command {
     Deployment(DeploymentCommand),
     /// create a new shuttle service
     Init(InitArgs),
+    /// generate shell completions
+    Generate {
+        /// which shell
+        #[clap(short, long, env, default_value_t = Shell::Bash)]
+        shell: Shell,
+        /// output to file or stdout by default
+        #[clap(short, long, env)]
+        output: Option<PathBuf>,
+    },
     /// view the status of a shuttle service
     Status,
     /// view the logs of a deployment in this shuttle service

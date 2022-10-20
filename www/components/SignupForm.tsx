@@ -50,10 +50,10 @@ export default function SignupForm() {
       >
         <div className="grid w-full grid-cols-1 gap-4 lg:grid-cols-12">
           <div className="mb-4 max-w-lg lg:col-span-5">
-            <p className="mt-3 text-lg text-slate-500 dark:text-gray-300 sm:mt-4">
+            <p className="mt-3 text-left text-lg text-slate-500 dark:text-gray-300 sm:mt-4">
               Lorem ipsum dolor.
             </p>
-            <p className="mt-3 text-lg text-slate-500 dark:text-gray-300 sm:mt-4">
+            <p className="mt-3 text-left text-lg text-slate-500 dark:text-gray-300 sm:mt-4">
               Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla a
               placerat nisi. Mauris quis congue purus. Nullam orci est, laoreet
               venenatis mi quis, consectetur semper ligula. Sed id augue

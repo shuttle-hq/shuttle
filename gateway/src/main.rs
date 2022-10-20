@@ -66,7 +66,7 @@ async fn start(db: SqlitePool, args: StartArgs) -> io::Result<()> {
         .to_string()
         .trim_end_matches('.')
         .to_string();
-    let gateway = Arc::new(GatewayService::init(args.context.clone(), fqdn.clone(), db).await);
+    let gateway = Arc::new(GatewayService::init(args.context.clone(), db).await);
 
     let worker = Worker::new(Arc::clone(&gateway));
 
@@ -150,13 +150,7 @@ async fn init(db: SqlitePool, args: InitArgs) -> io::Result<()> {
 }
 
 async fn exec(db: SqlitePool, exec_cmd: ExecCmds) -> io::Result<()> {
-    let fqdn = exec_cmd
-        .context
-        .proxy_fqdn
-        .to_string()
-        .trim_end_matches('.')
-        .to_string();
-    let gateway = GatewayService::init(exec_cmd.context.clone(), fqdn.clone(), db).await;
+    let gateway = GatewayService::init(exec_cmd.context.clone(), db).await;
 
     match exec_cmd.command {
         ExecCmd::Revive => project::exec::revive(gateway)

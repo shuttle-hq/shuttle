@@ -6,54 +6,74 @@ use shuttle_proto::provisioner::{
     database_request::DbType, provisioner_client::ProvisionerClient, DatabaseRequest,
 };
 use shuttle_service::{Factory, ServiceName};
-use tonic::{transport::Channel, Request};
+use thiserror::Error;
+use tonic::{
+    transport::{Channel, Endpoint},
+    Request,
+};
 use tracing::{debug, info, trace};
 use uuid::Uuid;
 
 use crate::persistence::{Resource, ResourceRecorder, ResourceType, SecretGetter};
 
 /// Trait to make it easy to get a factory (service locator) for each service being started
-pub trait AbstractFactory: Send + 'static {
+#[async_trait]
+pub trait AbstractFactory: Send + Sync + 'static {
     type Output: Factory;
+    type Error: std::error::Error;
 
     /// Get a factory for a specific service
-    fn get_factory(&self, service_name: ServiceName, service_id: Uuid) -> Self::Output;
+    async fn get_factory(
+        &self,
+        service_name: ServiceName,
+        service_id: Uuid,
+    ) -> Result<Self::Output, Self::Error>;
 }
 
 /// An abstract factory that makes factories which uses provisioner
 #[derive(Clone)]
 pub struct AbstractProvisionerFactory<R: ResourceRecorder, S: SecretGetter> {
-    provisioner_client: ProvisionerClient<Channel>,
+    provisioner_uri: Endpoint,
     resource_recorder: R,
     secret_getter: S,
 }
 
+#[async_trait]
 impl<R: ResourceRecorder, S: SecretGetter> AbstractFactory for AbstractProvisionerFactory<R, S> {
     type Output = ProvisionerFactory<R, S>;
+    type Error = ProvisionerError;
 
-    fn get_factory(&self, service_name: ServiceName, service_id: Uuid) -> Self::Output {
-        ProvisionerFactory::new(
-            self.provisioner_client.clone(),
+    async fn get_factory(
+        &self,
+        service_name: ServiceName,
+        service_id: Uuid,
+    ) -> Result<Self::Output, Self::Error> {
+        let provisioner_client = ProvisionerClient::connect(self.provisioner_uri.clone()).await?;
+
+        Ok(ProvisionerFactory::new(
+            provisioner_client,
             service_name,
             service_id,
             self.resource_recorder.clone(),
             self.secret_getter.clone(),
-        )
+        ))
     }
 }
 
 impl<R: ResourceRecorder, S: SecretGetter> AbstractProvisionerFactory<R, S> {
-    pub fn new(
-        provisioner_client: ProvisionerClient<Channel>,
-        resource_recorder: R,
-        secret_getter: S,
-    ) -> Self {
+    pub fn new(provisioner_uri: Endpoint, resource_recorder: R, secret_getter: S) -> Self {
         Self {
-            provisioner_client,
+            provisioner_uri,
             resource_recorder,
             secret_getter,
         }
     }
+}
+
+#[derive(Error, Debug)]
+pub enum ProvisionerError {
+    #[error("failed to connect to provisioner: {0}")]
+    TonicClient(#[from] tonic::transport::Error),
 }
 
 /// A factory (service locator) which goes through the provisioner crate

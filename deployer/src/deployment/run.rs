@@ -62,7 +62,16 @@ pub async fn task(
                 continue;
             }
         };
-        let mut factory = abstract_factory.get_factory(service_name, built.service_id);
+        let mut factory = match abstract_factory
+            .get_factory(service_name, built.service_id)
+            .await
+        {
+            Ok(factory) => factory,
+            Err(err) => {
+                start_crashed_cleanup(&id, err);
+                continue;
+            }
+        };
         let logger = logger_factory.get_logger(id);
 
         let old_deployments_killer = kill_old_deployments(

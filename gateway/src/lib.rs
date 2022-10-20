@@ -287,7 +287,7 @@ pub mod tests {
     use tracing::info;
 
     use crate::api::make_api;
-    use crate::args::StartArgs;
+    use crate::args::{ContextArgs, StartArgs};
     use crate::auth::User;
     use crate::proxy::make_proxy;
     use crate::service::{ContainerSettings, GatewayService, MIGRATIONS};
@@ -485,7 +485,6 @@ pub mod tests {
         args: StartArgs,
         hyper: HyperClient<HttpConnector, Body>,
         pool: SqlitePool,
-        fqdn: String,
     }
 
     #[derive(Clone, Copy)]
@@ -493,13 +492,11 @@ pub mod tests {
         pub docker: &'c Docker,
         pub container_settings: &'c ContainerSettings,
         pub hyper: &'c HyperClient<HttpConnector, Body>,
-        pub fqdn: &'c str,
     }
 
     impl World {
         pub async fn new() -> Self {
             let docker = Docker::connect_with_local_defaults().unwrap();
-            let fqdn = "test.shuttleapp.rs".to_string();
 
             docker
                 .list_images::<&str>(None)
@@ -529,17 +526,19 @@ pub mod tests {
 
             let args = StartArgs {
                 control,
-                docker_host,
                 user,
-                image,
-                prefix,
-                provisioner_host,
-                network_name,
-                proxy_fqdn: FQDN::from_str(&fqdn).unwrap(),
+                context: ContextArgs {
+                    docker_host,
+                    image,
+                    prefix,
+                    provisioner_host,
+                    network_name,
+                    proxy_fqdn: FQDN::from_str("test.shuttleapp.rs").unwrap(),
+                },
             };
 
-            let settings = ContainerSettings::builder(&docker, fqdn.clone())
-                .from_args(&args)
+            let settings = ContainerSettings::builder(&docker)
+                .from_args(&args.context)
                 .await;
 
             let hyper = HyperClient::builder().build(HttpConnector::new());
@@ -553,12 +552,11 @@ pub mod tests {
                 args,
                 hyper,
                 pool,
-                fqdn,
             }
         }
 
-        pub fn args(&self) -> StartArgs {
-            self.args.clone()
+        pub fn args(&self) -> ContextArgs {
+            self.args.context.clone()
         }
 
         pub fn pool(&self) -> SqlitePool {
@@ -570,7 +568,11 @@ pub mod tests {
         }
 
         pub fn fqdn(&self) -> String {
-            self.fqdn.clone()
+            self.args()
+                .proxy_fqdn
+                .to_string()
+                .trim_end_matches('.')
+                .to_string()
         }
     }
 
@@ -580,7 +582,6 @@ pub mod tests {
                 docker: &self.docker,
                 container_settings: &self.settings,
                 hyper: &self.hyper,
-                fqdn: &self.fqdn,
             }
         }
     }
@@ -598,8 +599,7 @@ pub mod tests {
     #[tokio::test]
     async fn end_to_end() {
         let world = World::new().await;
-        let service =
-            Arc::new(GatewayService::init(world.args(), world.fqdn(), world.pool()).await);
+        let service = Arc::new(GatewayService::init(world.args(), world.pool()).await);
         let worker = Worker::new(Arc::clone(&service));
 
         let (log_out, mut log_in) = channel(256);

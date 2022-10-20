@@ -19,6 +19,7 @@ pub struct Args {
 pub enum Commands {
     Start(StartArgs),
     Init(InitArgs),
+    Exec(ExecCmds),
 }
 
 #[derive(clap::Args, Debug, Clone)]
@@ -29,6 +30,35 @@ pub struct StartArgs {
     /// Address to bind the user plane to
     #[arg(long, default_value = "127.0.0.1:8000")]
     pub user: SocketAddr,
+    #[command(flatten)]
+    pub context: ContextArgs,
+}
+
+#[derive(clap::Args, Debug, Clone)]
+pub struct InitArgs {
+    /// Name of initial account to create
+    #[arg(long)]
+    pub name: String,
+    /// Key to assign to initial account
+    #[arg(long)]
+    pub key: Option<Key>,
+}
+
+#[derive(clap::Args, Debug, Clone)]
+pub struct ExecCmds {
+    #[command(flatten)]
+    pub context: ContextArgs,
+    #[command(subcommand)]
+    pub command: ExecCmd,
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum ExecCmd {
+    Revive,
+}
+
+#[derive(clap::Args, Debug, Clone)]
+pub struct ContextArgs {
     /// Default image to deploy user runtimes into
     #[arg(long, default_value = "public.ecr.aws/shuttle/deployer:latest")]
     pub image: String,
@@ -40,23 +70,13 @@ pub struct StartArgs {
     /// the provisioner service
     #[arg(long, default_value = "provisioner")]
     pub provisioner_host: String,
-    /// The path to the docker daemon socket
-    #[arg(long, default_value = "/var/run/docker.sock")]
-    pub docker_host: String,
     /// The Docker Network name in which to deploy user runtimes
     #[arg(long, default_value = "shuttle_default")]
     pub network_name: String,
     /// FQDN where the proxy can be reached at
     #[arg(long)]
     pub proxy_fqdn: FQDN,
-}
-
-#[derive(clap::Args, Debug, Clone)]
-pub struct InitArgs {
-    /// Name of initial account to create
-    #[arg(long)]
-    pub name: String,
-    /// Key to assign to initial account
-    #[arg(long)]
-    pub key: Option<Key>,
+    /// The path to the docker daemon socket
+    #[arg(long, default_value = "/var/run/docker.sock")]
+    pub docker_host: String,
 }

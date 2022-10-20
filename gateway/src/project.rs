@@ -703,6 +703,62 @@ impl<'c> State<'c> for ProjectError {
     }
 }
 
+pub mod exec {
+    use bollard::service::ContainerState;
+
+    use crate::{
+        service::GatewayService,
+        worker::{do_work, Work},
+    };
+
+    use super::*;
+
+    pub async fn revive(gateway: GatewayService) -> Result<(), ProjectError> {
+        let mut mutations = Vec::new();
+
+        for Work {
+            project_name,
+            account_name,
+            work,
+        } in gateway
+            .iter_projects()
+            .await
+            .expect("could not list projects")
+        {
+            if let Project::Errored(ProjectError { ctx: Some(ctx), .. }) = work {
+                if let Some(container) = ctx.container() {
+                    if let Ok(container) = gateway
+                        .context()
+                        .docker()
+                        .inspect_container(safe_unwrap!(container.id), None)
+                        .await
+                    {
+                        if let Some(ContainerState {
+                            status: Some(ContainerStateStatusEnum::EXITED),
+                            ..
+                        }) = container.state
+                        {
+                            mutations.push(Work {
+                                project_name,
+                                account_name,
+                                work: Project::Stopped(ProjectStopped { container }),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        for work in mutations {
+            debug!(?work, "project will be revived");
+
+            do_work(work, &gateway).await;
+        }
+
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 pub mod tests {
 

@@ -8,8 +8,6 @@ use cargo::util::errors::CargoTestError;
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Streaming error: {0}")]
-    Streaming(#[source] axum::Error),
     #[error("Internal I/O error: {0}")]
     InputOutput(#[from] io::Error),
     #[error("Build error: {0}")]

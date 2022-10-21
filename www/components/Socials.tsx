@@ -29,11 +29,9 @@ export default function Socials() {
   return (
     <div className="mx-auto max-w-2xl py-20 px-4 text-center sm:py-28 sm:px-6 lg:px-8">
       <h2 className="text-3xl font-extrabold tracking-tight dark:text-gray-200 sm:text-4xl">
-        Let's make Rust the next language of cloud-native
+        Let's Build the Future of Backend Development Together
       </h2>
-      <p className="mt-4 text-xl dark:text-gray-300">
-        We love you Go, but Rust is just better.
-      </p>
+
       <div className="mt-8 flex justify-center gap-3">
         {communities.map((community, index) => (
           <ExternalLink

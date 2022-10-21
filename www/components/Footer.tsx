@@ -105,9 +105,6 @@ export default function Footer() {
         <h2 className="text-3xl font-extrabold tracking-tight dark:text-gray-200 sm:text-4xl">
           Let's make Rust the next language of cloud-native
         </h2>
-        <p className="mt-4 text-xl dark:text-gray-300">
-          We love you Go, but Rust is just better.
-        </p>
         <div className="mt-8 flex justify-center gap-3">
           {communities.map((community, index) => (
             <ExternalLink

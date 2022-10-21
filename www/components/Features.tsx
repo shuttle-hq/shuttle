@@ -2,29 +2,27 @@ import { CheckIcon } from "@heroicons/react/outline";
 
 const features = [
   {
-    name: "Infrastructure from Rust",
+    name: "Skip the AWS console",
     description:
-      "Traits and annotations define all your infrastructure from your service code",
+      "Configure your infrastructure directly from your Rust code. Avoid unnecessary context-switching and complicated UIs.",
   },
   {
-    name: "Serverless",
+    name: "Compile-time insurance",
     description:
-      "All the infrastructure and wiring you need is handled by the deployer runtime. No VMs or containers",
+      "Know that you are getting what you need at compile-time. Cut down on debugging time.",
   },
   {
     name: "Databases",
     description:
-      "Wiring up a service to a persistent database is as easy as deriving a trait",
+      "Wiring up a service to a persistent database is as easy as adding one line of code. And we support multiple providers.",
   },
   {
     name: "Entirely open-source",
-    description:
-      "A completely free and open-source project, with no vendor lock-in or hidden code",
+    description: "A completely free and open-source project.",
   },
   {
-    name: "Self-hosting friendly",
-    description:
-      "Deploy the entire platform under your own AWS account for extra security and isolation",
+    name: "Generous free tier",
+    description: "Start deploying your apps with no strings attached.",
   },
   {
     name: "Fast deploy times",
@@ -42,11 +40,10 @@ export default function Features() {
       <div className="mx-auto max-w-6xl py-16 px-4 sm:px-6 lg:py-24 lg:px-8">
         <div className="mx-auto max-w-3xl text-center">
           <h2 className="text-3xl font-extrabold tracking-tight dark:text-gray-200 sm:text-4xl">
-            Serverless for Rust
+            Deploy Apps with a Single Command
           </h2>
           <p className="mt-4 text-xl text-slate-500 dark:text-gray-300">
-            The only serverless platform that lets you control your
-            infrastructure from Rust code as easily as deriving a trait.
+            Control your infrastructure by adding annotations to your code.
           </p>
         </div>
         <dl className="mt-12 space-y-10 sm:grid sm:grid-cols-2 sm:gap-x-6 sm:gap-y-12 sm:space-y-0 lg:grid-cols-3 lg:gap-x-8">

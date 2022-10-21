@@ -6,5 +6,5 @@ edition = "2021"
 [lib]
 
 [dependencies]
-shuttle-service = { version = "0.7.0", features = ["web-thruster"] }
+shuttle-service = { version = "0.7.1", features = ["web-thruster"] }
 thruster = { version = "1.2.6", features = ["hyper_server"] }

@@ -44,7 +44,7 @@ version = "0.7.1"
 path = "../common"
 
 [dependencies.shuttle-secrets]
-version = "0.7.0"
+version = "0.7.1"
 path = "../resources/secrets"
 
 [dependencies.shuttle-service]

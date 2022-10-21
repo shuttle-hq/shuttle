@@ -1,12 +1,12 @@
 use clap::Parser;
 use futures::prelude::*;
-use shuttle_gateway::args::{Args, Commands, InitArgs};
+use shuttle_gateway::args::{Args, Commands, ExecCmd, ExecCmds, InitArgs};
 use shuttle_gateway::auth::Key;
 use shuttle_gateway::proxy::make_proxy;
 use shuttle_gateway::service::{GatewayService, MIGRATIONS};
 use shuttle_gateway::worker::{Work, Worker};
 use shuttle_gateway::{api::make_api, args::StartArgs};
-use shuttle_gateway::{Refresh, Service};
+use shuttle_gateway::{project, Refresh, Service};
 use sqlx::migrate::MigrateDatabase;
 use sqlx::{query, Sqlite, SqlitePool};
 use std::io;
@@ -55,16 +55,18 @@ async fn main() -> io::Result<()> {
     match args.command {
         Commands::Start(start_args) => start(db, start_args).await,
         Commands::Init(init_args) => init(db, init_args).await,
+        Commands::Exec(exec_cmd) => exec(db, exec_cmd).await,
     }
 }
 
 async fn start(db: SqlitePool, args: StartArgs) -> io::Result<()> {
     let fqdn = args
+        .context
         .proxy_fqdn
         .to_string()
         .trim_end_matches('.')
         .to_string();
-    let gateway = Arc::new(GatewayService::init(args.clone(), fqdn.clone(), db).await);
+    let gateway = Arc::new(GatewayService::init(args.context.clone(), db).await);
 
     let worker = Worker::new(Arc::clone(&gateway));
 
@@ -144,5 +146,17 @@ async fn init(db: SqlitePool, args: InitArgs) -> io::Result<()> {
         .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
     println!("`{}` created as super user with key: {key}", args.name);
+    Ok(())
+}
+
+async fn exec(db: SqlitePool, exec_cmd: ExecCmds) -> io::Result<()> {
+    let gateway = GatewayService::init(exec_cmd.context.clone(), db).await;
+
+    match exec_cmd.command {
+        ExecCmd::Revive => project::exec::revive(gateway)
+            .await
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?,
+    };
+
     Ok(())
 }

@@ -366,9 +366,9 @@ impl ProjectCreating {
                 "RUST_LOG=debug",
             ],
             "Healthcheck": {
-                "Interval": 60_000_000_000i64, // Every minute
-                "Timeout": 15_000_000_000i64, // 15 seconds
-                "Test": ["CMD", "curl", format!("localhost:8001/projects/{project_name}/status")],
+                "Interval": 1_000_000_000i64, // Every second
+                "Timeout": 15_000_000_000i64, // 15 seconds. Should match the --max-time below
+                "Test": ["CMD", "curl", "--max-time=15", format!("localhost:8001/projects/{project_name}/status")],
             },
         });
 
@@ -387,7 +387,9 @@ impl ProjectCreating {
                 "Target": "/opt/shuttle",
                 "Source": format!("{prefix}{project_name}_vol"),
                 "Type": "volume"
-            }]
+            }],
+            "Memory": 6442450000i64, // 6 GiB hard limit
+            "MemoryReservation": 4295000000i64, // 4 GiB soft limit, applied if host is low on memory
         });
 
         debug!(
@@ -485,12 +487,13 @@ impl<'c> State<'c> for ProjectStarted {
             let service = Service::from_container(container.clone())?;
             Ok(Self::Next::Ready(ProjectReady { container, service }))
         } else {
-            let created = chrono::DateTime::parse_from_rfc3339(safe_unwrap!(container.created))
-                .map_err(|_err| {
-                    ProjectError::internal("invalid `created` response from Docker daemon")
-                })?;
+            let started_at =
+                chrono::DateTime::parse_from_rfc3339(safe_unwrap!(container.state.started_at))
+                    .map_err(|_err| {
+                        ProjectError::internal("invalid `started_at` response from Docker daemon")
+                    })?;
             let now = chrono::offset::Utc::now();
-            if created + chrono::Duration::seconds(120) < now {
+            if started_at + chrono::Duration::seconds(120) < now {
                 return Err(ProjectError::internal(
                     "project did not become healthy in time",
                 ));
@@ -697,6 +700,62 @@ impl<'c> State<'c> for ProjectError {
 
     async fn next<C: Context<'c>>(self, _ctx: &C) -> Result<Self::Next, Self::Error> {
         Ok(self)
+    }
+}
+
+pub mod exec {
+    use bollard::service::ContainerState;
+
+    use crate::{
+        service::GatewayService,
+        worker::{do_work, Work},
+    };
+
+    use super::*;
+
+    pub async fn revive(gateway: GatewayService) -> Result<(), ProjectError> {
+        let mut mutations = Vec::new();
+
+        for Work {
+            project_name,
+            account_name,
+            work,
+        } in gateway
+            .iter_projects()
+            .await
+            .expect("could not list projects")
+        {
+            if let Project::Errored(ProjectError { ctx: Some(ctx), .. }) = work {
+                if let Some(container) = ctx.container() {
+                    if let Ok(container) = gateway
+                        .context()
+                        .docker()
+                        .inspect_container(safe_unwrap!(container.id), None)
+                        .await
+                    {
+                        if let Some(ContainerState {
+                            status: Some(ContainerStateStatusEnum::EXITED),
+                            ..
+                        }) = container.state
+                        {
+                            mutations.push(Work {
+                                project_name,
+                                account_name,
+                                work: Project::Stopped(ProjectStopped { container }),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        for work in mutations {
+            debug!(?work, "project will be revived");
+
+            do_work(work, &gateway).await;
+        }
+
+        Ok(())
     }
 }
 

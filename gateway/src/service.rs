@@ -20,7 +20,7 @@ use sqlx::types::Json as SqlxJson;
 use sqlx::{query, Error as SqlxError, Row};
 use tracing::debug;
 
-use crate::args::StartArgs;
+use crate::args::ContextArgs;
 use crate::auth::{Key, User};
 use crate::project::{self, Project};
 use crate::worker::Work;
@@ -43,33 +43,35 @@ pub struct ContainerSettingsBuilder<'d> {
     image: Option<String>,
     provisioner: Option<String>,
     network_name: Option<String>,
-    fqdn: String,
+    fqdn: Option<String>,
 }
 
 impl<'d> ContainerSettingsBuilder<'d> {
-    pub fn new(docker: &'d Docker, fqdn: String) -> Self {
+    pub fn new(docker: &'d Docker) -> Self {
         Self {
             docker,
             prefix: None,
             image: None,
             provisioner: None,
             network_name: None,
-            fqdn,
+            fqdn: None,
         }
     }
 
-    pub async fn from_args(self, args: &StartArgs) -> ContainerSettings {
-        let StartArgs {
+    pub async fn from_args(self, args: &ContextArgs) -> ContainerSettings {
+        let ContextArgs {
             prefix,
             network_name,
             provisioner_host,
             image,
+            proxy_fqdn,
             ..
         } = args;
         self.prefix(prefix)
             .image(image)
             .provisioner_host(provisioner_host)
             .network_name(network_name)
+            .fqdn(proxy_fqdn)
             .build()
             .await
     }
@@ -91,6 +93,11 @@ impl<'d> ContainerSettingsBuilder<'d> {
 
     pub fn network_name<S: ToString>(mut self, name: S) -> Self {
         self.network_name = Some(name.to_string());
+        self
+    }
+
+    pub fn fqdn<S: ToString>(mut self, fqdn: S) -> Self {
+        self.fqdn = Some(fqdn.to_string().trim_end_matches('.').to_string());
         self
     }
 
@@ -125,7 +132,7 @@ impl<'d> ContainerSettingsBuilder<'d> {
 
         let network_name = self.network_name.take().unwrap();
         let network_id = self.resolve_network_id(&network_name).await;
-        let fqdn = self.fqdn;
+        let fqdn = self.fqdn.take().unwrap();
 
         ContainerSettings {
             prefix,
@@ -148,8 +155,8 @@ pub struct ContainerSettings {
 }
 
 impl ContainerSettings {
-    pub fn builder(docker: &Docker, fqdn: String) -> ContainerSettingsBuilder {
-        ContainerSettingsBuilder::new(docker, fqdn)
+    pub fn builder(docker: &Docker) -> ContainerSettingsBuilder {
+        ContainerSettingsBuilder::new(docker)
     }
 }
 
@@ -181,12 +188,10 @@ impl GatewayService {
     ///
     /// * `args` - The [`Args`] with which the service was
     /// started. Will be passed as [`Context`] to workers and state.
-    pub async fn init(args: StartArgs, fqdn: String, db: SqlitePool) -> Self {
+    pub async fn init(args: ContextArgs, db: SqlitePool) -> Self {
         let docker = Docker::connect_with_unix(&args.docker_host, 60, API_DEFAULT_VERSION).unwrap();
 
-        let container_settings = ContainerSettings::builder(&docker, fqdn)
-            .from_args(&args)
-            .await;
+        let container_settings = ContainerSettings::builder(&docker).from_args(&args).await;
 
         let provider = GatewayContextProvider::new(docker, container_settings);
 
@@ -439,8 +444,30 @@ impl GatewayService {
         })
     }
 
-    fn context(&self) -> GatewayContext {
+    pub fn context(&self) -> GatewayContext {
         self.provider.context()
+    }
+}
+
+#[async_trait]
+impl<'c> Service<'c> for GatewayService {
+    type Context = GatewayContext<'c>;
+
+    type State = Work<Project>;
+
+    type Error = Error;
+
+    fn context(&'c self) -> Self::Context {
+        GatewayService::context(self)
+    }
+
+    async fn update(
+        &self,
+        Work {
+            project_name, work, ..
+        }: &Self::State,
+    ) -> Result<(), Self::Error> {
+        self.update_project(project_name, work).await
     }
 }
 
@@ -492,7 +519,7 @@ pub mod tests {
     #[tokio::test]
     async fn service_create_find_user() -> anyhow::Result<()> {
         let world = World::new().await;
-        let svc = GatewayService::init(world.args(), world.fqdn(), world.pool()).await;
+        let svc = GatewayService::init(world.args(), world.pool()).await;
 
         let account_name: AccountName = "test_user_123".parse()?;
 
@@ -543,7 +570,7 @@ pub mod tests {
     #[tokio::test]
     async fn service_create_find_delete_project() -> anyhow::Result<()> {
         let world = World::new().await;
-        let svc = Arc::new(GatewayService::init(world.args(), world.fqdn(), world.pool()).await);
+        let svc = Arc::new(GatewayService::init(world.args(), world.pool()).await);
 
         let neo: AccountName = "neo".parse().unwrap();
         let matrix: ProjectName = "matrix".parse().unwrap();

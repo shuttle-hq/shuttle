@@ -3,7 +3,6 @@ use shuttle_deployer::{
     start, start_proxy, AbstractProvisionerFactory, Args, DeployLayer, Persistence,
     RuntimeLoggerFactory,
 };
-use shuttle_proto::provisioner::provisioner_client::ProvisionerClient;
 use tokio::select;
 use tonic::transport::Endpoint;
 use tracing::trace;
@@ -43,15 +42,8 @@ async fn main() {
     ))
     .expect("provisioner uri is not valid");
 
-    let provisioner_client = ProvisionerClient::connect(provisioner_uri)
-        .await
-        .expect("failed to connect to provisioner");
-
-    let abstract_factory = AbstractProvisionerFactory::new(
-        provisioner_client,
-        persistence.clone(),
-        persistence.clone(),
-    );
+    let abstract_factory =
+        AbstractProvisionerFactory::new(provisioner_uri, persistence.clone(), persistence.clone());
 
     let runtime_logger_factory = RuntimeLoggerFactory::new(persistence.get_log_sender());
 

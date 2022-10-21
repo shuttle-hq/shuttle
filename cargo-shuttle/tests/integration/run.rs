@@ -10,7 +10,7 @@ async fn cargo_shuttle_run(working_directory: &str) -> u16 {
     let port = pick_unused_port().unwrap();
     let run_args = RunArgs { port };
 
-    let runner = Shuttle::new().run(Args {
+    let runner = Shuttle::new().unwrap().run(Args {
         api_url: Some("http://shuttle.invalid:80".to_string()),
         project_args: ProjectArgs {
             working_directory: working_directory.clone(),
@@ -229,7 +229,7 @@ async fn warp_hello_world() {
         .await
         .unwrap();
 
-    assert_eq!(request_text, "Hello, World!");
+    assert_eq!(request_text, "Hello, World");
 }
 
 #[tokio::test(flavor = "multi_thread")]

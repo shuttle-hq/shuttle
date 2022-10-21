@@ -1181,7 +1181,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-shuttle"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5252,7 +5252,7 @@ checksum = "45bb67a18fa91266cc7807181f62f9178a6873bfad7dc788c42e6430db40184f"
 
 [[package]]
 name = "shuttle-codegen"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "pretty_assertions",
  "proc-macro-error",
@@ -5264,7 +5264,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-common"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "chrono",
  "comfy-table",
@@ -5281,7 +5281,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-deployer"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5328,7 +5328,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-gateway"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5365,7 +5365,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-proto"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "prost",
  "shuttle-common",
@@ -5375,7 +5375,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-provisioner"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "aws-config",
  "aws-sdk-rds",
@@ -5401,7 +5401,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-secrets"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "async-trait",
  "shuttle-service",
@@ -5410,7 +5410,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-service"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "anyhow",
  "async-std",
@@ -7376,15 +7376,3 @@ name = "zeroize"
 version = "1.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94693807d016b2f2d2e14420eb3bfcca689311ff775dcf113d74ea624b7cdf07"
-
-[[patch.unused]]
-name = "shuttle-aws-rds"
-version = "0.7.0"
-
-[[patch.unused]]
-name = "shuttle-persist"
-version = "0.7.0"
-
-[[patch.unused]]
-name = "shuttle-shared-db"
-version = "0.7.0"

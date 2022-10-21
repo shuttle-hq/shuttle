@@ -1,6 +1,4 @@
 use std::fmt::Write;
-use std::fs::File;
-use std::io::Read;
 
 use anyhow::{Context, Result};
 use async_trait::async_trait;
@@ -78,7 +76,7 @@ impl Client {
 
     pub async fn deploy(
         &self,
-        package_file: File,
+        data: Vec<u8>,
         project: &ProjectName,
         no_test: bool,
     ) -> Result<deployment::Response> {
@@ -92,13 +90,7 @@ impl Client {
             let _ = write!(path, "?no-test");
         }
 
-        let mut package_file = package_file;
-        let mut package_content = Vec::new();
-        package_file
-            .read_to_end(&mut package_content)
-            .context("failed to convert package content to buf")?;
-
-        self.post(path, Some(package_content))
+        self.post(path, Some(data))
             .await
             .context("failed to send deployment to the Shuttle server")?
             .to_json()

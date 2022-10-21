@@ -19,6 +19,7 @@ clap_complete = "3.2.5"
 crossbeam-channel = "0.5.6"
 crossterm = "0.25.0"
 dirs = "4.0.0"
+flate2 = "1.0.24"
 futures = "0.3.23"
 headers = "0.3.8"
 indoc = "1.0.7"
@@ -30,6 +31,7 @@ reqwest-retry = "0.1.5"
 serde = { version = "1.0.143", features = ["derive"] }
 serde_json = "1.0.83"
 sqlx = { version = "0.6.1", features = ["runtime-tokio-native-tls", "postgres"] }
+tar = "0.4.38"
 tokio = { version = "1.20.1", features = ["macros"] }
 tokio-tungstenite = { version = "0.17.2", features = ["native-tls"] }
 toml = "0.5.9"

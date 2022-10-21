@@ -39,7 +39,7 @@ impl std::fmt::Display for ProjectName {
 impl ProjectName {
     pub fn is_valid(hostname: &str) -> bool {
         fn is_valid_char(byte: u8) -> bool {
-            matches!(byte, b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'_')
+            matches!(byte, b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_')
         }
 
         fn is_profanity_free(hostname: &str) -> bool {
@@ -103,9 +103,10 @@ impl Display for ProjectNameError {
 `{}` is an invalid project name. project name must
 1. start and end with alphanumeric characters.
 2. only contain characters inside of the alphanumeric range, except for `-`, or `_`.
-3. not be empty.,
-4. not contain profanity.
-5. not be a reserved word."#,
+3. be lowercase.
+4. not be empty.
+5. not contain profanity.
+6. not be a reserved word."#,
                 name
             ),
         }
@@ -123,18 +124,13 @@ pub mod tests {
     #[test]
     fn valid_hostnames() {
         for hostname in [
-            "VaLiD-HoStNaMe",
             "50-name",
             "235235",
-            "VaLid",
             "123",
             "s________e",
             "snake_case",
             "kebab-case",
             "lowercase",
-            "UPPERCASE",
-            "CamelCase",
-            "pascalCase",
             "myassets",
             "dachterrasse",
         ] {
@@ -146,6 +142,10 @@ pub mod tests {
     #[test]
     fn invalid_hostnames() {
         for hostname in [
+            "inVaLiD-HoStNaMe",
+            "CamelCase",
+            "pascalCase",
+            "inVaLid",
             "-invalid-name",
             "also-invalid-",
             "asdf@fasd",

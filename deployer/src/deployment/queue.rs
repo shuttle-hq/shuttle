@@ -16,14 +16,11 @@ use std::fmt;
 use std::fs::remove_file;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::pin::Pin;
 
-use bytes::{BufMut, Bytes};
 use cargo::core::compiler::{CompileMode, MessageFormat};
 use cargo::core::Workspace;
 use cargo::ops::{CompileOptions, TestOptions};
 use flate2::read::GzDecoder;
-use futures::{Stream, StreamExt};
 use tar::Archive;
 use tokio::fs;
 

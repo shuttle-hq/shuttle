@@ -9,6 +9,7 @@ import { SITE_URL } from "../lib/constants";
 import { GetStaticPropsResult } from "next";
 import InternalLink from "../components/InternalLink";
 import classnames from "classnames";
+import Socials from "../components/Socials";
 
 export async function getStaticProps(): Promise<GetStaticPropsResult<Props>> {
   const allPostsData = getSortedPosts();
@@ -142,6 +143,7 @@ export default function Blog(props: Props): JSX.Element {
           </ol>
         </div>
       </div>
+      <Socials />
     </>
   );
 }

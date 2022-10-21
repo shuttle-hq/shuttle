@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@auth0/nextjs-auth0": "^1.7.0",
+    "@formspree/react": "^2.4.0",
     "@fortawesome/fontawesome-svg-core": "^6.1.0",
     "@fortawesome/free-brands-svg-icons": "^6.1.0",
     "@fortawesome/free-regular-svg-icons": "^6.1.0",

@@ -19,6 +19,8 @@ use cargo::core::resolver::CliFeatures;
 use cargo::core::Workspace;
 use cargo::ops::{PackageOpts, Packages};
 use cargo_metadata::Message;
+use clap::CommandFactory;
+use clap_complete::{generate, Shell};
 use config::RequestContext;
 use crossterm::style::Stylize;
 use factory::LocalFactory;
@@ -61,6 +63,7 @@ impl Shuttle {
 
         match args.cmd {
             Command::Init(init_args) => self.init(init_args).await,
+            Command::Generate { shell, output } => self.complete(shell, output).await,
             Command::Login(login_args) => self.login(login_args).await,
             Command::Run(run_args) => self.local_run(run_args).await,
             need_client => {
@@ -171,6 +174,17 @@ impl Shuttle {
             "Successfully deleted service".bold(),
             service
         );
+
+        Ok(())
+    }
+
+    async fn complete(&self, shell: Shell, output: Option<PathBuf>) -> Result<()> {
+        let name = env!("CARGO_PKG_NAME");
+        let mut app = Command::command();
+        match output {
+            Some(v) => generate(shell, &mut app, name, &mut File::create(v)?),
+            None => generate(shell, &mut app, name, &mut stdout()),
+        };
 
         Ok(())
     }

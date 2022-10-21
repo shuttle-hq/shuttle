@@ -451,7 +451,7 @@ impl Shuttle {
         for entry in archive_read.entries()? {
             let entry = entry?;
             let path = entry.path()?;
-            let file_name = path.components().skip(1).next().unwrap();
+            let file_name = path.components().nth(1).unwrap();
 
             if file_name.as_os_str() == "Secrets.toml" {
                 println!(
@@ -553,7 +553,7 @@ mod tests {
         for entry in archive.entries().unwrap() {
             let entry = entry.unwrap();
             let path = entry.path().unwrap();
-            let name = path.components().skip(1).next().unwrap().as_os_str();
+            let name = path.components().nth(1).unwrap().as_os_str();
 
             assert!(
                 name != "Secrets.toml",
@@ -573,7 +573,7 @@ mod tests {
         for entry in archive.entries().unwrap() {
             let entry = entry.unwrap();
             let path = entry.path().unwrap();
-            let name = path.components().skip(1).next().unwrap().as_os_str();
+            let name = path.components().nth(1).unwrap().as_os_str();
 
             if name == "Secrets.toml" {
                 found_secrets_file = true;

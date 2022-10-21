@@ -7376,15 +7376,3 @@ name = "zeroize"
 version = "1.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94693807d016b2f2d2e14420eb3bfcca689311ff775dcf113d74ea624b7cdf07"
-
-[[patch.unused]]
-name = "shuttle-aws-rds"
-version = "0.6.0"
-
-[[patch.unused]]
-name = "shuttle-persist"
-version = "0.6.0"
-
-[[patch.unused]]
-name = "shuttle-shared-db"
-version = "0.6.0"

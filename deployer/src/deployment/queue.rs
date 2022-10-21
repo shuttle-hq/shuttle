@@ -239,6 +239,7 @@ async fn extract_stream(
         debug!("Received {} bytes", buf.len());
         vec.put(buf);
     }
+    debug!("Received a total of {} bytes", vec.len());
 
     Ok(vec)
 }

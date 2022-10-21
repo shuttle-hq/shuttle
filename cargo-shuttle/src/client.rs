@@ -258,6 +258,7 @@ impl Client {
 
         if let Some(body) = body {
             builder = builder.body(body);
+            builder = builder.header("Transfer-Encoding", "chunked");
         }
 
         builder.send().await

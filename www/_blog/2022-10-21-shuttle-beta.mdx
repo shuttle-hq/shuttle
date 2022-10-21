@@ -8,12 +8,9 @@ cover: shuttle-beta.png
 date: "2022-10-21T15:00:00"
 ---
 
-# Announcing shuttle beta - Replacing containers for backend development
-
-> **TLDR**
 > Containers have improved development in a lot of ways, but over time they have also created a lot of problems. We believe it's time to take a bold view and rethink the way we do backend development.
 >
-> We're announcing shuttle-next: a next-generation backend development framework that has **up to 100x smaller images** and **deploys end-to-end in under a second**.
+> We're announcing shuttle-next: a next-generation backend development framework that has up to **100x smaller images** and **deploys end-to-end in under a second**.
 
 In web applications nowadays, you can sort any component somewhere in a broad spectrum from client-side to server-side.
 
@@ -95,10 +92,10 @@ With this approach, the component of virtualization that you end up deploying on
 
 This results in "images" that are effectively up to **100x smaller** because of the switch from container images to WASM binaries. And super fast to deploy too, from tens of minutes to **less than a second,** because you don't have to build and test a large codebase with its large userspace dependencies. You just need to build and ship the code you're writing/the changes you've made.
 
-Our vision for this new way of doing backend development is `shuttle-next`: a next-generation backend framework with the fastest build, test and deployment times ever.
+Our vision for this new way of doing backend development is shuttle-next: a next-generation backend framework with the fastest build, test and deployment times ever.
 
-We believe that what we're starting with `shuttle-next` will eventually become the norm. In the same way we all think it's often not best to setup and start a VM only to run a single process, we will eventually all think it's misguided to build and start a container only to run a single service.
+We believe that what we're starting with shuttle-next will eventually become the norm. In the same way we all think it's often not best to setup and start a VM only to run a single process, we will eventually all think it's misguided to build and start a container only to run a single service.
 
-We are launching `shuttle-next` as part of our closed beta for `shuttle` later this month, with the public release coming soon after. If you’re keen to give it a try early, **sign up for the beta!**
+We are launching shuttle-next as part of our closed beta for shuttle later this month, with the public release coming soon after. If you’re keen to give it a try early, **sign up for the beta!**
 
 In the meantime, check out [shuttle’s GitHub repo](https://github.com/shuttle-hq/shuttle) and [Twitter](https://twitter.com/shuttle_dev) for updates. If you’d like to show support before the official release, please star the repo and/or join the [shuttle Discord community](https://discord.gg/shuttle)!

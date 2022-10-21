@@ -18,15 +18,6 @@ const BetaHero = () => {
                 BETA
               </span>
             </div>
-            <div className="mt-8 mb-2 max-w-xl">
-              <h2 className="text-3xl font-extrabold tracking-tight dark:text-gray-200 sm:text-3xl">
-                Fastest backend development experience ever
-              </h2>
-              <p className="mt-6 text-lg text-slate-500 dark:text-gray-300 sm:mt-6">
-                A next-generation backend framework with the fastest build, test
-                and deployment times ever.
-              </p>
-            </div>
             <SignupForm />
           </div>
         </div>

@@ -24,7 +24,7 @@ export default function SignupForm() {
           Thank you for registering your interest in the next iteration of
           shuttle.
         </p>
-        <p className="mt-3 text-lg text-slate-500 dark:text-gray-300 sm:mt-4">
+        <p className="text-lg text-slate-500 dark:text-gray-300">
           If you are looking for a way to support shuttle in the meantime, you
           can do so by:
         </p>
@@ -44,13 +44,32 @@ export default function SignupForm() {
   }
   return (
     <>
+      <div className="mt-5">
+        <div className="mb-7 text-4xl font-bold dark:text-gray-200 sm:text-5xl md:text-6xl">
+          Build Backends. Fast.
+        </div>
+        <div className="mt-4 px-10 text-xl text-slate-500 dark:text-gray-300">
+          Sign up to our closed beta and get updated on the{" "}
+          {
+            <ExternalLink
+              key="shuttle-next"
+              href="https://shuttle.rs/blog/2022/10/21/shuttle-beta"
+              className="text-brand-orange1 hover:text-brand-orange2"
+            >
+              next iteration of shuttle
+            </ExternalLink>
+          }
+          , a serverless backend framework with the fastest build, test and
+          deploy times ever.
+        </div>
+      </div>
       <form onSubmit={handleSubmit} className="align-center flex flex-col">
         <input
           id="email"
           type="email"
           name="email"
           placeholder={`hello@shuttle.rs`}
-          className="text-m mt-3 block w-full max-w-sm self-center rounded border border-gray-300 bg-slate-300 p-4 text-slate-700  hover:border-brand-orange1 focus:border-brand-orange1 focus:ring-brand-orange1 dark:border-gray-600 dark:bg-gray-500 dark:text-white dark:placeholder-gray-400 dark:focus:border-brand-orange1 dark:focus:ring-brand-orange1"
+          className="text-m mt-2 block w-full max-w-sm self-center rounded border border-gray-300 bg-slate-300 p-4 text-slate-700  hover:border-brand-orange1 focus:border-brand-orange1 focus:ring-brand-orange1 dark:border-gray-600 dark:bg-gray-500 dark:text-white dark:placeholder-gray-400 dark:focus:border-brand-orange1 dark:focus:ring-brand-orange1"
         />
         <ValidationError prefix="Email" field="email" errors={state.errors} />
         <button

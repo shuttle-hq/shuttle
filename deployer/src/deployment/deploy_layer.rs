@@ -355,7 +355,6 @@ mod tests {
     use axum::body::Bytes;
     use ctor::ctor;
     use flate2::{write::GzEncoder, Compression};
-    use futures::FutureExt;
     use shuttle_service::Logger;
     use tokio::{select, sync::mpsc, time::sleep};
     use tracing_subscriber::prelude::*;
@@ -944,7 +943,7 @@ mod tests {
                 id,
                 service_name: "nil_id".to_string(),
                 service_id: Uuid::new_v4(),
-                data_stream: Box::pin(async { Ok(Bytes::from("violets are red")) }.into_stream()),
+                data: Bytes::from("violets are red").to_vec(),
                 will_run_tests: false,
             })
             .await;
@@ -987,7 +986,7 @@ mod tests {
             id: Uuid::new_v4(),
             service_name: format!("deploy-layer-{name}"),
             service_id: Uuid::new_v4(),
-            data_stream: Box::pin(async { Ok(Bytes::from(bytes)) }.into_stream()),
+            data: bytes,
             will_run_tests: false,
         }
     }

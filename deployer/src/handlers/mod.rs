@@ -6,9 +6,10 @@ use axum::extract::{Extension, Path, Query};
 use axum::http::{Request, Response};
 use axum::routing::{get, Router};
 use axum::{extract::BodyStream, Json};
+use bytes::BufMut;
 use chrono::{TimeZone, Utc};
 use fqdn::FQDN;
-use futures::TryStreamExt;
+use futures::StreamExt;
 use shuttle_common::models::secret;
 use shuttle_common::LogItem;
 use tower_http::auth::RequireAuthorizationLayer;
@@ -155,7 +156,7 @@ async fn post_service(
     Extension(deployment_manager): Extension<DeploymentManager>,
     Path((_project_name, service_name)): Path<(String, String)>,
     Query(params): Query<HashMap<String, String>>,
-    stream: BodyStream,
+    mut stream: BodyStream,
 ) -> Result<Json<shuttle_common::models::deployment::Response>> {
     let service = persistence.get_or_create_service(&service_name).await?;
     let id = Uuid::new_v4();
@@ -168,13 +169,21 @@ async fn post_service(
         address: None,
     };
 
+    let mut data = Vec::new();
+    while let Some(buf) = stream.next().await {
+        let buf = buf?;
+        debug!("Received {} bytes", buf.len());
+        data.put(buf);
+    }
+    debug!("Received a total of {} bytes", data.len());
+
     persistence.insert_deployment(deployment.clone()).await?;
 
     let queued = Queued {
         id,
         service_name: service.name,
         service_id: service.id,
-        data_stream: Box::pin(stream.map_err(crate::error::Error::Streaming)),
+        data,
         will_run_tests: !params.contains_key("no-test"),
     };
 

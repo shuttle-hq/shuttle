@@ -9,6 +9,8 @@ use shuttle_common::models::error::ApiError;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
+    #[error("Streaming error: {0}")]
+    Streaming(#[from] axum::Error),
     #[error("Persistence failure: {0}")]
     Persistence(#[from] crate::persistence::PersistenceError),
     #[error("Failed to convert {from} to {to}")]

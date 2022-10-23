@@ -5422,7 +5422,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-service"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "anyhow",
  "async-std",
@@ -6255,9 +6255,9 @@ checksum = "cda74da7e1a664f795bb1f8a87ec406fb89a02522cf6e50620d016add6dbbf5c"
 
 [[package]]
 name = "tokio"
-version = "1.20.1"
+version = "1.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a8325f63a7d4774dd041e363b2409ed1c5cbbd0f867795e661df066b2b0a581"
+checksum = "0020c875007ad96677dcc890298f4b942882c5d4eb7cc8f439fc3bf813dc9c95"
 dependencies = [
  "autocfg 1.1.0",
  "bytes 1.1.0",
@@ -7388,7 +7388,3 @@ name = "zeroize"
 version = "1.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94693807d016b2f2d2e14420eb3bfcca689311ff775dcf113d74ea624b7cdf07"
-
-[[patch.unused]]
-name = "shuttle-aws-rds"
-version = "0.7.0"

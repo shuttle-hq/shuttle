@@ -16,14 +16,11 @@ use std::fmt;
 use std::fs::remove_file;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::pin::Pin;
 
-use bytes::{BufMut, Bytes};
 use cargo::core::compiler::{CompileMode, MessageFormat};
 use cargo::core::Workspace;
 use cargo::ops::{CompileOptions, TestOptions};
 use flate2::read::GzDecoder;
-use futures::{Stream, StreamExt};
 use tar::Archive;
 use tokio::fs;
 
@@ -91,7 +88,7 @@ pub struct Queued {
     pub id: Uuid,
     pub service_name: String,
     pub service_id: Uuid,
-    pub data_stream: Pin<Box<dyn Stream<Item = Result<Bytes>> + Send + Sync>>,
+    pub data: Vec<u8>,
     pub will_run_tests: bool,
 }
 
@@ -104,16 +101,12 @@ impl Queued {
         log_recorder: impl LogRecorder,
         secret_recorder: impl SecretRecorder,
     ) -> Result<Built> {
-        info!("Fetching POSTed data");
-
-        let vec = extract_stream(self.data_stream).await?;
-
         info!("Extracting received data");
 
         let project_path = builds_path.join(&self.service_name);
         fs::create_dir_all(project_path.clone()).await?;
 
-        extract_tar_gz_data(vec.as_slice(), &project_path)?;
+        extract_tar_gz_data(self.data.as_slice(), &project_path)?;
 
         let secrets = get_secrets(&project_path).await?;
         set_secrets(secrets, &self.service_id, secret_recorder).await?;
@@ -227,20 +220,6 @@ async fn set_secrets(
     }
 
     Ok(())
-}
-
-#[instrument(skip(data_stream))]
-async fn extract_stream(
-    mut data_stream: Pin<Box<dyn Stream<Item = Result<Bytes>> + Send + Sync>>,
-) -> Result<Vec<u8>> {
-    let mut vec = Vec::new();
-    while let Some(buf) = data_stream.next().await {
-        let buf = buf?;
-        debug!("Received {} bytes", buf.len());
-        vec.put(buf);
-    }
-
-    Ok(vec)
 }
 
 /// Equivalent to the command: `tar -xzf --strip-components 1`

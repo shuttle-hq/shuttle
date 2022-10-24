@@ -52,7 +52,8 @@ fn secrets_rocket() {
     std::fs::copy(
         project_path.join("Secrets.toml.example"),
         project_path.join("Secrets.toml"),
-    );
+    )
+    .unwrap();
 
     client.deploy("rocket/secrets");
     let secret_response: String = client

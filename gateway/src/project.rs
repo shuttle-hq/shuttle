@@ -60,7 +60,7 @@ macro_rules! impl_from_variant {
 const RUNTIME_API_PORT: u16 = 8001;
 
 // Client used for health checks
-static CLIENT: Lazy<Client<HttpConnector>> = Lazy::new(|| Client::new());
+static CLIENT: Lazy<Client<HttpConnector>> = Lazy::new(Client::new);
 
 #[async_trait]
 impl Refresh for ContainerInspectResponse {

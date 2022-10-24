@@ -112,7 +112,7 @@ CARGO_HOME: {}
         let admin_key = if let Ok(key) = env::var("SHUTTLE_API_KEY") {
             key
         } else {
-            "test-key".to_string()
+            "e2e-test-key".to_string()
         };
 
         Command::new(DOCKER.as_os_str())
@@ -128,7 +128,7 @@ CARGO_HOME: {}
                 "--state=/var/lib/shuttle/gateway.sqlite",
                 "init",
                 "--name",
-                "admin",
+                "e2e-admin",
                 "--key",
                 &admin_key,
             ])

@@ -1,4 +1,4 @@
-use colored::Color;
+use crossterm::style::Color;
 
 use crate::helpers::{self, APPS_FQDN};
 
@@ -15,5 +15,5 @@ fn hello_world_warp() {
         .text()
         .unwrap();
 
-    assert_eq!(request_text, "Hello, world!");
+    assert_eq!(request_text, "Hello, World!");
 }

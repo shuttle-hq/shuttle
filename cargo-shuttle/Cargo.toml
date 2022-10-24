@@ -1,6 +1,6 @@
 [package]
 name = "cargo-shuttle"
-version = "0.7.0"
+version = "0.7.1"
 edition = "2021"
 license = "Apache-2.0"
 description = "A cargo command for the shuttle platform (https://www.shuttle.rs/)"
@@ -43,15 +43,15 @@ uuid = { version = "1.1.2", features = ["v4"] }
 webbrowser = "0.7.1"
 
 [dependencies.shuttle-common]
-version = "0.7.0"
+version = "0.7.1"
 path = "../common"
 
 [dependencies.shuttle-secrets]
-version = "0.7.0"
+version = "0.7.1"
 path = "../resources/secrets"
 
 [dependencies.shuttle-service]
-version = "0.7.0"
+version = "0.7.1"
 path = "../service"
 features = ["loader"]
 

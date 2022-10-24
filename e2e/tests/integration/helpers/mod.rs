@@ -341,7 +341,7 @@ impl Services {
 
             run.env("CARGO_HOME", CARGO_HOME.path());
             run.args(["project", "status"])
-                .current_dir(WORKSPACE_ROOT.join("examples").join(project_path));
+                .current_dir(Self::get_project_path(project_path));
             let stdout = run.output().unwrap().stdout;
             let stdout = String::from_utf8(stdout).unwrap();
 
@@ -358,9 +358,8 @@ impl Services {
         panic!("timed out while waiting for deployer to be ready");
     }
 
-    pub fn run_client<'s, I, P>(&self, args: I, path: P) -> Child
+    pub fn run_client<'s, I>(&self, args: I, project_path: &str) -> Child
     where
-        P: AsRef<Path>,
         I: IntoIterator<Item = &'s str>,
     {
         let mut run = Command::new(WORKSPACE_ROOT.join("target/debug/cargo-shuttle"));
@@ -371,26 +370,21 @@ impl Services {
 
         run.env("CARGO_HOME", CARGO_HOME.path());
 
-        run.args(args).current_dir(path);
+        run.args(args)
+            .current_dir(Self::get_project_path(project_path));
         spawn_and_log(&mut run, &self.target, self.color)
     }
 
     pub fn deploy(&self, project_path: &str) {
-        self.run_client(
-            ["project", "new"],
-            WORKSPACE_ROOT.join("examples").join(project_path),
-        )
-        .wait()
-        .ensure_success("failed to run deploy");
+        self.run_client(["project", "new"], project_path)
+            .wait()
+            .ensure_success("failed to run deploy");
 
         self.wait_deployer_ready(project_path, Duration::from_secs(120));
 
-        self.run_client(
-            ["deploy", "--allow-dirty"],
-            WORKSPACE_ROOT.join("examples").join(project_path),
-        )
-        .wait()
-        .ensure_success("failed to run deploy");
+        self.run_client(["deploy", "--allow-dirty"], project_path)
+            .wait()
+            .ensure_success("failed to run deploy");
     }
 
     pub fn get(&self, sub_path: &str) -> RequestBuilder {
@@ -400,5 +394,9 @@ impl Services {
     #[allow(dead_code)]
     pub fn post(&self, sub_path: &str) -> RequestBuilder {
         reqwest::blocking::Client::new().post(format!("http://{}/{}", self.proxy_addr, sub_path))
+    }
+
+    pub fn get_project_path(project_path: &str) -> PathBuf {
+        WORKSPACE_ROOT.join("examples").join(project_path)
     }
 }

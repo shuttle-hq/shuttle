@@ -48,6 +48,13 @@ fn postgres_rocket() {
 #[test]
 fn secrets_rocket() {
     let client = helpers::Services::new_docker("secrets (rocket)", Color::Red);
+    let project_path = helpers::Services::get_project_path("rocket/secrets");
+    std::fs::copy(
+        project_path.join("Secrets.toml.example"),
+        project_path.join("Secrets.toml"),
+    )
+    .unwrap();
+
     client.deploy("rocket/secrets");
     let secret_response: String = client
         .get("secret")

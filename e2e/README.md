@@ -4,12 +4,10 @@ This crate runs all the end-to-end tests for shuttle. These tests must run again
 Running all the end-to-end tests may take a long time, so it is recommended to run individual tests shipped as part of each crate in the workspace first.
 
 ## Running the tests
-Simply do
+In the root of the repository, run:
 
 ```bash
-$ SHUTTLE_API_KEY=test-key cargo test -- --nocapture
+make test
 ```
-
-the `--nocapture` flag helps with logging errors as they arise instead of in one block at the end.
 
 The server-side logs can be accessed with `docker compose logs`.

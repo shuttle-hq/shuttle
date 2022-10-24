@@ -14,8 +14,6 @@ in
       (rustChannelOf{ channel = "1.63.0"; }).rust
       rust-analyzer
       cargo-watch
-      gdb
-      nodejs
       terraform
       awscli2
       websocat

@@ -1,6 +1,6 @@
-## shuttle-next runtime
+## shuttle-next runtime-wrapper
 
-Load and run a .so library that implements `shuttle_service::Service`. 
+Load and run an .so library that implements `shuttle_service::Service`. 
 
 To load and run, pass the path to the .so file to load as an argument to the shuttle-next binary:
 

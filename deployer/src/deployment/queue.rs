@@ -104,9 +104,8 @@ impl Queued {
         info!("Extracting received data");
 
         let project_path = builds_path.join(&self.service_name);
-        fs::create_dir_all(project_path.clone()).await?;
 
-        extract_tar_gz_data(self.data.as_slice(), &project_path)?;
+        extract_tar_gz_data(self.data.as_slice(), &project_path).await?;
 
         let secrets = get_secrets(&project_path).await?;
         set_secrets(secrets, &self.service_id, secret_recorder).await?;
@@ -224,10 +223,12 @@ async fn set_secrets(
 
 /// Equivalent to the command: `tar -xzf --strip-components 1`
 #[instrument(skip(data, dest))]
-fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<()> {
+async fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<()> {
     let tar = GzDecoder::new(data);
     let mut archive = Archive::new(tar);
     archive.set_overwrite(true);
+
+    fs::create_dir_all(&dest).await?;
 
     for entry in archive.entries()? {
         let mut entry = entry?;
@@ -355,7 +356,9 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
         )
         .unwrap();
 
-        super::extract_tar_gz_data(test_data.as_slice(), &p).unwrap();
+        super::extract_tar_gz_data(test_data.as_slice(), &p)
+            .await
+            .unwrap();
         assert!(fs::read_to_string(p.join("world.txt"))
             .await
             .unwrap()
@@ -366,7 +369,9 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
             .starts_with("def"));
 
         // Can we extract again without error?
-        super::extract_tar_gz_data(test_data.as_slice(), &p).unwrap();
+        super::extract_tar_gz_data(test_data.as_slice(), &p)
+            .await
+            .unwrap();
     }
 
     #[tokio::test(flavor = "multi_thread")]

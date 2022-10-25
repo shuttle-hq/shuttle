@@ -1,0 +1,26 @@
+[package]
+name = "shuttle-runtime"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+crate-type = [ "cdylib", "lib" ]
+
+[[bin]]
+name = "shuttle-runtime"
+
+[dependencies]
+shuttle-service = { version = "0.7.1", features = [ "bot-serenity" ] }
+
+async-trait = "0.1.58"
+
+tokio = { version = "1.20.1", features = [ "full" ] }
+
+cap-std = "*"
+wasmtime = "*"
+wasmtime-wasi = "*"
+wasi-common = "*"
+
+serenity = "0.11.5"

@@ -338,6 +338,32 @@ mod tests {
         let dir = TempDir::new("shuttle-extraction-test").unwrap();
         let p = dir.path();
 
+        // Files whose content should be replaced with the archive
+        fs::write(p.join("world.txt"), b"original text")
+            .await
+            .unwrap();
+
+        // Extra files that should be deleted
+        fs::write(
+            p.join("extra.txt"),
+            b"extra file at top level that should be deleted",
+        )
+        .await
+        .unwrap();
+        fs::create_dir_all(p.join("subdir")).await.unwrap();
+        fs::write(
+            p.join("subdir/extra.txt"),
+            b"extra file in subdir that should be deleted",
+        )
+        .await
+        .unwrap();
+
+        // Build cache in `/target` should not be cleared/deleted
+        fs::create_dir_all(p.join("target")).await.unwrap();
+        fs::write(p.join("target/asset.txt"), b"some file in the build cache")
+            .await
+            .unwrap();
+
         // Binary data for an archive in the following form:
         //
         // - temp
@@ -367,6 +393,28 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
             .await
             .unwrap()
             .starts_with("def"));
+
+        assert_eq!(
+            fs::metadata(p.join("extra.txt")).await.unwrap_err().kind(),
+            std::io::ErrorKind::NotFound,
+            "extra file should be deleted"
+        );
+        assert_eq!(
+            fs::metadata(p.join("subdir/extra.txt"))
+                .await
+                .unwrap_err()
+                .kind(),
+            std::io::ErrorKind::NotFound,
+            "extra file in subdir should be deleted"
+        );
+
+        assert_eq!(
+            fs::read_to_string(p.join("target/asset.txt"))
+                .await
+                .unwrap(),
+            "some file in the build cache",
+            "build cache file should not be touched"
+        );
 
         // Can we extract again without error?
         super::extract_tar_gz_data(test_data.as_slice(), &p)

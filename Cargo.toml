@@ -5,6 +5,7 @@ members = [
   "common",
   "deployer",
   "gateway",
+  "next",
   "proto",
   "provisioner",
   "service"

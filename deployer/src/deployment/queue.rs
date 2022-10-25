@@ -104,9 +104,8 @@ impl Queued {
         info!("Extracting received data");
 
         let project_path = builds_path.join(&self.service_name);
-        fs::create_dir_all(project_path.clone()).await?;
 
-        extract_tar_gz_data(self.data.as_slice(), &project_path)?;
+        extract_tar_gz_data(self.data.as_slice(), &project_path).await?;
 
         let secrets = get_secrets(&project_path).await?;
         set_secrets(secrets, &self.service_id, secret_recorder).await?;
@@ -224,10 +223,27 @@ async fn set_secrets(
 
 /// Equivalent to the command: `tar -xzf --strip-components 1`
 #[instrument(skip(data, dest))]
-fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<()> {
+async fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<()> {
     let tar = GzDecoder::new(data);
     let mut archive = Archive::new(tar);
     archive.set_overwrite(true);
+
+    fs::create_dir_all(&dest).await?;
+
+    // Clear directory first
+    let mut entries = fs::read_dir(&dest).await?;
+    while let Some(entry) = entries.next_entry().await? {
+        // Ignore the build cache directory
+        if entry.file_name() == "target" {
+            continue;
+        }
+
+        if entry.metadata().await?.is_dir() {
+            fs::remove_dir_all(entry.path()).await?;
+        } else {
+            fs::remove_file(entry.path()).await?;
+        }
+    }
 
     for entry in archive.entries()? {
         let mut entry = entry?;
@@ -337,6 +353,32 @@ mod tests {
         let dir = TempDir::new("shuttle-extraction-test").unwrap();
         let p = dir.path();
 
+        // Files whose content should be replaced with the archive
+        fs::write(p.join("world.txt"), b"original text")
+            .await
+            .unwrap();
+
+        // Extra files that should be deleted
+        fs::write(
+            p.join("extra.txt"),
+            b"extra file at top level that should be deleted",
+        )
+        .await
+        .unwrap();
+        fs::create_dir_all(p.join("subdir")).await.unwrap();
+        fs::write(
+            p.join("subdir/extra.txt"),
+            b"extra file in subdir that should be deleted",
+        )
+        .await
+        .unwrap();
+
+        // Build cache in `/target` should not be cleared/deleted
+        fs::create_dir_all(p.join("target")).await.unwrap();
+        fs::write(p.join("target/asset.txt"), b"some file in the build cache")
+            .await
+            .unwrap();
+
         // Binary data for an archive in the following form:
         //
         // - temp
@@ -355,7 +397,9 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
         )
         .unwrap();
 
-        super::extract_tar_gz_data(test_data.as_slice(), &p).unwrap();
+        super::extract_tar_gz_data(test_data.as_slice(), &p)
+            .await
+            .unwrap();
         assert!(fs::read_to_string(p.join("world.txt"))
             .await
             .unwrap()
@@ -365,8 +409,32 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
             .unwrap()
             .starts_with("def"));
 
+        assert_eq!(
+            fs::metadata(p.join("extra.txt")).await.unwrap_err().kind(),
+            std::io::ErrorKind::NotFound,
+            "extra file should be deleted"
+        );
+        assert_eq!(
+            fs::metadata(p.join("subdir/extra.txt"))
+                .await
+                .unwrap_err()
+                .kind(),
+            std::io::ErrorKind::NotFound,
+            "extra file in subdir should be deleted"
+        );
+
+        assert_eq!(
+            fs::read_to_string(p.join("target/asset.txt"))
+                .await
+                .unwrap(),
+            "some file in the build cache",
+            "build cache file should not be touched"
+        );
+
         // Can we extract again without error?
-        super::extract_tar_gz_data(test_data.as_slice(), &p).unwrap();
+        super::extract_tar_gz_data(test_data.as_slice(), &p)
+            .await
+            .unwrap();
     }
 
     #[tokio::test(flavor = "multi_thread")]

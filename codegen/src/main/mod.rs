@@ -20,7 +20,8 @@ pub(crate) fn r#impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
             addr: std::net::SocketAddr,
             runtime: &shuttle_service::Runtime,
         ) -> shuttle_service::ServeHandle {
-            runtime.spawn(async move { service.bind(addr).await })
+            use shuttle_service::Context;
+            runtime.spawn(async move { service.bind(addr).await.context("failed to bind service").map_err(Into::into) })
         }
 
         #fn_decl
@@ -228,6 +229,7 @@ impl ToTokens for Wrapper {
                 runtime: &shuttle_service::Runtime,
                 logger: shuttle_service::Logger,
             ) -> Result<Box<dyn shuttle_service::Service>, shuttle_service::Error> {
+                use shuttle_service::Context;
                 use shuttle_service::tracing_subscriber::prelude::*;
                 #extra_imports
 
@@ -249,15 +251,15 @@ impl ToTokens for Wrapper {
                             .into_panic()
                             .downcast_ref::<&str>()
                             .map(|x| x.to_string())
-                            .unwrap_or_else(|| "<no panic message>".to_string());
+                            .unwrap_or_else(|| "panicked setting logger".to_string());
 
                         shuttle_service::Error::BuildPanic(mes)
                     } else {
-                        shuttle_service::Error::Custom(shuttle_service::error::CustomError::new(e))
+                        shuttle_service::Error::Custom(shuttle_service::error::CustomError::new(e).context("failed to set logger"))
                     }
                 })?;
 
-                #(let #fn_inputs = #fn_inputs_builder::new()#fn_inputs_builder_options.build(#factory_ident, runtime).await?;)*
+                #(let #fn_inputs = #fn_inputs_builder::new()#fn_inputs_builder_options.build(#factory_ident, runtime).await.context(format!("failed to provision {}", stringify!(#fn_inputs_builder)))?;)*
 
                 runtime.spawn(async {
                     #fn_ident(#(#fn_inputs),*)
@@ -271,11 +273,11 @@ impl ToTokens for Wrapper {
                                 .into_panic()
                                 .downcast_ref::<&str>()
                                 .map(|x| x.to_string())
-                                .unwrap_or_else(|| "<no panic message>".to_string());
+                                .unwrap_or_else(|| "panicked calling main".to_string());
 
                             shuttle_service::Error::BuildPanic(mes)
                         } else {
-                            shuttle_service::Error::Custom(shuttle_service::error::CustomError::new(e))
+                            shuttle_service::Error::Custom(shuttle_service::error::CustomError::new(e).context("failed to call main"))
                         }
                     })?
             }
@@ -320,6 +322,7 @@ mod tests {
                 runtime: &shuttle_service::Runtime,
                 logger: shuttle_service::Logger,
             ) -> Result<Box<dyn shuttle_service::Service>, shuttle_service::Error> {
+                use shuttle_service::Context;
                 use shuttle_service::tracing_subscriber::prelude::*;
                 runtime.spawn_blocking(move || {
                     let filter_layer =
@@ -339,11 +342,11 @@ mod tests {
                             .into_panic()
                             .downcast_ref::<&str>()
                             .map(|x| x.to_string())
-                            .unwrap_or_else(|| "<no panic message>".to_string());
+                            .unwrap_or_else(|| "panicked setting logger".to_string());
 
                         shuttle_service::Error::BuildPanic(mes)
                     } else {
-                        shuttle_service::Error::Custom(shuttle_service::error::CustomError::new(e))
+                        shuttle_service::Error::Custom(shuttle_service::error::CustomError::new(e).context("failed to set logger"))
                     }
                 })?;
 
@@ -359,11 +362,11 @@ mod tests {
                             .into_panic()
                             .downcast_ref::<&str>()
                             .map(|x| x.to_string())
-                            .unwrap_or_else(|| "<no panic message>".to_string());
+                            .unwrap_or_else(|| "panicked calling main".to_string());
 
                         shuttle_service::Error::BuildPanic(mes)
                     } else {
-                        shuttle_service::Error::Custom(shuttle_service::error::CustomError::new(e))
+                        shuttle_service::Error::Custom(shuttle_service::error::CustomError::new(e).context("failed to call main"))
                     }
                 })?
             }
@@ -432,6 +435,7 @@ mod tests {
                 runtime: &shuttle_service::Runtime,
                 logger: shuttle_service::Logger,
             ) -> Result<Box<dyn shuttle_service::Service>, shuttle_service::Error> {
+                use shuttle_service::Context;
                 use shuttle_service::tracing_subscriber::prelude::*;
                 use shuttle_service::ResourceBuilder;
 
@@ -453,16 +457,16 @@ mod tests {
                             .into_panic()
                             .downcast_ref::<&str>()
                             .map(|x| x.to_string())
-                            .unwrap_or_else(|| "<no panic message>".to_string());
+                            .unwrap_or_else(|| "panicked setting logger".to_string());
 
                         shuttle_service::Error::BuildPanic(mes)
                     } else {
-                        shuttle_service::Error::Custom(shuttle_service::error::CustomError::new(e))
+                        shuttle_service::Error::Custom(shuttle_service::error::CustomError::new(e).context("failed to set logger"))
                     }
                 })?;
 
-                let pool = shuttle_shared_db::Postgres::new().build(factory, runtime).await?;
-                let redis = shuttle_shared_db::Redis::new().build(factory, runtime).await?;
+                let pool = shuttle_shared_db::Postgres::new().build(factory, runtime).await.context(format!("failed to provision {}", stringify!(shuttle_shared_db::Postgres)))?;
+                let redis = shuttle_shared_db::Redis::new().build(factory, runtime).await.context(format!("failed to provision {}", stringify!(shuttle_shared_db::Redis)))?;
 
                 runtime.spawn(async {
                     complex(pool, redis)
@@ -476,11 +480,11 @@ mod tests {
                             .into_panic()
                             .downcast_ref::<&str>()
                             .map(|x| x.to_string())
-                            .unwrap_or_else(|| "<no panic message>".to_string());
+                            .unwrap_or_else(|| "panicked calling main".to_string());
 
                         shuttle_service::Error::BuildPanic(mes)
                     } else {
-                        shuttle_service::Error::Custom(shuttle_service::error::CustomError::new(e))
+                        shuttle_service::Error::Custom(shuttle_service::error::CustomError::new(e).context("failed to call main"))
                     }
                 })?
             }
@@ -593,6 +597,7 @@ mod tests {
                 runtime: &shuttle_service::Runtime,
                 logger: shuttle_service::Logger,
             ) -> Result<Box<dyn shuttle_service::Service>, shuttle_service::Error> {
+                use shuttle_service::Context;
                 use shuttle_service::tracing_subscriber::prelude::*;
                 use shuttle_service::ResourceBuilder;
 
@@ -614,15 +619,15 @@ mod tests {
                             .into_panic()
                             .downcast_ref::<&str>()
                             .map(|x| x.to_string())
-                            .unwrap_or_else(|| "<no panic message>".to_string());
+                            .unwrap_or_else(|| "panicked setting logger".to_string());
 
                         shuttle_service::Error::BuildPanic(mes)
                     } else {
-                        shuttle_service::Error::Custom(shuttle_service::error::CustomError::new(e))
+                        shuttle_service::Error::Custom(shuttle_service::error::CustomError::new(e).context("failed to set logger"))
                     }
                 })?;
 
-                let pool = shuttle_shared_db::Postgres::new().size("10Gb").public(false).build(factory, runtime).await?;
+                let pool = shuttle_shared_db::Postgres::new().size("10Gb").public(false).build(factory, runtime).await.context(format!("failed to provision {}", stringify!(shuttle_shared_db::Postgres)))?;
 
                 runtime.spawn(async {
                     complex(pool)
@@ -636,11 +641,11 @@ mod tests {
                             .into_panic()
                             .downcast_ref::<&str>()
                             .map(|x| x.to_string())
-                            .unwrap_or_else(|| "<no panic message>".to_string());
+                            .unwrap_or_else(|| "panicked calling main".to_string());
 
                         shuttle_service::Error::BuildPanic(mes)
                     } else {
-                        shuttle_service::Error::Custom(shuttle_service::error::CustomError::new(e))
+                        shuttle_service::Error::Custom(shuttle_service::error::CustomError::new(e).context("failed to call main"))
                     }
                 })?
             }

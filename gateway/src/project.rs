@@ -6,10 +6,13 @@ use bollard::container::{
     Config, CreateContainerOptions, RemoveContainerOptions, StopContainerOptions,
 };
 use bollard::errors::Error as DockerError;
-use bollard::models::{
-    ContainerConfig, ContainerInspectResponse, ContainerStateStatusEnum, HealthStatusEnum,
-};
+use bollard::models::{ContainerConfig, ContainerInspectResponse, ContainerStateStatusEnum};
 use futures::prelude::*;
+use http::uri::InvalidUri;
+use http::StatusCode;
+use hyper::client::HttpConnector;
+use hyper::Client;
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use tokio::time;
 use tracing::{debug, error};
@@ -55,6 +58,9 @@ macro_rules! impl_from_variant {
 }
 
 const RUNTIME_API_PORT: u16 = 8001;
+
+// Client used for health checks
+static CLIENT: Lazy<Client<HttpConnector>> = Lazy::new(Client::new);
 
 #[async_trait]
 impl Refresh for ContainerInspectResponse {
@@ -365,11 +371,6 @@ impl ProjectCreating {
             "Env": [
                 "RUST_LOG=debug",
             ],
-            "Healthcheck": {
-                "Interval": 1_000_000_000i64, // Every second
-                "Timeout": 15_000_000_000i64, // 15 seconds. Should match the --max-time below
-                "Test": ["CMD", "curl", "--max-time", "15", format!("localhost:8001/projects/{project_name}/status")],
-            },
         });
 
         let mut config = Config::<String>::from(container_config);
@@ -480,11 +481,28 @@ impl<'c> State<'c> for ProjectStarted {
     async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error> {
         time::sleep(Duration::from_secs(1)).await;
         let container = self.container.refresh(ctx).await?;
-        if matches!(
-            safe_unwrap!(container.state.health.status),
-            HealthStatusEnum::HEALTHY
+        let ready_service = if matches!(
+            safe_unwrap!(container.state.status),
+            ContainerStateStatusEnum::RUNNING
         ) {
             let service = Service::from_container(container.clone())?;
+            let uri = format!(
+                "http://{}:8001/projects/{}/status",
+                service.target, service.name
+            );
+            let uri = uri.parse()?;
+            let res = CLIENT.get(uri).await?;
+
+            if res.status() == StatusCode::OK {
+                Some(service)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        if let Some(service) = ready_service {
             Ok(Self::Next::Ready(ProjectReady { container, service }))
         } else {
             let started_at =
@@ -687,6 +705,30 @@ impl From<DockerError> for ProjectError {
     }
 }
 
+impl From<InvalidUri> for ProjectError {
+    fn from(uri: InvalidUri) -> Self {
+        error!(%uri, "failed to create a health check URI");
+
+        Self {
+            kind: ProjectErrorKind::Internal,
+            message: uri.to_string(),
+            ctx: None,
+        }
+    }
+}
+
+impl From<hyper::Error> for ProjectError {
+    fn from(err: hyper::Error) -> Self {
+        error!(error = %err, "failed to check project's health");
+
+        Self {
+            kind: ProjectErrorKind::Internal,
+            message: err.to_string(),
+            ctx: None,
+        }
+    }
+}
+
 impl From<ProjectError> for Error {
     fn from(err: ProjectError) -> Self {
         Self::source(ErrorKind::Internal, err)
@@ -762,7 +804,7 @@ pub mod exec {
 #[cfg(test)]
 pub mod tests {
 
-    use bollard::models::{ContainerState, Health};
+    use bollard::models::ContainerState;
     use futures::prelude::*;
     use hyper::{Body, Request, StatusCode};
 
@@ -817,14 +859,11 @@ pub mod tests {
 
         let project_ready = assert_stream_matches!(
             project_readying,
-            #[assertion = "Container is ready, in a healthy state"]
+            #[assertion = "Container is ready"]
             Ok(Project::Ready(ProjectReady {
                 container: ContainerInspectResponse {
                     state: Some(ContainerState {
-                        health: Some(Health {
-                            status: Some(HealthStatusEnum::HEALTHY),
-                            ..
-                        }),
+                        status: Some(ContainerStateStatusEnum::RUNNING),
                         ..
                     }),
                     ..

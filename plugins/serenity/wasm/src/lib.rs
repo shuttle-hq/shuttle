@@ -1,6 +1,6 @@
-use std::os::wasi::prelude::*;
 use std::fs::File;
 use std::io::{Read, Write};
+use std::os::wasi::prelude::*;
 
 pub fn handle_message(message: &str) -> Option<String> {
     if message == "!hello" {
@@ -34,5 +34,4 @@ pub extern "C" fn __SHUTTLE_EventHandler_message(fd: RawFd) {
     if let Some(resp) = handle_message(msg.as_str()) {
         f.write_all(resp.as_bytes()).unwrap();
     }
-
 }

@@ -1,8 +1,8 @@
 use std::fs::File;
 use std::io::{Read, Write};
+use std::os::unix::prelude::RawFd;
 use std::path::Path;
 use std::sync::Arc;
-use std::os::unix::prelude::RawFd;
 
 use async_trait::async_trait;
 
@@ -53,7 +53,7 @@ impl BotBuilder {
         let mut buf = Vec::new();
         self.src.unwrap().read_to_end(&mut buf).unwrap();
         let module = Module::new(&self.engine, buf).unwrap();
-        
+
         for export in module.exports() {
             println!("export: {}", export.name());
         }
@@ -64,7 +64,7 @@ impl BotBuilder {
             linker: self.linker,
         };
         Bot {
-            inner: Arc::new(Mutex::new(inner))
+            inner: Arc::new(Mutex::new(inner)),
         }
     }
 }
@@ -78,7 +78,7 @@ impl BotInner {
     pub async fn message(&mut self, new_message: &str) -> Option<String> {
         let (mut host, client) = UnixStream::pair().unwrap();
         let client = WasiUnixStream::from_cap_std(client);
-        
+
         self.store
             .data_mut()
             .insert_file(3, Box::new(client), FileCaps::all());
@@ -87,7 +87,8 @@ impl BotInner {
         host.write(&[0]).unwrap();
 
         println!("calling inner EventHandler message");
-        self.linker.get(&mut self.store, "bot", "__SHUTTLE_EventHandler_message")
+        self.linker
+            .get(&mut self.store, "bot", "__SHUTTLE_EventHandler_message")
             .unwrap()
             .into_func()
             .unwrap()
@@ -108,7 +109,7 @@ impl BotInner {
 }
 
 pub struct Bot {
-    inner: Arc<Mutex<BotInner>>
+    inner: Arc<Mutex<BotInner>>,
 }
 
 impl Bot {
@@ -117,9 +118,7 @@ impl Bot {
     }
 
     pub fn new<P: AsRef<Path>>(src: P) -> Self {
-        Self::builder()
-            .src(src)
-            .build()
+        Self::builder().src(src).build()
     }
 
     pub async fn into_client(self, token: &str, intents: GatewayIntents) -> Client {

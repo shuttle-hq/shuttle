@@ -14,8 +14,6 @@ use wasmtime::{Engine, Linker, Module, Store};
 use wasmtime_wasi::sync::net::UnixStream as WasiUnixStream;
 use wasmtime_wasi::{WasiCtx, WasiCtxBuilder};
 
-use shuttle_service::Error;
-
 pub struct BotBuilder {
     engine: Engine,
     store: Store<WasiCtx>,
@@ -140,14 +138,6 @@ impl EventHandler for Bot {
             new_message.channel_id.say(&ctx.http, resp).await.unwrap();
         }
     }
-}
-
-#[shuttle_service::main]
-async fn serenity() -> Result<Client, Error> {
-    let intents = GatewayIntents::GUILD_MESSAGES | GatewayIntents::MESSAGE_CONTENT;
-    let token = "1";
-    let client = Bot::new("bot.wasm").into_client(token, intents).await;
-    Ok(client)
 }
 
 #[cfg(test)]

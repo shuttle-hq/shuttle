@@ -12,8 +12,6 @@ crate-type = [ "cdylib", "lib" ]
 name = "shuttle-runtime"
 
 [dependencies]
-shuttle-service = { version = "0.7.1", features = [ "bot-serenity" ] }
-
 async-trait = "0.1.58"
 
 tokio = { version = "1.20.1", features = [ "full" ] }

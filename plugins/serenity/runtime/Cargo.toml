@@ -18,4 +18,4 @@ wasmtime = "*"
 wasmtime-wasi = "*"
 wasi-common = "*"
 
-serenity = "0.11.5"
+serenity = { version = "0.11.5", default-features = false, features = ["client", "gateway", "rustls_backend", "model"] }

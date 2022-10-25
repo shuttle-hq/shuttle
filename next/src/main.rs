@@ -4,13 +4,12 @@ use async_trait::async_trait;
 use clap::Parser;
 use shuttle_common::{database, LogItem};
 use shuttle_next::args::Args;
-use shuttle_next::error::Result;
 use shuttle_service::{
     loader::{LoadedService, Loader},
     Factory, Logger, ServiceName,
 };
 use tokio::sync::mpsc::{self, UnboundedReceiver};
-use tracing::{info, trace};
+use tracing::{info, instrument, trace};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 #[tokio::main(flavor = "multi_thread")]
@@ -27,20 +26,21 @@ async fn main() {
         .with(fmt_layer)
         .init();
 
-    tracing::trace!(args = ?args, "parsed args");
+    trace!(args = ?args, "parsed args");
 
     let address: SocketAddr = "127.0.0.1:8000".parse().unwrap();
     let mut factory = DummyFactory::new();
     let (logger, _rx) = get_logger();
     let so_path = PathBuf::from(args.file_path.as_str());
 
-    let service = load_deployment(address, so_path, &mut factory, logger)
+    let service = load_service(address, so_path, &mut factory, logger)
         .await
         .unwrap();
 
     _ = tokio::spawn(run(service, address)).await;
 }
 
+#[instrument(skip(service))]
 async fn run(service: LoadedService, addr: SocketAddr) {
     let (handle, library) = service;
 
@@ -53,13 +53,13 @@ async fn run(service: LoadedService, addr: SocketAddr) {
     });
 }
 
-// #[instrument(skip(addr, so_path, factory, logger))]
-async fn load_deployment(
+#[instrument(skip(addr, so_path, factory, logger))]
+async fn load_service(
     addr: SocketAddr,
     so_path: PathBuf,
     factory: &mut dyn Factory,
     logger: Logger,
-) -> Result<LoadedService> {
+) -> shuttle_next::error::Result<LoadedService> {
     let loader = Loader::from_so_file(so_path)?;
 
     Ok(loader.load(factory, addr, logger).await?)
@@ -86,13 +86,11 @@ impl Factory for DummyFactory {
     async fn get_db_connection_string(
         &mut self,
         _: database::Type,
-    ) -> std::result::Result<String, shuttle_service::Error> {
+    ) -> Result<String, shuttle_service::Error> {
         todo!()
     }
 
-    async fn get_secrets(
-        &mut self,
-    ) -> std::result::Result<BTreeMap<String, String>, shuttle_service::Error> {
+    async fn get_secrets(&mut self) -> Result<BTreeMap<String, String>, shuttle_service::Error> {
         todo!()
     }
 }

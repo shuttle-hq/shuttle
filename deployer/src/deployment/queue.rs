@@ -230,6 +230,21 @@ async fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<
 
     fs::create_dir_all(&dest).await?;
 
+    // Clear directory first
+    let mut entries = fs::read_dir(&dest).await?;
+    while let Some(entry) = entries.next_entry().await? {
+        // Ignore the build cache directory
+        if entry.file_name() == "target" {
+            continue;
+        }
+
+        if entry.metadata().await?.is_dir() {
+            fs::remove_dir_all(entry.path()).await?;
+        } else {
+            fs::remove_file(entry.path()).await?;
+        }
+    }
+
     for entry in archive.entries()? {
         let mut entry = entry?;
         let path: PathBuf = entry.path()?.components().skip(1).collect();

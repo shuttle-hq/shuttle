@@ -11,7 +11,9 @@ in
       pkg-config
     ];
     buildInputs = with nixpkgs; [
-      (rustChannelOf{ channel = "1.63.0"; }).rust
+      ((rustChannelOf{ channel = "1.63.0"; }).rust.override {
+        targets = ["wasm32-wasi"];
+      })
       rust-analyzer
       cargo-watch
       terraform

@@ -15,10 +15,10 @@ tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }
 
 [dependencies.shuttle-common]
 version = "0.7.0"
-path = "../common"
+path = "../../common"
 
 [dependencies.shuttle-service]
 version = "0.7.0"
 default-features = false
 features = ["loader"]
-path = "../service"
+path = "../../service"

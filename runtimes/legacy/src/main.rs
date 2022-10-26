@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, net::SocketAddr, path::PathBuf, str::FromStr};
 use async_trait::async_trait;
 use clap::Parser;
 use shuttle_common::{database, LogItem};
-use shuttle_next::args::Args;
+use shuttle_legacy::args::Args;
 use shuttle_service::{
     loader::{LoadedService, Loader},
     Factory, Logger, ServiceName,
@@ -59,7 +59,7 @@ async fn load_service(
     so_path: PathBuf,
     factory: &mut dyn Factory,
     logger: Logger,
-) -> shuttle_next::error::Result<LoadedService> {
+) -> shuttle_legacy::error::Result<LoadedService> {
     let loader = Loader::from_so_file(so_path)?;
 
     Ok(loader.load(factory, addr, logger).await?)

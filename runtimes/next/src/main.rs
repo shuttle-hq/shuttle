@@ -3,7 +3,7 @@ use std::io;
 
 use serenity::prelude::*;
 
-use shuttle_runtime::Bot;
+use shuttle_next::Bot;
 
 #[tokio::main]
 async fn main() -> io::Result<()> {

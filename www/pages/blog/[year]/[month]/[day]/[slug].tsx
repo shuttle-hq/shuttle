@@ -199,7 +199,11 @@ const mdxComponents: MDXRemoteProps["components"] = {
       </blockquote>
     );
   },
-  FaIcon: (props) => <FontAwesomeIcon icon={faStar} color="#fae15c" />,
+  FaStar: (props) => (
+    <div className="inline text-brand-300">
+      <FontAwesomeIcon icon={faStar} />
+    </div>
+  ),
 };
 
 interface Props {

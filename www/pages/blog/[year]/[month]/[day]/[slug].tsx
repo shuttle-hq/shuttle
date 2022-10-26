@@ -27,6 +27,7 @@ import { DocumentTextIcon } from "@heroicons/react/outline";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faLinkedin, faTwitter } from "@fortawesome/free-brands-svg-icons";
 import Copy from "../../../../../components/Copy";
+import Socials from "../../../../../components/Socials";
 
 export async function getStaticPaths() {
   const paths = getAllPostSlugs();
@@ -335,6 +336,7 @@ export default function BlogPostPage(props: Props) {
                 )}
               </div>
             </div>
+            <Socials />
           </div>
           {/* Sidebar */}
           <div className="flex-none space-y-8 lg:w-64">

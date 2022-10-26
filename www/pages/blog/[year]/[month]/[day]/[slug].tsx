@@ -25,7 +25,6 @@ import ExternalLink from "../../../../../components/ExternalLink";
 import classnames from "classnames";
 import { DocumentTextIcon } from "@heroicons/react/outline";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faStar } from "@fortawesome/free-solid-svg-icons";
 import { faLinkedin, faTwitter } from "@fortawesome/free-brands-svg-icons";
 import Copy from "../../../../../components/Copy";
 import Socials from "../../../../../components/Socials";
@@ -192,18 +191,23 @@ const mdxComponents: MDXRemoteProps["components"] = {
   pre: (props: any) => {
     return <Pre {...props} />;
   },
-  blockquote(props) {
+  TLDR: (props: any) => {
     return (
-      <blockquote className="my-4 border-l-8 border-brand-orange1 bg-gray-200 p-4 text-left text-xl text-gray-500 dark:border-brand-orange2 dark:bg-gray-800 dark:text-gray-200">
+      <div className="border-l-8 border-brand-orange1 bg-gray-200 p-4 text-left text-xl text-gray-500  dark:bg-gray-800 dark:text-gray-200">
+        <span className="text-md rounded bg-brand-orange1 px-[10px] py-[2px] font-extrabold text-slate-100  dark:text-dark-800">
+          TLDR
+        </span>
         {props.children}
-      </blockquote>
+      </div>
     );
   },
-  FaStar: (props) => (
-    <div className="inline text-brand-300">
-      <FontAwesomeIcon icon={faStar} />
-    </div>
-  ),
+  // blockquote(props) {
+  //   return (
+  //     <blockquote className="my-4 border-l-8 border-brand-orange1 bg-gray-200 p-4 text-left text-xl text-gray-500 dark:border-brand-orange2 dark:bg-gray-800 dark:text-gray-200">
+  //       {props.children}
+  //     </blockquote>
+  //   );
+  // },
 };
 
 interface Props {

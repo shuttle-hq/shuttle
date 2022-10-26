@@ -13,9 +13,9 @@ members = [
 exclude = [
   "e2e",
   "examples",
-  "plugins",
   "resources/aws-rds",
   "resources/persist",
   "resources/secrets",
-  "resources/shared-db"
+  "resources/shared-db",
+  "runtimes"
 ]

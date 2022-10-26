@@ -173,13 +173,33 @@ const Pre = ({ children, ...props }: any) => {
 const mdxComponents: MDXRemoteProps["components"] = {
   a(props) {
     if (props.href.match(/^https?:\/\//)) {
-      return <ExternalLink {...props}></ExternalLink>;
+      return (
+        <ExternalLink
+          {...props}
+          className="text-brand-orange1 no-underline hover:text-brand-orange2"
+        ></ExternalLink>
+      );
     }
 
-    return <InternalLink {...(props as any)}></InternalLink>;
+    return (
+      <InternalLink
+        {...(props as any)}
+        className="text-brand-orange1 no-underline hover:text-brand-orange2"
+      ></InternalLink>
+    );
   },
   pre: (props: any) => {
     return <Pre {...props} />;
+  },
+  blockquote(props) {
+    return (
+      <blockquote className="my-4 border-l-8 border-brand-orange1 bg-gray-200 p-4 text-left text-xl text-gray-500 dark:border-brand-orange2 dark:bg-gray-800 dark:text-gray-200">
+        {props.children}
+      </blockquote>
+    );
+  },
+  icon(props: any) {
+    return <a></a>;
   },
 };
 

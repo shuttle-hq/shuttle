@@ -83,6 +83,16 @@ export async function getStaticProps({
   const nextPost = allPosts[currentIndex + 1] ?? null;
   const prevPost = allPosts[currentIndex - 1] ?? null;
 
+  const options: Intl.DateTimeFormatOptions = {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  };
+  const formattedDate = new Date(data.date).toLocaleDateString(
+    "en-IN",
+    options
+  );
+
   return {
     props: {
       prevPost,
@@ -94,6 +104,7 @@ export async function getStaticProps({
         ...data,
         toc: mdxTOC,
         readingTime,
+        date: formattedDate,
       } as Post,
     },
   };

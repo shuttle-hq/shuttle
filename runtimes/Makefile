@@ -11,3 +11,6 @@ test: wasm
 
 next:
 	cd next; cargo build
+
+legacy:
+	cd legacy; cargo build

@@ -1,4 +1,4 @@
-## shuttle-next runtime-wrapper
+## shuttle-legacy
 
 Load and run an .so library that implements `shuttle_service::Service`. 
 

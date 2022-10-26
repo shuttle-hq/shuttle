@@ -1,0 +1,37 @@
+syntax = "proto3";
+package runtime;
+
+service Runtime {
+  // Load a service file to be ready to start it
+  rpc load(LoadRequest) returns (LoadResponse);
+
+  // Start a loaded service file
+  rpc start(StartRequest) returns (StartResponse);
+}
+
+message LoadRequest {
+  // Name of service to load
+  string service_name = 1;
+
+  // Path to compiled file to load for service
+  string path = 2;
+}
+
+message LoadResponse {
+  // Could the service be loaded
+  bool success = 1;
+}
+
+message StartRequest {
+  // Name of service to start
+  string service_name = 1;
+}
+
+message StartResponse {
+  // Was the start successful
+  bool success = 1;
+
+  // Optional port the service was started on
+  // This is likely to be None for bots
+  optional uint32 port = 2;
+}

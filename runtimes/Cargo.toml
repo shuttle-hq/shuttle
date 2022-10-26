@@ -2,5 +2,6 @@
 members = [
   "legacy",
   "next",
+  "proto",
   "wasm"
 ]

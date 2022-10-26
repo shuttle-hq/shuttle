@@ -25,6 +25,7 @@ import ExternalLink from "../../../../../components/ExternalLink";
 import classnames from "classnames";
 import { DocumentTextIcon } from "@heroicons/react/outline";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faStar } from "@fortawesome/free-solid-svg-icons";
 import { faLinkedin, faTwitter } from "@fortawesome/free-brands-svg-icons";
 import Copy from "../../../../../components/Copy";
 import Socials from "../../../../../components/Socials";
@@ -198,9 +199,7 @@ const mdxComponents: MDXRemoteProps["components"] = {
       </blockquote>
     );
   },
-  icon(props: any) {
-    return <a></a>;
-  },
+  FaIcon: (props) => <FontAwesomeIcon icon={faStar} color="#fae15c" />,
 };
 
 interface Props {

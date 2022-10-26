@@ -3,62 +3,88 @@ use std::{
     net::{Ipv4Addr, SocketAddr},
     path::PathBuf,
     str::FromStr,
+    sync::Mutex,
 };
 
 use anyhow::anyhow;
 use async_trait::async_trait;
 use shuttle_common::{database, LogItem};
+use shuttle_runtime_proto::runtime::{
+    runtime_server::Runtime, LoadRequest, LoadResponse, StartRequest, StartResponse,
+};
 use shuttle_service::{
     loader::{LoadedService, Loader},
     Factory, Logger, ServiceName,
 };
 use tokio::sync::mpsc::{self, UnboundedReceiver};
+use tonic::{Request, Response, Status};
 use tracing::{info, instrument, trace};
 
 pub mod args;
 pub mod error;
 
 pub struct Legacy {
-    so_path: Option<PathBuf>,
-    port: Option<u16>,
+    // Mutexes are for interior mutability
+    so_path: Mutex<Option<PathBuf>>,
+    port: Mutex<Option<u16>>,
 }
 
 impl Legacy {
     pub fn new() -> Self {
         Self {
-            so_path: None,
-            port: None,
+            so_path: Mutex::new(None),
+            port: Mutex::new(None),
         }
     }
+}
 
-    pub async fn load(&mut self, so_path: PathBuf) -> Result<bool, error::Error> {
-        self.so_path = Some(so_path);
+#[async_trait]
+impl Runtime for Legacy {
+    async fn load(&self, request: Request<LoadRequest>) -> Result<Response<LoadResponse>, Status> {
+        let so_path = request.into_inner().path;
+        trace!(so_path, "loading");
 
-        Ok(true)
+        let so_path = PathBuf::from(so_path);
+        *self.so_path.lock().unwrap() = Some(so_path);
+
+        let message = LoadResponse { success: true };
+        Ok(Response::new(message))
     }
 
-    pub async fn start(&mut self) -> Result<(), error::Error> {
-        let port = 8000;
+    async fn start(
+        &self,
+        _request: Request<StartRequest>,
+    ) -> Result<Response<StartResponse>, Status> {
+        let port = 8001;
         let address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
         let mut factory = DummyFactory::new();
         let (logger, _rx) = get_logger();
         let so_path = self
             .so_path
+            .lock()
+            .unwrap()
             .as_ref()
             .ok_or_else(|| -> error::Error {
                 error::Error::Start(anyhow!("trying to start a service that was not loaded"))
-            })?
+            })
+            .map_err(|err| Status::from_error(Box::new(err)))?
             .clone();
 
+        trace!(%address, "starting");
         let service = load_service(address, so_path, &mut factory, logger)
             .await
             .unwrap();
 
-        self.port = Some(port);
+        _ = tokio::spawn(run(service, address));
 
-        _ = tokio::spawn(run(service, address)).await;
+        *self.port.lock().unwrap() = Some(port);
 
-        Ok(())
+        let message = StartResponse {
+            success: true,
+            port: Some(port as u32),
+        };
+
+        Ok(Response::new(message))
     }
 }
 

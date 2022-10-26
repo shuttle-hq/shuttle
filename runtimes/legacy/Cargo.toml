@@ -19,6 +19,10 @@ tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }
 version = "0.7.0"
 path = "../../common"
 
+[dependencies.shuttle-runtime-proto]
+version = "0.1.0"
+path = "../proto"
+
 [dependencies.shuttle-service]
 version = "0.7.0"
 default-features = false

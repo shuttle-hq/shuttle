@@ -1,7 +1,9 @@
-use std::path::PathBuf;
+use std::net::{Ipv4Addr, SocketAddr};
 
 use clap::Parser;
 use shuttle_legacy::{args::Args, Legacy};
+use shuttle_runtime_proto::runtime::runtime_server::RuntimeServer;
+use tonic::transport::Server;
 use tracing::trace;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
@@ -21,8 +23,11 @@ async fn main() {
 
     trace!(args = ?args, "parsed args");
 
-    let so_path = PathBuf::from(args.file_path.as_str());
-    let mut legacy = Legacy::new();
-    legacy.load(so_path).await.unwrap();
-    legacy.start().await.unwrap();
+    let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8000);
+    let legacy = Legacy::new();
+    Server::builder()
+        .add_service(RuntimeServer::new(legacy))
+        .serve(addr)
+        .await
+        .unwrap();
 }

@@ -2,8 +2,15 @@
 
 Load and run an .so library that implements `shuttle_service::Service`. 
 
-To load and run, pass the path to the .so file to load as an argument to the shuttle-next binary:
+To test, first start this binary using:
 
 ```bash
-cargo run -- -f "src/libhello_world.so"
+cargo run --
+```
+
+Then in another shell, load a `.so` file and start it up:
+
+``` bash
+grpcurl -plaintext -import-path ../proto -proto runtime.proto -d '{"service_name": "Tonic", "path": "../../examples/rocket/hello-world/target/debug/libhello_world.so"}' localhost:8000 runtime.Runtime/load
+grpcurl -plaintext -import-path ../proto -proto runtime.proto -d '{"service_name": "Tonic"}' localhost:8000 runtime.Runtime/start
 ```

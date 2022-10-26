@@ -10,6 +10,7 @@ async-trait = "0.1.58"
 clap ={ version = "4.0.18", features = ["derive"] }
 thiserror = "1.0.37"
 tokio = { version = "=1.20.1", features = ["full"] }
+tonic = "0.8.0"
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }
 

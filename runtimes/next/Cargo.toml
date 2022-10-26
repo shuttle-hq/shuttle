@@ -10,8 +10,9 @@ name = "shuttle-next"
 
 [dependencies]
 async-trait = "0.1.58"
-
+clap ={ version = "4.0.18", features = ["derive"] }
 tokio = { version = "1.20.1", features = [ "full" ] }
+tonic = "0.8.0"
 
 cap-std = "*"
 wasmtime = "*"

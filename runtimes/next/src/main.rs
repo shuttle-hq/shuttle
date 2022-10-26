@@ -1,12 +1,13 @@
+use clap::Parser;
+use serenity::prelude::*;
+use shuttle_next::{args::Args, Bot};
 use std::env;
 use std::io;
 
-use serenity::prelude::*;
-
-use shuttle_next::Bot;
-
 #[tokio::main]
 async fn main() -> io::Result<()> {
+    let _args = Args::parse();
+
     let intents = GatewayIntents::GUILD_MESSAGES | GatewayIntents::MESSAGE_CONTENT;
 
     let token = env::var("DISCORD_TOKEN").unwrap();

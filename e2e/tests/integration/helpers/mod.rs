@@ -128,7 +128,7 @@ CARGO_HOME: {}
                 "--state=/var/lib/shuttle/gateway.sqlite",
                 "init",
                 "--name",
-                "e2e-admin",
+                "admin",
                 "--key",
                 &admin_key,
             ])
@@ -214,12 +214,14 @@ pub fn spawn_and_log<D: std::fmt::Display, C: Into<Color>>(
 pub struct Services {
     api_addr: SocketAddr,
     proxy_addr: SocketAddr,
+    /// Path within the examples dir to a specific example
+    example_path: String,
     target: String,
     color: Color,
 }
 
 impl Services {
-    fn new_free<D, C>(target: D, color: C) -> Self
+    fn new_free<D, C>(target: D, example_path: D, color: C) -> Self
     where
         D: std::fmt::Display,
         C: Into<Color>,
@@ -229,16 +231,25 @@ impl Services {
             proxy_addr: "127.0.0.1:8000".parse().unwrap(),
             target: target.to_string(),
             color: color.into(),
+            example_path: example_path.to_string(),
         }
     }
 
-    pub fn new_docker<D, C>(target: D, color: C) -> Self
+    /// Initializes a a test client
+    ///
+    /// # Arguments
+    ///
+    /// * `target` - A string that describes the test target
+    /// * `example_path` - Path to a specific example within the examples dir, this is where
+    ///   `project new` and `deploy` will run
+    /// * `color` - a preferably unique `crossterm::style::Color` to distinguish test logs
+    pub fn new_docker<D, C>(target: D, example_path: D, color: C) -> Self
     where
         D: std::fmt::Display,
         C: Into<Color>,
     {
         let _ = *LOCAL_UP;
-        let service = Self::new_free(target, color);
+        let service = Self::new_free(target, example_path, color);
         service.wait_ready(Duration::from_secs(15));
 
         // Make sure provisioner is ready, else deployers will fail to start up
@@ -330,7 +341,7 @@ impl Services {
         panic!("timed out while waiting for mongodb to be ready");
     }
 
-    pub fn wait_deployer_ready(&self, project_path: &str, mut timeout: Duration) {
+    pub fn wait_deployer_ready(&self, mut timeout: Duration) {
         let mut now = SystemTime::now();
         while !timeout.is_zero() {
             let mut run = Command::new(WORKSPACE_ROOT.join("target/debug/cargo-shuttle"));
@@ -341,7 +352,7 @@ impl Services {
 
             run.env("CARGO_HOME", CARGO_HOME.path());
             run.args(["project", "status"])
-                .current_dir(Self::get_project_path(project_path));
+                .current_dir(self.get_full_project_path());
             let stdout = run.output().unwrap().stdout;
             let stdout = String::from_utf8(stdout).unwrap();
 
@@ -358,7 +369,7 @@ impl Services {
         panic!("timed out while waiting for deployer to be ready");
     }
 
-    pub fn run_client<'s, I>(&self, args: I, project_path: &str) -> Child
+    pub fn run_client<'s, I>(&self, args: I) -> Child
     where
         I: IntoIterator<Item = &'s str>,
     {
@@ -370,19 +381,19 @@ impl Services {
 
         run.env("CARGO_HOME", CARGO_HOME.path());
 
-        run.args(args)
-            .current_dir(Self::get_project_path(project_path));
+        run.args(args).current_dir(self.get_full_project_path());
         spawn_and_log(&mut run, &self.target, self.color)
     }
 
-    pub fn deploy(&self, project_path: &str) {
-        self.run_client(["project", "new"], project_path)
+    /// Starts a project and deploys a service for the example in `self.example_path`
+    pub fn deploy(&self) {
+        self.run_client(["project", "new"])
             .wait()
             .ensure_success("failed to run deploy");
 
-        self.wait_deployer_ready(project_path, Duration::from_secs(120));
+        self.wait_deployer_ready(Duration::from_secs(120));
 
-        self.run_client(["deploy", "--allow-dirty"], project_path)
+        self.run_client(["deploy", "--allow-dirty"])
             .wait()
             .ensure_success("failed to run deploy");
     }
@@ -396,7 +407,14 @@ impl Services {
         reqwest::blocking::Client::new().post(format!("http://{}/{}", self.proxy_addr, sub_path))
     }
 
-    pub fn get_project_path(project_path: &str) -> PathBuf {
-        WORKSPACE_ROOT.join("examples").join(project_path)
+    /// Gets the full path: the path within examples to a specific example appended to the workspace root
+    pub fn get_full_project_path(&self) -> PathBuf {
+        WORKSPACE_ROOT.join("examples").join(&self.example_path)
+    }
+}
+
+impl Drop for Services {
+    fn drop(&mut self) {
+        self.run_client(["project", "rm"]).wait().unwrap();
     }
 }

@@ -138,12 +138,20 @@ async fn init(db: SqlitePool, args: InitArgs) -> io::Result<()> {
         None => Key::new_random(),
     };
 
-    query("INSERT INTO accounts (account_name, key, super_user) VALUES (?1, ?2, 1)")
-        .bind(&args.name)
-        .bind(&key)
-        .execute(&db)
-        .await
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    query(
+        r#"
+    INSERT INTO accounts (account_name, key, super_user) 
+    VALUES (?1, ?2, 1)
+    ON CONFLICT (account_name)
+    DO
+        UPDATE SET key = ?2
+    "#,
+    )
+    .bind(&args.name)
+    .bind(&key)
+    .execute(&db)
+    .await
+    .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
     println!("`{}` created as super user with key: {key}", args.name);
     Ok(())

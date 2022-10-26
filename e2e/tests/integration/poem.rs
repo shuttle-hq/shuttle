@@ -4,8 +4,9 @@ use crate::helpers::{self, APPS_FQDN};
 
 #[test]
 fn hello_world_poem() {
-    let client = helpers::Services::new_docker("hello-world (poem)", Color::Cyan);
-    client.deploy("poem/hello-world");
+    let client =
+        helpers::Services::new_docker("hello-world (poem)", "poem/hello-world", Color::Cyan);
+    client.deploy();
 
     let request_text = client
         .get("hello")
@@ -20,8 +21,8 @@ fn hello_world_poem() {
 
 #[test]
 fn postgres_poem() {
-    let client = helpers::Services::new_docker("postgres (poem)", Color::Blue);
-    client.deploy("poem/postgres");
+    let client = helpers::Services::new_docker("postgres (poem)", "poem/postgres", Color::Blue);
+    client.deploy();
 
     let add_response = client
         .post("todo")
@@ -48,8 +49,8 @@ fn postgres_poem() {
 
 #[test]
 fn mongodb_poem() {
-    let client = helpers::Services::new_docker("mongo (poem)", Color::Green);
-    client.deploy("poem/mongodb");
+    let client = helpers::Services::new_docker("mongo (poem)", "poem/mongodb", Color::Green);
+    client.deploy();
 
     // post todo and get its generated objectId
     let add_response = client

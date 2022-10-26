@@ -10,4 +10,10 @@ In the root of the repository, run:
 make test
 ```
 
+To run individual tests, in the root of the e2e directory run:
+
+```bash
+POSTGRES_PASSWORD=postgres APPS_FQDN=unstable.shuttleapp.rs cargo test <test name> -- --nocapture
+```
+
 The server-side logs can be accessed with `docker compose logs`.

@@ -5380,20 +5380,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "shuttle-next"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "clap 4.0.18",
- "shuttle-common",
- "shuttle-service",
- "thiserror",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "shuttle-proto"
 version = "0.7.0"
 dependencies = [

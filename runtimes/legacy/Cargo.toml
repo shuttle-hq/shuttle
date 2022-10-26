@@ -10,15 +10,16 @@ async-trait = "0.1.58"
 clap ={ version = "4.0.18", features = ["derive"] }
 thiserror = "1.0.37"
 tokio = { version = "=1.20.1", features = ["full"] }
+tonic = "0.8.0"
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }
 
 [dependencies.shuttle-common]
 version = "0.7.0"
-path = "../common"
+path = "../../common"
 
 [dependencies.shuttle-service]
 version = "0.7.0"
 default-features = false
 features = ["loader"]
-path = "../service"
+path = "../../service"

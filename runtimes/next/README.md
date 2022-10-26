@@ -1,4 +1,4 @@
-# `shuttle-runtime`
+# `shuttle-next`
 
 ## How to run
 

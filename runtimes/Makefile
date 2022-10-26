@@ -1,13 +1,13 @@
-.PHONY: wasm runtime
+.PHONY: wasm next
 
-all: wasm runtime
+all: wasm next
 
 wasm:
 	cd wasm; cargo build --target wasm32-wasi
-	cp target/wasm32-wasi/debug/shuttle_serenity.wasm runtime/bot.wasm
+	cp target/wasm32-wasi/debug/shuttle_serenity.wasm next/bot.wasm
 
 test: wasm
-	cd runtime; cargo test -- --nocapture
+	cd next; cargo test -- --nocapture
 
-runtime:
-	cd runtime; cargo build
+next:
+	cd next; cargo build

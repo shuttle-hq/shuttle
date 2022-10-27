@@ -108,6 +108,12 @@ bump-resources:
 	$(call next, bump-examples)
 
 bump-examples:
+	git commit -am "chore: resources v$(version)"
+	fastmod --fixed-strings $(current) $(version) examples
+
+	$(call next, bump-misc)
+
+bump-misc:
 	git commit -am "docs: v$(version)"
 
 define next

@@ -7,5 +7,5 @@ edition = "2021"
 
 [dependencies]
 hyper = { version = "0.14", features = ["full"] }
-shuttle-service = { version = "0.7.1", features = ["web-tower"] }
+shuttle-service = { version = "0.7.2", features = ["web-tower"] }
 tower = { version = "0.4", features = ["full"] }

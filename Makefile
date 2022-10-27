@@ -96,23 +96,34 @@ shuttle-%: ${SRC} Cargo.lock
 	       .
 
 bump-version: --validate-version
-	# git checkout -b "chore/v$(version)"
+	git checkout -b "chore/v$(version)"
 	cargo set-version --workspace "$(version)"
 
 	$(call next, bump-resources)
 
 bump-resources:
 	git commit -am "chore: v$(version)"
+	fastmod --fixed-strings $(current) $(version) resources
+
+	$(call next, bump-examples)
+
+bump-examples:
+	git commit -am "docs: v$(version)"
 
 define next
 	git add --all
 	git --no-pager diff --staged
 
 	echo -e "\x1B[36m>> Is this correct?\x1B[39m"
-	read yn; if [ $$yn != "y" ]; then echo "Fix the issues then continue with:"; echo "make version=$(version) $1"; exit 2; fi
+	read yn; if [ $$yn != "y" ]; then echo "Fix the issues then continue with:"; echo "make version=$(version) current=$(current) $1"; exit 2; fi
 
 	make $1
 endef
 
+define update
+	echo $1 | jq
+endef
+
 --validate-version:
-	echo "$(version)" | rg -q "\d+\.\d+\.\d+" || { echo "first argument must be in the form x.y.z"; exit 1; }
+	echo "$(version)" | rg -q "\d+\.\d+\.\d+" || { echo "version argument must be in the form x.y.z"; exit 1; }
+	echo "$(current)" | rg -q "\d+\.\d+\.\d+" || { echo "current argument must be in the form x.y.z"; exit 1; }

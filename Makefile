@@ -54,7 +54,7 @@ RUST_LOG?=debug
 
 DOCKER_COMPOSE_ENV=STACK=$(STACK) BACKEND_TAG=$(TAG) PROVISIONER_TAG=$(TAG) POSTGRES_TAG=${POSTGRES_TAG} APPS_FQDN=$(APPS_FQDN) DB_FQDN=$(DB_FQDN) POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) RUST_LOG=$(RUST_LOG) CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) MONGO_INITDB_ROOT_USERNAME=$(MONGO_INITDB_ROOT_USERNAME) MONGO_INITDB_ROOT_PASSWORD=$(MONGO_INITDB_ROOT_PASSWORD)
 
-.PHONY: images clean src up down deploy shuttle-% postgres docker-compose.rendered.yml test
+.PHONY: images clean src up down deploy shuttle-% postgres docker-compose.rendered.yml test bump-version bump-resources --validate-version
 
 clean:
 	rm .shuttle-*
@@ -94,3 +94,25 @@ shuttle-%: ${SRC} Cargo.lock
 	       $(BUILDX_FLAGS) \
 	       -f Containerfile \
 	       .
+
+bump-version: --validate-version
+	# git checkout -b "chore/v$(version)"
+	cargo set-version --workspace "$(version)"
+
+	$(call next, bump-resources)
+
+bump-resources:
+	git commit -am "chore: v$(version)"
+
+define next
+	git add --all
+	git --no-pager diff --staged
+
+	echo -e "\x1B[36m>> Is this correct?\x1B[39m"
+	read yn; if [ $$yn != "y" ]; then echo "Fix the issues then continue with:"; echo "make version=$(version) $1"; exit 2; fi
+
+	make $1
+endef
+
+--validate-version:
+	echo "$(version)" | rg -q "\d+\.\d+\.\d+" || { echo "first argument must be in the form x.y.z"; exit 1; }

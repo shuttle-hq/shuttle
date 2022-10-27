@@ -205,7 +205,7 @@ const mdxComponents: MDXRemoteProps["components"] = {
     return (
       <div className="grid grid-cols-1 justify-items-center">
         <img src={props.src} alt={props.src}></img>
-        <span className="-mt-6 text-sm dark:text-gray-200">
+        <span className="-mt-6 text-sm text-[#828282] dark:text-gray-300">
           {props.caption}
         </span>
       </div>
@@ -311,17 +311,25 @@ export default function BlogPostPage(props: Props) {
           {/* Content */}
           <div className="flex-1 overflow-hidden">
             {(props.blog.thumb ?? props.blog.cover) && (
-              <div
-                className="relative mb-8 aspect-[4/3] overflow-auto rounded"
-                style={{
-                  aspectRatio: props.blog.coverAspectRatio,
-                }}
-              >
-                <Image
+              <div className="mb-8 grid grid-cols-1 justify-items-center">
+                {/* todo: fix this temporary hack to fix the caption */}
+                <img
+                  className="rounded"
                   src={"/images/blog/" + (props.blog.cover ?? props.blog.thumb)}
-                  layout="fill"
-                  objectFit="cover"
+                  alt="Cover image"
                 />
+                {/* <Image
+                    src={
+                      "/images/blog/" + (props.blog.cover ?? props.blog.thumb)
+                    }
+                    layout="fill"
+                    objectFit="contain"
+                  /> */}
+                {props.blog.caption && (
+                  <span className="mt-2 text-sm text-[#828282] dark:text-gray-300">
+                    {props.blog.caption}
+                  </span>
+                )}
               </div>
             )}
             <article

@@ -33,7 +33,7 @@ tar = "0.4.38"
 thiserror = "1.0.24"
 tokio = { version = "1.19.2", features = ["fs"] }
 toml = "0.5.9"
-tonic = "0.8.0"
+tonic = "0.8.2"
 tower = { version = "0.4.12", features = ["make"] }
 tower-http = { version = "0.3.4", features = ["auth", "trace"] }
 tracing = "0.1.35"

@@ -1,7 +1,7 @@
 ## How to run
 
 ```bash
-$ cd ..; make wasm
+$ make wasm
 $ DISCORD_TOKEN=xxx cargo run
 ```
 

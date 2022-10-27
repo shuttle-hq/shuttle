@@ -201,6 +201,16 @@ const mdxComponents: MDXRemoteProps["components"] = {
       </div>
     );
   },
+  CaptionedImage: (props: any) => {
+    return (
+      <div className="grid grid-cols-1 justify-items-center">
+        <img src={props.src} alt={props.src}></img>
+        <span className="-mt-6 text-sm dark:text-gray-200">
+          {props.caption}
+        </span>
+      </div>
+    );
+  },
   // blockquote(props) {
   //   return (
   //     <blockquote className="my-4 border-l-8 border-brand-orange1 bg-gray-200 p-4 text-left text-xl text-gray-500 dark:border-brand-orange2 dark:bg-gray-800 dark:text-gray-200">

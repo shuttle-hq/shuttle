@@ -73,7 +73,7 @@ The really powerful thing about WASM is that it is a very common compilation tar
 
 ## A next-generation backend framework
 
-![Hello, shuttle!](/images/blog/beta-hello.png)
+<CaptionedImage src='/images/blog/beta-hello.png' alt='Hello world endpoint' caption='A simple "Hello, World!" endpoint.'/>
 
 When we launched [shuttle](https://shuttle.rs/) in alpha, back in March 2022, our purpose was to address the issues people face using containers when building and deploying web apps. So we created an open-source infrastructure-from-code platform with which you don’t need to write Containerfiles and orchestrate images, starting with support for Rust.
 
@@ -91,13 +91,13 @@ After all, a major culprit of these long build and deploy times in the real worl
 
 What we wanted to do, then, is move these heavy dependencies to a common runtime across services. So your tokio, hyper, sqlx and co (in the case of Rust), now all belong to a long-lived containerized process running persistently in the cloud. Whereas all your service logic, database and endpoint code build into lightweight WASM modules that are dynamically loaded in-place by this global persistent process. That way "building" means compiling a very lightweight codebase with a small dependency footprint. And "deploying" means calling upon the control plane of that long-lived process to replace service components without rolling out new images, containers or VMs.
 
-![Hello, shuttle!](/images/blog/beta-api.png)
+<CaptionedImage src='/images/blog/beta-api.png' alt='Get article endpoint' caption='A GET article endpoint that retrieves an article from the provisioned database.'/>
 
 With this approach, the component of virtualization that you end up deploying on a daily basis is much smaller than traditional VMs and containers. In a way, we can say this makes the virtualization layer more adapted to the specific needs of backend services running in the cloud. It's an optimized I/O surface between backend service components that change a lot (e.g. endpoint implementations) and their environing long-lived runtimes that don't (e.g. tokio/hyper/sqlx).
 
 This results in "images" that are effectively up to **100x smaller** because of the switch from container images to WASM binaries. And super fast to deploy too, from tens of minutes to **less than a second,** because you don't have to build and test a large codebase with its large userspace dependencies. You just need to build and ship the code you're writing/the changes you've made.
 
-![Hello, shuttle!](/images/blog/beta-next-deploy-demo.gif)
+<CaptionedImage src='/images/blog/beta-next-deploy-demo.gif' alt='Deployment demo' caption='Deploy your application in less than a second.'/>
 
 Our vision for this new way of doing backend development is shuttle-next: a next-generation backend framework with the fastest build, test and deployment times ever.
 

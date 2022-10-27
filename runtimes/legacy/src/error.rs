@@ -7,6 +7,8 @@ pub enum Error {
     Load(#[from] LoaderError),
     #[error("Run error: {0}")]
     Run(#[from] shuttle_service::Error),
+    #[error("Start error: {0}")]
+    Start(#[from] shuttle_service::error::CustomError),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

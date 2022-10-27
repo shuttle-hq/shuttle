@@ -1,5 +1,6 @@
 pub mod args;
 
+use std::env;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::os::unix::prelude::RawFd;
@@ -7,16 +8,71 @@ use std::path::Path;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-
-use serenity::{model::prelude::*, prelude::*};
-
 use cap_std::os::unix::net::UnixStream;
+use serenity::{model::prelude::*, prelude::*};
+use shuttle_runtime_proto::runtime::runtime_server::Runtime;
+use shuttle_runtime_proto::runtime::{LoadRequest, LoadResponse, StartRequest, StartResponse};
+use tonic::{Request, Response, Status};
+use tracing::trace;
 use wasi_common::file::FileCaps;
 use wasmtime::{Engine, Linker, Module, Store};
 use wasmtime_wasi::sync::net::UnixStream as WasiUnixStream;
 use wasmtime_wasi::{WasiCtx, WasiCtxBuilder};
 
-pub struct BotBuilder {
+pub struct Next {
+    bot: std::sync::Mutex<Option<Bot>>,
+}
+
+impl Next {
+    pub fn new() -> Self {
+        Self {
+            bot: std::sync::Mutex::new(None),
+        }
+    }
+}
+
+#[async_trait]
+impl Runtime for Next {
+    async fn load(&self, request: Request<LoadRequest>) -> Result<Response<LoadResponse>, Status> {
+        let wasm_path = request.into_inner().path;
+        trace!(wasm_path, "loading");
+
+        let bot = Bot::new(wasm_path);
+
+        *self.bot.lock().unwrap() = Some(bot);
+
+        let message = LoadResponse { success: true };
+
+        Ok(Response::new(message))
+    }
+
+    async fn start(
+        &self,
+        _request: Request<StartRequest>,
+    ) -> Result<Response<StartResponse>, Status> {
+        let intents = GatewayIntents::GUILD_MESSAGES | GatewayIntents::MESSAGE_CONTENT;
+        let token = env::var("DISCORD_TOKEN").unwrap();
+        let bot: Bot = {
+            let guard = self.bot.lock().unwrap();
+            guard.as_ref().unwrap().clone()
+        };
+        let mut client = bot.into_client(token.as_str(), intents).await;
+
+        trace!("starting bot");
+        tokio::spawn(async move {
+            client.start().await.unwrap();
+        });
+
+        let message = StartResponse {
+            success: true,
+            port: None,
+        };
+
+        Ok(Response::new(message))
+    }
+}
+
+struct BotBuilder {
     engine: Engine,
     store: Store<WasiCtx>,
     linker: Linker<WasiCtx>,
@@ -71,7 +127,7 @@ impl BotBuilder {
     }
 }
 
-pub struct BotInner {
+struct BotInner {
     store: Store<WasiCtx>,
     linker: Linker<WasiCtx>,
 }
@@ -110,7 +166,8 @@ impl BotInner {
     }
 }
 
-pub struct Bot {
+#[derive(Clone)]
+struct Bot {
     inner: Arc<Mutex<BotInner>>,
 }
 

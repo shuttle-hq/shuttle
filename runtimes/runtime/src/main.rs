@@ -1,8 +1,8 @@
 use std::net::{Ipv4Addr, SocketAddr};
 
 use clap::Parser;
-use shuttle_legacy::{Args, Legacy, Next};
 use shuttle_proto::runtime::runtime_server::RuntimeServer;
+use shuttle_runtime::{Args, Legacy, Next};
 use tonic::transport::Server;
 use tracing::trace;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};

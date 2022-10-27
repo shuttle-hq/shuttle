@@ -1,7 +1,7 @@
 use std::net::{Ipv4Addr, SocketAddr};
 
 use clap::Parser;
-use shuttle_legacy::{args::Args, Legacy};
+use shuttle_legacy::{Args, Legacy, Next};
 use shuttle_runtime_proto::runtime::runtime_server::RuntimeServer;
 use tonic::transport::Server;
 use tracing::trace;
@@ -24,10 +24,15 @@ async fn main() {
     trace!(args = ?args, "parsed args");
 
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8000);
-    let legacy = Legacy::new();
-    Server::builder()
-        .add_service(RuntimeServer::new(legacy))
-        .serve(addr)
-        .await
-        .unwrap();
+    let router = if args.legacy {
+        let legacy = Legacy::new();
+        let svc = RuntimeServer::new(legacy);
+        Server::builder().add_service(svc)
+    } else {
+        let next = Next::new();
+        let svc = RuntimeServer::new(next);
+        Server::builder().add_service(svc)
+    };
+
+    router.serve(addr).await.unwrap();
 }

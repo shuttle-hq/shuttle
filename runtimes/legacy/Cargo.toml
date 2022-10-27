@@ -15,6 +15,13 @@ tonic = "0.8.0"
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }
 
+cap-std = "*"
+wasmtime = "*"
+wasmtime-wasi = "*"
+wasi-common = "*"
+
+serenity = { version = "0.11.5", default-features = false, features = ["client", "gateway", "rustls_backend", "model"] }
+
 [dependencies.shuttle-common]
 version = "0.7.0"
 path = "../../common"

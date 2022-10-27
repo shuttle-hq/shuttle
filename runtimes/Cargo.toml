@@ -1,7 +1,6 @@
 [workspace]
 members = [
   "legacy",
-  "next",
   "proto",
   "wasm"
 ]

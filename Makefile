@@ -54,7 +54,7 @@ RUST_LOG?=debug
 
 DOCKER_COMPOSE_ENV=STACK=$(STACK) BACKEND_TAG=$(TAG) PROVISIONER_TAG=$(TAG) POSTGRES_TAG=${POSTGRES_TAG} APPS_FQDN=$(APPS_FQDN) DB_FQDN=$(DB_FQDN) POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) RUST_LOG=$(RUST_LOG) CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) MONGO_INITDB_ROOT_USERNAME=$(MONGO_INITDB_ROOT_USERNAME) MONGO_INITDB_ROOT_PASSWORD=$(MONGO_INITDB_ROOT_PASSWORD)
 
-.PHONY: images clean src up down deploy shuttle-% postgres docker-compose.rendered.yml test bump-version bump-resources --validate-version
+.PHONY: images clean src up down deploy shuttle-% postgres docker-compose.rendered.yml test bump-% --validate-version
 
 clean:
 	rm .shuttle-*
@@ -95,6 +95,7 @@ shuttle-%: ${SRC} Cargo.lock
 	       -f Containerfile \
 	       .
 
+# Bunch of targets to make bumping the shuttle version easier
 bump-version: --validate-version
 	git checkout -b "chore/v$(version)"
 	cargo set-version --workspace "$(version)"
@@ -115,6 +116,12 @@ bump-examples:
 
 bump-misc:
 	git commit -am "docs: v$(version)"
+	fastmod --fixed-strings $(current) $(version)
+
+	$(call next, bump-final)
+
+bump-final:
+	git commit -am "misc: v$(version)"
 
 define next
 	git add --all
@@ -124,10 +131,6 @@ define next
 	read yn; if [ $$yn != "y" ]; then echo "Fix the issues then continue with:"; echo "make version=$(version) current=$(current) $1"; exit 2; fi
 
 	make $1
-endef
-
-define update
-	echo $1 | jq
 endef
 
 --validate-version:

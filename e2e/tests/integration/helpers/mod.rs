@@ -414,6 +414,7 @@ impl Services {
 
 impl Drop for Services {
     fn drop(&mut self) {
-        self.run_client(["project", "rm"]).wait().unwrap();
+        // Initiate project destruction on test completion
+        _ = self.run_client(["project", "rm"]).wait();
     }
 }

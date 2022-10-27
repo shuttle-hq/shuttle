@@ -5,7 +5,7 @@ use std::panic::AssertUnwindSafe;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context};
-use cargo::core::compiler::{CompileMode, MessageFormat};
+use cargo::core::compiler::{CompileKind, CompileMode, CompileTarget, MessageFormat};
 use cargo::core::{Manifest, PackageId, Shell, Summary, Verbosity, Workspace};
 use cargo::ops::{compile, CompileOptions};
 use cargo::util::interning::InternedString;
@@ -100,13 +100,20 @@ impl Loader {
     }
 }
 
+/// How to run/build the project
+pub enum Runtime {
+    Next(PathBuf),
+    Legacy(PathBuf),
+}
+
 /// Given a project directory path, builds the crate
 pub async fn build_crate(
     deployment_id: Uuid,
     project_path: &Path,
     release_mode: bool,
+    wasm: bool,
     tx: Sender<Message>,
-) -> anyhow::Result<PathBuf> {
+) -> anyhow::Result<Runtime> {
     let (read, write) = pipe::pipe();
     let project_path = project_path.to_owned();
 
@@ -125,10 +132,15 @@ pub async fn build_crate(
         check_version(summary)?;
         check_no_panic(&ws)?;
 
-        let opts = get_compile_options(&config, release_mode)?;
+        let opts = get_compile_options(&config, release_mode, wasm)?;
         let compilation = compile(&ws, &opts);
 
-        Ok(compilation?.cdylibs[0].path.clone())
+        let path = compilation?.cdylibs[0].path.clone();
+        Ok(if wasm {
+            Runtime::Next(path)
+        } else {
+            Runtime::Legacy(path)
+        })
     });
 
     // This needs to be on a separate thread, else deployer will block (reason currently unknown :D)
@@ -169,7 +181,11 @@ pub fn get_config(writer: PipeWriter) -> anyhow::Result<Config> {
 }
 
 /// Get options to compile in build mode
-fn get_compile_options(config: &Config, release_mode: bool) -> anyhow::Result<CompileOptions> {
+fn get_compile_options(
+    config: &Config,
+    release_mode: bool,
+    wasm: bool,
+) -> anyhow::Result<CompileOptions> {
     let mut opts = CompileOptions::new(config, CompileMode::Build)?;
     opts.build_config.message_format = MessageFormat::Json {
         render_diagnostics: false,
@@ -182,6 +198,12 @@ fn get_compile_options(config: &Config, release_mode: bool) -> anyhow::Result<Co
     } else {
         InternedString::new("dev")
     };
+
+    opts.build_config.requested_kinds = vec![if wasm {
+        CompileKind::Target(CompileTarget::new("wasm32-unknown-unknown")?)
+    } else {
+        CompileKind::Host
+    }];
 
     Ok(opts)
 }

@@ -1,16 +1,16 @@
 ---
-title: Announcing shuttle beta - replacing containers for backend development
+title: Replacing containers for backend development
 description: A next-generation backend development framework with the fastest build, test and deployment times ever.
-author: damien
+author: brokad
 tags: [rust, startup, beta, backend]
 thumb: shuttle-beta.png
 cover: shuttle-beta.png
 date: "2022-10-21T15:00:00"
 ---
-
-> Containers have improved development in a lot of ways, but over time they have also created a lot of problems. We believe it's time to take a bold view and rethink the way we do backend development.
->
-> We're announcing [shuttle-next](https://shuttle.rs/beta): a next-generation backend development framework that has up to **100x smaller images** and **deploys end-to-end in under a second**.
+<TLDR>
+    <p>Containers have improved development in a lot of ways, but over time they have also created a lot of problems. We believe it's time to take a bold view and rethink the way we do backend development.</p>
+    <p>We're announcing [shuttle-next](https://shuttle.rs/beta): a next-generation backend development framework that has up to **100x smaller images** and **deploys end-to-end in under a second**.</p>
+</TLDR>
 
 In web applications nowadays, you can sort any component somewhere in a broad spectrum from client-side to server-side.
 
@@ -57,8 +57,9 @@ So we need to restrict the scope of virtualization to something more specific to
 Where does that leave us then? We need a new take on virtualization. One that has, perhaps, simplified I/Os and is engineered for backend services. Thankfully, we don't have to invent most of that wheel: let's talk about WASI.
 
 ## WASM/WASI
-
-<blockquote class="twitter-tweet"><p lang="en" dir="ltr">If WASM+WASI existed in 2008, we wouldn&#39;t have needed to created Docker. That&#39;s how important it is. Webassembly on the server is the future of computing. A standardized system interface was the missing link. Let&#39;s hope WASI is up to the task! <a href="https://t.co/wnXQg4kwa4">https://t.co/wnXQg4kwa4</a></p>&mdash; Solomon Hykes (@solomonstre) <a href="https://twitter.com/solomonstre/status/1111004913222324225?ref_src=twsrc%5Etfw">March 27, 2019</a></blockquote> <script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
+<div style={{display:'flex',justifyContent:'center'}}>
+<blockquote className="twitter-tweet"><p lang="en" dir="ltr">If WASM+WASI existed in 2008, we wouldn&#39;t have needed to created Docker. That&#39;s how important it is. Webassembly on the server is the future of computing. A standardized system interface was the missing link. Let&#39;s hope WASI is up to the task! <a href="https://t.co/wnXQg4kwa4">https://t.co/wnXQg4kwa4</a></p>&mdash; Solomon Hykes (@solomonstre) <a href="https://twitter.com/solomonstre/status/1111004913222324225?ref_src=twsrc%5Etfw">March 27, 2019</a></blockquote> <script async src="https://platform.twitter.com/widgets.js" charSet="utf-8"></script>
+</div>
 
 WebAssembly (abbreviated WASM) is an instruction set for extremely lightweight virtual machines. Its most common use is to speed up client-side interactivity. This is made possible as popular browsers have rolled out WASM runtimes a few years back.
 
@@ -76,7 +77,7 @@ The really powerful thing about WASM is that it is a very common compilation tar
 
 When we launched [shuttle](https://shuttle.rs/) in alpha, back in March 2022, our purpose was to address the issues people face using containers when building and deploying web apps. So we created an open-source infrastructure-from-code platform with which you don’t need to write Containerfiles and orchestrate images, starting with support for Rust.
 
-Since then, more than 1k people ⭐ed [shuttle repo](https://github.com/shuttle-hq/shuttle) and hundreds joined our discord community. shuttle as a platform has now seen more 2000 deployments and hundreds of users. And we received a ton of feedback from it all.
+Since then, more than 1k people starred the [shuttle repo](https://github.com/shuttle-hq/shuttle) and hundreds joined our discord community. shuttle as a platform has now seen more 2000 deployments and hundreds of users. And we received a ton of feedback from it all.
 
 What we quickly realized is that, while we managed to free users from having to work with containers, we completely failed to solve two core problems: long build and deploy times.
 

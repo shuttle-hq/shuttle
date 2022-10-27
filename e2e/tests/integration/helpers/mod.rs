@@ -115,7 +115,7 @@ CARGO_HOME: {}
             "e2e-test-key".to_string()
         };
 
-        Command::new(DOCKER.as_os_str())
+        _ = Command::new(DOCKER.as_os_str())
             .args([
                 "compose",
                 "--file",
@@ -128,12 +128,11 @@ CARGO_HOME: {}
                 "--state=/var/lib/shuttle/gateway.sqlite",
                 "init",
                 "--name",
-                "admin",
+                "test",
                 "--key",
                 &admin_key,
             ])
-            .output()
-            .ensure_success("failed to create admin user on gateway");
+            .output();
     };
 }
 

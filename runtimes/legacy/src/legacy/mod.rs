@@ -9,7 +9,7 @@ use std::{
 use anyhow::anyhow;
 use async_trait::async_trait;
 use shuttle_common::{database, LogItem};
-use shuttle_runtime_proto::runtime::{
+use shuttle_proto::runtime::{
     runtime_server::Runtime, LoadRequest, LoadResponse, StartRequest, StartResponse,
 };
 use shuttle_service::{

@@ -63,3 +63,7 @@ pub mod provisioner {
         }
     }
 }
+
+pub mod runtime {
+    tonic::include_proto!("runtime");
+}

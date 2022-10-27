@@ -119,7 +119,7 @@ async fn main() {
 
 and deploy it to Heroku:
 
-![Hello, Heroku!](/images/blog/beta-heroku.gif)
+<CaptionedImage src='/images/blog/axum-heroku.gif' alt='Deployment demo' caption='TLDR: it takes 3 minutes and 50 seconds.'/>
 
 To try to address this, we wanted to **move all these heavy dependencies to a common runtime across services**. So your tokio, hyper, sqlx and co (in the case of Rust), now all belong to a long-lived containerized process running persistently in the cloud. Whereas all your service logic, database and endpoint code build into lightweight WASM modules that are dynamically loaded in-place by this global persistent process. That way "building" means compiling a very lightweight codebase with a small dependency footprint. And "deploying" means calling upon the control plane of that long-lived process to replace service components without rolling out new images, containers or VMs.
 

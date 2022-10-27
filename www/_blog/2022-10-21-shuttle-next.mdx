@@ -5,8 +5,10 @@ author: brokad
 tags: [rust, startup, beta, backend]
 thumb: shuttle-beta.png
 cover: shuttle-beta.png
+caption: '"An oil paining of an orange shuttle taking off with a container exploding in the background" - DALL·E 2'
 date: "2022-10-21T15:00:00"
 ---
+
 <TLDR>
   <p>Virtual machines and containers have improved backends in a lot of ways, but over time they have also created a lot of problems. We believe it's time to rethink how we use virtualization for backend development.</p>
   <p>We're building a backend framework that shifts the scope of virtualization from processes down to service components.</p>
@@ -73,7 +75,7 @@ The really powerful thing about WASM is that it is a very common compilation tar
 
 ## Changing virtualization for backends
 
-![Hello, shuttle!](/images/blog/beta-hello.png)
+<CaptionedImage src='/images/blog/beta-hello.png' alt='Hello world endpoint' caption='A simple "Hello, World!" endpoint.'/>
 
 When we launched [shuttle](https://shuttle.rs/) for its early alpha, back in March 2022, our purpose was to address the issues people face when building and deploying web app backends. So we created an open-source infrastructure-from-code platform with which you don’t need to write Containerfiles and orchestrate images, starting with support for Rust.
 
@@ -123,7 +125,7 @@ To try to address this, we wanted to **move all these heavy dependencies to a co
 
 This leaves us with a trimmed down user-facing API that still uses familiar objects like `PgClient`s and axum-style routes with guards:
 
-![Hello, shuttle!](/images/blog/beta-api.png)
+<CaptionedImage src='/images/blog/beta-api.png' alt='Get article endpoint' caption='A GET article endpoint that retrieves an article from the provisioned database.'/>
 
 Except that now the virtualization platform in which your services are run is responsible for instantiating these objects and calling these functions.
 
@@ -131,7 +133,7 @@ With this approach, the component of virtualization that you end up deploying on
 
 This results in "images" that are effectively up to **100x smaller** because of the switch from container images to WASM binaries. And super fast to deploy too, from tens of minutes sometimes to **less than a second** all the time. All because when things are *really* incremental, you don't have to build and test a large codebase with its large userspace dependencies on every push. You just need to build and test the code you're writing and the changes you've made.
 
-![Hello, shuttle!](/images/blog/beta-next-deploy-demo.gif)
+<CaptionedImage src='/images/blog/beta-next-deploy-demo.gif' alt='Deployment demo' caption='Deploy your application in less than a second.'/>
 
 Our vision for this new way of doing backend development is shuttle-next: a next-generation backend framework with the fastest build, test and deployment times ever.
 

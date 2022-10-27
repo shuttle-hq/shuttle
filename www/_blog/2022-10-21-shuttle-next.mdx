@@ -1,6 +1,6 @@
 ---
-title: Replacing containers for backend development
-description: A next-generation backend development framework with the fastest build, test and deployment times ever.
+title: It's time to rethink how we use virtualization in backends
+description: Virtual machines and containers have improved development in a lot of ways, but over time they have also created a lot of problems. We believe it's time to rethink how we use virtualization for backend development.
 author: brokad
 tags: [rust, startup, beta, backend]
 thumb: shuttle-beta.png
@@ -8,8 +8,8 @@ cover: shuttle-beta.png
 date: "2022-10-21T15:00:00"
 ---
 <TLDR>
-    <p>Containers have improved development in a lot of ways, but over time they have also created a lot of problems. We believe it's time to take a bold view and rethink the way we do backend development.</p>
-    <p>We're announcing [shuttle-next](https://shuttle.rs/beta): a next-generation backend development framework that has up to **100x smaller images** and **deploys end-to-end in under a second**.</p>
+  <p>Virtual machines and containers have improved backends in a lot of ways, but over time they have also created a lot of problems. We believe it's time to rethink how we use virtualization for backend development.</p>
+  <p>We're building a backend framework that shifts the scope of virtualization from processes down to service components.</p>
 </TLDR>
 
 In web applications nowadays, you can sort any component somewhere in a broad spectrum from client-side to server-side.
@@ -24,9 +24,9 @@ On the server-side, things are more fragmented. This is also not surprising: bac
 
 As in many other scenarios in software engineering and computer science, this huge free space of options is also the cause of a lot of problems. To understand why, we need to talk about containers.
 
-## Containers are also a problem
+## Containers are a solution and a problem
 
-On its way to settling in its standards, the cloud - epitomized by AWS - has evolved massively over the past decade. My co-founder has written an [excellent post on this](https://www.shuttle.rs/blog/2022/05/09/ifc) on our blog.
+On its way to settling in its standards, the cloud - epitomized by AWS - has evolved massively over the past decade. My co-founder has written a [post on this](https://www.shuttle.rs/blog/2022/05/09/ifc) previously.
 
 Today we, as software engineers, deal with it as it is: the result of incremental changes on top of a status quo. And it is not ideal.
 
@@ -56,53 +56,90 @@ So we need to restrict the scope of virtualization to something more specific to
 
 Where does that leave us then? We need a new take on virtualization. One that has, perhaps, simplified I/Os and is engineered for backend services. Thankfully, we don't have to invent most of that wheel: let's talk about WASI.
 
-## WASM/WASI
+## WASM and WASI
 <div style={{display:'flex',justifyContent:'center'}}>
 <blockquote className="twitter-tweet"><p lang="en" dir="ltr">If WASM+WASI existed in 2008, we wouldn&#39;t have needed to created Docker. That&#39;s how important it is. Webassembly on the server is the future of computing. A standardized system interface was the missing link. Let&#39;s hope WASI is up to the task! <a href="https://t.co/wnXQg4kwa4">https://t.co/wnXQg4kwa4</a></p>&mdash; Solomon Hykes (@solomonstre) <a href="https://twitter.com/solomonstre/status/1111004913222324225?ref_src=twsrc%5Etfw">March 27, 2019</a></blockquote> <script async src="https://platform.twitter.com/widgets.js" charSet="utf-8"></script>
 </div>
 
-WebAssembly (abbreviated WASM) is an instruction set for extremely lightweight virtual machines. Its most common use is to speed up client-side interactivity. This is made possible as popular browsers have rolled out WASM runtimes a few years back.
+[WebAssembly][WebAssembly] (abbreviated WASM) is an instruction set for extremely lightweight virtual machines. Its most common use is to speed up client-side interactivity. This is made possible as popular browsers have rolled out WASM runtimes a few years back.
 
 WASM is made for fast sandboxing. However, without any extension, it is unable to perform even simple I/O operations like reading data from a file descriptor. This is not a big deal if WASM is used *in the browser* - we definitely don't want to let browsers freely provide file system access to web apps. But it is a serious limitation if WASM is to be used server-side - how else are you going to serve endpoints without that?
 
-Therefore, the introduction of WASM was followed, a short while later, by WASI - the WebAssembly System Interface. WASI is a standard API to give WASM code the ability to do system-level I/O. This allows WASM code running in a WASI-compliant runtime to do a lot of what a native process can do through syscalls.
+Therefore, the introduction of WASM was followed, a short while later, by WASI - the [WebAssembly System Interface][WASI]. WASI is a standard API to give WASM code the ability to do system-level I/O. This allows WASM code running in a WASI-compliant runtime to do a lot of what a native process can do through syscalls.
 
 The really powerful thing about WASM is that it is a very common compilation target. Major languages (and commonly associated frameworks) now support building WASM as a target, just the same way you build for amd64 or arm. And a lot of standard libraries have added support for WASI-based I/Os.
 
-[This](https://twitter.com/solomonstre/status/1111004913222324225?ref_src=twsrc%5Etfw) is what Docker's founder had to say about WASI, back in 2019. And we agree with them. At the end of the day containers are, really, just I/O-level virtualization. Now, a few years after its initial introduction, WASM runtimes have stabilised their support of WASI. This creates a prime environment to engineer, on top of WASI, a solution to containers' biggest drawbacks.
+[This](#wasm-and-wasi) is what Docker's founder had to say about WASI, back in 2019. And we agree with them. At the end of the day containers are, really, just I/O-level virtualization. Now, a few years after its initial introduction, WASM runtimes have stabilised their support of WASI. This creates a prime environment to engineer, on top of WASI, a solution to containers' biggest drawbacks.
 
-## A next-generation backend framework
+## Changing virtualization for backends
 
 ![Hello, shuttle!](/images/blog/beta-hello.png)
 
-When we launched [shuttle](https://shuttle.rs/) in alpha, back in March 2022, our purpose was to address the issues people face using containers when building and deploying web apps. So we created an open-source infrastructure-from-code platform with which you don’t need to write Containerfiles and orchestrate images, starting with support for Rust.
+When we launched [shuttle](https://shuttle.rs/) for its early alpha, back in March 2022, our purpose was to address the issues people face when building and deploying web app backends. So we created an open-source infrastructure-from-code platform with which you don’t need to write Containerfiles and orchestrate images, starting with support for Rust.
 
-Since then, more than 1k people starred the [shuttle repo](https://github.com/shuttle-hq/shuttle) and hundreds joined our discord community. shuttle as a platform has now seen more 2000 deployments and hundreds of users. And we received a ton of feedback from it all.
+Since then, more than 1.2k people starred the [shuttle repo](https://github.com/shuttle-hq/shuttle) and hundreds joined our discord community. And we've seen more than 2000 deployments and hundreds of users! From which we received a ton of feedback.
 
-What we quickly realized is that, while we managed to free users from having to work with containers, we completely failed to solve two core problems: long build and deploy times.
+What we quickly realized is that while we simplified the process of getting started implementing your own backend and setting up its infrastructure, we completely failed to solve two core problems: long build and deploy times.
 
 Rust has notoriously long build times (this probably has to do with static linking and heavy reliance on compile-time code generation). And while it supports incremental compilation out of the box, in a containerized environment, missing the cache for an image layer means having to rebuild from scratch.
 
 We've found that no matter how much we tweaked our internal caching, too often users had to wait too long for their projects to build and deploy - something that can take minutes in the simplest projects, and closer to half an hour in complex ones. The reason was simple: our execution of our idea for shuttle is built on top of containers. And no matter how much we try to distance containers from our users, their limitations always surface back.
 
-It was time for a complete rethink. So we took a radical view: let's start from the services people are writing, distilling what they need done quickly and easily. And let's make it our mission to optimize the hell out of the entire stack. We thought that if the execution of that idea is done right, it'd let us trim the dependency tree of services our users deploy and slim the runtime that every service ships with.
+It was time for a complete rethink, so we took a radical view: let's start from the services people are writing, distilling what they need done quickly and easily. And let's make it our mission to optimize the hell out of the entire stack. We thought that if the execution of that idea is done right, it'd let us trim the dependency tree of services our users deploy and slim the runtime that every service ships with.
+
+> What we quickly realized is that while we trimmed down the process of getting started implementing your own backend and setting up its infrastructure, we completely failed to solve two core problems: long build and deploy times.
 
 After all, a major culprit of these long build and deploy times in the real world is the large number of heavy dependencies of even simple projects. There's not much you can do about this: most services have a pretty big runtime that includes heavy machinery like an asynchronous executor (e.g. [tokio](https://tokio.rs)), a web server (e.g. [hyper](https://github.com/hyperium/hyper)), database drivers (e.g. [sqlx](https://github.com/launchbadge/sqlx)) and more. And on every deploy you need to re-build them and hope artifact caches are hit in order to get an incremental build. And it's not just building either, the running time of tests is also impacted by this. The closure of the codebase you're engaging in those tests is very large indeed as it follows that of your dependencies.
 
-What we wanted to do, then, is move these heavy dependencies to a common runtime across services. So your tokio, hyper, sqlx and co (in the case of Rust), now all belong to a long-lived containerized process running persistently in the cloud. Whereas all your service logic, database and endpoint code build into lightweight WASM modules that are dynamically loaded in-place by this global persistent process. That way "building" means compiling a very lightweight codebase with a small dependency footprint. And "deploying" means calling upon the control plane of that long-lived process to replace service components without rolling out new images, containers or VMs.
+This stuff materializes itself everywhere. Just try taking this hello world snippet:
+
+```rust
+use axum::{Router, routing::get};
+
+async fn get_hello() -> &'static str {
+    "You're slow, Heroku!"
+}
+
+#[tokio::main]
+async fn main() {
+    let port = std::env::var("PORT").unwrap();
+
+    let router = Router::new()
+        .route("/", get(get_hello))
+        .into_make_service();
+
+    hyper::Server::bind(&format!("127.0.0.1:{port}").parse().unwrap())
+        .serve(router)
+        .await
+        .unwrap();
+}
+```
+
+and deploy it to Heroku:
+
+![Hello, Heroku!](/images/blog/beta-heroku.gif)
+
+To try to address this, we wanted to **move all these heavy dependencies to a common runtime across services**. So your tokio, hyper, sqlx and co (in the case of Rust), now all belong to a long-lived containerized process running persistently in the cloud. Whereas all your service logic, database and endpoint code build into lightweight WASM modules that are dynamically loaded in-place by this global persistent process. That way "building" means compiling a very lightweight codebase with a small dependency footprint. And "deploying" means calling upon the control plane of that long-lived process to replace service components without rolling out new images, containers or VMs.
+
+This leaves us with a trimmed down user-facing API that still uses familiar objects like `PgClient`s and axum-style routes with guards:
 
 ![Hello, shuttle!](/images/blog/beta-api.png)
 
-With this approach, the component of virtualization that you end up deploying on a daily basis is much smaller than traditional VMs and containers. In a way, we can say this makes the virtualization layer more adapted to the specific needs of backend services running in the cloud. It's an optimized I/O surface between backend service components that change a lot (e.g. endpoint implementations) and their environing long-lived runtimes that don't (e.g. tokio/hyper/sqlx).
+Except that now the virtualization platform in which your services are run is responsible for instantiating these objects and calling these functions.
 
-This results in "images" that are effectively up to **100x smaller** because of the switch from container images to WASM binaries. And super fast to deploy too, from tens of minutes to **less than a second,** because you don't have to build and test a large codebase with its large userspace dependencies. You just need to build and ship the code you're writing/the changes you've made.
+With this approach, the component of virtualization that you end up deploying on a daily basis is much smaller than traditional VMs and containers. In a way we can say this makes the virtualization layer more adapted to the specific needs of backend services running in the cloud. It's an optimized I/O surface between backend service components that change a lot (e.g. endpoint implementations) and their environing long-lived runtimes that don't (e.g. tokio/hyper/sqlx).
+
+This results in "images" that are effectively up to **100x smaller** because of the switch from container images to WASM binaries. And super fast to deploy too, from tens of minutes sometimes to **less than a second** all the time. All because when things are *really* incremental, you don't have to build and test a large codebase with its large userspace dependencies on every push. You just need to build and test the code you're writing and the changes you've made.
 
 ![Hello, shuttle!](/images/blog/beta-next-deploy-demo.gif)
 
 Our vision for this new way of doing backend development is shuttle-next: a next-generation backend framework with the fastest build, test and deployment times ever.
 
-We believe that what we're starting with shuttle-next will eventually become the norm. In the same way we all think it's often not best to setup and start a VM only to run a single process, we will eventually all think it's misguided to build and start a container only to run a single service.
+We believe that scoping down virtualization to the level of service components will eventually become the norm for backend development. In the same way we all think it's often not best to setup and start a VM only to run a single process, we will eventually all think it's misguided to build and start a container only to run a single service.
 
-We are launching shuttle-next as part of our closed beta for shuttle later this month, with the public release coming soon after. If you’re keen to give it a try early, **[sign up for the beta!](https://shuttle.rs/beta)**
+We are launching shuttle-next as part of our closed beta for shuttle later this month, with the public release coming soon after. If you’re keen to give it a try early, **[sign up for the beta!](https://shuttle.rs/beta)** We'd love to know what you think!
 
-In the meantime, check out [shuttle's GitHub repo](https://github.com/shuttle-hq/shuttle) and [Twitter](https://twitter.com/shuttle_dev) for updates. If you’d like to show support before the official release, please star the repo and/or join the [shuttle Discord community](https://discord.gg/shuttle)!
+In the meantime, check out [shuttle's GitHub repo](https://github.com/shuttle-hq/shuttle) and [Twitter](https://twitter.com/shuttle_dev) for updates. If you’d like to support us, please star the repo and/or join the [shuttle Discord community](https://discord.gg/shuttle)!
+
+[WebAssembly]: http://webassembly.org/
+[WASI]: https://wasi.dev

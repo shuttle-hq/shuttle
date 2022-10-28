@@ -371,6 +371,9 @@ impl ProjectCreating {
             "Env": [
                 "RUST_LOG=debug",
             ],
+            "Labels": {
+                "project.name": project_name,
+            }
         });
 
         let mut config = Config::<String>::from(container_config);

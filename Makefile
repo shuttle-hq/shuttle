@@ -96,7 +96,12 @@ shuttle-%: ${SRC} Cargo.lock
 	       .
 
 # Bunch of targets to make bumping the shuttle version easier
+#
+# Dependencies: git, cargo-edit, fastmod, ripgrep
 bump-version: --validate-version
+	git checkout development
+	git fetch --all
+	git pull upstream
 	git checkout -b "chore/v$(version)"
 	cargo set-version --workspace "$(version)"
 
@@ -122,6 +127,31 @@ bump-misc:
 
 bump-final:
 	git commit -am "misc: v$(version)"
+
+deploy-examples: deploy-examples/rocket/hello-world \
+	deploy-examples/rocket/persist \
+	deploy-examples/rocket/postgres \
+	deploy-examples/rocket/secrets \
+	deploy-examples/rocket/authentication \
+	deploy-examples/axum/hello-world \
+	deploy-examples/axum/websocket \
+	deploy-examples/poem/hello-world \
+	deploy-examples/poem/mongodb \
+	deploy-examples/poem/postgres \
+	deploy-examples/salvo/hello-world \
+	deploy-examples/tide/hello-world \
+	deploy-examples/tide/postgres \
+	deploy-examples/tower/hello-world \
+	deploy-examples/warp/hello-world \
+
+	echo "All example have been redeployed"
+
+deploy-examples/%:
+	cd examples/$(*); $(shuttle-command) project rm || echo -e "\x1B[33m>> Nothing to remove for $*\x1B[39m"
+	sleep 5
+	cd examples/$(*); $(shuttle-command) project new
+	sleep 5
+	cd examples/$(*); $(shuttle-command) deploy
 
 define next
 	git add --all

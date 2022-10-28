@@ -24,8 +24,11 @@ async fn main() {
     trace!(args = ?args, "parsed args");
 
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8000);
+
+    let provisioner_address = args.provisioner_address;
+
     let router = if args.legacy {
-        let legacy = Legacy::new();
+        let legacy = Legacy::new(provisioner_address);
         let svc = RuntimeServer::new(legacy);
         Server::builder().add_service(svc)
     } else {

@@ -9,16 +9,19 @@ use std::{
 use anyhow::anyhow;
 use async_trait::async_trait;
 use shuttle_common::{database, LogItem};
-use shuttle_proto::runtime::{
-    runtime_server::Runtime, LoadRequest, LoadResponse, StartRequest, StartResponse,
+use shuttle_proto::{
+    provisioner::provisioner_client::ProvisionerClient,
+    runtime::{runtime_server::Runtime, LoadRequest, LoadResponse, StartRequest, StartResponse},
 };
 use shuttle_service::{
     loader::{LoadedService, Loader},
     Factory, Logger, ServiceName,
 };
 use tokio::sync::mpsc::{self, UnboundedReceiver};
-use tonic::{Request, Response, Status};
+use tonic::{transport::Endpoint, Request, Response, Status};
 use tracing::{info, instrument, trace};
+
+use crate::provisioner_factory::{AbstractFactory, AbstractProvisionerFactory};
 
 mod error;
 
@@ -26,13 +29,15 @@ pub struct Legacy {
     // Mutexes are for interior mutability
     so_path: Mutex<Option<PathBuf>>,
     port: Mutex<Option<u16>>,
+    provisioner_address: Endpoint,
 }
 
 impl Legacy {
-    pub fn new() -> Self {
+    pub fn new(provisioner_address: Endpoint) -> Self {
         Self {
             so_path: Mutex::new(None),
             port: Mutex::new(None),
+            provisioner_address,
         }
     }
 }
@@ -52,12 +57,23 @@ impl Runtime for Legacy {
 
     async fn start(
         &self,
-        _request: Request<StartRequest>,
+        request: Request<StartRequest>,
     ) -> Result<Response<StartResponse>, Status> {
         let port = 8001;
         let address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
-        let mut factory = DummyFactory::new();
+
+        let provisioner_client = ProvisionerClient::connect(self.provisioner_address.clone())
+            .await
+            .expect("failed to connect to provisioner");
+        let abstract_factory = AbstractProvisionerFactory::new(provisioner_client);
+
+        let service_name = ServiceName::from_str(request.into_inner().service_name.as_str())
+            .map_err(|err| Status::from_error(Box::new(err)))?;
+
+        let mut factory = abstract_factory.get_factory(service_name);
+
         let (logger, _rx) = get_logger();
+
         let so_path = self
             .so_path
             .lock()
@@ -110,36 +126,6 @@ async fn load_service(
     let loader = Loader::from_so_file(so_path)?;
 
     Ok(loader.load(factory, addr, logger).await?)
-}
-
-struct DummyFactory {
-    service_name: ServiceName,
-}
-
-impl DummyFactory {
-    fn new() -> Self {
-        Self {
-            service_name: ServiceName::from_str("legacy").unwrap(),
-        }
-    }
-}
-
-#[async_trait]
-impl Factory for DummyFactory {
-    fn get_service_name(&self) -> ServiceName {
-        self.service_name.clone()
-    }
-
-    async fn get_db_connection_string(
-        &mut self,
-        _: database::Type,
-    ) -> Result<String, shuttle_service::Error> {
-        todo!()
-    }
-
-    async fn get_secrets(&mut self) -> Result<BTreeMap<String, String>, shuttle_service::Error> {
-        todo!()
-    }
 }
 
 fn get_logger() -> (Logger, UnboundedReceiver<LogItem>) {

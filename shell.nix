@@ -25,6 +25,7 @@ in
       datadog-agent
       sccache
       sqlite
+      fastmod
     ];
 
     PROTOC = "${protobuf}/bin/protoc";

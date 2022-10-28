@@ -15,10 +15,16 @@ grpcurl -plaintext -import-path ../proto -proto runtime.proto -d '{"service_name
 
 Load and run an .so library that implements `shuttle_service::Service`. 
 
-To test, first start this binary using:
+To test, first start a provisioner from the root directory using:
 
 ```bash
-cargo run -- --legacy
+docker-compose -f docker-compose.rendered.yml up provisioner
+```
+
+Then in another shell, start the runtime using:
+
+```bash
+cargo run -- --legacy --provisioner-address http://localhost:8000
 ```
 
 Then in another shell, load a `.so` file and start it up:

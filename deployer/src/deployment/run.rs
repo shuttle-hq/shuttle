@@ -24,7 +24,7 @@ use crate::error::{Error, Result};
 pub async fn task(
     mut recv: RunReceiver,
     kill_send: KillSender,
-    abstract_factory: impl provisioner_factory::AbstractFactory,
+    abstract_dummy_factory: impl provisioner_factory::AbstractFactory,
     logger_factory: impl runtime_logger::Factory,
     active_deployment_getter: impl ActiveDeploymentsGetter,
     artifacts_path: PathBuf,
@@ -55,14 +55,14 @@ pub async fn task(
             }
         };
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
-        let service_name = match ServiceName::from_str(&built.service_name) {
+        let _service_name = match ServiceName::from_str(&built.service_name) {
             Ok(name) => name,
             Err(err) => {
                 start_crashed_cleanup(&id, err);
                 continue;
             }
         };
-        let mut factory = abstract_factory.get_factory(service_name, built.service_id);
+        let mut factory = abstract_dummy_factory.get_factory();
         let logger = logger_factory.get_logger(id);
 
         let old_deployments_killer = kill_old_deployments(

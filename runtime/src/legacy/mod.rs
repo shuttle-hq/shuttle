@@ -1,5 +1,4 @@
 use std::{
-    collections::BTreeMap,
     net::{Ipv4Addr, SocketAddr},
     path::PathBuf,
     str::FromStr,
@@ -8,7 +7,7 @@ use std::{
 
 use anyhow::anyhow;
 use async_trait::async_trait;
-use shuttle_common::{database, LogItem};
+use shuttle_common::LogItem;
 use shuttle_proto::{
     provisioner::provisioner_client::ProvisionerClient,
     runtime::{runtime_server::Runtime, LoadRequest, LoadResponse, StartRequest, StartResponse},

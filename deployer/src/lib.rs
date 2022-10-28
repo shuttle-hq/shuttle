@@ -2,7 +2,7 @@ use std::{convert::Infallible, net::SocketAddr};
 
 pub use args::Args;
 pub use deployment::{
-    deploy_layer::DeployLayer, provisioner_factory::AbstractProvisionerFactory,
+    deploy_layer::DeployLayer, provisioner_factory::AbstractDummyFactory,
     runtime_logger::RuntimeLoggerFactory,
 };
 use deployment::{provisioner_factory, runtime_logger, Built, DeploymentManager};
@@ -23,13 +23,13 @@ mod persistence;
 mod proxy;
 
 pub async fn start(
-    abstract_factory: impl provisioner_factory::AbstractFactory,
+    abstract_dummy_factory: impl provisioner_factory::AbstractFactory,
     runtime_logger_factory: impl runtime_logger::Factory,
     persistence: Persistence,
     args: Args,
 ) {
     let deployment_manager = DeploymentManager::new(
-        abstract_factory,
+        abstract_dummy_factory,
         runtime_logger_factory,
         persistence.clone(),
         persistence.clone(),

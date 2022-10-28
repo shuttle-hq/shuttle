@@ -8,9 +8,6 @@ use shuttle_proto::provisioner::{
 use shuttle_service::{Factory, ServiceName};
 use tonic::{transport::Channel, Request};
 use tracing::{debug, info, trace};
-// use uuid::Uuid;
-
-// use crate::persistence::{Resource, ResourceRecorder, ResourceType, SecretGetter};
 
 /// Trait to make it easy to get a factory (service locator) for each service being started
 pub trait AbstractFactory: Send + 'static {
@@ -24,46 +21,27 @@ pub trait AbstractFactory: Send + 'static {
 #[derive(Clone)]
 pub struct AbstractProvisionerFactory {
     provisioner_client: ProvisionerClient<Channel>,
-    // resource_recorder: R,
-    // secret_getter: S,
 }
 
 impl AbstractFactory for AbstractProvisionerFactory {
     type Output = ProvisionerFactory;
 
     fn get_factory(&self, service_name: ServiceName) -> Self::Output {
-        ProvisionerFactory::new(
-            self.provisioner_client.clone(),
-            service_name,
-            // service_id,
-            // self.resource_recorder.clone(),
-            // self.secret_getter.clone(),
-        )
+        ProvisionerFactory::new(self.provisioner_client.clone(), service_name)
     }
 }
 
 impl AbstractProvisionerFactory {
-    pub fn new(
-        provisioner_client: ProvisionerClient<Channel>,
-        // resource_recorder: R,
-        // secret_getter: S,
-    ) -> Self {
-        Self {
-            provisioner_client,
-            // resource_recorder,
-            // secret_getter,
-        }
+    pub fn new(provisioner_client: ProvisionerClient<Channel>) -> Self {
+        Self { provisioner_client }
     }
 }
 
 /// A factory (service locator) which goes through the provisioner crate
 pub struct ProvisionerFactory {
     service_name: ServiceName,
-    // service_id: Uuid,
     provisioner_client: ProvisionerClient<Channel>,
     info: Option<DatabaseReadyInfo>,
-    // resource_recorder: R,
-    // secret_getter: S,
     secrets: Option<BTreeMap<String, String>>,
 }
 
@@ -71,17 +49,11 @@ impl ProvisionerFactory {
     pub(crate) fn new(
         provisioner_client: ProvisionerClient<Channel>,
         service_name: ServiceName,
-        // service_id: Uuid,
-        // resource_recorder: R,
-        // secret_getter: S,
     ) -> Self {
         Self {
             provisioner_client,
             service_name,
-            // service_id,
             info: None,
-            // resource_recorder,
-            // secret_getter,
             secrets: None,
         }
     }
@@ -100,7 +72,6 @@ impl Factory for ProvisionerFactory {
             return Ok(info.connection_string_private());
         }
 
-        // let r#type = ResourceType::Database(db_type.clone().into());
         let db_type: DbType = db_type.into();
 
         let request = Request::new(DatabaseRequest {
@@ -118,15 +89,6 @@ impl Factory for ProvisionerFactory {
         let info: DatabaseReadyInfo = response.into();
         let conn_str = info.connection_string_private();
 
-        // self.resource_recorder
-        //     .insert_resource(&Resource {
-        //         service_id: self.service_id,
-        //         r#type,
-        //         data: serde_json::to_value(&info).unwrap(),
-        //     })
-        //     .await
-        //     .unwrap();
-
         self.info = Some(info);
 
         info!("Done provisioning database");
@@ -139,20 +101,6 @@ impl Factory for ProvisionerFactory {
             debug!("Returning previously fetched secrets");
             Ok(secrets.clone())
         } else {
-            // info!("Fetching secrets for deployment");
-            // let iter = self
-            //     .secret_getter
-            //     .get_secrets(&self.service_id)
-            //     .await
-            //     .map_err(shuttle_service::error::CustomError::new)?
-            //     .into_iter()
-            //     .map(|secret| (secret.key, secret.value));
-
-            // let secrets = BTreeMap::from_iter(iter);
-            // self.secrets = Some(secrets.clone());
-
-            // info!("Done fetching secrets");
-            // Ok(secrets)
             todo!()
         }
     }

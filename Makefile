@@ -54,7 +54,7 @@ RUST_LOG?=debug
 
 DOCKER_COMPOSE_ENV=STACK=$(STACK) BACKEND_TAG=$(TAG) PROVISIONER_TAG=$(TAG) POSTGRES_TAG=${POSTGRES_TAG} APPS_FQDN=$(APPS_FQDN) DB_FQDN=$(DB_FQDN) POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) RUST_LOG=$(RUST_LOG) CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) MONGO_INITDB_ROOT_USERNAME=$(MONGO_INITDB_ROOT_USERNAME) MONGO_INITDB_ROOT_PASSWORD=$(MONGO_INITDB_ROOT_PASSWORD)
 
-.PHONY: images clean src up down deploy shuttle-% postgres docker-compose.rendered.yml test bump-% --validate-version
+.PHONY: images clean src up down deploy shuttle-% postgres docker-compose.rendered.yml test bump-% publish publish-% --validate-version
 
 clean:
 	rm .shuttle-*
@@ -162,6 +162,35 @@ define next
 
 	make $1
 endef
+
+# Publish all our crates to crates.io
+# See CONTRIBUTING.md for the dependency graph
+publish: publish-resources publish-cargo-shuttle
+	echo "Publishing done"
+
+publish-resources: publish-resources/aws-rds \
+	publish-resources/persist \
+	publish-resources/shared-db
+
+publish-cargo-shuttle: publish-resources/secrets
+	cd cargo-shuttle; cargo publish
+	sleep 10 # Wait for crates.io to update
+
+publish-service: publish-codegen publish-common
+	cd service; cargo publish
+	sleep 10 # Wait for crates.io to update
+
+publish-codegen:
+	cd codegen; cargo publish
+	sleep 10 # Wait for crates.io to update
+
+publish-common:
+	cd common; cargo publish
+	sleep 10 # Wait for crates.io to update
+
+publish-resources/%: publish-service
+	cd resources/$(*); cargo publish
+	sleep 10 # Wait for crates.io to update
 
 --validate-version:
 	echo "$(version)" | rg -q "\d+\.\d+\.\d+" || { echo "version argument must be in the form x.y.z"; exit 1; }

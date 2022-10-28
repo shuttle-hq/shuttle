@@ -15,6 +15,7 @@ export interface Post {
   readonly title: string;
   readonly date: string;
   readonly cover?: string;
+  readonly caption?: string;
   readonly coverAspectRatio?: string;
   readonly author?: string;
   readonly author_url?: string;
@@ -51,7 +52,6 @@ export function getSortedPosts(
     //Extracts contents of the MDX file
     const fileContents = fs.readFileSync(fullPath, "utf8");
     const { data, content } = matter(fileContents);
-
     const options: Intl.DateTimeFormatOptions = {
       month: "long",
       day: "numeric",

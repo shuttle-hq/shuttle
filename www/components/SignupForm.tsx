@@ -7,13 +7,14 @@ import {
   TWITTER_URL,
 } from "../lib/constants";
 import ExternalLink from "./ExternalLink";
-import Image from "next/image";
+
 const links = [
   { name: "💻 contributing to shuttle", href: CONTRIBUTING_URL },
   { name: "⭐️ starring the repository", href: GITHUB_URL },
   { name: "👾 joining our discord community", href: DISCORD_URL },
   { name: "🐦 following us on twitter", href: TWITTER_URL },
 ];
+
 export default function SignupForm() {
   const [state, handleSubmit] = useForm(FORMSPREE_ENDPOINT);
 

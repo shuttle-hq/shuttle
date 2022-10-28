@@ -27,6 +27,7 @@ import { DocumentTextIcon } from "@heroicons/react/outline";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faLinkedin, faTwitter } from "@fortawesome/free-brands-svg-icons";
 import Copy from "../../../../../components/Copy";
+import Socials from "../../../../../components/Socials";
 
 export async function getStaticPaths() {
   const paths = getAllPostSlugs();
@@ -83,6 +84,16 @@ export async function getStaticProps({
   const nextPost = allPosts[currentIndex + 1] ?? null;
   const prevPost = allPosts[currentIndex - 1] ?? null;
 
+  const options: Intl.DateTimeFormatOptions = {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  };
+  const formattedDate = new Date(data.date).toLocaleDateString(
+    "en-IN",
+    options
+  );
+
   return {
     props: {
       prevPost,
@@ -94,6 +105,7 @@ export async function getStaticProps({
         ...data,
         toc: mdxTOC,
         readingTime,
+        date: formattedDate,
       } as Post,
     },
   };
@@ -161,14 +173,51 @@ const Pre = ({ children, ...props }: any) => {
 const mdxComponents: MDXRemoteProps["components"] = {
   a(props) {
     if (props.href.match(/^https?:\/\//)) {
-      return <ExternalLink {...props}></ExternalLink>;
+      return (
+        <ExternalLink
+          {...props}
+          className="text-brand-orange1 no-underline hover:text-brand-orange2"
+        ></ExternalLink>
+      );
     }
 
-    return <InternalLink {...(props as any)}></InternalLink>;
+    return (
+      <InternalLink
+        {...(props as any)}
+        className="text-brand-orange1 no-underline hover:text-brand-orange2"
+      ></InternalLink>
+    );
   },
   pre: (props: any) => {
     return <Pre {...props} />;
   },
+  TLDR: (props: any) => {
+    return (
+      <div className="border-l-8 border-brand-orange1 bg-gray-200 p-4 text-left text-xl text-gray-500  dark:bg-gray-800 dark:text-gray-200">
+        <span className="text-md rounded bg-brand-orange1 px-[10px] py-[2px] font-extrabold text-slate-100  dark:text-dark-800">
+          TLDR
+        </span>
+        {props.children}
+      </div>
+    );
+  },
+  CaptionedImage: (props: any) => {
+    return (
+      <div className="grid grid-cols-1 justify-items-center">
+        <img src={props.src} alt={props.src}></img>
+        <span className="-mt-6 text-sm text-[#828282] dark:text-gray-300">
+          {props.caption}
+        </span>
+      </div>
+    );
+  },
+  // blockquote(props) {
+  //   return (
+  //     <blockquote className="my-4 border-l-8 border-brand-orange1 bg-gray-200 p-4 text-left text-xl text-gray-500 dark:border-brand-orange2 dark:bg-gray-800 dark:text-gray-200">
+  //       {props.children}
+  //     </blockquote>
+  //   );
+  // },
 };
 
 interface Props {
@@ -262,17 +311,25 @@ export default function BlogPostPage(props: Props) {
           {/* Content */}
           <div className="flex-1 overflow-hidden">
             {(props.blog.thumb ?? props.blog.cover) && (
-              <div
-                className="relative mb-8 aspect-[4/3] overflow-auto rounded"
-                style={{
-                  aspectRatio: props.blog.coverAspectRatio,
-                }}
-              >
-                <Image
+              <div className="mb-8 grid grid-cols-1 justify-items-center">
+                {/* todo: fix this temporary hack to fix the caption */}
+                <img
+                  className="rounded"
                   src={"/images/blog/" + (props.blog.cover ?? props.blog.thumb)}
-                  layout="fill"
-                  objectFit="cover"
+                  alt="Cover image"
                 />
+                {/* <Image
+                    src={
+                      "/images/blog/" + (props.blog.cover ?? props.blog.thumb)
+                    }
+                    layout="fill"
+                    objectFit="contain"
+                  /> */}
+                {props.blog.caption && (
+                  <span className="mt-2 text-sm text-[#828282] dark:text-gray-300">
+                    {props.blog.caption}
+                  </span>
+                )}
               </div>
             )}
             <article
@@ -324,6 +381,7 @@ export default function BlogPostPage(props: Props) {
                 )}
               </div>
             </div>
+            <Socials />
           </div>
           {/* Sidebar */}
           <div className="flex-none space-y-8 lg:w-64">

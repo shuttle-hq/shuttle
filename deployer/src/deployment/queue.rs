@@ -7,7 +7,7 @@ use cargo_metadata::Message;
 use chrono::Utc;
 use crossbeam_channel::Sender;
 use serde_json::json;
-use shuttle_service::loader::{build_crate, get_config};
+use shuttle_service::loader::{build_crate, get_config, Runtime};
 use tracing::{debug, error, info, instrument, trace};
 use uuid::Uuid;
 
@@ -158,7 +158,7 @@ impl Queued {
         });
 
         let project_path = project_path.canonicalize()?;
-        let so_path = build_deployment(self.id, &project_path, tx.clone()).await?;
+        let so_path = build_deployment(self.id, &project_path, false, tx.clone()).await?;
 
         if self.will_run_tests {
             info!(
@@ -265,13 +265,17 @@ fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<()> {
 async fn build_deployment(
     deployment_id: Uuid,
     project_path: &Path,
+    wasm: bool,
     tx: crossbeam_channel::Sender<Message>,
 ) -> Result<PathBuf> {
-    let so_path = build_crate(deployment_id, project_path, true, tx)
+    let runtime_path = build_crate(deployment_id, project_path, true, wasm, tx)
         .await
         .map_err(|e| Error::Build(e.into()))?;
 
-    Ok(so_path)
+    match runtime_path {
+        Runtime::Legacy(so_path) => Ok(so_path),
+        Runtime::Next(_) => todo!(),
+    }
 }
 
 #[instrument(skip(project_path, tx))]

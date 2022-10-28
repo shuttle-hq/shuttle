@@ -24,7 +24,7 @@ use crossterm::style::Stylize;
 use factory::LocalFactory;
 use futures::StreamExt;
 use shuttle_common::models::secret;
-use shuttle_service::loader::{build_crate, Loader};
+use shuttle_service::loader::{build_crate, Loader, Runtime};
 use shuttle_service::Logger;
 use tokio::sync::mpsc;
 use tracing::trace;
@@ -277,7 +277,10 @@ impl Shuttle {
             "Building".bold().green(),
             working_directory.display()
         );
-        let so_path = build_crate(id, working_directory, false, tx).await?;
+        let so_path = match build_crate(id, working_directory, false, false, tx).await? {
+            Runtime::Legacy(path) => path,
+            Runtime::Next(_) => todo!(),
+        };
 
         trace!("loading secrets");
         let secrets_path = working_directory.join("Secrets.toml");

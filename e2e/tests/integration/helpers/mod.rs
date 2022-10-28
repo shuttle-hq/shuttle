@@ -346,7 +346,7 @@ impl Services {
             let mut run = Command::new(WORKSPACE_ROOT.join("target/debug/cargo-shuttle"));
 
             if env::var("SHUTTLE_API_KEY").is_err() {
-                run.env("SHUTTLE_API_KEY", "test-key");
+                run.env("SHUTTLE_API_KEY", "e2e-test-key");
             }
 
             run.env("CARGO_HOME", CARGO_HOME.path());
@@ -375,7 +375,7 @@ impl Services {
         let mut run = Command::new(WORKSPACE_ROOT.join("target/debug/cargo-shuttle"));
 
         if env::var("SHUTTLE_API_KEY").is_err() {
-            run.env("SHUTTLE_API_KEY", "test-key");
+            run.env("SHUTTLE_API_KEY", "e2e-test-key");
         }
 
         run.env("CARGO_HOME", CARGO_HOME.path());

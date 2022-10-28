@@ -127,6 +127,10 @@ bump-misc:
 
 bump-final:
 	git commit -am "misc: v$(version)"
+	git push --set-upstream origin $$(git rev-parse --abbrev-ref HEAD)
+
+	echo "Make pull request and confirm everything is okay. Then run:"
+	echo "make publish"
 
 deploy-examples: deploy-examples/rocket/hello-world \
 	deploy-examples/rocket/persist \
@@ -166,7 +170,7 @@ endef
 # Publish all our crates to crates.io
 # See CONTRIBUTING.md for the dependency graph
 publish: publish-resources publish-cargo-shuttle
-	echo "Publishing done"
+	echo "The branch can now be safely merged"
 
 publish-resources: publish-resources/aws-rds \
 	publish-resources/persist \

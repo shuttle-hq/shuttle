@@ -82,9 +82,9 @@ pub async fn task(
 }
 
 #[instrument(skip(_id), fields(id = %_id, state = %State::Crashed))]
-fn build_failed(_id: &Uuid, err: impl std::error::Error + 'static) {
+fn build_failed(_id: &Uuid, error: impl std::error::Error + 'static) {
     error!(
-        error = &err as &dyn std::error::Error,
+        error = &error as &dyn std::error::Error,
         "service build encountered an error"
     );
 }

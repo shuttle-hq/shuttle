@@ -163,17 +163,17 @@ fn stopped_cleanup(_id: &Uuid) {
 }
 
 #[instrument(skip(_id), fields(id = %_id, state = %State::Crashed))]
-fn crashed_cleanup(_id: &Uuid, err: impl std::error::Error + 'static) {
+fn crashed_cleanup(_id: &Uuid, error: impl std::error::Error + 'static) {
     error!(
-        error = &err as &dyn std::error::Error,
+        error = &error as &dyn std::error::Error,
         "service encountered an error"
     );
 }
 
 #[instrument(skip(_id), fields(id = %_id, state = %State::Crashed))]
-fn start_crashed_cleanup(_id: &Uuid, err: impl std::error::Error + 'static) {
+fn start_crashed_cleanup(_id: &Uuid, error: impl std::error::Error + 'static) {
     error!(
-        error = &err as &dyn std::error::Error,
+        error = &error as &dyn std::error::Error,
         "service startup encountered an error"
     );
 }

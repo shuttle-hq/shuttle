@@ -98,6 +98,7 @@ shuttle-%: ${SRC} Cargo.lock
 # Bunch of targets to make bumping the shuttle version easier
 #
 # Dependencies: git, cargo-edit, fastmod, ripgrep
+# Usage: make bump-version current=0.6.3 version=0.7.0
 bump-version: --validate-version
 	git checkout development
 	git fetch --all
@@ -132,6 +133,8 @@ bump-final:
 	echo "Make pull request and confirm everything is okay. Then run:"
 	echo "make publish"
 
+# Deploy all our example using the command set in shuttle-command
+# Usage: make deploy-example shuttle-command="cargo shuttle" -j 2
 deploy-examples: deploy-examples/rocket/hello-world \
 	deploy-examples/rocket/persist \
 	deploy-examples/rocket/postgres \
@@ -170,6 +173,7 @@ endef
 
 # Publish all our crates to crates.io
 # See CONTRIBUTING.md for the dependency graph
+# Usage: make publish -j 4
 publish: publish-resources publish-cargo-shuttle
 	echo "The branch can now be safely merged"
 

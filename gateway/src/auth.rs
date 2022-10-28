@@ -141,6 +141,9 @@ where
                 .map(|Path((p, _))| p)
                 .unwrap(),
         };
+
+        // Record current account name for tracing purposes
+        Span::current().record("account.project", &scope.to_string());
         if user.super_user || user.projects.contains(&scope) {
             Ok(Self { user, scope })
         } else {

@@ -108,25 +108,25 @@ bump-version: --validate-version
 	$(call next, bump-resources)
 
 bump-resources:
-	git commit -am "chore: v$(version)"
+	git commit -m "chore: v$(version)"
 	fastmod --fixed-strings $(current) $(version) resources
 
 	$(call next, bump-examples)
 
 bump-examples:
-	git commit -am "chore: resources v$(version)"
+	git commit -m "chore: resources v$(version)"
 	fastmod --fixed-strings $(current) $(version) examples
 
 	$(call next, bump-misc)
 
 bump-misc:
-	git commit -am "docs: v$(version)"
+	git commit -m "docs: v$(version)"
 	fastmod --fixed-strings $(current) $(version)
 
 	$(call next, bump-final)
 
 bump-final:
-	git commit -am "misc: v$(version)"
+	git commit -m "misc: v$(version)"
 	git push --set-upstream origin $$(git rev-parse --abbrev-ref HEAD)
 
 	echo "Make pull request and confirm everything is okay. Then run:"
@@ -158,6 +158,7 @@ deploy-examples/%:
 	cd examples/$(*); $(shuttle-command) deploy
 
 define next
+	cargo check # To update Cargo.lock
 	git add --all
 	git --no-pager diff --staged
 

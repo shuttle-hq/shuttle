@@ -11,7 +11,10 @@ use hyper::{
 };
 use hyper_reverse_proxy::{ProxyError, ReverseProxy};
 use once_cell::sync::Lazy;
+use opentelemetry::global;
+use opentelemetry_http::HeaderExtractor;
 use tracing::{error, field, instrument, trace, Span};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
     Lazy::new(|| ReverseProxy::new(Client::new()));
@@ -24,6 +27,12 @@ pub async fn handle(
     req: Request<Body>,
     address_getter: impl AddressGetter,
 ) -> Result<Response<Body>, Infallible> {
+    let span = Span::current();
+    let parent_context = global::get_text_map_propagator(|propagator| {
+        propagator.extract(&HeaderExtractor(req.headers()))
+    });
+    span.set_parent(parent_context);
+
     let host = match req.headers().get(HOST) {
         Some(host) => host.to_str().unwrap_or_default().to_owned(),
         None => {
@@ -48,7 +57,7 @@ pub async fn handle(
     };
 
     // Record current service for tracing purposes
-    Span::current().record("service", &service);
+    span.record("service", &service);
 
     let proxy_address = match address_getter.get_address_for_service(service).await {
         Ok(Some(address)) => address,

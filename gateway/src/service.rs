@@ -12,13 +12,16 @@ use hyper::client::HttpConnector;
 use hyper::Client;
 use hyper_reverse_proxy::ReverseProxy;
 use once_cell::sync::Lazy;
+use opentelemetry::global;
+use opentelemetry_http::HeaderInjector;
 use rand::distributions::{Alphanumeric, DistString};
 use sqlx::error::DatabaseError;
 use sqlx::migrate::Migrator;
 use sqlx::sqlite::SqlitePool;
 use sqlx::types::Json as SqlxJson;
 use sqlx::{query, Error as SqlxError, Row};
-use tracing::debug;
+use tracing::{debug, Span};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::args::ContextArgs;
 use crate::auth::{Key, User};
@@ -217,6 +220,11 @@ impl GatewayService {
         let target_url = format!("http://{target_ip}:8001");
 
         debug!(target_url, "routing control");
+
+        let cx = Span::current().context();
+        global::get_text_map_propagator(|propagator| {
+            propagator.inject_context(&cx, &mut HeaderInjector(req.headers_mut()))
+        });
 
         let resp = PROXY_CLIENT
             .call("127.0.0.1".parse().unwrap(), &target_url, req)

@@ -10,11 +10,14 @@ use bytes::BufMut;
 use chrono::{TimeZone, Utc};
 use fqdn::FQDN;
 use futures::StreamExt;
+use opentelemetry::global;
+use opentelemetry_http::HeaderExtractor;
 use shuttle_common::models::secret;
 use shuttle_common::LogItem;
 use tower_http::auth::RequireAuthorizationLayer;
 use tower_http::trace::TraceLayer;
 use tracing::{debug, debug_span, error, field, trace, Span};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
 use crate::deployment::{DeploymentManager, Queued};
@@ -60,7 +63,13 @@ pub fn make_router(
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(|request: &Request<Body>| {
-                    debug_span!("request", http.uri = %request.uri(), http.method = %request.method(), http.status_code = field::Empty, api_key = field::Empty)
+                    let span = debug_span!("request", http.uri = %request.uri(), http.method = %request.method(), http.status_code = field::Empty);
+                    let parent_context = global::get_text_map_propagator(|propagator| {
+                        propagator.extract(&HeaderExtractor(request.headers()))
+                    });
+                    span.set_parent(parent_context);
+
+                    span
                 })
                 .on_response(
                     |response: &Response<BoxBody>, latency: Duration, span: &Span| {
@@ -185,6 +194,7 @@ async fn post_service(
         service_id: service.id,
         data,
         will_run_tests: !params.contains_key("no-test"),
+        tracing_context: Default::default(),
     };
 
     deployment_manager.queue_push(queued).await;

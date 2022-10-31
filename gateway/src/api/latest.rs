@@ -158,7 +158,7 @@ pub fn make_api(service: Arc<GatewayService>, sender: Sender<Work>) -> Router<Bo
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(|request: &Request<Body>| {
-                    debug_span!("request", http.uri = %request.uri(), http.method = %request.method(), http.status_code = field::Empty, api_key = field::Empty)
+                    debug_span!("request", http.uri = %request.uri(), http.method = %request.method(), http.status_code = field::Empty, account.name = field::Empty, account.project = field::Empty)
                 })
                 .on_response(
                     |response: &Response<BoxBody>, latency: Duration, span: &Span| {

@@ -14,8 +14,11 @@ use hyper::server::conn::AddrStream;
 use hyper::{Client, Request};
 use hyper_reverse_proxy::ReverseProxy;
 use once_cell::sync::Lazy;
+use opentelemetry::global;
+use opentelemetry_http::HeaderInjector;
 use tower::Service;
-use tracing::debug;
+use tracing::{debug, debug_span, field};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::service::GatewayService;
 use crate::{Error, ErrorKind, ProjectName};
@@ -39,12 +42,14 @@ impl Service<Request<Body>> for ProxyService {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, req: Request<Body>) -> Self::Future {
+    fn call(&mut self, mut req: Request<Body>) -> Self::Future {
         let remote_addr = self.remote_addr.ip();
         let gateway = Arc::clone(&self.gateway);
         let fqdn = self.fqdn.clone();
+
         Box::pin(
             async move {
+                let span = debug_span!("proxy", http.method = %req.method(), http.uri = %req.uri(), http.status_code = field::Empty, project = field::Empty);
                 let project_str = req
                     .headers()
                     .get("Host")
@@ -58,11 +63,20 @@ impl Service<Request<Body>> for ProxyService {
 
                 let project = gateway.find_project(&project_name).await?;
 
+                // Record current project for tracing purposes
+                span.record("project", &project_name.to_string());
+
                 let target_ip = project
                     .target_ip()?
                     .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotReady))?;
 
                 let target_url = format!("http://{}:{}", target_ip, 8000);
+
+                let cx = span.context();
+
+                global::get_text_map_propagator(|propagator| {
+                    propagator.inject_context(&cx, &mut HeaderInjector(req.headers_mut()))
+                });
 
                 let proxy = PROXY_CLIENT
                     .call(remote_addr, &target_url, req)
@@ -71,6 +85,9 @@ impl Service<Request<Body>> for ProxyService {
 
                 let (parts, body) = proxy.into_parts();
                 let body = <Body as HttpBody>::map_err(body, axum::Error::new).boxed_unsync();
+
+                span.record("http.status_code", &parts.status.as_u16());
+
                 Ok(Response::from_parts(parts, body))
             }
             .or_else(|err: Error| future::ready(Ok(err.into_response()))),

@@ -131,6 +131,8 @@ services:
       - DD_APM_NON_LOCAL_TRAFFIC=true
       - DD_SITE=datadoghq.eu
       - DD_API_KEY=${DD_API_KEY}
+      - DD_ENV=${DD_ENV}
+      - DD_CONTAINER_LABELS_AS_TAGS={"project.name":"project_name"}
     deploy:
       placement:
         constraints:

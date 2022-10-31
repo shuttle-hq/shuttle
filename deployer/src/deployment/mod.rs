@@ -8,7 +8,8 @@ use std::path::PathBuf;
 
 pub use queue::Queued;
 pub use run::{ActiveDeploymentsGetter, Built};
-use tracing::instrument;
+use tracing::{instrument, Span};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::persistence::{SecretRecorder, State};
 use tokio::sync::{broadcast, mpsc};
@@ -54,7 +55,13 @@ impl DeploymentManager {
     }
 
     #[instrument(skip(self), fields(id = %queued.id, state = %State::Queued))]
-    pub async fn queue_push(&self, queued: Queued) {
+    pub async fn queue_push(&self, mut queued: Queued) {
+        let cx = Span::current().context();
+
+        opentelemetry::global::get_text_map_propagator(|propagator| {
+            propagator.inject_context(&cx, &mut queued.tracing_context);
+        });
+
         self.pipeline.queue_send.send(queued).await.unwrap();
     }
 

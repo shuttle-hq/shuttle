@@ -1,5 +1,6 @@
 use clap::Parser;
 use futures::prelude::*;
+use opentelemetry::global;
 use shuttle_gateway::args::{Args, Commands, ExecCmd, ExecCmds, InitArgs};
 use shuttle_gateway::auth::Key;
 use shuttle_gateway::proxy::make_proxy;
@@ -20,6 +21,8 @@ async fn main() -> io::Result<()> {
     let args = Args::parse();
 
     trace!(args = ?args, "parsed args");
+
+    global::set_text_map_propagator(opentelemetry_datadog::DatadogPropagator::new());
 
     let fmt_layer = fmt::layer();
     let filter_layer = EnvFilter::try_from_default_env()

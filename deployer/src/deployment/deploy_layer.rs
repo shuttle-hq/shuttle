@@ -889,6 +889,7 @@ mod tests {
                 id,
                 service_name: "run-test".to_string(),
                 service_id: Uuid::new_v4(),
+                tracing_context: Default::default(),
             })
             .await;
 
@@ -945,6 +946,7 @@ mod tests {
                 service_id: Uuid::new_v4(),
                 data: Bytes::from("violets are red").to_vec(),
                 will_run_tests: false,
+                tracing_context: Default::default(),
             })
             .await;
 
@@ -988,6 +990,7 @@ mod tests {
             service_id: Uuid::new_v4(),
             data: bytes,
             will_run_tests: false,
+            tracing_context: Default::default(),
         }
     }
 }

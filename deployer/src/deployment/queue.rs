@@ -6,12 +6,14 @@ use crate::persistence::{LogLevel, SecretRecorder};
 use cargo_metadata::Message;
 use chrono::Utc;
 use crossbeam_channel::Sender;
+use opentelemetry::global;
 use serde_json::json;
 use shuttle_service::loader::{build_crate, get_config};
-use tracing::{debug, error, info, instrument, trace};
+use tracing::{debug, debug_span, error, info, instrument, trace, Instrument, Span};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::fs::remove_file;
 use std::io::Read;
@@ -58,27 +60,43 @@ pub async fn task(
         let libs_path = libs_path.clone();
 
         tokio::spawn(async move {
-            match queued
-                .handle(builds_path, libs_path, log_recorder, secret_recorder)
-                .await
-            {
-                Ok(built) => promote_to_run(built, run_send_cloned).await,
-                Err(err) => build_failed(&id, err),
+            let parent_cx = global::get_text_map_propagator(|propagator| {
+                propagator.extract(&queued.tracing_context)
+            });
+            let span = debug_span!("builder");
+            span.set_parent(parent_cx);
+
+            async move {
+                match queued
+                    .handle(builds_path, libs_path, log_recorder, secret_recorder)
+                    .await
+                {
+                    Ok(built) => promote_to_run(built, run_send_cloned).await,
+                    Err(err) => build_failed(&id, err),
+                }
             }
+            .instrument(span)
+            .await
         });
     }
 }
 
-#[instrument(fields(id = %_id, state = %State::Crashed))]
-fn build_failed(_id: &Uuid, err: impl std::error::Error + 'static) {
+#[instrument(skip(_id), fields(id = %_id, state = %State::Crashed))]
+fn build_failed(_id: &Uuid, error: impl std::error::Error + 'static) {
     error!(
-        error = &err as &dyn std::error::Error,
+        error = &error as &dyn std::error::Error,
         "service build encountered an error"
     );
 }
 
 #[instrument(fields(id = %built.id, state = %State::Built))]
-async fn promote_to_run(built: Built, run_send: RunSender) {
+async fn promote_to_run(mut built: Built, run_send: RunSender) {
+    let cx = Span::current().context();
+
+    opentelemetry::global::get_text_map_propagator(|propagator| {
+        propagator.inject_context(&cx, &mut built.tracing_context);
+    });
+
     if let Err(err) = run_send.send(built.clone()).await {
         build_failed(&built.id, err);
     }
@@ -90,10 +108,11 @@ pub struct Queued {
     pub service_id: Uuid,
     pub data: Vec<u8>,
     pub will_run_tests: bool,
+    pub tracing_context: HashMap<String, String>,
 }
 
 impl Queued {
-    #[instrument(name = "queued_handle", skip(self, builds_path, libs_path, log_recorder, secret_recorder), fields(id = %self.id, state = %State::Building))]
+    #[instrument(skip(self, builds_path, libs_path, log_recorder, secret_recorder), fields(id = %self.id, state = %State::Building))]
     async fn handle(
         self,
         builds_path: PathBuf,
@@ -169,6 +188,7 @@ impl Queued {
             id: self.id,
             service_name: self.service_name,
             service_id: self.service_id,
+            tracing_context: Default::default(),
         };
 
         Ok(built)

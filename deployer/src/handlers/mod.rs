@@ -63,7 +63,7 @@ pub fn make_router(
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(|request: &Request<Body>| {
-                    let span = debug_span!("request", http.uri = %request.uri(), http.method = %request.method(), http.status_code = field::Empty, api_key = field::Empty);
+                    let span = debug_span!("request", http.uri = %request.uri(), http.method = %request.method(), http.status_code = field::Empty);
                     let parent_context = global::get_text_map_propagator(|propagator| {
                         propagator.extract(&HeaderExtractor(request.headers()))
                     });

@@ -12,8 +12,6 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use bollard::Docker;
 use futures::prelude::*;
-use once_cell::sync::Lazy;
-use regex::Regex;
 use serde::{Deserialize, Deserializer, Serialize};
 use shuttle_common::models::error::{ApiError, ErrorKind};
 use tokio::sync::mpsc::error::SendError;
@@ -28,8 +26,6 @@ pub mod service;
 pub mod worker;
 
 use crate::service::{ContainerSettings, GatewayService};
-
-static PROJECT_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new("^[a-zA-Z0-9\\-_]{3,64}$").unwrap());
 
 /// Server-side errors that do not have to do with the user runtime
 /// should be [`Error`]s.
@@ -126,11 +122,9 @@ impl FromStr for ProjectName {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if PROJECT_REGEX.is_match(s) {
-            Ok(Self(s.to_string()))
-        } else {
-            Err(Error::from_kind(ErrorKind::InvalidProjectName))
-        }
+        s.parse::<shuttle_common::project::ProjectName>()
+            .map_err(|_| Error::from_kind(ErrorKind::InvalidProjectName))
+            .map(|pn| Self(pn.to_string()))
     }
 }
 

@@ -73,7 +73,7 @@ postgres:
 	       $(POSTGRES_EXTRA_PATH)
 
 docker-compose.rendered.yml: docker-compose.yml docker-compose.dev.yml
-	$(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE) $(DOCKER_COMPOSE_FILES) -p $(STACK) config > $@
+	$(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE) $(DOCKER_COMPOSE_FILES) $(DOCKER_COMPOSE_CONFIG_FLAGS) -p $(STACK) config > $@
 
 deploy: docker-compose.yml
 	$(DOCKER_COMPOSE_ENV) docker stack deploy -c $< $(STACK)

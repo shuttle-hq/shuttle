@@ -13,6 +13,7 @@ use hyper::{
 };
 pub use persistence::Persistence;
 use proxy::AddressGetter;
+use tokio::select;
 use tracing::{error, info};
 
 mod args;
@@ -54,12 +55,15 @@ pub async fn start(
     );
     let make_service = router.into_make_service();
 
-    info!("Binding to and listening at address: {}", args.api_address);
-
-    axum::Server::bind(&args.api_address)
-        .serve(make_service)
-        .await
-        .unwrap_or_else(|_| panic!("Failed to bind to address: {}", args.api_address));
+    select! {
+        _ = tokio::spawn(shuttle_runtime::start_legacy()) => {
+            info!("Legacy runtime stopped.")
+        },
+        _ = axum::Server::bind(&args.api_address)
+        .serve(make_service) => {
+            info!("Handlers server error, addr: {}", &args.api_address);
+        },
+    }
 }
 
 pub async fn start_proxy(

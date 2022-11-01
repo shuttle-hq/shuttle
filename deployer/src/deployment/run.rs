@@ -7,12 +7,11 @@ use std::{
 use async_trait::async_trait;
 use portpicker::pick_unused_port;
 use shuttle_common::project::ProjectName as ServiceName;
-use shuttle_service::{
-    loader::{LoadedService, Loader},
-    Factory, Logger,
-};
+use shuttle_proto::runtime::{runtime_client::RuntimeClient, LoadRequest, StartRequest};
+
+use shuttle_service::{Factory, Logger};
 use tokio::task::JoinError;
-use tracing::{debug, error, info, instrument, trace};
+use tracing::{error, info, instrument, trace};
 use uuid::Uuid;
 
 use super::{provisioner_factory, runtime_logger, KillReceiver, KillSender, RunReceiver, State};
@@ -174,82 +173,108 @@ pub struct Built {
 }
 
 impl Built {
-    #[instrument(name = "built_handle", skip(self, libs_path, factory, logger, kill_recv, kill_old_deployments, cleanup), fields(id = %self.id, state = %State::Loading))]
+    #[instrument(name = "built_handle", skip(self, libs_path, _factory, _logger, kill_recv, kill_old_deployments, cleanup), fields(id = %self.id, state = %State::Loading))]
     #[allow(clippy::too_many_arguments)]
     async fn handle(
         self,
         address: SocketAddr,
         libs_path: PathBuf,
-        factory: &mut dyn Factory,
-        logger: Logger,
+        _factory: &mut dyn Factory,
+        _logger: Logger,
         kill_recv: KillReceiver,
         kill_old_deployments: impl futures::Future<Output = Result<()>>,
         cleanup: impl FnOnce(std::result::Result<std::result::Result<(), shuttle_service::Error>, JoinError>)
             + Send
             + 'static,
     ) -> Result<()> {
-        let service = load_deployment(&self.id, address, libs_path, factory, logger).await?;
-
+        // todo: refactor this?
         kill_old_deployments.await?;
 
         info!("got handle for deployment");
         // Execute loaded service
-        tokio::spawn(run(self.id, service, address, kill_recv, cleanup));
+        tokio::spawn(run(
+            self.id,
+            self.service_name,
+            libs_path,
+            address,
+            kill_recv,
+            cleanup,
+        ));
 
         Ok(())
     }
 }
 
-#[instrument(skip(service, kill_recv, cleanup), fields(address = %_address, state = %State::Running))]
+#[instrument(skip(_kill_recv, _cleanup), fields(address = %_address, state = %State::Running))]
 async fn run(
     id: Uuid,
-    service: LoadedService,
+    service_name: String,
+    libs_path: PathBuf,
     _address: SocketAddr,
-    mut kill_recv: KillReceiver,
-    cleanup: impl FnOnce(std::result::Result<std::result::Result<(), shuttle_service::Error>, JoinError>)
+    _kill_recv: KillReceiver,
+    _cleanup: impl FnOnce(std::result::Result<std::result::Result<(), shuttle_service::Error>, JoinError>)
         + Send
         + 'static,
 ) {
-    info!("starting up service");
-    let (mut handle, library) = service;
-    let result;
-    loop {
-        tokio::select! {
-             Ok(kill_id) = kill_recv.recv() => {
-                 if kill_id == id {
-                     debug!("deployment '{id}' killed");
-                     handle.abort();
-                     result = handle.await;
-                     break;
-                 }
-             }
-             rsl = &mut handle => {
-                 result = rsl;
-                 break;
-             }
-        }
-    }
+    info!("starting up deployer grpc client");
+    let mut client = RuntimeClient::connect("http://127.0.0.1:8002")
+        .await
+        .unwrap();
 
-    if let Err(err) = library.close() {
-        crashed_cleanup(&id, err);
-    } else {
-        cleanup(result);
-    }
-}
+    info!(
+        "loading project from: {}",
+        libs_path.clone().into_os_string().into_string().unwrap()
+    );
 
-#[instrument(skip(id, addr, libs_path, factory, logger))]
-async fn load_deployment(
-    id: &Uuid,
-    addr: SocketAddr,
-    libs_path: PathBuf,
-    factory: &mut dyn Factory,
-    logger: Logger,
-) -> Result<LoadedService> {
     let so_path = libs_path.join(id.to_string());
-    let loader = Loader::from_so_file(so_path)?;
+    let load_request = tonic::Request::new(LoadRequest {
+        path: so_path.into_os_string().into_string().unwrap(),
+        service_name: service_name.clone(),
+    });
+    info!("loading service");
+    let response = client.load(load_request).await;
 
-    Ok(loader.load(factory, addr, logger).await?)
+    if let Err(e) = response {
+        info!("something went wrong {}", e);
+    }
+    info!("starting service");
+    let start_request = tonic::Request::new(StartRequest { service_name });
+    let _response = client.start(start_request).await.unwrap();
+    // let (mut handle, library) = service;
+
+    // let result;
+    // loop {
+    //     tokio::select! {
+    //          Ok(kill_id) = kill_recv.recv() => {
+    //              todo!()
+    //          }
+    //          route = run => {
+    //              result = rsl;
+    //              break;
+    //          }
+    //     }
+    // }
+
+    // if let Err(err) = library.close() {
+    //     crashed_cleanup(&id, err);
+    // } else {
+    //     cleanup(result);
+    // }
 }
+
+// #[instrument(skip(id, addr, libs_path, factory, logger))]
+// async fn load_deployment(
+//     id: &Uuid,
+//     addr: SocketAddr,
+//     libs_path: PathBuf,
+//     factory: &mut dyn Factory,
+//     logger: Logger,
+// ) -> Result<LoadedService> {
+//     let so_path = libs_path.join(id.to_string());
+//     let loader = Loader::from_so_file(so_path)?;
+
+//     Ok(loader.load(factory, addr, logger).await?)
+// }
 
 #[cfg(test)]
 mod tests {

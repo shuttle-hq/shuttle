@@ -63,7 +63,8 @@ impl Runtime for Next {
 
         let message = StartResponse {
             success: true,
-            port: None,
+            // todo: port set here until I can set the port field to optional in the protobuf
+            port: 8001,
         };
 
         Ok(Response::new(message))

@@ -5760,6 +5760,7 @@ dependencies = [
  "serde_json",
  "shuttle-common",
  "shuttle-proto",
+ "shuttle-runtime",
  "shuttle-service",
  "sqlx 0.6.1",
  "strum",

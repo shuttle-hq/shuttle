@@ -54,6 +54,10 @@ version = "0.7.0"
 path = "../service"
 features = ["loader"]
 
+[dependencies.shuttle-runtime]
+version = "0.1.0"
+path = "../runtime"
+
 [dev-dependencies]
 ctor = "0.1.22"
 hex = "0.4.3"

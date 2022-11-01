@@ -1,11 +1,8 @@
 use clap::Parser;
 use shuttle_deployer::{
-    start, start_proxy, AbstractProvisionerFactory, Args, DeployLayer, Persistence,
-    RuntimeLoggerFactory,
+    start, start_proxy, AbstractDummyFactory, Args, DeployLayer, Persistence, RuntimeLoggerFactory,
 };
-use shuttle_proto::provisioner::provisioner_client::ProvisionerClient;
 use tokio::select;
-use tonic::transport::Endpoint;
 use tracing::trace;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{fmt, EnvFilter};
@@ -37,26 +34,12 @@ async fn main() {
         .with(opentelemetry)
         .init();
 
-    let provisioner_uri = Endpoint::try_from(format!(
-        "http://{}:{}",
-        args.provisioner_address, args.provisioner_port
-    ))
-    .expect("provisioner uri is not valid");
-
-    let provisioner_client = ProvisionerClient::connect(provisioner_uri)
-        .await
-        .expect("failed to connect to provisioner");
-
-    let abstract_factory = AbstractProvisionerFactory::new(
-        provisioner_client,
-        persistence.clone(),
-        persistence.clone(),
-    );
+    let abstract_dummy_factory = AbstractDummyFactory::new();
 
     let runtime_logger_factory = RuntimeLoggerFactory::new(persistence.get_log_sender());
 
     select! {
         _ = start_proxy(args.proxy_address, args.proxy_fqdn.clone(), persistence.clone()) => {},
-        _ = start(abstract_factory, runtime_logger_factory, persistence, args) => {},
+        _ = start(abstract_dummy_factory, runtime_logger_factory, persistence, args) => {},
     }
 }

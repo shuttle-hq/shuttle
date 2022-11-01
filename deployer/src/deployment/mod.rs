@@ -30,7 +30,7 @@ impl DeploymentManager {
     /// Create a new deployment manager. Manages one or more 'pipelines' for
     /// processing service building, loading, and deployment.
     pub fn new(
-        abstract_factory: impl provisioner_factory::AbstractFactory,
+        abstract_dummy_factory: impl provisioner_factory::AbstractFactory,
         runtime_logger_factory: impl runtime_logger::Factory,
         build_log_recorder: impl LogRecorder,
         secret_recorder: impl SecretRecorder,
@@ -42,7 +42,7 @@ impl DeploymentManager {
         DeploymentManager {
             pipeline: Pipeline::new(
                 kill_send.clone(),
-                abstract_factory,
+                abstract_dummy_factory,
                 runtime_logger_factory,
                 build_log_recorder,
                 secret_recorder,

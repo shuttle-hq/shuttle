@@ -183,6 +183,25 @@ pub struct InitArgs {
 
 // Helper function to parse and return the absolute path
 fn parse_path(path: &OsStr) -> Result<PathBuf, io::Error> {
+    #[cfg(target_os = "windows")]
+    {
+        let p = PathBuf::try_from(path).map_err(|e| {
+            io::Error::new(
+                ErrorKind::InvalidInput,
+                format!("could not turn {path:?} into a real path: {e}"),
+            )
+        })?;
+        
+        std::env::current_dir().map_err(|e| {
+            io::Error::new(
+                ErrorKind::InvalidInput,
+                format!("could not get current working dir: {e}"),
+            )         
+        })?;
+        Ok(p)
+    }
+
+    #[cfg(target_os = "unix")]
     canonicalize(path).map_err(|e| {
         io::Error::new(
             ErrorKind::InvalidInput,

@@ -407,7 +407,7 @@ impl GatewayService {
             if project.is_destroyed() {
                 // But is in `::Destroyed` state, recreate it
                 let project = SqlxJson(Project::create(project_name.clone()));
-                query("UPDATE projects SET project_state = ?1 AND initial_key = ?2 WHERE project_name = ?3")
+                query("UPDATE projects SET project_state = ?1, initial_key = ?2 WHERE project_name = ?3")
                     .bind(&project)
                     .bind(project.initial_key().unwrap())
                     .bind(&project_name)

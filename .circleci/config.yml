@@ -252,24 +252,6 @@ workflows:
           matrix:
             parameters:
               path:
-                - examples/axum/hello-world
-                - examples/axum/websocket
-                - examples/poem/hello-world
-                - examples/poem/mongodb
-                - examples/poem/postgres
-                - examples/rocket/authentication
-                - examples/rocket/hello-world
-                - examples/rocket/postgres
-                - examples/rocket/url-shortener
-                - examples/thruster/hello-world
-                - examples/thruster/postgres
-                - examples/salvo/hello-world
-                - examples/serenity/hello-world
-                - examples/serenity/postgres
-                - examples/tide/hello-world
-                - examples/tide/postgres
-                - examples/tower/hello-world
-
                 - resources/aws-rds
                 - resources/persist
                 - resources/secrets

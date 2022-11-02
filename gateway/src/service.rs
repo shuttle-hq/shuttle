@@ -192,7 +192,7 @@ impl GatewayService {
     /// * `args` - The [`Args`] with which the service was
     /// started. Will be passed as [`Context`] to workers and state.
     pub async fn init(args: ContextArgs, db: SqlitePool) -> Self {
-        let docker = Docker::connect_with_unix(&args.docker_host, 60, API_DEFAULT_VERSION).unwrap();
+        let docker = Docker::connect_with_local(&args.docker_host, 60, API_DEFAULT_VERSION).unwrap();
 
         let container_settings = ContainerSettings::builder(&docker).from_args(&args).await;
 

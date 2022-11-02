@@ -178,6 +178,8 @@ jobs:
     steps:
       - install-rust
       - checkout
+      - run: git submodule sync
+      - run: git submodule update --init
       - restore-cargo-cache
       - apply-patches
       - run:
@@ -196,6 +198,8 @@ jobs:
     steps:
       - install-rust
       - checkout
+      - run: git submodule sync
+      - run: git submodule update --init
       - restore-buildx-cache
       - run:
           name: Make images for tests

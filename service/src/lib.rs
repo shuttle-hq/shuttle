@@ -52,7 +52,7 @@
 //! ```
 //!
 //! See the [shuttle_service::main][main] macro for more information on supported services - such as `axum`.
-//! Or look at more complete examples [in the repository](https://github.com/shuttle-hq/shuttle/tree/main/examples), but
+//! Or look at [more complete examples](https://github.com/shuttle-hq/examples), but
 //! take note that the examples may update before official releases.
 //!
 //! ## Running locally
@@ -256,13 +256,13 @@ extern crate shuttle_codegen;
 ///
 /// | Return type                           | Feature flag | Service                                     | Version    | Example                                                                               |
 /// | ------------------------------------- | ------------ | ------------------------------------------- | ---------- | -----------------------------------------------------------------------------------   |
-/// | `ShuttleRocket`                       | web-rocket   | [rocket](https://docs.rs/rocket/0.5.0-rc.2) | 0.5.0-rc.2 | [GitHub](https://github.com/shuttle-hq/shuttle/tree/main/examples/rocket/hello-world)   |
-/// | `ShuttleAxum`                         | web-axum     | [axum](https://docs.rs/axum/0.5)            | 0.5        | [GitHub](https://github.com/shuttle-hq/shuttle/tree/main/examples/axum/hello-world)     |
-/// | `ShuttleSalvo`                        | web-salvo    | [salvo](https://docs.rs/salvo/0.34.3)       | 0.34.3     | [GitHub](https://github.com/shuttle-hq/shuttle/tree/main/examples/salvo/hello-world)    |
-/// | `ShuttleTide`                         | web-tide     | [tide](https://docs.rs/tide/0.16.0)         | 0.16.0     | [GitHub](https://github.com/shuttle-hq/shuttle/tree/main/examples/tide/hello-world)     |
-/// | `ShuttlePoem`                         | web-poem     | [poem](https://docs.rs/poem/1.3.35)         | 1.3.35     | [GitHub](https://github.com/shuttle-hq/shuttle/tree/main/examples/poem/hello-world)     |
-/// | `Result<T, shuttle_service::Error>`   | web-tower    | [tower](https://docs.rs/tower/0.4.12)       | 0.14.12    | [GitHub](https://github.com/shuttle-hq/shuttle/tree/main/examples/tower/hello-world)    |
-/// | `ShuttleSerenity`                     | bot-serenity | [serenity](https://docs.rs/serenity/0.11.5) | 0.11.5     | [GitHub](https://github.com/shuttle-hq/shuttle/tree/main/examples/serenity/hello-world) |
+/// | `ShuttleRocket`                       | web-rocket   | [rocket](https://docs.rs/rocket/0.5.0-rc.2) | 0.5.0-rc.2 | [GitHub](https://github.com/shuttle-hq/examples/tree/main/rocket/hello-world)         |
+/// | `ShuttleAxum`                         | web-axum     | [axum](https://docs.rs/axum/0.5)            | 0.5        | [GitHub](https://github.com/shuttle-hq/examples/tree/main/axum/hello-world)           |
+/// | `ShuttleSalvo`                        | web-salvo    | [salvo](https://docs.rs/salvo/0.34.3)       | 0.34.3     | [GitHub](https://github.com/shuttle-hq/examples/tree/main/salvo/hello-world)          |
+/// | `ShuttleTide`                         | web-tide     | [tide](https://docs.rs/tide/0.16.0)         | 0.16.0     | [GitHub](https://github.com/shuttle-hq/examples/tree/main/tide/hello-world)           |
+/// | `ShuttlePoem`                         | web-poem     | [poem](https://docs.rs/poem/1.3.35)         | 1.3.35     | [GitHub](https://github.com/shuttle-hq/examples/tree/main/poem/hello-world)           |
+/// | `Result<T, shuttle_service::Error>`   | web-tower    | [tower](https://docs.rs/tower/0.4.12)       | 0.14.12    | [GitHub](https://github.com/shuttle-hq/examples/tree/main/tower/hello-world)          |
+/// | `ShuttleSerenity`                     | bot-serenity | [serenity](https://docs.rs/serenity/0.11.5) | 0.11.5     | [GitHub](https://github.com/shuttle-hq/examples/tree/main/serenity/hello-world)       |
 ///
 /// # Getting shuttle managed resources
 /// Shuttle is able to manage resource dependencies for you. These resources are passed in as inputs to your `#[shuttle_service::main]` function and are configured using attributes:

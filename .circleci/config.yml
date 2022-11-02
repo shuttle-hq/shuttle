@@ -178,6 +178,8 @@ jobs:
     steps:
       - install-rust
       - checkout
+      - run: git submodule sync
+      - run: git submodule update --init
       - restore-cargo-cache
       - apply-patches
       - run:
@@ -196,6 +198,8 @@ jobs:
     steps:
       - install-rust
       - checkout
+      - run: git submodule sync
+      - run: git submodule update --init
       - restore-buildx-cache
       - run:
           name: Make images for tests
@@ -252,24 +256,6 @@ workflows:
           matrix:
             parameters:
               path:
-                - examples/axum/hello-world
-                - examples/axum/websocket
-                - examples/poem/hello-world
-                - examples/poem/mongodb
-                - examples/poem/postgres
-                - examples/rocket/authentication
-                - examples/rocket/hello-world
-                - examples/rocket/postgres
-                - examples/rocket/url-shortener
-                - examples/thruster/hello-world
-                - examples/thruster/postgres
-                - examples/salvo/hello-world
-                - examples/serenity/hello-world
-                - examples/serenity/postgres
-                - examples/tide/hello-world
-                - examples/tide/postgres
-                - examples/tower/hello-world
-
                 - resources/aws-rds
                 - resources/persist
                 - resources/secrets
@@ -288,9 +274,12 @@ workflows:
             - service-test
             - platform-test
             - check-standalone
+          filters:
+            branches:
+              only: production
       - build-and-push:
           requires:
             - e2e-test
           filters:
             branches:
-              only: main
+              only: production

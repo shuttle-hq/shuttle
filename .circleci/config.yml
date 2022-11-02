@@ -288,9 +288,12 @@ workflows:
             - service-test
             - platform-test
             - check-standalone
+          filters:
+            branches:
+              only: production
       - build-and-push:
           requires:
             - e2e-test
           filters:
             branches:
-              only: main
+              only: production

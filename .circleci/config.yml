@@ -97,7 +97,27 @@ commands:
           command: |
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
             sudo apt update && sudo apt install -y libssl1.1
-
+  setup-integration-testing:
+    steps:
+      - install-rust
+      - checkout
+      - run: git submodule sync
+      - run: git submodule update --init
+      - restore-buildx-cache
+      - run:
+          name: Make images for tests
+          command: |
+            sudo mkdir -p $BUILDX_CACHE && sudo chown -R circleci:circleci $BUILDX_CACHE
+            make images
+      - save-buildx-cache
+      - apply-patches
+      - run:
+          name: Deploy shuttle locally
+          command: |
+            # clean up a potential existing deployments before running
+            # the tests just in case the environment is not clean
+            make down
+            BUILDX_CACHE=/tmp/cache/buildx make up
 jobs:
   workspace-fmt:
     executor: docker-rust
@@ -192,32 +212,23 @@ jobs:
             set +o pipefail
             (cargo test --package << parameters.crate >> --all-features --test '*' -- --list 2>&1 | grep -q "no test target matches pattern") && echo "nothing to test" || cargo test --package << parameters.crate >> --all-features --test '*' -- --nocapture
       - save-cargo-cache
+  gateway-test:
+    resource_class: xlarge
+    executor: image-ubuntu
+    steps:
+      - setup-integration-testing
+      - run:
+          name: Run gateway tests
+          command: |
+            SHUTTLE_TESTS_NETWORK=shuttle-dev_user-net SHUTTLE_TESTS_RUNTIME_IMAGE=public.ecr.aws/shuttle-dev/deployer:latest cargo test --package shuttle-gateway --all-features --lib -- --nocapture
   e2e-test:
     resource_class: xlarge
     executor: image-ubuntu
     steps:
-      - install-rust
-      - checkout
-      - run: git submodule sync
-      - run: git submodule update --init
-      - restore-buildx-cache
+      - setup-integration-testing
       - run:
-          name: Make images for tests
+          name: Run E2E tests
           command: |
-            sudo mkdir -p $BUILDX_CACHE && sudo chown -R circleci:circleci $BUILDX_CACHE
-            make images
-      - save-buildx-cache
-      - apply-patches
-      - run:
-          name: Run the E2E tests
-          command: |
-            # clean up a potential existing deployments before running
-            # the tests just in case the environment is not clean
-            make down
-            BUILDX_CACHE=/tmp/cache/buildx make up
-
-            SHUTTLE_TESTS_NETWORK=shuttle-dev_user-net SHUTTLE_TESTS_RUNTIME_IMAGE=public.ecr.aws/shuttle-dev/deployer:latest cargo test --package shuttle-gateway --all-features --lib -- --nocapture
-
             BUILDX_CACHE=/tmp/cache/buildx make test
       - save_cache:
           paths:
@@ -269,6 +280,9 @@ workflows:
           matrix:
             parameters:
               crate: ["shuttle-deployer", "cargo-shuttle", "shuttle-codegen", "shuttle-common", "shuttle-proto", "shuttle-provisioner"]
+      - gateway-test:
+          requires:
+            - workspace-clippy
       - e2e-test:
           requires:
             - service-test

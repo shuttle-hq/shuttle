@@ -19,7 +19,6 @@ pub struct Args {
 pub enum Commands {
     Start(StartArgs),
     Init(InitArgs),
-    // Exec(ExecCmds),
 }
 
 #[derive(clap::Args, Debug, Clone)]
@@ -43,19 +42,6 @@ pub struct InitArgs {
     #[arg(long)]
     pub key: Option<Key>,
 }
-
-// #[derive(clap::Args, Debug, Clone)]
-// pub struct ExecCmds {
-//     #[command(flatten)]
-//     pub context: ContextArgs,
-//     #[command(subcommand)]
-//     pub command: ExecCmd,
-// }
-
-// #[derive(Subcommand, Debug, Clone)]
-// pub enum ExecCmd {
-//     Revive,
-// }
 
 #[derive(clap::Args, Debug, Clone)]
 pub struct ContextArgs {

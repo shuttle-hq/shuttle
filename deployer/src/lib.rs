@@ -61,6 +61,7 @@ pub async fn start(
     let mut runtime = dbg!(
         tokio::process::Command::new(runtime_dir.join("shuttle-runtime"))
             .args(&["--legacy", "--provisioner-address", "http://localhost:8000"])
+            .current_dir(&runtime_dir)
             .spawn()
             .unwrap()
     );

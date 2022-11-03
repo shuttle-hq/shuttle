@@ -23,6 +23,7 @@ pub mod auth;
 pub mod project;
 pub mod proxy;
 pub mod service;
+pub mod task;
 pub mod worker;
 
 use crate::service::{ContainerSettings, GatewayService};
@@ -163,22 +164,22 @@ impl<'de> Deserialize<'de> for AccountName {
     }
 }
 
-pub trait Context<'c>: Send + Sync {
-    fn docker(&self) -> &'c Docker;
+pub trait DockerContext: Send + Sync {
+    fn docker(&self) -> &Docker;
 
-    fn container_settings(&self) -> &'c ContainerSettings;
+    fn container_settings(&self) -> &ContainerSettings;
 }
 
 #[async_trait]
-pub trait Service<'c> {
-    type Context: Context<'c>;
+pub trait Service {
+    type Context;
 
-    type State: EndState<'c>;
+    type State: EndState<Self::Context>;
 
     type Error;
 
     /// Asks for the latest available context for task execution
-    fn context(&'c self) -> Self::Context;
+    fn context(&self) -> Self::Context;
 
     /// Commit a state update to persistence
     async fn update(&self, state: &Self::State) -> Result<(), Self::Error>;
@@ -187,42 +188,39 @@ pub trait Service<'c> {
 /// A generic state which can, when provided with a [`Context`], do
 /// some work and advance itself
 #[async_trait]
-pub trait State<'c>: Send + Sized + Clone {
+pub trait State<Ctx>: Send {
     type Next;
 
     type Error;
 
-    async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error>;
-}
-
-/// A [`State`] which contains all its transitions, including
-/// failures
-pub trait EndState<'c>
-where
-    Self: State<'c, Error = Infallible, Next = Self>,
-{
-    type ErrorVariant;
-
-    fn is_done(&self) -> bool;
-
-    fn into_result(self) -> Result<Self, Self::ErrorVariant>;
+    async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error>;
 }
 
 pub type StateTryStream<'c, St, Err> = Pin<Box<dyn Stream<Item = Result<St, Err>> + Send + 'c>>;
 
-pub trait EndStateExt<'c>: EndState<'c> {
+pub trait EndState<Ctx>
+where
+    Self: State<Ctx, Error = Infallible, Next = Self>,
+{
+    fn is_done(&self) -> bool;
+}
+
+pub trait EndStateExt<Ctx>: TryState + EndState<Ctx>
+where
+    Ctx: Sync,
+    Self: Clone,
+{
     /// Convert the state into a [`TryStream`] that yields
     /// the generated states.
     ///
     /// This stream will not end.
-    fn into_stream<Ctx>(self, ctx: Ctx) -> StateTryStream<'c, Self, Self::ErrorVariant>
+    fn into_stream<'c>(self, ctx: &'c Ctx) -> StateTryStream<'c, Self, Self::ErrorVariant>
     where
         Self: 'c,
-        Ctx: 'c + Context<'c>,
     {
         Box::pin(stream::try_unfold((self, ctx), |(state, ctx)| async move {
             state
-                .next(&ctx)
+                .next(ctx)
                 .await
                 .unwrap() // EndState's `next` is Infallible
                 .into_result()
@@ -231,29 +229,42 @@ pub trait EndStateExt<'c>: EndState<'c> {
     }
 }
 
-impl<'c, S> EndStateExt<'c> for S where S: EndState<'c> {}
-
-pub trait IntoEndState<'c, E>
+impl<Ctx, S> EndStateExt<Ctx> for S
 where
-    E: EndState<'c>,
+    S: Clone + TryState + EndState<Ctx>,
+    Ctx: Send + Sync,
 {
-    fn into_end_state(self) -> Result<E, Infallible>;
 }
 
-impl<'c, E, S, Err> IntoEndState<'c, E> for Result<S, Err>
+/// A [`State`] which contains all its transitions, including
+/// failures
+pub trait TryState: Sized {
+    type ErrorVariant;
+
+    fn into_result(self) -> Result<Self, Self::ErrorVariant>;
+}
+
+pub trait IntoTryState<S>
 where
-    E: EndState<'c> + From<S> + From<Err>,
+    S: TryState,
 {
-    fn into_end_state(self) -> Result<E, Infallible> {
-        self.map(|s| E::from(s)).or_else(|err| Ok(E::from(err)))
+    fn into_try_state(self) -> Result<S, Infallible>;
+}
+
+impl<S, F, Err> IntoTryState<S> for Result<F, Err>
+where
+    S: TryState + From<F> + From<Err>,
+{
+    fn into_try_state(self) -> Result<S, Infallible> {
+        self.map(|s| S::from(s)).or_else(|err| Ok(S::from(err)))
     }
 }
 
 #[async_trait]
-pub trait Refresh: Sized {
+pub trait Refresh<Ctx>: Sized {
     type Error: StdError;
 
-    async fn refresh<'c, C: Context<'c>>(self, ctx: &C) -> Result<Self, Self::Error>;
+    async fn refresh(self, ctx: &Ctx) -> Result<Self, Self::Error>;
 }
 
 #[cfg(test)]
@@ -278,7 +289,6 @@ pub mod tests {
     use shuttle_common::models::{project, service};
     use sqlx::SqlitePool;
     use tokio::sync::mpsc::channel;
-    use tracing::info;
 
     use crate::api::make_api;
     use crate::args::{ContextArgs, StartArgs};
@@ -286,7 +296,7 @@ pub mod tests {
     use crate::proxy::make_proxy;
     use crate::service::{ContainerSettings, GatewayService, MIGRATIONS};
     use crate::worker::Worker;
-    use crate::Context;
+    use crate::DockerContext;
 
     macro_rules! value_block_helper {
         ($next:ident, $block:block) => {
@@ -349,7 +359,7 @@ pub mod tests {
             $($(#[$($meta:tt)*])* $($patterns:pat_param)|+ $(if $guards:expr)? $(=> $mores:block)?,)+
         } => {{
             let state = $state;
-            let mut stream = crate::EndStateExt::into_stream(state, $ctx);
+            let mut stream = crate::EndStateExt::into_stream(state, &$ctx);
             assert_stream_matches!(
                 stream,
                 $($(#[$($meta)*])* $($patterns)|+ $(if $guards)? $(=> $mores)?,)+
@@ -481,11 +491,11 @@ pub mod tests {
         pool: SqlitePool,
     }
 
-    #[derive(Clone, Copy)]
-    pub struct WorldContext<'c> {
-        pub docker: &'c Docker,
-        pub container_settings: &'c ContainerSettings,
-        pub hyper: &'c HyperClient<HttpConnector, Body>,
+    #[derive(Clone)]
+    pub struct WorldContext {
+        pub docker: Docker,
+        pub container_settings: ContainerSettings,
+        pub hyper: HyperClient<HttpConnector, Body>,
     }
 
     impl World {
@@ -573,20 +583,20 @@ pub mod tests {
     impl World {
         pub fn context(&self) -> WorldContext {
             WorldContext {
-                docker: &self.docker,
-                container_settings: &self.settings,
-                hyper: &self.hyper,
+                docker: self.docker.clone(),
+                container_settings: self.settings.clone(),
+                hyper: self.hyper.clone(),
             }
         }
     }
 
-    impl<'c> Context<'c> for WorldContext<'c> {
-        fn docker(&self) -> &'c Docker {
-            self.docker
+    impl DockerContext for WorldContext {
+        fn docker(&self) -> &Docker {
+            &self.docker
         }
 
-        fn container_settings(&self) -> &'c ContainerSettings {
-            self.container_settings
+        fn container_settings(&self) -> &ContainerSettings {
+            &self.container_settings
         }
     }
 
@@ -594,17 +604,19 @@ pub mod tests {
     async fn end_to_end() {
         let world = World::new().await;
         let service = Arc::new(GatewayService::init(world.args(), world.pool()).await);
-        let worker = Worker::new(Arc::clone(&service));
+        let worker = Worker::new();
 
         let (log_out, mut log_in) = channel(256);
         tokio::spawn({
             let sender = worker.sender();
             async move {
                 while let Some(work) = log_in.recv().await {
-                    info!("work: {work:?}");
-                    sender.send(work).await.unwrap()
+                    sender
+                        .send(work)
+                        .await
+                        .map_err(|_| "could not send work")
+                        .unwrap();
                 }
-                info!("work channel closed");
             }
         });
 
@@ -771,8 +783,8 @@ pub mod tests {
                 )
                 .await
                 .unwrap();
-            println!("{resp:?}");
-            if matches!(resp.status(), StatusCode::NOT_FOUND) {
+            let resp = serde_json::from_slice::<project::Response>(resp.body().as_slice()).unwrap();
+            if matches!(resp.state, project::State::Destroyed) {
                 break;
             }
         });

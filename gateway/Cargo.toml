@@ -31,6 +31,7 @@ tower-http = { version = "0.3.4", features = ["trace"] }
 tracing = "0.1.35"
 tracing-opentelemetry = "0.18.0"
 tracing-subscriber = { version = "0.3.11", features = ["env-filter"] }
+uuid = { version = "1.2.1", features = [ "v4" ] }
 
 [dependencies.shuttle-common]
 version = "0.7.2"

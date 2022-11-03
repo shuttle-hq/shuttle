@@ -14,7 +14,6 @@ use hyper_reverse_proxy::ReverseProxy;
 use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
-use rand::distributions::{Alphanumeric, DistString};
 use sqlx::error::DatabaseError;
 use sqlx::migrate::Migrator;
 use sqlx::sqlite::SqlitePool;
@@ -25,9 +24,9 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::args::ContextArgs;
 use crate::auth::{Key, User};
-use crate::project::{self, Project};
-use crate::worker::Work;
-use crate::{AccountName, Context, Error, ErrorKind, ProjectName, Service};
+use crate::project::Project;
+use crate::task::TaskBuilder;
+use crate::{AccountName, DockerContext, Error, ErrorKind, ProjectName};
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
@@ -148,6 +147,7 @@ impl<'d> ContainerSettingsBuilder<'d> {
     }
 }
 
+#[derive(Clone)]
 pub struct ContainerSettings {
     pub prefix: String,
     pub image: String,
@@ -175,8 +175,8 @@ impl GatewayContextProvider {
 
     pub fn context(&self) -> GatewayContext {
         GatewayContext {
-            docker: &self.docker,
-            settings: &self.settings,
+            docker: self.docker.clone(),
+            settings: self.settings.clone(),
         }
     }
 }
@@ -234,16 +234,14 @@ impl GatewayService {
         Ok(resp)
     }
 
-    pub async fn iter_projects(&self) -> Result<impl Iterator<Item = Work>, Error> {
-        let iter = query("SELECT * FROM projects")
+    pub async fn iter_projects(
+        &self,
+    ) -> Result<impl Iterator<Item = (ProjectName, AccountName)>, Error> {
+        let iter = query("SELECT project_name, account_name FROM projects")
             .fetch_all(&self.db)
             .await?
             .into_iter()
-            .map(|row| Work {
-                project_name: row.get("project_name"),
-                work: row.get::<SqlxJson<Project>, _>("project_state").0,
-                account_name: row.get("account_name"),
-            });
+            .map(|row| (row.get("project_name"), row.get("account_name")));
         Ok(iter)
     }
 
@@ -260,21 +258,16 @@ impl GatewayService {
             .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotFound))
     }
 
-    async fn update_project(
+    pub async fn update_project(
         &self,
         project_name: &ProjectName,
         project: &Project,
     ) -> Result<(), Error> {
-        let query = match project {
-            Project::Destroyed(_) => {
-                query("DELETE FROM projects WHERE project_name = ?1").bind(project_name)
-            }
-            _ => query("UPDATE projects SET project_state = ?1 WHERE project_name = ?2")
-                .bind(SqlxJson(project))
-                .bind(project_name),
-        };
-
-        query.execute(&self.db).await?;
+        query("UPDATE projects SET project_state = ?1 WHERE project_name = ?2")
+            .bind(SqlxJson(project))
+            .bind(project_name)
+            .execute(&self.db)
+            .await?;
         Ok(())
     }
 
@@ -402,18 +395,48 @@ impl GatewayService {
         &self,
         project_name: ProjectName,
         account_name: AccountName,
-    ) -> Result<Work, Error> {
-        let initial_key = Alphanumeric.sample_string(&mut rand::thread_rng(), 32);
+    ) -> Result<Project, Error> {
+        if let Some(row) = query("SELECT project_name, account_name, initial_key, project_state FROM projects WHERE project_name = ?1 AND account_name = ?2")
+            .bind(&project_name)
+            .bind(&account_name)
+            .fetch_optional(&self.db)
+            .await?
+        {
+            // If the project already exists and belongs to this account
+            let project = row.get::<SqlxJson<Project>, _>("project_state").0;
+            if project.is_destroyed() {
+                // But is in `::Destroyed` state, recreate it
+                let project = SqlxJson(Project::create(project_name.clone()));
+                query("UPDATE projects SET project_state = ?1, initial_key = ?2 WHERE project_name = ?3")
+                    .bind(&project)
+                    .bind(project.initial_key().unwrap())
+                    .bind(&project_name)
+                    .execute(&self.db)
+                    .await?;
+                Ok(project.0)
+            } else {
+                // Otherwise it already exists
+                Err(Error::from_kind(ErrorKind::ProjectAlreadyExists))
+            }
+        } else {
+            // Otherwise attempt to create a new one. This will fail
+            // outright if the project already exists (this happens if
+            // it belongs to another account).
+            self.insert_project(project_name, account_name).await
+        }
+    }
 
-        let project = SqlxJson(Project::Creating(project::ProjectCreating::new(
-            project_name.clone(),
-            initial_key.clone(),
-        )));
+    pub async fn insert_project(
+        &self,
+        project_name: ProjectName,
+        account_name: AccountName,
+    ) -> Result<Project, Error> {
+        let project = SqlxJson(Project::create(project_name.clone()));
 
         query("INSERT INTO projects (project_name, account_name, initial_key, project_state) VALUES (?1, ?2, ?3, ?4)")
             .bind(&project_name)
             .bind(&account_name)
-            .bind(&initial_key)
+            .bind(project.initial_key().unwrap())
             .bind(&project)
             .execute(&self.db)
             .await
@@ -431,88 +454,32 @@ impl GatewayService {
 
         let project = project.0;
 
-        Ok(Work {
-            project_name,
-            account_name,
-            work: project,
-        })
-    }
-
-    pub async fn destroy_project(
-        &self,
-        project_name: ProjectName,
-        account_name: AccountName,
-    ) -> Result<Work, Error> {
-        let project = self.find_project(&project_name).await?.destroy()?;
-
-        Ok(Work {
-            project_name,
-            account_name,
-            work: project,
-        })
+        Ok(project)
     }
 
     pub fn context(&self) -> GatewayContext {
         self.provider.context()
     }
-}
 
-#[async_trait]
-impl<'c> Service<'c> for GatewayService {
-    type Context = GatewayContext<'c>;
-
-    type State = Work<Project>;
-
-    type Error = Error;
-
-    fn context(&'c self) -> Self::Context {
-        GatewayService::context(self)
-    }
-
-    async fn update(
-        &self,
-        Work {
-            project_name, work, ..
-        }: &Self::State,
-    ) -> Result<(), Self::Error> {
-        self.update_project(project_name, work).await
+    /// Create a builder for a new [ProjectTask]
+    pub fn new_task(self: &Arc<Self>) -> TaskBuilder {
+        TaskBuilder::new(self.clone())
     }
 }
 
-#[async_trait]
-impl<'c> Service<'c> for Arc<GatewayService> {
-    type Context = GatewayContext<'c>;
-
-    type State = Work<Project>;
-
-    type Error = Error;
-
-    fn context(&'c self) -> Self::Context {
-        GatewayService::context(self)
-    }
-
-    async fn update(
-        &self,
-        Work {
-            project_name, work, ..
-        }: &Self::State,
-    ) -> Result<(), Self::Error> {
-        self.update_project(project_name, work).await
-    }
+#[derive(Clone)]
+pub struct GatewayContext {
+    docker: Docker,
+    settings: ContainerSettings,
 }
 
-pub struct GatewayContext<'c> {
-    docker: &'c Docker,
-    settings: &'c ContainerSettings,
-}
-
-impl<'c> Context<'c> for GatewayContext<'c> {
-    fn docker(&self) -> &'c Docker {
-        self.docker
+impl DockerContext for GatewayContext {
+    fn docker(&self) -> &Docker {
+        &self.docker
     }
 
-    fn container_settings(&self) -> &'c ContainerSettings {
-        self.settings
+    fn container_settings(&self) -> &ContainerSettings {
+        &self.settings
     }
 }
 
@@ -522,7 +489,9 @@ pub mod tests {
     use std::str::FromStr;
 
     use super::*;
+    use crate::task::{self, TaskResult};
     use crate::tests::{assert_err_kind, World};
+    use crate::{Error, ErrorKind};
 
     #[tokio::test]
     async fn service_create_find_user() -> anyhow::Result<()> {
@@ -581,6 +550,7 @@ pub mod tests {
         let svc = Arc::new(GatewayService::init(world.args(), world.pool()).await);
 
         let neo: AccountName = "neo".parse().unwrap();
+        let trinity: AccountName = "trinity".parse().unwrap();
         let matrix: ProjectName = "matrix".parse().unwrap();
 
         let creating_same_project_name = |project: &Project, project_name: &ProjectName| {
@@ -591,34 +561,109 @@ pub mod tests {
         };
 
         svc.create_user(neo.clone()).await.unwrap();
+        svc.create_user(trinity.clone()).await.unwrap();
 
-        let work = svc
+        let project = svc
             .create_project(matrix.clone(), neo.clone())
             .await
             .unwrap();
-
-        // work work work work
-        let project = work.work;
 
         assert!(creating_same_project_name(&project, &matrix));
 
         assert_eq!(svc.find_project(&matrix).await.unwrap(), project);
 
-        let work = svc.destroy_project(matrix.clone(), neo).await.unwrap();
+        let mut work = svc
+            .new_task()
+            .project(matrix.clone())
+            .account(neo.clone())
+            .and_then(task::destroy())
+            .build();
 
-        let project = work.work;
+        while let TaskResult::Pending(_) = work.poll(()).await {}
+        assert!(matches!(work.poll(()).await, TaskResult::Done(())));
 
-        assert!(matches!(&project, Project::Destroyed(_)));
-
-        svc.update_project(&matrix, &project).await.unwrap();
-
+        // After project has been destroyed...
         assert!(matches!(
             svc.find_project(&matrix).await,
+            Ok(Project::Destroyed(_))
+        ));
+
+        // If recreated by a different user
+        assert!(matches!(
+            svc.create_project(matrix.clone(), trinity.clone()).await,
             Err(Error {
-                kind: ErrorKind::ProjectNotFound,
+                kind: ErrorKind::ProjectAlreadyExists,
                 ..
             })
         ));
+
+        // If recreated by the same user
+        assert!(matches!(
+            svc.create_project(matrix, neo).await,
+            Ok(Project::Creating(_))
+        ));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn service_create_ready_kill_restart_docker() -> anyhow::Result<()> {
+        let world = World::new().await;
+        let svc = Arc::new(GatewayService::init(world.args(), world.pool()).await);
+
+        let neo: AccountName = "neo".parse().unwrap();
+        let matrix: ProjectName = "matrix".parse().unwrap();
+
+        svc.create_user(neo.clone()).await.unwrap();
+        svc.create_project(matrix.clone(), neo.clone())
+            .await
+            .unwrap();
+
+        let mut task = svc
+            .new_task()
+            .account(neo.clone())
+            .project(matrix.clone())
+            .build();
+
+        while let TaskResult::Pending(_) = task.poll(()).await {
+            // keep polling
+        }
+
+        let project = svc.find_project(&matrix).await.unwrap();
+        println!("{:?}", project);
+        assert!(project.is_ready());
+
+        let container = project.container().unwrap();
+        svc.context()
+            .docker()
+            .kill_container::<String>(container.name.unwrap().strip_prefix('/').unwrap(), None)
+            .await
+            .unwrap();
+
+        println!("killed container");
+
+        let mut ambulance_task = svc
+            .new_task()
+            .project(matrix.clone())
+            .account(neo.clone())
+            .and_then(task::check_health())
+            .build();
+
+        // the first poll will trigger a refresh
+        let _ = ambulance_task.poll(()).await;
+
+        let project = svc.find_project(&matrix).await.unwrap();
+        println!("{:?}", project);
+        assert!(!project.is_ready());
+
+        // the subsequent will trigger a restart task
+        while let TaskResult::Pending(_) = ambulance_task.poll(()).await {
+            // keep polling
+        }
+
+        let project = svc.find_project(&matrix).await.unwrap();
+        println!("{:?}", project);
+        assert!(project.is_ready());
 
         Ok(())
     }

@@ -9,17 +9,18 @@ use bollard::errors::Error as DockerError;
 use bollard::models::{ContainerConfig, ContainerInspectResponse, ContainerStateStatusEnum};
 use futures::prelude::*;
 use http::uri::InvalidUri;
-use http::StatusCode;
+use http::Uri;
 use hyper::client::HttpConnector;
 use hyper::Client;
 use once_cell::sync::Lazy;
+use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Serialize};
 use tokio::time;
 use tracing::{debug, error};
 
 use crate::{
-    ContainerSettings, Context, EndState, Error, ErrorKind, IntoEndState, ProjectName, Refresh,
-    State,
+    ContainerSettings, DockerContext, EndState, Error, ErrorKind, IntoTryState, ProjectName,
+    Refresh, State, TryState,
 };
 
 macro_rules! safe_unwrap {
@@ -58,14 +59,18 @@ macro_rules! impl_from_variant {
 }
 
 const RUNTIME_API_PORT: u16 = 8001;
+const MAX_RESTARTS: i64 = 3;
 
 // Client used for health checks
 static CLIENT: Lazy<Client<HttpConnector>> = Lazy::new(Client::new);
 
 #[async_trait]
-impl Refresh for ContainerInspectResponse {
+impl<Ctx> Refresh<Ctx> for ContainerInspectResponse
+where
+    Ctx: DockerContext,
+{
     type Error = DockerError;
-    async fn refresh<'c, C: Context<'c>>(self, ctx: &C) -> Result<Self, Self::Error> {
+    async fn refresh(self, ctx: &Ctx) -> Result<Self, Self::Error> {
         ctx.docker()
             .inspect_container(self.id.as_ref().unwrap(), None)
             .await
@@ -116,12 +121,24 @@ impl Project {
         }
     }
 
+    pub fn create(project_name: ProjectName) -> Self {
+        Self::Creating(ProjectCreating::new_with_random_initial_key(project_name))
+    }
+
     pub fn destroy(self) -> Result<Self, Error> {
         if let Some(container) = self.container() {
             Ok(Self::Destroying(ProjectDestroying { container }))
         } else {
             Ok(Self::Destroyed(ProjectDestroyed { destroyed: None }))
         }
+    }
+
+    pub fn is_ready(&self) -> bool {
+        matches!(self, Self::Ready(_))
+    }
+
+    pub fn is_destroyed(&self) -> bool {
+        matches!(self, Self::Destroyed(_))
     }
 
     pub fn target_ip(&self) -> Result<Option<IpAddr>, Error> {
@@ -164,6 +181,14 @@ impl Project {
         }
     }
 
+    pub fn initial_key(&self) -> Option<&String> {
+        if let Self::Creating(ProjectCreating { initial_key, .. }) = self {
+            Some(initial_key)
+        } else {
+            None
+        }
+    }
+
     pub fn container_id(&self) -> Option<String> {
         self.container().and_then(|container| container.id)
     }
@@ -186,27 +211,30 @@ impl From<Project> for shuttle_common::models::project::State {
 }
 
 #[async_trait]
-impl<'c> State<'c> for Project {
+impl<Ctx> State<Ctx> for Project
+where
+    Ctx: DockerContext,
+{
     type Next = Self;
     type Error = Infallible;
 
-    async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error> {
+    async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let previous = self.clone();
         let previous_state = previous.state();
 
         let mut new = match self {
-            Self::Creating(creating) => creating.next(ctx).await.into_end_state(),
-            Self::Starting(ready) => ready.next(ctx).await.into_end_state(),
+            Self::Creating(creating) => creating.next(ctx).await.into_try_state(),
+            Self::Starting(ready) => ready.next(ctx).await.into_try_state(),
             Self::Started(started) => match started.next(ctx).await {
                 Ok(ProjectReadying::Ready(ready)) => Ok(ready.into()),
                 Ok(ProjectReadying::Started(started)) => Ok(started.into()),
                 Err(err) => Ok(Self::Errored(err)),
             },
-            Self::Ready(ready) => ready.next(ctx).await.into_end_state(),
-            Self::Stopped(stopped) => stopped.next(ctx).await.into_end_state(),
-            Self::Stopping(stopping) => stopping.next(ctx).await.into_end_state(),
-            Self::Destroying(destroying) => destroying.next(ctx).await.into_end_state(),
-            Self::Destroyed(destroyed) => destroyed.next(ctx).await.into_end_state(),
+            Self::Ready(ready) => ready.next(ctx).await.into_try_state(),
+            Self::Stopped(stopped) => stopped.next(ctx).await.into_try_state(),
+            Self::Stopping(stopping) => stopping.next(ctx).await.into_try_state(),
+            Self::Destroying(destroying) => destroying.next(ctx).await.into_try_state(),
+            Self::Destroyed(destroyed) => destroyed.next(ctx).await.into_try_state(),
             Self::Errored(errored) => Ok(Self::Errored(errored)),
         };
 
@@ -228,15 +256,17 @@ impl<'c> State<'c> for Project {
     }
 }
 
-impl<'c> EndState<'c> for Project {
-    type ErrorVariant = ProjectError;
-
+impl<Ctx> EndState<Ctx> for Project
+where
+    Ctx: DockerContext,
+{
     fn is_done(&self) -> bool {
-        matches!(
-            self,
-            Self::Errored(_) | Self::Ready(_) | Self::Stopped(_) | Self::Destroyed(_)
-        )
+        matches!(self, Self::Errored(_) | Self::Ready(_) | Self::Destroyed(_))
     }
+}
+
+impl TryState for Project {
+    type ErrorVariant = ProjectError;
 
     fn into_result(self) -> Result<Self, Self::ErrorVariant> {
         match self {
@@ -247,7 +277,10 @@ impl<'c> EndState<'c> for Project {
 }
 
 #[async_trait]
-impl Refresh for Project {
+impl<Ctx> Refresh<Ctx> for Project
+where
+    Ctx: DockerContext,
+{
     type Error = Error;
 
     /// TODO: we could be a bit more clever than this by using the
@@ -255,7 +288,7 @@ impl Refresh for Project {
     /// state which is probably prone to erroneously setting the
     /// project into the wrong state if the docker is transitioning
     /// the state of its resources under us
-    async fn refresh<'c, C: Context<'c>>(self, ctx: &C) -> Result<Self, Self::Error> {
+    async fn refresh(self, ctx: &Ctx) -> Result<Self, Self::Error> {
         let _container = if let Some(container_id) = self.container_id() {
             Some(ctx.docker().inspect_container(&container_id, None).await?)
         } else {
@@ -272,7 +305,8 @@ impl Refresh for Project {
                 let container = container.refresh(ctx).await?;
                 match container.state.as_ref().unwrap().status.as_ref().unwrap() {
                     ContainerStateStatusEnum::RUNNING => {
-                        Self::Started(ProjectStarted { container })
+                        let service = Service::from_container(container.clone())?;
+                        Self::Started(ProjectStarted { container, service })
                     }
                     ContainerStateStatusEnum::CREATED => {
                         Self::Starting(ProjectStarting { container })
@@ -308,11 +342,16 @@ impl ProjectCreating {
         }
     }
 
+    pub fn new_with_random_initial_key(project_name: ProjectName) -> Self {
+        let initial_key = Alphanumeric.sample_string(&mut rand::thread_rng(), 32);
+        Self::new(project_name, initial_key)
+    }
+
     pub fn project_name(&self) -> &ProjectName {
         &self.project_name
     }
 
-    fn container_name<'c, C: Context<'c>>(&self, ctx: &C) -> String {
+    fn container_name<C: DockerContext>(&self, ctx: &C) -> String {
         let prefix = &ctx.container_settings().prefix;
 
         let Self { project_name, .. } = &self;
@@ -320,7 +359,7 @@ impl ProjectCreating {
         format!("{prefix}{project_name}_run")
     }
 
-    fn generate_container_config<'c, C: Context<'c>>(
+    fn generate_container_config<C: DockerContext>(
         &self,
         ctx: &C,
     ) -> (CreateContainerOptions<String>, Config<String>) {
@@ -408,11 +447,14 @@ Config: {config:#?}
 }
 
 #[async_trait]
-impl<'c> State<'c> for ProjectCreating {
+impl<Ctx> State<Ctx> for ProjectCreating
+where
+    Ctx: DockerContext,
+{
     type Next = ProjectStarting;
     type Error = ProjectError;
 
-    async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error> {
+    async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let container_name = self.container_name(ctx);
         let container = ctx
             .docker()
@@ -441,11 +483,14 @@ pub struct ProjectStarting {
 }
 
 #[async_trait]
-impl<'c> State<'c> for ProjectStarting {
+impl<Ctx> State<Ctx> for ProjectStarting
+where
+    Ctx: DockerContext,
+{
     type Next = ProjectStarted;
     type Error = ProjectError;
 
-    async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error> {
+    async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let container_id = self.container.id.as_ref().unwrap();
         ctx.docker()
             .start_container::<String>(container_id, None)
@@ -459,15 +504,18 @@ impl<'c> State<'c> for ProjectStarting {
                 }
             })?;
 
-        Ok(Self::Next {
-            container: self.container.refresh(ctx).await?,
-        })
+        let container = self.container.refresh(ctx).await?;
+
+        let service = Service::from_container(container.clone())?;
+
+        Ok(Self::Next { container, service })
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProjectStarted {
     container: ContainerInspectResponse,
+    service: Service,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -477,35 +525,20 @@ pub enum ProjectReadying {
 }
 
 #[async_trait]
-impl<'c> State<'c> for ProjectStarted {
+impl<Ctx> State<Ctx> for ProjectStarted
+where
+    Ctx: DockerContext,
+{
     type Next = ProjectReadying;
     type Error = ProjectError;
 
-    async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error> {
+    async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         time::sleep(Duration::from_secs(1)).await;
+
         let container = self.container.refresh(ctx).await?;
-        let ready_service = if matches!(
-            safe_unwrap!(container.state.status),
-            ContainerStateStatusEnum::RUNNING
-        ) {
-            let service = Service::from_container(container.clone())?;
-            let uri = format!(
-                "http://{}:8001/projects/{}/status",
-                service.target, service.name
-            );
-            let uri = uri.parse()?;
-            let res = CLIENT.get(uri).await?;
+        let mut service = self.service;
 
-            if res.status() == StatusCode::OK {
-                Some(service)
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-        if let Some(service) = ready_service {
+        if service.is_healthy().await {
             Ok(Self::Next::Ready(ProjectReady { container, service }))
         } else {
             let started_at =
@@ -520,7 +553,7 @@ impl<'c> State<'c> for ProjectStarted {
                 ));
             }
 
-            Ok(Self::Next::Started(ProjectStarted { container }))
+            Ok(Self::Next::Started(ProjectStarted { container, service }))
         }
     }
 }
@@ -532,11 +565,14 @@ pub struct ProjectReady {
 }
 
 #[async_trait]
-impl<'c> State<'c> for ProjectReady {
+impl<Ctx> State<Ctx> for ProjectReady
+where
+    Ctx: DockerContext,
+{
     type Next = Self;
     type Error = ProjectError;
 
-    async fn next<C: Context<'c>>(self, _ctx: &C) -> Result<Self::Next, Self::Error> {
+    async fn next(mut self, _ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         Ok(self)
     }
 }
@@ -549,12 +585,32 @@ impl ProjectReady {
     pub fn target_ip(&self) -> &IpAddr {
         &self.service.target
     }
+
+    pub async fn is_healthy(&mut self) -> bool {
+        self.service.is_healthy().await
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HealthCheckRecord {
+    at: chrono::DateTime<chrono::Utc>,
+    is_healthy: bool,
+}
+
+impl HealthCheckRecord {
+    pub fn new(is_healthy: bool) -> Self {
+        Self {
+            at: chrono::Utc::now(),
+            is_healthy,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Service {
     name: String,
     target: IpAddr,
+    last_check: Option<HealthCheckRecord>,
 }
 
 impl Service {
@@ -572,7 +628,21 @@ impl Service {
         Ok(Self {
             name: resource_name,
             target,
+            last_check: None,
         })
+    }
+
+    pub fn uri<S: AsRef<str>>(&self, path: S) -> Result<Uri, ProjectError> {
+        format!("http://{}:8001{}", self.target, path.as_ref())
+            .parse::<Uri>()
+            .map_err(|err| err.into())
+    }
+
+    pub async fn is_healthy(&mut self) -> bool {
+        let uri = self.uri(format!("/projects/{}/status", self.name)).unwrap();
+        let is_healthy = matches!(CLIENT.get(uri).await, Ok(res) if res.status().is_success());
+        self.last_check = Some(HealthCheckRecord::new(is_healthy));
+        is_healthy
     }
 }
 
@@ -582,12 +652,15 @@ pub struct ProjectStopping {
 }
 
 #[async_trait]
-impl<'c> State<'c> for ProjectStopping {
+impl<Ctx> State<Ctx> for ProjectStopping
+where
+    Ctx: DockerContext,
+{
     type Next = ProjectStopped;
 
     type Error = ProjectError;
 
-    async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error> {
+    async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let Self { container } = self;
         ctx.docker()
             .stop_container(
@@ -607,15 +680,22 @@ pub struct ProjectStopped {
 }
 
 #[async_trait]
-impl<'c> State<'c> for ProjectStopped {
+impl<Ctx> State<Ctx> for ProjectStopped
+where
+    Ctx: DockerContext,
+{
     type Next = ProjectStarting;
     type Error = ProjectError;
 
-    async fn next<C: Context<'c>>(self, _ctx: &C) -> Result<Self::Next, Self::Error> {
-        // If stopped, try to restart
-        Ok(ProjectStarting {
-            container: self.container,
-        })
+    async fn next(self, _ctx: &Ctx) -> Result<Self::Next, Self::Error> {
+        // If stopped, and has not restarted too much, try to restart
+        if self.container.restart_count.unwrap_or_default() < MAX_RESTARTS {
+            Ok(ProjectStarting {
+                container: self.container,
+            })
+        } else {
+            Err(ProjectError::internal("too many restarts"))
+        }
     }
 }
 
@@ -625,11 +705,14 @@ pub struct ProjectDestroying {
 }
 
 #[async_trait]
-impl<'c> State<'c> for ProjectDestroying {
+impl<Ctx> State<Ctx> for ProjectDestroying
+where
+    Ctx: DockerContext,
+{
     type Next = ProjectDestroyed;
     type Error = ProjectError;
 
-    async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error> {
+    async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let container_id = self.container.id.as_ref().unwrap();
         ctx.docker()
             .stop_container(container_id, Some(StopContainerOptions { t: 1 }))
@@ -657,11 +740,14 @@ pub struct ProjectDestroyed {
 }
 
 #[async_trait]
-impl<'c> State<'c> for ProjectDestroyed {
+impl<Ctx> State<Ctx> for ProjectDestroyed
+where
+    Ctx: DockerContext,
+{
     type Next = ProjectDestroyed;
     type Error = ProjectError;
 
-    async fn next<C: Context<'c>>(self, _ctx: &C) -> Result<Self::Next, Self::Error> {
+    async fn next(self, _ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         Ok(self)
     }
 }
@@ -739,38 +825,42 @@ impl From<ProjectError> for Error {
 }
 
 #[async_trait]
-impl<'c> State<'c> for ProjectError {
+impl<Ctx> State<Ctx> for ProjectError
+where
+    Ctx: DockerContext,
+{
     type Next = Self;
     type Error = Infallible;
 
-    async fn next<C: Context<'c>>(self, _ctx: &C) -> Result<Self::Next, Self::Error> {
+    async fn next(self, _ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         Ok(self)
     }
 }
 
 pub mod exec {
+    use std::sync::Arc;
+
     use bollard::service::ContainerState;
 
     use crate::{
         service::GatewayService,
-        worker::{do_work, Work},
+        task::{self, TaskResult},
     };
 
     use super::*;
 
     pub async fn revive(gateway: GatewayService) -> Result<(), ProjectError> {
         let mut mutations = Vec::new();
+        let gateway = Arc::new(gateway);
 
-        for Work {
-            project_name,
-            account_name,
-            work,
-        } in gateway
+        for (project_name, account_name) in gateway
             .iter_projects()
             .await
             .expect("could not list projects")
         {
-            if let Project::Errored(ProjectError { ctx: Some(ctx), .. }) = work {
+            if let Project::Errored(ProjectError { ctx: Some(ctx), .. }) =
+                gateway.find_project(&project_name).await.unwrap()
+            {
                 if let Some(container) = ctx.container() {
                     if let Ok(container) = gateway
                         .context()
@@ -783,21 +873,28 @@ pub mod exec {
                             ..
                         }) = container.state
                         {
-                            mutations.push(Work {
-                                project_name,
-                                account_name,
-                                work: Project::Stopped(ProjectStopped { container }),
-                            });
+                            mutations.push((
+                                project_name.clone(),
+                                gateway
+                                    .new_task()
+                                    .project(project_name)
+                                    .account(account_name)
+                                    .and_then(task::run(|ctx| async move {
+                                        TaskResult::Done(Project::Stopped(ProjectStopped {
+                                            container: ctx.state.container().unwrap(),
+                                        }))
+                                    }))
+                                    .build(),
+                            ));
                         }
                     }
                 }
             }
         }
 
-        for work in mutations {
-            debug!(?work, "project will be revived");
-
-            do_work(work, &gateway).await;
+        for (project_name, mut work) in mutations {
+            debug!(?project_name, "project will be revived");
+            while let TaskResult::Pending(_) = work.poll(()).await {}
         }
 
         Ok(())
@@ -856,7 +953,7 @@ pub mod tests {
         futures::pin_mut!(delay);
         let mut project_readying = project_started
             .unwrap()
-            .into_stream(ctx)
+            .into_stream(&ctx)
             .take_until(delay)
             .try_skip_while(|state| future::ready(Ok(!matches!(state, Project::Ready(_)))));
 

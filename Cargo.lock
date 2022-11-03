@@ -5403,7 +5403,6 @@ dependencies = [
  "opentelemetry-http",
  "portpicker",
  "rand 0.8.5",
- "regex",
  "serde",
  "serde_json",
  "shuttle-common",

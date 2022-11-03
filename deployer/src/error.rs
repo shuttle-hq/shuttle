@@ -14,8 +14,6 @@ pub enum Error {
     InputOutput(#[from] io::Error),
     #[error("Build error: {0}")]
     Build(#[source] Box<dyn StdError + Send>),
-    #[error("Prepare to load error: {0}")]
-    PrepareLoad(String),
     #[error("Load error: {0}")]
     Load(#[from] LoaderError),
     #[error("Run error: {0}")]

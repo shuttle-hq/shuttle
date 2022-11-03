@@ -455,11 +455,7 @@ mod tests {
     impl provisioner_factory::AbstractFactory for StubAbstractProvisionerFactory {
         type Output = StubProvisionerFactory;
 
-        fn get_factory(
-            &self,
-            _project_name: shuttle_common::project::ProjectName,
-            _service_id: Uuid,
-        ) -> Self::Output {
+        fn get_factory(&self) -> Self::Output {
             StubProvisionerFactory
         }
     }

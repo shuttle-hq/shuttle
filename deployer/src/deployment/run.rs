@@ -5,7 +5,6 @@ use std::{
 };
 
 use async_trait::async_trait;
-use portpicker::pick_unused_port;
 use shuttle_common::project::ProjectName as ServiceName;
 use shuttle_proto::runtime::{runtime_client::RuntimeClient, LoadRequest, StartRequest};
 
@@ -41,18 +40,7 @@ pub async fn task(
         let kill_send = kill_send.clone();
         let kill_recv = kill_send.subscribe();
 
-        // let port = match pick_unused_port() {
-        //     Some(port) => port,
-        //     None => {
-        //         start_crashed_cleanup(
-        //             &id,
-        //             Error::PrepareLoad(
-        //                 "could not find a free port to deploy service on".to_string(),
-        //             ),
-        //         );
-        //         continue;
-        //     }
-        // };
+        // todo: this is the port the legacy runtime is hardcoded to start services on
         let port = 7001;
 
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
@@ -237,47 +225,16 @@ async fn run(
     let response = client.load(load_request).await;
 
     if let Err(e) = response {
-        info!("something went wrong {}", e);
+        info!("failed to load service: {}", e);
     }
-    info!("starting service");
+
     let start_request = tonic::Request::new(StartRequest { service_name });
+
+    info!("starting service");
     let response = client.start(start_request).await.unwrap();
+
     info!(response = ?response,  "client response: ");
-    // let (mut handle, library) = service;
-
-    // let result;
-    // loop {
-    //     tokio::select! {
-    //          Ok(kill_id) = kill_recv.recv() => {
-    //              todo!()
-    //          }
-    //          route = run => {
-    //              result = rsl;
-    //              break;
-    //          }
-    //     }
-    // }
-
-    // if let Err(err) = library.close() {
-    //     crashed_cleanup(&id, err);
-    // } else {
-    //     cleanup(result);
-    // }
 }
-
-// #[instrument(skip(id, addr, libs_path, factory, logger))]
-// async fn load_deployment(
-//     id: &Uuid,
-//     addr: SocketAddr,
-//     libs_path: PathBuf,
-//     factory: &mut dyn Factory,
-//     logger: Logger,
-// ) -> Result<LoadedService> {
-//     let so_path = libs_path.join(id.to_string());
-//     let loader = Loader::from_so_file(so_path)?;
-
-//     Ok(loader.load(factory, addr, logger).await?)
-// }
 
 #[cfg(test)]
 mod tests {

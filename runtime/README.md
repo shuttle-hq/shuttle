@@ -21,12 +21,21 @@ To test, first start a provisioner from the root directory using:
 docker-compose -f docker-compose.rendered.yml up provisioner
 ```
 
-Then in another shell, start the runtime using:
+Then in another shell, start the runtime using the clap CLI:
 
 ```bash
 cargo run -- --legacy --provisioner-address http://localhost:8000
 ```
 
+Or directly (this is the path hardcoded in `deployer::start`):
+```bash
+# first, make sure the shuttle-runtime binary is built
+cargo build
+# then
+/home/<path to shuttle repo>/target/debug/shuttle-runtime --legacy --provisioner-address http://localhost:8000
+```
+
+Pass the path to `deployer::start`
 Then in another shell, load a `.so` file and start it up:
 
 ``` bash

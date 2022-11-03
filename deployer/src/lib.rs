@@ -55,16 +55,14 @@ pub async fn start(
     );
     let make_service = router.into_make_service();
 
+    // todo: don't hardcode this path
     let runtime_dir = PathBuf::from_str("/home/oddgrd/Documents/shuttle/target/debug").unwrap();
-    info!("runtime dir: {:?}", runtime_dir.clone());
 
-    let mut runtime = dbg!(
-        tokio::process::Command::new(runtime_dir.join("shuttle-runtime"))
-            .args(&["--legacy", "--provisioner-address", "http://localhost:8000"])
-            .current_dir(&runtime_dir)
-            .spawn()
-            .unwrap()
-    );
+    let mut runtime = tokio::process::Command::new(runtime_dir.join("shuttle-runtime"))
+        .args(&["--legacy", "--provisioner-address", "http://localhost:8000"])
+        .current_dir(&runtime_dir)
+        .spawn()
+        .unwrap();
 
     select! {
         _ = runtime.wait() => {

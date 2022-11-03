@@ -81,11 +81,11 @@ deploy: docker-compose.yml
 test:
 	cd e2e; POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) APPS_FQDN=$(APPS_FQDN) cargo test $(CARGO_TEST_FLAGS) -- --nocapture
 
-up: docker-compose.rendered.yml images
-	CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) $(DOCKER_COMPOSE) -f $< -p $(STACK) up -d
+up: docker-compose.rendered.yml
+	CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) $(DOCKER_COMPOSE) -f $< -p $(STACK) up -d $(DOCKER_COMPOSE_FLAGS)
 
 down: docker-compose.rendered.yml
-	CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) $(DOCKER_COMPOSE) -f $< -p $(STACK) down
+	CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) $(DOCKER_COMPOSE) -f $< -p $(STACK) down $(DOCKER_COMPOSE_FLAGS)
 
 shuttle-%: ${SRC} Cargo.lock
 	docker buildx build \

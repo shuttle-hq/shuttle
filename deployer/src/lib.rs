@@ -1,4 +1,4 @@
-use std::{convert::Infallible, net::SocketAddr};
+use std::{convert::Infallible, net::SocketAddr, path::PathBuf, str::FromStr};
 
 pub use args::Args;
 pub use deployment::{
@@ -55,13 +55,22 @@ pub async fn start(
     );
     let make_service = router.into_make_service();
 
+    let runtime_dir = PathBuf::from_str("/home/oddgrd/Documents/shuttle/target/debug").unwrap();
+    info!("runtime dir: {:?}", runtime_dir.clone());
+
+    let mut runtime = dbg!(
+        tokio::process::Command::new(runtime_dir.join("shuttle-runtime"))
+            .args(&["--legacy", "--provisioner-address", "http://localhost:8000"])
+            .spawn()
+            .unwrap()
+    );
+
     select! {
-        _ = tokio::spawn(shuttle_runtime::start_legacy()) => {
+        _ = runtime.wait() => {
             info!("Legacy runtime stopped.")
         },
-        _ = axum::Server::bind(&args.api_address)
-        .serve(make_service) => {
-            info!("Handlers server error, addr: {}", &args.api_address);
+        _ = axum::Server::bind(&args.api_address).serve(make_service) => {
+            info!("Handlers server stopped serving addr: {}", &args.api_address);
         },
     }
 }

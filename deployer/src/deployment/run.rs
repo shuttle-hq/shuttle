@@ -41,18 +41,20 @@ pub async fn task(
         let kill_send = kill_send.clone();
         let kill_recv = kill_send.subscribe();
 
-        let port = match pick_unused_port() {
-            Some(port) => port,
-            None => {
-                start_crashed_cleanup(
-                    &id,
-                    Error::PrepareLoad(
-                        "could not find a free port to deploy service on".to_string(),
-                    ),
-                );
-                continue;
-            }
-        };
+        // let port = match pick_unused_port() {
+        //     Some(port) => port,
+        //     None => {
+        //         start_crashed_cleanup(
+        //             &id,
+        //             Error::PrepareLoad(
+        //                 "could not find a free port to deploy service on".to_string(),
+        //             ),
+        //         );
+        //         continue;
+        //     }
+        // };
+        let port = 7001;
+
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
         let _service_name = match ServiceName::from_str(&built.service_name) {
             Ok(name) => name,
@@ -217,7 +219,7 @@ async fn run(
         + 'static,
 ) {
     info!("starting up deployer grpc client");
-    let mut client = RuntimeClient::connect("http://127.0.0.1:8002")
+    let mut client = RuntimeClient::connect("http://127.0.0.1:6001")
         .await
         .unwrap();
 
@@ -239,7 +241,8 @@ async fn run(
     }
     info!("starting service");
     let start_request = tonic::Request::new(StartRequest { service_name });
-    let _response = client.start(start_request).await.unwrap();
+    let response = client.start(start_request).await.unwrap();
+    info!(response = ?response,  "client response: ");
     // let (mut handle, library) = service;
 
     // let result;

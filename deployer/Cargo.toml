@@ -31,7 +31,7 @@ sqlx = { version = "0.6.0", features = ["runtime-tokio-native-tls", "sqlite", "c
 strum = { version = "0.24.1", features = ["derive"] }
 tar = "0.4.38"
 thiserror = "1.0.24"
-tokio = { version = "1.19.2", features = ["fs"] }
+tokio = { version = "1.19.2", features = ["fs", "process"] }
 toml = "0.5.9"
 tonic = "0.8.2"
 tower = { version = "0.4.12", features = ["make"] }
@@ -53,10 +53,6 @@ path = "../proto"
 version = "0.7.0"
 path = "../service"
 features = ["loader"]
-
-[dependencies.shuttle-runtime]
-version = "0.1.0"
-path = "../runtime"
 
 [dev-dependencies]
 ctor = "0.1.22"

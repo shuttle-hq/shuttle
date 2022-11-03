@@ -58,7 +58,7 @@ impl Runtime for Legacy {
         &self,
         request: Request<StartRequest>,
     ) -> Result<Response<StartResponse>, Status> {
-        let service_port = 8001;
+        let service_port = 7001;
         let service_address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), service_port);
 
         let provisioner_client = ProvisionerClient::connect(self.provisioner_address.clone())

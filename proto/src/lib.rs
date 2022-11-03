@@ -65,5 +65,52 @@ pub mod provisioner {
 }
 
 pub mod runtime {
+    use std::time::SystemTime;
+
+    use prost_types::Timestamp;
+
     tonic::include_proto!("runtime");
+
+    impl From<shuttle_common::LogItem> for LogItem {
+        fn from(log: shuttle_common::LogItem) -> Self {
+            Self {
+                id: log.id.to_string(),
+                timestamp: Some(Timestamp::from(SystemTime::from(log.timestamp))),
+                state: LogState::from(log.state) as i32,
+                level: LogLevel::from(log.level) as i32,
+                file: log.file,
+                line: log.line,
+                target: log.target,
+                fields: log.fields,
+            }
+        }
+    }
+
+    impl From<shuttle_common::deployment::State> for LogState {
+        fn from(state: shuttle_common::deployment::State) -> Self {
+            match state {
+                shuttle_common::deployment::State::Queued => Self::Queued,
+                shuttle_common::deployment::State::Building => Self::Building,
+                shuttle_common::deployment::State::Built => Self::Built,
+                shuttle_common::deployment::State::Loading => Self::Loading,
+                shuttle_common::deployment::State::Running => Self::Running,
+                shuttle_common::deployment::State::Completed => Self::Completed,
+                shuttle_common::deployment::State::Stopped => Self::Stopped,
+                shuttle_common::deployment::State::Crashed => Self::Crashed,
+                shuttle_common::deployment::State::Unknown => Self::Unknown,
+            }
+        }
+    }
+
+    impl From<shuttle_common::log::Level> for LogLevel {
+        fn from(level: shuttle_common::log::Level) -> Self {
+            match level {
+                shuttle_common::log::Level::Trace => Self::Trace,
+                shuttle_common::log::Level::Debug => Self::Debug,
+                shuttle_common::log::Level::Info => Self::Info,
+                shuttle_common::log::Level::Warn => Self::Warn,
+                shuttle_common::log::Level::Error => Self::Error,
+            }
+        }
+    }
 }

@@ -1,5 +1,6 @@
 use std::{
     net::{Ipv4Addr, SocketAddr},
+    ops::DerefMut,
     path::PathBuf,
     str::FromStr,
     sync::Mutex,
@@ -10,13 +11,17 @@ use async_trait::async_trait;
 use shuttle_common::LogItem;
 use shuttle_proto::{
     provisioner::provisioner_client::ProvisionerClient,
-    runtime::{runtime_server::Runtime, LoadRequest, LoadResponse, StartRequest, StartResponse},
+    runtime::{
+        self, runtime_server::Runtime, LoadRequest, LoadResponse, StartRequest, StartResponse,
+        SubscribeLogsRequest,
+    },
 };
 use shuttle_service::{
     loader::{LoadedService, Loader},
     Factory, Logger, ServiceName,
 };
 use tokio::sync::mpsc::{self, UnboundedReceiver};
+use tokio_stream::wrappers::ReceiverStream;
 use tonic::{transport::Endpoint, Request, Response, Status};
 use tracing::{info, instrument, trace};
 
@@ -28,6 +33,7 @@ pub struct Legacy {
     // Mutexes are for interior mutability
     so_path: Mutex<Option<PathBuf>>,
     port: Mutex<Option<u16>>,
+    logs_rx: Mutex<Option<UnboundedReceiver<LogItem>>>,
     provisioner_address: Endpoint,
 }
 
@@ -36,6 +42,7 @@ impl Legacy {
         Self {
             so_path: Mutex::new(None),
             port: Mutex::new(None),
+            logs_rx: Mutex::new(None),
             provisioner_address,
         }
     }
@@ -71,7 +78,8 @@ impl Runtime for Legacy {
 
         let mut factory = abstract_factory.get_factory(service_name);
 
-        let (logger, _rx) = get_logger();
+        let (logger, rx) = get_logger();
+        *self.logs_rx.lock().unwrap() = Some(rx);
 
         let so_path = self
             .so_path
@@ -99,6 +107,29 @@ impl Runtime for Legacy {
         };
 
         Ok(Response::new(message))
+    }
+
+    type SubscribeLogsStream = ReceiverStream<Result<runtime::LogItem, Status>>;
+
+    async fn subscribe_logs(
+        &self,
+        _request: Request<SubscribeLogsRequest>,
+    ) -> Result<Response<Self::SubscribeLogsStream>, Status> {
+        let logs_rx = self.logs_rx.lock().unwrap().deref_mut().take();
+
+        if let Some(mut logs_rx) = logs_rx {
+            let (tx, rx) = mpsc::channel(1);
+
+            tokio::spawn(async move {
+                while let Some(log) = logs_rx.recv().await {
+                    tx.send(Ok(log.into())).await.unwrap();
+                }
+            });
+
+            Ok(Response::new(ReceiverStream::new(rx)))
+        } else {
+            Err(Status::internal("logs have already been subscribed to"))
+        }
     }
 }
 

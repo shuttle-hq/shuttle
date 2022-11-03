@@ -1,6 +1,6 @@
 use std::{
     ffi::OsStr,
-    fs::{canonicalize, create_dir_all},
+    fs::{create_dir_all},
     io::{self, ErrorKind},
     path::PathBuf,
 };
@@ -202,7 +202,7 @@ fn parse_path(path: &OsStr) -> Result<PathBuf, io::Error> {
     }
 
     #[cfg(target_os = "unix")]
-    canonicalize(path).map_err(|e| {
+    std::fs::canonicalize(path).map_err(|e| {
         io::Error::new(
             ErrorKind::InvalidInput,
             format!("could not turn {path:?} into a real path: {e}"),

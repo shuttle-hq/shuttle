@@ -849,9 +849,8 @@ pub mod exec {
 
     use super::*;
 
-    pub async fn revive(gateway: GatewayService) -> Result<(), ProjectError> {
+    pub async fn revive(gateway: Arc<GatewayService>) -> Result<(), ProjectError> {
         let mut mutations = Vec::new();
-        let gateway = Arc::new(gateway);
 
         for (project_name, account_name) in gateway
             .iter_projects()

@@ -5309,8 +5309,10 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap 4.0.18",
+ "dirs",
  "reqwest",
  "tokio",
+ "toml",
 ]
 
 [[package]]

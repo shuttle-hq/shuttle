@@ -1,3 +1,8 @@
+use clap::Parser;
+use shuttle_admin::args::Args;
+
 fn main() {
-    println!("Hello, world!");
+    let args = Args::parse();
+
+    println!("{args:?}");
 }

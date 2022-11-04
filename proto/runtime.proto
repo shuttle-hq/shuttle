@@ -31,7 +31,8 @@ message StartResponse {
   // Was the start successful
   bool success = 1;
 
+  // todo: find a way to add optional flag here
   // Optional port the service was started on
   // This is likely to be None for bots
-  optional uint32 port = 2;
+  uint32 port = 2;
 }

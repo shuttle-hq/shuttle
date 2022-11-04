@@ -58,8 +58,8 @@ impl Runtime for Legacy {
         &self,
         request: Request<StartRequest>,
     ) -> Result<Response<StartResponse>, Status> {
-        let port = 8001;
-        let address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
+        let service_port = 7001;
+        let service_address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), service_port);
 
         let provisioner_client = ProvisionerClient::connect(self.provisioner_address.clone())
             .await
@@ -84,18 +84,18 @@ impl Runtime for Legacy {
             .map_err(|err| Status::from_error(Box::new(err)))?
             .clone();
 
-        trace!(%address, "starting");
-        let service = load_service(address, so_path, &mut factory, logger)
+        trace!(%service_address, "starting");
+        let service = load_service(service_address, so_path, &mut factory, logger)
             .await
             .unwrap();
 
-        _ = tokio::spawn(run(service, address));
+        _ = tokio::spawn(run(service, service_address));
 
-        *self.port.lock().unwrap() = Some(port);
+        *self.port.lock().unwrap() = Some(service_port);
 
         let message = StartResponse {
             success: true,
-            port: Some(port as u32),
+            port: service_port as u32,
         };
 
         Ok(Response::new(message))

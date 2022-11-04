@@ -1,4 +1,4 @@
-use std::{convert::Infallible, net::SocketAddr};
+use std::{convert::Infallible, env, net::SocketAddr, path::PathBuf};
 
 pub use args::Args;
 pub use deployment::{
@@ -13,6 +13,7 @@ use hyper::{
 };
 pub use persistence::Persistence;
 use proxy::AddressGetter;
+use tokio::select;
 use tracing::{error, info};
 
 mod args;
@@ -54,12 +55,27 @@ pub async fn start(
     );
     let make_service = router.into_make_service();
 
-    info!("Binding to and listening at address: {}", args.api_address);
+    let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .to_path_buf();
 
-    axum::Server::bind(&args.api_address)
-        .serve(make_service)
-        .await
-        .unwrap_or_else(|_| panic!("Failed to bind to address: {}", args.api_address));
+    let runtime_dir = workspace_root.join("target/debug");
+
+    let mut runtime = tokio::process::Command::new(runtime_dir.join("shuttle-runtime"))
+        .args(&["--legacy", "--provisioner-address", "http://localhost:8000"])
+        .current_dir(&runtime_dir)
+        .spawn()
+        .unwrap();
+
+    select! {
+        _ = runtime.wait() => {
+            info!("Legacy runtime stopped.")
+        },
+        _ = axum::Server::bind(&args.api_address).serve(make_service) => {
+            info!("Handlers server stopped serving addr: {}", &args.api_address);
+        },
+    }
 }
 
 pub async fn start_proxy(

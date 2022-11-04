@@ -177,7 +177,7 @@ pub fn make_api(service: Arc<GatewayService>, sender: Sender<BoxedTask>) -> Rout
         )
         .route("/users/:account_name", get(get_user).post(post_user))
         .route("/projects/:project/*any", any(route_project))
-        .route("/admin/revive", get(revive_projects))
+        .route("/admin/revive", post(revive_projects))
         .layer(Extension(service))
         .layer(Extension(sender))
         .layer(

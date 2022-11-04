@@ -4,4 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+anyhow = "1.0.62"
 clap = { version = "4.0.0", features = [ "derive", "env" ] }
+reqwest = { version = "0.11.11", features = ["json"] }
+tokio = { version = "1.20.1", features = ["macros"] }

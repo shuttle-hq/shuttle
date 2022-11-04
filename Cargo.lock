@@ -5307,7 +5307,10 @@ checksum = "45bb67a18fa91266cc7807181f62f9178a6873bfad7dc788c42e6430db40184f"
 name = "shuttle-admin"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "clap 4.0.18",
+ "reqwest",
+ "tokio",
 ]
 
 [[package]]

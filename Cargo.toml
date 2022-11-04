@@ -1,5 +1,6 @@
 [workspace]
 members = [
+  "admin",
   "cargo-shuttle",
   "codegen",
   "common",

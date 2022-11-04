@@ -11,18 +11,18 @@ impl Client {
     }
 
     pub async fn revive(&self) -> Result<String> {
-        self.get("/admin/revive").await
+        self.post("/admin/revive").await
     }
 
-    async fn get(&self, path: &str) -> Result<String> {
+    async fn post(&self, path: &str) -> Result<String> {
         reqwest::Client::new()
-            .get(format!("{}{}", self.api_url, path))
+            .post(format!("{}{}", self.api_url, path))
             .bearer_auth(&self.api_key)
             .send()
             .await
-            .context("failed to make get request")?
+            .context("failed to make post request")?
             .text()
             .await
-            .context("failed to get text body from response")
+            .context("failed to post text body from response")
     }
 }

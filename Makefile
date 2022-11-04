@@ -89,7 +89,7 @@ down: docker-compose.rendered.yml
 
 shuttle-%: ${SRC} Cargo.lock
 	docker buildx build \
-	       --build-arg crate=shuttle-$(*) \
+	       --build-arg folder=$(*) \
 	       --tag $(CONTAINER_REGISTRY)/$(*):$(COMMIT_SHA) \
 	       --tag $(CONTAINER_REGISTRY)/$(*):$(TAG) \
 	       --tag $(CONTAINER_REGISTRY)/$(*):latest \

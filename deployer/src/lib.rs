@@ -55,12 +55,11 @@ pub async fn start(
     );
     let make_service = router.into_make_service();
 
-    let workspace_root: PathBuf = {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .to_path_buf()
-    };
+    let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .to_path_buf();
+
     let runtime_dir = workspace_root.join("target/debug");
 
     let mut runtime = tokio::process::Command::new(runtime_dir.join("shuttle-runtime"))

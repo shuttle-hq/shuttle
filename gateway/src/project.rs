@@ -838,21 +838,23 @@ where
 }
 
 pub mod exec {
+
     use std::sync::Arc;
 
     use bollard::service::ContainerState;
+    use tokio::sync::mpsc::Sender;
 
     use crate::{
         service::GatewayService,
-        task::{self, TaskResult},
+        task::{self, BoxedTask, TaskResult},
     };
 
     use super::*;
 
-    pub async fn revive(gateway: GatewayService) -> Result<(), ProjectError> {
-        let mut mutations = Vec::new();
-        let gateway = Arc::new(gateway);
-
+    pub async fn revive(
+        gateway: Arc<GatewayService>,
+        sender: Sender<BoxedTask>,
+    ) -> Result<(), ProjectError> {
         for (project_name, account_name) in gateway
             .iter_projects()
             .await
@@ -873,28 +875,22 @@ pub mod exec {
                             ..
                         }) = container.state
                         {
-                            mutations.push((
-                                project_name.clone(),
-                                gateway
-                                    .new_task()
-                                    .project(project_name)
-                                    .account(account_name)
-                                    .and_then(task::run(|ctx| async move {
-                                        TaskResult::Done(Project::Stopped(ProjectStopped {
-                                            container: ctx.state.container().unwrap(),
-                                        }))
+                            debug!("{} will be revived", project_name.clone());
+                            _ = gateway
+                                .new_task()
+                                .project(project_name)
+                                .account(account_name)
+                                .and_then(task::run(|ctx| async move {
+                                    TaskResult::Done(Project::Stopped(ProjectStopped {
+                                        container: ctx.state.container().unwrap(),
                                     }))
-                                    .build(),
-                            ));
+                                }))
+                                .send(&sender)
+                                .await;
                         }
                     }
                 }
             }
-        }
-
-        for (project_name, mut work) in mutations {
-            debug!(?project_name, "project will be revived");
-            while let TaskResult::Pending(_) = work.poll(()).await {}
         }
 
         Ok(())

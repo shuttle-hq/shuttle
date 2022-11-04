@@ -5,10 +5,11 @@ use axum::body::{Body, BoxBody};
 use axum::extract::{Extension, Path};
 use axum::http::Request;
 use axum::response::Response;
-use axum::routing::{any, get};
+use axum::routing::{any, get, post};
 use axum::{Json as AxumJson, Router};
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
+use shuttle_common::models::error::ErrorKind;
 use shuttle_common::models::{project, user};
 use tokio::sync::mpsc::Sender;
 use tower_http::trace::TraceLayer;
@@ -153,6 +154,16 @@ async fn get_status(Extension(sender): Extension<Sender<BoxedTask>>) -> Response
         .unwrap()
 }
 
+async fn revive_projects(
+    _: Admin,
+    Extension(service): Extension<Arc<GatewayService>>,
+    Extension(sender): Extension<Sender<BoxedTask>>,
+) -> Result<(), Error> {
+    crate::project::exec::revive(service, sender)
+        .await
+        .map_err(|_| Error::from_kind(ErrorKind::Internal))
+}
+
 pub fn make_api(service: Arc<GatewayService>, sender: Sender<BoxedTask>) -> Router<Body> {
     debug!("making api route");
 
@@ -167,6 +178,7 @@ pub fn make_api(service: Arc<GatewayService>, sender: Sender<BoxedTask>) -> Rout
         )
         .route("/users/:account_name", get(get_user).post(post_user))
         .route("/projects/:project/*any", any(route_project))
+        .route("/admin/revive", post(revive_projects))
         .layer(Extension(service))
         .layer(Extension(sender))
         .layer(

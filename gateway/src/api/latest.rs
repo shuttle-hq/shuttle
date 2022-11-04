@@ -5,7 +5,7 @@ use axum::body::{Body, BoxBody};
 use axum::extract::{Extension, Path};
 use axum::http::Request;
 use axum::response::Response;
-use axum::routing::{any, get};
+use axum::routing::{any, get, post};
 use axum::{Json as AxumJson, Router};
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
@@ -157,8 +157,9 @@ async fn get_status(Extension(sender): Extension<Sender<BoxedTask>>) -> Response
 async fn revive_projects(
     _: Admin,
     Extension(service): Extension<Arc<GatewayService>>,
+    Extension(sender): Extension<Sender<BoxedTask>>,
 ) -> Result<(), Error> {
-    crate::project::exec::revive(service)
+    crate::project::exec::revive(service, sender)
         .await
         .map_err(|_| Error::from_kind(ErrorKind::Internal))
 }

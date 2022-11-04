@@ -23,7 +23,7 @@ use tracing::{debug, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::args::ContextArgs;
-use crate::auth::{Key, User, Permissions};
+use crate::auth::{Key, Permissions, User};
 use crate::project::Project;
 use crate::task::TaskBuilder;
 use crate::{AccountName, DockerContext, Error, ErrorKind, ProjectName};
@@ -327,24 +327,25 @@ impl GatewayService {
     }
 
     pub async fn get_permissions(&self, account_name: &AccountName) -> Result<Permissions, Error> {
-        let permissions = query("SELECT super_user, account_tier FROM accounts WHERE account_name = ?1")
-            .bind(account_name)
-            .fetch_optional(&self.db)
-            .await?
-            .map(|row| {
-                Permissions::builder()
-                    .super_user(row.try_get("super_user").unwrap())
-                    .tier(row.try_get("account_tier").unwrap())
-                    .build()
-            })
-            .unwrap_or_default(); // defaults to `false` (i.e. not super user)
+        let permissions =
+            query("SELECT super_user, account_tier FROM accounts WHERE account_name = ?1")
+                .bind(account_name)
+                .fetch_optional(&self.db)
+                .await?
+                .map(|row| {
+                    Permissions::builder()
+                        .super_user(row.try_get("super_user").unwrap())
+                        .tier(row.try_get("account_tier").unwrap())
+                        .build()
+                })
+                .unwrap_or_default(); // defaults to `false` (i.e. not super user)
         Ok(permissions)
     }
 
     pub async fn set_super_user(
         &self,
         account_name: &AccountName,
-        super_user: bool
+        super_user: bool,
     ) -> Result<(), Error> {
         query("UPDATE accounts SET super_user = ?1 WHERE account_name = ?2")
             .bind(super_user)
@@ -357,7 +358,7 @@ impl GatewayService {
     pub async fn set_permissions(
         &self,
         account_name: &AccountName,
-        permissions: &Permissions
+        permissions: &Permissions,
     ) -> Result<(), Error> {
         query("UPDATE accounts SET super_user = ?1, account_tier = ?2 WHERE account_name = ?3")
             .bind(&permissions.super_user)

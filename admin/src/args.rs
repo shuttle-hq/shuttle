@@ -3,8 +3,8 @@ use clap::{Parser, Subcommand};
 #[derive(Parser, Debug)]
 pub struct Args {
     /// run this command against the api at the supplied url
-    #[arg(long, env = "SHUTTLE_API")]
-    pub api_url: Option<String>,
+    #[arg(long, default_value = "https://api.shuttle.rs", env = "SHUTTLE_API")]
+    pub api_url: String,
 
     #[command(subcommand)]
     pub command: Command,

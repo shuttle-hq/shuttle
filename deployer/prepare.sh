@@ -1,5 +1,10 @@
 #!/usr/bin/env sh
 
+###############################################################################
+# This file is used by our common Containerfile incase the container for this #
+# service might need some extra preparation steps for its final image         #
+###############################################################################
+
 # Patch crates to be on same versions
 mkdir -p $CARGO_HOME; \
 echo '[patch.crates-io]

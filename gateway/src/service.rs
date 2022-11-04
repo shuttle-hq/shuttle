@@ -23,7 +23,7 @@ use tracing::{debug, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::args::ContextArgs;
-use crate::auth::{Key, User};
+use crate::auth::{Key, Permissions, User};
 use crate::project::Project;
 use crate::task::TaskBuilder;
 use crate::{AccountName, DockerContext, Error, ErrorKind, ProjectName};
@@ -304,30 +304,6 @@ impl GatewayService {
         Ok(control_key)
     }
 
-    pub async fn user_from_account_name(&self, name: AccountName) -> Result<User, Error> {
-        let key = self.key_from_account_name(&name).await?;
-        let super_user = self.is_super_user(&name).await?;
-        let projects = self.iter_user_projects(&name).await?.collect();
-        Ok(User {
-            name,
-            key,
-            projects,
-            super_user,
-        })
-    }
-
-    pub async fn user_from_key(&self, key: Key) -> Result<User, Error> {
-        let name = self.account_name_from_key(&key).await?;
-        let super_user = self.is_super_user(&name).await?;
-        let projects = self.iter_user_projects(&name).await?.collect();
-        Ok(User {
-            name,
-            key,
-            projects,
-            super_user,
-        })
-    }
-
     pub async fn create_user(&self, name: AccountName) -> Result<User, Error> {
         let key = Key::new_random();
         query("INSERT INTO accounts (account_name, key) VALUES (?1, ?2)")
@@ -347,38 +323,53 @@ impl GatewayService {
                 // Otherwise this is internal
                 err.into()
             })?;
-        Ok(User {
-            name,
-            key,
-            projects: Vec::default(),
-            super_user: false,
-        })
+        Ok(User::new_with_defaults(name, key))
     }
 
-    pub async fn is_super_user(&self, account_name: &AccountName) -> Result<bool, Error> {
-        let is_super_user = query("SELECT super_user FROM accounts WHERE account_name = ?1")
-            .bind(account_name)
-            .fetch_optional(&self.db)
-            .await?
-            .map(|row| row.try_get("super_user").unwrap())
-            .unwrap_or(false); // defaults to `false` (i.e. not super user)
-        Ok(is_super_user)
+    pub async fn get_permissions(&self, account_name: &AccountName) -> Result<Permissions, Error> {
+        let permissions =
+            query("SELECT super_user, account_tier FROM accounts WHERE account_name = ?1")
+                .bind(account_name)
+                .fetch_optional(&self.db)
+                .await?
+                .map(|row| {
+                    Permissions::builder()
+                        .super_user(row.try_get("super_user").unwrap())
+                        .tier(row.try_get("account_tier").unwrap())
+                        .build()
+                })
+                .unwrap_or_default(); // defaults to `false` (i.e. not super user)
+        Ok(permissions)
     }
 
     pub async fn set_super_user(
         &self,
         account_name: &AccountName,
-        value: bool,
+        super_user: bool,
     ) -> Result<(), Error> {
         query("UPDATE accounts SET super_user = ?1 WHERE account_name = ?2")
-            .bind(value)
+            .bind(super_user)
             .bind(account_name)
             .execute(&self.db)
             .await?;
         Ok(())
     }
 
-    async fn iter_user_projects(
+    pub async fn set_permissions(
+        &self,
+        account_name: &AccountName,
+        permissions: &Permissions,
+    ) -> Result<(), Error> {
+        query("UPDATE accounts SET super_user = ?1, account_tier = ?2 WHERE account_name = ?3")
+            .bind(&permissions.super_user)
+            .bind(&permissions.tier)
+            .bind(account_name)
+            .execute(&self.db)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn iter_user_projects(
         &self,
         AccountName(account_name): &AccountName,
     ) -> Result<impl Iterator<Item = ProjectName>, Error> {
@@ -489,6 +480,7 @@ pub mod tests {
     use std::str::FromStr;
 
     use super::*;
+    use crate::auth::AccountTier;
     use crate::task::{self, TaskResult};
     use crate::tests::{assert_err_kind, World};
     use crate::{Error, ErrorKind};
@@ -501,34 +493,34 @@ pub mod tests {
         let account_name: AccountName = "test_user_123".parse()?;
 
         assert_err_kind!(
-            svc.user_from_account_name(account_name.clone()).await,
+            User::retrieve_from_account_name(&svc, account_name.clone()).await,
             ErrorKind::UserNotFound
         );
 
         assert_err_kind!(
-            svc.user_from_key(Key::from_str("123").unwrap()).await,
+            User::retrieve_from_key(&svc, Key::from_str("123").unwrap()).await,
             ErrorKind::UserNotFound
         );
 
         let user = svc.create_user(account_name.clone()).await?;
 
         assert_eq!(
-            svc.user_from_account_name(account_name.clone()).await?,
+            User::retrieve_from_account_name(&svc, account_name.clone()).await?,
             user
         );
-
-        assert!(!svc.is_super_user(&account_name).await?);
 
         let User {
             name,
             key,
             projects,
-            super_user,
+            permissions,
         } = user;
 
         assert!(projects.is_empty());
 
-        assert!(!super_user);
+        assert!(!permissions.is_super_user());
+
+        assert_eq!(*permissions.tier(), AccountTier::Basic);
 
         assert_eq!(name, account_name);
 

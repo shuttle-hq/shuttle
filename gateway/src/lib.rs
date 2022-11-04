@@ -286,7 +286,7 @@ pub mod tests {
     use hyper::http::Uri;
     use hyper::{Body, Client as HyperClient, Request, Response, StatusCode};
     use rand::distributions::{Alphanumeric, DistString, Distribution, Uniform};
-    use shuttle_common::models::{project, service};
+    use shuttle_common::models::{project, service, user};
     use sqlx::SqlitePool;
     use tokio::sync::mpsc::channel;
 
@@ -648,7 +648,7 @@ pub mod tests {
         let User { key, name, .. } = service.create_user("neo".parse().unwrap()).await.unwrap();
         service.set_super_user(&name, true).await.unwrap();
 
-        let User { key, .. } = api_client
+        let user::Response { key, .. } = api_client
             .request(
                 Request::post("/users/trinity")
                     .with_header(&Authorization::bearer(key.as_str()).unwrap())

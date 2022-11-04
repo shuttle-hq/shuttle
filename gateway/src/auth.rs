@@ -1,4 +1,4 @@
-use std::fmt::Formatter;
+use std::fmt::{Debug, Formatter};
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -58,8 +58,6 @@ impl Key {
     }
 }
 
-const FALSE: fn() -> bool = || false;
-
 /// A wrapper for a guard that verifies an API key is associated with a
 /// valid user.
 ///
@@ -71,9 +69,111 @@ pub struct User {
     pub name: AccountName,
     pub key: Key,
     pub projects: Vec<ProjectName>,
-    #[serde(skip_serializing_if = "std::ops::Not::not")]
-    #[serde(default = "FALSE")]
+    pub permissions: Permissions,
+}
+
+impl User {
+    pub fn is_super_user(&self) -> bool {
+        self.permissions.is_super_user()
+    }
+
+    pub fn new_with_defaults(name: AccountName, key: Key) -> Self {
+        Self {
+            name,
+            key,
+            projects: Vec::new(),
+            permissions: Permissions::default(),
+        }
+    }
+
+    pub async fn retrieve_from_account_name(
+        svc: &GatewayService,
+        name: AccountName,
+    ) -> Result<User, Error> {
+        let key = svc.key_from_account_name(&name).await?;
+        let permissions = svc.get_permissions(&name).await?;
+        let projects = svc.iter_user_projects(&name).await?.collect();
+        Ok(User {
+            name,
+            key,
+            projects,
+            permissions,
+        })
+    }
+
+    pub async fn retrieve_from_key(svc: &GatewayService, key: Key) -> Result<User, Error> {
+        let name = svc.account_name_from_key(&key).await?;
+        let permissions = svc.get_permissions(&name).await?;
+        let projects = svc.iter_user_projects(&name).await?.collect();
+        Ok(User {
+            name,
+            key,
+            projects,
+            permissions,
+        })
+    }
+}
+
+#[derive(Clone, Copy, Deserialize, PartialEq, Eq, Serialize, Debug, sqlx::Type)]
+#[sqlx(rename_all = "lowercase")]
+pub enum AccountTier {
+    Basic,
+    Pro,
+    Team,
+}
+
+#[derive(Default)]
+pub struct PermissionsBuilder {
+    tier: Option<AccountTier>,
+    super_user: Option<bool>,
+}
+
+impl PermissionsBuilder {
+    pub fn super_user(mut self, is_super_user: bool) -> Self {
+        self.super_user = Some(is_super_user);
+        self
+    }
+
+    pub fn tier(mut self, tier: AccountTier) -> Self {
+        self.tier = Some(tier);
+        self
+    }
+
+    pub fn build(self) -> Permissions {
+        Permissions {
+            tier: self.tier.unwrap_or(AccountTier::Basic),
+            super_user: self.super_user.unwrap_or_default(),
+        }
+    }
+}
+
+#[derive(Clone, Deserialize, PartialEq, Eq, Serialize, Debug)]
+pub struct Permissions {
+    pub tier: AccountTier,
     pub super_user: bool,
+}
+
+impl Default for Permissions {
+    fn default() -> Self {
+        Self {
+            tier: AccountTier::Basic,
+            super_user: false,
+        }
+    }
+}
+
+impl Permissions {
+    pub fn builder() -> PermissionsBuilder {
+        PermissionsBuilder::default()
+    }
+
+    pub fn tier(&self) -> &AccountTier {
+        &self.tier
+    }
+
+    pub fn is_super_user(&self) -> bool {
+        self.super_user
+    }
 }
 
 #[async_trait]
@@ -88,8 +188,7 @@ where
         let Extension(service) = Extension::<Arc<GatewayService>>::from_request(req)
             .await
             .unwrap();
-        let user = service
-            .user_from_key(key)
+        let user = User::retrieve_from_key(&service, key)
             .await
             // Absord any error into `Unauthorized`
             .map_err(|e| Error::source(ErrorKind::Unauthorized, e))?;
@@ -144,7 +243,7 @@ where
 
         // Record current project for tracing purposes
         Span::current().record("account.project", &scope.to_string());
-        if user.super_user || user.projects.contains(&scope) {
+        if user.is_super_user() || user.projects.contains(&scope) {
             Ok(Self { user, scope })
         } else {
             Err(Error::from(ErrorKind::ProjectNotFound))
@@ -165,7 +264,7 @@ where
 
     async fn from_request(req: &mut RequestParts<B>) -> Result<Self, Self::Rejection> {
         let user = User::from_request(req).await?;
-        if user.super_user {
+        if user.is_super_user() {
             Ok(Self { user })
         } else {
             Err(Error::from(ErrorKind::Forbidden))

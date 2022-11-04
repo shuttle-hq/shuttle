@@ -49,7 +49,7 @@ async fn get_user(
     Path(account_name): Path<AccountName>,
     _: Admin,
 ) -> Result<AxumJson<user::Response>, Error> {
-    let user = service.user_from_account_name(account_name).await?;
+    let user = User::retrieve_from_account_name(&service, account_name).await?;
 
     Ok(AxumJson(user.into()))
 }

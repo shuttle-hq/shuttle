@@ -245,7 +245,6 @@ workflows:
   version: 2
   ci:
     jobs:
-      - service-test:
       - platform-test:
           matrix:
             parameters:

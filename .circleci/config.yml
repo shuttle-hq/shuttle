@@ -10,8 +10,6 @@ executors:
       - image: cimg/rust:1.63.0
   image-ubuntu:
     resource_class: shuttle-hq/aws
-    machine:
-      docker_layer_caching: true
 
 # sscache steps are from this guide
 # https://medium.com/@edouard.oger/rust-caching-on-circleci-using-sccache-c996344f0115

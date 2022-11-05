@@ -9,6 +9,7 @@ executors:
     docker:
       - image: cimg/rust:1.63.0
   image-ubuntu:
+    machine: ~
     resource_class: shuttle-hq/aws
 
 # sscache steps are from this guide

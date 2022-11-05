@@ -11,7 +11,6 @@ executors:
   image-ubuntu:
     resource_class: shuttle-hq/aws
     machine:
-      image: ubuntu-2204:2022.04.1
       docker_layer_caching: true
 
 # sscache steps are from this guide

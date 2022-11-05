@@ -252,7 +252,7 @@ workflows:
             - workspace-fmt
           matrix:
             parameters:
-              framework: ["web-axum", "web-rocket", "web-poem", "web-thruster", "web-tide", "web-tower","web-warp", "web-salvo", "bot-serenity"]
+              framework: ["web-axum"]
       - check-standalone:
           matrix:
             parameters:
@@ -269,7 +269,7 @@ workflows:
             - workspace-clippy
           matrix:
             parameters:
-              crate: ["shuttle-deployer", "cargo-shuttle", "shuttle-codegen", "shuttle-common", "shuttle-proto", "shuttle-provisioner"]
+              crate: ["shuttle-deployer"]
       - e2e-test:
           requires:
             - service-test

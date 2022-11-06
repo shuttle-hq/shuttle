@@ -3,8 +3,18 @@ version: 2.1
 workflows:
   build-workflow:
     jobs:
-      - runner
+      - runner:
+          filters:
+            branches:
+              only: production
+      - other
+          
 jobs:
+  other:
+    docker:
+      - image: cimg/rust:1.63.0
+    steps:
+      - run: echo "Hello, I'm not on runners!"
   runner:
     machine: true
     resource_class: shuttle-hq/aws

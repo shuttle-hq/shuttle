@@ -394,6 +394,8 @@ impl ProjectCreating {
             "Cmd": [
                 "--admin-secret",
                 initial_key,
+                "--project",
+                project_name,
                 "--api-address",
                 format!("0.0.0.0:{RUNTIME_API_PORT}"),
                 "--provisioner-address",

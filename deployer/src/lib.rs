@@ -52,6 +52,7 @@ pub async fn start(
         deployment_manager,
         args.proxy_fqdn,
         args.admin_secret,
+        args.project,
     );
     let make_service = router.into_make_service();
 

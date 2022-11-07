@@ -108,10 +108,10 @@ This prevents `gateway` from starting up. Now you can start deployer only using:
 
 ```bash
 provisioner_address=$(docker inspect --format '{{(index .NetworkSettings.Networks "shuttle_default").IPAddress}}' shuttle_prod_hello-world-rocket-app_run)
-cargo run -p shuttle-deployer -- --provisioner-address $provisioner_address --provisioner-port 8000 --proxy-fqdn local.rs --admin-secret test-key
+cargo run -p shuttle-deployer -- --provisioner-address $provisioner_address --provisioner-port 8000 --proxy-fqdn local.rs --admin-secret test-key --project <project_name>
 ```
 
-The `--admin-secret` can safely be changed to your api-key to make testing easier.
+The `--admin-secret` can safely be changed to your api-key to make testing easier. While `<project_name>` needs to match the name of the project that will be deployed to this deployer. This is the `Cargo.toml` or `Shuttle.toml` name for the project.
 
 ### Using Podman instead of Docker
 If you are using Podman over Docker, then expose a rootless socket of Podman using the following command:

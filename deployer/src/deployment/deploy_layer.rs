@@ -345,7 +345,6 @@ impl Visit for JsonVisitor {
 #[cfg(test)]
 mod tests {
     use std::{
-        collections::BTreeMap,
         fs::read_dir,
         path::PathBuf,
         sync::{Arc, Mutex},
@@ -356,15 +355,13 @@ mod tests {
     use ctor::ctor;
     use flate2::{write::GzEncoder, Compression};
     use futures::FutureExt;
-    use shuttle_service::Logger;
-    use tokio::{select, sync::mpsc, time::sleep};
+    use tokio::{select, time::sleep};
     use tracing_subscriber::prelude::*;
     use uuid::Uuid;
 
     use crate::{
         deployment::{
-            deploy_layer::LogType, provisioner_factory, runtime_logger, ActiveDeploymentsGetter,
-            Built, DeploymentManager, Queued,
+            deploy_layer::LogType, ActiveDeploymentsGetter, Built, DeploymentManager, Queued,
         },
         persistence::{SecretRecorder, State},
     };
@@ -450,54 +447,6 @@ mod tests {
         }
     }
 
-    struct StubAbstractProvisionerFactory;
-
-    impl provisioner_factory::AbstractFactory for StubAbstractProvisionerFactory {
-        type Output = StubProvisionerFactory;
-
-        fn get_factory(&self) -> Self::Output {
-            StubProvisionerFactory
-        }
-    }
-
-    struct StubProvisionerFactory;
-
-    #[async_trait::async_trait]
-    impl shuttle_service::Factory for StubProvisionerFactory {
-        async fn get_db_connection_string(
-            &mut self,
-            _db_type: shuttle_common::database::Type,
-        ) -> Result<String, shuttle_service::Error> {
-            panic!("did not expect any deploy_layer test to connect to the database")
-        }
-
-        async fn get_secrets(
-            &mut self,
-        ) -> Result<BTreeMap<String, String>, shuttle_service::Error> {
-            panic!("did not expect any deploy_layer test to get secrets")
-        }
-
-        fn get_service_name(&self) -> shuttle_service::ServiceName {
-            panic!("did not expect any deploy_layer test to get the service name")
-        }
-    }
-
-    struct StubRuntimeLoggerFactory;
-
-    impl runtime_logger::Factory for StubRuntimeLoggerFactory {
-        fn get_logger(&self, id: Uuid) -> Logger {
-            let (tx, mut rx) = mpsc::unbounded_channel();
-
-            tokio::spawn(async move {
-                while let Some(log) = rx.recv().await {
-                    println!("{log}")
-                }
-            });
-
-            Logger::new(tx, id)
-        }
-    }
-
     #[derive(Clone)]
     struct StubActiveDeploymentGetter;
 
@@ -516,8 +465,6 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_to_be_queued() {
         let deployment_manager = DeploymentManager::new(
-            StubAbstractProvisionerFactory,
-            StubRuntimeLoggerFactory,
             RECORDER.clone(),
             RECORDER.clone(),
             StubActiveDeploymentGetter,
@@ -635,8 +582,6 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_self_stop() {
         let deployment_manager = DeploymentManager::new(
-            StubAbstractProvisionerFactory,
-            StubRuntimeLoggerFactory,
             RECORDER.clone(),
             RECORDER.clone(),
             StubActiveDeploymentGetter,
@@ -715,8 +660,6 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_bind_panic() {
         let deployment_manager = DeploymentManager::new(
-            StubAbstractProvisionerFactory,
-            StubRuntimeLoggerFactory,
             RECORDER.clone(),
             RECORDER.clone(),
             StubActiveDeploymentGetter,
@@ -795,8 +738,6 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_main_panic() {
         let deployment_manager = DeploymentManager::new(
-            StubAbstractProvisionerFactory,
-            StubRuntimeLoggerFactory,
             RECORDER.clone(),
             RECORDER.clone(),
             StubActiveDeploymentGetter,
@@ -870,8 +811,6 @@ mod tests {
     #[tokio::test]
     async fn deployment_from_run() {
         let deployment_manager = DeploymentManager::new(
-            StubAbstractProvisionerFactory,
-            StubRuntimeLoggerFactory,
             RECORDER.clone(),
             RECORDER.clone(),
             StubActiveDeploymentGetter,
@@ -924,8 +863,6 @@ mod tests {
     #[tokio::test]
     async fn scope_with_nil_id() {
         let deployment_manager = DeploymentManager::new(
-            StubAbstractProvisionerFactory,
-            StubRuntimeLoggerFactory,
             RECORDER.clone(),
             RECORDER.clone(),
             StubActiveDeploymentGetter,

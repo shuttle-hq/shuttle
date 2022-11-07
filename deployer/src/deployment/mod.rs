@@ -1,5 +1,4 @@
 pub mod deploy_layer;
-pub mod provisioner_factory;
 mod queue;
 mod run;
 pub mod runtime_logger;
@@ -30,8 +29,6 @@ impl DeploymentManager {
     /// Create a new deployment manager. Manages one or more 'pipelines' for
     /// processing service building, loading, and deployment.
     pub fn new(
-        abstract_dummy_factory: impl provisioner_factory::AbstractFactory,
-        runtime_logger_factory: impl runtime_logger::Factory,
         build_log_recorder: impl LogRecorder,
         secret_recorder: impl SecretRecorder,
         active_deployment_getter: impl ActiveDeploymentsGetter,
@@ -42,8 +39,6 @@ impl DeploymentManager {
         DeploymentManager {
             pipeline: Pipeline::new(
                 kill_send.clone(),
-                abstract_dummy_factory,
-                runtime_logger_factory,
                 build_log_recorder,
                 secret_recorder,
                 active_deployment_getter,
@@ -97,8 +92,6 @@ impl Pipeline {
     /// deployments between the aforementioned tasks.
     fn new(
         kill_send: KillSender,
-        abstract_factory: impl provisioner_factory::AbstractFactory,
-        runtime_logger_factory: impl runtime_logger::Factory,
         build_log_recorder: impl LogRecorder,
         secret_recorder: impl SecretRecorder,
         active_deployment_getter: impl ActiveDeploymentsGetter,
@@ -119,8 +112,6 @@ impl Pipeline {
         tokio::spawn(run::task(
             run_recv,
             kill_send,
-            abstract_factory,
-            runtime_logger_factory,
             active_deployment_getter,
             artifacts_path,
         ));

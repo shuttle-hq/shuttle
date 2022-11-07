@@ -1,7 +1,5 @@
 use clap::Parser;
-use shuttle_deployer::{
-    start, start_proxy, AbstractDummyFactory, Args, DeployLayer, Persistence, RuntimeLoggerFactory,
-};
+use shuttle_deployer::{start, start_proxy, Args, DeployLayer, Persistence};
 use tokio::select;
 use tracing::trace;
 use tracing_subscriber::prelude::*;
@@ -34,12 +32,8 @@ async fn main() {
         .with(opentelemetry)
         .init();
 
-    let abstract_dummy_factory = AbstractDummyFactory::new();
-
-    let runtime_logger_factory = RuntimeLoggerFactory::new(persistence.get_log_sender());
-
     select! {
         _ = start_proxy(args.proxy_address, args.proxy_fqdn.clone(), persistence.clone()) => {},
-        _ = start(abstract_dummy_factory, runtime_logger_factory, persistence, args) => {},
+        _ = start(persistence, args) => {},
     }
 }

@@ -1,11 +1,8 @@
 use std::{convert::Infallible, env, net::SocketAddr, path::PathBuf};
 
 pub use args::Args;
-pub use deployment::{
-    deploy_layer::DeployLayer, provisioner_factory::AbstractDummyFactory,
-    runtime_logger::RuntimeLoggerFactory,
-};
-use deployment::{provisioner_factory, runtime_logger, Built, DeploymentManager};
+pub use deployment::{deploy_layer::DeployLayer, runtime_logger::RuntimeLoggerFactory};
+use deployment::{Built, DeploymentManager};
 use fqdn::FQDN;
 use hyper::{
     server::conn::AddrStream,
@@ -23,15 +20,8 @@ mod handlers;
 mod persistence;
 mod proxy;
 
-pub async fn start(
-    abstract_dummy_factory: impl provisioner_factory::AbstractFactory,
-    runtime_logger_factory: impl runtime_logger::Factory,
-    persistence: Persistence,
-    args: Args,
-) {
+pub async fn start(persistence: Persistence, args: Args) {
     let deployment_manager = DeploymentManager::new(
-        abstract_dummy_factory,
-        runtime_logger_factory,
         persistence.clone(),
         persistence.clone(),
         persistence.clone(),

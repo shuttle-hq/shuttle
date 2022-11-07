@@ -8,12 +8,11 @@ use async_trait::async_trait;
 use shuttle_common::project::ProjectName as ServiceName;
 use shuttle_proto::runtime::{runtime_client::RuntimeClient, LoadRequest, StartRequest};
 
-use shuttle_service::{Factory, Logger};
 use tokio::task::JoinError;
 use tracing::{error, info, instrument, trace};
 use uuid::Uuid;
 
-use super::{provisioner_factory, runtime_logger, KillReceiver, KillSender, RunReceiver, State};
+use super::{KillReceiver, KillSender, RunReceiver, State};
 use crate::error::{Error, Result};
 
 /// Run a task which takes runnable deploys from a channel and starts them up with a factory provided by the
@@ -22,8 +21,6 @@ use crate::error::{Error, Result};
 pub async fn task(
     mut recv: RunReceiver,
     kill_send: KillSender,
-    abstract_dummy_factory: impl provisioner_factory::AbstractFactory,
-    logger_factory: impl runtime_logger::Factory,
     active_deployment_getter: impl ActiveDeploymentsGetter,
     artifacts_path: PathBuf,
 ) {
@@ -51,8 +48,6 @@ pub async fn task(
                 continue;
             }
         };
-        let mut factory = abstract_dummy_factory.get_factory();
-        let logger = logger_factory.get_logger(id);
 
         let old_deployments_killer = kill_old_deployments(
             built.service_id,
@@ -76,15 +71,7 @@ pub async fn task(
 
         tokio::spawn(async move {
             if let Err(err) = built
-                .handle(
-                    addr,
-                    libs_path,
-                    &mut factory,
-                    logger,
-                    kill_recv,
-                    old_deployments_killer,
-                    cleanup,
-                )
+                .handle(addr, libs_path, kill_recv, old_deployments_killer, cleanup)
                 .await
             {
                 start_crashed_cleanup(&id, err)
@@ -163,14 +150,12 @@ pub struct Built {
 }
 
 impl Built {
-    #[instrument(name = "built_handle", skip(self, libs_path, _factory, _logger, kill_recv, kill_old_deployments, cleanup), fields(id = %self.id, state = %State::Loading))]
+    #[instrument(name = "built_handle", skip(self, libs_path, kill_recv, kill_old_deployments, cleanup), fields(id = %self.id, state = %State::Loading))]
     #[allow(clippy::too_many_arguments)]
     async fn handle(
         self,
         address: SocketAddr,
         libs_path: PathBuf,
-        _factory: &mut dyn Factory,
-        _logger: Logger,
         kill_recv: KillReceiver,
         kill_old_deployments: impl futures::Future<Output = Result<()>>,
         cleanup: impl FnOnce(std::result::Result<std::result::Result<(), shuttle_service::Error>, JoinError>)
@@ -239,7 +224,6 @@ async fn run(
 #[cfg(test)]
 mod tests {
     use std::{
-        collections::BTreeMap,
         fs,
         net::{Ipv4Addr, SocketAddr},
         path::PathBuf,
@@ -247,10 +231,8 @@ mod tests {
         time::Duration,
     };
 
-    use shuttle_common::database;
-    use shuttle_service::{Factory, Logger};
     use tokio::{
-        sync::{broadcast, mpsc, oneshot},
+        sync::{broadcast, oneshot},
         task::JoinError,
         time::sleep,
     };
@@ -262,40 +244,6 @@ mod tests {
 
     const RESOURCES_PATH: &str = "tests/resources";
     const LIBS_PATH: &str = "/tmp/shuttle-libs-tests";
-
-    struct StubFactory;
-
-    #[async_trait::async_trait]
-    impl Factory for StubFactory {
-        async fn get_db_connection_string(
-            &mut self,
-            _db_type: database::Type,
-        ) -> Result<String, shuttle_service::Error> {
-            panic!("no run test should get an sql connection");
-        }
-
-        async fn get_secrets(
-            &mut self,
-        ) -> Result<BTreeMap<String, String>, shuttle_service::Error> {
-            panic!("no test should get any secrets");
-        }
-
-        fn get_service_name(&self) -> shuttle_service::ServiceName {
-            panic!("no test should get the service name");
-        }
-    }
-
-    fn get_logger(id: Uuid) -> Logger {
-        let (tx, mut rx) = mpsc::unbounded_channel();
-
-        tokio::spawn(async move {
-            while let Some(log) = rx.recv().await {
-                println!("{log}");
-            }
-        });
-
-        Logger::new(tx, id)
-    }
 
     async fn kill_old_deployments() -> crate::error::Result<()> {
         Ok(())
@@ -321,15 +269,11 @@ mod tests {
             cleanup_send.send(()).unwrap();
         };
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
-        let mut factory = StubFactory;
-        let logger = get_logger(built.id);
 
         built
             .handle(
                 addr,
                 PathBuf::from(LIBS_PATH),
-                &mut factory,
-                logger,
                 kill_recv,
                 kill_old_deployments(),
                 handle_cleanup,
@@ -369,15 +313,11 @@ mod tests {
             cleanup_send.send(()).unwrap();
         };
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
-        let mut factory = StubFactory;
-        let logger = get_logger(built.id);
 
         built
             .handle(
                 addr,
                 PathBuf::from(LIBS_PATH),
-                &mut factory,
-                logger,
                 kill_recv,
                 kill_old_deployments(),
                 handle_cleanup,
@@ -411,15 +351,11 @@ mod tests {
             cleanup_send.send(()).unwrap();
         };
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
-        let mut factory = StubFactory;
-        let logger = get_logger(built.id);
 
         built
             .handle(
                 addr,
                 PathBuf::from(LIBS_PATH),
-                &mut factory,
-                logger,
                 kill_recv,
                 kill_old_deployments(),
                 handle_cleanup,
@@ -441,15 +377,11 @@ mod tests {
 
         let handle_cleanup = |_result| panic!("the service shouldn't even start");
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
-        let mut factory = StubFactory;
-        let logger = get_logger(built.id);
 
         let result = built
             .handle(
                 addr,
                 PathBuf::from(LIBS_PATH),
-                &mut factory,
-                logger,
                 kill_recv,
                 kill_old_deployments(),
                 handle_cleanup,
@@ -474,15 +406,11 @@ mod tests {
 
         let handle_cleanup = |_result| panic!("no service means no cleanup");
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
-        let mut factory = StubFactory;
-        let logger = get_logger(built.id);
 
         let result = built
             .handle(
                 addr,
                 PathBuf::from(LIBS_PATH),
-                &mut factory,
-                logger,
                 kill_recv,
                 kill_old_deployments(),
                 handle_cleanup,

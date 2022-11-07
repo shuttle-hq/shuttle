@@ -24,9 +24,10 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::args::ContextArgs;
 use crate::auth::{Key, Permissions, User};
+use crate::custom_domain::CustomDomain;
 use crate::project::Project;
 use crate::task::TaskBuilder;
-use crate::{AccountName, DockerContext, Error, ErrorKind, ProjectName};
+use crate::{AccountName, DockerContext, Error, ErrorKind, Fqdn, ProjectName};
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
@@ -199,6 +200,16 @@ impl GatewayService {
         let provider = GatewayContextProvider::new(docker, container_settings);
 
         Self { provider, db }
+    }
+
+    pub async fn route_fqdn(&self, req: Request<Body>) -> Result<Response<Body>, Error> {
+        let fqdn = req
+            .headers()
+            .typed_get::<Fqdn>()
+            .ok_or_else(|| Error::from(ErrorKind::CustomDomainNotFound))?;
+        let project_name = self.project_name_for_custom_domain(&fqdn).await?;
+
+        self.route(&project_name, req).await
     }
 
     pub async fn route(
@@ -448,6 +459,42 @@ impl GatewayService {
         Ok(project)
     }
 
+    pub async fn create_custom_domain(
+        &self,
+        project_name: ProjectName,
+        fqdn: Fqdn,
+    ) -> Result<CustomDomain, Error> {
+        let state = SqlxJson(CustomDomain::Creating);
+
+        query("INSERT INTO custom_domains (fqdn, project_name, state) VALUES (?1, ?2, ?3)")
+            .bind(&fqdn)
+            .bind(&project_name)
+            .bind(&state)
+            .execute(&self.db)
+            .await
+            .map_err(|err| {
+                if let Some(db_err_code) = err.as_database_error().and_then(DatabaseError::code) {
+                    if db_err_code == "1555" {
+                        return Error::from(ErrorKind::CustomDomainAlreadyExists);
+                    }
+                }
+
+                err.into()
+            })?;
+
+        Ok(state.0)
+    }
+
+    pub async fn project_name_for_custom_domain(&self, fqdn: &Fqdn) -> Result<ProjectName, Error> {
+        let project_name = query("SELECT project_name FROM custom_domains WHERE fqdn = ?1")
+            .bind(fqdn)
+            .fetch_optional(&self.db)
+            .await?
+            .map(|row| row.try_get("project_name").unwrap())
+            .ok_or_else(|| Error::from(ErrorKind::CustomDomainNotFound))?;
+        Ok(project_name)
+    }
+
     pub fn context(&self) -> GatewayContext {
         self.provider.context()
     }
@@ -656,6 +703,44 @@ pub mod tests {
         let project = svc.find_project(&matrix).await.unwrap();
         println!("{:?}", project);
         assert!(project.is_ready());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn service_create_find_custom_domain() -> anyhow::Result<()> {
+        let world = World::new().await;
+        let svc = Arc::new(GatewayService::init(world.args(), world.fqdn(), world.pool()).await);
+
+        let account: AccountName = "neo".parse().unwrap();
+        let project_name: ProjectName = "matrix".parse().unwrap();
+        let domain: Fqdn = "neo.the.matrix".parse().unwrap();
+
+        svc.create_user(account.clone()).await.unwrap();
+
+        assert_err_kind!(
+            svc.project_name_for_custom_domain(&domain).await,
+            ErrorKind::CustomDomainNotFound
+        );
+
+        let _ = svc
+            .create_project(project_name.clone(), account.clone())
+            .await
+            .unwrap();
+
+        svc.create_custom_domain(project_name.clone(), domain.clone())
+            .await
+            .unwrap();
+
+        let project = svc.project_name_for_custom_domain(&domain).await.unwrap();
+
+        assert_eq!(project, project_name);
+
+        assert_err_kind!(
+            svc.create_custom_domain(project_name.clone(), domain.clone())
+                .await,
+            ErrorKind::CustomDomainAlreadyExists
+        );
 
         Ok(())
     }

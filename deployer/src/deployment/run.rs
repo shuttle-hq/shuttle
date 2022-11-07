@@ -9,6 +9,7 @@ use shuttle_common::project::ProjectName as ServiceName;
 use shuttle_proto::runtime::{runtime_client::RuntimeClient, LoadRequest, StartRequest};
 
 use tokio::task::JoinError;
+use tonic::transport::Channel;
 use tracing::{error, info, instrument, trace};
 use uuid::Uuid;
 
@@ -20,6 +21,7 @@ use crate::error::{Error, Result};
 /// A deploy is killed when it receives a signal from the kill channel
 pub async fn task(
     mut recv: RunReceiver,
+    runtime_client: RuntimeClient<Channel>,
     kill_send: KillSender,
     active_deployment_getter: impl ActiveDeploymentsGetter,
     artifacts_path: PathBuf,
@@ -68,10 +70,18 @@ pub async fn task(
         };
 
         let libs_path = libs_path.clone();
+        let runtime_client = runtime_client.clone();
 
         tokio::spawn(async move {
             if let Err(err) = built
-                .handle(addr, libs_path, kill_recv, old_deployments_killer, cleanup)
+                .handle(
+                    addr,
+                    libs_path,
+                    runtime_client,
+                    kill_recv,
+                    old_deployments_killer,
+                    cleanup,
+                )
                 .await
             {
                 start_crashed_cleanup(&id, err)
@@ -150,12 +160,13 @@ pub struct Built {
 }
 
 impl Built {
-    #[instrument(name = "built_handle", skip(self, libs_path, kill_recv, kill_old_deployments, cleanup), fields(id = %self.id, state = %State::Loading))]
+    #[instrument(name = "built_handle", skip(self, libs_path, runtime_client, kill_recv, kill_old_deployments, cleanup), fields(id = %self.id, state = %State::Loading))]
     #[allow(clippy::too_many_arguments)]
     async fn handle(
         self,
         address: SocketAddr,
         libs_path: PathBuf,
+        runtime_client: RuntimeClient<Channel>,
         kill_recv: KillReceiver,
         kill_old_deployments: impl futures::Future<Output = Result<()>>,
         cleanup: impl FnOnce(std::result::Result<std::result::Result<(), shuttle_service::Error>, JoinError>)
@@ -171,6 +182,7 @@ impl Built {
             self.id,
             self.service_name,
             libs_path,
+            runtime_client,
             address,
             kill_recv,
             cleanup,
@@ -185,17 +197,13 @@ async fn run(
     id: Uuid,
     service_name: String,
     libs_path: PathBuf,
+    mut runtime_client: RuntimeClient<Channel>,
     _address: SocketAddr,
     _kill_recv: KillReceiver,
     _cleanup: impl FnOnce(std::result::Result<std::result::Result<(), shuttle_service::Error>, JoinError>)
         + Send
         + 'static,
 ) {
-    info!("starting up deployer grpc client");
-    let mut client = RuntimeClient::connect("http://127.0.0.1:6001")
-        .await
-        .unwrap();
-
     info!(
         "loading project from: {}",
         libs_path.clone().into_os_string().into_string().unwrap()
@@ -207,7 +215,7 @@ async fn run(
         service_name: service_name.clone(),
     });
     info!("loading service");
-    let response = client.load(load_request).await;
+    let response = runtime_client.load(load_request).await;
 
     if let Err(e) = response {
         info!("failed to load service: {}", e);
@@ -216,7 +224,7 @@ async fn run(
     let start_request = tonic::Request::new(StartRequest { service_name });
 
     info!("starting service");
-    let response = client.start(start_request).await.unwrap();
+    let response = runtime_client.start(start_request).await.unwrap();
 
     info!(response = ?response,  "client response: ");
 }
@@ -231,11 +239,13 @@ mod tests {
         time::Duration,
     };
 
+    use shuttle_proto::runtime::runtime_client::RuntimeClient;
     use tokio::{
         sync::{broadcast, oneshot},
         task::JoinError,
         time::sleep,
     };
+    use tonic::transport::Channel;
     use uuid::Uuid;
 
     use crate::error::Error;
@@ -247,6 +257,12 @@ mod tests {
 
     async fn kill_old_deployments() -> crate::error::Result<()> {
         Ok(())
+    }
+
+    async fn get_runtime_client() -> RuntimeClient<Channel> {
+        RuntimeClient::connect("http://127.0.0.1:6001")
+            .await
+            .unwrap()
     }
 
     // This test uses the kill signal to make sure a service does stop when asked to
@@ -274,6 +290,7 @@ mod tests {
             .handle(
                 addr,
                 PathBuf::from(LIBS_PATH),
+                get_runtime_client().await,
                 kill_recv,
                 kill_old_deployments(),
                 handle_cleanup,
@@ -318,6 +335,7 @@ mod tests {
             .handle(
                 addr,
                 PathBuf::from(LIBS_PATH),
+                get_runtime_client().await,
                 kill_recv,
                 kill_old_deployments(),
                 handle_cleanup,
@@ -356,6 +374,7 @@ mod tests {
             .handle(
                 addr,
                 PathBuf::from(LIBS_PATH),
+                get_runtime_client().await,
                 kill_recv,
                 kill_old_deployments(),
                 handle_cleanup,
@@ -382,6 +401,7 @@ mod tests {
             .handle(
                 addr,
                 PathBuf::from(LIBS_PATH),
+                get_runtime_client().await,
                 kill_recv,
                 kill_old_deployments(),
                 handle_cleanup,
@@ -411,6 +431,7 @@ mod tests {
             .handle(
                 addr,
                 PathBuf::from(LIBS_PATH),
+                get_runtime_client().await,
                 kill_recv,
                 kill_old_deployments(),
                 handle_cleanup,

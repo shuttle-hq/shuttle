@@ -7,6 +7,8 @@ use std::path::PathBuf;
 
 pub use queue::Queued;
 pub use run::{ActiveDeploymentsGetter, Built};
+use shuttle_proto::runtime::runtime_client::RuntimeClient;
+use tonic::transport::Channel;
 use tracing::instrument;
 
 use crate::persistence::{SecretRecorder, State};
@@ -29,6 +31,7 @@ impl DeploymentManager {
     /// Create a new deployment manager. Manages one or more 'pipelines' for
     /// processing service building, loading, and deployment.
     pub fn new(
+        runtime_client: RuntimeClient<Channel>,
         build_log_recorder: impl LogRecorder,
         secret_recorder: impl SecretRecorder,
         active_deployment_getter: impl ActiveDeploymentsGetter,
@@ -39,6 +42,7 @@ impl DeploymentManager {
         DeploymentManager {
             pipeline: Pipeline::new(
                 kill_send.clone(),
+                runtime_client,
                 build_log_recorder,
                 secret_recorder,
                 active_deployment_getter,
@@ -92,6 +96,7 @@ impl Pipeline {
     /// deployments between the aforementioned tasks.
     fn new(
         kill_send: KillSender,
+        runtime_client: RuntimeClient<Channel>,
         build_log_recorder: impl LogRecorder,
         secret_recorder: impl SecretRecorder,
         active_deployment_getter: impl ActiveDeploymentsGetter,
@@ -111,6 +116,7 @@ impl Pipeline {
         ));
         tokio::spawn(run::task(
             run_recv,
+            runtime_client,
             kill_send,
             active_deployment_getter,
             artifacts_path,

@@ -3,6 +3,7 @@ use std::process::exit;
 
 use clap::Parser;
 use shuttle_deployer::{start, start_proxy, Args, DeployLayer, Persistence};
+use shuttle_proto::runtime::runtime_client::RuntimeClient;
 use tokio::select;
 use tracing::{error, trace};
 use tracing_subscriber::prelude::*;
@@ -47,11 +48,15 @@ async fn main() {
         .spawn()
         .unwrap();
 
+    let runtime_client = RuntimeClient::connect("http://127.0.0.1:6001")
+        .await
+        .unwrap();
+
     select! {
         _ = start_proxy(args.proxy_address, args.proxy_fqdn.clone(), persistence.clone()) => {
             error!("Proxy stopped.")
         },
-        _ = start(persistence, args) => {
+        _ = start(persistence, runtime_client, args) => {
             error!("Deployment service stopped.")
         },
         _ = runtime.wait() => {

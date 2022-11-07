@@ -10,6 +10,8 @@ use hyper::{
 };
 pub use persistence::Persistence;
 use proxy::AddressGetter;
+use shuttle_proto::runtime::runtime_client::RuntimeClient;
+use tonic::transport::Channel;
 use tracing::{error, info};
 
 mod args;
@@ -19,8 +21,9 @@ mod handlers;
 mod persistence;
 mod proxy;
 
-pub async fn start(persistence: Persistence, args: Args) {
+pub async fn start(persistence: Persistence, runtime_client: RuntimeClient<Channel>, args: Args) {
     let deployment_manager = DeploymentManager::new(
+        runtime_client,
         persistence.clone(),
         persistence.clone(),
         persistence.clone(),

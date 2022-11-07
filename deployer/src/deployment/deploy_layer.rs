@@ -355,7 +355,9 @@ mod tests {
     use ctor::ctor;
     use flate2::{write::GzEncoder, Compression};
     use futures::FutureExt;
+    use shuttle_proto::runtime::runtime_client::RuntimeClient;
     use tokio::{select, time::sleep};
+    use tonic::transport::Channel;
     use tracing_subscriber::prelude::*;
     use uuid::Uuid;
 
@@ -427,6 +429,12 @@ mod tests {
         }
     }
 
+    async fn get_runtime_client() -> RuntimeClient<Channel> {
+        RuntimeClient::connect("http://127.0.0.1:6001")
+            .await
+            .unwrap()
+    }
+
     #[async_trait::async_trait]
     impl SecretRecorder for Arc<Mutex<RecorderMock>> {
         type Err = std::io::Error;
@@ -465,6 +473,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_to_be_queued() {
         let deployment_manager = DeploymentManager::new(
+            get_runtime_client().await,
             RECORDER.clone(),
             RECORDER.clone(),
             StubActiveDeploymentGetter,
@@ -582,6 +591,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_self_stop() {
         let deployment_manager = DeploymentManager::new(
+            get_runtime_client().await,
             RECORDER.clone(),
             RECORDER.clone(),
             StubActiveDeploymentGetter,
@@ -660,6 +670,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_bind_panic() {
         let deployment_manager = DeploymentManager::new(
+            get_runtime_client().await,
             RECORDER.clone(),
             RECORDER.clone(),
             StubActiveDeploymentGetter,
@@ -738,6 +749,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_main_panic() {
         let deployment_manager = DeploymentManager::new(
+            get_runtime_client().await,
             RECORDER.clone(),
             RECORDER.clone(),
             StubActiveDeploymentGetter,
@@ -811,6 +823,7 @@ mod tests {
     #[tokio::test]
     async fn deployment_from_run() {
         let deployment_manager = DeploymentManager::new(
+            get_runtime_client().await,
             RECORDER.clone(),
             RECORDER.clone(),
             StubActiveDeploymentGetter,
@@ -863,6 +876,7 @@ mod tests {
     #[tokio::test]
     async fn scope_with_nil_id() {
         let deployment_manager = DeploymentManager::new(
+            get_runtime_client().await,
             RECORDER.clone(),
             RECORDER.clone(),
             StubActiveDeploymentGetter,

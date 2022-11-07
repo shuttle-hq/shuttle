@@ -74,7 +74,7 @@ pub mod runtime {
     impl From<shuttle_common::LogItem> for LogItem {
         fn from(log: shuttle_common::LogItem) -> Self {
             Self {
-                id: log.id.to_string(),
+                id: log.id.into_bytes().to_vec(),
                 timestamp: Some(Timestamp::from(SystemTime::from(log.timestamp))),
                 state: LogState::from(log.state) as i32,
                 level: LogLevel::from(log.level) as i32,

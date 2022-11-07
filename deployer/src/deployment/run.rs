@@ -192,7 +192,7 @@ impl Built {
     }
 }
 
-#[instrument(skip(_kill_recv, _cleanup), fields(address = %_address, state = %State::Running))]
+#[instrument(skip(runtime_client, _kill_recv, _cleanup), fields(address = %_address, state = %State::Running))]
 async fn run(
     id: Uuid,
     service_name: String,

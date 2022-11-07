@@ -1,7 +1,7 @@
 use std::{convert::Infallible, net::SocketAddr};
 
 pub use args::Args;
-pub use deployment::{deploy_layer::DeployLayer, runtime_logger::RuntimeLoggerFactory};
+pub use deployment::deploy_layer::DeployLayer;
 use deployment::{Built, DeploymentManager};
 use fqdn::FQDN;
 use hyper::{

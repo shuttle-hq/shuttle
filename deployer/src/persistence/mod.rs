@@ -277,10 +277,12 @@ impl Persistence {
         get_deployment_logs(&self.pool, id).await
     }
 
+    /// Get a broadcast channel for listening to logs that are being stored into persistence
     pub fn get_log_subscriber(&self) -> Receiver<deploy_layer::Log> {
         self.stream_log_send.subscribe()
     }
 
+    /// Returns a sender for sending logs to persistence storage
     pub fn get_log_sender(&self) -> crossbeam_channel::Sender<deploy_layer::Log> {
         self.log_send.clone()
     }

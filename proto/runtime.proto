@@ -44,7 +44,7 @@ message StartResponse {
 message SubscribeLogsRequest {}
 
 message LogItem {
-  string id = 1;
+  bytes id = 1;
   google.protobuf.Timestamp timestamp = 2;
   LogState state = 3;
   LogLevel level = 4;

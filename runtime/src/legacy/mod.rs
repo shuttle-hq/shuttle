@@ -20,7 +20,7 @@ use shuttle_service::{
     loader::{LoadedService, Loader},
     Factory, Logger, ServiceName,
 };
-use tokio::sync::mpsc::{self, UnboundedReceiver};
+use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{transport::Endpoint, Request, Response, Status};
 use tracing::{info, instrument, trace};
@@ -34,15 +34,19 @@ pub struct Legacy {
     so_path: Mutex<Option<PathBuf>>,
     port: Mutex<Option<u16>>,
     logs_rx: Mutex<Option<UnboundedReceiver<LogItem>>>,
+    logs_tx: Mutex<UnboundedSender<LogItem>>,
     provisioner_address: Endpoint,
 }
 
 impl Legacy {
     pub fn new(provisioner_address: Endpoint) -> Self {
+        let (tx, rx) = mpsc::unbounded_channel();
+
         Self {
             so_path: Mutex::new(None),
             port: Mutex::new(None),
-            logs_rx: Mutex::new(None),
+            logs_rx: Mutex::new(Some(rx)),
+            logs_tx: Mutex::new(tx),
             provisioner_address,
         }
     }
@@ -78,8 +82,8 @@ impl Runtime for Legacy {
 
         let mut factory = abstract_factory.get_factory(service_name);
 
-        let (logger, rx) = get_logger();
-        *self.logs_rx.lock().unwrap() = Some(rx);
+        let logs_tx = self.logs_tx.lock().unwrap().clone();
+        let logger = Logger::new(logs_tx, Default::default());
 
         let so_path = self
             .so_path
@@ -156,11 +160,4 @@ async fn load_service(
     let loader = Loader::from_so_file(so_path)?;
 
     Ok(loader.load(factory, addr, logger).await?)
-}
-
-fn get_logger() -> (Logger, UnboundedReceiver<LogItem>) {
-    let (tx, rx) = mpsc::unbounded_channel();
-    let logger = Logger::new(tx, Default::default());
-
-    (logger, rx)
 }

@@ -22,7 +22,8 @@
 use chrono::{DateTime, Utc};
 use serde_json::json;
 use shuttle_common::STATE_MESSAGE;
-use std::{net::SocketAddr, str::FromStr};
+use shuttle_proto::runtime;
+use std::{net::SocketAddr, str::FromStr, time::SystemTime};
 use tracing::{error, field::Visit, span, warn, Metadata, Subscriber};
 use tracing_subscriber::Layer;
 use uuid::Uuid;
@@ -122,6 +123,51 @@ impl From<Log> for DeploymentState {
             state: log.state,
             last_update: log.timestamp,
             address,
+        }
+    }
+}
+
+impl From<runtime::LogItem> for Log {
+    fn from(log: runtime::LogItem) -> Self {
+        Self {
+            id: Uuid::from_slice(&log.id).unwrap(),
+            state: runtime::LogState::from_i32(log.state).unwrap().into(),
+            level: runtime::LogLevel::from_i32(log.level).unwrap().into(),
+            timestamp: DateTime::from(SystemTime::try_from(log.timestamp.unwrap()).unwrap()),
+            file: log.file,
+            line: log.line,
+            target: log.target,
+            fields: serde_json::from_slice(&log.fields).unwrap(),
+            r#type: LogType::Event,
+            address: None,
+        }
+    }
+}
+
+impl From<runtime::LogState> for State {
+    fn from(state: runtime::LogState) -> Self {
+        match state {
+            runtime::LogState::Queued => Self::Queued,
+            runtime::LogState::Building => Self::Building,
+            runtime::LogState::Built => Self::Built,
+            runtime::LogState::Loading => Self::Loading,
+            runtime::LogState::Running => Self::Running,
+            runtime::LogState::Completed => Self::Completed,
+            runtime::LogState::Stopped => Self::Stopped,
+            runtime::LogState::Crashed => Self::Crashed,
+            runtime::LogState::Unknown => Self::Unknown,
+        }
+    }
+}
+
+impl From<runtime::LogLevel> for LogLevel {
+    fn from(level: runtime::LogLevel) -> Self {
+        match level {
+            runtime::LogLevel::Trace => Self::Trace,
+            runtime::LogLevel::Debug => Self::Debug,
+            runtime::LogLevel::Info => Self::Info,
+            runtime::LogLevel::Warn => Self::Warn,
+            runtime::LogLevel::Error => Self::Error,
         }
     }
 }

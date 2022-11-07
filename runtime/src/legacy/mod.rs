@@ -86,7 +86,8 @@ impl Runtime for Legacy {
         let mut factory = abstract_factory.get_factory(service_name);
 
         let logs_tx = self.logs_tx.lock().unwrap().clone();
-        let logger = Logger::new(logs_tx, Uuid::from_slice(&request.deployment_id).unwrap());
+        let deployment_id = Uuid::from_slice(&request.deployment_id).unwrap();
+        let logger = Logger::new(logs_tx, deployment_id);
 
         let so_path = self
             .so_path
@@ -127,6 +128,7 @@ impl Runtime for Legacy {
         if let Some(mut logs_rx) = logs_rx {
             let (tx, rx) = mpsc::channel(1);
 
+            // Move logger items into stream to be returned
             tokio::spawn(async move {
                 while let Some(log) = logs_rx.recv().await {
                     tx.send(Ok(log.into())).await.unwrap();

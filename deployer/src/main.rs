@@ -55,7 +55,10 @@ async fn main() {
         .spawn()
         .unwrap();
 
+    // Sleep because the timeout below does not seem to work
+    // TODO: investigate why
     tokio::time::sleep(Duration::from_secs(2)).await;
+
     info!("connecting runtime client");
     let conn = Endpoint::new("http://127.0.0.1:6001")
         .unwrap()

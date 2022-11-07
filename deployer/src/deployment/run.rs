@@ -221,12 +221,15 @@ async fn run(
         info!("failed to load service: {}", e);
     }
 
-    let start_request = tonic::Request::new(StartRequest { service_name });
+    let start_request = tonic::Request::new(StartRequest {
+        deployment_id: id.as_bytes().to_vec(),
+        service_name,
+    });
 
     info!("starting service");
     let response = runtime_client.start(start_request).await.unwrap();
 
-    info!(response = ?response,  "client response: ");
+    info!(response = ?response.into_inner(),  "client response: ");
 }
 
 #[cfg(test)]

@@ -24,6 +24,7 @@ use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{transport::Endpoint, Request, Response, Status};
 use tracing::{info, instrument, trace};
+use uuid::Uuid;
 
 use crate::provisioner_factory::{AbstractFactory, AbstractProvisionerFactory};
 
@@ -72,18 +73,20 @@ impl Runtime for Legacy {
         let service_port = 7001;
         let service_address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), service_port);
 
+        let request = request.into_inner();
+
         let provisioner_client = ProvisionerClient::connect(self.provisioner_address.clone())
             .await
             .expect("failed to connect to provisioner");
         let abstract_factory = AbstractProvisionerFactory::new(provisioner_client);
 
-        let service_name = ServiceName::from_str(request.into_inner().service_name.as_str())
+        let service_name = ServiceName::from_str(request.service_name.as_str())
             .map_err(|err| Status::from_error(Box::new(err)))?;
 
         let mut factory = abstract_factory.get_factory(service_name);
 
         let logs_tx = self.logs_tx.lock().unwrap().clone();
-        let logger = Logger::new(logs_tx, Default::default());
+        let logger = Logger::new(logs_tx, Uuid::from_slice(&request.deployment_id).unwrap());
 
         let so_path = self
             .so_path

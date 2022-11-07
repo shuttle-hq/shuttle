@@ -1,7 +1,10 @@
+use std::path::PathBuf;
+use std::process::exit;
+
 use clap::Parser;
 use shuttle_deployer::{start, start_proxy, Args, DeployLayer, Persistence};
 use tokio::select;
-use tracing::trace;
+use tracing::{error, trace};
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{fmt, EnvFilter};
 
@@ -32,8 +35,29 @@ async fn main() {
         .with(opentelemetry)
         .init();
 
+    let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .to_path_buf();
+    let runtime_dir = workspace_root.join("target/debug");
+
+    let mut runtime = tokio::process::Command::new(runtime_dir.join("shuttle-runtime"))
+        .args(&["--legacy", "--provisioner-address", "http://localhost:8000"])
+        .current_dir(&runtime_dir)
+        .spawn()
+        .unwrap();
+
     select! {
-        _ = start_proxy(args.proxy_address, args.proxy_fqdn.clone(), persistence.clone()) => {},
-        _ = start(persistence, args) => {},
+        _ = start_proxy(args.proxy_address, args.proxy_fqdn.clone(), persistence.clone()) => {
+            error!("Proxy stopped.")
+        },
+        _ = start(persistence, args) => {
+            error!("Deployment service stopped.")
+        },
+        _ = runtime.wait() => {
+            error!("Legacy runtime stopped.")
+        },
     }
+
+    exit(1);
 }

@@ -129,7 +129,7 @@ jobs:
                        -A clippy::let-unit-value \
                        -A clippy::format-push-string
       - save-cargo-cache
-  check-standalone:
+  check-out-of-workspace:
     parameters:
       path:
         description: "Path to crate external from workspace"
@@ -244,15 +244,7 @@ workflows:
   version: 2
   ci:
     jobs:
-      - workspace-fmt
-      - workspace-clippy:
-          name: workspace-clippy-<< matrix.framework >>
-          requires:
-            - workspace-fmt
-          matrix:
-            parameters:
-              framework: ["web-axum", "web-rocket", "web-poem", "web-thruster", "web-tide", "web-tower","web-warp", "web-salvo", "bot-serenity"]
-      - check-standalone:
+      - check-out-of-workspace:
           matrix:
             parameters:
               path:
@@ -260,26 +252,3 @@ workflows:
                 - resources/persist
                 - resources/secrets
                 - resources/shared-db
-      - service-test:
-          requires:
-            - workspace-clippy
-      - platform-test:
-          requires:
-            - workspace-clippy
-          matrix:
-            parameters:
-              crate: ["shuttle-deployer", "cargo-shuttle", "shuttle-codegen", "shuttle-common", "shuttle-proto", "shuttle-provisioner"]
-      - e2e-test:
-          requires:
-            - service-test
-            - platform-test
-            - check-standalone
-          filters:
-            branches:
-              only: production
-      - build-and-push:
-          requires:
-            - e2e-test
-          filters:
-            branches:
-              only: production

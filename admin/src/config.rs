@@ -4,7 +4,10 @@ pub fn get_api_key() -> String {
     let data = fs::read_to_string(config_path()).expect("shuttle config file to exist");
     let toml: toml::Value = toml::from_str(&data).expect("to parse shuttle config file");
 
-    toml["api_key"].to_string()
+    toml["api_key"]
+        .as_str()
+        .expect("api key to be a string")
+        .to_string()
 }
 
 fn config_path() -> PathBuf {

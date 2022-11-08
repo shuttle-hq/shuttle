@@ -17,6 +17,7 @@ http = "0.2.8"
 hyper = { version = "0.14.19", features = [ "stream" ] }
 # not great, but waiting for WebSocket changes to be merged
 hyper-reverse-proxy = { git = "https://github.com/chesedo/hyper-reverse-proxy", branch = "bug/host_header" }
+instant-acme = "0.1.0"
 once_cell = "1.14.0"
 opentelemetry = { version = "0.18.0", features = ["rt-tokio"] }
 opentelemetry-datadog = { version = "0.6.0", features = ["reqwest-client"] }

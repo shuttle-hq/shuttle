@@ -7,7 +7,7 @@ use axum::headers::authorization::Bearer;
 use axum::headers::Authorization;
 use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Serialize};
-use tracing::Span;
+use tracing::{trace, Span};
 
 use crate::service::GatewayService;
 use crate::{AccountName, Error, ErrorKind, ProjectName};
@@ -31,10 +31,14 @@ where
     type Rejection = Error;
 
     async fn from_request(req: &mut RequestParts<B>) -> Result<Self, Self::Rejection> {
-        TypedHeader::<Authorization<Bearer>>::from_request(req)
+        let key = TypedHeader::<Authorization<Bearer>>::from_request(req)
             .await
             .map_err(|_| Error::from(ErrorKind::KeyMissing))
-            .and_then(|TypedHeader(Authorization(bearer))| bearer.token().trim().parse())
+            .and_then(|TypedHeader(Authorization(bearer))| bearer.token().trim().parse())?;
+
+        trace!(%key, "got bearer key");
+
+        Ok(key)
     }
 }
 
@@ -103,6 +107,8 @@ impl User {
 
     pub async fn retrieve_from_key(svc: &GatewayService, key: Key) -> Result<User, Error> {
         let name = svc.account_name_from_key(&key).await?;
+        trace!(%name, "got account name from key");
+
         let permissions = svc.get_permissions(&name).await?;
         let projects = svc.iter_user_projects(&name).await?.collect();
         Ok(User {

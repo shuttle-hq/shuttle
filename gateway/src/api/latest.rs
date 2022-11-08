@@ -8,12 +8,13 @@ use axum::response::Response;
 use axum::routing::{any, get, post};
 use axum::{Json as AxumJson, Router};
 use http::StatusCode;
+use instant_acme::{LetsEncrypt, NewAccount};
 use serde::{Deserialize, Serialize};
 use shuttle_common::models::error::ErrorKind;
 use shuttle_common::models::{project, user};
 use tokio::sync::mpsc::Sender;
 use tower_http::trace::TraceLayer;
-use tracing::{debug, debug_span, field, Span};
+use tracing::{debug, debug_span, error, field, trace, Span};
 
 use crate::auth::{Admin, ScopedUser, User};
 use crate::task::{self, BoxedTask};
@@ -186,6 +187,37 @@ async fn revive_projects(
         .map_err(|_| Error::from_kind(ErrorKind::Internal))
 }
 
+async fn create_acme_account(
+    _: Admin,
+    Path(email): Path<String>,
+) -> Result<AxumJson<serde_json::Value>, Error> {
+    trace!(email, "creating acme account");
+
+    let account = NewAccount {
+        contact: &[&format!("mailto:{email}")],
+        terms_of_service_agreed: true,
+        only_return_existing: false,
+    };
+    let account = instant_acme::Account::create(&account, LetsEncrypt::Production.url())
+        .await
+        .map_err(|error| {
+            error!(
+                error = &error as &dyn std::error::Error,
+                "got error while creating acme account"
+            );
+            Error::from_kind(ErrorKind::Internal)
+        })?;
+    let credentials = serde_json::to_value(account.credentials()).map_err(|error| {
+        error!(
+            error = &error as &dyn std::error::Error,
+            "got error while extracting credentials from acme account"
+        );
+        Error::from_kind(ErrorKind::Internal)
+    })?;
+
+    Ok(AxumJson(credentials))
+}
+
 pub fn make_api(service: Arc<GatewayService>, sender: Sender<BoxedTask>) -> Router<Body> {
     debug!("making api route");
 
@@ -201,6 +233,7 @@ pub fn make_api(service: Arc<GatewayService>, sender: Sender<BoxedTask>) -> Rout
         .route("/users/:account_name", get(get_user).post(post_user))
         .route("/projects/:project/*any", any(route_project))
         .route("/admin/revive", post(revive_projects))
+        .route("/admin/acme/:email", post(create_acme_account))
         .layer(Extension(service))
         .layer(Extension(sender))
         .layer(

@@ -14,4 +14,16 @@ pub struct Args {
 pub enum Command {
     /// Try to revive projects in the crashed state
     Revive,
+
+    #[command(subcommand)]
+    Acme(AcmeCommand),
+}
+
+#[derive(Subcommand, Debug)]
+pub enum AcmeCommand {
+    CreateAccount {
+        /// Email for managing all certificates
+        #[arg(long)]
+        email: String,
+    },
 }

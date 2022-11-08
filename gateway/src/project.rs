@@ -63,7 +63,8 @@ const MAX_RESTARTS: i64 = 3;
 
 // Client used for health checks
 static CLIENT: Lazy<Client<HttpConnector>> = Lazy::new(Client::new);
-static IS_HEALTHY_TIMEOUT: u64 = 10;  // Health check must succeed within 10 seconds
+// Health check must succeed within 10 seconds
+static IS_HEALTHY_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[async_trait]
 impl<Ctx> Refresh<Ctx> for ContainerInspectResponse
@@ -641,7 +642,7 @@ impl Service {
 
     pub async fn is_healthy(&mut self) -> bool {
         let uri = self.uri(format!("/projects/{}/status", self.name)).unwrap();
-        let resp = timeout(Duration::from_secs(IS_HEALTHY_TIMEOUT), CLIENT.get(uri)).await;
+        let resp = timeout(IS_HEALTHY_TIMEOUT, CLIENT.get(uri)).await;
         let is_healthy = matches!(resp, Ok(Ok(res)) if res.status().is_success());
         self.last_check = Some(HealthCheckRecord::new(is_healthy));
         is_healthy

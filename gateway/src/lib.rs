@@ -77,7 +77,7 @@ impl From<ErrorKind> for Error {
 
 impl<T> From<SendError<T>> for Error {
     fn from(_: SendError<T>) -> Self {
-        Self::from(ErrorKind::NotReady)
+        Self::from(ErrorKind::ServiceUnavailable)
     }
 }
 

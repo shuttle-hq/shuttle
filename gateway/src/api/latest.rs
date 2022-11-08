@@ -44,7 +44,7 @@ impl StatusResponse {
 
     pub fn degraded() -> Self {
         Self {
-            status: GatewayStatus::Degraded
+            status: GatewayStatus::Degraded,
         }
     }
 
@@ -148,21 +148,15 @@ async fn route_project(
 }
 
 async fn get_status(Extension(sender): Extension<Sender<BoxedTask>>) -> Response<Body> {
-    let (status, body) = if sender.is_closed() || sender.capacity() == 0 { 
+    let (status, body) = if sender.is_closed() || sender.capacity() == 0 {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             StatusResponse::unhealthy(),
         )
     } else if sender.capacity() < WORKER_QUEUE_SIZE - SVC_DEGRADED_THRESHOLD {
-        (
-            StatusCode::OK,
-            StatusResponse::degraded()
-        )
+        (StatusCode::OK, StatusResponse::degraded())
     } else {
-        (
-            StatusCode::OK,
-            StatusResponse::healthy()
-        )
+        (StatusCode::OK, StatusResponse::healthy())
     };
 
     let body = serde_json::to_vec(&body).unwrap();

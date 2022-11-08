@@ -389,7 +389,8 @@ impl ProjectCreating {
             "Image": image,
             "Hostname": format!("{prefix}{project_name}"),
             "Labels": {
-                "shuttle_prefix": prefix
+                "shuttle_prefix": prefix,
+                "project.name": project_name,
             },
             "Cmd": [
                 "--admin-secret",
@@ -413,10 +414,7 @@ impl ProjectCreating {
             ],
             "Env": [
                 "RUST_LOG=debug",
-            ],
-            "Labels": {
-                "project.name": project_name,
-            }
+            ]
         });
 
         let mut config = Config::<String>::from(container_config);
@@ -619,9 +617,7 @@ pub struct Service {
 
 impl Service {
     pub fn from_container(container: ContainerInspectResponse) -> Result<Self, ProjectError> {
-        let container_name = safe_unwrap!(container.name.strip_prefix("/")).to_string();
-
-        let resource_name = safe_unwrap!(container_name.strip_suffix("_run")).to_string();
+        let name = safe_unwrap!(container.config.labels.get("project.name")).to_string();
 
         let network = safe_unwrap!(container.network_settings.networks)
             .values()
@@ -630,7 +626,7 @@ impl Service {
         let target = safe_unwrap!(network.ip_address).parse().unwrap();
 
         Ok(Self {
-            name: resource_name,
+            name,
             target,
             last_check: None,
         })

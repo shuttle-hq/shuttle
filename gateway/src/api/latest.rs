@@ -1,3 +1,4 @@
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -7,6 +8,7 @@ use axum::http::Request;
 use axum::response::Response;
 use axum::routing::{any, get, post};
 use axum::{Json as AxumJson, Router};
+use fqdn::FQDN;
 use http::StatusCode;
 use instant_acme::{LetsEncrypt, NewAccount};
 use serde::{Deserialize, Serialize};
@@ -218,6 +220,40 @@ async fn create_acme_account(
     Ok(AxumJson(credentials))
 }
 
+async fn request_acme_certificate(
+    _: Admin,
+    Path(fqdn): Path<String>,
+    AxumJson(json): AxumJson<serde_json::Value>,
+) -> Result<AxumJson<serde_json::Value>, Error> {
+    trace!(%fqdn, "requesting acme certificate");
+
+    let fqdn = FQDN::from_str(&fqdn).map_err(|error| {
+        error!(
+            error = &error as &dyn std::error::Error,
+            "could not parse fqdn"
+        );
+        Error::from_kind(ErrorKind::InvalidOperation)
+    });
+
+    let credentials = serde_json::from_value(json).map_err(|error| {
+        error!(
+            error = &error as &dyn std::error::Error,
+            "failed to parse acme credentials"
+        );
+        Error::from_kind(ErrorKind::Internal)
+    })?;
+
+    let account = instant_acme::Account::from_credentials(credentials).map_err(|error| {
+        error!(
+            error = &error as &dyn std::error::Error,
+            "failed to convert acme credentials into account"
+        );
+        Error::from_kind(ErrorKind::Internal)
+    })?;
+
+    Ok(AxumJson(serde_json::json!({})))
+}
+
 pub fn make_api(service: Arc<GatewayService>, sender: Sender<BoxedTask>) -> Router<Body> {
     debug!("making api route");
 
@@ -234,6 +270,7 @@ pub fn make_api(service: Arc<GatewayService>, sender: Sender<BoxedTask>) -> Rout
         .route("/projects/:project/*any", any(route_project))
         .route("/admin/revive", post(revive_projects))
         .route("/admin/acme/:email", post(create_acme_account))
+        .route("/admin/acme/request/:fqdn", post(request_acme_certificate))
         .layer(Extension(service))
         .layer(Extension(sender))
         .layer(

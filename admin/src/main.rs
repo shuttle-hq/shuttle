@@ -4,7 +4,7 @@ use shuttle_admin::{
     client::Client,
     config::get_api_key,
 };
-use std::fmt::Write;
+use std::{fmt::Write, fs};
 use tracing::trace;
 
 #[tokio::main]
@@ -31,6 +31,18 @@ async fn main() {
             writeln!(res, "{}", serde_json::to_string_pretty(&account).unwrap()).unwrap();
 
             res
+        }
+        Command::Acme(AcmeCommand::RequestCertificate { fqdn, credentials }) => {
+            let credentials = fs::read_to_string(credentials).expect("to read credentials file");
+            let credentials =
+                serde_json::from_str(&credentials).expect("to parse content of credentials file");
+
+            let res = client
+                .acme_request_certificate(&fqdn, &credentials)
+                .await
+                .expect("to get a certificate challenge instructions");
+
+            String::new()
         }
     };
 

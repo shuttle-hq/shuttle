@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::convert::Infallible;
 use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
@@ -7,6 +8,7 @@ use bollard::container::{
 };
 use bollard::errors::Error as DockerError;
 use bollard::models::{ContainerConfig, ContainerInspectResponse, ContainerStateStatusEnum};
+use bollard::system::EventsOptions;
 use futures::prelude::*;
 use http::uri::InvalidUri;
 use http::Uri;
@@ -59,7 +61,7 @@ macro_rules! impl_from_variant {
 }
 
 const RUNTIME_API_PORT: u16 = 8001;
-const MAX_RESTARTS: i64 = 3;
+const MAX_RESTARTS: usize = 3;
 
 // Client used for health checks
 static CLIENT: Lazy<Client<HttpConnector>> = Lazy::new(Client::new);
@@ -687,9 +689,33 @@ where
     type Next = ProjectStarting;
     type Error = ProjectError;
 
-    async fn next(self, _ctx: &Ctx) -> Result<Self::Next, Self::Error> {
+    async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
+        let container_id = self
+            .container
+            .id
+            .as_deref()
+            .expect("container should have ID");
+
+        // Filter and count the `start` events for this project in the last 15 minutes
+        let start_event_count = ctx
+            .docker()
+            .events(Some(EventsOptions::<String> {
+                since: Some(
+                    (chrono::offset::Utc::now() - chrono::Duration::minutes(15)).to_string(),
+                ),
+                until: Some(chrono::offset::Utc::now().to_string()),
+                filters: HashMap::from([
+                    ("container".to_string(), vec![container_id.to_string()]),
+                    ("event".to_string(), vec!["start".to_string()]),
+                ]),
+            }))
+            .count()
+            .await;
+
+        debug!("start event count: {start_event_count}");
+
         // If stopped, and has not restarted too much, try to restart
-        if self.container.restart_count.unwrap_or_default() < MAX_RESTARTS {
+        if start_event_count < MAX_RESTARTS {
             Ok(ProjectStarting {
                 container: self.container,
             })

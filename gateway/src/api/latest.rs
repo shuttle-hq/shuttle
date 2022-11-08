@@ -4,8 +4,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::body::{Body, BoxBody};
-use axum::extract::{Extension, Path};
+use axum::extract::{Extension, MatchedPath, Path};
 use axum::http::Request;
+use axum::middleware::from_extractor;
 use axum::response::Response;
 use axum::routing::{any, get, post};
 use axum::{Json as AxumJson, Router};
@@ -286,18 +287,41 @@ impl ApiBuilder {
     }
 
     pub fn with_default_traces(mut self) -> Self {
-        self.router = self.router.layer(
-            TraceLayer::new_for_http()
-                .make_span_with(|request: &Request<Body>| {
-                    debug_span!("request", http.uri = %request.uri(), http.method = %request.method(), http.status_code = field::Empty, account.name = field::Empty, account.project = field::Empty)
-                })
-                .on_response(
-                    |response: &Response<BoxBody>, latency: Duration, span: &Span| {
-                        span.record("http.status_code", response.status().as_u16());
-                        debug!(latency = format_args!("{} ns", latency.as_nanos()), "finished processing request");
-                    },
-                ),
-        );
+        self.router = self
+            .router
+            .route_layer(from_extractor::<crate::api::metrics::Metrics>())
+            .layer(
+                TraceLayer::new_for_http()
+                    .make_span_with(|request: &Request<Body>| {
+                        let path = if let Some(path) = request.extensions().get::<MatchedPath>() {
+                            path.as_str()
+                        } else {
+                            ""
+                        };
+
+                        debug_span!(
+                            "request",
+                            http.uri = %request.uri(),
+                            http.method = %request.method(),
+                            http.status_code = field::Empty,
+                            account.name = field::Empty,
+                            // A bunch of extra things for metrics
+                            // Should be able to make this clearer once `Valuable` support lands in tracing
+                            request.path = path,
+                            request.params.project_name = field::Empty,
+                            request.params.account_name = field::Empty,
+                        )
+                    })
+                    .on_response(
+                        |response: &Response<BoxBody>, latency: Duration, span: &Span| {
+                            span.record("http.status_code", response.status().as_u16());
+                            debug!(
+                                latency = format_args!("{} ns", latency.as_nanos()),
+                                "finished processing request"
+                            );
+                        },
+                    ),
+            );
         self
     }
 
@@ -306,11 +330,11 @@ impl ApiBuilder {
             .router
             .route("/", get(get_status))
             .route(
-                "/projects/:project",
+                "/projects/:project_name",
                 get(get_project).delete(delete_project).post(post_project),
             )
             .route("/users/:account_name", get(get_user).post(post_user))
-            .route("/projects/:project/*any", any(route_project))
+            .route("/projects/:project_name/*any", any(route_project))
             .route("/admin/revive", post(revive_projects));
         self
     }

@@ -17,12 +17,16 @@ use tracing::{debug, debug_span, field, Span};
 
 use crate::auth::{Admin, ScopedUser, User};
 use crate::task::{self, BoxedTask};
+use crate::worker::WORKER_QUEUE_SIZE;
 use crate::{AccountName, Error, GatewayService, ProjectName};
+
+pub const SVC_DEGRADED_THRESHOLD: usize = 128;
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum GatewayStatus {
     Healthy,
+    Degraded,
     Unhealthy,
 }
 
@@ -35,6 +39,12 @@ impl StatusResponse {
     pub fn healthy() -> Self {
         Self {
             status: GatewayStatus::Healthy,
+        }
+    }
+
+    pub fn degraded() -> Self {
+        Self {
+            status: GatewayStatus::Degraded,
         }
     }
 
@@ -138,13 +148,15 @@ async fn route_project(
 }
 
 async fn get_status(Extension(sender): Extension<Sender<BoxedTask>>) -> Response<Body> {
-    let (status, body) = if !sender.is_closed() && sender.capacity() > 0 {
-        (StatusCode::OK, StatusResponse::healthy())
-    } else {
+    let (status, body) = if sender.is_closed() || sender.capacity() == 0 {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             StatusResponse::unhealthy(),
         )
+    } else if sender.capacity() < WORKER_QUEUE_SIZE - SVC_DEGRADED_THRESHOLD {
+        (StatusCode::OK, StatusResponse::degraded())
+    } else {
+        (StatusCode::OK, StatusResponse::healthy())
     };
 
     let body = serde_json::to_vec(&body).unwrap();

@@ -47,6 +47,7 @@ pub enum ErrorKind {
     InvalidOperation,
     Internal,
     NotReady,
+    ServiceUnavailable,
 }
 
 impl From<ErrorKind> for ApiError {
@@ -54,6 +55,10 @@ impl From<ErrorKind> for ApiError {
         let (status, error_message) = match kind {
             ErrorKind::Internal => (StatusCode::INTERNAL_SERVER_ERROR, "internal server error"),
             ErrorKind::KeyMissing => (StatusCode::UNAUTHORIZED, "request is missing a key"),
+            ErrorKind::ServiceUnavailable => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "we're experiencing a high workload right now, please try again in a little bit",
+            ),
             ErrorKind::KeyMalformed => (StatusCode::BAD_REQUEST, "request has an invalid key"),
             ErrorKind::BadHost => (StatusCode::BAD_REQUEST, "the 'Host' header is invalid"),
             ErrorKind::UserNotFound => (StatusCode::NOT_FOUND, "user not found"),

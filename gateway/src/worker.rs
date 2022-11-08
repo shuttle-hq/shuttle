@@ -4,7 +4,7 @@ use tracing::{debug, info};
 use crate::task::{BoxedTask, TaskResult};
 use crate::Error;
 
-const WORKER_QUEUE_SIZE: usize = 2048;
+pub const WORKER_QUEUE_SIZE: usize = 2048;
 
 pub struct Worker<W = BoxedTask> {
     send: Option<Sender<W>>,

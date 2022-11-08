@@ -63,7 +63,7 @@ const MAX_RESTARTS: i64 = 3;
 
 // Client used for health checks
 static CLIENT: Lazy<Client<HttpConnector>> = Lazy::new(Client::new);
-static IS_HEALTHY_TIMEOUT: u64 = 1;  // Health check must succeed within 1 second
+static IS_HEALTHY_TIMEOUT: u64 = 10;  // Health check must succeed within 10 seconds
 
 #[async_trait]
 impl<Ctx> Refresh<Ctx> for ContainerInspectResponse

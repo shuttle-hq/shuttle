@@ -15,7 +15,7 @@ use hyper::Client;
 use once_cell::sync::Lazy;
 use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Serialize};
-use tokio::time;
+use tokio::time::{self, timeout};
 use tracing::{debug, error};
 
 use crate::{
@@ -640,7 +640,8 @@ impl Service {
 
     pub async fn is_healthy(&mut self) -> bool {
         let uri = self.uri(format!("/projects/{}/status", self.name)).unwrap();
-        let is_healthy = matches!(CLIENT.get(uri).await, Ok(res) if res.status().is_success());
+        let resp = timeout(Duration::from_secs(1), CLIENT.get(uri)).await;
+        let is_healthy = matches!(resp, Ok(Ok(res)) if res.status().is_success());
         self.last_check = Some(HealthCheckRecord::new(is_healthy));
         is_healthy
     }

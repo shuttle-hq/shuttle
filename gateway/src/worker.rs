@@ -1,9 +1,13 @@
+use std::time::Duration;
+
 use tokio::sync::mpsc::{channel, Receiver, Sender};
-use tracing::{debug, info};
+use tokio::time;
+use tracing::{debug, info, warn};
 
 use crate::task::{BoxedTask, TaskResult};
 use crate::Error;
 
+const TASK_MAX_IDLE_TIMEOUT: u64 = 60;  // Maximum time before a task is considered degraded
 const WORKER_QUEUE_SIZE: usize = 2048;
 
 pub struct Worker<W = BoxedTask> {
@@ -57,7 +61,16 @@ impl Worker<BoxedTask> {
 
         while let Some(mut work) = self.recv.recv().await {
             loop {
-                match work.poll(()).await {
+                let timeout = time::sleep(Duration::from_secs(TASK_MAX_IDLE_TIMEOUT));
+                let mut poll = work.poll(());
+                let res = tokio::select! {
+                    res = &mut poll => res,
+                    _ = timeout => {
+                        warn!("a task has been running for a long time");
+                        poll.await
+                    }
+                };
+                match res {
                     TaskResult::Done(_) | TaskResult::Cancelled => break,
                     TaskResult::Pending(_) | TaskResult::TryAgain => continue,
                     TaskResult::Err(err) => {

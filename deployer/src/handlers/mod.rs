@@ -2,7 +2,7 @@ mod error;
 
 use axum::body::{Body, BoxBody};
 use axum::extract::ws::{self, WebSocket};
-use axum::extract::{Extension, Path, Query};
+use axum::extract::{Extension, MatchedPath, Path, Query};
 use axum::http::{Request, Response};
 use axum::middleware::from_extractor;
 use axum::routing::{get, Router};
@@ -30,6 +30,7 @@ use std::time::Duration;
 
 pub use {self::error::Error, self::error::Result};
 
+mod metrics;
 mod project;
 
 pub fn make_router(
@@ -45,7 +46,10 @@ pub fn make_router(
             "/projects/:project_name/services/:service_name",
             get(get_service).post(post_service).delete(delete_service),
         )
-        .route("/projects/:project_name/services/:service_name/summary", get(get_service_summary))
+        .route(
+            "/projects/:project_name/services/:service_name/summary",
+            get(get_service_summary),
+        )
         .route(
             "/projects/:project_name/deployments/:deployment_id",
             get(get_deployment).delete(delete_deployment),
@@ -54,7 +58,10 @@ pub fn make_router(
             "/projects/:project_name/ws/deployments/:deployment_id/logs",
             get(get_logs_subscribe),
         )
-        .route("/projects/:project_name/deployments/:deployment_id/logs", get(get_logs))
+        .route(
+            "/projects/:project_name/deployments/:deployment_id/logs",
+            get(get_logs),
+        )
         .route(
             "/projects/:project_name/secrets/:service_name",
             get(get_secrets),
@@ -65,10 +72,28 @@ pub fn make_router(
         .layer(RequireAuthorizationLayer::bearer(&admin_secret))
         // This route should be below the auth bearer since it does not need authentication
         .route("/projects/:project_name/status", get(get_status))
+        .route_layer(from_extractor::<metrics::Metrics>())
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(|request: &Request<Body>| {
-                    let span = debug_span!("request", http.uri = %request.uri(), http.method = %request.method(), http.status_code = field::Empty);
+                    let path = if let Some(path) = request.extensions().get::<MatchedPath>() {
+                        path.as_str()
+                    } else {
+                        ""
+                    };
+
+                    let span = debug_span!(
+                        "request",
+                        http.uri = %request.uri(),
+                        http.method = %request.method(),
+                        http.status_code = field::Empty,
+                        // A bunch of extra things for metrics
+                        // Should be able to make this clearer once `Valuable` support lands in tracing
+                        request.path = path,
+                        request.params.project_name = field::Empty,
+                        request.params.service_name = field::Empty,
+                        request.params.deployment_id = field::Empty,
+                    );
                     let parent_context = global::get_text_map_propagator(|propagator| {
                         propagator.extract(&HeaderExtractor(request.headers()))
                     });
@@ -79,7 +104,10 @@ pub fn make_router(
                 .on_response(
                     |response: &Response<BoxBody>, latency: Duration, span: &Span| {
                         span.record("http.status_code", &response.status().as_u16());
-                        debug!(latency = format_args!("{} ns", latency.as_nanos()), "finished processing request");
+                        debug!(
+                            latency = format_args!("{} ns", latency.as_nanos()),
+                            "finished processing request"
+                        );
                     },
                 ),
         )

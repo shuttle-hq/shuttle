@@ -3,8 +3,8 @@ use std::collections::VecDeque;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::mpsc::error::SendError;
 use tokio::sync::mpsc::Sender;
+use tokio::time::{sleep, timeout};
 use tracing::warn;
 use uuid::Uuid;
 
@@ -12,7 +12,12 @@ use crate::project::*;
 use crate::service::{GatewayContext, GatewayService};
 use crate::{AccountName, EndState, Error, ErrorKind, ProjectName, Refresh, State};
 
-const DEFAULT_TIMEOUT: Duration = Duration::from_secs(300);
+// Default maximum _total_ time a task is allowed to run
+pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(300);
+// Maximum time we'll wait for a task to successfully be sent down the channel
+pub const TASK_SEND_TIMEOUT: Duration = Duration::from_secs(9);
+// Maximum time before a task is considered degraded
+pub const PROJECT_TASK_MAX_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[async_trait]
 pub trait Task<Ctx>: Send {
@@ -183,8 +188,11 @@ impl TaskBuilder {
         ))
     }
 
-    pub async fn send(self, sender: &Sender<BoxedTask>) -> Result<(), SendError<BoxedTask>> {
-        sender.send(self.build()).await
+    pub async fn send(self, sender: &Sender<BoxedTask>) -> Result<(), Error> {
+        match timeout(TASK_SEND_TIMEOUT, sender.send(self.build())).await {
+            Ok(Ok(_)) => Ok(()),
+            _ => Err(Error::from_kind(ErrorKind::ServiceUnavailable)),
+        }
     }
 }
 
@@ -338,7 +346,21 @@ where
 
         let task = self.tasks.front_mut().unwrap();
 
-        let res = task.poll(project_ctx).await;
+        let timeout = sleep(PROJECT_TASK_MAX_IDLE_TIMEOUT);
+        let res = {
+            let mut poll = task.poll(project_ctx);
+            tokio::select! {
+                res = &mut poll => res,
+                _ = timeout => {
+                    warn!(
+                        project_name = ?self.project_name,
+                        account_name = ?self.account_name,
+                        "a task has been idling for a long time"
+                    );
+                    poll.await
+                }
+            }
+        };
 
         if let Some(update) = res.as_ref().ok() {
             match self

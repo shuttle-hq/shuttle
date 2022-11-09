@@ -44,9 +44,13 @@ pub enum ErrorKind {
     ProjectAlreadyExists,
     ProjectNotReady,
     ProjectUnavailable,
+    CustomDomainNotFound,
+    InvalidCustomDomain,
+    CustomDomainAlreadyExists,
     InvalidOperation,
     Internal,
     NotReady,
+    ServiceUnavailable,
 }
 
 impl From<ErrorKind> for ApiError {
@@ -54,6 +58,10 @@ impl From<ErrorKind> for ApiError {
         let (status, error_message) = match kind {
             ErrorKind::Internal => (StatusCode::INTERNAL_SERVER_ERROR, "internal server error"),
             ErrorKind::KeyMissing => (StatusCode::UNAUTHORIZED, "request is missing a key"),
+            ErrorKind::ServiceUnavailable => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "we're experiencing a high workload right now, please try again in a little bit",
+            ),
             ErrorKind::KeyMalformed => (StatusCode::BAD_REQUEST, "request has an invalid key"),
             ErrorKind::BadHost => (StatusCode::BAD_REQUEST, "the 'Host' header is invalid"),
             ErrorKind::UserNotFound => (StatusCode::NOT_FOUND, "user not found"),
@@ -75,6 +83,11 @@ impl From<ErrorKind> for ApiError {
                 StatusCode::BAD_REQUEST,
                 "a project with the same name already exists",
             ),
+            ErrorKind::InvalidCustomDomain => (StatusCode::BAD_REQUEST, "invalid custom domain"),
+            ErrorKind::CustomDomainNotFound => (StatusCode::NOT_FOUND, "custom domain not found"),
+            ErrorKind::CustomDomainAlreadyExists => {
+                (StatusCode::BAD_REQUEST, "custom domain already in use")
+            }
             ErrorKind::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
             ErrorKind::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
             ErrorKind::NotReady => (StatusCode::INTERNAL_SERVER_ERROR, "service not ready"),

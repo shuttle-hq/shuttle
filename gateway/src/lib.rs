@@ -8,18 +8,24 @@ use std::io;
 use std::pin::Pin;
 use std::str::FromStr;
 
+use axum::headers::{Header, HeaderName, HeaderValue, Host};
+use axum::http::uri::Authority;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use bollard::Docker;
 use futures::prelude::*;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use shuttle_common::models::error::{ApiError, ErrorKind};
+use sqlx::database::{HasArguments, HasValueRef};
+use sqlx::encode::IsNull;
+use sqlx::error::BoxDynError;
 use tokio::sync::mpsc::error::SendError;
 use tracing::error;
 
 pub mod api;
 pub mod args;
 pub mod auth;
+pub mod custom_domain;
 pub mod project;
 pub mod proxy;
 pub mod service;
@@ -77,7 +83,7 @@ impl From<ErrorKind> for Error {
 
 impl<T> From<SendError<T>> for Error {
     fn from(_: SendError<T>) -> Self {
-        Self::from(ErrorKind::NotReady)
+        Self::from(ErrorKind::ServiceUnavailable)
     }
 }
 
@@ -161,6 +167,105 @@ impl<'de> Deserialize<'de> for AccountName {
         String::deserialize(deserializer)?
             .parse()
             .map_err(|_err| todo!())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Fqdn(fqdn::FQDN);
+
+impl FromStr for Fqdn {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let fqdn =
+            fqdn::FQDN::from_str(s).map_err(|_err| Error::from(ErrorKind::InvalidCustomDomain))?;
+        Ok(Fqdn(fqdn))
+    }
+}
+
+impl std::fmt::Display for Fqdn {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl<DB> sqlx::Type<DB> for Fqdn
+where
+    DB: sqlx::Database,
+    str: sqlx::Type<DB>,
+{
+    fn type_info() -> <DB as sqlx::Database>::TypeInfo {
+        <&str as sqlx::Type<DB>>::type_info()
+    }
+
+    fn compatible(ty: &<DB as sqlx::Database>::TypeInfo) -> bool {
+        <&str as sqlx::Type<DB>>::compatible(ty)
+    }
+}
+
+impl<'q, DB> sqlx::Encode<'q, DB> for Fqdn
+where
+    DB: sqlx::Database,
+    String: sqlx::Encode<'q, DB>,
+{
+    fn encode_by_ref(&self, buf: &mut <DB as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
+        let owned = self.0.to_string();
+        <String as sqlx::Encode<DB>>::encode(owned, buf)
+    }
+}
+
+impl<'r, DB> sqlx::Decode<'r, DB> for Fqdn
+where
+    DB: sqlx::Database,
+    &'r str: sqlx::Decode<'r, DB>,
+{
+    fn decode(value: <DB as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
+        let value = <&str as sqlx::Decode<DB>>::decode(value)?;
+        Ok(value.parse()?)
+    }
+}
+
+impl Serialize for Fqdn {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.0.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for Fqdn {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        String::deserialize(deserializer)?
+            .parse()
+            .map_err(<D::Error as serde::de::Error>::custom)
+    }
+}
+
+impl Header for Fqdn {
+    fn name() -> &'static HeaderName {
+        Host::name()
+    }
+
+    fn decode<'i, I>(values: &mut I) -> Result<Self, axum::headers::Error>
+    where
+        Self: Sized,
+        I: Iterator<Item = &'i HeaderValue>,
+    {
+        let host = Host::decode(values)?;
+        let fqdn = fqdn::FQDN::from_str(host.hostname())
+            .map_err(|_err| axum::headers::Error::invalid())?;
+
+        Ok(Fqdn(fqdn))
+    }
+
+    fn encode<E: Extend<HeaderValue>>(&self, values: &mut E) {
+        let authority = Authority::from_str(&self.0.to_string()).unwrap();
+        let host = Host::from(authority);
+        host.encode(values);
     }
 }
 

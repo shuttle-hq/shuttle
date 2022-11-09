@@ -76,9 +76,9 @@ where
             .path()
             .strip_prefix("/.well-known/acme-challenge/")
         {
-            Some(token) => token,
+            Some(token) => token.to_string(),
             None => {
-                return Box::pin(|| async {
+                return Box::pin(async {
                     Ok(Response::builder()
                         .status(404)
                         .body(boxed(Body::empty()))
@@ -87,9 +87,10 @@ where
             }
         };
 
+        let gateway = self.gateway.clone();
+
         Box::pin(async move {
-            let (status, body) = match self.gateway.get_http01_challenge_authorization(token).await
-            {
+            let (status, body) = match gateway.get_http01_challenge_authorization(&token).await {
                 Some(key) => (200, Body::from(key)),
                 None => (404, Body::empty()),
             };

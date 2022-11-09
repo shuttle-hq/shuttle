@@ -49,7 +49,7 @@ APPS_FQDN=unstable.shuttleapp.rs
 DB_FQDN=db.unstable.shuttle.rs
 CONTAINER_REGISTRY=public.ecr.aws/shuttle-dev
 DD_ENV=unstable
-USE_TLS=disable
+USE_TLS?=disable
 endif
 
 POSTGRES_EXTRA_PATH?=./extras/postgres

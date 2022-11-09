@@ -1,6 +1,6 @@
 use std::net::SocketAddr;
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use fqdn::FQDN;
 
 use crate::auth::Key;
@@ -13,6 +13,12 @@ pub struct Args {
 
     #[command(subcommand)]
     pub command: Commands,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum UseTls {
+    Disable,
+    Enable
 }
 
 #[derive(Subcommand, Debug)]
@@ -29,6 +35,9 @@ pub struct StartArgs {
     /// Address to bind the user plane to
     #[arg(long, default_value = "127.0.0.1:8000")]
     pub user: SocketAddr,
+    /// Allows to disable the use of TLS in proxying deployed services (DANGEROUS)
+    #[arg(long, default_value = "enable")]
+    pub use_tls: UseTls,
     #[command(flatten)]
     pub context: ContextArgs,
 }

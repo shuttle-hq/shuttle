@@ -13,7 +13,6 @@ use shuttle_common::models::error::ErrorKind;
 use tokio::runtime::Handle;
 use tokio::sync::RwLock;
 
-use crate::service::GatewayService;
 use crate::{Error, Fqdn};
 
 pub fn parse_pem(certs: &[u8], key: &[u8]) -> Result<(Vec<Certificate>, PrivateKey), Error> {
@@ -87,7 +86,7 @@ impl ResolvesServerCert for GatewayCertResolver {
     fn resolve(&self, client_hello: ClientHello) -> Option<Arc<CertifiedKey>> {
         let sni = client_hello.server_name()?;
         let handle = Handle::current();
-        handle.enter();
+        let _ = handle.enter();
         block_on(self.get(sni))
     }
 }

@@ -1,7 +1,7 @@
 use clap::Parser;
 use futures::prelude::*;
 use opentelemetry::global;
-use shuttle_gateway::args::{Args, Commands, InitArgs};
+use shuttle_gateway::args::{Args, Commands, InitArgs, UseTls};
 use shuttle_gateway::auth::Key;
 use shuttle_gateway::custom_domain::AcmeClient;
 use shuttle_gateway::proxy::make_proxy;
@@ -16,7 +16,7 @@ use std::io;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{debug, error, info, trace};
+use tracing::{debug, error, warn, info, trace};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 #[tokio::main(flavor = "multi_thread")]
@@ -131,10 +131,18 @@ async fn start(db: SqlitePool, args: StartArgs) -> io::Result<()> {
     let api_handle = tokio::spawn(axum::Server::bind(&args.control).serve(api.into_make_service()));
 
     let proxy = make_proxy(Arc::clone(&gateway), acme_client, fqdn);
-    let (resolver, tls_acceptor) = make_tls_acceptor();
-    let proxy_handle = tokio::spawn(axum_server::Server::bind(args.user)
-        .acceptor(tls_acceptor)
-        .serve(proxy));
+    let (_resolver, tls_acceptor) = make_tls_acceptor();
+    let proxy_handle = if let UseTls::Disable = args.use_tls {
+        warn!("TLS is disabled in the proxy service. This is only acceptable in testing, and should *never* be used in deployments.");
+        axum_server::Server::bind(args.user)
+            .serve(proxy)
+            .boxed()
+    } else {
+        axum_server::Server::bind(args.user)
+            .acceptor(tls_acceptor)
+            .serve(proxy)
+            .boxed()
+    };
 
     debug!("starting up all services");
 

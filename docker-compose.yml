@@ -52,6 +52,7 @@ services:
       - "--docker-host=/var/run/docker.sock"
       - "--provisioner-host=provisioner"
       - "--proxy-fqdn=${APPS_FQDN}"
+      - "--use-tls=${USE_TLS}"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001"]
       interval: 1m

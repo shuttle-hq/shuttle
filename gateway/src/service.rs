@@ -372,8 +372,8 @@ impl GatewayService {
         permissions: &Permissions,
     ) -> Result<(), Error> {
         query("UPDATE accounts SET super_user = ?1, account_tier = ?2 WHERE account_name = ?3")
-            .bind(&permissions.super_user)
-            .bind(&permissions.tier)
+            .bind(permissions.super_user)
+            .bind(permissions.tier)
             .bind(account_name)
             .execute(&self.db)
             .await?;

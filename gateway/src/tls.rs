@@ -42,6 +42,12 @@ pub struct GatewayCertResolver {
     keys: RwLock<HashMap<String, Arc<CertifiedKey>>>,
 }
 
+impl Default for GatewayCertResolver {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GatewayCertResolver {
     pub fn new() -> Self {
         Self {

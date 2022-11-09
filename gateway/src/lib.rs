@@ -26,8 +26,8 @@ pub mod project;
 pub mod proxy;
 pub mod service;
 pub mod task;
-pub mod worker;
 pub mod tls;
+pub mod worker;
 
 use crate::service::{ContainerSettings, GatewayService};
 
@@ -300,7 +300,7 @@ pub mod tests {
     use tokio::sync::mpsc::channel;
 
     use crate::api::make_api;
-    use crate::args::{ContextArgs, StartArgs};
+    use crate::args::{ContextArgs, StartArgs, UseTls};
     use crate::auth::User;
     use crate::custom_domain::AcmeClient;
     use crate::proxy::make_proxy;
@@ -542,6 +542,7 @@ pub mod tests {
             let args = StartArgs {
                 control,
                 user,
+                use_tls: UseTls::Disable,
                 context: ContextArgs {
                     docker_host,
                     image,

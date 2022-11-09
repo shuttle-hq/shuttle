@@ -711,7 +711,7 @@ where
             .try_collect::<Vec<_>>()
             .await?;
 
-        let start_event_count = start_events.iter().count();
+        let start_event_count = start_events.len();
         debug!(
             "project started {} times in the last 15 minutes",
             start_event_count

@@ -1,5 +1,6 @@
-## How to run
+# How to run
 
+## shuttle-next
 ```bash
 $ make wasm
 $ DISCORD_TOKEN=xxx cargo run
@@ -12,6 +13,24 @@ grpcurl -plaintext -import-path ../proto -proto runtime.proto -d '{"service_name
 grpcurl -plaintext -import-path ../proto -proto runtime.proto -d '{"service_name": "Tonic"}' localhost:8000 runtime.Runtime/Start
 grpcurl -plaintext -import-path ../proto -proto runtime.proto localhost:8000 runtime.Runtime/SubscribeLogs
 ```
+
+## axum-wasm
+
+Compile the wasm axum router:
+
+```bash
+make wasm
+```
+
+Run the test:
+
+```bash
+cargo test axum -- --nocapture
+```
+
+Load and run:
+TODO
+
 ## shuttle-legacy
 
 Load and run an .so library that implements `shuttle_service::Service`. 

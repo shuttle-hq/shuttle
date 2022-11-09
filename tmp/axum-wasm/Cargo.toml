@@ -1,0 +1,13 @@
+[package]
+name = "shuttle-axum"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = [ "cdylib" ]
+
+[dependencies]
+axum = { version = "0.6.0-rc.4", default-features = false }
+futures-executor = "0.3.21"
+http = "0.2.7"
+tower-service = "0.3.1"

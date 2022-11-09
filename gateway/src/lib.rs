@@ -27,6 +27,7 @@ pub mod proxy;
 pub mod service;
 pub mod task;
 pub mod worker;
+pub mod tls;
 
 use crate::service::{ContainerSettings, GatewayService};
 

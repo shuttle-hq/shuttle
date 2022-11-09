@@ -7,6 +7,7 @@ use shuttle_gateway::custom_domain::AcmeClient;
 use shuttle_gateway::proxy::make_proxy;
 use shuttle_gateway::service::{GatewayService, MIGRATIONS};
 use shuttle_gateway::task;
+use shuttle_gateway::tls::make_tls_acceptor;
 use shuttle_gateway::worker::Worker;
 use shuttle_gateway::{api::make_api, args::StartArgs};
 use sqlx::migrate::MigrateDatabase;
@@ -129,9 +130,11 @@ async fn start(db: SqlitePool, args: StartArgs) -> io::Result<()> {
 
     let api_handle = tokio::spawn(axum::Server::bind(&args.control).serve(api.into_make_service()));
 
-    let proxy = make_proxy(gateway, acme_client, fqdn);
-
-    let proxy_handle = tokio::spawn(hyper::Server::bind(&args.user).serve(proxy));
+    let proxy = make_proxy(Arc::clone(&gateway), acme_client, fqdn);
+    let (resolver, tls_acceptor) = make_tls_acceptor();
+    let proxy_handle = tokio::spawn(axum_server::Server::bind(args.user)
+        .acceptor(tls_acceptor)
+        .serve(proxy));
 
     debug!("starting up all services");
 

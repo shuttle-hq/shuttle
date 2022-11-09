@@ -7,7 +7,12 @@ publish = false
 [dependencies]
 acme2 = "0.5.1"
 async-trait = "0.1.52"
+
 axum = { version = "0.5.8", features = [ "headers" ] }
+axum-server = { version = "0.4.4", features = [ "tls-rustls" ] }
+rustls = { version = "0.20.6" }
+rustls-pemfile = { version = "1.0.1" }
+
 base64 = "0.13"
 bollard = "0.13"
 chrono = "0.4"

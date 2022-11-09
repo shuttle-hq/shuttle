@@ -11,6 +11,7 @@ use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
 use hyper::Client;
 use hyper_reverse_proxy::ReverseProxy;
+use instant_acme::KeyAuthorization;
 use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
@@ -19,6 +20,7 @@ use sqlx::migrate::Migrator;
 use sqlx::sqlite::SqlitePool;
 use sqlx::types::Json as SqlxJson;
 use sqlx::{query, Error as SqlxError, Row};
+use tokio::sync::RwLock;
 use tracing::{debug, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
@@ -182,9 +184,35 @@ impl GatewayContextProvider {
     }
 }
 
+#[derive(Clone)]
+pub struct AcmeChallenges(Arc<RwLock<HashMap<String, KeyAuthorization>>>);
+
+impl AcmeChallenges {
+    fn new() -> Self {
+        AcmeChallenges(Arc::new(RwLock::new(HashMap::new())))
+    }
+
+    pub async fn insert(&self, token: String, key: KeyAuthorization) {
+        self.0.write().await.insert(token, key);
+    }
+
+    pub async fn get(&self, token: &str) -> Option<String> {
+        self.0
+            .read()
+            .await
+            .get(token)
+            .map(|key| key.as_str().to_owned())
+    }
+
+    pub async fn remove(&self, token: &str) {
+        self.0.write().await.remove(token);
+    }
+}
+
 pub struct GatewayService {
     provider: GatewayContextProvider,
     db: SqlitePool,
+    challenges: AcmeChallenges,
 }
 
 impl GatewayService {
@@ -199,7 +227,11 @@ impl GatewayService {
 
         let provider = GatewayContextProvider::new(docker, container_settings);
 
-        Self { provider, db }
+        Self {
+            provider,
+            db,
+            challenges: AcmeChallenges::new(),
+        }
     }
 
     pub async fn route_fqdn(&self, req: Request<Body>) -> Result<Response<Body>, Error> {
@@ -502,6 +534,18 @@ impl GatewayService {
     /// Create a builder for a new [ProjectTask]
     pub fn new_task(self: &Arc<Self>) -> TaskBuilder {
         TaskBuilder::new(self.clone())
+    }
+
+    pub async fn add_http01_challenge_authorization(&self, token: String, key: KeyAuthorization) {
+        self.challenges.insert(token, key).await;
+    }
+
+    pub async fn get_http01_challenge_authorization(&self, token: &str) -> Option<String> {
+        self.challenges.get(token).await
+    }
+
+    pub async fn remove_http01_challenge_authorization(&self, token: &str) {
+        self.challenges.remove(token).await
     }
 }
 

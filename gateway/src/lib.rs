@@ -185,7 +185,12 @@ impl FromStr for Fqdn {
 
 impl std::fmt::Display for Fqdn {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
+        let mut labels = self.0.labels();
+        f.write_str(labels.next().unwrap())?;
+        labels.try_for_each(|s| {
+            f.write_str(".")?;
+            f.write_str(s)
+        })
     }
 }
 

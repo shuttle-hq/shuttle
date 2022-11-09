@@ -690,37 +690,40 @@ where
     type Error = ProjectError;
 
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
-        let container_id = self
-            .container
-            .id
-            .as_deref()
-            .expect("container should have ID");
+        let container = self.container;
 
-        // Filter and count the `start` events for this project in the last 15 minutes
-        let start_event_count = ctx
+        let since = (chrono::Utc::now() - chrono::Duration::minutes(15))
+            .timestamp()
+            .to_string();
+        let until = chrono::Utc::now().timestamp().to_string();
+
+        // Filter and collect `start` events for this project in the last 15 minutes
+        let start_events = ctx
             .docker()
-            .events(Some(EventsOptions::<String> {
-                since: Some(
-                    (chrono::offset::Utc::now() - chrono::Duration::minutes(15)).to_string(),
-                ),
-                until: Some(chrono::offset::Utc::now().to_string()),
+            .events(Some(EventsOptions::<&str> {
+                since: Some(since),
+                until: Some(until),
                 filters: HashMap::from([
-                    ("container".to_string(), vec![container_id.to_string()]),
-                    ("event".to_string(), vec!["start".to_string()]),
+                    ("container", vec![safe_unwrap!(container.id).as_str()]),
+                    ("event", vec!["start"]),
                 ]),
             }))
-            .count()
-            .await;
+            .try_collect::<Vec<_>>()
+            .await?;
 
-        debug!("start event count: {start_event_count}");
+        let start_event_count = start_events.iter().count();
+        debug!(
+            "project started {} times in the last 15 minutes",
+            start_event_count
+        );
 
         // If stopped, and has not restarted too much, try to restart
         if start_event_count < MAX_RESTARTS {
-            Ok(ProjectStarting {
-                container: self.container,
-            })
+            Ok(ProjectStarting { container })
         } else {
-            Err(ProjectError::internal("too many restarts"))
+            Err(ProjectError::internal(
+                "too many restarts in the last 15 minutes",
+            ))
         }
     }
 }

@@ -617,7 +617,13 @@ pub struct Service {
 
 impl Service {
     pub fn from_container(container: ContainerInspectResponse) -> Result<Self, ProjectError> {
-        let name = safe_unwrap!(container.config.labels.get("project.name")).to_string();
+        // This version can't be enabled while there are active deployers before v0.8.0 since the don't have this label
+        // TODO: switch to this version when you notice all deployers are greater than v0.8.0
+        // let name = safe_unwrap!(container.config.labels.get("project.name")).to_string();
+        let container_name = safe_unwrap!(container.name.strip_prefix("/")).to_string();
+        let prefix = safe_unwrap!(container.config.labels.get("shuttle_prefix")).to_string();
+        let resource_name =
+            safe_unwrap!(container_name.strip_prefix(&prefix).strip_suffix("_run")).to_string();
 
         let network = safe_unwrap!(container.network_settings.networks)
             .values()
@@ -626,7 +632,7 @@ impl Service {
         let target = safe_unwrap!(network.ip_address).parse().unwrap();
 
         Ok(Self {
-            name,
+            name: resource_name,
             target,
             last_check: None,
         })

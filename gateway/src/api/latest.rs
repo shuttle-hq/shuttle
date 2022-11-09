@@ -9,8 +9,7 @@ use axum::routing::{any, get, post};
 use axum::{Json as AxumJson, Router};
 use http::StatusCode;
 use instant_acme::{
-    Account, AccountCredentials, ChallengeType, Identifier, LetsEncrypt, NewAccount, NewOrder,
-    OrderStatus,
+    Account, AccountCredentials, ChallengeType, Identifier, NewAccount, NewOrder, OrderStatus,
 };
 use rcgen::{Certificate, CertificateParams, DistinguishedName};
 use serde::{Deserialize, Serialize};
@@ -244,8 +243,6 @@ async fn request_acme_certificate(
             error!(%error, "failed to order certificate");
             Error::from(ErrorKind::Internal)
         })?;
-
-    dbg!(&state);
 
     let authorizations = order
         .authorizations(&state.authorizations)

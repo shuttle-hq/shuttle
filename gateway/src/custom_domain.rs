@@ -1,13 +1,13 @@
-use axum::body::boxed;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use axum::http::Request;
+use axum::body::boxed;
 use axum::response::Response;
 use futures::future::BoxFuture;
-use hyper::Body;
+use hyper::{Body, Request};
 use serde::{Deserialize, Serialize};
 use tower::{Layer, Service};
+use tracing::trace;
 
 use crate::service::GatewayService;
 use crate::Error;
@@ -49,9 +49,9 @@ pub struct ChallengeResponderMiddleware<S> {
     inner: S,
 }
 
-impl<S> Service<Request<Body>> for ChallengeResponderMiddleware<S>
+impl<ReqBody, S> Service<Request<ReqBody>> for ChallengeResponderMiddleware<S>
 where
-    S: Service<Request<Body>, Response = Response, Error = Error> + Send + 'static,
+    S: Service<Request<ReqBody>, Response = Response, Error = Error> + Send + 'static,
     S::Future: Send + 'static,
 {
     type Response = S::Response;
@@ -62,7 +62,7 @@ where
         self.inner.poll_ready(cx)
     }
 
-    fn call(&mut self, req: Request<Body>) -> Self::Future {
+    fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
         if !req.uri().path().starts_with("/.well-known/acme-challenge/") {
             let future = self.inner.call(req);
             return Box::pin(async move {
@@ -86,6 +86,8 @@ where
                 })
             }
         };
+
+        trace!(token, "responding to certificate challenge");
 
         let gateway = self.gateway.clone();
 

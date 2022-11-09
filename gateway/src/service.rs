@@ -21,7 +21,7 @@ use sqlx::sqlite::SqlitePool;
 use sqlx::types::Json as SqlxJson;
 use sqlx::{query, Error as SqlxError, Row};
 use tokio::sync::RwLock;
-use tracing::{debug, Span};
+use tracing::{debug, trace, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::args::ContextArgs;
@@ -537,6 +537,7 @@ impl GatewayService {
     }
 
     pub async fn add_http01_challenge_authorization(&self, token: String, key: KeyAuthorization) {
+        trace!(token, "saving acme http01 challenge");
         self.challenges.insert(token, key).await;
     }
 
@@ -545,6 +546,7 @@ impl GatewayService {
     }
 
     pub async fn remove_http01_challenge_authorization(&self, token: &str) {
+        trace!(token, "removing acme http01 challenge");
         self.challenges.remove(token).await
     }
 }

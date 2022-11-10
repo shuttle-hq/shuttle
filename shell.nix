@@ -26,6 +26,7 @@ in
       sccache
       sqlite
       fastmod
+      pebble
     ];
 
     PROTOC = "${protobuf}/bin/protoc";

@@ -5494,6 +5494,7 @@ dependencies = [
  "shuttle-common",
  "snailquote",
  "sqlx 0.5.13",
+ "strum",
  "tempfile",
  "tokio",
  "tower",

@@ -20,7 +20,7 @@ use tower::{Service, ServiceBuilder};
 use tracing::{debug, debug_span, field, trace};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
-use crate::custom_domain::{ChallengeResponder, ChallengeResponderMiddleware};
+use crate::custom_domain::{AcmeClient, ChallengeResponder, ChallengeResponderLayer};
 use crate::service::GatewayService;
 use crate::{Error, ErrorKind, ProjectName};
 
@@ -99,11 +99,12 @@ impl Service<Request<Body>> for ProxyService {
 
 pub struct MakeProxyService {
     gateway: Arc<GatewayService>,
+    acme_client: AcmeClient,
     fqdn: String,
 }
 
 impl<'r> Service<&'r AddrStream> for MakeProxyService {
-    type Response = ChallengeResponderMiddleware<ProxyService>;
+    type Response = ChallengeResponder<ProxyService>;
     type Error = Error;
     type Future =
         Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
@@ -114,10 +115,12 @@ impl<'r> Service<&'r AddrStream> for MakeProxyService {
 
     fn call(&mut self, target: &'r AddrStream) -> Self::Future {
         let gateway = Arc::clone(&self.gateway);
+        let acme_client = self.acme_client.clone();
         let remote_addr = target.remote_addr();
         let fqdn = self.fqdn.clone();
+
         Box::pin(async move {
-            let custom_domain_service = ChallengeResponder::new(gateway.clone());
+            let challenge_response_layer = ChallengeResponderLayer::new(acme_client);
             let proxy_service = ProxyService {
                 remote_addr,
                 gateway,
@@ -125,7 +128,7 @@ impl<'r> Service<&'r AddrStream> for MakeProxyService {
             };
 
             let service = ServiceBuilder::new()
-                .layer(custom_domain_service)
+                .layer(challenge_response_layer)
                 .service(proxy_service);
 
             Ok(service)
@@ -133,11 +136,16 @@ impl<'r> Service<&'r AddrStream> for MakeProxyService {
     }
 }
 
-pub fn make_proxy<'r>(gateway: Arc<GatewayService>, fqdn: String) -> MakeProxyService {
+pub fn make_proxy<'r>(
+    gateway: Arc<GatewayService>,
+    acme_client: AcmeClient,
+    fqdn: String,
+) -> MakeProxyService {
     debug!("making proxy");
 
     MakeProxyService {
         gateway,
+        acme_client,
         fqdn: format!(".{fqdn}"),
     }
 }

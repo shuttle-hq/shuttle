@@ -3,6 +3,7 @@ use futures::prelude::*;
 use opentelemetry::global;
 use shuttle_gateway::args::{Args, Commands, InitArgs};
 use shuttle_gateway::auth::Key;
+use shuttle_gateway::custom_domain::AcmeClient;
 use shuttle_gateway::proxy::make_proxy;
 use shuttle_gateway::service::{GatewayService, MIGRATIONS};
 use shuttle_gateway::task;
@@ -122,11 +123,13 @@ async fn start(db: SqlitePool, args: StartArgs) -> io::Result<()> {
         }
     });
 
-    let api = make_api(Arc::clone(&gateway), sender);
+    let acme_client = AcmeClient::new();
+
+    let api = make_api(Arc::clone(&gateway), acme_client.clone(), sender);
 
     let api_handle = tokio::spawn(axum::Server::bind(&args.control).serve(api.into_make_service()));
 
-    let proxy = make_proxy(gateway, fqdn);
+    let proxy = make_proxy(gateway, acme_client, fqdn);
 
     let proxy_handle = tokio::spawn(hyper::Server::bind(&args.user).serve(proxy));
 

@@ -28,6 +28,7 @@ rcgen = "0.10.0"
 serde = { version = "1.0.137", features = [ "derive" ] }
 serde_json = "1.0.81"
 sqlx = { version = "0.5.11", features = [ "sqlite", "json", "runtime-tokio-rustls", "migrate" ] }
+strum = { version = "0.24.1", features = ["derive"] }
 tokio = { version = "1.17", features = [ "full" ] }
 tower = { version = "0.4.13", features = [ "steer" ] }
 tower-http = { version = "0.3.4", features = ["trace"] }

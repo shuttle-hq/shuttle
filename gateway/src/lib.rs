@@ -13,6 +13,7 @@ use axum::http::uri::Authority;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use bollard::Docker;
+use custom_domain::AcmeClientError;
 use futures::prelude::*;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use shuttle_common::models::error::{ApiError, ErrorKind};
@@ -84,6 +85,12 @@ impl From<ErrorKind> for Error {
 impl<T> From<SendError<T>> for Error {
     fn from(_: SendError<T>) -> Self {
         Self::from(ErrorKind::ServiceUnavailable)
+    }
+}
+
+impl From<AcmeClientError> for Error {
+    fn from(error: AcmeClientError) -> Self {
+        Self::source(ErrorKind::Internal, error)
     }
 }
 

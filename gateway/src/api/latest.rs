@@ -8,20 +8,16 @@ use axum::response::Response;
 use axum::routing::{any, get, post};
 use axum::{Json as AxumJson, Router};
 use http::StatusCode;
-use instant_acme::{
-    Account, AccountCredentials, Authorization, AuthorizationStatus, ChallengeType, Identifier,
-    NewAccount, NewOrder, Order, OrderStatus,
-};
-use rcgen::{Certificate, CertificateParams, DistinguishedName};
+use instant_acme::AccountCredentials;
 use serde::{Deserialize, Serialize};
 use shuttle_common::models::error::ErrorKind;
 use shuttle_common::models::{project, user};
 use tokio::sync::mpsc::Sender;
-use tokio::time::sleep;
 use tower_http::trace::TraceLayer;
-use tracing::{debug, debug_span, error, field, trace, Span};
+use tracing::{debug, debug_span, field, Span};
 
 use crate::auth::{Admin, ScopedUser, User};
+use crate::custom_domain::AcmeClient;
 use crate::task::{self, BoxedTask};
 use crate::worker::WORKER_QUEUE_SIZE;
 use crate::{AccountName, Error, Fqdn, GatewayService, ProjectName};
@@ -194,187 +190,35 @@ async fn revive_projects(
 
 async fn create_acme_account(
     _: Admin,
+    Extension(acme_client): Extension<AcmeClient>,
     Path(email): Path<String>,
 ) -> Result<AxumJson<serde_json::Value>, Error> {
-    trace!(email, "creating acme account");
+    let res = acme_client.create_account(&email).await?;
 
-    let account = NewAccount {
-        contact: &[&format!("mailto:{email}")],
-        terms_of_service_agreed: true,
-        only_return_existing: false,
-    };
-    // TODO: change to production
-    let account = Account::create(&account, LetsEncrypt::Staging.url())
-        .await
-        .map_err(|error| {
-            error!(%error, "got error while creating acme account");
-            Error::from_kind(ErrorKind::Internal)
-        })?;
-
-    let credentials = serde_json::to_value(account.credentials()).map_err(|error| {
-        error!(%error, "got error while extracting credentials from acme account");
-        Error::from_kind(ErrorKind::Internal)
-    })?;
-
-    Ok(AxumJson(credentials))
+    Ok(AxumJson(res))
 }
 
 async fn request_acme_certificate(
-    Extension(service): Extension<Arc<GatewayService>>,
     _: Admin,
+    Extension(service): Extension<Arc<GatewayService>>,
+    Extension(acme_client): Extension<AcmeClient>,
     Path(fqdn): Path<Fqdn>,
     AxumJson(credentials): AxumJson<AccountCredentials<'_>>,
 ) -> Result<AxumJson<serde_json::Value>, Error> {
-    let fqdn = fqdn.to_string();
-    trace!(fqdn, "requesting acme certificate");
-
-    let account = Account::from_credentials(credentials).map_err(|error| {
-        error!(
-            error = &error as &dyn std::error::Error,
-            "failed to convert acme credentials into account"
-        );
-        Error::from_kind(ErrorKind::Internal)
-    })?;
-
-    let (mut order, state) = account
-        .new_order(&NewOrder {
-            identifiers: &[Identifier::Dns(fqdn.to_string())],
-        })
-        .await
-        .map_err(|error| {
-            error!(%error, "failed to order certificate");
-            Error::from(ErrorKind::Internal)
-        })?;
-
-    let authorizations = order
-        .authorizations(&state.authorizations)
-        .await
-        .map_err(|error| {
-            error!(%error, "failed to get authorizations information");
-            Error::from(ErrorKind::Internal)
-        })?;
-
-    // There should only ever be 1 authorization as we only provide 1 domain at a time
-    debug_assert!(authorizations.len() == 1);
-    let authorization = &authorizations[0];
-
-    trace!(?authorization, "got authorization");
-
-    complete_challenge(authorization, &mut order, service).await?;
-
-    let Identifier::Dns(identifier) = &authorization.identifier;
-
-    let certificate = {
-        let mut params = CertificateParams::new(vec![identifier.to_string()]);
-        params.distinguished_name = DistinguishedName::new();
-        Certificate::from_params(params).map_err(|error| {
-            error!(%error, "failed to create certificate");
-            Error::from(ErrorKind::Internal)
-        })?
-    };
-    let signing_request = certificate.serialize_request_der().map_err(|error| {
-        error!(%error, "failed to create certificate signing request");
-        Error::from(ErrorKind::Internal)
-    })?;
-
-    let certificate_chain = order
-        .finalize(&signing_request, &state.finalize)
-        .await
-        .map_err(|error| {
-            error!(%error, "failed to finalize certificate request");
-            Error::from(ErrorKind::Internal)
-        })?;
-
+    let _ = acme_client.create_certificate(fqdn, credentials).await?;
     // TODO: save certificate to database
 
     Ok(AxumJson(serde_json::json!({
-        "certificate": certificate_chain,
-        "private_key": certificate.serialize_private_key_pem(),
-        "account_credentials": account.credentials(),
+        // "certificate": certificate_chain,
+        // "private_key": certificate.serialize_private_key_pem(),
     })))
 }
 
-async fn complete_challenge(
-    authorization: &Authorization,
-    order: &mut Order,
+pub fn make_api(
     service: Arc<GatewayService>,
-) -> Result<(), Error> {
-    if let AuthorizationStatus::Valid = authorization.status {
-        return Ok(());
-    }
-
-    let challenge = authorization
-        .challenges
-        .iter()
-        .find(|c| c.r#type == ChallengeType::Http01)
-        .ok_or_else(|| {
-            error!("http-01 challenge not found");
-            Error::from(ErrorKind::Internal)
-        })?;
-
-    trace!(?challenge, "will complete challenge");
-
-    service
-        .add_http01_challenge_authorization(
-            challenge.token.clone(),
-            order.key_authorization(challenge),
-        )
-        .await;
-
-    order
-        .set_challenge_ready(&challenge.url)
-        .await
-        .map_err(|error| {
-            error!(%error, "failed to mark challenge as ready");
-            Error::from(ErrorKind::Internal)
-        })?;
-
-    // Exponential backoff until order changes status
-    let mut tries = 1u8;
-    let mut delay = Duration::from_millis(250);
-    let state = loop {
-        sleep(delay).await;
-        let state = order.state().await.map_err(|error| {
-            error!(%error, "got error while fetching state");
-            Error::from(ErrorKind::Internal)
-        })?;
-
-        trace!(?state, "order state refreshed");
-        match state.status {
-            OrderStatus::Ready => break state,
-            OrderStatus::Invalid => {
-                service
-                    .remove_http01_challenge_authorization(&challenge.token)
-                    .await;
-                return Err(Error::from(ErrorKind::Internal));
-            }
-            OrderStatus::Pending => {
-                delay *= 2;
-                tries += 1;
-                if tries < 5 {
-                    trace!(?state, tries, attempt_in=?delay, "order not yet ready");
-                } else {
-                    error!(?state, tries, "order not ready in 5 tries");
-                    service
-                        .remove_http01_challenge_authorization(&challenge.token)
-                        .await;
-                    return Err(Error::from(ErrorKind::Internal));
-                }
-            }
-            _ => unreachable!(),
-        }
-    };
-
-    trace!(challenge.token, ?state, "challenge completed");
-
-    service
-        .remove_http01_challenge_authorization(&challenge.token)
-        .await;
-
-    Ok(())
-}
-
-pub fn make_api(service: Arc<GatewayService>, sender: Sender<BoxedTask>) -> Router<Body> {
+    acme_client: AcmeClient,
+    sender: Sender<BoxedTask>,
+) -> Router<Body> {
     debug!("making api route");
 
     Router::<Body>::new()
@@ -392,6 +236,7 @@ pub fn make_api(service: Arc<GatewayService>, sender: Sender<BoxedTask>) -> Rout
         .route("/admin/acme/:email", post(create_acme_account))
         .route("/admin/acme/request/:fqdn", post(request_acme_certificate))
         .layer(Extension(service))
+        .layer(Extension(acme_client))
         .layer(Extension(sender))
         .layer(
             TraceLayer::new_for_http()

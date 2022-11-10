@@ -13,30 +13,23 @@ trait ToJson {
 #[async_trait]
 impl ToJson for Response {
     async fn to_json<T: DeserializeOwned>(self) -> Result<T> {
-        let status_code = self.status();
         let full = self.bytes().await?;
 
         trace!(
             response = std::str::from_utf8(&full).unwrap_or_default(),
             "parsing response to json"
         );
+        // try to deserialize into calling function response model
+        match serde_json::from_slice(&full) {
+            Ok(res) => Ok(res),
+            Err(_) => {
+                trace!("parsing response to common error");
+                // if that doesn't work, try to deserialize into common error type
+                let res: error::ApiError =
+                    serde_json::from_slice(&full).context("failed to parse response to JSON")?;
 
-        if matches!(
-            status_code,
-            StatusCode::OK | StatusCode::SWITCHING_PROTOCOLS
-        ) {
-            serde_json::from_slice(&full).context("failed to parse a successfull response")
-        } else {
-            trace!("parsing response to common error");
-            let res: error::ApiError = match serde_json::from_slice(&full) {
-                Ok(res) => res,
-                _ => {
-                    trace!("getting error from status code");
-                    panic!("fire");
-                }
-            };
-
-            Err(res.into())
+                Err(res.into())
+            }
         }
     }
 }

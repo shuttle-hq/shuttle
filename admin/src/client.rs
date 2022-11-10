@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
-use reqwest::{Response, StatusCode};
+use reqwest::Response;
 use serde::{de::DeserializeOwned, Serialize};
 use shuttle_common::{models::error, project::ProjectName};
 use tracing::trace;

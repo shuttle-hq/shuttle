@@ -136,7 +136,7 @@ impl<'r> Service<&'r AddrStream> for MakeProxyService {
     }
 }
 
-pub fn make_proxy<'r>(
+pub fn make_proxy(
     gateway: Arc<GatewayService>,
     acme_client: AcmeClient,
     fqdn: String,

@@ -29,7 +29,7 @@ pub struct CustomDomain {
 
 /// An ACME client implementation that completes Http01 challenges
 /// It is safe to clone this type as it functions as a singleton
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct AcmeClient(Arc<Mutex<HashMap<String, KeyAuthorization>>>);
 
 impl AcmeClient {
@@ -61,7 +61,7 @@ impl AcmeClient {
         email: &str,
         acme_server: Option<String>,
     ) -> Result<serde_json::Value, AcmeClientError> {
-        let acme_server = acme_server.unwrap_or(LetsEncrypt::Production.url().to_string());
+        let acme_server = acme_server.unwrap_or_else(|| LetsEncrypt::Production.url().to_string());
 
         trace!(email, acme_server, "creating acme account");
 

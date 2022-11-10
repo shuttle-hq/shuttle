@@ -7,6 +7,7 @@ use axum::http::Request;
 use axum::response::Response;
 use axum::routing::{any, get, post};
 use axum::{Json as AxumJson, Router};
+use fqdn::FQDN;
 use http::StatusCode;
 use instant_acme::AccountCredentials;
 use serde::{Deserialize, Serialize};
@@ -20,7 +21,7 @@ use crate::auth::{Admin, ScopedUser, User};
 use crate::custom_domain::AcmeClient;
 use crate::task::{self, BoxedTask};
 use crate::worker::WORKER_QUEUE_SIZE;
-use crate::{AccountName, Error, Fqdn, GatewayService, ProjectName};
+use crate::{AccountName, Error, GatewayService, ProjectName};
 
 pub const SVC_DEGRADED_THRESHOLD: usize = 128;
 
@@ -202,14 +203,17 @@ async fn request_acme_certificate(
     _: Admin,
     Extension(service): Extension<Arc<GatewayService>>,
     Extension(acme_client): Extension<AcmeClient>,
-    Path((project_name, fqdn)): Path<(ProjectName, Fqdn)>,
+    Path((project_name, fqdn)): Path<(ProjectName, String)>,
     AxumJson(credentials): AxumJson<AccountCredentials<'_>>,
 ) -> Result<String, Error> {
+    let fqdn: FQDN = fqdn
+        .parse()
+        .map_err(|_err| Error::from(ErrorKind::InvalidCustomDomain))?;
     let (chain, async_keys) = acme_client.create_certificate(&fqdn, credentials).await?;
     let private_key = async_keys.serialize_private_key_pem();
 
     service
-        .create_custom_domain(project_name, fqdn, &chain, &private_key)
+        .create_custom_domain(project_name, &fqdn, &chain, &private_key)
         .await?;
 
     Ok("Certificate created".to_string())

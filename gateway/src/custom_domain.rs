@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use axum::body::boxed;
 use axum::response::Response;
+use fqdn::Fqdn;
 use futures::future::BoxFuture;
 use hyper::{Body, Request};
 use instant_acme::{
@@ -17,7 +18,7 @@ use tokio::time::sleep;
 use tower::{Layer, Service};
 use tracing::{error, trace};
 
-use crate::{Error, Fqdn};
+use crate::Error;
 
 /// An ACME client implementation that completes Http01 challenges
 /// It is safe to clone this type as it functions as a singleton

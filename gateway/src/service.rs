@@ -7,6 +7,7 @@ use axum::http::Request;
 use axum::response::Response;
 use bollard::network::ListNetworksOptions;
 use bollard::{Docker, API_DEFAULT_VERSION};
+use fqdn::Fqdn;
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
 use hyper::Client;
@@ -26,7 +27,7 @@ use crate::args::ContextArgs;
 use crate::auth::{Key, Permissions, User};
 use crate::project::Project;
 use crate::task::TaskBuilder;
-use crate::{AccountName, DockerContext, Error, ErrorKind, Fqdn, ProjectName};
+use crate::{AccountName, DockerContext, Error, ErrorKind, ProjectName};
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
@@ -199,16 +200,6 @@ impl GatewayService {
         let provider = GatewayContextProvider::new(docker, container_settings);
 
         Self { provider, db }
-    }
-
-    pub async fn route_fqdn(&self, req: Request<Body>) -> Result<Response<Body>, Error> {
-        let fqdn = req
-            .headers()
-            .typed_get::<Fqdn>()
-            .ok_or_else(|| Error::from(ErrorKind::CustomDomainNotFound))?;
-        let project_name = self.project_name_for_custom_domain(&fqdn).await?;
-
-        self.route(&project_name, req).await
     }
 
     pub async fn route(
@@ -461,12 +452,12 @@ impl GatewayService {
     pub async fn create_custom_domain(
         &self,
         project_name: ProjectName,
-        fqdn: Fqdn,
+        fqdn: &Fqdn,
         certificate: &str,
         private_key: &str,
     ) -> Result<(), Error> {
         query("INSERT INTO custom_domains (fqdn, project_name, certificate, private_key) VALUES (?1, ?2, ?3, ?4)")
-            .bind(&fqdn)
+            .bind(fqdn.to_string())
             .bind(&project_name)
             .bind(certificate)
             .bind(private_key)
@@ -487,7 +478,7 @@ impl GatewayService {
 
     pub async fn project_name_for_custom_domain(&self, fqdn: &Fqdn) -> Result<ProjectName, Error> {
         let project_name = query("SELECT project_name FROM custom_domains WHERE fqdn = ?1")
-            .bind(fqdn)
+            .bind(fqdn.to_string())
             .fetch_optional(&self.db)
             .await?
             .map(|row| row.try_get("project_name").unwrap())

@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::{Read, Write};
 use std::os::unix::prelude::RawFd;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use cap_std::os::unix::net::UnixStream;
@@ -109,7 +109,7 @@ impl RouterBuilder {
             linker: self.linker,
         };
         Router {
-            inner: Arc::new(tokio::sync::Mutex::new(inner)),
+            inner: Arc::new(Mutex::new(inner)),
         }
     }
 }
@@ -159,7 +159,7 @@ impl RouterInner {
 
 #[derive(Clone)]
 struct Router {
-    inner: Arc<tokio::sync::Mutex<RouterInner>>,
+    inner: Arc<Mutex<RouterInner>>,
 }
 
 impl Router {
@@ -179,7 +179,7 @@ pub mod tests {
     #[tokio::test]
     async fn axum() {
         let axum = Router::new("axum.wasm");
-        let mut inner = axum.inner.lock().await;
+        let mut inner = axum.inner.lock().unwrap();
 
         assert_eq!(inner.get("hello").await, Some("Hello, World!".to_string()));
         assert_eq!(

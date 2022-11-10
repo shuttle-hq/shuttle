@@ -301,6 +301,7 @@ pub mod tests {
     use crate::api::make_api;
     use crate::args::{ContextArgs, StartArgs};
     use crate::auth::User;
+    use crate::custom_domain::AcmeClient;
     use crate::proxy::make_proxy;
     use crate::service::{ContainerSettings, GatewayService, MIGRATIONS};
     use crate::worker::Worker;
@@ -497,6 +498,7 @@ pub mod tests {
         args: StartArgs,
         hyper: HyperClient<HttpConnector, Body>,
         pool: SqlitePool,
+        acme_client: AcmeClient,
     }
 
     #[derive(Clone)]
@@ -558,12 +560,15 @@ pub mod tests {
             let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
             MIGRATIONS.run(&pool).await.unwrap();
 
+            let acme_client = AcmeClient::new();
+
             Self {
                 docker,
                 settings,
                 args,
                 hyper,
                 pool,
+                acme_client,
             }
         }
 
@@ -585,6 +590,10 @@ pub mod tests {
                 .to_string()
                 .trim_end_matches('.')
                 .to_string()
+        }
+
+        pub fn acme_client(&self) -> AcmeClient {
+            self.acme_client.clone()
         }
     }
 
@@ -635,12 +644,12 @@ pub mod tests {
             }
         };
 
-        let api = make_api(Arc::clone(&service), log_out);
+        let api = make_api(Arc::clone(&service), world.acme_client(), log_out);
         let api_addr = format!("127.0.0.1:{}", base_port).parse().unwrap();
         let serve_api = hyper::Server::bind(&api_addr).serve(api.into_make_service());
         let api_client = world.client(api_addr);
 
-        let proxy = make_proxy(Arc::clone(&service), world.fqdn());
+        let proxy = make_proxy(Arc::clone(&service), world.acme_client(), world.fqdn());
         let proxy_addr = format!("127.0.0.1:{}", base_port + 1).parse().unwrap();
         let serve_proxy = hyper::Server::bind(&proxy_addr).serve(proxy);
         let proxy_client = world.client(proxy_addr);

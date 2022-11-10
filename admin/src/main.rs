@@ -41,12 +41,10 @@ async fn main() {
             let credentials =
                 serde_json::from_str(&credentials).expect("to parse content of credentials file");
 
-            let res = client
+            client
                 .acme_request_certificate(&fqdn, &project, &credentials)
                 .await
-                .expect("to get a certificate challenge response");
-
-            res
+                .expect("to get a certificate challenge response")
         }
     };
 

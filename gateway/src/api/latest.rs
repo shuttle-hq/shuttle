@@ -286,7 +286,7 @@ pub mod tests {
             }
         });
 
-        let mut router = make_api(Arc::clone(&service), sender);
+        let mut router = make_api(Arc::clone(&service), world.acme_client(), sender);
 
         let neo = service.create_user("neo".parse().unwrap()).await?;
 
@@ -430,7 +430,7 @@ pub mod tests {
             }
         });
 
-        let mut router = make_api(Arc::clone(&service), sender);
+        let mut router = make_api(Arc::clone(&service), world.acme_client(), sender);
 
         let get_neo = || {
             Request::builder()
@@ -526,7 +526,7 @@ pub mod tests {
             }
         });
 
-        let mut router = make_api(Arc::clone(&service), sender.clone());
+        let mut router = make_api(Arc::clone(&service), world.acme_client(), sender.clone());
 
         let get_status = || {
             Request::builder()

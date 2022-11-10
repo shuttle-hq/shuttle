@@ -18,7 +18,14 @@ use tokio::time::sleep;
 use tower::{Layer, Service};
 use tracing::{error, trace};
 
-use crate::Error;
+use crate::{Error, ProjectName};
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct CustomDomain {
+    pub project_name: ProjectName,
+    pub certificate: Vec<u8>,
+    pub private_key: Vec<u8>,
+}
 
 /// An ACME client implementation that completes Http01 challenges
 /// It is safe to clone this type as it functions as a singleton

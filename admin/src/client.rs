@@ -55,9 +55,13 @@ impl Client {
         self.post("/admin/revive", Option::<String>::None).await
     }
 
-    pub async fn acme_account_create(&self, email: &str) -> Result<serde_json::Value> {
+    pub async fn acme_account_create(
+        &self,
+        email: &str,
+        acme_server: Option<String>,
+    ) -> Result<serde_json::Value> {
         let path = format!("/admin/acme/{email}");
-        self.post(&path, Option::<String>::None).await
+        self.post(&path, Some(acme_server)).await
     }
 
     pub async fn acme_request_certificate(

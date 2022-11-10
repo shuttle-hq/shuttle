@@ -29,6 +29,10 @@ pub enum AcmeCommand {
         /// Email for managing all certificates
         #[arg(long)]
         email: String,
+
+        /// Acme server to create account on. Gateway will default to LetsEncrypt
+        #[arg(long)]
+        acme_server: Option<String>,
     },
 
     /// Request a certificate for a FQDN

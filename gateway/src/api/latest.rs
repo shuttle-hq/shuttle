@@ -193,8 +193,9 @@ async fn create_acme_account(
     _: Admin,
     Extension(acme_client): Extension<AcmeClient>,
     Path(email): Path<String>,
+    AxumJson(acme_server): AxumJson<Option<String>>,
 ) -> Result<AxumJson<serde_json::Value>, Error> {
-    let res = acme_client.create_account(&email).await?;
+    let res = acme_client.create_account(&email, acme_server).await?;
 
     Ok(AxumJson(res))
 }

@@ -20,9 +20,9 @@ async fn main() {
 
     let res = match args.command {
         Command::Revive => client.revive().await.expect("revive to succeed"),
-        Command::Acme(AcmeCommand::CreateAccount { email }) => {
+        Command::Acme(AcmeCommand::CreateAccount { email, acme_server }) => {
             let account = client
-                .acme_account_create(&email)
+                .acme_account_create(&email, acme_server)
                 .await
                 .expect("to create ACME account");
 

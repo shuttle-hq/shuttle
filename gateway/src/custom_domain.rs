@@ -33,8 +33,6 @@ pub struct CustomDomain {
 pub struct AcmeClient(Arc<Mutex<HashMap<String, KeyAuthorization>>>);
 
 impl AcmeClient {
-    const SERVER_URL: &'static str = LetsEncrypt::Production.url();
-
     pub fn new() -> Self {
         Self(Arc::new(Mutex::new(HashMap::default())))
     }
@@ -58,8 +56,14 @@ impl AcmeClient {
     }
 
     /// Create a new ACME account that can be restored using by deserializing the returned JSON into a [instant_acme::AccountCredentials]
-    pub async fn create_account(&self, email: &str) -> Result<serde_json::Value, AcmeClientError> {
-        trace!(email, "creating acme account");
+    pub async fn create_account(
+        &self,
+        email: &str,
+        acme_server: Option<String>,
+    ) -> Result<serde_json::Value, AcmeClientError> {
+        let acme_server = acme_server.unwrap_or(LetsEncrypt::Production.url().to_string());
+
+        trace!(email, acme_server, "creating acme account");
 
         let account: NewAccount = NewAccount {
             contact: &[&format!("mailto:{email}")],
@@ -67,7 +71,7 @@ impl AcmeClient {
             only_return_existing: false,
         };
 
-        let account = Account::create(&account, Self::SERVER_URL)
+        let account = Account::create(&account, &acme_server)
             .await
             .map_err(|error| {
                 error!(%error, "got error while creating acme account");

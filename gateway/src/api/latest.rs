@@ -202,16 +202,17 @@ async fn request_acme_certificate(
     _: Admin,
     Extension(service): Extension<Arc<GatewayService>>,
     Extension(acme_client): Extension<AcmeClient>,
-    Path(fqdn): Path<Fqdn>,
+    Path((project_name, fqdn)): Path<(ProjectName, Fqdn)>,
     AxumJson(credentials): AxumJson<AccountCredentials<'_>>,
-) -> Result<AxumJson<serde_json::Value>, Error> {
-    let _ = acme_client.create_certificate(fqdn, credentials).await?;
-    // TODO: save certificate to database
+) -> Result<String, Error> {
+    let (chain, async_keys) = acme_client.create_certificate(&fqdn, credentials).await?;
+    let private_key = async_keys.serialize_private_key_pem();
 
-    Ok(AxumJson(serde_json::json!({
-        // "certificate": certificate_chain,
-        // "private_key": certificate.serialize_private_key_pem(),
-    })))
+    service
+        .create_custom_domain(project_name, fqdn, &chain, &private_key)
+        .await?;
+
+    Ok("Certificate created".to_string())
 }
 
 pub fn make_api(
@@ -234,7 +235,7 @@ pub fn make_api(
         .route("/projects/:project/*any", any(route_project))
         .route("/admin/revive", post(revive_projects))
         .route("/admin/acme/:email", post(create_acme_account))
-        .route("/admin/acme/request/:fqdn", post(request_acme_certificate))
+        .route("/admin/acme/request/:project_name/:fqdn", post(request_acme_certificate))
         .layer(Extension(service))
         .layer(Extension(acme_client))
         .layer(Extension(sender))

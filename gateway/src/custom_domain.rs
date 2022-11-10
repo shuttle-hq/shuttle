@@ -12,24 +12,12 @@ use instant_acme::{
     KeyAuthorization, LetsEncrypt, NewAccount, NewOrder, Order, OrderStatus,
 };
 use rcgen::{Certificate, CertificateParams, DistinguishedName};
-use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use tower::{Layer, Service};
 use tracing::{error, trace};
 
 use crate::{Error, Fqdn};
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum CustomDomain {
-    // TODO: update custom domain states, these are just placeholders for now
-    Creating,
-    Verifying,
-    IssuingCertificate,
-    Ready,
-    Errored,
-}
 
 /// An ACME client implementation that completes Http01 challenges
 /// It is safe to clone this type as it functions as a singleton
@@ -86,11 +74,12 @@ impl AcmeClient {
         Ok(credentials)
     }
 
+    /// Create a certificate and return it with the keys used to sign it
     pub async fn create_certificate(
         &self,
-        fqdn: Fqdn,
+        fqdn: &Fqdn,
         credentials: AccountCredentials<'_>,
-    ) -> Result<(), AcmeClientError> {
+    ) -> Result<(String, Certificate), AcmeClientError> {
         let fqdn = fqdn.to_string();
         trace!(fqdn, "requesting acme certificate");
 
@@ -152,7 +141,7 @@ impl AcmeClient {
                 AcmeClientError::OrderFinalizing
             })?;
 
-        Ok(())
+        Ok((certificate_chain, certificate))
     }
 
     async fn complete_challenge(

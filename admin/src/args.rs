@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
+use shuttle_common::project::ProjectName;
 
 #[derive(Parser, Debug)]
 pub struct Args {
@@ -35,6 +36,10 @@ pub enum AcmeCommand {
         /// Fqdn to request certificate for
         #[arg(long)]
         fqdn: String,
+
+        /// Project to request certificate for
+        #[arg(long)]
+        project: ProjectName,
 
         /// Path to acme credentials file
         /// This should have been created with `acme create-account`

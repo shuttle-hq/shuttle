@@ -5375,11 +5375,13 @@ name = "shuttle-admin"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "clap 4.0.4",
  "dirs",
  "reqwest",
  "serde",
  "serde_json",
+ "shuttle-common",
  "tokio",
  "toml",
  "tracing",

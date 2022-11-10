@@ -24,7 +24,6 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::args::ContextArgs;
 use crate::auth::{Key, Permissions, User};
-use crate::custom_domain::CustomDomain;
 use crate::project::Project;
 use crate::task::TaskBuilder;
 use crate::{AccountName, DockerContext, Error, ErrorKind, Fqdn, ProjectName};
@@ -463,13 +462,14 @@ impl GatewayService {
         &self,
         project_name: ProjectName,
         fqdn: Fqdn,
-    ) -> Result<CustomDomain, Error> {
-        let state = SqlxJson(CustomDomain::Creating);
-
-        query("INSERT INTO custom_domains (fqdn, project_name, state) VALUES (?1, ?2, ?3)")
+        certificate: &str,
+        private_key: &str,
+    ) -> Result<(), Error> {
+        query("INSERT INTO custom_domains (fqdn, project_name, certificate, private_key) VALUES (?1, ?2, ?3, ?4)")
             .bind(&fqdn)
             .bind(&project_name)
-            .bind(&state)
+            .bind(certificate)
+            .bind(private_key)
             .execute(&self.db)
             .await
             .map_err(|err| {
@@ -482,7 +482,7 @@ impl GatewayService {
                 err.into()
             })?;
 
-        Ok(state.0)
+        Ok(())
     }
 
     pub async fn project_name_for_custom_domain(&self, fqdn: &Fqdn) -> Result<ProjectName, Error> {

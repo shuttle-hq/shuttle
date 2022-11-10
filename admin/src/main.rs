@@ -32,17 +32,21 @@ async fn main() {
 
             res
         }
-        Command::Acme(AcmeCommand::RequestCertificate { fqdn, credentials }) => {
+        Command::Acme(AcmeCommand::RequestCertificate {
+            fqdn,
+            project,
+            credentials,
+        }) => {
             let credentials = fs::read_to_string(credentials).expect("to read credentials file");
             let credentials =
                 serde_json::from_str(&credentials).expect("to parse content of credentials file");
 
             let res = client
-                .acme_request_certificate(&fqdn, &credentials)
+                .acme_request_certificate(&fqdn, &project, &credentials)
                 .await
-                .expect("to get a certificate challenge instructions");
+                .expect("to get a certificate challenge response");
 
-            String::new()
+            res
         }
     };
 

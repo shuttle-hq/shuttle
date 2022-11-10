@@ -9,7 +9,8 @@ use axum::routing::{any, get, post};
 use axum::{Json as AxumJson, Router};
 use http::StatusCode;
 use instant_acme::{
-    Account, AccountCredentials, ChallengeType, Identifier, NewAccount, NewOrder, OrderStatus,
+    Account, AccountCredentials, Authorization, AuthorizationStatus, ChallengeType, Identifier,
+    NewAccount, NewOrder, Order, OrderStatus,
 };
 use rcgen::{Certificate, CertificateParams, DistinguishedName};
 use serde::{Deserialize, Serialize};
@@ -224,7 +225,8 @@ async fn request_acme_certificate(
     Path(fqdn): Path<Fqdn>,
     AxumJson(credentials): AxumJson<AccountCredentials<'_>>,
 ) -> Result<AxumJson<serde_json::Value>, Error> {
-    trace!(%fqdn, "requesting acme certificate");
+    let fqdn = fqdn.to_string();
+    trace!(fqdn, "requesting acme certificate");
 
     let account = Account::from_credentials(credentials).map_err(|error| {
         error!(
@@ -256,6 +258,51 @@ async fn request_acme_certificate(
     debug_assert!(authorizations.len() == 1);
     let authorization = &authorizations[0];
 
+    trace!(?authorization, "got authorization");
+
+    complete_challenge(authorization, &mut order, service).await?;
+
+    let Identifier::Dns(identifier) = &authorization.identifier;
+
+    let certificate = {
+        let mut params = CertificateParams::new(vec![identifier.to_string()]);
+        params.distinguished_name = DistinguishedName::new();
+        Certificate::from_params(params).map_err(|error| {
+            error!(%error, "failed to create certificate");
+            Error::from(ErrorKind::Internal)
+        })?
+    };
+    let signing_request = certificate.serialize_request_der().map_err(|error| {
+        error!(%error, "failed to create certificate signing request");
+        Error::from(ErrorKind::Internal)
+    })?;
+
+    let certificate_chain = order
+        .finalize(&signing_request, &state.finalize)
+        .await
+        .map_err(|error| {
+            error!(%error, "failed to finalize certificate request");
+            Error::from(ErrorKind::Internal)
+        })?;
+
+    // TODO: save certificate to database
+
+    Ok(AxumJson(serde_json::json!({
+        "certificate": certificate_chain,
+        "private_key": certificate.serialize_private_key_pem(),
+        "account_credentials": account.credentials(),
+    })))
+}
+
+async fn complete_challenge(
+    authorization: &Authorization,
+    order: &mut Order,
+    service: Arc<GatewayService>,
+) -> Result<(), Error> {
+    if let AuthorizationStatus::Valid = authorization.status {
+        return Ok(());
+    }
+
     let challenge = authorization
         .challenges
         .iter()
@@ -264,6 +311,8 @@ async fn request_acme_certificate(
             error!("http-01 challenge not found");
             Error::from(ErrorKind::Internal)
         })?;
+
+    trace!(?challenge, "will complete challenge");
 
     service
         .add_http01_challenge_authorization(
@@ -316,38 +365,13 @@ async fn request_acme_certificate(
         }
     };
 
+    trace!(challenge.token, ?state, "challenge completed");
+
     service
         .remove_http01_challenge_authorization(&challenge.token)
         .await;
 
-    let certificate = {
-        let mut params = CertificateParams::new(vec![fqdn.to_string()]);
-        params.distinguished_name = DistinguishedName::new();
-        Certificate::from_params(params).map_err(|error| {
-            error!(%error, "failed to create certificate");
-            Error::from(ErrorKind::Internal)
-        })?
-    };
-    let signing_request = certificate.serialize_request_der().map_err(|error| {
-        error!(%error, "failed to create certificate signing request");
-        Error::from(ErrorKind::Internal)
-    })?;
-
-    let certificate_chain = order
-        .finalize(&signing_request, &state.finalize)
-        .await
-        .map_err(|error| {
-            error!(%error, "failed to finalize certificate request");
-            Error::from(ErrorKind::Internal)
-        })?;
-
-    // TODO: save certificate to database
-
-    Ok(AxumJson(serde_json::json!({
-        "certificate": certificate_chain,
-        "private_key": certificate.serialize_private_key_pem(),
-        "account_credentials": account.credentials(),
-    })))
+    Ok(())
 }
 
 pub fn make_api(service: Arc<GatewayService>, sender: Sender<BoxedTask>) -> Router<Body> {

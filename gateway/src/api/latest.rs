@@ -124,6 +124,18 @@ async fn delete_project(
 ) -> Result<AxumJson<project::Response>, Error> {
     let project_name = project.clone();
 
+    let state = service.find_project(&project_name).await?;
+
+    let mut response = project::Response {
+        name: project_name.to_string(),
+        state: state.into(),
+    };
+
+    if response.state == shuttle_common::models::project::State::Destroyed {
+        return Ok(AxumJson(response));
+    }
+
+    // if project exists and isn't `Destroyed`, send destroy task
     service
         .new_task()
         .project(project)
@@ -132,10 +144,8 @@ async fn delete_project(
         .send(&sender)
         .await?;
 
-    let response = project::Response {
-        name: project_name.to_string(),
-        state: shuttle_common::models::project::State::Destroying,
-    };
+    response.state = shuttle_common::models::project::State::Destroying;
+
     Ok(AxumJson(response))
 }
 

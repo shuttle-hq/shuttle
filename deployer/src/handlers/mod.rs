@@ -13,6 +13,7 @@ use fqdn::FQDN;
 use futures::StreamExt;
 use opentelemetry::global;
 use opentelemetry_http::HeaderExtractor;
+use shuttle_common::backends::metrics::Metrics;
 use shuttle_common::models::secret;
 use shuttle_common::project::ProjectName;
 use shuttle_common::LogItem;
@@ -30,7 +31,6 @@ use std::time::Duration;
 
 pub use {self::error::Error, self::error::Result};
 
-mod metrics;
 mod project;
 
 pub fn make_router(
@@ -72,7 +72,7 @@ pub fn make_router(
         .layer(RequireAuthorizationLayer::bearer(&admin_secret))
         // This route should be below the auth bearer since it does not need authentication
         .route("/projects/:project_name/status", get(get_status))
-        .route_layer(from_extractor::<metrics::Metrics>())
+        .route_layer(from_extractor::<Metrics>())
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(|request: &Request<Body>| {

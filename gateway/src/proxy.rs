@@ -86,7 +86,7 @@ impl Service<Request<Body>> for ProxyService {
                 let (parts, body) = proxy.into_parts();
                 let body = <Body as HttpBody>::map_err(body, axum::Error::new).boxed_unsync();
 
-                span.record("http.status_code", &parts.status.as_u16());
+                span.record("http.status_code", parts.status.as_u16());
 
                 Ok(Response::from_parts(parts, body))
             }

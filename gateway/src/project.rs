@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::convert::Infallible;
 use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
@@ -7,6 +8,7 @@ use bollard::container::{
 };
 use bollard::errors::Error as DockerError;
 use bollard::models::{ContainerConfig, ContainerInspectResponse, ContainerStateStatusEnum};
+use bollard::system::EventsOptions;
 use futures::prelude::*;
 use http::uri::InvalidUri;
 use http::Uri;
@@ -59,7 +61,7 @@ macro_rules! impl_from_variant {
 }
 
 const RUNTIME_API_PORT: u16 = 8001;
-const MAX_RESTARTS: i64 = 3;
+const MAX_RESTARTS: usize = 3;
 
 // Client used for health checks
 static CLIENT: Lazy<Client<HttpConnector>> = Lazy::new(Client::new);
@@ -690,14 +692,41 @@ where
     type Next = ProjectStarting;
     type Error = ProjectError;
 
-    async fn next(self, _ctx: &Ctx) -> Result<Self::Next, Self::Error> {
+    async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
+        let container = self.container;
+
+        let since = (chrono::Utc::now() - chrono::Duration::minutes(15))
+            .timestamp()
+            .to_string();
+        let until = chrono::Utc::now().timestamp().to_string();
+
+        // Filter and collect `start` events for this project in the last 15 minutes
+        let start_events = ctx
+            .docker()
+            .events(Some(EventsOptions::<&str> {
+                since: Some(since),
+                until: Some(until),
+                filters: HashMap::from([
+                    ("container", vec![safe_unwrap!(container.id).as_str()]),
+                    ("event", vec!["start"]),
+                ]),
+            }))
+            .try_collect::<Vec<_>>()
+            .await?;
+
+        let start_event_count = start_events.len();
+        debug!(
+            "project started {} times in the last 15 minutes",
+            start_event_count
+        );
+
         // If stopped, and has not restarted too much, try to restart
-        if self.container.restart_count.unwrap_or_default() < MAX_RESTARTS {
-            Ok(ProjectStarting {
-                container: self.container,
-            })
+        if start_event_count < MAX_RESTARTS {
+            Ok(ProjectStarting { container })
         } else {
-            Err(ProjectError::internal("too many restarts"))
+            Err(ProjectError::internal(
+                "too many restarts in the last 15 minutes",
+            ))
         }
     }
 }

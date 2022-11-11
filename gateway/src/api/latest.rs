@@ -366,6 +366,15 @@ pub mod tests {
             .await
             .unwrap();
 
+        // delete returns 404 for project that doesn't exist
+        router
+            .call(delete_project("resurrections").with_header(&authorization))
+            .map_ok(|resp| {
+                assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+            })
+            .await
+            .unwrap();
+
         Ok(())
     }
 

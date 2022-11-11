@@ -4,7 +4,7 @@ use comfy_table::Color;
 use crossterm::style::Stylize;
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
-use tracing::{error, log::warn};
+use tracing::{error, warn};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ApiError {

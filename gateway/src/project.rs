@@ -391,11 +391,14 @@ impl ProjectCreating {
             "Image": image,
             "Hostname": format!("{prefix}{project_name}"),
             "Labels": {
-                "shuttle_prefix": prefix
+                "shuttle_prefix": prefix,
+                "project.name": project_name,
             },
             "Cmd": [
                 "--admin-secret",
                 initial_key,
+                "--project",
+                project_name,
                 "--api-address",
                 format!("0.0.0.0:{RUNTIME_API_PORT}"),
                 "--provisioner-address",
@@ -413,10 +416,7 @@ impl ProjectCreating {
             ],
             "Env": [
                 "RUST_LOG=debug",
-            ],
-            "Labels": {
-                "project.name": project_name,
-            }
+            ]
         });
 
         let mut config = Config::<String>::from(container_config);
@@ -619,9 +619,13 @@ pub struct Service {
 
 impl Service {
     pub fn from_container(container: ContainerInspectResponse) -> Result<Self, ProjectError> {
+        // This version can't be enabled while there are active deployers before v0.8.0 since the don't have this label
+        // TODO: switch to this version when you notice all deployers are greater than v0.8.0
+        // let name = safe_unwrap!(container.config.labels.get("project.name")).to_string();
         let container_name = safe_unwrap!(container.name.strip_prefix("/")).to_string();
-
-        let resource_name = safe_unwrap!(container_name.strip_suffix("_run")).to_string();
+        let prefix = safe_unwrap!(container.config.labels.get("shuttle_prefix")).to_string();
+        let resource_name =
+            safe_unwrap!(container_name.strip_prefix(&prefix).strip_suffix("_run")).to_string();
 
         let network = safe_unwrap!(container.network_settings.networks)
             .values()

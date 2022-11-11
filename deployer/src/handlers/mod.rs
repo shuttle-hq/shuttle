@@ -4,6 +4,7 @@ use axum::body::{Body, BoxBody};
 use axum::extract::ws::{self, WebSocket};
 use axum::extract::{Extension, Path, Query};
 use axum::http::{Request, Response};
+use axum::middleware::from_extractor;
 use axum::routing::{get, Router};
 use axum::{extract::BodyStream, Json};
 use bytes::BufMut;
@@ -13,6 +14,7 @@ use futures::StreamExt;
 use opentelemetry::global;
 use opentelemetry_http::HeaderExtractor;
 use shuttle_common::models::secret;
+use shuttle_common::project::ProjectName;
 use shuttle_common::LogItem;
 use tower_http::auth::RequireAuthorizationLayer;
 use tower_http::trace::TraceLayer;
@@ -28,11 +30,14 @@ use std::time::Duration;
 
 pub use {self::error::Error, self::error::Result};
 
+mod project;
+
 pub fn make_router(
     persistence: Persistence,
     deployment_manager: DeploymentManager,
     proxy_fqdn: FQDN,
     admin_secret: String,
+    project_name: ProjectName,
 ) -> Router<Body> {
     Router::new()
         .route("/projects/:project_name/services", get(list_services))
@@ -78,6 +83,8 @@ pub fn make_router(
                     },
                 ),
         )
+        .route_layer(from_extractor::<project::ProjectNameGuard>())
+        .layer(Extension(project_name))
 }
 
 async fn list_services(

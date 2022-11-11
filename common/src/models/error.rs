@@ -100,7 +100,7 @@ impl From<StatusCode> for ApiError {
             }
             StatusCode::FORBIDDEN => "this request is not allowed",
             StatusCode::UNAUTHORIZED => {
-                "we we're able to authorize your request. Is your key still valid?"
+                "we were unable to authorize your request. Is your key still valid?"
             },
             StatusCode::INTERNAL_SERVER_ERROR => "our server was unable to handle your request. A ticket should be created for us to fix this.",
             StatusCode::SERVICE_UNAVAILABLE => "we're experiencing a high workload right now, please try again in a little bit",

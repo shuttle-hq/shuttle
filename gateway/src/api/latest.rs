@@ -160,10 +160,10 @@ async fn delete_project(
 
 async fn route_project(
     Extension(service): Extension<Arc<GatewayService>>,
-    ScopedUser { scope, .. }: ScopedUser,
+    scoped_user: ScopedUser,
     req: Request<Body>,
 ) -> Result<Response<Body>, Error> {
-    service.route(&scope, req).await
+    service.route(&scoped_user, req).await
 }
 
 async fn get_status(Extension(sender): Extension<Sender<BoxedTask>>) -> Response<Body> {

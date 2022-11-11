@@ -82,11 +82,17 @@ pub fn make_router(
                         ""
                     };
 
+                    let account_name = request
+                        .headers()
+                        .get("X-Forwarded-Account-Name")
+                        .map(|value| value.to_str().unwrap_or_default());
+
                     let span = debug_span!(
                         "request",
                         http.uri = %request.uri(),
                         http.method = %request.method(),
                         http.status_code = field::Empty,
+                        account.name = account_name,
                         // A bunch of extra things for metrics
                         // Should be able to make this clearer once `Valuable` support lands in tracing
                         request.path = path,

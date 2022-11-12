@@ -25,7 +25,7 @@ make wasm
 Run the test:
 
 ```bash
-cargo test axum -- --nocapture
+cargo test --all-features axum -- --nocapture
 ```
 
 Load and run:

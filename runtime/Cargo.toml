@@ -12,6 +12,7 @@ cap-std = "0.26.0"
 clap ={ version = "4.0.18", features = ["derive"] }
 serenity = { version = "0.11.5", default-features = false, features = ["client", "gateway", "rustls_backend", "model"] }
 thiserror = "1.0.37"
+hyper = "1.0.0-rc.1"
 tokio = { version = "=1.20.1", features = ["full"] }
 tokio-stream = "0.1.11"
 tonic = "0.8.2"
@@ -35,3 +36,10 @@ version = "0.7.0"
 default-features = false
 features = ["loader"]
 path = "../service"
+
+[dependencies.shuttle-axum-utils]
+path = "../tmp/utils"
+optional = true
+
+[features]
+axum = ["shuttle-axum-utils"]

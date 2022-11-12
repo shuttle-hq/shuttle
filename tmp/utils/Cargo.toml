@@ -1,0 +1,12 @@
+[package]
+name = "shuttle-axum-utils"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+
+[dependencies]
+http = "0.2.7"
+serde = { version = "1.0.137", features = [ "derive" ] }
+http-serde = { version ="1.1.2" }
+rmp-serde = { version = "1.1.1" }

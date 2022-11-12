@@ -1,27 +1,14 @@
-use axum::body::Bytes;
-use axum::{body::HttpBody, response::Response, routing::get, Router};
+use axum::{response::Response, routing::get, Router};
 use futures_executor::block_on;
 use http::Request;
+use shuttle_axum_utils::{RequestWrapper, ResponseWrapper};
 use std::fs::File;
 use std::io::{Read, Write};
 use std::os::wasi::prelude::*;
 use tower_service::Service;
 
-pub fn handle_request(endpoint: String) -> Option<Bytes> {
-    let request: Request<String> = Request::builder()
-        .uri(format!("https://serverless.example/{}", endpoint.clone()))
-        .body("Some body".to_string())
-        .unwrap();
-
-    let response = block_on(app(request));
-
-    let response_body = block_on(response.into_body().data());
-
-    if let Some(body) = response_body {
-        Some(body.unwrap())
-    } else {
-        None
-    }
+pub fn handle_request(req: Request<String>) -> Response {
+    block_on(app(req))
 }
 
 async fn app(request: Request<String>) -> Response {
@@ -50,23 +37,34 @@ pub extern "C" fn __SHUTTLE_Axum_call(fd: RawFd) {
 
     let mut f = unsafe { File::from_raw_fd(fd) };
 
-    let mut buf = Vec::new();
-    let mut c_buf = [0; 1];
+    let mut req_buf = Vec::new();
+    let mut c_buf: [u8; 1] = [0; 1];
     loop {
         f.read(&mut c_buf).unwrap();
         if c_buf[0] == 0 {
             break;
         } else {
-            buf.push(c_buf[0]);
+            req_buf.push(c_buf[0]);
         }
     }
 
-    let endpoint = String::from_utf8(buf).unwrap();
+    let req = RequestWrapper::from_rmp(req_buf);
 
-    println!("inner router called; GET /{endpoint}");
-    let res = handle_request(endpoint);
+    // todo: clean up conversion of wrapper to request
+    let mut request: Request<String> = Request::builder()
+        .method(req.method)
+        .version(req.version)
+        .uri(req.uri)
+        .body("Some body".to_string())
+        .unwrap();
 
-    if let Some(bytes) = res {
-        f.write_all(&bytes).unwrap();
-    }
+    request.headers_mut().extend(req.headers.into_iter());
+
+    println!("inner router received request: {:?}", &request);
+    let res = handle_request(request);
+
+    println!("inner router sending response: {:?}", &res);
+    let response = ResponseWrapper::from(res);
+
+    f.write_all(&response.into_rmp()).unwrap();
 }

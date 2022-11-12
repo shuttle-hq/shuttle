@@ -520,7 +520,7 @@ dependencies = [
  "bytes 1.1.0",
  "hex 0.4.3",
  "http 0.2.8",
- "hyper",
+ "hyper 0.14.20",
  "ring",
  "time 0.3.11",
  "tokio",
@@ -553,7 +553,7 @@ dependencies = [
  "aws-types",
  "bytes 1.1.0",
  "http 0.2.8",
- "http-body",
+ "http-body 0.4.5",
  "lazy_static",
  "percent-encoding",
  "pin-project-lite 0.2.9",
@@ -683,8 +683,8 @@ dependencies = [
  "bytes 1.1.0",
  "fastrand",
  "http 0.2.8",
- "http-body",
- "hyper",
+ "http-body 0.4.5",
+ "hyper 0.14.20",
  "hyper-rustls 0.22.1",
  "lazy_static",
  "pin-project-lite 0.2.9",
@@ -704,8 +704,8 @@ dependencies = [
  "bytes-utils",
  "futures-core",
  "http 0.2.8",
- "http-body",
- "hyper",
+ "http-body 0.4.5",
+ "hyper 0.14.20",
  "once_cell",
  "percent-encoding",
  "pin-project-lite 0.2.9",
@@ -723,7 +723,7 @@ dependencies = [
  "aws-smithy-http",
  "bytes 1.1.0",
  "http 0.2.8",
- "http-body",
+ "http-body 0.4.5",
  "pin-project-lite 0.2.9",
  "tower",
  "tracing",
@@ -799,8 +799,8 @@ dependencies = [
  "futures-util",
  "headers",
  "http 0.2.8",
- "http-body",
- "hyper",
+ "http-body 0.4.5",
+ "hyper 0.14.20",
  "itoa 1.0.2",
  "matchit",
  "memchr",
@@ -830,7 +830,7 @@ dependencies = [
  "bytes 1.1.0",
  "futures-util",
  "http 0.2.8",
- "http-body",
+ "http-body 0.4.5",
  "mime",
 ]
 
@@ -948,7 +948,7 @@ dependencies = [
  "futures-util",
  "hex 0.4.3",
  "http 0.2.8",
- "hyper",
+ "hyper 0.14.20",
  "hyperlocal",
  "log",
  "pin-project-lite 0.2.9",
@@ -3002,6 +3002,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "http-body"
+version = "1.0.0-rc1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f038884e63a5a85612eeea789f5e0f54c3ada7306234502543b23d98744781f0"
+dependencies = [
+ "bytes 1.1.0",
+ "http 0.2.8",
+]
+
+[[package]]
 name = "http-client"
 version = "6.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3018,6 +3028,16 @@ name = "http-range-header"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0bfe8eed0a9285ef776bb792479ea3834e8b94e13d615c2f66d03dd50a435a29"
+
+[[package]]
+name = "http-serde"
+version = "1.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0e272971f774ba29341db2f686255ff8a979365a26fb9e4277f6b6d9ec0cdd5e"
+dependencies = [
+ "http 0.2.8",
+ "serde",
+]
 
 [[package]]
 name = "http-types"
@@ -3071,7 +3091,7 @@ dependencies = [
  "futures-util",
  "h2",
  "http 0.2.8",
- "http-body",
+ "http-body 0.4.5",
  "httparse",
  "httpdate",
  "itoa 1.0.2",
@@ -3084,11 +3104,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "hyper"
+version = "1.0.0-rc.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d85cfb5d312f278a651d0567873b9c32b28d8ced5603a9242c73c54c93fec814"
+dependencies = [
+ "bytes 1.1.0",
+ "futures-channel",
+ "futures-core",
+ "futures-util",
+ "http 0.2.8",
+ "http-body 1.0.0-rc1",
+ "httparse",
+ "httpdate",
+ "itoa 1.0.2",
+ "pin-project-lite 0.2.9",
+ "tokio",
+ "tracing",
+ "want",
+]
+
+[[package]]
 name = "hyper-reverse-proxy"
 version = "0.5.2-dev"
 source = "git+https://github.com/chesedo/hyper-reverse-proxy?branch=bug/host_header#5f82b7dffe940abf896fe47dadf6c8e87ddc670b"
 dependencies = [
- "hyper",
+ "hyper 0.14.20",
  "lazy_static",
  "tokio",
  "tracing",
@@ -3099,7 +3140,7 @@ name = "hyper-reverse-proxy"
 version = "0.5.2-dev"
 source = "git+https://github.com/chesedo/hyper-reverse-proxy?branch=master#a4deffef77685b37fda7224ae678d3d9f00d391e"
 dependencies = [
- "hyper",
+ "hyper 0.14.20",
  "lazy_static",
  "tokio",
  "tracing",
@@ -3113,7 +3154,7 @@ checksum = "5f9f7a97316d44c0af9b0301e65010573a853a9fc97046d7331d7f6bc0fd5a64"
 dependencies = [
  "ct-logs",
  "futures-util",
- "hyper",
+ "hyper 0.14.20",
  "log",
  "rustls 0.19.1",
  "rustls-native-certs",
@@ -3129,7 +3170,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d87c48c02e0dc5e3b849a2041db3029fd066650f8f717c07bf8ed78ccb895cac"
 dependencies = [
  "http 0.2.8",
- "hyper",
+ "hyper 0.14.20",
  "rustls 0.20.6",
  "tokio",
  "tokio-rustls 0.23.4",
@@ -3141,7 +3182,7 @@ version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbb958482e8c7be4bc3cf272a766a2b0bf1a6755e7a6ae777f017a31d11b13b1"
 dependencies = [
- "hyper",
+ "hyper 0.14.20",
  "pin-project-lite 0.2.9",
  "tokio",
  "tokio-io-timeout",
@@ -3154,7 +3195,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6183ddfa99b85da61a140bea0efc93fdf56ceaa041b37d553518030827f9905"
 dependencies = [
  "bytes 1.1.0",
- "hyper",
+ "hyper 0.14.20",
  "native-tls",
  "tokio",
  "tokio-native-tls",
@@ -3168,7 +3209,7 @@ checksum = "0fafdf7b2b2de7c9784f76e02c0935e65a8117ec3b768644379983ab333ac98c"
 dependencies = [
  "futures-util",
  "hex 0.4.3",
- "hyper",
+ "hyper 0.14.20",
  "pin-project",
  "tokio",
 ]
@@ -4325,7 +4366,7 @@ dependencies = [
  "futures-util",
  "headers",
  "http 0.2.8",
- "hyper",
+ "hyper 0.14.20",
  "mime",
  "parking_lot 0.12.1",
  "percent-encoding",
@@ -4925,8 +4966,8 @@ dependencies = [
  "futures-util",
  "h2",
  "http 0.2.8",
- "http-body",
- "hyper",
+ "http-body 0.4.5",
+ "hyper 0.14.20",
  "hyper-rustls 0.23.0",
  "hyper-tls",
  "ipnet",
@@ -4983,7 +5024,7 @@ dependencies = [
  "chrono",
  "futures",
  "http 0.2.8",
- "hyper",
+ "hyper 0.14.20",
  "reqwest",
  "reqwest-middleware",
  "retry-policies",
@@ -5046,6 +5087,17 @@ dependencies = [
  "byteorder",
  "num-traits",
  "paste",
+]
+
+[[package]]
+name = "rmp-serde"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c5b13be192e0220b8afb7222aa5813cb62cc269ebb5cac346ca6487681d2913e"
+dependencies = [
+ "byteorder",
+ "rmp",
+ "serde",
 ]
 
 [[package]]
@@ -5112,7 +5164,7 @@ dependencies = [
  "either",
  "futures",
  "http 0.2.8",
- "hyper",
+ "hyper 0.14.20",
  "indexmap",
  "log",
  "memchr",
@@ -5326,7 +5378,7 @@ dependencies = [
  "futures-util",
  "headers",
  "http 0.2.8",
- "hyper",
+ "hyper 0.14.20",
  "mime",
  "mime_guess",
  "multer",
@@ -5463,9 +5515,9 @@ checksum = "388a1df253eca08550bef6c72392cfe7c30914bf41df5269b68cbd6ff8f570a3"
 
 [[package]]
 name = "serde"
-version = "1.0.143"
+version = "1.0.147"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "53e8e5d5b70924f74ff5c6d64d9a5acd91422117c60f48c4e07855238a254553"
+checksum = "d193d69bae983fc11a79df82342761dfbf28a99fc8d203dca4c3c1b590948965"
 dependencies = [
  "serde_derive",
 ]
@@ -5491,9 +5543,9 @@ dependencies = [
 
 [[package]]
 name = "serde_derive"
-version = "1.0.143"
+version = "1.0.147"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3d8e8de557aee63c26b85b947f5e59b690d0454c753f3adeb5cd7835ab88391"
+checksum = "4f1d362ca8fc9c3e3a7484440752472d68a6caa98f1ab81d99b5dfe517cec852"
 dependencies = [
  "proc-macro2 1.0.43",
  "quote 1.0.21",
@@ -5702,6 +5754,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "shuttle-axum-utils"
+version = "0.1.0"
+dependencies = [
+ "http 0.2.8",
+ "http-serde",
+ "rmp-serde",
+ "serde",
+]
+
+[[package]]
 name = "shuttle-codegen"
 version = "0.7.0"
 dependencies = [
@@ -5748,7 +5810,7 @@ dependencies = [
  "fqdn",
  "futures",
  "hex 0.4.3",
- "hyper",
+ "hyper 0.14.20",
  "hyper-reverse-proxy 0.5.2-dev (git+https://github.com/chesedo/hyper-reverse-proxy?branch=master)",
  "once_cell",
  "opentelemetry",
@@ -5791,7 +5853,7 @@ dependencies = [
  "fqdn",
  "futures",
  "http 0.2.8",
- "hyper",
+ "hyper 0.14.20",
  "hyper-reverse-proxy 0.5.2-dev (git+https://github.com/chesedo/hyper-reverse-proxy?branch=bug/host_header)",
  "once_cell",
  "opentelemetry",
@@ -5858,7 +5920,9 @@ dependencies = [
  "async-trait",
  "cap-std",
  "clap 4.0.18",
+ "hyper 1.0.0-rc.1",
  "serenity",
+ "shuttle-axum-utils",
  "shuttle-common",
  "shuttle-proto",
  "shuttle-service",
@@ -5897,7 +5961,7 @@ dependencies = [
  "chrono",
  "crossbeam-channel",
  "futures",
- "hyper",
+ "hyper 0.14.20",
  "libloading",
  "pipe",
  "poem",
@@ -6912,7 +6976,7 @@ source = "git+https://github.com/shuttle-hq/tokiotest-httpserver?branch=feat/bod
 dependencies = [
  "async-trait",
  "futures",
- "hyper",
+ "hyper 0.14.20",
  "lazy_static",
  "queues",
  "serde_json",
@@ -6959,8 +7023,8 @@ dependencies = [
  "futures-util",
  "h2",
  "http 0.2.8",
- "http-body",
- "hyper",
+ "http-body 0.4.5",
+ "hyper 0.14.20",
  "hyper-timeout",
  "percent-encoding",
  "pin-project",
@@ -7020,7 +7084,7 @@ dependencies = [
  "futures-core",
  "futures-util",
  "http 0.2.8",
- "http-body",
+ "http-body 0.4.5",
  "http-range-header",
  "pin-project-lite 0.2.9",
  "tower-layer",
@@ -7039,7 +7103,7 @@ dependencies = [
  "futures-core",
  "futures-util",
  "http 0.2.8",
- "http-body",
+ "http-body 0.4.5",
  "http-range-header",
  "pin-project-lite 0.2.9",
  "tower",
@@ -7564,7 +7628,7 @@ dependencies = [
  "futures-util",
  "headers",
  "http 0.2.8",
- "hyper",
+ "hyper 0.14.20",
  "log",
  "mime",
  "mime_guess",
@@ -8270,3 +8334,15 @@ dependencies = [
  "cc",
  "libc",
 ]
+
+[[patch.unused]]
+name = "shuttle-aws-rds"
+version = "0.7.0"
+
+[[patch.unused]]
+name = "shuttle-persist"
+version = "0.7.0"
+
+[[patch.unused]]
+name = "shuttle-shared-db"
+version = "0.7.0"

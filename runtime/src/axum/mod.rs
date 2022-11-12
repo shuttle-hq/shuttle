@@ -6,9 +6,11 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use cap_std::os::unix::net::UnixStream;
+use hyper::Response;
+use shuttle_axum_utils::{RequestWrapper, ResponseWrapper};
 use shuttle_proto::runtime::runtime_server::Runtime;
 use shuttle_proto::runtime::{LoadRequest, LoadResponse, StartRequest, StartResponse};
-use tonic::{Request, Response, Status};
+use tonic::Status;
 use tracing::trace;
 use wasi_common::file::FileCaps;
 use wasmtime::{Engine, Linker, Module, Store};
@@ -29,7 +31,10 @@ impl AxumWasm {
 
 #[async_trait]
 impl Runtime for AxumWasm {
-    async fn load(&self, request: Request<LoadRequest>) -> Result<Response<LoadResponse>, Status> {
+    async fn load(
+        &self,
+        request: tonic::Request<LoadRequest>,
+    ) -> Result<tonic::Response<LoadResponse>, Status> {
         let wasm_path = request.into_inner().path;
         trace!(wasm_path, "loading");
 
@@ -39,21 +44,21 @@ impl Runtime for AxumWasm {
 
         let message = LoadResponse { success: true };
 
-        Ok(Response::new(message))
+        Ok(tonic::Response::new(message))
     }
 
     async fn start(
         &self,
-        _request: Request<StartRequest>,
-    ) -> Result<Response<StartResponse>, Status> {
-        // TODO: start a process that streams requests from a socket into wasm router and returns response?
+        _request: tonic::Request<StartRequest>,
+    ) -> Result<tonic::Response<StartResponse>, Status> {
+        // TODO: start a hyper server and serve the axum-wasm router as a service
 
         let message = StartResponse {
             success: true,
             port: 7002,
         };
 
-        Ok(Response::new(message))
+        Ok(tonic::Response::new(message))
     }
 }
 
@@ -120,8 +125,9 @@ struct RouterInner {
 }
 
 impl RouterInner {
-    /// Send a GET request to given endpoint on the axum-wasm router
-    pub async fn get(&mut self, endpoint: &str) -> Option<String> {
+    /// Send a HTTP request to given endpoint on the axum-wasm router and return the response
+    /// todo: also send and receive the body
+    pub async fn send_request(&mut self, req: hyper::Request<String>) -> Response<String> {
         let (mut host, client) = UnixStream::pair().unwrap();
         let client = WasiUnixStream::from_cap_std(client);
 
@@ -129,11 +135,13 @@ impl RouterInner {
             .data_mut()
             .insert_file(3, Box::new(client), FileCaps::all());
 
-        host.write_all(endpoint.as_bytes()).unwrap();
+        // serialise request to rmp
+        let request_rmp = RequestWrapper::from(req).into_rmp();
+
+        host.write_all(&request_rmp).unwrap();
         host.write(&[0]).unwrap();
 
-        println!("calling inner Router endpoint: /{endpoint}");
-
+        println!("calling inner Router");
         self.linker
             .get(&mut self.store, "axum", "__SHUTTLE_Axum_call")
             .unwrap()
@@ -144,16 +152,20 @@ impl RouterInner {
             .call(&mut self.store, 3)
             .unwrap();
 
-        let mut res = String::new();
-        host.read_to_string(&mut res).unwrap();
+        let mut res_buf = Vec::new();
+        host.read_to_end(&mut res_buf).unwrap();
 
-        if res.is_empty() {
-            println!("invalid endpoint");
-            None
-        } else {
-            println!("received response: {res}");
-            Some(res)
-        }
+        // deserialize response from rmp
+        let res = ResponseWrapper::from_rmp(res_buf);
+
+        // todo: clean up conversion of wrapper to request
+        let mut response = Response::builder().status(res.status).version(res.version);
+        response
+            .headers_mut()
+            .unwrap()
+            .extend(res.headers.into_iter());
+
+        response.body("Some body".to_string()).unwrap()
     }
 }
 
@@ -174,6 +186,8 @@ impl Router {
 
 #[cfg(test)]
 pub mod tests {
+    use hyper::{http::HeaderValue, Method, Request, StatusCode, Version};
+
     use super::*;
 
     #[tokio::test]
@@ -181,11 +195,41 @@ pub mod tests {
         let axum = Router::new("axum.wasm");
         let mut inner = axum.inner.lock().unwrap();
 
-        assert_eq!(inner.get("hello").await, Some("Hello, World!".to_string()));
-        assert_eq!(
-            inner.get("goodbye").await,
-            Some("Goodbye, World!".to_string())
-        );
-        assert_eq!(inner.get("not/a/real/endpoint").await, None);
+        // GET /hello
+        let request: Request<String> = Request::builder()
+            .method(Method::GET)
+            .version(Version::HTTP_11)
+            .header("test", HeaderValue::from_static("hello"))
+            .uri(format!("https://axum-wasm.example/hello"))
+            .body("Some body".to_string())
+            .unwrap();
+
+        let res = inner.send_request(request).await;
+        assert_eq!(res.status(), StatusCode::OK);
+
+        // GET /goodbye
+        let request: Request<String> = Request::builder()
+            .method(Method::GET)
+            .version(Version::HTTP_11)
+            .header("test", HeaderValue::from_static("goodbye"))
+            .uri(format!("https://axum-wasm.example/goodbye"))
+            .body("Some body".to_string())
+            .unwrap();
+
+        let res = inner.send_request(request).await;
+        assert_eq!(res.status(), StatusCode::OK);
+
+        // GET /invalid
+        let request: Request<String> = Request::builder()
+            .method(Method::GET)
+            .version(Version::HTTP_11)
+            .header("test", HeaderValue::from_static("invalid"))
+            .uri(format!("https://axum-wasm.example/invalid"))
+            .body("Some body".to_string())
+            .unwrap();
+
+        let res = inner.send_request(request).await;
+
+        assert_eq!(res.status(), StatusCode::NOT_FOUND);
     }
 }

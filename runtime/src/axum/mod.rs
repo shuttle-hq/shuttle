@@ -6,8 +6,10 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use cap_std::os::unix::net::UnixStream;
+use http_body::Full;
+use hyper::body::Bytes;
 use hyper::Response;
-use shuttle_axum_utils::{RequestWrapper, ResponseWrapper};
+use shuttle_axum_utils::{wrap_request, RequestWrapper, ResponseWrapper};
 use shuttle_proto::runtime::runtime_server::Runtime;
 use shuttle_proto::runtime::{LoadRequest, LoadResponse, StartRequest, StartResponse};
 use tonic::Status;
@@ -125,9 +127,8 @@ struct RouterInner {
 }
 
 impl RouterInner {
-    /// Send a HTTP request to given endpoint on the axum-wasm router and return the response
-    /// todo: also send and receive the body
-    pub async fn send_request(&mut self, req: hyper::Request<String>) -> Response<String> {
+    /// Send a HTTP request with body to given endpoint on the axum-wasm router and return the response
+    pub async fn send_request(&mut self, req: hyper::Request<Full<Bytes>>) -> Response<Vec<u8>> {
         let (mut host, client) = UnixStream::pair().unwrap();
         let client = WasiUnixStream::from_cap_std(client);
 
@@ -136,7 +137,7 @@ impl RouterInner {
             .insert_file(3, Box::new(client), FileCaps::all());
 
         // serialise request to rmp
-        let request_rmp = RequestWrapper::from(req).into_rmp();
+        let request_rmp = wrap_request(req).await.into_rmp();
 
         host.write_all(&request_rmp).unwrap();
         host.write(&[0]).unwrap();
@@ -158,14 +159,8 @@ impl RouterInner {
         // deserialize response from rmp
         let res = ResponseWrapper::from_rmp(res_buf);
 
-        // todo: clean up conversion of wrapper to request
-        let mut response = Response::builder().status(res.status).version(res.version);
-        response
-            .headers_mut()
-            .unwrap()
-            .extend(res.headers.into_iter());
-
-        response.body("Some body".to_string()).unwrap()
+        // consume the wrapper and return response
+        res.into_response()
     }
 }
 
@@ -196,36 +191,38 @@ pub mod tests {
         let mut inner = axum.inner.lock().unwrap();
 
         // GET /hello
-        let request: Request<String> = Request::builder()
+        let request: Request<Full<Bytes>> = Request::builder()
             .method(Method::GET)
             .version(Version::HTTP_11)
             .header("test", HeaderValue::from_static("hello"))
             .uri(format!("https://axum-wasm.example/hello"))
-            .body("Some body".to_string())
+            .body(Full::new(Bytes::from_static(b"some body")))
             .unwrap();
 
         let res = inner.send_request(request).await;
         assert_eq!(res.status(), StatusCode::OK);
+        assert_eq!(std::str::from_utf8(&res.body()).unwrap(), "Hello, World!");
 
         // GET /goodbye
-        let request: Request<String> = Request::builder()
+        let request: Request<Full<Bytes>> = Request::builder()
             .method(Method::GET)
             .version(Version::HTTP_11)
             .header("test", HeaderValue::from_static("goodbye"))
             .uri(format!("https://axum-wasm.example/goodbye"))
-            .body("Some body".to_string())
+            .body(Full::new(Bytes::from_static(b"some body")))
             .unwrap();
 
         let res = inner.send_request(request).await;
         assert_eq!(res.status(), StatusCode::OK);
+        assert_eq!(std::str::from_utf8(&res.body()).unwrap(), "Goodbye, World!");
 
         // GET /invalid
-        let request: Request<String> = Request::builder()
+        let request: Request<Full<Bytes>> = Request::builder()
             .method(Method::GET)
             .version(Version::HTTP_11)
             .header("test", HeaderValue::from_static("invalid"))
             .uri(format!("https://axum-wasm.example/invalid"))
-            .body("Some body".to_string())
+            .body(Full::new(Bytes::from_static(b"some body")))
             .unwrap();
 
         let res = inner.send_request(request).await;

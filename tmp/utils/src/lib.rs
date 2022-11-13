@@ -1,10 +1,12 @@
 use http::{HeaderMap, Method, Request, Response, StatusCode, Uri, Version};
+use http_body::{Body, Full};
+use hyper::body::Bytes;
 use rmps::{Deserializer, Serializer};
 use serde::{Deserialize, Serialize};
 
 extern crate rmp_serde as rmps;
 
-// todo: add extensions
+// todo: add http extensions field
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RequestWrapper {
     #[serde(with = "http_serde::method")]
@@ -18,18 +20,27 @@ pub struct RequestWrapper {
 
     #[serde(with = "http_serde::header_map")]
     pub headers: HeaderMap,
+
+    // I used Vec<u8> since it can derive serialize/deserialize
+    pub body: Vec<u8>,
 }
 
-impl<B> From<Request<B>> for RequestWrapper {
-    fn from(req: Request<B>) -> Self {
-        let (parts, _) = req.into_parts();
+/// Wrap HTTP Request in a struct that can be serialized to and from Rust MessagePack
+pub async fn wrap_request<B>(req: Request<B>) -> RequestWrapper
+where
+    B: Body<Data = Bytes>,
+    B::Error: std::fmt::Debug,
+{
+    let (parts, body) = req.into_parts();
 
-        Self {
-            method: parts.method,
-            uri: parts.uri,
-            version: parts.version,
-            headers: parts.headers,
-        }
+    let body = hyper::body::to_bytes(body).await.unwrap();
+
+    RequestWrapper {
+        method: parts.method,
+        uri: parts.uri,
+        version: parts.version,
+        headers: parts.headers,
+        body: body.into(),
     }
 }
 
@@ -48,9 +59,23 @@ impl RequestWrapper {
 
         Deserialize::deserialize(&mut de).unwrap()
     }
+
+    /// Consume wrapper and return Request
+    pub fn into_request(self) -> Request<Full<Bytes>> {
+        let mut request: Request<Full<Bytes>> = Request::builder()
+            .method(self.method)
+            .version(self.version)
+            .uri(self.uri)
+            .body(Full::new(self.body.into()))
+            .unwrap();
+
+        request.headers_mut().extend(self.headers.into_iter());
+
+        request
+    }
 }
 
-// todo: add extensions
+// todo: add http extensions field
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ResponseWrapper {
     #[serde(with = "http_serde::status_code")]
@@ -61,17 +86,26 @@ pub struct ResponseWrapper {
 
     #[serde(with = "http_serde::header_map")]
     pub headers: HeaderMap,
+
+    // I used Vec<u8> since it can derive serialize/deserialize
+    pub body: Vec<u8>,
 }
 
-impl<B> From<Response<B>> for ResponseWrapper {
-    fn from(res: Response<B>) -> Self {
-        let (parts, _) = res.into_parts();
+/// Wrap HTTP Response in a struct that can be serialized to and from Rust MessagePack
+pub async fn wrap_response<B>(res: Response<B>) -> ResponseWrapper
+where
+    B: Body<Data = Bytes>,
+    B::Error: std::fmt::Debug,
+{
+    let (parts, body) = res.into_parts();
 
-        Self {
-            status: parts.status,
-            version: parts.version,
-            headers: parts.headers,
-        }
+    let body = hyper::body::to_bytes(body).await.unwrap();
+
+    ResponseWrapper {
+        status: parts.status,
+        version: parts.version,
+        headers: parts.headers,
+        body: body.into(),
     }
 }
 
@@ -90,25 +124,38 @@ impl ResponseWrapper {
 
         Deserialize::deserialize(&mut de).unwrap()
     }
+
+    /// Consume wrapper and return Response
+    pub fn into_response(self) -> Response<Vec<u8>> {
+        let mut response = Response::builder()
+            .status(self.status)
+            .version(self.version);
+        response
+            .headers_mut()
+            .unwrap()
+            .extend(self.headers.into_iter());
+
+        response.body(self.body).unwrap()
+    }
 }
 
 #[cfg(test)]
 mod test {
-    use http::HeaderValue;
-
     use super::*;
+    use futures_executor::block_on;
+    use http::HeaderValue;
 
     #[test]
     fn request_roundtrip() {
-        let request: Request<String> = Request::builder()
+        let request: Request<Full<Bytes>> = Request::builder()
             .method(Method::PUT)
             .version(Version::HTTP_11)
             .header("test", HeaderValue::from_static("request"))
             .uri(format!("https://axum-wasm.example/hello"))
-            .body("Some body".to_string())
+            .body(Full::new(Bytes::from_static(b"request body")))
             .unwrap();
 
-        let rmp = RequestWrapper::from(request).into_rmp();
+        let rmp = block_on(wrap_request(request)).into_rmp();
 
         let back = RequestWrapper::from_rmp(rmp);
 
@@ -122,18 +169,19 @@ mod test {
             back.uri.to_string(),
             "https://axum-wasm.example/hello".to_string()
         );
+        assert_eq!(std::str::from_utf8(&back.body).unwrap(), "request body");
     }
 
     #[test]
     fn response_roundtrip() {
-        let response: Response<String> = Response::builder()
+        let response: Response<Full<Bytes>> = Response::builder()
             .version(Version::HTTP_11)
             .header("test", HeaderValue::from_static("response"))
             .status(StatusCode::NOT_MODIFIED)
-            .body("Some body".to_string())
+            .body(Full::new(Bytes::from_static(b"response body")))
             .unwrap();
 
-        let rmp = ResponseWrapper::from(response).into_rmp();
+        let rmp = block_on(wrap_response(response)).into_rmp();
 
         let back = ResponseWrapper::from_rmp(rmp);
 
@@ -143,5 +191,6 @@ mod test {
         );
         assert_eq!(back.status, StatusCode::NOT_MODIFIED);
         assert_eq!(back.version, Version::HTTP_11);
+        assert_eq!(std::str::from_utf8(&back.body).unwrap(), "response body");
     }
 }

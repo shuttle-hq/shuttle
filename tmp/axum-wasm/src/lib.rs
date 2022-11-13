@@ -1,17 +1,24 @@
+use axum::body::HttpBody;
 use axum::{response::Response, routing::get, Router};
 use futures_executor::block_on;
 use http::Request;
-use shuttle_axum_utils::{RequestWrapper, ResponseWrapper};
+use shuttle_axum_utils::{wrap_response, RequestWrapper};
 use std::fs::File;
 use std::io::{Read, Write};
 use std::os::wasi::prelude::*;
 use tower_service::Service;
 
-pub fn handle_request(req: Request<String>) -> Response {
+pub fn handle_request<B>(req: Request<B>) -> Response
+where
+    B: HttpBody + Send + 'static,
+{
     block_on(app(req))
 }
 
-async fn app(request: Request<String>) -> Response {
+async fn app<B>(request: Request<B>) -> Response
+where
+    B: HttpBody + Send + 'static,
+{
     let mut router = Router::new()
         .route("/hello", get(hello))
         .route("/goodbye", get(goodbye))
@@ -48,23 +55,18 @@ pub extern "C" fn __SHUTTLE_Axum_call(fd: RawFd) {
         }
     }
 
+    // deserialize request from rust messagepack
     let req = RequestWrapper::from_rmp(req_buf);
 
-    // todo: clean up conversion of wrapper to request
-    let mut request: Request<String> = Request::builder()
-        .method(req.method)
-        .version(req.version)
-        .uri(req.uri)
-        .body("Some body".to_string())
-        .unwrap();
-
-    request.headers_mut().extend(req.headers.into_iter());
+    // consume wrapper and return Request
+    let request = req.into_request();
 
     println!("inner router received request: {:?}", &request);
     let res = handle_request(request);
 
     println!("inner router sending response: {:?}", &res);
-    let response = ResponseWrapper::from(res);
+    // wrap inner response and serialize it as rust messagepack
+    let response = block_on(wrap_response(res)).into_rmp();
 
-    f.write_all(&response.into_rmp()).unwrap();
+    f.write_all(&response).unwrap();
 }

@@ -9,7 +9,7 @@ description = "Utilities for serializing requests to and from rust messagepack"
 http = "0.2.7"
 http-body = "0.4.5"
 http-serde = { version = "1.1.2" }
-# hyper dep because I was struggling to turn http body to bytes with hyper::body::to_bytes
+# hyper dep because I was struggling to turn http body to bytes without hyper::body::to_bytes
 hyper = "0.14.23"
 rmp-serde = { version = "1.1.1" }
 serde = { version = "1.0.137", features = [ "derive" ] }

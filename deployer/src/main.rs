@@ -1,9 +1,14 @@
+use std::path::PathBuf;
+use std::process::exit;
+use std::time::Duration;
+
 use clap::Parser;
-use shuttle_deployer::{
-    start, start_proxy, AbstractDummyFactory, Args, DeployLayer, Persistence, RuntimeLoggerFactory,
-};
+use shuttle_deployer::{start, start_proxy, Args, DeployLayer, Persistence};
+use shuttle_proto::runtime::runtime_client::RuntimeClient;
+use shuttle_proto::runtime::SubscribeLogsRequest;
 use tokio::select;
-use tracing::trace;
+use tonic::transport::Endpoint;
+use tracing::{error, info, trace};
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{fmt, EnvFilter};
 
@@ -34,12 +39,62 @@ async fn main() {
         .with(opentelemetry)
         .init();
 
-    let abstract_dummy_factory = AbstractDummyFactory::new();
+    let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .to_path_buf();
+    let runtime_dir = workspace_root.join("target/debug");
 
-    let runtime_logger_factory = RuntimeLoggerFactory::new(persistence.get_log_sender());
+    let mut runtime = tokio::process::Command::new(runtime_dir.join("shuttle-runtime"))
+        .args(&[
+            "--legacy",
+            "--provisioner-address",
+            "https://localhost:5000",
+        ])
+        .current_dir(&runtime_dir)
+        .spawn()
+        .unwrap();
+
+    // Sleep because the timeout below does not seem to work
+    // TODO: investigate why
+    tokio::time::sleep(Duration::from_secs(2)).await;
+
+    info!("connecting runtime client");
+    let conn = Endpoint::new("http://127.0.0.1:6001")
+        .unwrap()
+        .connect_timeout(Duration::from_secs(5))
+        .connect()
+        .await
+        .unwrap();
+    let mut runtime_client = RuntimeClient::new(conn);
+
+    let sender = persistence.get_log_sender();
+    let mut stream = runtime_client
+        .subscribe_logs(tonic::Request::new(SubscribeLogsRequest {}))
+        .await
+        .unwrap()
+        .into_inner();
+
+    let logs_task = tokio::spawn(async move {
+        while let Some(log) = stream.message().await.unwrap() {
+            sender.send(log.into()).expect("to send log to persistence");
+        }
+    });
 
     select! {
-        _ = start_proxy(args.proxy_address, args.proxy_fqdn.clone(), persistence.clone()) => {},
-        _ = start(abstract_dummy_factory, runtime_logger_factory, persistence, args) => {},
+        _ = start_proxy(args.proxy_address, args.proxy_fqdn.clone(), persistence.clone()) => {
+            error!("Proxy stopped.")
+        },
+        _ = start(persistence, runtime_client, args) => {
+            error!("Deployment service stopped.")
+        },
+        _ = runtime.wait() => {
+            error!("Legacy runtime stopped.")
+        },
+        _ = logs_task => {
+            error!("Logs task stopped")
+        },
     }
+
+    exit(1);
 }

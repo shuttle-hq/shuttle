@@ -9,7 +9,10 @@ use async_trait::async_trait;
 use cap_std::os::unix::net::UnixStream;
 use serenity::{model::prelude::*, prelude::*};
 use shuttle_proto::runtime::runtime_server::Runtime;
-use shuttle_proto::runtime::{LoadRequest, LoadResponse, StartRequest, StartResponse};
+use shuttle_proto::runtime::{
+    self, LoadRequest, LoadResponse, StartRequest, StartResponse, SubscribeLogsRequest,
+};
+use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
 use tracing::trace;
 use wasi_common::file::FileCaps;
@@ -68,6 +71,15 @@ impl Runtime for Next {
         };
 
         Ok(Response::new(message))
+    }
+
+    type SubscribeLogsStream = ReceiverStream<Result<runtime::LogItem, Status>>;
+
+    async fn subscribe_logs(
+        &self,
+        _request: Request<SubscribeLogsRequest>,
+    ) -> Result<Response<Self::SubscribeLogsStream>, Status> {
+        todo!()
     }
 }
 

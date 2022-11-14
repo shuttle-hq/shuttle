@@ -13,9 +13,11 @@ clap ={ version = "4.0.18", features = ["derive"] }
 serenity = { version = "0.11.5", default-features = false, features = ["client", "gateway", "rustls_backend", "model"] }
 thiserror = "1.0.37"
 tokio = { version = "=1.20.1", features = ["full"] }
+tokio-stream = "0.1.11"
 tonic = "0.8.2"
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }
+uuid = { version = "1.1.2", features = ["v4"] }
 wasi-common = "2.0.0"
 wasmtime = "2.0.0"
 wasmtime-wasi = "2.0.0"

@@ -1,4 +1,7 @@
-use std::net::{Ipv4Addr, SocketAddr};
+use std::{
+    net::{Ipv4Addr, SocketAddr},
+    time::Duration,
+};
 
 use clap::Parser;
 use shuttle_proto::runtime::runtime_server::RuntimeServer;
@@ -26,15 +29,17 @@ async fn main() {
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 6001);
 
     let provisioner_address = args.provisioner_address;
+    let mut server_builder =
+        Server::builder().http2_keepalive_interval(Some(Duration::from_secs(60)));
 
     let router = if args.legacy {
         let legacy = Legacy::new(provisioner_address);
         let svc = RuntimeServer::new(legacy);
-        Server::builder().add_service(svc)
+        server_builder.add_service(svc)
     } else {
         let next = Next::new();
         let svc = RuntimeServer::new(next);
-        Server::builder().add_service(svc)
+        server_builder.add_service(svc)
     };
 
     router.serve(addr).await.unwrap();

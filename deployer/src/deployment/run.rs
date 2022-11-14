@@ -8,12 +8,12 @@ use async_trait::async_trait;
 use shuttle_common::project::ProjectName as ServiceName;
 use shuttle_proto::runtime::{runtime_client::RuntimeClient, LoadRequest, StartRequest};
 
-use shuttle_service::{Factory, Logger};
 use tokio::task::JoinError;
+use tonic::transport::Channel;
 use tracing::{error, info, instrument, trace};
 use uuid::Uuid;
 
-use super::{provisioner_factory, runtime_logger, KillReceiver, KillSender, RunReceiver, State};
+use super::{KillReceiver, KillSender, RunReceiver, State};
 use crate::error::{Error, Result};
 
 /// Run a task which takes runnable deploys from a channel and starts them up with a factory provided by the
@@ -21,9 +21,8 @@ use crate::error::{Error, Result};
 /// A deploy is killed when it receives a signal from the kill channel
 pub async fn task(
     mut recv: RunReceiver,
+    runtime_client: RuntimeClient<Channel>,
     kill_send: KillSender,
-    abstract_dummy_factory: impl provisioner_factory::AbstractFactory,
-    logger_factory: impl runtime_logger::Factory,
     active_deployment_getter: impl ActiveDeploymentsGetter,
     artifacts_path: PathBuf,
 ) {
@@ -51,8 +50,6 @@ pub async fn task(
                 continue;
             }
         };
-        let mut factory = abstract_dummy_factory.get_factory();
-        let logger = logger_factory.get_logger(id);
 
         let old_deployments_killer = kill_old_deployments(
             built.service_id,
@@ -73,14 +70,14 @@ pub async fn task(
         };
 
         let libs_path = libs_path.clone();
+        let runtime_client = runtime_client.clone();
 
         tokio::spawn(async move {
             if let Err(err) = built
                 .handle(
                     addr,
                     libs_path,
-                    &mut factory,
-                    logger,
+                    runtime_client,
                     kill_recv,
                     old_deployments_killer,
                     cleanup,
@@ -163,14 +160,13 @@ pub struct Built {
 }
 
 impl Built {
-    #[instrument(name = "built_handle", skip(self, libs_path, _factory, _logger, kill_recv, kill_old_deployments, cleanup), fields(id = %self.id, state = %State::Loading))]
+    #[instrument(name = "built_handle", skip(self, libs_path, runtime_client, kill_recv, kill_old_deployments, cleanup), fields(id = %self.id, state = %State::Loading))]
     #[allow(clippy::too_many_arguments)]
     async fn handle(
         self,
         address: SocketAddr,
         libs_path: PathBuf,
-        _factory: &mut dyn Factory,
-        _logger: Logger,
+        runtime_client: RuntimeClient<Channel>,
         kill_recv: KillReceiver,
         kill_old_deployments: impl futures::Future<Output = Result<()>>,
         cleanup: impl FnOnce(std::result::Result<std::result::Result<(), shuttle_service::Error>, JoinError>)
@@ -186,6 +182,7 @@ impl Built {
             self.id,
             self.service_name,
             libs_path,
+            runtime_client,
             address,
             kill_recv,
             cleanup,
@@ -195,22 +192,18 @@ impl Built {
     }
 }
 
-#[instrument(skip(_kill_recv, _cleanup), fields(address = %_address, state = %State::Running))]
+#[instrument(skip(runtime_client, _kill_recv, _cleanup), fields(address = %_address, state = %State::Running))]
 async fn run(
     id: Uuid,
     service_name: String,
     libs_path: PathBuf,
+    mut runtime_client: RuntimeClient<Channel>,
     _address: SocketAddr,
     _kill_recv: KillReceiver,
     _cleanup: impl FnOnce(std::result::Result<std::result::Result<(), shuttle_service::Error>, JoinError>)
         + Send
         + 'static,
 ) {
-    info!("starting up deployer grpc client");
-    let mut client = RuntimeClient::connect("http://127.0.0.1:6001")
-        .await
-        .unwrap();
-
     info!(
         "loading project from: {}",
         libs_path.clone().into_os_string().into_string().unwrap()
@@ -222,24 +215,26 @@ async fn run(
         service_name: service_name.clone(),
     });
     info!("loading service");
-    let response = client.load(load_request).await;
+    let response = runtime_client.load(load_request).await;
 
     if let Err(e) = response {
         info!("failed to load service: {}", e);
     }
 
-    let start_request = tonic::Request::new(StartRequest { service_name });
+    let start_request = tonic::Request::new(StartRequest {
+        deployment_id: id.as_bytes().to_vec(),
+        service_name,
+    });
 
     info!("starting service");
-    let response = client.start(start_request).await.unwrap();
+    let response = runtime_client.start(start_request).await.unwrap();
 
-    info!(response = ?response,  "client response: ");
+    info!(response = ?response.into_inner(),  "client response: ");
 }
 
 #[cfg(test)]
 mod tests {
     use std::{
-        collections::BTreeMap,
         fs,
         net::{Ipv4Addr, SocketAddr},
         path::PathBuf,
@@ -247,13 +242,13 @@ mod tests {
         time::Duration,
     };
 
-    use shuttle_common::database;
-    use shuttle_service::{Factory, Logger};
+    use shuttle_proto::runtime::runtime_client::RuntimeClient;
     use tokio::{
-        sync::{broadcast, mpsc, oneshot},
+        sync::{broadcast, oneshot},
         task::JoinError,
         time::sleep,
     };
+    use tonic::transport::Channel;
     use uuid::Uuid;
 
     use crate::error::Error;
@@ -263,42 +258,14 @@ mod tests {
     const RESOURCES_PATH: &str = "tests/resources";
     const LIBS_PATH: &str = "/tmp/shuttle-libs-tests";
 
-    struct StubFactory;
-
-    #[async_trait::async_trait]
-    impl Factory for StubFactory {
-        async fn get_db_connection_string(
-            &mut self,
-            _db_type: database::Type,
-        ) -> Result<String, shuttle_service::Error> {
-            panic!("no run test should get an sql connection");
-        }
-
-        async fn get_secrets(
-            &mut self,
-        ) -> Result<BTreeMap<String, String>, shuttle_service::Error> {
-            panic!("no test should get any secrets");
-        }
-
-        fn get_service_name(&self) -> shuttle_service::ServiceName {
-            panic!("no test should get the service name");
-        }
-    }
-
-    fn get_logger(id: Uuid) -> Logger {
-        let (tx, mut rx) = mpsc::unbounded_channel();
-
-        tokio::spawn(async move {
-            while let Some(log) = rx.recv().await {
-                println!("{log}");
-            }
-        });
-
-        Logger::new(tx, id)
-    }
-
     async fn kill_old_deployments() -> crate::error::Result<()> {
         Ok(())
+    }
+
+    async fn get_runtime_client() -> RuntimeClient<Channel> {
+        RuntimeClient::connect("http://127.0.0.1:6001")
+            .await
+            .unwrap()
     }
 
     // This test uses the kill signal to make sure a service does stop when asked to
@@ -321,15 +288,12 @@ mod tests {
             cleanup_send.send(()).unwrap();
         };
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
-        let mut factory = StubFactory;
-        let logger = get_logger(built.id);
 
         built
             .handle(
                 addr,
                 PathBuf::from(LIBS_PATH),
-                &mut factory,
-                logger,
+                get_runtime_client().await,
                 kill_recv,
                 kill_old_deployments(),
                 handle_cleanup,
@@ -369,15 +333,12 @@ mod tests {
             cleanup_send.send(()).unwrap();
         };
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
-        let mut factory = StubFactory;
-        let logger = get_logger(built.id);
 
         built
             .handle(
                 addr,
                 PathBuf::from(LIBS_PATH),
-                &mut factory,
-                logger,
+                get_runtime_client().await,
                 kill_recv,
                 kill_old_deployments(),
                 handle_cleanup,
@@ -411,15 +372,12 @@ mod tests {
             cleanup_send.send(()).unwrap();
         };
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
-        let mut factory = StubFactory;
-        let logger = get_logger(built.id);
 
         built
             .handle(
                 addr,
                 PathBuf::from(LIBS_PATH),
-                &mut factory,
-                logger,
+                get_runtime_client().await,
                 kill_recv,
                 kill_old_deployments(),
                 handle_cleanup,
@@ -441,15 +399,12 @@ mod tests {
 
         let handle_cleanup = |_result| panic!("the service shouldn't even start");
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
-        let mut factory = StubFactory;
-        let logger = get_logger(built.id);
 
         let result = built
             .handle(
                 addr,
                 PathBuf::from(LIBS_PATH),
-                &mut factory,
-                logger,
+                get_runtime_client().await,
                 kill_recv,
                 kill_old_deployments(),
                 handle_cleanup,
@@ -474,15 +429,12 @@ mod tests {
 
         let handle_cleanup = |_result| panic!("no service means no cleanup");
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
-        let mut factory = StubFactory;
-        let logger = get_logger(built.id);
 
         let result = built
             .handle(
                 addr,
                 PathBuf::from(LIBS_PATH),
-                &mut factory,
-                logger,
+                get_runtime_client().await,
                 kill_recv,
                 kill_old_deployments(),
                 handle_cleanup,

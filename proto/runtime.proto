@@ -1,12 +1,16 @@
 syntax = "proto3";
 package runtime;
 
+import "google/protobuf/timestamp.proto";
+
 service Runtime {
   // Load a service file to be ready to start it
-  rpc load(LoadRequest) returns (LoadResponse);
+  rpc Load(LoadRequest) returns (LoadResponse);
 
   // Start a loaded service file
-  rpc start(StartRequest) returns (StartResponse);
+  rpc Start(StartRequest) returns (StartResponse);
+
+  rpc SubscribeLogs(SubscribeLogsRequest) returns (stream LogItem);
 }
 
 message LoadRequest {
@@ -23,8 +27,10 @@ message LoadResponse {
 }
 
 message StartRequest {
+  // Id to associate with the deployment being started
+  bytes deployment_id = 1;
   // Name of service to start
-  string service_name = 1;
+  string service_name = 2;
 }
 
 message StartResponse {
@@ -35,4 +41,37 @@ message StartResponse {
   // Optional port the service was started on
   // This is likely to be None for bots
   uint32 port = 2;
+}
+
+message SubscribeLogsRequest {}
+
+message LogItem {
+  bytes id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  LogState state = 3;
+  LogLevel level = 4;
+  optional string file = 5;
+  optional uint32 line = 6;
+  string target = 7;
+  bytes fields = 8;
+}
+
+enum LogState {
+  Queued = 0;
+  Building = 1;
+  Built = 2;
+  Loading = 3;
+  Running = 4;
+  Completed = 5;
+  Stopped = 6;
+  Crashed = 7;
+  Unknown = 50;
+}
+
+enum LogLevel {
+  Trace = 0;
+  Debug = 1;
+  Info = 2;
+  Warn = 3;
+  Error = 4;
 }

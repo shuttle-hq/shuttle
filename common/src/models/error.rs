@@ -4,6 +4,7 @@ use comfy_table::Color;
 use crossterm::style::Stylize;
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
+use tracing::{error, warn};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ApiError {
@@ -95,6 +96,43 @@ impl From<ErrorKind> for ApiError {
         Self {
             message: error_message.to_string(),
             status_code: status.as_u16(),
+        }
+    }
+}
+
+impl From<StatusCode> for ApiError {
+    fn from(code: StatusCode) -> Self {
+        let message = match code {
+            StatusCode::OK | StatusCode::ACCEPTED | StatusCode::FOUND | StatusCode::SWITCHING_PROTOCOLS => {
+                unreachable!("we should not have an API error with a successfull status code")
+            }
+            StatusCode::FORBIDDEN => "this request is not allowed",
+            StatusCode::UNAUTHORIZED => {
+                "we were unable to authorize your request. Is your key still valid?"
+            },
+            StatusCode::INTERNAL_SERVER_ERROR => "our server was unable to handle your request. A ticket should be created for us to fix this.",
+            StatusCode::SERVICE_UNAVAILABLE => "we're experiencing a high workload right now, please try again in a little bit",
+            StatusCode::BAD_REQUEST => {
+                warn!("responding to a BAD_REQUEST request with an unhelpful message. Use ErrorKind instead");
+                "this request is invalid"
+            },
+            StatusCode::NOT_FOUND => {
+                warn!("responding to a NOT_FOUND request with an unhelpful message. Use ErrorKind instead");
+                "we don't serve this resource"
+            },
+            StatusCode::BAD_GATEWAY => {
+                warn!("got a bad response from a deployer");
+                "response from deployer is invalid. Please create a ticket to report this"
+            },
+            _ => {
+                error!(%code, "got an unexpected status code");
+                "an unexpected error occured. Please create a ticket to report this"
+            },
+        };
+
+        Self {
+            message: message.to_string(),
+            status_code: code.as_u16(),
         }
     }
 }

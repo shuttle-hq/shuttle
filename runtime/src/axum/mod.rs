@@ -17,7 +17,7 @@ use shuttle_proto::runtime::{
 };
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::Status;
-use tracing::{info, trace};
+use tracing::info;
 use wasi_common::file::FileCaps;
 use wasmtime::{Engine, Linker, Module, Store};
 use wasmtime_wasi::sync::net::UnixStream as WasiUnixStream;
@@ -62,16 +62,15 @@ impl Runtime for AxumWasm {
         let port = 7002;
         let address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
 
-        let router = self.router.lock().unwrap().take().unwrap();
+        let router = self.router.lock().unwrap().take().unwrap().inner;
+
         let make_service = make_service_fn(move |_conn| {
             let router = router.clone();
             async move {
                 Ok::<_, Infallible>(service_fn(move |req: Request<Body>| {
                     let router = router.clone();
                     async move {
-                        Ok::<_, Infallible>(
-                            router.inner.lock().await.send_request(req).await.unwrap(),
-                        )
+                        Ok::<_, Infallible>(router.lock().await.send_request(req).await.unwrap())
                     }
                 }))
             }

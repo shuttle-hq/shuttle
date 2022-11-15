@@ -893,5 +893,22 @@ pub mod tests {
                 break;
             }
         });
+
+        // Attempting to delete already Destroyed project will return Destroyed
+        api_client
+            .request(
+                Request::delete("/projects/matrix")
+                    .with_header(&authorization)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .map_ok(|resp| {
+                assert_eq!(resp.status(), StatusCode::OK);
+                let resp =
+                    serde_json::from_slice::<project::Response>(resp.body().as_slice()).unwrap();
+                assert_eq!(resp.state, project::State::Destroyed);
+            })
+            .await
+            .unwrap();
     }
 }

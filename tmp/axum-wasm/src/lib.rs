@@ -59,6 +59,7 @@ pub extern "C" fn __SHUTTLE_Axum_call(fd: RawFd) {
     // deserialize request parts from rust messagepack
     let wrapper = RequestWrapper::from_rmp(req_buf);
 
+    // TODO: deduplicate this? Is it the correct strategy to send two separate files?
     // read request body from host
     let mut body_buf = Vec::new();
     let mut c_buf: [u8; 1] = [0; 1];

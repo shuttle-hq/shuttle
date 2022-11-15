@@ -133,7 +133,7 @@ impl Queued {
 
         let (tx, rx): (crossbeam_channel::Sender<Message>, _) = crossbeam_channel::bounded(0);
         let id = self.id;
-        tokio::spawn(async move {
+        tokio::task::spawn_blocking(move || {
             while let Ok(message) = rx.recv() {
                 trace!(?message, "received cargo message");
                 // TODO: change these to `info!(...)` as [valuable] support increases.
@@ -286,6 +286,8 @@ async fn build_deployment(
         .await
         .map_err(|e| Error::Build(e.into()))?;
 
+    trace!(?so_path, "got so path");
+
     Ok(so_path)
 }
 
@@ -297,36 +299,8 @@ async fn run_pre_deploy_tests(
     let (read, write) = pipe::pipe();
     let project_path = project_path.to_owned();
 
-    let handle = tokio::spawn(async move {
-        let config = get_config(write)?;
-        let manifest_path = project_path.join("Cargo.toml");
-
-        let ws = Workspace::new(&manifest_path, &config)?;
-
-        let mut compile_opts = CompileOptions::new(&config, CompileMode::Test)?;
-
-        compile_opts.build_config.message_format = MessageFormat::Json {
-            render_diagnostics: false,
-            short: false,
-            ansi: false,
-        };
-
-        let opts = TestOptions {
-            compile_opts,
-            no_run: false,
-            no_fail_fast: false,
-        };
-
-        let test_failures = cargo::ops::run_tests(&ws, &opts, &[])?;
-
-        match test_failures {
-            Some(failures) => Err(failures.into()),
-            None => Ok(()),
-        }
-    });
-
     // This needs to be on a separate thread, else deployer will block (reason currently unknown :D)
-    tokio::spawn(async move {
+    tokio::task::spawn_blocking(move || {
         for message in Message::parse_stream(read) {
             match message {
                 Ok(message) => {
@@ -341,7 +315,31 @@ async fn run_pre_deploy_tests(
         }
     });
 
-    handle.await?
+    let config = get_config(write)?;
+    let manifest_path = project_path.join("Cargo.toml");
+
+    let ws = Workspace::new(&manifest_path, &config)?;
+
+    let mut compile_opts = CompileOptions::new(&config, CompileMode::Test)?;
+
+    compile_opts.build_config.message_format = MessageFormat::Json {
+        render_diagnostics: false,
+        short: false,
+        ansi: false,
+    };
+
+    let opts = TestOptions {
+        compile_opts,
+        no_run: false,
+        no_fail_fast: false,
+    };
+
+    let test_failures = cargo::ops::run_tests(&ws, &opts, &[])?;
+
+    match test_failures {
+        Some(failures) => Err(failures.into()),
+        None => Ok(()),
+    }
 }
 
 /// Store 'so' file in the libs folder
@@ -462,7 +460,7 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));
         let (tx, rx) = crossbeam_channel::unbounded();
 
-        tokio::spawn(async move { while rx.recv().is_ok() {} });
+        tokio::task::spawn_blocking(move || while rx.recv().is_ok() {});
 
         let failure_project_path = root.join("tests/resources/tests-fail");
         assert!(matches!(

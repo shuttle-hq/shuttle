@@ -44,6 +44,7 @@ pub extern "C" fn __SHUTTLE_Axum_call(fd: RawFd) {
 
     let mut f = unsafe { File::from_raw_fd(fd) };
 
+    // read request parts from host
     let mut req_buf = Vec::new();
     let mut c_buf: [u8; 1] = [0; 1];
     loop {
@@ -55,16 +56,29 @@ pub extern "C" fn __SHUTTLE_Axum_call(fd: RawFd) {
         }
     }
 
-    // deserialize request from rust messagepack
-    let req = RequestWrapper::from_rmp(req_buf);
+    // deserialize request parts from rust messagepack
+    let wrapper = RequestWrapper::from_rmp(req_buf);
 
-    // consume wrapper and return Request
-    let request = req.into_request();
+    // read request body from host
+    let mut body_buf = Vec::new();
+    let mut c_buf: [u8; 1] = [0; 1];
+    loop {
+        f.read(&mut c_buf).unwrap();
+        if c_buf[0] == 0 {
+            break;
+        } else {
+            body_buf.push(c_buf[0]);
+        }
+    }
+
+    // set body in the wrapper (Body::Empty if buf is empty), consume wrapper and return Request<Body>
+    let request = wrapper.set_body(body_buf).into_request();
 
     println!("inner router received request: {:?}", &request);
     let res = handle_request(request);
 
     println!("inner router sending response: {:?}", &res);
+    // TODO: handle response body the same as request body (don't serialize it as rmp)
     // wrap inner response and serialize it as rust messagepack
     let response = block_on(wrap_response(res)).into_rmp();
 

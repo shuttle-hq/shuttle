@@ -176,10 +176,18 @@ impl RouterInner {
             .data_mut()
             .insert_file(3, Box::new(client), FileCaps::all());
 
-        // serialise request to rmp
-        let request_rmp = wrap_request(req).await.into_rmp();
+        let (parts, body) = req.into_parts();
 
+        // serialise request parts to rmp
+        let request_rmp = wrap_request(parts).await.into_rmp();
+
+        // write request parts
         host.write_all(&request_rmp).unwrap();
+        host.write(&[0]).unwrap();
+
+        // write body
+        host.write_all(hyper::body::to_bytes(body).await.unwrap().as_ref())
+            .unwrap();
         host.write(&[0]).unwrap();
 
         println!("calling inner Router");
@@ -196,6 +204,7 @@ impl RouterInner {
         let mut res_buf = Vec::new();
         host.read_to_end(&mut res_buf).unwrap();
 
+        // TODO: handle response body the same way as request body (don't serialize it as rmp)
         // deserialize response from rmp
         let res = ResponseWrapper::from_rmp(res_buf);
 
@@ -235,7 +244,7 @@ pub mod tests {
             .version(Version::HTTP_11)
             .header("test", HeaderValue::from_static("hello"))
             .uri(format!("https://axum-wasm.example/hello"))
-            .body(Body::empty())
+            .body(Body::from("Hello world body"))
             .unwrap();
 
         let res = inner.send_request(request).await.unwrap();
@@ -258,7 +267,7 @@ pub mod tests {
             .version(Version::HTTP_11)
             .header("test", HeaderValue::from_static("goodbye"))
             .uri(format!("https://axum-wasm.example/goodbye"))
-            .body(Body::empty())
+            .body(Body::from("Goodbye world body"))
             .unwrap();
 
         let res = inner.send_request(request).await.unwrap();

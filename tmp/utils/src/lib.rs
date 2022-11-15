@@ -1,5 +1,6 @@
-use http::{HeaderMap, Method, Request, Response, StatusCode, Uri, Version};
-use http_body::{Body, Full};
+use http::{request::Parts, HeaderMap, Method, Request, Response, StatusCode, Uri, Version};
+use http_body::Body as HttpBody;
+use hyper::body::Body;
 use hyper::body::Bytes;
 use rmps::{Deserializer, Serializer};
 use serde::{Deserialize, Serialize};
@@ -21,27 +22,18 @@ pub struct RequestWrapper {
     #[serde(with = "http_serde::header_map")]
     pub headers: HeaderMap,
 
-    // I used Vec<u8> since it can derive serialize/deserialize
+    #[serde(skip)]
     pub body: Vec<u8>,
 }
 
-/// Wrap HTTP Request in a struct that can be serialized to and from Rust MessagePack
-pub async fn wrap_request<B>(req: Request<B>) -> RequestWrapper
-where
-    B: Body<Data = Bytes>,
-    B::Error: std::fmt::Debug,
-{
-    let (parts, body) = req.into_parts();
-
-    let body = hyper::body::to_bytes(body).await.unwrap();
-    let body = body.iter().cloned().collect::<Vec<u8>>();
-
+/// Wrap HTTP Request parts in a struct that can be serialized to and from Rust MessagePack
+pub async fn wrap_request(parts: Parts) -> RequestWrapper {
     RequestWrapper {
         method: parts.method,
         uri: parts.uri,
         version: parts.version,
         headers: parts.headers,
-        body,
+        body: Vec::new(),
     }
 }
 
@@ -61,13 +53,19 @@ impl RequestWrapper {
         Deserialize::deserialize(&mut de).unwrap()
     }
 
+    /// Set the http body
+    pub fn set_body(mut self, buf: Vec<u8>) -> Self {
+        self.body = buf;
+        self
+    }
+
     /// Consume wrapper and return Request
-    pub fn into_request(self) -> Request<Full<Bytes>> {
-        let mut request: Request<Full<Bytes>> = Request::builder()
+    pub fn into_request(self) -> Request<Body> {
+        let mut request = Request::builder()
             .method(self.method)
             .version(self.version)
             .uri(self.uri)
-            .body(Full::new(self.body.into()))
+            .body(Body::from(self.body))
             .unwrap();
 
         request.headers_mut().extend(self.headers.into_iter());
@@ -95,7 +93,7 @@ pub struct ResponseWrapper {
 /// Wrap HTTP Response in a struct that can be serialized to and from Rust MessagePack
 pub async fn wrap_response<B>(res: Response<B>) -> ResponseWrapper
 where
-    B: Body<Data = Bytes>,
+    B: HttpBody<Data = Bytes>,
     B::Error: std::fmt::Debug,
 {
     let (parts, body) = res.into_parts();

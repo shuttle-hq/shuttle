@@ -9,9 +9,9 @@ $ DISCORD_TOKEN=xxx cargo run
 In another terminal:
 
 ``` bash
-grpcurl -plaintext -import-path ../proto -proto runtime.proto -d '{"service_name": "Tonic", "path": "runtime/bot.wasm"}' localhost:8000 runtime.Runtime/Load
-grpcurl -plaintext -import-path ../proto -proto runtime.proto -d '{"service_name": "Tonic"}' localhost:8000 runtime.Runtime/Start
-grpcurl -plaintext -import-path ../proto -proto runtime.proto localhost:8000 runtime.Runtime/SubscribeLogs
+grpcurl -plaintext -import-path ../proto -proto runtime.proto -d '{"service_name": "Tonic", "path": "runtime/axum.wasm"}' localhost:6001 runtime.Runtime/Load
+grpcurl -plaintext -import-path ../proto -proto runtime.proto -d '{"service_name": "Tonic"}' localhost:6001 runtime.Runtime/Start
+grpcurl -plaintext -import-path ../proto -proto runtime.proto localhost:6001 runtime.Runtime/SubscribeLogs
 ```
 
 ## axum-wasm
@@ -19,7 +19,7 @@ grpcurl -plaintext -import-path ../proto -proto runtime.proto localhost:8000 run
 Compile the wasm axum router:
 
 ```bash
-make wasm
+make axum
 ```
 
 Run the test:
@@ -29,7 +29,18 @@ cargo test --all-features axum -- --nocapture
 ```
 
 Load and run:
-TODO
+
+```bash
+make axum
+```
+
+In another terminal:
+
+``` bash
+grpcurl -plaintext -import-path ../proto -proto runtime.proto -d '{"service_name": "Tonic", "path": "runtime/axum.wasm"}' localhost:8000 runtime.Runtime/Load
+grpcurl -plaintext -import-path ../proto -proto runtime.proto -d '{"service_name": "Tonic"}' localhost:8000 runtime.Runtime/Start
+# grpcurl -plaintext -import-path ../proto -proto runtime.proto localhost:8000 runtime.Runtime/SubscribeLogs
+```
 
 ## shuttle-legacy
 

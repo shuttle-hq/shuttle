@@ -1,19 +1,23 @@
+use std::convert::Infallible;
 use std::fs::File;
 use std::io::{Read, Write};
+use std::net::{Ipv4Addr, SocketAddr};
 use std::os::unix::prelude::RawFd;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use cap_std::os::unix::net::UnixStream;
-use http_body::Full;
-use hyper::body::Bytes;
-use hyper::Response;
-use shuttle_axum_utils::{wrap_request, RequestWrapper, ResponseWrapper};
+use hyper::service::{make_service_fn, service_fn};
+use hyper::{Body, Request, Response};
+use shuttle_axum_utils::{wrap_request, ResponseWrapper};
 use shuttle_proto::runtime::runtime_server::Runtime;
-use shuttle_proto::runtime::{LoadRequest, LoadResponse, StartRequest, StartResponse};
+use shuttle_proto::runtime::{
+    self, LoadRequest, LoadResponse, StartRequest, StartResponse, SubscribeLogsRequest,
+};
+use tokio_stream::wrappers::ReceiverStream;
 use tonic::Status;
-use tracing::trace;
+use tracing::{info, trace};
 use wasi_common::file::FileCaps;
 use wasmtime::{Engine, Linker, Module, Store};
 use wasmtime_wasi::sync::net::UnixStream as WasiUnixStream;
@@ -21,12 +25,14 @@ use wasmtime_wasi::{WasiCtx, WasiCtxBuilder};
 
 pub struct AxumWasm {
     router: std::sync::Mutex<Option<Router>>,
+    port: Mutex<Option<u16>>,
 }
 
 impl AxumWasm {
     pub fn new() -> Self {
         Self {
             router: std::sync::Mutex::new(None),
+            port: std::sync::Mutex::new(None),
         }
     }
 }
@@ -38,7 +44,7 @@ impl Runtime for AxumWasm {
         request: tonic::Request<LoadRequest>,
     ) -> Result<tonic::Response<LoadResponse>, Status> {
         let wasm_path = request.into_inner().path;
-        trace!(wasm_path, "loading");
+        info!(wasm_path, "loading");
 
         let router = Router::new(wasm_path);
 
@@ -53,14 +59,46 @@ impl Runtime for AxumWasm {
         &self,
         _request: tonic::Request<StartRequest>,
     ) -> Result<tonic::Response<StartResponse>, Status> {
-        // TODO: start a hyper server and serve the axum-wasm router as a service
+        let port = 7002;
+        let address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
+
+        let router = self.router.lock().unwrap().take().unwrap();
+        let make_service = make_service_fn(move |_conn| {
+            let router = router.clone();
+            async move {
+                Ok::<_, Infallible>(service_fn(move |req: Request<Body>| {
+                    let router = router.clone();
+                    async move {
+                        Ok::<_, Infallible>(
+                            router.inner.lock().await.send_request(req).await.unwrap(),
+                        )
+                    }
+                }))
+            }
+        });
+
+        info!("starting hyper server on: {}", &address);
+        let server = hyper::Server::bind(&address).serve(make_service);
+
+        _ = tokio::spawn(server);
+
+        *self.port.lock().unwrap() = Some(port);
 
         let message = StartResponse {
             success: true,
-            port: 7002,
+            port: port as u32,
         };
 
         Ok(tonic::Response::new(message))
+    }
+
+    type SubscribeLogsStream = ReceiverStream<Result<runtime::LogItem, Status>>;
+
+    async fn subscribe_logs(
+        &self,
+        _request: tonic::Request<SubscribeLogsRequest>,
+    ) -> Result<tonic::Response<Self::SubscribeLogsStream>, Status> {
+        todo!()
     }
 }
 
@@ -116,7 +154,7 @@ impl RouterBuilder {
             linker: self.linker,
         };
         Router {
-            inner: Arc::new(Mutex::new(inner)),
+            inner: Arc::new(tokio::sync::Mutex::new(inner)),
         }
     }
 }
@@ -128,7 +166,10 @@ struct RouterInner {
 
 impl RouterInner {
     /// Send a HTTP request with body to given endpoint on the axum-wasm router and return the response
-    pub async fn send_request(&mut self, req: hyper::Request<Full<Bytes>>) -> Response<Vec<u8>> {
+    pub async fn send_request(
+        &mut self,
+        req: hyper::Request<Body>,
+    ) -> Result<Response<Body>, Infallible> {
         let (mut host, client) = UnixStream::pair().unwrap();
         let client = WasiUnixStream::from_cap_std(client);
 
@@ -160,13 +201,13 @@ impl RouterInner {
         let res = ResponseWrapper::from_rmp(res_buf);
 
         // consume the wrapper and return response
-        res.into_response()
+        Ok(res.into_response())
     }
 }
 
 #[derive(Clone)]
 struct Router {
-    inner: Arc<Mutex<RouterInner>>,
+    inner: Arc<tokio::sync::Mutex<RouterInner>>,
 }
 
 impl Router {
@@ -181,51 +222,70 @@ impl Router {
 
 #[cfg(test)]
 pub mod tests {
-    use hyper::{http::HeaderValue, Method, Request, StatusCode, Version};
-
     use super::*;
+    use hyper::{http::HeaderValue, Method, Request, StatusCode, Version};
 
     #[tokio::test]
     async fn axum() {
         let axum = Router::new("axum.wasm");
-        let mut inner = axum.inner.lock().unwrap();
+        let mut inner = axum.inner.lock().await;
 
         // GET /hello
-        let request: Request<Full<Bytes>> = Request::builder()
+        let request: Request<Body> = Request::builder()
             .method(Method::GET)
             .version(Version::HTTP_11)
             .header("test", HeaderValue::from_static("hello"))
             .uri(format!("https://axum-wasm.example/hello"))
-            .body(Full::new(Bytes::from_static(b"some body")))
+            .body(Body::empty())
             .unwrap();
 
-        let res = inner.send_request(request).await;
+        let res = inner.send_request(request).await.unwrap();
+
         assert_eq!(res.status(), StatusCode::OK);
-        assert_eq!(std::str::from_utf8(&res.body()).unwrap(), "Hello, World!");
+        assert_eq!(
+            &hyper::body::to_bytes(res.into_body())
+                .await
+                .unwrap()
+                .iter()
+                .cloned()
+                .collect::<Vec<u8>>()
+                .as_ref(),
+            b"Hello, World!"
+        );
 
         // GET /goodbye
-        let request: Request<Full<Bytes>> = Request::builder()
+        let request: Request<Body> = Request::builder()
             .method(Method::GET)
             .version(Version::HTTP_11)
             .header("test", HeaderValue::from_static("goodbye"))
             .uri(format!("https://axum-wasm.example/goodbye"))
-            .body(Full::new(Bytes::from_static(b"some body")))
+            .body(Body::empty())
             .unwrap();
 
-        let res = inner.send_request(request).await;
+        let res = inner.send_request(request).await.unwrap();
+
         assert_eq!(res.status(), StatusCode::OK);
-        assert_eq!(std::str::from_utf8(&res.body()).unwrap(), "Goodbye, World!");
+        assert_eq!(
+            &hyper::body::to_bytes(res.into_body())
+                .await
+                .unwrap()
+                .iter()
+                .cloned()
+                .collect::<Vec<u8>>()
+                .as_ref(),
+            b"Goodbye, World!"
+        );
 
         // GET /invalid
-        let request: Request<Full<Bytes>> = Request::builder()
+        let request: Request<Body> = Request::builder()
             .method(Method::GET)
             .version(Version::HTTP_11)
             .header("test", HeaderValue::from_static("invalid"))
             .uri(format!("https://axum-wasm.example/invalid"))
-            .body(Full::new(Bytes::from_static(b"some body")))
+            .body(Body::empty())
             .unwrap();
 
-        let res = inner.send_request(request).await;
+        let res = inner.send_request(request).await.unwrap();
 
         assert_eq!(res.status(), StatusCode::NOT_FOUND);
     }

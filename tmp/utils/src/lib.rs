@@ -34,13 +34,14 @@ where
     let (parts, body) = req.into_parts();
 
     let body = hyper::body::to_bytes(body).await.unwrap();
+    let body = body.iter().cloned().collect::<Vec<u8>>();
 
     RequestWrapper {
         method: parts.method,
         uri: parts.uri,
         version: parts.version,
         headers: parts.headers,
-        body: body.into(),
+        body,
     }
 }
 
@@ -100,12 +101,13 @@ where
     let (parts, body) = res.into_parts();
 
     let body = hyper::body::to_bytes(body).await.unwrap();
+    let body = body.iter().cloned().collect::<Vec<u8>>();
 
     ResponseWrapper {
         status: parts.status,
         version: parts.version,
         headers: parts.headers,
-        body: body.into(),
+        body,
     }
 }
 
@@ -126,7 +128,7 @@ impl ResponseWrapper {
     }
 
     /// Consume wrapper and return Response
-    pub fn into_response(self) -> Response<Vec<u8>> {
+    pub fn into_response(self) -> Response<hyper::Body> {
         let mut response = Response::builder()
             .status(self.status)
             .version(self.version);
@@ -135,7 +137,7 @@ impl ResponseWrapper {
             .unwrap()
             .extend(self.headers.into_iter());
 
-        response.body(self.body).unwrap()
+        response.body(hyper::Body::from(self.body)).unwrap()
     }
 }
 

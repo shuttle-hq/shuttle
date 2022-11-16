@@ -53,7 +53,7 @@ pub extern "C" fn __SHUTTLE_Axum_call(fd_3: RawFd, fd_4: RawFd) {
     // deserialize request parts from rust messagepack
     let wrapper: RequestWrapper = rmps::from_read(reader).unwrap();
 
-    // file descriptor 4 for reading and writing http parts
+    // file descriptor 4 for reading and writing http body
     let mut body_fd = unsafe { File::from_raw_fd(fd_4) };
 
     // read body from host

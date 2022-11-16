@@ -1,7 +1,5 @@
-use http::{request::Parts, HeaderMap, Method, Request, Response, StatusCode, Uri, Version};
-use http_body::Body as HttpBody;
 use hyper::body::Body;
-use hyper::body::Bytes;
+use hyper::http::{HeaderMap, Method, Request, Response, StatusCode, Uri, Version};
 use rmps::{Deserializer, Serializer};
 use serde::{Deserialize, Serialize};
 
@@ -26,14 +24,15 @@ pub struct RequestWrapper {
     pub body: Vec<u8>,
 }
 
-/// Wrap HTTP Request parts in a struct that can be serialized to and from Rust MessagePack
-pub async fn wrap_request(parts: Parts) -> RequestWrapper {
-    RequestWrapper {
-        method: parts.method,
-        uri: parts.uri,
-        version: parts.version,
-        headers: parts.headers,
-        body: Vec::new(),
+impl From<hyper::http::request::Parts> for RequestWrapper {
+    fn from(parts: hyper::http::request::Parts) -> Self {
+        RequestWrapper {
+            method: parts.method,
+            uri: parts.uri,
+            version: parts.version,
+            headers: parts.headers,
+            body: Vec::new(),
+        }
     }
 }
 
@@ -53,7 +52,7 @@ impl RequestWrapper {
         Deserialize::deserialize(&mut de).unwrap()
     }
 
-    /// Set the http body
+    /// Set the request body
     pub fn set_body(mut self, buf: Vec<u8>) -> Self {
         self.body = buf;
         self
@@ -86,26 +85,18 @@ pub struct ResponseWrapper {
     #[serde(with = "http_serde::header_map")]
     pub headers: HeaderMap,
 
-    // I used Vec<u8> since it can derive serialize/deserialize
+    #[serde(skip)]
     pub body: Vec<u8>,
 }
 
-/// Wrap HTTP Response in a struct that can be serialized to and from Rust MessagePack
-pub async fn wrap_response<B>(res: Response<B>) -> ResponseWrapper
-where
-    B: HttpBody<Data = Bytes>,
-    B::Error: std::fmt::Debug,
-{
-    let (parts, body) = res.into_parts();
-
-    let body = hyper::body::to_bytes(body).await.unwrap();
-    let body = body.iter().cloned().collect::<Vec<u8>>();
-
-    ResponseWrapper {
-        status: parts.status,
-        version: parts.version,
-        headers: parts.headers,
-        body,
+impl From<hyper::http::response::Parts> for ResponseWrapper {
+    fn from(parts: hyper::http::response::Parts) -> Self {
+        ResponseWrapper {
+            status: parts.status,
+            version: parts.version,
+            headers: parts.headers,
+            body: Vec::new(),
+        }
     }
 }
 
@@ -125,37 +116,43 @@ impl ResponseWrapper {
         Deserialize::deserialize(&mut de).unwrap()
     }
 
+    /// Set the response body
+    pub fn set_body(mut self, buf: Vec<u8>) -> Self {
+        self.body = buf;
+        self
+    }
+
     /// Consume wrapper and return Response
-    pub fn into_response(self) -> Response<hyper::Body> {
+    pub fn into_response(self) -> Response<Body> {
         let mut response = Response::builder()
             .status(self.status)
-            .version(self.version);
-        response
-            .headers_mut()
-            .unwrap()
-            .extend(self.headers.into_iter());
+            .version(self.version)
+            .body(Body::from(self.body))
+            .unwrap();
 
-        response.body(hyper::Body::from(self.body)).unwrap()
+        response.headers_mut().extend(self.headers.into_iter());
+
+        response
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use futures_executor::block_on;
-    use http::HeaderValue;
+    use hyper::http::HeaderValue;
 
     #[test]
     fn request_roundtrip() {
-        let request: Request<Full<Bytes>> = Request::builder()
+        let request: Request<Body> = Request::builder()
             .method(Method::PUT)
             .version(Version::HTTP_11)
             .header("test", HeaderValue::from_static("request"))
             .uri(format!("https://axum-wasm.example/hello"))
-            .body(Full::new(Bytes::from_static(b"request body")))
+            .body(Body::empty())
             .unwrap();
 
-        let rmp = block_on(wrap_request(request)).into_rmp();
+        let (parts, _) = request.into_parts();
+        let rmp = RequestWrapper::from(parts).into_rmp();
 
         let back = RequestWrapper::from_rmp(rmp);
 
@@ -169,19 +166,19 @@ mod test {
             back.uri.to_string(),
             "https://axum-wasm.example/hello".to_string()
         );
-        assert_eq!(std::str::from_utf8(&back.body).unwrap(), "request body");
     }
 
     #[test]
     fn response_roundtrip() {
-        let response: Response<Full<Bytes>> = Response::builder()
+        let response: Response<Body> = Response::builder()
             .version(Version::HTTP_11)
             .header("test", HeaderValue::from_static("response"))
             .status(StatusCode::NOT_MODIFIED)
-            .body(Full::new(Bytes::from_static(b"response body")))
+            .body(Body::empty())
             .unwrap();
 
-        let rmp = block_on(wrap_response(response)).into_rmp();
+        let (parts, _) = response.into_parts();
+        let rmp = ResponseWrapper::from(parts).into_rmp();
 
         let back = ResponseWrapper::from_rmp(rmp);
 
@@ -191,6 +188,5 @@ mod test {
         );
         assert_eq!(back.status, StatusCode::NOT_MODIFIED);
         assert_eq!(back.version, Version::HTTP_11);
-        assert_eq!(std::str::from_utf8(&back.body).unwrap(), "response body");
     }
 }

@@ -2,7 +2,7 @@ use axum::body::HttpBody;
 use axum::{response::Response, routing::get, Router};
 use futures_executor::block_on;
 use http::Request;
-use shuttle_axum_utils::{wrap_response, RequestWrapper};
+use shuttle_axum_utils::{RequestWrapper, ResponseWrapper};
 use std::fs::File;
 use std::io::{Read, Write};
 use std::os::wasi::prelude::*;
@@ -78,10 +78,19 @@ pub extern "C" fn __SHUTTLE_Axum_call(fd: RawFd) {
     println!("inner router received request: {:?}", &request);
     let res = handle_request(request);
 
-    println!("inner router sending response: {:?}", &res);
-    // TODO: handle response body the same as request body (don't serialize it as rmp)
-    // wrap inner response and serialize it as rust messagepack
-    let response = block_on(wrap_response(res)).into_rmp();
+    let (parts, mut body) = res.into_parts();
 
-    f.write_all(&response).unwrap();
+    println!("sending parts: {:?}", parts.headers.clone());
+    // wrap and serialize response parts as rmp
+    let response_parts = ResponseWrapper::from(parts);
+
+    println!("sending response parts: {:?}", &response_parts);
+    // write response parts
+    f.write_all(&response_parts).unwrap();
+    f.write(&[0]).unwrap();
+
+    // write body
+    f.write_all(block_on(body.data()).unwrap().unwrap().as_ref())
+        .unwrap();
+    f.write(&[0]).unwrap();
 }

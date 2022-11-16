@@ -10,7 +10,7 @@ use async_trait::async_trait;
 use cap_std::os::unix::net::UnixStream;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response};
-use shuttle_axum_utils::{wrap_request, ResponseWrapper};
+use shuttle_axum_utils::{RequestWrapper, ResponseWrapper};
 use shuttle_proto::runtime::runtime_server::Runtime;
 use shuttle_proto::runtime::{
     self, LoadRequest, LoadResponse, StartRequest, StartResponse, SubscribeLogsRequest,
@@ -179,7 +179,7 @@ impl RouterInner {
         let (parts, body) = req.into_parts();
 
         // serialise request parts to rmp
-        let request_rmp = wrap_request(parts).await.into_rmp();
+        let request_rmp = RequestWrapper::from(parts).into_rmp();
 
         // write request parts
         host.write_all(&request_rmp).unwrap();
@@ -201,15 +201,39 @@ impl RouterInner {
             .call(&mut self.store, 3)
             .unwrap();
 
+        // read response parts from host
         let mut res_buf = Vec::new();
-        host.read_to_end(&mut res_buf).unwrap();
+        let mut c_buf: [u8; 1] = [0; 1];
+        loop {
+            host.read(&mut c_buf).unwrap();
+            if c_buf[0] == 0 {
+                break;
+            } else {
+                res_buf.push(c_buf[0]);
+            }
+        }
 
-        // TODO: handle response body the same way as request body (don't serialize it as rmp)
-        // deserialize response from rmp
-        let res = ResponseWrapper::from_rmp(res_buf);
+        println!("received response parts buf: \n{:?}", &res_buf);
+        // deserialize response parts from rust messagepack
+        let wrapper = ResponseWrapper::from_rmp(res_buf);
+
+        // read response body from wasm router
+        let mut body_buf = Vec::new();
+        let mut c_buf: [u8; 1] = [0; 1];
+        loop {
+            host.read(&mut c_buf).unwrap();
+            if c_buf[0] == 0 {
+                break;
+            } else {
+                body_buf.push(c_buf[0]);
+            }
+        }
+
+        // set body in the wrapper (Body::Empty if buf is empty), consume wrapper and return Response<Body>
+        let response = wrapper.set_body(body_buf).into_response();
 
         // consume the wrapper and return response
-        Ok(res.into_response())
+        Ok(response)
     }
 }
 
@@ -242,9 +266,8 @@ pub mod tests {
         let request: Request<Body> = Request::builder()
             .method(Method::GET)
             .version(Version::HTTP_11)
-            .header("test", HeaderValue::from_static("hello"))
             .uri(format!("https://axum-wasm.example/hello"))
-            .body(Body::from("Hello world body"))
+            .body(Body::empty())
             .unwrap();
 
         let res = inner.send_request(request).await.unwrap();

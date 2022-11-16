@@ -31,7 +31,7 @@ cargo test --all-features axum -- --nocapture
 Load and run:
 
 ```bash
-make axum
+cargo run --all-features
 ```
 
 In another terminal:

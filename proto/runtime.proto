@@ -10,7 +10,7 @@ service Runtime {
   // Start a loaded service file
   rpc Start(StartRequest) returns (StartResponse);
   
-  // Stop a started service file
+  // Stop a started service
   rpc Stop(StopRequest) returns (StopResponse);
 
   rpc SubscribeLogs(SubscribeLogsRequest) returns (stream LogItem);
@@ -49,7 +49,7 @@ message StartResponse {
 message StopRequest {
   // Id to associate with the deployment being stopped
   bytes deployment_id = 1;
-  // Name of service to start
+  // Name of service to stop
   string service_name = 2;
 }
 

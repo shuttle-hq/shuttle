@@ -77,10 +77,6 @@ impl Runtime for Legacy {
 
         let request = request.into_inner();
 
-        println!(
-            "provisioner address: {:?}",
-            self.provisioner_address.clone().uri()
-        );
         let provisioner_client = ProvisionerClient::connect(self.provisioner_address.clone())
             .await
             .expect("failed to connect to provisioner");
@@ -181,15 +177,15 @@ async fn run(
 ) {
     let (handle, library) = service;
 
-    info!("starting deployment on {}", &addr);
+    trace!("starting deployment on {}", &addr);
     tokio::select! {
         _ = handle => {
-            println!("deployment stopped on {}", &addr);
+            trace!("deployment stopped on {}", &addr);
         },
         message = kill_rx => {
             match message {
-                Ok(msg) => println!("{msg}"),
-                Err(_) => println!("the sender dropped")
+                Ok(msg) => trace!("{msg}"),
+                Err(_) => trace!("the sender dropped")
             }
         }
     }

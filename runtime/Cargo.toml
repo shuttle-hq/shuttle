@@ -22,6 +22,7 @@ uuid = { version = "1.1.2", features = ["v4"] }
 wasi-common = "2.0.0"
 wasmtime = "2.0.0"
 wasmtime-wasi = "2.0.0"
+rmp-serde = { version = "1.1.1" }
 
 [dependencies.shuttle-common]
 version = "0.7.0"

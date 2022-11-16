@@ -1,6 +1,6 @@
 use std::convert::Infallible;
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io::{BufReader, Read, Write};
 use std::net::{Ipv4Addr, SocketAddr};
 use std::os::unix::prelude::RawFd;
 use std::path::Path;
@@ -22,6 +22,8 @@ use wasi_common::file::FileCaps;
 use wasmtime::{Engine, Linker, Module, Store};
 use wasmtime_wasi::sync::net::UnixStream as WasiUnixStream;
 use wasmtime_wasi::{WasiCtx, WasiCtxBuilder};
+
+extern crate rmp_serde as rmps;
 
 pub struct AxumWasm {
     router: std::sync::Mutex<Option<Router>>,
@@ -169,12 +171,19 @@ impl RouterInner {
         &mut self,
         req: hyper::Request<Body>,
     ) -> Result<Response<Body>, Infallible> {
-        let (mut host, client) = UnixStream::pair().unwrap();
-        let client = WasiUnixStream::from_cap_std(client);
+        let (mut parts_stream, parts_client) = UnixStream::pair().unwrap();
+        let (mut body_stream, body_client) = UnixStream::pair().unwrap();
+
+        let parts_client = WasiUnixStream::from_cap_std(parts_client);
+        let body_client = WasiUnixStream::from_cap_std(body_client);
 
         self.store
             .data_mut()
-            .insert_file(3, Box::new(client), FileCaps::all());
+            .insert_file(3, Box::new(parts_client), FileCaps::all());
+
+        self.store
+            .data_mut()
+            .insert_file(4, Box::new(body_client), FileCaps::all());
 
         let (parts, body) = req.into_parts();
 
@@ -182,13 +191,13 @@ impl RouterInner {
         let request_rmp = RequestWrapper::from(parts).into_rmp();
 
         // write request parts
-        host.write_all(&request_rmp).unwrap();
-        host.write(&[0]).unwrap();
+        parts_stream.write_all(&request_rmp).unwrap();
 
         // write body
-        host.write_all(hyper::body::to_bytes(body).await.unwrap().as_ref())
+        body_stream
+            .write_all(hyper::body::to_bytes(body).await.unwrap().as_ref())
             .unwrap();
-        host.write(&[0]).unwrap();
+        body_stream.write(&[0]).unwrap();
 
         println!("calling inner Router");
         self.linker
@@ -196,32 +205,22 @@ impl RouterInner {
             .unwrap()
             .into_func()
             .unwrap()
-            .typed::<RawFd, (), _>(&self.store)
+            .typed::<(RawFd, RawFd), (), _>(&self.store)
             .unwrap()
-            .call(&mut self.store, 3)
+            .call(&mut self.store, (3, 4))
             .unwrap();
 
         // read response parts from host
-        let mut res_buf = Vec::new();
-        let mut c_buf: [u8; 1] = [0; 1];
-        loop {
-            host.read(&mut c_buf).unwrap();
-            if c_buf[0] == 0 {
-                break;
-            } else {
-                res_buf.push(c_buf[0]);
-            }
-        }
+        let reader = BufReader::new(&mut parts_stream);
 
-        println!("received response parts buf: \n{:?}", &res_buf);
         // deserialize response parts from rust messagepack
-        let wrapper = ResponseWrapper::from_rmp(res_buf);
+        let wrapper: ResponseWrapper = rmps::from_read(reader).unwrap();
 
         // read response body from wasm router
         let mut body_buf = Vec::new();
         let mut c_buf: [u8; 1] = [0; 1];
         loop {
-            host.read(&mut c_buf).unwrap();
+            body_stream.read(&mut c_buf).unwrap();
             if c_buf[0] == 0 {
                 break;
             } else {

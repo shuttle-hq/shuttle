@@ -82,7 +82,7 @@ pub extern "C" fn __SHUTTLE_Axum_call(fd: RawFd) {
 
     println!("sending parts: {:?}", parts.headers.clone());
     // wrap and serialize response parts as rmp
-    let response_parts = ResponseWrapper::from(parts);
+    let response_parts = ResponseWrapper::from(parts).into_rmp();
 
     println!("sending response parts: {:?}", &response_parts);
     // write response parts

@@ -25,7 +25,7 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::args::ContextArgs;
 use crate::auth::{Key, Permissions, User};
-use crate::custom_domain::CustomDomain;
+use crate::acme::CustomDomain;
 use crate::project::Project;
 use crate::task::TaskBuilder;
 use crate::{AccountName, DockerContext, Error, ErrorKind, ProjectName};

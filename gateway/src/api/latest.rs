@@ -18,7 +18,7 @@ use tower_http::trace::TraceLayer;
 use tracing::{debug, debug_span, field, Span};
 
 use crate::auth::{Admin, ScopedUser, User};
-use crate::custom_domain::AcmeClient;
+use crate::acme::AcmeClient;
 use crate::task::{self, BoxedTask};
 use crate::worker::WORKER_QUEUE_SIZE;
 use crate::{AccountName, Error, GatewayService, ProjectName};

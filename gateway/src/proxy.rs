@@ -4,10 +4,11 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use axum::body::HttpBody;
+use axum::headers::{HeaderMapExt, Host};
 use axum::response::{IntoResponse, Response};
+use fqdn::{fqdn, Fqdn, FQDN};
 use futures::prelude::*;
-use hyper::body::Body;
+use hyper::body::{Body, HttpBody};
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
 use hyper::server::conn::AddrStream;
@@ -20,7 +21,7 @@ use tower::{Service, ServiceBuilder};
 use tracing::{debug, debug_span, field, trace};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
-use crate::custom_domain::{AcmeClient, ChallengeResponder, ChallengeResponderLayer};
+use crate::acme::{AcmeClient, ChallengeResponder, ChallengeResponderLayer, CustomDomain};
 use crate::service::GatewayService;
 use crate::{Error, ErrorKind, ProjectName};
 
@@ -132,6 +133,52 @@ impl<'r> Service<&'r AddrStream> for MakeProxyService {
                 .service(proxy_service);
 
             Ok(service)
+        })
+    }
+}
+
+pub struct Bouncer {
+    gateway: Arc<GatewayService>,
+    public: FQDN,
+}
+
+impl Service<Request<Body>> for Bouncer {
+    type Response = Response<Body>;
+    type Error = Error;
+    type Future =
+        Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
+
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, req: Request<Body>) -> Self::Future {
+        let gateway = Arc::clone(&self.gateway);
+        let public = self.public.clone();
+
+        Box::pin(async move {
+            let mut resp = Response::builder();
+
+            let host = req.headers().typed_get::<Host>().unwrap();
+            let hostname = host.hostname();
+            let fqdn = fqdn!(hostname);
+
+            let path = req.uri();
+
+            if fqdn.is_subdomain_of(&public)
+                || gateway
+                    .project_details_for_custom_domain(&fqdn)
+                    .await
+                    .is_ok()
+            {
+                resp = resp
+                    .status(301)
+                    .header("Location", format!("https://{hostname}{path}"));
+            } else {
+                resp = resp.status(404);
+            }
+
+            Ok(resp.body(Body::empty()).unwrap())
         })
     }
 }

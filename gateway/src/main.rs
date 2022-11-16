@@ -3,7 +3,7 @@ use futures::prelude::*;
 use opentelemetry::global;
 use shuttle_gateway::args::{Args, Commands, InitArgs, UseTls};
 use shuttle_gateway::auth::Key;
-use shuttle_gateway::custom_domain::AcmeClient;
+use shuttle_gateway::acme::AcmeClient;
 use shuttle_gateway::proxy::make_proxy;
 use shuttle_gateway::service::{GatewayService, MIGRATIONS};
 use shuttle_gateway::task;
@@ -135,7 +135,7 @@ async fn start(db: SqlitePool, args: StartArgs) -> io::Result<()> {
         warn!("TLS is disabled in the proxy service. This is only acceptable in testing, and should *never* be used in deployments.");
         axum_server::Server::bind(args.user).serve(proxy).boxed()
     } else {
-        let (_resolver, tls_acceptor) = make_tls_acceptor();
+        let (resolver, tls_acceptor) = make_tls_acceptor();
         axum_server::Server::bind(args.user)
             .acceptor(tls_acceptor)
             .serve(proxy)

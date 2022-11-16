@@ -1,6 +1,6 @@
 use hyper::body::Body;
 use hyper::http::{HeaderMap, Method, Request, Response, StatusCode, Uri, Version};
-use rmps::{Deserializer, Serializer};
+use rmps::Serializer;
 use serde::{Deserialize, Serialize};
 
 extern crate rmp_serde as rmps;
@@ -43,13 +43,6 @@ impl RequestWrapper {
         self.serialize(&mut Serializer::new(&mut buf)).unwrap();
 
         buf
-    }
-
-    /// Deserialize a RequestWrapper from the Rust MessagePack data format
-    pub fn from_rmp(buf: Vec<u8>) -> Self {
-        let mut de = Deserializer::new(buf.as_slice());
-
-        Deserialize::deserialize(&mut de).unwrap()
     }
 
     /// Set the request body
@@ -109,13 +102,6 @@ impl ResponseWrapper {
         buf
     }
 
-    /// Deserialize a ResponseWrapper from the Rust MessagePack data format
-    pub fn from_rmp(buf: Vec<u8>) -> Self {
-        let mut de = Deserializer::new(buf.as_slice());
-
-        Deserialize::deserialize(&mut de).unwrap()
-    }
-
     /// Set the response body
     pub fn set_body(mut self, buf: Vec<u8>) -> Self {
         self.body = buf;
@@ -154,7 +140,7 @@ mod test {
         let (parts, _) = request.into_parts();
         let rmp = RequestWrapper::from(parts).into_rmp();
 
-        let back = RequestWrapper::from_rmp(rmp);
+        let back: RequestWrapper = rmps::from_slice(&rmp).unwrap();
 
         assert_eq!(
             back.headers.get("test").unwrap(),
@@ -180,7 +166,7 @@ mod test {
         let (parts, _) = response.into_parts();
         let rmp = ResponseWrapper::from(parts).into_rmp();
 
-        let back = ResponseWrapper::from_rmp(rmp);
+        let back: ResponseWrapper = rmps::from_slice(&rmp).unwrap();
 
         assert_eq!(
             back.headers.get("test").unwrap(),

@@ -1,4 +1,7 @@
+use std::path::PathBuf;
+
 use clap::{Parser, Subcommand};
+use shuttle_common::project::ProjectName;
 
 #[derive(Parser, Debug)]
 pub struct Args {
@@ -14,4 +17,37 @@ pub struct Args {
 pub enum Command {
     /// Try to revive projects in the crashed state
     Revive,
+
+    #[command(subcommand)]
+    Acme(AcmeCommand),
+}
+
+#[derive(Subcommand, Debug)]
+pub enum AcmeCommand {
+    /// Create a new ACME account. Should only be needed once
+    CreateAccount {
+        /// Email for managing all certificates
+        #[arg(long)]
+        email: String,
+
+        /// Acme server to create account on. Gateway will default to LetsEncrypt
+        #[arg(long)]
+        acme_server: Option<String>,
+    },
+
+    /// Request a certificate for a FQDN
+    RequestCertificate {
+        /// Fqdn to request certificate for
+        #[arg(long)]
+        fqdn: String,
+
+        /// Project to request certificate for
+        #[arg(long)]
+        project: ProjectName,
+
+        /// Path to acme credentials file
+        /// This should have been created with `acme create-account`
+        #[arg(long)]
+        credentials: PathBuf,
+    },
 }

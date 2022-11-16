@@ -7,6 +7,7 @@ use axum::http::Request;
 use axum::response::Response;
 use bollard::network::ListNetworksOptions;
 use bollard::{Docker, API_DEFAULT_VERSION};
+use fqdn::Fqdn;
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
 use hyper::Client;
@@ -27,7 +28,7 @@ use crate::auth::{Key, Permissions, User};
 use crate::custom_domain::CustomDomain;
 use crate::project::Project;
 use crate::task::TaskBuilder;
-use crate::{AccountName, DockerContext, Error, ErrorKind, Fqdn, ProjectName};
+use crate::{AccountName, DockerContext, Error, ErrorKind, ProjectName};
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
@@ -200,16 +201,6 @@ impl GatewayService {
         let provider = GatewayContextProvider::new(docker, container_settings);
 
         Self { provider, db }
-    }
-
-    pub async fn route_fqdn(&self, req: Request<Body>) -> Result<Response<Body>, Error> {
-        let fqdn = req
-            .headers()
-            .typed_get::<Fqdn>()
-            .ok_or_else(|| Error::from(ErrorKind::CustomDomainNotFound))?;
-        let project_name = self.project_name_for_custom_domain(&fqdn).await?;
-
-        self.route(&project_name, req).await
     }
 
     pub async fn route(
@@ -462,14 +453,15 @@ impl GatewayService {
     pub async fn create_custom_domain(
         &self,
         project_name: ProjectName,
-        fqdn: Fqdn,
-    ) -> Result<CustomDomain, Error> {
-        let state = SqlxJson(CustomDomain::Creating);
-
-        query("INSERT INTO custom_domains (fqdn, project_name, state) VALUES (?1, ?2, ?3)")
-            .bind(&fqdn)
+        fqdn: &Fqdn,
+        certificate: &str,
+        private_key: &str,
+    ) -> Result<(), Error> {
+        query("INSERT INTO custom_domains (fqdn, project_name, certificate, private_key) VALUES (?1, ?2, ?3, ?4)")
+            .bind(fqdn.to_string())
             .bind(&project_name)
-            .bind(&state)
+            .bind(certificate)
+            .bind(private_key)
             .execute(&self.db)
             .await
             .map_err(|err| {
@@ -482,17 +474,26 @@ impl GatewayService {
                 err.into()
             })?;
 
-        Ok(state.0)
+        Ok(())
     }
 
-    pub async fn project_name_for_custom_domain(&self, fqdn: &Fqdn) -> Result<ProjectName, Error> {
-        let project_name = query("SELECT project_name FROM custom_domains WHERE fqdn = ?1")
-            .bind(fqdn)
-            .fetch_optional(&self.db)
-            .await?
-            .map(|row| row.try_get("project_name").unwrap())
-            .ok_or_else(|| Error::from(ErrorKind::CustomDomainNotFound))?;
-        Ok(project_name)
+    pub async fn project_details_for_custom_domain(
+        &self,
+        fqdn: &Fqdn,
+    ) -> Result<CustomDomain, Error> {
+        let custom_domain = query(
+            "SELECT project_name, certificate, private_key FROM custom_domains WHERE fqdn = ?1",
+        )
+        .bind(fqdn.to_string())
+        .fetch_optional(&self.db)
+        .await?
+        .map(|row| CustomDomain {
+            project_name: row.try_get("project_name").unwrap(),
+            certificate: row.get("certificate"),
+            private_key: row.get("private_key"),
+        })
+        .ok_or_else(|| Error::from(ErrorKind::CustomDomainNotFound))?;
+        Ok(custom_domain)
     }
 
     pub fn context(&self) -> GatewayContext {
@@ -525,6 +526,8 @@ impl DockerContext for GatewayContext {
 pub mod tests {
 
     use std::str::FromStr;
+
+    use fqdn::FQDN;
 
     use super::*;
     use crate::auth::AccountTier;
@@ -710,16 +713,18 @@ pub mod tests {
     #[tokio::test]
     async fn service_create_find_custom_domain() -> anyhow::Result<()> {
         let world = World::new().await;
-        let svc = Arc::new(GatewayService::init(world.args(), world.fqdn(), world.pool()).await);
+        let svc = Arc::new(GatewayService::init(world.args(), world.pool()).await);
 
         let account: AccountName = "neo".parse().unwrap();
         let project_name: ProjectName = "matrix".parse().unwrap();
-        let domain: Fqdn = "neo.the.matrix".parse().unwrap();
+        let domain: FQDN = "neo.the.matrix".parse().unwrap();
+        let certificate = "dummy certificate";
+        let private_key = "dummy private key";
 
         svc.create_user(account.clone()).await.unwrap();
 
         assert_err_kind!(
-            svc.project_name_for_custom_domain(&domain).await,
+            svc.project_details_for_custom_domain(&domain).await,
             ErrorKind::CustomDomainNotFound
         );
 
@@ -728,16 +733,21 @@ pub mod tests {
             .await
             .unwrap();
 
-        svc.create_custom_domain(project_name.clone(), domain.clone())
+        svc.create_custom_domain(project_name.clone(), &domain, certificate, private_key)
             .await
             .unwrap();
 
-        let project = svc.project_name_for_custom_domain(&domain).await.unwrap();
+        let custom_domain = svc
+            .project_details_for_custom_domain(&domain)
+            .await
+            .unwrap();
 
-        assert_eq!(project, project_name);
+        assert_eq!(custom_domain.project_name, project_name);
+        assert_eq!(custom_domain.certificate, certificate.as_bytes());
+        assert_eq!(custom_domain.private_key, private_key.as_bytes());
 
         assert_err_kind!(
-            svc.create_custom_domain(project_name.clone(), domain.clone())
+            svc.create_custom_domain(project_name.clone(), &domain, certificate, private_key)
                 .await,
             ErrorKind::CustomDomainAlreadyExists
         );

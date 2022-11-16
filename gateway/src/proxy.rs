@@ -16,10 +16,11 @@ use hyper_reverse_proxy::ReverseProxy;
 use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
-use tower::Service;
-use tracing::{debug, debug_span, field};
+use tower::{Service, ServiceBuilder};
+use tracing::{debug, debug_span, field, trace};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
+use crate::custom_domain::{AcmeClient, ChallengeResponder, ChallengeResponderLayer};
 use crate::service::GatewayService;
 use crate::{Error, ErrorKind, ProjectName};
 
@@ -50,6 +51,7 @@ impl Service<Request<Body>> for ProxyService {
         Box::pin(
             async move {
                 let span = debug_span!("proxy", http.method = %req.method(), http.uri = %req.uri(), http.status_code = field::Empty, project = field::Empty);
+                trace!(?req, "serving proxy request");
                 let project_str = req
                     .headers()
                     .get("Host")
@@ -97,11 +99,12 @@ impl Service<Request<Body>> for ProxyService {
 
 pub struct MakeProxyService {
     gateway: Arc<GatewayService>,
+    acme_client: AcmeClient,
     fqdn: String,
 }
 
 impl<'r> Service<&'r AddrStream> for MakeProxyService {
-    type Response = ProxyService;
+    type Response = ChallengeResponder<ProxyService>;
     type Error = Error;
     type Future =
         Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
@@ -112,23 +115,37 @@ impl<'r> Service<&'r AddrStream> for MakeProxyService {
 
     fn call(&mut self, target: &'r AddrStream) -> Self::Future {
         let gateway = Arc::clone(&self.gateway);
+        let acme_client = self.acme_client.clone();
         let remote_addr = target.remote_addr();
         let fqdn = self.fqdn.clone();
+
         Box::pin(async move {
-            Ok(ProxyService {
+            let challenge_response_layer = ChallengeResponderLayer::new(acme_client);
+            let proxy_service = ProxyService {
                 remote_addr,
                 gateway,
                 fqdn,
-            })
+            };
+
+            let service = ServiceBuilder::new()
+                .layer(challenge_response_layer)
+                .service(proxy_service);
+
+            Ok(service)
         })
     }
 }
 
-pub fn make_proxy(gateway: Arc<GatewayService>, fqdn: String) -> MakeProxyService {
+pub fn make_proxy(
+    gateway: Arc<GatewayService>,
+    acme_client: AcmeClient,
+    fqdn: String,
+) -> MakeProxyService {
     debug!("making proxy");
 
     MakeProxyService {
         gateway,
+        acme_client,
         fqdn: format!(".{fqdn}"),
     }
 }

@@ -7,7 +7,9 @@ use axum::http::Request;
 use axum::response::Response;
 use axum::routing::{any, get, post};
 use axum::{Json as AxumJson, Router};
+use fqdn::FQDN;
 use http::StatusCode;
+use instant_acme::AccountCredentials;
 use serde::{Deserialize, Serialize};
 use shuttle_common::models::error::ErrorKind;
 use shuttle_common::models::{project, user};
@@ -16,6 +18,7 @@ use tower_http::trace::TraceLayer;
 use tracing::{debug, debug_span, field, Span};
 
 use crate::auth::{Admin, ScopedUser, User};
+use crate::custom_domain::AcmeClient;
 use crate::task::{self, BoxedTask};
 use crate::worker::WORKER_QUEUE_SIZE;
 use crate::{AccountName, Error, GatewayService, ProjectName};
@@ -186,7 +189,42 @@ async fn revive_projects(
         .map_err(|_| Error::from_kind(ErrorKind::Internal))
 }
 
-pub fn make_api(service: Arc<GatewayService>, sender: Sender<BoxedTask>) -> Router<Body> {
+async fn create_acme_account(
+    _: Admin,
+    Extension(acme_client): Extension<AcmeClient>,
+    Path(email): Path<String>,
+    AxumJson(acme_server): AxumJson<Option<String>>,
+) -> Result<AxumJson<serde_json::Value>, Error> {
+    let res = acme_client.create_account(&email, acme_server).await?;
+
+    Ok(AxumJson(res))
+}
+
+async fn request_acme_certificate(
+    _: Admin,
+    Extension(service): Extension<Arc<GatewayService>>,
+    Extension(acme_client): Extension<AcmeClient>,
+    Path((project_name, fqdn)): Path<(ProjectName, String)>,
+    AxumJson(credentials): AxumJson<AccountCredentials<'_>>,
+) -> Result<String, Error> {
+    let fqdn: FQDN = fqdn
+        .parse()
+        .map_err(|_err| Error::from(ErrorKind::InvalidCustomDomain))?;
+    let (chain, async_keys) = acme_client.create_certificate(&fqdn, credentials).await?;
+    let private_key = async_keys.serialize_private_key_pem();
+
+    service
+        .create_custom_domain(project_name, &fqdn, &chain, &private_key)
+        .await?;
+
+    Ok("Certificate created".to_string())
+}
+
+pub fn make_api(
+    service: Arc<GatewayService>,
+    acme_client: AcmeClient,
+    sender: Sender<BoxedTask>,
+) -> Router<Body> {
     debug!("making api route");
 
     Router::<Body>::new()
@@ -201,7 +239,10 @@ pub fn make_api(service: Arc<GatewayService>, sender: Sender<BoxedTask>) -> Rout
         .route("/users/:account_name", get(get_user).post(post_user))
         .route("/projects/:project/*any", any(route_project))
         .route("/admin/revive", post(revive_projects))
+        .route("/admin/acme/:email", post(create_acme_account))
+        .route("/admin/acme/request/:project_name/:fqdn", post(request_acme_certificate))
         .layer(Extension(service))
+        .layer(Extension(acme_client))
         .layer(Extension(sender))
         .layer(
             TraceLayer::new_for_http()
@@ -246,7 +287,7 @@ pub mod tests {
             }
         });
 
-        let mut router = make_api(Arc::clone(&service), sender);
+        let mut router = make_api(Arc::clone(&service), world.acme_client(), sender);
 
         let neo = service.create_user("neo".parse().unwrap()).await?;
 
@@ -390,7 +431,7 @@ pub mod tests {
             }
         });
 
-        let mut router = make_api(Arc::clone(&service), sender);
+        let mut router = make_api(Arc::clone(&service), world.acme_client(), sender);
 
         let get_neo = || {
             Request::builder()
@@ -486,7 +527,7 @@ pub mod tests {
             }
         });
 
-        let mut router = make_api(Arc::clone(&service), sender.clone());
+        let mut router = make_api(Arc::clone(&service), world.acme_client(), sender.clone());
 
         let get_status = || {
             Request::builder()

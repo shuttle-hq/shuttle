@@ -131,11 +131,11 @@ async fn start(db: SqlitePool, args: StartArgs) -> io::Result<()> {
     let api_handle = tokio::spawn(axum::Server::bind(&args.control).serve(api.into_make_service()));
 
     let proxy = make_proxy(Arc::clone(&gateway), acme_client, fqdn);
-    let (_resolver, tls_acceptor) = make_tls_acceptor();
     let proxy_handle = if let UseTls::Disable = args.use_tls {
         warn!("TLS is disabled in the proxy service. This is only acceptable in testing, and should *never* be used in deployments.");
         axum_server::Server::bind(args.user).serve(proxy).boxed()
     } else {
+        let (_resolver, tls_acceptor) = make_tls_acceptor();
         axum_server::Server::bind(args.user)
             .acceptor(tls_acceptor)
             .serve(proxy)

@@ -13,7 +13,7 @@ use shuttle_common::models::error::ErrorKind;
 use tokio::runtime::Handle;
 use tokio::sync::RwLock;
 
-use crate::{Error, Fqdn};
+use crate::Error;
 
 pub fn parse_pem(certs: &[u8], key: &[u8]) -> Result<(Vec<Certificate>, PrivateKey), Error> {
     let certs = rustls_pemfile::read_all(&mut BufReader::new(certs))
@@ -65,7 +65,7 @@ impl GatewayCertResolver {
     /// receiving incoming TLS connections for the given domain.
     pub async fn serve_der(
         &self,
-        fqdn: Fqdn,
+        fqdn: &str,
         certs: Vec<Certificate>,
         key: PrivateKey,
     ) -> Result<(), Error> {
@@ -82,7 +82,7 @@ impl GatewayCertResolver {
     /// Same as [GatewayCertResolver::serve_der] but assuming the
     /// certificate and keys are provided as PEM files which have to
     /// be parsed.
-    pub async fn serve_pem(&self, fqdn: Fqdn, certs: &[u8], key: &[u8]) -> Result<(), Error> {
+    pub async fn serve_pem(&self, fqdn: &str, certs: &[u8], key: &[u8]) -> Result<(), Error> {
         let (certs, private_key) = parse_pem(certs, key)?;
         self.serve_der(fqdn, certs, private_key).await
     }

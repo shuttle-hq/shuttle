@@ -13,7 +13,7 @@ use shuttle_proto::{
     provisioner::provisioner_client::ProvisionerClient,
     runtime::{
         self, runtime_server::Runtime, LoadRequest, LoadResponse, StartRequest, StartResponse,
-        SubscribeLogsRequest,
+        StopRequest, StopResponse, SubscribeLogsRequest,
     },
 };
 use shuttle_service::{
@@ -37,6 +37,7 @@ pub struct Legacy {
     logs_rx: Mutex<Option<UnboundedReceiver<LogItem>>>,
     logs_tx: Mutex<UnboundedSender<LogItem>>,
     provisioner_address: Endpoint,
+    kill_tx: Mutex<Option<tokio::sync::oneshot::Sender<String>>>,
 }
 
 impl Legacy {
@@ -48,6 +49,7 @@ impl Legacy {
             port: Mutex::new(None),
             logs_rx: Mutex::new(Some(rx)),
             logs_tx: Mutex::new(tx),
+            kill_tx: Mutex::new(None),
             provisioner_address,
         }
     }
@@ -75,6 +77,10 @@ impl Runtime for Legacy {
 
         let request = request.into_inner();
 
+        println!(
+            "provisioner address: {:?}",
+            self.provisioner_address.clone().uri()
+        );
         let provisioner_client = ProvisionerClient::connect(self.provisioner_address.clone())
             .await
             .expect("failed to connect to provisioner");
@@ -105,7 +111,11 @@ impl Runtime for Legacy {
             .await
             .unwrap();
 
-        _ = tokio::spawn(run(service, service_address));
+        let (kill_tx, kill_rx) = tokio::sync::oneshot::channel();
+
+        *self.kill_tx.lock().unwrap() = Some(kill_tx);
+
+        _ = tokio::spawn(run(service, service_address, kill_rx));
 
         *self.port.lock().unwrap() = Some(service_port);
 
@@ -140,14 +150,49 @@ impl Runtime for Legacy {
             Err(Status::internal("logs have already been subscribed to"))
         }
     }
+
+    async fn stop(&self, request: Request<StopRequest>) -> Result<Response<StopResponse>, Status> {
+        let request = request.into_inner();
+
+        let service_name = ServiceName::from_str(request.service_name.as_str())
+            .map_err(|err| Status::from_error(Box::new(err)))?;
+
+        let kill_tx = self.kill_tx.lock().unwrap().deref_mut().take();
+
+        if let Some(kill_tx) = kill_tx {
+            tokio::spawn(async move {
+                kill_tx
+                    .send(format!("stopping deployment: {}", &service_name))
+                    .unwrap();
+            });
+
+            Ok(Response::new(StopResponse { success: true }))
+        } else {
+            Err(Status::internal("failed to stop deployment"))
+        }
+    }
 }
 
 #[instrument(skip(service))]
-async fn run(service: LoadedService, addr: SocketAddr) {
+async fn run(
+    service: LoadedService,
+    addr: SocketAddr,
+    kill_rx: tokio::sync::oneshot::Receiver<String>,
+) {
     let (handle, library) = service;
 
-    info!("starting deployment on {}", addr);
-    handle.await.unwrap().unwrap();
+    info!("starting deployment on {}", &addr);
+    tokio::select! {
+        _ = handle => {
+            println!("deployment stopped on {}", &addr);
+        },
+        message = kill_rx => {
+            match message {
+                Ok(msg) => println!("{msg}"),
+                Err(_) => println!("the sender dropped")
+            }
+        }
+    }
 
     tokio::spawn(async move {
         trace!("closing .so file");

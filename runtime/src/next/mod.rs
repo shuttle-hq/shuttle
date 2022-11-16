@@ -10,7 +10,8 @@ use cap_std::os::unix::net::UnixStream;
 use serenity::{model::prelude::*, prelude::*};
 use shuttle_proto::runtime::runtime_server::Runtime;
 use shuttle_proto::runtime::{
-    self, LoadRequest, LoadResponse, StartRequest, StartResponse, SubscribeLogsRequest,
+    self, LoadRequest, LoadResponse, StartRequest, StartResponse, StopRequest, StopResponse,
+    SubscribeLogsRequest,
 };
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
@@ -79,6 +80,10 @@ impl Runtime for Next {
         &self,
         _request: Request<SubscribeLogsRequest>,
     ) -> Result<Response<Self::SubscribeLogsStream>, Status> {
+        todo!()
+    }
+
+    async fn stop(&self, _request: Request<StopRequest>) -> Result<Response<StopResponse>, Status> {
         todo!()
     }
 }

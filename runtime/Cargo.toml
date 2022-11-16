@@ -43,5 +43,5 @@ path = "../tmp/utils"
 optional = true
 
 [features]
-axum = ["shuttle-axum-utils"]
+shuttle-axum = ["shuttle-axum-utils"]
 

@@ -1,38 +1,7 @@
 use anyhow::{Context, Result};
-use async_trait::async_trait;
-use reqwest::Response;
 use serde::{de::DeserializeOwned, Serialize};
-use shuttle_common::{models::error, project::ProjectName};
+use shuttle_common::{models::ToJson, project::ProjectName};
 use tracing::trace;
-
-#[async_trait]
-trait ToJson {
-    async fn to_json<T: DeserializeOwned>(self) -> Result<T>;
-}
-
-#[async_trait]
-impl ToJson for Response {
-    async fn to_json<T: DeserializeOwned>(self) -> Result<T> {
-        let full = self.bytes().await?;
-
-        trace!(
-            response = std::str::from_utf8(&full).unwrap_or_default(),
-            "parsing response to json"
-        );
-        // try to deserialize into calling function response model
-        match serde_json::from_slice(&full) {
-            Ok(res) => Ok(res),
-            Err(_) => {
-                trace!("parsing response to common error");
-                // if that doesn't work, try to deserialize into common error type
-                let res: error::ApiError =
-                    serde_json::from_slice(&full).context("failed to parse response to JSON")?;
-
-                Err(res.into())
-            }
-        }
-    }
-}
 
 pub struct Client {
     api_url: String,

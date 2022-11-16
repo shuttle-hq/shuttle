@@ -5375,7 +5375,6 @@ name = "shuttle-admin"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "async-trait",
  "clap 4.0.4",
  "dirs",
  "reqwest",
@@ -5404,11 +5403,14 @@ dependencies = [
 name = "shuttle-common"
 version = "0.7.2"
 dependencies = [
+ "anyhow",
+ "async-trait",
  "chrono",
  "comfy-table",
  "crossterm",
  "http 0.2.8",
  "once_cell",
+ "reqwest",
  "rustrict",
  "serde",
  "serde_json",

@@ -1,62 +1,24 @@
 use std::fmt::Write;
 
 use anyhow::{Context, Result};
-use async_trait::async_trait;
 use headers::{Authorization, HeaderMapExt};
-use reqwest::{Body, Response, StatusCode};
+use reqwest::{Body, Response};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, RequestBuilder};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
-use serde::de::DeserializeOwned;
 use serde::Deserialize;
-use shuttle_common::models::{deployment, error, project, secret, service, user};
+use shuttle_common::models::{deployment, project, secret, service, user, ToJson};
 use shuttle_common::project::ProjectName;
 use shuttle_common::{ApiKey, ApiUrl, LogItem};
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
-use tracing::{error, trace};
+use tracing::error;
 use uuid::Uuid;
 
 pub struct Client {
     api_url: ApiUrl,
     api_key: Option<ApiKey>,
-}
-
-#[async_trait]
-trait ToJson {
-    async fn to_json<T: DeserializeOwned>(self) -> Result<T>;
-}
-
-#[async_trait]
-impl ToJson for Response {
-    async fn to_json<T: DeserializeOwned>(self) -> Result<T> {
-        let status_code = self.status();
-        let full = self.bytes().await?;
-
-        trace!(
-            response = std::str::from_utf8(&full).unwrap_or_default(),
-            "parsing response to json"
-        );
-
-        if matches!(
-            status_code,
-            StatusCode::OK | StatusCode::SWITCHING_PROTOCOLS
-        ) {
-            serde_json::from_slice(&full).context("failed to parse a successfull response")
-        } else {
-            trace!("parsing response to common error");
-            let res: error::ApiError = match serde_json::from_slice(&full) {
-                Ok(res) => res,
-                _ => {
-                    trace!("getting error from status code");
-                    status_code.into()
-                }
-            };
-
-            Err(res.into())
-        }
-    }
 }
 
 impl Client {

@@ -46,6 +46,26 @@ async fn main() {
                 .await
                 .expect("to get a certificate challenge response")
         }
+        Command::ProjectNames => {
+            let projects = client
+                .list_invalid_project_names()
+                .await
+                .expect("get invalid project names");
+
+            let mut res = String::new();
+
+            for (project, issues) in projects {
+                writeln!(res, "{project}").expect("to write name of project name having issues");
+
+                for issue in issues {
+                    writeln!(res, "\t- {issue}").expect("to write issue with project name");
+                }
+
+                writeln!(res).expect("to write a new line");
+            }
+
+            res
+        }
     };
 
     println!("{res}");

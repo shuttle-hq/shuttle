@@ -36,6 +36,10 @@ impl Client {
         self.post(&path, Some(credentials)).await
     }
 
+    pub async fn list_invalid_project_names(&self) -> Result<Vec<(String, Vec<String>)>> {
+        self.get("/admin/invalid-names").await
+    }
+
     async fn post<T: Serialize, R: DeserializeOwned>(
         &self,
         path: &str,
@@ -58,5 +62,17 @@ impl Client {
             .to_json()
             .await
             .context("failed to extract json body from post response")
+    }
+
+    async fn get<R: DeserializeOwned>(&self, path: &str) -> Result<R> {
+        reqwest::Client::new()
+            .get(format!("{}{}", self.api_url, path))
+            .bearer_auth(&self.api_key)
+            .send()
+            .await
+            .context("failed to make post request")?
+            .to_json()
+            .await
+            .context("failed to post text body from response")
     }
 }

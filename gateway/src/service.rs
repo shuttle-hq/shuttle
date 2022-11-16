@@ -496,6 +496,22 @@ impl GatewayService {
         Ok(custom_domain)
     }
 
+    pub async fn iter_projects_with_user(
+        &self,
+    ) -> Result<impl Iterator<Item = (ProjectName, AccountName)>, Error> {
+        let iter = query("SELECT project_name, account_name FROM projects")
+            .fetch_all(&self.db)
+            .await?
+            .into_iter()
+            .map(|row| {
+                (
+                    row.try_get("project_name").unwrap(),
+                    row.try_get("account_name").unwrap(),
+                )
+            });
+        Ok(iter)
+    }
+
     pub fn context(&self) -> GatewayContext {
         self.provider.context()
     }
@@ -613,6 +629,14 @@ pub mod tests {
         assert!(creating_same_project_name(&project, &matrix));
 
         assert_eq!(svc.find_project(&matrix).await.unwrap(), project);
+        assert_eq!(
+            svc.iter_projects_with_user()
+                .await
+                .unwrap()
+                .next()
+                .expect("to get one project with its user"),
+            (matrix.clone(), neo.clone())
+        );
 
         let mut work = svc
             .new_task()

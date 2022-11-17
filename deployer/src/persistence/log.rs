@@ -100,14 +100,9 @@ fn extract_message(fields: &Value) -> Option<String> {
             return Some(message.as_str()?.to_string());
         }
 
-        if let Some(message) = map.get("message") {
-            match message {
-                Value::Object(message_object) => {
-                    if let Some(rendered) = message_object.get("rendered") {
-                        return Some(rendered.as_str()?.to_string());
-                    }
-                }
-                _ => {}
+        if let Some(Value::Object(message_object)) = map.get("message") {
+            if let Some(rendered) = message_object.get("rendered") {
+                return Some(rendered.as_str()?.to_string());
             }
         }
     }

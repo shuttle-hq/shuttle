@@ -4,6 +4,8 @@ pub mod log;
 #[cfg(feature = "models")]
 pub mod models;
 pub mod project;
+#[cfg(feature = "axum-wasm")]
+pub mod wasm;
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;

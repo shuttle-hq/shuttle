@@ -10,7 +10,7 @@ use async_trait::async_trait;
 use cap_std::os::unix::net::UnixStream;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response};
-use shuttle_axum_utils::{RequestWrapper, ResponseWrapper};
+use shuttle_common::wasm::{RequestWrapper, ResponseWrapper};
 use shuttle_proto::runtime::runtime_server::Runtime;
 use shuttle_proto::runtime::{
     self, LoadRequest, LoadResponse, StartRequest, StartResponse, SubscribeLogsRequest,

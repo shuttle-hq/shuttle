@@ -2,7 +2,7 @@ use axum::body::{Body, HttpBody};
 use axum::{response::Response, routing::get, Router};
 use futures_executor::block_on;
 use http::Request;
-use shuttle_axum_utils::{RequestWrapper, ResponseWrapper};
+use shuttle_common::wasm::{RequestWrapper, ResponseWrapper};
 use std::fs::File;
 use std::io::BufReader;
 use std::io::{Read, Write};

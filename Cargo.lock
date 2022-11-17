@@ -5723,16 +5723,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "shuttle-axum-utils"
-version = "0.1.0"
-dependencies = [
- "http-serde",
- "hyper",
- "rmp-serde",
- "serde",
-]
-
-[[package]]
 name = "shuttle-codegen"
 version = "0.7.0"
 dependencies = [
@@ -5752,7 +5742,10 @@ dependencies = [
  "comfy-table",
  "crossterm",
  "http 0.2.8",
+ "http-serde",
+ "hyper",
  "once_cell",
+ "rmp-serde",
  "rustrict",
  "serde",
  "serde_json",
@@ -5892,7 +5885,6 @@ dependencies = [
  "hyper",
  "rmp-serde",
  "serenity",
- "shuttle-axum-utils",
  "shuttle-common",
  "shuttle-proto",
  "shuttle-service",

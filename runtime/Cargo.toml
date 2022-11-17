@@ -38,10 +38,6 @@ default-features = false
 features = ["loader"]
 path = "../service"
 
-[dependencies.shuttle-axum-utils]
-path = "../tmp/utils"
-optional = true
-
 [features]
-shuttle-axum = ["shuttle-axum-utils"]
+shuttle-axum = ["shuttle-common/axum-wasm"]
 

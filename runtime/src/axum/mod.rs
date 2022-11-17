@@ -197,6 +197,7 @@ impl RouterInner {
         body_stream
             .write_all(hyper::body::to_bytes(body).await.unwrap().as_ref())
             .unwrap();
+        // signal to the receiver that end of file has been reached
         body_stream.write(&[0]).unwrap();
 
         println!("calling inner Router");
@@ -228,10 +229,11 @@ impl RouterInner {
             }
         }
 
-        // set body in the wrapper (Body::Empty if buf is empty), consume wrapper and return Response<Body>
-        let response = wrapper.set_body(body_buf).into_response();
+        let response: Response<Body> = wrapper
+            .into_response_builder()
+            .body(body_buf.into())
+            .unwrap();
 
-        // consume the wrapper and return response
         Ok(response)
     }
 }

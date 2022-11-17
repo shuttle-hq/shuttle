@@ -1,4 +1,3 @@
-use hyper::body::Body;
 use hyper::http::{HeaderMap, Method, Request, Response, StatusCode, Uri, Version};
 use rmps::Serializer;
 use serde::{Deserialize, Serialize};
@@ -19,9 +18,6 @@ pub struct RequestWrapper {
 
     #[serde(with = "http_serde::header_map")]
     pub headers: HeaderMap,
-
-    #[serde(skip)]
-    pub body: Vec<u8>,
 }
 
 impl From<hyper::http::request::Parts> for RequestWrapper {
@@ -31,7 +27,6 @@ impl From<hyper::http::request::Parts> for RequestWrapper {
             uri: parts.uri,
             version: parts.version,
             headers: parts.headers,
-            body: Vec::new(),
         }
     }
 }
@@ -45,22 +40,17 @@ impl RequestWrapper {
         buf
     }
 
-    /// Set the request body
-    pub fn set_body(mut self, buf: Vec<u8>) -> Self {
-        self.body = buf;
-        self
-    }
-
-    /// Consume wrapper and return Request
-    pub fn into_request(self) -> Request<Body> {
+    /// Consume the wrapper and return a request builder with `Parts` set
+    pub fn into_request_builder(self) -> hyper::http::request::Builder {
         let mut request = Request::builder()
             .method(self.method)
             .version(self.version)
-            .uri(self.uri)
-            .body(Body::from(self.body))
-            .unwrap();
+            .uri(self.uri);
 
-        request.headers_mut().extend(self.headers.into_iter());
+        request
+            .headers_mut()
+            .unwrap()
+            .extend(self.headers.into_iter());
 
         request
     }
@@ -77,9 +67,6 @@ pub struct ResponseWrapper {
 
     #[serde(with = "http_serde::header_map")]
     pub headers: HeaderMap,
-
-    #[serde(skip)]
-    pub body: Vec<u8>,
 }
 
 impl From<hyper::http::response::Parts> for ResponseWrapper {
@@ -88,7 +75,6 @@ impl From<hyper::http::response::Parts> for ResponseWrapper {
             status: parts.status,
             version: parts.version,
             headers: parts.headers,
-            body: Vec::new(),
         }
     }
 }
@@ -102,21 +88,16 @@ impl ResponseWrapper {
         buf
     }
 
-    /// Set the response body
-    pub fn set_body(mut self, buf: Vec<u8>) -> Self {
-        self.body = buf;
-        self
-    }
-
-    /// Consume wrapper and return Response
-    pub fn into_response(self) -> Response<Body> {
+    /// Consume the wrapper and return a response builder with `Parts` set
+    pub fn into_response_builder(self) -> hyper::http::response::Builder {
         let mut response = Response::builder()
             .status(self.status)
-            .version(self.version)
-            .body(Body::from(self.body))
-            .unwrap();
+            .version(self.version);
 
-        response.headers_mut().extend(self.headers.into_iter());
+        response
+            .headers_mut()
+            .unwrap()
+            .extend(self.headers.into_iter());
 
         response
     }
@@ -125,6 +106,7 @@ impl ResponseWrapper {
 #[cfg(test)]
 mod test {
     use super::*;
+    use hyper::body::Body;
     use hyper::http::HeaderValue;
 
     #[test]

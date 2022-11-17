@@ -1,4 +1,4 @@
-use axum::body::HttpBody;
+use axum::body::{Body, HttpBody};
 use axum::{response::Response, routing::get, Router};
 use futures_executor::block_on;
 use http::Request;
@@ -68,7 +68,10 @@ pub extern "C" fn __SHUTTLE_Axum_call(fd_3: RawFd, fd_4: RawFd) {
         }
     }
 
-    let request = wrapper.set_body(body_buf).into_request();
+    let request: Request<Body> = wrapper
+        .into_request_builder()
+        .body(body_buf.into())
+        .unwrap();
 
     println!("inner router received request: {:?}", &request);
     let res = handle_request(request);
@@ -81,9 +84,10 @@ pub extern "C" fn __SHUTTLE_Axum_call(fd_3: RawFd, fd_4: RawFd) {
     // write response parts
     parts_fd.write_all(&response_parts).unwrap();
 
-    // write body
+    // write body if there is one
     if let Some(body) = block_on(body.data()) {
         body_fd.write_all(body.unwrap().as_ref()).unwrap();
     }
+    // signal to the reader that end of file has been reached
     body_fd.write(&[0]).unwrap();
 }

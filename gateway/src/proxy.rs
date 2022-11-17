@@ -161,7 +161,7 @@ impl<R> AsResponderTo<R> for Bouncer {
 }
 
 impl Bouncer {
-    async fn bounce(self, req: Request<Body>) -> Result<Response<Body>, Error> {
+    async fn bounce(self, req: Request<Body>) -> Result<Response, Error> {
         let mut resp = Response::builder();
 
         let host = req.headers().typed_get::<Host>().unwrap();
@@ -183,12 +183,14 @@ impl Bouncer {
             resp = resp.status(404);
         }
 
-        Ok(resp.body(Body::empty()).unwrap())
+        let body = <Body as HttpBody>::map_err(Body::empty(), axum::Error::new).boxed_unsync();
+
+        Ok(resp.body(body).unwrap())
     }
 }
 
 impl Service<Request<Body>> for Bouncer {
-    type Response = Response<Body>;
+    type Response = Response;
     type Error = Error;
     type Future =
         Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;

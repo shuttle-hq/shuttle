@@ -126,6 +126,9 @@ async fn start(db: SqlitePool, args: StartArgs) -> io::Result<()> {
 
     let (bouncer, user_proxy) =
         make_proxy(Arc::clone(&gateway), acme_client, args.context.proxy_fqdn);
+
+    let bouncer_handle = axum_server::Server::bind(args.bouncer).serve(bouncer);
+
     let proxy_handle = if let UseTls::Disable = args.use_tls {
         warn!("TLS is disabled in the proxy service. This is only acceptable in testing, and should *never* be used in deployments.");
         axum_server::Server::bind(args.user)
@@ -144,6 +147,7 @@ async fn start(db: SqlitePool, args: StartArgs) -> io::Result<()> {
     tokio::select!(
         _ = worker_handle => info!("worker handle finished"),
         _ = api_handle => error!("api handle finished"),
+        _ = bouncer_handle => error!("bouncer handle finished"),
         _ = proxy_handle => error!("proxy handle finished"),
         _ = ambulance_handle => error!("ambulance handle finished"),
     );

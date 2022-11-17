@@ -32,10 +32,13 @@ pub struct StartArgs {
     /// Address to bind the control plane to
     #[arg(long, default_value = "127.0.0.1:8001")]
     pub control: SocketAddr,
-    /// Address to bind the user plane to
+    /// Address to bind the bouncer service to
+    #[arg(long, default_value = "127.0.0.1:7999")]
+    pub bouncer: SocketAddr,
+    /// Address to bind the user proxy to
     #[arg(long, default_value = "127.0.0.1:8000")]
     pub user: SocketAddr,
-    /// Allows to disable the use of TLS in proxying deployed services (DANGEROUS)
+    /// Allows to disable the use of TLS in the user proxy service (DANGEROUS)
     #[arg(long, default_value = "enable")]
     pub use_tls: UseTls,
     #[command(flatten)]

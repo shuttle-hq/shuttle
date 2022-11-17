@@ -1,9 +1,9 @@
 use clap::Parser;
 use futures::prelude::*;
 use opentelemetry::global;
+use shuttle_gateway::acme::AcmeClient;
 use shuttle_gateway::args::{Args, Commands, InitArgs, UseTls};
 use shuttle_gateway::auth::Key;
-use shuttle_gateway::acme::AcmeClient;
 use shuttle_gateway::proxy::make_proxy;
 use shuttle_gateway::service::{GatewayService, MIGRATIONS};
 use shuttle_gateway::task;
@@ -65,12 +65,6 @@ async fn main() -> io::Result<()> {
 }
 
 async fn start(db: SqlitePool, args: StartArgs) -> io::Result<()> {
-    let fqdn = args
-        .context
-        .proxy_fqdn
-        .to_string()
-        .trim_end_matches('.')
-        .to_string();
     let gateway = Arc::new(GatewayService::init(args.context.clone(), db).await);
 
     let worker = Worker::new();
@@ -130,15 +124,18 @@ async fn start(db: SqlitePool, args: StartArgs) -> io::Result<()> {
 
     let api_handle = tokio::spawn(axum::Server::bind(&args.control).serve(api.into_make_service()));
 
-    let proxy = make_proxy(Arc::clone(&gateway), acme_client, fqdn);
+    let (bouncer, user_proxy) =
+        make_proxy(Arc::clone(&gateway), acme_client, args.context.proxy_fqdn);
     let proxy_handle = if let UseTls::Disable = args.use_tls {
         warn!("TLS is disabled in the proxy service. This is only acceptable in testing, and should *never* be used in deployments.");
-        axum_server::Server::bind(args.user).serve(proxy).boxed()
+        axum_server::Server::bind(args.user)
+            .serve(user_proxy)
+            .boxed()
     } else {
         let (resolver, tls_acceptor) = make_tls_acceptor();
         axum_server::Server::bind(args.user)
             .acceptor(tls_acceptor)
-            .serve(proxy)
+            .serve(user_proxy)
             .boxed()
     };
 

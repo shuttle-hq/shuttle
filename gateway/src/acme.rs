@@ -7,6 +7,7 @@ use axum::body::boxed;
 use axum::response::Response;
 use fqdn::Fqdn;
 use futures::future::BoxFuture;
+use hyper::server::conn::AddrStream;
 use hyper::{Body, Request};
 use instant_acme::{
     Account, AccountCredentials, Authorization, AuthorizationStatus, ChallengeType, Identifier,
@@ -18,6 +19,7 @@ use tokio::time::sleep;
 use tower::{Layer, Service};
 use tracing::{error, trace};
 
+use crate::proxy::AsResponderTo;
 use crate::{Error, ProjectName};
 
 #[derive(Debug, Eq, PartialEq)]
@@ -276,6 +278,18 @@ impl<S> Layer<S> for ChallengeResponderLayer {
 pub struct ChallengeResponder<S> {
     client: AcmeClient,
     inner: S,
+}
+
+impl<'r, S> AsResponderTo<&'r AddrStream> for ChallengeResponder<S>
+where
+    S: AsResponderTo<&'r AddrStream>
+{
+    fn as_responder_to(&self, req: &'r AddrStream) -> Self {
+        Self {
+            client: self.client.clone(),
+            inner: self.inner.as_responder_to(req)
+        }
+    }
 }
 
 impl<ReqBody, S> Service<Request<ReqBody>> for ChallengeResponder<S>

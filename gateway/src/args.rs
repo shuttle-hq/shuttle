@@ -69,7 +69,7 @@ pub struct ContextArgs {
     #[arg(long, default_value = "shuttle_default")]
     pub network_name: String,
     /// FQDN where the proxy can be reached at
-    #[arg(long)]
+    #[arg(long, default_value = "shuttleapp.rs")]
     pub proxy_fqdn: FQDN,
     /// The path to the docker daemon socket
     #[arg(long, default_value = "/var/run/docker.sock")]

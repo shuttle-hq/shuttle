@@ -64,7 +64,7 @@ impl ChainAndPrivateKey {
         // TODO: not necessarily RSA
         pems.push(Pem {
             tag: "RSA PRIVATE KEY".to_string(),
-            contents: self.private_key.0
+            contents: self.private_key.0,
         });
 
         Ok(pem::encode_many(&pems))
@@ -121,11 +121,7 @@ impl GatewayCertResolver {
 
     /// Load a new certificate chain and private key to serve when
     /// receiving incoming TLS connections for the given domain.
-    pub async fn serve_der(
-        &self,
-        fqdn: &str,
-        certs: ChainAndPrivateKey,
-    ) -> Result<(), Error> {
+    pub async fn serve_der(&self, fqdn: &str, certs: ChainAndPrivateKey) -> Result<(), Error> {
         let certified_key = certs.into_certified_key()?;
         self.keys
             .write()

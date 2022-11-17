@@ -318,10 +318,9 @@ impl ApiBuilder {
     pub fn into_router(self) -> Router<Body> {
         let service = self.service.expect("a GatewayService is required");
         let sender = self.sender.expect("a task Sender is required");
-        self
-            .router
+        self.router
             .layer(Extension(service))
-            .layer(Extension(sender))        
+            .layer(Extension(sender))
     }
 
     pub fn serve(self) -> impl Future<Output = Result<(), hyper::Error>> {

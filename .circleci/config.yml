@@ -240,12 +240,48 @@ jobs:
             PUSH=true PLATFORMS=linux/amd64 make images
       - save-buildx-cache
   build-binaries:
-    executor: docker-rust
+    machine:
+      image: ubuntu-2204:2022.04.1
     steps:
       - checkout
-      - restore-cargo-cache
-      - run: sudo apt install -y protobuf-compiler
-      - run: cargo build --release --package cargo-shuttle
+      - run: sudo apt update && sudo DEBIAN_FRONTEND=noninteractive apt install -y libssl-dev musl-tools p7zip-full
+      - run:
+          name: Build openssl with musl
+          command: |
+            # Inspired by https://qiita.com/liubin/items/6c94f0b61f746c08b74c
+            # and https://github.com/clux/muslrust/blob/main/Dockerfile
+            export SSL_VER="1.1.1q"
+            export PREFIX=/musl
+            sudo ln -s /usr/include/x86_64-linux-gnu/asm /usr/include/x86_64-linux-musl/asm
+            sudo ln -s /usr/include/asm-generic /usr/include/x86_64-linux-musl/asm-generic
+            sudo ln -s /usr/include/linux /usr/include/x86_64-linux-musl/linux
+            curl -sSL https://www.openssl.org/source/openssl-$SSL_VER.tar.gz | tar xz && cd openssl-$SSL_VER
+            CC="musl-gcc -fPIE -pie" ./Configure no-zlib no-shared --prefix=$PREFIX --openssldir=$PREFIX/ssl linux-x86_64
+            make depend
+            make -j$(nproc)
+            sudo make install
+      - run:
+          name: Install Rust
+          command: curl --proto '=https' --tlsv1.3 https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.63.0 --target x86_64-unknown-linux-musl
+      - run:
+          name: Build
+          command: |
+            # export TARGET_CC=clang
+            # export CFLAGS_aarch64_unknown_linux_musl=--sysroot=/usr/aarch64-linux-gnu
+            # export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=/usr/aarch64-linux-gnu/bin/ld
+            export OPENSSL_DIR=/musl
+            cargo build --release --package cargo-shuttle --target x86_64-unknown-linux-musl
+      - run:
+          name: Make artifact
+          command: |
+            mkdir artifacts
+            mv target/x86_64-unknown-linux-musl/release/cargo-shuttle artifacts/shuttle
+            mv README.md LICENSE artifacts/
+            7z a -ttar -so -an artifacts | 7z a -si artifacts/shuttle-version-x86_64-unknown-linux-musl.tar.gz
+      - persist_to_workspace:
+          root: artifacts
+          paths:
+            - shuttle-version-x86_64-unknown-linux-musl.tar.gz
 
 workflows:
   version: 2

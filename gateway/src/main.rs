@@ -192,12 +192,12 @@ async fn init(db: SqlitePool, args: InitArgs) -> io::Result<()> {
 }
 
 async fn init_certs<P: AsRef<Path>>(fs: P, public: FQDN, acme: AcmeClient) -> ChainAndPrivateKey {
-    let tls_path = fs.as_ref().join("ssl.pem").canonicalize().unwrap();
+    let tls_path = fs.as_ref().join("ssl.pem");
 
     match ChainAndPrivateKey::load_pem(&tls_path) {
         Ok(valid) => valid,
         Err(_) => {
-            let creds_path = fs.as_ref().join("acme.json").canonicalize().unwrap();
+            let creds_path = fs.as_ref().join("acme.json");
             warn!(
                 "no valid certificate found at {}, creating one...",
                 tls_path.display()

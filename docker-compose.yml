@@ -15,6 +15,7 @@ services:
     depends_on:
       - provisioner
     ports:
+      - 7999:7999
       - 8000:8000
       - 8001:8001
     deploy:

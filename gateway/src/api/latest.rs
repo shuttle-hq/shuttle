@@ -23,7 +23,7 @@ use tracing::{debug, debug_span, field, Span};
 use crate::acme::AcmeClient;
 use crate::auth::{Admin, ScopedUser, User};
 use crate::task::{self, BoxedTask};
-use crate::tls::{GatewayCertResolver};
+use crate::tls::GatewayCertResolver;
 use crate::worker::WORKER_QUEUE_SIZE;
 use crate::{AccountName, Error, GatewayService, ProjectName};
 
@@ -216,7 +216,9 @@ async fn request_acme_certificate(
         .parse()
         .map_err(|_err| Error::from(ErrorKind::InvalidCustomDomain))?;
 
-    let (certs, private_key) = acme_client.create_certificate(&fqdn.to_string(), credentials).await?;
+    let (certs, private_key) = acme_client
+        .create_certificate(&fqdn.to_string(), credentials)
+        .await?;
 
     service
         .create_custom_domain(project_name, &fqdn, &certs, &private_key)
@@ -313,14 +315,18 @@ impl ApiBuilder {
         self
     }
 
-    pub fn serve(self) -> impl Future<Output = Result<(), hyper::Error>> {
+    pub fn into_router(self) -> Router<Body> {
         let service = self.service.expect("a GatewayService is required");
         let sender = self.sender.expect("a task Sender is required");
-        let bind = self.bind.expect("a socket address to bind to is required");
-        let router = self
+        self
             .router
             .layer(Extension(service))
-            .layer(Extension(sender));
+            .layer(Extension(sender))        
+    }
+
+    pub fn serve(self) -> impl Future<Output = Result<(), hyper::Error>> {
+        let bind = self.bind.expect("a socket address to bind to is required");
+        let router = self.into_router();
         axum::Server::bind(&bind).serve(router.into_make_service())
     }
 }
@@ -354,7 +360,11 @@ pub mod tests {
             }
         });
 
-        let mut router = make_api(Arc::clone(&service), world.acme_client(), sender);
+        let mut router = ApiBuilder::new()
+            .with_service(Arc::clone(&service))
+            .with_sender(sender)
+            .with_default_routes()
+            .into_router();
 
         let neo = service.create_user("neo".parse().unwrap()).await?;
 
@@ -498,7 +508,11 @@ pub mod tests {
             }
         });
 
-        let mut router = make_api(Arc::clone(&service), world.acme_client(), sender);
+        let mut router = ApiBuilder::new()
+            .with_service(Arc::clone(&service))
+            .with_sender(sender)
+            .with_default_routes()
+            .into_router();
 
         let get_neo = || {
             Request::builder()
@@ -594,7 +608,11 @@ pub mod tests {
             }
         });
 
-        let mut router = make_api(Arc::clone(&service), world.acme_client(), sender.clone());
+        let mut router = ApiBuilder::new()
+            .with_service(Arc::clone(&service))
+            .with_sender(sender)
+            .with_default_routes()
+            .into_router();
 
         let get_status = || {
             Request::builder()

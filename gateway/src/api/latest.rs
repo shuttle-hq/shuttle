@@ -1,3 +1,4 @@
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -8,6 +9,7 @@ use axum::response::Response;
 use axum::routing::{any, get, post};
 use axum::{Json as AxumJson, Router};
 use fqdn::FQDN;
+use futures::Future;
 use http::StatusCode;
 use instant_acme::AccountCredentials;
 use serde::{Deserialize, Serialize};
@@ -231,6 +233,7 @@ pub struct ApiBuilder {
     router: Router<Body>,
     service: Option<Arc<GatewayService>>,
     sender: Option<Sender<BoxedTask>>,
+    bind: Option<SocketAddr>,
 }
 
 impl Default for ApiBuilder {
@@ -245,6 +248,7 @@ impl ApiBuilder {
             router: Router::new(),
             service: None,
             sender: None,
+            bind: None,
         }
     }
 
@@ -271,6 +275,11 @@ impl ApiBuilder {
         self
     }
 
+    pub fn binding_to(mut self, addr: SocketAddr) -> Self {
+        self.bind = Some(addr);
+        self
+    }
+
     pub fn with_default_traces(mut self) -> Self {
         self.router = self.router.layer(
             TraceLayer::new_for_http()
@@ -288,7 +297,8 @@ impl ApiBuilder {
     }
 
     pub fn with_default_routes(mut self) -> Self {
-        self.router = self.router
+        self.router = self
+            .router
             .route("/", get(get_status))
             .route(
                 "/projects/:project",
@@ -300,12 +310,15 @@ impl ApiBuilder {
         self
     }
 
-    pub fn build(self) -> Router<Body> {
+    pub fn serve(self) -> impl Future<Output = Result<(), hyper::Error>> {
         let service = self.service.expect("a GatewayService is required");
         let sender = self.sender.expect("a task Sender is required");
-        self.router
+        let bind = self.bind.expect("a socket address to bind to");
+        let router = self
+            .router
             .layer(Extension(service))
-            .layer(Extension(sender))
+            .layer(Extension(sender));
+        axum::Server::bind(&bind).serve(router.into_make_service())
     }
 }
 

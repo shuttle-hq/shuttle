@@ -131,7 +131,8 @@ async fn start(db: SqlitePool, args: StartArgs) -> io::Result<()> {
 
     let mut api_builder = ApiBuilder::new()
         .with_service(Arc::clone(&gateway))
-        .with_sender(sender);
+        .with_sender(sender)
+        .binding_to(args.control);
 
     let proxy_handle = if let UseTls::Disable = args.use_tls {
         warn!("TLS is disabled in the proxy service. This is only acceptable in testing, and should *never* be used in deployments.");
@@ -149,12 +150,10 @@ async fn start(db: SqlitePool, args: StartArgs) -> io::Result<()> {
             .boxed()
     };
 
-    let api = api_builder
+    let api_handle = api_builder
         .with_default_routes()
         .with_default_traces()
-        .build();
-
-    let api_handle = tokio::spawn(axum::Server::bind(&args.control).serve(api.into_make_service()));
+        .serve();
 
     debug!("starting up all services");
 

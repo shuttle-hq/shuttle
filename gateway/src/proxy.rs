@@ -90,7 +90,7 @@ impl UserProxy {
             .typed_get::<Host>()
             .map(|host| fqdn!(host.hostname()))
             .and_then(|fqdn| {
-                if fqdn.is_subdomain_of(&self.public) && fqdn.depth() == 3 {
+                if fqdn.is_subdomain_of(&self.public) && fqdn.depth() - self.public.depth() == 1 {
                     Some(fqdn.labels().next().unwrap().to_owned())
                 } else {
                     None
@@ -274,7 +274,7 @@ impl UserServiceBuilder {
 
         let user_proxy = UserProxy {
             gateway: service.clone(),
-            remote_addr: "127.0.0.1".parse().unwrap(),
+            remote_addr: "127.0.0.1:80".parse().unwrap(),
             public: public.clone(),
         };
 

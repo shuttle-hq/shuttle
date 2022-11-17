@@ -42,7 +42,7 @@ services:
     environment:
       - RUST_LOG=${RUST_LOG}
     command:
-      - "--state=/var/lib/shuttle/gateway.sqlite"
+      - "--state=/var/lib/shuttle"
       - "start"
       - "--control=0.0.0.0:8001"
       - "--user=0.0.0.0:8000"

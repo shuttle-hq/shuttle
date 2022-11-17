@@ -660,7 +660,7 @@ pub mod tests {
             .binding_to(api_addr);
 
         let user_addr: SocketAddr = format!("127.0.0.1:{}", base_port + 1).parse().unwrap();
-        let proxy_client = world.client(user_addr.clone());
+        let proxy_client = world.client(user_addr);
         let user = UserServiceBuilder::new()
             .with_service(Arc::clone(&service))
             .with_public(world.fqdn())

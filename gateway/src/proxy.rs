@@ -1,16 +1,16 @@
 use std::convert::Infallible;
 use std::future::Future;
+use std::io;
 use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use std::io;
 
 use axum::headers::{HeaderMapExt, Host};
 use axum::response::{IntoResponse, Response};
 use axum_server::accept::DefaultAcceptor;
 use axum_server::tls_rustls::RustlsAcceptor;
-use fqdn::{fqdn, Fqdn, FQDN};
+use fqdn::{fqdn, FQDN};
 use futures::future::{ready, Ready};
 use futures::prelude::*;
 use hyper::body::{Body, HttpBody};
@@ -22,13 +22,12 @@ use hyper_reverse_proxy::ReverseProxy;
 use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
-use tower::{Layer, Service, ServiceBuilder, ServiceExt};
-use tracing::{error, debug, debug_span, field, trace};
+use tower::{Service, ServiceBuilder};
+use tracing::{debug_span, error, field, trace};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
-use crate::acme::{AcmeClient, ChallengeResponder, ChallengeResponderLayer, CustomDomain};
+use crate::acme::{AcmeClient, ChallengeResponderLayer};
 use crate::service::GatewayService;
-use crate::tls::GatewayCertResolver;
 use crate::{Error, ErrorKind, ProjectName};
 
 static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
@@ -159,7 +158,7 @@ pub struct Bouncer {
 }
 
 impl<'r> AsResponderTo<&'r AddrStream> for Bouncer {
-    fn as_responder_to(&self, req: &'r AddrStream) -> Self {
+    fn as_responder_to(&self, _req: &'r AddrStream) -> Self {
         self.clone()
     }
 }
@@ -261,10 +260,7 @@ impl UserServiceBuilder {
         self
     }
 
-    pub fn with_tls(
-        mut self,
-        acceptor: RustlsAcceptor<DefaultAcceptor>,
-    ) -> Self {
+    pub fn with_tls(mut self, acceptor: RustlsAcceptor<DefaultAcceptor>) -> Self {
         self.tls_acceptor = Some(acceptor);
         self
     }
@@ -282,7 +278,7 @@ impl UserServiceBuilder {
             public: public.clone(),
         };
 
-        let bouncer = self.bouncer_binds_to.as_ref().map(|bind| Bouncer {
+        let bouncer = self.bouncer_binds_to.as_ref().map(|_| Bouncer {
             gateway: service.clone(),
             public: public.clone(),
         });

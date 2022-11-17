@@ -294,7 +294,7 @@ impl UserServiceBuilder {
                 .expect("TLS cannot be enabled without an ACME client");
 
             let bouncer = ServiceBuilder::new()
-                .layer(ChallengeResponderLayer::new(acme.clone()))
+                .layer(ChallengeResponderLayer::new(acme))
                 .service(bouncer);
 
             let bouncer = axum_server::Server::bind(bouncer_binds_to)

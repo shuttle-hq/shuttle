@@ -239,47 +239,58 @@ jobs:
           command: |
             PUSH=true PLATFORMS=linux/amd64 make images
       - save-buildx-cache
+  build-binaries:
+    executor: docker-rust
+    steps:
+      - checkout
+      - restore-cargo-cache
+      - run: sudo apt install -y protobuf-compiler
+      - run: cargo build --release --package cargo-shuttle
 
 workflows:
   version: 2
   ci:
     jobs:
-      - workspace-fmt
-      - workspace-clippy:
-          name: workspace-clippy-<< matrix.framework >>
-          requires:
-            - workspace-fmt
-          matrix:
-            parameters:
-              framework: ["web-axum", "web-rocket", "web-poem", "web-thruster", "web-tide", "web-tower","web-warp", "web-salvo", "bot-serenity"]
-      - check-standalone:
-          matrix:
-            parameters:
-              path:
-                - resources/aws-rds
-                - resources/persist
-                - resources/secrets
-                - resources/shared-db
-      - service-test:
-          requires:
-            - workspace-clippy
-      - platform-test:
-          requires:
-            - workspace-clippy
-          matrix:
-            parameters:
-              crate: ["shuttle-deployer", "cargo-shuttle", "shuttle-codegen", "shuttle-common", "shuttle-proto", "shuttle-provisioner"]
-      - e2e-test:
-          requires:
-            - service-test
-            - platform-test
-            - check-standalone
-          filters:
-            branches:
-              only: production
-      - build-and-push:
-          requires:
-            - e2e-test
-          filters:
-            branches:
-              only: production
+      # - workspace-fmt
+      # - workspace-clippy:
+      #     name: workspace-clippy-<< matrix.framework >>
+      #     requires:
+      #       - workspace-fmt
+      #     matrix:
+      #       parameters:
+      #         framework: ["web-axum", "web-rocket", "web-poem", "web-thruster", "web-tide", "web-tower","web-warp", "web-salvo", "bot-serenity"]
+      # - check-standalone:
+      #     matrix:
+      #       parameters:
+      #         path:
+      #           - resources/aws-rds
+      #           - resources/persist
+      #           - resources/secrets
+      #           - resources/shared-db
+      # - service-test:
+      #     requires:
+      #       - workspace-clippy
+      # - platform-test:
+      #     requires:
+      #       - workspace-clippy
+      #     matrix:
+      #       parameters:
+      #         crate: ["shuttle-deployer", "cargo-shuttle", "shuttle-codegen", "shuttle-common", "shuttle-proto", "shuttle-provisioner"]
+      # - e2e-test:
+      #     requires:
+      #       - service-test
+      #       - platform-test
+      #       - check-standalone
+      #     filters:
+      #       branches:
+      #         only: production
+      # - build-and-push:
+      #     requires:
+      #       - e2e-test
+      #     filters:
+      #       branches:
+      #         only: production
+      - build-binaries
+      # - build-binaries:
+          # requires:
+          #   - build-and-push

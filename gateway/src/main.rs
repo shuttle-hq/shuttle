@@ -2,6 +2,8 @@ use clap::Parser;
 use futures::prelude::*;
 use opentelemetry::global;
 use shuttle_gateway::acme::AcmeClient;
+use shuttle_gateway::api::latest::ApiBuilder;
+use shuttle_gateway::args::StartArgs;
 use shuttle_gateway::args::{Args, Commands, InitArgs, UseTls};
 use shuttle_gateway::auth::Key;
 use shuttle_gateway::proxy::make_proxy;
@@ -9,7 +11,6 @@ use shuttle_gateway::service::{GatewayService, MIGRATIONS};
 use shuttle_gateway::task;
 use shuttle_gateway::tls::make_tls_acceptor;
 use shuttle_gateway::worker::Worker;
-use shuttle_gateway::{api::make_api, args::StartArgs};
 use sqlx::migrate::MigrateDatabase;
 use sqlx::{query, Sqlite, SqlitePool};
 use std::io;
@@ -120,14 +121,17 @@ async fn start(db: SqlitePool, args: StartArgs) -> io::Result<()> {
 
     let acme_client = AcmeClient::new();
 
-    let api = make_api(Arc::clone(&gateway), acme_client.clone(), sender);
-
-    let api_handle = tokio::spawn(axum::Server::bind(&args.control).serve(api.into_make_service()));
-
-    let (bouncer, user_proxy) =
-        make_proxy(Arc::clone(&gateway), acme_client, args.context.proxy_fqdn);
+    let (bouncer, user_proxy) = make_proxy(
+        Arc::clone(&gateway),
+        acme_client.clone(),
+        args.context.proxy_fqdn,
+    );
 
     let bouncer_handle = axum_server::Server::bind(args.bouncer).serve(bouncer);
+
+    let mut api_builder = ApiBuilder::new()
+        .with_service(Arc::clone(&gateway))
+        .with_sender(sender);
 
     let proxy_handle = if let UseTls::Disable = args.use_tls {
         warn!("TLS is disabled in the proxy service. This is only acceptable in testing, and should *never* be used in deployments.");
@@ -136,11 +140,21 @@ async fn start(db: SqlitePool, args: StartArgs) -> io::Result<()> {
             .boxed()
     } else {
         let (resolver, tls_acceptor) = make_tls_acceptor();
+
+        api_builder = api_builder.with_acme(acme_client, resolver);
+
         axum_server::Server::bind(args.user)
             .acceptor(tls_acceptor)
             .serve(user_proxy)
             .boxed()
     };
+
+    let api = api_builder
+        .with_default_routes()
+        .with_default_traces()
+        .build();
+
+    let api_handle = tokio::spawn(axum::Server::bind(&args.control).serve(api.into_make_service()));
 
     debug!("starting up all services");
 

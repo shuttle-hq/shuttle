@@ -17,9 +17,10 @@ use tokio::sync::mpsc::Sender;
 use tower_http::trace::TraceLayer;
 use tracing::{debug, debug_span, field, Span};
 
-use crate::auth::{Admin, ScopedUser, User};
 use crate::acme::AcmeClient;
+use crate::auth::{Admin, ScopedUser, User};
 use crate::task::{self, BoxedTask};
+use crate::tls::GatewayCertResolver;
 use crate::worker::WORKER_QUEUE_SIZE;
 use crate::{AccountName, Error, GatewayService, ProjectName};
 
@@ -204,47 +205,74 @@ async fn request_acme_certificate(
     _: Admin,
     Extension(service): Extension<Arc<GatewayService>>,
     Extension(acme_client): Extension<AcmeClient>,
+    Extension(resolver): Extension<Arc<GatewayCertResolver>>,
     Path((project_name, fqdn)): Path<(ProjectName, String)>,
     AxumJson(credentials): AxumJson<AccountCredentials<'_>>,
 ) -> Result<String, Error> {
     let fqdn: FQDN = fqdn
         .parse()
         .map_err(|_err| Error::from(ErrorKind::InvalidCustomDomain))?;
+
     let (chain, async_keys) = acme_client.create_certificate(&fqdn, credentials).await?;
     let private_key = async_keys.serialize_private_key_pem();
+
+    resolver
+        .serve_pem(&fqdn.to_string(), chain.as_bytes(), private_key.as_bytes())
+        .await?;
 
     service
         .create_custom_domain(project_name, &fqdn, &chain, &private_key)
         .await?;
 
-    Ok("Certificate created".to_string())
+    Ok("certificate created".to_string())
 }
 
-pub fn make_api(
-    service: Arc<GatewayService>,
-    acme_client: AcmeClient,
-    sender: Sender<BoxedTask>,
-) -> Router<Body> {
-    debug!("making api route");
+pub struct ApiBuilder {
+    router: Router<Body>,
+    service: Option<Arc<GatewayService>>,
+    sender: Option<Sender<BoxedTask>>,
+}
 
-    Router::<Body>::new()
-        .route(
-            "/",
-            get(get_status)
-        )
-        .route(
-            "/projects/:project",
-            get(get_project).delete(delete_project).post(post_project)
-        )
-        .route("/users/:account_name", get(get_user).post(post_user))
-        .route("/projects/:project/*any", any(route_project))
-        .route("/admin/revive", post(revive_projects))
-        .route("/admin/acme/:email", post(create_acme_account))
-        .route("/admin/acme/request/:project_name/:fqdn", post(request_acme_certificate))
-        .layer(Extension(service))
-        .layer(Extension(acme_client))
-        .layer(Extension(sender))
-        .layer(
+impl Default for ApiBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ApiBuilder {
+    pub fn new() -> Self {
+        Self {
+            router: Router::new(),
+            service: None,
+            sender: None,
+        }
+    }
+
+    pub fn with_acme(mut self, acme: AcmeClient, resolver: Arc<GatewayCertResolver>) -> Self {
+        self.router = self
+            .router
+            .route("/admin/acme/:email", post(create_acme_account))
+            .route(
+                "/admin/acme/request/:project_name/:fqdn",
+                post(request_acme_certificate),
+            )
+            .layer(Extension(acme))
+            .layer(Extension(resolver));
+        self
+    }
+
+    pub fn with_service(mut self, service: Arc<GatewayService>) -> Self {
+        self.service = Some(service);
+        self
+    }
+
+    pub fn with_sender(mut self, sender: Sender<BoxedTask>) -> Self {
+        self.sender = Some(sender);
+        self
+    }
+
+    pub fn with_default_traces(mut self) -> Self {
+        self.router = self.router.layer(
             TraceLayer::new_for_http()
                 .make_span_with(|request: &Request<Body>| {
                     debug_span!("request", http.uri = %request.uri(), http.method = %request.method(), http.status_code = field::Empty, account.name = field::Empty, account.project = field::Empty)
@@ -255,7 +283,30 @@ pub fn make_api(
                         debug!(latency = format_args!("{} ns", latency.as_nanos()), "finished processing request");
                     },
                 ),
-        )
+        );
+        self
+    }
+
+    pub fn with_default_routes(mut self) -> Self {
+        self.router = self.router
+            .route("/", get(get_status))
+            .route(
+                "/projects/:project",
+                get(get_project).delete(delete_project).post(post_project),
+            )
+            .route("/users/:account_name", get(get_user).post(post_user))
+            .route("/projects/:project/*any", any(route_project))
+            .route("/admin/revive", post(revive_projects));
+        self
+    }
+
+    pub fn build(self) -> Router<Body> {
+        let service = self.service.expect("a GatewayService is required");
+        let sender = self.sender.expect("a task Sender is required");
+        self.router
+            .layer(Extension(service))
+            .layer(Extension(sender))
+    }
 }
 
 #[cfg(test)]

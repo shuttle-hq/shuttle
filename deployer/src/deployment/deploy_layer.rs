@@ -586,7 +586,7 @@ mod tests {
         };
 
         select! {
-            _ = sleep(Duration::from_secs(120)) => {
+            _ = sleep(Duration::from_secs(180)) => {
                 panic!("states should go into 'Running' for a valid service");
             }
             _ = test => {}
@@ -710,7 +710,7 @@ mod tests {
         };
 
         select! {
-            _ = sleep(Duration::from_secs(120)) => {
+            _ = sleep(Duration::from_secs(180)) => {
                 panic!("states should go into 'Completed' when a service stops by itself");
             }
             _ = test => {}
@@ -790,7 +790,7 @@ mod tests {
         };
 
         select! {
-            _ = sleep(Duration::from_secs(120)) => {
+            _ = sleep(Duration::from_secs(180)) => {
                 panic!("states should go into 'Crashed' panicing in bind");
             }
             _ = test => {}
@@ -865,7 +865,7 @@ mod tests {
         };
 
         select! {
-            _ = sleep(Duration::from_secs(120)) => {
+            _ = sleep(Duration::from_secs(180)) => {
                 panic!("states should go into 'Crashed' when panicing in main");
             }
             _ = test => {}

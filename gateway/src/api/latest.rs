@@ -313,7 +313,7 @@ impl ApiBuilder {
     pub fn serve(self) -> impl Future<Output = Result<(), hyper::Error>> {
         let service = self.service.expect("a GatewayService is required");
         let sender = self.sender.expect("a task Sender is required");
-        let bind = self.bind.expect("a socket address to bind to");
+        let bind = self.bind.expect("a socket address to bind to is required");
         let router = self
             .router
             .layer(Extension(service))

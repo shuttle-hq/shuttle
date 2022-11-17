@@ -6,7 +6,7 @@ use shuttle_gateway::api::latest::ApiBuilder;
 use shuttle_gateway::args::StartArgs;
 use shuttle_gateway::args::{Args, Commands, InitArgs, UseTls};
 use shuttle_gateway::auth::Key;
-use shuttle_gateway::proxy::make_proxy;
+use shuttle_gateway::proxy::UserServiceBuilder;
 use shuttle_gateway::service::{GatewayService, MIGRATIONS};
 use shuttle_gateway::task;
 use shuttle_gateway::tls::make_tls_acceptor;
@@ -121,33 +121,27 @@ async fn start(db: SqlitePool, args: StartArgs) -> io::Result<()> {
 
     let acme_client = AcmeClient::new();
 
-    let (bouncer, user_proxy) = make_proxy(
-        Arc::clone(&gateway),
-        acme_client.clone(),
-        args.context.proxy_fqdn,
-    );
-
-    let bouncer_handle = axum_server::Server::bind(args.bouncer).serve(bouncer);
-
     let mut api_builder = ApiBuilder::new()
         .with_service(Arc::clone(&gateway))
         .with_sender(sender)
         .binding_to(args.control);
 
-    let proxy_handle = if let UseTls::Disable = args.use_tls {
-        warn!("TLS is disabled in the proxy service. This is only acceptable in testing, and should *never* be used in deployments.");
-        axum_server::Server::bind(args.user)
-            .serve(user_proxy)
-            .boxed()
-    } else {
+    let mut user_builder = UserServiceBuilder::new()
+        .with_service(Arc::clone(&gateway))
+        .with_public(args.context.proxy_fqdn)
+        .with_user_proxy_binding_to(args.user)
+        .with_bouncer(args.bouncer);
+
+    if let UseTls::Enable = args.use_tls {
         let (resolver, tls_acceptor) = make_tls_acceptor();
 
-        api_builder = api_builder.with_acme(acme_client, resolver);
+        user_builder = user_builder
+            .with_acme(acme_client.clone())
+            .with_tls(tls_acceptor);
 
-        axum_server::Server::bind(args.user)
-            .acceptor(tls_acceptor)
-            .serve(user_proxy)
-            .boxed()
+        api_builder = api_builder.with_acme(acme_client, resolver);
+    } else {
+        warn!("TLS is disabled in the proxy service. This is only acceptable in testing, and should *never* be used in deployments.");
     };
 
     let api_handle = api_builder
@@ -155,13 +149,14 @@ async fn start(db: SqlitePool, args: StartArgs) -> io::Result<()> {
         .with_default_traces()
         .serve();
 
+    let user_handle = user_builder.serve();
+
     debug!("starting up all services");
 
     tokio::select!(
         _ = worker_handle => info!("worker handle finished"),
         _ = api_handle => error!("api handle finished"),
-        _ = bouncer_handle => error!("bouncer handle finished"),
-        _ = proxy_handle => error!("proxy handle finished"),
+        _ = user_handle => error!("user handle finished"),
         _ = ambulance_handle => error!("ambulance handle finished"),
     );
 

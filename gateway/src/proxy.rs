@@ -4,9 +4,12 @@ use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
+use std::io;
 
 use axum::headers::{HeaderMapExt, Host};
 use axum::response::{IntoResponse, Response};
+use axum_server::accept::DefaultAcceptor;
+use axum_server::tls_rustls::RustlsAcceptor;
 use fqdn::{fqdn, Fqdn, FQDN};
 use futures::future::{ready, Ready};
 use futures::prelude::*;
@@ -19,12 +22,13 @@ use hyper_reverse_proxy::ReverseProxy;
 use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
-use tower::{Layer, Service, ServiceBuilder};
-use tracing::{debug, debug_span, field, trace};
+use tower::{Layer, Service, ServiceBuilder, ServiceExt};
+use tracing::{error, debug, debug_span, field, trace};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::acme::{AcmeClient, ChallengeResponder, ChallengeResponderLayer, CustomDomain};
 use crate::service::GatewayService;
+use crate::tls::GatewayCertResolver;
 use crate::{Error, ErrorKind, ProjectName};
 
 static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
@@ -154,8 +158,8 @@ pub struct Bouncer {
     public: FQDN,
 }
 
-impl<R> AsResponderTo<R> for Bouncer {
-    fn as_responder_to(&self, req: R) -> Self {
+impl<'r> AsResponderTo<&'r AddrStream> for Bouncer {
+    fn as_responder_to(&self, req: &'r AddrStream) -> Self {
         self.clone()
     }
 }
@@ -171,7 +175,8 @@ impl Bouncer {
         let path = req.uri();
 
         if fqdn.is_subdomain_of(&self.public)
-            || self.gateway
+            || self
+                .gateway
                 .project_details_for_custom_domain(&fqdn)
                 .await
                 .is_ok()
@@ -204,28 +209,132 @@ impl Service<Request<Body>> for Bouncer {
     }
 }
 
-pub fn make_proxy(
-    gateway: Arc<GatewayService>,
-    acme: AcmeClient,
-    public: FQDN,
-) -> (
-    ResponderMakeService<ChallengeResponder<Bouncer>>,
-    ResponderMakeService<UserProxy>,
-) {
-    debug!("making proxy");
+pub struct UserServiceBuilder {
+    service: Option<Arc<GatewayService>>,
+    acme: Option<AcmeClient>,
+    tls_acceptor: Option<RustlsAcceptor<DefaultAcceptor>>,
+    bouncer_binds_to: Option<SocketAddr>,
+    user_binds_to: Option<SocketAddr>,
+    public: Option<FQDN>,
+}
 
-    let bouncer = ServiceBuilder::new()
-        .layer(ChallengeResponderLayer::new(acme.clone()))
-        .service(Bouncer {
-            gateway: Arc::clone(&gateway),
+impl Default for UserServiceBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl UserServiceBuilder {
+    pub fn new() -> Self {
+        Self {
+            service: None,
+            public: None,
+            acme: None,
+            tls_acceptor: None,
+            bouncer_binds_to: None,
+            user_binds_to: None,
+        }
+    }
+
+    pub fn with_public(mut self, public: FQDN) -> Self {
+        self.public = Some(public);
+        self
+    }
+
+    pub fn with_service(mut self, service: Arc<GatewayService>) -> Self {
+        self.service = Some(service);
+        self
+    }
+
+    pub fn with_bouncer(mut self, bound_to: SocketAddr) -> Self {
+        self.bouncer_binds_to = Some(bound_to);
+        self
+    }
+
+    pub fn with_user_proxy_binding_to(mut self, bound_to: SocketAddr) -> Self {
+        self.user_binds_to = Some(bound_to);
+        self
+    }
+
+    pub fn with_acme(mut self, acme: AcmeClient) -> Self {
+        self.acme = Some(acme);
+        self
+    }
+
+    pub fn with_tls(
+        mut self,
+        acceptor: RustlsAcceptor<DefaultAcceptor>,
+    ) -> Self {
+        self.tls_acceptor = Some(acceptor);
+        self
+    }
+
+    pub fn serve(self) -> impl Future<Output = Result<(), io::Error>> {
+        let service = self.service.expect("a GatewayService is required");
+        let public = self.public.expect("a public FQDN is required");
+        let user_binds_to = self
+            .user_binds_to
+            .expect("a socket address to bind to is required");
+
+        let user_proxy = UserProxy {
+            gateway: service.clone(),
+            remote_addr: "127.0.0.1".parse().unwrap(),
+            public: public.clone(),
+        };
+
+        let bouncer = self.bouncer_binds_to.as_ref().map(|bind| Bouncer {
+            gateway: service.clone(),
             public: public.clone(),
         });
 
-    let proxy = UserProxy {
-        gateway,
-        remote_addr: "127.0.0.1".parse().unwrap(),
-        public,
-    };
+        let mut futs = Vec::new();
+        if let Some(tls_acceptor) = self.tls_acceptor {
+            // TLS is enabled
+            let bouncer = bouncer.expect("TLS cannot be enabled without a bouncer");
+            let bouncer_binds_to = self.bouncer_binds_to.unwrap();
 
-    (bouncer.into_make_service(), proxy.into_make_service())
+            let acme = self
+                .acme
+                .expect("TLS cannot be enabled without an ACME client");
+
+            let bouncer = ServiceBuilder::new()
+                .layer(ChallengeResponderLayer::new(acme.clone()))
+                .service(bouncer);
+
+            let bouncer = axum_server::Server::bind(bouncer_binds_to)
+                .serve(bouncer.into_make_service())
+                .map(|handle| ("bouncer (with challenge responder)", handle))
+                .boxed();
+
+            futs.push(bouncer);
+
+            let user_with_tls = axum_server::Server::bind(user_binds_to)
+                .acceptor(tls_acceptor)
+                .serve(user_proxy.into_make_service())
+                .map(|handle| ("user proxy (with TLS)", handle))
+                .boxed();
+            futs.push(user_with_tls);
+        } else {
+            if let Some(bouncer) = bouncer {
+                // bouncer is enabled
+                let bouncer_binds_to = self.bouncer_binds_to.unwrap();
+                let bouncer = axum_server::Server::bind(bouncer_binds_to)
+                    .serve(bouncer.into_make_service())
+                    .map(|handle| ("bouncer (without challenge responder)", handle))
+                    .boxed();
+                futs.push(bouncer);
+            }
+
+            let user_without_tls = axum_server::Server::bind(user_binds_to)
+                .serve(user_proxy.into_make_service())
+                .map(|handle| ("user proxy (no TLS)", handle))
+                .boxed();
+            futs.push(user_without_tls);
+        }
+
+        future::select_all(futs.into_iter()).map(|((name, resolved), _, _)| {
+            error!(service = %name, "exited early");
+            resolved
+        })
+    }
 }

@@ -50,7 +50,7 @@ impl Loader {
     /// function called `ENTRYPOINT_SYMBOL_NAME`, likely automatically generated
     /// using the [`shuttle_service::main`][crate::main] macro.
     pub fn from_so_file<P: AsRef<OsStr>>(so_path: P) -> Result<Self, LoaderError> {
-        trace!("loading {:?}", so_path.as_ref().to_str());
+        trace!(so_path = so_path.as_ref().to_str(), "loading .so path");
         unsafe {
             let lib = Library::new(so_path).map_err(LoaderError::Load)?;
 
@@ -110,29 +110,8 @@ pub async fn build_crate(
     let (read, write) = pipe::pipe();
     let project_path = project_path.to_owned();
 
-    let handle = tokio::spawn(async move {
-        trace!("started thread to build crate");
-        let config = get_config(write)?;
-        let manifest_path = project_path.join("Cargo.toml");
-        let mut ws = Workspace::new(&manifest_path, &config)?;
-
-        let current = ws.current_mut().map_err(|_| anyhow!("A Shuttle project cannot have a virtual manifest file - please ensure your Cargo.toml file specifies it as a library."))?;
-        let manifest = current.manifest_mut();
-        ensure_cdylib(manifest)?;
-
-        let summary = current.manifest_mut().summary_mut();
-        make_name_unique(summary, deployment_id);
-        check_version(summary)?;
-        check_no_panic(&ws)?;
-
-        let opts = get_compile_options(&config, release_mode)?;
-        let compilation = compile(&ws, &opts);
-
-        Ok(compilation?.cdylibs[0].path.clone())
-    });
-
     // This needs to be on a separate thread, else deployer will block (reason currently unknown :D)
-    tokio::spawn(async move {
+    tokio::task::spawn_blocking(move || {
         trace!("started thread to to capture build output stream");
         for message in Message::parse_stream(read) {
             trace!(?message, "parsed cargo message");
@@ -149,7 +128,23 @@ pub async fn build_crate(
         }
     });
 
-    handle.await?
+    let config = get_config(write)?;
+    let manifest_path = project_path.join("Cargo.toml");
+    let mut ws = Workspace::new(&manifest_path, &config)?;
+
+    let current = ws.current_mut().map_err(|_| anyhow!("A Shuttle project cannot have a virtual manifest file - please ensure your Cargo.toml file specifies it as a library."))?;
+    let manifest = current.manifest_mut();
+    ensure_cdylib(manifest)?;
+
+    let summary = current.manifest_mut().summary_mut();
+    make_name_unique(summary, deployment_id);
+    check_version(summary)?;
+    check_no_panic(&ws)?;
+
+    let opts = get_compile_options(&config, release_mode)?;
+    let compilation = compile(&ws, &opts);
+
+    Ok(compilation?.cdylibs[0].path.clone())
 }
 
 /// Get the default compile config with output redirected to writer

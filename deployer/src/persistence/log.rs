@@ -107,7 +107,6 @@ fn extract_message(fields: &Value) -> Option<String> {
                         return Some(rendered.as_str()?.to_string());
                     }
                 }
-                Value::String(mes_str) => return Some(mes_str.to_string()),
                 _ => {}
             }
         }

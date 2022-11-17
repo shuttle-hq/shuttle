@@ -266,7 +266,7 @@ impl Shuttle {
         trace!("starting a local run for a service: {run_args:?}");
 
         let (tx, rx): (crossbeam_channel::Sender<Message>, _) = crossbeam_channel::bounded(0);
-        tokio::spawn(async move {
+        tokio::task::spawn_blocking(move || {
             while let Ok(message) = rx.recv() {
                 match message {
                     Message::TextLine(line) => println!("{line}"),
@@ -332,7 +332,7 @@ impl Shuttle {
 
         handle.await??;
 
-        tokio::spawn(async move {
+        tokio::task::spawn_blocking(move || {
             trace!("closing so file");
             so.close().unwrap();
         });

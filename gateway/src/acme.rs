@@ -5,7 +5,6 @@ use std::time::Duration;
 
 use axum::body::boxed;
 use axum::response::Response;
-use fqdn::Fqdn;
 use futures::future::BoxFuture;
 use hyper::server::conn::AddrStream;
 use hyper::{Body, Request};
@@ -88,14 +87,14 @@ impl AcmeClient {
         Ok(credentials)
     }
 
-    /// Create a certificate and return it with the keys used to sign it
+    /// Create an ACME-signed certificate and return it and its
+    /// associated PEM-encoded private key
     pub async fn create_certificate(
         &self,
-        fqdn: &Fqdn,
+        identifier: &str,
         credentials: AccountCredentials<'_>,
-    ) -> Result<(String, Certificate), AcmeClientError> {
-        let fqdn = fqdn.to_string();
-        trace!(fqdn, "requesting acme certificate");
+    ) -> Result<(String, String), AcmeClientError> {
+        trace!(identifier, "requesting acme certificate");
 
         let account = Account::from_credentials(credentials).map_err(|error| {
             error!(
@@ -107,7 +106,7 @@ impl AcmeClient {
 
         let (mut order, state) = account
             .new_order(&NewOrder {
-                identifiers: &[Identifier::Dns(fqdn.to_string())],
+                identifiers: &[Identifier::Dns(identifier.to_string())],
             })
             .await
             .map_err(|error| {
@@ -155,7 +154,7 @@ impl AcmeClient {
                 AcmeClientError::OrderFinalizing
             })?;
 
-        Ok((certificate_chain, certificate))
+        Ok((certificate_chain, certificate.serialize_private_key_pem()))
     }
 
     async fn complete_challenge(
@@ -282,12 +281,12 @@ pub struct ChallengeResponder<S> {
 
 impl<'r, S> AsResponderTo<&'r AddrStream> for ChallengeResponder<S>
 where
-    S: AsResponderTo<&'r AddrStream>
+    S: AsResponderTo<&'r AddrStream>,
 {
     fn as_responder_to(&self, req: &'r AddrStream) -> Self {
         Self {
             client: self.client.clone(),
-            inner: self.inner.as_responder_to(req)
+            inner: self.inner.as_responder_to(req),
         }
     }
 }

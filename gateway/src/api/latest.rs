@@ -1,3 +1,4 @@
+use std::io::Cursor;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -22,7 +23,7 @@ use tracing::{debug, debug_span, field, Span};
 use crate::acme::AcmeClient;
 use crate::auth::{Admin, ScopedUser, User};
 use crate::task::{self, BoxedTask};
-use crate::tls::GatewayCertResolver;
+use crate::tls::{GatewayCertResolver};
 use crate::worker::WORKER_QUEUE_SIZE;
 use crate::{AccountName, Error, GatewayService, ProjectName};
 
@@ -215,15 +216,17 @@ async fn request_acme_certificate(
         .parse()
         .map_err(|_err| Error::from(ErrorKind::InvalidCustomDomain))?;
 
-    let (chain, async_keys) = acme_client.create_certificate(&fqdn, credentials).await?;
-    let private_key = async_keys.serialize_private_key_pem();
-
-    resolver
-        .serve_pem(&fqdn.to_string(), chain.as_bytes(), private_key.as_bytes())
-        .await?;
+    let (certs, private_key) = acme_client.create_certificate(&fqdn.to_string(), credentials).await?;
 
     service
-        .create_custom_domain(project_name, &fqdn, &chain, &private_key)
+        .create_custom_domain(project_name, &fqdn, &certs, &private_key)
+        .await?;
+
+    let mut buf = Vec::new();
+    buf.extend(certs.as_bytes());
+    buf.extend(private_key.as_bytes());
+    resolver
+        .serve_pem(&fqdn.to_string(), Cursor::new(buf))
         .await?;
 
     Ok("certificate created".to_string())

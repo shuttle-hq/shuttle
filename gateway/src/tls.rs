@@ -1,10 +1,13 @@
 use std::collections::HashMap;
-use std::io::BufReader;
+use std::fs::File;
+use std::io::{BufReader, Read, Write};
+use std::path::Path;
 use std::sync::Arc;
 
 use axum_server::accept::DefaultAcceptor;
 use axum_server::tls_rustls::{RustlsAcceptor, RustlsConfig};
 use futures::executor::block_on;
+use pem::Pem;
 use rustls::server::{ClientHello, ResolvesServerCert};
 use rustls::sign::{self, CertifiedKey};
 use rustls::{Certificate, PrivateKey, ServerConfig};
@@ -15,31 +18,75 @@ use tokio::sync::RwLock;
 
 use crate::Error;
 
-pub fn parse_pem(certs: &[u8], key: &[u8]) -> Result<(Vec<Certificate>, PrivateKey), Error> {
-    let certs = rustls_pemfile::read_all(&mut BufReader::new(certs))
-        .map_err(|_| Error::from_kind(ErrorKind::Internal))
-        .and_then(|items| {
-            items
-                .into_iter()
-                .map(|item| match item {
-                    Item::X509Certificate(cert) => Ok(Certificate(cert)),
-                    _ => Err(Error::from_kind(ErrorKind::Internal)),
-                })
-                .collect()
-        })?;
+#[derive(Clone)]
+pub struct ChainAndPrivateKey {
+    chain: Vec<Certificate>,
+    private_key: PrivateKey,
+}
 
-    let private_key = match rustls_pemfile::read_one(&mut BufReader::new(key)).unwrap() {
-        Some(Item::RSAKey(key)) | Some(Item::PKCS8Key(key)) | Some(Item::ECKey(key)) => {
-            Ok(PrivateKey(key))
+impl ChainAndPrivateKey {
+    pub fn parse_pem<R: Read>(rd: R) -> Result<Self, Error> {
+        let mut private_key = None;
+        let mut chain = Vec::new();
+
+        for item in rustls_pemfile::read_all(&mut BufReader::new(rd))
+            .map_err(|_| Error::from_kind(ErrorKind::Internal))?
+        {
+            match item {
+                Item::X509Certificate(cert) => chain.push(Certificate(cert)),
+                Item::ECKey(key) | Item::PKCS8Key(key) | Item::RSAKey(key) => {
+                    private_key = Some(PrivateKey(key))
+                }
+                _ => unreachable!(),
+            }
         }
-        _ => Err(Error::from_kind(ErrorKind::Internal)),
-    }?;
 
-    Ok((certs, private_key))
+        Ok(Self {
+            chain,
+            private_key: private_key.unwrap(),
+        })
+    }
+
+    pub fn load_pem<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
+        let rd = File::open(path)?;
+        Self::parse_pem(rd)
+    }
+
+    pub fn into_pem(self) -> Result<String, Error> {
+        let mut pems = Vec::new();
+        for cert in self.chain {
+            pems.push(Pem {
+                tag: "CERTIFICATE".to_string(),
+                contents: cert.0,
+            });
+        }
+
+        // TODO: not necessarily RSA
+        pems.push(Pem {
+            tag: "RSA PRIVATE KEY".to_string(),
+            contents: self.private_key.0
+        });
+
+        Ok(pem::encode_many(&pems))
+    }
+
+    pub fn into_certified_key(self) -> Result<CertifiedKey, Error> {
+        let signing_key = sign::any_supported_type(&self.private_key)
+            .map_err(|_| Error::from_kind(ErrorKind::Internal))?;
+        Ok(CertifiedKey::new(self.chain, signing_key))
+    }
+
+    pub fn save_pem<P: AsRef<Path>>(self, path: P) -> Result<(), Error> {
+        let as_pem = self.into_pem()?;
+        let mut f = File::create(path)?;
+        f.write_all(as_pem.as_bytes())?;
+        Ok(())
+    }
 }
 
 pub struct GatewayCertResolver {
     keys: RwLock<HashMap<String, Arc<CertifiedKey>>>,
+    default: RwLock<Option<Arc<CertifiedKey>>>,
 }
 
 impl Default for GatewayCertResolver {
@@ -52,6 +99,7 @@ impl GatewayCertResolver {
     pub fn new() -> Self {
         Self {
             keys: RwLock::new(HashMap::default()),
+            default: RwLock::new(None),
         }
     }
 
@@ -61,17 +109,24 @@ impl GatewayCertResolver {
         self.keys.read().await.get(sni).map(Arc::clone)
     }
 
+    pub async fn serve_default_der(&self, certs: ChainAndPrivateKey) -> Result<(), Error> {
+        *self.default.write().await = Some(Arc::new(certs.into_certified_key()?));
+        Ok(())
+    }
+
+    pub async fn serve_default_pem<R: Read>(&self, rd: R) -> Result<(), Error> {
+        let certs = ChainAndPrivateKey::parse_pem(rd)?;
+        self.serve_default_der(certs).await
+    }
+
     /// Load a new certificate chain and private key to serve when
     /// receiving incoming TLS connections for the given domain.
     pub async fn serve_der(
         &self,
         fqdn: &str,
-        certs: Vec<Certificate>,
-        key: PrivateKey,
+        certs: ChainAndPrivateKey,
     ) -> Result<(), Error> {
-        let signing_key =
-            sign::any_supported_type(&key).map_err(|_| Error::from_kind(ErrorKind::Internal))?;
-        let certified_key = CertifiedKey::new(certs, signing_key);
+        let certified_key = certs.into_certified_key()?;
         self.keys
             .write()
             .await
@@ -79,12 +134,9 @@ impl GatewayCertResolver {
         Ok(())
     }
 
-    /// Same as [GatewayCertResolver::serve_der] but assuming the
-    /// certificate and keys are provided as PEM files which have to
-    /// be parsed.
-    pub async fn serve_pem(&self, fqdn: &str, certs: &[u8], key: &[u8]) -> Result<(), Error> {
-        let (certs, private_key) = parse_pem(certs, key)?;
-        self.serve_der(fqdn, certs, private_key).await
+    pub async fn serve_pem<R: Read>(&self, fqdn: &str, rd: R) -> Result<(), Error> {
+        let certs = ChainAndPrivateKey::parse_pem(rd)?;
+        self.serve_der(fqdn, certs).await
     }
 }
 
@@ -93,7 +145,13 @@ impl ResolvesServerCert for GatewayCertResolver {
         let sni = client_hello.server_name()?;
         let handle = Handle::current();
         let _ = handle.enter();
-        block_on(self.get(sni))
+        block_on(async move {
+            if let Some(cert) = self.get(sni).await {
+                Some(cert)
+            } else {
+                self.default.read().await.clone()
+            }
+        })
     }
 }
 

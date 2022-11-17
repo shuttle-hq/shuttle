@@ -84,6 +84,12 @@ impl<T> From<SendError<T>> for Error {
     }
 }
 
+impl From<io::Error> for Error {
+    fn from(_: io::Error) -> Self {
+        Self::from(ErrorKind::Internal)
+    }
+}
+
 impl From<AcmeClientError> for Error {
     fn from(error: AcmeClientError) -> Self {
         Self::source(ErrorKind::Internal, error)

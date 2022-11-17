@@ -1,4 +1,4 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr, path::PathBuf};
 
 use clap::{Parser, Subcommand, ValueEnum};
 use fqdn::FQDN;
@@ -7,9 +7,9 @@ use crate::auth::Key;
 
 #[derive(Parser, Debug)]
 pub struct Args {
-    /// Uri to the `.sqlite` file used to store state
-    #[arg(long, default_value = "./gateway.sqlite")]
-    pub state: String,
+    /// Where to store gateway state (such as sqlite state, and certs)
+    #[arg(long, default_value = "./")]
+    pub state: PathBuf,
 
     #[command(subcommand)]
     pub command: Commands,

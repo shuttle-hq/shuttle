@@ -1,5 +1,7 @@
 use clap::Parser;
+use fqdn::FQDN;
 use futures::prelude::*;
+use instant_acme::AccountCredentials;
 use opentelemetry::global;
 use shuttle_gateway::acme::AcmeClient;
 use shuttle_gateway::api::latest::ApiBuilder;
@@ -9,12 +11,12 @@ use shuttle_gateway::auth::Key;
 use shuttle_gateway::proxy::UserServiceBuilder;
 use shuttle_gateway::service::{GatewayService, MIGRATIONS};
 use shuttle_gateway::task;
-use shuttle_gateway::tls::make_tls_acceptor;
+use shuttle_gateway::tls::{make_tls_acceptor, ChainAndPrivateKey};
 use shuttle_gateway::worker::Worker;
 use sqlx::migrate::MigrateDatabase;
 use sqlx::{query, Sqlite, SqlitePool};
-use std::io;
-use std::path::Path;
+use std::io::{self, Cursor};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::{debug, error, info, trace, warn};
@@ -45,8 +47,11 @@ async fn main() -> io::Result<()> {
         .with(opentelemetry)
         .init();
 
-    if !Path::new(&args.state).exists() {
-        Sqlite::create_database(&args.state).await.unwrap();
+    let db_path = args.state.join("gateway.sqlite");
+    let db_uri = db_path.to_str().unwrap();
+
+    if !db_path.exists() {
+        Sqlite::create_database(db_uri).await.unwrap();
     }
 
     info!(
@@ -55,17 +60,17 @@ async fn main() -> io::Result<()> {
             .unwrap()
             .to_string_lossy()
     );
-    let db = SqlitePool::connect(&args.state).await.unwrap();
+    let db = SqlitePool::connect(db_uri).await.unwrap();
 
     MIGRATIONS.run(&db).await.unwrap();
 
     match args.command {
-        Commands::Start(start_args) => start(db, start_args).await,
+        Commands::Start(start_args) => start(db, args.state, start_args).await,
         Commands::Init(init_args) => init(db, init_args).await,
     }
 }
 
-async fn start(db: SqlitePool, args: StartArgs) -> io::Result<()> {
+async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
     let gateway = Arc::new(GatewayService::init(args.context.clone(), db).await);
 
     let worker = Worker::new();
@@ -128,7 +133,7 @@ async fn start(db: SqlitePool, args: StartArgs) -> io::Result<()> {
 
     let mut user_builder = UserServiceBuilder::new()
         .with_service(Arc::clone(&gateway))
-        .with_public(args.context.proxy_fqdn)
+        .with_public(args.context.proxy_fqdn.clone())
         .with_user_proxy_binding_to(args.user)
         .with_bouncer(args.bouncer);
 
@@ -139,7 +144,13 @@ async fn start(db: SqlitePool, args: StartArgs) -> io::Result<()> {
             .with_acme(acme_client.clone())
             .with_tls(tls_acceptor);
 
-        api_builder = api_builder.with_acme(acme_client, resolver);
+        api_builder = api_builder.with_acme(acme_client.clone(), resolver.clone());
+
+        tokio::spawn(async move {
+            // make sure we have a certificate for ourselves
+            let certs = init_certs(fs, args.context.proxy_fqdn.clone(), acme_client.clone()).await;
+            resolver.serve_default_der(certs).await.unwrap();
+        });
     } else {
         warn!("TLS is disabled in the proxy service. This is only acceptable in testing, and should *never* be used in deployments.");
     };
@@ -178,4 +189,43 @@ async fn init(db: SqlitePool, args: InitArgs) -> io::Result<()> {
 
     println!("`{}` created as super user with key: {key}", args.name);
     Ok(())
+}
+
+async fn init_certs<P: AsRef<Path>>(fs: P, public: FQDN, acme: AcmeClient) -> ChainAndPrivateKey {
+    let tls_path = fs.as_ref().join("ssl.pem").canonicalize().unwrap();
+
+    match ChainAndPrivateKey::load_pem(&tls_path) {
+        Ok(valid) => valid,
+        Err(_) => {
+            let creds_path = fs.as_ref().join("acme.json").canonicalize().unwrap();
+            warn!(
+                "no valid certificate found at {}, creating one...",
+                tls_path.display()
+            );
+
+            if !creds_path.exists() {
+                panic!(
+                    "no ACME credentials found at {}, cannot continue with certificate creation",
+                    creds_path.display()
+                );
+            }
+
+            let creds = std::fs::File::open(creds_path).unwrap();
+            let creds: AccountCredentials = serde_json::from_reader(&creds).unwrap();
+
+            let identifier = format!("*.{public}");
+
+            let (chain, private_key) = acme.create_certificate(&identifier, creds).await.unwrap();
+
+            let mut buf = Vec::new();
+            buf.extend(chain.as_bytes());
+            buf.extend(private_key.as_bytes());
+
+            let certs = ChainAndPrivateKey::parse_pem(Cursor::new(buf)).unwrap();
+
+            certs.clone().save_pem(&tls_path).unwrap();
+
+            certs
+        }
+    }
 }

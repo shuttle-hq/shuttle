@@ -454,13 +454,13 @@ impl GatewayService {
         &self,
         project_name: ProjectName,
         fqdn: &Fqdn,
-        certificate: &str,
-        private_key: &str,
+        certs: &str,
+        private_key: &str
     ) -> Result<(), Error> {
         query("INSERT INTO custom_domains (fqdn, project_name, certificate, private_key) VALUES (?1, ?2, ?3, ?4)")
             .bind(fqdn.to_string())
             .bind(&project_name)
-            .bind(certificate)
+            .bind(certs)
             .bind(private_key)
             .execute(&self.db)
             .await

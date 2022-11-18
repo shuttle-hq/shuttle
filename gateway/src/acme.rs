@@ -5,20 +5,23 @@ use std::time::Duration;
 
 use axum::body::boxed;
 use axum::response::Response;
-use fqdn::Fqdn;
 use futures::future::BoxFuture;
+use hyper::server::conn::AddrStream;
 use hyper::{Body, Request};
 use instant_acme::{
-    Account, AccountCredentials, Authorization, AuthorizationStatus, ChallengeType, Identifier,
-    KeyAuthorization, LetsEncrypt, NewAccount, NewOrder, Order, OrderStatus,
+    Account, AccountCredentials, Authorization, AuthorizationStatus, Challenge, ChallengeType,
+    Identifier, KeyAuthorization, LetsEncrypt, NewAccount, NewOrder, Order, OrderStatus,
 };
 use rcgen::{Certificate, CertificateParams, DistinguishedName};
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use tower::{Layer, Service};
-use tracing::{error, trace};
+use tracing::{error, trace, warn};
 
+use crate::proxy::AsResponderTo;
 use crate::{Error, ProjectName};
+
+const MAX_RETRIES: usize = 15;
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct CustomDomain {
@@ -86,14 +89,15 @@ impl AcmeClient {
         Ok(credentials)
     }
 
-    /// Create a certificate and return it with the keys used to sign it
+    /// Create an ACME-signed certificate and return it and its
+    /// associated PEM-encoded private key
     pub async fn create_certificate(
         &self,
-        fqdn: &Fqdn,
+        identifier: &str,
+        challenge_type: ChallengeType,
         credentials: AccountCredentials<'_>,
-    ) -> Result<(String, Certificate), AcmeClientError> {
-        let fqdn = fqdn.to_string();
-        trace!(fqdn, "requesting acme certificate");
+    ) -> Result<(String, String), AcmeClientError> {
+        trace!(identifier, "requesting acme certificate");
 
         let account = Account::from_credentials(credentials).map_err(|error| {
             error!(
@@ -105,7 +109,7 @@ impl AcmeClient {
 
         let (mut order, state) = account
             .new_order(&NewOrder {
-                identifiers: &[Identifier::Dns(fqdn.to_string())],
+                identifiers: &[Identifier::Dns(identifier.to_string())],
             })
             .await
             .map_err(|error| {
@@ -128,12 +132,11 @@ impl AcmeClient {
 
         trace!(?authorization, "got authorization");
 
-        self.complete_challenge(authorization, &mut order).await?;
-
-        let Identifier::Dns(identifier) = &authorization.identifier;
+        self.complete_challenge(challenge_type, authorization, &mut order)
+            .await?;
 
         let certificate = {
-            let mut params = CertificateParams::new(vec![identifier.to_string()]);
+            let mut params = CertificateParams::new(vec![identifier.to_owned()]);
             params.distinguished_name = DistinguishedName::new();
             Certificate::from_params(params).map_err(|error| {
                 error!(%error, "failed to create certificate");
@@ -153,11 +156,62 @@ impl AcmeClient {
                 AcmeClientError::OrderFinalizing
             })?;
 
-        Ok((certificate_chain, certificate))
+        Ok((certificate_chain, certificate.serialize_private_key_pem()))
+    }
+
+    fn find_challenge(
+        ty: ChallengeType,
+        authorization: &Authorization,
+    ) -> Result<&Challenge, AcmeClientError> {
+        authorization
+            .challenges
+            .iter()
+            .find(|c| c.r#type == ty)
+            .ok_or_else(|| {
+                error!("http-01 challenge not found");
+                AcmeClientError::MissingChallenge
+            })
+    }
+
+    async fn wait_for_termination(&self, order: &mut Order) -> Result<(), AcmeClientError> {
+        // Exponential backoff until order changes status
+        let mut tries = 1;
+        let mut delay = Duration::from_millis(250);
+        let state = loop {
+            sleep(delay).await;
+            let state = order.state().await.map_err(|error| {
+                error!(%error, "got error while fetching state");
+                AcmeClientError::FetchingState
+            })?;
+
+            trace!(?state, "order state refreshed");
+            match state.status {
+                OrderStatus::Ready => break state,
+                OrderStatus::Invalid => {
+                    return Err(AcmeClientError::ChallengeInvalid);
+                }
+                OrderStatus::Pending => {
+                    delay *= 2;
+                    tries += 1;
+                    if tries < MAX_RETRIES {
+                        trace!(?state, tries, attempt_in=?delay, "order not yet ready");
+                    } else {
+                        error!(?state, tries, "order not ready in {MAX_RETRIES} tries");
+                        return Err(AcmeClientError::ChallengeTimeout);
+                    }
+                }
+                _ => unreachable!(),
+            }
+        };
+
+        trace!(?state, "challenge completed");
+
+        Ok(())
     }
 
     async fn complete_challenge(
         &self,
+        ty: ChallengeType,
         authorization: &Authorization,
         order: &mut Order,
     ) -> Result<(), AcmeClientError> {
@@ -165,16 +219,48 @@ impl AcmeClient {
         if let AuthorizationStatus::Valid = authorization.status {
             return Ok(());
         }
+        let challenge = Self::find_challenge(ty, authorization)?;
+        match ty {
+            ChallengeType::Http01 => self.complete_http01_challenge(challenge, order).await,
+            ChallengeType::Dns01 => {
+                self.complete_dns01_challenge(&authorization.identifier, challenge, order)
+                    .await
+            }
+            _ => Err(AcmeClientError::ChallengeNotSupported),
+        }
+    }
 
-        let challenge = authorization
-            .challenges
-            .iter()
-            .find(|c| c.r#type == ChallengeType::Http01)
-            .ok_or_else(|| {
-                error!("http-01 challenge not found");
-                AcmeClientError::MissingHttp01Challenge
+    async fn complete_dns01_challenge(
+        &self,
+        identifier: &Identifier,
+        challenge: &Challenge,
+        order: &mut Order,
+    ) -> Result<(), AcmeClientError> {
+        let Identifier::Dns(domain) = identifier;
+
+        let digest = order.key_authorization(challenge).dns_value();
+        warn!("dns-01 challenge: _acme-challenge.{domain} 300 IN TXT \"{digest}\"");
+
+        // Wait 120 secs to insert the record manually and for it to
+        // propagate before moving on
+        sleep(Duration::from_secs(120)).await;
+
+        order
+            .set_challenge_ready(&challenge.url)
+            .await
+            .map_err(|error| {
+                error!(%error, "failed to mark challenge as ready");
+                AcmeClientError::SetReadyFailed
             })?;
 
+        self.wait_for_termination(order).await
+    }
+
+    async fn complete_http01_challenge(
+        &self,
+        challenge: &Challenge,
+        order: &mut Order,
+    ) -> Result<(), AcmeClientError> {
         trace!(?challenge, "will complete challenge");
 
         self.add_http01_challenge_authorization(
@@ -191,46 +277,12 @@ impl AcmeClient {
                 AcmeClientError::SetReadyFailed
             })?;
 
-        // Exponential backoff until order changes status
-        let mut tries = 1u8;
-        let mut delay = Duration::from_millis(250);
-        let state = loop {
-            sleep(delay).await;
-            let state = order.state().await.map_err(|error| {
-                error!(%error, "got error while fetching state");
-                AcmeClientError::FetchingState
-            })?;
-
-            trace!(?state, "order state refreshed");
-            match state.status {
-                OrderStatus::Ready => break state,
-                OrderStatus::Invalid => {
-                    self.remove_http01_challenge_authorization(&challenge.token)
-                        .await;
-                    return Err(AcmeClientError::ChallengeInvalid);
-                }
-                OrderStatus::Pending => {
-                    delay *= 2;
-                    tries += 1;
-                    if tries < 5 {
-                        trace!(?state, tries, attempt_in=?delay, "order not yet ready");
-                    } else {
-                        error!(?state, tries, "order not ready in 5 tries");
-                        self.remove_http01_challenge_authorization(&challenge.token)
-                            .await;
-                        return Err(AcmeClientError::ChallengeTimeout);
-                    }
-                }
-                _ => unreachable!(),
-            }
-        };
-
-        trace!(challenge.token, ?state, "challenge completed");
+        let res = self.wait_for_termination(order).await;
 
         self.remove_http01_challenge_authorization(&challenge.token)
             .await;
 
-        Ok(())
+        res
     }
 }
 
@@ -245,7 +297,8 @@ pub enum AcmeClientError {
     FetchingState,
     OrderCreation,
     OrderFinalizing,
-    MissingHttp01Challenge,
+    MissingChallenge,
+    ChallengeNotSupported,
     Serializing,
     SetReadyFailed,
 }
@@ -276,6 +329,18 @@ impl<S> Layer<S> for ChallengeResponderLayer {
 pub struct ChallengeResponder<S> {
     client: AcmeClient,
     inner: S,
+}
+
+impl<'r, S> AsResponderTo<&'r AddrStream> for ChallengeResponder<S>
+where
+    S: AsResponderTo<&'r AddrStream>,
+{
+    fn as_responder_to(&self, req: &'r AddrStream) -> Self {
+        Self {
+            client: self.client.clone(),
+            inner: self.inner.as_responder_to(req),
+        }
+    }
 }
 
 impl<ReqBody, S> Service<Request<ReqBody>> for ChallengeResponder<S>

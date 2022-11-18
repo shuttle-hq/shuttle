@@ -23,9 +23,9 @@ use sqlx::{query, Error as SqlxError, Row};
 use tracing::{debug, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
+use crate::acme::CustomDomain;
 use crate::args::ContextArgs;
 use crate::auth::{Key, Permissions, User};
-use crate::custom_domain::CustomDomain;
 use crate::project::Project;
 use crate::task::TaskBuilder;
 use crate::{AccountName, DockerContext, Error, ErrorKind, ProjectName};
@@ -454,13 +454,13 @@ impl GatewayService {
         &self,
         project_name: ProjectName,
         fqdn: &Fqdn,
-        certificate: &str,
+        certs: &str,
         private_key: &str,
     ) -> Result<(), Error> {
         query("INSERT INTO custom_domains (fqdn, project_name, certificate, private_key) VALUES (?1, ?2, ?3, ?4)")
             .bind(fqdn.to_string())
             .bind(&project_name)
-            .bind(certificate)
+            .bind(certs)
             .bind(private_key)
             .execute(&self.db)
             .await

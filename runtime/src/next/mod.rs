@@ -1,8 +1,10 @@
 use std::env;
 use std::fs::File;
 use std::io::{Read, Write};
+use std::ops::DerefMut;
 use std::os::unix::prelude::RawFd;
 use std::path::Path;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -13,6 +15,8 @@ use shuttle_proto::runtime::{
     self, LoadRequest, LoadResponse, StartRequest, StartResponse, StopRequest, StopResponse,
     SubscribeLogsRequest,
 };
+use shuttle_service::ServiceName;
+use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
 use tracing::trace;
@@ -23,12 +27,14 @@ use wasmtime_wasi::{WasiCtx, WasiCtxBuilder};
 
 pub struct Next {
     bot: std::sync::Mutex<Option<Bot>>,
+    kill_tx: std::sync::Mutex<Option<oneshot::Sender<String>>>,
 }
 
 impl Next {
     pub fn new() -> Self {
         Self {
             bot: std::sync::Mutex::new(None),
+            kill_tx: std::sync::Mutex::new(None),
         }
     }
 }
@@ -58,12 +64,15 @@ impl Runtime for Next {
             let guard = self.bot.lock().unwrap();
             guard.as_ref().unwrap().clone()
         };
-        let mut client = bot.into_client(token.as_str(), intents).await;
+        let client = bot.into_client(token.as_str(), intents).await;
 
+        let (kill_tx, kill_rx) = tokio::sync::oneshot::channel();
+
+        *self.kill_tx.lock().unwrap() = Some(kill_tx);
+
+        // start bot as a background task with a kill receiver
         trace!("starting bot");
-        tokio::spawn(async move {
-            client.start().await.unwrap();
-        });
+        tokio::spawn(run_until_stopped(client, kill_rx));
 
         let message = StartResponse {
             success: true,
@@ -83,8 +92,40 @@ impl Runtime for Next {
         todo!()
     }
 
-    async fn stop(&self, _request: Request<StopRequest>) -> Result<Response<StopResponse>, Status> {
-        todo!()
+    async fn stop(&self, request: Request<StopRequest>) -> Result<Response<StopResponse>, Status> {
+        let request = request.into_inner();
+
+        let service_name = ServiceName::from_str(request.service_name.as_str())
+            .map_err(|err| Status::from_error(Box::new(err)))?;
+
+        let kill_tx = self.kill_tx.lock().unwrap().deref_mut().take();
+
+        if let Some(kill_tx) = kill_tx {
+            tokio::spawn(async move {
+                kill_tx
+                    .send(format!("stopping deployment: {}", &service_name))
+                    .unwrap();
+            });
+
+            Ok(Response::new(StopResponse { success: true }))
+        } else {
+            Err(Status::internal("failed to stop deployment"))
+        }
+    }
+}
+
+/// Run the bot and run until a stop signal is received
+async fn run_until_stopped(mut client: Client, kill_rx: tokio::sync::oneshot::Receiver<String>) {
+    tokio::select! {
+        _ = client.start() => {
+            trace!("serenity bot stopped");
+        },
+        message = kill_rx => {
+            match message {
+                Ok(msg) => trace!("{msg}"),
+                Err(_) => trace!("the sender dropped")
+            }
+        }
     }
 }
 

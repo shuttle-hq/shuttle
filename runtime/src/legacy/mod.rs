@@ -21,9 +21,10 @@ use shuttle_service::{
     Factory, Logger, ServiceName,
 };
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{transport::Endpoint, Request, Response, Status};
-use tracing::{info, instrument, trace};
+use tracing::{instrument, trace};
 use uuid::Uuid;
 
 use crate::provisioner_factory::{AbstractFactory, AbstractProvisionerFactory};
@@ -37,7 +38,7 @@ pub struct Legacy {
     logs_rx: Mutex<Option<UnboundedReceiver<LogItem>>>,
     logs_tx: Mutex<UnboundedSender<LogItem>>,
     provisioner_address: Endpoint,
-    kill_tx: Mutex<Option<tokio::sync::oneshot::Sender<String>>>,
+    kill_tx: Mutex<Option<oneshot::Sender<String>>>,
 }
 
 impl Legacy {
@@ -111,7 +112,8 @@ impl Runtime for Legacy {
 
         *self.kill_tx.lock().unwrap() = Some(kill_tx);
 
-        _ = tokio::spawn(run(service, service_address, kill_rx));
+        // start service as a background task with a kill receiver
+        tokio::spawn(run_until_stopped(service, service_address, kill_rx));
 
         *self.port.lock().unwrap() = Some(service_port);
 
@@ -169,8 +171,9 @@ impl Runtime for Legacy {
     }
 }
 
+/// Run the service and run until a stop signal is received
 #[instrument(skip(service))]
-async fn run(
+async fn run_until_stopped(
     service: LoadedService,
     addr: SocketAddr,
     kill_rx: tokio::sync::oneshot::Receiver<String>,

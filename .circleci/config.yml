@@ -282,6 +282,20 @@ jobs:
           root: artifacts
           paths:
             - shuttle-version-x86_64-unknown-linux-musl.tar.gz
+  publish-github-release:
+    docker:
+      - image: cimg/go:1.19.3
+    steps:
+      - attach_workspace:
+          at: artifacts
+      - run:
+          name: "Publish Release on GitHub"
+          environment:
+            GITHUB_TOKEN: $GITHUB_TOKEN
+          command: |
+            go install github.com/tcnksm/ghr@v0.16.0
+            VERSION=version
+            ghr -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} -delete -draft ${VERSION} artifacts/
 
 workflows:
   version: 2
@@ -330,3 +344,6 @@ workflows:
       # - build-binaries:
           # requires:
           #   - build-and-push
+      - publish-github-release:
+          requires:
+            - build-binaries

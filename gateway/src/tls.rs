@@ -157,7 +157,7 @@ pub fn make_tls_acceptor() -> (Arc<GatewayCertResolver>, RustlsAcceptor<DefaultA
         .with_safe_defaults()
         .with_no_client_auth()
         .with_cert_resolver(Arc::clone(&resolver) as Arc<dyn ResolvesServerCert>);
-    server_config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+    server_config.alpn_protocols = vec![b"http/1.1".to_vec()];
 
     let rustls_config = RustlsConfig::from_config(Arc::new(server_config));
 

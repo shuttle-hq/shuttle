@@ -23,7 +23,7 @@ use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
 use tower::{Service, ServiceBuilder};
-use tracing::{debug_span, error, field, trace};
+use tracing::{debug_span, error, field, trace, debug};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::acme::{AcmeClient, ChallengeResponderLayer};
@@ -82,7 +82,7 @@ impl<'r> AsResponderTo<&'r AddrStream> for UserProxy {
 
 impl UserProxy {
     async fn proxy(self, mut req: Request<Body>) -> Result<Response, Error> {
-        let span = debug_span!("proxy", http.method = %req.method(), http.uri = %req.uri(), http.status_code = field::Empty, project = field::Empty);
+        let span = debug_span!("proxy", http.method = %req.method(), http.host = ?req.headers().get("Host"), http.uri = %req.uri(), http.status_code = field::Empty, project = field::Empty);
         trace!(?req, "serving proxy request");
 
         let project_str = req
@@ -90,6 +90,7 @@ impl UserProxy {
             .typed_get::<Host>()
             .map(|host| fqdn!(host.hostname()))
             .and_then(|fqdn| {
+                debug!(host = %fqdn, public = %self.public, "comparing host key");
                 if fqdn.is_subdomain_of(&self.public) && fqdn.depth() - self.public.depth() == 1 {
                     Some(fqdn.labels().next().unwrap().to_owned())
                 } else {

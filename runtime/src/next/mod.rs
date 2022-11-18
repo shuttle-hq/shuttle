@@ -114,7 +114,7 @@ impl Runtime for Next {
     }
 }
 
-/// Run the bot and run until a stop signal is received
+/// Run the bot until a stop signal is received
 async fn run_until_stopped(mut client: Client, kill_rx: tokio::sync::oneshot::Receiver<String>) {
     tokio::select! {
         _ = client.start() => {

@@ -171,7 +171,7 @@ impl Runtime for Legacy {
     }
 }
 
-/// Run the service and run until a stop signal is received
+/// Run the service until a stop signal is received
 #[instrument(skip(service))]
 async fn run_until_stopped(
     service: LoadedService,

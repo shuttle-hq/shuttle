@@ -236,9 +236,8 @@ impl AcmeClient {
         challenge: &Challenge,
         order: &mut Order,
     ) -> Result<(), AcmeClientError> {
-        let domain = match identifier {
-            Identifier::Dns(domain) => domain,
-        };
+        let Identifier::Dns(domain) = identifier;
+
         let digest = order.key_authorization(challenge).dns_value();
         warn!("dns-01 challenge: _acme-challenge.{domain} 300 IN TXT \"{digest}\"");
 

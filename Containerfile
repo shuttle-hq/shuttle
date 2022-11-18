@@ -1,7 +1,12 @@
 #syntax=docker/dockerfile-upstream:1.4.0-rc1
 FROM rust:1.63.0-buster as shuttle-build
 RUN apt-get update &&\
-    apt-get install -y curl protobuf-compiler
+    apt-get install -y curl
+
+RUN curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v21.9/protoc-21.9-linux-x86_64.zip &&\
+    unzip -o protoc-21.9-linux-x86_64.zip -d /usr bin/protoc &&\
+    unzip -o protoc-21.9-linux-x86_64.zip -d /usr/ 'include/*' &&\
+    rm -f protoc-21.9-linux-x86_64.zip
 RUN cargo install cargo-chef
 WORKDIR /build
 
@@ -36,6 +41,7 @@ shuttle-service = { path = "/usr/src/shuttle/service" } \n\
 shuttle-aws-rds = { path = "/usr/src/shuttle/resources/aws-rds" } \n\
 shuttle-persist = { path = "/usr/src/shuttle/resources/persist" } \n\
 shuttle-shared-db = { path = "/usr/src/shuttle/resources/shared-db" } \n\
+shuttle-proto = { path = "proto" } \n\
 shuttle-secrets = { path = "/usr/src/shuttle/resources/secrets" }' > $CARGO_HOME/config.toml
 COPY --from=builder /build/target/debug/${crate} /usr/local/bin/service
 ENTRYPOINT ["/usr/local/bin/service"]

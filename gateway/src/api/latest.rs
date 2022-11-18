@@ -12,7 +12,7 @@ use axum::{Json as AxumJson, Router};
 use fqdn::FQDN;
 use futures::Future;
 use http::StatusCode;
-use instant_acme::AccountCredentials;
+use instant_acme::{AccountCredentials, ChallengeType};
 use serde::{Deserialize, Serialize};
 use shuttle_common::models::error::ErrorKind;
 use shuttle_common::models::{project, user};
@@ -217,7 +217,7 @@ async fn request_acme_certificate(
         .map_err(|_err| Error::from(ErrorKind::InvalidCustomDomain))?;
 
     let (certs, private_key) = acme_client
-        .create_certificate(&fqdn.to_string(), credentials)
+        .create_certificate(&fqdn.to_string(), ChallengeType::Http01, credentials)
         .await?;
 
     service

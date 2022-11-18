@@ -61,9 +61,8 @@ impl ChainAndPrivateKey {
             });
         }
 
-        // TODO: not necessarily RSA
         pems.push(Pem {
-            tag: "RSA PRIVATE KEY".to_string(),
+            tag: "PRIVATE KEY".to_string(),
             contents: self.private_key.0,
         });
 

@@ -1,7 +1,7 @@
 use clap::Parser;
 use fqdn::FQDN;
 use futures::prelude::*;
-use instant_acme::AccountCredentials;
+use instant_acme::{AccountCredentials, ChallengeType};
 use opentelemetry::global;
 use shuttle_gateway::acme::AcmeClient;
 use shuttle_gateway::api::latest::ApiBuilder;
@@ -215,7 +215,12 @@ async fn init_certs<P: AsRef<Path>>(fs: P, public: FQDN, acme: AcmeClient) -> Ch
 
             let identifier = format!("*.{public}");
 
-            let (chain, private_key) = acme.create_certificate(&identifier, creds).await.unwrap();
+            // Use ::Dns01 challenge because that's the only supported
+            // challenge type for wildcard domains
+            let (chain, private_key) = acme
+                .create_certificate(&identifier, ChallengeType::Dns01, creds)
+                .await
+                .unwrap();
 
             let mut buf = Vec::new();
             buf.extend(chain.as_bytes());

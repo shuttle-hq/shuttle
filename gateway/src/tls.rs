@@ -36,7 +36,7 @@ impl ChainAndPrivateKey {
                 Item::X509Certificate(cert) => chain.push(Certificate(cert)),
                 Item::ECKey(key) | Item::PKCS8Key(key) | Item::RSAKey(key) => {
                     private_key = Some(PrivateKey(key))
-                },
+                }
                 _ => return Err(Error::from_kind(ErrorKind::Internal)),
             }
         }

@@ -23,7 +23,7 @@ use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
 use tower::{Service, ServiceBuilder};
-use tracing::{debug_span, error, field, trace, debug};
+use tracing::{debug, debug_span, error, field, trace};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::acme::{AcmeClient, ChallengeResponderLayer};

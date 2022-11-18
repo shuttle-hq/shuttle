@@ -241,47 +241,42 @@ jobs:
       - save-buildx-cache
   build-binaries:
     machine:
-      image: ubuntu-2204:2022.04.1
+      image: << parameters.image >>
+    resource_class: << parameters.resource_class >>
+    parameters:
+      target:
+        description: "Linux target to build for"
+        type: string
+      image:
+        description: "Machine image to use"
+        type: string
+      resource_class:
+        description: "The resource type to use for the machine"
+        type: string
     steps:
       - checkout
-      - run: sudo apt update && sudo DEBIAN_FRONTEND=noninteractive apt install -y libssl-dev musl-tools p7zip-full
-      - run:
-          name: Build openssl with musl
-          command: |
-            # Inspired by https://qiita.com/liubin/items/6c94f0b61f746c08b74c
-            # and https://github.com/clux/muslrust/blob/main/Dockerfile
-            export SSL_VER="1.1.1q"
-            export PREFIX=/musl
-            sudo ln -s /usr/include/x86_64-linux-gnu/asm /usr/include/x86_64-linux-musl/asm
-            sudo ln -s /usr/include/asm-generic /usr/include/x86_64-linux-musl/asm-generic
-            sudo ln -s /usr/include/linux /usr/include/x86_64-linux-musl/linux
-            curl -sSL https://www.openssl.org/source/openssl-$SSL_VER.tar.gz | tar xz && cd openssl-$SSL_VER
-            CC="musl-gcc -fPIE -pie" ./Configure no-zlib no-shared --prefix=$PREFIX --openssldir=$PREFIX/ssl linux-x86_64
-            make depend
-            make -j$(nproc)
-            sudo make install
+      - run: sudo apt update && sudo DEBIAN_FRONTEND=noninteractive apt install -y libssl-dev musl-tools clang p7zip-full
       - run:
           name: Install Rust
-          command: curl --proto '=https' --tlsv1.3 https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.63.0 --target x86_64-unknown-linux-musl
+          command: curl --proto '=https' --tlsv1.3 https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.63.0 --target << parameters.target >>
       - run:
           name: Build
           command: |
-            # export TARGET_CC=clang
-            # export CFLAGS_aarch64_unknown_linux_musl=--sysroot=/usr/aarch64-linux-gnu
-            # export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=/usr/aarch64-linux-gnu/bin/ld
-            export OPENSSL_DIR=/musl
-            cargo build --release --package cargo-shuttle --target x86_64-unknown-linux-musl
+            # From https://github.com/briansmith/ring/issues/1414#issuecomment-1055177218
+            export CC_aarch64_unknown_linux_musl=clang
+            # "vendored-openssl" is from https://github.com/cross-rs/cross/issues/229#issuecomment-597898074
+            cargo build --release --package cargo-shuttle --features vendored-openssl --target << parameters.target >>
       - run:
           name: Make artifact
           command: |
             mkdir artifacts
-            mv target/x86_64-unknown-linux-musl/release/cargo-shuttle artifacts/shuttle
+            mv target/<< parameters.target >>/release/cargo-shuttle artifacts/shuttle
             mv README.md LICENSE artifacts/
-            7z a -ttar -so -an artifacts | 7z a -si artifacts/shuttle-version-x86_64-unknown-linux-musl.tar.gz
+            7z a -ttar -so -an artifacts | 7z a -si artifacts/shuttle-version-<< parameters.target >>.tar.gz
       - persist_to_workspace:
           root: artifacts
           paths:
-            - shuttle-version-x86_64-unknown-linux-musl.tar.gz
+            - shuttle-version-<< parameters.target >>.tar.gz
   publish-github-release:
     docker:
       - image: cimg/go:1.19.3
@@ -340,10 +335,21 @@ workflows:
       #     filters:
       #       branches:
       #         only: production
-      - build-binaries
-      # - build-binaries:
+      - build-binaries:
+          name: build-binaries-x86_64
+          image: ubuntu-2204:2022.04.1
+          target: x86_64-unknown-linux-musl
+          resource_class: medium
+          # requires:
+          #   - build-and-push
+      - build-binaries:
+          name: build-binaries-aarch64
+          image: ubuntu-2004:202101-01
+          target: aarch64-unknown-linux-musl
+          resource_class: arm.medium
           # requires:
           #   - build-and-push
       - publish-github-release:
           requires:
-            - build-binaries
+            - build-binaries-x86_64
+            - build-binaries-aarch64

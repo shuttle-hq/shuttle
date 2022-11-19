@@ -5513,6 +5513,7 @@ dependencies = [
  "hyper",
  "hyper-reverse-proxy 0.5.2-dev (git+https://github.com/chesedo/hyper-reverse-proxy?branch=bug/host_header)",
  "instant-acme",
+ "lazy_static",
  "once_cell",
  "opentelemetry",
  "opentelemetry-datadog",

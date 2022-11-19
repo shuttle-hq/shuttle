@@ -19,6 +19,8 @@ bollard = "0.13"
 chrono = "0.4"
 clap = { version = "4.0.0", features = [ "derive" ] }
 
+lazy_static = "1.4.0"
+
 fqdn = "0.2.2"
 
 futures = "0.3.21"

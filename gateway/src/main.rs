@@ -3,7 +3,7 @@ use fqdn::FQDN;
 use futures::prelude::*;
 use instant_acme::{AccountCredentials, ChallengeType};
 use opentelemetry::global;
-use shuttle_gateway::acme::AcmeClient;
+use shuttle_gateway::acme::{AcmeClient, CustomDomain};
 use shuttle_gateway::api::latest::ApiBuilder;
 use shuttle_gateway::args::StartArgs;
 use shuttle_gateway::args::{Args, Commands, InitArgs, UseTls};
@@ -145,6 +145,19 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
             .with_tls(tls_acceptor);
 
         api_builder = api_builder.with_acme(acme_client.clone(), resolver.clone());
+
+        for CustomDomain {
+            fqdn,
+            certificate,
+            private_key,
+            ..
+        } in gateway.iter_custom_domains().await.unwrap()
+        {
+            let mut buf = Vec::new();
+            buf.extend(certificate);
+            buf.extend(private_key);
+            resolver.serve_pem(&fqdn.to_string(), Cursor::new(buf)).await.unwrap();
+        }
 
         tokio::spawn(async move {
             // make sure we have a certificate for ourselves

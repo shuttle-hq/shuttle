@@ -120,18 +120,18 @@ impl GatewayCertResolver {
 
     /// Load a new certificate chain and private key to serve when
     /// receiving incoming TLS connections for the given domain.
-    pub async fn serve_der(&self, fqdn: &str, certs: ChainAndPrivateKey) -> Result<(), Error> {
+    pub async fn serve_der(&self, sni: &str, certs: ChainAndPrivateKey) -> Result<(), Error> {
         let certified_key = certs.into_certified_key()?;
         self.keys
             .write()
             .await
-            .insert(fqdn.to_string(), Arc::new(certified_key));
+            .insert(sni.to_string(), Arc::new(certified_key));
         Ok(())
     }
 
-    pub async fn serve_pem<R: Read>(&self, fqdn: &str, rd: R) -> Result<(), Error> {
+    pub async fn serve_pem<R: Read>(&self, sni: &str, rd: R) -> Result<(), Error> {
         let certs = ChainAndPrivateKey::parse_pem(rd)?;
-        self.serve_der(fqdn, certs).await
+        self.serve_der(sni, certs).await
     }
 }
 

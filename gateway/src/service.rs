@@ -477,17 +477,33 @@ impl GatewayService {
         Ok(())
     }
 
+    pub async fn iter_custom_domains(&self) -> Result<impl Iterator<Item = CustomDomain>, Error> {
+        query("SELECT fqdn, project_name, certificate, private_key FROM custom_domains")
+            .fetch_all(&self.db)
+            .await
+            .map(|res| {
+                res.into_iter().map(|row| CustomDomain {
+                    fqdn: row.get::<&str, _>("fqdn").parse().unwrap(),
+                    project_name: row.try_get("project_name").unwrap(),
+                    certificate: row.get("certificate"),
+                    private_key: row.get("private_key"),
+                })
+            })
+            .map_err(|_| Error::from_kind(ErrorKind::Internal))
+    }
+
     pub async fn project_details_for_custom_domain(
         &self,
         fqdn: &Fqdn,
     ) -> Result<CustomDomain, Error> {
         let custom_domain = query(
-            "SELECT project_name, certificate, private_key FROM custom_domains WHERE fqdn = ?1",
+            "SELECT fqdn, project_name, certificate, private_key FROM custom_domains WHERE fqdn = ?1",
         )
         .bind(fqdn.to_string())
         .fetch_optional(&self.db)
         .await?
         .map(|row| CustomDomain {
+            fqdn: row.get::<&str, _>("fqdn").parse().unwrap(),
             project_name: row.try_get("project_name").unwrap(),
             certificate: row.get("certificate"),
             private_key: row.get("private_key"),

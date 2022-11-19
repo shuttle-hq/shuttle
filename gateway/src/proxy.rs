@@ -6,7 +6,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use axum::headers::{HeaderMapExt, Host};
+use axum::headers::{Error as HeaderError, Header, HeaderMapExt, HeaderName, HeaderValue, Host};
 use axum::response::{IntoResponse, Response};
 use axum_server::accept::DefaultAcceptor;
 use axum_server::tls_rustls::RustlsAcceptor;
@@ -23,10 +23,10 @@ use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
 use tower::{Service, ServiceBuilder};
-use tracing::{debug, debug_span, error, field, trace};
+use tracing::{debug_span, error, field, trace};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
-use crate::acme::{AcmeClient, ChallengeResponderLayer};
+use crate::acme::{AcmeClient, ChallengeResponderLayer, CustomDomain};
 use crate::service::GatewayService;
 use crate::{Error, ErrorKind, ProjectName};
 
@@ -65,6 +65,37 @@ where
     }
 }
 
+lazy_static::lazy_static! {
+    pub static ref X_SHUTTLE_PROJECT: HeaderName = HeaderName::from_static("X-Shuttle-Project");
+}
+
+pub struct XShuttleProject(ProjectName);
+
+impl Header for XShuttleProject {
+    fn name() -> &'static HeaderName {
+        &X_SHUTTLE_PROJECT
+    }
+
+    fn encode<E: Extend<HeaderValue>>(&self, values: &mut E) {
+        values.extend(std::iter::once(
+            HeaderValue::from_str(self.0.as_str()).unwrap(),
+        ));
+    }
+
+    fn decode<'i, I>(values: &mut I) -> Result<Self, HeaderError>
+    where
+        Self: Sized,
+        I: Iterator<Item = &'i HeaderValue>,
+    {
+        values
+            .last()
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.parse().ok())
+            .map(|project_name| Self(project_name))
+            .ok_or_else(|| HeaderError::invalid())
+    }
+}
+
 #[derive(Clone)]
 pub struct UserProxy {
     gateway: Arc<GatewayService>,
@@ -85,23 +116,29 @@ impl UserProxy {
         let span = debug_span!("proxy", http.method = %req.method(), http.host = ?req.headers().get("Host"), http.uri = %req.uri(), http.status_code = field::Empty, project = field::Empty);
         trace!(?req, "serving proxy request");
 
-        let project_str = req
+        let fqdn = req
             .headers()
             .typed_get::<Host>()
             .map(|host| fqdn!(host.hostname()))
-            .and_then(|fqdn| {
-                debug!(host = %fqdn, public = %self.public, "comparing host key");
-                if fqdn.is_subdomain_of(&self.public) && fqdn.depth() - self.public.depth() == 1 {
-                    Some(fqdn.labels().next().unwrap().to_owned())
-                } else {
-                    None
-                }
-            })
             .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotFound))?;
 
-        let project_name: ProjectName = project_str
-            .parse()
-            .map_err(|_| Error::from_kind(ErrorKind::InvalidProjectName))?;
+        let project_name =
+            if fqdn.is_subdomain_of(&self.public) && fqdn.depth() - self.public.depth() == 1 {
+                fqdn.labels()
+                    .next()
+                    .unwrap()
+                    .to_owned()
+                    .parse()
+                    .map_err(|_| Error::from_kind(ErrorKind::ProjectNotFound))?
+            } else if let Ok(CustomDomain { project_name, .. }) =
+                self.gateway.project_details_for_custom_domain(&fqdn).await
+            {
+                project_name
+            } else {
+                return Err(Error::from_kind(ErrorKind::ProjectNotFound));
+            };
+
+        req.headers_mut().typed_insert(XShuttleProject(project_name.clone()));
 
         let project = self.gateway.find_project(&project_name).await?;
 

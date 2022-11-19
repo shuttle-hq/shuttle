@@ -156,7 +156,10 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
             let mut buf = Vec::new();
             buf.extend(certificate);
             buf.extend(private_key);
-            resolver.serve_pem(&fqdn.to_string(), Cursor::new(buf)).await.unwrap();
+            resolver
+                .serve_pem(&fqdn.to_string(), Cursor::new(buf))
+                .await
+                .unwrap();
         }
 
         tokio::spawn(async move {

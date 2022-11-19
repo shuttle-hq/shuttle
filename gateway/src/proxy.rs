@@ -91,8 +91,8 @@ impl Header for XShuttleProject {
             .last()
             .and_then(|value| value.to_str().ok())
             .and_then(|value| value.parse().ok())
-            .map(|project_name| Self(project_name))
-            .ok_or_else(|| HeaderError::invalid())
+            .map(Self)
+            .ok_or_else(HeaderError::invalid)
     }
 }
 
@@ -138,7 +138,8 @@ impl UserProxy {
                 return Err(Error::from_kind(ErrorKind::ProjectNotFound));
             };
 
-        req.headers_mut().typed_insert(XShuttleProject(project_name.clone()));
+        req.headers_mut()
+            .typed_insert(XShuttleProject(project_name.clone()));
 
         let project = self.gateway.find_project(&project_name).await?;
 

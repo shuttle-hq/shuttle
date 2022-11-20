@@ -336,6 +336,7 @@ where
 pub struct ProjectCreating {
     project_name: ProjectName,
     initial_key: String,
+    fqdn: Option<String>
 }
 
 impl ProjectCreating {
@@ -343,7 +344,13 @@ impl ProjectCreating {
         Self {
             project_name,
             initial_key,
+            fqdn: None
         }
+    }
+
+    pub fn with_fqdn(mut self, fqdn: String) -> Self {
+        self.fqdn = Some(fqdn);
+        self
     }
 
     pub fn new_with_random_initial_key(project_name: ProjectName) -> Self {
@@ -373,14 +380,14 @@ impl ProjectCreating {
             provisioner_host,
             network_name,
             network_id,
-            fqdn,
+            fqdn: public,
             ..
         } = ctx.container_settings();
 
         let Self {
             initial_key,
             project_name,
-            ..
+            fqdn
         } = &self;
 
         let create_container_options = CreateContainerOptions {
@@ -408,7 +415,7 @@ impl ProjectCreating {
                 "--proxy-address",
                 "0.0.0.0:8000",
                 "--proxy-fqdn",
-                fqdn,
+                fqdn.clone().unwrap_or(format!("{project_name}.{public}")),
                 "--artifacts-path",
                 "/opt/shuttle",
                 "--state",
@@ -891,7 +898,7 @@ pub mod exec {
         gateway: Arc<GatewayService>,
         sender: Sender<BoxedTask>,
     ) -> Result<(), ProjectError> {
-        for (project_name, account_name) in gateway
+        for (project_name, _) in gateway
             .iter_projects()
             .await
             .expect("could not list projects")
@@ -915,7 +922,6 @@ pub mod exec {
                             _ = gateway
                                 .new_task()
                                 .project(project_name)
-                                .account(account_name)
                                 .and_then(task::run(|ctx| async move {
                                     TaskResult::Done(Project::Stopped(ProjectStopped {
                                         container: ctx.state.container().unwrap(),
@@ -955,6 +961,7 @@ pub mod tests {
             Project::Creating(ProjectCreating {
                 project_name: "my-project-test".parse().unwrap(),
                 initial_key: "test".to_string(),
+                fqdn: None,
             }),
             #[assertion = "Container created, assigned an `id`"]
             Ok(Project::Starting(ProjectStarting {

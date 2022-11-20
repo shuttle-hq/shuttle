@@ -22,7 +22,8 @@ use tracing::{debug, debug_span, field, Span};
 
 use crate::acme::AcmeClient;
 use crate::auth::{Admin, ScopedUser, User};
-use crate::task::{self, BoxedTask};
+use crate::project::{Project, ProjectCreating};
+use crate::task::{self, BoxedTask, TaskResult};
 use crate::tls::GatewayCertResolver;
 use crate::worker::WORKER_QUEUE_SIZE;
 use crate::{AccountName, Error, GatewayService, ProjectName};
@@ -108,7 +109,6 @@ async fn post_project(
     service
         .new_task()
         .project(project.clone())
-        .account(name.clone())
         .send(&sender)
         .await?;
 
@@ -124,17 +124,14 @@ async fn delete_project(
     Extension(service): Extension<Arc<GatewayService>>,
     Extension(sender): Extension<Sender<BoxedTask>>,
     ScopedUser {
-        scope: _,
-        user: User { name, .. },
+        scope: project,
+        ..
     }: ScopedUser,
-    Path(project): Path<ProjectName>,
 ) -> Result<AxumJson<project::Response>, Error> {
-    let project_name = project.clone();
-
-    let state = service.find_project(&project_name).await?;
+    let state = service.find_project(&project).await?;
 
     let mut response = project::Response {
-        name: project_name.to_string(),
+        name: project.to_string(),
         state: state.into(),
     };
 
@@ -146,7 +143,6 @@ async fn delete_project(
     service
         .new_task()
         .project(project)
-        .account(name)
         .and_then(task::destroy())
         .send(&sender)
         .await?;
@@ -209,6 +205,7 @@ async fn request_acme_certificate(
     Extension(service): Extension<Arc<GatewayService>>,
     Extension(acme_client): Extension<AcmeClient>,
     Extension(resolver): Extension<Arc<GatewayCertResolver>>,
+    Extension(sender): Extension<Sender<BoxedTask>>,
     Path((project_name, fqdn)): Path<(ProjectName, String)>,
     AxumJson(credentials): AxumJson<AccountCredentials<'_>>,
 ) -> Result<String, Error> {
@@ -221,7 +218,27 @@ async fn request_acme_certificate(
         .await?;
 
     service
-        .create_custom_domain(project_name, &fqdn, &certs, &private_key)
+        .create_custom_domain(project_name.clone(), &fqdn, &certs, &private_key)
+        .await?;
+
+    // destroy and recreate the project with the new domain
+    service
+        .new_task()
+        .project(project_name)
+        .and_then(task::destroy())
+        .and_then(task::run_until_done())
+        .and_then(task::run({
+            let fqdn = fqdn.to_string();
+            move |ctx| {
+                let fqdn = fqdn.clone();
+                async move {
+                    let creating = ProjectCreating::new_with_random_initial_key(ctx.project_name)
+                        .with_fqdn(fqdn);
+                    TaskResult::Done(Project::Creating(creating))
+                }
+            }
+        }))
+        .send(&sender)
         .await?;
 
     let mut buf = Vec::new();

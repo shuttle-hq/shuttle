@@ -273,6 +273,15 @@ impl GatewayService {
         Ok(())
     }
 
+    pub async fn account_name_from_project(&self, project_name: &ProjectName) -> Result<AccountName, Error> {
+        query("SELECT account_name FROM projects WHERE project_name = ?1")
+            .bind(project_name)
+            .fetch_optional(&self.db)
+            .await?
+            .map(|row| row.get("account_name"))
+            .ok_or_else(|| Error::from(ErrorKind::ProjectNotFound))
+    }
+
     pub async fn key_from_account_name(&self, account_name: &AccountName) -> Result<Key, Error> {
         let key = query("SELECT key FROM accounts WHERE account_name = ?1")
             .bind(account_name)
@@ -633,7 +642,6 @@ pub mod tests {
         let mut work = svc
             .new_task()
             .project(matrix.clone())
-            .account(neo.clone())
             .and_then(task::destroy())
             .build();
 
@@ -679,7 +687,6 @@ pub mod tests {
 
         let mut task = svc
             .new_task()
-            .account(neo.clone())
             .project(matrix.clone())
             .build();
 
@@ -703,7 +710,6 @@ pub mod tests {
         let mut ambulance_task = svc
             .new_task()
             .project(matrix.clone())
-            .account(neo.clone())
             .and_then(task::check_health())
             .build();
 

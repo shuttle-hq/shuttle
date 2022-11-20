@@ -89,7 +89,10 @@ impl Runtime for Legacy {
         let mut factory = abstract_factory.get_factory(service_name);
 
         let logs_tx = self.logs_tx.lock().unwrap().clone();
-        let deployment_id = Uuid::from_slice(&request.deployment_id).unwrap();
+
+        let deployment_id =
+            Uuid::from_str(std::str::from_utf8(&request.deployment_id).unwrap()).unwrap();
+
         let logger = Logger::new(logs_tx, deployment_id);
 
         let so_path = self

@@ -312,6 +312,32 @@ jobs:
           root: artifacts
           paths:
             - shuttle-${CIRCLE_TAG}-x86_64-pc-windows-msvc.tar.gz
+  build-binaries-mac:
+    macos:
+      xcode: 12.5.1
+    resource_class: medium
+    steps:
+      - checkout
+      - run: brew install p7zip
+      - run:
+          name: Install Rust
+          command: curl --proto '=https' https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.63.0 --target x86_64-apple-darwin
+      - run:
+          name: Build
+          command: |
+            # "vendored-openssl" is from https://github.com/cross-rs/cross/issues/229#issuecomment-597898074
+            cargo build --release --package cargo-shuttle --features vendored-openssl --target x86_64-apple-darwin
+      - run:
+          name: Make artifact
+          command: |
+            mkdir artifacts
+            mv target/x86_64-apple-darwin/release/cargo-shuttle artifacts/shuttle
+            mv README.md LICENSE artifacts/
+            7z a -ttar -so -an artifacts | 7z a -si artifacts/shuttle-${CIRCLE_TAG}-x86_64-apple-darwin.tar.gz
+      - persist_to_workspace:
+          root: artifacts
+          paths:
+            - shuttle-${CIRCLE_TAG}-x86_64-apple-darwin.tar.gz
   publish-github-release:
     docker:
       - image: cimg/go:1.19.3
@@ -389,7 +415,13 @@ workflows:
       #     filters:
       #       tags:
       #         only: /^v.*/
-      - build-binaries-windows
+      # - build-binaries-windows:
+      #     requires:
+      #       - build-and-push
+      #     filters:
+      #       tags:
+      #         only: /^v.*/
+      - build-binaries-mac
           # requires:
           #   - build-and-push
           # filters:
@@ -399,7 +431,8 @@ workflows:
           requires:
             # - build-binaries-x86_64
             # - build-binaries-aarch64
-            - build-binaries-windows
+            # - build-binaries-windows
+            - build-binaries-mac
           filters:
             tags:
               only: /^v.*/

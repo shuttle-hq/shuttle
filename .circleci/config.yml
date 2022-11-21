@@ -239,7 +239,7 @@ jobs:
           command: |
             PUSH=true PLATFORMS=linux/amd64 make images
       - save-buildx-cache
-  build-binaries:
+  build-binaries-linux:
     machine:
       image: << parameters.image >>
     resource_class: << parameters.resource_class >>
@@ -334,7 +334,7 @@ workflows:
       #     filters:
       #       branches:
       #         only: production
-      - build-binaries:
+      - build-binaries-linux:
           name: build-binaries-x86_64
           image: ubuntu-2204:2022.04.1
           target: x86_64-unknown-linux-musl
@@ -344,7 +344,7 @@ workflows:
           filters:
             tags:
               only: /^v.*/
-      - build-binaries:
+      - build-binaries-linux:
           name: build-binaries-aarch64
           image: ubuntu-2004:202101-01
           target: aarch64-unknown-linux-musl

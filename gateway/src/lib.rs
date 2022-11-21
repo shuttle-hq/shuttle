@@ -783,7 +783,7 @@ pub mod tests {
             .request(
                 Request::get("/hello")
                     .header("Host", "matrix.test.shuttleapp.rs")
-                    .header("X-Shuttle-Project", "matrix")
+                    .header("x-shuttle-project", "matrix")
                     .body(Body::empty())
                     .unwrap(),
             )

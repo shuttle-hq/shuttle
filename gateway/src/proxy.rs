@@ -66,7 +66,7 @@ where
 }
 
 lazy_static::lazy_static! {
-    pub static ref X_SHUTTLE_PROJECT: HeaderName = HeaderName::from_static("X-Shuttle-Project");
+    pub static ref X_SHUTTLE_PROJECT: HeaderName = HeaderName::from_static("x-shuttle-project");
 }
 
 pub struct XShuttleProject(ProjectName);

@@ -198,7 +198,7 @@ impl RouterInner {
             .write_all(hyper::body::to_bytes(body).await.unwrap().as_ref())
             .unwrap();
         // signal to the receiver that end of file has been reached
-        body_stream.write(&[0]).unwrap();
+        body_stream.write_all(&[0]).unwrap();
 
         println!("calling inner Router");
         self.linker
@@ -221,7 +221,7 @@ impl RouterInner {
         let mut body_buf = Vec::new();
         let mut c_buf: [u8; 1] = [0; 1];
         loop {
-            body_stream.read(&mut c_buf).unwrap();
+            body_stream.read_exact(&mut c_buf).unwrap();
             if c_buf[0] == 0 {
                 break;
             } else {

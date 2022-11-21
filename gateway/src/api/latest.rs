@@ -4,8 +4,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::body::{Body, BoxBody};
-use axum::extract::{Extension, Path};
+use axum::extract::{Extension, MatchedPath, Path};
 use axum::http::Request;
+use axum::middleware::from_extractor;
 use axum::response::Response;
 use axum::routing::{any, get, post};
 use axum::{Json as AxumJson, Router};
@@ -14,6 +15,7 @@ use futures::Future;
 use http::StatusCode;
 use instant_acme::{AccountCredentials, ChallengeType};
 use serde::{Deserialize, Serialize};
+use shuttle_common::backends::metrics::Metrics;
 use shuttle_common::models::error::ErrorKind;
 use shuttle_common::models::{project, user};
 use tokio::sync::mpsc::Sender;
@@ -151,10 +153,10 @@ async fn delete_project(
 
 async fn route_project(
     Extension(service): Extension<Arc<GatewayService>>,
-    ScopedUser { scope, .. }: ScopedUser,
+    scoped_user: ScopedUser,
     req: Request<Body>,
 ) -> Result<Response<Body>, Error> {
-    service.route(&scope, req).await
+    service.route(&scoped_user, req).await
 }
 
 async fn get_status(Extension(sender): Extension<Sender<BoxedTask>>) -> Response<Body> {
@@ -310,15 +312,35 @@ impl ApiBuilder {
     }
 
     pub fn with_default_traces(mut self) -> Self {
-        self.router = self.router.layer(
+        self.router = self.router.route_layer(from_extractor::<Metrics>()).layer(
             TraceLayer::new_for_http()
                 .make_span_with(|request: &Request<Body>| {
-                    debug_span!("request", http.uri = %request.uri(), http.method = %request.method(), http.status_code = field::Empty, account.name = field::Empty, account.project = field::Empty)
+                    let path = if let Some(path) = request.extensions().get::<MatchedPath>() {
+                        path.as_str()
+                    } else {
+                        ""
+                    };
+
+                    debug_span!(
+                        "request",
+                        http.uri = %request.uri(),
+                        http.method = %request.method(),
+                        http.status_code = field::Empty,
+                        account.name = field::Empty,
+                        // A bunch of extra things for metrics
+                        // Should be able to make this clearer once `Valuable` support lands in tracing
+                        request.path = path,
+                        request.params.project_name = field::Empty,
+                        request.params.account_name = field::Empty,
+                    )
                 })
                 .on_response(
                     |response: &Response<BoxBody>, latency: Duration, span: &Span| {
                         span.record("http.status_code", response.status().as_u16());
-                        debug!(latency = format_args!("{} ns", latency.as_nanos()), "finished processing request");
+                        debug!(
+                            latency = format_args!("{} ns", latency.as_nanos()),
+                            "finished processing request"
+                        );
                     },
                 ),
         );
@@ -330,11 +352,11 @@ impl ApiBuilder {
             .router
             .route("/", get(get_status))
             .route(
-                "/projects/:project",
+                "/projects/:project_name",
                 get(get_project).delete(delete_project).post(post_project),
             )
             .route("/users/:account_name", get(get_user).post(post_user))
-            .route("/projects/:project/*any", any(route_project))
+            .route("/projects/:project_name/*any", any(route_project))
             .route("/admin/revive", post(revive_projects));
         self
     }

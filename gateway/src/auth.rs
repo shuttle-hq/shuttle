@@ -247,8 +247,6 @@ where
                 .unwrap(),
         };
 
-        // Record current project for tracing purposes
-        Span::current().record("account.project", &scope.to_string());
         if user.is_super_user() || user.projects.contains(&scope) {
             Ok(Self { user, scope })
         } else {

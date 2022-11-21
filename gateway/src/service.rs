@@ -8,6 +8,7 @@ use axum::response::Response;
 use bollard::network::ListNetworksOptions;
 use bollard::{Docker, API_DEFAULT_VERSION};
 use fqdn::Fqdn;
+use http::HeaderValue;
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
 use hyper::Client;
@@ -25,7 +26,7 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::acme::CustomDomain;
 use crate::args::ContextArgs;
-use crate::auth::{Key, Permissions, User};
+use crate::auth::{Key, Permissions, ScopedUser, User};
 use crate::project::Project;
 use crate::task::TaskBuilder;
 use crate::{AccountName, DockerContext, Error, ErrorKind, ProjectName};
@@ -205,9 +206,10 @@ impl GatewayService {
 
     pub async fn route(
         &self,
-        project_name: &ProjectName,
+        scoped_user: &ScopedUser,
         mut req: Request<Body>,
     ) -> Result<Response<Body>, Error> {
+        let project_name = &scoped_user.scope;
         let target_ip = self
             .find_project(project_name)
             .await?
@@ -223,9 +225,15 @@ impl GatewayService {
 
         debug!(target_url, "routing control");
 
+        let headers = req.headers_mut();
+        headers.append(
+            "X-Shuttle-Account-Name",
+            HeaderValue::from_str(&scoped_user.user.name.to_string()).unwrap(),
+        );
+
         let cx = Span::current().context();
         global::get_text_map_propagator(|propagator| {
-            propagator.inject_context(&cx, &mut HeaderInjector(req.headers_mut()))
+            propagator.inject_context(&cx, &mut HeaderInjector(headers))
         });
 
         let resp = PROXY_CLIENT

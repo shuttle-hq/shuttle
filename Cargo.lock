@@ -5431,6 +5431,7 @@ version = "0.7.2"
 dependencies = [
  "anyhow",
  "async-trait",
+ "axum",
  "chrono",
  "comfy-table",
  "crossterm",

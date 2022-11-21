@@ -45,6 +45,7 @@ uuid = { version = "1.1.2", features = ["v4"] }
 [dependencies.shuttle-common]
 version = "0.7.2"
 path = "../common"
+features = ["backend"]
 
 [dependencies.shuttle-proto]
 version = "0.7.2"

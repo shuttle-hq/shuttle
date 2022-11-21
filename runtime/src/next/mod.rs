@@ -260,8 +260,8 @@ pub mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn bot() {
-        let bot = Bot::new("bot.wasm");
+    async fn serenity() {
+        let bot = Bot::new("serenity.wasm");
         let mut inner = bot.inner.lock().await;
         assert_eq!(inner.message("not !hello").await, None);
         assert_eq!(inner.message("!hello").await, Some("world!".to_string()));

@@ -10,9 +10,10 @@ anyhow = "1.0.62"
 async-trait = "0.1.58"
 cap-std = "0.26.0"
 clap ={ version = "4.0.18", features = ["derive"] }
+hyper = { version = "0.14.23", features = ["full"] }
+rmp-serde = { version = "1.1.1" }
 serenity = { version = "0.11.5", default-features = false, features = ["client", "gateway", "rustls_backend", "model"] }
 thiserror = "1.0.37"
-hyper = { version = "0.14.23", features = ["full"] }
 tokio = { version = "=1.20.1", features = ["full"] }
 tokio-stream = "0.1.11"
 tonic = "0.8.2"
@@ -22,7 +23,6 @@ uuid = { version = "1.1.2", features = ["v4"] }
 wasi-common = "2.0.0"
 wasmtime = "2.0.0"
 wasmtime-wasi = "2.0.0"
-rmp-serde = { version = "1.1.1" }
 
 [dependencies.shuttle-common]
 version = "0.7.0"

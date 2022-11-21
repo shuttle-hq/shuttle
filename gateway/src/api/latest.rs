@@ -20,7 +20,7 @@ use tokio::sync::mpsc::Sender;
 use tower_http::trace::TraceLayer;
 use tracing::{debug, debug_span, field, Span};
 
-use crate::acme::AcmeClient;
+use crate::acme::{AcmeClient, CustomDomain};
 use crate::auth::{Admin, ScopedUser, User};
 use crate::project::{Project, ProjectCreating};
 use crate::task::{self, BoxedTask, TaskResult};
@@ -210,13 +210,23 @@ async fn request_acme_certificate(
         .parse()
         .map_err(|_err| Error::from(ErrorKind::InvalidCustomDomain))?;
 
-    let (certs, private_key) = acme_client
-        .create_certificate(&fqdn.to_string(), ChallengeType::Http01, credentials)
-        .await?;
-
-    service
-        .create_custom_domain(project_name.clone(), &fqdn, &certs, &private_key)
-        .await?;
+    let (certs, private_key) = match service.project_details_for_custom_domain(&fqdn).await {
+        Ok(CustomDomain {
+            certificate,
+            private_key,
+            ..
+        }) => (certificate, private_key),
+        Err(err) if err.kind() == ErrorKind::CustomDomainNotFound => {
+            let (certs, private_key) = acme_client
+                .create_certificate(&fqdn.to_string(), ChallengeType::Http01, credentials)
+                .await?;
+            service
+                .create_custom_domain(project_name.clone(), &fqdn, &certs, &private_key)
+                .await?;
+            (certs, private_key)
+        }
+        Err(err) => return Err(err),
+    };
 
     // destroy and recreate the project with the new domain
     service

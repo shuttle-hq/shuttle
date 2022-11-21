@@ -469,22 +469,13 @@ impl GatewayService {
         certs: &str,
         private_key: &str,
     ) -> Result<(), Error> {
-        query("INSERT INTO custom_domains (fqdn, project_name, certificate, private_key) VALUES (?1, ?2, ?3, ?4)")
+        query("INSERT OR REPLACE INTO custom_domains (fqdn, project_name, certificate, private_key) VALUES (?1, ?2, ?3, ?4)")
             .bind(fqdn.to_string())
             .bind(&project_name)
             .bind(certs)
             .bind(private_key)
             .execute(&self.db)
-            .await
-            .map_err(|err| {
-                if let Some(db_err_code) = err.as_database_error().and_then(DatabaseError::code) {
-                    if db_err_code == "1555" {
-                        return Error::from(ErrorKind::CustomDomainAlreadyExists);
-                    }
-                }
-
-                err.into()
-            })?;
+            .await?;
 
         Ok(())
     }
@@ -765,8 +756,8 @@ pub mod tests {
             .unwrap();
 
         assert_eq!(custom_domain.project_name, project_name);
-        assert_eq!(custom_domain.certificate, certificate.as_bytes());
-        assert_eq!(custom_domain.private_key, private_key.as_bytes());
+        assert_eq!(custom_domain.certificate, certificate);
+        assert_eq!(custom_domain.private_key, private_key);
 
         assert_err_kind!(
             svc.create_custom_domain(project_name.clone(), &domain, certificate, private_key)

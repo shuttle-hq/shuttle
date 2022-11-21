@@ -152,8 +152,8 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
         } in gateway.iter_custom_domains().await.unwrap()
         {
             let mut buf = Vec::new();
-            buf.extend(certificate);
-            buf.extend(private_key);
+            buf.extend(certificate.as_bytes());
+            buf.extend(private_key.as_bytes());
             resolver
                 .serve_pem(&fqdn.to_string(), Cursor::new(buf))
                 .await

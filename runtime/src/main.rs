@@ -5,7 +5,7 @@ use std::{
 
 use clap::Parser;
 use shuttle_proto::runtime::runtime_server::RuntimeServer;
-use shuttle_runtime::{Args, Legacy, Next};
+use shuttle_runtime::{Args, AxumWasm, Legacy, Next};
 use tonic::transport::Server;
 use tracing::trace;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
@@ -35,6 +35,10 @@ async fn main() {
     let router = if args.legacy {
         let legacy = Legacy::new(provisioner_address);
         let svc = RuntimeServer::new(legacy);
+        server_builder.add_service(svc)
+    } else if args.axum {
+        let axum = AxumWasm::new();
+        let svc = RuntimeServer::new(axum);
         server_builder.add_service(svc)
     } else {
         let next = Next::new();

@@ -8,6 +8,10 @@ pub struct Args {
     pub provisioner_address: Endpoint,
 
     /// Is this runtime for a legacy service
-    #[clap(long)]
+    #[clap(long, conflicts_with("axum"))]
     pub legacy: bool,
+
+    /// Is this runtime for an axum-wasm service
+    #[clap(long, conflicts_with("legacy"))]
+    pub axum: bool,
 }

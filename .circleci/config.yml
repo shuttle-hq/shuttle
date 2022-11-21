@@ -272,7 +272,7 @@ jobs:
             mkdir artifacts
             mv target/<< parameters.target >>/release/cargo-shuttle artifacts/shuttle
             mv README.md LICENSE artifacts/
-            7z a -ttar -so -an artifacts | 7z a -si artifacts/shuttle-version-<< parameters.target >>.tar.gz
+            7z a -ttar -so -an artifacts | 7z a -si artifacts/shuttle-${CIRCLE_TAG}-<< parameters.target >>.tar.gz
       - persist_to_workspace:
           root: artifacts
           paths:
@@ -289,8 +289,7 @@ jobs:
             GITHUB_TOKEN: $GITHUB_TOKEN
           command: |
             go install github.com/tcnksm/ghr@v0.16.0
-            VERSION=version
-            ghr -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} -delete -draft ${VERSION} artifacts/
+            ghr -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} -delete -draft ${CIRCLE_TAG} artifacts/
 
 workflows:
   version: 2
@@ -342,6 +341,9 @@ workflows:
           resource_class: medium
           # requires:
           #   - build-and-push
+          filters:
+            tags:
+              only: /^v.*/
       - build-binaries:
           name: build-binaries-aarch64
           image: ubuntu-2004:202101-01
@@ -349,7 +351,13 @@ workflows:
           resource_class: arm.medium
           # requires:
           #   - build-and-push
+          filters:
+            tags:
+              only: /^v.*/
       - publish-github-release:
           requires:
             - build-binaries-x86_64
             - build-binaries-aarch64
+          filters:
+            tags:
+              only: /^v.*/

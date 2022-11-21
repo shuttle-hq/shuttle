@@ -3,7 +3,7 @@ use fqdn::FQDN;
 use futures::prelude::*;
 use instant_acme::{AccountCredentials, ChallengeType};
 use opentelemetry::global;
-use shuttle_gateway::acme::AcmeClient;
+use shuttle_gateway::acme::{AcmeClient, CustomDomain};
 use shuttle_gateway::api::latest::ApiBuilder;
 use shuttle_gateway::args::StartArgs;
 use shuttle_gateway::args::{Args, Commands, InitArgs, UseTls};
@@ -77,7 +77,7 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
 
     let sender = worker.sender();
 
-    for (project_name, account_name) in gateway
+    for (project_name, _) in gateway
         .iter_projects()
         .await
         .expect("could not list projects")
@@ -86,7 +86,6 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
             .clone()
             .new_task()
             .project(project_name)
-            .account(account_name)
             .and_then(task::refresh())
             .send(&sender)
             .await
@@ -110,11 +109,10 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
             loop {
                 tokio::time::sleep(Duration::from_secs(60)).await;
                 if let Ok(projects) = gateway.iter_projects().await {
-                    for (project_name, account_name) in projects {
+                    for (project_name, _) in projects {
                         let _ = gateway
                             .new_task()
                             .project(project_name)
-                            .account(account_name)
                             .and_then(task::check_health())
                             .send(&sender)
                             .await;
@@ -145,6 +143,22 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
             .with_tls(tls_acceptor);
 
         api_builder = api_builder.with_acme(acme_client.clone(), resolver.clone());
+
+        for CustomDomain {
+            fqdn,
+            certificate,
+            private_key,
+            ..
+        } in gateway.iter_custom_domains().await.unwrap()
+        {
+            let mut buf = Vec::new();
+            buf.extend(certificate.as_bytes());
+            buf.extend(private_key.as_bytes());
+            resolver
+                .serve_pem(&fqdn.to_string(), Cursor::new(buf))
+                .await
+                .unwrap();
+        }
 
         tokio::spawn(async move {
             // make sure we have a certificate for ourselves

@@ -3,6 +3,7 @@ version: 2.1
 orbs: 
   docker-buildx: sensu/docker-buildx@1.1.1
   aws-ecr: circleci/aws-ecr@8.1.2
+  win: circleci/windows@5.0
 
 executors:
   docker-rust:
@@ -276,7 +277,41 @@ jobs:
       - persist_to_workspace:
           root: artifacts
           paths:
-            - shuttle-version-<< parameters.target >>.tar.gz
+            - shuttle-${CIRCLE_TAG}-<< parameters.target >>.tar.gz
+  build-binaries-windows:
+    executor:
+      name: win/server-2022
+      size: medium
+    environment:
+      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+    steps:
+      - checkout
+      - run: choco install -y strawberryperl
+      - run:
+          name: Install Rust
+          command: |
+            wget -OutFile "C:\rustup-init.exe" https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-gnu/rustup-init.exe
+            C:\rustup-init.exe -y --default-toolchain 1.63.0 --target x86_64-pc-windows-msvc
+      - run:
+          name: Build
+          command: |
+            # From https://github.com/alexcrichton/openssl-src-rs/issues/45
+            # Because of https://github.com/openssl/openssl/issues/9048
+            $env:OPENSSL_SRC_PERL="C:\Strawberry\perl\bin\perl.exe"
+            # "vendored-openssl" is from https://github.com/cross-rs/cross/issues/229#issuecomment-597898074
+            ..\.cargo\bin\cargo.exe build --release --package cargo-shuttle --features vendored-openssl --target x86_64-pc-windows-msvc
+      - run:
+          name: Make artifact
+          command: |
+            mkdir artifacts
+            mv target/x86_64-pc-windows-msvc/release/cargo-shuttle.exe artifacts/shuttle.exe
+            mv LICENSE artifacts/
+            mv README.md artifacts/
+            7z a -ttar -so -an artifacts | 7z a -si artifacts/shuttle-${CIRCLE_TAG}-x86_64-pc-windows-msvc.tar.gz
+      - persist_to_workspace:
+          root: artifacts
+          paths:
+            - shuttle-${CIRCLE_TAG}-x86_64-pc-windows-msvc.tar.gz
   publish-github-release:
     docker:
       - image: cimg/go:1.19.3
@@ -334,30 +369,37 @@ workflows:
       #     filters:
       #       branches:
       #         only: production
-      - build-binaries-linux:
-          name: build-binaries-x86_64
-          image: ubuntu-2204:2022.04.1
-          target: x86_64-unknown-linux-musl
-          resource_class: medium
+      # - build-binaries-linux:
+      #     name: build-binaries-x86_64
+      #     image: ubuntu-2204:2022.04.1
+      #     target: x86_64-unknown-linux-musl
+      #     resource_class: medium
+      #     # requires:
+      #     #   - build-and-push
+      #     filters:
+      #       tags:
+      #         only: /^v.*/
+      # - build-binaries-linux:
+      #     name: build-binaries-aarch64
+      #     image: ubuntu-2004:202101-01
+      #     target: aarch64-unknown-linux-musl
+      #     resource_class: arm.medium
+      #     # requires:
+      #     #   - build-and-push
+      #     filters:
+      #       tags:
+      #         only: /^v.*/
+      - build-binaries-windows
           # requires:
           #   - build-and-push
-          filters:
-            tags:
-              only: /^v.*/
-      - build-binaries-linux:
-          name: build-binaries-aarch64
-          image: ubuntu-2004:202101-01
-          target: aarch64-unknown-linux-musl
-          resource_class: arm.medium
-          # requires:
-          #   - build-and-push
-          filters:
-            tags:
-              only: /^v.*/
+          # filters:
+          #   tags:
+          #     only: /^v.*/
       - publish-github-release:
           requires:
-            - build-binaries-x86_64
-            - build-binaries-aarch64
+            # - build-binaries-x86_64
+            # - build-binaries-aarch64
+            - build-binaries-windows
           filters:
             tags:
               only: /^v.*/

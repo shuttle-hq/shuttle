@@ -336,7 +336,7 @@ where
 pub struct ProjectCreating {
     project_name: ProjectName,
     initial_key: String,
-    fqdn: Option<String>
+    fqdn: Option<String>,
 }
 
 impl ProjectCreating {
@@ -344,7 +344,7 @@ impl ProjectCreating {
         Self {
             project_name,
             initial_key,
-            fqdn: None
+            fqdn: None,
         }
     }
 
@@ -387,7 +387,7 @@ impl ProjectCreating {
         let Self {
             initial_key,
             project_name,
-            fqdn
+            fqdn,
         } = &self;
 
         let create_container_options = CreateContainerOptions {

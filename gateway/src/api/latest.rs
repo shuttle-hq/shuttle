@@ -123,10 +123,7 @@ async fn post_project(
 async fn delete_project(
     Extension(service): Extension<Arc<GatewayService>>,
     Extension(sender): Extension<Sender<BoxedTask>>,
-    ScopedUser {
-        scope: project,
-        ..
-    }: ScopedUser,
+    ScopedUser { scope: project, .. }: ScopedUser,
 ) -> Result<AxumJson<project::Response>, Error> {
     let state = service.find_project(&project).await?;
 

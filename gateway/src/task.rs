@@ -328,7 +328,11 @@ where
             Err(err) => return TaskResult::Err(err),
         };
 
-        let account_name = match self.service.account_name_from_project(&self.project_name).await {
+        let account_name = match self
+            .service
+            .account_name_from_project(&self.project_name)
+            .await
+        {
             Ok(account_name) => account_name,
             Err(err) => return TaskResult::Err(err),
         };

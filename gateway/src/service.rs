@@ -273,7 +273,10 @@ impl GatewayService {
         Ok(())
     }
 
-    pub async fn account_name_from_project(&self, project_name: &ProjectName) -> Result<AccountName, Error> {
+    pub async fn account_name_from_project(
+        &self,
+        project_name: &ProjectName,
+    ) -> Result<AccountName, Error> {
         query("SELECT account_name FROM projects WHERE project_name = ?1")
             .bind(project_name)
             .fetch_optional(&self.db)
@@ -685,10 +688,7 @@ pub mod tests {
             .await
             .unwrap();
 
-        let mut task = svc
-            .new_task()
-            .project(matrix.clone())
-            .build();
+        let mut task = svc.new_task().project(matrix.clone()).build();
 
         while let TaskResult::Pending(_) = task.poll(()).await {
             // keep polling

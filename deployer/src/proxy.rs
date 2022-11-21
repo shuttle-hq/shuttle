@@ -35,7 +35,12 @@ pub async fn handle(
     span.set_parent(parent_context);
 
     let host: FQDN = match req.headers().get(HOST) {
-        Some(host) => host.to_str().unwrap_or_default().parse::<FQDN>().unwrap_or_default().to_owned(),
+        Some(host) => host
+            .to_str()
+            .unwrap_or_default()
+            .parse::<FQDN>()
+            .unwrap_or_default()
+            .to_owned(),
         None => {
             trace!("proxy request has no host header");
             return Ok(Response::builder()
@@ -48,9 +53,9 @@ pub async fn handle(
     if host != fqdn {
         trace!(?host, "proxy won't serve foreign domain");
         return Ok(Response::builder()
-                  .status(StatusCode::BAD_REQUEST)
-                  .body(Body::from("this domain is not served by proxy"))
-                  .unwrap());
+            .status(StatusCode::BAD_REQUEST)
+            .body(Body::from("this domain is not served by proxy"))
+            .unwrap());
     }
 
     // We only have one service per project, and its name coincides

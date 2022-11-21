@@ -277,7 +277,7 @@ jobs:
       - persist_to_workspace:
           root: artifacts
           paths:
-            - shuttle-${CIRCLE_TAG}-<< parameters.target >>.tar.gz
+            - shuttle-{{ .Environment.CIRCLE_TAG }}-<< parameters.target >>.tar.gz
   build-binaries-windows:
     executor:
       name: win/server-2022
@@ -311,7 +311,7 @@ jobs:
       - persist_to_workspace:
           root: artifacts
           paths:
-            - shuttle-${CIRCLE_TAG}-x86_64-pc-windows-msvc.tar.gz
+            - shuttle-{{ .Environment.CIRCLE_TAG }}-x86_64-pc-windows-msvc.tar.gz
   build-binaries-mac:
     macos:
       xcode: 12.5.1
@@ -337,7 +337,7 @@ jobs:
       - persist_to_workspace:
           root: artifacts
           paths:
-            - shuttle-${CIRCLE_TAG}-x86_64-apple-darwin.tar.gz
+            - shuttle-{{ .Environment.CIRCLE_TAG }}-x86_64-apple-darwin.tar.gz
   publish-github-release:
     docker:
       - image: cimg/go:1.19.3
@@ -395,27 +395,27 @@ workflows:
       #     filters:
       #       branches:
       #         only: production
-      # - build-binaries-linux:
-      #     name: build-binaries-x86_64
-      #     image: ubuntu-2204:2022.04.1
-      #     target: x86_64-unknown-linux-musl
-      #     resource_class: medium
+      - build-binaries-linux:
+          name: build-binaries-x86_64
+          image: ubuntu-2204:2022.04.1
+          target: x86_64-unknown-linux-musl
+          resource_class: medium
       #     # requires:
       #     #   - build-and-push
       #     filters:
       #       tags:
       #         only: /^v.*/
-      # - build-binaries-linux:
-      #     name: build-binaries-aarch64
-      #     image: ubuntu-2004:202101-01
-      #     target: aarch64-unknown-linux-musl
-      #     resource_class: arm.medium
+      - build-binaries-linux:
+          name: build-binaries-aarch64
+          image: ubuntu-2004:202101-01
+          target: aarch64-unknown-linux-musl
+          resource_class: arm.medium
       #     # requires:
       #     #   - build-and-push
       #     filters:
       #       tags:
       #         only: /^v.*/
-      # - build-binaries-windows:
+      - build-binaries-windows
       #     requires:
       #       - build-and-push
       #     filters:
@@ -429,9 +429,9 @@ workflows:
           #     only: /^v.*/
       - publish-github-release:
           requires:
-            # - build-binaries-x86_64
-            # - build-binaries-aarch64
-            # - build-binaries-windows
+            - build-binaries-x86_64
+            - build-binaries-aarch64
+            - build-binaries-windows
             - build-binaries-mac
           filters:
             tags:

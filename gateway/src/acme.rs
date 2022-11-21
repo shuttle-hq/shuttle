@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use axum::body::boxed;
 use axum::response::Response;
+use fqdn::FQDN;
 use futures::future::BoxFuture;
 use hyper::server::conn::AddrStream;
 use hyper::{Body, Request};
@@ -25,9 +26,10 @@ const MAX_RETRIES: usize = 15;
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct CustomDomain {
+    pub fqdn: FQDN,
     pub project_name: ProjectName,
-    pub certificate: Vec<u8>,
-    pub private_key: Vec<u8>,
+    pub certificate: String,
+    pub private_key: String,
 }
 
 /// An ACME client implementation that completes Http01 challenges

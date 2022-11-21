@@ -129,7 +129,6 @@ pub fn run_until_done() -> impl Task<ProjectContext, Output = Project, Error = E
 
 pub struct TaskBuilder {
     project_name: Option<ProjectName>,
-    account_name: Option<AccountName>,
     service: Arc<GatewayService>,
     timeout: Option<Duration>,
     tasks: VecDeque<BoxedTask<ProjectContext, Project>>,
@@ -140,7 +139,6 @@ impl TaskBuilder {
         Self {
             service,
             project_name: None,
-            account_name: None,
             timeout: None,
             tasks: VecDeque::new(),
         }
@@ -150,11 +148,6 @@ impl TaskBuilder {
 impl TaskBuilder {
     pub fn project(mut self, name: ProjectName) -> Self {
         self.project_name = Some(name);
-        self
-    }
-
-    pub fn account(mut self, name: AccountName) -> Self {
-        self.account_name = Some(name);
         self
     }
 
@@ -181,7 +174,6 @@ impl TaskBuilder {
             ProjectTask {
                 uuid: Uuid::new_v4(),
                 project_name: self.project_name.expect("project_name is required"),
-                account_name: self.account_name.expect("account_name is required"),
                 service: self.service,
                 tasks: self.tasks,
             },
@@ -287,7 +279,6 @@ where
 pub struct ProjectTask<T> {
     uuid: Uuid,
     project_name: ProjectName,
-    account_name: AccountName,
     service: Arc<GatewayService>,
     tasks: VecDeque<T>,
 }
@@ -337,9 +328,18 @@ where
             Err(err) => return TaskResult::Err(err),
         };
 
+        let account_name = match self
+            .service
+            .account_name_from_project(&self.project_name)
+            .await
+        {
+            Ok(account_name) => account_name,
+            Err(err) => return TaskResult::Err(err),
+        };
+
         let project_ctx = ProjectContext {
             project_name: self.project_name.clone(),
-            account_name: self.account_name.clone(),
+            account_name: account_name.clone(),
             gateway: ctx,
             state: project,
         };
@@ -354,7 +354,7 @@ where
                 _ = timeout => {
                     warn!(
                         project_name = ?self.project_name,
-                        account_name = ?self.account_name,
+                        account_name = ?account_name,
                         "a task has been idling for a long time"
                     );
                     poll.await

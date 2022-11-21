@@ -273,6 +273,18 @@ impl GatewayService {
         Ok(())
     }
 
+    pub async fn account_name_from_project(
+        &self,
+        project_name: &ProjectName,
+    ) -> Result<AccountName, Error> {
+        query("SELECT account_name FROM projects WHERE project_name = ?1")
+            .bind(project_name)
+            .fetch_optional(&self.db)
+            .await?
+            .map(|row| row.get("account_name"))
+            .ok_or_else(|| Error::from(ErrorKind::ProjectNotFound))
+    }
+
     pub async fn key_from_account_name(&self, account_name: &AccountName) -> Result<Key, Error> {
         let key = query("SELECT key FROM accounts WHERE account_name = ?1")
             .bind(account_name)
@@ -457,24 +469,30 @@ impl GatewayService {
         certs: &str,
         private_key: &str,
     ) -> Result<(), Error> {
-        query("INSERT INTO custom_domains (fqdn, project_name, certificate, private_key) VALUES (?1, ?2, ?3, ?4)")
+        query("INSERT OR REPLACE INTO custom_domains (fqdn, project_name, certificate, private_key) VALUES (?1, ?2, ?3, ?4)")
             .bind(fqdn.to_string())
             .bind(&project_name)
             .bind(certs)
             .bind(private_key)
             .execute(&self.db)
-            .await
-            .map_err(|err| {
-                if let Some(db_err_code) = err.as_database_error().and_then(DatabaseError::code) {
-                    if db_err_code == "1555" {
-                        return Error::from(ErrorKind::CustomDomainAlreadyExists);
-                    }
-                }
-
-                err.into()
-            })?;
+            .await?;
 
         Ok(())
+    }
+
+    pub async fn iter_custom_domains(&self) -> Result<impl Iterator<Item = CustomDomain>, Error> {
+        query("SELECT fqdn, project_name, certificate, private_key FROM custom_domains")
+            .fetch_all(&self.db)
+            .await
+            .map(|res| {
+                res.into_iter().map(|row| CustomDomain {
+                    fqdn: row.get::<&str, _>("fqdn").parse().unwrap(),
+                    project_name: row.try_get("project_name").unwrap(),
+                    certificate: row.get("certificate"),
+                    private_key: row.get("private_key"),
+                })
+            })
+            .map_err(|_| Error::from_kind(ErrorKind::Internal))
     }
 
     pub async fn project_details_for_custom_domain(
@@ -482,12 +500,13 @@ impl GatewayService {
         fqdn: &Fqdn,
     ) -> Result<CustomDomain, Error> {
         let custom_domain = query(
-            "SELECT project_name, certificate, private_key FROM custom_domains WHERE fqdn = ?1",
+            "SELECT fqdn, project_name, certificate, private_key FROM custom_domains WHERE fqdn = ?1",
         )
         .bind(fqdn.to_string())
         .fetch_optional(&self.db)
         .await?
         .map(|row| CustomDomain {
+            fqdn: row.get::<&str, _>("fqdn").parse().unwrap(),
             project_name: row.try_get("project_name").unwrap(),
             certificate: row.get("certificate"),
             private_key: row.get("private_key"),
@@ -617,7 +636,6 @@ pub mod tests {
         let mut work = svc
             .new_task()
             .project(matrix.clone())
-            .account(neo.clone())
             .and_then(task::destroy())
             .build();
 
@@ -661,11 +679,7 @@ pub mod tests {
             .await
             .unwrap();
 
-        let mut task = svc
-            .new_task()
-            .account(neo.clone())
-            .project(matrix.clone())
-            .build();
+        let mut task = svc.new_task().project(matrix.clone()).build();
 
         while let TaskResult::Pending(_) = task.poll(()).await {
             // keep polling
@@ -687,7 +701,6 @@ pub mod tests {
         let mut ambulance_task = svc
             .new_task()
             .project(matrix.clone())
-            .account(neo.clone())
             .and_then(task::check_health())
             .build();
 
@@ -743,8 +756,8 @@ pub mod tests {
             .unwrap();
 
         assert_eq!(custom_domain.project_name, project_name);
-        assert_eq!(custom_domain.certificate, certificate.as_bytes());
-        assert_eq!(custom_domain.private_key, private_key.as_bytes());
+        assert_eq!(custom_domain.certificate, certificate);
+        assert_eq!(custom_domain.private_key, private_key);
 
         assert_err_kind!(
             svc.create_custom_domain(project_name.clone(), &domain, certificate, private_key)

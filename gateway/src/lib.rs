@@ -123,6 +123,12 @@ impl StdError for Error {}
 #[sqlx(transparent)]
 pub struct ProjectName(String);
 
+impl ProjectName {
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
 impl<'de> Deserialize<'de> for ProjectName {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -777,6 +783,7 @@ pub mod tests {
             .request(
                 Request::get("/hello")
                     .header("Host", "matrix.test.shuttleapp.rs")
+                    .header("x-shuttle-project", "matrix")
                     .body(Body::empty())
                     .unwrap(),
             )

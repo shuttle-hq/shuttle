@@ -1,5 +1,9 @@
 # How to run
 
+## serenity-wasm
+
+Build and run:
+
 ## shuttle-next
 ```bash
 $ make wasm
@@ -51,6 +55,7 @@ curl  localhost:7002/hello
 
 curl  localhost:7002/goodbye
 ```
+
 ## shuttle-legacy
 
 Load and run an .so library that implements `shuttle_service::Service`. 
@@ -64,7 +69,7 @@ docker-compose -f docker-compose.rendered.yml up provisioner
 Then in another shell, start the runtime using the clap CLI:
 
 ```bash
-cargo run -- --legacy --provisioner-address http://localhost:8000
+cargo run -- --legacy --provisioner-address http://localhost:5000
 ```
 
 Or directly (this is the path hardcoded in `deployer::start`):
@@ -72,7 +77,7 @@ Or directly (this is the path hardcoded in `deployer::start`):
 # first, make sure the shuttle-runtime binary is built
 cargo build
 # then
-/home/<path to shuttle repo>/target/debug/shuttle-runtime --legacy --provisioner-address http://localhost:6001
+/home/<path to shuttle repo>/target/debug/shuttle-runtime --legacy --provisioner-address http://localhost:5000
 ```
 
 Pass the path to `deployer::start`
@@ -83,13 +88,12 @@ Then in another shell, load a `.so` file and start it up:
 grpcurl -plaintext -import-path ../proto -proto runtime.proto -d '{"service_name": "Tonic", "path": "examples/rocket/hello-world/target/debug/libhello_world.so"}' localhost:6001 runtime.Runtime/Load
 
 # run (this deployment id is default uuid encoded as base64)
-grpcurl -plaintext -import-path ../proto -proto runtime.proto -d '{"service_name": "Tonic", "deployment_id": "MDAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAw"}' localhost:6001 runti
-me.Runtime/Start
+grpcurl -plaintext -import-path ../proto -proto runtime.proto -d '{"service_name": "Tonic", "deployment_id": "MDAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAw"}' localhost:6001 runtime.Runtime/Start
 
 # subscribe to logs
 grpcurl -plaintext -import-path ../proto -proto runtime.proto localhost:6001 runtime.Runtime/SubscribeLogs
 
-# stop
+# stop (the service started in the legacy runtime can't currently be stopped)
 grpcurl -plaintext -import-path ../proto -proto runtime.proto -d '{"service_name": "Tonic"}' localhost:6001 runtime.Runtime/Stop
 ```
 

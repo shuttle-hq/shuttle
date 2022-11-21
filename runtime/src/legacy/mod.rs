@@ -152,6 +152,8 @@ impl Runtime for Legacy {
         }
     }
 
+    // todo: this doesn't currently stop the service, since we can't stop the tokio runtime it
+    // is started on.
     async fn stop(&self, request: Request<StopRequest>) -> Result<Response<StopResponse>, Status> {
         let request = request.into_inner();
 

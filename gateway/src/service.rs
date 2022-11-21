@@ -227,7 +227,7 @@ impl GatewayService {
 
         let headers = req.headers_mut();
         headers.append(
-            "X-Forwarded-Account-Name",
+            "X-Shuttle-Account-Name",
             HeaderValue::from_str(&scoped_user.user.name.to_string()).unwrap(),
         );
 

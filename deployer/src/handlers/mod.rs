@@ -84,7 +84,7 @@ pub fn make_router(
 
                     let account_name = request
                         .headers()
-                        .get("X-Forwarded-Account-Name")
+                        .get("X-Shuttle-Account-Name")
                         .map(|value| value.to_str().unwrap_or_default());
 
                     let span = debug_span!(

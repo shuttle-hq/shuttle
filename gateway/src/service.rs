@@ -273,11 +273,18 @@ impl GatewayService {
         project_name: &ProjectName,
         project: &Project,
     ) -> Result<(), Error> {
-        query("UPDATE projects SET project_state = ?1 WHERE project_name = ?2")
+        let query = match project {
+            Project::Creating(state) => query(
+                "UPDATE projects SET initial_key = ?1, project_state = ?2 WHERE project_name = ?3",
+            )
+            .bind(state.initial_key())
             .bind(SqlxJson(project))
-            .bind(project_name)
-            .execute(&self.db)
-            .await?;
+            .bind(project_name),
+            _ => query("UPDATE projects SET project_state = ?1 WHERE project_name = ?2")
+                .bind(SqlxJson(project))
+                .bind(project_name),
+        };
+        query.execute(&self.db).await?;
         Ok(())
     }
 
@@ -419,14 +426,9 @@ impl GatewayService {
             let project = row.get::<SqlxJson<Project>, _>("project_state").0;
             if project.is_destroyed() {
                 // But is in `::Destroyed` state, recreate it
-                let project = SqlxJson(Project::create(project_name.clone()));
-                query("UPDATE projects SET project_state = ?1, initial_key = ?2 WHERE project_name = ?3")
-                    .bind(&project)
-                    .bind(project.initial_key().unwrap())
-                    .bind(&project_name)
-                    .execute(&self.db)
-                    .await?;
-                Ok(project.0)
+                let project = Project::create(project_name.clone());
+                self.update_project(&project_name, &project).await?;
+                Ok(project)
             } else {
                 // Otherwise it already exists
                 Err(Error::from_kind(ErrorKind::ProjectAlreadyExists))

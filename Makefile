@@ -47,7 +47,7 @@ DD_ENV=production
 USE_TLS=enable
 else
 DOCKER_COMPOSE_FILES=-f docker-compose.yml -f docker-compose.dev.yml
-STACK=shuttle-dev
+STACK?=shuttle-dev
 APPS_FQDN=unstable.shuttleapp.rs
 DB_FQDN=db.unstable.shuttle.rs
 CONTAINER_REGISTRY=public.ecr.aws/shuttle-dev

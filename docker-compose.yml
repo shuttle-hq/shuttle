@@ -8,7 +8,7 @@ networks:
     ipam:
       driver: default
       config:
-        - subnet: 10.99.0.0/24
+        - subnet: 10.99.0.0/16
 services:
   gateway:
     image: "${CONTAINER_REGISTRY}/gateway:${BACKEND_TAG}"

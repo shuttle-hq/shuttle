@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc::Sender;
 use tokio::time::{sleep, timeout};
-use tracing::warn;
+use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::project::*;
@@ -108,17 +108,16 @@ pub fn destroy() -> impl Task<ProjectContext, Output = Project, Error = Error> {
 
 pub fn check_health() -> impl Task<ProjectContext, Output = Project, Error = Error> {
     run(|ctx| async move {
-        if let Project::Ready(mut ready) = ctx.state {
-            if ready.is_healthy().await {
-                TaskResult::Done(Project::Ready(ready))
-            } else {
-                match Project::Ready(ready).refresh(&ctx.gateway).await {
-                    Ok(update) => TaskResult::Done(update),
-                    Err(err) => TaskResult::Err(err),
+        match ctx.state.refresh(&ctx.gateway).await {
+            Ok(Project::Ready(mut ready)) => {
+                if ready.is_healthy().await {
+                    TaskResult::Done(Project::Ready(ready))
+                } else {
+                    TaskResult::Done(Project::Ready(ready).stop().unwrap())
                 }
             }
-        } else {
-            TaskResult::Err(Error::from_kind(ErrorKind::NotReady))
+            Ok(update) => TaskResult::Done(update),
+            Err(err) => TaskResult::Err(err),
         }
     })
 }
@@ -322,6 +321,8 @@ where
         }
 
         let ctx = self.service.context();
+
+        info!(%self.project_name, "starting work on project");
 
         let project = match self.service.find_project(&self.project_name).await {
             Ok(project) => project,

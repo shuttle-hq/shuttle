@@ -15,7 +15,7 @@ make serenity
 Run the test:
 
 ```bash
-cargo test serenity --features shuttle-axum -- --nocapture
+cargo test serenity -- --nocapture
 
 # or, run tests for both axum and serenity:
 make test
@@ -54,7 +54,7 @@ make axum
 Run the test:
 
 ```bash
-cargo test axum --features shuttle-axum -- --nocapture
+cargo test axum -- --nocapture
 
 # or, run tests for both axum and serenity:
 make test
@@ -63,7 +63,7 @@ make test
 Load and run:
 
 ```bash
-cargo run --features shuttle-axum -- --axum --provisioner-address http://localhost:5000
+cargo run -- --axum --provisioner-address http://localhost:5000
 ```
 
 In another terminal:

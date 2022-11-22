@@ -4,7 +4,7 @@ use futures::prelude::*;
 use instant_acme::{AccountCredentials, ChallengeType};
 use opentelemetry::global;
 use shuttle_gateway::acme::{AcmeClient, CustomDomain};
-use shuttle_gateway::api::latest::ApiBuilder;
+use shuttle_gateway::api::latest::{ApiBuilder, SVC_DEGRADED_THRESHOLD};
 use shuttle_gateway::args::StartArgs;
 use shuttle_gateway::args::{Args, Commands, InitArgs, UseTls};
 use shuttle_gateway::auth::Key;
@@ -12,7 +12,7 @@ use shuttle_gateway::proxy::UserServiceBuilder;
 use shuttle_gateway::service::{GatewayService, MIGRATIONS};
 use shuttle_gateway::task;
 use shuttle_gateway::tls::{make_tls_acceptor, ChainAndPrivateKey};
-use shuttle_gateway::worker::Worker;
+use shuttle_gateway::worker::{Worker, WORKER_QUEUE_SIZE};
 use sqlx::migrate::MigrateDatabase;
 use sqlx::{query, Sqlite, SqlitePool};
 use std::io::{self, Cursor};
@@ -108,14 +108,24 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
         async move {
             loop {
                 tokio::time::sleep(Duration::from_secs(60)).await;
+                if sender.capacity() < WORKER_QUEUE_SIZE - SVC_DEGRADED_THRESHOLD {
+                    // if degraded, don't stack more health checks
+                    continue;
+                }
+
                 if let Ok(projects) = gateway.iter_projects().await {
                     for (project_name, _) in projects {
-                        let _ = gateway
+                        if let Ok(handle) = gateway
                             .new_task()
                             .project(project_name)
                             .and_then(task::check_health())
                             .send(&sender)
-                            .await;
+                            .await
+                        {
+                            // we wait for the check to be done before
+                            // queuing up the next one
+                            handle.await
+                        }
                     }
                 }
             }

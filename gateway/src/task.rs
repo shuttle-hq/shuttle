@@ -1,9 +1,11 @@
 use futures::Future;
 use std::collections::VecDeque;
 use std::marker::PhantomData;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc::Sender;
+use tokio::sync::oneshot;
 use tokio::time::{sleep, timeout};
 use tracing::{info, warn};
 use uuid::Uuid;
@@ -63,6 +65,13 @@ impl<R, E> TaskResult<R, E> {
         match self {
             Self::Pending(r) | Self::Done(r) => Some(r),
             _ => None,
+        }
+    }
+
+    pub fn is_done(&self) -> bool {
+        match self {
+            Self::Done(_) | Self::Cancelled | Self::Err(_) => true,
+            Self::TryAgain | Self::Pending(_) => false,
         }
     }
 
@@ -179,9 +188,10 @@ impl TaskBuilder {
         ))
     }
 
-    pub async fn send(self, sender: &Sender<BoxedTask>) -> Result<(), Error> {
-        match timeout(TASK_SEND_TIMEOUT, sender.send(self.build())).await {
-            Ok(Ok(_)) => Ok(()),
+    pub async fn send(self, sender: &Sender<BoxedTask>) -> Result<TaskHandle, Error> {
+        let (task, handle) = AndThenNotify::after(self.build());
+        match timeout(TASK_SEND_TIMEOUT, sender.send(Box::new(task))).await {
+            Ok(Ok(_)) => Ok(handle),
             _ => Err(Error::from_kind(ErrorKind::ServiceUnavailable)),
         }
     }
@@ -222,6 +232,60 @@ impl Task<ProjectContext> for RunUntilDone {
         } else {
             TaskResult::Done(ctx.state)
         }
+    }
+}
+
+pub struct TaskHandle {
+    rx: oneshot::Receiver<()>,
+}
+
+impl Future for TaskHandle {
+    type Output = ();
+
+    fn poll(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Self::Output> {
+        Pin::new(&mut self.rx).poll(cx).map(|_| ())
+    }
+}
+
+pub struct AndThenNotify<T> {
+    inner: T,
+    notify: Option<oneshot::Sender<()>>,
+}
+
+impl<T> AndThenNotify<T> {
+    pub fn after(task: T) -> (Self, TaskHandle) {
+        let (tx, rx) = oneshot::channel();
+        (
+            Self {
+                inner: task,
+                notify: Some(tx),
+            },
+            TaskHandle { rx },
+        )
+    }
+}
+
+#[async_trait]
+impl<T, Ctx> Task<Ctx> for AndThenNotify<T>
+where
+    Ctx: Send + 'static,
+    T: Task<Ctx>,
+{
+    type Output = T::Output;
+
+    type Error = T::Error;
+
+    async fn poll(&mut self, ctx: Ctx) -> TaskResult<Self::Output, Self::Error> {
+        let out = self.inner.poll(ctx).await;
+
+        if out.is_done() {
+            let _ = self.notify.take().unwrap().send(());
+        }
+
+        out
     }
 }
 

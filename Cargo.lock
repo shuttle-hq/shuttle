@@ -5427,7 +5427,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-common"
-version = "0.7.2"
+version = "0.7.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5448,7 +5448,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-deployer"
-version = "0.7.2"
+version = "0.7.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5496,7 +5496,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-gateway"
-version = "0.7.2"
+version = "0.7.3"
 dependencies = [
  "acme2",
  "anyhow",
@@ -5543,7 +5543,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-proto"
-version = "0.7.2"
+version = "0.7.3"
 dependencies = [
  "prost",
  "shuttle-common",
@@ -5553,7 +5553,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-provisioner"
-version = "0.7.2"
+version = "0.7.3"
 dependencies = [
  "aws-config",
  "aws-sdk-rds",

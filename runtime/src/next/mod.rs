@@ -39,6 +39,12 @@ impl Next {
     }
 }
 
+impl Default for Next {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait]
 impl Runtime for Next {
     async fn load(&self, request: Request<LoadRequest>) -> Result<Response<LoadResponse>, Status> {

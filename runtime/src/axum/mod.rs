@@ -46,6 +46,12 @@ impl AxumWasm {
     }
 }
 
+impl Default for AxumWasm {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait]
 impl Runtime for AxumWasm {
     async fn load(

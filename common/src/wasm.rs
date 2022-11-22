@@ -115,7 +115,7 @@ mod test {
             .method(Method::PUT)
             .version(Version::HTTP_11)
             .header("test", HeaderValue::from_static("request"))
-            .uri(format!("https://axum-wasm.example/hello"))
+            .uri("https://axum-wasm.example/hello")
             .body(Body::empty())
             .unwrap();
 

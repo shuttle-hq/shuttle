@@ -199,7 +199,7 @@ impl BotInner {
             .insert_file(3, Box::new(client), FileCaps::all());
 
         host.write_all(new_message.as_bytes()).unwrap();
-        host.write(&[0]).unwrap();
+        host.write_all(&[0]).unwrap();
 
         println!("calling inner EventHandler message");
         self.linker
@@ -238,7 +238,7 @@ impl Bot {
     }
 
     pub async fn into_client(self, token: &str, intents: GatewayIntents) -> Client {
-        Client::builder(&token, intents)
+        Client::builder(token, intents)
             .event_handler(self)
             .await
             .unwrap()

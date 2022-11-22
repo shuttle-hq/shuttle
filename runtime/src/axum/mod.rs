@@ -327,7 +327,7 @@ pub mod tests {
         let request: Request<Body> = Request::builder()
             .method(Method::GET)
             .version(Version::HTTP_11)
-            .uri(format!("https://axum-wasm.example/hello"))
+            .uri("https://axum-wasm.example/hello")
             .body(Body::empty())
             .unwrap();
 
@@ -350,7 +350,7 @@ pub mod tests {
             .method(Method::GET)
             .version(Version::HTTP_11)
             .header("test", HeaderValue::from_static("goodbye"))
-            .uri(format!("https://axum-wasm.example/goodbye"))
+            .uri("https://axum-wasm.example/goodbye")
             .body(Body::from("Goodbye world body"))
             .unwrap();
 
@@ -373,7 +373,7 @@ pub mod tests {
             .method(Method::GET)
             .version(Version::HTTP_11)
             .header("test", HeaderValue::from_static("invalid"))
-            .uri(format!("https://axum-wasm.example/invalid"))
+            .uri("https://axum-wasm.example/invalid")
             .body(Body::empty())
             .unwrap();
 

@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot;
 use tokio::time::{sleep, timeout};
-use tracing::{info, warn};
+use tracing::{error, info, info_span, warn};
 use uuid::Uuid;
 
 use crate::project::*;
@@ -65,6 +65,16 @@ impl<R, E> TaskResult<R, E> {
         match self {
             Self::Pending(r) | Self::Done(r) => Some(r),
             _ => None,
+        }
+    }
+
+    pub fn to_str(&self) -> &str {
+        match self {
+            Self::Pending(_) => "pending",
+            Self::Done(_) => "done",
+            Self::TryAgain => "try again",
+            Self::Cancelled => "cancelled",
+            Self::Err(_) => "error",
         }
     }
 
@@ -386,8 +396,6 @@ where
 
         let ctx = self.service.context();
 
-        info!(%self.project_name, "starting work on project");
-
         let project = match self.service.find_project(&self.project_name).await {
             Ok(project) => project,
             Err(err) => return TaskResult::Err(err),
@@ -409,6 +417,14 @@ where
             state: project,
         };
 
+        let span = info_span!(
+            "polling project",
+            ctx.project = ?project_ctx.project_name,
+            ctx.account = ?project_ctx.account_name,
+            ctx.state = project_ctx.state.state()
+        );
+        let _ = span.enter();
+
         let task = self.tasks.front_mut().unwrap();
 
         let timeout = sleep(PROJECT_TASK_MAX_IDLE_TIMEOUT);
@@ -428,15 +444,23 @@ where
         };
 
         if let Some(update) = res.as_ref().ok() {
+            info!(new_state = ?update.state(), "new state");
             match self
                 .service
                 .update_project(&self.project_name, update)
                 .await
             {
-                Ok(_) => {}
-                Err(err) => return TaskResult::Err(err),
+                Ok(_) => {
+                    info!(new_state = ?update.state(), "successfully updated project state");
+                }
+                Err(err) => {
+                    error!(err = %err, "could not update project state");
+                    return TaskResult::Err(err);
+                }
             }
         }
+
+        info!(result = res.to_str(), "poll result");
 
         match res {
             TaskResult::Pending(_) => TaskResult::Pending(()),
@@ -450,7 +474,10 @@ where
                 }
             }
             TaskResult::Cancelled => TaskResult::Cancelled,
-            TaskResult::Err(err) => TaskResult::Err(err),
+            TaskResult::Err(err) => {
+                error!(err = %err, "project task failure");
+                TaskResult::Err(err)
+            }
         }
     }
 }

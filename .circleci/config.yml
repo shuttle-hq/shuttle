@@ -111,11 +111,12 @@ commands:
       - run:
           name: Make artifact
           command: |
+            mkdir shuttle
+            mv target/<< parameters.target >>/release/cargo-shuttle<< parameters.suffix >> shuttle/shuttle<< parameters.suffix >>
+            mv LICENSE shuttle/
+            mv README.md shuttle/
             mkdir artifacts
-            mv target/<< parameters.target >>/release/cargo-shuttle<< parameters.suffix >> artifacts/shuttle<< parameters.suffix >>
-            mv LICENSE artifacts/
-            mv README.md artifacts/
-            7z a -ttar -so -an artifacts | 7z a -si artifacts/shuttle-${CIRCLE_TAG}-<< parameters.target >>.tar.gz
+            7z a -ttar -so -an shuttle | 7z a -si artifacts/shuttle-${CIRCLE_TAG}-<< parameters.target >>.tar.gz
       - persist_to_workspace:
           root: artifacts
           paths:
@@ -422,20 +423,20 @@ workflows:
           #     only: /^v.*/
           #   branches:
           #     only: production
-      - build-binaries-mac
-          # requires:
-          #   - build-and-push
-          # filters:
-          #   tags:
-          #     only: /^v.*/
-          #   branches:
-          #     only: production
+      # - build-binaries-mac:
+      #     requires:
+      #       - build-and-push
+      #     filters:
+      #       tags:
+      #         only: /^v.*/
+      #       branches:
+      #         only: production
       - publish-github-release:
           requires:
             # - build-binaries-x86_64
             # - build-binaries-aarch64
             - build-binaries-windows
-            - build-binaries-mac
+            # - build-binaries-mac
           # filters:
           #   tags:
           #     only: /^v.*/

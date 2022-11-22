@@ -46,7 +46,7 @@ async fn main() {
     let runtime_dir = workspace_root.join("target/debug");
 
     let mut runtime = tokio::process::Command::new(runtime_dir.join("shuttle-runtime"))
-        .args(&[
+        .args([
             "--legacy",
             "--provisioner-address",
             "https://localhost:5000",

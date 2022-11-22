@@ -162,7 +162,7 @@ pub fn make_api(service: Arc<GatewayService>, sender: Sender<Work>) -> Router<Bo
                 })
                 .on_response(
                     |response: &Response<BoxBody>, latency: Duration, span: &Span| {
-                        span.record("http.status_code", &response.status().as_u16());
+                        span.record("http.status_code", response.status().as_u16());
                         debug!(latency = format_args!("{} ns", latency.as_nanos()), "finished processing request");
                     },
                 ),

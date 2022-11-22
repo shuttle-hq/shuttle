@@ -116,11 +116,12 @@ commands:
             mv LICENSE shuttle/
             mv README.md shuttle/
             mkdir artifacts
-            7z a -ttar -so -an shuttle | 7z a -si artifacts/shuttle-${CIRCLE_TAG}-<< parameters.target >>.tar.gz
+            tar -cvzf artifacts/shuttle-${CIRCLE_TAG}-<< parameters.target >>.tar.gz shuttle
       - persist_to_workspace:
           root: artifacts
           paths:
-            - shuttle-${CIRCLE_TAG}-<< parameters.target >>.tar.gz
+            # - shuttle-${CIRCLE_TAG}-<< parameters.target >>.tar.gz
+            - shuttle--<< parameters.target >>.tar.gz
 
 jobs:
   workspace-fmt:
@@ -279,7 +280,7 @@ jobs:
         type: string
     steps:
       - checkout
-      - run: sudo apt update && sudo DEBIAN_FRONTEND=noninteractive apt install -y libssl-dev musl-tools clang p7zip-full
+      - run: sudo apt update && sudo DEBIAN_FRONTEND=noninteractive apt install -y libssl-dev musl-tools clang
       - run:
           name: Install Rust
           command: curl --proto '=https' --tlsv1.3 https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.63.0 --target << parameters.target >>
@@ -323,7 +324,6 @@ jobs:
     resource_class: medium
     steps:
       - checkout
-      - run: brew install p7zip
       - run:
           name: Install Rust
           command: curl --proto '=https' https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.63.0 --target x86_64-apple-darwin
@@ -391,11 +391,11 @@ workflows:
       #     filters:
       #       branches:
       #         only: production
-      # - build-binaries-linux:
-      #     name: build-binaries-x86_64
-      #     image: ubuntu-2204:2022.04.1
-      #     target: x86_64-unknown-linux-musl
-      #     resource_class: medium
+      - build-binaries-linux:
+          name: build-binaries-x86_64
+          image: ubuntu-2204:2022.04.1
+          target: x86_64-unknown-linux-musl
+          resource_class: medium
       #     requires:
       #       - build-and-push
       #     filters:
@@ -403,11 +403,11 @@ workflows:
       #         only: /^v.*/
       #       branches:
       #         only: production
-      # - build-binaries-linux:
-      #     name: build-binaries-aarch64
-      #     image: ubuntu-2004:202101-01
-      #     target: aarch64-unknown-linux-musl
-      #     resource_class: arm.medium
+      - build-binaries-linux:
+          name: build-binaries-aarch64
+          image: ubuntu-2004:202101-01
+          target: aarch64-unknown-linux-musl
+          resource_class: arm.medium
       #     requires:
       #       - build-and-push
       #     filters:
@@ -423,7 +423,7 @@ workflows:
           #     only: /^v.*/
           #   branches:
           #     only: production
-      # - build-binaries-mac:
+      - build-binaries-mac
       #     requires:
       #       - build-and-push
       #     filters:
@@ -433,10 +433,10 @@ workflows:
       #         only: production
       - publish-github-release:
           requires:
-            # - build-binaries-x86_64
-            # - build-binaries-aarch64
+            - build-binaries-x86_64
+            - build-binaries-aarch64
             - build-binaries-windows
-            # - build-binaries-mac
+            - build-binaries-mac
           # filters:
           #   tags:
           #     only: /^v.*/

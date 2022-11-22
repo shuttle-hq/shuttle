@@ -97,6 +97,15 @@ commands:
           command: |
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
             sudo apt update && sudo apt install -y libssl1.1
+  install-protoc:
+    steps:
+      - run:
+          name: Install protoc
+          command: |
+            curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v21.9/protoc-21.9-linux-x86_64.zip &&\
+              sudo unzip -o protoc-21.9-linux-x86_64.zip -d /usr bin/protoc &&\
+              sudo unzip -o protoc-21.9-linux-x86_64.zip -d /usr/ 'include/*' &&\
+              rm -f protoc-21.9-linux-x86_64.zip
 
 jobs:
   workspace-fmt:
@@ -104,7 +113,7 @@ jobs:
     steps:
       - checkout
       - restore-cargo-cache
-      - run: sudo apt install -y protobuf-compiler
+      - install-protoc
       - run: cargo fmt --all --check
       - run: cargo install cargo-sort
       - run: cargo sort --check --workspace
@@ -119,7 +128,7 @@ jobs:
     steps:
       - checkout
       - restore-cargo-cache
-      - run: sudo apt install -y protobuf-compiler
+      - install-protoc
       - run: |
           cargo clippy --tests \
                        --all-targets \
@@ -138,7 +147,7 @@ jobs:
     steps:
       - checkout
       - restore-cargo-cache
-      - run: sudo apt install -y protobuf-compiler
+      - install-protoc
       - apply-patches
       - run: cargo fmt --all --check --manifest-path << parameters.path >>/Cargo.toml
       - run: cargo install cargo-sort

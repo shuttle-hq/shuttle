@@ -19,7 +19,7 @@ use std::io::{self, Cursor};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, error, info, info_span, trace, warn};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 #[tokio::main(flavor = "multi_thread")]
@@ -110,10 +110,19 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
                 tokio::time::sleep(Duration::from_secs(60)).await;
                 if sender.capacity() < WORKER_QUEUE_SIZE - SVC_DEGRADED_THRESHOLD {
                     // if degraded, don't stack more health checks
+                    warn!(
+                        sender.capacity = sender.capacity(),
+                        "skipping health checks"
+                    );
                     continue;
                 }
 
                 if let Ok(projects) = gateway.iter_projects().await {
+                    let span = info_span!(
+                        "running health checks",
+                        healthcheck.num_projects = projects.len()
+                    );
+                    let _ = span.enter();
                     for (project_name, _) in projects {
                         if let Ok(handle) = gateway
                             .new_task()

@@ -24,7 +24,7 @@ use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{transport::Endpoint, Request, Response, Status};
-use tracing::{instrument, trace};
+use tracing::{error, instrument, trace};
 use uuid::Uuid;
 
 use crate::provisioner_factory::{AbstractFactory, AbstractProvisionerFactory};
@@ -163,11 +163,12 @@ impl Runtime for Legacy {
         let kill_tx = self.kill_tx.lock().unwrap().deref_mut().take();
 
         if let Some(kill_tx) = kill_tx {
-            tokio::spawn(async move {
-                kill_tx
-                    .send(format!("stopping deployment: {}", &service_name))
-                    .unwrap();
-            });
+            if kill_tx
+                .send(format!("stopping deployment: {}", &service_name))
+                .is_err()
+            {
+                error!("the receiver dropped");
+            }
 
             Ok(Response::new(StopResponse { success: true }))
         } else {

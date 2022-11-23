@@ -22,7 +22,7 @@ use shuttle_service::ServiceName;
 use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::Status;
-use tracing::trace;
+use tracing::{error, trace};
 use wasi_common::file::FileCaps;
 use wasmtime::{Engine, Linker, Module, Store};
 use wasmtime_wasi::sync::net::UnixStream as WasiUnixStream;
@@ -117,11 +117,12 @@ impl Runtime for AxumWasm {
         let kill_tx = self.kill_tx.lock().unwrap().deref_mut().take();
 
         if let Some(kill_tx) = kill_tx {
-            tokio::spawn(async move {
-                kill_tx
-                    .send(format!("stopping deployment: {}", &service_name))
-                    .unwrap();
-            });
+            if kill_tx
+                .send(format!("stopping deployment: {}", &service_name))
+                .is_err()
+            {
+                error!("the receiver dropped");
+            }
 
             Ok(tonic::Response::new(StopResponse { success: true }))
         } else {

@@ -168,6 +168,7 @@ impl Runtime for Legacy {
                 .is_err()
             {
                 error!("the receiver dropped");
+                return Err(Status::internal("failed to stop deployment"));
             }
 
             Ok(Response::new(StopResponse { success: true }))

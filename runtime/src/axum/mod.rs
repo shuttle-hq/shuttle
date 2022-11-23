@@ -122,6 +122,7 @@ impl Runtime for AxumWasm {
                 .is_err()
             {
                 error!("the receiver dropped");
+                return Err(Status::internal("failed to stop deployment"));
             }
 
             Ok(tonic::Response::new(StopResponse { success: true }))

@@ -246,7 +246,7 @@ impl GatewayService {
 
     pub async fn iter_projects(
         &self,
-    ) -> Result<impl Iterator<Item = (ProjectName, AccountName)>, Error> {
+    ) -> Result<impl ExactSizeIterator<Item = (ProjectName, AccountName)>, Error> {
         let iter = query("SELECT project_name, account_name FROM projects")
             .fetch_all(&self.db)
             .await?

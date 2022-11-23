@@ -243,9 +243,9 @@ impl AcmeClient {
         let digest = order.key_authorization(challenge).dns_value();
         warn!("dns-01 challenge: _acme-challenge.{domain} 300 IN TXT \"{digest}\"");
 
-        // Wait 120 secs to insert the record manually and for it to
+        // Wait 60 secs to insert the record manually and for it to
         // propagate before moving on
-        sleep(Duration::from_secs(120)).await;
+        sleep(Duration::from_secs(60)).await;
 
         order
             .set_challenge_ready(&challenge.url)

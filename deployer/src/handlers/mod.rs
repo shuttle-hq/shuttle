@@ -174,7 +174,7 @@ async fn get_service(
 async fn get_service_summary(
     Extension(persistence): Extension<Persistence>,
     Extension(proxy_fqdn): Extension<FQDN>,
-    Path((project_name, service_name)): Path<(String, String)>,
+    Path((_, service_name)): Path<(String, String)>,
 ) -> Result<Json<shuttle_common::models::service::Summary>> {
     if let Some(service) = persistence.get_service_by_name(&service_name).await? {
         let deployment = persistence
@@ -189,7 +189,7 @@ async fn get_service_summary(
             .collect();
 
         let response = shuttle_common::models::service::Summary {
-            uri: format!("https://{}.{proxy_fqdn}", project_name),
+            uri: format!("https://{proxy_fqdn}"),
             name: service.name,
             deployment,
             resources,

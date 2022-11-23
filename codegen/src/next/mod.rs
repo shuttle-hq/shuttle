@@ -1,10 +1,10 @@
-use http::Method;
+use proc_macro_error::emit_error;
 use quote::{quote, ToTokens};
 use syn::{Ident, LitStr};
 
 struct Endpoint {
     route: LitStr,
-    method: Method,
+    method: Ident,
     function: Ident,
 }
 
@@ -16,17 +16,15 @@ impl ToTokens for Endpoint {
             function,
         } = self;
 
-        let method = match *method {
-            Method::GET => quote!(get),
-            Method::POST => quote!(post),
-            Method::DELETE => quote!(delete),
-            Method::PUT => quote!(put),
-            Method::OPTIONS => quote!(options),
-            Method::CONNECT => quote!(connect),
-            Method::HEAD => quote!(head),
-            Method::TRACE => quote!(trace),
-            Method::PATCH => quote!(patch),
-            _ => quote!(extension),
+        match method.to_string().as_str() {
+            "get" | "post" | "delete" | "put" | "options" | "head" | "trace" | "patch" => {}
+            _ => {
+                emit_error!(
+                    method,
+                    "method is not supported";
+                    hint = "Try one of the following: `get`, `post`, `delete`, `put`, `options`, `head`, `trace` or `patch`"
+                )
+            }
         };
 
         let route = quote!(.route(#route, axum::routing::#method(#function)));
@@ -131,7 +129,6 @@ pub(crate) fn wasi_bindings(app: App) -> proc_macro2::TokenStream {
 
 #[cfg(test)]
 mod tests {
-    use http::Method;
     use pretty_assertions::assert_eq;
     use quote::quote;
     use syn::parse_quote;
@@ -144,7 +141,7 @@ mod tests {
     fn endpoint_to_token() {
         let endpoint = Endpoint {
             route: parse_quote!("/hello"),
-            method: Method::GET,
+            method: parse_quote!(get),
             function: parse_quote!(hello),
         };
 
@@ -160,12 +157,12 @@ mod tests {
             endpoints: vec![
                 Endpoint {
                     route: parse_quote!("/hello"),
-                    method: Method::GET,
+                    method: parse_quote!(get),
                     function: parse_quote!(hello),
                 },
                 Endpoint {
                     route: parse_quote!("/goodbye"),
-                    method: Method::POST,
+                    method: parse_quote!(post),
                     function: parse_quote!(goodbye),
                 },
             ],

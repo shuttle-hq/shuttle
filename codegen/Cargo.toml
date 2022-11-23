@@ -10,7 +10,6 @@ description = "Proc-macro code generator for the shuttle.rs service"
 proc-macro = true
 
 [dependencies]
-http = "0.2.8"
 proc-macro-error = "1.0.4"
 proc-macro2 = "1.0.43"
 quote = "1.0.21"

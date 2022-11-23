@@ -29,7 +29,7 @@ impl ToTokens for Endpoint {
             _ => quote!(extension),
         };
 
-        let route = quote!(.route(#route, #method(#function)));
+        let route = quote!(.route(#route, axum::routing::#method(#function)));
 
         route.to_tokens(tokens);
     }
@@ -44,11 +44,13 @@ impl ToTokens for App {
         let Self { endpoints } = self;
 
         let app = quote!(
-            async fn app<B>(request: Request<B>) -> Response
+            async fn app<B>(request: http::Request<B>) -> axum::response::Response
             where
-                B: HttpBody + Send + 'static,
+                B: axum::body::HttpBody + Send + 'static,
             {
-                let mut router = Router::new()
+                use tower_service::Service;
+
+                let mut router = axum::Router::new()
                     #(#endpoints)*
                     .into_service();
 
@@ -82,7 +84,7 @@ mod tests {
         };
 
         let actual = quote!(#endpoint);
-        let expected = quote!(.route("/hello", get(hello)));
+        let expected = quote!(.route("/hello", axum::routing::get(hello)));
 
         assert_eq!(actual.to_string(), expected.to_string());
     }
@@ -106,13 +108,15 @@ mod tests {
 
         let actual = quote!(#app);
         let expected = quote!(
-            async fn app<B>(request: Request<B>) -> Response
+            async fn app<B>(request: http::Request<B>) -> axum::response::Response
             where
-                B: HttpBody + Send + 'static,
+                B: axum::body::HttpBody + Send + 'static,
             {
-                let mut router = Router::new()
-                    .route("/hello", get(hello))
-                    .route("/goodbye", post(goodbye))
+                use tower_service::Service;
+
+                let mut router = axum::Router::new()
+                    .route("/hello", axum::routing::get(hello))
+                    .route("/goodbye", axum::routing::post(goodbye))
                     .into_service();
 
                 let response = router.call(request).await.unwrap();

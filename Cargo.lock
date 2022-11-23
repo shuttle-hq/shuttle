@@ -5726,6 +5726,7 @@ dependencies = [
 name = "shuttle-codegen"
 version = "0.7.0"
 dependencies = [
+ "http 0.2.8",
  "pretty_assertions",
  "proc-macro-error",
  "proc-macro2 1.0.43",

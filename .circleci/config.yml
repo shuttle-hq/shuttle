@@ -116,11 +116,11 @@ commands:
             mv LICENSE shuttle/
             mv README.md shuttle/
             mkdir artifacts
-            tar -cvzf artifacts/shuttle-${CIRCLE_TAG}-<< parameters.target >>.tar.gz shuttle
+            tar -cvzf artifacts/cargo-shuttle-${CIRCLE_TAG}-<< parameters.target >>.tar.gz shuttle
       - persist_to_workspace:
           root: artifacts
           paths:
-            - shuttle-${CIRCLE_TAG}-<< parameters.target >>.tar.gz
+            - cargo-shuttle-${CIRCLE_TAG}-<< parameters.target >>.tar.gz
 
 jobs:
   workspace-fmt:

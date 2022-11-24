@@ -1,11 +1,96 @@
 use proc_macro_error::emit_error;
 use quote::{quote, ToTokens};
-use syn::{Ident, LitStr};
+use syn::{
+    braced, bracketed, parenthesized, parse::Parse, parse2, parse_macro_input, parse_quote,
+    punctuated::Punctuated, token::Paren, Expr, Ident, ItemFn, Lit, LitStr, Token,
+};
 
+#[derive(Debug, Eq, PartialEq)]
 struct Endpoint {
     route: LitStr,
     method: Ident,
     function: Ident,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct Parameter {
+    key: Ident,
+    equals: Token![=],
+    value: Expr,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct Params {
+    params: Punctuated<Parameter, Token![,]>,
+    paren_token: Paren,
+}
+
+impl Parse for Parameter {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        Ok(Self {
+            key: input.parse()?,
+            equals: input.parse()?,
+            value: input.parse()?,
+        })
+    }
+}
+
+impl Parse for Params {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let content;
+        Ok(Self {
+            paren_token: parenthesized!(content in input),
+            params: content.parse_terminated(Parameter::parse)?,
+        })
+    }
+}
+
+impl Endpoint {
+    fn from_item_fn(item: ItemFn) -> syn::Result<Self> {
+        let function = item.sig.ident;
+
+        let params = item.attrs[0].tokens.clone();
+        let params: Params = parse2(params)?;
+
+        let mut route = None;
+        let mut method = None;
+
+        for Parameter { key, value, .. } in params.params {
+            match key.to_string().as_str() {
+                "method" => {
+                    if let Expr::Path(path) = value {
+                        method = Some(path.path.segments[0].ident.clone());
+                    };
+                }
+                "route" => {
+                    if let Expr::Lit(literal) = value {
+                        if let Some(Lit::Str(literal)) = Some(literal.lit) {
+                            route = Some(literal);
+                        }
+                    }
+                }
+                _ => todo!(),
+            }
+        }
+
+        let route = if let Some(route) = route {
+            route
+        } else {
+            todo!()
+        };
+
+        let method = if let Some(method) = method {
+            method
+        } else {
+            todo!()
+        };
+
+        Ok(Endpoint {
+            route,
+            method,
+            function,
+        })
+    }
 }
 
 impl ToTokens for Endpoint {
@@ -133,9 +218,9 @@ mod tests {
     use quote::quote;
     use syn::parse_quote;
 
-    use crate::next::App;
+    use crate::next::{App, Parameter};
 
-    use super::Endpoint;
+    use super::{Endpoint, Params};
 
     #[test]
     fn endpoint_to_token() {
@@ -188,5 +273,70 @@ mod tests {
         );
 
         assert_eq!(actual.to_string(), expected.to_string());
+    }
+
+    #[test]
+    fn parse_endpoint() {
+        let input = parse_quote! {
+            #[shuttle_codegen::endpoint(method = get, route = "/hello")]
+            async fn hello() -> &'static str {
+                "Hello, World!"
+            }
+        };
+
+        let actual = Endpoint::from_item_fn(input).unwrap();
+        let expected = Endpoint {
+            route: parse_quote!("/hello"),
+            method: parse_quote!(get),
+            function: parse_quote!(hello),
+        };
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn parse_parameter() {
+        // test method param
+        let tests: Vec<(Parameter, Parameter)> = vec![
+            (
+                // parsing an identifier
+                parse_quote! {
+                    method = get
+                },
+                Parameter {
+                    key: parse_quote!(method),
+                    equals: parse_quote!(=),
+                    value: parse_quote!(get),
+                },
+            ),
+            (
+                // parsing a string literal
+                parse_quote! {
+                    route = "/hello"
+                },
+                Parameter {
+                    key: parse_quote!(route),
+                    equals: parse_quote!(=),
+                    value: parse_quote!("/hello"),
+                },
+            ),
+        ];
+        for (actual, expected) in tests {
+            assert_eq!(actual, expected);
+        }
+    }
+
+    #[test]
+    fn parse_params() {
+        let actual: Params = parse_quote![(method = get, route = "/hello")];
+
+        let mut expected = Params {
+            params: Default::default(),
+            paren_token: Default::default(),
+        };
+        expected.params.push(parse_quote!(method = get));
+        expected.params.push(parse_quote!(route = "/hello"));
+
+        assert_eq!(actual, expected);
     }
 }

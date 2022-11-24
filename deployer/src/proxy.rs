@@ -48,7 +48,7 @@ pub async fn handle(
     };
 
     // Record current service for tracing purposes
-    Span::current().record("service", &service);
+    Span::current().record("service", service);
 
     let proxy_address = match address_getter.get_address_for_service(service).await {
         Ok(Some(address)) => address,
@@ -73,7 +73,7 @@ pub async fn handle(
 
     match reverse_proxy(remote_address.ip(), &proxy_address.to_string(), req).await {
         Ok(response) => {
-            Span::current().record("http.status_code", &response.status().as_u16());
+            Span::current().record("http.status_code", response.status().as_u16());
             Ok(response)
         }
         Err(error) => {

@@ -27,6 +27,7 @@ wasmtime-wasi = "2.0.0"
 [dependencies.shuttle-common]
 version = "0.7.0"
 path = "../common"
+features = ["axum-wasm"]
 
 [dependencies.shuttle-proto]
 version = "0.7.0"
@@ -37,7 +38,3 @@ version = "0.7.0"
 default-features = false
 features = ["loader"]
 path = "../service"
-
-[features]
-shuttle-axum = ["shuttle-common/axum-wasm"]
-

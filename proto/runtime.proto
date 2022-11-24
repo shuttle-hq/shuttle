@@ -9,6 +9,9 @@ service Runtime {
 
   // Start a loaded service file
   rpc Start(StartRequest) returns (StartResponse);
+  
+  // Stop a started service
+  rpc Stop(StopRequest) returns (StopResponse);
 
   rpc SubscribeLogs(SubscribeLogsRequest) returns (stream LogItem);
 }
@@ -41,6 +44,18 @@ message StartResponse {
   // Optional port the service was started on
   // This is likely to be None for bots
   uint32 port = 2;
+}
+
+message StopRequest {
+  // Id to associate with the deployment being stopped
+  bytes deployment_id = 1;
+  // Name of service to stop
+  string service_name = 2;
+}
+
+message StopResponse {
+  // Was the stop successful
+  bool success = 1;
 }
 
 message SubscribeLogsRequest {}

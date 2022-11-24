@@ -13,7 +13,7 @@ use shuttle_proto::{
     provisioner::provisioner_client::ProvisionerClient,
     runtime::{
         self, runtime_server::Runtime, LoadRequest, LoadResponse, StartRequest, StartResponse,
-        SubscribeLogsRequest,
+        StopRequest, StopResponse, SubscribeLogsRequest,
     },
 };
 use shuttle_service::{
@@ -21,9 +21,10 @@ use shuttle_service::{
     Factory, Logger, ServiceName,
 };
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{transport::Endpoint, Request, Response, Status};
-use tracing::{info, instrument, trace};
+use tracing::{error, instrument, trace};
 use uuid::Uuid;
 
 use crate::provisioner_factory::{AbstractFactory, AbstractProvisionerFactory};
@@ -37,6 +38,7 @@ pub struct Legacy {
     logs_rx: Mutex<Option<UnboundedReceiver<LogItem>>>,
     logs_tx: Mutex<UnboundedSender<LogItem>>,
     provisioner_address: Endpoint,
+    kill_tx: Mutex<Option<oneshot::Sender<String>>>,
 }
 
 impl Legacy {
@@ -48,6 +50,7 @@ impl Legacy {
             port: Mutex::new(None),
             logs_rx: Mutex::new(Some(rx)),
             logs_tx: Mutex::new(tx),
+            kill_tx: Mutex::new(None),
             provisioner_address,
         }
     }
@@ -86,7 +89,10 @@ impl Runtime for Legacy {
         let mut factory = abstract_factory.get_factory(service_name);
 
         let logs_tx = self.logs_tx.lock().unwrap().clone();
-        let deployment_id = Uuid::from_slice(&request.deployment_id).unwrap();
+
+        let deployment_id =
+            Uuid::from_str(std::str::from_utf8(&request.deployment_id).unwrap()).unwrap();
+
         let logger = Logger::new(logs_tx, deployment_id);
 
         let so_path = self
@@ -105,7 +111,12 @@ impl Runtime for Legacy {
             .await
             .unwrap();
 
-        _ = tokio::spawn(run(service, service_address));
+        let (kill_tx, kill_rx) = tokio::sync::oneshot::channel();
+
+        *self.kill_tx.lock().unwrap() = Some(kill_tx);
+
+        // start service as a background task with a kill receiver
+        tokio::spawn(run_until_stopped(service, service_address, kill_rx));
 
         *self.port.lock().unwrap() = Some(service_port);
 
@@ -140,14 +151,54 @@ impl Runtime for Legacy {
             Err(Status::internal("logs have already been subscribed to"))
         }
     }
+
+    // todo: this doesn't currently stop the service, since we can't stop the tokio runtime it
+    // is started on.
+    async fn stop(&self, request: Request<StopRequest>) -> Result<Response<StopResponse>, Status> {
+        let request = request.into_inner();
+
+        let service_name = ServiceName::from_str(request.service_name.as_str())
+            .map_err(|err| Status::from_error(Box::new(err)))?;
+
+        let kill_tx = self.kill_tx.lock().unwrap().deref_mut().take();
+
+        if let Some(kill_tx) = kill_tx {
+            if kill_tx
+                .send(format!("stopping deployment: {}", &service_name))
+                .is_err()
+            {
+                error!("the receiver dropped");
+                return Err(Status::internal("failed to stop deployment"));
+            }
+
+            Ok(Response::new(StopResponse { success: true }))
+        } else {
+            Err(Status::internal("failed to stop deployment"))
+        }
+    }
 }
 
+/// Run the service until a stop signal is received
 #[instrument(skip(service))]
-async fn run(service: LoadedService, addr: SocketAddr) {
+async fn run_until_stopped(
+    service: LoadedService,
+    addr: SocketAddr,
+    kill_rx: tokio::sync::oneshot::Receiver<String>,
+) {
     let (handle, library) = service;
 
-    info!("starting deployment on {}", addr);
-    handle.await.unwrap().unwrap();
+    trace!("starting deployment on {}", &addr);
+    tokio::select! {
+        _ = handle => {
+            trace!("deployment stopped on {}", &addr);
+        },
+        message = kill_rx => {
+            match message {
+                Ok(msg) => trace!("{msg}"),
+                Err(_) => trace!("the sender dropped")
+            }
+        }
+    }
 
     tokio::spawn(async move {
         trace!("closing .so file");

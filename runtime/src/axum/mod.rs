@@ -2,8 +2,10 @@ use std::convert::Infallible;
 use std::fs::File;
 use std::io::{BufReader, Read, Write};
 use std::net::{Ipv4Addr, SocketAddr};
+use std::ops::DerefMut;
 use std::os::unix::prelude::RawFd;
 use std::path::Path;
+use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
@@ -13,11 +15,14 @@ use hyper::{Body, Request, Response};
 use shuttle_common::wasm::{RequestWrapper, ResponseWrapper};
 use shuttle_proto::runtime::runtime_server::Runtime;
 use shuttle_proto::runtime::{
-    self, LoadRequest, LoadResponse, StartRequest, StartResponse, SubscribeLogsRequest,
+    self, LoadRequest, LoadResponse, StartRequest, StartResponse, StopRequest, StopResponse,
+    SubscribeLogsRequest,
 };
+use shuttle_service::ServiceName;
+use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::Status;
-use tracing::info;
+use tracing::{error, trace};
 use wasi_common::file::FileCaps;
 use wasmtime::{Engine, Linker, Module, Store};
 use wasmtime_wasi::sync::net::UnixStream as WasiUnixStream;
@@ -28,6 +33,7 @@ extern crate rmp_serde as rmps;
 pub struct AxumWasm {
     router: std::sync::Mutex<Option<Router>>,
     port: Mutex<Option<u16>>,
+    kill_tx: std::sync::Mutex<Option<oneshot::Sender<String>>>,
 }
 
 impl AxumWasm {
@@ -35,7 +41,14 @@ impl AxumWasm {
         Self {
             router: std::sync::Mutex::new(None),
             port: std::sync::Mutex::new(None),
+            kill_tx: std::sync::Mutex::new(None),
         }
+    }
+}
+
+impl Default for AxumWasm {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -46,7 +59,7 @@ impl Runtime for AxumWasm {
         request: tonic::Request<LoadRequest>,
     ) -> Result<tonic::Response<LoadResponse>, Status> {
         let wasm_path = request.into_inner().path;
-        info!(wasm_path, "loading");
+        trace!(wasm_path, "loading");
 
         let router = Router::new(wasm_path);
 
@@ -64,24 +77,14 @@ impl Runtime for AxumWasm {
         let port = 7002;
         let address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
 
-        let router = self.router.lock().unwrap().take().unwrap().inner;
+        let router = self.router.lock().unwrap().take().unwrap();
 
-        let make_service = make_service_fn(move |_conn| {
-            let router = router.clone();
-            async move {
-                Ok::<_, Infallible>(service_fn(move |req: Request<Body>| {
-                    let router = router.clone();
-                    async move {
-                        Ok::<_, Infallible>(router.lock().await.send_request(req).await.unwrap())
-                    }
-                }))
-            }
-        });
+        let (kill_tx, kill_rx) = tokio::sync::oneshot::channel();
 
-        info!("starting hyper server on: {}", &address);
-        let server = hyper::Server::bind(&address).serve(make_service);
+        *self.kill_tx.lock().unwrap() = Some(kill_tx);
 
-        _ = tokio::spawn(server);
+        // TODO: split `into_server` up into build and run functions
+        tokio::spawn(router.into_server(address, kill_rx));
 
         *self.port.lock().unwrap() = Some(port);
 
@@ -100,6 +103,32 @@ impl Runtime for AxumWasm {
         _request: tonic::Request<SubscribeLogsRequest>,
     ) -> Result<tonic::Response<Self::SubscribeLogsStream>, Status> {
         todo!()
+    }
+
+    async fn stop(
+        &self,
+        request: tonic::Request<StopRequest>,
+    ) -> Result<tonic::Response<StopResponse>, Status> {
+        let request = request.into_inner();
+
+        let service_name = ServiceName::from_str(request.service_name.as_str())
+            .map_err(|err| Status::from_error(Box::new(err)))?;
+
+        let kill_tx = self.kill_tx.lock().unwrap().deref_mut().take();
+
+        if let Some(kill_tx) = kill_tx {
+            if kill_tx
+                .send(format!("stopping deployment: {}", &service_name))
+                .is_err()
+            {
+                error!("the receiver dropped");
+                return Err(Status::internal("failed to stop deployment"));
+            }
+
+            Ok(tonic::Response::new(StopResponse { success: true }))
+        } else {
+            Err(Status::internal("failed to stop deployment"))
+        }
     }
 }
 
@@ -167,7 +196,7 @@ struct RouterInner {
 
 impl RouterInner {
     /// Send a HTTP request with body to given endpoint on the axum-wasm router and return the response
-    pub async fn send_request(
+    pub async fn handle_request(
         &mut self,
         req: hyper::Request<Body>,
     ) -> Result<Response<Body>, Infallible> {
@@ -251,6 +280,45 @@ impl Router {
     pub fn new<P: AsRef<Path>>(src: P) -> Self {
         Self::builder().src(src).build()
     }
+
+    /// Consume the router, build and run server until a stop signal is received via the
+    /// kill receiver
+    // TODO: figure out how to handle the complicated generics for hyper::Server and
+    // hyper::MakeServiceFn and split this up into `build` and `run_until_stopped` functions
+    pub async fn into_server(
+        self,
+        address: SocketAddr,
+        kill_rx: tokio::sync::oneshot::Receiver<String>,
+    ) {
+        let router = self.inner;
+
+        let make_service = make_service_fn(move |_conn| {
+            let router = router.clone();
+            async move {
+                Ok::<_, Infallible>(service_fn(move |req: Request<Body>| {
+                    let router = router.clone();
+                    async move {
+                        Ok::<_, Infallible>(router.lock().await.handle_request(req).await.unwrap())
+                    }
+                }))
+            }
+        });
+
+        let server = hyper::Server::bind(&address).serve(make_service);
+
+        trace!("starting hyper server on: {}", &address);
+        tokio::select! {
+            _ = server => {
+                trace!("axum wasm server stopped");
+            },
+            message = kill_rx => {
+                match message {
+                    Ok(msg) => trace!("{msg}"),
+                    Err(_) => trace!("the sender dropped")
+                }
+            }
+        };
+    }
 }
 
 #[cfg(test)]
@@ -267,11 +335,11 @@ pub mod tests {
         let request: Request<Body> = Request::builder()
             .method(Method::GET)
             .version(Version::HTTP_11)
-            .uri(format!("https://axum-wasm.example/hello"))
+            .uri("https://axum-wasm.example/hello")
             .body(Body::empty())
             .unwrap();
 
-        let res = inner.send_request(request).await.unwrap();
+        let res = inner.handle_request(request).await.unwrap();
 
         assert_eq!(res.status(), StatusCode::OK);
         assert_eq!(
@@ -290,11 +358,11 @@ pub mod tests {
             .method(Method::GET)
             .version(Version::HTTP_11)
             .header("test", HeaderValue::from_static("goodbye"))
-            .uri(format!("https://axum-wasm.example/goodbye"))
+            .uri("https://axum-wasm.example/goodbye")
             .body(Body::from("Goodbye world body"))
             .unwrap();
 
-        let res = inner.send_request(request).await.unwrap();
+        let res = inner.handle_request(request).await.unwrap();
 
         assert_eq!(res.status(), StatusCode::OK);
         assert_eq!(
@@ -313,11 +381,11 @@ pub mod tests {
             .method(Method::GET)
             .version(Version::HTTP_11)
             .header("test", HeaderValue::from_static("invalid"))
-            .uri(format!("https://axum-wasm.example/invalid"))
+            .uri("https://axum-wasm.example/invalid")
             .body(Body::empty())
             .unwrap();
 
-        let res = inner.send_request(request).await.unwrap();
+        let res = inner.handle_request(request).await.unwrap();
 
         assert_eq!(res.status(), StatusCode::NOT_FOUND);
     }

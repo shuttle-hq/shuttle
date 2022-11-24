@@ -37,11 +37,11 @@ async fn main() {
         let svc = RuntimeServer::new(legacy);
         server_builder.add_service(svc)
     } else if args.axum {
-        let axum = AxumWasm::new();
+        let axum = AxumWasm::default();
         let svc = RuntimeServer::new(axum);
         server_builder.add_service(svc)
     } else {
-        let next = Next::new();
+        let next = Next::default();
         let svc = RuntimeServer::new(next);
         server_builder.add_service(svc)
     };

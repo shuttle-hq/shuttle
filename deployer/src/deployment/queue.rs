@@ -380,7 +380,7 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
         )
         .unwrap();
 
-        super::extract_tar_gz_data(test_data.as_slice(), &p).unwrap();
+        super::extract_tar_gz_data(test_data.as_slice(), p).unwrap();
         assert!(fs::read_to_string(p.join("world.txt"))
             .await
             .unwrap()
@@ -391,7 +391,7 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
             .starts_with("def"));
 
         // Can we extract again without error?
-        super::extract_tar_gz_data(test_data.as_slice(), &p).unwrap();
+        super::extract_tar_gz_data(test_data.as_slice(), p).unwrap();
     }
 
     #[tokio::test(flavor = "multi_thread")]

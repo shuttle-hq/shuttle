@@ -1,30 +1,19 @@
-use axum::body::{Body, HttpBody};
-use axum::{response::Response, routing::get, Router};
-use futures_executor::block_on;
-use http::Request;
-use shuttle_common::wasm::{RequestWrapper, ResponseWrapper};
-use std::fs::File;
-use std::io::BufReader;
-use std::io::{Read, Write};
-use std::os::wasi::prelude::*;
-use tower_service::Service;
-
-extern crate rmp_serde as rmps;
-
-pub fn handle_request<B>(req: Request<B>) -> Response
+pub fn handle_request<B>(req: http::Request<B>) -> axum::response::Response
 where
-    B: HttpBody + Send + 'static,
+    B: axum::body::HttpBody + Send + 'static,
 {
-    block_on(app(req))
+    futures_executor::block_on(app(req))
 }
 
-async fn app<B>(request: Request<B>) -> Response
+async fn app<B>(request: http::Request<B>) -> axum::response::Response
 where
-    B: HttpBody + Send + 'static,
+    B: axum::body::HttpBody + Send + 'static,
 {
-    let mut router = Router::new()
-        .route("/hello", get(hello))
-        .route("/goodbye", get(goodbye))
+    use tower_service::Service;
+
+    let mut router = axum::Router::new()
+        .route("/hello", axum::routing::get(hello))
+        .route("/goodbye", axum::routing::get(goodbye))
         .into_service();
 
     let response = router.call(request).await.unwrap();
@@ -42,19 +31,26 @@ async fn goodbye() -> &'static str {
 
 #[no_mangle]
 #[allow(non_snake_case)]
-pub extern "C" fn __SHUTTLE_Axum_call(fd_3: RawFd, fd_4: RawFd) {
+pub extern "C" fn __SHUTTLE_Axum_call(
+    fd_3: std::os::wasi::prelude::RawFd,
+    fd_4: std::os::wasi::prelude::RawFd,
+) {
+    use axum::body::HttpBody;
+    use std::io::{Read, Write};
+    use std::os::wasi::io::FromRawFd;
+
     println!("inner handler awoken; interacting with fd={fd_3},{fd_4}");
 
     // file descriptor 3 for reading and writing http parts
-    let mut parts_fd = unsafe { File::from_raw_fd(fd_3) };
+    let mut parts_fd = unsafe { std::fs::File::from_raw_fd(fd_3) };
 
-    let reader = BufReader::new(&mut parts_fd);
+    let reader = std::io::BufReader::new(&mut parts_fd);
 
     // deserialize request parts from rust messagepack
-    let wrapper: RequestWrapper = rmps::from_read(reader).unwrap();
+    let wrapper: shuttle_common::wasm::RequestWrapper = rmp_serde::from_read(reader).unwrap();
 
     // file descriptor 4 for reading and writing http body
-    let mut body_fd = unsafe { File::from_raw_fd(fd_4) };
+    let mut body_fd = unsafe { std::fs::File::from_raw_fd(fd_4) };
 
     // read body from host
     let mut body_buf = Vec::new();
@@ -68,7 +64,7 @@ pub extern "C" fn __SHUTTLE_Axum_call(fd_3: RawFd, fd_4: RawFd) {
         }
     }
 
-    let request: Request<Body> = wrapper
+    let request: http::Request<axum::body::Body> = wrapper
         .into_request_builder()
         .body(body_buf.into())
         .unwrap();
@@ -79,13 +75,13 @@ pub extern "C" fn __SHUTTLE_Axum_call(fd_3: RawFd, fd_4: RawFd) {
     let (parts, mut body) = res.into_parts();
 
     // wrap and serialize response parts as rmp
-    let response_parts = ResponseWrapper::from(parts).into_rmp();
+    let response_parts = shuttle_common::wasm::ResponseWrapper::from(parts).into_rmp();
 
     // write response parts
     parts_fd.write_all(&response_parts).unwrap();
 
     // write body if there is one
-    if let Some(body) = block_on(body.data()) {
+    if let Some(body) = futures_executor::block_on(body.data()) {
         body_fd.write_all(body.unwrap().as_ref()).unwrap();
     }
     // signal to the reader that end of file has been reached

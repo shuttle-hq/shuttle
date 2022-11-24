@@ -74,6 +74,18 @@ impl Endpoint {
             }
         };
 
+        // use paren span for missing argument errors
+        let paren = params.paren_token;
+
+        if params.params.is_empty() {
+            emit_error!(
+                paren.span,
+                "missing endpoint arguments";
+                hint = "The endpoint takes two arguments: `endpoint(method = get, route = \"/hello\")`"
+            );
+            return None;
+        }
+
         let mut route = None;
         let mut method = None;
 
@@ -102,9 +114,6 @@ impl Endpoint {
                 }
             }
         }
-
-        // use paren span for missing argument errors
-        let paren = params.paren_token;
 
         let route = if let Some(route) = route {
             route

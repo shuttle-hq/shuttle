@@ -8,4 +8,9 @@ shuttle_codegen::app! {
     async fn goodbye() -> &'static str {
         "Goodbye, World!"
     }
+
+    #[shuttle_codegen::endpoint()]
+    async fn goodbye() -> &'static str {
+        "Goodbye, World!"
+    }
 }

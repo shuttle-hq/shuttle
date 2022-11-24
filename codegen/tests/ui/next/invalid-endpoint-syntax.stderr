@@ -1,0 +1,23 @@
+error: expected `,`
+
+         = help: The endpoint takes a comma-separated list of keys and values: `endpoint(method = get, route = "/hello")`
+
+ --> tests/ui/next/invalid-endpoint-syntax.rs:2:64
+  |
+2 |     #[shuttle_codegen::endpoint(method = get, route = "/hello" extra = abundant)]
+  |                                                                ^^^^^
+
+error: expected `=`
+
+         = help: The endpoint takes a comma-separated list of keys and values: `endpoint(method = get, route = "/hello")`
+
+ --> tests/ui/next/invalid-endpoint-syntax.rs:7:74
+  |
+7 |     #[shuttle_codegen::endpoint(method = get, route = "/goodbye", invalid)]
+  |                                                                          ^
+
+error[E0601]: `main` function not found in crate `$CRATE`
+  --> tests/ui/next/invalid-endpoint-syntax.rs:11:2
+   |
+11 | }
+   |  ^ consider adding a `main` function to `$DIR/tests/ui/next/invalid-endpoint-syntax.rs`

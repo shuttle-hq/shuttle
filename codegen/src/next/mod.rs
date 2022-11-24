@@ -54,7 +54,7 @@ impl Endpoint {
         } else {
             emit_error!(
                 function,
-                "no endpoint attribute given";
+                "missing endpoint attribute";
                 hint = "Try adding `#[shuttle_codegen::endpoint(method = get, route = \"/hello\")]`"
             );
             return None;
@@ -62,12 +62,23 @@ impl Endpoint {
 
         item.attrs.clear();
 
-        let params: Params = parse2(params).unwrap();
+        let params: Params = match parse2(params) {
+            Ok(params) => params,
+            Err(err) => {
+                emit_error!(
+                    err.span(),
+                    err;
+                    hint = "The endpoint takes a comma-separated list of keys and values: `endpoint(method = get, route = \"/hello\")`"
+                );
+                return None;
+            }
+        };
 
         let mut route = None;
         let mut method = None;
 
         for Parameter { key, value, .. } in params.params {
+            let key_ident = key.clone();
             match key.to_string().as_str() {
                 "method" => {
                     if let Expr::Path(path) = value {
@@ -81,20 +92,40 @@ impl Endpoint {
                         }
                     }
                 }
-                _ => todo!(),
+                _ => {
+                    emit_error!(
+                        key_ident,
+                        "invalid endpoint argument";
+                        hint = "Only `method` and `route` are valid endpoint arguments."
+                    );
+                    return None;
+                }
             }
         }
+
+        // use paren span for missing argument errors
+        let paren = params.paren_token;
 
         let route = if let Some(route) = route {
             route
         } else {
-            todo!()
+            emit_error!(
+                paren.span,
+                "no route provided";
+                hint = "Add a route to your endpoint: `#[shuttle_codegen::endpoint(method = get, route = \"/hello\")]`"
+            );
+            return None;
         };
 
         let method = if let Some(method) = method {
             method
         } else {
-            todo!()
+            emit_error!(
+                paren.span,
+                "no method provided";
+                hint = "Add a method to your endpoint: `#[shuttle_codegen::endpoint(method = get, route = \"/hello\")]`"
+            );
+            return None;
         };
 
         Some(Endpoint {

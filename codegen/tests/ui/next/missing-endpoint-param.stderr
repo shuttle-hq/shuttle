@@ -1,0 +1,23 @@
+error: no route provided
+
+         = help: Add a route to your endpoint: `#[shuttle_codegen::endpoint(method = get, route = "/hello")]`
+
+ --> tests/ui/next/missing-endpoint-param.rs:2:32
+  |
+2 |     #[shuttle_codegen::endpoint(method = get)]
+  |                                ^^^^^^^^^^^^^^
+
+error: no method provided
+
+         = help: Add a method to your endpoint: `#[shuttle_codegen::endpoint(method = get, route = "/hello")]`
+
+ --> tests/ui/next/missing-endpoint-param.rs:7:32
+  |
+7 |     #[shuttle_codegen::endpoint(route = "/goodbye")]
+  |                                ^^^^^^^^^^^^^^^^^^^^
+
+error[E0601]: `main` function not found in crate `$CRATE`
+  --> tests/ui/next/missing-endpoint-param.rs:11:2
+   |
+11 | }
+   |  ^ consider adding a `main` function to `$DIR/tests/ui/next/missing-endpoint-param.rs`

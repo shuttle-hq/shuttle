@@ -1,8 +1,8 @@
 use proc_macro_error::emit_error;
 use quote::{quote, ToTokens};
 use syn::{
-    braced, bracketed, parenthesized, parse::Parse, parse2, parse_macro_input, parse_quote,
-    punctuated::Punctuated, token::Paren, Expr, Ident, ItemFn, Lit, LitStr, Token,
+    parenthesized, parse::Parse, parse2, punctuated::Punctuated, token::Paren, Expr, File, Ident,
+    Item, ItemFn, Lit, LitStr, Token,
 };
 
 #[derive(Debug, Eq, PartialEq)]
@@ -46,10 +46,13 @@ impl Parse for Params {
 }
 
 impl Endpoint {
-    fn from_item_fn(item: ItemFn) -> syn::Result<Self> {
-        let function = item.sig.ident;
+    fn from_item_fn(item: &mut ItemFn) -> syn::Result<Self> {
+        let function = item.sig.ident.clone();
 
         let params = item.attrs[0].tokens.clone();
+
+        item.attrs.clear();
+
         let params: Params = parse2(params)?;
 
         let mut route = None;
@@ -118,8 +121,27 @@ impl ToTokens for Endpoint {
     }
 }
 
+#[derive(Debug, Eq, PartialEq)]
 pub(crate) struct App {
     endpoints: Vec<Endpoint>,
+}
+
+impl App {
+    pub(crate) fn from_file(file: &mut File) -> syn::Result<Self> {
+        let endpoints = file
+            .items
+            .iter_mut()
+            .filter_map(|item| {
+                if let Item::Fn(item_fn) = item {
+                    Some(item_fn)
+                } else {
+                    None
+                }
+            })
+            .map(Endpoint::from_item_fn)
+            .collect::<syn::Result<Vec<Endpoint>>>()?;
+        Ok(Self { endpoints })
+    }
 }
 
 impl ToTokens for App {
@@ -277,14 +299,15 @@ mod tests {
 
     #[test]
     fn parse_endpoint() {
-        let input = parse_quote! {
+        let mut input = parse_quote! {
             #[shuttle_codegen::endpoint(method = get, route = "/hello")]
             async fn hello() -> &'static str {
                 "Hello, World!"
             }
+
         };
 
-        let actual = Endpoint::from_item_fn(input).unwrap();
+        let actual = Endpoint::from_item_fn(&mut input).unwrap();
         let expected = Endpoint {
             route: parse_quote!("/hello"),
             method: parse_quote!(get),
@@ -292,6 +315,11 @@ mod tests {
         };
 
         assert_eq!(actual, expected);
+
+        assert!(
+            input.attrs.is_empty(),
+            "expected attributes to be stripped since there is no macro for them"
+        );
     }
 
     #[test]
@@ -338,5 +366,44 @@ mod tests {
         expected.params.push(parse_quote!(route = "/hello"));
 
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn parse_app() {
+        let mut input = parse_quote! {
+            #[shuttle_codegen::endpoint(method = get, route = "/hello")]
+            async fn hello() -> &'static str {
+                "Hello, World!"
+            }
+
+            #[shuttle_codegen::endpoint(method = post, route = "/goodbye")]
+            async fn goodbye() -> &'static str {
+                "Goodbye, World!"
+            }
+        };
+
+        let actual = App::from_file(&mut input).unwrap();
+        let expected = App {
+            endpoints: vec![
+                Endpoint {
+                    route: parse_quote!("/hello"),
+                    method: parse_quote!(get),
+                    function: parse_quote!(hello),
+                },
+                Endpoint {
+                    route: parse_quote!("/goodbye"),
+                    method: parse_quote!(post),
+                    function: parse_quote!(goodbye),
+                },
+            ],
+        };
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn ui() {
+        let t = trybuild::TestCases::new();
+        t.compile_fail("tests/ui/next/*.rs");
     }
 }

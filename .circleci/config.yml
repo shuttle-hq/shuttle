@@ -112,7 +112,7 @@ commands:
           name: Make artifact
           command: |
             mkdir shuttle
-            mv target/<< parameters.target >>/release/cargo-shuttle<< parameters.suffix >> shuttle/shuttle<< parameters.suffix >>
+            mv target/<< parameters.target >>/release/cargo-shuttle<< parameters.suffix >> shuttle/cargo-shuttle<< parameters.suffix >>
             mv LICENSE shuttle/
             mv README.md shuttle/
             mkdir artifacts

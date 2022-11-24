@@ -46,14 +46,23 @@ impl Parse for Params {
 }
 
 impl Endpoint {
-    fn from_item_fn(item: &mut ItemFn) -> syn::Result<Self> {
+    fn from_item_fn(item: &mut ItemFn) -> Option<Self> {
         let function = item.sig.ident.clone();
 
-        let params = item.attrs[0].tokens.clone();
+        let params = if let Some(attribute) = item.attrs.get(0) {
+            attribute.tokens.clone()
+        } else {
+            emit_error!(
+                function,
+                "no endpoint attribute given";
+                hint = "Try adding `#[shuttle_codegen::endpoint(method = get, route = \"/hello\")]`"
+            );
+            return None;
+        };
 
         item.attrs.clear();
 
-        let params: Params = parse2(params)?;
+        let params: Params = parse2(params).unwrap();
 
         let mut route = None;
         let mut method = None;
@@ -88,7 +97,7 @@ impl Endpoint {
             todo!()
         };
 
-        Ok(Endpoint {
+        Some(Endpoint {
             route,
             method,
             function,
@@ -127,7 +136,7 @@ pub(crate) struct App {
 }
 
 impl App {
-    pub(crate) fn from_file(file: &mut File) -> syn::Result<Self> {
+    pub(crate) fn from_file(file: &mut File) -> Self {
         let endpoints = file
             .items
             .iter_mut()
@@ -138,9 +147,10 @@ impl App {
                     None
                 }
             })
-            .map(Endpoint::from_item_fn)
-            .collect::<syn::Result<Vec<Endpoint>>>()?;
-        Ok(Self { endpoints })
+            .filter_map(Endpoint::from_item_fn)
+            .collect();
+
+        Self { endpoints }
     }
 }
 
@@ -382,7 +392,7 @@ mod tests {
             }
         };
 
-        let actual = App::from_file(&mut input).unwrap();
+        let actual = App::from_file(&mut input);
         let expected = App {
             endpoints: vec![
                 Endpoint {

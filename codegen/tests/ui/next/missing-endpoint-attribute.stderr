@@ -1,0 +1,23 @@
+error: missing endpoint attribute
+
+         = help: Try adding `#[shuttle_codegen::endpoint(method = get, route = "/hello")]`
+
+ --> tests/ui/next/missing-endpoint-attribute.rs:2:14
+  |
+2 |     async fn hello() -> &'static str {
+  |              ^^^^^
+
+error: missing endpoint attribute
+
+         = help: Try adding `#[shuttle_codegen::endpoint(method = get, route = "/hello")]`
+
+ --> tests/ui/next/missing-endpoint-attribute.rs:6:14
+  |
+6 |     async fn goodbye() -> &'static str {
+  |              ^^^^^^^
+
+error[E0601]: `main` function not found in crate `$CRATE`
+ --> tests/ui/next/missing-endpoint-attribute.rs:9:2
+  |
+9 | }
+  |  ^ consider adding a `main` function to `$DIR/tests/ui/next/missing-endpoint-attribute.rs`

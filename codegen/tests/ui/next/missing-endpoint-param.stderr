@@ -1,6 +1,6 @@
 error: no route provided
 
-         = help: Add a route to your endpoint: `#[shuttle_codegen::endpoint(method = get, route = "/hello")]`
+         = help: Add a route to your endpoint: `route = "/hello")`
 
  --> tests/ui/next/missing-endpoint-param.rs:2:32
   |
@@ -9,7 +9,7 @@ error: no route provided
 
 error: no method provided
 
-         = help: Add a method to your endpoint: `#[shuttle_codegen::endpoint(method = get, route = "/hello")]`
+         = help: Add a method to your endpoint: `method = get`
 
  --> tests/ui/next/missing-endpoint-param.rs:7:32
   |

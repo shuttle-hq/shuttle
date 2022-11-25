@@ -1,0 +1,23 @@
+error: duplicate endpoint method
+
+         = help: The endpoint `method` should only be set once.
+
+ --> tests/ui/next/duplicate-endpoint-param.rs:2:47
+  |
+2 |     #[shuttle_codegen::endpoint(method = get, method = get)]
+  |                                               ^^^^^^
+
+error: duplicate endpoint route
+
+         = help: The endpoint `route` should only be set once.
+
+ --> tests/ui/next/duplicate-endpoint-param.rs:7:53
+  |
+7 |     #[shuttle_codegen::endpoint(route = "/goodbye", route = "/goodbye")]
+  |                                                     ^^^^^
+
+error[E0601]: `main` function not found in crate `$CRATE`
+  --> tests/ui/next/duplicate-endpoint-param.rs:11:2
+   |
+11 | }
+   |  ^ consider adding a `main` function to `$DIR/tests/ui/next/duplicate-endpoint-param.rs`

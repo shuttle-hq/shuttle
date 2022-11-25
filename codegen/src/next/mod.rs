@@ -63,7 +63,7 @@ impl Endpoint {
                 emit_error!(
                     err.span(),
                     err;
-                    hint = "The endpoint takes a comma-separated list of keys and values: `endpoint(method = get, route = \"/hello\")`"
+                    hint = "The endpoint takes two arguments: `endpoint(method = get, route = \"/hello\")`"
                 );
                 return None;
             }
@@ -88,11 +88,27 @@ impl Endpoint {
             let key_ident = key.clone();
             match key.to_string().as_str() {
                 "method" => {
+                    if method.is_some() {
+                        emit_error!(
+                            key_ident,
+                            "duplicate endpoint method";
+                            hint = "The endpoint `method` should only be set once."
+                        );
+                        return None;
+                    }
                     if let Expr::Path(path) = value {
                         method = Some(path.path.segments[0].ident.clone());
                     };
                 }
                 "route" => {
+                    if route.is_some() {
+                        emit_error!(
+                            key_ident,
+                            "duplicate endpoint route";
+                            hint = "The endpoint `route` should only be set once."
+                        );
+                        return None;
+                    }
                     if let Expr::Lit(literal) = value {
                         if let Some(Lit::Str(literal)) = Some(literal.lit) {
                             route = Some(literal);
@@ -116,7 +132,7 @@ impl Endpoint {
             emit_error!(
                 paren.span,
                 "no route provided";
-                hint = "Add a route to your endpoint: `#[shuttle_codegen::endpoint(method = get, route = \"/hello\")]`"
+                hint = "Add a route to your endpoint: `route = \"/hello\")`"
             );
             return None;
         };
@@ -127,7 +143,7 @@ impl Endpoint {
             emit_error!(
                 paren.span,
                 "no method provided";
-                hint = "Add a method to your endpoint: `#[shuttle_codegen::endpoint(method = get, route = \"/hello\")]`"
+                hint = "Add a method to your endpoint: `method = get`"
             );
             return None;
         };

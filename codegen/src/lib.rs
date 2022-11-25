@@ -16,8 +16,9 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn app(item: TokenStream) -> TokenStream {
     let mut file = parse_macro_input!(item as File);
-    // todo: handle error
+
     let app = App::from_file(&mut file);
+
     quote::quote!(
         #file
         #app

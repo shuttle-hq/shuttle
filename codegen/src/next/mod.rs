@@ -52,11 +52,6 @@ impl Endpoint {
         let params = if let Some(attribute) = item.attrs.get(0) {
             attribute.tokens.clone()
         } else {
-            emit_error!(
-                function,
-                "missing endpoint attribute";
-                hint = "Try adding `#[shuttle_codegen::endpoint(method = get, route = \"/hello\")]`"
-            );
             return None;
         };
 
@@ -78,6 +73,11 @@ impl Endpoint {
         let paren = params.paren_token;
 
         if params.params.is_empty() {
+            emit_error!(
+                paren.span,
+                "missing endpoint arguments";
+                hint = "The endpoint takes two arguments: `endpoint(method = get, route = \"/hello\")`"
+            );
             return None;
         }
 

@@ -69,7 +69,7 @@ impl Endpoint {
             }
         };
 
-        // use paren span for missing argument errors
+        // We'll use the paren span for errors later
         let paren = params.paren_token;
 
         if params.params.is_empty() {

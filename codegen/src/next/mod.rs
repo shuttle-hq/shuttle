@@ -49,21 +49,38 @@ impl Endpoint {
     fn from_item_fn(item: &mut ItemFn) -> Option<Self> {
         let function = item.sig.ident.clone();
 
-        let params = if let Some(attribute) = item.attrs.get(0) {
-            attribute.tokens.clone()
+        let endpoint_index;
+        // Find the index of an attribute that is an endpoint
+        if let Some(index) = item.attrs.iter().position(|attr| {
+            if let Some(segment) = attr.path.segments.last() {
+                segment.ident.to_string().as_str() == "endpoint"
+            } else {
+                false
+            }
+        }) {
+            endpoint_index = Some(index);
         } else {
+            // This item does not have an endpoint attribute
             return None;
         };
 
-        item.attrs.clear();
+        // Strip the endpoint attribute if it exists
+        let endpoint = if let Some(index) = endpoint_index {
+            item.attrs.remove(index)
+        } else {
+            // This item does not have an endpoint attribute
+            return None;
+        };
 
-        let params: Params = match parse2(params) {
+        // Parse the endpoint's parameters
+        let params: Params = match parse2(endpoint.tokens) {
             Ok(params) => params,
             Err(err) => {
+                // This will error on invalid parameter syntax
                 emit_error!(
                     err.span(),
                     err;
-                    hint = "The endpoint takes two arguments: `endpoint(method = get, route = \"/hello\")`"
+                    hint = ""
                 );
                 return None;
             }
@@ -360,27 +377,55 @@ mod tests {
 
     #[test]
     fn parse_endpoint() {
-        let mut input = parse_quote! {
-            #[shuttle_codegen::endpoint(method = get, route = "/hello")]
-            async fn hello() -> &'static str {
-                "Hello, World!"
-            }
+        let inputs = vec![
+            (
+                parse_quote! {
+                #[shuttle_codegen::endpoint(method = get, route = "/hello")]
+                async fn hello() -> &'static str {
+                    "Hello, World!"
+                }},
+                Some(Endpoint {
+                    route: parse_quote!("/hello"),
+                    method: parse_quote!(get),
+                    function: parse_quote!(hello),
+                }),
+                0,
+            ),
+            (
+                parse_quote! {
+                #[doc = r" This attribute is not an endpoint so keep it"]
+                #[shuttle_codegen::endpoint(method = get, route = "/hello")]
+                async fn hello() -> &'static str {
+                    "Hello, World!"
+                }},
+                Some(Endpoint {
+                    route: parse_quote!("/hello"),
+                    method: parse_quote!(get),
+                    function: parse_quote!(hello),
+                }),
+                1,
+            ),
+            (
+                parse_quote! {
+                    #[doc = r" This attribute is not an endpoint so keep it"]
+                    async fn say_hello() -> &'static str {
+                        "Hello, World!"
+                    }
+                },
+                None,
+                1,
+            ),
+        ];
 
-        };
+        for (mut input, expected, remaining_attributes) in inputs {
+            let actual = Endpoint::from_item_fn(&mut input);
 
-        let actual = Endpoint::from_item_fn(&mut input).unwrap();
-        let expected = Endpoint {
-            route: parse_quote!("/hello"),
-            method: parse_quote!(get),
-            function: parse_quote!(hello),
-        };
+            assert_eq!(actual, expected);
 
-        assert_eq!(actual, expected);
-
-        assert!(
-            input.attrs.is_empty(),
-            "expected attributes to be stripped since there is no macro for them"
-        );
+            // If input was an endpoint, its attribute should be stripped,
+            // if not an endpoint the attribute should remain
+            assert_eq!(input.attrs.len(), remaining_attributes);
+        }
     }
 
     #[test]

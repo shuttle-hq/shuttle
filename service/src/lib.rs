@@ -544,6 +544,22 @@ impl Service for sync_wrapper::SyncWrapper<axum::Router> {
     }
 }
 
+#[cfg(feature = "web-actix-web")]
+#[async_trait]
+impl<F> Service for F
+where F: FnOnce(&mut actix_web::web::ServiceConfig) + Sync + Send + Copy + Clone + 'static {
+    async fn bind(self: Box<Self>, addr: SocketAddr) -> Result<(), Error> {
+        let srv = actix_web::HttpServer::new(move || actix_web::App::new().configure(*self))
+            .bind(addr)?
+            .run();
+        srv.await.map_err(error::CustomError::new)?;
+
+        Ok(())
+    }
+}
+#[cfg(feature = "web-actix-web")]
+pub type ShuttleActixWeb<F> = Result<F, Error> ;
+
 #[cfg(feature = "web-axum")]
 pub type ShuttleAxum = Result<sync_wrapper::SyncWrapper<axum::Router>, Error>;
 

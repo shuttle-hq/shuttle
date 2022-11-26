@@ -105,6 +105,10 @@ impl Endpoint {
             return None;
         }
 
+        // At this point an endpoint with params and valid syntax exists, so we will check for
+        // all errors before returning
+        let mut has_err = false;
+
         let mut route = None;
         let mut method = None;
 
@@ -118,7 +122,7 @@ impl Endpoint {
                             "duplicate endpoint method";
                             hint = "The endpoint `method` should only be set once."
                         );
-                        return None;
+                        has_err = true;
                     }
                     if let Expr::Path(path) = value {
                         method = Some(path.path.segments[0].ident.clone());
@@ -131,7 +135,7 @@ impl Endpoint {
                             "duplicate endpoint route";
                             hint = "The endpoint `route` should only be set once."
                         );
-                        return None;
+                        has_err = true;
                     }
                     if let Expr::Lit(literal) = value {
                         if let Some(Lit::Str(literal)) = Some(literal.lit) {
@@ -145,38 +149,39 @@ impl Endpoint {
                         "invalid endpoint argument";
                         hint = "Only `method` and `route` are valid endpoint arguments."
                     );
-                    return None;
+                    has_err = true;
                 }
             }
         }
 
-        let route = if let Some(route) = route {
-            route
-        } else {
+        if route.is_none() {
             emit_error!(
                 paren.span,
                 "no route provided";
                 hint = "Add a route to your endpoint: `route = \"/hello\")`"
             );
-            return None;
+            has_err = true;
         };
 
-        let method = if let Some(method) = method {
-            method
-        } else {
+        if method.is_none() {
             emit_error!(
                 paren.span,
                 "no method provided";
                 hint = "Add a method to your endpoint: `method = get`"
             );
-            return None;
+            has_err = true;
         };
 
-        Some(Endpoint {
-            route,
-            method,
-            function,
-        })
+        if has_err {
+            None
+        } else {
+            // Safe to unwrap because `has_err` is true if `route` or `method` is `None`
+            Some(Endpoint {
+                route: route.unwrap(),
+                method: method.unwrap(),
+                function,
+            })
+        }
     }
 }
 

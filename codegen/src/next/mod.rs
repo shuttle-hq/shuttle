@@ -1,4 +1,4 @@
-use proc_macro_error::{emit_call_site_error, emit_error};
+use proc_macro_error::emit_error;
 use quote::{quote, ToTokens};
 use syn::{
     parenthesized, parse::Parse, parse2, punctuated::Punctuated, token::Paren, Expr, File, Ident,
@@ -57,8 +57,9 @@ impl Endpoint {
             if let Some(segment) = item.attrs[index].path.segments.last() {
                 if segment.ident.to_string().as_str() == "endpoint" {
                     if endpoint_index.is_some() {
-                        emit_call_site_error!(
-                            "more than one endpoint attribute provided";
+                        emit_error!(
+                            item,
+                            "extra endpoint attribute";
                             hint = "There should only be one endpoint annotation per handler function."
                         );
                         return None;

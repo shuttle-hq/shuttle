@@ -1,0 +1,21 @@
+error: more than one endpoint attribute provided
+
+         = help: There should only be one endpoint annotation per handler function.
+
+ --> tests/ui/next/extra-endpoint-attributes.rs:1:1
+  |
+1 | / shuttle_codegen::app! {
+2 | |     #[shuttle_codegen::endpoint(method = get, route = "/hello")]
+3 | |     #[shuttle_codegen::endpoint(method = post, route = "/hello")]
+4 | |     async fn hello() -> &'static str {
+5 | |         "Hello, World!"
+6 | | }}
+  | |__^
+  |
+  = note: this error originates in the macro `shuttle_codegen::app` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0601]: `main` function not found in crate `$CRATE`
+ --> tests/ui/next/extra-endpoint-attributes.rs:6:3
+  |
+6 | }}
+  |   ^ consider adding a `main` function to `$DIR/tests/ui/next/extra-endpoint-attributes.rs`

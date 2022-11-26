@@ -1,4 +1,4 @@
-use proc_macro_error::emit_error;
+use proc_macro_error::{emit_call_site_error, emit_error};
 use quote::{quote, ToTokens};
 use syn::{
     parenthesized, parse::Parse, parse2, punctuated::Punctuated, token::Paren, Expr, File, Ident,
@@ -49,20 +49,26 @@ impl Endpoint {
     fn from_item_fn(item: &mut ItemFn) -> Option<Self> {
         let function = item.sig.ident.clone();
 
-        let endpoint_index;
+        let mut endpoint_index = None;
+
         // Find the index of an attribute that is an endpoint
-        if let Some(index) = item.attrs.iter().position(|attr| {
-            if let Some(segment) = attr.path.segments.last() {
-                segment.ident.to_string().as_str() == "endpoint"
+        for index in 0..item.attrs.len() {
+            // The endpoint ident should be the last segment in the path
+            if let Some(segment) = item.attrs[index].path.segments.last() {
+                if segment.ident.to_string().as_str() == "endpoint" {
+                    if endpoint_index.is_some() {
+                        emit_call_site_error!(
+                            "more than one endpoint attribute provided";
+                            hint = "There should only be one endpoint annotation per handler function."
+                        );
+                        return None;
+                    }
+                    endpoint_index = Some(index);
+                }
             } else {
-                false
+                return None;
             }
-        }) {
-            endpoint_index = Some(index);
-        } else {
-            // This item does not have an endpoint attribute
-            return None;
-        };
+        }
 
         // Strip the endpoint attribute if it exists
         let endpoint = if let Some(index) = endpoint_index {
@@ -247,6 +253,7 @@ impl ToTokens for App {
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn wasi_bindings(app: App) -> proc_macro2::TokenStream {
     quote!(
         #app
@@ -377,7 +384,7 @@ mod tests {
 
     #[test]
     fn parse_endpoint() {
-        let inputs = vec![
+        let cases = vec![
             (
                 parse_quote! {
                 #[shuttle_codegen::endpoint(method = get, route = "/hello")]
@@ -407,7 +414,7 @@ mod tests {
             ),
             (
                 parse_quote! {
-                    #[doc = r" This attribute is not an endpoint so keep it"]
+                    /// This attribute is not an endpoint so keep it
                     async fn say_hello() -> &'static str {
                         "Hello, World!"
                     }
@@ -417,13 +424,12 @@ mod tests {
             ),
         ];
 
-        for (mut input, expected, remaining_attributes) in inputs {
+        for (mut input, expected, remaining_attributes) in cases {
             let actual = Endpoint::from_item_fn(&mut input);
 
             assert_eq!(actual, expected);
 
-            // If input was an endpoint, its attribute should be stripped,
-            // if not an endpoint the attribute should remain
+            // Verify that only endpoint attributes have been stripped
             assert_eq!(input.attrs.len(), remaining_attributes);
         }
     }
@@ -431,7 +437,7 @@ mod tests {
     #[test]
     fn parse_parameter() {
         // test method param
-        let tests: Vec<(Parameter, Parameter)> = vec![
+        let cases: Vec<(Parameter, Parameter)> = vec![
             (
                 // parsing an identifier
                 parse_quote! {
@@ -455,7 +461,7 @@ mod tests {
                 },
             ),
         ];
-        for (actual, expected) in tests {
+        for (actual, expected) in cases {
             assert_eq!(actual, expected);
         }
     }

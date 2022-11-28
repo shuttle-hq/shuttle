@@ -9,7 +9,6 @@ publish = false
 [dependencies]
 aws-config = "0.51.0"
 aws-sdk-rds = "0.21.0"
-aws-smithy-types = "0.51.0"
 clap = { version = "3.2.17", features = ["derive", "env"] }
 fqdn = "0.2.3"
 mongodb = "2.3.1"

@@ -5835,7 +5835,6 @@ version = "0.7.3"
 dependencies = [
  "aws-config",
  "aws-sdk-rds",
- "aws-smithy-types",
  "clap 3.2.17",
  "ctor",
  "fqdn",

@@ -86,8 +86,7 @@ impl Endpoint {
                 // This will error on invalid parameter syntax
                 emit_error!(
                     err.span(),
-                    err;
-                    hint = ""
+                    err
                 );
                 return None;
             }

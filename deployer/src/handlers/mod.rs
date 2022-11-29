@@ -39,7 +39,7 @@ pub fn make_router(
     proxy_fqdn: FQDN,
     admin_secret: String,
     project_name: ProjectName,
-) -> Router<Body> {
+) -> Router {
     Router::new()
         .route("/projects/:project_name/services", get(list_services))
         .route(

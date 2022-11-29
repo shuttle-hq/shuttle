@@ -213,6 +213,7 @@
 use std::collections::BTreeMap;
 use std::future::Future;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::pin::Pin;
 
 pub use async_trait::async_trait;
@@ -310,6 +311,12 @@ pub trait Factory: Send + Sync {
 
     /// Get the name for the service being deployed
     fn get_service_name(&self) -> ServiceName;
+
+    /// Get the where the build files are stored for this service
+    fn get_build_path(&self) -> PathBuf;
+
+    /// Get the path where files can be stored for this deployment
+    fn get_storage_path(&self) -> PathBuf;
 }
 
 /// Used to get resources of type `T` from factories.

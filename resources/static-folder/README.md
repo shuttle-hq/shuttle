@@ -1,0 +1,1 @@
+# Shuttle Static Folder

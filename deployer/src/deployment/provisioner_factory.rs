@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, path::PathBuf};
 
 use async_trait::async_trait;
 use shuttle_common::{database, DatabaseReadyInfo};
@@ -27,6 +27,7 @@ pub trait AbstractFactory: Send + Sync + 'static {
         &self,
         service_name: ServiceName,
         service_id: Uuid,
+        build_path: PathBuf,
     ) -> Result<Self::Output, Self::Error>;
 }
 
@@ -47,6 +48,7 @@ impl<R: ResourceRecorder, S: SecretGetter> AbstractFactory for AbstractProvision
         &self,
         service_name: ServiceName,
         service_id: Uuid,
+        build_path: PathBuf,
     ) -> Result<Self::Output, Self::Error> {
         let provisioner_client = ProvisionerClient::connect(self.provisioner_uri.clone()).await?;
 
@@ -54,6 +56,7 @@ impl<R: ResourceRecorder, S: SecretGetter> AbstractFactory for AbstractProvision
             provisioner_client,
             service_name,
             service_id,
+            build_path,
             self.resource_recorder.clone(),
             self.secret_getter.clone(),
         ))
@@ -80,6 +83,7 @@ pub enum ProvisionerError {
 pub struct ProvisionerFactory<R: ResourceRecorder, S: SecretGetter> {
     service_name: ServiceName,
     service_id: Uuid,
+    builds_path: PathBuf,
     provisioner_client: ProvisionerClient<Channel>,
     info: Option<DatabaseReadyInfo>,
     resource_recorder: R,
@@ -92,6 +96,7 @@ impl<R: ResourceRecorder, S: SecretGetter> ProvisionerFactory<R, S> {
         provisioner_client: ProvisionerClient<Channel>,
         service_name: ServiceName,
         service_id: Uuid,
+        builds_path: PathBuf,
         resource_recorder: R,
         secret_getter: S,
     ) -> Self {
@@ -99,6 +104,7 @@ impl<R: ResourceRecorder, S: SecretGetter> ProvisionerFactory<R, S> {
             provisioner_client,
             service_name,
             service_id,
+            builds_path,
             info: None,
             resource_recorder,
             secret_getter,
@@ -178,5 +184,13 @@ impl<R: ResourceRecorder, S: SecretGetter> Factory for ProvisionerFactory<R, S> 
 
     fn get_service_name(&self) -> ServiceName {
         self.service_name.clone()
+    }
+
+    fn get_build_path(&self) -> PathBuf {
+        self.builds_path.join(self.service_name.as_str()).clone()
+    }
+
+    fn get_storage_path(&self) -> PathBuf {
+        PathBuf::from("/tmp")
     }
 }

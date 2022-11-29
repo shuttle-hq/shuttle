@@ -34,6 +34,9 @@ pub async fn task(
 ) {
     info!("Run task started");
 
+    // Path of the directory that contains extracted service Cargo projects.
+    let builds_path = artifacts_path.join("shuttle-builds");
+
     // The directory in which compiled '.so' files are stored.
     let libs_path = artifacts_path.join("shuttle-libs");
 
@@ -66,7 +69,7 @@ pub async fn task(
             }
         };
         let mut factory = match abstract_factory
-            .get_factory(service_name, built.service_id)
+            .get_factory(service_name, built.service_id, builds_path.clone())
             .await
         {
             Ok(factory) => factory,

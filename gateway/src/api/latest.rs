@@ -261,7 +261,7 @@ async fn request_acme_certificate(
 }
 
 pub struct ApiBuilder {
-    router: Router<Body>,
+    router: Router,
     service: Option<Arc<GatewayService>>,
     sender: Option<Sender<BoxedTask>>,
     bind: Option<SocketAddr>,
@@ -361,7 +361,7 @@ impl ApiBuilder {
         self
     }
 
-    pub fn into_router(self) -> Router<Body> {
+    pub fn into_router(self) -> Router {
         let service = self.service.expect("a GatewayService is required");
         let sender = self.sender.expect("a task Sender is required");
         self.router

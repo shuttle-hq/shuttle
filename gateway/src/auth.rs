@@ -2,9 +2,10 @@ use std::fmt::{Debug, Formatter};
 use std::str::FromStr;
 use std::sync::Arc;
 
-use axum::extract::{Extension, FromRequest, Path, RequestParts, TypedHeader};
+use axum::extract::{Extension, FromRequestParts, Path, TypedHeader};
 use axum::headers::authorization::Bearer;
 use axum::headers::Authorization;
+use axum::http::request::Parts;
 use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Serialize};
 use tracing::{trace, Span};
@@ -24,14 +25,14 @@ impl Key {
 }
 
 #[async_trait]
-impl<B> FromRequest<B> for Key
+impl<S> FromRequestParts<S> for Key
 where
-    B: Send,
+    S: Send + Sync,
 {
     type Rejection = Error;
 
-    async fn from_request(req: &mut RequestParts<B>) -> Result<Self, Self::Rejection> {
-        let key = TypedHeader::<Authorization<Bearer>>::from_request(req)
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let key = TypedHeader::<Authorization<Bearer>>::from_request_parts(parts, state)
             .await
             .map_err(|_| Error::from(ErrorKind::KeyMissing))
             .and_then(|TypedHeader(Authorization(bearer))| bearer.token().trim().parse())?;
@@ -183,15 +184,15 @@ impl Permissions {
 }
 
 #[async_trait]
-impl<B> FromRequest<B> for User
+impl<S> FromRequestParts<S> for User
 where
-    B: Send,
+    S: Send + Sync,
 {
     type Rejection = Error;
 
-    async fn from_request(req: &mut RequestParts<B>) -> Result<Self, Self::Rejection> {
-        let key = Key::from_request(req).await?;
-        let Extension(service) = Extension::<Arc<GatewayService>>::from_request(req)
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let key = Key::from_request_parts(parts, state).await?;
+        let Extension(service) = Extension::<Arc<GatewayService>>::from_request_parts(parts, state)
             .await
             .unwrap();
         let user = User::retrieve_from_key(&service, key)
@@ -231,17 +232,17 @@ pub struct ScopedUser {
 }
 
 #[async_trait]
-impl<B> FromRequest<B> for ScopedUser
+impl<S> FromRequestParts<S> for ScopedUser
 where
-    B: Send,
+    S: Send + Sync,
 {
     type Rejection = Error;
 
-    async fn from_request(req: &mut RequestParts<B>) -> Result<Self, Self::Rejection> {
-        let user = User::from_request(req).await?;
-        let scope = match Path::<ProjectName>::from_request(req).await {
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let user = User::from_request_parts(parts, state).await?;
+        let scope = match Path::<ProjectName>::from_request_parts(parts, state).await {
             Ok(Path(p)) => p,
-            Err(_) => Path::<(ProjectName, String)>::from_request(req)
+            Err(_) => Path::<(ProjectName, String)>::from_request_parts(parts, state)
                 .await
                 .map(|Path((p, _))| p)
                 .unwrap(),
@@ -260,14 +261,14 @@ pub struct Admin {
 }
 
 #[async_trait]
-impl<B> FromRequest<B> for Admin
+impl<S> FromRequestParts<S> for Admin
 where
-    B: Send,
+    S: Send + Sync,
 {
     type Rejection = Error;
 
-    async fn from_request(req: &mut RequestParts<B>) -> Result<Self, Self::Rejection> {
-        let user = User::from_request(req).await?;
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let user = User::from_request_parts(parts, state).await?;
         if user.is_super_user() {
             Ok(Self { user })
         } else {

@@ -18,7 +18,10 @@ use tracing::{debug, debug_span, error, info, instrument, trace, Instrument};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
-use super::{provisioner_factory, runtime_logger, KillReceiver, KillSender, RunReceiver, State};
+use super::{
+    provisioner_factory, runtime_logger, storage_manager::StorageManager, KillReceiver, KillSender,
+    RunReceiver, State,
+};
 use crate::error::{Error, Result};
 
 /// Run a task which takes runnable deploys from a channel and starts them up with a factory provided by the
@@ -30,15 +33,9 @@ pub async fn task(
     abstract_factory: impl provisioner_factory::AbstractFactory,
     logger_factory: impl runtime_logger::Factory,
     active_deployment_getter: impl ActiveDeploymentsGetter,
-    artifacts_path: PathBuf,
+    storage_manager: StorageManager,
 ) {
     info!("Run task started");
-
-    // Path of the directory that contains extracted service Cargo projects.
-    let builds_path = artifacts_path.join("shuttle-builds");
-
-    // The directory in which compiled '.so' files are stored.
-    let libs_path = artifacts_path.join("shuttle-libs");
 
     while let Some(built) = recv.recv().await {
         let id = built.id;
@@ -47,6 +44,7 @@ pub async fn task(
 
         let kill_send = kill_send.clone();
         let kill_recv = kill_send.subscribe();
+        let storage_manager = storage_manager.clone();
 
         let port = match pick_unused_port() {
             Some(port) => port,
@@ -69,7 +67,12 @@ pub async fn task(
             }
         };
         let mut factory = match abstract_factory
-            .get_factory(service_name, built.service_id, builds_path.clone())
+            .get_factory(
+                service_name,
+                built.service_id,
+                built.id,
+                storage_manager.clone(),
+            )
             .await
         {
             Ok(factory) => factory,
@@ -98,8 +101,6 @@ pub async fn task(
             Err(err) => start_crashed_cleanup(&id, err),
         };
 
-        let libs_path = libs_path.clone();
-
         tokio::spawn(async move {
             let parent_cx = global::get_text_map_propagator(|propagator| {
                 propagator.extract(&built.tracing_context)
@@ -111,7 +112,7 @@ pub async fn task(
                 if let Err(err) = built
                     .handle(
                         addr,
-                        libs_path,
+                        storage_manager,
                         &mut factory,
                         logger,
                         kill_recv,
@@ -200,12 +201,12 @@ pub struct Built {
 }
 
 impl Built {
-    #[instrument(skip(self, libs_path, factory, logger, kill_recv, kill_old_deployments, cleanup), fields(id = %self.id, state = %State::Loading))]
+    #[instrument(skip(self, storage_manager, factory, logger, kill_recv, kill_old_deployments, cleanup), fields(id = %self.id, state = %State::Loading))]
     #[allow(clippy::too_many_arguments)]
     async fn handle(
         self,
         address: SocketAddr,
-        libs_path: PathBuf,
+        storage_manager: StorageManager,
         factory: &mut dyn Factory,
         logger: Logger,
         kill_recv: KillReceiver,
@@ -214,7 +215,8 @@ impl Built {
             + Send
             + 'static,
     ) -> Result<()> {
-        let service = load_deployment(&self.id, address, libs_path, factory, logger).await?;
+        let so_path = storage_manager.deployment_library_path(&self.id);
+        let service = load_deployment(address, so_path, factory, logger).await?;
 
         kill_old_deployments.await?;
 
@@ -263,15 +265,13 @@ async fn run(
     }
 }
 
-#[instrument(skip(id, addr, libs_path, factory, logger))]
+#[instrument(skip(addr, so_path, factory, logger))]
 async fn load_deployment(
-    id: &Uuid,
     addr: SocketAddr,
-    libs_path: PathBuf,
+    so_path: PathBuf,
     factory: &mut dyn Factory,
     logger: Logger,
 ) -> Result<LoadedService> {
-    let so_path = libs_path.join(id.to_string());
     let loader = Loader::from_so_file(so_path)?;
 
     Ok(loader.load(factory, addr, logger).await?)

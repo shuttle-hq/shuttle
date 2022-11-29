@@ -4,8 +4,11 @@ use crate::helpers::{self, APPS_FQDN};
 
 #[test]
 fn hello_world_actix_web() {
-    let client =
-        helpers::Services::new_docker("hello-world (actix-web)", "actix-web/hello-world", Color::Green);
+    let client = helpers::Services::new_docker(
+        "hello-world (actix-web)",
+        "actix-web/hello-world",
+        Color::Green,
+    );
     client.deploy();
 
     let request_text = client
@@ -16,5 +19,5 @@ fn hello_world_actix_web() {
         .text()
         .unwrap();
 
-    assert_eq!(request_text, "Hello, world!");
+    assert_eq!(request_text, "Hello World!");
 }

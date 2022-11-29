@@ -1,4 +1,3 @@
 [submodule "examples"]
 	path = examples
-	url = git@github.com:biryukovmaxim/shuttle-examples.git
-	branch = feature/actix-web-example
+	url = git@github.com:shuttle-hq/examples.git

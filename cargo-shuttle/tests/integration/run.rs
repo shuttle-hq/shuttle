@@ -169,6 +169,22 @@ async fn rocket_authentication() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn actix_web_hello_world() {
+    let port = cargo_shuttle_run("../examples/actix-web/hello-world").await;
+
+    let request_text = reqwest::Client::new()
+        .get(format!("http://localhost:{port}/hello"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+
+    assert_eq!(request_text, "Hello World!");
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn axum_hello_world() {
     let port = cargo_shuttle_run("../examples/axum/hello-world").await;
 

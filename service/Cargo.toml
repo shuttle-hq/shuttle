@@ -10,6 +10,7 @@ homepage = "https://www.shuttle.rs"
 doctest = false
 
 [dependencies]
+actix-web = { version = "4.2.1", optional = true }
 anyhow = "1.0.62"
 async-trait = "0.1.57"
 axum = { version = "0.5.15", optional = true }
@@ -66,6 +67,7 @@ default = ["codegen"]
 codegen = ["shuttle-codegen"]
 loader = ["cargo", "libloading"]
 
+web-actix-web = ["actix-web"]
 web-axum = ["axum", "sync_wrapper"]
 web-rocket = ["rocket"]
 web-thruster = ["thruster"]

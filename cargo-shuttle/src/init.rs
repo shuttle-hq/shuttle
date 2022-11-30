@@ -21,6 +21,51 @@ pub trait ShuttleInit {
     fn get_boilerplate_code_for_framework(&self) -> &'static str;
 }
 
+pub struct ShuttleInitActixWeb;
+
+impl ShuttleInit for ShuttleInitActixWeb {
+    fn set_cargo_dependencies(
+        &self,
+        dependencies: &mut Table,
+        manifest_path: &Path,
+        url: &Url,
+        get_dependency_version_fn: GetDependencyVersionFn,
+    ) {
+        set_key_value_dependency_version(
+            "actix-web",
+            dependencies,
+            manifest_path,
+            url,
+            true,
+            get_dependency_version_fn,
+        );
+
+        set_inline_table_dependency_features(
+            "shuttle-service",
+            dependencies,
+            vec!["web-actix-web".to_string()],
+        );
+    }
+
+    fn get_boilerplate_code_for_framework(&self) -> &'static str {
+        indoc! {r#"
+        use actix_web::web::{resource, ServiceConfig};
+        use shuttle_service::ShuttleActixWeb;
+
+        async fn hello_world() -> &'static str {
+            "Hello World!"
+        }
+
+        #[shuttle_service::main]
+        async fn actix_web(
+        ) -> ShuttleActixWeb<impl FnOnce(&mut ServiceConfig) + Sync + Send + Copy + Clone + 'static> {
+            Ok(move |cfg: &mut ServiceConfig| {
+                cfg.service(resource("/hello").to(hello_world));
+            })
+        }"#}
+    }
+}
+
 pub struct ShuttleInitAxum;
 
 impl ShuttleInit for ShuttleInitAxum {
@@ -556,6 +601,9 @@ impl ShuttleInit for ShuttleInitNoOp {
 /// for writing framework-specific dependencies to `Cargo.toml` and generating
 /// boilerplate code in `src/lib.rs`.
 pub fn get_framework(init_args: &InitArgs) -> Box<dyn ShuttleInit> {
+    if init_args.actix_web {
+        return Box::new(ShuttleInitActixWeb);
+    }
     if init_args.axum {
         return Box::new(ShuttleInitAxum);
     }
@@ -742,6 +790,7 @@ mod shuttle_init_tests {
 
     fn init_args_factory(framework: &str) -> InitArgs {
         let mut init_args = InitArgs {
+            actix_web: false,
             axum: false,
             rocket: false,
             tide: false,
@@ -755,6 +804,7 @@ mod shuttle_init_tests {
         };
 
         match framework {
+            "actix-web" => init_args.actix_web = true,
             "axum" => init_args.axum = true,
             "rocket" => init_args.rocket = true,
             "tide" => init_args.tide = true,
@@ -790,9 +840,19 @@ mod shuttle_init_tests {
     #[test]
     fn test_get_framework_via_get_boilerplate_code() {
         let frameworks = vec![
-            "axum", "rocket", "tide", "tower", "poem", "salvo", "serenity", "warp", "thruster",
+            "actix-web",
+            "axum",
+            "rocket",
+            "tide",
+            "tower",
+            "poem",
+            "salvo",
+            "serenity",
+            "warp",
+            "thruster",
         ];
         let framework_inits: Vec<Box<dyn ShuttleInit>> = vec![
+            Box::new(ShuttleInitActixWeb),
             Box::new(ShuttleInitAxum),
             Box::new(ShuttleInitRocket),
             Box::new(ShuttleInitTide),
@@ -875,6 +935,37 @@ mod shuttle_init_tests {
         let expected = indoc! {r#"
             [dependencies]
             shuttle-service = "1.0"
+        "#};
+
+        assert_eq!(cargo_toml.to_string(), expected);
+    }
+    #[test]
+    fn test_set_cargo_dependencies_actix_web() {
+        let mut cargo_toml = cargo_toml_factory();
+        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
+        let manifest_path = PathBuf::new();
+        let url = Url::parse("https://shuttle.rs").unwrap();
+
+        set_inline_table_dependency_version(
+            "shuttle-service",
+            dependencies,
+            &manifest_path,
+            &url,
+            false,
+            mock_get_latest_dependency_version,
+        );
+
+        ShuttleInitActixWeb.set_cargo_dependencies(
+            dependencies,
+            &manifest_path,
+            &url,
+            mock_get_latest_dependency_version,
+        );
+
+        let expected = indoc! {r#"
+            [dependencies]
+            shuttle-service = { version = "1.0", features = ["web-actix-web"] }
+            actix-web = "1.0"
         "#};
 
         assert_eq!(cargo_toml.to_string(), expected);

@@ -353,7 +353,9 @@ async fn logs_websocket_handler(mut s: WebSocket, persistence: Persistence, id: 
             return;
         }
     };
-    let mut last_timestamp = Utc.timestamp(0, 0);
+
+    // Unwrap is safe because it only returns None for out of range numbers or invalid nanosecond
+    let mut last_timestamp = Utc.timestamp_opt(0, 0).unwrap();
 
     for log in backlog.into_iter() {
         last_timestamp = log.timestamp;

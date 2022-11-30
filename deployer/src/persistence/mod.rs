@@ -476,7 +476,7 @@ mod tests {
             id,
             service_id,
             state: State::Queued,
-            last_update: Utc.ymd(2022, 4, 25).and_hms(4, 43, 33),
+            last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 43, 33).unwrap(),
             address: None,
         };
 
@@ -496,7 +496,10 @@ mod tests {
         .unwrap();
         let update = p.get_deployment(&id).await.unwrap().unwrap();
         assert_eq!(update.state, State::Built);
-        assert_ne!(update.last_update, Utc.ymd(2022, 4, 25).and_hms(4, 43, 33));
+        assert_ne!(
+            update.last_update,
+            Utc.with_ymd_and_hms(2022, 4, 25, 4, 43, 33).unwrap()
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -510,28 +513,28 @@ mod tests {
             id: Uuid::new_v4(),
             service_id: xyz_id,
             state: State::Crashed,
-            last_update: Utc.ymd(2022, 4, 25).and_hms(7, 29, 35),
+            last_update: Utc.with_ymd_and_hms(2022, 4, 25, 7, 29, 35).unwrap(),
             address: None,
         };
         let deployment_stopped = Deployment {
             id: Uuid::new_v4(),
             service_id: xyz_id,
             state: State::Stopped,
-            last_update: Utc.ymd(2022, 4, 25).and_hms(7, 49, 35),
+            last_update: Utc.with_ymd_and_hms(2022, 4, 25, 7, 49, 35).unwrap(),
             address: None,
         };
         let deployment_other = Deployment {
             id: Uuid::new_v4(),
             service_id,
             state: State::Running,
-            last_update: Utc.ymd(2022, 4, 25).and_hms(7, 39, 39),
+            last_update: Utc.with_ymd_and_hms(2022, 4, 25, 7, 39, 39).unwrap(),
             address: None,
         };
         let deployment_running = Deployment {
             id: Uuid::new_v4(),
             service_id: xyz_id,
             state: State::Running,
-            last_update: Utc.ymd(2022, 4, 25).and_hms(7, 48, 29),
+            last_update: Utc.with_ymd_and_hms(2022, 4, 25, 7, 48, 29).unwrap(),
             address: Some(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 9876)),
         };
 
@@ -568,35 +571,35 @@ mod tests {
                 id: Uuid::new_v4(),
                 service_id,
                 state: State::Built,
-                last_update: Utc.ymd(2022, 4, 25).and_hms(4, 29, 33),
+                last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 29, 33).unwrap(),
                 address: None,
             },
             Deployment {
                 id: id_1,
                 service_id: foo_id,
                 state: State::Running,
-                last_update: Utc.ymd(2022, 4, 25).and_hms(4, 29, 44),
+                last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 29, 44).unwrap(),
                 address: None,
             },
             Deployment {
                 id: id_2,
                 service_id: bar_id,
                 state: State::Running,
-                last_update: Utc.ymd(2022, 4, 25).and_hms(4, 33, 48),
+                last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 33, 48).unwrap(),
                 address: None,
             },
             Deployment {
                 id: Uuid::new_v4(),
                 service_id: service_id2,
                 state: State::Crashed,
-                last_update: Utc.ymd(2022, 4, 25).and_hms(4, 38, 52),
+                last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 38, 52).unwrap(),
                 address: None,
             },
             Deployment {
                 id: id_3,
                 service_id: foo_id,
                 state: State::Running,
-                last_update: Utc.ymd(2022, 4, 25).and_hms(4, 42, 32),
+                last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 42, 32).unwrap(),
                 address: None,
             },
         ] {
@@ -788,14 +791,14 @@ mod tests {
             id,
             service_id,
             state: State::Queued, // Should be different from the state recorded below
-            last_update: Utc.ymd(2022, 4, 29).and_hms(2, 39, 39),
+            last_update: Utc.with_ymd_and_hms(2022, 4, 29, 2, 39, 39).unwrap(),
             address: None,
         })
         .await
         .unwrap();
         let state = deploy_layer::Log {
             id,
-            timestamp: Utc.ymd(2022, 4, 29).and_hms(2, 39, 59),
+            timestamp: Utc.with_ymd_and_hms(2022, 4, 29, 2, 39, 59).unwrap(),
             state: State::Running,
             level: Level::Info,
             file: None,
@@ -828,7 +831,7 @@ mod tests {
                 id,
                 service_id,
                 state: State::Running,
-                last_update: Utc.ymd(2022, 4, 29).and_hms(2, 39, 59),
+                last_update: Utc.with_ymd_and_hms(2022, 4, 29, 2, 39, 59).unwrap(),
                 address: Some(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 12345)),
             }
         );
@@ -1004,35 +1007,35 @@ mod tests {
                 id: Uuid::new_v4(),
                 service_id,
                 state: State::Built,
-                last_update: Utc.ymd(2022, 4, 25).and_hms(4, 29, 33),
+                last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 29, 33).unwrap(),
                 address: None,
             },
             Deployment {
                 id: Uuid::new_v4(),
                 service_id,
                 state: State::Stopped,
-                last_update: Utc.ymd(2022, 4, 25).and_hms(4, 29, 44),
+                last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 29, 44).unwrap(),
                 address: None,
             },
             Deployment {
                 id: id_1,
                 service_id,
                 state: State::Running,
-                last_update: Utc.ymd(2022, 4, 25).and_hms(4, 33, 48),
+                last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 33, 48).unwrap(),
                 address: None,
             },
             Deployment {
                 id: Uuid::new_v4(),
                 service_id,
                 state: State::Crashed,
-                last_update: Utc.ymd(2022, 4, 25).and_hms(4, 38, 52),
+                last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 38, 52).unwrap(),
                 address: None,
             },
             Deployment {
                 id: id_2,
                 service_id,
                 state: State::Running,
-                last_update: Utc.ymd(2022, 4, 25).and_hms(4, 42, 32),
+                last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 42, 32).unwrap(),
                 address: None,
             },
         ] {

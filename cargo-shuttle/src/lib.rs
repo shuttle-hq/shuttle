@@ -27,7 +27,7 @@ use futures::StreamExt;
 use git2::{Repository, StatusOptions};
 use ignore::overrides::OverrideBuilder;
 use ignore::WalkBuilder;
-use shuttle_common::models::secret;
+use shuttle_common::models::{project, secret};
 use shuttle_service::loader::{build_crate, Loader};
 use shuttle_service::Logger;
 use std::fmt::Write;
@@ -485,7 +485,38 @@ impl Shuttle {
     }
 
     async fn project_create(&self, client: &Client) -> Result<()> {
-        let project = client.create_project(self.ctx.project_name()).await?;
+        let pb = indicatif::ProgressBar::new_spinner();
+        pb.enable_steady_tick(std::time::Duration::from_millis(100));
+        pb.set_style(
+            indicatif::ProgressStyle::with_template("{spinner:.blue} {msg}")
+                .unwrap()
+                .tick_strings(&[
+                    "( ●    )",
+                    "(  ●   )",
+                    "(   ●  )",
+                    "(    ● )",
+                    "(     ●)",
+                    "(    ● )",
+                    "(   ●  )",
+                    "(  ●   )",
+                    "( ●    )",
+                    "(●     )",
+                    "(●●●●●●)",
+                ]),
+        );
+
+        let mut project = client.create_project(self.ctx.project_name()).await?;
+
+        loop {
+            if project.state == project::State::Ready {
+                break;
+            }
+
+            pb.set_message(format!("{project}"));
+            project = client.get_project(self.ctx.project_name()).await?;
+        }
+
+        pb.finish_with_message("Done");
 
         println!("{project}");
 

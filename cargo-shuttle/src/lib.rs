@@ -93,7 +93,9 @@ impl Shuttle {
                     Command::Secrets => self.secrets(&client).await,
                     Command::Auth(auth_args) => self.auth(auth_args, &client).await,
                     Command::Project(ProjectCommand::New) => self.project_create(&client).await,
-                    Command::Project(ProjectCommand::Status) => self.project_status(&client).await,
+                    Command::Project(ProjectCommand::Status { follow }) => {
+                        self.project_status(&client, follow).await
+                    }
                     Command::Project(ProjectCommand::Rm) => self.project_delete(&client).await,
                     _ => {
                         unreachable!("commands that don't need a client have already been matched")
@@ -523,11 +525,48 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn project_status(&self, client: &Client) -> Result<()> {
-        let project = client.get_project(self.ctx.project_name()).await?;
+    async fn project_status(&self, client: &Client, follow: bool) -> Result<()> {
+        let mut project = client.get_project(self.ctx.project_name()).await?;
+
+        match follow {
+            true => {
+                let pb = indicatif::ProgressBar::new_spinner();
+                pb.enable_steady_tick(std::time::Duration::from_millis(100));
+                pb.set_style(
+                    indicatif::ProgressStyle::with_template("{spinner:.blue} {msg}")
+                        .unwrap()
+                        .tick_strings(&[
+                            "( ●    )",
+                            "(  ●   )",
+                            "(   ●  )",
+                            "(    ● )",
+                            "(     ●)",
+                            "(    ● )",
+                            "(   ●  )",
+                            "(  ●   )",
+                            "( ●    )",
+                            "(●     )",
+                            "(●●●●●●)",
+                        ]),
+                );
+
+                loop {
+                    if project.state == project::State::Ready
+                        || project.state == project::State::Destroyed
+                    {
+                        break;
+                    }
+
+                    pb.set_message(format!("{project}"));
+                    project = client.get_project(self.ctx.project_name()).await?;
+                }
+
+                pb.finish_with_message("Done");
+            }
+            false => (),
+        }
 
         println!("{project}");
-
         Ok(())
     }
 

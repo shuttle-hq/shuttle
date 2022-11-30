@@ -19,7 +19,7 @@ impl ResourceBuilder<PathBuf> for StaticFolder {
         let input_dir = factory.get_build_path().join("public");
         let output_dir = factory.get_storage_path().join("public");
 
-        rename(input_dir, output_dir.clone()).unwrap();
+        rename(input_dir, output_dir.clone())?;
 
         Ok(output_dir)
     }

@@ -184,12 +184,12 @@ impl Factory for LocalFactory {
         self.service_name.clone()
     }
 
-    fn get_build_path(&self) -> PathBuf {
-        self.working_directory.clone()
+    fn get_build_path(&self) -> Result<PathBuf, shuttle_service::Error> {
+        Ok(self.working_directory.clone())
     }
 
-    fn get_storage_path(&self) -> PathBuf {
-        self.working_directory.clone()
+    fn get_storage_path(&self) -> Result<PathBuf, shuttle_service::Error> {
+        Ok(self.working_directory.clone())
     }
 }
 

@@ -215,7 +215,7 @@ impl Built {
             + Send
             + 'static,
     ) -> Result<()> {
-        let so_path = storage_manager.deployment_library_path(&self.id);
+        let so_path = storage_manager.deployment_library_path(&self.id)?;
         let service = load_deployment(address, so_path, factory, logger).await?;
 
         kill_old_deployments.await?;

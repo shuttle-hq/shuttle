@@ -313,10 +313,10 @@ pub trait Factory: Send + Sync {
     fn get_service_name(&self) -> ServiceName;
 
     /// Get the where the build files are stored for this service
-    fn get_build_path(&self) -> PathBuf;
+    fn get_build_path(&self) -> Result<PathBuf, crate::Error>;
 
     /// Get the path where files can be stored for this deployment
-    fn get_storage_path(&self) -> PathBuf;
+    fn get_storage_path(&self) -> Result<PathBuf, crate::Error>;
 }
 
 /// Used to get resources of type `T` from factories.

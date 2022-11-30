@@ -2,6 +2,8 @@ use crossterm::style::Color;
 
 use crate::helpers::{self, APPS_FQDN};
 
+// TODO: remove ignore when updated examples are merged: https://github.com/shuttle-hq/examples/pull/4
+#[ignore]
 #[test]
 fn hello_world_actix_web() {
     let client = helpers::Services::new_docker(

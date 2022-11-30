@@ -68,12 +68,12 @@ mod tests {
             panic!("no static folder test should try to get the service name")
         }
 
-        fn get_build_path(&self) -> std::path::PathBuf {
-            self.build_path.path().to_owned()
+        fn get_build_path(&self) -> Result<std::path::PathBuf, shuttle_service::Error> {
+            Ok(self.build_path.path().to_owned())
         }
 
-        fn get_storage_path(&self) -> std::path::PathBuf {
-            self.storage_path.path().to_owned()
+        fn get_storage_path(&self) -> Result<std::path::PathBuf, shuttle_service::Error> {
+            Ok(self.storage_path.path().to_owned())
         }
     }
 

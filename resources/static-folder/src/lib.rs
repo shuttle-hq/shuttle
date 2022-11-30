@@ -16,8 +16,8 @@ impl ResourceBuilder<PathBuf> for StaticFolder {
         factory: &mut dyn Factory,
         _runtime: &Runtime,
     ) -> Result<PathBuf, shuttle_service::Error> {
-        let input_dir = factory.get_build_path().join("static");
-        let output_dir = factory.get_storage_path().join("static");
+        let input_dir = factory.get_build_path()?.join("static");
+        let output_dir = factory.get_storage_path()?.join("static");
 
         rename(input_dir, output_dir.clone())?;
 

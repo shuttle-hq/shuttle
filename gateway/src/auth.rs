@@ -1,8 +1,7 @@
 use std::fmt::{Debug, Formatter};
 use std::str::FromStr;
-use std::sync::Arc;
 
-use axum::extract::{Extension, FromRequestParts, Path, TypedHeader};
+use axum::extract::{FromRef, FromRequestParts, Path, TypedHeader};
 use axum::headers::authorization::Bearer;
 use axum::headers::Authorization;
 use axum::http::request::Parts;
@@ -10,6 +9,7 @@ use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Serialize};
 use tracing::{trace, Span};
 
+use crate::api::latest::RouterState;
 use crate::service::GatewayService;
 use crate::{AccountName, Error, ErrorKind, ProjectName};
 
@@ -187,14 +187,15 @@ impl Permissions {
 impl<S> FromRequestParts<S> for User
 where
     S: Send + Sync,
+    RouterState: FromRef<S>,
 {
     type Rejection = Error;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let key = Key::from_request_parts(parts, state).await?;
-        let Extension(service) = Extension::<Arc<GatewayService>>::from_request_parts(parts, state)
-            .await
-            .unwrap();
+
+        let RouterState { service, .. } = RouterState::from_ref(state);
+
         let user = User::retrieve_from_key(&service, key)
             .await
             // Absord any error into `Unauthorized`
@@ -235,11 +236,13 @@ pub struct ScopedUser {
 impl<S> FromRequestParts<S> for ScopedUser
 where
     S: Send + Sync,
+    RouterState: FromRef<S>,
 {
     type Rejection = Error;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let user = User::from_request_parts(parts, state).await?;
+
         let scope = match Path::<ProjectName>::from_request_parts(parts, state).await {
             Ok(Path(p)) => p,
             Err(_) => Path::<(ProjectName, String)>::from_request_parts(parts, state)
@@ -264,11 +267,13 @@ pub struct Admin {
 impl<S> FromRequestParts<S> for Admin
 where
     S: Send + Sync,
+    RouterState: FromRef<S>,
 {
     type Rejection = Error;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let user = User::from_request_parts(parts, state).await?;
+
         if user.is_super_user() {
             Ok(Self { user })
         } else {

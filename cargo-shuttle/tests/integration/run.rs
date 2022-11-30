@@ -168,6 +168,8 @@ async fn rocket_authentication() {
     );
 }
 
+// TODO: remove ignore when updated examples are merged: https://github.com/shuttle-hq/examples/pull/4
+#[ignore]
 #[tokio::test(flavor = "multi_thread")]
 async fn actix_web_hello_world() {
     let port = cargo_shuttle_run("../examples/actix-web/hello-world").await;

@@ -125,7 +125,7 @@ CARGO_HOME: {}
                 "exec",
                 "gateway",
                 "/usr/local/bin/service",
-                "--state=/var/lib/shuttle/gateway.sqlite",
+                "--state=/var/lib/shuttle",
                 "init",
                 "--name",
                 "test",

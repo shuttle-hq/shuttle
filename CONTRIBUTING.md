@@ -49,7 +49,7 @@ shuttle-secrets = { path = "[base]/shuttle/resources/secrets" }
 Prime gateway database with an admin user:
 
 ```bash
-docker compose --file docker-compose.rendered.yml --project-name shuttle-dev exec gateway /usr/local/bin/service --state=/var/lib/shuttle/gateway.sqlite init --name admin --key test-key
+docker compose --file docker-compose.rendered.yml --project-name shuttle-dev exec gateway /usr/local/bin/service --state=/var/lib/shuttle init --name admin --key test-key
 ```
 
 Login to shuttle service in a new terminal window from the main shuttle directory:

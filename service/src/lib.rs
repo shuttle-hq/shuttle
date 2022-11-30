@@ -312,7 +312,7 @@ pub trait Factory: Send + Sync {
     /// Get the name for the service being deployed
     fn get_service_name(&self) -> ServiceName;
 
-    /// Get the where the build files are stored for this service
+    /// Get the path where the build files are stored for this service
     fn get_build_path(&self) -> Result<PathBuf, crate::Error>;
 
     /// Get the path where files can be stored for this deployment

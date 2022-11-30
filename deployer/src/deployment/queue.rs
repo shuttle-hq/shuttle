@@ -333,7 +333,7 @@ async fn store_lib(
     so_path: impl AsRef<Path>,
     id: &Uuid,
 ) -> Result<()> {
-    let new_so_path = storage_manager.deployment_library_path(&id)?;
+    let new_so_path = storage_manager.deployment_library_path(id)?;
 
     fs::rename(so_path, new_so_path).await?;
 

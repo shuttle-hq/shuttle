@@ -188,6 +188,7 @@ publish: publish-resources publish-cargo-shuttle
 publish-resources: publish-resources/aws-rds \
 	publish-resources/persist \
 	publish-resources/shared-db
+	publish-resources/static-folder
 
 publish-cargo-shuttle: publish-resources/secrets
 	cd cargo-shuttle; cargo publish

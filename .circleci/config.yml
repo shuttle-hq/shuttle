@@ -89,6 +89,7 @@ commands:
             shuttle-persist = { path = "$PWD/resources/persist" }
             shuttle-shared-db = { path = "$PWD/resources/shared-db" }
             shuttle-secrets = { path = "$PWD/resources/secrets" }
+            shuttle-static-folder = { path = "$PWD/resources/static-folder" }
             EOF
   install-rust:
     steps:
@@ -260,6 +261,7 @@ workflows:
                 - resources/persist
                 - resources/secrets
                 - resources/shared-db
+                - resources/static-folder
       - service-test:
           requires:
             - workspace-clippy

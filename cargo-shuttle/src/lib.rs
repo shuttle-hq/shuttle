@@ -4,6 +4,7 @@ pub mod config;
 mod factory;
 mod init;
 
+use shuttle_common::project::ProjectName;
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fs::{read_to_string, File};
@@ -487,10 +488,53 @@ impl Shuttle {
     }
 
     async fn project_create(&self, client: &Client) -> Result<()> {
+        self.wait_with_spinner(
+            &[project::State::Ready],
+            Client::create_project,
+            self.ctx.project_name(),
+            client,
+        )
+        .await?;
+
+        Ok(())
+    }
+
+    async fn project_status(&self, client: &Client, follow: bool) -> Result<()> {
+        match follow {
+            true => {
+                self.wait_with_spinner(
+                    &[project::State::Ready, project::State::Destroyed],
+                    Client::get_project,
+                    self.ctx.project_name(),
+                    client,
+                )
+                .await?;
+            }
+            false => {
+                let project = client.get_project(self.ctx.project_name()).await?;
+                println!("{project}");
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn wait_with_spinner<'a, F, Fut>(
+        &self,
+        states_to_check: &[project::State],
+        f: F,
+        project_name: &'a ProjectName,
+        client: &'a Client,
+    ) -> Result<(), anyhow::Error>
+    where
+        F: Fn(&'a Client, &'a ProjectName) -> Fut,
+        Fut: std::future::Future<Output = Result<project::Response>> + 'a,
+    {
+        let mut project = f(client, project_name).await?;
         let pb = indicatif::ProgressBar::new_spinner();
-        pb.enable_steady_tick(std::time::Duration::from_millis(100));
+        pb.enable_steady_tick(std::time::Duration::from_millis(350));
         pb.set_style(
-            indicatif::ProgressStyle::with_template("{spinner:.blue} {msg}")
+            indicatif::ProgressStyle::with_template("{spinner:.orange} {msg}")
                 .unwrap()
                 .tick_strings(&[
                     "( ●    )",
@@ -506,66 +550,15 @@ impl Shuttle {
                     "(●●●●●●)",
                 ]),
         );
-
-        let mut project = client.create_project(self.ctx.project_name()).await?;
-
         loop {
-            if project.state == project::State::Ready {
+            if states_to_check.contains(&project.state) {
                 break;
             }
 
             pb.set_message(format!("{project}"));
-            project = client.get_project(self.ctx.project_name()).await?;
+            project = client.get_project(project_name).await?;
         }
-
         pb.finish_with_message("Done");
-
-        println!("{project}");
-
-        Ok(())
-    }
-
-    async fn project_status(&self, client: &Client, follow: bool) -> Result<()> {
-        let mut project = client.get_project(self.ctx.project_name()).await?;
-
-        match follow {
-            true => {
-                let pb = indicatif::ProgressBar::new_spinner();
-                pb.enable_steady_tick(std::time::Duration::from_millis(100));
-                pb.set_style(
-                    indicatif::ProgressStyle::with_template("{spinner:.blue} {msg}")
-                        .unwrap()
-                        .tick_strings(&[
-                            "( ●    )",
-                            "(  ●   )",
-                            "(   ●  )",
-                            "(    ● )",
-                            "(     ●)",
-                            "(    ● )",
-                            "(   ●  )",
-                            "(  ●   )",
-                            "( ●    )",
-                            "(●     )",
-                            "(●●●●●●)",
-                        ]),
-                );
-
-                loop {
-                    if project.state == project::State::Ready
-                        || project.state == project::State::Destroyed
-                    {
-                        break;
-                    }
-
-                    pb.set_message(format!("{project}"));
-                    project = client.get_project(self.ctx.project_name()).await?;
-                }
-
-                pb.finish_with_message("Done");
-            }
-            false => (),
-        }
-
         println!("{project}");
         Ok(())
     }

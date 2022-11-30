@@ -348,7 +348,7 @@ mod tests {
     use tokio::fs;
     use uuid::Uuid;
 
-    use crate::error::TestError;
+    use crate::{deployment::storage_manager::StorageManager, error::TestError};
 
     #[tokio::test]
     async fn extract_tar_gz_data() {
@@ -462,22 +462,24 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
     async fn store_lib() {
         let libs_dir = TempDir::new("lib-store").unwrap();
         let libs_p = libs_dir.path();
+        let storage_manager = StorageManager::new(libs_p.to_path_buf());
 
-        let build_dir = TempDir::new("build-store").unwrap();
-        let build_p = build_dir.path();
+        let build_p = storage_manager.builds_path().unwrap();
 
         let so_path = build_p.join("xyz.so");
         let id = Uuid::new_v4();
 
         fs::write(&so_path, "barfoo").await.unwrap();
 
-        super::store_lib(&libs_p, &so_path, &id).await.unwrap();
+        super::store_lib(&storage_manager, &so_path, &id)
+            .await
+            .unwrap();
 
         // Old '.so' file gone?
         assert!(!so_path.exists());
 
         assert_eq!(
-            fs::read_to_string(libs_p.join(id.to_string()))
+            fs::read_to_string(libs_p.join("shuttle-libs").join(id.to_string()))
                 .await
                 .unwrap(),
             "barfoo"

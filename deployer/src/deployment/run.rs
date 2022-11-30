@@ -281,7 +281,6 @@ async fn load_deployment(
 mod tests {
     use std::{
         collections::BTreeMap,
-        fs,
         net::{Ipv4Addr, SocketAddr},
         path::PathBuf,
         process::Command,
@@ -290,6 +289,7 @@ mod tests {
 
     use shuttle_common::database;
     use shuttle_service::{Factory, Logger};
+    use tempdir::TempDir;
     use tokio::{
         sync::{broadcast, mpsc, oneshot},
         task::JoinError,
@@ -297,12 +297,11 @@ mod tests {
     };
     use uuid::Uuid;
 
-    use crate::error::Error;
+    use crate::{deployment::storage_manager::StorageManager, error::Error};
 
     use super::Built;
 
     const RESOURCES_PATH: &str = "tests/resources";
-    const LIBS_PATH: &str = "/tmp/shuttle-libs-tests";
 
     struct StubFactory;
 
@@ -324,6 +323,21 @@ mod tests {
         fn get_service_name(&self) -> shuttle_service::ServiceName {
             panic!("no test should get the service name");
         }
+
+        fn get_build_path(&self) -> Result<PathBuf, shuttle_service::Error> {
+            panic!("no test should get the build path");
+        }
+
+        fn get_storage_path(&self) -> Result<PathBuf, shuttle_service::Error> {
+            panic!("no test should get the storage path");
+        }
+    }
+
+    fn get_storage_manager() -> StorageManager {
+        let tmp_dir = TempDir::new("shuttle_run_test").unwrap();
+        let path = tmp_dir.into_path();
+
+        StorageManager::new(path)
     }
 
     fn get_logger(id: Uuid) -> Logger {
@@ -345,7 +359,7 @@ mod tests {
     // This test uses the kill signal to make sure a service does stop when asked to
     #[tokio::test]
     async fn can_be_killed() {
-        let built = make_so_and_built("sleep-async");
+        let (built, storage_manager) = make_so_and_built("sleep-async");
         let id = built.id;
         let (kill_send, kill_recv) = broadcast::channel(1);
         let (cleanup_send, cleanup_recv) = oneshot::channel();
@@ -368,7 +382,7 @@ mod tests {
         built
             .handle(
                 addr,
-                PathBuf::from(LIBS_PATH),
+                storage_manager,
                 &mut factory,
                 logger,
                 kill_recv,
@@ -393,7 +407,7 @@ mod tests {
     // This test does not use a kill signal to stop the service. Rather the service decided to stop on its own without errors
     #[tokio::test]
     async fn self_stop() {
-        let built = make_so_and_built("sleep-async");
+        let (built, storage_manager) = make_so_and_built("sleep-async");
         let (_kill_send, kill_recv) = broadcast::channel(1);
         let (cleanup_send, cleanup_recv) = oneshot::channel();
 
@@ -416,7 +430,7 @@ mod tests {
         built
             .handle(
                 addr,
-                PathBuf::from(LIBS_PATH),
+                storage_manager,
                 &mut factory,
                 logger,
                 kill_recv,
@@ -435,7 +449,7 @@ mod tests {
     // Test for panics in Service::bind
     #[tokio::test]
     async fn panic_in_bind() {
-        let built = make_so_and_built("bind-panic");
+        let (built, storage_manager) = make_so_and_built("bind-panic");
         let (_kill_send, kill_recv) = broadcast::channel(1);
         let (cleanup_send, cleanup_recv): (oneshot::Sender<()>, _) = oneshot::channel();
 
@@ -458,7 +472,7 @@ mod tests {
         built
             .handle(
                 addr,
-                PathBuf::from(LIBS_PATH),
+                storage_manager,
                 &mut factory,
                 logger,
                 kill_recv,
@@ -477,7 +491,7 @@ mod tests {
     // Test for panics in the main function
     #[tokio::test]
     async fn panic_in_main() {
-        let built = make_so_and_built("main-panic");
+        let (built, storage_manager) = make_so_and_built("main-panic");
         let (_kill_send, kill_recv) = broadcast::channel(1);
 
         let handle_cleanup = |_result| panic!("the service shouldn't even start");
@@ -488,7 +502,7 @@ mod tests {
         let result = built
             .handle(
                 addr,
-                PathBuf::from(LIBS_PATH),
+                storage_manager,
                 &mut factory,
                 logger,
                 kill_recv,
@@ -516,13 +530,14 @@ mod tests {
 
         let handle_cleanup = |_result| panic!("no service means no cleanup");
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
+        let storage_manager = get_storage_manager();
         let mut factory = StubFactory;
         let logger = get_logger(built.id);
 
         let result = built
             .handle(
                 addr,
-                PathBuf::from(LIBS_PATH),
+                storage_manager,
                 &mut factory,
                 logger,
                 kill_recv,
@@ -541,7 +556,7 @@ mod tests {
         );
     }
 
-    fn make_so_and_built(crate_name: &str) -> Built {
+    fn make_so_and_built(crate_name: &str) -> (Built, StorageManager) {
         let crate_dir: PathBuf = [RESOURCES_PATH, crate_name].iter().collect();
 
         Command::new("cargo")
@@ -562,18 +577,19 @@ mod tests {
 
         let id = Uuid::new_v4();
         let so_path = crate_dir.join("target/release").join(lib_name);
-        let libs_path = PathBuf::from(LIBS_PATH);
-        fs::create_dir_all(&libs_path).unwrap();
-
-        let new_so_path = libs_path.join(id.to_string());
+        let storage_manager = get_storage_manager();
+        let new_so_path = storage_manager.deployment_library_path(&id).unwrap();
 
         std::fs::copy(so_path, new_so_path).unwrap();
 
-        Built {
-            id,
-            service_name: crate_name.to_string(),
-            service_id: Uuid::new_v4(),
-            tracing_context: Default::default(),
-        }
+        (
+            Built {
+                id,
+                service_name: crate_name.to_string(),
+                service_id: Uuid::new_v4(),
+                tracing_context: Default::default(),
+            },
+            storage_manager,
+        )
     }
 }

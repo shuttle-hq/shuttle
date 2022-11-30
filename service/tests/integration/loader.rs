@@ -60,6 +60,14 @@ impl Factory for DummyFactory {
     async fn get_secrets(&mut self) -> Result<BTreeMap<String, String>, Error> {
         panic!("did not expect any loader test to get secrets")
     }
+
+    fn get_build_path(&self) -> Result<std::path::PathBuf, shuttle_service::Error> {
+        panic!("did not expect any loader test to get the build path")
+    }
+
+    fn get_storage_path(&self) -> Result<std::path::PathBuf, shuttle_service::Error> {
+        panic!("did not expect any loader test to get the storage path")
+    }
 }
 
 #[test]

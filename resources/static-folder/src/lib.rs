@@ -16,8 +16,8 @@ impl ResourceBuilder<PathBuf> for StaticFolder {
         factory: &mut dyn Factory,
         _runtime: &Runtime,
     ) -> Result<PathBuf, shuttle_service::Error> {
-        let input_dir = factory.get_build_path().join("public");
-        let output_dir = factory.get_storage_path().join("public");
+        let input_dir = factory.get_build_path().join("static");
+        let output_dir = factory.get_storage_path().join("static");
 
         rename(input_dir, output_dir.clone())?;
 
@@ -81,11 +81,11 @@ mod tests {
     async fn copies_folder() {
         let mut factory = MockFactory::new();
 
-        let input_file_path = factory.build_path.path().join("public").join("note.txt");
+        let input_file_path = factory.build_path.path().join("static").join("note.txt");
         fs::create_dir_all(input_file_path.parent().unwrap()).unwrap();
         fs::write(input_file_path, "Hello, test!").unwrap();
 
-        let expected_file = factory.storage_path.path().join("public").join("note.txt");
+        let expected_file = factory.storage_path.path().join("static").join("note.txt");
         assert!(!expected_file.exists(), "input file should not exist yet");
 
         // Call plugin
@@ -96,7 +96,7 @@ mod tests {
 
         assert_eq!(
             actual_folder,
-            factory.storage_path.path().join("public"),
+            factory.storage_path.path().join("static"),
             "expect path to the static folder"
         );
         assert!(expected_file.exists(), "expected input file to be created");

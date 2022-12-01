@@ -460,6 +460,30 @@ impl Shuttle {
         Ok(owned)
     }
 
+    fn make_archive(&self) -> Result<Vec<u8>> {
+        let enc = GzEncoder::new(Vec::new(), Compression::fast());
+        let mut tar = tar::Builder::new(enc);
+
+        for dir_entry in std::fs::read_dir(self.ctx.working_directory()).unwrap() {
+            let dir_entry = dir_entry.unwrap();
+
+            if dir_entry.file_name() != "target" {
+                let path = dir_entry.file_name().to_str().unwrap().to_string();
+
+                if dir_entry.file_type().unwrap().is_dir() {
+                    tar.append_dir_all(path, dir_entry.path()).unwrap();
+                } else {
+                    tar.append_path_with_name(dir_entry.path(), path).unwrap();
+                }
+            }
+        }
+
+        let enc = tar.into_inner().unwrap();
+        let bytes = enc.finish().unwrap();
+
+        Ok(bytes)
+    }
+
     fn package_secret(&self, file: File) -> Result<Vec<u8>> {
         let tar_read = GzDecoder::new(file);
         let mut archive_read = Archive::new(tar_read);
@@ -541,6 +565,51 @@ mod tests {
         assert_eq!(
             project_args.working_directory,
             path_from_workspace_root("examples/axum/hello-world/")
+        );
+    }
+
+    #[test]
+    fn make_archive() {
+        let working_directory =
+            canonicalize(path_from_workspace_root("examples/rocket/secrets")).unwrap();
+
+        let mut secrets_file = File::create(working_directory.join("Secrets.toml")).unwrap();
+        secrets_file
+            .write_all(b"MY_API_KEY = 'the contents of my API key'")
+            .unwrap();
+
+        let mut project_args = ProjectArgs {
+            working_directory,
+            name: None,
+        };
+
+        let mut shuttle = Shuttle::new().unwrap();
+        shuttle.load_project(&mut project_args).unwrap();
+
+        let archive = shuttle.make_archive().unwrap();
+
+        // Make sure the Secrets.toml file is not initially present
+        let tar = GzDecoder::new(&archive[..]);
+        let mut archive = Archive::new(tar);
+
+        let entries: Vec<_> = archive
+            .entries()
+            .unwrap()
+            .map(|entry| entry.unwrap().path().unwrap().display().to_string())
+            .collect();
+
+        assert_eq!(
+            entries,
+            vec![
+                "src/",
+                "src/lib.rs",
+                "README.md",
+                "Secrets.toml",
+                "Cargo.toml",
+                "Shuttle.toml",
+                "Secrets.toml.example",
+                ".gitignore"
+            ]
         );
     }
 

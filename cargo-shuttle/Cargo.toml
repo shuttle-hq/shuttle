@@ -24,6 +24,7 @@ futures = "0.3.23"
 headers = "0.3.8"
 indoc = "1.0.7"
 log = "0.4.17"
+openssl = { version = '0.10', optional = true }
 portpicker = "0.1.1"
 reqwest = { version = "0.11.11", features = ["json"] }
 reqwest-middleware = "0.1.6"
@@ -54,6 +55,9 @@ path = "../resources/secrets"
 version = "0.7.2"
 path = "../service"
 features = ["loader"]
+
+[features]
+vendored-openssl = ["openssl/vendored"]
 
 [dev-dependencies]
 tempfile = "3.3.0"

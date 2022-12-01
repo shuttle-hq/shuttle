@@ -141,7 +141,9 @@ jobs:
       - install-protoc
       - run: cargo fmt --all --check
       - run: cargo install cargo-sort
-      - run: cargo sort --check --workspace
+      # TODO: this is incompatible with workspace inheritance, uncomment when 
+      # https://github.com/DevinR528/cargo-sort/pull/29 is merged
+      # - run: cargo sort --check --workspace
       - run: cargo check --workspace --all-targets
       - save-cargo-cache
   workspace-clippy:
@@ -176,7 +178,9 @@ jobs:
       - apply-patches
       - run: cargo fmt --all --check --manifest-path << parameters.path >>/Cargo.toml
       - run: cargo install cargo-sort
-      - run: cargo sort --check << parameters.path >>
+      # TODO: this is incompatible with workspace inheritance, uncomment when 
+      # https://github.com/DevinR528/cargo-sort/pull/29 is merged
+      # - run: cargo sort --check << parameters.path >>
       - run: |
           cargo clippy --tests \
                        --all-targets \

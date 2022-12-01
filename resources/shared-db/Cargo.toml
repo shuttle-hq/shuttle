@@ -11,7 +11,7 @@ keywords = ["shuttle-service", "database"]
 async-trait = "0.1.56"
 mongodb = { version = "2.3.0", optional = true }
 shuttle-service = { path = "../../service", version = "0.7.2", default-features = false }
-sqlx = { version = "0.6.1", features = ["runtime-tokio-native-tls"], optional = true }
+sqlx = { version = "0.6.2", features = ["runtime-tokio-native-tls"], optional = true }
 tokio = { version = "1.19.2", features = ["rt"] }
 
 [features]

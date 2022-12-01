@@ -8,7 +8,7 @@ orbs:
 executors:
   docker-rust:
     docker:
-      - image: cimg/rust:1.63.0
+      - image: cimg/rust:1.64.0
   image-ubuntu:
     machine:
       image: ubuntu-2204:2022.04.1

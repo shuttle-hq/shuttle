@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::body::{Body, BoxBody};
-use axum::extract::{Extension, MatchedPath, Path};
+use axum::extract::{Extension, MatchedPath, Path, State};
 use axum::http::Request;
 use axum::middleware::from_extractor;
 use axum::response::Response;
@@ -66,7 +66,7 @@ impl StatusResponse {
 }
 
 async fn get_user(
-    Extension(service): Extension<Arc<GatewayService>>,
+    State(RouterState { service, .. }): State<RouterState>,
     Path(account_name): Path<AccountName>,
     _: Admin,
 ) -> Result<AxumJson<user::Response>, Error> {
@@ -76,7 +76,7 @@ async fn get_user(
 }
 
 async fn post_user(
-    Extension(service): Extension<Arc<GatewayService>>,
+    State(RouterState { service, .. }): State<RouterState>,
     Path(account_name): Path<AccountName>,
     _: Admin,
 ) -> Result<AxumJson<user::Response>, Error> {
@@ -86,7 +86,7 @@ async fn post_user(
 }
 
 async fn get_project(
-    Extension(service): Extension<Arc<GatewayService>>,
+    State(RouterState { service, .. }): State<RouterState>,
     ScopedUser { scope, .. }: ScopedUser,
 ) -> Result<AxumJson<project::Response>, Error> {
     let state = service.find_project(&scope).await?.into();
@@ -99,8 +99,7 @@ async fn get_project(
 }
 
 async fn post_project(
-    Extension(service): Extension<Arc<GatewayService>>,
-    Extension(sender): Extension<Sender<BoxedTask>>,
+    State(RouterState { service, sender }): State<RouterState>,
     User { name, .. }: User,
     Path(project): Path<ProjectName>,
 ) -> Result<AxumJson<project::Response>, Error> {
@@ -123,8 +122,7 @@ async fn post_project(
 }
 
 async fn delete_project(
-    Extension(service): Extension<Arc<GatewayService>>,
-    Extension(sender): Extension<Sender<BoxedTask>>,
+    State(RouterState { service, sender }): State<RouterState>,
     ScopedUser { scope: project, .. }: ScopedUser,
 ) -> Result<AxumJson<project::Response>, Error> {
     let state = service.find_project(&project).await?;
@@ -152,14 +150,14 @@ async fn delete_project(
 }
 
 async fn route_project(
-    Extension(service): Extension<Arc<GatewayService>>,
+    State(RouterState { service, .. }): State<RouterState>,
     scoped_user: ScopedUser,
     req: Request<Body>,
 ) -> Result<Response<Body>, Error> {
     service.route(&scoped_user, req).await
 }
 
-async fn get_status(Extension(sender): Extension<Sender<BoxedTask>>) -> Response<Body> {
+async fn get_status(State(RouterState { sender, .. }): State<RouterState>) -> Response<Body> {
     let (status, body) = if sender.is_closed() || sender.capacity() == 0 {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -180,8 +178,7 @@ async fn get_status(Extension(sender): Extension<Sender<BoxedTask>>) -> Response
 
 async fn revive_projects(
     _: Admin,
-    Extension(service): Extension<Arc<GatewayService>>,
-    Extension(sender): Extension<Sender<BoxedTask>>,
+    State(RouterState { service, sender }): State<RouterState>,
 ) -> Result<(), Error> {
     crate::project::exec::revive(service, sender)
         .await
@@ -201,10 +198,9 @@ async fn create_acme_account(
 
 async fn request_acme_certificate(
     _: Admin,
-    Extension(service): Extension<Arc<GatewayService>>,
+    State(RouterState { service, sender }): State<RouterState>,
     Extension(acme_client): Extension<AcmeClient>,
     Extension(resolver): Extension<Arc<GatewayCertResolver>>,
-    Extension(sender): Extension<Sender<BoxedTask>>,
     Path((project_name, fqdn)): Path<(ProjectName, String)>,
     AxumJson(credentials): AxumJson<AccountCredentials<'_>>,
 ) -> Result<String, Error> {
@@ -260,8 +256,14 @@ async fn request_acme_certificate(
     Ok("certificate created".to_string())
 }
 
+#[derive(Clone)]
+pub(crate) struct RouterState {
+    pub service: Arc<GatewayService>,
+    pub sender: Sender<BoxedTask>,
+}
+
 pub struct ApiBuilder {
-    router: Router<Body>,
+    router: Router<RouterState>,
     service: Option<Arc<GatewayService>>,
     sender: Option<Sender<BoxedTask>>,
     bind: Option<SocketAddr>,
@@ -361,12 +363,11 @@ impl ApiBuilder {
         self
     }
 
-    pub fn into_router(self) -> Router<Body> {
+    pub fn into_router(self) -> Router {
         let service = self.service.expect("a GatewayService is required");
         let sender = self.sender.expect("a task Sender is required");
-        self.router
-            .layer(Extension(service))
-            .layer(Extension(sender))
+
+        self.router.with_state(RouterState { service, sender })
     }
 
     pub fn serve(self) -> impl Future<Output = Result<(), hyper::Error>> {

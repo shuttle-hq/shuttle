@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
-use axum::extract::{FromRequest, Path, RequestParts};
+use axum::extract::{Extension, FromRequestParts, Path};
+use axum::http::request::Parts;
+use axum::RequestPartsExt;
 use hyper::StatusCode;
 use shuttle_common::project::ProjectName;
 use tracing::error;
@@ -11,18 +13,19 @@ use tracing::error;
 pub struct ProjectNameGuard;
 
 #[async_trait]
-impl<B> FromRequest<B> for ProjectNameGuard
+impl<S> FromRequestParts<S> for ProjectNameGuard
 where
-    B: Send,
+    S: Send + Sync,
 {
     type Rejection = StatusCode;
 
-    async fn from_request(req: &mut RequestParts<B>) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         // We expect some path parameters
-        let Path(path): Path<HashMap<String, String>> = match req.extract().await {
-            Ok(path) => path,
-            Err(_) => return Err(StatusCode::NOT_FOUND),
-        };
+        let Path(path): Path<HashMap<String, String>> =
+            match Path::from_request_parts(parts, state).await {
+                Ok(path) => path,
+                Err(_) => return Err(StatusCode::NOT_FOUND),
+            };
 
         // All our routes have the `project_name` parameter
         let project_name = match path.get("project_name") {
@@ -34,9 +37,10 @@ where
         };
 
         // This extractor requires the ProjectName extension to be set
-        let expected_project_name: &ProjectName = match req.extensions().get() {
-            Some(expected) => expected,
-            None => {
+        let Extension(expected_project_name) = match parts.extract::<Extension<ProjectName>>().await
+        {
+            Ok(expected) => expected,
+            Err(_) => {
                 error!("ProjectName extension is not set");
                 return Err(StatusCode::INTERNAL_SERVER_ERROR);
             }

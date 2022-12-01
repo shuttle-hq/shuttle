@@ -1,13 +1,13 @@
 [package]
 name = "cargo-shuttle"
 version = "0.7.2"
-edition = "2021"
-license = "Apache-2.0"
+edition.workspace = true
+license.workspace = true
 description = "A cargo command for the shuttle platform (https://www.shuttle.rs/)"
 homepage = "https://www.shuttle.rs"
 
 [dependencies]
-anyhow = "1.0.66"
+anyhow = { workspace = true }
 async-trait = "0.1.58"
 bollard = "0.13.0"
 cargo = "0.64.0"
@@ -39,23 +39,21 @@ tokio = { version = "1.22.0", features = ["macros"] }
 tokio-tungstenite = { version = "0.17.2", features = ["native-tls"] }
 toml = "0.5.9"
 toml_edit = "0.15.0"
-tracing = "0.1.37"
-tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 url = "2.3.1"
 uuid = { version = "1.2.2", features = ["v4"] }
 webbrowser = "0.8.2"
 
 [dependencies.shuttle-common]
-version = "0.7.2"
-path = "../common"
+workspace = true
 
 [dependencies.shuttle-secrets]
 version = "0.7.2"
 path = "../resources/secrets"
 
 [dependencies.shuttle-service]
-version = "0.7.2"
-path = "../service"
+workspace = true
 features = ["loader"]
 
 [features]

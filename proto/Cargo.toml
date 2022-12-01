@@ -1,7 +1,8 @@
 [package]
 name = "shuttle-proto"
 version = "0.7.3"
-edition = "2021"
+edition.workspace = true
+license.workspace = true
 publish = false
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -10,8 +11,7 @@ prost = "0.11.2"
 tonic = "0.8.3"
 
 [dependencies.shuttle-common]
-version = "0.7.2"
-path = "../common"
+workspace = true
 
 [build-dependencies]
 tonic-build = "0.8.3"

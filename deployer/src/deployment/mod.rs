@@ -3,6 +3,7 @@ pub mod provisioner_factory;
 mod queue;
 mod run;
 pub mod runtime_logger;
+mod storage_manager;
 
 use std::path::PathBuf;
 
@@ -15,7 +16,7 @@ use crate::persistence::{SecretRecorder, State};
 use tokio::sync::{broadcast, mpsc};
 use uuid::Uuid;
 
-use self::deploy_layer::LogRecorder;
+use self::{deploy_layer::LogRecorder, storage_manager::StorageManager};
 
 const QUEUE_BUFFER_SIZE: usize = 100;
 const RUN_BUFFER_SIZE: usize = 100;
@@ -48,7 +49,7 @@ impl DeploymentManager {
                 build_log_recorder,
                 secret_recorder,
                 active_deployment_getter,
-                artifacts_path,
+                StorageManager::new(artifacts_path),
             ),
             kill_send,
         }
@@ -109,7 +110,7 @@ impl Pipeline {
         build_log_recorder: impl LogRecorder,
         secret_recorder: impl SecretRecorder,
         active_deployment_getter: impl ActiveDeploymentsGetter,
-        artifacts_path: PathBuf,
+        storage_manager: StorageManager,
     ) -> Pipeline {
         let (queue_send, queue_recv) = mpsc::channel(QUEUE_BUFFER_SIZE);
         let (run_send, run_recv) = mpsc::channel(RUN_BUFFER_SIZE);
@@ -121,7 +122,7 @@ impl Pipeline {
             run_send_clone,
             build_log_recorder,
             secret_recorder,
-            artifacts_path.clone(),
+            storage_manager.clone(),
         ));
         tokio::spawn(run::task(
             run_recv,
@@ -129,7 +130,7 @@ impl Pipeline {
             abstract_factory,
             runtime_logger_factory,
             active_deployment_getter,
-            artifacts_path,
+            storage_manager,
         ));
 
         Pipeline {

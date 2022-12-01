@@ -49,6 +49,7 @@ shuttle-aws-rds = { path = "[base]/shuttle/resources/aws-rds" }
 shuttle-persist = { path = "[base]/shuttle/resources/persist" }
 shuttle-shared-db = { path = "[base]/shuttle/resources/shared-db" }
 shuttle-secrets = { path = "[base]/shuttle/resources/secrets" }
+shuttle-static-folder = { path = "[base]/shuttle/resources/static-folder" }
 ```
 
 Prime gateway database with an admin user:

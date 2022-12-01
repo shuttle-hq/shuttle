@@ -1,7 +1,12 @@
 #syntax=docker/dockerfile-upstream:1.4.0-rc1
 FROM rust:1.65.0-buster as shuttle-build
 RUN apt-get update &&\
-    apt-get install -y curl protobuf-compiler
+    apt-get install -y curl
+# download protoc binary and unzip it in usr/bin
+RUN curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v21.9/protoc-21.9-linux-x86_64.zip &&\
+    unzip -o protoc-21.9-linux-x86_64.zip -d /usr bin/protoc &&\
+    unzip -o protoc-21.9-linux-x86_64.zip -d /usr/ 'include/*' &&\
+    rm -f protoc-21.9-linux-x86_64.zip
 RUN cargo install cargo-chef
 WORKDIR /build
 

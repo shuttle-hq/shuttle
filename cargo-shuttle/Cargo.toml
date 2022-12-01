@@ -8,12 +8,12 @@ homepage = "https://www.shuttle.rs"
 
 [dependencies]
 anyhow = { workspace = true }
-async-trait = "0.1.58"
+async-trait = { workspace = true }
 bollard = "0.13.0"
 cargo = "0.64.0"
 cargo-edit = { version = "0.11.6", features = ["cli"] }
 cargo_metadata = "0.15.2"
-chrono = "0.4.23"
+chrono = { workspace = true }
 clap = { version = "3.2.17", features = ["derive", "env"] }
 clap_complete = "3.2.5"
 crossbeam-channel = "0.5.6"
@@ -30,8 +30,8 @@ portpicker = "0.1.1"
 reqwest = { version = "0.11.13", features = ["json"] }
 reqwest-middleware = "0.2.0"
 reqwest-retry = "0.2.0"
-serde = { version = "1.0.148", features = ["derive"] }
-serde_json = "1.0.89"
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
 sqlx = { version = "0.6.2", features = ["runtime-tokio-native-tls", "postgres"] }
 strum = { version = "0.24.1", features = ["derive"] }
 tar = "0.4.38"
@@ -42,7 +42,7 @@ toml_edit = "0.15.0"
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 url = "2.3.1"
-uuid = { version = "1.2.2", features = ["v4"] }
+uuid = { workspace = true, features = ["v4"] }
 webbrowser = "0.8.2"
 
 [dependencies.shuttle-common]

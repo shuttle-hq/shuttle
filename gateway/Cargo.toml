@@ -7,12 +7,12 @@ publish = false
 
 [dependencies]
 acme2 = "0.5.1"
-async-trait = "0.1.58"
-axum = { version = "0.6.0", features = [ "headers" ] }
+async-trait = { workspace = true }
+axum = { workspace = true, features = [ "headers" ] }
 axum-server = { version = "0.4.4", features = [ "tls-rustls" ] }
 base64 = "0.13.1"
 bollard = "0.13.0"
-chrono = "0.4.23"
+chrono = { workspace = true }
 clap = { version = "4.0.27", features = [ "derive" ] }
 fqdn = "0.2.3"
 futures = "0.3.25"
@@ -31,8 +31,8 @@ rand = "0.8.5"
 rcgen = "0.10.0"
 rustls = "0.20.7"
 rustls-pemfile = "1.0.1"
-serde = { version = "1.0.148", features = [ "derive" ] }
-serde_json = "1.0.89"
+serde = { workspace = true, features = [ "derive" ] }
+serde_json = { workspace = true }
 sqlx = { version = "0.6.2", features = [ "sqlite", "json", "runtime-tokio-native-tls", "migrate" ] }
 strum = { version = "0.24.1", features = ["derive"] }
 tokio = { version = "1.22.0", features = [ "full" ] }
@@ -41,7 +41,7 @@ tower-http = { version = "0.3.4", features = ["trace"] }
 tracing = { workspace = true }
 tracing-opentelemetry = "0.18.0"
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
-uuid = { version = "1.2.2", features = [ "v4" ] }
+uuid = { workspace = true, features = [ "v4" ] }
 
 [dependencies.shuttle-common]
 workspace = true

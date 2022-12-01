@@ -350,7 +350,7 @@ impl ResourceRecorder for Persistence {
 
     async fn insert_resource(&self, resource: &Resource) -> Result<()> {
         sqlx::query("INSERT OR REPLACE INTO resources (service_id, type, data) VALUES (?, ?, ?)")
-            .bind(&resource.service_id)
+            .bind(resource.service_id)
             .bind(resource.r#type)
             .bind(&resource.data)
             .execute(&self.pool)
@@ -966,19 +966,19 @@ mod tests {
         )
         // This running item should match
         .bind(Uuid::new_v4())
-        .bind(&service_id)
+        .bind(service_id)
         .bind(State::Running)
         .bind(Utc::now())
         .bind("10.0.0.5:12356")
         // A stopped item should not match
         .bind(Uuid::new_v4())
-        .bind(&service_id)
+        .bind(service_id)
         .bind(State::Stopped)
         .bind(Utc::now())
         .bind("10.0.0.5:9876")
         // Another service should not match
         .bind(Uuid::new_v4())
-        .bind(&service_other_id)
+        .bind(service_other_id)
         .bind(State::Running)
         .bind(Utc::now())
         .bind("10.0.0.5:5678")
@@ -1054,8 +1054,8 @@ mod tests {
         sqlx::query(
             "INSERT INTO deployments (id, service_id, state, last_update) VALUES (?, ?, ?, ?)",
         )
-        .bind(&deployment_id)
-        .bind(&service_id)
+        .bind(deployment_id)
+        .bind(service_id)
         .bind(State::Running)
         .bind(Utc::now())
         .execute(pool)
@@ -1072,7 +1072,7 @@ mod tests {
         let service_id = Uuid::new_v4();
 
         sqlx::query("INSERT INTO services (id, name) VALUES (?, ?)")
-            .bind(&service_id)
+            .bind(service_id)
             .bind(name)
             .execute(pool)
             .await?;

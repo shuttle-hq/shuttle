@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -221,85 +220,18 @@ async fn request_acme_certificate(
     Ok("Certificate created".to_string())
 }
 
-async fn invalid_project_names(
+async fn get_projects(
     _: Admin,
     Extension(service): Extension<Arc<GatewayService>>,
-) -> Result<AxumJson<Vec<(String, Vec<String>)>>, Error> {
-    let projects: HashMap<String, String, std::collections::hash_map::RandomState> =
-        HashMap::from_iter(
-            service
-                .iter_projects_with_user()
-                .await?
-                .map(|(project_name, account_name)| (project_name.0, account_name.0)),
-        );
-    let mut result = Vec::with_capacity(projects.len());
+) -> Result<AxumJson<Vec<project::AdminResponse>>, Error> {
+    let projects = service
+        .iter_projects_detailed()
+        .await?
+        .into_iter()
+        .map(Into::into)
+        .collect();
 
-    for (project_name, account_name) in &projects {
-        let mut output = Vec::new();
-        let cleaned_name = project_name.to_lowercase();
-
-        // Were there any uppercase characters
-        if &cleaned_name != project_name {
-            // Since there were uppercase characters, will the new name clash with any existing projects
-            if let Some(other_account) = projects.get(&cleaned_name) {
-                if other_account == account_name {
-                    output.push("changing to lower case will clash with same owner".to_string());
-                } else {
-                    output.push(format!(
-                        "changing to lower case will clash with another owner: {other_account}"
-                    ));
-                }
-            }
-        }
-
-        let cleaned_underscore = cleaned_name.replace('_', "-");
-        // Were there any underscore cleanups
-        if cleaned_underscore != cleaned_name {
-            // Since there were underscore cleanups, will the new name clash with any existing projects
-            if let Some(other_account) = projects.get(&cleaned_underscore) {
-                if other_account == account_name {
-                    output.push("cleaning underscore will clash with same owner".to_string());
-                } else {
-                    output.push(format!(
-                        "cleaning underscore will clash with another owner: {other_account}"
-                    ));
-                }
-            }
-        }
-
-        let cleaned_separator_name = cleaned_underscore.trim_matches('-');
-        // Were there any dash cleanups
-        if cleaned_separator_name != cleaned_underscore {
-            // Since there were dash cleanups, will the new name clash with any existing projects
-            if let Some(other_account) = projects.get(cleaned_separator_name) {
-                if other_account == account_name {
-                    output.push("cleaning dashes will clash with same owner".to_string());
-                } else {
-                    output.push(format!(
-                        "cleaning dashes will clash with another owner: {other_account}"
-                    ));
-                }
-            }
-        }
-
-        // Are reserved words used
-        match cleaned_separator_name {
-            "shuttleapp" | "shuttle" => output.push("is a reserved name".to_string()),
-            _ => {}
-        }
-
-        // Is it longer than 63 chars
-        if cleaned_separator_name.len() > 63 {
-            output.push("final name is too long".to_string());
-        }
-
-        // Only report of problem projects
-        if !output.is_empty() {
-            result.push((project_name.to_string(), output));
-        }
-    }
-
-    Ok(AxumJson(result))
+    Ok(AxumJson(projects))
 }
 
 pub fn make_api(
@@ -323,7 +255,7 @@ pub fn make_api(
         .route("/admin/revive", post(revive_projects))
         .route("/admin/acme/:email", post(create_acme_account))
         .route("/admin/acme/request/:project_name/:fqdn", post(request_acme_certificate))
-        .route("/admin/invalid-names", get(invalid_project_names))
+        .route("/admin/projects", get(get_projects))
         .layer(Extension(service))
         .layer(Extension(acme_client))
         .layer(Extension(sender))

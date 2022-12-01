@@ -172,6 +172,21 @@ impl<'de> Deserialize<'de> for AccountName {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectDetails {
+    pub project_name: ProjectName,
+    pub account_name: AccountName,
+}
+
+impl From<ProjectDetails> for shuttle_common::models::project::AdminResponse {
+    fn from(project: ProjectDetails) -> Self {
+        Self {
+            project_name: project.project_name.to_string(),
+            account_name: project.account_name.to_string(),
+        }
+    }
+}
+
 pub trait DockerContext: Send + Sync {
     fn docker(&self) -> &Docker;
 

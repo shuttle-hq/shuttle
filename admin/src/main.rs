@@ -4,7 +4,11 @@ use shuttle_admin::{
     client::Client,
     config::get_api_key,
 };
-use std::{fmt::Write, fs};
+use std::{
+    collections::{hash_map::RandomState, HashMap},
+    fmt::Write,
+    fs,
+};
 use tracing::trace;
 
 #[tokio::main]
@@ -48,20 +52,91 @@ async fn main() {
         }
         Command::ProjectNames => {
             let projects = client
-                .list_invalid_project_names()
+                .get_projects()
                 .await
-                .expect("get invalid project names");
+                .expect("to get list of projects");
+
+            let projects: HashMap<String, String, RandomState> = HashMap::from_iter(
+                projects
+                    .into_iter()
+                    .map(|project| (project.project_name, project.account_name)),
+            );
 
             let mut res = String::new();
 
-            for (project, issues) in projects {
-                writeln!(res, "{project}").expect("to write name of project name having issues");
+            for (project_name, account_name) in &projects {
+                let mut issues = Vec::new();
+                let cleaned_name = project_name.to_lowercase();
 
-                for issue in issues {
-                    writeln!(res, "\t- {issue}").expect("to write issue with project name");
+                // Were there any uppercase characters
+                if &cleaned_name != project_name {
+                    // Since there were uppercase characters, will the new name clash with any existing projects
+                    if let Some(other_account) = projects.get(&cleaned_name) {
+                        if other_account == account_name {
+                            issues.push(
+                                "changing to lower case will clash with same owner".to_string(),
+                            );
+                        } else {
+                            issues.push(format!(
+                            "changing to lower case will clash with another owner: {other_account}"
+                        ));
+                        }
+                    }
                 }
 
-                writeln!(res).expect("to write a new line");
+                let cleaned_underscore = cleaned_name.replace('_', "-");
+                // Were there any underscore cleanups
+                if cleaned_underscore != cleaned_name {
+                    // Since there were underscore cleanups, will the new name clash with any existing projects
+                    if let Some(other_account) = projects.get(&cleaned_underscore) {
+                        if other_account == account_name {
+                            issues
+                                .push("cleaning underscore will clash with same owner".to_string());
+                        } else {
+                            issues.push(format!(
+                            "cleaning underscore will clash with another owner: {other_account}"
+                        ));
+                        }
+                    }
+                }
+
+                let cleaned_separator_name = cleaned_underscore.trim_matches('-');
+                // Were there any dash cleanups
+                if cleaned_separator_name != cleaned_underscore {
+                    // Since there were dash cleanups, will the new name clash with any existing projects
+                    if let Some(other_account) = projects.get(cleaned_separator_name) {
+                        if other_account == account_name {
+                            issues.push("cleaning dashes will clash with same owner".to_string());
+                        } else {
+                            issues.push(format!(
+                                "cleaning dashes will clash with another owner: {other_account}"
+                            ));
+                        }
+                    }
+                }
+
+                // Are reserved words used
+                match cleaned_separator_name {
+                    "shuttleapp" | "shuttle" => issues.push("is a reserved name".to_string()),
+                    _ => {}
+                }
+
+                // Is it longer than 63 chars
+                if cleaned_separator_name.len() > 63 {
+                    issues.push("final name is too long".to_string());
+                }
+
+                // Only report of problem projects
+                if !issues.is_empty() {
+                    writeln!(res, "{project_name}")
+                        .expect("to write name of project name having issues");
+
+                    for issue in issues {
+                        writeln!(res, "\t- {issue}").expect("to write issue with project name");
+                    }
+
+                    writeln!(res).expect("to write a new line");
+                }
             }
 
             res

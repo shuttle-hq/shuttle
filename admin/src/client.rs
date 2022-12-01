@@ -1,6 +1,9 @@
 use anyhow::{Context, Result};
 use serde::{de::DeserializeOwned, Serialize};
-use shuttle_common::{models::ToJson, project::ProjectName};
+use shuttle_common::{
+    models::{project, ToJson},
+    project::ProjectName,
+};
 use tracing::trace;
 
 pub struct Client {
@@ -36,8 +39,8 @@ impl Client {
         self.post(&path, Some(credentials)).await
     }
 
-    pub async fn list_invalid_project_names(&self) -> Result<Vec<(String, Vec<String>)>> {
-        self.get("/admin/invalid-names").await
+    pub async fn get_projects(&self) -> Result<Vec<project::AdminResponse>> {
+        self.get("/admin/projects").await
     }
 
     async fn post<T: Serialize, R: DeserializeOwned>(

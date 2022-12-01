@@ -11,7 +11,7 @@ keywords = ["shuttle-service", "rds"]
 async-trait = "0.1.56"
 paste = "1.0.7"
 shuttle-service = { path = "../../service", version = "0.7.2", default-features = false }
-sqlx = { version = "0.6.0", features = ["runtime-tokio-native-tls"] }
+sqlx = { version = "0.6.2", features = ["runtime-tokio-native-tls"] }
 tokio = { version = "1.19.2", features = ["rt"] }
 
 [features]

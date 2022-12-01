@@ -109,7 +109,7 @@
 //!
 //! ```toml
 //! shuttle-shared-db = { version = "0.7.2", features = ["postgres"] }
-//! sqlx = { version = "0.6.1", features = ["runtime-tokio-native-tls", "postgres"] }
+//! sqlx = { version = "0.6.2", features = ["runtime-tokio-native-tls", "postgres"] }
 //! ```
 //!
 //! Now update the `#[shuttle_service::main]` function to take in a `PgPool`:
@@ -213,6 +213,7 @@
 use std::collections::BTreeMap;
 use std::future::Future;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::pin::Pin;
 
 pub use async_trait::async_trait;
@@ -263,6 +264,8 @@ extern crate shuttle_codegen;
 /// | `ShuttlePoem`                         | web-poem     | [poem](https://docs.rs/poem/1.3.35)         | 1.3.35     | [GitHub](https://github.com/shuttle-hq/examples/tree/main/poem/hello-world)           |
 /// | `Result<T, shuttle_service::Error>`   | web-tower    | [tower](https://docs.rs/tower/0.4.12)       | 0.14.12    | [GitHub](https://github.com/shuttle-hq/examples/tree/main/tower/hello-world)          |
 /// | `ShuttleSerenity`                     | bot-serenity | [serenity](https://docs.rs/serenity/0.11.5) | 0.11.5     | [GitHub](https://github.com/shuttle-hq/examples/tree/main/serenity/hello-world)       |
+/// | `ShuttleActixWeb`                     | web-actix-web| [actix-web](https://docs.rs/actix-web/4.2.1)| 4.2.1      | [GitHub](https://github.com/shuttle-hq/examples/tree/main/actix-web/hello-world)           |
+
 ///
 /// # Getting shuttle managed resources
 /// Shuttle is able to manage resource dependencies for you. These resources are passed in as inputs to your `#[shuttle_service::main]` function and are configured using attributes:
@@ -310,6 +313,12 @@ pub trait Factory: Send + Sync {
 
     /// Get the name for the service being deployed
     fn get_service_name(&self) -> ServiceName;
+
+    /// Get the path where the build files are stored for this service
+    fn get_build_path(&self) -> Result<PathBuf, crate::Error>;
+
+    /// Get the path where files can be stored for this deployment
+    fn get_storage_path(&self) -> Result<PathBuf, crate::Error>;
 }
 
 /// Used to get resources of type `T` from factories.
@@ -543,6 +552,24 @@ impl Service for sync_wrapper::SyncWrapper<axum::Router> {
         Ok(())
     }
 }
+
+#[cfg(feature = "web-actix-web")]
+#[async_trait]
+impl<F> Service for F
+where
+    F: FnOnce(&mut actix_web::web::ServiceConfig) + Sync + Send + Copy + Clone + 'static,
+{
+    async fn bind(self: Box<Self>, addr: SocketAddr) -> Result<(), Error> {
+        let srv = actix_web::HttpServer::new(move || actix_web::App::new().configure(*self))
+            .bind(addr)?
+            .run();
+        srv.await.map_err(error::CustomError::new)?;
+
+        Ok(())
+    }
+}
+#[cfg(feature = "web-actix-web")]
+pub type ShuttleActixWeb<F> = Result<F, Error>;
 
 #[cfg(feature = "web-axum")]
 pub type ShuttleAxum = Result<sync_wrapper::SyncWrapper<axum::Router>, Error>;

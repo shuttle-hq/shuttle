@@ -3,7 +3,6 @@ use std::time::Duration;
 pub use args::Args;
 use aws_config::timeout;
 use aws_sdk_rds::{error::ModifyDBInstanceErrorKind, model::DbInstance, types::SdkError, Client};
-use aws_smithy_types::tristate::TriState;
 pub use error::Error;
 use mongodb::{bson::doc, options::ClientOptions};
 use rand::Rng;
@@ -51,10 +50,10 @@ impl MyProvisioner {
         let mongodb_client = mongodb::Client::with_options(mongodb_options)?;
 
         // Default timeout is too long so lowering it
-        let api_timeout_config = timeout::Api::new()
-            .with_call_timeout(TriState::Set(Duration::from_secs(120)))
-            .with_call_attempt_timeout(TriState::Set(Duration::from_secs(120)));
-        let timeout_config = timeout::Config::new().with_api_timeouts(api_timeout_config);
+        let timeout_config = timeout::TimeoutConfig::builder()
+            .operation_timeout(Duration::from_secs(120))
+            .operation_attempt_timeout(Duration::from_secs(120))
+            .build();
 
         let aws_config = aws_config::from_env()
             .timeout_config(timeout_config)

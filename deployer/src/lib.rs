@@ -69,10 +69,10 @@ pub async fn start_proxy(
     fqdn: FQDN,
     address_getter: impl AddressGetter,
 ) {
-    let make_service = make_service_fn(|socket: &AddrStream| {
+    let make_service = make_service_fn(move |socket: &AddrStream| {
         let remote_address = socket.remote_addr();
-        let fqdn = format!(".{}", fqdn.to_string().trim_end_matches('.'));
         let address_getter = address_getter.clone();
+        let fqdn = fqdn.clone();
 
         async move {
             Ok::<_, Infallible>(service_fn(move |req| {

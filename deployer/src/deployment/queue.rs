@@ -1,4 +1,5 @@
 use super::deploy_layer::{Log, LogRecorder, LogType};
+use super::storage_manager::StorageManager;
 use super::{Built, QueueReceiver, RunSender, State};
 use crate::error::{Error, Result, TestError};
 use crate::persistence::{LogLevel, SecretRecorder};
@@ -31,22 +32,9 @@ pub async fn task(
     run_send: RunSender,
     log_recorder: impl LogRecorder,
     secret_recorder: impl SecretRecorder,
-    artifacts_path: PathBuf,
+    storage_manager: StorageManager,
 ) {
     info!("Queue task started");
-
-    // Path of the directory that contains extracted service Cargo projects.
-    let builds_path = artifacts_path.join("shuttle-builds");
-
-    // The directory in which compiled '.so' files are stored.
-    let libs_path = artifacts_path.join("shuttle-libs");
-
-    fs::create_dir_all(&builds_path)
-        .await
-        .expect("could not create builds directory");
-    fs::create_dir_all(&libs_path)
-        .await
-        .expect("could not create libs directory");
 
     while let Some(queued) = recv.recv().await {
         let id = queued.id;
@@ -56,8 +44,7 @@ pub async fn task(
         let run_send_cloned = run_send.clone();
         let log_recorder = log_recorder.clone();
         let secret_recorder = secret_recorder.clone();
-        let builds_path = builds_path.clone();
-        let libs_path = libs_path.clone();
+        let storage_manager = storage_manager.clone();
 
         tokio::spawn(async move {
             let parent_cx = global::get_text_map_propagator(|propagator| {
@@ -68,7 +55,7 @@ pub async fn task(
 
             async move {
                 match queued
-                    .handle(builds_path, libs_path, log_recorder, secret_recorder)
+                    .handle(storage_manager, log_recorder, secret_recorder)
                     .await
                 {
                     Ok(built) => promote_to_run(built, run_send_cloned).await,
@@ -112,17 +99,16 @@ pub struct Queued {
 }
 
 impl Queued {
-    #[instrument(skip(self, builds_path, libs_path, log_recorder, secret_recorder), fields(id = %self.id, state = %State::Building))]
+    #[instrument(skip(self, storage_manager, log_recorder, secret_recorder), fields(id = %self.id, state = %State::Building))]
     async fn handle(
         self,
-        builds_path: PathBuf,
-        libs_path: PathBuf,
+        storage_manager: StorageManager,
         log_recorder: impl LogRecorder,
         secret_recorder: impl SecretRecorder,
     ) -> Result<Built> {
         info!("Extracting received data");
 
-        let project_path = builds_path.join(&self.service_name);
+        let project_path = storage_manager.service_build_path(&self.service_name)?;
 
         extract_tar_gz_data(self.data.as_slice(), &project_path).await?;
 
@@ -182,7 +168,7 @@ impl Queued {
 
         info!("Moving built library");
 
-        store_lib(libs_path, so_path, &self.id).await?;
+        store_lib(&storage_manager, so_path, &self.id).await?;
 
         let built = Built {
             id: self.id,
@@ -247,8 +233,6 @@ async fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<
     let tar = GzDecoder::new(data);
     let mut archive = Archive::new(tar);
     archive.set_overwrite(true);
-
-    fs::create_dir_all(&dest).await?;
 
     // Clear directory first
     let mut entries = fs::read_dir(&dest).await?;
@@ -343,13 +327,13 @@ async fn run_pre_deploy_tests(
 }
 
 /// Store 'so' file in the libs folder
-#[instrument(skip(storage_dir_path, so_path, id))]
+#[instrument(skip(storage_manager, so_path, id))]
 async fn store_lib(
-    storage_dir_path: impl AsRef<Path>,
+    storage_manager: &StorageManager,
     so_path: impl AsRef<Path>,
     id: &Uuid,
 ) -> Result<()> {
-    let new_so_path = storage_dir_path.as_ref().join(id.to_string());
+    let new_so_path = storage_manager.deployment_library_path(id)?;
 
     fs::rename(so_path, new_so_path).await?;
 
@@ -364,7 +348,7 @@ mod tests {
     use tokio::fs;
     use uuid::Uuid;
 
-    use crate::error::TestError;
+    use crate::{deployment::storage_manager::StorageManager, error::TestError};
 
     #[tokio::test]
     async fn extract_tar_gz_data() {
@@ -478,22 +462,24 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
     async fn store_lib() {
         let libs_dir = TempDir::new("lib-store").unwrap();
         let libs_p = libs_dir.path();
+        let storage_manager = StorageManager::new(libs_p.to_path_buf());
 
-        let build_dir = TempDir::new("build-store").unwrap();
-        let build_p = build_dir.path();
+        let build_p = storage_manager.builds_path().unwrap();
 
         let so_path = build_p.join("xyz.so");
         let id = Uuid::new_v4();
 
         fs::write(&so_path, "barfoo").await.unwrap();
 
-        super::store_lib(&libs_p, &so_path, &id).await.unwrap();
+        super::store_lib(&storage_manager, &so_path, &id)
+            .await
+            .unwrap();
 
         // Old '.so' file gone?
         assert!(!so_path.exists());
 
         assert_eq!(
-            fs::read_to_string(libs_p.join(id.to_string()))
+            fs::read_to_string(libs_p.join("shuttle-libs").join(id.to_string()))
                 .await
                 .unwrap(),
             "barfoo"

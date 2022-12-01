@@ -8,24 +8,25 @@ use std::io;
 use std::pin::Pin;
 use std::str::FromStr;
 
+use acme::AcmeClientError;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use bollard::Docker;
-use custom_domain::AcmeClientError;
 use futures::prelude::*;
 use serde::{Deserialize, Deserializer, Serialize};
 use shuttle_common::models::error::{ApiError, ErrorKind};
 use tokio::sync::mpsc::error::SendError;
 use tracing::error;
 
+pub mod acme;
 pub mod api;
 pub mod args;
 pub mod auth;
-pub mod custom_domain;
 pub mod project;
 pub mod proxy;
 pub mod service;
 pub mod task;
+pub mod tls;
 pub mod worker;
 
 use crate::service::{ContainerSettings, GatewayService};
@@ -83,6 +84,12 @@ impl<T> From<SendError<T>> for Error {
     }
 }
 
+impl From<io::Error> for Error {
+    fn from(_: io::Error) -> Self {
+        Self::from(ErrorKind::Internal)
+    }
+}
+
 impl From<AcmeClientError> for Error {
     fn from(error: AcmeClientError) -> Self {
         Self::source(ErrorKind::Internal, error)
@@ -115,6 +122,12 @@ impl StdError for Error {}
 #[derive(Debug, sqlx::Type, Serialize, Clone, PartialEq, Eq)]
 #[sqlx(transparent)]
 pub struct ProjectName(String);
+
+impl ProjectName {
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
 
 impl<'de> Deserialize<'de> for ProjectName {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -313,11 +326,11 @@ pub mod tests {
     use sqlx::SqlitePool;
     use tokio::sync::mpsc::channel;
 
-    use crate::api::make_api;
-    use crate::args::{ContextArgs, StartArgs};
+    use crate::acme::AcmeClient;
+    use crate::api::latest::ApiBuilder;
+    use crate::args::{ContextArgs, StartArgs, UseTls};
     use crate::auth::User;
-    use crate::custom_domain::AcmeClient;
-    use crate::proxy::make_proxy;
+    use crate::proxy::UserServiceBuilder;
     use crate::service::{ContainerSettings, GatewayService, MIGRATIONS};
     use crate::worker::Worker;
     use crate::DockerContext;
@@ -535,8 +548,10 @@ pub mod tests {
 
             let control: i16 = Uniform::from(9000..10000).sample(&mut rand::thread_rng());
             let user = control + 1;
+            let bouncer = user + 1;
             let control = format!("127.0.0.1:{control}").parse().unwrap();
             let user = format!("127.0.0.1:{user}").parse().unwrap();
+            let bouncer = format!("127.0.0.1:{bouncer}").parse().unwrap();
 
             let prefix = format!(
                 "shuttle_test_{}_",
@@ -556,6 +571,8 @@ pub mod tests {
             let args = StartArgs {
                 control,
                 user,
+                bouncer,
+                use_tls: UseTls::Disable,
                 context: ContextArgs {
                     docker_host,
                     image,
@@ -599,12 +616,8 @@ pub mod tests {
             Client::new(addr).with_hyper_client(self.hyper.clone())
         }
 
-        pub fn fqdn(&self) -> String {
-            self.args()
-                .proxy_fqdn
-                .to_string()
-                .trim_end_matches('.')
-                .to_string()
+        pub fn fqdn(&self) -> FQDN {
+            self.args().proxy_fqdn
         }
 
         pub fn acme_client(&self) -> AcmeClient {
@@ -659,21 +672,26 @@ pub mod tests {
             }
         };
 
-        let api = make_api(Arc::clone(&service), world.acme_client(), log_out);
         let api_addr = format!("127.0.0.1:{}", base_port).parse().unwrap();
-        let serve_api = hyper::Server::bind(&api_addr).serve(api.into_make_service());
         let api_client = world.client(api_addr);
+        let api = ApiBuilder::new()
+            .with_service(Arc::clone(&service))
+            .with_sender(log_out)
+            .with_default_routes()
+            .binding_to(api_addr);
 
-        let proxy = make_proxy(Arc::clone(&service), world.acme_client(), world.fqdn());
-        let proxy_addr = format!("127.0.0.1:{}", base_port + 1).parse().unwrap();
-        let serve_proxy = hyper::Server::bind(&proxy_addr).serve(proxy);
-        let proxy_client = world.client(proxy_addr);
+        let user_addr: SocketAddr = format!("127.0.0.1:{}", base_port + 1).parse().unwrap();
+        let proxy_client = world.client(user_addr);
+        let user = UserServiceBuilder::new()
+            .with_service(Arc::clone(&service))
+            .with_public(world.fqdn())
+            .with_user_proxy_binding_to(user_addr);
 
         let _gateway = tokio::spawn(async move {
             tokio::select! {
                 _ = worker.start() => {},
-                _ = serve_api => {},
-                _ = serve_proxy => {}
+                _ = api.serve() => {},
+                _ = user.serve() => {}
             }
         });
 
@@ -780,6 +798,7 @@ pub mod tests {
             .request(
                 Request::get("/hello")
                     .header("Host", "matrix.test.shuttleapp.rs")
+                    .header("x-shuttle-project", "matrix")
                     .body(Body::empty())
                     .unwrap(),
             )

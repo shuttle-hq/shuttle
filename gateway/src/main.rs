@@ -1,21 +1,25 @@
 use clap::Parser;
+use fqdn::FQDN;
 use futures::prelude::*;
+use instant_acme::{AccountCredentials, ChallengeType};
 use opentelemetry::global;
-use shuttle_gateway::args::{Args, Commands, InitArgs};
+use shuttle_gateway::acme::{AcmeClient, CustomDomain};
+use shuttle_gateway::api::latest::{ApiBuilder, SVC_DEGRADED_THRESHOLD};
+use shuttle_gateway::args::StartArgs;
+use shuttle_gateway::args::{Args, Commands, InitArgs, UseTls};
 use shuttle_gateway::auth::Key;
-use shuttle_gateway::custom_domain::AcmeClient;
-use shuttle_gateway::proxy::make_proxy;
+use shuttle_gateway::proxy::UserServiceBuilder;
 use shuttle_gateway::service::{GatewayService, MIGRATIONS};
 use shuttle_gateway::task;
-use shuttle_gateway::worker::Worker;
-use shuttle_gateway::{api::make_api, args::StartArgs};
+use shuttle_gateway::tls::{make_tls_acceptor, ChainAndPrivateKey};
+use shuttle_gateway::worker::{Worker, WORKER_QUEUE_SIZE};
 use sqlx::migrate::MigrateDatabase;
 use sqlx::{query, Sqlite, SqlitePool};
-use std::io;
-use std::path::Path;
+use std::io::{self, Cursor};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{debug, error, info, trace};
+use tracing::{debug, error, info, info_span, trace, warn};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 #[tokio::main(flavor = "multi_thread")]
@@ -43,8 +47,11 @@ async fn main() -> io::Result<()> {
         .with(opentelemetry)
         .init();
 
-    if !Path::new(&args.state).exists() {
-        Sqlite::create_database(&args.state).await.unwrap();
+    let db_path = args.state.join("gateway.sqlite");
+    let db_uri = db_path.to_str().unwrap();
+
+    if !db_path.exists() {
+        Sqlite::create_database(db_uri).await.unwrap();
     }
 
     info!(
@@ -53,30 +60,24 @@ async fn main() -> io::Result<()> {
             .unwrap()
             .to_string_lossy()
     );
-    let db = SqlitePool::connect(&args.state).await.unwrap();
+    let db = SqlitePool::connect(db_uri).await.unwrap();
 
     MIGRATIONS.run(&db).await.unwrap();
 
     match args.command {
-        Commands::Start(start_args) => start(db, start_args).await,
+        Commands::Start(start_args) => start(db, args.state, start_args).await,
         Commands::Init(init_args) => init(db, init_args).await,
     }
 }
 
-async fn start(db: SqlitePool, args: StartArgs) -> io::Result<()> {
-    let fqdn = args
-        .context
-        .proxy_fqdn
-        .to_string()
-        .trim_end_matches('.')
-        .to_string();
+async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
     let gateway = Arc::new(GatewayService::init(args.context.clone(), db).await);
 
     let worker = Worker::new();
 
     let sender = worker.sender();
 
-    for (project_name, account_name) in gateway
+    for (project_name, _) in gateway
         .iter_projects()
         .await
         .expect("could not list projects")
@@ -85,7 +86,6 @@ async fn start(db: SqlitePool, args: StartArgs) -> io::Result<()> {
             .clone()
             .new_task()
             .project(project_name)
-            .account(account_name)
             .and_then(task::refresh())
             .send(&sender)
             .await
@@ -108,15 +108,33 @@ async fn start(db: SqlitePool, args: StartArgs) -> io::Result<()> {
         async move {
             loop {
                 tokio::time::sleep(Duration::from_secs(60)).await;
+                if sender.capacity() < WORKER_QUEUE_SIZE - SVC_DEGRADED_THRESHOLD {
+                    // if degraded, don't stack more health checks
+                    warn!(
+                        sender.capacity = sender.capacity(),
+                        "skipping health checks"
+                    );
+                    continue;
+                }
+
                 if let Ok(projects) = gateway.iter_projects().await {
-                    for (project_name, account_name) in projects {
-                        let _ = gateway
+                    let span = info_span!(
+                        "running health checks",
+                        healthcheck.num_projects = projects.len()
+                    );
+                    let _ = span.enter();
+                    for (project_name, _) in projects {
+                        if let Ok(handle) = gateway
                             .new_task()
                             .project(project_name)
-                            .account(account_name)
                             .and_then(task::check_health())
                             .send(&sender)
-                            .await;
+                            .await
+                        {
+                            // we wait for the check to be done before
+                            // queuing up the next one
+                            handle.await
+                        }
                     }
                 }
             }
@@ -125,20 +143,64 @@ async fn start(db: SqlitePool, args: StartArgs) -> io::Result<()> {
 
     let acme_client = AcmeClient::new();
 
-    let api = make_api(Arc::clone(&gateway), acme_client.clone(), sender);
+    let mut api_builder = ApiBuilder::new()
+        .with_service(Arc::clone(&gateway))
+        .with_sender(sender)
+        .binding_to(args.control);
 
-    let api_handle = tokio::spawn(axum::Server::bind(&args.control).serve(api.into_make_service()));
+    let mut user_builder = UserServiceBuilder::new()
+        .with_service(Arc::clone(&gateway))
+        .with_public(args.context.proxy_fqdn.clone())
+        .with_user_proxy_binding_to(args.user)
+        .with_bouncer(args.bouncer);
 
-    let proxy = make_proxy(gateway, acme_client, fqdn);
+    if let UseTls::Enable = args.use_tls {
+        let (resolver, tls_acceptor) = make_tls_acceptor();
 
-    let proxy_handle = tokio::spawn(hyper::Server::bind(&args.user).serve(proxy));
+        user_builder = user_builder
+            .with_acme(acme_client.clone())
+            .with_tls(tls_acceptor);
+
+        api_builder = api_builder.with_acme(acme_client.clone(), resolver.clone());
+
+        for CustomDomain {
+            fqdn,
+            certificate,
+            private_key,
+            ..
+        } in gateway.iter_custom_domains().await.unwrap()
+        {
+            let mut buf = Vec::new();
+            buf.extend(certificate.as_bytes());
+            buf.extend(private_key.as_bytes());
+            resolver
+                .serve_pem(&fqdn.to_string(), Cursor::new(buf))
+                .await
+                .unwrap();
+        }
+
+        tokio::spawn(async move {
+            // make sure we have a certificate for ourselves
+            let certs = init_certs(fs, args.context.proxy_fqdn.clone(), acme_client.clone()).await;
+            resolver.serve_default_der(certs).await.unwrap();
+        });
+    } else {
+        warn!("TLS is disabled in the proxy service. This is only acceptable in testing, and should *never* be used in deployments.");
+    };
+
+    let api_handle = api_builder
+        .with_default_routes()
+        .with_default_traces()
+        .serve();
+
+    let user_handle = user_builder.serve();
 
     debug!("starting up all services");
 
     tokio::select!(
         _ = worker_handle => info!("worker handle finished"),
         _ = api_handle => error!("api handle finished"),
-        _ = proxy_handle => error!("proxy handle finished"),
+        _ = user_handle => error!("user handle finished"),
         _ = ambulance_handle => error!("ambulance handle finished"),
     );
 
@@ -160,4 +222,48 @@ async fn init(db: SqlitePool, args: InitArgs) -> io::Result<()> {
 
     println!("`{}` created as super user with key: {key}", args.name);
     Ok(())
+}
+
+async fn init_certs<P: AsRef<Path>>(fs: P, public: FQDN, acme: AcmeClient) -> ChainAndPrivateKey {
+    let tls_path = fs.as_ref().join("ssl.pem");
+
+    match ChainAndPrivateKey::load_pem(&tls_path) {
+        Ok(valid) => valid,
+        Err(_) => {
+            let creds_path = fs.as_ref().join("acme.json");
+            warn!(
+                "no valid certificate found at {}, creating one...",
+                tls_path.display()
+            );
+
+            if !creds_path.exists() {
+                panic!(
+                    "no ACME credentials found at {}, cannot continue with certificate creation",
+                    creds_path.display()
+                );
+            }
+
+            let creds = std::fs::File::open(creds_path).unwrap();
+            let creds: AccountCredentials = serde_json::from_reader(&creds).unwrap();
+
+            let identifier = format!("*.{public}");
+
+            // Use ::Dns01 challenge because that's the only supported
+            // challenge type for wildcard domains
+            let (chain, private_key) = acme
+                .create_certificate(&identifier, ChallengeType::Dns01, creds)
+                .await
+                .unwrap();
+
+            let mut buf = Vec::new();
+            buf.extend(chain.as_bytes());
+            buf.extend(private_key.as_bytes());
+
+            let certs = ChainAndPrivateKey::parse_pem(Cursor::new(buf)).unwrap();
+
+            certs.clone().save_pem(&tls_path).unwrap();
+
+            certs
+        }
+    }
 }

@@ -16,5 +16,6 @@ exclude = [
   "resources/aws-rds",
   "resources/persist",
   "resources/secrets",
-  "resources/shared-db"
+  "resources/shared-db",
+  "resources/static-folder"
 ]

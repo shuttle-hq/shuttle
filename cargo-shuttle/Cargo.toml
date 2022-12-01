@@ -7,40 +7,41 @@ description = "A cargo command for the shuttle platform (https://www.shuttle.rs/
 homepage = "https://www.shuttle.rs"
 
 [dependencies]
-anyhow = "1.0.62"
-async-trait = "0.1.57"
+anyhow = "1.0.66"
+async-trait = "0.1.58"
 bollard = "0.13.0"
 cargo = "0.64.0"
-cargo-edit = { version = "0.10.4", features = ["cli"] }
-cargo_metadata = "0.15.0"
-chrono = "0.4.22"
+cargo-edit = { version = "0.11.6", features = ["cli"] }
+cargo_metadata = "0.15.2"
+chrono = "0.4.23"
 clap = { version = "3.2.17", features = ["derive", "env"] }
 clap_complete = "3.2.5"
 crossbeam-channel = "0.5.6"
 crossterm = "0.25.0"
 dirs = "4.0.0"
-flate2 = "1.0.24"
-futures = "0.3.23"
+flate2 = "1.0.25"
+futures = "0.3.25"
 headers = "0.3.8"
 indoc = "1.0.7"
 log = "0.4.17"
+openssl = { version = '0.10', optional = true }
 portpicker = "0.1.1"
-reqwest = { version = "0.11.11", features = ["json"] }
-reqwest-middleware = "0.1.6"
-reqwest-retry = "0.1.5"
-serde = { version = "1.0.143", features = ["derive"] }
-serde_json = "1.0.83"
-sqlx = { version = "0.6.1", features = ["runtime-tokio-native-tls", "postgres"] }
+reqwest = { version = "0.11.13", features = ["json"] }
+reqwest-middleware = "0.2.0"
+reqwest-retry = "0.2.0"
+serde = { version = "1.0.148", features = ["derive"] }
+serde_json = "1.0.89"
+sqlx = { version = "0.6.2", features = ["runtime-tokio-native-tls", "postgres"] }
 tar = "0.4.38"
-tokio = { version = "1.20.1", features = ["macros"] }
+tokio = { version = "1.22.0", features = ["macros"] }
 tokio-tungstenite = { version = "0.17.2", features = ["native-tls"] }
 toml = "0.5.9"
-toml_edit = "0.14.4"
-tracing = "0.1.35"
-tracing-subscriber = { version = "0.3.11", features = ["env-filter"] }
-url = "2.2.2"
-uuid = { version = "1.1.2", features = ["v4"] }
-webbrowser = "0.7.1"
+toml_edit = "0.15.0"
+tracing = "0.1.37"
+tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }
+url = "2.3.1"
+uuid = { version = "1.2.2", features = ["v4"] }
+webbrowser = "0.8.2"
 
 [dependencies.shuttle-common]
 version = "0.7.2"
@@ -54,6 +55,9 @@ path = "../resources/secrets"
 version = "0.7.2"
 path = "../service"
 features = ["loader"]
+
+[features]
+vendored-openssl = ["openssl/vendored"]
 
 [dev-dependencies]
 tempfile = "3.3.0"

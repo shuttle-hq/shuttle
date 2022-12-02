@@ -7882,15 +7882,3 @@ dependencies = [
  "cc",
  "libc",
 ]
-
-[[patch.unused]]
-name = "shuttle-aws-rds"
-version = "0.7.2"
-
-[[patch.unused]]
-name = "shuttle-persist"
-version = "0.7.2"
-
-[[patch.unused]]
-name = "shuttle-shared-db"
-version = "0.7.2"

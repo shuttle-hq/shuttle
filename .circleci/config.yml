@@ -292,7 +292,7 @@ jobs:
       - run: sudo apt update && sudo DEBIAN_FRONTEND=noninteractive apt install -y libssl-dev musl-tools clang
       - run:
           name: Install Rust
-          command: curl --proto '=https' --tlsv1.3 https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.63.0 --target << parameters.target >>
+          command: curl --proto '=https' --tlsv1.3 https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.65.0 --target << parameters.target >>
       - run:
           name: Build
           command: |
@@ -315,7 +315,7 @@ jobs:
           name: Install Rust
           command: |
             wget -OutFile "C:\rustup-init.exe" https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe
-            C:\rustup-init.exe -y --default-toolchain 1.63.0 --target x86_64-pc-windows-msvc
+            C:\rustup-init.exe -y --default-toolchain 1.65.0 --target x86_64-pc-windows-msvc
       - run:
           name: Build
           command: |
@@ -335,7 +335,7 @@ jobs:
       - checkout
       - run:
           name: Install Rust
-          command: curl --proto '=https' https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.63.0 --target x86_64-apple-darwin
+          command: curl --proto '=https' https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.65.0 --target x86_64-apple-darwin
       - run:
           name: Build
           command: |

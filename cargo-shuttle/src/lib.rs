@@ -28,7 +28,7 @@ use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use futures::StreamExt;
-use ignore::{Walk, WalkBuilder};
+use ignore::WalkBuilder;
 use shuttle_common::models::secret;
 use shuttle_service::loader::{build_crate, Loader};
 use shuttle_service::Logger;
@@ -528,6 +528,7 @@ pub enum CommandOutcome {
 #[cfg(test)]
 mod tests {
     use flate2::read::GzDecoder;
+    use shuttle_common::project::ProjectName;
     use tar::Archive;
     use tempfile::TempDir;
 
@@ -536,11 +537,29 @@ mod tests {
     use std::fs::{self, canonicalize, File};
     use std::io::Write;
     use std::path::PathBuf;
+    use std::str::FromStr;
 
     fn path_from_workspace_root(path: &str) -> PathBuf {
         PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
             .join("..")
             .join(path)
+    }
+
+    fn get_archive_entries(mut project_args: ProjectArgs) -> Vec<String> {
+        let mut shuttle = Shuttle::new().unwrap();
+        shuttle.load_project(&mut project_args).unwrap();
+
+        let archive = shuttle.make_archive().unwrap();
+
+        // Make sure the Secrets.toml file is not initially present
+        let tar = GzDecoder::new(&archive[..]);
+        let mut archive = Archive::new(tar);
+
+        archive
+            .entries()
+            .unwrap()
+            .map(|entry| entry.unwrap().path().unwrap().display().to_string())
+            .collect()
     }
 
     #[test]
@@ -581,25 +600,12 @@ mod tests {
             .write_all(b"MY_API_KEY = 'the contents of my API key'")
             .unwrap();
 
-        let mut project_args = ProjectArgs {
+        let project_args = ProjectArgs {
             working_directory,
             name: None,
         };
 
-        let mut shuttle = Shuttle::new().unwrap();
-        shuttle.load_project(&mut project_args).unwrap();
-
-        let archive = shuttle.make_archive().unwrap();
-
-        // Make sure the Secrets.toml file is not initially present
-        let tar = GzDecoder::new(&archive[..]);
-        let mut archive = Archive::new(tar);
-
-        let entries: Vec<_> = archive
-            .entries()
-            .unwrap()
-            .map(|entry| entry.unwrap().path().unwrap().display().to_string())
-            .collect();
+        let entries = get_archive_entries(project_args);
 
         assert_eq!(
             entries,
@@ -621,55 +627,17 @@ mod tests {
         let working_directory = tmp_dir.path();
 
         fs::write(working_directory.join(".env"), "API_KEY = 'blabla'").unwrap();
-        fs::write(
-            working_directory.join(".ignore"),
-            r#"
-.env
-"#,
-        )
-        .unwrap();
-        fs::create_dir_all(working_directory.join("src")).unwrap();
-        fs::write(
-            working_directory.join("src").join("lib.rs"),
-            "/// Empty file",
-        )
-        .unwrap();
-        fs::write(
-            working_directory.join("Cargo.toml"),
-            r#"
-[package]
-name = "secret"
-version = "0.0.1"
+        fs::write(working_directory.join(".ignore"), ".env").unwrap();
+        fs::write(working_directory.join("Cargo.toml"), "[package]").unwrap();
 
-[lib]
-"#,
-        )
-        .unwrap();
-
-        let mut project_args = ProjectArgs {
+        let project_args = ProjectArgs {
             working_directory: working_directory.to_path_buf(),
-            name: None,
+            name: Some(ProjectName::from_str("secret").unwrap()),
         };
 
-        let mut shuttle = Shuttle::new().unwrap();
-        shuttle.load_project(&mut project_args).unwrap();
+        let entries = get_archive_entries(project_args);
 
-        let archive = shuttle.make_archive().unwrap();
-
-        // Make sure the Secrets.toml file is not initially present
-        let tar = GzDecoder::new(&archive[..]);
-        let mut archive = Archive::new(tar);
-
-        let entries: Vec<_> = archive
-            .entries()
-            .unwrap()
-            .map(|entry| entry.unwrap().path().unwrap().display().to_string())
-            .collect();
-
-        assert_eq!(
-            entries,
-            vec!["Cargo.toml", "src/lib.rs", ".ignore", "Cargo.lock"]
-        );
+        assert_eq!(entries, vec!["Cargo.toml", ".ignore"]);
     }
 
     #[test]

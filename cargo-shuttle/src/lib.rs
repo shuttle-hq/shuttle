@@ -28,6 +28,7 @@ use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use futures::StreamExt;
+use ignore::overrides::OverrideBuilder;
 use ignore::WalkBuilder;
 use shuttle_common::models::secret;
 use shuttle_service::loader::{build_crate, Loader};
@@ -465,19 +466,26 @@ impl Shuttle {
         let enc = GzEncoder::new(Vec::new(), Compression::fast());
         let mut tar = tar::Builder::new(enc);
         let working_directory = self.ctx.working_directory();
+        let overrides = OverrideBuilder::new(working_directory)
+            .add("!target/")
+            .unwrap()
+            .build()
+            .unwrap();
 
-        for dir_entry in WalkBuilder::new(working_directory).hidden(false).build() {
+        for dir_entry in WalkBuilder::new(working_directory)
+            .hidden(false)
+            .overrides(overrides)
+            .build()
+        {
             let dir_entry = dir_entry.unwrap();
 
             if dir_entry.file_type().unwrap().is_dir() {
                 continue;
             }
 
-            if dir_entry.file_name() != "target" {
-                let path = dir_entry.path().strip_prefix(working_directory).unwrap();
+            let path = dir_entry.path().strip_prefix(working_directory).unwrap();
 
-                tar.append_path_with_name(dir_entry.path(), path).unwrap();
-            }
+            tar.append_path_with_name(dir_entry.path(), path).unwrap();
         }
 
         let enc = tar.into_inner().unwrap();
@@ -638,6 +646,25 @@ mod tests {
         let entries = get_archive_entries(project_args);
 
         assert_eq!(entries, vec!["Cargo.toml", ".ignore"]);
+    }
+
+    #[test]
+    fn make_archive_ignore_target_folder() {
+        let tmp_dir = TempDir::new().unwrap();
+        let working_directory = tmp_dir.path();
+
+        fs::create_dir_all(working_directory.join("target")).unwrap();
+        fs::write(working_directory.join("target").join("binary"), "12345").unwrap();
+        fs::write(working_directory.join("Cargo.toml"), "[package]").unwrap();
+
+        let project_args = ProjectArgs {
+            working_directory: working_directory.to_path_buf(),
+            name: Some(ProjectName::from_str("exclude_target").unwrap()),
+        };
+
+        let entries = get_archive_entries(project_args);
+
+        assert_eq!(entries, vec!["Cargo.toml"]);
     }
 
     #[test]

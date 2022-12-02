@@ -10,21 +10,16 @@ use std::io::Write;
 use std::io::{self, stdout};
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 pub use args::{Args, Command, DeployArgs, InitArgs, ProjectArgs, RunArgs};
 use args::{AuthArgs, LoginArgs};
-use cargo::core::resolver::CliFeatures;
-use cargo::core::Workspace;
-use cargo::ops::{PackageOpts, Packages};
 use cargo_metadata::Message;
 use clap::CommandFactory;
 use clap_complete::{generate, Shell};
 use config::RequestContext;
 use crossterm::style::Stylize;
 use factory::LocalFactory;
-use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use futures::StreamExt;
@@ -33,7 +28,7 @@ use ignore::WalkBuilder;
 use shuttle_common::models::secret;
 use shuttle_service::loader::{build_crate, Loader};
 use shuttle_service::Logger;
-use tar::{Archive, Builder};
+use tar::Builder;
 use tokio::sync::mpsc;
 use tracing::trace;
 use uuid::Uuid;
@@ -347,11 +342,7 @@ impl Shuttle {
     }
 
     async fn deploy(&self, args: DeployArgs, client: &Client) -> Result<CommandOutcome> {
-        let package_file = self
-            .run_cargo_package(args.allow_dirty)
-            .context("failed to package cargo project")?;
-
-        let data = self.package_secret(package_file)?;
+        let data = self.make_archive()?;
 
         let deployment = client
             .deploy(data, self.ctx.project_name(), args.no_test)
@@ -432,46 +423,19 @@ impl Shuttle {
         Ok(())
     }
 
-    // Packages the cargo project and returns a File to that file
-    fn run_cargo_package(&self, allow_dirty: bool) -> Result<File> {
-        let config = cargo::util::config::Config::default()?;
-
-        let working_directory = self.ctx.working_directory();
-        let path = working_directory.join("Cargo.toml");
-
-        let ws = Workspace::new(&path, &config)?;
-        let opts = PackageOpts {
-            config: &config,
-            list: false,
-            check_metadata: true,
-            allow_dirty,
-            keep_going: false,
-            verify: false,
-            jobs: None,
-            to_package: Packages::Default,
-            targets: vec![],
-            cli_features: CliFeatures {
-                features: Rc::new(Default::default()),
-                all_features: false,
-                uses_default_features: true,
-            },
-        };
-
-        let locks = cargo::ops::package(&ws, &opts)?.expect("unwrap ok here");
-        let owned = locks.get(0).unwrap().file().try_clone()?;
-        Ok(owned)
-    }
-
     fn make_archive(&self) -> Result<Vec<u8>> {
-        let enc = GzEncoder::new(Vec::new(), Compression::fast());
-        let mut tar = tar::Builder::new(enc);
+        let encoder = GzEncoder::new(Vec::new(), Compression::fast());
+        let mut tar = Builder::new(encoder);
+
         let working_directory = self.ctx.working_directory();
+        let base_directory = working_directory.parent().unwrap();
+
+        // Make sure the target folder is excluded at all times
         let overrides = OverrideBuilder::new(working_directory)
             .add("!target/")
             .unwrap()
             .build()
             .unwrap();
-        let base_directory = working_directory.parent().unwrap();
 
         for dir_entry in WalkBuilder::new(working_directory)
             .hidden(false)
@@ -480,6 +444,7 @@ impl Shuttle {
         {
             let dir_entry = dir_entry.unwrap();
 
+            // It's not possible to add a directory to an archive
             if dir_entry.file_type().unwrap().is_dir() {
                 continue;
             }
@@ -489,48 +454,16 @@ impl Shuttle {
             tar.append_path_with_name(dir_entry.path(), path).unwrap();
         }
 
+        // Make sure to add any `Secrets.toml` files
         let secrets_path = self.ctx.working_directory().join("Secrets.toml");
         if secrets_path.exists() {
             tar.append_path_with_name(secrets_path, Path::new("shuttle").join("Secrets.toml"))?;
         }
 
-        let enc = tar.into_inner().unwrap();
-        let bytes = enc.finish().unwrap();
+        let encoder = tar.into_inner().unwrap();
+        let bytes = encoder.finish().unwrap();
 
         Ok(bytes)
-    }
-
-    fn package_secret(&self, file: File) -> Result<Vec<u8>> {
-        let tar_read = GzDecoder::new(file);
-        let mut archive_read = Archive::new(tar_read);
-        let tar_write = GzEncoder::new(Vec::new(), Compression::best());
-        let mut archive_write = Builder::new(tar_write);
-
-        for entry in archive_read.entries()? {
-            let entry = entry?;
-            let path = entry.path()?;
-            let file_name = path.components().nth(1).unwrap();
-
-            if file_name.as_os_str() == "Secrets.toml" {
-                println!(
-                    "{}: you may want to fix this",
-                    "Secrets.toml might be tracked by your version control".yellow()
-                );
-            }
-
-            archive_write.append(&entry.header().clone(), entry)?;
-        }
-
-        let secrets_path = self.ctx.working_directory().join("Secrets.toml");
-        if secrets_path.exists() {
-            archive_write
-                .append_path_with_name(secrets_path, Path::new("shuttle").join("Secrets.toml"))?;
-        }
-
-        let encoder = archive_write.into_inner()?;
-        let data = encoder.finish()?;
-
-        Ok(data)
     }
 }
 
@@ -548,8 +481,7 @@ mod tests {
 
     use crate::args::ProjectArgs;
     use crate::Shuttle;
-    use std::fs::{self, canonicalize, File};
-    use std::io::Write;
+    use std::fs::{self, canonicalize};
     use std::path::PathBuf;
     use std::str::FromStr;
 
@@ -682,65 +614,5 @@ mod tests {
         let entries = get_archive_entries(project_args);
 
         assert_eq!(entries, vec!["Cargo.toml"]);
-    }
-
-    #[test]
-    fn secrets_file_is_archived() {
-        let working_directory =
-            canonicalize(path_from_workspace_root("examples/rocket/secrets")).unwrap();
-
-        let mut secrets_file = File::create(working_directory.join("Secrets.toml")).unwrap();
-        secrets_file
-            .write_all(b"MY_API_KEY = 'the contents of my API key'")
-            .unwrap();
-
-        let mut project_args = ProjectArgs {
-            working_directory,
-            name: None,
-        };
-
-        let mut shuttle = Shuttle::new().unwrap();
-        shuttle.load_project(&mut project_args).unwrap();
-
-        let file = shuttle.run_cargo_package(true).unwrap();
-
-        // Make sure the Secrets.toml file is not initially present
-        let tar = GzDecoder::new(file);
-        let mut archive = Archive::new(tar);
-
-        for entry in archive.entries().unwrap() {
-            let entry = entry.unwrap();
-            let path = entry.path().unwrap();
-            let name = path.components().nth(1).unwrap().as_os_str();
-
-            assert!(
-                name != "Secrets.toml",
-                "no Secrets.toml file should be in the initial archive: {:?}",
-                path
-            );
-        }
-
-        let file = shuttle.run_cargo_package(true).unwrap();
-        let new_file = shuttle.package_secret(file).unwrap();
-        let mut found_secrets_file = false;
-
-        // This time the Secrets.toml file should be present
-        let tar = flate2::bufread::GzDecoder::new(&new_file[..]);
-        let mut archive = Archive::new(tar);
-
-        for entry in archive.entries().unwrap() {
-            let entry = entry.unwrap();
-            let path = entry.path().unwrap();
-            let name = path.components().nth(1).unwrap().as_os_str();
-
-            if name == "Secrets.toml" {
-                found_secrets_file = true;
-            }
-        }
-
-        assert!(
-            found_secrets_file,
-            "Secrets.toml was not added to the archive"
-        );
     }
 }

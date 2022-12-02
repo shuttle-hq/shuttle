@@ -129,9 +129,6 @@ pub struct AuthArgs {
 
 #[derive(Parser)]
 pub struct DeployArgs {
-    /// allow dirty working directories to be packaged
-    #[clap(long)]
-    pub allow_dirty: bool,
     /// allows pre-deploy tests to be skipped
     #[clap(long)]
     pub no_test: bool,

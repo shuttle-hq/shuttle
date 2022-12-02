@@ -28,6 +28,7 @@ use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use futures::StreamExt;
+use ignore::{Walk, WalkBuilder};
 use shuttle_common::models::secret;
 use shuttle_service::loader::{build_crate, Loader};
 use shuttle_service::Logger;
@@ -463,18 +464,19 @@ impl Shuttle {
     fn make_archive(&self) -> Result<Vec<u8>> {
         let enc = GzEncoder::new(Vec::new(), Compression::fast());
         let mut tar = tar::Builder::new(enc);
+        let working_directory = self.ctx.working_directory();
 
-        for dir_entry in std::fs::read_dir(self.ctx.working_directory()).unwrap() {
+        for dir_entry in WalkBuilder::new(working_directory).hidden(false).build() {
             let dir_entry = dir_entry.unwrap();
 
-            if dir_entry.file_name() != "target" {
-                let path = dir_entry.file_name().to_str().unwrap().to_string();
+            if dir_entry.file_type().unwrap().is_dir() {
+                continue;
+            }
 
-                if dir_entry.file_type().unwrap().is_dir() {
-                    tar.append_dir_all(path, dir_entry.path()).unwrap();
-                } else {
-                    tar.append_path_with_name(dir_entry.path(), path).unwrap();
-                }
+            if dir_entry.file_name() != "target" {
+                let path = dir_entry.path().strip_prefix(working_directory).unwrap();
+
+                tar.append_path_with_name(dir_entry.path(), path).unwrap();
             }
         }
 
@@ -527,10 +529,11 @@ pub enum CommandOutcome {
 mod tests {
     use flate2::read::GzDecoder;
     use tar::Archive;
+    use tempfile::TempDir;
 
     use crate::args::ProjectArgs;
     use crate::Shuttle;
-    use std::fs::{canonicalize, File};
+    use std::fs::{self, canonicalize, File};
     use std::io::Write;
     use std::path::PathBuf;
 
@@ -601,15 +604,71 @@ mod tests {
         assert_eq!(
             entries,
             vec![
-                "src/",
                 "src/lib.rs",
                 "README.md",
-                "Secrets.toml",
                 "Cargo.toml",
                 "Shuttle.toml",
                 "Secrets.toml.example",
-                ".gitignore"
+                ".gitignore",
+                "Secrets.toml",
             ]
+        );
+    }
+
+    #[test]
+    fn make_archive_respect_ignore() {
+        let tmp_dir = TempDir::new().unwrap();
+        let working_directory = tmp_dir.path();
+
+        fs::write(working_directory.join(".env"), "API_KEY = 'blabla'").unwrap();
+        fs::write(
+            working_directory.join(".ignore"),
+            r#"
+.env
+"#,
+        )
+        .unwrap();
+        fs::create_dir_all(working_directory.join("src")).unwrap();
+        fs::write(
+            working_directory.join("src").join("lib.rs"),
+            "/// Empty file",
+        )
+        .unwrap();
+        fs::write(
+            working_directory.join("Cargo.toml"),
+            r#"
+[package]
+name = "secret"
+version = "0.0.1"
+
+[lib]
+"#,
+        )
+        .unwrap();
+
+        let mut project_args = ProjectArgs {
+            working_directory: working_directory.to_path_buf(),
+            name: None,
+        };
+
+        let mut shuttle = Shuttle::new().unwrap();
+        shuttle.load_project(&mut project_args).unwrap();
+
+        let archive = shuttle.make_archive().unwrap();
+
+        // Make sure the Secrets.toml file is not initially present
+        let tar = GzDecoder::new(&archive[..]);
+        let mut archive = Archive::new(tar);
+
+        let entries: Vec<_> = archive
+            .entries()
+            .unwrap()
+            .map(|entry| entry.unwrap().path().unwrap().display().to_string())
+            .collect();
+
+        assert_eq!(
+            entries,
+            vec!["Cargo.toml", "src/lib.rs", ".ignore", "Cargo.lock"]
         );
     }
 

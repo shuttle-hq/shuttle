@@ -471,6 +471,7 @@ impl Shuttle {
             .unwrap()
             .build()
             .unwrap();
+        let base_directory = working_directory.parent().unwrap();
 
         for dir_entry in WalkBuilder::new(working_directory)
             .hidden(false)
@@ -483,9 +484,14 @@ impl Shuttle {
                 continue;
             }
 
-            let path = dir_entry.path().strip_prefix(working_directory).unwrap();
+            let path = dir_entry.path().strip_prefix(base_directory).unwrap();
 
             tar.append_path_with_name(dir_entry.path(), path).unwrap();
+        }
+
+        let secrets_path = self.ctx.working_directory().join("Secrets.toml");
+        if secrets_path.exists() {
+            tar.append_path_with_name(secrets_path, Path::new("shuttle").join("Secrets.toml"))?;
         }
 
         let enc = tar.into_inner().unwrap();
@@ -566,7 +572,17 @@ mod tests {
         archive
             .entries()
             .unwrap()
-            .map(|entry| entry.unwrap().path().unwrap().display().to_string())
+            .map(|entry| {
+                entry
+                    .unwrap()
+                    .path()
+                    .unwrap()
+                    .components()
+                    .skip(1)
+                    .collect::<PathBuf>()
+                    .display()
+                    .to_string()
+            })
             .collect()
     }
 
@@ -599,14 +615,15 @@ mod tests {
     }
 
     #[test]
-    fn make_archive() {
+    fn make_archive_include_secrets() {
         let working_directory =
             canonicalize(path_from_workspace_root("examples/rocket/secrets")).unwrap();
 
-        let mut secrets_file = File::create(working_directory.join("Secrets.toml")).unwrap();
-        secrets_file
-            .write_all(b"MY_API_KEY = 'the contents of my API key'")
-            .unwrap();
+        fs::write(
+            working_directory.join("Secrets.toml"),
+            "MY_API_KEY = 'the contents of my API key'",
+        )
+        .unwrap();
 
         let project_args = ProjectArgs {
             working_directory,

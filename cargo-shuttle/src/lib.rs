@@ -11,7 +11,7 @@ use std::io::{self, stdout};
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 pub use args::{Args, Command, DeployArgs, InitArgs, ProjectArgs, RunArgs};
 use args::{AuthArgs, LoginArgs};
 use cargo_metadata::Message;
@@ -428,30 +428,36 @@ impl Shuttle {
         let mut tar = Builder::new(encoder);
 
         let working_directory = self.ctx.working_directory();
-        let base_directory = working_directory.parent().unwrap();
+        let base_directory = working_directory
+            .parent()
+            .context("get parent directory of crate")?;
 
         // Make sure the target folder is excluded at all times
         let overrides = OverrideBuilder::new(working_directory)
             .add("!target/")
-            .unwrap()
+            .context("add `!target/` override")?
             .build()
-            .unwrap();
+            .context("build an override")?;
 
         for dir_entry in WalkBuilder::new(working_directory)
             .hidden(false)
             .overrides(overrides)
             .build()
         {
-            let dir_entry = dir_entry.unwrap();
+            let dir_entry = dir_entry.context("get directory entry")?;
 
             // It's not possible to add a directory to an archive
-            if dir_entry.file_type().unwrap().is_dir() {
+            if dir_entry.file_type().context("get file type")?.is_dir() {
                 continue;
             }
 
-            let path = dir_entry.path().strip_prefix(base_directory).unwrap();
+            let path = dir_entry
+                .path()
+                .strip_prefix(base_directory)
+                .context("strip the base of the archive entry")?;
 
-            tar.append_path_with_name(dir_entry.path(), path).unwrap();
+            tar.append_path_with_name(dir_entry.path(), path)
+                .context("archive entry")?;
         }
 
         // Make sure to add any `Secrets.toml` files
@@ -460,8 +466,8 @@ impl Shuttle {
             tar.append_path_with_name(secrets_path, Path::new("shuttle").join("Secrets.toml"))?;
         }
 
-        let encoder = tar.into_inner().unwrap();
-        let bytes = encoder.finish().unwrap();
+        let encoder = tar.into_inner().context("get encoder from tar archive")?;
+        let bytes = encoder.finish().context("finish up encoder")?;
 
         Ok(bytes)
     }

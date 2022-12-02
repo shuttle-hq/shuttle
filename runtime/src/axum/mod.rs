@@ -1,10 +1,9 @@
 use std::convert::Infallible;
-use std::fs::File;
 use std::io::{BufReader, Read, Write};
 use std::net::{Ipv4Addr, SocketAddr};
 use std::ops::DerefMut;
 use std::os::unix::prelude::RawFd;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
@@ -136,7 +135,7 @@ struct RouterBuilder {
     engine: Engine,
     store: Store<WasiCtx>,
     linker: Linker<WasiCtx>,
-    src: Option<File>,
+    src: Option<PathBuf>,
 }
 
 impl RouterBuilder {
@@ -163,14 +162,13 @@ impl RouterBuilder {
     }
 
     pub fn src<P: AsRef<Path>>(mut self, src: P) -> Self {
-        self.src = Some(File::open(src).unwrap());
+        self.src = Some(src.as_ref().to_path_buf());
         self
     }
 
     pub fn build(mut self) -> Router {
-        let mut buf = Vec::new();
-        self.src.unwrap().read_to_end(&mut buf).unwrap();
-        let module = Module::new(&self.engine, buf).unwrap();
+        let file = self.src.unwrap();
+        let module = Module::from_file(&self.engine, file).unwrap();
 
         for export in module.exports() {
             println!("export: {}", export.name());

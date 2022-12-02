@@ -97,7 +97,7 @@ pub async fn handle(
 
     match reverse_proxy(remote_address.ip(), &proxy_address.to_string(), req).await {
         Ok(response) => {
-            Span::current().record("http.status_code", &response.status().as_u16());
+            Span::current().record("http.status_code", response.status().as_u16());
             Ok(response)
         }
         Err(error) => {

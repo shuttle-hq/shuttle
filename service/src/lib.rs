@@ -578,7 +578,7 @@ pub type ShuttleAxum = Result<sync_wrapper::SyncWrapper<axum::Router>, Error>;
 #[async_trait]
 impl Service for salvo::Router {
     async fn bind(mut self: Box<Self>, addr: SocketAddr) -> Result<(), error::Error> {
-        salvo::Server::new(salvo::listener::TcpListener::bind(&addr))
+        salvo::Server::new(salvo::listener::TcpListener::bind(addr))
             .serve(self)
             .await;
 

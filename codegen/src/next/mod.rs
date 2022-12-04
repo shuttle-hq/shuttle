@@ -56,6 +56,9 @@ impl Endpoint {
             // The endpoint ident should be the last segment in the path
             if let Some(segment) = item.attrs[index].path.segments.last() {
                 if segment.ident.to_string().as_str() == "endpoint" {
+                    // TODO: we should allow multiple endpoint attributes per handler.
+                    // We could refactor this to return a Vec<Endpoint> and then check
+                    // that the combination of endpoints is valid.
                     if endpoint_index.is_some() {
                         emit_error!(
                             item,

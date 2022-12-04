@@ -1,11 +1,190 @@
 use proc_macro_error::emit_error;
 use quote::{quote, ToTokens};
-use syn::{Ident, LitStr};
+use syn::{
+    parenthesized, parse::Parse, parse2, punctuated::Punctuated, token::Paren, Expr, File, Ident,
+    Item, ItemFn, Lit, LitStr, Token,
+};
 
+#[derive(Debug, Eq, PartialEq)]
 struct Endpoint {
     route: LitStr,
     method: Ident,
     function: Ident,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct Parameter {
+    key: Ident,
+    equals: Token![=],
+    value: Expr,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct Params {
+    params: Punctuated<Parameter, Token![,]>,
+    paren_token: Paren,
+}
+
+impl Parse for Parameter {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        Ok(Self {
+            key: input.parse()?,
+            equals: input.parse()?,
+            value: input.parse()?,
+        })
+    }
+}
+
+impl Parse for Params {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let content;
+        Ok(Self {
+            paren_token: parenthesized!(content in input),
+            params: content.parse_terminated(Parameter::parse)?,
+        })
+    }
+}
+
+impl Endpoint {
+    fn from_item_fn(item: &mut ItemFn) -> Option<Self> {
+        let function = item.sig.ident.clone();
+
+        let mut endpoint_index = None;
+
+        // Find the index of an attribute that is an endpoint
+        for index in 0..item.attrs.len() {
+            // The endpoint ident should be the last segment in the path
+            if let Some(segment) = item.attrs[index].path.segments.last() {
+                if segment.ident.to_string().as_str() == "endpoint" {
+                    // TODO: we should allow multiple endpoint attributes per handler.
+                    // We could refactor this to return a Vec<Endpoint> and then check
+                    // that the combination of endpoints is valid.
+                    if endpoint_index.is_some() {
+                        emit_error!(
+                            item,
+                            "extra endpoint attribute";
+                            hint = "There should only be one endpoint annotation per handler function."
+                        );
+                        return None;
+                    }
+                    endpoint_index = Some(index);
+                }
+            } else {
+                return None;
+            }
+        }
+
+        // Strip the endpoint attribute if it exists
+        let endpoint = if let Some(index) = endpoint_index {
+            item.attrs.remove(index)
+        } else {
+            // This item does not have an endpoint attribute
+            return None;
+        };
+
+        // Parse the endpoint's parameters
+        let params: Params = match parse2(endpoint.tokens) {
+            Ok(params) => params,
+            Err(err) => {
+                // This will error on invalid parameter syntax
+                emit_error!(
+                    err.span(),
+                    err
+                );
+                return None;
+            }
+        };
+
+        // We'll use the paren span for errors later
+        let paren = params.paren_token;
+
+        if params.params.is_empty() {
+            emit_error!(
+                paren.span,
+                "missing endpoint arguments";
+                hint = "The endpoint takes two arguments: `endpoint(method = get, route = \"/hello\")`"
+            );
+            return None;
+        }
+
+        // At this point an endpoint with params and valid syntax exists, so we will check for
+        // all errors before returning
+        let mut has_err = false;
+
+        let mut route = None;
+        let mut method = None;
+
+        for Parameter { key, value, .. } in params.params {
+            let key_ident = key.clone();
+            match key.to_string().as_str() {
+                "method" => {
+                    if method.is_some() {
+                        emit_error!(
+                            key_ident,
+                            "duplicate endpoint method";
+                            hint = "The endpoint `method` should only be set once."
+                        );
+                        has_err = true;
+                    }
+                    if let Expr::Path(path) = value {
+                        method = Some(path.path.segments[0].ident.clone());
+                    };
+                }
+                "route" => {
+                    if route.is_some() {
+                        emit_error!(
+                            key_ident,
+                            "duplicate endpoint route";
+                            hint = "The endpoint `route` should only be set once."
+                        );
+                        has_err = true;
+                    }
+                    if let Expr::Lit(literal) = value {
+                        if let Some(Lit::Str(literal)) = Some(literal.lit) {
+                            route = Some(literal);
+                        }
+                    }
+                }
+                _ => {
+                    emit_error!(
+                        key_ident,
+                        "invalid endpoint argument";
+                        hint = "Only `method` and `route` are valid endpoint arguments."
+                    );
+                    has_err = true;
+                }
+            }
+        }
+
+        if route.is_none() {
+            emit_error!(
+                paren.span,
+                "no route provided";
+                hint = "Add a route to your endpoint: `route = \"/hello\")`"
+            );
+            has_err = true;
+        };
+
+        if method.is_none() {
+            emit_error!(
+                paren.span,
+                "no method provided";
+                hint = "Add a method to your endpoint: `method = get`"
+            );
+            has_err = true;
+        };
+
+        if has_err {
+            None
+        } else {
+            // Safe to unwrap because `has_err` is true if `route` or `method` is `None`
+            Some(Endpoint {
+                route: route.unwrap(),
+                method: method.unwrap(),
+                function,
+            })
+        }
+    }
 }
 
 impl ToTokens for Endpoint {
@@ -33,8 +212,28 @@ impl ToTokens for Endpoint {
     }
 }
 
+#[derive(Debug, Eq, PartialEq)]
 pub(crate) struct App {
     endpoints: Vec<Endpoint>,
+}
+
+impl App {
+    pub(crate) fn from_file(file: &mut File) -> Self {
+        let endpoints = file
+            .items
+            .iter_mut()
+            .filter_map(|item| {
+                if let Item::Fn(item_fn) = item {
+                    Some(item_fn)
+                } else {
+                    None
+                }
+            })
+            .filter_map(Endpoint::from_item_fn)
+            .collect();
+
+        Self { endpoints }
+    }
 }
 
 impl ToTokens for App {
@@ -62,6 +261,7 @@ impl ToTokens for App {
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn wasi_bindings(app: App) -> proc_macro2::TokenStream {
     quote!(
         #app
@@ -133,9 +333,9 @@ mod tests {
     use quote::quote;
     use syn::parse_quote;
 
-    use crate::next::App;
+    use crate::next::{App, Parameter};
 
-    use super::Endpoint;
+    use super::{Endpoint, Params};
 
     #[test]
     fn endpoint_to_token() {
@@ -188,5 +388,142 @@ mod tests {
         );
 
         assert_eq!(actual.to_string(), expected.to_string());
+    }
+
+    #[test]
+    fn parse_endpoint() {
+        let cases = vec![
+            (
+                parse_quote! {
+                #[shuttle_codegen::endpoint(method = get, route = "/hello")]
+                async fn hello() -> &'static str {
+                    "Hello, World!"
+                }},
+                Some(Endpoint {
+                    route: parse_quote!("/hello"),
+                    method: parse_quote!(get),
+                    function: parse_quote!(hello),
+                }),
+                0,
+            ),
+            (
+                parse_quote! {
+                #[doc = r" This attribute is not an endpoint so keep it"]
+                #[shuttle_codegen::endpoint(method = get, route = "/hello")]
+                async fn hello() -> &'static str {
+                    "Hello, World!"
+                }},
+                Some(Endpoint {
+                    route: parse_quote!("/hello"),
+                    method: parse_quote!(get),
+                    function: parse_quote!(hello),
+                }),
+                1,
+            ),
+            (
+                parse_quote! {
+                    /// This attribute is not an endpoint so keep it
+                    async fn say_hello() -> &'static str {
+                        "Hello, World!"
+                    }
+                },
+                None,
+                1,
+            ),
+        ];
+
+        for (mut input, expected, remaining_attributes) in cases {
+            let actual = Endpoint::from_item_fn(&mut input);
+
+            assert_eq!(actual, expected);
+
+            // Verify that only endpoint attributes have been stripped
+            assert_eq!(input.attrs.len(), remaining_attributes);
+        }
+    }
+
+    #[test]
+    fn parse_parameter() {
+        // test method param
+        let cases: Vec<(Parameter, Parameter)> = vec![
+            (
+                // parsing an identifier
+                parse_quote! {
+                    method = get
+                },
+                Parameter {
+                    key: parse_quote!(method),
+                    equals: parse_quote!(=),
+                    value: parse_quote!(get),
+                },
+            ),
+            (
+                // parsing a string literal
+                parse_quote! {
+                    route = "/hello"
+                },
+                Parameter {
+                    key: parse_quote!(route),
+                    equals: parse_quote!(=),
+                    value: parse_quote!("/hello"),
+                },
+            ),
+        ];
+        for (actual, expected) in cases {
+            assert_eq!(actual, expected);
+        }
+    }
+
+    #[test]
+    fn parse_params() {
+        let actual: Params = parse_quote![(method = get, route = "/hello")];
+
+        let mut expected = Params {
+            params: Default::default(),
+            paren_token: Default::default(),
+        };
+        expected.params.push(parse_quote!(method = get));
+        expected.params.push(parse_quote!(route = "/hello"));
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn parse_app() {
+        let mut input = parse_quote! {
+            #[shuttle_codegen::endpoint(method = get, route = "/hello")]
+            async fn hello() -> &'static str {
+                "Hello, World!"
+            }
+
+            #[shuttle_codegen::endpoint(method = post, route = "/goodbye")]
+            async fn goodbye() -> &'static str {
+                "Goodbye, World!"
+            }
+        };
+
+        let actual = App::from_file(&mut input);
+        let expected = App {
+            endpoints: vec![
+                Endpoint {
+                    route: parse_quote!("/hello"),
+                    method: parse_quote!(get),
+                    function: parse_quote!(hello),
+                },
+                Endpoint {
+                    route: parse_quote!("/goodbye"),
+                    method: parse_quote!(post),
+                    function: parse_quote!(goodbye),
+                },
+            ],
+        };
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn ui() {
+        let t = trybuild::TestCases::new();
+        t.compile_fail("tests/ui/next/*.rs");
     }
 }

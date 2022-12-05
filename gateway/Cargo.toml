@@ -44,7 +44,8 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 uuid = { workspace = true, features = [ "v4" ] }
 
 [dependencies.shuttle-common]
-workspace = true
+version = "0.7.3"
+path = "../common"
 features = ["backend"]
 
 [dev-dependencies]

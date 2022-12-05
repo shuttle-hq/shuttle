@@ -48,11 +48,13 @@ optional = true
 features = ["tokio1"]
 
 [dependencies.shuttle-codegen]
-workspace = true 
+version = "0.7.2"
+path = "../codegen"
 optional = true
 
 [dependencies.shuttle-common]
-workspace = true
+version = "0.7.3"
+path = "../common"
 default-features = false
 
 [dev-dependencies]

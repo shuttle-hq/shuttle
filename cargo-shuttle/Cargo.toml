@@ -46,14 +46,16 @@ uuid = { workspace = true, features = ["v4"] }
 webbrowser = "0.8.2"
 
 [dependencies.shuttle-common]
-workspace = true
+version = "0.7.3"
+path = "../common"
 
 [dependencies.shuttle-secrets]
 version = "0.7.2"
 path = "../resources/secrets"
 
 [dependencies.shuttle-service]
-workspace = true
+version = "0.7.2"
+path = "../service"
 features = ["loader"]
 
 [features]

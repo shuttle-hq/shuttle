@@ -16,4 +16,5 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [dependencies.shuttle-common]
-workspace = true
+version = "0.7.3"
+path = "../common"

@@ -23,7 +23,8 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
 [dependencies.shuttle-proto]
-workspace = true
+version = "0.7.3"
+path = "../proto"
 
 [dev-dependencies]
 ctor = "0.1.26"

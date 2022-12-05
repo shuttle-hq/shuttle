@@ -29,14 +29,13 @@ edition = "2021"
 license = "Apache-2.0"
 
 [workspace.dependencies]
-# TODO: these are different versions, and setting their version here can't 
-# be done without them using the worspace version. Using the workspace version 
-# means the resources can't resolve their dependency on shuttle-service. Look at
-# other repos that have implemented inheritance to figure out a solution for this.
-shuttle-common = { path = "common" }
-shuttle-proto = { path = "proto" }
-shuttle-service = { path = "service" }
-shuttle-codegen = { path = "codegen" }
+# TODO: these are different versions, so we end up setting the version in two
+# places for some of them. Using the workspace version also means the resources 
+# can't resolve their dependency on shuttle-service. 
+# shuttle-common = { path = "common" }
+# shuttle-proto = { path = "proto" }
+# shuttle-service = { path = "service" }
+# shuttle-codegen = { path = "codegen" }
 
 anyhow = "1.0.66"
 async-trait = "0.1.58"

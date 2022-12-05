@@ -21,22 +21,15 @@ exclude = [
   "resources/static-folder"
 ]
 
-# TODO: should we have the same version for all crates?
-# currently backend crates are 0.7.3 and client side are 0.7.2
 [workspace.package]
-# version = "0.7.2"
 edition = "2021"
 license = "Apache-2.0"
 
-[workspace.dependencies]
-# TODO: these are different versions, so we end up setting the version in two
-# places for some of them. Using the workspace version also means the resources 
-# can't resolve their dependency on shuttle-service. 
-# shuttle-common = { path = "common" }
-# shuttle-proto = { path = "proto" }
-# shuttle-service = { path = "service" }
-# shuttle-codegen = { path = "codegen" }
+# TODO: add local crates to the workspace dependencies when it's
+# supported by cargo-chef: https://github.com/LukeMathWalker/cargo-chef/issues/167
 
+# https://doc.rust-lang.org/cargo/reference/workspaces.html#the-workspacedependencies-table
+[workspace.dependencies]
 anyhow = "1.0.66"
 async-trait = "0.1.58"
 axum = "0.6.0"

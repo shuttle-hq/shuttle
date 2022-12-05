@@ -3,12 +3,23 @@ use shuttle_service::{Factory, ResourceBuilder};
 use std::{fs::rename, path::PathBuf};
 use tokio::runtime::Runtime;
 
-pub struct StaticFolder;
+pub struct StaticFolder<'a> {
+    /// The folder to reach at runtime. Defaults to `static`
+    folder: &'a str,
+}
+
+impl<'a> StaticFolder<'a> {
+    pub fn folder(mut self, folder: &'a str) -> Self {
+        self.folder = folder;
+
+        self
+    }
+}
 
 #[async_trait]
-impl ResourceBuilder<PathBuf> for StaticFolder {
+impl<'a> ResourceBuilder<PathBuf> for StaticFolder<'a> {
     fn new() -> Self {
-        Self {}
+        Self { folder: "static" }
     }
 
     async fn build(
@@ -16,8 +27,8 @@ impl ResourceBuilder<PathBuf> for StaticFolder {
         factory: &mut dyn Factory,
         _runtime: &Runtime,
     ) -> Result<PathBuf, shuttle_service::Error> {
-        let input_dir = factory.get_build_path()?.join("static");
-        let output_dir = factory.get_storage_path()?.join("static");
+        let input_dir = factory.get_build_path()?.join(self.folder);
+        let output_dir = factory.get_storage_path()?.join(self.folder);
 
         rename(input_dir, output_dir.clone())?;
 
@@ -89,7 +100,7 @@ mod tests {
         assert!(!expected_file.exists(), "input file should not exist yet");
 
         // Call plugin
-        let static_folder = StaticFolder;
+        let static_folder = StaticFolder::new();
 
         let runtime = tokio::runtime::Runtime::new().unwrap();
         let actual_folder = static_folder.build(&mut factory, &runtime).await.unwrap();

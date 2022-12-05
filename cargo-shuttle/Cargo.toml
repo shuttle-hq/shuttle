@@ -10,7 +10,8 @@ homepage = "https://www.shuttle.rs"
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 bollard = "0.13.0"
-cargo = "0.64.0"
+# TODO: debug the libgit2-sys conflict with cargo-edit when upgrading cargo to 0.66
+cargo = "0.65.0"
 cargo-edit = { version = "0.11.6", features = ["cli"] }
 cargo_metadata = "0.15.2"
 chrono = { workspace = true }

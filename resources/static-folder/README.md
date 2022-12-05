@@ -16,7 +16,7 @@ async fn main(
 ### Parameters
 | Parameter | Type | Default  | Description                                                        |
 |-----------|------|----------|--------------------------------------------------------------------|
-| folder    | str  | `static` | The folder relative to the crate root to make a static folder for. |
+| folder    | str  | `static` | The relative path, from the crate root, to the directory containing static files to deploy |
 
 ### Example: Using the public folder instead
 Since this plugin defaults to the `static` folder, the arguments can be used to use the `public` folder instead.

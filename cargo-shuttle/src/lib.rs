@@ -632,18 +632,19 @@ mod tests {
             name: None,
         };
 
-        let entries = get_archive_entries(project_args);
+        let mut entries = get_archive_entries(project_args);
+        entries.sort();
 
         assert_eq!(
             entries,
             vec![
-                "src/lib.rs",
-                "README.md",
-                "Cargo.toml",
-                "Shuttle.toml",
-                "Secrets.toml.example",
                 ".gitignore",
+                "Cargo.toml",
+                "README.md",
                 "Secrets.toml",
+                "Secrets.toml.example",
+                "Shuttle.toml",
+                "src/lib.rs",
             ]
         );
     }
@@ -662,9 +663,10 @@ mod tests {
             name: Some(ProjectName::from_str("secret").unwrap()),
         };
 
-        let entries = get_archive_entries(project_args);
+        let mut entries = get_archive_entries(project_args);
+        entries.sort();
 
-        assert_eq!(entries, vec!["Cargo.toml", ".ignore"]);
+        assert_eq!(entries, vec![".ignore", "Cargo.toml"]);
     }
 
     #[test]
@@ -681,7 +683,8 @@ mod tests {
             name: Some(ProjectName::from_str("exclude_target").unwrap()),
         };
 
-        let entries = get_archive_entries(project_args);
+        let mut entries = get_archive_entries(project_args);
+        entries.sort();
 
         assert_eq!(entries, vec!["Cargo.toml"]);
     }

@@ -505,9 +505,9 @@ impl Shuttle {
                 .statuses(Some(&mut status_options))
                 .context("getting status of repository files")?;
 
-            if statuses.len() > 0 {
+            if !statuses.is_empty() {
                 let mut error: String = format!("{} files in the working directory contain changes that were not yet committed into git:", statuses.len());
-                writeln!(error, "").expect("to append error");
+                writeln!(error).expect("to append error");
 
                 for status in statuses.iter() {
                     trace!(
@@ -526,7 +526,7 @@ impl Shuttle {
                     writeln!(error, "{rel_path}").expect("to append error");
                 }
 
-                writeln!(error, "").expect("to append error");
+                writeln!(error).expect("to append error");
                 writeln!(error, "to proceed despite this and include the uncommitted changes, pass the `--allow-dirty` flag").expect("to append error");
 
                 return Err(anyhow::Error::msg(error));

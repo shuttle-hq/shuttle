@@ -5,6 +5,7 @@ mod factory;
 mod init;
 
 use std::collections::BTreeMap;
+use std::fmt::Write as FmtWrite;
 use std::fs::{read_to_string, File};
 use std::io::Write;
 use std::io::{self, stdout};
@@ -23,6 +24,7 @@ use factory::LocalFactory;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use futures::StreamExt;
+use git2::{Repository, StatusOptions};
 use ignore::overrides::OverrideBuilder;
 use ignore::WalkBuilder;
 use shuttle_common::models::secret;
@@ -342,6 +344,10 @@ impl Shuttle {
     }
 
     async fn deploy(&self, args: DeployArgs, client: &Client) -> Result<CommandOutcome> {
+        if !args.allow_dirty {
+            self.is_dirty()?;
+        }
+
         let data = self.make_archive()?;
 
         let deployment = client
@@ -470,6 +476,64 @@ impl Shuttle {
         let bytes = encoder.finish().context("finish up encoder")?;
 
         Ok(bytes)
+    }
+
+    fn is_dirty(&self) -> Result<()> {
+        let working_directory = self.ctx.working_directory();
+        if let Ok(repo) = Repository::discover(working_directory) {
+            let repo_path = repo
+                .workdir()
+                .context("getting working directory of repository")?;
+
+            trace!(?repo_path, "found git repository");
+
+            let repo_rel_path = working_directory
+                .strip_prefix(repo_path)
+                .context("stripping repository path from working directory")?;
+
+            trace!(
+                ?repo_rel_path,
+                "got working directory path relative to git repository"
+            );
+
+            let mut status_options = StatusOptions::new();
+            status_options
+                .pathspec(repo_rel_path)
+                .include_untracked(true);
+
+            let statuses = repo
+                .statuses(Some(&mut status_options))
+                .context("getting status of repository files")?;
+
+            if statuses.len() > 0 {
+                let mut error: String = format!("{} files in the working directory contain changes that were not yet committed into git:", statuses.len());
+                writeln!(error, "").expect("to append error");
+
+                for status in statuses.iter() {
+                    trace!(
+                        path = status.path(),
+                        status = ?status.status(),
+                        "found file with updates"
+                    );
+
+                    let path =
+                        repo_path.join(status.path().context("getting path of changed file")?);
+                    let rel_path = path
+                        .strip_prefix(working_directory)
+                        .expect("getting relative path of changed file")
+                        .display();
+
+                    writeln!(error, "{rel_path}").expect("to append error");
+                }
+
+                writeln!(error, "").expect("to append error");
+                writeln!(error, "to proceed despite this and include the uncommitted changes, pass the `--allow-dirty` flag").expect("to append error");
+
+                return Err(anyhow::Error::msg(error));
+            }
+        }
+
+        Ok(())
     }
 }
 

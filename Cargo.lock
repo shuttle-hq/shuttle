@@ -1402,6 +1402,7 @@ dependencies = [
  "dirs",
  "flate2",
  "futures",
+ "git2",
  "headers",
  "ignore",
  "indoc",

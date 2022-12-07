@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-common"
-version = "0.7.3"
+version.workspace = true
 edition.workspace = true
 licence.workspace = true
 description = "Common library for the shuttle platform (https://www.shuttle.rs/)"
@@ -24,8 +24,6 @@ tracing = { workspace = true }
 uuid = { workspace = true, features = ["v4", "serde"] }
 
 [features]
-default = ["models"]
-
 backend = ["async-trait", "axum"]
 display = ["comfy-table", "crossterm"]
 models = ["anyhow", "async-trait", "display", "http", "reqwest", "serde_json"]

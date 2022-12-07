@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-gateway"
-version = "0.7.3"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish = false
@@ -44,9 +44,8 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 uuid = { workspace = true, features = [ "v4" ] }
 
 [dependencies.shuttle-common]
-version = "0.7.3"
-path = "../common"
-features = ["backend"]
+workspace = true
+features = ["backend", "models"]
 
 [dev-dependencies]
 anyhow = { workspace = true }

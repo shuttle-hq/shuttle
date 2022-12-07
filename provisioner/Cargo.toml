@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-provisioner"
-version = "0.7.3"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "Service responsible for provisioning and managing resources for services"
@@ -23,8 +23,7 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
 [dependencies.shuttle-proto]
-version = "0.7.3"
-path = "../proto"
+workspace = true
 
 [dev-dependencies]
 ctor = "0.1.26"

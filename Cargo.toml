@@ -22,14 +22,17 @@ exclude = [
 ]
 
 [workspace.package]
+version = "0.7.3"
 edition = "2021"
 license = "Apache-2.0"
 
-# TODO: add local crates to the workspace dependencies when it's
-# supported by cargo-chef: https://github.com/LukeMathWalker/cargo-chef/issues/167
-
 # https://doc.rust-lang.org/cargo/reference/workspaces.html#the-workspacedependencies-table
 [workspace.dependencies]
+shuttle-codegen = { path = "codegen", version = "0.7.2" }
+shuttle-common = { path = "common", version = "0.7.3" }
+shuttle-proto = { path = "proto", version = "0.7.3" }
+shuttle-service = { path = "service", version = "0.7.2" }
+
 anyhow = "1.0.66"
 async-trait = "0.1.58"
 axum = "0.6.0"

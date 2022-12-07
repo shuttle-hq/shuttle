@@ -11,8 +11,8 @@ prost = "0.11.2"
 tonic = "0.8.3"
 
 [dependencies.shuttle-common]
-version = "0.7.3"
-path = "../common"
+workspace = true
+features = ["models"]
 
 [build-dependencies]
 tonic-build = "0.8.3"

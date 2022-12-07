@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-deployer"
-version = "0.7.3"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "Service with instances created per project for handling the compilation, loading, and execution of Shuttle services"
@@ -45,17 +45,14 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 uuid = { workspace = true, features = ["v4"] }
 
 [dependencies.shuttle-common]
-version = "0.7.3"
-path = "../common"
-features = ["backend"]
+workspace = true
+features= ["backend", "models"]
 
 [dependencies.shuttle-proto]
-version = "0.7.2"
-path = "../proto"
+workspace = true
 
 [dependencies.shuttle-service]
-version = "0.7.2"
-path = "../service"
+workspace = true
 features = ["loader"]
 
 [dev-dependencies]

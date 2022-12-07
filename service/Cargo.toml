@@ -48,14 +48,11 @@ optional = true
 features = ["tokio1"]
 
 [dependencies.shuttle-codegen]
-version = "0.7.2"
-path = "../codegen"
+workspace = true
 optional = true
 
 [dependencies.shuttle-common]
-version = "0.7.3"
-path = "../common"
-default-features = false
+workspace = true
 
 [dev-dependencies]
 portpicker = "0.1.1"

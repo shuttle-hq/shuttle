@@ -562,15 +562,22 @@ impl Shuttle {
             pb.set_message(format!("{project}"));
             project = client.get_project(project_name).await?;
         }
-        pb.finish_with_message("Done");
+        pb.finish_and_clear();
         println!("{project}");
         Ok(())
     }
 
     async fn project_delete(&self, client: &Client) -> Result<()> {
-        let project = client.delete_project(self.ctx.project_name()).await?;
-
-        println!("{project}");
+        self.wait_with_spinner(
+            &[
+                project::State::Destroyed,
+                project::State::Errored,
+            ],
+            Client::delete_project,
+            self.ctx.project_name(),
+            client,
+        )
+        .await?;
 
         Ok(())
     }

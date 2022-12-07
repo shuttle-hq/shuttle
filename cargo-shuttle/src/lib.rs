@@ -569,10 +569,7 @@ impl Shuttle {
 
     async fn project_delete(&self, client: &Client) -> Result<()> {
         self.wait_with_spinner(
-            &[
-                project::State::Destroyed,
-                project::State::Errored,
-            ],
+            &[project::State::Destroyed, project::State::Errored],
             Client::delete_project,
             self.ctx.project_name(),
             client,

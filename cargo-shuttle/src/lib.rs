@@ -4,6 +4,7 @@ pub mod config;
 mod factory;
 mod init;
 
+use shuttle_common::project::ProjectName;
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fs::{read_to_string, File};
@@ -27,7 +28,7 @@ use futures::StreamExt;
 use git2::{Repository, StatusOptions};
 use ignore::overrides::OverrideBuilder;
 use ignore::WalkBuilder;
-use shuttle_common::models::secret;
+use shuttle_common::models::{project, secret};
 use shuttle_service::loader::{build_crate, Loader};
 use shuttle_service::Logger;
 use std::fmt::Write;
@@ -93,7 +94,9 @@ impl Shuttle {
                     Command::Secrets => self.secrets(&client).await,
                     Command::Auth(auth_args) => self.auth(auth_args, &client).await,
                     Command::Project(ProjectCommand::New) => self.project_create(&client).await,
-                    Command::Project(ProjectCommand::Status) => self.project_status(&client).await,
+                    Command::Project(ProjectCommand::Status { follow }) => {
+                        self.project_status(&client, follow).await
+                    }
                     Command::Project(ProjectCommand::Rm) => self.project_delete(&client).await,
                     _ => {
                         unreachable!("commands that don't need a client have already been matched")
@@ -485,18 +488,82 @@ impl Shuttle {
     }
 
     async fn project_create(&self, client: &Client) -> Result<()> {
-        let project = client.create_project(self.ctx.project_name()).await?;
-
-        println!("{project}");
+        self.wait_with_spinner(
+            &[project::State::Ready, project::state::Errored],
+            Client::create_project,
+            self.ctx.project_name(),
+            client,
+        )
+        .await?;
 
         Ok(())
     }
 
-    async fn project_status(&self, client: &Client) -> Result<()> {
-        let project = client.get_project(self.ctx.project_name()).await?;
+    async fn project_status(&self, client: &Client, follow: bool) -> Result<()> {
+        match follow {
+            true => {
+                self.wait_with_spinner(
+                    &[
+                        project::State::Ready,
+                        project::State::Destroyed,
+                        project::state::Errored,
+                    ],
+                    Client::get_project,
+                    self.ctx.project_name(),
+                    client,
+                )
+                .await?;
+            }
+            false => {
+                let project = client.get_project(self.ctx.project_name()).await?;
+                println!("{project}");
+            }
+        }
 
+        Ok(())
+    }
+
+    async fn wait_with_spinner<'a, F, Fut>(
+        &self,
+        states_to_check: &[project::State],
+        f: F,
+        project_name: &'a ProjectName,
+        client: &'a Client,
+    ) -> Result<(), anyhow::Error>
+    where
+        F: Fn(&'a Client, &'a ProjectName) -> Fut,
+        Fut: std::future::Future<Output = Result<project::Response>> + 'a,
+    {
+        let mut project = f(client, project_name).await?;
+        let pb = indicatif::ProgressBar::new_spinner();
+        pb.enable_steady_tick(std::time::Duration::from_millis(350));
+        pb.set_style(
+            indicatif::ProgressStyle::with_template("{spinner:.orange} {msg}")
+                .unwrap()
+                .tick_strings(&[
+                    "( ●    )",
+                    "(  ●   )",
+                    "(   ●  )",
+                    "(    ● )",
+                    "(     ●)",
+                    "(    ● )",
+                    "(   ●  )",
+                    "(  ●   )",
+                    "( ●    )",
+                    "(●     )",
+                    "(●●●●●●)",
+                ]),
+        );
+        loop {
+            if states_to_check.contains(&project.state) {
+                break;
+            }
+
+            pb.set_message(format!("{project}"));
+            project = client.get_project(project_name).await?;
+        }
+        pb.finish_with_message("Done");
         println!("{project}");
-
         Ok(())
     }
 

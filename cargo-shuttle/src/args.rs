@@ -112,7 +112,11 @@ pub enum ProjectCommand {
     /// remove this project environment from shuttle
     Rm,
     /// show the status of this project's environment on shuttle
-    Status,
+    Status {
+        #[clap(short, long)]
+        /// Follow status of project command
+        follow: bool,
+    },
 }
 
 #[derive(Parser, Clone, Debug)]

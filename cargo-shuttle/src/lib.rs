@@ -5,21 +5,21 @@ mod factory;
 mod init;
 
 use std::collections::BTreeMap;
-use std::fmt::Write as FmtWrite;
+use std::ffi::OsString;
 use std::fs::{read_to_string, File};
-use std::io::Write;
-use std::io::{self, stdout};
+use std::io::stdout;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, Context, Result};
-pub use args::{Args, Command, DeployArgs, InitArgs, ProjectArgs, RunArgs};
-use args::{AuthArgs, LoginArgs};
+use anyhow::{anyhow, bail, Context, Result};
+use args::AuthArgs;
+pub use args::{Args, Command, DeployArgs, InitArgs, LoginArgs, ProjectArgs, RunArgs};
 use cargo_metadata::Message;
 use clap::CommandFactory;
 use clap_complete::{generate, Shell};
 use config::RequestContext;
 use crossterm::style::Stylize;
+use dialoguer::{theme::ColorfulTheme, Confirm, FuzzySelect, Input, Password};
 use factory::LocalFactory;
 use flate2::write::GzEncoder;
 use flate2::Compression;
@@ -30,6 +30,8 @@ use ignore::WalkBuilder;
 use shuttle_common::models::secret;
 use shuttle_service::loader::{build_crate, Loader};
 use shuttle_service::Logger;
+use std::fmt::Write;
+use strum::IntoEnumIterator;
 use tar::Builder;
 use tokio::sync::mpsc;
 use tracing::trace;
@@ -64,14 +66,14 @@ impl Shuttle {
             self.load_project(&mut args.project_args)?;
         }
 
+        self.ctx.set_api_url(args.api_url);
+
         match args.cmd {
-            Command::Init(init_args) => self.init(init_args).await,
+            Command::Init(init_args) => self.init(init_args, args.project_args).await,
             Command::Generate { shell, output } => self.complete(shell, output).await,
             Command::Login(login_args) => self.login(login_args).await,
             Command::Run(run_args) => self.local_run(run_args).await,
             need_client => {
-                self.ctx.set_api_url(args.api_url);
-
                 let mut client = Client::new(self.ctx.api_url());
                 client.set_api_key(self.ctx.api_key()?);
 
@@ -102,13 +104,92 @@ impl Shuttle {
         .map(|_| CommandOutcome::Ok)
     }
 
-    async fn init(&self, args: InitArgs) -> Result<()> {
-        // Interface with cargo to initialize new lib package for shuttle
-        let path = args.path.clone();
-        init::cargo_init(path.clone())?;
+    /// Log in, initialize a project and potentially create the Shuttle environment for it.
+    ///
+    /// If both a project name and framework are passed as arguments, it will run without any extra
+    /// interaction.
+    async fn init(&mut self, args: InitArgs, mut project_args: ProjectArgs) -> Result<()> {
+        let interactive = project_args.name.is_none() || args.framework().is_none();
 
-        let framework = init::get_framework(&args);
+        let theme = ColorfulTheme::default();
+
+        // 1. Log in (if not logged in yet)
+        if self.ctx.api_key().is_err() {
+            if interactive {
+                println!("First, let's log in to your Shuttle account.");
+                self.login(args.login_args.clone()).await?;
+                println!();
+            } else if args.new && args.login_args.api_key.is_some() {
+                self.login(args.login_args.clone()).await?;
+            } else {
+                bail!("Tried to login to create a Shuttle environment, but no API key was set.")
+            }
+        }
+
+        // 2. Ask for project name
+        if project_args.name.is_none() {
+            println!("How do you want to name your project? It will be hosted at ${{project_name}}.shuttleapp.rs.");
+            // TODO: Check whether the project name is still available
+            project_args.name = Some(
+                Input::with_theme(&theme)
+                    .with_prompt("Project name")
+                    .interact()?,
+            );
+            println!();
+        }
+
+        // 3. Confirm the project directory
+        let path = if interactive {
+            println!("Where should we create this project?");
+            let directory_str: String = Input::with_theme(&theme)
+                .with_prompt("Directory")
+                .default(".".to_owned())
+                .interact()?;
+            println!();
+            args::parse_init_path(&OsString::from(directory_str))?
+        } else {
+            args.path.clone()
+        };
+
+        // 4. Ask for the framework
+        let framework = match args.framework() {
+            Some(framework) => framework,
+            None => {
+                println!(
+                    "Shuttle works with a range of web frameworks. Which one do you want to use?"
+                );
+                let frameworks = init::Framework::iter().collect::<Vec<_>>();
+                let index = FuzzySelect::with_theme(&theme)
+                    .items(&frameworks)
+                    .default(0)
+                    .interact()?;
+                println!();
+                frameworks[index]
+            }
+        };
+
+        // 5. Initialize locally
+        init::cargo_init(path.clone())?;
         init::cargo_shuttle_init(path, framework)?;
+        println!();
+
+        // 6. Confirm that the user wants to create the project environment on Shuttle
+        let should_create_environment = if !interactive {
+            args.new
+        } else if args.new {
+            true
+        } else {
+            Confirm::with_theme(&theme)
+                .with_prompt("Do you want to create the project environment on Shuttle?")
+                .default(true)
+                .interact()?
+        };
+        if should_create_environment {
+            self.load_project(&mut project_args)?;
+            let mut client = Client::new(self.ctx.api_url());
+            client.set_api_key(self.ctx.api_key()?);
+            self.project_create(&client).await?;
+        }
 
         Ok(())
     }
@@ -132,23 +213,21 @@ impl Shuttle {
         self.ctx.load_local(project_args)
     }
 
+    /// Log in with the given API key or after prompting the user for one.
     async fn login(&mut self, login_args: LoginArgs) -> Result<()> {
-        let api_key_str = login_args.api_key.unwrap_or_else(|| {
-            let url = "https://shuttle.rs/login";
+        let api_key_str = match login_args.api_key {
+            Some(api_key) => api_key,
+            None => {
+                let url = "https://shuttle.rs/login";
+                let _ = webbrowser::open(url);
 
-            let _ = webbrowser::open(url);
+                println!("If your browser did not automatically open, go to {url}");
 
-            println!("If your browser did not automatically open, go to {url}");
-            print!("Enter Api Key: ");
-
-            stdout().flush().unwrap();
-
-            let mut input = String::new();
-
-            io::stdin().read_line(&mut input).unwrap();
-
-            input
-        });
+                Password::with_theme(&ColorfulTheme::default())
+                    .with_prompt("API key")
+                    .interact()?
+            }
+        };
 
         let api_key = api_key_str.trim().parse()?;
 

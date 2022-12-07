@@ -489,7 +489,7 @@ impl Shuttle {
 
     async fn project_create(&self, client: &Client) -> Result<()> {
         self.wait_with_spinner(
-            &[project::State::Ready],
+            &[project::State::Ready, project::state::Errored],
             Client::create_project,
             self.ctx.project_name(),
             client,
@@ -503,7 +503,11 @@ impl Shuttle {
         match follow {
             true => {
                 self.wait_with_spinner(
-                    &[project::State::Ready, project::State::Destroyed],
+                    &[
+                        project::State::Ready,
+                        project::State::Destroyed,
+                        project::state::Errored,
+                    ],
                     Client::get_project,
                     self.ctx.project_name(),
                     client,

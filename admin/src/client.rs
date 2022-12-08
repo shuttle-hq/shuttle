@@ -1,6 +1,9 @@
 use anyhow::{Context, Result};
 use serde::{de::DeserializeOwned, Serialize};
-use shuttle_common::{models::ToJson, project::ProjectName};
+use shuttle_common::{
+    models::{project, ToJson},
+    project::ProjectName,
+};
 use tracing::trace;
 
 pub struct Client {
@@ -36,6 +39,10 @@ impl Client {
         self.post(&path, Some(credentials)).await
     }
 
+    pub async fn get_projects(&self) -> Result<Vec<project::AdminResponse>> {
+        self.get("/admin/projects").await
+    }
+
     async fn post<T: Serialize, R: DeserializeOwned>(
         &self,
         path: &str,
@@ -58,5 +65,17 @@ impl Client {
             .to_json()
             .await
             .context("failed to extract json body from post response")
+    }
+
+    async fn get<R: DeserializeOwned>(&self, path: &str) -> Result<R> {
+        reqwest::Client::new()
+            .get(format!("{}{}", self.api_url, path))
+            .bearer_auth(&self.api_key)
+            .send()
+            .await
+            .context("failed to make post request")?
+            .to_json()
+            .await
+            .context("failed to post text body from response")
     }
 }

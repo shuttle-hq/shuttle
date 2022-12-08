@@ -256,6 +256,20 @@ async fn request_acme_certificate(
     Ok("certificate created".to_string())
 }
 
+async fn get_projects(
+    _: Admin,
+    Extension(service): Extension<Arc<GatewayService>>,
+) -> Result<AxumJson<Vec<project::AdminResponse>>, Error> {
+    let projects = service
+        .iter_projects_detailed()
+        .await?
+        .into_iter()
+        .map(Into::into)
+        .collect();
+
+    Ok(AxumJson(projects))
+}
+
 #[derive(Clone)]
 pub(crate) struct RouterState {
     pub service: Arc<GatewayService>,
@@ -293,6 +307,7 @@ impl ApiBuilder {
                 "/admin/acme/request/:project_name/:fqdn",
                 post(request_acme_certificate),
             )
+            .route("/admin/projects", get(get_projects))
             .layer(Extension(acme))
             .layer(Extension(resolver));
         self

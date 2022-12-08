@@ -18,8 +18,12 @@ pub enum Command {
     /// Try to revive projects in the crashed state
     Revive,
 
+    /// Manage custom domains
     #[command(subcommand)]
     Acme(AcmeCommand),
+
+    /// Manage project names
+    ProjectNames,
 }
 
 #[derive(Subcommand, Debug)]

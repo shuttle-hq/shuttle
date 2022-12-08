@@ -29,7 +29,7 @@ use crate::args::ContextArgs;
 use crate::auth::{Key, Permissions, ScopedUser, User};
 use crate::project::Project;
 use crate::task::TaskBuilder;
-use crate::{AccountName, DockerContext, Error, ErrorKind, ProjectName};
+use crate::{AccountName, DockerContext, Error, ErrorKind, ProjectDetails, ProjectName};
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
@@ -525,6 +525,20 @@ impl GatewayService {
         Ok(custom_domain)
     }
 
+    pub async fn iter_projects_detailed(
+        &self,
+    ) -> Result<impl Iterator<Item = ProjectDetails>, Error> {
+        let iter = query("SELECT project_name, account_name FROM projects")
+            .fetch_all(&self.db)
+            .await?
+            .into_iter()
+            .map(|row| ProjectDetails {
+                project_name: row.try_get("project_name").unwrap(),
+                account_name: row.try_get("account_name").unwrap(),
+            });
+        Ok(iter)
+    }
+
     pub fn context(&self) -> GatewayContext {
         self.provider.context()
     }
@@ -642,6 +656,17 @@ pub mod tests {
         assert!(creating_same_project_name(&project, &matrix));
 
         assert_eq!(svc.find_project(&matrix).await.unwrap(), project);
+        assert_eq!(
+            svc.iter_projects_detailed()
+                .await
+                .unwrap()
+                .next()
+                .expect("to get one project with its user"),
+            ProjectDetails {
+                project_name: matrix.clone(),
+                account_name: neo.clone(),
+            }
+        );
 
         let mut work = svc
             .new_task()

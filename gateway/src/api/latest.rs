@@ -258,7 +258,7 @@ async fn request_acme_certificate(
 
 async fn get_projects(
     _: Admin,
-    Extension(service): Extension<Arc<GatewayService>>,
+    State(RouterState { service, .. }): State<RouterState>,
 ) -> Result<AxumJson<Vec<project::AdminResponse>>, Error> {
     let projects = service
         .iter_projects_detailed()
@@ -307,7 +307,6 @@ impl ApiBuilder {
                 "/admin/acme/request/:project_name/:fqdn",
                 post(request_acme_certificate),
             )
-            .route("/admin/projects", get(get_projects))
             .layer(Extension(acme))
             .layer(Extension(resolver));
         self
@@ -374,6 +373,7 @@ impl ApiBuilder {
             )
             .route("/users/:account_name", get(get_user).post(post_user))
             .route("/projects/:project_name/*any", any(route_project))
+            .route("/admin/projects", get(get_projects))
             .route("/admin/revive", post(revive_projects));
         self
     }

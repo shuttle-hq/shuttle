@@ -4,6 +4,7 @@ use super::{Built, QueueReceiver, RunSender, State};
 use crate::error::{Error, Result, TestError};
 use crate::persistence::{LogLevel, SecretRecorder};
 
+use cargo::util::interning::InternedString;
 use cargo_metadata::Message;
 use chrono::Utc;
 use crossbeam_channel::Sender;
@@ -311,6 +312,14 @@ async fn run_pre_deploy_tests(
         short: false,
         ansi: false,
     };
+
+    // We set the tests to build with the release profile since deployments compile
+    // with the release profile by default. This means crates don't need to be
+    // recompiled in debug mode for the tests, reducing memory usage during deployment.
+    compile_opts.build_config.requested_profile = InternedString::new("release");
+
+    // Build tests with a maximum of 8 workers.
+    compile_opts.build_config.jobs = 8;
 
     let opts = TestOptions {
         compile_opts,

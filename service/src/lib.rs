@@ -557,10 +557,10 @@ impl Service for sync_wrapper::SyncWrapper<axum::Router> {
 #[async_trait]
 impl<F> Service for F
 where
-    F: FnOnce(&mut actix_web::web::ServiceConfig) + Sync + Send + Copy + Clone + 'static,
+    F: FnOnce(&mut actix_web::web::ServiceConfig) + Sync + Send + Clone + 'static,
 {
-    async fn bind(self: Box<Self>, addr: SocketAddr) -> Result<(), Error> {
-        let srv = actix_web::HttpServer::new(move || actix_web::App::new().configure(*self))
+    async fn bind(mut self: Box<Self>, addr: SocketAddr) -> Result<(), Error> {
+        let srv = actix_web::HttpServer::new(move || actix_web::App::new().configure(self.clone()))
             .bind(addr)?
             .run();
         srv.await.map_err(error::CustomError::new)?;

@@ -1,4 +1,3 @@
 [submodule "examples"]
 	path = examples
-	url = git@github.com:oddgrd/examples.git
-	branch = feat/bump-dependencies
+	url = git@github.com:shuttle-hq/examples.git

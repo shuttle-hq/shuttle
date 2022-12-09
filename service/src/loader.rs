@@ -178,6 +178,12 @@ fn get_compile_options(config: &Config, release_mode: bool) -> anyhow::Result<Co
         InternedString::new("dev")
     };
 
+    // This sets the max workers for cargo build to 8 for release mode (aka deployment),
+    // but leaves it as default (num cpus) for local runs
+    if release_mode {
+        opts.build_config.jobs = 8
+    };
+
     Ok(opts)
 }
 

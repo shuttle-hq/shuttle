@@ -2,7 +2,7 @@
 name = "shuttle-common"
 version.workspace = true
 edition.workspace = true
-licence.workspace = true
+license.workspace = true
 description = "Common library for the shuttle platform (https://www.shuttle.rs/)"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

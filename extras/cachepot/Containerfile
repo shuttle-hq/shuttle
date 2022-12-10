@@ -1,0 +1,13 @@
+FROM rust:1.65.0-buster as shuttle-common
+
+RUN apt-get update &&\
+    apt-get install -y bubblewrap
+
+RUN cargo install --git https://github.com/paritytech/cachepot --features="dist-client dist-worker"
+ENV CACHEPOT_NO_DAEMON=1
+
+WORKDIR cachepot-config
+COPY . .
+
+
+ENTRYPOINT ["cachepot-dist"]

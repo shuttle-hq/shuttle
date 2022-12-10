@@ -140,3 +140,36 @@ services:
       placement:
         constraints:
           - node.hostname==controller
+  cachepot-scheduler:
+    image: "${CONTAINER_REGISTRY}/cachepot-dist:latest"
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    networks:
+      user-net:
+    volumes:
+      - postgres-vol:/var/lib/postgresql/data
+    deploy:
+      placement:
+        constraints:
+          - node.hostname==controller
+    command: scheduler --config scheduler.conf
+    environment:
+      - RUST_LOG=trace
+      - CACHEPOT_LOG=trace
+  cachepot-worker:
+    image: "${CONTAINER_REGISTRY}/cachepot-dist:latest"
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    networks:
+      user-net:
+    deploy:
+      placement:
+        constraints:
+          - node.hostname==controller
+    command: worker --config worker.conf
+    environment:
+      - RUST_LOG=trace
+      - CACHEPOT_LOG=trace
+      - CACHEPOT_SANDBOX=userns

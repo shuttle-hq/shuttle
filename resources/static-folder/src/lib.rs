@@ -149,11 +149,11 @@ mod tests {
         }
 
         fn get_build_path(&self) -> Result<std::path::PathBuf, shuttle_service::Error> {
-            Ok(self.build_path().to_owned())
+            Ok(self.build_path())
         }
 
         fn get_storage_path(&self) -> Result<std::path::PathBuf, shuttle_service::Error> {
-            Ok(self.storage_path().to_owned())
+            Ok(self.storage_path())
         }
     }
 

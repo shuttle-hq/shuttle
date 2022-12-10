@@ -13,8 +13,8 @@ shuttle-aws-rds = { path = "/usr/src/shuttle/resources/aws-rds" }
 shuttle-persist = { path = "/usr/src/shuttle/resources/persist" }
 shuttle-shared-db = { path = "/usr/src/shuttle/resources/shared-db" }
 shuttle-secrets = { path = "/usr/src/shuttle/resources/secrets" }
-shuttle-static-folder = { path = "/usr/src/shuttle/resources/static-folder" }' > $CARGO_HOME/config.toml
+shuttle-static-folder = { path = "/usr/src/shuttle/resources/static-folder" }
 
-# Prefetch crates.io index
-cd /usr/src/shuttle/service
-cargo fetch
+[source.crates-io]
+registry = "http://panamax:8080/git/crates.io-index"
+' > $CARGO_HOME/config.toml

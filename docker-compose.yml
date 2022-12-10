@@ -2,6 +2,7 @@ version: "3.7"
 volumes:
   gateway-vol:
   postgres-vol:
+  panamax-vol:
 networks:
   user-net:
     attachable: true
@@ -140,3 +141,15 @@ services:
       placement:
         constraints:
           - node.hostname==controller
+  panamax:
+    image: panamaxrs/panamax
+    networks:
+      user-net: null
+    restart: always
+    volumes:
+      - postgres-vol:/mirror
+    deploy:
+      placement:
+        constraints:
+          - node.hostname==controller
+    command: serve /mirror

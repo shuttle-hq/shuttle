@@ -561,6 +561,7 @@ where
 {
     async fn bind(mut self: Box<Self>, addr: SocketAddr) -> Result<(), Error> {
         let srv = actix_web::HttpServer::new(move || actix_web::App::new().configure(self.clone()))
+            .workers(8)
             .bind(addr)?
             .run();
         srv.await.map_err(error::CustomError::new)?;

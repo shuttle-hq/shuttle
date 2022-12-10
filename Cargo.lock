@@ -5965,6 +5965,7 @@ dependencies = [
  "futures",
  "hyper",
  "libloading",
+ "num_cpus",
  "pipe",
  "poem",
  "portpicker",

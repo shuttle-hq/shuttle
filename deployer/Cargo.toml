@@ -1,61 +1,62 @@
 [package]
 name = "shuttle-deployer"
-version = "0.7.2"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
 description = "Service with instances created per project for handling the compilation, loading, and execution of Shuttle services"
 
 [dependencies]
-anyhow = "1.0.58"
-async-trait = "0.1.56"
-axum = { version = "0.5.7", features = ["ws"] }
-bytes = "1.1.0"
-cargo = "0.64.0"
-cargo_metadata = "0.15.0"
-chrono = "0.4.22"
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+axum = { workspace = true, features = ["ws"] }
+bytes = "1.3.0"
+# TODO: debug the libgit2-sys conflict with cargo-edit when upgrading cargo to 0.66
+cargo = "0.65.0"
+cargo_metadata = "0.15.2"
+chrono = { workspace = true }
 clap = { version = "3.2.8", features = ["derive"] }
 crossbeam-channel = "0.5.6"
-flate2 = "1.0.24"
-fqdn = "0.2.2"
-futures = "0.3.21"
-hyper = { version = "0.14.20", features = ["client", "http1", "http2", "tcp" ] }
+flate2 = "1.0.25"
+fqdn = "0.2.3"
+futures = "0.3.25"
+hyper = { version = "0.14.23", features = ["client", "http1", "http2", "tcp" ] }
 # not great, but waiting for WebSocket changes to be merged
 hyper-reverse-proxy = { git = "https://github.com/chesedo/hyper-reverse-proxy", branch = "master" }
-once_cell = "1.14.0"
-opentelemetry = { version = "0.17.0", features = ["rt-tokio"] }
-opentelemetry-datadog = { version = "0.5.0", features = ["reqwest-client"] }
+once_cell = { workspace = true }
+opentelemetry = { version = "0.18.0", features = ["rt-tokio"] }
+opentelemetry-datadog = { version = "0.6.0", features = ["reqwest-client"] }
+opentelemetry-http = "0.7.0"
 pipe = "0.4.0"
 portpicker = "0.1.1"
-serde = "1.0.137"
-serde_json = "1.0.81"
-sqlx = { version = "0.6.0", features = ["runtime-tokio-native-tls", "sqlite", "chrono", "json", "migrate", "uuid"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sqlx = { version = "0.6.2", features = ["runtime-tokio-native-tls", "sqlite", "chrono", "json", "migrate", "uuid"] }
 strum = { version = "0.24.1", features = ["derive"] }
 tar = "0.4.38"
-thiserror = "1.0.24"
-tokio = { version = "1.19.2", features = ["fs"] }
+thiserror = { workspace = true }
+tokio = { version = "1.22.0", features = ["fs"] }
 toml = "0.5.9"
-tonic = "0.8.0"
-tower = { version = "0.4.12", features = ["make"] }
+tonic = "0.8.3"
+tower = { version = "0.4.13", features = ["make"] }
 tower-http = { version = "0.3.4", features = ["auth", "trace"] }
-tracing = "0.1.35"
-tracing-opentelemetry = "0.17.4"
-tracing-subscriber = { version = "0.3.11", features = ["env-filter"] }
-uuid = { version = "1.1.2", features = ["v4"] }
+tracing = { workspace = true }
+tracing-opentelemetry = "0.18.0"
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+uuid = { workspace = true, features = ["v4"] }
 
 [dependencies.shuttle-common]
-version = "0.7.2"
-path = "../common"
+workspace = true
+features= ["backend", "models"]
 
 [dependencies.shuttle-proto]
-version = "0.7.2"
-path = "../proto"
+workspace = true
 
 [dependencies.shuttle-service]
-version = "0.7.2"
-path = "../service"
+workspace = true
 features = ["loader"]
 
 [dev-dependencies]
-ctor = "0.1.22"
+ctor = "0.1.26"
 hex = "0.4.3"
 rand = "0.8.5"
 tempdir = "0.3.7"

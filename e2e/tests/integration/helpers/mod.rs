@@ -42,12 +42,17 @@ shuttle-service = {{ path = "{}" }}
 shuttle-aws-rds = {{ path = "{}" }}
 shuttle-persist = {{ path = "{}" }}
 shuttle-shared-db = {{ path = "{}" }}
-shuttle-secrets = {{ path = "{}" }}"#,
+shuttle-secrets = {{ path = "{}" }}
+shuttle-static-folder = {{ path = "{}" }}"#,
                     WORKSPACE_ROOT.join("service").display(),
                     WORKSPACE_ROOT.join("resources").join("aws-rds").display(),
                     WORKSPACE_ROOT.join("resources").join("persist").display(),
                     WORKSPACE_ROOT.join("resources").join("shared-db").display(),
                     WORKSPACE_ROOT.join("resources").join("secrets").display(),
+                    WORKSPACE_ROOT
+                        .join("resources")
+                        .join("static-folder")
+                        .display(),
                 )
                 .unwrap();
 
@@ -125,7 +130,7 @@ CARGO_HOME: {}
                 "exec",
                 "gateway",
                 "/usr/local/bin/service",
-                "--state=/var/lib/shuttle/gateway.sqlite",
+                "--state=/var/lib/shuttle",
                 "init",
                 "--name",
                 "test",

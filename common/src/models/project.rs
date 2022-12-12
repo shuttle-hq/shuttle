@@ -46,3 +46,9 @@ impl State {
         }
     }
 }
+
+#[derive(Deserialize, Serialize)]
+pub struct AdminResponse {
+    pub project_name: String,
+    pub account_name: String,
+}

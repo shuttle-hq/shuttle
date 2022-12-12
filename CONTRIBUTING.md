@@ -13,6 +13,11 @@ are always appreciated!
 You can use Docker and docker-compose to test shuttle locally during development. See the [Docker install](https://docs.docker.com/get-docker/)
 and [docker-compose install](https://docs.docker.com/compose/install/) instructions if you do not have them installed already.
 
+```bash
+git clone git@github.com:shuttle-hq/shuttle.git
+cd shuttle
+```
+
 You should now be ready to setup a local environment to test code changes to core `shuttle` packages as follows:
 
 Build the required images with:
@@ -44,12 +49,13 @@ shuttle-aws-rds = { path = "[base]/shuttle/resources/aws-rds" }
 shuttle-persist = { path = "[base]/shuttle/resources/persist" }
 shuttle-shared-db = { path = "[base]/shuttle/resources/shared-db" }
 shuttle-secrets = { path = "[base]/shuttle/resources/secrets" }
+shuttle-static-folder = { path = "[base]/shuttle/resources/static-folder" }
 ```
 
 Prime gateway database with an admin user:
 
 ```bash
-docker compose --file docker-compose.rendered.yml --project-name shuttle-dev exec gateway /usr/local/bin/service --state=/var/lib/shuttle/gateway.sqlite init --name admin --key test-key
+docker compose --file docker-compose.rendered.yml --project-name shuttle-dev exec gateway /usr/local/bin/service --state=/var/lib/shuttle init --name admin --key test-key
 ```
 
 Login to shuttle service in a new terminal window from the main shuttle directory:
@@ -61,6 +67,8 @@ cargo run --bin cargo-shuttle -- login --api-key "test-key"
 cd into one of the examples:
 
 ```bash
+git submodule init
+git submodule update
 cd examples/rocket/hello-world/
 ```
 
@@ -108,10 +116,10 @@ This prevents `gateway` from starting up. Now you can start deployer only using:
 
 ```bash
 provisioner_address=$(docker inspect --format '{{(index .NetworkSettings.Networks "shuttle_default").IPAddress}}' shuttle_prod_hello-world-rocket-app_run)
-cargo run -p shuttle-deployer -- --provisioner-address $provisioner_address --provisioner-port 8000 --proxy-fqdn local.rs --admin-secret test-key
+cargo run -p shuttle-deployer -- --provisioner-address $provisioner_address --provisioner-port 8000 --proxy-fqdn local.rs --admin-secret test-key --project <project_name>
 ```
 
-The `--admin-secret` can safely be changed to your api-key to make testing easier.
+The `--admin-secret` can safely be changed to your api-key to make testing easier. While `<project_name>` needs to match the name of the project that will be deployed to this deployer. This is the `Cargo.toml` or `Shuttle.toml` name for the project.
 
 ### Using Podman instead of Docker
 If you are using Podman over Docker, then expose a rootless socket of Podman using the following command:

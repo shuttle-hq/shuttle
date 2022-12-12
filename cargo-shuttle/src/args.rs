@@ -10,6 +10,8 @@ use clap_complete::Shell;
 use shuttle_common::project::ProjectName;
 use uuid::Uuid;
 
+use crate::init::Framework;
+
 #[derive(Parser)]
 #[clap(
     version,
@@ -110,10 +112,14 @@ pub enum ProjectCommand {
     /// remove this project environment from shuttle
     Rm,
     /// show the status of this project's environment on shuttle
-    Status,
+    Status {
+        #[clap(short, long)]
+        /// Follow status of project command
+        follow: bool,
+    },
 }
 
-#[derive(Parser)]
+#[derive(Parser, Clone, Debug)]
 pub struct LoginArgs {
     /// api key for the shuttle platform
     #[clap(long)]
@@ -146,39 +152,80 @@ pub struct RunArgs {
 
 #[derive(Parser, Debug)]
 pub struct InitArgs {
+    /// Initialize with actix-web framework
+    #[clap(long="actix-web", conflicts_with_all = &["axum", "rocket", "tide", "tower", "poem", "serenity", "warp", "salvo", "thruster", "no-framework"])]
+    pub actix_web: bool,
     /// Initialize with axum framework
-    #[clap(long, conflicts_with_all = &["rocket", "tide", "tower", "poem", "serenity", "warp", "salvo", "thruster"])]
+    #[clap(long, conflicts_with_all = &["actix-web","rocket", "tide", "tower", "poem", "serenity", "warp", "salvo", "thruster", "no-framework"])]
     pub axum: bool,
     /// Initialize with rocket framework
-    #[clap(long, conflicts_with_all = &["axum", "tide", "tower", "poem", "serenity", "warp", "salvo", "thruster"])]
+    #[clap(long, conflicts_with_all = &["actix-web","axum", "tide", "tower", "poem", "serenity", "warp", "salvo", "thruster", "no-framework"])]
     pub rocket: bool,
     /// Initialize with tide framework
-    #[clap(long, conflicts_with_all = &["axum", "rocket", "tower", "poem", "serenity", "warp", "salvo", "thruster"])]
+    #[clap(long, conflicts_with_all = &["actix-web","axum", "rocket", "tower", "poem", "serenity", "warp", "salvo", "thruster", "no-framework"])]
     pub tide: bool,
     /// Initialize with tower framework
-    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "poem", "serenity", "warp", "salvo", "thruster"])]
+    #[clap(long, conflicts_with_all = &["actix-web","axum", "rocket", "tide", "poem", "serenity", "warp", "salvo", "thruster", "no-framework"])]
     pub tower: bool,
     /// Initialize with poem framework
-    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "tower", "serenity", "warp", "salvo", "thruster"])]
+    #[clap(long, conflicts_with_all = &["actix-web","axum", "rocket", "tide", "tower", "serenity", "warp", "salvo", "thruster", "no-framework"])]
     pub poem: bool,
     /// Initialize with salvo framework
-    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "tower", "poem", "warp", "serenity", "thruster"])]
+    #[clap(long, conflicts_with_all = &["actix-web","axum", "rocket", "tide", "tower", "poem", "warp", "serenity", "thruster", "no-framework"])]
     pub salvo: bool,
     /// Initialize with serenity framework
-    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "tower", "poem", "warp", "salvo", "thruster"])]
+    #[clap(long, conflicts_with_all = &["actix-web","axum", "rocket", "tide", "tower", "poem", "warp", "salvo", "thruster", "no-framework"])]
     pub serenity: bool,
     /// Initialize with warp framework
-    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "tower", "poem", "serenity", "salvo", "thruster"])]
+    #[clap(long, conflicts_with_all = &["actix-web","axum", "rocket", "tide", "tower", "poem", "serenity", "salvo", "thruster", "no-framework"])]
     pub warp: bool,
     /// Initialize with thruster framework
-    #[clap(long, conflicts_with_all = &["axum", "rocket", "tide", "tower", "poem", "warp", "salvo", "serenity"])]
+    #[clap(long, conflicts_with_all = &["actix-web","axum", "rocket", "tide", "tower", "poem", "warp", "salvo", "serenity", "no-framework"])]
     pub thruster: bool,
+    /// Initialize without a framework
+    #[clap(long, conflicts_with_all = &["actix-web","axum", "rocket", "tide", "tower", "poem", "warp", "salvo", "serenity", "thruster"])]
+    pub no_framework: bool,
+    /// Whether to create the environment for this project on Shuttle
+    #[clap(long)]
+    pub new: bool,
+    #[clap(flatten)]
+    pub login_args: LoginArgs,
     /// Path to initialize a new shuttle project
     #[clap(
         parse(try_from_os_str = parse_init_path),
         default_value = ".",
     )]
     pub path: PathBuf,
+}
+
+impl InitArgs {
+    pub fn framework(&self) -> Option<Framework> {
+        if self.actix_web {
+            Some(Framework::ActixWeb)
+        } else if self.axum {
+            Some(Framework::Axum)
+        } else if self.rocket {
+            Some(Framework::Rocket)
+        } else if self.tide {
+            Some(Framework::Tide)
+        } else if self.tower {
+            Some(Framework::Tower)
+        } else if self.poem {
+            Some(Framework::Poem)
+        } else if self.salvo {
+            Some(Framework::Salvo)
+        } else if self.serenity {
+            Some(Framework::Serenity)
+        } else if self.warp {
+            Some(Framework::Warp)
+        } else if self.thruster {
+            Some(Framework::Thruster)
+        } else if self.no_framework {
+            Some(Framework::None)
+        } else {
+            None
+        }
+    }
 }
 
 // Helper function to parse and return the absolute path
@@ -192,9 +239,60 @@ fn parse_path(path: &OsStr) -> Result<PathBuf, io::Error> {
 }
 
 // Helper function to parse, create if not exists, and return the absolute path
-fn parse_init_path(path: &OsStr) -> Result<PathBuf, io::Error> {
+pub(crate) fn parse_init_path(path: &OsStr) -> Result<PathBuf, io::Error> {
     // Create the directory if does not exist
     create_dir_all(path)?;
 
     parse_path(path)
+}
+
+#[cfg(test)]
+mod tests {
+    use strum::IntoEnumIterator;
+
+    use super::*;
+
+    fn init_args_factory(framework: &str) -> InitArgs {
+        let mut init_args = InitArgs {
+            actix_web: false,
+            axum: false,
+            rocket: false,
+            tide: false,
+            tower: false,
+            poem: false,
+            salvo: false,
+            serenity: false,
+            warp: false,
+            thruster: false,
+            no_framework: false,
+            new: false,
+            login_args: LoginArgs { api_key: None },
+            path: PathBuf::new(),
+        };
+
+        match framework {
+            "actix-web" => init_args.actix_web = true,
+            "axum" => init_args.axum = true,
+            "rocket" => init_args.rocket = true,
+            "tide" => init_args.tide = true,
+            "tower" => init_args.tower = true,
+            "poem" => init_args.poem = true,
+            "salvo" => init_args.salvo = true,
+            "serenity" => init_args.serenity = true,
+            "warp" => init_args.warp = true,
+            "thruster" => init_args.thruster = true,
+            "none" => init_args.no_framework = true,
+            _ => unreachable!(),
+        }
+
+        init_args
+    }
+
+    #[test]
+    fn test_init_args_framework() {
+        for framework in Framework::iter() {
+            let args = init_args_factory(&framework.to_string());
+            assert_eq!(args.framework(), Some(framework));
+        }
+    }
 }

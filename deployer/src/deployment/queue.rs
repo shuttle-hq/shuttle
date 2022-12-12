@@ -1,17 +1,21 @@
 use super::deploy_layer::{Log, LogRecorder, LogType};
+use super::storage_manager::StorageManager;
 use super::{Built, QueueReceiver, RunSender, State};
 use crate::error::{Error, Result, TestError};
 use crate::persistence::{LogLevel, SecretRecorder};
 
+use cargo::util::interning::InternedString;
 use cargo_metadata::Message;
 use chrono::Utc;
 use crossbeam_channel::Sender;
+use opentelemetry::global;
 use serde_json::json;
 use shuttle_service::loader::{build_crate, get_config};
-use tracing::{debug, error, info, instrument, trace};
+use tracing::{debug, debug_span, error, info, instrument, trace, Instrument, Span};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::fs::remove_file;
 use std::io::Read;
@@ -29,22 +33,9 @@ pub async fn task(
     run_send: RunSender,
     log_recorder: impl LogRecorder,
     secret_recorder: impl SecretRecorder,
-    artifacts_path: PathBuf,
+    storage_manager: StorageManager,
 ) {
     info!("Queue task started");
-
-    // Path of the directory that contains extracted service Cargo projects.
-    let builds_path = artifacts_path.join("shuttle-builds");
-
-    // The directory in which compiled '.so' files are stored.
-    let libs_path = artifacts_path.join("shuttle-libs");
-
-    fs::create_dir_all(&builds_path)
-        .await
-        .expect("could not create builds directory");
-    fs::create_dir_all(&libs_path)
-        .await
-        .expect("could not create libs directory");
 
     while let Some(queued) = recv.recv().await {
         let id = queued.id;
@@ -54,31 +45,46 @@ pub async fn task(
         let run_send_cloned = run_send.clone();
         let log_recorder = log_recorder.clone();
         let secret_recorder = secret_recorder.clone();
-        let builds_path = builds_path.clone();
-        let libs_path = libs_path.clone();
+        let storage_manager = storage_manager.clone();
 
         tokio::spawn(async move {
-            match queued
-                .handle(builds_path, libs_path, log_recorder, secret_recorder)
-                .await
-            {
-                Ok(built) => promote_to_run(built, run_send_cloned).await,
-                Err(err) => build_failed(&id, err),
+            let parent_cx = global::get_text_map_propagator(|propagator| {
+                propagator.extract(&queued.tracing_context)
+            });
+            let span = debug_span!("builder");
+            span.set_parent(parent_cx);
+
+            async move {
+                match queued
+                    .handle(storage_manager, log_recorder, secret_recorder)
+                    .await
+                {
+                    Ok(built) => promote_to_run(built, run_send_cloned).await,
+                    Err(err) => build_failed(&id, err),
+                }
             }
+            .instrument(span)
+            .await
         });
     }
 }
 
-#[instrument(fields(id = %_id, state = %State::Crashed))]
-fn build_failed(_id: &Uuid, err: impl std::error::Error + 'static) {
+#[instrument(skip(_id), fields(id = %_id, state = %State::Crashed))]
+fn build_failed(_id: &Uuid, error: impl std::error::Error + 'static) {
     error!(
-        error = &err as &dyn std::error::Error,
+        error = &error as &dyn std::error::Error,
         "service build encountered an error"
     );
 }
 
 #[instrument(fields(id = %built.id, state = %State::Built))]
-async fn promote_to_run(built: Built, run_send: RunSender) {
+async fn promote_to_run(mut built: Built, run_send: RunSender) {
+    let cx = Span::current().context();
+
+    opentelemetry::global::get_text_map_propagator(|propagator| {
+        propagator.inject_context(&cx, &mut built.tracing_context);
+    });
+
     if let Err(err) = run_send.send(built.clone()).await {
         build_failed(&built.id, err);
     }
@@ -90,20 +96,20 @@ pub struct Queued {
     pub service_id: Uuid,
     pub data: Vec<u8>,
     pub will_run_tests: bool,
+    pub tracing_context: HashMap<String, String>,
 }
 
 impl Queued {
-    #[instrument(name = "queued_handle", skip(self, builds_path, libs_path, log_recorder, secret_recorder), fields(id = %self.id, state = %State::Building))]
+    #[instrument(skip(self, storage_manager, log_recorder, secret_recorder), fields(id = %self.id, state = %State::Building))]
     async fn handle(
         self,
-        builds_path: PathBuf,
-        libs_path: PathBuf,
+        storage_manager: StorageManager,
         log_recorder: impl LogRecorder,
         secret_recorder: impl SecretRecorder,
     ) -> Result<Built> {
         info!("Extracting received data");
 
-        let project_path = builds_path.join(&self.service_name);
+        let project_path = storage_manager.service_build_path(&self.service_name)?;
 
         extract_tar_gz_data(self.data.as_slice(), &project_path).await?;
 
@@ -114,7 +120,7 @@ impl Queued {
 
         let (tx, rx): (crossbeam_channel::Sender<Message>, _) = crossbeam_channel::bounded(0);
         let id = self.id;
-        tokio::spawn(async move {
+        tokio::task::spawn_blocking(move || {
             while let Ok(message) = rx.recv() {
                 trace!(?message, "received cargo message");
                 // TODO: change these to `info!(...)` as [valuable] support increases.
@@ -163,12 +169,13 @@ impl Queued {
 
         info!("Moving built library");
 
-        store_lib(libs_path, so_path, &self.id).await?;
+        store_lib(&storage_manager, so_path, &self.id).await?;
 
         let built = Built {
             id: self.id,
             service_name: self.service_name,
             service_id: self.service_id,
+            tracing_context: Default::default(),
         };
 
         Ok(built)
@@ -228,8 +235,6 @@ async fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<
     let mut archive = Archive::new(tar);
     archive.set_overwrite(true);
 
-    fs::create_dir_all(&dest).await?;
-
     // Clear directory first
     let mut entries = fs::read_dir(&dest).await?;
     while let Some(entry) = entries.next_entry().await? {
@@ -266,6 +271,8 @@ async fn build_deployment(
         .await
         .map_err(|e| Error::Build(e.into()))?;
 
+    trace!(?so_path, "got so path");
+
     Ok(so_path)
 }
 
@@ -277,36 +284,8 @@ async fn run_pre_deploy_tests(
     let (read, write) = pipe::pipe();
     let project_path = project_path.to_owned();
 
-    let handle = tokio::spawn(async move {
-        let config = get_config(write)?;
-        let manifest_path = project_path.join("Cargo.toml");
-
-        let ws = Workspace::new(&manifest_path, &config)?;
-
-        let mut compile_opts = CompileOptions::new(&config, CompileMode::Test)?;
-
-        compile_opts.build_config.message_format = MessageFormat::Json {
-            render_diagnostics: false,
-            short: false,
-            ansi: false,
-        };
-
-        let opts = TestOptions {
-            compile_opts,
-            no_run: false,
-            no_fail_fast: false,
-        };
-
-        let test_failures = cargo::ops::run_tests(&ws, &opts, &[])?;
-
-        match test_failures {
-            Some(failures) => Err(failures.into()),
-            None => Ok(()),
-        }
-    });
-
     // This needs to be on a separate thread, else deployer will block (reason currently unknown :D)
-    tokio::spawn(async move {
+    tokio::task::spawn_blocking(move || {
         for message in Message::parse_stream(read) {
             match message {
                 Ok(message) => {
@@ -321,17 +300,49 @@ async fn run_pre_deploy_tests(
         }
     });
 
-    handle.await?
+    let config = get_config(write)?;
+    let manifest_path = project_path.join("Cargo.toml");
+
+    let ws = Workspace::new(&manifest_path, &config)?;
+
+    let mut compile_opts = CompileOptions::new(&config, CompileMode::Test)?;
+
+    compile_opts.build_config.message_format = MessageFormat::Json {
+        render_diagnostics: false,
+        short: false,
+        ansi: false,
+    };
+
+    // We set the tests to build with the release profile since deployments compile
+    // with the release profile by default. This means crates don't need to be
+    // recompiled in debug mode for the tests, reducing memory usage during deployment.
+    compile_opts.build_config.requested_profile = InternedString::new("release");
+
+    // Build tests with a maximum of 8 workers.
+    compile_opts.build_config.jobs = 8;
+
+    let opts = TestOptions {
+        compile_opts,
+        no_run: false,
+        no_fail_fast: false,
+    };
+
+    let test_failures = cargo::ops::run_tests(&ws, &opts, &[])?;
+
+    match test_failures {
+        Some(failures) => Err(failures.into()),
+        None => Ok(()),
+    }
 }
 
 /// Store 'so' file in the libs folder
-#[instrument(skip(storage_dir_path, so_path, id))]
+#[instrument(skip(storage_manager, so_path, id))]
 async fn store_lib(
-    storage_dir_path: impl AsRef<Path>,
+    storage_manager: &StorageManager,
     so_path: impl AsRef<Path>,
     id: &Uuid,
 ) -> Result<()> {
-    let new_so_path = storage_dir_path.as_ref().join(id.to_string());
+    let new_so_path = storage_manager.deployment_library_path(id)?;
 
     fs::rename(so_path, new_so_path).await?;
 
@@ -346,7 +357,7 @@ mod tests {
     use tokio::fs;
     use uuid::Uuid;
 
-    use crate::error::TestError;
+    use crate::{deployment::storage_manager::StorageManager, error::TestError};
 
     #[tokio::test]
     async fn extract_tar_gz_data() {
@@ -442,7 +453,7 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));
         let (tx, rx) = crossbeam_channel::unbounded();
 
-        tokio::spawn(async move { while rx.recv().is_ok() {} });
+        tokio::task::spawn_blocking(move || while rx.recv().is_ok() {});
 
         let failure_project_path = root.join("tests/resources/tests-fail");
         assert!(matches!(
@@ -460,22 +471,24 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
     async fn store_lib() {
         let libs_dir = TempDir::new("lib-store").unwrap();
         let libs_p = libs_dir.path();
+        let storage_manager = StorageManager::new(libs_p.to_path_buf());
 
-        let build_dir = TempDir::new("build-store").unwrap();
-        let build_p = build_dir.path();
+        let build_p = storage_manager.builds_path().unwrap();
 
         let so_path = build_p.join("xyz.so");
         let id = Uuid::new_v4();
 
         fs::write(&so_path, "barfoo").await.unwrap();
 
-        super::store_lib(&libs_p, &so_path, &id).await.unwrap();
+        super::store_lib(&storage_manager, &so_path, &id)
+            .await
+            .unwrap();
 
         // Old '.so' file gone?
         assert!(!so_path.exists());
 
         assert_eq!(
-            fs::read_to_string(libs_p.join(id.to_string()))
+            fs::read_to_string(libs_p.join("shuttle-libs").join(id.to_string()))
                 .await
                 .unwrap(),
             "barfoo"

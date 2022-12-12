@@ -42,6 +42,7 @@ pub async fn start(
             id: existing_deployment.id,
             service_name: existing_deployment.service_name,
             service_id: existing_deployment.service_id,
+            tracing_context: Default::default(),
         };
         deployment_manager.run_push(built).await;
     }
@@ -51,6 +52,7 @@ pub async fn start(
         deployment_manager,
         args.proxy_fqdn,
         args.admin_secret,
+        args.project,
     );
     let make_service = router.into_make_service();
 
@@ -67,10 +69,10 @@ pub async fn start_proxy(
     fqdn: FQDN,
     address_getter: impl AddressGetter,
 ) {
-    let make_service = make_service_fn(|socket: &AddrStream| {
+    let make_service = make_service_fn(move |socket: &AddrStream| {
         let remote_address = socket.remote_addr();
-        let fqdn = format!(".{}", fqdn.to_string().trim_end_matches('.'));
         let address_getter = address_getter.clone();
+        let fqdn = fqdn.clone();
 
         async move {
             Ok::<_, Infallible>(service_fn(move |req| {

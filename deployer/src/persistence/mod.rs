@@ -77,7 +77,7 @@ impl Persistence {
         let (log_send, log_recv): (crossbeam_channel::Sender<deploy_layer::Log>, _) =
             crossbeam_channel::bounded(0);
 
-        let (stream_log_send, _) = broadcast::channel(32);
+        let (stream_log_send, _) = broadcast::channel(1);
         let stream_log_send_clone = stream_log_send.clone();
 
         let pool_cloned = pool.clone();
@@ -350,7 +350,7 @@ impl ResourceRecorder for Persistence {
 
     async fn insert_resource(&self, resource: &Resource) -> Result<()> {
         sqlx::query("INSERT OR REPLACE INTO resources (service_id, type, data) VALUES (?, ?, ?)")
-            .bind(&resource.service_id)
+            .bind(resource.service_id)
             .bind(resource.r#type)
             .bind(&resource.data)
             .execute(&self.pool)
@@ -476,7 +476,7 @@ mod tests {
             id,
             service_id,
             state: State::Queued,
-            last_update: Utc.ymd(2022, 4, 25).and_hms(4, 43, 33),
+            last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 43, 33).unwrap(),
             address: None,
         };
 
@@ -496,7 +496,10 @@ mod tests {
         .unwrap();
         let update = p.get_deployment(&id).await.unwrap().unwrap();
         assert_eq!(update.state, State::Built);
-        assert_ne!(update.last_update, Utc.ymd(2022, 4, 25).and_hms(4, 43, 33));
+        assert_ne!(
+            update.last_update,
+            Utc.with_ymd_and_hms(2022, 4, 25, 4, 43, 33).unwrap()
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -510,28 +513,28 @@ mod tests {
             id: Uuid::new_v4(),
             service_id: xyz_id,
             state: State::Crashed,
-            last_update: Utc.ymd(2022, 4, 25).and_hms(7, 29, 35),
+            last_update: Utc.with_ymd_and_hms(2022, 4, 25, 7, 29, 35).unwrap(),
             address: None,
         };
         let deployment_stopped = Deployment {
             id: Uuid::new_v4(),
             service_id: xyz_id,
             state: State::Stopped,
-            last_update: Utc.ymd(2022, 4, 25).and_hms(7, 49, 35),
+            last_update: Utc.with_ymd_and_hms(2022, 4, 25, 7, 49, 35).unwrap(),
             address: None,
         };
         let deployment_other = Deployment {
             id: Uuid::new_v4(),
             service_id,
             state: State::Running,
-            last_update: Utc.ymd(2022, 4, 25).and_hms(7, 39, 39),
+            last_update: Utc.with_ymd_and_hms(2022, 4, 25, 7, 39, 39).unwrap(),
             address: None,
         };
         let deployment_running = Deployment {
             id: Uuid::new_v4(),
             service_id: xyz_id,
             state: State::Running,
-            last_update: Utc.ymd(2022, 4, 25).and_hms(7, 48, 29),
+            last_update: Utc.with_ymd_and_hms(2022, 4, 25, 7, 48, 29).unwrap(),
             address: Some(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 9876)),
         };
 
@@ -568,35 +571,35 @@ mod tests {
                 id: Uuid::new_v4(),
                 service_id,
                 state: State::Built,
-                last_update: Utc.ymd(2022, 4, 25).and_hms(4, 29, 33),
+                last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 29, 33).unwrap(),
                 address: None,
             },
             Deployment {
                 id: id_1,
                 service_id: foo_id,
                 state: State::Running,
-                last_update: Utc.ymd(2022, 4, 25).and_hms(4, 29, 44),
+                last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 29, 44).unwrap(),
                 address: None,
             },
             Deployment {
                 id: id_2,
                 service_id: bar_id,
                 state: State::Running,
-                last_update: Utc.ymd(2022, 4, 25).and_hms(4, 33, 48),
+                last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 33, 48).unwrap(),
                 address: None,
             },
             Deployment {
                 id: Uuid::new_v4(),
                 service_id: service_id2,
                 state: State::Crashed,
-                last_update: Utc.ymd(2022, 4, 25).and_hms(4, 38, 52),
+                last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 38, 52).unwrap(),
                 address: None,
             },
             Deployment {
                 id: id_3,
                 service_id: foo_id,
                 state: State::Running,
-                last_update: Utc.ymd(2022, 4, 25).and_hms(4, 42, 32),
+                last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 42, 32).unwrap(),
                 address: None,
             },
         ] {
@@ -788,14 +791,14 @@ mod tests {
             id,
             service_id,
             state: State::Queued, // Should be different from the state recorded below
-            last_update: Utc.ymd(2022, 4, 29).and_hms(2, 39, 39),
+            last_update: Utc.with_ymd_and_hms(2022, 4, 29, 2, 39, 39).unwrap(),
             address: None,
         })
         .await
         .unwrap();
         let state = deploy_layer::Log {
             id,
-            timestamp: Utc.ymd(2022, 4, 29).and_hms(2, 39, 59),
+            timestamp: Utc.with_ymd_and_hms(2022, 4, 29, 2, 39, 59).unwrap(),
             state: State::Running,
             level: Level::Info,
             file: None,
@@ -828,7 +831,7 @@ mod tests {
                 id,
                 service_id,
                 state: State::Running,
-                last_update: Utc.ymd(2022, 4, 29).and_hms(2, 39, 59),
+                last_update: Utc.with_ymd_and_hms(2022, 4, 29, 2, 39, 59).unwrap(),
                 address: Some(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 12345)),
             }
         );
@@ -963,19 +966,19 @@ mod tests {
         )
         // This running item should match
         .bind(Uuid::new_v4())
-        .bind(&service_id)
+        .bind(service_id)
         .bind(State::Running)
         .bind(Utc::now())
         .bind("10.0.0.5:12356")
         // A stopped item should not match
         .bind(Uuid::new_v4())
-        .bind(&service_id)
+        .bind(service_id)
         .bind(State::Stopped)
         .bind(Utc::now())
         .bind("10.0.0.5:9876")
         // Another service should not match
         .bind(Uuid::new_v4())
-        .bind(&service_other_id)
+        .bind(service_other_id)
         .bind(State::Running)
         .bind(Utc::now())
         .bind("10.0.0.5:5678")
@@ -1004,35 +1007,35 @@ mod tests {
                 id: Uuid::new_v4(),
                 service_id,
                 state: State::Built,
-                last_update: Utc.ymd(2022, 4, 25).and_hms(4, 29, 33),
+                last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 29, 33).unwrap(),
                 address: None,
             },
             Deployment {
                 id: Uuid::new_v4(),
                 service_id,
                 state: State::Stopped,
-                last_update: Utc.ymd(2022, 4, 25).and_hms(4, 29, 44),
+                last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 29, 44).unwrap(),
                 address: None,
             },
             Deployment {
                 id: id_1,
                 service_id,
                 state: State::Running,
-                last_update: Utc.ymd(2022, 4, 25).and_hms(4, 33, 48),
+                last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 33, 48).unwrap(),
                 address: None,
             },
             Deployment {
                 id: Uuid::new_v4(),
                 service_id,
                 state: State::Crashed,
-                last_update: Utc.ymd(2022, 4, 25).and_hms(4, 38, 52),
+                last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 38, 52).unwrap(),
                 address: None,
             },
             Deployment {
                 id: id_2,
                 service_id,
                 state: State::Running,
-                last_update: Utc.ymd(2022, 4, 25).and_hms(4, 42, 32),
+                last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 42, 32).unwrap(),
                 address: None,
             },
         ] {
@@ -1051,8 +1054,8 @@ mod tests {
         sqlx::query(
             "INSERT INTO deployments (id, service_id, state, last_update) VALUES (?, ?, ?, ?)",
         )
-        .bind(&deployment_id)
-        .bind(&service_id)
+        .bind(deployment_id)
+        .bind(service_id)
         .bind(State::Running)
         .bind(Utc::now())
         .execute(pool)
@@ -1069,7 +1072,7 @@ mod tests {
         let service_id = Uuid::new_v4();
 
         sqlx::query("INSERT INTO services (id, name) VALUES (?, ?)")
-            .bind(&service_id)
+            .bind(service_id)
             .bind(name)
             .execute(pool)
             .await?;

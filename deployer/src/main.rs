@@ -1,4 +1,5 @@
 use clap::Parser;
+use opentelemetry::global;
 use shuttle_deployer::{
     start, start_proxy, AbstractProvisionerFactory, Args, DeployLayer, Persistence,
     RuntimeLoggerFactory,
@@ -16,6 +17,8 @@ async fn main() {
     let args = Args::parse();
 
     trace!(args = ?args, "parsed args");
+
+    global::set_text_map_propagator(opentelemetry_datadog::DatadogPropagator::new());
 
     let fmt_layer = fmt::layer();
     let filter_layer = EnvFilter::try_from_default_env()

@@ -23,6 +23,7 @@ use shuttle_service::{database::Type, error::CustomError, Factory, ServiceName};
 use std::{
     collections::{BTreeMap, HashMap},
     io::stdout,
+    path::PathBuf,
     time::Duration,
 };
 use tokio::time::sleep;
@@ -32,14 +33,20 @@ pub struct LocalFactory {
     docker: Docker,
     service_name: ServiceName,
     secrets: BTreeMap<String, String>,
+    working_directory: PathBuf,
 }
 
 impl LocalFactory {
-    pub fn new(service_name: ServiceName, secrets: BTreeMap<String, String>) -> Result<Self> {
+    pub fn new(
+        service_name: ServiceName,
+        secrets: BTreeMap<String, String>,
+        working_directory: PathBuf,
+    ) -> Result<Self> {
         Ok(Self {
             docker: Docker::connect_with_local_defaults()?,
             service_name,
             secrets,
+            working_directory,
         })
     }
 }
@@ -175,6 +182,14 @@ impl Factory for LocalFactory {
 
     fn get_service_name(&self) -> ServiceName {
         self.service_name.clone()
+    }
+
+    fn get_build_path(&self) -> Result<PathBuf, shuttle_service::Error> {
+        Ok(self.working_directory.clone())
+    }
+
+    fn get_storage_path(&self) -> Result<PathBuf, shuttle_service::Error> {
+        Ok(self.working_directory.clone())
     }
 }
 

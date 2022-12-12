@@ -362,8 +362,9 @@ mod tests {
 
     use crate::{
         deployment::{
-            deploy_layer::LogType, provisioner_factory, runtime_logger, ActiveDeploymentsGetter,
-            Built, DeploymentManager, Queued,
+            deploy_layer::LogType, provisioner_factory, runtime_logger,
+            storage_manager::StorageManager, ActiveDeploymentsGetter, Built, DeploymentManager,
+            Queued,
         },
         persistence::{SecretRecorder, State},
     };
@@ -460,6 +461,8 @@ mod tests {
             &self,
             _project_name: shuttle_common::project::ProjectName,
             _service_id: Uuid,
+            _deployment_id: Uuid,
+            _storage_manager: StorageManager,
         ) -> Result<Self::Output, Self::Error> {
             Ok(StubProvisionerFactory)
         }
@@ -484,6 +487,14 @@ mod tests {
 
         fn get_service_name(&self) -> shuttle_service::ServiceName {
             panic!("did not expect any deploy_layer test to get the service name")
+        }
+
+        fn get_build_path(&self) -> Result<PathBuf, shuttle_service::Error> {
+            panic!("did not expect any deploy_layer test to get the build path")
+        }
+
+        fn get_storage_path(&self) -> Result<PathBuf, shuttle_service::Error> {
+            panic!("did not expect any deploy_layer test to get the storage path")
         }
     }
 
@@ -586,7 +597,7 @@ mod tests {
         };
 
         select! {
-            _ = sleep(Duration::from_secs(120)) => {
+            _ = sleep(Duration::from_secs(180)) => {
                 panic!("states should go into 'Running' for a valid service");
             }
             _ = test => {}
@@ -710,7 +721,7 @@ mod tests {
         };
 
         select! {
-            _ = sleep(Duration::from_secs(120)) => {
+            _ = sleep(Duration::from_secs(180)) => {
                 panic!("states should go into 'Completed' when a service stops by itself");
             }
             _ = test => {}
@@ -790,7 +801,7 @@ mod tests {
         };
 
         select! {
-            _ = sleep(Duration::from_secs(120)) => {
+            _ = sleep(Duration::from_secs(180)) => {
                 panic!("states should go into 'Crashed' panicing in bind");
             }
             _ = test => {}
@@ -865,7 +876,7 @@ mod tests {
         };
 
         select! {
-            _ = sleep(Duration::from_secs(120)) => {
+            _ = sleep(Duration::from_secs(180)) => {
                 panic!("states should go into 'Crashed' when panicing in main");
             }
             _ = test => {}
@@ -889,6 +900,7 @@ mod tests {
                 id,
                 service_name: "run-test".to_string(),
                 service_id: Uuid::new_v4(),
+                tracing_context: Default::default(),
             })
             .await;
 
@@ -945,6 +957,7 @@ mod tests {
                 service_id: Uuid::new_v4(),
                 data: Bytes::from("violets are red").to_vec(),
                 will_run_tests: false,
+                tracing_context: Default::default(),
             })
             .await;
 
@@ -988,6 +1001,7 @@ mod tests {
             service_id: Uuid::new_v4(),
             data: bytes,
             will_run_tests: false,
+            tracing_context: Default::default(),
         }
     }
 }

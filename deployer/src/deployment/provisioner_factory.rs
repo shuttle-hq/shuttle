@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, path::PathBuf};
 
 use async_trait::async_trait;
 use shuttle_common::{database, DatabaseReadyInfo};
@@ -16,6 +16,8 @@ use uuid::Uuid;
 
 use crate::persistence::{Resource, ResourceRecorder, ResourceType, SecretGetter};
 
+use super::storage_manager::StorageManager;
+
 /// Trait to make it easy to get a factory (service locator) for each service being started
 #[async_trait]
 pub trait AbstractFactory: Send + Sync + 'static {
@@ -27,6 +29,8 @@ pub trait AbstractFactory: Send + Sync + 'static {
         &self,
         service_name: ServiceName,
         service_id: Uuid,
+        deployment_id: Uuid,
+        storage_manager: StorageManager,
     ) -> Result<Self::Output, Self::Error>;
 }
 
@@ -47,6 +51,8 @@ impl<R: ResourceRecorder, S: SecretGetter> AbstractFactory for AbstractProvision
         &self,
         service_name: ServiceName,
         service_id: Uuid,
+        deployment_id: Uuid,
+        storage_manager: StorageManager,
     ) -> Result<Self::Output, Self::Error> {
         let provisioner_client = ProvisionerClient::connect(self.provisioner_uri.clone()).await?;
 
@@ -54,6 +60,8 @@ impl<R: ResourceRecorder, S: SecretGetter> AbstractFactory for AbstractProvision
             provisioner_client,
             service_name,
             service_id,
+            deployment_id,
+            storage_manager,
             self.resource_recorder.clone(),
             self.secret_getter.clone(),
         ))
@@ -80,6 +88,8 @@ pub enum ProvisionerError {
 pub struct ProvisionerFactory<R: ResourceRecorder, S: SecretGetter> {
     service_name: ServiceName,
     service_id: Uuid,
+    deployment_id: Uuid,
+    storage_manager: StorageManager,
     provisioner_client: ProvisionerClient<Channel>,
     info: Option<DatabaseReadyInfo>,
     resource_recorder: R,
@@ -92,6 +102,8 @@ impl<R: ResourceRecorder, S: SecretGetter> ProvisionerFactory<R, S> {
         provisioner_client: ProvisionerClient<Channel>,
         service_name: ServiceName,
         service_id: Uuid,
+        deployment_id: Uuid,
+        storage_manager: StorageManager,
         resource_recorder: R,
         secret_getter: S,
     ) -> Self {
@@ -99,6 +111,8 @@ impl<R: ResourceRecorder, S: SecretGetter> ProvisionerFactory<R, S> {
             provisioner_client,
             service_name,
             service_id,
+            deployment_id,
+            storage_manager,
             info: None,
             resource_recorder,
             secret_getter,
@@ -178,5 +192,17 @@ impl<R: ResourceRecorder, S: SecretGetter> Factory for ProvisionerFactory<R, S> 
 
     fn get_service_name(&self) -> ServiceName {
         self.service_name.clone()
+    }
+
+    fn get_build_path(&self) -> Result<PathBuf, shuttle_service::Error> {
+        self.storage_manager
+            .service_build_path(self.service_name.as_str())
+            .map_err(Into::into)
+    }
+
+    fn get_storage_path(&self) -> Result<PathBuf, shuttle_service::Error> {
+        self.storage_manager
+            .deployment_storage_path(self.service_name.as_str(), &self.deployment_id)
+            .map_err(Into::into)
     }
 }

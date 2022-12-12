@@ -1,11 +1,22 @@
 use async_trait::async_trait;
-use shuttle_service::{Factory, ResourceBuilder};
-use std::{fs::rename, path::PathBuf};
+use shuttle_service::{
+    error::{CustomError, Error as ShuttleError},
+    Factory, ResourceBuilder,
+};
+use std::{
+    fs::rename,
+    path::{Path, PathBuf},
+};
 use tokio::runtime::Runtime;
 
 pub struct StaticFolder<'a> {
     /// The folder to reach at runtime. Defaults to `static`
     folder: &'a str,
+}
+
+pub enum Error {
+    AbsolutePath,
+    TransversedUp,
 }
 
 impl<'a> StaticFolder<'a> {
@@ -27,7 +38,23 @@ impl<'a> ResourceBuilder<PathBuf> for StaticFolder<'a> {
         factory: &mut dyn Factory,
         _runtime: &Runtime,
     ) -> Result<PathBuf, shuttle_service::Error> {
+        let folder = Path::new(self.folder);
+
+        // Prevent users from users from reading anything outside of their crate's build folder
+        if folder.is_absolute() {
+            return Err(Error::AbsolutePath)?;
+        }
+
         let input_dir = factory.get_build_path()?.join(self.folder);
+
+        match input_dir.canonicalize() {
+            Ok(canonical_path) if canonical_path != input_dir => return Err(Error::TransversedUp)?,
+            Ok(_) => {
+                // The path did not change to outside the crate's build folder
+            }
+            Err(err) => return Err(err)?,
+        }
+
         let output_dir = factory.get_storage_path()?.join(self.folder);
 
         rename(input_dir, output_dir.clone())?;
@@ -36,9 +63,21 @@ impl<'a> ResourceBuilder<PathBuf> for StaticFolder<'a> {
     }
 }
 
+impl From<Error> for shuttle_service::Error {
+    fn from(error: Error) -> Self {
+        let msg = match error {
+            Error::AbsolutePath => "Cannot use an absolute path for a static folder",
+            Error::TransversedUp => "Cannot transverse out of crate for a static folder",
+        };
+
+        ShuttleError::Custom(CustomError::msg(msg))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs::{self};
+    use std::path::PathBuf;
 
     use async_trait::async_trait;
     use shuttle_service::{Factory, ResourceBuilder};
@@ -47,16 +86,46 @@ mod tests {
     use crate::StaticFolder;
 
     struct MockFactory {
-        build_path: TempDir,
-        storage_path: TempDir,
+        temp_dir: TempDir,
     }
 
+    // Will have this tree across all the tests
+    // .
+    // ├── build
+    // │   └── static
+    // │       └── note.txt
+    // ├── storage
+    // │   └── static
+    // │       └── note.txt
+    // └── escape
+    //     └── passwd
     impl MockFactory {
         fn new() -> Self {
             Self {
-                build_path: TempDir::new("build").unwrap(),
-                storage_path: TempDir::new("storage").unwrap(),
+                temp_dir: TempDir::new("static_folder").unwrap(),
             }
+        }
+
+        fn build_path(&self) -> PathBuf {
+            self.get_path("build")
+        }
+
+        fn storage_path(&self) -> PathBuf {
+            self.get_path("storage")
+        }
+
+        fn escape_path(&self) -> PathBuf {
+            self.get_path("escape")
+        }
+
+        fn get_path(&self, folder: &str) -> PathBuf {
+            let path = self.temp_dir.path().join(folder);
+
+            if !path.exists() {
+                fs::create_dir(&path).unwrap();
+            }
+
+            path
         }
     }
 
@@ -80,11 +149,11 @@ mod tests {
         }
 
         fn get_build_path(&self) -> Result<std::path::PathBuf, shuttle_service::Error> {
-            Ok(self.build_path.path().to_owned())
+            Ok(self.build_path())
         }
 
         fn get_storage_path(&self) -> Result<std::path::PathBuf, shuttle_service::Error> {
-            Ok(self.storage_path.path().to_owned())
+            Ok(self.storage_path())
         }
     }
 
@@ -92,11 +161,11 @@ mod tests {
     async fn copies_folder() {
         let mut factory = MockFactory::new();
 
-        let input_file_path = factory.build_path.path().join("static").join("note.txt");
+        let input_file_path = factory.build_path().join("static").join("note.txt");
         fs::create_dir_all(input_file_path.parent().unwrap()).unwrap();
         fs::write(input_file_path, "Hello, test!").unwrap();
 
-        let expected_file = factory.storage_path.path().join("static").join("note.txt");
+        let expected_file = factory.storage_path().join("static").join("note.txt");
         assert!(!expected_file.exists(), "input file should not exist yet");
 
         // Call plugin
@@ -107,7 +176,7 @@ mod tests {
 
         assert_eq!(
             actual_folder,
-            factory.storage_path.path().join("static"),
+            factory.storage_path().join("static"),
             "expect path to the static folder"
         );
         assert!(expected_file.exists(), "expected input file to be created");
@@ -116,6 +185,44 @@ mod tests {
             "Hello, test!",
             "expected file content to match"
         );
+
+        runtime.shutdown_background();
+    }
+
+    #[tokio::test]
+    #[should_panic(expected = "Cannot use an absolute path for a static folder")]
+    async fn cannot_use_absolute_path() {
+        let mut factory = MockFactory::new();
+        let static_folder = StaticFolder::new();
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+
+        let _ = static_folder
+            .folder("/etc")
+            .build(&mut factory, &runtime)
+            .await
+            .unwrap();
+
+        runtime.shutdown_background();
+    }
+
+    #[tokio::test]
+    #[should_panic(expected = "Cannot transverse out of crate for a static folder")]
+    async fn cannot_transverse_up() {
+        let mut factory = MockFactory::new();
+
+        let password_file_path = factory.escape_path().join("passwd");
+        fs::create_dir_all(password_file_path.parent().unwrap()).unwrap();
+        fs::write(password_file_path, "qwerty").unwrap();
+
+        // Call plugin
+        let static_folder = StaticFolder::new();
+
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let _ = static_folder
+            .folder("../escape")
+            .build(&mut factory, &runtime)
+            .await
+            .unwrap();
 
         runtime.shutdown_background();
     }

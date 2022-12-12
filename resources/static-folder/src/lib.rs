@@ -40,7 +40,7 @@ impl<'a> ResourceBuilder<PathBuf> for StaticFolder<'a> {
     ) -> Result<PathBuf, shuttle_service::Error> {
         let folder = Path::new(self.folder);
 
-        // Prevent users from users from reading anything outside of there crate's build folder
+        // Prevent users from users from reading anything outside of their crate's build folder
         if folder.is_absolute() {
             return Err(Error::AbsolutePath)?;
         }

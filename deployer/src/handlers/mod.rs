@@ -5,7 +5,7 @@ use axum::extract::ws::{self, WebSocket};
 use axum::extract::{Extension, MatchedPath, Path, Query};
 use axum::http::{Request, Response};
 use axum::middleware::from_extractor;
-use axum::routing::{get, Router};
+use axum::routing::{get, post, Router};
 use axum::{extract::BodyStream, Json};
 use bytes::BufMut;
 use chrono::{TimeZone, Utc};
@@ -17,6 +17,7 @@ use shuttle_common::backends::metrics::Metrics;
 use shuttle_common::models::secret;
 use shuttle_common::project::ProjectName;
 use shuttle_common::LogItem;
+use shuttle_service::loader::clean_crate;
 use tower_http::auth::RequireAuthorizationLayer;
 use tower_http::trace::TraceLayer;
 use tracing::{debug, debug_span, error, field, trace, Span};
@@ -66,6 +67,7 @@ pub fn make_router(
             "/projects/:project_name/secrets/:service_name",
             get(get_secrets),
         )
+        .route("/projects/:project_name/clean", post(post_clean))
         .layer(Extension(persistence))
         .layer(Extension(deployment_manager))
         .layer(Extension(proxy_fqdn))
@@ -405,6 +407,20 @@ async fn get_secrets(
     } else {
         Err(Error::NotFound)
     }
+}
+
+async fn post_clean(
+    Extension(deployment_manager): Extension<DeploymentManager>,
+    Path(project_name): Path<String>,
+) -> Result<Json<Vec<String>>> {
+    let project_path = deployment_manager
+        .storage_manager()
+        .service_build_path(project_name)
+        .map_err(anyhow::Error::new)?;
+
+    let lines = clean_crate(&project_path, true)?;
+
+    Ok(Json(lines))
 }
 
 async fn get_status() -> String {

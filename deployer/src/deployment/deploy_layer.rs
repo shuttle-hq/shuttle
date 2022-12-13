@@ -362,9 +362,9 @@ mod tests {
 
     use crate::{
         deployment::{
-            deploy_layer::LogType, provisioner_factory, runtime_logger,
-            storage_manager::StorageManager, ActiveDeploymentsGetter, Built, DeploymentManager,
-            Queued,
+            deploy_layer::LogType, gateway_client::BuildQueueClient, provisioner_factory,
+            runtime_logger, storage_manager::StorageManager, ActiveDeploymentsGetter, Built,
+            DeploymentManager, Queued,
         },
         persistence::{SecretRecorder, State},
     };
@@ -529,6 +529,26 @@ mod tests {
         }
     }
 
+    #[derive(Clone)]
+    struct StubBuildQueueClient;
+
+    #[async_trait::async_trait]
+    impl BuildQueueClient for StubBuildQueueClient {
+        async fn get_slot(
+            &self,
+            _id: Uuid,
+        ) -> Result<bool, crate::deployment::gateway_client::Error> {
+            Ok(true)
+        }
+
+        async fn release_slot(
+            &self,
+            _id: Uuid,
+        ) -> Result<(), crate::deployment::gateway_client::Error> {
+            Ok(())
+        }
+    }
+
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_to_be_queued() {
         let deployment_manager = DeploymentManager::new(
@@ -538,6 +558,7 @@ mod tests {
             RECORDER.clone(),
             StubActiveDeploymentGetter,
             PathBuf::from("/tmp"),
+            StubBuildQueueClient,
         );
 
         let queued = get_queue("sleep-async");
@@ -657,6 +678,7 @@ mod tests {
             RECORDER.clone(),
             StubActiveDeploymentGetter,
             PathBuf::from("/tmp"),
+            StubBuildQueueClient,
         );
 
         let queued = get_queue("self-stop");
@@ -737,6 +759,7 @@ mod tests {
             RECORDER.clone(),
             StubActiveDeploymentGetter,
             PathBuf::from("/tmp"),
+            StubBuildQueueClient,
         );
 
         let queued = get_queue("bind-panic");
@@ -817,6 +840,7 @@ mod tests {
             RECORDER.clone(),
             StubActiveDeploymentGetter,
             PathBuf::from("/tmp"),
+            StubBuildQueueClient,
         );
 
         let queued = get_queue("main-panic");
@@ -892,6 +916,7 @@ mod tests {
             RECORDER.clone(),
             StubActiveDeploymentGetter,
             PathBuf::from("/tmp"),
+            StubBuildQueueClient,
         );
 
         let id = Uuid::new_v4();
@@ -947,6 +972,7 @@ mod tests {
             RECORDER.clone(),
             StubActiveDeploymentGetter,
             PathBuf::from("/tmp"),
+            StubBuildQueueClient,
         );
 
         let id = Uuid::nil();

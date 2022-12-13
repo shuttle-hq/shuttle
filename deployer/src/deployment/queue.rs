@@ -1,5 +1,5 @@
 use super::deploy_layer::{Log, LogRecorder, LogType};
-use super::gateway_client::GatewayClient;
+use super::gateway_client::BuildQueueClient;
 use super::storage_manager::StorageManager;
 use super::{Built, QueueReceiver, RunSender, State};
 use crate::error::{Error, Result, TestError};
@@ -11,7 +11,6 @@ use chrono::Utc;
 use crossbeam_channel::Sender;
 use opentelemetry::global;
 use serde_json::json;
-use shuttle_common::models::stats;
 use shuttle_service::loader::{build_crate, get_config};
 use tokio::time::sleep;
 use tracing::{debug, debug_span, error, info, instrument, trace, Instrument, Span};
@@ -38,7 +37,7 @@ pub async fn task(
     log_recorder: impl LogRecorder,
     secret_recorder: impl SecretRecorder,
     storage_manager: StorageManager,
-    gateway_client: GatewayClient,
+    queue_client: impl BuildQueueClient,
 ) {
     info!("Queue task started");
 
@@ -51,7 +50,7 @@ pub async fn task(
         let log_recorder = log_recorder.clone();
         let secret_recorder = secret_recorder.clone();
         let storage_manager = storage_manager.clone();
-        let gateway_client = gateway_client.clone();
+        let queue_client = queue_client.clone();
 
         tokio::spawn(async move {
             let parent_cx = global::get_text_map_propagator(|propagator| {
@@ -61,7 +60,7 @@ pub async fn task(
             span.set_parent(parent_cx);
 
             async move {
-                match wait_for_queue(&gateway_client, id).await {
+                match wait_for_queue(queue_client.clone(), id).await {
                     Ok(_) => {}
                     Err(err) => return build_failed(&id, err),
                 }
@@ -74,7 +73,7 @@ pub async fn task(
                     Err(err) => build_failed(&id, err),
                 }
 
-                match remove_from_queue(&gateway_client, id).await {
+                match remove_from_queue(queue_client, id).await {
                     Ok(_) => {}
                     Err(err) => return build_failed(&id, err),
                 }
@@ -93,14 +92,12 @@ fn build_failed(_id: &Uuid, error: impl std::error::Error + 'static) {
     );
 }
 
-#[instrument(skip(gateway_client), fields(state = %State::Queued))]
-async fn wait_for_queue(gateway_client: &GatewayClient, id: Uuid) -> Result<()> {
-    let body = stats::LoadRequest { id };
-
+#[instrument(skip(queue_client), fields(state = %State::Queued))]
+async fn wait_for_queue(queue_client: impl BuildQueueClient, id: Uuid) -> Result<()> {
     loop {
-        let load: stats::LoadResponse = gateway_client.post("stats/load", Some(&body)).await?;
+        let got_slot = queue_client.get_slot(id).await?;
 
-        if load.has_capacity {
+        if got_slot {
             break;
         }
 
@@ -112,9 +109,8 @@ async fn wait_for_queue(gateway_client: &GatewayClient, id: Uuid) -> Result<()> 
     Ok(())
 }
 
-async fn remove_from_queue(gateway_client: &GatewayClient, id: Uuid) -> Result<()> {
-    let body = stats::LoadRequest { id };
-    let _resp = gateway_client.delete("stats/load", Some(&body)).await?;
+async fn remove_from_queue(queue_client: impl BuildQueueClient, id: Uuid) -> Result<()> {
+    queue_client.release_slot(id).await?;
 
     Ok(())
 }

@@ -15,6 +15,8 @@ pub use persistence::Persistence;
 use proxy::AddressGetter;
 use tracing::{error, info};
 
+use crate::deployment::gateway_client::GatewayClient;
+
 mod args;
 mod deployment;
 mod error;
@@ -35,7 +37,7 @@ pub async fn start(
         persistence.clone(),
         persistence.clone(),
         args.artifacts_path,
-        args.gateway_uri,
+        GatewayClient::new(args.gateway_uri),
     );
 
     for existing_deployment in persistence.get_all_runnable_deployments().await.unwrap() {

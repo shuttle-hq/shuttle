@@ -8,9 +8,12 @@ use cargo::util::interning::InternedString;
 use cargo_metadata::Message;
 use chrono::Utc;
 use crossbeam_channel::Sender;
+use hyper::{body, Body, Client, Method, Request};
 use opentelemetry::global;
 use serde_json::json;
-use shuttle_service::loader::{build_crate, get_config};
+use shuttle_common::models::stats;
+use shuttle_service::loader::{build_crate, get_config, make_name_unique};
+use tokio::time::sleep;
 use tracing::{debug, debug_span, error, info, instrument, trace, Instrument, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
@@ -20,6 +23,7 @@ use std::fmt;
 use std::fs::remove_file;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use cargo::core::compiler::{CompileMode, MessageFormat};
 use cargo::core::Workspace;
@@ -55,12 +59,22 @@ pub async fn task(
             span.set_parent(parent_cx);
 
             async move {
+                match wait_for_queue(id).await {
+                    Ok(_) => {}
+                    Err(err) => return build_failed(&id, err),
+                }
+
                 match queued
                     .handle(storage_manager, log_recorder, secret_recorder)
                     .await
                 {
                     Ok(built) => promote_to_run(built, run_send_cloned).await,
                     Err(err) => build_failed(&id, err),
+                }
+
+                match remove_from_queue(id).await {
+                    Ok(_) => {}
+                    Err(err) => return build_failed(&id, err),
                 }
             }
             .instrument(span)
@@ -75,6 +89,63 @@ fn build_failed(_id: &Uuid, error: impl std::error::Error + 'static) {
         error = &error as &dyn std::error::Error,
         "service build encountered an error"
     );
+}
+
+#[instrument(fields(state = %State::Queued))]
+async fn wait_for_queue(id: Uuid) -> Result<()> {
+    let body = stats::LoadRequest { id };
+    let body = serde_json::to_vec(&body)?;
+
+    let client = Client::new();
+    let uri = "http://localhost:7001/stats/load";
+
+    loop {
+        trace!("Checking for build capacity");
+
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri(uri)
+            .header("Content-Type", "application/json")
+            .body(Body::from(body.clone()))
+            .unwrap();
+        let resp = client.request(req).await?;
+
+        trace!(response = ?resp, "Load response");
+
+        let body = resp.into_body();
+        let bytes = body::to_bytes(body).await?;
+        let load: stats::LoadResponse = serde_json::from_slice(&bytes.to_vec())?;
+
+        if load.has_capacity {
+            break;
+        }
+
+        info!("The build queue is currently full...");
+
+        sleep(Duration::from_secs(1)).await;
+    }
+
+    Ok(())
+}
+
+async fn remove_from_queue(id: Uuid) -> Result<()> {
+    let body = stats::LoadRequest { id };
+    let body = serde_json::to_vec(&body)?;
+
+    let client = Client::new();
+    let uri = "http://localhost:7001/stats/load";
+
+    trace!("Remove build that is complete");
+
+    let req = Request::builder()
+        .method(Method::DELETE)
+        .uri(uri)
+        .header("Content-Type", "application/json")
+        .body(Body::from(body.clone()))
+        .unwrap();
+    let _resp = client.request(req).await?;
+
+    Ok(())
 }
 
 #[instrument(fields(id = %built.id, state = %State::Built))]

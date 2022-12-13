@@ -17,10 +17,14 @@ use instant_acme::{AccountCredentials, ChallengeType};
 use serde::{Deserialize, Serialize};
 use shuttle_common::backends::metrics::Metrics;
 use shuttle_common::models::error::ErrorKind;
-use shuttle_common::models::{project, user};
+use shuttle_common::models::stats::LoadResponse;
+use shuttle_common::models::{project, stats, user};
 use tokio::sync::mpsc::Sender;
+use tokio::sync::{Mutex, MutexGuard};
 use tower_http::trace::TraceLayer;
 use tracing::{debug, debug_span, field, Span};
+use ttl_cache::TtlCache;
+use uuid::Uuid;
 
 use crate::acme::{AcmeClient, CustomDomain};
 use crate::auth::{Admin, ScopedUser, User};
@@ -99,7 +103,9 @@ async fn get_project(
 }
 
 async fn post_project(
-    State(RouterState { service, sender }): State<RouterState>,
+    State(RouterState {
+        service, sender, ..
+    }): State<RouterState>,
     User { name, .. }: User,
     Path(project): Path<ProjectName>,
 ) -> Result<AxumJson<project::Response>, Error> {
@@ -122,7 +128,9 @@ async fn post_project(
 }
 
 async fn delete_project(
-    State(RouterState { service, sender }): State<RouterState>,
+    State(RouterState {
+        service, sender, ..
+    }): State<RouterState>,
     ScopedUser { scope: project, .. }: ScopedUser,
 ) -> Result<AxumJson<project::Response>, Error> {
     let state = service.find_project(&project).await?;
@@ -176,9 +184,58 @@ async fn get_status(State(RouterState { sender, .. }): State<RouterState>) -> Re
         .unwrap()
 }
 
+async fn post_load(
+    State(RouterState { running_builds, .. }): State<RouterState>,
+    AxumJson(build): AxumJson<stats::LoadRequest>,
+) -> Result<AxumJson<stats::LoadResponse>, Error> {
+    let mut running_builds = running_builds.lock().await;
+    let (mut active, has_capacity) = calculate_capacity(&mut running_builds);
+
+    if has_capacity {
+        if let None = running_builds.insert(build.id, (), Duration::from_secs(60 * 10)) {
+            // Only increase when an item was not already in the queue
+            active += 1;
+        }
+    }
+
+    let response = LoadResponse {
+        builds_count: active,
+        has_capacity,
+    };
+
+    Ok(AxumJson(response))
+}
+
+async fn delete_load(
+    State(RouterState { running_builds, .. }): State<RouterState>,
+    AxumJson(build): AxumJson<stats::LoadRequest>,
+) -> Result<AxumJson<stats::LoadResponse>, Error> {
+    let mut running_builds = running_builds.lock().await;
+    running_builds.remove(&build.id);
+
+    let (active, has_capacity) = calculate_capacity(&mut running_builds);
+
+    let response = LoadResponse {
+        builds_count: active,
+        has_capacity,
+    };
+
+    Ok(AxumJson(response))
+}
+
+fn calculate_capacity(running_builds: &mut MutexGuard<TtlCache<Uuid, ()>>) -> (usize, bool) {
+    let active = running_builds.iter().count();
+    let capacity = running_builds.capacity();
+    let has_capacity = active < capacity;
+
+    return (active, has_capacity);
+}
+
 async fn revive_projects(
     _: Admin,
-    State(RouterState { service, sender }): State<RouterState>,
+    State(RouterState {
+        service, sender, ..
+    }): State<RouterState>,
 ) -> Result<(), Error> {
     crate::project::exec::revive(service, sender)
         .await
@@ -198,7 +255,9 @@ async fn create_acme_account(
 
 async fn request_acme_certificate(
     _: Admin,
-    State(RouterState { service, sender }): State<RouterState>,
+    State(RouterState {
+        service, sender, ..
+    }): State<RouterState>,
     Extension(acme_client): Extension<AcmeClient>,
     Extension(resolver): Extension<Arc<GatewayCertResolver>>,
     Path((project_name, fqdn)): Path<(ProjectName, String)>,
@@ -274,6 +333,7 @@ async fn get_projects(
 pub(crate) struct RouterState {
     pub service: Arc<GatewayService>,
     pub sender: Sender<BoxedTask>,
+    pub running_builds: Arc<Mutex<TtlCache<Uuid, ()>>>,
 }
 
 pub struct ApiBuilder {
@@ -373,6 +433,7 @@ impl ApiBuilder {
             )
             .route("/users/:account_name", get(get_user).post(post_user))
             .route("/projects/:project_name/*any", any(route_project))
+            .route("/stats/load", post(post_load).delete(delete_load))
             .route("/admin/projects", get(get_projects))
             .route("/admin/revive", post(revive_projects));
         self
@@ -381,8 +442,13 @@ impl ApiBuilder {
     pub fn into_router(self) -> Router {
         let service = self.service.expect("a GatewayService is required");
         let sender = self.sender.expect("a task Sender is required");
+        let running_builds = Arc::new(Mutex::new(TtlCache::new(5)));
 
-        self.router.with_state(RouterState { service, sender })
+        self.router.with_state(RouterState {
+            service,
+            sender,
+            running_builds,
+        })
     }
 
     pub fn serve(self) -> impl Future<Output = Result<(), hyper::Error>> {

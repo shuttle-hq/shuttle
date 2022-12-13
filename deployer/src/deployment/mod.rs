@@ -55,7 +55,6 @@ impl DeploymentManager {
         }
     }
 
-    #[instrument(skip(self), fields(id = %queued.id, state = %State::Queued))]
     pub async fn queue_push(&self, mut queued: Queued) {
         let cx = Span::current().context();
 

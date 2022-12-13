@@ -435,7 +435,14 @@ impl ApiBuilder {
     pub fn into_router(self) -> Router {
         let service = self.service.expect("a GatewayService is required");
         let sender = self.sender.expect("a task Sender is required");
-        let running_builds = Arc::new(Mutex::new(TtlCache::new(5)));
+
+        // Allow about 4 cores per build
+        let mut concurrent_builds = num_cpus::get() / 4;
+        if concurrent_builds < 1 {
+            concurrent_builds = 1;
+        }
+
+        let running_builds = Arc::new(Mutex::new(TtlCache::new(concurrent_builds)));
 
         self.router.with_state(RouterState {
             service,

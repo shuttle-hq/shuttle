@@ -28,8 +28,8 @@ pub enum Error {
     SecretsSet(#[source] Box<dyn StdError + Send>),
     #[error("Failed to cleanup old deployments: {0}")]
     OldCleanup(#[source] Box<dyn StdError + Send>),
-    #[error("Gateway error: {0}")]
-    Hyper(#[from] gateway_client::Error),
+    #[error("Gateway client error: {0}")]
+    GatewayClient(#[from] gateway_client::Error),
 }
 
 #[derive(Error, Debug)]

@@ -189,21 +189,16 @@ async fn post_load(
     AxumJson(build): AxumJson<stats::LoadRequest>,
 ) -> Result<AxumJson<stats::LoadResponse>, Error> {
     let mut running_builds = running_builds.lock().await;
-    let (mut active, has_capacity) = calculate_capacity(&mut running_builds);
+    let mut load = calculate_capacity(&mut running_builds);
 
-    if has_capacity {
+    if load.has_capacity {
         if let None = running_builds.insert(build.id, (), Duration::from_secs(60 * 10)) {
             // Only increase when an item was not already in the queue
-            active += 1;
+            load.builds_count += 1;
         }
     }
 
-    let response = LoadResponse {
-        builds_count: active,
-        has_capacity,
-    };
-
-    Ok(AxumJson(response))
+    Ok(AxumJson(load))
 }
 
 async fn delete_load(
@@ -213,22 +208,20 @@ async fn delete_load(
     let mut running_builds = running_builds.lock().await;
     running_builds.remove(&build.id);
 
-    let (active, has_capacity) = calculate_capacity(&mut running_builds);
+    let load = calculate_capacity(&mut running_builds);
 
-    let response = LoadResponse {
-        builds_count: active,
-        has_capacity,
-    };
-
-    Ok(AxumJson(response))
+    Ok(AxumJson(load))
 }
 
-fn calculate_capacity(running_builds: &mut MutexGuard<TtlCache<Uuid, ()>>) -> (usize, bool) {
+fn calculate_capacity(running_builds: &mut MutexGuard<TtlCache<Uuid, ()>>) -> stats::LoadResponse {
     let active = running_builds.iter().count();
     let capacity = running_builds.capacity();
     let has_capacity = active < capacity;
 
-    return (active, has_capacity);
+    LoadResponse {
+        builds_count: active,
+        has_capacity,
+    }
 }
 
 async fn revive_projects(

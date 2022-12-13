@@ -198,11 +198,13 @@ async fn post_load(
     let mut running_builds = running_builds.lock().await;
     let mut load = calculate_capacity(&mut running_builds);
 
-    if load.has_capacity {
-        if let None = running_builds.insert(build.id, (), Duration::from_secs(60 * 10)) {
-            // Only increase when an item was not already in the queue
-            load.builds_count += 1;
-        }
+    if load.has_capacity
+        && running_builds
+            .insert(build.id, (), Duration::from_secs(60 * 10))
+            .is_none()
+    {
+        // Only increase when an item was not already in the queue
+        load.builds_count += 1;
     }
 
     Ok(AxumJson(load))

@@ -80,7 +80,7 @@ pub async fn task(
 
                 match remove_from_queue(queue_client, id).await {
                     Ok(_) => {}
-                    Err(err) => return build_failed(&id, err),
+                    Err(err) => build_failed(&id, err),
                 }
             }
             .instrument(span)

@@ -84,7 +84,7 @@ impl GatewayClient {
 
         let body = resp.into_body();
         let bytes = body::to_bytes(body).await?;
-        let json = serde_json::from_slice(&bytes.to_vec())?;
+        let json = serde_json::from_slice(&bytes)?;
 
         Ok(json)
     }

@@ -308,6 +308,8 @@ impl Shuttle {
             println!("{line}");
         }
 
+        println!("Cleaning done!");
+
         Ok(())
     }
 

@@ -1,4 +1,5 @@
 pub mod deploy_layer;
+pub mod gateway_client;
 pub mod provisioner_factory;
 mod queue;
 mod run;
@@ -7,6 +8,7 @@ mod storage_manager;
 
 use std::path::PathBuf;
 
+use hyper::Uri;
 pub use queue::Queued;
 pub use run::{ActiveDeploymentsGetter, Built};
 use tracing::{instrument, Span};
@@ -16,7 +18,9 @@ use crate::persistence::{SecretRecorder, State};
 use tokio::sync::{broadcast, mpsc};
 use uuid::Uuid;
 
-use self::{deploy_layer::LogRecorder, storage_manager::StorageManager};
+use self::{
+    deploy_layer::LogRecorder, gateway_client::GatewayClient, storage_manager::StorageManager,
+};
 
 const QUEUE_BUFFER_SIZE: usize = 100;
 const RUN_BUFFER_SIZE: usize = 100;
@@ -38,6 +42,7 @@ impl DeploymentManager {
         secret_recorder: impl SecretRecorder,
         active_deployment_getter: impl ActiveDeploymentsGetter,
         artifacts_path: PathBuf,
+        gateway_uri: Uri,
     ) -> Self {
         let (kill_send, _) = broadcast::channel(KILL_BUFFER_SIZE);
 
@@ -50,6 +55,7 @@ impl DeploymentManager {
                 secret_recorder,
                 active_deployment_getter,
                 StorageManager::new(artifacts_path),
+                GatewayClient::new(gateway_uri),
             ),
             kill_send,
         }
@@ -110,6 +116,7 @@ impl Pipeline {
         secret_recorder: impl SecretRecorder,
         active_deployment_getter: impl ActiveDeploymentsGetter,
         storage_manager: StorageManager,
+        gateway_client: GatewayClient,
     ) -> Pipeline {
         let (queue_send, queue_recv) = mpsc::channel(QUEUE_BUFFER_SIZE);
         let (run_send, run_recv) = mpsc::channel(RUN_BUFFER_SIZE);
@@ -122,6 +129,7 @@ impl Pipeline {
             build_log_recorder,
             secret_recorder,
             storage_manager.clone(),
+            gateway_client,
         ));
         tokio::spawn(run::task(
             run_recv,

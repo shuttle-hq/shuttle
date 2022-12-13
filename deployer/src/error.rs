@@ -6,6 +6,8 @@ use shuttle_service::loader::LoaderError;
 
 use cargo::util::errors::CargoTestError;
 
+use crate::deployment::gateway_client;
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Internal I/O error: {0}")]
@@ -26,10 +28,8 @@ pub enum Error {
     SecretsSet(#[source] Box<dyn StdError + Send>),
     #[error("Failed to cleanup old deployments: {0}")]
     OldCleanup(#[source] Box<dyn StdError + Send>),
-    #[error("Hyper error: {0}")]
-    Hyper(#[from] hyper::Error),
-    #[error("Serde JSON error: {0}")]
-    SerdeJson(#[from] serde_json::Error),
+    #[error("Gateway error: {0}")]
+    Hyper(#[from] gateway_client::Error),
 }
 
 #[derive(Error, Debug)]

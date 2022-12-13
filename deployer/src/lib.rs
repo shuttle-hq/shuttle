@@ -35,6 +35,7 @@ pub async fn start(
         persistence.clone(),
         persistence.clone(),
         args.artifacts_path,
+        args.gateway_uri,
     );
 
     for existing_deployment in persistence.get_all_runnable_deployments().await.unwrap() {

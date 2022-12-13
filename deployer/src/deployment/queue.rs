@@ -12,7 +12,7 @@ use crossbeam_channel::Sender;
 use opentelemetry::global;
 use serde_json::json;
 use shuttle_service::loader::{build_crate, get_config};
-use tokio::time::sleep;
+use tokio::time::{sleep, timeout};
 use tracing::{debug, debug_span, error, info, instrument, trace, Instrument, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
@@ -60,7 +60,12 @@ pub async fn task(
             span.set_parent(parent_cx);
 
             async move {
-                match wait_for_queue(queue_client.clone(), id).await {
+                match timeout(
+                    Duration::from_secs(60 * 5), // Timeout after 5 minutes if the build queue hangs or it takes too long for a slot to become available
+                    wait_for_queue(queue_client.clone(), id),
+                )
+                .await
+                {
                     Ok(_) => {}
                     Err(err) => return build_failed(&id, err),
                 }

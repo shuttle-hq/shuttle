@@ -20,7 +20,7 @@ use shuttle_common::models::error::ErrorKind;
 use shuttle_common::models::{project, user};
 use tokio::sync::mpsc::Sender;
 use tower_http::trace::TraceLayer;
-use tracing::{debug, debug_span, field, Span};
+use tracing::{debug, debug_span, field, instrument, Span};
 
 use crate::acme::{AcmeClient, CustomDomain};
 use crate::auth::{Admin, ScopedUser, User};
@@ -65,6 +65,7 @@ impl StatusResponse {
     }
 }
 
+#[instrument(skip_all, fields(%account_name))]
 async fn get_user(
     State(RouterState { service, .. }): State<RouterState>,
     Path(account_name): Path<AccountName>,
@@ -75,6 +76,7 @@ async fn get_user(
     Ok(AxumJson(user.into()))
 }
 
+#[instrument(skip_all, fields(%account_name))]
 async fn post_user(
     State(RouterState { service, .. }): State<RouterState>,
     Path(account_name): Path<AccountName>,
@@ -85,6 +87,7 @@ async fn post_user(
     Ok(AxumJson(user.into()))
 }
 
+#[instrument(skip(service))]
 async fn get_project(
     State(RouterState { service, .. }): State<RouterState>,
     ScopedUser { scope, .. }: ScopedUser,
@@ -98,6 +101,7 @@ async fn get_project(
     Ok(AxumJson(response))
 }
 
+#[instrument(skip_all, fields(%project))]
 async fn post_project(
     State(RouterState { service, sender }): State<RouterState>,
     User { name, .. }: User,
@@ -121,6 +125,7 @@ async fn post_project(
     Ok(AxumJson(response))
 }
 
+#[instrument(skip_all, fields(%project))]
 async fn delete_project(
     State(RouterState { service, sender }): State<RouterState>,
     ScopedUser { scope: project, .. }: ScopedUser,
@@ -149,6 +154,7 @@ async fn delete_project(
     Ok(AxumJson(response))
 }
 
+#[instrument(skip_all, fields(scope = %scoped_user.scope))]
 async fn route_project(
     State(RouterState { service, .. }): State<RouterState>,
     scoped_user: ScopedUser,
@@ -176,6 +182,7 @@ async fn get_status(State(RouterState { sender, .. }): State<RouterState>) -> Re
         .unwrap()
 }
 
+#[instrument(skip_all)]
 async fn revive_projects(
     _: Admin,
     State(RouterState { service, sender }): State<RouterState>,
@@ -185,6 +192,7 @@ async fn revive_projects(
         .map_err(|_| Error::from_kind(ErrorKind::Internal))
 }
 
+#[instrument(skip_all, fields(%email, ?acme_server))]
 async fn create_acme_account(
     _: Admin,
     Extension(acme_client): Extension<AcmeClient>,
@@ -196,6 +204,7 @@ async fn create_acme_account(
     Ok(AxumJson(res))
 }
 
+#[instrument(skip_all, fields(%project_name, %fqdn))]
 async fn request_acme_certificate(
     _: Admin,
     State(RouterState { service, sender }): State<RouterState>,

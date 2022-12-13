@@ -19,7 +19,7 @@ use once_cell::sync::Lazy;
 use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Serialize};
 use tokio::time::{self, timeout};
-use tracing::{debug, error};
+use tracing::{debug, error, instrument};
 
 use crate::{
     ContainerSettings, DockerContext, EndState, Error, ErrorKind, IntoTryState, ProjectName,
@@ -276,6 +276,7 @@ where
     type Next = Self;
     type Error = Infallible;
 
+    #[instrument(skip_all, fields(state = %self.state()))]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let previous = self.clone();
         let previous_state = previous.state();
@@ -557,6 +558,7 @@ where
     type Next = ProjectStarting;
     type Error = ProjectError;
 
+    #[instrument(skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let container_name = self.container_name(ctx);
         let container = ctx
@@ -593,6 +595,7 @@ where
     type Next = ProjectStarted;
     type Error = ProjectError;
 
+    #[instrument(skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let container_id = self.container.id.as_ref().unwrap();
         ctx.docker()
@@ -642,6 +645,7 @@ where
     type Next = ProjectReadying;
     type Error = ProjectError;
 
+    #[instrument(skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         time::sleep(Duration::from_secs(1)).await;
 
@@ -688,6 +692,7 @@ where
     type Next = Self;
     type Error = ProjectError;
 
+    #[instrument(skip_all)]
     async fn next(mut self, _ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         Ok(self)
     }
@@ -781,6 +786,7 @@ where
 
     type Error = ProjectError;
 
+    #[instrument(skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let Self { container } = self;
         ctx.docker()
@@ -808,6 +814,7 @@ where
     type Next = ProjectStarting;
     type Error = ProjectError;
 
+    #[instrument(skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let container = self.container;
 
@@ -860,6 +867,7 @@ where
     type Next = ProjectDestroyed;
     type Error = ProjectError;
 
+    #[instrument(skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let container_id = self.container.id.as_ref().unwrap();
         ctx.docker()
@@ -895,6 +903,7 @@ where
     type Next = ProjectDestroyed;
     type Error = ProjectError;
 
+    #[instrument(skip_all)]
     async fn next(self, _ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         Ok(self)
     }
@@ -980,6 +989,7 @@ where
     type Next = Self;
     type Error = Infallible;
 
+    #[instrument(skip_all)]
     async fn next(self, _ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         Ok(self)
     }

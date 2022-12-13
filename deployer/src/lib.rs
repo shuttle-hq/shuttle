@@ -40,7 +40,9 @@ pub async fn start(
         GatewayClient::new(args.gateway_uri),
     );
 
-    for existing_deployment in persistence.get_all_runnable_deployments().await.unwrap() {
+    let runnable_deployments = persistence.get_all_runnable_deployments().await.unwrap();
+    info!(count = %runnable_deployments.len(), "enqueuing runnable deployments");
+    for existing_deployment in runnable_deployments {
         let built = Built {
             id: existing_deployment.id,
             service_name: existing_deployment.service_name,
@@ -59,7 +61,7 @@ pub async fn start(
     );
     let make_service = router.into_make_service();
 
-    info!("Binding to and listening at address: {}", args.api_address);
+    info!(address=%args.api_address, "Binding to and listening at address");
 
     axum::Server::bind(&args.api_address)
         .serve(make_service)

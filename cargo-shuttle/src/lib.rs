@@ -641,12 +641,13 @@ impl Shuttle {
         if let Ok(repo) = Repository::discover(working_directory) {
             let repo_path = repo
                 .workdir()
-                .context("getting working directory of repository")?;
+                .context("getting working directory of repository")?
+                .canonicalize()?;
 
             trace!(?repo_path, "found git repository");
 
             let repo_rel_path = working_directory
-                .strip_prefix(repo_path)
+                .strip_prefix(repo_path.as_path())
                 .context("stripping repository path from working directory")?;
 
             trace!(

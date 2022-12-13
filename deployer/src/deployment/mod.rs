@@ -25,6 +25,103 @@ const QUEUE_BUFFER_SIZE: usize = 100;
 const RUN_BUFFER_SIZE: usize = 100;
 const KILL_BUFFER_SIZE: usize = 10;
 
+pub struct DeploymentManagerBuilder<AF, RLF, LR, SR, ADG, QC> {
+    abstract_factory: Option<AF>,
+    runtime_logger_factory: Option<RLF>,
+    build_log_recorder: Option<LR>,
+    secret_recorder: Option<SR>,
+    active_deployment_getter: Option<ADG>,
+    artifacts_path: Option<PathBuf>,
+    queue_client: Option<QC>,
+}
+
+impl<AF, RLF, LR, SR, ADG, QC> DeploymentManagerBuilder<AF, RLF, LR, SR, ADG, QC>
+where
+    AF: provisioner_factory::AbstractFactory,
+    RLF: runtime_logger::Factory,
+    LR: LogRecorder,
+    SR: SecretRecorder,
+    ADG: ActiveDeploymentsGetter,
+    QC: BuildQueueClient,
+{
+    pub fn abstract_factory(mut self, abstract_factory: AF) -> Self {
+        self.abstract_factory = Some(abstract_factory);
+
+        self
+    }
+
+    pub fn runtime_logger_factory(mut self, runtime_logger_factory: RLF) -> Self {
+        self.runtime_logger_factory = Some(runtime_logger_factory);
+
+        self
+    }
+
+    pub fn build_log_recorder(mut self, build_log_recorder: LR) -> Self {
+        self.build_log_recorder = Some(build_log_recorder);
+
+        self
+    }
+
+    pub fn secret_recorder(mut self, secret_recorder: SR) -> Self {
+        self.secret_recorder = Some(secret_recorder);
+
+        self
+    }
+
+    pub fn active_deployment_getter(mut self, active_deployment_getter: ADG) -> Self {
+        self.active_deployment_getter = Some(active_deployment_getter);
+
+        self
+    }
+
+    pub fn artifacts_path(mut self, artifacts_path: PathBuf) -> Self {
+        self.artifacts_path = Some(artifacts_path);
+
+        self
+    }
+
+    pub fn queue_client(mut self, queue_client: QC) -> Self {
+        self.queue_client = Some(queue_client);
+
+        self
+    }
+
+    pub fn build(self) -> DeploymentManager {
+        let abstract_factory = self
+            .abstract_factory
+            .expect("an abstract factory to be set");
+        let runtime_logger_factory = self
+            .runtime_logger_factory
+            .expect("a runtime logger factory to be set");
+        let build_log_recorder = self
+            .build_log_recorder
+            .expect("a build log recorder to be set");
+        let secret_recorder = self.secret_recorder.expect("a secret recorder to be set");
+        let active_deployment_getter = self
+            .active_deployment_getter
+            .expect("an active deployment getter to be set");
+        let artifacts_path = self.artifacts_path.expect("artifacts path to be set");
+        let queue_client = self.queue_client.expect("a queue client to be set");
+
+        let (kill_send, _) = broadcast::channel(KILL_BUFFER_SIZE);
+        let pipeline = Pipeline::new(
+            kill_send.clone(),
+            abstract_factory,
+            runtime_logger_factory,
+            build_log_recorder,
+            secret_recorder,
+            active_deployment_getter,
+            StorageManager::new(artifacts_path),
+            queue_client,
+        );
+
+        DeploymentManager {
+            pipeline,
+            kill_send,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct DeploymentManager {
     pipeline: Pipeline,
@@ -34,29 +131,16 @@ pub struct DeploymentManager {
 impl DeploymentManager {
     /// Create a new deployment manager. Manages one or more 'pipelines' for
     /// processing service building, loading, and deployment.
-    pub fn new(
-        abstract_factory: impl provisioner_factory::AbstractFactory,
-        runtime_logger_factory: impl runtime_logger::Factory,
-        build_log_recorder: impl LogRecorder,
-        secret_recorder: impl SecretRecorder,
-        active_deployment_getter: impl ActiveDeploymentsGetter,
-        artifacts_path: PathBuf,
-        queue_client: impl BuildQueueClient,
-    ) -> Self {
-        let (kill_send, _) = broadcast::channel(KILL_BUFFER_SIZE);
-
-        DeploymentManager {
-            pipeline: Pipeline::new(
-                kill_send.clone(),
-                abstract_factory,
-                runtime_logger_factory,
-                build_log_recorder,
-                secret_recorder,
-                active_deployment_getter,
-                StorageManager::new(artifacts_path),
-                queue_client,
-            ),
-            kill_send,
+    pub fn builder<AF, RLF, LR, SR, ADG, QC>() -> DeploymentManagerBuilder<AF, RLF, LR, SR, ADG, QC>
+    {
+        DeploymentManagerBuilder {
+            abstract_factory: None,
+            runtime_logger_factory: None,
+            build_log_recorder: None,
+            secret_recorder: None,
+            active_deployment_getter: None,
+            artifacts_path: None,
+            queue_client: None,
         }
     }
 

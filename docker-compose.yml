@@ -2,7 +2,8 @@ version: "3.7"
 volumes:
   gateway-vol:
   postgres-vol:
-  panamax-vol:
+  panamax-crates-vol:
+  panamax-io-index-vol:
 networks:
   user-net:
     attachable: true
@@ -142,14 +143,14 @@ services:
         constraints:
           - node.hostname==controller
   panamax:
-    image: panamaxrs/panamax
-    networks:
-      user-net: null
+    image: "${CONTAINER_REGISTRY}/panamax:${PANAMAX_TAG}"
     restart: always
+    networks:
+      user-net:
     volumes:
-      - panamax-vol:/mirror
+      - panamax-crates-vol:/mirror/crates
+      - panamax-io-index-vol:/mirror/crates.io-index
     deploy:
       placement:
         constraints:
           - node.hostname==controller
-    command: serve /mirror

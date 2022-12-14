@@ -86,6 +86,10 @@ where
         self
     }
 
+    /// Creates two Tokio tasks, one for building queued services, the other for
+    /// executing/deploying built services. Two multi-producer, single consumer
+    /// channels are also created which are for moving on-going service
+    /// deployments between the aforementioned tasks.
     pub fn build(self) -> DeploymentManager {
         let abstract_factory = self
             .abstract_factory
@@ -103,20 +107,33 @@ where
         let artifacts_path = self.artifacts_path.expect("artifacts path to be set");
         let queue_client = self.queue_client.expect("a queue client to be set");
 
+        let (queue_send, queue_recv) = mpsc::channel(QUEUE_BUFFER_SIZE);
+        let (run_send, run_recv) = mpsc::channel(RUN_BUFFER_SIZE);
         let (kill_send, _) = broadcast::channel(KILL_BUFFER_SIZE);
-        let pipeline = Pipeline::new(
+        let storage_manager = StorageManager::new(artifacts_path);
+
+        let run_send_clone = run_send.clone();
+
+        tokio::spawn(queue::task(
+            queue_recv,
+            run_send_clone,
+            build_log_recorder,
+            secret_recorder,
+            storage_manager.clone(),
+            queue_client,
+        ));
+        tokio::spawn(run::task(
+            run_recv,
             kill_send.clone(),
             abstract_factory,
             runtime_logger_factory,
-            build_log_recorder,
-            secret_recorder,
             active_deployment_getter,
-            StorageManager::new(artifacts_path),
-            queue_client,
-        );
+            storage_manager,
+        ));
 
         DeploymentManager {
-            pipeline,
+            queue_send,
+            run_send,
             kill_send,
         }
     }
@@ -124,10 +141,25 @@ where
 
 #[derive(Clone)]
 pub struct DeploymentManager {
-    pipeline: Pipeline,
+    queue_send: QueueSender,
+    run_send: RunSender,
     kill_send: KillSender,
 }
 
+/// ```no-test
+/// queue channel   all deployments here are State::Queued until the get a slot from gateway
+///       |
+///       v
+///  queue task     when taken from the channel by this task, deployments
+///                 enter the State::Building state and upon being
+///       |         built transition to the State::Built state
+///       v
+///  run channel    all deployments here are State::Built
+///       |
+///       v
+///    run task     tasks enter the State::Running state and begin
+///                 executing
+/// ```
 impl DeploymentManager {
     /// Create a new deployment manager. Manages one or more 'pipelines' for
     /// processing service building, loading, and deployment.
@@ -151,81 +183,17 @@ impl DeploymentManager {
             propagator.inject_context(&cx, &mut queued.tracing_context);
         });
 
-        self.pipeline.queue_send.send(queued).await.unwrap();
+        self.queue_send.send(queued).await.unwrap();
     }
 
     #[instrument(skip(self), fields(id = %built.id, state = %State::Built))]
     pub async fn run_push(&self, built: Built) {
-        self.pipeline.run_send.send(built).await.unwrap();
+        self.run_send.send(built).await.unwrap();
     }
 
     pub async fn kill(&self, id: Uuid) {
         if self.kill_send.receiver_count() > 0 {
             self.kill_send.send(id).unwrap();
-        }
-    }
-}
-
-/// ```no-test
-/// queue channel   all deployments here are State::Queued
-///       |
-///       v
-///  queue task     when taken from the channel by this task, deployments
-///                 enter the State::Building state and upon being
-///       |         built transition to the State::Built state
-///       v
-///  run channel    all deployments here are State::Built
-///       |
-///       v
-///    run task     tasks enter the State::Running state and begin
-///                 executing
-/// ```
-#[derive(Clone)]
-struct Pipeline {
-    queue_send: QueueSender,
-    run_send: RunSender,
-}
-
-impl Pipeline {
-    /// Creates two Tokio tasks, one for building queued services, the other for
-    /// executing/deploying built services. Two multi-producer, single consumer
-    /// channels are also created which are for moving on-going service
-    /// deployments between the aforementioned tasks.
-    fn new(
-        kill_send: KillSender,
-        abstract_factory: impl provisioner_factory::AbstractFactory,
-        runtime_logger_factory: impl runtime_logger::Factory,
-        build_log_recorder: impl LogRecorder,
-        secret_recorder: impl SecretRecorder,
-        active_deployment_getter: impl ActiveDeploymentsGetter,
-        storage_manager: StorageManager,
-        queue_client: impl BuildQueueClient,
-    ) -> Pipeline {
-        let (queue_send, queue_recv) = mpsc::channel(QUEUE_BUFFER_SIZE);
-        let (run_send, run_recv) = mpsc::channel(RUN_BUFFER_SIZE);
-
-        let run_send_clone = run_send.clone();
-
-        tokio::spawn(queue::task(
-            queue_recv,
-            run_send_clone,
-            build_log_recorder,
-            secret_recorder,
-            storage_manager.clone(),
-            queue_client,
-        ));
-        tokio::spawn(run::task(
-            run_recv,
-            kill_send,
-            abstract_factory,
-            runtime_logger_factory,
-            active_deployment_getter,
-            storage_manager,
-        ));
-
-        Pipeline {
-            queue_send,
-            run_send,
         }
     }
 }

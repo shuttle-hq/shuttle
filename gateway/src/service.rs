@@ -28,7 +28,8 @@ use crate::acme::CustomDomain;
 use crate::args::ContextArgs;
 use crate::auth::{Key, Permissions, ScopedUser, User};
 use crate::project::Project;
-use crate::task::TaskBuilder;
+use crate::task::{BoxedTask, TaskBuilder};
+use crate::worker::TaskRouter;
 use crate::{AccountName, DockerContext, Error, ErrorKind, ProjectDetails, ProjectName};
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
@@ -187,6 +188,7 @@ impl GatewayContextProvider {
 pub struct GatewayService {
     provider: GatewayContextProvider,
     db: SqlitePool,
+    task_router: TaskRouter<BoxedTask>,
 }
 
 impl GatewayService {
@@ -201,7 +203,13 @@ impl GatewayService {
 
         let provider = GatewayContextProvider::new(docker, container_settings);
 
-        Self { provider, db }
+        let task_router = TaskRouter::new();
+
+        Self {
+            provider,
+            db,
+            task_router,
+        }
     }
 
     pub async fn route(
@@ -546,6 +554,10 @@ impl GatewayService {
     /// Create a builder for a new [ProjectTask]
     pub fn new_task(self: &Arc<Self>) -> TaskBuilder {
         TaskBuilder::new(self.clone())
+    }
+
+    pub fn task_router(&self) -> TaskRouter<BoxedTask> {
+        self.task_router.clone()
     }
 }
 

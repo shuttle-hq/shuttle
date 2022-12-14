@@ -103,24 +103,20 @@ impl TaskRouter<BoxedTask> {
         name: &ProjectName,
         task: BoxedTask,
     ) -> Result<(), SendError<BoxedTask>> {
-        if let Some(sender) = self.table.read().await.get(name) {
+        let mut table = self.table.write().await;
+        if let Some(sender) = table.get(name) {
             sender.send(task).await
         } else {
-            let mut table = self.table.write().await;
-            if let Some(sender) = table.get(name) {
-                sender.send(task).await
-            } else {
-                let worker = Worker::new();
-                let sender = worker.sender();
+            let worker = Worker::new();
+            let sender = worker.sender();
 
-                tokio::spawn(worker.start());
+            tokio::spawn(worker.start());
 
-                let res = sender.send(task).await;
+            let res = sender.send(task).await;
 
-                table.insert(name.clone(), sender);
+            table.insert(name.clone(), sender);
 
-                res
-            }
+            res
         }
     }
 }

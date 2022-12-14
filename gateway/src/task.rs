@@ -188,25 +188,22 @@ impl TaskBuilder {
 
         let timeout = self.timeout.unwrap_or(DEFAULT_TIMEOUT);
 
-        let project_name = self.project_name.expect("project_name is required");
-
-        let task_router = self.service.task_router();
-
-        let task: BoxedTask = Box::new(WithTimeout::on(
+        Box::new(WithTimeout::on(
             timeout,
             ProjectTask {
                 uuid: Uuid::new_v4(),
-                project_name: project_name.clone(),
+                project_name: self.project_name.expect("project_name is required"),
                 service: self.service,
                 tasks: self.tasks,
             },
-        ));
-
-        Box::new(Route::to(project_name, task, task_router))
+        ))
     }
 
     pub async fn send(self, sender: &Sender<BoxedTask>) -> Result<TaskHandle, Error> {
+        let project_name = self.project_name.clone().expect("project_name is required");
+        let task_router = self.service.task_router();
         let (task, handle) = AndThenNotify::after(self.build());
+        let task = Route::<BoxedTask>::to(project_name, Box::new(task), task_router);
         match timeout(TASK_SEND_TIMEOUT, sender.send(Box::new(task))).await {
             Ok(Ok(_)) => Ok(handle),
             _ => Err(Error::from_kind(ErrorKind::ServiceUnavailable)),
@@ -238,6 +235,7 @@ impl Task<()> for Route<BoxedTask> {
 
     async fn poll(&mut self, _ctx: ()) -> TaskResult<Self::Output, Self::Error> {
         if let Some(task) = self.inner.take() {
+            println!("task picked up");
             match self.router.route(&self.project_name, task).await {
                 Ok(_) => TaskResult::Done(()),
                 Err(_) => TaskResult::Err(Error::from_kind(ErrorKind::Internal))

@@ -147,7 +147,7 @@ services:
       user-net: null
     restart: always
     volumes:
-      - postgres-vol:/mirror
+      - panamax-vol:/mirror
     deploy:
       placement:
         constraints:

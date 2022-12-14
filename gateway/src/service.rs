@@ -434,10 +434,18 @@ impl GatewayService {
                 Err(Error::from_kind(ErrorKind::ProjectAlreadyExists))
             }
         } else {
-            // Otherwise attempt to create a new one. This will fail
-            // outright if the project already exists (this happens if
-            // it belongs to another account).
-            self.insert_project(project_name, account_name).await
+            // Check if project name is valid according to new rules if it
+            // doesn't exist.
+            // TODO: remove this check when we update the project name rules
+            // in shuttle-common
+            if project_name.is_valid() {
+                // Otherwise attempt to create a new one. This will fail
+                // outright if the project already exists (this happens if
+                // it belongs to another account).
+                self.insert_project(project_name, account_name).await
+            } else {
+                Err(Error::from_kind(ErrorKind::InvalidProjectName))
+            }
         }
     }
 

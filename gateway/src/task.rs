@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 use crate::project::*;
 use crate::service::{GatewayContext, GatewayService};
+use crate::worker::TaskRouter;
 use crate::{AccountName, EndState, Error, ErrorKind, ProjectName, Refresh, State};
 
 // Default maximum _total_ time a task is allowed to run
@@ -187,15 +188,21 @@ impl TaskBuilder {
 
         let timeout = self.timeout.unwrap_or(DEFAULT_TIMEOUT);
 
-        Box::new(WithTimeout::on(
+        let project_name = self.project_name.expect("project_name is required");
+
+        let task_router = self.service.task_router();
+
+        let task: BoxedTask = Box::new(WithTimeout::on(
             timeout,
             ProjectTask {
                 uuid: Uuid::new_v4(),
-                project_name: self.project_name.expect("project_name is required"),
+                project_name: project_name.clone(),
                 service: self.service,
                 tasks: self.tasks,
             },
-        ))
+        ));
+
+        Box::new(Route::to(project_name, task, task_router))
     }
 
     pub async fn send(self, sender: &Sender<BoxedTask>) -> Result<TaskHandle, Error> {
@@ -203,6 +210,40 @@ impl TaskBuilder {
         match timeout(TASK_SEND_TIMEOUT, sender.send(Box::new(task))).await {
             Ok(Ok(_)) => Ok(handle),
             _ => Err(Error::from_kind(ErrorKind::ServiceUnavailable)),
+        }
+    }
+}
+
+pub struct Route<T> {
+    project_name: ProjectName,
+    inner: Option<T>,
+    router: TaskRouter<T>,
+}
+
+impl<T> Route<T> {
+    pub fn to(project_name: ProjectName, what: T, router: TaskRouter<T>) -> Self {
+        Self {
+            project_name,
+            inner: Some(what),
+            router
+        }
+    }
+}
+
+#[async_trait]
+impl Task<()> for Route<BoxedTask> {
+    type Output = ();
+
+    type Error = Error;
+
+    async fn poll(&mut self, _ctx: ()) -> TaskResult<Self::Output, Self::Error> {
+        if let Some(task) = self.inner.take() {
+            match self.router.route(&self.project_name, task).await {
+                Ok(_) => TaskResult::Done(()),
+                Err(_) => TaskResult::Err(Error::from_kind(ErrorKind::Internal))
+            }
+        } else {
+            TaskResult::Done(())
         }
     }
 }

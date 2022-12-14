@@ -119,7 +119,7 @@ impl std::fmt::Display for Error {
 
 impl StdError for Error {}
 
-#[derive(Debug, sqlx::Type, Serialize, Clone, PartialEq, Eq)]
+#[derive(Debug, sqlx::Type, Serialize, Clone, PartialEq, Eq, Hash)]
 #[sqlx(transparent)]
 pub struct ProjectName(String);
 

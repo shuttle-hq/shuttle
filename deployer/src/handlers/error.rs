@@ -21,6 +21,8 @@ pub enum Error {
     },
     #[error("record could not be found")]
     NotFound,
+    #[error("Custom error: {0}")]
+    Custom(#[from] anyhow::Error),
 }
 
 impl Serialize for Error {

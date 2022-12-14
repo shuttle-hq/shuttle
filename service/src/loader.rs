@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{anyhow, Context};
 use cargo::core::compiler::{CompileMode, MessageFormat};
 use cargo::core::{Manifest, PackageId, Shell, Summary, Verbosity, Workspace};
-use cargo::ops::{compile, CompileOptions};
+use cargo::ops::{clean, compile, CleanOptions, CompileOptions};
 use cargo::util::interning::InternedString;
 use cargo::util::{homedir, ToSemver};
 use cargo::Config;
@@ -145,6 +145,51 @@ pub async fn build_crate(
     let compilation = compile(&ws, &opts);
 
     Ok(compilation?.cdylibs[0].path.clone())
+}
+
+pub fn clean_crate(project_path: &Path, release_mode: bool) -> anyhow::Result<Vec<String>> {
+    let (read, write) = pipe::pipe();
+    let project_path = project_path.to_owned();
+
+    tokio::task::spawn_blocking(move || {
+        let config = get_config(write).unwrap();
+        let manifest_path = project_path.join("Cargo.toml");
+        let ws = Workspace::new(&manifest_path, &config).unwrap();
+
+        let requested_profile = if release_mode {
+            InternedString::new("release")
+        } else {
+            InternedString::new("dev")
+        };
+
+        let opts = CleanOptions {
+            config: &config,
+            spec: Vec::new(),
+            targets: Vec::new(),
+            requested_profile,
+            profile_specified: true,
+            doc: false,
+        };
+
+        clean(&ws, &opts).unwrap();
+    });
+
+    let mut lines = Vec::new();
+
+    for message in Message::parse_stream(read) {
+        trace!(?message, "parsed cargo message");
+        match message {
+            Ok(Message::TextLine(line)) => {
+                lines.push(line);
+            }
+            Ok(_) => {}
+            Err(error) => {
+                error!("failed to parse cargo message: {error}");
+            }
+        }
+    }
+
+    Ok(lines)
 }
 
 /// Get the default compile config with output redirected to writer

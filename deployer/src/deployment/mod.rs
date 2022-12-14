@@ -128,13 +128,14 @@ where
             abstract_factory,
             runtime_logger_factory,
             active_deployment_getter,
-            storage_manager,
+            storage_manager.clone(),
         ));
 
         DeploymentManager {
             queue_send,
             run_send,
             kill_send,
+            storage_manager,
         }
     }
 }
@@ -144,6 +145,7 @@ pub struct DeploymentManager {
     queue_send: QueueSender,
     run_send: RunSender,
     kill_send: KillSender,
+    storage_manager: StorageManager,
 }
 
 /// ```no-test
@@ -195,6 +197,10 @@ impl DeploymentManager {
         if self.kill_send.receiver_count() > 0 {
             self.kill_send.send(id).unwrap();
         }
+    }
+
+    pub fn storage_manager(&self) -> StorageManager {
+        self.storage_manager.clone()
     }
 }
 

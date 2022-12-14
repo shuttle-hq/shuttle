@@ -106,6 +106,16 @@ impl Client {
             .await
     }
 
+    pub async fn clean_project(&self, project: &ProjectName) -> Result<Vec<String>> {
+        let path = format!("/projects/{}/clean", project.as_str(),);
+
+        self.post(path, Option::<String>::None)
+            .await
+            .context("failed to get clean output")?
+            .to_json()
+            .await
+    }
+
     pub async fn get_project(&self, project: &ProjectName) -> Result<project::Response> {
         let path = format!("/projects/{}", project.as_str());
 

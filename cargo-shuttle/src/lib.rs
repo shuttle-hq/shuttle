@@ -59,6 +59,7 @@ impl Shuttle {
                 | Command::Deployment(..)
                 | Command::Project(..)
                 | Command::Delete
+                | Command::Clean
                 | Command::Secrets
                 | Command::Status
                 | Command::Logs { .. }
@@ -91,6 +92,7 @@ impl Shuttle {
                         self.deployment_get(&client, id).await
                     }
                     Command::Delete => self.delete(&client).await,
+                    Command::Clean => self.clean(&client).await,
                     Command::Secrets => self.secrets(&client).await,
                     Command::Auth(auth_args) => self.auth(auth_args, &client).await,
                     Command::Project(ProjectCommand::New) => self.project_create(&client).await,
@@ -295,6 +297,18 @@ impl Shuttle {
         let table = secret::get_table(&secrets);
 
         println!("{table}");
+
+        Ok(())
+    }
+
+    async fn clean(&self, client: &Client) -> Result<()> {
+        let lines = client.clean_project(self.ctx.project_name()).await?;
+
+        for line in lines {
+            println!("{line}");
+        }
+
+        println!("Cleaning done!");
 
         Ok(())
     }

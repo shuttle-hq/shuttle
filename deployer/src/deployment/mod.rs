@@ -26,6 +26,7 @@ const KILL_BUFFER_SIZE: usize = 10;
 pub struct DeploymentManager {
     pipeline: Pipeline,
     kill_send: KillSender,
+    storage_manager: StorageManager,
 }
 
 impl DeploymentManager {
@@ -40,6 +41,7 @@ impl DeploymentManager {
         artifacts_path: PathBuf,
     ) -> Self {
         let (kill_send, _) = broadcast::channel(KILL_BUFFER_SIZE);
+        let storage_manager = StorageManager::new(artifacts_path);
 
         DeploymentManager {
             pipeline: Pipeline::new(
@@ -49,9 +51,10 @@ impl DeploymentManager {
                 build_log_recorder,
                 secret_recorder,
                 active_deployment_getter,
-                StorageManager::new(artifacts_path),
+                storage_manager.clone(),
             ),
             kill_send,
+            storage_manager,
         }
     }
 
@@ -75,6 +78,10 @@ impl DeploymentManager {
         if self.kill_send.receiver_count() > 0 {
             self.kill_send.send(id).unwrap();
         }
+    }
+
+    pub fn storage_manager(&self) -> StorageManager {
+        self.storage_manager.clone()
     }
 }
 

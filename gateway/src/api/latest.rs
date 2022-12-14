@@ -17,7 +17,6 @@ use instant_acme::{AccountCredentials, ChallengeType};
 use serde::{Deserialize, Serialize};
 use shuttle_common::backends::metrics::Metrics;
 use shuttle_common::models::error::ErrorKind;
-use shuttle_common::models::stats::LoadResponse;
 use shuttle_common::models::{project, stats, user};
 use tokio::sync::mpsc::Sender;
 use tokio::sync::{Mutex, MutexGuard};
@@ -223,12 +222,37 @@ async fn delete_load(
     Ok(AxumJson(load))
 }
 
+#[instrument(skip_all)]
+async fn get_load_admin(
+    _: Admin,
+    State(RouterState { running_builds, .. }): State<RouterState>,
+) -> Result<AxumJson<stats::LoadResponse>, Error> {
+    let mut running_builds = running_builds.lock().await;
+
+    let load = calculate_capacity(&mut running_builds);
+
+    Ok(AxumJson(load))
+}
+
+#[instrument(skip_all)]
+async fn delete_load_admin(
+    _: Admin,
+    State(RouterState { running_builds, .. }): State<RouterState>,
+) -> Result<AxumJson<stats::LoadResponse>, Error> {
+    let mut running_builds = running_builds.lock().await;
+    running_builds.clear();
+
+    let load = calculate_capacity(&mut running_builds);
+
+    Ok(AxumJson(load))
+}
+
 fn calculate_capacity(running_builds: &mut MutexGuard<TtlCache<Uuid, ()>>) -> stats::LoadResponse {
     let active = running_builds.iter().count();
     let capacity = running_builds.capacity();
     let has_capacity = active < capacity;
 
-    LoadResponse {
+    stats::LoadResponse {
         builds_count: active,
         has_capacity,
     }
@@ -441,7 +465,11 @@ impl ApiBuilder {
             .route("/projects/:project_name/*any", any(route_project))
             .route("/stats/load", post(post_load).delete(delete_load))
             .route("/admin/projects", get(get_projects))
-            .route("/admin/revive", post(revive_projects));
+            .route("/admin/revive", post(revive_projects))
+            .route(
+                "/admin/stats/load",
+                get(get_load_admin).delete(delete_load_admin),
+            );
         self
     }
 

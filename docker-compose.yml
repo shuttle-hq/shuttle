@@ -150,6 +150,21 @@ services:
     volumes:
       - panamax-crates-vol:/mirror/crates
       - panamax-io-index-vol:/mirror/crates.io-index
+    labels:
+      deck-chores.sync-mirror.command: panamax sync /mirror
+      deck-chores.sync-mirror.interval: 5 minutes
+      deck-chores.sync-mirror.max: 1
+    deploy:
+      placement:
+        constraints:
+          - node.hostname==controller
+  deck-chores:
+    image: funkyfuture/deck-chores:1
+    restart: unless-stopped
+    environment:
+      TIMEZONE: UTC
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     deploy:
       placement:
         constraints:

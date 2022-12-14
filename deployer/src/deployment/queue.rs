@@ -13,7 +13,7 @@ use opentelemetry::global;
 use serde_json::json;
 use shuttle_service::loader::{build_crate, get_config};
 use tokio::time::{sleep, timeout};
-use tracing::{debug, debug_span, error, info, instrument, trace, Instrument, Span};
+use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
@@ -78,10 +78,7 @@ pub async fn task(
                     Err(err) => build_failed(&id, err),
                 }
 
-                match remove_from_queue(queue_client, id).await {
-                    Ok(_) => {}
-                    Err(err) => build_failed(&id, err),
-                }
+                remove_from_queue(queue_client, id).await
             }
             .instrument(span)
             .await
@@ -114,10 +111,14 @@ async fn wait_for_queue(queue_client: impl BuildQueueClient, id: Uuid) -> Result
     Ok(())
 }
 
-async fn remove_from_queue(queue_client: impl BuildQueueClient, id: Uuid) -> Result<()> {
-    queue_client.release_slot(id).await?;
-
-    Ok(())
+async fn remove_from_queue(queue_client: impl BuildQueueClient, id: Uuid) {
+    match queue_client.release_slot(id).await {
+        Ok(_) => {}
+        Err(error) => warn!(
+            error = &error as &dyn std::error::Error,
+            "could not release build slot"
+        ),
+    }
 }
 
 #[instrument(fields(id = %built.id, state = %State::Built))]

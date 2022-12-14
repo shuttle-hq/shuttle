@@ -75,7 +75,17 @@ impl From<ErrorKind> for ApiError {
             ErrorKind::ProjectUnavailable => {
                 (StatusCode::BAD_GATEWAY, "project returned invalid response")
             }
-            ErrorKind::InvalidProjectName => (StatusCode::BAD_REQUEST, "invalid project name"),
+            ErrorKind::InvalidProjectName => (
+                StatusCode::BAD_REQUEST,
+                r#"
+            Invalid project name. Project name must:
+            1. start and end with alphanumeric characters.
+            2. only contain characters inside of the alphanumeric range, except for `-`.
+            3. not be empty.
+            4. be shorter than 63 characters.
+            4. not contain profanity.
+            5. not be a reserved word."#,
+            ),
             ErrorKind::InvalidOperation => (
                 StatusCode::BAD_REQUEST,
                 "the requested operation is invalid",

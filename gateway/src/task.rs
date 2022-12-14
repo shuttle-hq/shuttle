@@ -222,7 +222,7 @@ impl<T> Route<T> {
         Self {
             project_name,
             inner: Some(what),
-            router
+            router,
         }
     }
 }
@@ -238,7 +238,7 @@ impl Task<()> for Route<BoxedTask> {
             println!("task picked up");
             match self.router.route(&self.project_name, task).await {
                 Ok(_) => TaskResult::Done(()),
-                Err(_) => TaskResult::Err(Error::from_kind(ErrorKind::Internal))
+                Err(_) => TaskResult::Err(Error::from_kind(ErrorKind::Internal)),
             }
         } else {
             TaskResult::Done(())

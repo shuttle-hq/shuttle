@@ -28,7 +28,7 @@ use crate::acme::CustomDomain;
 use crate::args::ContextArgs;
 use crate::auth::{Key, Permissions, ScopedUser, User};
 use crate::project::Project;
-use crate::task::{TaskBuilder, BoxedTask};
+use crate::task::{BoxedTask, TaskBuilder};
 use crate::worker::TaskRouter;
 use crate::{AccountName, DockerContext, Error, ErrorKind, ProjectDetails, ProjectName};
 
@@ -188,7 +188,7 @@ impl GatewayContextProvider {
 pub struct GatewayService {
     provider: GatewayContextProvider,
     db: SqlitePool,
-    task_router: TaskRouter<BoxedTask>
+    task_router: TaskRouter<BoxedTask>,
 }
 
 impl GatewayService {
@@ -205,7 +205,11 @@ impl GatewayService {
 
         let task_router = TaskRouter::new();
 
-        Self { provider, db, task_router }
+        Self {
+            provider,
+            db,
+            task_router,
+        }
     }
 
     pub async fn route(

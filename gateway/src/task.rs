@@ -235,7 +235,6 @@ impl Task<()> for Route<BoxedTask> {
 
     async fn poll(&mut self, _ctx: ()) -> TaskResult<Self::Output, Self::Error> {
         if let Some(task) = self.inner.take() {
-            println!("task picked up");
             match self.router.route(&self.project_name, task).await {
                 Ok(_) => TaskResult::Done(()),
                 Err(_) => TaskResult::Err(Error::from_kind(ErrorKind::Internal)),

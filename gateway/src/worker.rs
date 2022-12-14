@@ -89,6 +89,12 @@ impl<W> Clone for TaskRouter<W> {
     }
 }
 
+impl<W> Default for TaskRouter<W> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<W> TaskRouter<W> {
     pub fn new() -> Self {
         Self {

@@ -282,7 +282,7 @@ async fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<
     let mut entries = fs::read_dir(&dest).await?;
     while let Some(entry) = entries.next_entry().await? {
         // Ignore the build cache directory
-        if entry.file_name() == "target" {
+        if ["target", "Cargo.lock"].contains(&entry.file_name().to_string_lossy().as_ref()) {
             continue;
         }
 
@@ -433,6 +433,11 @@ mod tests {
             .await
             .unwrap();
 
+        // Cargo.lock file shouldn't be deleted
+        fs::write(p.join("Cargo.lock"), "lock file contents shouldn't matter")
+            .await
+            .unwrap();
+
         // Binary data for an archive in the following form:
         //
         // - temp
@@ -483,6 +488,12 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
                 .unwrap(),
             "some file in the build cache",
             "build cache file should not be touched"
+        );
+
+        assert_eq!(
+            fs::read_to_string(p.join("Cargo.lock")).await.unwrap(),
+            "lock file contents shouldn't matter",
+            "Cargo lock file should not be touched"
         );
 
         // Can we extract again without error?

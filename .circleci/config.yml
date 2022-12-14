@@ -410,8 +410,6 @@ workflows:
           image: ubuntu-2204:2022.04.1
           target: x86_64-unknown-linux-musl
           resource_class: medium
-          requires:
-            - build-and-push
           filters:
             tags:
               only: /^v.*/
@@ -422,24 +420,18 @@ workflows:
           image: ubuntu-2004:202101-01
           target: aarch64-unknown-linux-musl
           resource_class: arm.medium
-          requires:
-            - build-and-push
           filters:
             tags:
               only: /^v.*/
             branches:
               only: production
       - build-binaries-windows:
-          requires:
-            - build-and-push
           filters:
             tags:
               only: /^v.*/
             branches:
               only: production
       - build-binaries-mac:
-          requires:
-            - build-and-push
           filters:
             tags:
               only: /^v.*/

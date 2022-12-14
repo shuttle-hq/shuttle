@@ -560,8 +560,8 @@ where
     F: FnOnce(&mut actix_web::web::ServiceConfig) + Sync + Send + Clone + 'static,
 {
     async fn bind(mut self: Box<Self>, addr: SocketAddr) -> Result<(), Error> {
-        // Start a worker for each cpu, but no more than 8.
-        let worker_count = num_cpus::get().max(8);
+        // Start a worker for each cpu, but no more than 4.
+        let worker_count = num_cpus::get().max(4);
 
         let srv = actix_web::HttpServer::new(move || actix_web::App::new().configure(self.clone()))
             .workers(worker_count)

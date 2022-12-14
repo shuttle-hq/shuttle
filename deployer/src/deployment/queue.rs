@@ -318,8 +318,8 @@ async fn run_pre_deploy_tests(
     // recompiled in debug mode for the tests, reducing memory usage during deployment.
     compile_opts.build_config.requested_profile = InternedString::new("release");
 
-    // Build tests with a maximum of 8 workers.
-    compile_opts.build_config.jobs = 8;
+    // Build tests with a maximum of 4 workers.
+    compile_opts.build_config.jobs = 4;
 
     let opts = TestOptions {
         compile_opts,

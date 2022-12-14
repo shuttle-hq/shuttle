@@ -535,8 +535,12 @@ impl ProjectCreating {
                 "Source": format!("{prefix}{project_name}_vol"),
                 "Type": "volume"
             }],
+            // https://docs.docker.com/config/containers/resource_constraints/#memory
             "Memory": 6442450000i64, // 6 GiB hard limit
             "MemoryReservation": 4295000000i64, // 4 GiB soft limit, applied if host is low on memory
+            // https://docs.docker.com/config/containers/resource_constraints/#cpu
+            "CpuPeriod": 100000i64,
+            "CpuQuota": 400000i64
         });
 
         debug!(

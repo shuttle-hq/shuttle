@@ -80,11 +80,12 @@ impl From<ErrorKind> for ApiError {
                 r#"
             Invalid project name. Project name must:
             1. start and end with alphanumeric characters.
-            2. only contain characters inside of the alphanumeric range, except for `-`.
-            3. not be empty.
-            4. be shorter than 63 characters.
-            4. not contain profanity.
-            5. not be a reserved word."#,
+            2. only contain lowercase characters.
+            3. only contain characters inside of the alphanumeric range, except for `-`.
+            4. not be empty.
+            5. be shorter than 63 characters.
+            6. not contain profanity.
+            7. not be a reserved word."#,
             ),
             ErrorKind::InvalidOperation => (
                 StatusCode::BAD_REQUEST,

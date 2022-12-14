@@ -15,6 +15,8 @@ pub use persistence::Persistence;
 use proxy::AddressGetter;
 use tracing::{error, info};
 
+use crate::deployment::gateway_client::GatewayClient;
+
 mod args;
 mod deployment;
 mod error;
@@ -28,14 +30,15 @@ pub async fn start(
     persistence: Persistence,
     args: Args,
 ) {
-    let deployment_manager = DeploymentManager::new(
-        abstract_factory,
-        runtime_logger_factory,
-        persistence.clone(),
-        persistence.clone(),
-        persistence.clone(),
-        args.artifacts_path,
-    );
+    let deployment_manager = DeploymentManager::builder()
+        .abstract_factory(abstract_factory)
+        .runtime_logger_factory(runtime_logger_factory)
+        .build_log_recorder(persistence.clone())
+        .secret_recorder(persistence.clone())
+        .active_deployment_getter(persistence.clone())
+        .artifacts_path(args.artifacts_path)
+        .queue_client(GatewayClient::new(args.gateway_uri))
+        .build();
 
     let runnable_deployments = persistence.get_all_runnable_deployments().await.unwrap();
     info!(count = %runnable_deployments.len(), "enqueuing runnable deployments");

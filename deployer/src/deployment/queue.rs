@@ -1,4 +1,5 @@
 use super::deploy_layer::{Log, LogRecorder, LogType};
+use super::gateway_client::BuildQueueClient;
 use super::storage_manager::StorageManager;
 use super::{Built, QueueReceiver, RunSender, State};
 use crate::error::{Error, Result, TestError};
@@ -11,6 +12,7 @@ use crossbeam_channel::Sender;
 use opentelemetry::global;
 use serde_json::json;
 use shuttle_service::loader::{build_crate, get_config};
+use tokio::time::{sleep, timeout};
 use tracing::{debug, debug_span, error, info, instrument, trace, Instrument, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
@@ -20,6 +22,7 @@ use std::fmt;
 use std::fs::remove_file;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use cargo::core::compiler::{CompileMode, MessageFormat};
 use cargo::core::Workspace;
@@ -34,6 +37,7 @@ pub async fn task(
     log_recorder: impl LogRecorder,
     secret_recorder: impl SecretRecorder,
     storage_manager: StorageManager,
+    queue_client: impl BuildQueueClient,
 ) {
     info!("Queue task started");
 
@@ -46,6 +50,7 @@ pub async fn task(
         let log_recorder = log_recorder.clone();
         let secret_recorder = secret_recorder.clone();
         let storage_manager = storage_manager.clone();
+        let queue_client = queue_client.clone();
 
         tokio::spawn(async move {
             let parent_cx = global::get_text_map_propagator(|propagator| {
@@ -55,11 +60,26 @@ pub async fn task(
             span.set_parent(parent_cx);
 
             async move {
+                match timeout(
+                    Duration::from_secs(60 * 5), // Timeout after 5 minutes if the build queue hangs or it takes too long for a slot to become available
+                    wait_for_queue(queue_client.clone(), id),
+                )
+                .await
+                {
+                    Ok(_) => {}
+                    Err(err) => return build_failed(&id, err),
+                }
+
                 match queued
                     .handle(storage_manager, log_recorder, secret_recorder)
                     .await
                 {
                     Ok(built) => promote_to_run(built, run_send_cloned).await,
+                    Err(err) => build_failed(&id, err),
+                }
+
+                match remove_from_queue(queue_client, id).await {
+                    Ok(_) => {}
                     Err(err) => build_failed(&id, err),
                 }
             }
@@ -75,6 +95,29 @@ fn build_failed(_id: &Uuid, error: impl std::error::Error + 'static) {
         error = &error as &dyn std::error::Error,
         "service build encountered an error"
     );
+}
+
+#[instrument(skip(queue_client), fields(state = %State::Queued))]
+async fn wait_for_queue(queue_client: impl BuildQueueClient, id: Uuid) -> Result<()> {
+    loop {
+        let got_slot = queue_client.get_slot(id).await?;
+
+        if got_slot {
+            break;
+        }
+
+        info!("The build queue is currently full...");
+
+        sleep(Duration::from_secs(1)).await;
+    }
+
+    Ok(())
+}
+
+async fn remove_from_queue(queue_client: impl BuildQueueClient, id: Uuid) -> Result<()> {
+    queue_client.release_slot(id).await?;
+
+    Ok(())
 }
 
 #[instrument(fields(id = %built.id, state = %State::Built))]

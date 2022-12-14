@@ -101,7 +101,7 @@ impl BuildQueueClient for GatewayClient {
 
     async fn release_slot(&self, id: Uuid) -> Result<(), Error> {
         let body = stats::LoadRequest { id };
-        self.delete("stats/load", Some(body)).await?;
+        let _load: stats::LoadResponse = self.delete("stats/load", Some(body)).await?;
 
         Ok(())
     }

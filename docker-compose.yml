@@ -2,6 +2,8 @@ version: "3.7"
 volumes:
   gateway-vol:
   postgres-vol:
+  panamax-crates-vol:
+  panamax-io-index-vol:
 networks:
   user-net:
     attachable: true
@@ -136,6 +138,18 @@ services:
       - DD_API_KEY=${DD_API_KEY}
       - DD_ENV=${DD_ENV}
       - DD_CONTAINER_LABELS_AS_TAGS={"project.name":"project_name"}
+    deploy:
+      placement:
+        constraints:
+          - node.hostname==controller
+  panamax:
+    image: "${CONTAINER_REGISTRY}/panamax:${PANAMAX_TAG}"
+    restart: always
+    networks:
+      user-net:
+    volumes:
+      - panamax-crates-vol:/mirror/crates
+      - panamax-io-index-vol:/mirror/crates.io-index
     deploy:
       placement:
         constraints:

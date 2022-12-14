@@ -18,3 +18,10 @@ shuttle-static-folder = { path = "/usr/src/shuttle/resources/static-folder" }' >
 # Prefetch crates.io index
 cd /usr/src/shuttle/service
 cargo fetch
+
+# Make future crates requests to our own mirror
+echo '
+[source.shuttle-crates-io-mirror]
+registry = "http://panamax:8080/git/crates.io-index"
+[source.crates-io]
+replace-with = "shuttle-crates-io-mirror"' >> $CARGO_HOME/config.toml

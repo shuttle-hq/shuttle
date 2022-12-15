@@ -8,6 +8,8 @@ use bollard::container::{
 };
 use bollard::errors::Error as DockerError;
 use bollard::models::{ContainerInspectResponse, ContainerStateStatusEnum};
+use bollard::network::{ConnectNetworkOptions, DisconnectNetworkOptions};
+use bollard::service::EndpointSettings;
 use bollard::system::EventsOptions;
 use fqdn::FQDN;
 use futures::prelude::*;
@@ -19,7 +21,7 @@ use once_cell::sync::Lazy;
 use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Serialize};
 use tokio::time::{self, timeout};
-use tracing::{debug, error, instrument};
+use tracing::{debug, error, info, instrument};
 
 use crate::{
     ContainerSettings, DockerContext, EndState, Error, ErrorKind, IntoTryState, ProjectName,
@@ -300,6 +302,11 @@ where
         if let Ok(Self::Errored(errored)) = &mut new {
             errored.ctx = Some(Box::new(previous));
             error!(error = ?errored, "state for project errored");
+
+            if errored.kind == ProjectErrorKind::NoNetwork {
+                // Restart the container to try and connect to the network again
+                new = Ok(errored.ctx.clone().unwrap().stop().unwrap());
+            }
         }
 
         let new_state = new.as_ref().unwrap().state();
@@ -463,8 +470,6 @@ impl ProjectCreating {
             image: default_image,
             prefix,
             provisioner_host,
-            network_name,
-            network_id,
             fqdn: public,
             ..
         } = ctx.container_settings();
@@ -520,14 +525,6 @@ impl ProjectCreating {
             });
 
         let mut config = Config::<String>::from(container_config);
-
-        config.networking_config = deserialize_json!({
-            "EndpointsConfig": {
-                network_name: {
-                    "NetworkID": network_id
-                }
-            }
-        });
 
         config.host_config = deserialize_json!({
             "Mounts": [{
@@ -602,12 +599,52 @@ where
     #[instrument(skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let container_id = self.container.id.as_ref().unwrap();
+        let ContainerSettings {
+            network_name,
+            network_id,
+            ..
+        } = ctx.container_settings();
+
         ctx.docker()
             .start_container::<String>(container_id, None)
             .await
             .or_else(|err| {
                 if matches!(err, DockerError::DockerResponseServerError { status_code, .. } if status_code == 304) {
                     // Already started
+                    Ok(())
+                } else {
+                    Err(err)
+                }
+            })?;
+
+        // Make sure the container is connected to the user network only
+        let network_config = ConnectNetworkOptions {
+            container: container_id,
+            endpoint_config: EndpointSettings {
+                network_id: Some(network_id.to_string()),
+                ..Default::default()
+            },
+        };
+
+        ctx.docker().connect_network(network_name, network_config)
+            .await
+            .or_else(|err| {
+                if matches!(err, DockerError::DockerResponseServerError { status_code, .. } if status_code == 403) {
+                    info!("already connected to the shuttle network");
+                    Ok(())
+                } else {
+                    Err(err)
+                }
+            })?;
+
+        ctx.docker().disconnect_network("bridge", DisconnectNetworkOptions{
+            container: container_id,
+            force: true,
+        })
+            .await
+            .or_else(|err| {
+                if matches!(err, DockerError::DockerResponseServerError { status_code, .. } if status_code == 500) {
+                    info!("already disconnected from the bridge network");
                     Ok(())
                 } else {
                     Err(err)
@@ -748,11 +785,11 @@ impl Service {
         let network = safe_unwrap!(container.network_settings.networks)
             .values()
             .next()
-            .ok_or_else(|| ProjectError::internal("project was not linked to a network"))?;
+            .ok_or_else(|| ProjectError::no_network("project was not linked to a network"))?;
 
         let target = safe_unwrap!(network.ip_address)
             .parse()
-            .map_err(|_| ProjectError::internal("project did not join the network"))?;
+            .map_err(|_| ProjectError::no_network("project did not join the network"))?;
 
         Ok(Self {
             name: resource_name,
@@ -916,6 +953,7 @@ where
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ProjectErrorKind {
     Internal,
+    NoNetwork,
 }
 
 /// A runtime error coming from inside a project
@@ -930,6 +968,14 @@ impl ProjectError {
     pub fn internal<S: AsRef<str>>(message: S) -> Self {
         Self {
             kind: ProjectErrorKind::Internal,
+            message: message.as_ref().to_string(),
+            ctx: None,
+        }
+    }
+
+    pub fn no_network<S: AsRef<str>>(message: S) -> Self {
+        Self {
+            kind: ProjectErrorKind::NoNetwork,
             message: message.as_ref().to_string(),
             ctx: None,
         }

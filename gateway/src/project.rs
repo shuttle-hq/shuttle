@@ -1094,6 +1094,21 @@ pub mod exec {
                                 }))
                                 .send(&sender)
                                 .await;
+                        } else if safe_unwrap!(container.network_settings.networks).is_empty() {
+                            debug!(
+                                "{} is not connected to a network so will be restarted",
+                                project_name.clone()
+                            );
+                            _ = gateway
+                                .new_task()
+                                .project(project_name)
+                                .and_then(task::run(|ctx| async move {
+                                    TaskResult::Done(Project::Stopping(ProjectStopping {
+                                        container: ctx.state.container().unwrap(),
+                                    }))
+                                }))
+                                .send(&sender)
+                                .await;
                         }
                     }
                 }

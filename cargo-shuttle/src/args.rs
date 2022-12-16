@@ -38,12 +38,7 @@ pub struct Args {
 #[derive(Parser, Debug)]
 pub struct ProjectArgs {
     /// Specify the working directory
-    #[clap(
-        global = true,
-        long,
-        parse(try_from_os_str = parse_path),
-        default_value = ".",
-    )]
+    #[clap(global = true, long, value_parser, default_value = ".")]
     pub working_directory: PathBuf,
     /// Specify the name of the project (overrides crate name)
     #[clap(global = true, long)]
@@ -193,10 +188,7 @@ pub struct InitArgs {
     #[clap(flatten)]
     pub login_args: LoginArgs,
     /// Path to initialize a new shuttle project
-    #[clap(
-        parse(try_from_os_str = parse_init_path),
-        default_value = ".",
-    )]
+    #[clap(value_parser, default_value = ".")]
     pub path: PathBuf,
 }
 

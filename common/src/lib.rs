@@ -1,3 +1,5 @@
+#[cfg(feature = "backend")]
+pub mod backends;
 pub mod database;
 pub mod deployment;
 pub mod log;

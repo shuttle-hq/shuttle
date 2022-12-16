@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{anyhow, Context};
 use cargo::core::compiler::{CompileKind, CompileMode, CompileTarget, MessageFormat};
 use cargo::core::{Manifest, PackageId, Shell, Summary, Verbosity, Workspace};
-use cargo::ops::{compile, CompileOptions};
+use cargo::ops::{clean, compile, CleanOptions, CompileOptions};
 use cargo::util::interning::InternedString;
 use cargo::util::{homedir, ToSemver};
 use cargo::Config;
@@ -50,7 +50,7 @@ impl Loader {
     /// function called `ENTRYPOINT_SYMBOL_NAME`, likely automatically generated
     /// using the [`shuttle_service::main`][crate::main] macro.
     pub fn from_so_file<P: AsRef<OsStr>>(so_path: P) -> Result<Self, LoaderError> {
-        trace!("loading {:?}", so_path.as_ref().to_str());
+        trace!(so_path = so_path.as_ref().to_str(), "loading .so path");
         unsafe {
             let lib = Library::new(so_path).map_err(LoaderError::Load)?;
 
@@ -117,34 +117,8 @@ pub async fn build_crate(
     let (read, write) = pipe::pipe();
     let project_path = project_path.to_owned();
 
-    let handle = tokio::spawn(async move {
-        trace!("started thread to build crate");
-        let config = get_config(write)?;
-        let manifest_path = project_path.join("Cargo.toml");
-        let mut ws = Workspace::new(&manifest_path, &config)?;
-
-        let current = ws.current_mut().map_err(|_| anyhow!("A Shuttle project cannot have a virtual manifest file - please ensure your Cargo.toml file specifies it as a library."))?;
-        let manifest = current.manifest_mut();
-        ensure_cdylib(manifest)?;
-
-        let summary = current.manifest_mut().summary_mut();
-        make_name_unique(summary, deployment_id);
-        check_version(summary)?;
-        check_no_panic(&ws)?;
-
-        let opts = get_compile_options(&config, release_mode, wasm)?;
-        let compilation = compile(&ws, &opts);
-
-        let path = compilation?.cdylibs[0].path.clone();
-        Ok(if wasm {
-            Runtime::Next(path)
-        } else {
-            Runtime::Legacy(path)
-        })
-    });
-
     // This needs to be on a separate thread, else deployer will block (reason currently unknown :D)
-    tokio::spawn(async move {
+    tokio::task::spawn_blocking(move || {
         trace!("started thread to to capture build output stream");
         for message in Message::parse_stream(read) {
             trace!(?message, "parsed cargo message");
@@ -161,7 +135,73 @@ pub async fn build_crate(
         }
     });
 
-    handle.await?
+    let config = get_config(write)?;
+    let manifest_path = project_path.join("Cargo.toml");
+    let mut ws = Workspace::new(&manifest_path, &config)?;
+
+    let current = ws.current_mut().map_err(|_| anyhow!("A Shuttle project cannot have a virtual manifest file - please ensure your Cargo.toml file specifies it as a library."))?;
+    let manifest = current.manifest_mut();
+    ensure_cdylib(manifest)?;
+
+    let summary = current.manifest_mut().summary_mut();
+    make_name_unique(summary, deployment_id);
+    check_version(summary)?;
+    check_no_panic(&ws)?;
+
+    let opts = get_compile_options(&config, release_mode, wasm)?;
+    let compilation = compile(&ws, &opts);
+
+    let path = compilation?.cdylibs[0].path.clone();
+    Ok(if wasm {
+        Runtime::Next(path)
+    } else {
+        Runtime::Legacy(path)
+    })
+}
+
+pub fn clean_crate(project_path: &Path, release_mode: bool) -> anyhow::Result<Vec<String>> {
+    let (read, write) = pipe::pipe();
+    let project_path = project_path.to_owned();
+
+    tokio::task::spawn_blocking(move || {
+        let config = get_config(write).unwrap();
+        let manifest_path = project_path.join("Cargo.toml");
+        let ws = Workspace::new(&manifest_path, &config).unwrap();
+
+        let requested_profile = if release_mode {
+            InternedString::new("release")
+        } else {
+            InternedString::new("dev")
+        };
+
+        let opts = CleanOptions {
+            config: &config,
+            spec: Vec::new(),
+            targets: Vec::new(),
+            requested_profile,
+            profile_specified: true,
+            doc: false,
+        };
+
+        clean(&ws, &opts).unwrap();
+    });
+
+    let mut lines = Vec::new();
+
+    for message in Message::parse_stream(read) {
+        trace!(?message, "parsed cargo message");
+        match message {
+            Ok(Message::TextLine(line)) => {
+                lines.push(line);
+            }
+            Ok(_) => {}
+            Err(error) => {
+                error!("failed to parse cargo message: {error}");
+            }
+        }
+    }
+
+    Ok(lines)
 }
 
 /// Get the default compile config with output redirected to writer
@@ -197,6 +237,12 @@ fn get_compile_options(
         InternedString::new("release")
     } else {
         InternedString::new("dev")
+    };
+
+    // This sets the max workers for cargo build to 4 for release mode (aka deployment),
+    // but leaves it as default (num cpus) for local runs
+    if release_mode {
+        opts.build_config.jobs = 4
     };
 
     opts.build_config.requested_kinds = vec![if wasm {

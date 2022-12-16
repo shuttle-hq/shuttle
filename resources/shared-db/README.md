@@ -9,5 +9,5 @@ Add `shuttle-shared-db` to the dependencies for your service. Every type of shar
 | Postgres | postgres     | shuttle_shared_db::Postgres |
 | MongoDB  | mongodb      | shuttle_shared_db::MongoDb  |
 
-An example using the Rocket framework can be found on [GitHub](https://github.com/shuttle-hq/shuttle/tree/main/examples/rocket/postgres)
+An example using the Rocket framework can be found on [GitHub](https://github.com/shuttle-hq/examples/tree/main/rocket/postgres)
 

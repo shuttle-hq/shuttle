@@ -6,10 +6,10 @@ use shuttle_service::loader::LoaderError;
 
 use cargo::util::errors::CargoTestError;
 
+use crate::deployment::gateway_client;
+
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Streaming error: {0}")]
-    Streaming(#[source] axum::Error),
     #[error("Internal I/O error: {0}")]
     InputOutput(#[from] io::Error),
     #[error("Build error: {0}")]
@@ -26,6 +26,8 @@ pub enum Error {
     SecretsSet(#[source] Box<dyn StdError + Send>),
     #[error("Failed to cleanup old deployments: {0}")]
     OldCleanup(#[source] Box<dyn StdError + Send>),
+    #[error("Gateway client error: {0}")]
+    GatewayClient(#[from] gateway_client::Error),
 }
 
 #[derive(Error, Debug)]

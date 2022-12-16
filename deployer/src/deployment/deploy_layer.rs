@@ -400,16 +400,17 @@ mod tests {
     use axum::body::Bytes;
     use ctor::ctor;
     use flate2::{write::GzEncoder, Compression};
-    use futures::FutureExt;
     use shuttle_proto::runtime::runtime_client::RuntimeClient;
-    use tokio::{select, time::sleep};
+    use tokio::{select, sync::mpsc, time::sleep};
     use tonic::transport::Channel;
     use tracing_subscriber::prelude::*;
     use uuid::Uuid;
 
     use crate::{
         deployment::{
-            deploy_layer::LogType, ActiveDeploymentsGetter, Built, DeploymentManager, Queued,
+            deploy_layer::LogType, gateway_client::BuildQueueClient,
+            storage_manager::StorageManager, ActiveDeploymentsGetter, Built, DeploymentManager,
+            Queued,
         },
         persistence::{SecretRecorder, State},
     };
@@ -516,15 +517,29 @@ mod tests {
         }
     }
 
+    #[derive(Clone)]
+    struct StubBuildQueueClient;
+
+    #[async_trait::async_trait]
+    impl BuildQueueClient for StubBuildQueueClient {
+        async fn get_slot(
+            &self,
+            _id: Uuid,
+        ) -> Result<bool, crate::deployment::gateway_client::Error> {
+            Ok(true)
+        }
+
+        async fn release_slot(
+            &self,
+            _id: Uuid,
+        ) -> Result<(), crate::deployment::gateway_client::Error> {
+            Ok(())
+        }
+    }
+
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_to_be_queued() {
-        let deployment_manager = DeploymentManager::new(
-            get_runtime_client().await,
-            RECORDER.clone(),
-            RECORDER.clone(),
-            StubActiveDeploymentGetter,
-            PathBuf::from("/tmp"),
-        );
+        let deployment_manager = get_deployment_manager().await;
 
         let queued = get_queue("sleep-async");
         let id = queued.id;
@@ -583,7 +598,7 @@ mod tests {
         };
 
         select! {
-            _ = sleep(Duration::from_secs(120)) => {
+            _ = sleep(Duration::from_secs(180)) => {
                 panic!("states should go into 'Running' for a valid service");
             }
             _ = test => {}
@@ -636,13 +651,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_self_stop() {
-        let deployment_manager = DeploymentManager::new(
-            get_runtime_client().await,
-            RECORDER.clone(),
-            RECORDER.clone(),
-            StubActiveDeploymentGetter,
-            PathBuf::from("/tmp"),
-        );
+        let deployment_manager = get_deployment_manager().await;
 
         let queued = get_queue("self-stop");
         let id = queued.id;
@@ -706,7 +715,7 @@ mod tests {
         };
 
         select! {
-            _ = sleep(Duration::from_secs(120)) => {
+            _ = sleep(Duration::from_secs(180)) => {
                 panic!("states should go into 'Completed' when a service stops by itself");
             }
             _ = test => {}
@@ -715,13 +724,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_bind_panic() {
-        let deployment_manager = DeploymentManager::new(
-            get_runtime_client().await,
-            RECORDER.clone(),
-            RECORDER.clone(),
-            StubActiveDeploymentGetter,
-            PathBuf::from("/tmp"),
-        );
+        let deployment_manager = get_deployment_manager().await;
 
         let queued = get_queue("bind-panic");
         let id = queued.id;
@@ -785,7 +788,7 @@ mod tests {
         };
 
         select! {
-            _ = sleep(Duration::from_secs(120)) => {
+            _ = sleep(Duration::from_secs(180)) => {
                 panic!("states should go into 'Crashed' panicing in bind");
             }
             _ = test => {}
@@ -794,13 +797,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_main_panic() {
-        let deployment_manager = DeploymentManager::new(
-            get_runtime_client().await,
-            RECORDER.clone(),
-            RECORDER.clone(),
-            StubActiveDeploymentGetter,
-            PathBuf::from("/tmp"),
-        );
+        let deployment_manager = get_deployment_manager().await;
 
         let queued = get_queue("main-panic");
         let id = queued.id;
@@ -859,7 +856,7 @@ mod tests {
         };
 
         select! {
-            _ = sleep(Duration::from_secs(120)) => {
+            _ = sleep(Duration::from_secs(180)) => {
                 panic!("states should go into 'Crashed' when panicing in main");
             }
             _ = test => {}
@@ -868,13 +865,7 @@ mod tests {
 
     #[tokio::test]
     async fn deployment_from_run() {
-        let deployment_manager = DeploymentManager::new(
-            get_runtime_client().await,
-            RECORDER.clone(),
-            RECORDER.clone(),
-            StubActiveDeploymentGetter,
-            PathBuf::from("/tmp"),
-        );
+        let deployment_manager = get_deployment_manager().await;
 
         let id = Uuid::new_v4();
         deployment_manager
@@ -882,6 +873,7 @@ mod tests {
                 id,
                 service_name: "run-test".to_string(),
                 service_id: Uuid::new_v4(),
+                tracing_context: Default::default(),
             })
             .await;
 
@@ -921,13 +913,7 @@ mod tests {
 
     #[tokio::test]
     async fn scope_with_nil_id() {
-        let deployment_manager = DeploymentManager::new(
-            get_runtime_client().await,
-            RECORDER.clone(),
-            RECORDER.clone(),
-            StubActiveDeploymentGetter,
-            PathBuf::from("/tmp"),
-        );
+        let deployment_manager = get_deployment_manager().await;
 
         let id = Uuid::nil();
         deployment_manager
@@ -935,8 +921,9 @@ mod tests {
                 id,
                 service_name: "nil_id".to_string(),
                 service_id: Uuid::new_v4(),
-                data_stream: Box::pin(async { Ok(Bytes::from("violets are red")) }.into_stream()),
+                data: Bytes::from("violets are red").to_vec(),
                 will_run_tests: false,
+                tracing_context: Default::default(),
             })
             .await;
 
@@ -950,6 +937,17 @@ mod tests {
             states.is_empty(),
             "no logs should be recorded when the scope id is invalid:\n\t{states:#?}"
         );
+    }
+
+    async fn get_deployment_manager() -> DeploymentManager {
+        DeploymentManager::builder()
+            .build_log_recorder(RECORDER.clone())
+            .secret_recorder(RECORDER.clone())
+            .active_deployment_getter(StubActiveDeploymentGetter)
+            .artifacts_path(PathBuf::from("/tmp"))
+            .runtime(get_runtime_client().await)
+            .queue_client(StubBuildQueueClient)
+            .build()
     }
 
     fn get_queue(name: &str) -> Queued {
@@ -978,8 +976,9 @@ mod tests {
             id: Uuid::new_v4(),
             service_name: format!("deploy-layer-{name}"),
             service_id: Uuid::new_v4(),
-            data_stream: Box::pin(async { Ok(Bytes::from(bytes)) }.into_stream()),
+            data: bytes,
             will_run_tests: false,
+            tracing_context: Default::default(),
         }
     }
 }

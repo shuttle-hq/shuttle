@@ -1,88 +1,37 @@
-use std::fmt::Debug;
+use std::collections::HashMap;
 use std::sync::Arc;
 
+use tokio::sync::mpsc::error::SendError;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
+use tokio::sync::RwLock;
 use tracing::{debug, info};
 
-use crate::project::Project;
-use crate::service::GatewayService;
-use crate::{AccountName, Context, EndState, Error, ProjectName, Refresh, Service, State};
+use crate::task::{BoxedTask, TaskResult};
+use crate::{Error, ProjectName};
 
-#[must_use]
-#[derive(Debug, Clone)]
-pub struct Work<W = Project> {
-    pub project_name: ProjectName,
-    pub account_name: AccountName,
-    pub work: W,
-}
+pub const WORKER_QUEUE_SIZE: usize = 2048;
 
-#[async_trait]
-impl<W> Refresh for Work<W>
-where
-    W: Refresh + Send,
-{
-    type Error = W::Error;
-
-    async fn refresh<'c, C: Context<'c>>(self, ctx: &C) -> Result<Self, Self::Error> {
-        Ok(Self {
-            project_name: self.project_name,
-            account_name: self.account_name,
-            work: self.work.refresh(ctx).await?,
-        })
-    }
-}
-
-#[async_trait]
-impl<'c, W> State<'c> for Work<W>
-where
-    W: State<'c>,
-{
-    type Next = Work<W::Next>;
-
-    type Error = W::Error;
-
-    async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error> {
-        Ok(Work::<W::Next> {
-            project_name: self.project_name,
-            account_name: self.account_name,
-            work: self.work.next(ctx).await?,
-        })
-    }
-}
-
-impl<'c, W> EndState<'c> for Work<W>
-where
-    W: EndState<'c>,
-{
-    type ErrorVariant = W::ErrorVariant;
-
-    fn is_done(&self) -> bool {
-        self.work.is_done()
-    }
-
-    fn into_result(self) -> Result<Self, Self::ErrorVariant> {
-        Ok(Self {
-            project_name: self.project_name,
-            account_name: self.account_name,
-            work: self.work.into_result()?,
-        })
-    }
-}
-
-pub struct Worker<Svc = Arc<GatewayService>, W = Work> {
-    service: Svc,
+pub struct Worker<W = BoxedTask> {
     send: Option<Sender<W>>,
     recv: Receiver<W>,
 }
 
-impl<Svc, W> Worker<Svc, W>
+impl<W> Default for Worker<W>
 where
     W: Send,
 {
-    pub fn new(service: Svc) -> Self {
-        let (send, recv) = channel(32);
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<W> Worker<W>
+where
+    W: Send,
+{
+    pub fn new() -> Self {
+        let (send, recv) = channel(WORKER_QUEUE_SIZE);
         Self {
-            service,
             send: Some(send),
             recv,
         }
@@ -97,11 +46,7 @@ where
     }
 }
 
-impl<Svc, W> Worker<Svc, W>
-where
-    Svc: for<'c> Service<'c, State = W, Error = Error>,
-    W: Debug + Send + for<'c> EndState<'c>,
-{
+impl Worker<BoxedTask> {
     /// Starts the worker, waiting and processing elements from the
     /// queue until the last sending end for the channel is dropped,
     /// at which point this future resolves.
@@ -116,24 +61,14 @@ where
         debug!("starting worker");
 
         while let Some(mut work) = self.recv.recv().await {
-            debug!(?work, "received work");
             loop {
-                work = {
-                    let context = self.service.context();
-
-                    // Safety: EndState's transitions are Infallible
-                    work.next(&context).await.unwrap()
-                };
-
-                match self.service.update(&work).await {
-                    Ok(_) => {}
-                    Err(err) => info!("failed to update a state: {}\nstate: {:?}", err, work),
-                };
-
-                if work.is_done() {
-                    break;
-                } else {
-                    debug!(?work, "work not done yet");
+                match work.poll(()).await {
+                    TaskResult::Done(_) | TaskResult::Cancelled => break,
+                    TaskResult::Pending(_) | TaskResult::TryAgain => continue,
+                    TaskResult::Err(err) => {
+                        info!("task failed: {err}");
+                        break;
+                    }
                 }
             }
         }
@@ -142,121 +77,52 @@ where
     }
 }
 
-#[cfg(test)]
-pub mod tests {
-    use std::convert::Infallible;
+pub struct TaskRouter<W> {
+    table: Arc<RwLock<HashMap<ProjectName, Sender<W>>>>,
+}
 
-    use anyhow::anyhow;
-    use tokio::sync::Mutex;
-
-    use super::*;
-    use crate::tests::{World, WorldContext};
-
-    pub struct DummyService<S> {
-        world: World,
-        state: Mutex<Option<S>>,
-    }
-
-    impl DummyService<()> {
-        pub async fn new<S>() -> DummyService<S> {
-            let world = World::new().await;
-            DummyService {
-                world,
-                state: Mutex::new(None),
-            }
+impl<W> Clone for TaskRouter<W> {
+    fn clone(&self) -> Self {
+        Self {
+            table: self.table.clone(),
         }
     }
+}
 
-    #[async_trait]
-    impl<'c, S> Service<'c> for DummyService<S>
-    where
-        S: EndState<'c> + Sync,
-    {
-        type Context = WorldContext<'c>;
+impl<W> Default for TaskRouter<W> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
-        type State = S;
-
-        type Error = Error;
-
-        fn context(&'c self) -> Self::Context {
-            self.world.context()
-        }
-
-        async fn update(&self, state: &Self::State) -> Result<(), Self::Error> {
-            let mut lock = self.state.lock().await;
-            *lock = Some(Self::State::clone(state));
-            Ok(())
+impl<W> TaskRouter<W> {
+    pub fn new() -> Self {
+        Self {
+            table: Arc::new(RwLock::new(HashMap::new())),
         }
     }
+}
 
-    #[derive(Debug, PartialEq, Eq, Clone)]
-    pub struct FiniteState {
-        count: usize,
-        max_count: usize,
-    }
-
-    #[async_trait]
-    impl<'c> State<'c> for FiniteState {
-        type Next = Self;
-
-        type Error = Infallible;
-
-        async fn next<C: Context<'c>>(mut self, _ctx: &C) -> Result<Self::Next, Self::Error> {
-            if self.count < self.max_count {
-                self.count += 1;
-            }
-            Ok(self)
-        }
-    }
-
-    impl<'c> EndState<'c> for FiniteState {
-        type ErrorVariant = anyhow::Error;
-
-        fn is_done(&self) -> bool {
-            self.count == self.max_count
-        }
-
-        fn into_result(self) -> Result<Self, Self::ErrorVariant> {
-            if self.count > self.max_count {
-                Err(anyhow!(
-                    "count is over max_count: {} > {}",
-                    self.count,
-                    self.max_count
-                ))
-            } else {
-                Ok(self)
-            }
-        }
-    }
-
-    #[tokio::test]
-    async fn worker_queue_and_proceed_until_done() {
-        let svc = DummyService::new::<FiniteState>().await;
-
-        let worker = Worker::new(svc);
-
-        {
+impl TaskRouter<BoxedTask> {
+    pub async fn route(
+        &self,
+        name: &ProjectName,
+        task: BoxedTask,
+    ) -> Result<(), SendError<BoxedTask>> {
+        let mut table = self.table.write().await;
+        if let Some(sender) = table.get(name) {
+            sender.send(task).await
+        } else {
+            let worker = Worker::new();
             let sender = worker.sender();
 
-            let state = FiniteState {
-                count: 0,
-                max_count: 42,
-            };
+            tokio::spawn(worker.start());
 
-            sender.send(state).await.unwrap();
+            let res = sender.send(task).await;
+
+            table.insert(name.clone(), sender);
+
+            res
         }
-
-        let Worker {
-            service: DummyService { state, .. },
-            ..
-        } = worker.start().await.unwrap();
-
-        assert_eq!(
-            *state.lock().await,
-            Some(FiniteState {
-                count: 42,
-                max_count: 42
-            })
-        );
     }
 }

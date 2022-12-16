@@ -2,7 +2,8 @@ use std::{net::SocketAddr, path::PathBuf};
 
 use clap::Parser;
 use fqdn::FQDN;
-use shuttle_common::Port;
+use hyper::Uri;
+use shuttle_common::{project::ProjectName, Port};
 
 /// Program to handle the deploys for a single project
 /// Handling includes, building, testing, and running each service
@@ -32,6 +33,14 @@ pub struct Args {
     /// Address to bind proxy to
     #[clap(long, default_value = "0.0.0.0:8000")]
     pub proxy_address: SocketAddr,
+
+    /// Address to reach gateway's control plane at
+    #[clap(long, default_value = "http://gateway:8001")]
+    pub gateway_uri: Uri,
+
+    /// Project being served by this deployer
+    #[clap(long)]
+    pub project: ProjectName,
 
     /// Secret that will be used to perform admin tasks on this deployer
     #[clap(long)]

@@ -6,7 +6,7 @@ use clap::Parser;
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
-    let result = Shuttle::new().run(Args::parse()).await;
+    let result = Shuttle::new()?.run(Args::parse()).await;
 
     if matches!(result, Ok(CommandOutcome::DeploymentFailure)) {
         // Deployment failure results in a shell error exit code being returned (this allows

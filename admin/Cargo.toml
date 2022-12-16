@@ -1,0 +1,20 @@
+[package]
+name = "shuttle-admin"
+version = "0.8.0"
+edition = "2021"
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { version = "4.0.27", features = [ "derive", "env" ] }
+dirs = "4.0.0"
+reqwest = { version = "0.11.13", features = ["json"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tokio = { version = "1.22.0", features = ["macros", "rt-multi-thread"] }
+toml = "0.5.9"
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+
+[dependencies.shuttle-common]
+workspace = true
+features = ["models"]

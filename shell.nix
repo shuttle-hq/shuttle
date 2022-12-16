@@ -1,7 +1,7 @@
 let
   moz_overlay = import (builtins.fetchTarball https://github.com/mozilla/nixpkgs-mozilla/archive/master.tar.gz);
   # Pin to stable from https://status.nixos.org/
-  nixpkgs = import (fetchTarball "https://github.com/NixOS/nixpkgs/archive/3d47bbaa26e7a771059d828eecf3bd8bf28a8b0f.tar.gz") { overlays = [ moz_overlay ]; };
+  nixpkgs = import (fetchTarball "https://github.com/NixOS/nixpkgs/archive/596a8e828c5dfa504f91918d0fa4152db3ab5502.tar.gz") { overlays = [ moz_overlay ]; };
 in
   with nixpkgs;
   stdenv.mkDerivation {
@@ -11,10 +11,10 @@ in
       pkg-config
     ];
     buildInputs = with nixpkgs; [
-      ((rustChannelOf{ channel = "1.63.0"; }).rust.override {
+      ((rustChannelOf{ channel = "1.65.0"; }).rust.override {
         targets = ["wasm32-wasi"];
+        extensions = ["rust-src"];
       })
-      rust-analyzer
       cargo-watch
       terraform
       awscli2
@@ -27,6 +27,8 @@ in
       datadog-agent
       sccache
       sqlite
+      fastmod
+      pebble
     ];
 
     PROTOC = "${protobuf}/bin/protoc";

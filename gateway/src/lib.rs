@@ -8,28 +8,28 @@ use std::io;
 use std::pin::Pin;
 use std::str::FromStr;
 
+use acme::AcmeClientError;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use bollard::Docker;
 use futures::prelude::*;
-use once_cell::sync::Lazy;
-use regex::Regex;
 use serde::{Deserialize, Deserializer, Serialize};
 use shuttle_common::models::error::{ApiError, ErrorKind};
 use tokio::sync::mpsc::error::SendError;
 use tracing::error;
 
+pub mod acme;
 pub mod api;
 pub mod args;
 pub mod auth;
 pub mod project;
 pub mod proxy;
 pub mod service;
+pub mod task;
+pub mod tls;
 pub mod worker;
 
 use crate::service::{ContainerSettings, GatewayService};
-
-static PROJECT_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new("^[a-zA-Z0-9\\-_]{3,64}$").unwrap());
 
 /// Server-side errors that do not have to do with the user runtime
 /// should be [`Error`]s.
@@ -80,7 +80,19 @@ impl From<ErrorKind> for Error {
 
 impl<T> From<SendError<T>> for Error {
     fn from(_: SendError<T>) -> Self {
-        Self::from(ErrorKind::NotReady)
+        Self::from(ErrorKind::ServiceUnavailable)
+    }
+}
+
+impl From<io::Error> for Error {
+    fn from(_: io::Error) -> Self {
+        Self::from(ErrorKind::Internal)
+    }
+}
+
+impl From<AcmeClientError> for Error {
+    fn from(error: AcmeClientError) -> Self {
+        Self::source(ErrorKind::Internal, error)
     }
 }
 
@@ -107,9 +119,32 @@ impl std::fmt::Display for Error {
 
 impl StdError for Error {}
 
-#[derive(Debug, sqlx::Type, Serialize, Clone, PartialEq, Eq)]
+#[derive(Debug, sqlx::Type, Serialize, Clone, PartialEq, Eq, Hash)]
 #[sqlx(transparent)]
 pub struct ProjectName(String);
+
+impl ProjectName {
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+
+    pub fn is_valid(&self) -> bool {
+        let name = self.0.clone();
+
+        fn is_valid_char(byte: u8) -> bool {
+            matches!(byte, b'a'..=b'z' | b'0'..=b'9' | b'-')
+        }
+
+        // each label in a hostname can be between 1 and 63 chars
+        let is_invalid_length = name.len() > 63;
+
+        !(name.bytes().any(|byte| !is_valid_char(byte))
+            || name.ends_with('-')
+            || name.starts_with('-')
+            || name.is_empty()
+            || is_invalid_length)
+    }
+}
 
 impl<'de> Deserialize<'de> for ProjectName {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -126,11 +161,9 @@ impl FromStr for ProjectName {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if PROJECT_REGEX.is_match(s) {
-            Ok(Self(s.to_string()))
-        } else {
-            Err(Error::from_kind(ErrorKind::InvalidProjectName))
-        }
+        s.parse::<shuttle_common::project::ProjectName>()
+            .map_err(|_| Error::from_kind(ErrorKind::InvalidProjectName))
+            .map(|pn| Self(pn.to_string()))
     }
 }
 
@@ -169,22 +202,37 @@ impl<'de> Deserialize<'de> for AccountName {
     }
 }
 
-pub trait Context<'c>: Send + Sync {
-    fn docker(&self) -> &'c Docker;
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectDetails {
+    pub project_name: ProjectName,
+    pub account_name: AccountName,
+}
 
-    fn container_settings(&self) -> &'c ContainerSettings;
+impl From<ProjectDetails> for shuttle_common::models::project::AdminResponse {
+    fn from(project: ProjectDetails) -> Self {
+        Self {
+            project_name: project.project_name.to_string(),
+            account_name: project.account_name.to_string(),
+        }
+    }
+}
+
+pub trait DockerContext: Send + Sync {
+    fn docker(&self) -> &Docker;
+
+    fn container_settings(&self) -> &ContainerSettings;
 }
 
 #[async_trait]
-pub trait Service<'c> {
-    type Context: Context<'c>;
+pub trait Service {
+    type Context;
 
-    type State: EndState<'c>;
+    type State: EndState<Self::Context>;
 
     type Error;
 
     /// Asks for the latest available context for task execution
-    fn context(&'c self) -> Self::Context;
+    fn context(&self) -> Self::Context;
 
     /// Commit a state update to persistence
     async fn update(&self, state: &Self::State) -> Result<(), Self::Error>;
@@ -193,42 +241,39 @@ pub trait Service<'c> {
 /// A generic state which can, when provided with a [`Context`], do
 /// some work and advance itself
 #[async_trait]
-pub trait State<'c>: Send + Sized + Clone {
+pub trait State<Ctx>: Send {
     type Next;
 
     type Error;
 
-    async fn next<C: Context<'c>>(self, ctx: &C) -> Result<Self::Next, Self::Error>;
-}
-
-/// A [`State`] which contains all its transitions, including
-/// failures
-pub trait EndState<'c>
-where
-    Self: State<'c, Error = Infallible, Next = Self>,
-{
-    type ErrorVariant;
-
-    fn is_done(&self) -> bool;
-
-    fn into_result(self) -> Result<Self, Self::ErrorVariant>;
+    async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error>;
 }
 
 pub type StateTryStream<'c, St, Err> = Pin<Box<dyn Stream<Item = Result<St, Err>> + Send + 'c>>;
 
-pub trait EndStateExt<'c>: EndState<'c> {
+pub trait EndState<Ctx>
+where
+    Self: State<Ctx, Error = Infallible, Next = Self>,
+{
+    fn is_done(&self) -> bool;
+}
+
+pub trait EndStateExt<Ctx>: TryState + EndState<Ctx>
+where
+    Ctx: Sync,
+    Self: Clone,
+{
     /// Convert the state into a [`TryStream`] that yields
     /// the generated states.
     ///
     /// This stream will not end.
-    fn into_stream<Ctx>(self, ctx: Ctx) -> StateTryStream<'c, Self, Self::ErrorVariant>
+    fn into_stream<'c>(self, ctx: &'c Ctx) -> StateTryStream<'c, Self, Self::ErrorVariant>
     where
         Self: 'c,
-        Ctx: 'c + Context<'c>,
     {
         Box::pin(stream::try_unfold((self, ctx), |(state, ctx)| async move {
             state
-                .next(&ctx)
+                .next(ctx)
                 .await
                 .unwrap() // EndState's `next` is Infallible
                 .into_result()
@@ -237,29 +282,42 @@ pub trait EndStateExt<'c>: EndState<'c> {
     }
 }
 
-impl<'c, S> EndStateExt<'c> for S where S: EndState<'c> {}
-
-pub trait IntoEndState<'c, E>
+impl<Ctx, S> EndStateExt<Ctx> for S
 where
-    E: EndState<'c>,
+    S: Clone + TryState + EndState<Ctx>,
+    Ctx: Send + Sync,
 {
-    fn into_end_state(self) -> Result<E, Infallible>;
 }
 
-impl<'c, E, S, Err> IntoEndState<'c, E> for Result<S, Err>
+/// A [`State`] which contains all its transitions, including
+/// failures
+pub trait TryState: Sized {
+    type ErrorVariant;
+
+    fn into_result(self) -> Result<Self, Self::ErrorVariant>;
+}
+
+pub trait IntoTryState<S>
 where
-    E: EndState<'c> + From<S> + From<Err>,
+    S: TryState,
 {
-    fn into_end_state(self) -> Result<E, Infallible> {
-        self.map(|s| E::from(s)).or_else(|err| Ok(E::from(err)))
+    fn into_try_state(self) -> Result<S, Infallible>;
+}
+
+impl<S, F, Err> IntoTryState<S> for Result<F, Err>
+where
+    S: TryState + From<F> + From<Err>,
+{
+    fn into_try_state(self) -> Result<S, Infallible> {
+        self.map(|s| S::from(s)).or_else(|err| Ok(S::from(err)))
     }
 }
 
 #[async_trait]
-pub trait Refresh: Sized {
+pub trait Refresh<Ctx>: Sized {
     type Error: StdError;
 
-    async fn refresh<'c, C: Context<'c>>(self, ctx: &C) -> Result<Self, Self::Error>;
+    async fn refresh(self, ctx: &Ctx) -> Result<Self, Self::Error>;
 }
 
 #[cfg(test)]
@@ -281,18 +339,18 @@ pub mod tests {
     use hyper::http::Uri;
     use hyper::{Body, Client as HyperClient, Request, Response, StatusCode};
     use rand::distributions::{Alphanumeric, DistString, Distribution, Uniform};
-    use shuttle_common::models::{project, service};
+    use shuttle_common::models::{project, service, user};
     use sqlx::SqlitePool;
     use tokio::sync::mpsc::channel;
-    use tracing::info;
 
-    use crate::api::make_api;
-    use crate::args::StartArgs;
+    use crate::acme::AcmeClient;
+    use crate::api::latest::ApiBuilder;
+    use crate::args::{ContextArgs, StartArgs, UseTls};
     use crate::auth::User;
-    use crate::proxy::make_proxy;
+    use crate::proxy::UserServiceBuilder;
     use crate::service::{ContainerSettings, GatewayService, MIGRATIONS};
     use crate::worker::Worker;
-    use crate::Context;
+    use crate::DockerContext;
 
     macro_rules! value_block_helper {
         ($next:ident, $block:block) => {
@@ -355,7 +413,7 @@ pub mod tests {
             $($(#[$($meta:tt)*])* $($patterns:pat_param)|+ $(if $guards:expr)? $(=> $mores:block)?,)+
         } => {{
             let state = $state;
-            let mut stream = crate::EndStateExt::into_stream(state, $ctx);
+            let mut stream = crate::EndStateExt::into_stream(state, &$ctx);
             assert_stream_matches!(
                 stream,
                 $($(#[$($meta)*])* $($patterns)|+ $(if $guards)? $(=> $mores)?,)+
@@ -485,21 +543,19 @@ pub mod tests {
         args: StartArgs,
         hyper: HyperClient<HttpConnector, Body>,
         pool: SqlitePool,
-        fqdn: String,
+        acme_client: AcmeClient,
     }
 
-    #[derive(Clone, Copy)]
-    pub struct WorldContext<'c> {
-        pub docker: &'c Docker,
-        pub container_settings: &'c ContainerSettings,
-        pub hyper: &'c HyperClient<HttpConnector, Body>,
-        pub fqdn: &'c str,
+    #[derive(Clone)]
+    pub struct WorldContext {
+        pub docker: Docker,
+        pub container_settings: ContainerSettings,
+        pub hyper: HyperClient<HttpConnector, Body>,
     }
 
     impl World {
         pub async fn new() -> Self {
             let docker = Docker::connect_with_local_defaults().unwrap();
-            let fqdn = "test.shuttleapp.rs".to_string();
 
             docker
                 .list_images::<&str>(None)
@@ -509,8 +565,10 @@ pub mod tests {
 
             let control: i16 = Uniform::from(9000..10000).sample(&mut rand::thread_rng());
             let user = control + 1;
+            let bouncer = user + 1;
             let control = format!("127.0.0.1:{control}").parse().unwrap();
             let user = format!("127.0.0.1:{user}").parse().unwrap();
+            let bouncer = format!("127.0.0.1:{bouncer}").parse().unwrap();
 
             let prefix = format!(
                 "shuttle_test_{}_",
@@ -529,17 +587,21 @@ pub mod tests {
 
             let args = StartArgs {
                 control,
-                docker_host,
                 user,
-                image,
-                prefix,
-                provisioner_host,
-                network_name,
-                proxy_fqdn: FQDN::from_str(&fqdn).unwrap(),
+                bouncer,
+                use_tls: UseTls::Disable,
+                context: ContextArgs {
+                    docker_host,
+                    image,
+                    prefix,
+                    provisioner_host,
+                    network_name,
+                    proxy_fqdn: FQDN::from_str("test.shuttleapp.rs").unwrap(),
+                },
             };
 
-            let settings = ContainerSettings::builder(&docker, fqdn.clone())
-                .from_args(&args)
+            let settings = ContainerSettings::builder(&docker)
+                .from_args(&args.context)
                 .await;
 
             let hyper = HyperClient::builder().build(HttpConnector::new());
@@ -547,18 +609,20 @@ pub mod tests {
             let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
             MIGRATIONS.run(&pool).await.unwrap();
 
+            let acme_client = AcmeClient::new();
+
             Self {
                 docker,
                 settings,
                 args,
                 hyper,
                 pool,
-                fqdn,
+                acme_client,
             }
         }
 
-        pub fn args(&self) -> StartArgs {
-            self.args.clone()
+        pub fn args(&self) -> ContextArgs {
+            self.args.context.clone()
         }
 
         pub fn pool(&self) -> SqlitePool {
@@ -569,48 +633,52 @@ pub mod tests {
             Client::new(addr).with_hyper_client(self.hyper.clone())
         }
 
-        pub fn fqdn(&self) -> String {
-            self.fqdn.clone()
+        pub fn fqdn(&self) -> FQDN {
+            self.args().proxy_fqdn
+        }
+
+        pub fn acme_client(&self) -> AcmeClient {
+            self.acme_client.clone()
         }
     }
 
     impl World {
         pub fn context(&self) -> WorldContext {
             WorldContext {
-                docker: &self.docker,
-                container_settings: &self.settings,
-                hyper: &self.hyper,
-                fqdn: &self.fqdn,
+                docker: self.docker.clone(),
+                container_settings: self.settings.clone(),
+                hyper: self.hyper.clone(),
             }
         }
     }
 
-    impl<'c> Context<'c> for WorldContext<'c> {
-        fn docker(&self) -> &'c Docker {
-            self.docker
+    impl DockerContext for WorldContext {
+        fn docker(&self) -> &Docker {
+            &self.docker
         }
 
-        fn container_settings(&self) -> &'c ContainerSettings {
-            self.container_settings
+        fn container_settings(&self) -> &ContainerSettings {
+            &self.container_settings
         }
     }
 
     #[tokio::test]
     async fn end_to_end() {
         let world = World::new().await;
-        let service =
-            Arc::new(GatewayService::init(world.args(), world.fqdn(), world.pool()).await);
-        let worker = Worker::new(Arc::clone(&service));
+        let service = Arc::new(GatewayService::init(world.args(), world.pool()).await);
+        let worker = Worker::new();
 
         let (log_out, mut log_in) = channel(256);
         tokio::spawn({
             let sender = worker.sender();
             async move {
                 while let Some(work) = log_in.recv().await {
-                    info!("work: {work:?}");
-                    sender.send(work).await.unwrap()
+                    sender
+                        .send(work)
+                        .await
+                        .map_err(|_| "could not send work")
+                        .unwrap();
                 }
-                info!("work channel closed");
             }
         });
 
@@ -621,28 +689,33 @@ pub mod tests {
             }
         };
 
-        let api = make_api(Arc::clone(&service), log_out);
         let api_addr = format!("127.0.0.1:{}", base_port).parse().unwrap();
-        let serve_api = hyper::Server::bind(&api_addr).serve(api.into_make_service());
         let api_client = world.client(api_addr);
+        let api = ApiBuilder::new()
+            .with_service(Arc::clone(&service))
+            .with_sender(log_out)
+            .with_default_routes()
+            .binding_to(api_addr);
 
-        let proxy = make_proxy(Arc::clone(&service), world.fqdn());
-        let proxy_addr = format!("127.0.0.1:{}", base_port + 1).parse().unwrap();
-        let serve_proxy = hyper::Server::bind(&proxy_addr).serve(proxy);
-        let proxy_client = world.client(proxy_addr);
+        let user_addr: SocketAddr = format!("127.0.0.1:{}", base_port + 1).parse().unwrap();
+        let proxy_client = world.client(user_addr);
+        let user = UserServiceBuilder::new()
+            .with_service(Arc::clone(&service))
+            .with_public(world.fqdn())
+            .with_user_proxy_binding_to(user_addr);
 
         let _gateway = tokio::spawn(async move {
             tokio::select! {
                 _ = worker.start() => {},
-                _ = serve_api => {},
-                _ = serve_proxy => {}
+                _ = api.serve() => {},
+                _ = user.serve() => {}
             }
         });
 
         let User { key, name, .. } = service.create_user("neo".parse().unwrap()).await.unwrap();
         service.set_super_user(&name, true).await.unwrap();
 
-        let User { key, .. } = api_client
+        let user::Response { key, .. } = api_client
             .request(
                 Request::post("/users/trinity")
                     .with_header(&Authorization::bearer(key.as_str()).unwrap())
@@ -742,6 +815,7 @@ pub mod tests {
             .request(
                 Request::get("/hello")
                     .header("Host", "matrix.test.shuttleapp.rs")
+                    .header("x-shuttle-project", "matrix")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -777,10 +851,27 @@ pub mod tests {
                 )
                 .await
                 .unwrap();
-            println!("{resp:?}");
-            if matches!(resp.status(), StatusCode::NOT_FOUND) {
+            let resp = serde_json::from_slice::<project::Response>(resp.body().as_slice()).unwrap();
+            if matches!(resp.state, project::State::Destroyed) {
                 break;
             }
         });
+
+        // Attempting to delete already Destroyed project will return Destroyed
+        api_client
+            .request(
+                Request::delete("/projects/matrix")
+                    .with_header(&authorization)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .map_ok(|resp| {
+                assert_eq!(resp.status(), StatusCode::OK);
+                let resp =
+                    serde_json::from_slice::<project::Response>(resp.body().as_slice()).unwrap();
+                assert_eq!(resp.state, project::State::Destroyed);
+            })
+            .await
+            .unwrap();
     }
 }

@@ -10,7 +10,7 @@ async fn cargo_shuttle_run(working_directory: &str) -> u16 {
     let port = pick_unused_port().unwrap();
     let run_args = RunArgs { port };
 
-    let runner = Shuttle::new().run(Args {
+    let runner = Shuttle::new().unwrap().run(Args {
         api_url: Some("http://shuttle.invalid:80".to_string()),
         project_args: ProjectArgs {
             working_directory: working_directory.clone(),
@@ -166,6 +166,22 @@ async fn rocket_authentication() {
         private_text,
         "{\"message\":\"The `Claims` request guard ensures only valid JWTs can access this endpoint\",\"user\":\"username\"}"
     );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn actix_web_hello_world() {
+    let port = cargo_shuttle_run("../examples/actix-web/hello-world").await;
+
+    let request_text = reqwest::Client::new()
+        .get(format!("http://localhost:{port}/hello"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+
+    assert_eq!(request_text, "Hello World!");
 }
 
 #[tokio::test(flavor = "multi_thread")]

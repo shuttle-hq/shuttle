@@ -14,6 +14,8 @@ use shuttle_proto::runtime::runtime_client::RuntimeClient;
 use tonic::transport::Channel;
 use tracing::{error, info};
 
+use crate::deployment::gateway_client::GatewayClient;
+
 mod args;
 mod deployment;
 mod error;
@@ -22,19 +24,23 @@ mod persistence;
 mod proxy;
 
 pub async fn start(persistence: Persistence, runtime_client: RuntimeClient<Channel>, args: Args) {
-    let deployment_manager = DeploymentManager::new(
-        runtime_client,
-        persistence.clone(),
-        persistence.clone(),
-        persistence.clone(),
-        args.artifacts_path,
-    );
+    let deployment_manager = DeploymentManager::builder()
+        .build_log_recorder(persistence.clone())
+        .secret_recorder(persistence.clone())
+        .active_deployment_getter(persistence.clone())
+        .artifacts_path(args.artifacts_path)
+        .runtime(runtime_client)
+        .queue_client(GatewayClient::new(args.gateway_uri))
+        .build();
 
-    for existing_deployment in persistence.get_all_runnable_deployments().await.unwrap() {
+    let runnable_deployments = persistence.get_all_runnable_deployments().await.unwrap();
+    info!(count = %runnable_deployments.len(), "enqueuing runnable deployments");
+    for existing_deployment in runnable_deployments {
         let built = Built {
             id: existing_deployment.id,
             service_name: existing_deployment.service_name,
             service_id: existing_deployment.service_id,
+            tracing_context: Default::default(),
         };
         deployment_manager.run_push(built).await;
     }
@@ -44,8 +50,11 @@ pub async fn start(persistence: Persistence, runtime_client: RuntimeClient<Chann
         deployment_manager,
         args.proxy_fqdn,
         args.admin_secret,
+        args.project,
     );
     let make_service = router.into_make_service();
+
+    info!(address=%args.api_address, "Binding to and listening at address");
 
     axum::Server::bind(&args.api_address)
         .serve(make_service)
@@ -58,10 +67,10 @@ pub async fn start_proxy(
     fqdn: FQDN,
     address_getter: impl AddressGetter,
 ) {
-    let make_service = make_service_fn(|socket: &AddrStream| {
+    let make_service = make_service_fn(move |socket: &AddrStream| {
         let remote_address = socket.remote_addr();
-        let fqdn = format!(".{}", fqdn.to_string().trim_end_matches('.'));
         let address_getter = address_getter.clone();
+        let fqdn = fqdn.clone();
 
         async move {
             Ok::<_, Infallible>(service_fn(move |req| {

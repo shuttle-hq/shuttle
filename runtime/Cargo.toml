@@ -1,40 +1,38 @@
 [package]
 name = "shuttle-runtime"
 version = "0.1.0"
-edition = "2021"
+edition.workspace = true
+license.workspace = true
 publish = false
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.62"
-async-trait = "0.1.58"
+anyhow = { workspace = true }
+async-trait = { workspace = true }
 cap-std = "0.26.0"
 clap ={ version = "4.0.18", features = ["derive"] }
 hyper = { version = "0.14.23", features = ["full"] }
 rmp-serde = { version = "1.1.1" }
 serenity = { version = "0.11.5", default-features = false, features = ["client", "gateway", "rustls_backend", "model"] }
-thiserror = "1.0.37"
-tokio = { version = "=1.20.1", features = ["full"] }
+thiserror = { workspace = true }
+tokio = { version = "=1.22.0", features = ["full"] }
 tokio-stream = "0.1.11"
 tonic = "0.8.2"
-tracing = "0.1.37"
-tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }
-uuid = { version = "1.1.2", features = ["v4"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+uuid = { workspace = true, features = ["v4"] }
 wasi-common = "2.0.0"
 wasmtime = "2.0.0"
 wasmtime-wasi = "2.0.0"
 
 [dependencies.shuttle-common]
-version = "0.7.0"
-path = "../common"
+workspace = true
 features = ["axum-wasm"]
 
 [dependencies.shuttle-proto]
-version = "0.7.0"
-path = "../proto"
+workspace = true
 
 [dependencies.shuttle-service]
-version = "0.7.0"
-default-features = false
+workspace = true
+version = "0.8.0"
 features = ["loader"]
-path = "../service"

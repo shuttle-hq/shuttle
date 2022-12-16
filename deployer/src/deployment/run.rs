@@ -12,7 +12,7 @@ use shuttle_proto::runtime::{runtime_client::RuntimeClient, LoadRequest, StartRe
 
 use tokio::task::JoinError;
 use tonic::transport::Channel;
-use tracing::{debug, debug_span, error, info, instrument, trace, Instrument};
+use tracing::{debug_span, error, info, instrument, trace, Instrument};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
@@ -207,7 +207,7 @@ impl Built {
 async fn run(
     id: Uuid,
     service_name: String,
-    libs_path: PathBuf,
+    so_path: PathBuf,
     mut runtime_client: RuntimeClient<Channel>,
     _address: SocketAddr,
     _kill_recv: KillReceiver,
@@ -217,7 +217,7 @@ async fn run(
 ) {
     info!(
         "loading project from: {}",
-        libs_path.clone().into_os_string().into_string().unwrap()
+        so_path.clone().into_os_string().into_string().unwrap()
     );
 
     let load_request = tonic::Request::new(LoadRequest {
@@ -245,7 +245,6 @@ async fn run(
 #[cfg(test)]
 mod tests {
     use std::{
-        collections::BTreeMap,
         net::{Ipv4Addr, SocketAddr},
         path::PathBuf,
         process::Command,

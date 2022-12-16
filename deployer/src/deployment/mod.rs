@@ -25,13 +25,12 @@ const QUEUE_BUFFER_SIZE: usize = 100;
 const RUN_BUFFER_SIZE: usize = 100;
 const KILL_BUFFER_SIZE: usize = 10;
 
-pub struct DeploymentManagerBuilder<AF, RLF, LR, SR, ADG, QC> {
-    abstract_factory: Option<AF>,
-    runtime_logger_factory: Option<RLF>,
+pub struct DeploymentManagerBuilder<LR, SR, ADG, QC> {
     build_log_recorder: Option<LR>,
     secret_recorder: Option<SR>,
     active_deployment_getter: Option<ADG>,
     artifacts_path: Option<PathBuf>,
+    runtime_client: Option<RuntimeClient<Channel>>,
     queue_client: Option<QC>,
 }
 
@@ -72,6 +71,11 @@ where
         self
     }
 
+    pub fn runtime(mut self, runtime_client: RuntimeClient<Channel>) -> Self {
+        self.runtime_client = Some(runtime_client);
+
+        self
+    }
     /// Creates two Tokio tasks, one for building queued services, the other for
     /// executing/deploying built services. Two multi-producer, single consumer
     /// channels are also created which are for moving on-going service
@@ -106,7 +110,7 @@ where
         tokio::spawn(run::task(
             run_recv,
             runtime_client,
-            kill_send,
+            kill_send.clone(),
             active_deployment_getter,
             storage_manager.clone(),
         ));
@@ -145,15 +149,13 @@ pub struct DeploymentManager {
 impl DeploymentManager {
     /// Create a new deployment manager. Manages one or more 'pipelines' for
     /// processing service building, loading, and deployment.
-    pub fn builder<AF, RLF, LR, SR, ADG, QC>() -> DeploymentManagerBuilder<AF, RLF, LR, SR, ADG, QC>
-    {
+    pub fn builder<LR, SR, ADG, QC>() -> DeploymentManagerBuilder<LR, SR, ADG, QC> {
         DeploymentManagerBuilder {
-            abstract_factory: None,
-            runtime_logger_factory: None,
             build_log_recorder: None,
             secret_recorder: None,
             active_deployment_getter: None,
             artifacts_path: None,
+            runtime_client: None,
             queue_client: None,
         }
     }

@@ -401,16 +401,15 @@ mod tests {
     use ctor::ctor;
     use flate2::{write::GzEncoder, Compression};
     use shuttle_proto::runtime::runtime_client::RuntimeClient;
-    use tokio::{select, sync::mpsc, time::sleep};
+    use tokio::{select, time::sleep};
     use tonic::transport::Channel;
     use tracing_subscriber::prelude::*;
     use uuid::Uuid;
 
     use crate::{
         deployment::{
-            deploy_layer::LogType, gateway_client::BuildQueueClient,
-            storage_manager::StorageManager, ActiveDeploymentsGetter, Built, DeploymentManager,
-            Queued,
+            deploy_layer::LogType, gateway_client::BuildQueueClient, ActiveDeploymentsGetter,
+            Built, DeploymentManager, Queued,
         },
         persistence::{SecretRecorder, State},
     };

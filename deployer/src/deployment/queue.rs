@@ -399,11 +399,12 @@ async fn store_lib(
 mod tests {
     use std::{collections::BTreeMap, fs::File, io::Write, path::Path};
 
+    use shuttle_common::storage_manager::StorageManager;
     use tempdir::TempDir;
     use tokio::fs;
     use uuid::Uuid;
 
-    use crate::{deployment::storage_manager::StorageManager, error::TestError};
+    use crate::error::TestError;
 
     #[tokio::test]
     async fn extract_tar_gz_data() {

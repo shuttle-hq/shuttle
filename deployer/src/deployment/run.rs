@@ -252,6 +252,7 @@ mod tests {
         time::Duration,
     };
 
+    use shuttle_common::storage_manager::StorageManager;
     use shuttle_proto::runtime::runtime_client::RuntimeClient;
     use tempdir::TempDir;
     use tokio::{
@@ -262,7 +263,7 @@ mod tests {
     use tonic::transport::Channel;
     use uuid::Uuid;
 
-    use crate::{deployment::storage_manager::StorageManager, error::Error};
+    use crate::error::Error;
 
     use super::Built;
 

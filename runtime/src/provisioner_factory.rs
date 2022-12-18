@@ -1,20 +1,26 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, path::PathBuf};
 
 use async_trait::async_trait;
-use shuttle_common::{database, DatabaseReadyInfo};
+use shuttle_common::{database, storage_manager::StorageManager, DatabaseReadyInfo};
 use shuttle_proto::provisioner::{
     database_request::DbType, provisioner_client::ProvisionerClient, DatabaseRequest,
 };
 use shuttle_service::{Factory, ServiceName};
 use tonic::{transport::Channel, Request};
 use tracing::{debug, info, trace};
+use uuid::Uuid;
 
 /// Trait to make it easy to get a factory (service locator) for each service being started
 pub trait AbstractFactory: Send + 'static {
     type Output: Factory;
 
     /// Get a factory for a specific service
-    fn get_factory(&self, service_name: ServiceName) -> Self::Output;
+    fn get_factory(
+        &self,
+        service_name: ServiceName,
+        deployment_id: Uuid,
+        storage_manager: StorageManager,
+    ) -> Self::Output;
 }
 
 /// An abstract factory that makes factories which uses provisioner
@@ -26,8 +32,18 @@ pub struct AbstractProvisionerFactory {
 impl AbstractFactory for AbstractProvisionerFactory {
     type Output = ProvisionerFactory;
 
-    fn get_factory(&self, service_name: ServiceName) -> Self::Output {
-        ProvisionerFactory::new(self.provisioner_client.clone(), service_name)
+    fn get_factory(
+        &self,
+        service_name: ServiceName,
+        deployment_id: Uuid,
+        storage_manager: StorageManager,
+    ) -> Self::Output {
+        ProvisionerFactory::new(
+            self.provisioner_client.clone(),
+            service_name,
+            deployment_id,
+            storage_manager,
+        )
     }
 }
 
@@ -40,6 +56,8 @@ impl AbstractProvisionerFactory {
 /// A factory (service locator) which goes through the provisioner crate
 pub struct ProvisionerFactory {
     service_name: ServiceName,
+    deployment_id: Uuid,
+    storage_manager: StorageManager,
     provisioner_client: ProvisionerClient<Channel>,
     info: Option<DatabaseReadyInfo>,
     secrets: Option<BTreeMap<String, String>>,
@@ -49,10 +67,14 @@ impl ProvisionerFactory {
     pub(crate) fn new(
         provisioner_client: ProvisionerClient<Channel>,
         service_name: ServiceName,
+        deployment_id: Uuid,
+        storage_manager: StorageManager,
     ) -> Self {
         Self {
             provisioner_client,
             service_name,
+            deployment_id,
+            storage_manager,
             info: None,
             secrets: None,
         }
@@ -107,5 +129,17 @@ impl Factory for ProvisionerFactory {
 
     fn get_service_name(&self) -> ServiceName {
         self.service_name.clone()
+    }
+
+    fn get_build_path(&self) -> Result<PathBuf, shuttle_service::Error> {
+        self.storage_manager
+            .service_build_path(self.service_name.as_str())
+            .map_err(Into::into)
+    }
+
+    fn get_storage_path(&self) -> Result<PathBuf, shuttle_service::Error> {
+        self.storage_manager
+            .deployment_storage_path(self.service_name.as_str(), &self.deployment_id)
+            .map_err(Into::into)
     }
 }

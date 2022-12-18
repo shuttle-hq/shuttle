@@ -8,6 +8,7 @@ use std::{
 use async_trait::async_trait;
 use opentelemetry::global;
 use shuttle_common::project::ProjectName as ServiceName;
+use shuttle_common::storage_manager::StorageManager;
 use shuttle_proto::runtime::{runtime_client::RuntimeClient, LoadRequest, StartRequest};
 
 use tokio::task::JoinError;
@@ -16,7 +17,7 @@ use tracing::{debug_span, error, info, instrument, trace, Instrument};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
-use super::{storage_manager::StorageManager, KillReceiver, KillSender, RunReceiver, State};
+use super::{KillReceiver, KillSender, RunReceiver, State};
 use crate::error::{Error, Result};
 
 /// Run a task which takes runnable deploys from a channel and starts them up with a factory provided by the

@@ -2,12 +2,12 @@ pub mod deploy_layer;
 pub mod gateway_client;
 mod queue;
 mod run;
-mod storage_manager;
 
 use std::path::PathBuf;
 
 pub use queue::Queued;
 pub use run::{ActiveDeploymentsGetter, Built};
+use shuttle_common::storage_manager::StorageManager;
 use shuttle_proto::runtime::runtime_client::RuntimeClient;
 use tonic::transport::Channel;
 use tracing::{instrument, Span};
@@ -17,9 +17,7 @@ use crate::persistence::{SecretRecorder, State};
 use tokio::sync::{broadcast, mpsc};
 use uuid::Uuid;
 
-use self::{
-    deploy_layer::LogRecorder, gateway_client::BuildQueueClient, storage_manager::StorageManager,
-};
+use self::{deploy_layer::LogRecorder, gateway_client::BuildQueueClient};
 
 const QUEUE_BUFFER_SIZE: usize = 100;
 const RUN_BUFFER_SIZE: usize = 100;

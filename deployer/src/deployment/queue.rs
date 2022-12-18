@@ -1,9 +1,9 @@
 use super::deploy_layer::{Log, LogRecorder, LogType};
 use super::gateway_client::BuildQueueClient;
-use super::storage_manager::StorageManager;
 use super::{Built, QueueReceiver, RunSender, State};
 use crate::error::{Error, Result, TestError};
 use crate::persistence::{LogLevel, SecretRecorder};
+use shuttle_common::storage_manager::StorageManager;
 
 use cargo::util::interning::InternedString;
 use cargo_metadata::Message;

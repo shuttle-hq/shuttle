@@ -65,11 +65,9 @@ async fn main() {
     info!("connecting runtime client");
     let conn = Endpoint::new("http://127.0.0.1:6001")
         .unwrap()
-        .connect_timeout(Duration::from_secs(5))
-        .connect()
-        .await
-        .unwrap();
-    let mut runtime_client = RuntimeClient::new(conn);
+        .connect_timeout(Duration::from_secs(5));
+
+    let mut runtime_client = RuntimeClient::connect(conn).await.unwrap();
 
     let sender = persistence.get_log_sender();
     let mut stream = runtime_client

@@ -215,6 +215,7 @@ jobs:
     executor: image-ubuntu
     steps:
       - install-rust
+      - install-protoc
       - checkout
       - run: git submodule sync
       - run: git submodule update --init

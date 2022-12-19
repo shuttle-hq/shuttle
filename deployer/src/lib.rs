@@ -15,6 +15,8 @@ pub use persistence::Persistence;
 use proxy::AddressGetter;
 use tracing::{error, info};
 
+use crate::deployment::gateway_client::GatewayClient;
+
 mod args;
 mod deployment;
 mod error;
@@ -28,16 +30,19 @@ pub async fn start(
     persistence: Persistence,
     args: Args,
 ) {
-    let deployment_manager = DeploymentManager::new(
-        abstract_factory,
-        runtime_logger_factory,
-        persistence.clone(),
-        persistence.clone(),
-        persistence.clone(),
-        args.artifacts_path,
-    );
+    let deployment_manager = DeploymentManager::builder()
+        .abstract_factory(abstract_factory)
+        .runtime_logger_factory(runtime_logger_factory)
+        .build_log_recorder(persistence.clone())
+        .secret_recorder(persistence.clone())
+        .active_deployment_getter(persistence.clone())
+        .artifacts_path(args.artifacts_path)
+        .queue_client(GatewayClient::new(args.gateway_uri))
+        .build();
 
-    for existing_deployment in persistence.get_all_runnable_deployments().await.unwrap() {
+    let runnable_deployments = persistence.get_all_runnable_deployments().await.unwrap();
+    info!(count = %runnable_deployments.len(), "enqueuing runnable deployments");
+    for existing_deployment in runnable_deployments {
         let built = Built {
             id: existing_deployment.id,
             service_name: existing_deployment.service_name,
@@ -56,7 +61,7 @@ pub async fn start(
     );
     let make_service = router.into_make_service();
 
-    info!("Binding to and listening at address: {}", args.api_address);
+    info!(address=%args.api_address, "Binding to and listening at address");
 
     axum::Server::bind(&args.api_address)
         .serve(make_service)

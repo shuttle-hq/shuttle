@@ -1,4 +1,5 @@
 use super::deploy_layer::{Log, LogRecorder, LogType};
+use super::gateway_client::BuildQueueClient;
 use super::storage_manager::StorageManager;
 use super::{Built, QueueReceiver, RunSender, State};
 use crate::error::{Error, Result, TestError};
@@ -11,7 +12,8 @@ use crossbeam_channel::Sender;
 use opentelemetry::global;
 use serde_json::json;
 use shuttle_service::loader::{build_crate, get_config};
-use tracing::{debug, debug_span, error, info, instrument, trace, Instrument, Span};
+use tokio::time::{sleep, timeout};
+use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
@@ -20,6 +22,7 @@ use std::fmt;
 use std::fs::remove_file;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use cargo::core::compiler::{CompileMode, MessageFormat};
 use cargo::core::Workspace;
@@ -34,6 +37,7 @@ pub async fn task(
     log_recorder: impl LogRecorder,
     secret_recorder: impl SecretRecorder,
     storage_manager: StorageManager,
+    queue_client: impl BuildQueueClient,
 ) {
     info!("Queue task started");
 
@@ -46,6 +50,7 @@ pub async fn task(
         let log_recorder = log_recorder.clone();
         let secret_recorder = secret_recorder.clone();
         let storage_manager = storage_manager.clone();
+        let queue_client = queue_client.clone();
 
         tokio::spawn(async move {
             let parent_cx = global::get_text_map_propagator(|propagator| {
@@ -55,6 +60,16 @@ pub async fn task(
             span.set_parent(parent_cx);
 
             async move {
+                match timeout(
+                    Duration::from_secs(60 * 5), // Timeout after 5 minutes if the build queue hangs or it takes too long for a slot to become available
+                    wait_for_queue(queue_client.clone(), id),
+                )
+                .await
+                {
+                    Ok(_) => {}
+                    Err(err) => return build_failed(&id, err),
+                }
+
                 match queued
                     .handle(storage_manager, log_recorder, secret_recorder)
                     .await
@@ -62,6 +77,8 @@ pub async fn task(
                     Ok(built) => promote_to_run(built, run_send_cloned).await,
                     Err(err) => build_failed(&id, err),
                 }
+
+                remove_from_queue(queue_client, id).await
             }
             .instrument(span)
             .await
@@ -75,6 +92,33 @@ fn build_failed(_id: &Uuid, error: impl std::error::Error + 'static) {
         error = &error as &dyn std::error::Error,
         "service build encountered an error"
     );
+}
+
+#[instrument(skip(queue_client), fields(state = %State::Queued))]
+async fn wait_for_queue(queue_client: impl BuildQueueClient, id: Uuid) -> Result<()> {
+    loop {
+        let got_slot = queue_client.get_slot(id).await?;
+
+        if got_slot {
+            break;
+        }
+
+        info!("The build queue is currently full...");
+
+        sleep(Duration::from_secs(1)).await;
+    }
+
+    Ok(())
+}
+
+async fn remove_from_queue(queue_client: impl BuildQueueClient, id: Uuid) {
+    match queue_client.release_slot(id).await {
+        Ok(_) => {}
+        Err(error) => warn!(
+            error = &error as &dyn std::error::Error,
+            "could not release build slot"
+        ),
+    }
 }
 
 #[instrument(fields(id = %built.id, state = %State::Built))]
@@ -239,7 +283,7 @@ async fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<
     let mut entries = fs::read_dir(&dest).await?;
     while let Some(entry) = entries.next_entry().await? {
         // Ignore the build cache directory
-        if entry.file_name() == "target" {
+        if ["target", "Cargo.lock"].contains(&entry.file_name().to_string_lossy().as_ref()) {
             continue;
         }
 
@@ -318,8 +362,8 @@ async fn run_pre_deploy_tests(
     // recompiled in debug mode for the tests, reducing memory usage during deployment.
     compile_opts.build_config.requested_profile = InternedString::new("release");
 
-    // Build tests with a maximum of 8 workers.
-    compile_opts.build_config.jobs = 8;
+    // Build tests with a maximum of 4 workers.
+    compile_opts.build_config.jobs = 4;
 
     let opts = TestOptions {
         compile_opts,
@@ -390,6 +434,11 @@ mod tests {
             .await
             .unwrap();
 
+        // Cargo.lock file shouldn't be deleted
+        fs::write(p.join("Cargo.lock"), "lock file contents shouldn't matter")
+            .await
+            .unwrap();
+
         // Binary data for an archive in the following form:
         //
         // - temp
@@ -440,6 +489,12 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
                 .unwrap(),
             "some file in the build cache",
             "build cache file should not be touched"
+        );
+
+        assert_eq!(
+            fs::read_to_string(p.join("Cargo.lock")).await.unwrap(),
+            "lock file contents shouldn't matter",
+            "Cargo lock file should not be touched"
         );
 
         // Can we extract again without error?

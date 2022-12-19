@@ -19,7 +19,7 @@ use std::io::{self, Cursor};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{debug, error, info, info_span, trace, warn};
+use tracing::{debug, error, info, info_span, trace, warn, Instrument};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 #[tokio::main(flavor = "multi_thread")]
@@ -122,20 +122,26 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
                         "running health checks",
                         healthcheck.num_projects = projects.len()
                     );
-                    let _ = span.enter();
-                    for (project_name, _) in projects {
-                        if let Ok(handle) = gateway
-                            .new_task()
-                            .project(project_name)
-                            .and_then(task::check_health())
-                            .send(&sender)
-                            .await
-                        {
-                            // we wait for the check to be done before
-                            // queuing up the next one
-                            handle.await
+
+                    let gateway = gateway.clone();
+                    let sender = sender.clone();
+                    async move {
+                        for (project_name, _) in projects {
+                            if let Ok(handle) = gateway
+                                .new_task()
+                                .project(project_name)
+                                .and_then(task::check_health())
+                                .send(&sender)
+                                .await
+                            {
+                                // we wait for the check to be done before
+                                // queuing up the next one
+                                handle.await
+                            }
                         }
                     }
+                    .instrument(span)
+                    .await;
                 }
             }
         }

@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 use crate::project::*;
 use crate::service::{GatewayContext, GatewayService};
+use crate::worker::TaskRouter;
 use crate::{AccountName, EndState, Error, ErrorKind, ProjectName, Refresh, State};
 
 // Default maximum _total_ time a task is allowed to run
@@ -199,10 +200,47 @@ impl TaskBuilder {
     }
 
     pub async fn send(self, sender: &Sender<BoxedTask>) -> Result<TaskHandle, Error> {
+        let project_name = self.project_name.clone().expect("project_name is required");
+        let task_router = self.service.task_router();
         let (task, handle) = AndThenNotify::after(self.build());
+        let task = Route::<BoxedTask>::to(project_name, Box::new(task), task_router);
         match timeout(TASK_SEND_TIMEOUT, sender.send(Box::new(task))).await {
             Ok(Ok(_)) => Ok(handle),
             _ => Err(Error::from_kind(ErrorKind::ServiceUnavailable)),
+        }
+    }
+}
+
+pub struct Route<T> {
+    project_name: ProjectName,
+    inner: Option<T>,
+    router: TaskRouter<T>,
+}
+
+impl<T> Route<T> {
+    pub fn to(project_name: ProjectName, what: T, router: TaskRouter<T>) -> Self {
+        Self {
+            project_name,
+            inner: Some(what),
+            router,
+        }
+    }
+}
+
+#[async_trait]
+impl Task<()> for Route<BoxedTask> {
+    type Output = ();
+
+    type Error = Error;
+
+    async fn poll(&mut self, _ctx: ()) -> TaskResult<Self::Output, Self::Error> {
+        if let Some(task) = self.inner.take() {
+            match self.router.route(&self.project_name, task).await {
+                Ok(_) => TaskResult::Done(()),
+                Err(_) => TaskResult::Err(Error::from_kind(ErrorKind::Internal)),
+            }
+        } else {
+            TaskResult::Done(())
         }
     }
 }

@@ -5,7 +5,7 @@ use axum::extract::ws::{self, WebSocket};
 use axum::extract::{Extension, MatchedPath, Path, Query};
 use axum::http::{Request, Response};
 use axum::middleware::from_extractor;
-use axum::routing::{get, Router};
+use axum::routing::{get, post, Router};
 use axum::{extract::BodyStream, Json};
 use bytes::BufMut;
 use chrono::{TimeZone, Utc};
@@ -17,9 +17,10 @@ use shuttle_common::backends::metrics::Metrics;
 use shuttle_common::models::secret;
 use shuttle_common::project::ProjectName;
 use shuttle_common::LogItem;
+use shuttle_service::loader::clean_crate;
 use tower_http::auth::RequireAuthorizationLayer;
 use tower_http::trace::TraceLayer;
-use tracing::{debug, debug_span, error, field, trace, Span};
+use tracing::{debug, debug_span, error, field, instrument, trace, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
@@ -66,6 +67,7 @@ pub fn make_router(
             "/projects/:project_name/secrets/:service_name",
             get(get_secrets),
         )
+        .route("/projects/:project_name/clean", post(post_clean))
         .layer(Extension(persistence))
         .layer(Extension(deployment_manager))
         .layer(Extension(proxy_fqdn))
@@ -121,6 +123,7 @@ pub fn make_router(
         .layer(Extension(project_name))
 }
 
+#[instrument(skip_all)]
 async fn list_services(
     Extension(persistence): Extension<Persistence>,
 ) -> Result<Json<Vec<shuttle_common::models::service::Response>>> {
@@ -134,9 +137,10 @@ async fn list_services(
     Ok(Json(services))
 }
 
+#[instrument(skip(persistence))]
 async fn get_service(
     Extension(persistence): Extension<Persistence>,
-    Path((_project_name, service_name)): Path<(String, String)>,
+    Path((project_name, service_name)): Path<(String, String)>,
 ) -> Result<Json<shuttle_common::models::service::Detailed>> {
     if let Some(service) = persistence.get_service_by_name(&service_name).await? {
         let deployments = persistence
@@ -171,10 +175,11 @@ async fn get_service(
     }
 }
 
+#[instrument(skip_all, fields(%project_name, %service_name))]
 async fn get_service_summary(
     Extension(persistence): Extension<Persistence>,
     Extension(proxy_fqdn): Extension<FQDN>,
-    Path((_, service_name)): Path<(String, String)>,
+    Path((project_name, service_name)): Path<(String, String)>,
 ) -> Result<Json<shuttle_common::models::service::Summary>> {
     if let Some(service) = persistence.get_service_by_name(&service_name).await? {
         let deployment = persistence
@@ -201,10 +206,11 @@ async fn get_service_summary(
     }
 }
 
+#[instrument(skip_all, fields(%project_name, %service_name))]
 async fn post_service(
     Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
-    Path((_project_name, service_name)): Path<(String, String)>,
+    Path((project_name, service_name)): Path<(String, String)>,
     Query(params): Query<HashMap<String, String>>,
     mut stream: BodyStream,
 ) -> Result<Json<shuttle_common::models::deployment::Response>> {
@@ -243,10 +249,11 @@ async fn post_service(
     Ok(Json(deployment.into()))
 }
 
+#[instrument(skip_all, fields(%project_name, %service_name))]
 async fn delete_service(
     Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
-    Path((_project_name, service_name)): Path<(String, String)>,
+    Path((project_name, service_name)): Path<(String, String)>,
 ) -> Result<Json<shuttle_common::models::service::Detailed>> {
     if let Some(service) = persistence.get_service_by_name(&service_name).await? {
         let old_deployments = persistence
@@ -285,9 +292,10 @@ async fn delete_service(
     }
 }
 
+#[instrument(skip_all, fields(%project_name, %deployment_id))]
 async fn get_deployment(
     Extension(persistence): Extension<Persistence>,
-    Path((_project_name, deployment_id)): Path<(String, Uuid)>,
+    Path((project_name, deployment_id)): Path<(String, Uuid)>,
 ) -> Result<Json<shuttle_common::models::deployment::Response>> {
     if let Some(deployment) = persistence.get_deployment(&deployment_id).await? {
         Ok(Json(deployment.into()))
@@ -296,10 +304,11 @@ async fn get_deployment(
     }
 }
 
+#[instrument(skip_all, fields(%project_name, %deployment_id))]
 async fn delete_deployment(
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(persistence): Extension<Persistence>,
-    Path((_project_name, deployment_id)): Path<(String, Uuid)>,
+    Path((project_name, deployment_id)): Path<(String, Uuid)>,
 ) -> Result<Json<shuttle_common::models::deployment::Response>> {
     if let Some(deployment) = persistence.get_deployment(&deployment_id).await? {
         deployment_manager.kill(deployment.id).await;
@@ -310,9 +319,10 @@ async fn delete_deployment(
     }
 }
 
+#[instrument(skip_all, fields(%project_name, %deployment_id))]
 async fn get_logs(
     Extension(persistence): Extension<Persistence>,
-    Path((_project_name, deployment_id)): Path<(String, Uuid)>,
+    Path((project_name, deployment_id)): Path<(String, Uuid)>,
 ) -> Result<Json<Vec<LogItem>>> {
     if let Some(deployment) = persistence.get_deployment(&deployment_id).await? {
         Ok(Json(
@@ -389,9 +399,10 @@ async fn logs_websocket_handler(mut s: WebSocket, persistence: Persistence, id: 
     let _ = s.close().await;
 }
 
+#[instrument(skip_all, fields(%project_name, %service_name))]
 async fn get_secrets(
     Extension(persistence): Extension<Persistence>,
-    Path((_project_name, service_name)): Path<(String, String)>,
+    Path((project_name, service_name)): Path<(String, String)>,
 ) -> Result<Json<Vec<secret::Response>>> {
     if let Some(service) = persistence.get_service_by_name(&service_name).await? {
         let keys = persistence
@@ -405,6 +416,20 @@ async fn get_secrets(
     } else {
         Err(Error::NotFound)
     }
+}
+
+async fn post_clean(
+    Extension(deployment_manager): Extension<DeploymentManager>,
+    Path(project_name): Path<String>,
+) -> Result<Json<Vec<String>>> {
+    let project_path = deployment_manager
+        .storage_manager()
+        .service_build_path(project_name)
+        .map_err(anyhow::Error::new)?;
+
+    let lines = clean_crate(&project_path, true)?;
+
+    Ok(Json(lines))
 }
 
 async fn get_status() -> String {

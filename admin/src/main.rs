@@ -1,6 +1,6 @@
 use clap::Parser;
 use shuttle_admin::{
-    args::{AcmeCommand, Args, Command},
+    args::{AcmeCommand, Args, Command, StatsCommand},
     client::Client,
     config::get_api_key,
 };
@@ -140,6 +140,20 @@ async fn main() {
             }
 
             res
+        }
+        Command::Stats(StatsCommand::Load { clear }) => {
+            let resp = if clear {
+                client.clear_load().await.expect("to delete load stats")
+            } else {
+                client.get_load().await.expect("to get load stats")
+            };
+
+            let has_capacity = if resp.has_capacity { "a" } else { "no" };
+
+            format!(
+                "Currently {} builds are running and there is {} capacity for new builds",
+                resp.builds_count, has_capacity
+            )
         }
     };
 

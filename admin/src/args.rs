@@ -24,6 +24,10 @@ pub enum Command {
 
     /// Manage project names
     ProjectNames,
+
+    /// Viewing and managing stats
+    #[command(subcommand)]
+    Stats(StatsCommand),
 }
 
 #[derive(Subcommand, Debug)]
@@ -53,5 +57,15 @@ pub enum AcmeCommand {
         /// This should have been created with `acme create-account`
         #[arg(long)]
         credentials: PathBuf,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum StatsCommand {
+    /// View load stats
+    Load {
+        /// Clear the loads counter
+        #[arg(long)]
+        clear: bool,
     },
 }

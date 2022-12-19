@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{anyhow, Context};
 use cargo::core::compiler::{CompileMode, MessageFormat};
 use cargo::core::{Manifest, PackageId, Shell, Summary, Verbosity, Workspace};
-use cargo::ops::{compile, CompileOptions};
+use cargo::ops::{clean, compile, CleanOptions, CompileOptions};
 use cargo::util::interning::InternedString;
 use cargo::util::{homedir, ToSemver};
 use cargo::Config;
@@ -147,6 +147,51 @@ pub async fn build_crate(
     Ok(compilation?.cdylibs[0].path.clone())
 }
 
+pub fn clean_crate(project_path: &Path, release_mode: bool) -> anyhow::Result<Vec<String>> {
+    let (read, write) = pipe::pipe();
+    let project_path = project_path.to_owned();
+
+    tokio::task::spawn_blocking(move || {
+        let config = get_config(write).unwrap();
+        let manifest_path = project_path.join("Cargo.toml");
+        let ws = Workspace::new(&manifest_path, &config).unwrap();
+
+        let requested_profile = if release_mode {
+            InternedString::new("release")
+        } else {
+            InternedString::new("dev")
+        };
+
+        let opts = CleanOptions {
+            config: &config,
+            spec: Vec::new(),
+            targets: Vec::new(),
+            requested_profile,
+            profile_specified: true,
+            doc: false,
+        };
+
+        clean(&ws, &opts).unwrap();
+    });
+
+    let mut lines = Vec::new();
+
+    for message in Message::parse_stream(read) {
+        trace!(?message, "parsed cargo message");
+        match message {
+            Ok(Message::TextLine(line)) => {
+                lines.push(line);
+            }
+            Ok(_) => {}
+            Err(error) => {
+                error!("failed to parse cargo message: {error}");
+            }
+        }
+    }
+
+    Ok(lines)
+}
+
 /// Get the default compile config with output redirected to writer
 pub fn get_config(writer: PipeWriter) -> anyhow::Result<Config> {
     let mut shell = Shell::from_write(Box::new(writer));
@@ -178,10 +223,10 @@ fn get_compile_options(config: &Config, release_mode: bool) -> anyhow::Result<Co
         InternedString::new("dev")
     };
 
-    // This sets the max workers for cargo build to 8 for release mode (aka deployment),
+    // This sets the max workers for cargo build to 4 for release mode (aka deployment),
     // but leaves it as default (num cpus) for local runs
     if release_mode {
-        opts.build_config.jobs = 8
+        opts.build_config.jobs = 4
     };
 
     Ok(opts)

@@ -10,4 +10,4 @@ crate-type = ["cdylib"]
 
 [dependencies]
 tokio = { version = "1.22.0", features = ["time"] }
-shuttle-service = { path = "../../../" }
+shuttle-service = { path = "../../../", features = ["codegen"] }

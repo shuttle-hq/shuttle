@@ -229,8 +229,6 @@ fn get_compile_options(config: &Config, release_mode: bool) -> anyhow::Result<Co
         opts.build_config.jobs = 4
     };
 
-    opts.honor_rust_version = false;
-
     Ok(opts)
 }
 

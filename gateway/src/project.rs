@@ -515,6 +515,10 @@ impl ProjectCreating {
                     ],
                     "Env": [
                         "RUST_LOG=debug",
+                        // This should be set to the same version we pin Rust to in our Containerfile.
+                        // If we don't set this, users' dependencies with a `rust-toolchain.toml`
+                        // override will compile with incompatible versions of rust.
+                        "RUSTUP_TOOLCHAIN=1.65"
                     ]
                 })
             });

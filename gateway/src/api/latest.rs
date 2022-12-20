@@ -17,10 +17,13 @@ use instant_acme::{AccountCredentials, ChallengeType};
 use serde::{Deserialize, Serialize};
 use shuttle_common::backends::metrics::Metrics;
 use shuttle_common::models::error::ErrorKind;
-use shuttle_common::models::{project, user};
+use shuttle_common::models::{project, stats, user};
 use tokio::sync::mpsc::Sender;
+use tokio::sync::{Mutex, MutexGuard};
 use tower_http::trace::TraceLayer;
-use tracing::{debug, debug_span, field, Span};
+use tracing::{debug, debug_span, field, instrument, Span};
+use ttl_cache::TtlCache;
+use uuid::Uuid;
 
 use crate::acme::{AcmeClient, CustomDomain};
 use crate::auth::{Admin, ScopedUser, User};
@@ -65,6 +68,7 @@ impl StatusResponse {
     }
 }
 
+#[instrument(skip_all, fields(%account_name))]
 async fn get_user(
     State(RouterState { service, .. }): State<RouterState>,
     Path(account_name): Path<AccountName>,
@@ -75,6 +79,7 @@ async fn get_user(
     Ok(AxumJson(user.into()))
 }
 
+#[instrument(skip_all, fields(%account_name))]
 async fn post_user(
     State(RouterState { service, .. }): State<RouterState>,
     Path(account_name): Path<AccountName>,
@@ -85,6 +90,7 @@ async fn post_user(
     Ok(AxumJson(user.into()))
 }
 
+#[instrument(skip(service))]
 async fn get_project(
     State(RouterState { service, .. }): State<RouterState>,
     ScopedUser { scope, .. }: ScopedUser,
@@ -98,8 +104,11 @@ async fn get_project(
     Ok(AxumJson(response))
 }
 
+#[instrument(skip_all, fields(%project))]
 async fn post_project(
-    State(RouterState { service, sender }): State<RouterState>,
+    State(RouterState {
+        service, sender, ..
+    }): State<RouterState>,
     User { name, .. }: User,
     Path(project): Path<ProjectName>,
 ) -> Result<AxumJson<project::Response>, Error> {
@@ -121,8 +130,11 @@ async fn post_project(
     Ok(AxumJson(response))
 }
 
+#[instrument(skip_all, fields(%project))]
 async fn delete_project(
-    State(RouterState { service, sender }): State<RouterState>,
+    State(RouterState {
+        service, sender, ..
+    }): State<RouterState>,
     ScopedUser { scope: project, .. }: ScopedUser,
 ) -> Result<AxumJson<project::Response>, Error> {
     let state = service.find_project(&project).await?;
@@ -149,6 +161,7 @@ async fn delete_project(
     Ok(AxumJson(response))
 }
 
+#[instrument(skip_all, fields(scope = %scoped_user.scope))]
 async fn route_project(
     State(RouterState { service, .. }): State<RouterState>,
     scoped_user: ScopedUser,
@@ -176,15 +189,88 @@ async fn get_status(State(RouterState { sender, .. }): State<RouterState>) -> Re
         .unwrap()
 }
 
+#[instrument(skip_all)]
+async fn post_load(
+    State(RouterState { running_builds, .. }): State<RouterState>,
+    AxumJson(build): AxumJson<stats::LoadRequest>,
+) -> Result<AxumJson<stats::LoadResponse>, Error> {
+    let mut running_builds = running_builds.lock().await;
+    let mut load = calculate_capacity(&mut running_builds);
+
+    if load.has_capacity
+        && running_builds
+            .insert(build.id, (), Duration::from_secs(60 * 10))
+            .is_none()
+    {
+        // Only increase when an item was not already in the queue
+        load.builds_count += 1;
+    }
+
+    Ok(AxumJson(load))
+}
+
+#[instrument(skip_all)]
+async fn delete_load(
+    State(RouterState { running_builds, .. }): State<RouterState>,
+    AxumJson(build): AxumJson<stats::LoadRequest>,
+) -> Result<AxumJson<stats::LoadResponse>, Error> {
+    let mut running_builds = running_builds.lock().await;
+    running_builds.remove(&build.id);
+
+    let load = calculate_capacity(&mut running_builds);
+
+    Ok(AxumJson(load))
+}
+
+#[instrument(skip_all)]
+async fn get_load_admin(
+    _: Admin,
+    State(RouterState { running_builds, .. }): State<RouterState>,
+) -> Result<AxumJson<stats::LoadResponse>, Error> {
+    let mut running_builds = running_builds.lock().await;
+
+    let load = calculate_capacity(&mut running_builds);
+
+    Ok(AxumJson(load))
+}
+
+#[instrument(skip_all)]
+async fn delete_load_admin(
+    _: Admin,
+    State(RouterState { running_builds, .. }): State<RouterState>,
+) -> Result<AxumJson<stats::LoadResponse>, Error> {
+    let mut running_builds = running_builds.lock().await;
+    running_builds.clear();
+
+    let load = calculate_capacity(&mut running_builds);
+
+    Ok(AxumJson(load))
+}
+
+fn calculate_capacity(running_builds: &mut MutexGuard<TtlCache<Uuid, ()>>) -> stats::LoadResponse {
+    let active = running_builds.iter().count();
+    let capacity = running_builds.capacity();
+    let has_capacity = active < capacity;
+
+    stats::LoadResponse {
+        builds_count: active,
+        has_capacity,
+    }
+}
+
+#[instrument(skip_all)]
 async fn revive_projects(
     _: Admin,
-    State(RouterState { service, sender }): State<RouterState>,
+    State(RouterState {
+        service, sender, ..
+    }): State<RouterState>,
 ) -> Result<(), Error> {
     crate::project::exec::revive(service, sender)
         .await
         .map_err(|_| Error::from_kind(ErrorKind::Internal))
 }
 
+#[instrument(skip_all, fields(%email, ?acme_server))]
 async fn create_acme_account(
     _: Admin,
     Extension(acme_client): Extension<AcmeClient>,
@@ -196,9 +282,12 @@ async fn create_acme_account(
     Ok(AxumJson(res))
 }
 
+#[instrument(skip_all, fields(%project_name, %fqdn))]
 async fn request_acme_certificate(
     _: Admin,
-    State(RouterState { service, sender }): State<RouterState>,
+    State(RouterState {
+        service, sender, ..
+    }): State<RouterState>,
     Extension(acme_client): Extension<AcmeClient>,
     Extension(resolver): Extension<Arc<GatewayCertResolver>>,
     Path((project_name, fqdn)): Path<(ProjectName, String)>,
@@ -274,6 +363,7 @@ async fn get_projects(
 pub(crate) struct RouterState {
     pub service: Arc<GatewayService>,
     pub sender: Sender<BoxedTask>,
+    pub running_builds: Arc<Mutex<TtlCache<Uuid, ()>>>,
 }
 
 pub struct ApiBuilder {
@@ -373,8 +463,13 @@ impl ApiBuilder {
             )
             .route("/users/:account_name", get(get_user).post(post_user))
             .route("/projects/:project_name/*any", any(route_project))
+            .route("/stats/load", post(post_load).delete(delete_load))
             .route("/admin/projects", get(get_projects))
-            .route("/admin/revive", post(revive_projects));
+            .route("/admin/revive", post(revive_projects))
+            .route(
+                "/admin/stats/load",
+                get(get_load_admin).delete(delete_load_admin),
+            );
         self
     }
 
@@ -382,7 +477,19 @@ impl ApiBuilder {
         let service = self.service.expect("a GatewayService is required");
         let sender = self.sender.expect("a task Sender is required");
 
-        self.router.with_state(RouterState { service, sender })
+        // Allow about 4 cores per build
+        let mut concurrent_builds = num_cpus::get() / 4;
+        if concurrent_builds < 1 {
+            concurrent_builds = 1;
+        }
+
+        let running_builds = Arc::new(Mutex::new(TtlCache::new(concurrent_builds)));
+
+        self.router.with_state(RouterState {
+            service,
+            sender,
+            running_builds,
+        })
     }
 
     pub fn serve(self) -> impl Future<Output = Result<(), hyper::Error>> {

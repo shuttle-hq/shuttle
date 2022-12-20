@@ -119,13 +119,30 @@ impl std::fmt::Display for Error {
 
 impl StdError for Error {}
 
-#[derive(Debug, sqlx::Type, Serialize, Clone, PartialEq, Eq)]
+#[derive(Debug, sqlx::Type, Serialize, Clone, PartialEq, Eq, Hash)]
 #[sqlx(transparent)]
 pub struct ProjectName(String);
 
 impl ProjectName {
     pub fn as_str(&self) -> &str {
         self.0.as_str()
+    }
+
+    pub fn is_valid(&self) -> bool {
+        let name = self.0.clone();
+
+        fn is_valid_char(byte: u8) -> bool {
+            matches!(byte, b'a'..=b'z' | b'0'..=b'9' | b'-')
+        }
+
+        // each label in a hostname can be between 1 and 63 chars
+        let is_invalid_length = name.len() > 63;
+
+        !(name.bytes().any(|byte| !is_valid_char(byte))
+            || name.ends_with('-')
+            || name.starts_with('-')
+            || name.is_empty()
+            || is_invalid_length)
     }
 }
 

@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use serde::{de::DeserializeOwned, Serialize};
 use shuttle_common::{
-    models::{project, ToJson},
+    models::{project, stats, ToJson},
     project::ProjectName,
 };
 use tracing::trace;
@@ -43,6 +43,15 @@ impl Client {
         self.get("/admin/projects").await
     }
 
+    pub async fn get_load(&self) -> Result<stats::LoadResponse> {
+        self.get("/admin/stats/load").await
+    }
+
+    pub async fn clear_load(&self) -> Result<stats::LoadResponse> {
+        self.delete("/admin/stats/load", Option::<String>::None)
+            .await
+    }
+
     async fn post<T: Serialize, R: DeserializeOwned>(
         &self,
         path: &str,
@@ -65,6 +74,30 @@ impl Client {
             .to_json()
             .await
             .context("failed to extract json body from post response")
+    }
+
+    async fn delete<T: Serialize, R: DeserializeOwned>(
+        &self,
+        path: &str,
+        body: Option<T>,
+    ) -> Result<R> {
+        trace!(self.api_key, "using api key");
+
+        let mut builder = reqwest::Client::new()
+            .delete(format!("{}{}", self.api_url, path))
+            .bearer_auth(&self.api_key);
+
+        if let Some(body) = body {
+            builder = builder.json(&body);
+        }
+
+        builder
+            .send()
+            .await
+            .context("failed to make delete request")?
+            .to_json()
+            .await
+            .context("failed to extract json body from delete response")
     }
 
     async fn get<R: DeserializeOwned>(&self, path: &str) -> Result<R> {

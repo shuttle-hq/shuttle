@@ -4,6 +4,7 @@ pub mod project;
 pub mod resource;
 pub mod secret;
 pub mod service;
+pub mod stats;
 pub mod user;
 
 use anyhow::{Context, Result};

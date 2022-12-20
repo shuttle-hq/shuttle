@@ -362,9 +362,9 @@ mod tests {
 
     use crate::{
         deployment::{
-            deploy_layer::LogType, provisioner_factory, runtime_logger,
-            storage_manager::StorageManager, ActiveDeploymentsGetter, Built, DeploymentManager,
-            Queued,
+            deploy_layer::LogType, gateway_client::BuildQueueClient, provisioner_factory,
+            runtime_logger, storage_manager::StorageManager, ActiveDeploymentsGetter, Built,
+            DeploymentManager, Queued,
         },
         persistence::{SecretRecorder, State},
     };
@@ -529,16 +529,29 @@ mod tests {
         }
     }
 
+    #[derive(Clone)]
+    struct StubBuildQueueClient;
+
+    #[async_trait::async_trait]
+    impl BuildQueueClient for StubBuildQueueClient {
+        async fn get_slot(
+            &self,
+            _id: Uuid,
+        ) -> Result<bool, crate::deployment::gateway_client::Error> {
+            Ok(true)
+        }
+
+        async fn release_slot(
+            &self,
+            _id: Uuid,
+        ) -> Result<(), crate::deployment::gateway_client::Error> {
+            Ok(())
+        }
+    }
+
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_to_be_queued() {
-        let deployment_manager = DeploymentManager::new(
-            StubAbstractProvisionerFactory,
-            StubRuntimeLoggerFactory,
-            RECORDER.clone(),
-            RECORDER.clone(),
-            StubActiveDeploymentGetter,
-            PathBuf::from("/tmp"),
-        );
+        let deployment_manager = get_deployment_manager();
 
         let queued = get_queue("sleep-async");
         let id = queued.id;
@@ -650,14 +663,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_self_stop() {
-        let deployment_manager = DeploymentManager::new(
-            StubAbstractProvisionerFactory,
-            StubRuntimeLoggerFactory,
-            RECORDER.clone(),
-            RECORDER.clone(),
-            StubActiveDeploymentGetter,
-            PathBuf::from("/tmp"),
-        );
+        let deployment_manager = get_deployment_manager();
 
         let queued = get_queue("self-stop");
         let id = queued.id;
@@ -730,14 +736,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_bind_panic() {
-        let deployment_manager = DeploymentManager::new(
-            StubAbstractProvisionerFactory,
-            StubRuntimeLoggerFactory,
-            RECORDER.clone(),
-            RECORDER.clone(),
-            StubActiveDeploymentGetter,
-            PathBuf::from("/tmp"),
-        );
+        let deployment_manager = get_deployment_manager();
 
         let queued = get_queue("bind-panic");
         let id = queued.id;
@@ -810,14 +809,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_main_panic() {
-        let deployment_manager = DeploymentManager::new(
-            StubAbstractProvisionerFactory,
-            StubRuntimeLoggerFactory,
-            RECORDER.clone(),
-            RECORDER.clone(),
-            StubActiveDeploymentGetter,
-            PathBuf::from("/tmp"),
-        );
+        let deployment_manager = get_deployment_manager();
 
         let queued = get_queue("main-panic");
         let id = queued.id;
@@ -885,14 +877,7 @@ mod tests {
 
     #[tokio::test]
     async fn deployment_from_run() {
-        let deployment_manager = DeploymentManager::new(
-            StubAbstractProvisionerFactory,
-            StubRuntimeLoggerFactory,
-            RECORDER.clone(),
-            RECORDER.clone(),
-            StubActiveDeploymentGetter,
-            PathBuf::from("/tmp"),
-        );
+        let deployment_manager = get_deployment_manager();
 
         let id = Uuid::new_v4();
         deployment_manager
@@ -940,14 +925,7 @@ mod tests {
 
     #[tokio::test]
     async fn scope_with_nil_id() {
-        let deployment_manager = DeploymentManager::new(
-            StubAbstractProvisionerFactory,
-            StubRuntimeLoggerFactory,
-            RECORDER.clone(),
-            RECORDER.clone(),
-            StubActiveDeploymentGetter,
-            PathBuf::from("/tmp"),
-        );
+        let deployment_manager = get_deployment_manager();
 
         let id = Uuid::nil();
         deployment_manager
@@ -971,6 +949,18 @@ mod tests {
             states.is_empty(),
             "no logs should be recorded when the scope id is invalid:\n\t{states:#?}"
         );
+    }
+
+    fn get_deployment_manager() -> DeploymentManager {
+        DeploymentManager::builder()
+            .abstract_factory(StubAbstractProvisionerFactory)
+            .runtime_logger_factory(StubRuntimeLoggerFactory)
+            .build_log_recorder(RECORDER.clone())
+            .secret_recorder(RECORDER.clone())
+            .active_deployment_getter(StubActiveDeploymentGetter)
+            .artifacts_path(PathBuf::from("/tmp"))
+            .queue_client(StubBuildQueueClient)
+            .build()
     }
 
     fn get_queue(name: &str) -> Queued {

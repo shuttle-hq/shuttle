@@ -128,14 +128,12 @@ commands:
             mv target/<< parameters.target >>/release/cargo-shuttle<< parameters.suffix >> shuttle/cargo-shuttle<< parameters.suffix >>
             mv LICENSE shuttle/
             mv README.md shuttle/
-            mkdir artifacts
-            mkdir tmp
-            tar -cvzf tmp/cargo-shuttle-$TAG-<< parameters.target >>.tar.gz shuttle
-            ln -s tmp/cargo-shuttle-$TAG-<< parameters.target >>.tar.gz artifacts/<< parameters.target >>
+            mkdir -p artifacts/<< parameters.target >>
+            tar -cvzf artifacts/<< parameters.target >>/cargo-shuttle-$TAG-<< parameters.target >>.tar.gz shuttle
       - persist_to_workspace:
           root: artifacts
           paths:
-            - << parameters.target >>
+            - << parameters.target >>/*
 
 jobs:
   workspace-fmt:
@@ -369,8 +367,10 @@ jobs:
           environment:
             GITHUB_TOKEN: $GITHUB_TOKEN
           command: |
+            mkdir binaries
+            find artifacts -type f -exec cp -t binaries {} +
             go install github.com/tcnksm/ghr@v0.16.0
-            ghr -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} -delete -draft $TAG artifacts/
+            ghr -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} -delete -draft $TAG binaries/
 
 workflows:
   version: 2

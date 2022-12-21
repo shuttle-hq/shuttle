@@ -128,12 +128,14 @@ commands:
             mv target/<< parameters.target >>/release/cargo-shuttle<< parameters.suffix >> shuttle/cargo-shuttle<< parameters.suffix >>
             mv LICENSE shuttle/
             mv README.md shuttle/
-            mkdir -p artifacts/<< parameters.target >>
-            tar -cvzf artifacts/<< parameters.target >>/cargo-shuttle-$TAG-<< parameters.target >>.tar.gz shuttle
+            mkdir artifacts
+            mkdir tmp
+            tar -cvzf tmp/cargo-shuttle-$TAG-<< parameters.target >>.tar.gz shuttle
+            ln -s tmp/cargo-shuttle-$TAG-<< parameters.target >>.tar.gz artifacts/<< parameters.target >>
       - persist_to_workspace:
           root: artifacts
           paths:
-            - << parameters.target >>/*
+            - << parameters.target >>
 
 jobs:
   workspace-fmt:

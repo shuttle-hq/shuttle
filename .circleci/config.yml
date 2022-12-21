@@ -113,6 +113,9 @@ commands:
       target:
         description: "Rust target to put in artifact"
         type: string
+      tag:
+        description: "Git tag to put in artifact"
+        type: string
       suffix:
         description: "Suffix that is on the binary"
         type: string
@@ -134,10 +137,11 @@ commands:
             mkdir artifacts
             tar -cvzf artifacts/cargo-shuttle-$TAG-<< parameters.target >>.tar.gz shuttle
             echo $(ls artifacts)
+            echo << parameters.tag >>
       - persist_to_workspace:
           root: artifacts
           paths:
-            - cargo-shuttle-$TAG-<< parameters.target >>.tar.gz
+            - cargo-shuttle-<< parameters.tag >>-<< parameters.target >>.tar.gz
 
 jobs:
   workspace-fmt:
@@ -319,6 +323,7 @@ jobs:
             cargo build --release --package cargo-shuttle --features vendored-openssl --target << parameters.target >>
       - make-artifact:
           target: << parameters.target >>
+          tag: $TAG
   build-binaries-windows:
     executor:
       name: win/server-2022

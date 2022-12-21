@@ -119,8 +119,11 @@ commands:
         default: ""
     steps:
       - run:
-            name: "Get git tag"
+            name: "Set tag with git describe"
             command: echo TAG=$(git describe --tags) >> "$BASH_ENV"
+      - run:
+            name: "Echo git tag"
+            command: echo $TAG
       - run:
           name: Make artifact
           command: |

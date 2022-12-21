@@ -119,6 +119,9 @@ commands:
         default: ""
     steps:
       - run:
+            name: "Get git tag"
+            command: echo TAG=$(git describe --tags) >> "$BASH_ENV"
+      - run:
           name: Make artifact
           command: |
             mkdir shuttle
@@ -126,11 +129,11 @@ commands:
             mv LICENSE shuttle/
             mv README.md shuttle/
             mkdir artifacts
-            tar -cvzf artifacts/cargo-shuttle--<< parameters.target >>.tar.gz shuttle
+            tar -cvzf artifacts/cargo-shuttle-$TAG-<< parameters.target >>.tar.gz shuttle
       - persist_to_workspace:
           root: artifacts
           paths:
-            - cargo-shuttle--<< parameters.target >>.tar.gz
+            - cargo-shuttle-$TAG-<< parameters.target >>.tar.gz
 
 jobs:
   workspace-fmt:
@@ -359,7 +362,7 @@ jobs:
             GITHUB_TOKEN: $GITHUB_TOKEN
           command: |
             go install github.com/tcnksm/ghr@v0.16.0
-            ghr -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} -delete -draft ${CIRCLE_TAG} artifacts/
+            ghr -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} -delete -draft $TAG artifacts/
 
 workflows:
   version: 2
@@ -411,8 +414,6 @@ workflows:
           target: x86_64-unknown-linux-musl
           resource_class: medium
           # filters:
-          #   tags:
-          #     only: /^v.*/
           #   branches:
           #     only: production
       # - build-binaries-linux:

@@ -481,6 +481,14 @@ impl ProjectCreating {
             name: self.container_name(ctx),
         };
 
+        // Get the version of rustc gateway was compiled with, matching the deployer
+        // RUSTUP_TOOLCHAIN override with the version from our Containerfile
+        let version = rustc_version_runtime::version().to_string();
+        debug!(
+            "got installed rustc version for deployer toolchain override: {}",
+            version
+        );
+
         let container_config = self
             .from
             .as_ref()
@@ -515,10 +523,9 @@ impl ProjectCreating {
                     ],
                     "Env": [
                         "RUST_LOG=debug",
-                        // This should be set to the same version we pin Rust to in our Containerfile.
                         // If we don't set this, users' dependencies with a `rust-toolchain.toml`
                         // override will compile with incompatible versions of rust.
-                        "RUSTUP_TOOLCHAIN=1.65"
+                        format!("RUSTUP_TOOLCHAIN={version}")
                     ]
                 })
             });

@@ -368,7 +368,7 @@ jobs:
             GITHUB_TOKEN: $GITHUB_TOKEN
           command: |
             go install github.com/tcnksm/ghr@v0.16.0
-            ghr -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} -delete -draft $TAG artifacts/
+            ghr -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} -delete -draft $TAG artifacts/
 
 workflows:
   version: 2

@@ -1,8 +1,8 @@
 [package]
 name = "shuttle-service"
-version = "0.7.0"
-edition = "2021"
-license = "Apache-2.0"
+version = "0.8.0"
+edition.workspace = true
+license.workspace = true
 description = "Service traits and macros to deploy on the shuttle platform (https://www.shuttle.rs/)"
 homepage = "https://www.shuttle.rs"
 
@@ -10,33 +10,36 @@ homepage = "https://www.shuttle.rs"
 doctest = false
 
 [dependencies]
-anyhow = "1.0.62"
-async-trait = "0.1.57"
-axum = { version = "0.5.15", optional = true }
-bincode = { version = "1.2.1", optional = true }
-cargo = { version = "0.64.0", optional = true }
-cargo_metadata = "0.15.0"
-chrono = "=0.4.22"
+actix-web = { version = "4.2.1", optional = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+axum = { workspace = true, optional = true }
+bincode = { version = "1.3.3", optional = true }
+# TODO: debug the libgit2-sys conflict with cargo-edit when upgrading cargo to 0.66
+cargo = { version = "0.65.0", optional = true }
+cargo_metadata = "0.15.2"
+chrono = { workspace = true }
 crossbeam-channel = "0.5.6"
-futures = { version = "0.3.23", features = ["std"] }
-hyper = { version = "0.14.20", features = ["server", "tcp", "http1"], optional = true }
-libloading = { version = "0.7.3", optional = true }
+futures = { version = "0.3.25", features = ["std"] }
+hyper = { version = "0.14.23", features = ["server", "tcp", "http1"], optional = true }
+libloading = { version = "0.7.4", optional = true }
+num_cpus = { version = "1.14.0", optional = true }
 pipe = "0.4.0"
-poem = { version = "1.3.40", optional = true }
+poem = { version = "1.3.49", optional = true }
 rocket = { version = "0.5.0-rc.2", optional = true }
-salvo = { version = "0.34.3", optional = true }
-serde_json = "1.0.83"
+salvo = { version = "0.37.5", optional = true }
+serde_json = { workspace = true }
 serenity = { version = "0.11.5", default-features = false, features = ["client", "gateway", "rustls_backend", "model"], optional = true }
 sync_wrapper = { version = "0.1.1", optional = true }
-thiserror = "1.0.32"
-thruster = { version = "1.2.6", optional = true }
+thiserror = { workspace = true }
+thruster = { version = "1.3.0", optional = true }
 tide = { version = "0.16.0", optional = true }
-tokio = { version = "=1.20.1", features = ["rt", "rt-multi-thread", "sync"] }
+tokio = { version = "=1.22.0", features = ["rt", "rt-multi-thread", "sync"] }
 tower = { version = "0.4.13", features = ["make"], optional = true }
-tracing = "0.1.36"
-tracing-subscriber = { version = "0.3.15", features = ["env-filter"] }
-uuid = { version = "1.1.2", features = ["v4"] }
-warp = { version = "0.3.2", optional = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+uuid = { workspace = true, features = ["v4"] }
+warp = { version = "0.3.3", optional = true }
 
 # Tide does not have tokio support. So make sure async-std is compatible with tokio
 # https://github.com/http-rs/tide/issues/791
@@ -46,26 +49,23 @@ optional = true
 features = ["tokio1"]
 
 [dependencies.shuttle-codegen]
-version = "0.7.0"
-path = "../codegen"
+workspace = true
 optional = true
+
+[dependencies.shuttle-common]
+workspace = true
 
 [dev-dependencies]
 portpicker = "0.1.1"
-sqlx = { version = "0.6.1", features = ["runtime-tokio-native-tls", "postgres"] }
-tokio = { version = "1.20.1", features = ["macros"] }
-uuid = { version = "1.1.2", features = ["v4"] }
-
-[dependencies.shuttle-common]
-version = "0.7.0"
-default-features = false
-path = "../common"
+sqlx = { version = "0.6.2", features = ["runtime-tokio-native-tls", "postgres"] }
+tokio = { version = "1.22.0", features = ["macros"] }
+uuid = { workspace = true, features = ["v4"] }
 
 [features]
-default = ["codegen"]
 codegen = ["shuttle-codegen"]
 loader = ["cargo", "libloading"]
 
+web-actix-web = ["actix-web", "num_cpus"]
 web-axum = ["axum", "sync_wrapper"]
 web-rocket = ["rocket"]
 web-thruster = ["thruster"]

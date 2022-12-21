@@ -2,19 +2,22 @@ version: "3.7"
 volumes:
   gateway-vol:
   postgres-vol:
+  panamax-crates-vol:
+  panamax-io-index-vol:
 networks:
   user-net:
     attachable: true
     ipam:
       driver: default
       config:
-        - subnet: 10.99.0.0/24
+        - subnet: 10.99.0.0/16
 services:
   gateway:
     image: "${CONTAINER_REGISTRY}/gateway:${BACKEND_TAG}"
     depends_on:
       - provisioner
     ports:
+      - 7999:7999
       - 8000:8000
       - 8001:8001
     deploy:
@@ -42,16 +45,18 @@ services:
     environment:
       - RUST_LOG=${RUST_LOG}
     command:
-      - "--state=/var/lib/shuttle/gateway.sqlite"
+      - "--state=/var/lib/shuttle"
       - "start"
       - "--control=0.0.0.0:8001"
       - "--user=0.0.0.0:8000"
-      - "--image=${CONTAINER_REGISTRY}/deployer:${BACKEND_TAG}"
+      - "--bouncer=0.0.0.0:7999"
+      - "--image=${CONTAINER_REGISTRY}/deployer:${DEPLOYER_TAG}"
       - "--prefix=shuttle_"
       - "--network-name=${STACK}_user-net"
       - "--docker-host=/var/run/docker.sock"
       - "--provisioner-host=provisioner"
       - "--proxy-fqdn=${APPS_FQDN}"
+      - "--use-tls=${USE_TLS}"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001"]
       interval: 1m
@@ -131,6 +136,35 @@ services:
       - DD_APM_NON_LOCAL_TRAFFIC=true
       - DD_SITE=datadoghq.eu
       - DD_API_KEY=${DD_API_KEY}
+      - DD_ENV=${DD_ENV}
+      - DD_CONTAINER_LABELS_AS_TAGS={"project.name":"project_name"}
+    deploy:
+      placement:
+        constraints:
+          - node.hostname==controller
+  panamax:
+    image: "${CONTAINER_REGISTRY}/panamax:${PANAMAX_TAG}"
+    restart: always
+    networks:
+      user-net:
+    volumes:
+      - panamax-crates-vol:/mirror/crates
+      - panamax-io-index-vol:/mirror/crates.io-index
+    labels:
+      deck-chores.sync-mirror.command: panamax sync /mirror
+      deck-chores.sync-mirror.interval: 5 minutes
+      deck-chores.sync-mirror.max: 1
+    deploy:
+      placement:
+        constraints:
+          - node.hostname==controller
+  deck-chores:
+    image: funkyfuture/deck-chores:1
+    restart: unless-stopped
+    environment:
+      TIMEZONE: UTC
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     deploy:
       placement:
         constraints:

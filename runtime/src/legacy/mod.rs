@@ -8,7 +8,7 @@ use std::{
 
 use anyhow::anyhow;
 use async_trait::async_trait;
-use shuttle_common::LogItem;
+use shuttle_common::{storage_manager::StorageManager, LogItem};
 use shuttle_proto::{
     provisioner::provisioner_client::ProvisionerClient,
     runtime::{
@@ -76,24 +76,10 @@ impl Runtime for Legacy {
         let service_port = 7001;
         let service_address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), service_port);
 
-        let request = request.into_inner();
-
         let provisioner_client = ProvisionerClient::connect(self.provisioner_address.clone())
             .await
             .expect("failed to connect to provisioner");
         let abstract_factory = AbstractProvisionerFactory::new(provisioner_client);
-
-        let service_name = ServiceName::from_str(request.service_name.as_str())
-            .map_err(|err| Status::from_error(Box::new(err)))?;
-
-        let mut factory = abstract_factory.get_factory(service_name);
-
-        let logs_tx = self.logs_tx.lock().unwrap().clone();
-
-        let deployment_id =
-            Uuid::from_str(std::str::from_utf8(&request.deployment_id).unwrap()).unwrap();
-
-        let logger = Logger::new(logs_tx, deployment_id);
 
         let so_path = self
             .so_path
@@ -105,6 +91,25 @@ impl Runtime for Legacy {
             })
             .map_err(|err| Status::from_error(Box::new(err)))?
             .clone();
+
+        let storage_manager = StorageManager::new(so_path.clone());
+
+        let StartRequest {
+            deployment_id,
+            service_name,
+        } = request.into_inner();
+
+        let service_name = ServiceName::from_str(service_name.as_str())
+            .map_err(|err| Status::from_error(Box::new(err)))?;
+
+        let deployment_id = Uuid::from_str(std::str::from_utf8(&deployment_id).unwrap()).unwrap();
+
+        let mut factory =
+            abstract_factory.get_factory(service_name, deployment_id, storage_manager);
+
+        let logs_tx = self.logs_tx.lock().unwrap().clone();
+
+        let logger = Logger::new(logs_tx, deployment_id);
 
         trace!(%service_address, "starting");
         let service = load_service(service_address, so_path, &mut factory, logger)

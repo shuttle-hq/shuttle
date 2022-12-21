@@ -87,10 +87,7 @@ impl Endpoint {
             Ok(params) => params,
             Err(err) => {
                 // This will error on invalid parameter syntax
-                emit_error!(
-                    err.span(),
-                    err
-                );
+                emit_error!(err.span(), err);
                 return None;
             }
         };

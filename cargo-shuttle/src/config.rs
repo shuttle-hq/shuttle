@@ -41,11 +41,13 @@ pub trait ConfigManager: Sized {
         C: for<'de> Deserialize<'de>,
     {
         let path = self.path();
-        let config_bytes = File::open(&path).and_then(|mut f| {
-            let mut buf = Vec::new();
-            f.read_to_end(&mut buf)?;
-            Ok(buf)
-        })?;
+        let config_bytes = File::open(&path)
+            .and_then(|mut f| {
+                let mut buf = Vec::new();
+                f.read_to_end(&mut buf)?;
+                Ok(buf)
+            })
+            .with_context(|| anyhow!("Unable to read configuration file: {}", path.display()))?;
         toml::from_slice(config_bytes.as_slice())
             .with_context(|| anyhow!("Invalid global configuration file: {}", path.display()))
     }
@@ -256,7 +258,9 @@ impl RequestContext {
         if !global.exists() {
             global.create()?;
         }
-        global.open()?;
+        global
+            .open()
+            .context("Unable to load global configuration")?;
         Ok(Self {
             global,
             project: None,

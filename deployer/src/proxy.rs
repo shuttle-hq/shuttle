@@ -4,6 +4,7 @@ use std::{
 };
 
 use async_trait::async_trait;
+use fqdn::FQDN;
 use hyper::{
     client::{connect::dns::GaiResolver, HttpConnector},
     header::{HeaderValue, HOST, SERVER},
@@ -11,7 +12,10 @@ use hyper::{
 };
 use hyper_reverse_proxy::{ProxyError, ReverseProxy};
 use once_cell::sync::Lazy;
+use opentelemetry::global;
+use opentelemetry_http::HeaderExtractor;
 use tracing::{error, field, instrument, trace, Span};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
     Lazy::new(|| ReverseProxy::new(Client::new()));
@@ -20,14 +24,25 @@ static SERVER_HEADER: Lazy<HeaderValue> = Lazy::new(|| "shuttle.rs".parse().unwr
 #[instrument(name = "proxy_request", skip(address_getter), fields(http.method = %req.method(), http.uri = %req.uri(), http.status_code = field::Empty, service = field::Empty))]
 pub async fn handle(
     remote_address: SocketAddr,
-    fqdn: String,
+    fqdn: FQDN,
     req: Request<Body>,
     address_getter: impl AddressGetter,
 ) -> Result<Response<Body>, Infallible> {
-    let host = match req.headers().get(HOST) {
-        Some(host) => host.to_str().unwrap_or_default().to_owned(),
+    let span = Span::current();
+    let parent_context = global::get_text_map_propagator(|propagator| {
+        propagator.extract(&HeaderExtractor(req.headers()))
+    });
+    span.set_parent(parent_context);
+
+    let host: FQDN = match req.headers().get(HOST) {
+        Some(host) => host
+            .to_str()
+            .unwrap_or_default()
+            .parse::<FQDN>()
+            .unwrap_or_default()
+            .to_owned(),
         None => {
-            trace!("proxy request has to host header");
+            trace!("proxy request has no host header");
             return Ok(Response::builder()
                 .status(StatusCode::BAD_REQUEST)
                 .body(Body::empty())
@@ -35,33 +50,42 @@ pub async fn handle(
         }
     };
 
-    let service = match host.strip_suffix(&fqdn) {
-        Some(service) => service,
+    if host != fqdn {
+        trace!(?host, "proxy won't serve foreign domain");
+        return Ok(Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .body(Body::from("this domain is not served by proxy"))
+            .unwrap());
+    }
 
+    // We only have one service per project, and its name coincides
+    // with that of the project
+    let service = match req.headers().get("X-Shuttle-Project") {
+        Some(project) => project.to_str().unwrap_or_default().to_owned(),
         None => {
-            trace!(host, "proxy won't serve foreign domain");
+            trace!("proxy request has no X-Shuttle-Project header");
             return Ok(Response::builder()
                 .status(StatusCode::BAD_REQUEST)
-                .body(Body::from("this domain is not served by proxy"))
+                .body(Body::from("request has no X-Shuttle-Project header"))
                 .unwrap());
         }
     };
 
     // Record current service for tracing purposes
-    Span::current().record("service", service);
+    span.record("service", &service);
 
-    let proxy_address = match address_getter.get_address_for_service(service).await {
+    let proxy_address = match address_getter.get_address_for_service(&service).await {
         Ok(Some(address)) => address,
         Ok(None) => {
-            trace!(host, "host not found on this server");
-            let response_body = format!("could not find service for host: {}", host);
+            trace!(?host, service, "service not found on this server");
+            let response_body = format!("could not find service: {}", service);
             return Ok(Response::builder()
                 .status(StatusCode::NOT_FOUND)
                 .body(response_body.into())
                 .unwrap());
         }
         Err(err) => {
-            error!(error = %err, host, "proxy failed to find address for host");
+            error!(error = %err, service, "proxy failed to find address for host");
 
             let response_body = format!("failed to find service for host: {}", host);
             return Ok(Response::builder()

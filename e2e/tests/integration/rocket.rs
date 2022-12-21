@@ -4,8 +4,12 @@ use crate::helpers::{self, APPS_FQDN};
 
 #[test]
 fn hello_world_rocket() {
-    let client = helpers::Services::new_docker("hello-world (rocket)", Color::DarkMagenta);
-    client.deploy("rocket/hello-world");
+    let client = helpers::Services::new_docker(
+        "hello-world (rocket)",
+        "rocket/hello-world",
+        Color::DarkMagenta,
+    );
+    client.deploy();
 
     let request_text = client
         .get("hello")
@@ -20,8 +24,9 @@ fn hello_world_rocket() {
 
 #[test]
 fn postgres_rocket() {
-    let client = helpers::Services::new_docker("postgres (rocket)", Color::Magenta);
-    client.deploy("rocket/postgres");
+    let client =
+        helpers::Services::new_docker("postgres (rocket)", "rocket/postgres", Color::Magenta);
+    client.deploy();
 
     let add_response = client
         .post("todo")
@@ -47,8 +52,15 @@ fn postgres_rocket() {
 
 #[test]
 fn secrets_rocket() {
-    let client = helpers::Services::new_docker("secrets (rocket)", Color::Red);
-    client.deploy("rocket/secrets");
+    let client = helpers::Services::new_docker("secrets (rocket)", "rocket/secrets", Color::Red);
+    let project_path = client.get_full_project_path();
+    std::fs::copy(
+        project_path.join("Secrets.toml.example"),
+        project_path.join("Secrets.toml"),
+    )
+    .unwrap();
+
+    client.deploy();
     let secret_response: String = client
         .get("secret")
         .header("Host", format!("secrets-rocket-app.{}", *APPS_FQDN))

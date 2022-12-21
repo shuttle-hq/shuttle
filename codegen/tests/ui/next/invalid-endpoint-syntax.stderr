@@ -1,16 +1,10 @@
 error: expected `,`
-
-         = help:
-
  --> tests/ui/next/invalid-endpoint-syntax.rs:2:64
   |
 2 |     #[shuttle_codegen::endpoint(method = get, route = "/hello" extra = abundant)]
   |                                                                ^^^^^
 
 error: expected `=`
-
-         = help:
-
  --> tests/ui/next/invalid-endpoint-syntax.rs:7:74
   |
 7 |     #[shuttle_codegen::endpoint(method = get, route = "/goodbye", invalid)]

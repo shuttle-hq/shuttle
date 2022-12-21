@@ -1,9 +1,12 @@
+#[cfg(feature = "backend")]
+pub mod backends;
 pub mod database;
 pub mod deployment;
 pub mod log;
 #[cfg(feature = "models")]
 pub mod models;
 pub mod project;
+pub mod storage_manager;
 #[cfg(feature = "axum-wasm")]
 pub mod wasm;
 

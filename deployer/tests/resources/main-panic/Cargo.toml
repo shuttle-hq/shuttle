@@ -11,4 +11,4 @@ crate-type = ["cdylib"]
 [workspace]
 
 [dependencies]
-shuttle-service = { path = "../../../../service" }
+shuttle-service = { path = "../../../../service", features = ["codegen"] }

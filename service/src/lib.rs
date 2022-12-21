@@ -27,7 +27,7 @@
 //! be a library crate with a `shuttle-service` dependency with the `web-rocket` feature on the `shuttle-service` dependency.
 //!
 //! ```toml
-//! shuttle-service = { version = "0.7.0", features = ["web-rocket"] }
+//! shuttle-service = { version = "0.8.0", features = ["web-rocket"] }
 //! ```
 //!
 //! A boilerplate code for your rocket project can also be found in `src/lib.rs`:
@@ -52,7 +52,7 @@
 //! ```
 //!
 //! See the [shuttle_service::main][main] macro for more information on supported services - such as `axum`.
-//! Or look at more complete examples [in the repository](https://github.com/shuttle-hq/shuttle/tree/main/examples), but
+//! Or look at [more complete examples](https://github.com/shuttle-hq/examples), but
 //! take note that the examples may update before official releases.
 //!
 //! ## Running locally
@@ -108,8 +108,8 @@
 //! Add `shuttle-shared-db` as a dependency with the `postgres` feature, and add `sqlx` as a dependency with the `runtime-tokio-native-tls` and `postgres` features inside `Cargo.toml`:
 //!
 //! ```toml
-//! shuttle-shared-db = { version = "0.7.0", features = ["postgres"] }
-//! sqlx = { version = "0.6.1", features = ["runtime-tokio-native-tls", "postgres"] }
+//! shuttle-shared-db = { version = "0.8.0", features = ["postgres"] }
+//! sqlx = { version = "0.6.2", features = ["runtime-tokio-native-tls", "postgres"] }
 //! ```
 //!
 //! Now update the `#[shuttle_service::main]` function to take in a `PgPool`:
@@ -213,11 +213,13 @@
 use std::collections::BTreeMap;
 use std::future::Future;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::pin::Pin;
 
 pub use async_trait::async_trait;
 
 // Pub uses by `codegen`
+pub use anyhow::Context;
 pub use tokio::runtime::Runtime;
 pub use tracing;
 pub use tracing_subscriber;
@@ -255,13 +257,15 @@ extern crate shuttle_codegen;
 ///
 /// | Return type                           | Feature flag | Service                                     | Version    | Example                                                                               |
 /// | ------------------------------------- | ------------ | ------------------------------------------- | ---------- | -----------------------------------------------------------------------------------   |
-/// | `ShuttleRocket`                       | web-rocket   | [rocket](https://docs.rs/rocket/0.5.0-rc.2) | 0.5.0-rc.2 | [GitHub](https://github.com/shuttle-hq/shuttle/tree/main/examples/rocket/hello-world)   |
-/// | `ShuttleAxum`                         | web-axum     | [axum](https://docs.rs/axum/0.5)            | 0.5        | [GitHub](https://github.com/shuttle-hq/shuttle/tree/main/examples/axum/hello-world)     |
-/// | `ShuttleSalvo`                        | web-salvo    | [salvo](https://docs.rs/salvo/0.34.3)       | 0.34.3     | [GitHub](https://github.com/shuttle-hq/shuttle/tree/main/examples/salvo/hello-world)    |
-/// | `ShuttleTide`                         | web-tide     | [tide](https://docs.rs/tide/0.16.0)         | 0.16.0     | [GitHub](https://github.com/shuttle-hq/shuttle/tree/main/examples/tide/hello-world)     |
-/// | `ShuttlePoem`                         | web-poem     | [poem](https://docs.rs/poem/1.3.35)         | 1.3.35     | [GitHub](https://github.com/shuttle-hq/shuttle/tree/main/examples/poem/hello-world)     |
-/// | `Result<T, shuttle_service::Error>`   | web-tower    | [tower](https://docs.rs/tower/0.4.12)       | 0.14.12    | [GitHub](https://github.com/shuttle-hq/shuttle/tree/main/examples/tower/hello-world)    |
-/// | `ShuttleSerenity`                     | bot-serenity | [serenity](https://docs.rs/serenity/0.11.5) | 0.11.5     | [GitHub](https://github.com/shuttle-hq/shuttle/tree/main/examples/serenity/hello-world) |
+/// | `ShuttleRocket`                       | web-rocket   | [rocket](https://docs.rs/rocket/0.5.0-rc.2) | 0.5.0-rc.2 | [GitHub](https://github.com/shuttle-hq/examples/tree/main/rocket/hello-world)         |
+/// | `ShuttleAxum`                         | web-axum     | [axum](https://docs.rs/axum/0.5)            | 0.5        | [GitHub](https://github.com/shuttle-hq/examples/tree/main/axum/hello-world)           |
+/// | `ShuttleSalvo`                        | web-salvo    | [salvo](https://docs.rs/salvo/0.34.3)       | 0.34.3     | [GitHub](https://github.com/shuttle-hq/examples/tree/main/salvo/hello-world)          |
+/// | `ShuttleTide`                         | web-tide     | [tide](https://docs.rs/tide/0.16.0)         | 0.16.0     | [GitHub](https://github.com/shuttle-hq/examples/tree/main/tide/hello-world)           |
+/// | `ShuttlePoem`                         | web-poem     | [poem](https://docs.rs/poem/1.3.35)         | 1.3.35     | [GitHub](https://github.com/shuttle-hq/examples/tree/main/poem/hello-world)           |
+/// | `Result<T, shuttle_service::Error>`   | web-tower    | [tower](https://docs.rs/tower/0.4.12)       | 0.14.12    | [GitHub](https://github.com/shuttle-hq/examples/tree/main/tower/hello-world)          |
+/// | `ShuttleSerenity`                     | bot-serenity | [serenity](https://docs.rs/serenity/0.11.5) | 0.11.5     | [GitHub](https://github.com/shuttle-hq/examples/tree/main/serenity/hello-world)       |
+/// | `ShuttleActixWeb`                     | web-actix-web| [actix-web](https://docs.rs/actix-web/4.2.1)| 4.2.1      | [GitHub](https://github.com/shuttle-hq/examples/tree/main/actix-web/hello-world)           |
+
 ///
 /// # Getting shuttle managed resources
 /// Shuttle is able to manage resource dependencies for you. These resources are passed in as inputs to your `#[shuttle_service::main]` function and are configured using attributes:
@@ -309,6 +313,12 @@ pub trait Factory: Send + Sync {
 
     /// Get the name for the service being deployed
     fn get_service_name(&self) -> ServiceName;
+
+    /// Get the path where the build files are stored for this service
+    fn get_build_path(&self) -> Result<PathBuf, crate::Error>;
+
+    /// Get the path where files can be stored for this deployment
+    fn get_storage_path(&self) -> Result<PathBuf, crate::Error>;
 }
 
 /// Used to get resources of type `T` from factories.
@@ -543,6 +553,28 @@ impl Service for sync_wrapper::SyncWrapper<axum::Router> {
     }
 }
 
+#[cfg(feature = "web-actix-web")]
+#[async_trait]
+impl<F> Service for F
+where
+    F: FnOnce(&mut actix_web::web::ServiceConfig) + Sync + Send + Clone + 'static,
+{
+    async fn bind(mut self: Box<Self>, addr: SocketAddr) -> Result<(), Error> {
+        // Start a worker for each cpu, but no more than 4.
+        let worker_count = num_cpus::get().max(4);
+
+        let srv = actix_web::HttpServer::new(move || actix_web::App::new().configure(self.clone()))
+            .workers(worker_count)
+            .bind(addr)?
+            .run();
+        srv.await.map_err(error::CustomError::new)?;
+
+        Ok(())
+    }
+}
+#[cfg(feature = "web-actix-web")]
+pub type ShuttleActixWeb<F> = Result<F, Error>;
+
 #[cfg(feature = "web-axum")]
 pub type ShuttleAxum = Result<sync_wrapper::SyncWrapper<axum::Router>, Error>;
 
@@ -550,7 +582,7 @@ pub type ShuttleAxum = Result<sync_wrapper::SyncWrapper<axum::Router>, Error>;
 #[async_trait]
 impl Service for salvo::Router {
     async fn bind(mut self: Box<Self>, addr: SocketAddr) -> Result<(), error::Error> {
-        salvo::Server::new(salvo::listener::TcpListener::bind(&addr))
+        salvo::Server::new(salvo::listener::TcpListener::bind(addr))
             .serve(self)
             .await;
 

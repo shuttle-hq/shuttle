@@ -1,11 +1,12 @@
-use colored::Color;
+use crossterm::style::Color;
 
 use crate::helpers::{self, APPS_FQDN};
 
 #[test]
 fn hello_world_warp() {
-    let client = helpers::Services::new_docker("hello-world (warp)", Color::Cyan);
-    client.deploy("warp/hello-world");
+    let client =
+        helpers::Services::new_docker("hello-world (warp)", "warp/hello-world", Color::Cyan);
+    client.deploy();
 
     let request_text = client
         .get("hello")
@@ -15,5 +16,5 @@ fn hello_world_warp() {
         .text()
         .unwrap();
 
-    assert_eq!(request_text, "Hello, world!");
+    assert_eq!(request_text, "Hello, World!");
 }

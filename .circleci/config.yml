@@ -134,7 +134,7 @@ commands:
             mv target/<< parameters.target >>/release/cargo-shuttle<< parameters.suffix >> shuttle/cargo-shuttle<< parameters.suffix >>
             mv LICENSE shuttle/
             mv README.md shuttle/
-            mkdir artifacts
+            mkdir -p artifacts/<< parameters.target >>
             tar -cvzf artifacts/<< parameters.target >>/cargo-shuttle-$TAG-<< parameters.target >>.tar.gz shuttle
             echo $(ls artifacts)
             echo << parameters.tag >>

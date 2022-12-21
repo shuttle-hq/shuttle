@@ -133,6 +133,7 @@ commands:
             mv README.md shuttle/
             mkdir artifacts
             tar -cvzf artifacts/cargo-shuttle-$TAG-<< parameters.target >>.tar.gz shuttle
+            echo $(ls artifacts)
       - persist_to_workspace:
           root: artifacts
           paths:

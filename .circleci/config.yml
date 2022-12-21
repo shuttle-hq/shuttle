@@ -113,20 +113,14 @@ commands:
       target:
         description: "Rust target to put in artifact"
         type: string
-      tag:
-        description: "Git tag to put in artifact"
-        type: string
       suffix:
         description: "Suffix that is on the binary"
         type: string
         default: ""
     steps:
       - run:
-            name: "Set tag with git describe"
+            name: "Set tag using git describe"
             command: echo TAG=$(git describe --tags) >> "$BASH_ENV"
-      - run:
-            name: "Echo git tag"
-            command: echo $TAG
       - run:
           name: Make artifact
           command: |
@@ -136,8 +130,6 @@ commands:
             mv README.md shuttle/
             mkdir -p artifacts/<< parameters.target >>
             tar -cvzf artifacts/<< parameters.target >>/cargo-shuttle-$TAG-<< parameters.target >>.tar.gz shuttle
-            echo $(ls artifacts)
-            echo << parameters.tag >>
       - persist_to_workspace:
           root: artifacts
           paths:
@@ -323,7 +315,6 @@ jobs:
             cargo build --release --package cargo-shuttle --features vendored-openssl --target << parameters.target >>
       - make-artifact:
           target: << parameters.target >>
-          tag: $TAG
   build-binaries-windows:
     executor:
       name: win/server-2022
@@ -453,14 +444,14 @@ workflows:
       #         only: /^v.*/
       #       branches:
       #         only: production
-      # - publish-github-release:
-      #     requires:
-      #       - build-binaries-x86_64
-      #       - build-binaries-aarch64
-      #       - build-binaries-windows
-      #       - build-binaries-mac
-      #     filters:
-      #       tags:
-      #         only: /^v.*/
-      #       branches:
-      #         only: production
+      - publish-github-release:
+          requires:
+            - build-binaries-x86_64
+            # - build-binaries-aarch64
+            # - build-binaries-windows
+            # - build-binaries-mac
+          # filters:
+          #   tags:
+          #     only: /^v.*/
+          #   branches:
+          #     only: production

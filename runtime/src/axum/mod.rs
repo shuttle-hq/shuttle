@@ -231,7 +231,7 @@ impl RouterInner {
             .unwrap()
             .into_func()
             .unwrap()
-            .typed::<(RawFd, RawFd), (), _>(&store)
+            .typed::<(RawFd, RawFd), ()>(&store)
             .unwrap()
             .call(&mut store, (3, 4))
             .unwrap();

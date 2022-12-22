@@ -3,11 +3,12 @@ version: 2.1
 orbs: 
   docker-buildx: sensu/docker-buildx@1.1.1
   aws-ecr: circleci/aws-ecr@8.1.2
+  win: circleci/windows@5.0
 
 executors:
   docker-rust:
     docker:
-      - image: cimg/rust:1.63.0
+      - image: cimg/rust:1.65.0
   image-ubuntu:
     machine:
       image: ubuntu-2204:2022.04.1
@@ -89,6 +90,7 @@ commands:
             shuttle-persist = { path = "$PWD/resources/persist" }
             shuttle-shared-db = { path = "$PWD/resources/shared-db" }
             shuttle-secrets = { path = "$PWD/resources/secrets" }
+            shuttle-static-folder = { path = "$PWD/resources/static-folder" }
             EOF
   install-rust:
     steps:
@@ -97,6 +99,38 @@ commands:
           command: |
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
             sudo apt update && sudo apt install -y libssl1.1
+  install-protoc:
+    steps:
+      - run:
+          name: Install protoc
+          command: |
+            curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v21.9/protoc-21.9-linux-x86_64.zip &&\
+              sudo unzip -o protoc-21.9-linux-x86_64.zip -d /usr bin/protoc &&\
+              sudo unzip -o protoc-21.9-linux-x86_64.zip -d /usr/ 'include/*' &&\
+              rm -f protoc-21.9-linux-x86_64.zip
+  make-artifact:
+    parameters:
+      target:
+        description: "Rust target to put in artifact"
+        type: string
+      suffix:
+        description: "Suffix that is on the binary"
+        type: string
+        default: ""
+    steps:
+      - run:
+          name: Make artifact
+          command: |
+            mkdir shuttle
+            mv target/<< parameters.target >>/release/cargo-shuttle<< parameters.suffix >> shuttle/cargo-shuttle<< parameters.suffix >>
+            mv LICENSE shuttle/
+            mv README.md shuttle/
+            mkdir artifacts
+            tar -cvzf artifacts/cargo-shuttle-${CIRCLE_TAG}-<< parameters.target >>.tar.gz shuttle
+      - persist_to_workspace:
+          root: artifacts
+          paths:
+            - cargo-shuttle-${CIRCLE_TAG}-<< parameters.target >>.tar.gz
 
 jobs:
   workspace-fmt:
@@ -104,10 +138,12 @@ jobs:
     steps:
       - checkout
       - restore-cargo-cache
-      - run: sudo apt install -y protobuf-compiler
+      - install-protoc
       - run: cargo fmt --all --check
       - run: cargo install cargo-sort
-      - run: cargo sort --check --workspace
+      # TODO: this is incompatible with workspace inheritance, uncomment when 
+      # https://github.com/DevinR528/cargo-sort/pull/29 is merged
+      # - run: cargo sort --check --workspace
       - run: cargo check --workspace --all-targets
       - save-cargo-cache
   workspace-clippy:
@@ -119,7 +155,7 @@ jobs:
     steps:
       - checkout
       - restore-cargo-cache
-      - run: sudo apt install -y protobuf-compiler
+      - install-protoc
       - run: |
           cargo clippy --tests \
                        --all-targets \
@@ -138,11 +174,13 @@ jobs:
     steps:
       - checkout
       - restore-cargo-cache
-      - run: sudo apt install -y protobuf-compiler
+      - install-protoc
       - apply-patches
       - run: cargo fmt --all --check --manifest-path << parameters.path >>/Cargo.toml
       - run: cargo install cargo-sort
-      - run: cargo sort --check << parameters.path >>
+      # TODO: this is incompatible with workspace inheritance, uncomment when 
+      # https://github.com/DevinR528/cargo-sort/pull/29 is merged
+      # - run: cargo sort --check << parameters.path >>
       - run: |
           cargo clippy --tests \
                        --all-targets \
@@ -239,6 +277,89 @@ jobs:
           command: |
             PUSH=true PLATFORMS=linux/amd64 make images
       - save-buildx-cache
+  build-binaries-linux:
+    machine:
+      image: << parameters.image >>
+    resource_class: << parameters.resource_class >>
+    parameters:
+      target:
+        description: "Linux target to build for"
+        type: string
+      image:
+        description: "Machine image to use"
+        type: string
+      resource_class:
+        description: "The resource type to use for the machine"
+        type: string
+    steps:
+      - checkout
+      - run: sudo apt update && sudo DEBIAN_FRONTEND=noninteractive apt install -y libssl-dev musl-tools clang
+      - run:
+          name: Install Rust
+          command: curl --proto '=https' --tlsv1.3 https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.65.0 --target << parameters.target >>
+      - run:
+          name: Build
+          command: |
+            # From https://github.com/briansmith/ring/issues/1414#issuecomment-1055177218
+            export CC_aarch64_unknown_linux_musl=clang
+            # "vendored-openssl" is from https://github.com/cross-rs/cross/issues/229#issuecomment-597898074
+            cargo build --release --package cargo-shuttle --features vendored-openssl --target << parameters.target >>
+      - make-artifact:
+          target: << parameters.target >>
+  build-binaries-windows:
+    executor:
+      name: win/server-2022
+      size: medium
+    environment:
+      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+    steps:
+      - checkout
+      - run: choco install -y strawberryperl
+      - run:
+          name: Install Rust
+          command: |
+            wget -OutFile "C:\rustup-init.exe" https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe
+            C:\rustup-init.exe -y --default-toolchain 1.65.0 --target x86_64-pc-windows-msvc
+      - run:
+          name: Build
+          command: |
+            # From https://github.com/alexcrichton/openssl-src-rs/issues/45
+            # Because of https://github.com/openssl/openssl/issues/9048
+            $env:OPENSSL_SRC_PERL="C:\Strawberry\perl\bin\perl.exe"
+            # "vendored-openssl" is from https://github.com/cross-rs/cross/issues/229#issuecomment-597898074
+            ..\.cargo\bin\cargo.exe build --release --package cargo-shuttle --features vendored-openssl --target x86_64-pc-windows-msvc
+      - make-artifact:
+          target: x86_64-pc-windows-msvc
+          suffix: ".exe"
+  build-binaries-mac:
+    macos:
+      xcode: 12.5.1
+    resource_class: medium
+    steps:
+      - checkout
+      - run:
+          name: Install Rust
+          command: curl --proto '=https' https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.65.0 --target x86_64-apple-darwin
+      - run:
+          name: Build
+          command: |
+            # "vendored-openssl" is from https://github.com/cross-rs/cross/issues/229#issuecomment-597898074
+            cargo build --release --package cargo-shuttle --features vendored-openssl --target x86_64-apple-darwin
+      - make-artifact:
+          target: x86_64-apple-darwin
+  publish-github-release:
+    docker:
+      - image: cimg/go:1.19.3
+    steps:
+      - attach_workspace:
+          at: artifacts
+      - run:
+          name: "Publish Release on GitHub"
+          environment:
+            GITHUB_TOKEN: $GITHUB_TOKEN
+          command: |
+            go install github.com/tcnksm/ghr@v0.16.0
+            ghr -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} -delete -draft ${CIRCLE_TAG} artifacts/
 
 workflows:
   version: 2
@@ -251,7 +372,7 @@ workflows:
             - workspace-fmt
           matrix:
             parameters:
-              framework: ["web-axum", "web-rocket", "web-poem", "web-thruster", "web-tide", "web-tower","web-warp", "web-salvo", "bot-serenity"]
+              framework: ["web-actix-web", "web-axum", "web-rocket", "web-poem", "web-thruster", "web-tide", "web-tower","web-warp", "web-salvo", "bot-serenity"]
       - check-standalone:
           matrix:
             parameters:
@@ -260,6 +381,7 @@ workflows:
                 - resources/persist
                 - resources/secrets
                 - resources/shared-db
+                - resources/static-folder
       - service-test:
           requires:
             - workspace-clippy
@@ -281,5 +403,48 @@ workflows:
           requires:
             - e2e-test
           filters:
+            branches:
+              only: production
+      - build-binaries-linux:
+          name: build-binaries-x86_64
+          image: ubuntu-2204:2022.04.1
+          target: x86_64-unknown-linux-musl
+          resource_class: medium
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              only: production
+      - build-binaries-linux:
+          name: build-binaries-aarch64
+          image: ubuntu-2004:202101-01
+          target: aarch64-unknown-linux-musl
+          resource_class: arm.medium
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              only: production
+      - build-binaries-windows:
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              only: production
+      - build-binaries-mac:
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              only: production
+      - publish-github-release:
+          requires:
+            - build-binaries-x86_64
+            - build-binaries-aarch64
+            - build-binaries-windows
+            - build-binaries-mac
+          filters:
+            tags:
+              only: /^v.*/
             branches:
               only: production

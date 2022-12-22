@@ -8,28 +8,25 @@ use std::io;
 use std::pin::Pin;
 use std::str::FromStr;
 
-use axum::headers::{Header, HeaderName, HeaderValue, Host};
-use axum::http::uri::Authority;
+use acme::AcmeClientError;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use bollard::Docker;
 use futures::prelude::*;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize};
 use shuttle_common::models::error::{ApiError, ErrorKind};
-use sqlx::database::{HasArguments, HasValueRef};
-use sqlx::encode::IsNull;
-use sqlx::error::BoxDynError;
 use tokio::sync::mpsc::error::SendError;
 use tracing::error;
 
+pub mod acme;
 pub mod api;
 pub mod args;
 pub mod auth;
-pub mod custom_domain;
 pub mod project;
 pub mod proxy;
 pub mod service;
 pub mod task;
+pub mod tls;
 pub mod worker;
 
 use crate::service::{ContainerSettings, GatewayService};
@@ -87,6 +84,18 @@ impl<T> From<SendError<T>> for Error {
     }
 }
 
+impl From<io::Error> for Error {
+    fn from(_: io::Error) -> Self {
+        Self::from(ErrorKind::Internal)
+    }
+}
+
+impl From<AcmeClientError> for Error {
+    fn from(error: AcmeClientError) -> Self {
+        Self::source(ErrorKind::Internal, error)
+    }
+}
+
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
         error!(error = %self, "request had an error");
@@ -110,9 +119,32 @@ impl std::fmt::Display for Error {
 
 impl StdError for Error {}
 
-#[derive(Debug, sqlx::Type, Serialize, Clone, PartialEq, Eq)]
+#[derive(Debug, sqlx::Type, Serialize, Clone, PartialEq, Eq, Hash)]
 #[sqlx(transparent)]
 pub struct ProjectName(String);
+
+impl ProjectName {
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+
+    pub fn is_valid(&self) -> bool {
+        let name = self.0.clone();
+
+        fn is_valid_char(byte: u8) -> bool {
+            matches!(byte, b'a'..=b'z' | b'0'..=b'9' | b'-')
+        }
+
+        // each label in a hostname can be between 1 and 63 chars
+        let is_invalid_length = name.len() > 63;
+
+        !(name.bytes().any(|byte| !is_valid_char(byte))
+            || name.ends_with('-')
+            || name.starts_with('-')
+            || name.is_empty()
+            || is_invalid_length)
+    }
+}
 
 impl<'de> Deserialize<'de> for ProjectName {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -171,101 +203,17 @@ impl<'de> Deserialize<'de> for AccountName {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Fqdn(fqdn::FQDN);
-
-impl FromStr for Fqdn {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let fqdn =
-            fqdn::FQDN::from_str(s).map_err(|_err| Error::from(ErrorKind::InvalidCustomDomain))?;
-        Ok(Fqdn(fqdn))
-    }
+pub struct ProjectDetails {
+    pub project_name: ProjectName,
+    pub account_name: AccountName,
 }
 
-impl std::fmt::Display for Fqdn {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl<DB> sqlx::Type<DB> for Fqdn
-where
-    DB: sqlx::Database,
-    str: sqlx::Type<DB>,
-{
-    fn type_info() -> <DB as sqlx::Database>::TypeInfo {
-        <&str as sqlx::Type<DB>>::type_info()
-    }
-
-    fn compatible(ty: &<DB as sqlx::Database>::TypeInfo) -> bool {
-        <&str as sqlx::Type<DB>>::compatible(ty)
-    }
-}
-
-impl<'q, DB> sqlx::Encode<'q, DB> for Fqdn
-where
-    DB: sqlx::Database,
-    String: sqlx::Encode<'q, DB>,
-{
-    fn encode_by_ref(&self, buf: &mut <DB as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
-        let owned = self.0.to_string();
-        <String as sqlx::Encode<DB>>::encode(owned, buf)
-    }
-}
-
-impl<'r, DB> sqlx::Decode<'r, DB> for Fqdn
-where
-    DB: sqlx::Database,
-    &'r str: sqlx::Decode<'r, DB>,
-{
-    fn decode(value: <DB as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
-        let value = <&str as sqlx::Decode<DB>>::decode(value)?;
-        Ok(value.parse()?)
-    }
-}
-
-impl Serialize for Fqdn {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_str(&self.0.to_string())
-    }
-}
-
-impl<'de> Deserialize<'de> for Fqdn {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        String::deserialize(deserializer)?
-            .parse()
-            .map_err(<D::Error as serde::de::Error>::custom)
-    }
-}
-
-impl Header for Fqdn {
-    fn name() -> &'static HeaderName {
-        Host::name()
-    }
-
-    fn decode<'i, I>(values: &mut I) -> Result<Self, axum::headers::Error>
-    where
-        Self: Sized,
-        I: Iterator<Item = &'i HeaderValue>,
-    {
-        let host = Host::decode(values)?;
-        let fqdn = fqdn::FQDN::from_str(host.hostname())
-            .map_err(|_err| axum::headers::Error::invalid())?;
-
-        Ok(Fqdn(fqdn))
-    }
-
-    fn encode<E: Extend<HeaderValue>>(&self, values: &mut E) {
-        let authority = Authority::from_str(&self.0.to_string()).unwrap();
-        let host = Host::from(authority);
-        host.encode(values);
+impl From<ProjectDetails> for shuttle_common::models::project::AdminResponse {
+    fn from(project: ProjectDetails) -> Self {
+        Self {
+            project_name: project.project_name.to_string(),
+            account_name: project.account_name.to_string(),
+        }
     }
 }
 
@@ -395,10 +343,11 @@ pub mod tests {
     use sqlx::SqlitePool;
     use tokio::sync::mpsc::channel;
 
-    use crate::api::make_api;
-    use crate::args::{ContextArgs, StartArgs};
+    use crate::acme::AcmeClient;
+    use crate::api::latest::ApiBuilder;
+    use crate::args::{ContextArgs, StartArgs, UseTls};
     use crate::auth::User;
-    use crate::proxy::make_proxy;
+    use crate::proxy::UserServiceBuilder;
     use crate::service::{ContainerSettings, GatewayService, MIGRATIONS};
     use crate::worker::Worker;
     use crate::DockerContext;
@@ -594,6 +543,7 @@ pub mod tests {
         args: StartArgs,
         hyper: HyperClient<HttpConnector, Body>,
         pool: SqlitePool,
+        acme_client: AcmeClient,
     }
 
     #[derive(Clone)]
@@ -615,8 +565,10 @@ pub mod tests {
 
             let control: i16 = Uniform::from(9000..10000).sample(&mut rand::thread_rng());
             let user = control + 1;
+            let bouncer = user + 1;
             let control = format!("127.0.0.1:{control}").parse().unwrap();
             let user = format!("127.0.0.1:{user}").parse().unwrap();
+            let bouncer = format!("127.0.0.1:{bouncer}").parse().unwrap();
 
             let prefix = format!(
                 "shuttle_test_{}_",
@@ -636,6 +588,8 @@ pub mod tests {
             let args = StartArgs {
                 control,
                 user,
+                bouncer,
+                use_tls: UseTls::Disable,
                 context: ContextArgs {
                     docker_host,
                     image,
@@ -655,12 +609,15 @@ pub mod tests {
             let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
             MIGRATIONS.run(&pool).await.unwrap();
 
+            let acme_client = AcmeClient::new();
+
             Self {
                 docker,
                 settings,
                 args,
                 hyper,
                 pool,
+                acme_client,
             }
         }
 
@@ -676,12 +633,12 @@ pub mod tests {
             Client::new(addr).with_hyper_client(self.hyper.clone())
         }
 
-        pub fn fqdn(&self) -> String {
-            self.args()
-                .proxy_fqdn
-                .to_string()
-                .trim_end_matches('.')
-                .to_string()
+        pub fn fqdn(&self) -> FQDN {
+            self.args().proxy_fqdn
+        }
+
+        pub fn acme_client(&self) -> AcmeClient {
+            self.acme_client.clone()
         }
     }
 
@@ -732,21 +689,26 @@ pub mod tests {
             }
         };
 
-        let api = make_api(Arc::clone(&service), log_out);
         let api_addr = format!("127.0.0.1:{}", base_port).parse().unwrap();
-        let serve_api = hyper::Server::bind(&api_addr).serve(api.into_make_service());
         let api_client = world.client(api_addr);
+        let api = ApiBuilder::new()
+            .with_service(Arc::clone(&service))
+            .with_sender(log_out)
+            .with_default_routes()
+            .binding_to(api_addr);
 
-        let proxy = make_proxy(Arc::clone(&service), world.fqdn());
-        let proxy_addr = format!("127.0.0.1:{}", base_port + 1).parse().unwrap();
-        let serve_proxy = hyper::Server::bind(&proxy_addr).serve(proxy);
-        let proxy_client = world.client(proxy_addr);
+        let user_addr: SocketAddr = format!("127.0.0.1:{}", base_port + 1).parse().unwrap();
+        let proxy_client = world.client(user_addr);
+        let user = UserServiceBuilder::new()
+            .with_service(Arc::clone(&service))
+            .with_public(world.fqdn())
+            .with_user_proxy_binding_to(user_addr);
 
         let _gateway = tokio::spawn(async move {
             tokio::select! {
                 _ = worker.start() => {},
-                _ = serve_api => {},
-                _ = serve_proxy => {}
+                _ = api.serve() => {},
+                _ = user.serve() => {}
             }
         });
 
@@ -853,6 +815,7 @@ pub mod tests {
             .request(
                 Request::get("/hello")
                     .header("Host", "matrix.test.shuttleapp.rs")
+                    .header("x-shuttle-project", "matrix")
                     .body(Body::empty())
                     .unwrap(),
             )

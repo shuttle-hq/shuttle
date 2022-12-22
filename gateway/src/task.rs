@@ -1,15 +1,18 @@
 use futures::Future;
 use std::collections::VecDeque;
 use std::marker::PhantomData;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc::Sender;
+use tokio::sync::oneshot;
 use tokio::time::{sleep, timeout};
-use tracing::warn;
+use tracing::{error, info, info_span, warn};
 use uuid::Uuid;
 
 use crate::project::*;
 use crate::service::{GatewayContext, GatewayService};
+use crate::worker::TaskRouter;
 use crate::{AccountName, EndState, Error, ErrorKind, ProjectName, Refresh, State};
 
 // Default maximum _total_ time a task is allowed to run
@@ -66,6 +69,23 @@ impl<R, E> TaskResult<R, E> {
         }
     }
 
+    pub fn to_str(&self) -> &str {
+        match self {
+            Self::Pending(_) => "pending",
+            Self::Done(_) => "done",
+            Self::TryAgain => "try again",
+            Self::Cancelled => "cancelled",
+            Self::Err(_) => "error",
+        }
+    }
+
+    pub fn is_done(&self) -> bool {
+        match self {
+            Self::Done(_) | Self::Cancelled | Self::Err(_) => true,
+            Self::TryAgain | Self::Pending(_) => false,
+        }
+    }
+
     pub fn as_ref(&self) -> TaskResult<&R, &E> {
         match self {
             Self::Pending(r) => TaskResult::Pending(r),
@@ -108,17 +128,16 @@ pub fn destroy() -> impl Task<ProjectContext, Output = Project, Error = Error> {
 
 pub fn check_health() -> impl Task<ProjectContext, Output = Project, Error = Error> {
     run(|ctx| async move {
-        if let Project::Ready(mut ready) = ctx.state {
-            if ready.is_healthy().await {
-                TaskResult::Done(Project::Ready(ready))
-            } else {
-                match Project::Ready(ready).refresh(&ctx.gateway).await {
-                    Ok(update) => TaskResult::Done(update),
-                    Err(err) => TaskResult::Err(err),
+        match ctx.state.refresh(&ctx.gateway).await {
+            Ok(Project::Ready(mut ready)) => {
+                if ready.is_healthy().await {
+                    TaskResult::Done(Project::Ready(ready))
+                } else {
+                    TaskResult::Done(Project::Ready(ready).stop().unwrap())
                 }
             }
-        } else {
-            TaskResult::Err(Error::from_kind(ErrorKind::NotReady))
+            Ok(update) => TaskResult::Done(update),
+            Err(err) => TaskResult::Err(err),
         }
     })
 }
@@ -129,7 +148,6 @@ pub fn run_until_done() -> impl Task<ProjectContext, Output = Project, Error = E
 
 pub struct TaskBuilder {
     project_name: Option<ProjectName>,
-    account_name: Option<AccountName>,
     service: Arc<GatewayService>,
     timeout: Option<Duration>,
     tasks: VecDeque<BoxedTask<ProjectContext, Project>>,
@@ -140,7 +158,6 @@ impl TaskBuilder {
         Self {
             service,
             project_name: None,
-            account_name: None,
             timeout: None,
             tasks: VecDeque::new(),
         }
@@ -150,11 +167,6 @@ impl TaskBuilder {
 impl TaskBuilder {
     pub fn project(mut self, name: ProjectName) -> Self {
         self.project_name = Some(name);
-        self
-    }
-
-    pub fn account(mut self, name: AccountName) -> Self {
-        self.account_name = Some(name);
         self
     }
 
@@ -181,17 +193,54 @@ impl TaskBuilder {
             ProjectTask {
                 uuid: Uuid::new_v4(),
                 project_name: self.project_name.expect("project_name is required"),
-                account_name: self.account_name.expect("account_name is required"),
                 service: self.service,
                 tasks: self.tasks,
             },
         ))
     }
 
-    pub async fn send(self, sender: &Sender<BoxedTask>) -> Result<(), Error> {
-        match timeout(TASK_SEND_TIMEOUT, sender.send(self.build())).await {
-            Ok(Ok(_)) => Ok(()),
+    pub async fn send(self, sender: &Sender<BoxedTask>) -> Result<TaskHandle, Error> {
+        let project_name = self.project_name.clone().expect("project_name is required");
+        let task_router = self.service.task_router();
+        let (task, handle) = AndThenNotify::after(self.build());
+        let task = Route::<BoxedTask>::to(project_name, Box::new(task), task_router);
+        match timeout(TASK_SEND_TIMEOUT, sender.send(Box::new(task))).await {
+            Ok(Ok(_)) => Ok(handle),
             _ => Err(Error::from_kind(ErrorKind::ServiceUnavailable)),
+        }
+    }
+}
+
+pub struct Route<T> {
+    project_name: ProjectName,
+    inner: Option<T>,
+    router: TaskRouter<T>,
+}
+
+impl<T> Route<T> {
+    pub fn to(project_name: ProjectName, what: T, router: TaskRouter<T>) -> Self {
+        Self {
+            project_name,
+            inner: Some(what),
+            router,
+        }
+    }
+}
+
+#[async_trait]
+impl Task<()> for Route<BoxedTask> {
+    type Output = ();
+
+    type Error = Error;
+
+    async fn poll(&mut self, _ctx: ()) -> TaskResult<Self::Output, Self::Error> {
+        if let Some(task) = self.inner.take() {
+            match self.router.route(&self.project_name, task).await {
+                Ok(_) => TaskResult::Done(()),
+                Err(_) => TaskResult::Err(Error::from_kind(ErrorKind::Internal)),
+            }
+        } else {
+            TaskResult::Done(())
         }
     }
 }
@@ -231,6 +280,60 @@ impl Task<ProjectContext> for RunUntilDone {
         } else {
             TaskResult::Done(ctx.state)
         }
+    }
+}
+
+pub struct TaskHandle {
+    rx: oneshot::Receiver<()>,
+}
+
+impl Future for TaskHandle {
+    type Output = ();
+
+    fn poll(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Self::Output> {
+        Pin::new(&mut self.rx).poll(cx).map(|_| ())
+    }
+}
+
+pub struct AndThenNotify<T> {
+    inner: T,
+    notify: Option<oneshot::Sender<()>>,
+}
+
+impl<T> AndThenNotify<T> {
+    pub fn after(task: T) -> (Self, TaskHandle) {
+        let (tx, rx) = oneshot::channel();
+        (
+            Self {
+                inner: task,
+                notify: Some(tx),
+            },
+            TaskHandle { rx },
+        )
+    }
+}
+
+#[async_trait]
+impl<T, Ctx> Task<Ctx> for AndThenNotify<T>
+where
+    Ctx: Send + 'static,
+    T: Task<Ctx>,
+{
+    type Output = T::Output;
+
+    type Error = T::Error;
+
+    async fn poll(&mut self, ctx: Ctx) -> TaskResult<Self::Output, Self::Error> {
+        let out = self.inner.poll(ctx).await;
+
+        if out.is_done() {
+            let _ = self.notify.take().unwrap().send(());
+        }
+
+        out
     }
 }
 
@@ -287,7 +390,6 @@ where
 pub struct ProjectTask<T> {
     uuid: Uuid,
     project_name: ProjectName,
-    account_name: AccountName,
     service: Arc<GatewayService>,
     tasks: VecDeque<T>,
 }
@@ -337,12 +439,29 @@ where
             Err(err) => return TaskResult::Err(err),
         };
 
+        let account_name = match self
+            .service
+            .account_name_from_project(&self.project_name)
+            .await
+        {
+            Ok(account_name) => account_name,
+            Err(err) => return TaskResult::Err(err),
+        };
+
         let project_ctx = ProjectContext {
             project_name: self.project_name.clone(),
-            account_name: self.account_name.clone(),
+            account_name: account_name.clone(),
             gateway: ctx,
             state: project,
         };
+
+        let span = info_span!(
+            "polling project",
+            ctx.project = ?project_ctx.project_name,
+            ctx.account = ?project_ctx.account_name,
+            ctx.state = project_ctx.state.state()
+        );
+        let _ = span.enter();
 
         let task = self.tasks.front_mut().unwrap();
 
@@ -354,7 +473,7 @@ where
                 _ = timeout => {
                     warn!(
                         project_name = ?self.project_name,
-                        account_name = ?self.account_name,
+                        account_name = ?account_name,
                         "a task has been idling for a long time"
                     );
                     poll.await
@@ -363,15 +482,23 @@ where
         };
 
         if let Some(update) = res.as_ref().ok() {
+            info!(new_state = ?update.state(), "new state");
             match self
                 .service
                 .update_project(&self.project_name, update)
                 .await
             {
-                Ok(_) => {}
-                Err(err) => return TaskResult::Err(err),
+                Ok(_) => {
+                    info!(new_state = ?update.state(), "successfully updated project state");
+                }
+                Err(err) => {
+                    error!(err = %err, "could not update project state");
+                    return TaskResult::Err(err);
+                }
             }
         }
+
+        info!(result = res.to_str(), "poll result");
 
         match res {
             TaskResult::Pending(_) => TaskResult::Pending(()),
@@ -385,7 +512,10 @@ where
                 }
             }
             TaskResult::Cancelled => TaskResult::Cancelled,
-            TaskResult::Err(err) => TaskResult::Err(err),
+            TaskResult::Err(err) => {
+                error!(err = %err, "project task failure");
+                TaskResult::Err(err)
+            }
         }
     }
 }

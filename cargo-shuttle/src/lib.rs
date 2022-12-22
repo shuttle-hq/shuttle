@@ -4,34 +4,36 @@ pub mod config;
 mod factory;
 mod init;
 
+use shuttle_common::project::ProjectName;
 use std::collections::BTreeMap;
+use std::ffi::OsString;
 use std::fs::{read_to_string, File};
-use std::io::Write;
-use std::io::{self, stdout};
+use std::io::stdout;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
 
-use anyhow::{anyhow, Context, Result};
-pub use args::{Args, Command, DeployArgs, InitArgs, ProjectArgs, RunArgs};
-use args::{AuthArgs, LoginArgs};
-use cargo::core::resolver::CliFeatures;
-use cargo::core::Workspace;
-use cargo::ops::{PackageOpts, Packages};
+use anyhow::{anyhow, bail, Context, Result};
+use args::AuthArgs;
+pub use args::{Args, Command, DeployArgs, InitArgs, LoginArgs, ProjectArgs, RunArgs};
 use cargo_metadata::Message;
 use clap::CommandFactory;
 use clap_complete::{generate, Shell};
 use config::RequestContext;
 use crossterm::style::Stylize;
+use dialoguer::{theme::ColorfulTheme, Confirm, FuzzySelect, Input, Password};
 use factory::LocalFactory;
-use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use futures::StreamExt;
-use shuttle_common::models::secret;
+use git2::{Repository, StatusOptions};
+use ignore::overrides::OverrideBuilder;
+use ignore::WalkBuilder;
+use shuttle_common::models::{project, secret};
 use shuttle_service::loader::{build_crate, Loader};
 use shuttle_service::Logger;
-use tar::{Archive, Builder};
+use std::fmt::Write;
+use strum::IntoEnumIterator;
+use tar::Builder;
 use tokio::sync::mpsc;
 use tracing::trace;
 use uuid::Uuid;
@@ -57,6 +59,7 @@ impl Shuttle {
                 | Command::Deployment(..)
                 | Command::Project(..)
                 | Command::Delete
+                | Command::Clean
                 | Command::Secrets
                 | Command::Status
                 | Command::Logs { .. }
@@ -65,14 +68,14 @@ impl Shuttle {
             self.load_project(&mut args.project_args)?;
         }
 
+        self.ctx.set_api_url(args.api_url);
+
         match args.cmd {
-            Command::Init(init_args) => self.init(init_args).await,
+            Command::Init(init_args) => self.init(init_args, args.project_args).await,
             Command::Generate { shell, output } => self.complete(shell, output).await,
             Command::Login(login_args) => self.login(login_args).await,
             Command::Run(run_args) => self.local_run(run_args).await,
             need_client => {
-                self.ctx.set_api_url(args.api_url);
-
                 let mut client = Client::new(self.ctx.api_url());
                 client.set_api_key(self.ctx.api_key()?);
 
@@ -89,10 +92,13 @@ impl Shuttle {
                         self.deployment_get(&client, id).await
                     }
                     Command::Delete => self.delete(&client).await,
+                    Command::Clean => self.clean(&client).await,
                     Command::Secrets => self.secrets(&client).await,
                     Command::Auth(auth_args) => self.auth(auth_args, &client).await,
                     Command::Project(ProjectCommand::New) => self.project_create(&client).await,
-                    Command::Project(ProjectCommand::Status) => self.project_status(&client).await,
+                    Command::Project(ProjectCommand::Status { follow }) => {
+                        self.project_status(&client, follow).await
+                    }
                     Command::Project(ProjectCommand::Rm) => self.project_delete(&client).await,
                     _ => {
                         unreachable!("commands that don't need a client have already been matched")
@@ -103,13 +109,100 @@ impl Shuttle {
         .map(|_| CommandOutcome::Ok)
     }
 
-    async fn init(&self, args: InitArgs) -> Result<()> {
-        // Interface with cargo to initialize new lib package for shuttle
-        let path = args.path.clone();
-        init::cargo_init(path.clone())?;
+    /// Log in, initialize a project and potentially create the Shuttle environment for it.
+    ///
+    /// If both a project name and framework are passed as arguments, it will run without any extra
+    /// interaction.
+    async fn init(&mut self, args: InitArgs, mut project_args: ProjectArgs) -> Result<()> {
+        let interactive = project_args.name.is_none() || args.framework().is_none();
 
-        let framework = init::get_framework(&args);
-        init::cargo_shuttle_init(path, framework)?;
+        let theme = ColorfulTheme::default();
+
+        // 1. Log in (if not logged in yet)
+        if self.ctx.api_key().is_err() {
+            if interactive {
+                println!("First, let's log in to your Shuttle account.");
+                self.login(args.login_args.clone()).await?;
+                println!();
+            } else if args.new && args.login_args.api_key.is_some() {
+                self.login(args.login_args.clone()).await?;
+            } else {
+                bail!("Tried to login to create a Shuttle environment, but no API key was set.")
+            }
+        }
+
+        // 2. Ask for project name
+        if project_args.name.is_none() {
+            println!("How do you want to name your project? It will be hosted at ${{project_name}}.shuttleapp.rs.");
+            // TODO: Check whether the project name is still available
+            project_args.name = Some(
+                Input::with_theme(&theme)
+                    .with_prompt("Project name")
+                    .interact()?,
+            );
+            println!();
+        }
+
+        // 3. Confirm the project directory
+        let path = if interactive {
+            println!("Where should we create this project?");
+            let directory_str: String = Input::with_theme(&theme)
+                .with_prompt("Directory")
+                .default(".".to_owned())
+                .interact()?;
+            println!();
+            args::parse_init_path(&OsString::from(directory_str))?
+        } else {
+            args.path.clone()
+        };
+
+        // 4. Ask for the framework
+        let framework = match args.framework() {
+            Some(framework) => framework,
+            None => {
+                println!(
+                    "Shuttle works with a range of web frameworks. Which one do you want to use?"
+                );
+                let frameworks = init::Framework::iter().collect::<Vec<_>>();
+                let index = FuzzySelect::with_theme(&theme)
+                    .items(&frameworks)
+                    .default(0)
+                    .interact()?;
+                println!();
+                frameworks[index]
+            }
+        };
+
+        // 5. Initialize locally
+        init::cargo_init(path.clone())?;
+        init::cargo_shuttle_init(path.clone(), framework)?;
+        println!();
+
+        // 6. Confirm that the user wants to create the project environment on Shuttle
+        let should_create_environment = if !interactive {
+            args.new
+        } else if args.new {
+            true
+        } else {
+            let should_create = Confirm::with_theme(&theme)
+                .with_prompt("Do you want to create the project environment on Shuttle?")
+                .default(true)
+                .interact()?;
+
+            println!();
+            should_create
+        };
+
+        if should_create_environment {
+            // Set the project working directory path to the init path,
+            // so `load_project` is ran with the correct project path
+            project_args.working_directory = path;
+
+            self.load_project(&mut project_args)?;
+            let mut client = Client::new(self.ctx.api_url());
+            client.set_api_key(self.ctx.api_key()?);
+            self.project_create(&client).await?;
+        }
 
         Ok(())
     }
@@ -133,23 +226,21 @@ impl Shuttle {
         self.ctx.load_local(project_args)
     }
 
+    /// Log in with the given API key or after prompting the user for one.
     async fn login(&mut self, login_args: LoginArgs) -> Result<()> {
-        let api_key_str = login_args.api_key.unwrap_or_else(|| {
-            let url = "https://shuttle.rs/login";
+        let api_key_str = match login_args.api_key {
+            Some(api_key) => api_key,
+            None => {
+                let url = "https://shuttle.rs/login";
+                let _ = webbrowser::open(url);
 
-            let _ = webbrowser::open(url);
+                println!("If your browser did not automatically open, go to {url}");
 
-            println!("If your browser did not automatically open, go to {url}");
-            print!("Enter Api Key: ");
-
-            stdout().flush().unwrap();
-
-            let mut input = String::new();
-
-            io::stdin().read_line(&mut input).unwrap();
-
-            input
-        });
+                Password::with_theme(&ColorfulTheme::default())
+                    .with_prompt("API key")
+                    .interact()?
+            }
+        };
 
         let api_key = api_key_str.trim().parse()?;
 
@@ -210,6 +301,18 @@ impl Shuttle {
         Ok(())
     }
 
+    async fn clean(&self, client: &Client) -> Result<()> {
+        let lines = client.clean_project(self.ctx.project_name()).await?;
+
+        for line in lines {
+            println!("{line}");
+        }
+
+        println!("Cleaning done!");
+
+        Ok(())
+    }
+
     async fn logs(&self, client: &Client, id: Option<Uuid>, follow: bool) -> Result<()> {
         let id = if let Some(id) = id {
             id
@@ -266,7 +369,7 @@ impl Shuttle {
         trace!("starting a local run for a service: {run_args:?}");
 
         let (tx, rx): (crossbeam_channel::Sender<Message>, _) = crossbeam_channel::bounded(0);
-        tokio::spawn(async move {
+        tokio::task::spawn_blocking(move || {
             while let Ok(message) = rx.recv() {
                 match message {
                     Message::TextLine(line) => println!("{line}"),
@@ -309,7 +412,11 @@ impl Shuttle {
 
         let loader = Loader::from_so_file(so_path)?;
 
-        let mut factory = LocalFactory::new(self.ctx.project_name().clone(), secrets)?;
+        let mut factory = LocalFactory::new(
+            self.ctx.project_name().clone(),
+            secrets,
+            working_directory.to_path_buf(),
+        )?;
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), run_args.port);
 
         trace!("loading project");
@@ -332,7 +439,7 @@ impl Shuttle {
 
         handle.await??;
 
-        tokio::spawn(async move {
+        tokio::task::spawn_blocking(move || {
             trace!("closing so file");
             so.close().unwrap();
         });
@@ -341,11 +448,11 @@ impl Shuttle {
     }
 
     async fn deploy(&self, args: DeployArgs, client: &Client) -> Result<CommandOutcome> {
-        let package_file = self
-            .run_cargo_package(args.allow_dirty)
-            .context("failed to package cargo project")?;
+        if !args.allow_dirty {
+            self.is_dirty()?;
+        }
 
-        let data = self.package_secret(package_file)?;
+        let data = self.make_archive()?;
 
         let deployment = client
             .deploy(data, self.ctx.project_name(), args.no_test)
@@ -403,90 +510,203 @@ impl Shuttle {
     }
 
     async fn project_create(&self, client: &Client) -> Result<()> {
-        let project = client.create_project(self.ctx.project_name()).await?;
-
-        println!("{project}");
+        self.wait_with_spinner(
+            &[project::State::Ready, project::State::Errored],
+            Client::create_project,
+            self.ctx.project_name(),
+            client,
+        )
+        .await?;
 
         Ok(())
     }
 
-    async fn project_status(&self, client: &Client) -> Result<()> {
-        let project = client.get_project(self.ctx.project_name()).await?;
+    async fn project_status(&self, client: &Client, follow: bool) -> Result<()> {
+        match follow {
+            true => {
+                self.wait_with_spinner(
+                    &[
+                        project::State::Ready,
+                        project::State::Destroyed,
+                        project::State::Errored,
+                    ],
+                    Client::get_project,
+                    self.ctx.project_name(),
+                    client,
+                )
+                .await?;
+            }
+            false => {
+                let project = client.get_project(self.ctx.project_name()).await?;
+                println!("{project}");
+            }
+        }
 
+        Ok(())
+    }
+
+    async fn wait_with_spinner<'a, F, Fut>(
+        &self,
+        states_to_check: &[project::State],
+        f: F,
+        project_name: &'a ProjectName,
+        client: &'a Client,
+    ) -> Result<(), anyhow::Error>
+    where
+        F: Fn(&'a Client, &'a ProjectName) -> Fut,
+        Fut: std::future::Future<Output = Result<project::Response>> + 'a,
+    {
+        let mut project = f(client, project_name).await?;
+        let pb = indicatif::ProgressBar::new_spinner();
+        pb.enable_steady_tick(std::time::Duration::from_millis(350));
+        pb.set_style(
+            indicatif::ProgressStyle::with_template("{spinner:.orange} {msg}")
+                .unwrap()
+                .tick_strings(&[
+                    "( ●    )",
+                    "(  ●   )",
+                    "(   ●  )",
+                    "(    ● )",
+                    "(     ●)",
+                    "(    ● )",
+                    "(   ●  )",
+                    "(  ●   )",
+                    "( ●    )",
+                    "(●     )",
+                    "(●●●●●●)",
+                ]),
+        );
+        loop {
+            if states_to_check.contains(&project.state) {
+                break;
+            }
+
+            pb.set_message(format!("{project}"));
+            project = client.get_project(project_name).await?;
+        }
+        pb.finish_and_clear();
         println!("{project}");
-
         Ok(())
     }
 
     async fn project_delete(&self, client: &Client) -> Result<()> {
-        let project = client.delete_project(self.ctx.project_name()).await?;
-
-        println!("{project}");
+        self.wait_with_spinner(
+            &[project::State::Destroyed, project::State::Errored],
+            Client::delete_project,
+            self.ctx.project_name(),
+            client,
+        )
+        .await?;
 
         Ok(())
     }
 
-    // Packages the cargo project and returns a File to that file
-    fn run_cargo_package(&self, allow_dirty: bool) -> Result<File> {
-        let config = cargo::util::config::Config::default()?;
+    fn make_archive(&self) -> Result<Vec<u8>> {
+        let encoder = GzEncoder::new(Vec::new(), Compression::fast());
+        let mut tar = Builder::new(encoder);
 
         let working_directory = self.ctx.working_directory();
-        let path = working_directory.join("Cargo.toml");
+        let base_directory = working_directory
+            .parent()
+            .context("get parent directory of crate")?;
 
-        let ws = Workspace::new(&path, &config)?;
-        let opts = PackageOpts {
-            config: &config,
-            list: false,
-            check_metadata: true,
-            allow_dirty,
-            keep_going: false,
-            verify: false,
-            jobs: None,
-            to_package: Packages::Default,
-            targets: vec![],
-            cli_features: CliFeatures {
-                features: Rc::new(Default::default()),
-                all_features: false,
-                uses_default_features: true,
-            },
-        };
+        // Make sure the target folder is excluded at all times
+        let overrides = OverrideBuilder::new(working_directory)
+            .add("!target/")
+            .context("add `!target/` override")?
+            .build()
+            .context("build an override")?;
 
-        let locks = cargo::ops::package(&ws, &opts)?.expect("unwrap ok here");
-        let owned = locks.get(0).unwrap().file().try_clone()?;
-        Ok(owned)
-    }
+        for dir_entry in WalkBuilder::new(working_directory)
+            .hidden(false)
+            .overrides(overrides)
+            .build()
+        {
+            let dir_entry = dir_entry.context("get directory entry")?;
 
-    fn package_secret(&self, file: File) -> Result<Vec<u8>> {
-        let tar_read = GzDecoder::new(file);
-        let mut archive_read = Archive::new(tar_read);
-        let tar_write = GzEncoder::new(Vec::new(), Compression::best());
-        let mut archive_write = Builder::new(tar_write);
-
-        for entry in archive_read.entries()? {
-            let entry = entry?;
-            let path = entry.path()?;
-            let file_name = path.components().nth(1).unwrap();
-
-            if file_name.as_os_str() == "Secrets.toml" {
-                println!(
-                    "{}: you may want to fix this",
-                    "Secrets.toml might be tracked by your version control".yellow()
-                );
+            // It's not possible to add a directory to an archive
+            if dir_entry.file_type().context("get file type")?.is_dir() {
+                continue;
             }
 
-            archive_write.append(&entry.header().clone(), entry)?;
+            let path = dir_entry
+                .path()
+                .strip_prefix(base_directory)
+                .context("strip the base of the archive entry")?;
+
+            tar.append_path_with_name(dir_entry.path(), path)
+                .context("archive entry")?;
         }
 
+        // Make sure to add any `Secrets.toml` files
         let secrets_path = self.ctx.working_directory().join("Secrets.toml");
         if secrets_path.exists() {
-            archive_write
-                .append_path_with_name(secrets_path, Path::new("shuttle").join("Secrets.toml"))?;
+            tar.append_path_with_name(secrets_path, Path::new("shuttle").join("Secrets.toml"))?;
         }
 
-        let encoder = archive_write.into_inner()?;
-        let data = encoder.finish()?;
+        let encoder = tar.into_inner().context("get encoder from tar archive")?;
+        let bytes = encoder.finish().context("finish up encoder")?;
 
-        Ok(data)
+        Ok(bytes)
+    }
+
+    fn is_dirty(&self) -> Result<()> {
+        let working_directory = self.ctx.working_directory();
+        if let Ok(repo) = Repository::discover(working_directory) {
+            let repo_path = repo
+                .workdir()
+                .context("getting working directory of repository")?
+                .canonicalize()?;
+
+            trace!(?repo_path, "found git repository");
+
+            let repo_rel_path = working_directory
+                .strip_prefix(repo_path.as_path())
+                .context("stripping repository path from working directory")?;
+
+            trace!(
+                ?repo_rel_path,
+                "got working directory path relative to git repository"
+            );
+
+            let mut status_options = StatusOptions::new();
+            status_options
+                .pathspec(repo_rel_path)
+                .include_untracked(true);
+
+            let statuses = repo
+                .statuses(Some(&mut status_options))
+                .context("getting status of repository files")?;
+
+            if !statuses.is_empty() {
+                let mut error: String = format!("{} files in the working directory contain changes that were not yet committed into git:", statuses.len());
+                writeln!(error).expect("to append error");
+
+                for status in statuses.iter() {
+                    trace!(
+                        path = status.path(),
+                        status = ?status.status(),
+                        "found file with updates"
+                    );
+
+                    let path =
+                        repo_path.join(status.path().context("getting path of changed file")?);
+                    let rel_path = path
+                        .strip_prefix(working_directory)
+                        .expect("getting relative path of changed file")
+                        .display();
+
+                    writeln!(error, "{rel_path}").expect("to append error");
+                }
+
+                writeln!(error).expect("to append error");
+                writeln!(error, "to proceed despite this and include the uncommitted changes, pass the `--allow-dirty` flag").expect("to append error");
+
+                return Err(anyhow::Error::msg(error));
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -498,18 +718,47 @@ pub enum CommandOutcome {
 #[cfg(test)]
 mod tests {
     use flate2::read::GzDecoder;
+    use shuttle_common::project::ProjectName;
     use tar::Archive;
+    use tempfile::TempDir;
 
     use crate::args::ProjectArgs;
     use crate::Shuttle;
-    use std::fs::{canonicalize, File};
-    use std::io::Write;
+    use std::fs::{self, canonicalize};
     use std::path::PathBuf;
+    use std::str::FromStr;
 
     fn path_from_workspace_root(path: &str) -> PathBuf {
         PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
             .join("..")
             .join(path)
+    }
+
+    fn get_archive_entries(mut project_args: ProjectArgs) -> Vec<String> {
+        let mut shuttle = Shuttle::new().unwrap();
+        shuttle.load_project(&mut project_args).unwrap();
+
+        let archive = shuttle.make_archive().unwrap();
+
+        // Make sure the Secrets.toml file is not initially present
+        let tar = GzDecoder::new(&archive[..]);
+        let mut archive = Archive::new(tar);
+
+        archive
+            .entries()
+            .unwrap()
+            .map(|entry| {
+                entry
+                    .unwrap()
+                    .path()
+                    .unwrap()
+                    .components()
+                    .skip(1)
+                    .collect::<PathBuf>()
+                    .display()
+                    .to_string()
+            })
+            .collect()
     }
 
     #[test]
@@ -541,62 +790,75 @@ mod tests {
     }
 
     #[test]
-    fn secrets_file_is_archived() {
+    fn make_archive_include_secrets() {
         let working_directory =
             canonicalize(path_from_workspace_root("examples/rocket/secrets")).unwrap();
 
-        let mut secrets_file = File::create(working_directory.join("Secrets.toml")).unwrap();
-        secrets_file
-            .write_all(b"MY_API_KEY = 'the contents of my API key'")
-            .unwrap();
+        fs::write(
+            working_directory.join("Secrets.toml"),
+            "MY_API_KEY = 'the contents of my API key'",
+        )
+        .unwrap();
 
-        let mut project_args = ProjectArgs {
+        let project_args = ProjectArgs {
             working_directory,
             name: None,
         };
 
-        let mut shuttle = Shuttle::new().unwrap();
-        shuttle.load_project(&mut project_args).unwrap();
+        let mut entries = get_archive_entries(project_args);
+        entries.sort();
 
-        let file = shuttle.run_cargo_package(true).unwrap();
-
-        // Make sure the Secrets.toml file is not initially present
-        let tar = GzDecoder::new(file);
-        let mut archive = Archive::new(tar);
-
-        for entry in archive.entries().unwrap() {
-            let entry = entry.unwrap();
-            let path = entry.path().unwrap();
-            let name = path.components().nth(1).unwrap().as_os_str();
-
-            assert!(
-                name != "Secrets.toml",
-                "no Secrets.toml file should be in the initial archive: {:?}",
-                path
-            );
-        }
-
-        let file = shuttle.run_cargo_package(true).unwrap();
-        let new_file = shuttle.package_secret(file).unwrap();
-        let mut found_secrets_file = false;
-
-        // This time the Secrets.toml file should be present
-        let tar = flate2::bufread::GzDecoder::new(&new_file[..]);
-        let mut archive = Archive::new(tar);
-
-        for entry in archive.entries().unwrap() {
-            let entry = entry.unwrap();
-            let path = entry.path().unwrap();
-            let name = path.components().nth(1).unwrap().as_os_str();
-
-            if name == "Secrets.toml" {
-                found_secrets_file = true;
-            }
-        }
-
-        assert!(
-            found_secrets_file,
-            "Secrets.toml was not added to the archive"
+        assert_eq!(
+            entries,
+            vec![
+                ".gitignore",
+                "Cargo.toml",
+                "README.md",
+                "Secrets.toml",
+                "Secrets.toml.example",
+                "Shuttle.toml",
+                "src/lib.rs",
+            ]
         );
+    }
+
+    #[test]
+    fn make_archive_respect_ignore() {
+        let tmp_dir = TempDir::new().unwrap();
+        let working_directory = tmp_dir.path();
+
+        fs::write(working_directory.join(".env"), "API_KEY = 'blabla'").unwrap();
+        fs::write(working_directory.join(".ignore"), ".env").unwrap();
+        fs::write(working_directory.join("Cargo.toml"), "[package]").unwrap();
+
+        let project_args = ProjectArgs {
+            working_directory: working_directory.to_path_buf(),
+            name: Some(ProjectName::from_str("secret").unwrap()),
+        };
+
+        let mut entries = get_archive_entries(project_args);
+        entries.sort();
+
+        assert_eq!(entries, vec![".ignore", "Cargo.toml"]);
+    }
+
+    #[test]
+    fn make_archive_ignore_target_folder() {
+        let tmp_dir = TempDir::new().unwrap();
+        let working_directory = tmp_dir.path();
+
+        fs::create_dir_all(working_directory.join("target")).unwrap();
+        fs::write(working_directory.join("target").join("binary"), "12345").unwrap();
+        fs::write(working_directory.join("Cargo.toml"), "[package]").unwrap();
+
+        let project_args = ProjectArgs {
+            working_directory: working_directory.to_path_buf(),
+            name: Some(ProjectName::from_str("exclude_target").unwrap()),
+        };
+
+        let mut entries = get_archive_entries(project_args);
+        entries.sort();
+
+        assert_eq!(entries, vec!["Cargo.toml"]);
     }
 }

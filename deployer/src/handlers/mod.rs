@@ -2,10 +2,10 @@ mod error;
 
 use axum::body::{Body, BoxBody};
 use axum::extract::ws::{self, WebSocket};
-use axum::extract::{Extension, Path, Query};
+use axum::extract::{Extension, MatchedPath, Path, Query};
 use axum::http::{Request, Response};
 use axum::middleware::from_extractor;
-use axum::routing::{get, Router};
+use axum::routing::{get, post, Router};
 use axum::{extract::BodyStream, Json};
 use bytes::BufMut;
 use chrono::{TimeZone, Utc};
@@ -13,12 +13,14 @@ use fqdn::FQDN;
 use futures::StreamExt;
 use opentelemetry::global;
 use opentelemetry_http::HeaderExtractor;
+use shuttle_common::backends::metrics::Metrics;
 use shuttle_common::models::secret;
 use shuttle_common::project::ProjectName;
 use shuttle_common::LogItem;
+use shuttle_service::loader::clean_crate;
 use tower_http::auth::RequireAuthorizationLayer;
 use tower_http::trace::TraceLayer;
-use tracing::{debug, debug_span, error, field, trace, Span};
+use tracing::{debug, debug_span, error, field, instrument, trace, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
@@ -38,14 +40,17 @@ pub fn make_router(
     proxy_fqdn: FQDN,
     admin_secret: String,
     project_name: ProjectName,
-) -> Router<Body> {
+) -> Router {
     Router::new()
         .route("/projects/:project_name/services", get(list_services))
         .route(
             "/projects/:project_name/services/:service_name",
             get(get_service).post(post_service).delete(delete_service),
         )
-        .route("/projects/:project_name/services/:service_name/summary", get(get_service_summary))
+        .route(
+            "/projects/:project_name/services/:service_name/summary",
+            get(get_service_summary),
+        )
         .route(
             "/projects/:project_name/deployments/:deployment_id",
             get(get_deployment).delete(delete_deployment),
@@ -54,21 +59,49 @@ pub fn make_router(
             "/projects/:project_name/ws/deployments/:deployment_id/logs",
             get(get_logs_subscribe),
         )
-        .route("/projects/:project_name/deployments/:deployment_id/logs", get(get_logs))
+        .route(
+            "/projects/:project_name/deployments/:deployment_id/logs",
+            get(get_logs),
+        )
         .route(
             "/projects/:project_name/secrets/:service_name",
             get(get_secrets),
         )
+        .route("/projects/:project_name/clean", post(post_clean))
         .layer(Extension(persistence))
         .layer(Extension(deployment_manager))
         .layer(Extension(proxy_fqdn))
         .layer(RequireAuthorizationLayer::bearer(&admin_secret))
         // This route should be below the auth bearer since it does not need authentication
         .route("/projects/:project_name/status", get(get_status))
+        .route_layer(from_extractor::<Metrics>())
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(|request: &Request<Body>| {
-                    let span = debug_span!("request", http.uri = %request.uri(), http.method = %request.method(), http.status_code = field::Empty);
+                    let path = if let Some(path) = request.extensions().get::<MatchedPath>() {
+                        path.as_str()
+                    } else {
+                        ""
+                    };
+
+                    let account_name = request
+                        .headers()
+                        .get("X-Shuttle-Account-Name")
+                        .map(|value| value.to_str().unwrap_or_default());
+
+                    let span = debug_span!(
+                        "request",
+                        http.uri = %request.uri(),
+                        http.method = %request.method(),
+                        http.status_code = field::Empty,
+                        account.name = account_name,
+                        // A bunch of extra things for metrics
+                        // Should be able to make this clearer once `Valuable` support lands in tracing
+                        request.path = path,
+                        request.params.project_name = field::Empty,
+                        request.params.service_name = field::Empty,
+                        request.params.deployment_id = field::Empty,
+                    );
                     let parent_context = global::get_text_map_propagator(|propagator| {
                         propagator.extract(&HeaderExtractor(request.headers()))
                     });
@@ -78,8 +111,11 @@ pub fn make_router(
                 })
                 .on_response(
                     |response: &Response<BoxBody>, latency: Duration, span: &Span| {
-                        span.record("http.status_code", &response.status().as_u16());
-                        debug!(latency = format_args!("{} ns", latency.as_nanos()), "finished processing request");
+                        span.record("http.status_code", response.status().as_u16());
+                        debug!(
+                            latency = format_args!("{} ns", latency.as_nanos()),
+                            "finished processing request"
+                        );
                     },
                 ),
         )
@@ -87,6 +123,7 @@ pub fn make_router(
         .layer(Extension(project_name))
 }
 
+#[instrument(skip_all)]
 async fn list_services(
     Extension(persistence): Extension<Persistence>,
 ) -> Result<Json<Vec<shuttle_common::models::service::Response>>> {
@@ -100,9 +137,10 @@ async fn list_services(
     Ok(Json(services))
 }
 
+#[instrument(skip(persistence))]
 async fn get_service(
     Extension(persistence): Extension<Persistence>,
-    Path((_project_name, service_name)): Path<(String, String)>,
+    Path((project_name, service_name)): Path<(String, String)>,
 ) -> Result<Json<shuttle_common::models::service::Detailed>> {
     if let Some(service) = persistence.get_service_by_name(&service_name).await? {
         let deployments = persistence
@@ -137,6 +175,7 @@ async fn get_service(
     }
 }
 
+#[instrument(skip_all, fields(%project_name, %service_name))]
 async fn get_service_summary(
     Extension(persistence): Extension<Persistence>,
     Extension(proxy_fqdn): Extension<FQDN>,
@@ -155,7 +194,7 @@ async fn get_service_summary(
             .collect();
 
         let response = shuttle_common::models::service::Summary {
-            uri: format!("https://{}.{proxy_fqdn}", project_name),
+            uri: format!("https://{proxy_fqdn}"),
             name: service.name,
             deployment,
             resources,
@@ -167,10 +206,11 @@ async fn get_service_summary(
     }
 }
 
+#[instrument(skip_all, fields(%project_name, %service_name))]
 async fn post_service(
     Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
-    Path((_project_name, service_name)): Path<(String, String)>,
+    Path((project_name, service_name)): Path<(String, String)>,
     Query(params): Query<HashMap<String, String>>,
     mut stream: BodyStream,
 ) -> Result<Json<shuttle_common::models::deployment::Response>> {
@@ -209,10 +249,11 @@ async fn post_service(
     Ok(Json(deployment.into()))
 }
 
+#[instrument(skip_all, fields(%project_name, %service_name))]
 async fn delete_service(
     Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
-    Path((_project_name, service_name)): Path<(String, String)>,
+    Path((project_name, service_name)): Path<(String, String)>,
 ) -> Result<Json<shuttle_common::models::service::Detailed>> {
     if let Some(service) = persistence.get_service_by_name(&service_name).await? {
         let old_deployments = persistence
@@ -251,9 +292,10 @@ async fn delete_service(
     }
 }
 
+#[instrument(skip_all, fields(%project_name, %deployment_id))]
 async fn get_deployment(
     Extension(persistence): Extension<Persistence>,
-    Path((_project_name, deployment_id)): Path<(String, Uuid)>,
+    Path((project_name, deployment_id)): Path<(String, Uuid)>,
 ) -> Result<Json<shuttle_common::models::deployment::Response>> {
     if let Some(deployment) = persistence.get_deployment(&deployment_id).await? {
         Ok(Json(deployment.into()))
@@ -262,10 +304,11 @@ async fn get_deployment(
     }
 }
 
+#[instrument(skip_all, fields(%project_name, %deployment_id))]
 async fn delete_deployment(
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(persistence): Extension<Persistence>,
-    Path((_project_name, deployment_id)): Path<(String, Uuid)>,
+    Path((project_name, deployment_id)): Path<(String, Uuid)>,
 ) -> Result<Json<shuttle_common::models::deployment::Response>> {
     if let Some(deployment) = persistence.get_deployment(&deployment_id).await? {
         deployment_manager.kill(deployment.id).await;
@@ -276,9 +319,10 @@ async fn delete_deployment(
     }
 }
 
+#[instrument(skip_all, fields(%project_name, %deployment_id))]
 async fn get_logs(
     Extension(persistence): Extension<Persistence>,
-    Path((_project_name, deployment_id)): Path<(String, Uuid)>,
+    Path((project_name, deployment_id)): Path<(String, Uuid)>,
 ) -> Result<Json<Vec<LogItem>>> {
     if let Some(deployment) = persistence.get_deployment(&deployment_id).await? {
         Ok(Json(
@@ -319,7 +363,9 @@ async fn logs_websocket_handler(mut s: WebSocket, persistence: Persistence, id: 
             return;
         }
     };
-    let mut last_timestamp = Utc.timestamp(0, 0);
+
+    // Unwrap is safe because it only returns None for out of range numbers or invalid nanosecond
+    let mut last_timestamp = Utc.timestamp_opt(0, 0).unwrap();
 
     for log in backlog.into_iter() {
         last_timestamp = log.timestamp;
@@ -353,9 +399,10 @@ async fn logs_websocket_handler(mut s: WebSocket, persistence: Persistence, id: 
     let _ = s.close().await;
 }
 
+#[instrument(skip_all, fields(%project_name, %service_name))]
 async fn get_secrets(
     Extension(persistence): Extension<Persistence>,
-    Path((_project_name, service_name)): Path<(String, String)>,
+    Path((project_name, service_name)): Path<(String, String)>,
 ) -> Result<Json<Vec<secret::Response>>> {
     if let Some(service) = persistence.get_service_by_name(&service_name).await? {
         let keys = persistence
@@ -369,6 +416,20 @@ async fn get_secrets(
     } else {
         Err(Error::NotFound)
     }
+}
+
+async fn post_clean(
+    Extension(deployment_manager): Extension<DeploymentManager>,
+    Path(project_name): Path<String>,
+) -> Result<Json<Vec<String>>> {
+    let project_path = deployment_manager
+        .storage_manager()
+        .service_build_path(project_name)
+        .map_err(anyhow::Error::new)?;
+
+    let lines = clean_crate(&project_path, true)?;
+
+    Ok(Json(lines))
 }
 
 async fn get_status() -> String {

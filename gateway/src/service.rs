@@ -7,6 +7,8 @@ use axum::http::Request;
 use axum::response::Response;
 use bollard::network::ListNetworksOptions;
 use bollard::{Docker, API_DEFAULT_VERSION};
+use fqdn::Fqdn;
+use http::HeaderValue;
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
 use hyper::Client;
@@ -22,12 +24,13 @@ use sqlx::{query, Error as SqlxError, Row};
 use tracing::{debug, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
+use crate::acme::CustomDomain;
 use crate::args::ContextArgs;
-use crate::auth::{Key, Permissions, User};
-use crate::custom_domain::CustomDomain;
+use crate::auth::{Key, Permissions, ScopedUser, User};
 use crate::project::Project;
-use crate::task::TaskBuilder;
-use crate::{AccountName, DockerContext, Error, ErrorKind, Fqdn, ProjectName};
+use crate::task::{BoxedTask, TaskBuilder};
+use crate::worker::TaskRouter;
+use crate::{AccountName, DockerContext, Error, ErrorKind, ProjectDetails, ProjectName};
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
@@ -185,6 +188,7 @@ impl GatewayContextProvider {
 pub struct GatewayService {
     provider: GatewayContextProvider,
     db: SqlitePool,
+    task_router: TaskRouter<BoxedTask>,
 }
 
 impl GatewayService {
@@ -199,24 +203,21 @@ impl GatewayService {
 
         let provider = GatewayContextProvider::new(docker, container_settings);
 
-        Self { provider, db }
-    }
+        let task_router = TaskRouter::new();
 
-    pub async fn route_fqdn(&self, req: Request<Body>) -> Result<Response<Body>, Error> {
-        let fqdn = req
-            .headers()
-            .typed_get::<Fqdn>()
-            .ok_or_else(|| Error::from(ErrorKind::CustomDomainNotFound))?;
-        let project_name = self.project_name_for_custom_domain(&fqdn).await?;
-
-        self.route(&project_name, req).await
+        Self {
+            provider,
+            db,
+            task_router,
+        }
     }
 
     pub async fn route(
         &self,
-        project_name: &ProjectName,
+        scoped_user: &ScopedUser,
         mut req: Request<Body>,
     ) -> Result<Response<Body>, Error> {
+        let project_name = &scoped_user.scope;
         let target_ip = self
             .find_project(project_name)
             .await?
@@ -232,9 +233,15 @@ impl GatewayService {
 
         debug!(target_url, "routing control");
 
+        let headers = req.headers_mut();
+        headers.append(
+            "X-Shuttle-Account-Name",
+            HeaderValue::from_str(&scoped_user.user.name.to_string()).unwrap(),
+        );
+
         let cx = Span::current().context();
         global::get_text_map_propagator(|propagator| {
-            propagator.inject_context(&cx, &mut HeaderInjector(req.headers_mut()))
+            propagator.inject_context(&cx, &mut HeaderInjector(headers))
         });
 
         let resp = PROXY_CLIENT
@@ -247,7 +254,7 @@ impl GatewayService {
 
     pub async fn iter_projects(
         &self,
-    ) -> Result<impl Iterator<Item = (ProjectName, AccountName)>, Error> {
+    ) -> Result<impl ExactSizeIterator<Item = (ProjectName, AccountName)>, Error> {
         let iter = query("SELECT project_name, account_name FROM projects")
             .fetch_all(&self.db)
             .await?
@@ -274,12 +281,31 @@ impl GatewayService {
         project_name: &ProjectName,
         project: &Project,
     ) -> Result<(), Error> {
-        query("UPDATE projects SET project_state = ?1 WHERE project_name = ?2")
+        let query = match project {
+            Project::Creating(state) => query(
+                "UPDATE projects SET initial_key = ?1, project_state = ?2 WHERE project_name = ?3",
+            )
+            .bind(state.initial_key())
             .bind(SqlxJson(project))
-            .bind(project_name)
-            .execute(&self.db)
-            .await?;
+            .bind(project_name),
+            _ => query("UPDATE projects SET project_state = ?1 WHERE project_name = ?2")
+                .bind(SqlxJson(project))
+                .bind(project_name),
+        };
+        query.execute(&self.db).await?;
         Ok(())
+    }
+
+    pub async fn account_name_from_project(
+        &self,
+        project_name: &ProjectName,
+    ) -> Result<AccountName, Error> {
+        query("SELECT account_name FROM projects WHERE project_name = ?1")
+            .bind(project_name)
+            .fetch_optional(&self.db)
+            .await?
+            .map(|row| row.get("account_name"))
+            .ok_or_else(|| Error::from(ErrorKind::ProjectNotFound))
     }
 
     pub async fn key_from_account_name(&self, account_name: &AccountName) -> Result<Key, Error> {
@@ -408,23 +434,26 @@ impl GatewayService {
             let project = row.get::<SqlxJson<Project>, _>("project_state").0;
             if project.is_destroyed() {
                 // But is in `::Destroyed` state, recreate it
-                let project = SqlxJson(Project::create(project_name.clone()));
-                query("UPDATE projects SET project_state = ?1, initial_key = ?2 WHERE project_name = ?3")
-                    .bind(&project)
-                    .bind(project.initial_key().unwrap())
-                    .bind(&project_name)
-                    .execute(&self.db)
-                    .await?;
-                Ok(project.0)
+                let project = Project::create(project_name.clone());
+                self.update_project(&project_name, &project).await?;
+                Ok(project)
             } else {
                 // Otherwise it already exists
                 Err(Error::from_kind(ErrorKind::ProjectAlreadyExists))
             }
         } else {
-            // Otherwise attempt to create a new one. This will fail
-            // outright if the project already exists (this happens if
-            // it belongs to another account).
-            self.insert_project(project_name, account_name).await
+            // Check if project name is valid according to new rules if it
+            // doesn't exist.
+            // TODO: remove this check when we update the project name rules
+            // in shuttle-common
+            if project_name.is_valid() {
+                // Otherwise attempt to create a new one. This will fail
+                // outright if the project already exists (this happens if
+                // it belongs to another account).
+                self.insert_project(project_name, account_name).await
+            } else {
+                Err(Error::from_kind(ErrorKind::InvalidProjectName))
+            }
         }
     }
 
@@ -462,37 +491,68 @@ impl GatewayService {
     pub async fn create_custom_domain(
         &self,
         project_name: ProjectName,
-        fqdn: Fqdn,
-    ) -> Result<CustomDomain, Error> {
-        let state = SqlxJson(CustomDomain::Creating);
-
-        query("INSERT INTO custom_domains (fqdn, project_name, state) VALUES (?1, ?2, ?3)")
-            .bind(&fqdn)
+        fqdn: &Fqdn,
+        certs: &str,
+        private_key: &str,
+    ) -> Result<(), Error> {
+        query("INSERT OR REPLACE INTO custom_domains (fqdn, project_name, certificate, private_key) VALUES (?1, ?2, ?3, ?4)")
+            .bind(fqdn.to_string())
             .bind(&project_name)
-            .bind(&state)
+            .bind(certs)
+            .bind(private_key)
             .execute(&self.db)
-            .await
-            .map_err(|err| {
-                if let Some(db_err_code) = err.as_database_error().and_then(DatabaseError::code) {
-                    if db_err_code == "1555" {
-                        return Error::from(ErrorKind::CustomDomainAlreadyExists);
-                    }
-                }
+            .await?;
 
-                err.into()
-            })?;
-
-        Ok(state.0)
+        Ok(())
     }
 
-    pub async fn project_name_for_custom_domain(&self, fqdn: &Fqdn) -> Result<ProjectName, Error> {
-        let project_name = query("SELECT project_name FROM custom_domains WHERE fqdn = ?1")
-            .bind(fqdn)
-            .fetch_optional(&self.db)
+    pub async fn iter_custom_domains(&self) -> Result<impl Iterator<Item = CustomDomain>, Error> {
+        query("SELECT fqdn, project_name, certificate, private_key FROM custom_domains")
+            .fetch_all(&self.db)
+            .await
+            .map(|res| {
+                res.into_iter().map(|row| CustomDomain {
+                    fqdn: row.get::<&str, _>("fqdn").parse().unwrap(),
+                    project_name: row.try_get("project_name").unwrap(),
+                    certificate: row.get("certificate"),
+                    private_key: row.get("private_key"),
+                })
+            })
+            .map_err(|_| Error::from_kind(ErrorKind::Internal))
+    }
+
+    pub async fn project_details_for_custom_domain(
+        &self,
+        fqdn: &Fqdn,
+    ) -> Result<CustomDomain, Error> {
+        let custom_domain = query(
+            "SELECT fqdn, project_name, certificate, private_key FROM custom_domains WHERE fqdn = ?1",
+        )
+        .bind(fqdn.to_string())
+        .fetch_optional(&self.db)
+        .await?
+        .map(|row| CustomDomain {
+            fqdn: row.get::<&str, _>("fqdn").parse().unwrap(),
+            project_name: row.try_get("project_name").unwrap(),
+            certificate: row.get("certificate"),
+            private_key: row.get("private_key"),
+        })
+        .ok_or_else(|| Error::from(ErrorKind::CustomDomainNotFound))?;
+        Ok(custom_domain)
+    }
+
+    pub async fn iter_projects_detailed(
+        &self,
+    ) -> Result<impl Iterator<Item = ProjectDetails>, Error> {
+        let iter = query("SELECT project_name, account_name FROM projects")
+            .fetch_all(&self.db)
             .await?
-            .map(|row| row.try_get("project_name").unwrap())
-            .ok_or_else(|| Error::from(ErrorKind::CustomDomainNotFound))?;
-        Ok(project_name)
+            .into_iter()
+            .map(|row| ProjectDetails {
+                project_name: row.try_get("project_name").unwrap(),
+                account_name: row.try_get("account_name").unwrap(),
+            });
+        Ok(iter)
     }
 
     pub fn context(&self) -> GatewayContext {
@@ -502,6 +562,10 @@ impl GatewayService {
     /// Create a builder for a new [ProjectTask]
     pub fn new_task(self: &Arc<Self>) -> TaskBuilder {
         TaskBuilder::new(self.clone())
+    }
+
+    pub fn task_router(&self) -> TaskRouter<BoxedTask> {
+        self.task_router.clone()
     }
 }
 
@@ -525,6 +589,8 @@ impl DockerContext for GatewayContext {
 pub mod tests {
 
     use std::str::FromStr;
+
+    use fqdn::FQDN;
 
     use super::*;
     use crate::auth::AccountTier;
@@ -610,11 +676,21 @@ pub mod tests {
         assert!(creating_same_project_name(&project, &matrix));
 
         assert_eq!(svc.find_project(&matrix).await.unwrap(), project);
+        assert_eq!(
+            svc.iter_projects_detailed()
+                .await
+                .unwrap()
+                .next()
+                .expect("to get one project with its user"),
+            ProjectDetails {
+                project_name: matrix.clone(),
+                account_name: neo.clone(),
+            }
+        );
 
         let mut work = svc
             .new_task()
             .project(matrix.clone())
-            .account(neo.clone())
             .and_then(task::destroy())
             .build();
 
@@ -658,11 +734,7 @@ pub mod tests {
             .await
             .unwrap();
 
-        let mut task = svc
-            .new_task()
-            .account(neo.clone())
-            .project(matrix.clone())
-            .build();
+        let mut task = svc.new_task().project(matrix.clone()).build();
 
         while let TaskResult::Pending(_) = task.poll(()).await {
             // keep polling
@@ -684,7 +756,6 @@ pub mod tests {
         let mut ambulance_task = svc
             .new_task()
             .project(matrix.clone())
-            .account(neo.clone())
             .and_then(task::check_health())
             .build();
 
@@ -710,16 +781,18 @@ pub mod tests {
     #[tokio::test]
     async fn service_create_find_custom_domain() -> anyhow::Result<()> {
         let world = World::new().await;
-        let svc = Arc::new(GatewayService::init(world.args(), world.fqdn(), world.pool()).await);
+        let svc = Arc::new(GatewayService::init(world.args(), world.pool()).await);
 
         let account: AccountName = "neo".parse().unwrap();
         let project_name: ProjectName = "matrix".parse().unwrap();
-        let domain: Fqdn = "neo.the.matrix".parse().unwrap();
+        let domain: FQDN = "neo.the.matrix".parse().unwrap();
+        let certificate = "dummy certificate";
+        let private_key = "dummy private key";
 
         svc.create_user(account.clone()).await.unwrap();
 
         assert_err_kind!(
-            svc.project_name_for_custom_domain(&domain).await,
+            svc.project_details_for_custom_domain(&domain).await,
             ErrorKind::CustomDomainNotFound
         );
 
@@ -728,16 +801,21 @@ pub mod tests {
             .await
             .unwrap();
 
-        svc.create_custom_domain(project_name.clone(), domain.clone())
+        svc.create_custom_domain(project_name.clone(), &domain, certificate, private_key)
             .await
             .unwrap();
 
-        let project = svc.project_name_for_custom_domain(&domain).await.unwrap();
+        let custom_domain = svc
+            .project_details_for_custom_domain(&domain)
+            .await
+            .unwrap();
 
-        assert_eq!(project, project_name);
+        assert_eq!(custom_domain.project_name, project_name);
+        assert_eq!(custom_domain.certificate, certificate);
+        assert_eq!(custom_domain.private_key, private_key);
 
         assert_err_kind!(
-            svc.create_custom_domain(project_name.clone(), domain.clone())
+            svc.create_custom_domain(project_name.clone(), &domain, certificate, private_key)
                 .await,
             ErrorKind::CustomDomainAlreadyExists
         );

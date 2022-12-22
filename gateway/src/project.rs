@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::convert::Infallible;
+use std::convert::{identity, Infallible};
 use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
 
@@ -7,8 +7,9 @@ use bollard::container::{
     Config, CreateContainerOptions, RemoveContainerOptions, StopContainerOptions,
 };
 use bollard::errors::Error as DockerError;
-use bollard::models::{ContainerConfig, ContainerInspectResponse, ContainerStateStatusEnum};
+use bollard::models::{ContainerInspectResponse, ContainerStateStatusEnum};
 use bollard::system::EventsOptions;
+use fqdn::FQDN;
 use futures::prelude::*;
 use http::uri::InvalidUri;
 use http::Uri;
@@ -18,7 +19,7 @@ use once_cell::sync::Lazy;
 use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Serialize};
 use tokio::time::{self, timeout};
-use tracing::{debug, error};
+use tracing::{debug, error, instrument};
 
 use crate::{
     ContainerSettings, DockerContext, EndState, Error, ErrorKind, IntoTryState, ProjectName,
@@ -78,6 +79,59 @@ where
         ctx.docker()
             .inspect_container(self.id.as_ref().unwrap(), None)
             .await
+    }
+}
+
+pub trait ContainerInspectResponseExt {
+    fn container(&self) -> &ContainerInspectResponse;
+
+    fn project_name(&self, prefix: &str) -> Result<ProjectName, ProjectError> {
+        // This version can't be enabled while there are active
+        // deployers before v0.8.0 since the don't have this label
+        // TODO: switch to this version when you notice all deployers
+        // are greater than v0.8.0
+        // let name = safe_unwrap!(container.config.labels.get("project.name")).to_string();
+
+        let container = self.container();
+        let container_name = safe_unwrap!(container.name.strip_prefix("/")).to_string();
+        safe_unwrap!(container_name.strip_prefix(prefix).strip_suffix("_run"))
+            .parse::<ProjectName>()
+            .map_err(|_| ProjectError::internal("invalid project name"))
+    }
+
+    fn find_arg_and_then<'s, F, O>(&'s self, find: &str, and_then: F) -> Result<O, ProjectError>
+    where
+        F: FnOnce(&'s str) -> O,
+        O: 's,
+    {
+        let mut args = self.args()?.iter();
+        let out = if args.any(|arg| arg.as_str() == find) {
+            args.next().map(|s| and_then(s.as_str()))
+        } else {
+            None
+        };
+        out.ok_or_else(|| ProjectError::internal(format!("no such argument: {find}")))
+    }
+
+    fn args(&self) -> Result<&Vec<String>, ProjectError> {
+        let container = self.container();
+        Ok(safe_unwrap!(container.args))
+    }
+
+    fn fqdn(&self) -> Result<FQDN, ProjectError> {
+        self.find_arg_and_then("--proxy-fqdn", identity)?
+            .parse()
+            .map_err(|_| ProjectError::internal("invalid value for --proxy-fqdn"))
+    }
+
+    fn initial_key(&self) -> Result<String, ProjectError> {
+        self.find_arg_and_then("--admin-secret", str::to_owned)
+    }
+}
+
+impl ContainerInspectResponseExt for ContainerInspectResponse {
+    fn container(&self) -> &ContainerInspectResponse {
+        self
     }
 }
 
@@ -185,9 +239,9 @@ impl Project {
         }
     }
 
-    pub fn initial_key(&self) -> Option<&String> {
-        if let Self::Creating(ProjectCreating { initial_key, .. }) = self {
-            Some(initial_key)
+    pub fn initial_key(&self) -> Option<&str> {
+        if let Self::Creating(creating) = self {
+            Some(creating.initial_key())
         } else {
             None
         }
@@ -222,6 +276,7 @@ where
     type Next = Self;
     type Error = Infallible;
 
+    #[instrument(skip_all, fields(state = %self.state()))]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let previous = self.clone();
         let previous_state = previous.state();
@@ -293,24 +348,20 @@ where
     /// project into the wrong state if the docker is transitioning
     /// the state of its resources under us
     async fn refresh(self, ctx: &Ctx) -> Result<Self, Self::Error> {
-        let _container = if let Some(container_id) = self.container_id() {
-            Some(ctx.docker().inspect_container(&container_id, None).await?)
-        } else {
-            None
-        };
-
         let refreshed = match self {
             Self::Creating(creating) => Self::Creating(creating),
             Self::Starting(ProjectStarting { container })
             | Self::Started(ProjectStarted { container, .. })
             | Self::Ready(ProjectReady { container, .. })
             | Self::Stopping(ProjectStopping { container })
-            | Self::Stopped(ProjectStopped { container }) => {
-                let container = container.refresh(ctx).await?;
-                match container.state.as_ref().unwrap().status.as_ref().unwrap() {
+            | Self::Stopped(ProjectStopped { container }) => match container
+                .clone()
+                .refresh(ctx)
+                .await
+            {
+                Ok(container) => match container.state.as_ref().unwrap().status.as_ref().unwrap() {
                     ContainerStateStatusEnum::RUNNING => {
-                        let service = Service::from_container(container.clone())?;
-                        Self::Started(ProjectStarted { container, service })
+                        Self::Started(ProjectStarted::new(container))
                     }
                     ContainerStateStatusEnum::CREATED => {
                         Self::Starting(ProjectStarting { container })
@@ -322,8 +373,19 @@ where
                             "container resource has drifted out of sync: cannot recover",
                         ))
                     }
+                },
+                Err(DockerError::DockerResponseServerError {
+                    status_code: 404, ..
+                }) => {
+                    // container not found, let's try to recreate it
+                    // with the same image
+                    let project_name = container.project_name(&ctx.container_settings().prefix)?;
+                    let initial_key = container.initial_key()?;
+                    let creating = ProjectCreating::new(project_name, initial_key).from(container);
+                    Self::Creating(creating)
                 }
-            }
+                Err(err) => return Err(err.into()),
+            },
             Self::Destroying(destroying) => Self::Destroying(destroying),
             Self::Destroyed(destroyed) => Self::Destroyed(destroyed),
             Self::Errored(err) => Self::Errored(err),
@@ -332,10 +394,18 @@ where
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProjectCreating {
     project_name: ProjectName,
+    /// The admin secret with which the start deployer
     initial_key: String,
+    /// Override the default fqdn (`${project_name}.${public}`)
+    fqdn: Option<String>,
+    /// Override the default image (specified in the args to this gateway)
+    image: Option<String>,
+    /// Configuration will be extracted from there if specified (will
+    /// take precedence over other overrides)
+    from: Option<ContainerInspectResponse>,
 }
 
 impl ProjectCreating {
@@ -343,7 +413,20 @@ impl ProjectCreating {
         Self {
             project_name,
             initial_key,
+            fqdn: None,
+            image: None,
+            from: None,
         }
+    }
+
+    pub fn from(mut self, from: ContainerInspectResponse) -> Self {
+        self.from = Some(from);
+        self
+    }
+
+    pub fn with_fqdn(mut self, fqdn: String) -> Self {
+        self.fqdn = Some(fqdn);
+        self
     }
 
     pub fn new_with_random_initial_key(project_name: ProjectName) -> Self {
@@ -351,8 +434,17 @@ impl ProjectCreating {
         Self::new(project_name, initial_key)
     }
 
+    pub fn with_image(mut self, image: String) -> Self {
+        self.image = Some(image);
+        self
+    }
+
     pub fn project_name(&self) -> &ProjectName {
         &self.project_name
+    }
+
+    pub fn initial_key(&self) -> &str {
+        &self.initial_key
     }
 
     fn container_name<C: DockerContext>(&self, ctx: &C) -> String {
@@ -368,18 +460,20 @@ impl ProjectCreating {
         ctx: &C,
     ) -> (CreateContainerOptions<String>, Config<String>) {
         let ContainerSettings {
-            image,
+            image: default_image,
             prefix,
             provisioner_host,
             network_name,
             network_id,
-            fqdn,
+            fqdn: public,
             ..
         } = ctx.container_settings();
 
         let Self {
             initial_key,
             project_name,
+            fqdn,
+            image,
             ..
         } = &self;
 
@@ -387,37 +481,43 @@ impl ProjectCreating {
             name: self.container_name(ctx),
         };
 
-        let container_config: ContainerConfig = deserialize_json!({
-            "Image": image,
-            "Hostname": format!("{prefix}{project_name}"),
-            "Labels": {
-                "shuttle_prefix": prefix,
-                "project.name": project_name,
-            },
-            "Cmd": [
-                "--admin-secret",
-                initial_key,
-                "--project",
-                project_name,
-                "--api-address",
-                format!("0.0.0.0:{RUNTIME_API_PORT}"),
-                "--provisioner-address",
-                provisioner_host,
-                "--provisioner-port",
-                "8000",
-                "--proxy-address",
-                "0.0.0.0:8000",
-                "--proxy-fqdn",
-                fqdn,
-                "--artifacts-path",
-                "/opt/shuttle",
-                "--state",
-                "/opt/shuttle/deployer.sqlite",
-            ],
-            "Env": [
-                "RUST_LOG=debug",
-            ]
-        });
+        let container_config = self
+            .from
+            .as_ref()
+            .and_then(|container| container.config.clone())
+            .unwrap_or_else(|| {
+                deserialize_json!({
+                    "Image": image.as_ref().unwrap_or(default_image),
+                    "Hostname": format!("{prefix}{project_name}"),
+                    "Labels": {
+                        "shuttle.prefix": prefix,
+                        "shuttle.project": project_name,
+                    },
+                    "Cmd": [
+                        "--admin-secret",
+                        initial_key,
+                        "--project",
+                        project_name,
+                        "--api-address",
+                        format!("0.0.0.0:{RUNTIME_API_PORT}"),
+                        "--provisioner-address",
+                        provisioner_host,
+                        "--provisioner-port",
+                        "8000",
+                        "--proxy-address",
+                        "0.0.0.0:8000",
+                        "--proxy-fqdn",
+                        fqdn.clone().unwrap_or(format!("{project_name}.{public}")),
+                        "--artifacts-path",
+                        "/opt/shuttle",
+                        "--state",
+                        "/opt/shuttle/deployer.sqlite",
+                    ],
+                    "Env": [
+                        "RUST_LOG=debug",
+                    ]
+                })
+            });
 
         let mut config = Config::<String>::from(container_config);
 
@@ -435,8 +535,12 @@ impl ProjectCreating {
                 "Source": format!("{prefix}{project_name}_vol"),
                 "Type": "volume"
             }],
+            // https://docs.docker.com/config/containers/resource_constraints/#memory
             "Memory": 6442450000i64, // 6 GiB hard limit
             "MemoryReservation": 4295000000i64, // 4 GiB soft limit, applied if host is low on memory
+            // https://docs.docker.com/config/containers/resource_constraints/#cpu
+            "CpuPeriod": 100000i64,
+            "CpuQuota": 400000i64
         });
 
         debug!(
@@ -458,6 +562,7 @@ where
     type Next = ProjectStarting;
     type Error = ProjectError;
 
+    #[instrument(skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let container_name = self.container_name(ctx);
         let container = ctx
@@ -494,6 +599,7 @@ where
     type Next = ProjectStarted;
     type Error = ProjectError;
 
+    #[instrument(skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let container_id = self.container.id.as_ref().unwrap();
         ctx.docker()
@@ -510,16 +616,23 @@ where
 
         let container = self.container.refresh(ctx).await?;
 
-        let service = Service::from_container(container.clone())?;
-
-        Ok(Self::Next { container, service })
+        Ok(Self::Next::new(container))
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProjectStarted {
     container: ContainerInspectResponse,
-    service: Service,
+    service: Option<Service>,
+}
+
+impl ProjectStarted {
+    pub fn new(container: ContainerInspectResponse) -> Self {
+        Self {
+            container,
+            service: None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -536,11 +649,15 @@ where
     type Next = ProjectReadying;
     type Error = ProjectError;
 
+    #[instrument(skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         time::sleep(Duration::from_secs(1)).await;
 
         let container = self.container.refresh(ctx).await?;
-        let mut service = self.service;
+        let mut service = match self.service {
+            Some(service) => service,
+            None => Service::from_container(ctx, container.clone())?,
+        };
 
         if service.is_healthy().await {
             Ok(Self::Next::Ready(ProjectReady { container, service }))
@@ -557,7 +674,10 @@ where
                 ));
             }
 
-            Ok(Self::Next::Started(ProjectStarted { container, service }))
+            Ok(Self::Next::Started(ProjectStarted {
+                container,
+                service: Some(service),
+            }))
         }
     }
 }
@@ -576,13 +696,14 @@ where
     type Next = Self;
     type Error = ProjectError;
 
+    #[instrument(skip_all)]
     async fn next(mut self, _ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         Ok(self)
     }
 }
 
 impl ProjectReady {
-    pub fn name(&self) -> &str {
+    pub fn name(&self) -> &ProjectName {
         &self.service.name
     }
 
@@ -612,26 +733,26 @@ impl HealthCheckRecord {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Service {
-    name: String,
+    name: ProjectName,
     target: IpAddr,
     last_check: Option<HealthCheckRecord>,
 }
 
 impl Service {
-    pub fn from_container(container: ContainerInspectResponse) -> Result<Self, ProjectError> {
-        // This version can't be enabled while there are active deployers before v0.8.0 since the don't have this label
-        // TODO: switch to this version when you notice all deployers are greater than v0.8.0
-        // let name = safe_unwrap!(container.config.labels.get("project.name")).to_string();
-        let container_name = safe_unwrap!(container.name.strip_prefix("/")).to_string();
-        let prefix = safe_unwrap!(container.config.labels.get("shuttle_prefix")).to_string();
-        let resource_name =
-            safe_unwrap!(container_name.strip_prefix(&prefix).strip_suffix("_run")).to_string();
+    pub fn from_container<Ctx: DockerContext>(
+        ctx: &Ctx,
+        container: ContainerInspectResponse,
+    ) -> Result<Self, ProjectError> {
+        let resource_name = container.project_name(&ctx.container_settings().prefix)?;
 
         let network = safe_unwrap!(container.network_settings.networks)
             .values()
             .next()
             .ok_or_else(|| ProjectError::internal("project was not linked to a network"))?;
-        let target = safe_unwrap!(network.ip_address).parse().unwrap();
+
+        let target = safe_unwrap!(network.ip_address)
+            .parse()
+            .map_err(|_| ProjectError::internal("project did not join the network"))?;
 
         Ok(Self {
             name: resource_name,
@@ -669,6 +790,7 @@ where
 
     type Error = ProjectError;
 
+    #[instrument(skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let Self { container } = self;
         ctx.docker()
@@ -696,6 +818,7 @@ where
     type Next = ProjectStarting;
     type Error = ProjectError;
 
+    #[instrument(skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let container = self.container;
 
@@ -748,6 +871,7 @@ where
     type Next = ProjectDestroyed;
     type Error = ProjectError;
 
+    #[instrument(skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let container_id = self.container.id.as_ref().unwrap();
         ctx.docker()
@@ -783,6 +907,7 @@ where
     type Next = ProjectDestroyed;
     type Error = ProjectError;
 
+    #[instrument(skip_all)]
     async fn next(self, _ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         Ok(self)
     }
@@ -868,6 +993,7 @@ where
     type Next = Self;
     type Error = Infallible;
 
+    #[instrument(skip_all)]
     async fn next(self, _ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         Ok(self)
     }
@@ -891,7 +1017,7 @@ pub mod exec {
         gateway: Arc<GatewayService>,
         sender: Sender<BoxedTask>,
     ) -> Result<(), ProjectError> {
-        for (project_name, account_name) in gateway
+        for (project_name, _) in gateway
             .iter_projects()
             .await
             .expect("could not list projects")
@@ -915,7 +1041,6 @@ pub mod exec {
                             _ = gateway
                                 .new_task()
                                 .project(project_name)
-                                .account(account_name)
                                 .and_then(task::run(|ctx| async move {
                                     TaskResult::Done(Project::Stopped(ProjectStopped {
                                         container: ctx.state.container().unwrap(),
@@ -955,6 +1080,9 @@ pub mod tests {
             Project::Creating(ProjectCreating {
                 project_name: "my-project-test".parse().unwrap(),
                 initial_key: "test".to_string(),
+                fqdn: None,
+                image: None,
+                from: None,
             }),
             #[assertion = "Container created, assigned an `id`"]
             Ok(Project::Starting(ProjectStarting {

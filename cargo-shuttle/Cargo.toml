@@ -1,61 +1,72 @@
 [package]
 name = "cargo-shuttle"
-version = "0.7.2"
-edition = "2021"
-license = "Apache-2.0"
+version = "0.8.1"
+edition.workspace = true
+license.workspace = true
 description = "A cargo command for the shuttle platform (https://www.shuttle.rs/)"
 homepage = "https://www.shuttle.rs"
 
 [dependencies]
-anyhow = "1.0.62"
-async-trait = "0.1.57"
+anyhow = { workspace = true }
+async-trait = { workspace = true }
 bollard = "0.13.0"
-cargo = "0.64.0"
-cargo-edit = { version = "0.10.4", features = ["cli"] }
-cargo_metadata = "0.15.0"
-chrono = "0.4.22"
+# TODO: debug the libgit2-sys conflict with cargo-edit when upgrading cargo to 0.66
+cargo = "0.65.0"
+cargo-edit = { version = "0.11.6", features = ["cli"] }
+cargo_metadata = "0.15.2"
+chrono = { workspace = true }
 clap = { version = "3.2.17", features = ["derive", "env"] }
 clap_complete = "3.2.5"
 crossbeam-channel = "0.5.6"
 crossterm = "0.25.0"
+dialoguer = { version = "0.10.2", features = ["fuzzy-select"] }
 dirs = "4.0.0"
-flate2 = "1.0.24"
-futures = "0.3.23"
+flate2 = "1.0.25"
+futures = "0.3.25"
+git2 = "0.14.2"
 headers = "0.3.8"
+indicatif = "0.17.2"
+ignore = "0.4.18"
 indoc = "1.0.7"
 log = "0.4.17"
+openssl = { version = '0.10', optional = true }
 portpicker = "0.1.1"
-reqwest = { version = "0.11.11", features = ["json"] }
-reqwest-middleware = "0.1.6"
-reqwest-retry = "0.1.5"
-serde = { version = "1.0.143", features = ["derive"] }
-serde_json = "1.0.83"
-sqlx = { version = "0.6.1", features = ["runtime-tokio-native-tls", "postgres"] }
+reqwest = { version = "0.11.13", features = ["json"] }
+reqwest-middleware = "0.2.0"
+reqwest-retry = "0.2.0"
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+sqlx = { version = "0.6.2", features = ["runtime-tokio-native-tls", "postgres"] }
+strum = { version = "0.24.1", features = ["derive"] }
 tar = "0.4.38"
-tokio = { version = "1.20.1", features = ["macros"] }
+tokio = { version = "1.22.0", features = ["macros"] }
 tokio-tungstenite = { version = "0.17.2", features = ["native-tls"] }
 toml = "0.5.9"
-toml_edit = "0.14.4"
-tracing = "0.1.35"
-tracing-subscriber = { version = "0.3.11", features = ["env-filter"] }
-url = "2.2.2"
-uuid = { version = "1.1.2", features = ["v4"] }
-webbrowser = "0.7.1"
+toml_edit = "0.15.0"
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+url = "2.3.1"
+uuid = { workspace = true, features = ["v4"] }
+webbrowser = "0.8.2"
 
 [dependencies.shuttle-common]
-version = "0.7.2"
-path = "../common"
+workspace = true
+features= ["models"]
 
 [dependencies.shuttle-secrets]
-version = "0.7.2"
+version = "0.8.0"
 path = "../resources/secrets"
 
 [dependencies.shuttle-service]
-version = "0.7.2"
-path = "../service"
+workspace = true
 features = ["loader"]
 
+[features]
+vendored-openssl = ["openssl/vendored"]
+
 [dev-dependencies]
+assert_cmd = "2.0.6"
+rexpect = "0.5.0"
 tempfile = "3.3.0"
 test-context = "0.1.4"
 # Tmp until this branch is merged and released

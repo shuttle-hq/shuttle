@@ -1,5 +1,6 @@
 pub mod helpers;
 
+pub mod actix_web;
 pub mod axum;
 pub mod poem;
 pub mod rocket;

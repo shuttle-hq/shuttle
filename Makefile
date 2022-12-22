@@ -21,6 +21,9 @@ endif
 BUILDX_FLAGS=$(BUILDX_OP) $(PLATFORM_FLAGS) $(CACHE_FLAGS)
 
 TAG?=$(shell git describe --tags)
+BACKEND_TAG?=$(TAG)
+DEPLOYER_TAG?=$(TAG)
+PROVISIONER_TAG?=$(TAG)
 
 DOCKER?=docker
 
@@ -40,21 +43,27 @@ APPS_FQDN=shuttleapp.rs
 DB_FQDN=db.shuttle.rs
 CONTAINER_REGISTRY=public.ecr.aws/shuttle
 DD_ENV=production
+# make sure we only ever go to production with `--tls=enable`
+USE_TLS=enable
 else
 DOCKER_COMPOSE_FILES=-f docker-compose.yml -f docker-compose.dev.yml
-STACK=shuttle-dev
+STACK?=shuttle-dev
 APPS_FQDN=unstable.shuttleapp.rs
 DB_FQDN=db.unstable.shuttle.rs
 CONTAINER_REGISTRY=public.ecr.aws/shuttle-dev
 DD_ENV=unstable
+USE_TLS?=disable
 endif
 
 POSTGRES_EXTRA_PATH?=./extras/postgres
 POSTGRES_TAG?=14
 
+PANAMAX_EXTRA_PATH?=./extras/panamax
+PANAMAX_TAG?=1.0.6
+
 RUST_LOG?=debug
 
-DOCKER_COMPOSE_ENV=STACK=$(STACK) BACKEND_TAG=$(TAG) PROVISIONER_TAG=$(TAG) POSTGRES_TAG=${POSTGRES_TAG} APPS_FQDN=$(APPS_FQDN) DB_FQDN=$(DB_FQDN) POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) RUST_LOG=$(RUST_LOG) CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) MONGO_INITDB_ROOT_USERNAME=$(MONGO_INITDB_ROOT_USERNAME) MONGO_INITDB_ROOT_PASSWORD=$(MONGO_INITDB_ROOT_PASSWORD) DD_ENV=$(DD_ENV)
+DOCKER_COMPOSE_ENV=STACK=$(STACK) BACKEND_TAG=$(BACKEND_TAG) DEPLOYER_TAG=$(DEPLOYER_TAG) PROVISIONER_TAG=$(PROVISIONER_TAG) POSTGRES_TAG=${POSTGRES_TAG} PANAMAX_TAG=${PANAMAX_TAG} APPS_FQDN=$(APPS_FQDN) DB_FQDN=$(DB_FQDN) POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) RUST_LOG=$(RUST_LOG) CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) MONGO_INITDB_ROOT_USERNAME=$(MONGO_INITDB_ROOT_USERNAME) MONGO_INITDB_ROOT_PASSWORD=$(MONGO_INITDB_ROOT_PASSWORD) DD_ENV=$(DD_ENV) USE_TLS=$(USE_TLS)
 
 .PHONY: images clean src up down deploy shuttle-% postgres docker-compose.rendered.yml test bump-% deploy-examples publish publish-% --validate-version
 
@@ -62,7 +71,7 @@ clean:
 	rm .shuttle-*
 	rm docker-compose.rendered.yml
 
-images: shuttle-provisioner shuttle-deployer shuttle-gateway postgres
+images: shuttle-provisioner shuttle-deployer shuttle-gateway postgres panamax
 
 postgres:
 	docker buildx build \
@@ -71,6 +80,14 @@ postgres:
 	       $(BUILDX_FLAGS) \
 	       -f $(POSTGRES_EXTRA_PATH)/Containerfile \
 	       $(POSTGRES_EXTRA_PATH)
+
+panamax:
+	docker buildx build \
+	       --build-arg PANAMAX_TAG=$(PANAMAX_TAG) \
+	       --tag $(CONTAINER_REGISTRY)/panamax:$(PANAMAX_TAG) \
+	       $(BUILDX_FLAGS) \
+	       -f $(PANAMAX_EXTRA_PATH)/Containerfile \
+	       $(PANAMAX_EXTRA_PATH)
 
 docker-compose.rendered.yml: docker-compose.yml docker-compose.dev.yml
 	$(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE) $(DOCKER_COMPOSE_FILES) $(DOCKER_COMPOSE_CONFIG_FLAGS) -p $(STACK) config > $@
@@ -182,6 +199,7 @@ publish: publish-resources publish-cargo-shuttle
 publish-resources: publish-resources/aws-rds \
 	publish-resources/persist \
 	publish-resources/shared-db
+	publish-resources/static-folder
 
 publish-cargo-shuttle: publish-resources/secrets
 	cd cargo-shuttle; cargo publish

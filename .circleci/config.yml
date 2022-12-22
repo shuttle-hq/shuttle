@@ -367,10 +367,9 @@ jobs:
           environment:
             GITHUB_TOKEN: $GITHUB_TOKEN
           command: |
-            mkdir binaries
-            find artifacts -type f -exec cp -t binaries {} +
+            find artifacts -mindepth 2 -type f -exec mv -t artifacts {} +
             go install github.com/tcnksm/ghr@v0.16.0
-            ghr -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} -delete -draft $TAG binaries/
+            ghr -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} -delete -draft $TAG artifacts/
 
 workflows:
   version: 2

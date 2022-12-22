@@ -108,6 +108,11 @@ commands:
               sudo unzip -o protoc-21.9-linux-x86_64.zip -d /usr bin/protoc &&\
               sudo unzip -o protoc-21.9-linux-x86_64.zip -d /usr/ 'include/*' &&\
               rm -f protoc-21.9-linux-x86_64.zip
+  set-tag:
+    steps:
+      - run:
+            name: "Set git tag in the environment"
+            command: echo TAG=$(git describe --tags) >> "$BASH_ENV"
   make-artifact:
     parameters:
       target:
@@ -118,9 +123,6 @@ commands:
         type: string
         default: ""
     steps:
-      - run:
-            name: "Set tag using git describe"
-            command: echo TAG=$(git describe --tags) >> "$BASH_ENV"
       - run:
           name: Make artifact
           command: |
@@ -296,12 +298,6 @@ jobs:
         type: string
     steps:
       - checkout
-      - run:
-            name: "Set tag with git describe"
-            command: echo TAG=$(git describe --tags) >> "$BASH_ENV"
-      - run:
-            name: "Echo git tag"
-            command: echo $TAG
       - run: sudo apt update && sudo DEBIAN_FRONTEND=noninteractive apt install -y libssl-dev musl-tools clang
       - run:
           name: Install Rust
@@ -375,6 +371,7 @@ workflows:
   version: 2
   ci:
     jobs:
+      - set-tag
       # - workspace-fmt
       # - workspace-clippy:
       #     name: workspace-clippy-<< matrix.framework >>

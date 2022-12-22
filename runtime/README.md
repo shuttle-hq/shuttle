@@ -1,48 +1,5 @@
 # How to run
 
-## serenity-wasm
-
-Build and run:
-
-## shuttle-next
-
-Compile the shuttle-next serenity runtime:
-
-```bash
-make serenity
-```
-
-Run the test:
-
-```bash
-cargo test serenity -- --nocapture
-
-# or, run tests for both axum and serenity:
-make test
-```
-
-Start the shuttle-next runtime:
-
-```bash
-DISCORD_TOKEN=xxx cargo run
-```
-
-In another terminal:
-
-``` bash
-# load wasm module
-grpcurl -plaintext -import-path ../proto -proto runtime.proto -d '{"service_name": "Tonic", "path": "/home/<path to shuttle>/runtime/serenity.wasm"}' localhost:6001 runtime.Runtime/Load
-
-# start bot (the deployment ID is needed in the StartRequest, but it isn't used by the serenity bot currently)
-grpcurl -plaintext -import-path ../proto -proto runtime.proto -d '{"service_name": "Tonic", "deployment_id": "MDAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAw"}' localhost:6001 runtime.Runtime/Start
-
-# subscribe to logs (unimplemented)
-grpcurl -plaintext -import-path ../proto -proto runtime.proto localhost:6001 runtime.Runtime/SubscribeLogs
-
-# stop (the deployment ID is needed in the StopRequest, but it isn't used by the serenity bot currently)
-grpcurl -plaintext -import-path ../proto -proto runtime.proto -d '{"service_name": "Tonic", "deployment_id": "MDAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAw"}' localhost:6001 runtime.Runtime/Stop
-```
-
 ## axum-wasm
 
 Compile the wasm axum router:
@@ -56,7 +13,7 @@ Run the test:
 ```bash
 cargo test axum -- --nocapture
 
-# or, run tests for both axum and serenity:
+# or, run tests
 make test
 ```
 

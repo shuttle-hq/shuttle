@@ -369,7 +369,6 @@ workflows:
   version: 2
   ci:
     jobs:
-      - set-tag
       # - workspace-fmt
       # - workspace-clippy:
       #     name: workspace-clippy-<< matrix.framework >>

@@ -5,7 +5,7 @@ use std::{
 
 use clap::Parser;
 use shuttle_proto::runtime::runtime_server::RuntimeServer;
-use shuttle_runtime::{Args, AxumWasm, Legacy, Next};
+use shuttle_runtime::{Args, AxumWasm, Legacy};
 use tonic::transport::Server;
 use tracing::trace;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
@@ -41,9 +41,7 @@ async fn main() {
         let svc = RuntimeServer::new(axum);
         server_builder.add_service(svc)
     } else {
-        let next = Next::default();
-        let svc = RuntimeServer::new(next);
-        server_builder.add_service(svc)
+        panic!("No runtime was selected");
     };
 
     router.serve(addr).await.unwrap();

@@ -6380,7 +6380,6 @@ dependencies = [
  "clap 4.0.27",
  "hyper",
  "rmp-serde",
- "serenity",
  "shuttle-common",
  "shuttle-proto",
  "shuttle-service",
@@ -8747,15 +8746,3 @@ dependencies = [
  "cc",
  "libc",
 ]
-
-[[patch.unused]]
-name = "shuttle-aws-rds"
-version = "0.8.0"
-
-[[patch.unused]]
-name = "shuttle-persist"
-version = "0.8.0"
-
-[[patch.unused]]
-name = "shuttle-shared-db"
-version = "0.8.0"

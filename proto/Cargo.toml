@@ -7,9 +7,12 @@ publish = false
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = { workspace = true }
 prost = "0.11.2"
 prost-types = "0.11.0"
+tokio = "1.22.0"
 tonic = "0.8.3"
+tracing = { workspace = true }
 
 [dependencies.shuttle-common]
 workspace = true

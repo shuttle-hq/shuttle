@@ -1,15 +1,12 @@
 use std::path::PathBuf;
 use std::process::exit;
-use std::time::Duration;
 
 use clap::Parser;
 use opentelemetry::global;
 use shuttle_deployer::{start, start_proxy, Args, DeployLayer, Persistence};
-use shuttle_proto::runtime::runtime_client::RuntimeClient;
-use shuttle_proto::runtime::SubscribeLogsRequest;
+use shuttle_proto::runtime::{self, SubscribeLogsRequest};
 use tokio::select;
-use tonic::transport::Endpoint;
-use tracing::{error, info, trace};
+use tracing::{error, trace};
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{fmt, EnvFilter};
 
@@ -48,26 +45,9 @@ async fn main() {
         .to_path_buf();
     let runtime_dir = workspace_root.join("target/debug");
 
-    let mut runtime = tokio::process::Command::new(runtime_dir.join("shuttle-runtime"))
-        .args([
-            "--legacy",
-            "--provisioner-address",
-            "https://localhost:5000",
-        ])
-        .current_dir(&runtime_dir)
-        .spawn()
+    let (mut runtime, mut runtime_client) = runtime::start(runtime_dir.join("shuttle-runtime"))
+        .await
         .unwrap();
-
-    // Sleep because the timeout below does not seem to work
-    // TODO: investigate why
-    tokio::time::sleep(Duration::from_secs(2)).await;
-
-    info!("connecting runtime client");
-    let conn = Endpoint::new("http://127.0.0.1:6001")
-        .unwrap()
-        .connect_timeout(Duration::from_secs(5));
-
-    let mut runtime_client = RuntimeClient::connect(conn).await.unwrap();
 
     let sender = persistence.get_log_sender();
     let mut stream = runtime_client

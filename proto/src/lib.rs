@@ -65,9 +65,16 @@ pub mod provisioner {
 }
 
 pub mod runtime {
-    use std::time::SystemTime;
+    use std::{
+        ffi::OsStr,
+        time::{Duration, SystemTime},
+    };
 
+    use anyhow::Context;
     use prost_types::Timestamp;
+    use tokio::process;
+    use tonic::transport::{Channel, Endpoint};
+    use tracing::info;
 
     tonic::include_proto!("runtime");
 
@@ -112,5 +119,33 @@ pub mod runtime {
                 shuttle_common::log::Level::Error => Self::Error,
             }
         }
+    }
+
+    pub async fn start<S: AsRef<OsStr>>(
+        runtime_executable: S,
+    ) -> anyhow::Result<(process::Child, runtime_client::RuntimeClient<Channel>)> {
+        let runtime = tokio::process::Command::new(runtime_executable)
+            .args([
+                "--legacy",
+                "--provisioner-address",
+                "https://localhost:5000",
+            ])
+            .spawn()
+            .context("spawning runtime process")?;
+
+        // Sleep because the timeout below does not seem to work
+        // TODO: investigate why
+        tokio::time::sleep(Duration::from_secs(2)).await;
+
+        info!("connecting runtime client");
+        let conn = Endpoint::new("http://127.0.0.1:6001")
+            .context("creating runtime client endpoint")?
+            .connect_timeout(Duration::from_secs(5));
+
+        let runtime_client = runtime_client::RuntimeClient::connect(conn)
+            .await
+            .context("connecting runtime client")?;
+
+        Ok((runtime, runtime_client))
     }
 }

@@ -6307,11 +6307,14 @@ dependencies = [
 name = "shuttle-proto"
 version = "0.8.0"
 dependencies = [
+ "anyhow",
  "prost",
  "prost-types",
  "shuttle-common",
+ "tokio",
  "tonic",
  "tonic-build",
+ "tracing",
 ]
 
 [[package]]

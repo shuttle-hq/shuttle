@@ -33,5 +33,4 @@ workspace = true
 
 [dependencies.shuttle-service]
 workspace = true
-version = "0.8.0"
 features = ["loader"]

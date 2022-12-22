@@ -409,11 +409,11 @@ workflows:
       #     filters:
       #       branches:
       #         only: production
-      # - build-binaries-linux:
-      #     name: build-binaries-x86_64
-      #     image: ubuntu-2204:2022.04.1
-      #     target: x86_64-unknown-linux-musl
-      #     resource_class: medium
+      - build-binaries-linux:
+          name: build-binaries-x86_64
+          image: ubuntu-2204:2022.04.1
+          target: x86_64-unknown-linux-musl
+          resource_class: medium
           # filters:
           #   branches:
           #     only: production
@@ -439,7 +439,7 @@ workflows:
       #         only: production
       - publish-github-release:
           requires:
-            # - build-binaries-x86_64
+            - build-binaries-x86_64
             # - build-binaries-aarch64
             - build-binaries-windows
             # - build-binaries-mac

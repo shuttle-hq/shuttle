@@ -85,8 +85,6 @@ pub enum Command {
     Delete,
     /// manage secrets for this shuttle service
     Secrets,
-    /// create user credentials for the shuttle platform
-    Auth(AuthArgs),
     /// login to the shuttle platform
     Login(LoginArgs),
     /// run a shuttle service locally
@@ -126,13 +124,6 @@ pub struct LoginArgs {
     /// api key for the shuttle platform
     #[clap(long)]
     pub api_key: Option<String>,
-}
-
-#[derive(Parser)]
-pub struct AuthArgs {
-    /// the desired username for the shuttle platform
-    #[clap()]
-    pub username: String,
 }
 
 #[derive(Parser)]

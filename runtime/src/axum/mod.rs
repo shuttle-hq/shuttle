@@ -1,12 +1,11 @@
 use std::convert::Infallible;
-use std::fs::File;
 use std::io::{BufReader, Read, Write};
 use std::net::{Ipv4Addr, SocketAddr};
 use std::ops::DerefMut;
 use std::os::unix::prelude::RawFd;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 use async_trait::async_trait;
 use cap_std::os::unix::net::UnixStream;
@@ -134,9 +133,8 @@ impl Runtime for AxumWasm {
 
 struct RouterBuilder {
     engine: Engine,
-    store: Store<WasiCtx>,
     linker: Linker<WasiCtx>,
-    src: Option<File>,
+    src: Option<PathBuf>,
 }
 
 impl RouterBuilder {
@@ -146,52 +144,39 @@ impl RouterBuilder {
         let mut linker: Linker<WasiCtx> = Linker::new(&engine);
         wasmtime_wasi::add_to_linker(&mut linker, |s| s).unwrap();
 
-        let wasi = WasiCtxBuilder::new()
-            .inherit_stdio()
-            .inherit_args()
-            .unwrap()
-            .build();
-
-        let store = Store::new(&engine, wasi);
-
         Self {
             engine,
-            store,
             linker,
             src: None,
         }
     }
 
     pub fn src<P: AsRef<Path>>(mut self, src: P) -> Self {
-        self.src = Some(File::open(src).unwrap());
+        self.src = Some(src.as_ref().to_path_buf());
         self
     }
 
-    pub fn build(mut self) -> Router {
-        let mut buf = Vec::new();
-        self.src.unwrap().read_to_end(&mut buf).unwrap();
-        let module = Module::new(&self.engine, buf).unwrap();
+    pub fn build(self) -> Router {
+        let file = self.src.unwrap();
+        let module = Module::from_file(&self.engine, file).unwrap();
 
         for export in module.exports() {
             println!("export: {}", export.name());
         }
-
-        self.linker
-            .module(&mut self.store, "axum", &module)
-            .unwrap();
         let inner = RouterInner {
-            store: self.store,
             linker: self.linker,
+            engine: self.engine,
+            module,
         };
-        Router {
-            inner: Arc::new(tokio::sync::Mutex::new(inner)),
-        }
+        Router { inner }
     }
 }
 
+#[derive(Clone)]
 struct RouterInner {
-    store: Store<WasiCtx>,
     linker: Linker<WasiCtx>,
+    engine: Engine,
+    module: Module,
 }
 
 impl RouterInner {
@@ -200,17 +185,28 @@ impl RouterInner {
         &mut self,
         req: hyper::Request<Body>,
     ) -> Result<Response<Body>, Infallible> {
+        let wasi = WasiCtxBuilder::new()
+            .inherit_stdio()
+            .inherit_args()
+            .unwrap()
+            .build();
+
+        let mut store = Store::new(&self.engine, wasi);
+        self.linker
+            .module(&mut store, "axum", &self.module)
+            .unwrap();
+
         let (mut parts_stream, parts_client) = UnixStream::pair().unwrap();
         let (mut body_stream, body_client) = UnixStream::pair().unwrap();
 
         let parts_client = WasiUnixStream::from_cap_std(parts_client);
         let body_client = WasiUnixStream::from_cap_std(body_client);
 
-        self.store
+        store
             .data_mut()
             .insert_file(3, Box::new(parts_client), FileCaps::all());
 
-        self.store
+        store
             .data_mut()
             .insert_file(4, Box::new(body_client), FileCaps::all());
 
@@ -231,13 +227,13 @@ impl RouterInner {
 
         println!("calling inner Router");
         self.linker
-            .get(&mut self.store, "axum", "__SHUTTLE_Axum_call")
+            .get(&mut store, "axum", "__SHUTTLE_Axum_call")
             .unwrap()
             .into_func()
             .unwrap()
-            .typed::<(RawFd, RawFd), (), _>(&self.store)
+            .typed::<(RawFd, RawFd), (), _>(&store)
             .unwrap()
-            .call(&mut self.store, (3, 4))
+            .call(&mut store, (3, 4))
             .unwrap();
 
         // read response parts from host
@@ -269,7 +265,7 @@ impl RouterInner {
 
 #[derive(Clone)]
 struct Router {
-    inner: Arc<tokio::sync::Mutex<RouterInner>>,
+    inner: RouterInner,
 }
 
 impl Router {
@@ -296,10 +292,8 @@ impl Router {
             let router = router.clone();
             async move {
                 Ok::<_, Infallible>(service_fn(move |req: Request<Body>| {
-                    let router = router.clone();
-                    async move {
-                        Ok::<_, Infallible>(router.lock().await.handle_request(req).await.unwrap())
-                    }
+                    let mut router = router.clone();
+                    async move { Ok::<_, Infallible>(router.handle_request(req).await.unwrap()) }
                 }))
             }
         });
@@ -329,7 +323,7 @@ pub mod tests {
     #[tokio::test]
     async fn axum() {
         let axum = Router::new("axum.wasm");
-        let mut inner = axum.inner.lock().await;
+        let mut inner = axum.inner;
 
         // GET /hello
         let request: Request<Body> = Request::builder()

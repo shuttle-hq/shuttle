@@ -108,11 +108,6 @@ commands:
               sudo unzip -o protoc-21.9-linux-x86_64.zip -d /usr bin/protoc &&\
               sudo unzip -o protoc-21.9-linux-x86_64.zip -d /usr/ 'include/*' &&\
               rm -f protoc-21.9-linux-x86_64.zip
-  set-tag:
-    steps:
-      - run:
-            name: "Set git tag in the environment"
-            command: echo TAG=$(git describe --tags) >> "$BASH_ENV"
   make-artifact:
     parameters:
       target:
@@ -123,6 +118,9 @@ commands:
         type: string
         default: ""
     steps:
+      - run:
+          name: "Set git tag in the environment"
+          command: echo TAG=$(git describe --tags) >> "$BASH_ENV"
       - run:
           name: Make artifact
           command: |

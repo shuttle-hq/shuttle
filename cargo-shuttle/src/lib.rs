@@ -5,7 +5,7 @@ mod factory;
 mod init;
 
 use shuttle_common::project::ProjectName;
-use shuttle_proto::runtime::{self, LoadRequest, StartRequest};
+use shuttle_proto::runtime::{self, LoadRequest, StartRequest, SubscribeLogsRequest};
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fs::{read_to_string, File};
@@ -436,6 +436,19 @@ impl Shuttle {
             error!("failed to load service: {}", e);
         }
 
+        let mut stream = runtime_client
+            .subscribe_logs(tonic::Request::new(SubscribeLogsRequest {}))
+            .await
+            .unwrap()
+            .into_inner();
+
+        tokio::spawn(async move {
+            while let Some(log) = stream.message().await.unwrap() {
+                let log: shuttle_common::LogItem = log.into();
+                println!("{log}");
+            }
+        });
+
         let start_request = StartRequest {
             deployment_id: id.as_bytes().to_vec(),
             service_name,
@@ -478,13 +491,6 @@ impl Shuttle {
             self.ctx.project_name(),
             addr
         );
-        // let (tx, mut rx) = mpsc::unbounded_channel();
-
-        // tokio::spawn(async move {
-        //     while let Some(log) = rx.recv().await {
-        //         println!("{log}");
-        //     }
-        // });
 
         runtime.wait().await.unwrap();
 

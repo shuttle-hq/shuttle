@@ -6310,6 +6310,7 @@ name = "shuttle-proto"
 version = "0.8.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "prost",
  "prost-types",
  "shuttle-common",
@@ -6317,6 +6318,7 @@ dependencies = [
  "tonic",
  "tonic-build",
  "tracing",
+ "uuid 1.2.2",
 ]
 
 [[package]]

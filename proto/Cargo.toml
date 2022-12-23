@@ -8,11 +8,13 @@ publish = false
 
 [dependencies]
 anyhow = { workspace = true }
+chrono = { workspace = true }
 prost = "0.11.2"
 prost-types = "0.11.0"
 tokio = "1.22.0"
 tonic = { workspace = true }
 tracing = { workspace = true }
+uuid = { workspace = true, features = ["v4"] }
 
 [dependencies.shuttle-common]
 workspace = true

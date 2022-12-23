@@ -71,10 +71,12 @@ pub mod runtime {
     };
 
     use anyhow::Context;
+    use chrono::DateTime;
     use prost_types::Timestamp;
     use tokio::process;
     use tonic::transport::{Channel, Endpoint};
     use tracing::info;
+    use uuid::Uuid;
 
     tonic::include_proto!("runtime");
 
@@ -117,6 +119,49 @@ pub mod runtime {
                 shuttle_common::log::Level::Info => Self::Info,
                 shuttle_common::log::Level::Warn => Self::Warn,
                 shuttle_common::log::Level::Error => Self::Error,
+            }
+        }
+    }
+
+    impl From<LogItem> for shuttle_common::LogItem {
+        fn from(log: LogItem) -> Self {
+            Self {
+                id: Uuid::from_slice(&log.id).unwrap(),
+                timestamp: DateTime::from(SystemTime::try_from(log.timestamp.unwrap()).unwrap()),
+                state: LogState::from_i32(log.state).unwrap().into(),
+                level: LogLevel::from_i32(log.level).unwrap().into(),
+                file: log.file,
+                line: log.line,
+                target: log.target,
+                fields: log.fields,
+            }
+        }
+    }
+
+    impl From<LogState> for shuttle_common::deployment::State {
+        fn from(state: LogState) -> Self {
+            match state {
+                LogState::Queued => Self::Queued,
+                LogState::Building => Self::Building,
+                LogState::Built => Self::Built,
+                LogState::Loading => Self::Loading,
+                LogState::Running => Self::Running,
+                LogState::Completed => Self::Completed,
+                LogState::Stopped => Self::Stopped,
+                LogState::Crashed => Self::Crashed,
+                LogState::Unknown => Self::Unknown,
+            }
+        }
+    }
+
+    impl From<LogLevel> for shuttle_common::log::Level {
+        fn from(level: LogLevel) -> Self {
+            match level {
+                LogLevel::Trace => Self::Trace,
+                LogLevel::Debug => Self::Debug,
+                LogLevel::Info => Self::Info,
+                LogLevel::Warn => Self::Warn,
+                LogLevel::Error => Self::Error,
             }
         }
     }

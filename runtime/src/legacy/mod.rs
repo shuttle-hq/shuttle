@@ -102,7 +102,7 @@ impl Runtime for Legacy {
         let service_name = ServiceName::from_str(service_name.as_str())
             .map_err(|err| Status::from_error(Box::new(err)))?;
 
-        let deployment_id = Uuid::from_str(std::str::from_utf8(&deployment_id).unwrap()).unwrap();
+        let deployment_id = Uuid::from_slice(&deployment_id).unwrap();
 
         let mut factory =
             abstract_factory.get_factory(service_name, deployment_id, storage_manager);

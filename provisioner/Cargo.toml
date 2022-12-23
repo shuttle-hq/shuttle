@@ -18,7 +18,7 @@ rand = "0.8.5"
 sqlx = { version = "0.6.2", features = ["postgres", "runtime-tokio-native-tls"] }
 thiserror = { workspace = true }
 tokio = { version = "1.22.0", features = ["macros", "rt-multi-thread"] }
-tonic = "0.8.3"
+tonic = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 

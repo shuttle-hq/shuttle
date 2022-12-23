@@ -62,6 +62,8 @@ tokio = { version = "1.22.0", features = ["macros"] }
 uuid = { workspace = true, features = ["v4"] }
 
 [features]
+default = ["codegen"]
+
 codegen = ["shuttle-codegen"]
 loader = ["cargo", "libloading"]
 

@@ -43,6 +43,7 @@ tokio = { version = "1.22.0", features = ["macros"] }
 tokio-tungstenite = { version = "0.17.2", features = ["native-tls"] }
 toml = "0.5.9"
 toml_edit = "0.15.0"
+tonic = "0.8.3"
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 url = "2.3.1"
@@ -52,6 +53,9 @@ webbrowser = "0.8.2"
 [dependencies.shuttle-common]
 workspace = true
 features= ["models"]
+
+[dependencies.shuttle-proto]
+workspace = true
 
 [dependencies.shuttle-secrets]
 version = "0.8.0"

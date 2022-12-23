@@ -5,6 +5,7 @@ mod factory;
 mod init;
 
 use shuttle_common::project::ProjectName;
+use shuttle_proto::runtime::{self, LoadRequest, StartRequest};
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fs::{read_to_string, File};
@@ -35,7 +36,7 @@ use std::fmt::Write;
 use strum::IntoEnumIterator;
 use tar::Builder;
 use tokio::sync::mpsc;
-use tracing::trace;
+use tracing::{error, trace};
 use uuid::Uuid;
 
 use crate::args::{DeploymentCommand, ProjectCommand};
@@ -413,39 +414,79 @@ impl Shuttle {
                 Default::default()
             };
 
-        let loader = Loader::from_so_file(so_path)?;
+        let service_name = self.ctx.project_name().to_string();
 
-        let mut factory = LocalFactory::new(
+        let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .to_path_buf();
+        let runtime_dir = workspace_root.join("target/debug");
+
+        let (mut runtime, mut runtime_client) =
+            runtime::start(runtime_dir.join("shuttle-runtime")).await?;
+
+        let load_request = tonic::Request::new(LoadRequest {
+            path: so_path.into_os_string().into_string().unwrap(),
+            service_name: service_name.clone(),
+        });
+        trace!("loading service");
+        let response = runtime_client.load(load_request).await;
+
+        if let Err(e) = response {
+            error!("failed to load service: {}", e);
+        }
+
+        let start_request = StartRequest {
+            deployment_id: id.as_bytes().to_vec(),
+            service_name,
+        };
+
+        trace!(?start_request, "starting service");
+        let response = match runtime_client
+            .start(tonic::Request::new(start_request))
+            .await
+        {
+            Ok(response) => response.into_inner(),
+            Err(error) => {
+                error!(
+                    error = &error as &dyn std::error::Error,
+                    "failed to start service"
+                );
+
+                runtime.kill().await.unwrap();
+
+                return Ok(());
+            }
+        };
+
+        trace!(response = ?response,  "client response: ");
+
+        if !response.success {
+            todo!();
+        }
+
+        let factory = LocalFactory::new(
             self.ctx.project_name().clone(),
             secrets,
             working_directory.to_path_buf(),
         )?;
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), run_args.port);
 
-        trace!("loading project");
         println!(
             "\n{:>12} {} on http://{}",
             "Starting".bold().green(),
             self.ctx.project_name(),
             addr
         );
-        let (tx, mut rx) = mpsc::unbounded_channel();
+        // let (tx, mut rx) = mpsc::unbounded_channel();
 
-        tokio::spawn(async move {
-            while let Some(log) = rx.recv().await {
-                println!("{log}");
-            }
-        });
+        // tokio::spawn(async move {
+        //     while let Some(log) = rx.recv().await {
+        //         println!("{log}");
+        //     }
+        // });
 
-        let logger = Logger::new(tx, id);
-        let (handle, so) = loader.load(&mut factory, addr, logger).await?;
-
-        handle.await??;
-
-        tokio::task::spawn_blocking(move || {
-            trace!("closing so file");
-            so.close().unwrap();
-        });
+        runtime.wait().await.unwrap();
 
         Ok(())
     }

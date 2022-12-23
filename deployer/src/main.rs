@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use std::process::exit;
 
 use clap::Parser;
@@ -9,6 +8,8 @@ use tokio::select;
 use tracing::{error, trace};
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{fmt, EnvFilter};
+
+const BINARY_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/release/shuttle-runtime"));
 
 // The `multi_thread` is needed to prevent a deadlock in shuttle_service::loader::build_crate() which spawns two threads
 // Without this, both threads just don't start up
@@ -39,16 +40,7 @@ async fn main() {
         .with(opentelemetry)
         .init();
 
-    let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .to_path_buf();
-    let runtime_dir = workspace_root.join("target/debug");
-
-    let (mut runtime, mut runtime_client) =
-        runtime::start(runtime_dir.join("shuttle-runtime"), false)
-            .await
-            .unwrap();
+    let (mut runtime, mut runtime_client) = runtime::start(BINARY_BYTES, false).await.unwrap();
 
     let sender = persistence.get_log_sender();
     let mut stream = runtime_client

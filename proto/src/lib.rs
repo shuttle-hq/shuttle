@@ -66,7 +66,10 @@ pub mod provisioner {
 
 pub mod runtime {
     use std::{
-        ffi::OsStr,
+        env::temp_dir,
+        fs::OpenOptions,
+        io::Write,
+        path::PathBuf,
         time::{Duration, SystemTime},
     };
 
@@ -166,13 +169,15 @@ pub mod runtime {
         }
     }
 
-    pub async fn start<S: AsRef<OsStr>>(
-        runtime_executable: S,
+    pub async fn start(
+        binary_bytes: &[u8],
         wasm: bool,
     ) -> anyhow::Result<(process::Child, runtime_client::RuntimeClient<Channel>)> {
         let flag = if wasm { "--axum" } else { "--legacy" };
 
-        let runtime = tokio::process::Command::new(runtime_executable)
+        let runtime_executable = get_runtime_executable(binary_bytes);
+
+        let runtime = process::Command::new(runtime_executable)
             .args([flag, "--provisioner-address", "https://localhost:5000"])
             .spawn()
             .context("spawning runtime process")?;
@@ -191,5 +196,29 @@ pub mod runtime {
             .context("connecting runtime client")?;
 
         Ok((runtime, runtime_client))
+    }
+
+    fn get_runtime_executable(binary_bytes: &[u8]) -> PathBuf {
+        let tmp_dir = temp_dir();
+
+        let path = tmp_dir.join("shuttle-runtime");
+        let mut open_options = OpenOptions::new();
+        open_options.write(true).create(true).truncate(true);
+
+        #[cfg(target_family = "unix")]
+        {
+            use std::os::unix::prelude::OpenOptionsExt;
+
+            open_options.mode(0o755);
+        }
+
+        let mut file = open_options
+            .open(&path)
+            .expect("to create runtime executable file");
+
+        file.write_all(binary_bytes)
+            .expect("to write out binary file");
+
+        path
     }
 }

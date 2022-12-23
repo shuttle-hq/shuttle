@@ -41,6 +41,8 @@ use uuid::Uuid;
 use crate::args::{DeploymentCommand, ProjectCommand};
 use crate::client::Client;
 
+const BINARY_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/release/shuttle-runtime"));
+
 pub struct Shuttle {
     ctx: RequestContext,
 }
@@ -412,19 +414,12 @@ impl Shuttle {
 
         let service_name = self.ctx.project_name().to_string();
 
-        let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .to_path_buf();
-        let runtime_dir = workspace_root.join("target/debug");
-
         let (is_wasm, so_path) = match runtime {
             Runtime::Next(path) => (true, path),
             Runtime::Legacy(path) => (false, path),
         };
 
-        let (mut runtime, mut runtime_client) =
-            runtime::start(runtime_dir.join("shuttle-runtime"), is_wasm).await?;
+        let (mut runtime, mut runtime_client) = runtime::start(BINARY_BYTES, is_wasm).await?;
 
         let load_request = tonic::Request::new(LoadRequest {
             path: so_path.into_os_string().into_string().unwrap(),

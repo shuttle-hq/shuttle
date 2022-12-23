@@ -6234,6 +6234,7 @@ dependencies = [
  "opentelemetry-datadog",
  "opentelemetry-http",
  "pipe",
+ "portpicker",
  "rand 0.8.5",
  "serde",
  "serde_json",

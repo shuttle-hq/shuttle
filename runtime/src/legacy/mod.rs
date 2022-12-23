@@ -34,7 +34,6 @@ mod error;
 pub struct Legacy {
     // Mutexes are for interior mutability
     so_path: Mutex<Option<PathBuf>>,
-    port: Mutex<Option<u16>>,
     logs_rx: Mutex<Option<UnboundedReceiver<LogItem>>>,
     logs_tx: Mutex<UnboundedSender<LogItem>>,
     provisioner_address: Endpoint,
@@ -47,7 +46,6 @@ impl Legacy {
 
         Self {
             so_path: Mutex::new(None),
-            port: Mutex::new(None),
             logs_rx: Mutex::new(Some(rx)),
             logs_tx: Mutex::new(tx),
             kill_tx: Mutex::new(None),
@@ -73,9 +71,6 @@ impl Runtime for Legacy {
         &self,
         request: Request<StartRequest>,
     ) -> Result<Response<StartResponse>, Status> {
-        let service_port = 7001;
-        let service_address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), service_port);
-
         let provisioner_client = ProvisionerClient::connect(self.provisioner_address.clone())
             .await
             .expect("failed to connect to provisioner");
@@ -97,7 +92,9 @@ impl Runtime for Legacy {
         let StartRequest {
             deployment_id,
             service_name,
+            port,
         } = request.into_inner();
+        let service_address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port as u16);
 
         let service_name = ServiceName::from_str(service_name.as_str())
             .map_err(|err| Status::from_error(Box::new(err)))?;
@@ -123,12 +120,7 @@ impl Runtime for Legacy {
         // start service as a background task with a kill receiver
         tokio::spawn(run_until_stopped(service, service_address, kill_rx));
 
-        *self.port.lock().unwrap() = Some(service_port);
-
-        let message = StartResponse {
-            success: true,
-            port: service_port as u32,
-        };
+        let message = StartResponse { success: true };
 
         Ok(Response::new(message))
     }

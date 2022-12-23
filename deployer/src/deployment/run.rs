@@ -7,6 +7,7 @@ use std::{
 
 use async_trait::async_trait;
 use opentelemetry::global;
+use portpicker::pick_unused_port;
 use shuttle_common::project::ProjectName as ServiceName;
 use shuttle_common::storage_manager::StorageManager;
 use shuttle_proto::runtime::{runtime_client::RuntimeClient, LoadRequest, StartRequest};
@@ -41,10 +42,6 @@ pub async fn task(
         let kill_recv = kill_send.subscribe();
         let storage_manager = storage_manager.clone();
 
-        // todo: this is the port the legacy runtime is hardcoded to start services on
-        let port = 7001;
-
-        let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
         let _service_name = match ServiceName::from_str(&built.service_name) {
             Ok(name) => name,
             Err(err) => {
@@ -82,7 +79,6 @@ pub async fn task(
             async move {
                 if let Err(err) = built
                     .handle(
-                        addr,
                         storage_manager,
                         runtime_client,
                         kill_recv,
@@ -175,7 +171,6 @@ impl Built {
     #[allow(clippy::too_many_arguments)]
     async fn handle(
         self,
-        address: SocketAddr,
         storage_manager: StorageManager,
         runtime_client: RuntimeClient<Channel>,
         kill_recv: KillReceiver,
@@ -185,6 +180,17 @@ impl Built {
             + 'static,
     ) -> Result<()> {
         let so_path = storage_manager.deployment_library_path(&self.id)?;
+
+        let port = match pick_unused_port() {
+            Some(port) => port,
+            None => {
+                return Err(Error::PrepareRun(
+                    "could not find a free port to deploy service on".to_string(),
+                ))
+            }
+        };
+
+        let address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
 
         kill_old_deployments.await?;
 
@@ -204,13 +210,13 @@ impl Built {
     }
 }
 
-#[instrument(skip(runtime_client, _kill_recv, _cleanup), fields(address = %_address, state = %State::Running))]
+#[instrument(skip(runtime_client, _kill_recv, _cleanup), fields(state = %State::Running))]
 async fn run(
     id: Uuid,
     service_name: String,
     so_path: PathBuf,
     mut runtime_client: RuntimeClient<Channel>,
-    _address: SocketAddr,
+    address: SocketAddr,
     _kill_recv: KillReceiver,
     _cleanup: impl FnOnce(std::result::Result<std::result::Result<(), shuttle_service::Error>, JoinError>)
         + Send
@@ -235,6 +241,7 @@ async fn run(
     let start_request = tonic::Request::new(StartRequest {
         deployment_id: id.as_bytes().to_vec(),
         service_name,
+        port: address.port() as u32,
     });
 
     info!("starting service");

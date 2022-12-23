@@ -35,7 +35,6 @@ use shuttle_service::Logger;
 use std::fmt::Write;
 use strum::IntoEnumIterator;
 use tar::Builder;
-use tokio::sync::mpsc;
 use tracing::{error, trace};
 use uuid::Uuid;
 
@@ -452,6 +451,7 @@ impl Shuttle {
         let start_request = StartRequest {
             deployment_id: id.as_bytes().to_vec(),
             service_name,
+            port: run_args.port as u32,
         };
 
         trace!(?start_request, "starting service");

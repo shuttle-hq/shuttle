@@ -258,7 +258,6 @@ impl ToTokens for App {
     }
 }
 
-#[allow(dead_code)]
 pub(crate) fn wasi_bindings(app: App) -> proc_macro2::TokenStream {
     quote!(
         #app
@@ -273,7 +272,7 @@ pub(crate) fn wasi_bindings(app: App) -> proc_macro2::TokenStream {
             use std::io::{Read, Write};
             use std::os::wasi::io::FromRawFd;
 
-            println!("inner handler awoken; interacting with fd={fd_3},{fd_4}");
+            println!("inner handler awoken; interacting with fd={},{}", fd_3, fd_4);
 
             // file descriptor 3 for reading and writing http parts
             let mut parts_fd = unsafe { std::fs::File::from_raw_fd(fd_3) };

@@ -64,7 +64,7 @@ uuid = { workspace = true, features = ["v4"] }
 [features]
 default = ["codegen"]
 
-codegen = ["shuttle-codegen"]
+codegen = ["shuttle-codegen/frameworks"]
 loader = ["cargo", "libloading"]
 
 web-actix-web = ["actix-web", "num_cpus"]

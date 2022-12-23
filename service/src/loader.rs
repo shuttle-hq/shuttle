@@ -111,7 +111,6 @@ pub async fn build_crate(
     deployment_id: Uuid,
     project_path: &Path,
     release_mode: bool,
-    wasm: bool,
     tx: Sender<Message>,
 ) -> anyhow::Result<Runtime> {
     let (read, write) = pipe::pipe();
@@ -145,14 +144,18 @@ pub async fn build_crate(
 
     let summary = current.manifest_mut().summary_mut();
     make_name_unique(summary, deployment_id);
-    check_version(summary)?;
+
+    let is_next = is_next(summary);
+    if !is_next {
+        check_version(summary)?;
+    }
     check_no_panic(&ws)?;
 
-    let opts = get_compile_options(&config, release_mode, wasm)?;
+    let opts = get_compile_options(&config, release_mode, is_next)?;
     let compilation = compile(&ws, &opts);
 
     let path = compilation?.cdylibs[0].path.clone();
-    Ok(if wasm {
+    Ok(if is_next {
         Runtime::Next(path)
     } else {
         Runtime::Legacy(path)
@@ -246,7 +249,7 @@ fn get_compile_options(
     };
 
     opts.build_config.requested_kinds = vec![if wasm {
-        CompileKind::Target(CompileTarget::new("wasm32-unknown-unknown")?)
+        CompileKind::Target(CompileTarget::new("wasm32-wasi")?)
     } else {
         CompileKind::Host
     }];
@@ -290,6 +293,20 @@ fn make_name_unique(summary: &mut Summary, deployment_id: Uuid) {
         )
         .unwrap(),
     );
+}
+
+fn is_next(summary: &Summary) -> bool {
+    let features = if let Some(shuttle) = summary
+        .dependencies()
+        .iter()
+        .find(|dependency| dependency.package_name() == "shuttle-codegen")
+    {
+        shuttle.features()
+    } else {
+        &[]
+    };
+
+    features.contains(&InternedString::new("next"))
 }
 
 /// Check that the crate being build is compatible with this version of loader

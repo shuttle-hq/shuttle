@@ -392,10 +392,7 @@ impl Shuttle {
             "Building".bold().green(),
             working_directory.display()
         );
-        let so_path = match build_crate(id, working_directory, false, false, tx).await? {
-            Runtime::Legacy(path) => path,
-            Runtime::Next(_) => todo!(),
-        };
+        let runtime = build_crate(id, working_directory, false, tx).await?;
 
         trace!("loading secrets");
         let secrets_path = working_directory.join("Secrets.toml");
@@ -421,8 +418,13 @@ impl Shuttle {
             .to_path_buf();
         let runtime_dir = workspace_root.join("target/debug");
 
+        let (is_wasm, so_path) = match runtime {
+            Runtime::Next(path) => (true, path),
+            Runtime::Legacy(path) => (false, path),
+        };
+
         let (mut runtime, mut runtime_client) =
-            runtime::start(runtime_dir.join("shuttle-runtime")).await?;
+            runtime::start(runtime_dir.join("shuttle-runtime"), is_wasm).await?;
 
         let load_request = tonic::Request::new(LoadRequest {
             path: so_path.into_os_string().into_string().unwrap(),

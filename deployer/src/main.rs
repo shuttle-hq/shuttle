@@ -45,9 +45,10 @@ async fn main() {
         .to_path_buf();
     let runtime_dir = workspace_root.join("target/debug");
 
-    let (mut runtime, mut runtime_client) = runtime::start(runtime_dir.join("shuttle-runtime"))
-        .await
-        .unwrap();
+    let (mut runtime, mut runtime_client) =
+        runtime::start(runtime_dir.join("shuttle-runtime"), false)
+            .await
+            .unwrap();
 
     let sender = persistence.get_log_sender();
     let mut stream = runtime_client

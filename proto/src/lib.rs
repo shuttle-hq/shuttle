@@ -168,13 +168,12 @@ pub mod runtime {
 
     pub async fn start<S: AsRef<OsStr>>(
         runtime_executable: S,
+        wasm: bool,
     ) -> anyhow::Result<(process::Child, runtime_client::RuntimeClient<Channel>)> {
+        let flag = if wasm { "--axum" } else { "--legacy" };
+
         let runtime = tokio::process::Command::new(runtime_executable)
-            .args([
-                "--legacy",
-                "--provisioner-address",
-                "https://localhost:5000",
-            ])
+            .args([flag, "--provisioner-address", "https://localhost:5000"])
             .spawn()
             .context("spawning runtime process")?;
 

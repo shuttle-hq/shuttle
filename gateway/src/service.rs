@@ -276,6 +276,22 @@ impl GatewayService {
             .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotFound))
     }
 
+    pub async fn iter_projects_list(
+        &self,
+    ) -> Result<impl Iterator<Item = (ProjectName, Project)>, Error> {
+        let iter = query("SELECT project_name, project_state FROM projects")
+            .fetch_all(&self.db)
+            .await?
+            .into_iter()
+            .map(|row| {
+                (
+                    row.get("project_name"),
+                    row.get::<SqlxJson<Project>, _>("project_state").0,
+                )
+            });
+        Ok(iter)
+    }
+
     pub async fn update_project(
         &self,
         project_name: &ProjectName,

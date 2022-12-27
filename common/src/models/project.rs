@@ -1,4 +1,7 @@
-use comfy_table::Color;
+use comfy_table::{
+    modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, Cell, CellAlignment, Color,
+    ContentArrangement, Table,
+};
 use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
@@ -51,4 +54,40 @@ impl State {
 pub struct AdminResponse {
     pub project_name: String,
     pub account_name: String,
+}
+
+pub fn get_table(projects: &Vec<Response>) -> String {
+    if projects.is_empty() {
+        format!(
+            "{}\n",
+            "No projects are linked to this account".yellow().bold()
+        )
+    } else {
+        let mut table = Table::new();
+        table
+            .load_preset(UTF8_FULL)
+            .apply_modifier(UTF8_ROUND_CORNERS)
+            .set_content_arrangement(ContentArrangement::DynamicFullWidth)
+            .set_header(vec![
+                Cell::new("Project Name").set_alignment(CellAlignment::Center),
+                Cell::new("Status").set_alignment(CellAlignment::Center),
+            ]);
+
+        for project in projects.iter() {
+            table.add_row(vec![
+                Cell::new(&project.name),
+                Cell::new(&project.state)
+                    .fg(project.state.get_color())
+                    .set_alignment(CellAlignment::Center),
+            ]);
+        }
+
+        format!(
+            r#"
+These projects are linked to this account
+{}
+"#,
+            table,
+        )
+    }
 }

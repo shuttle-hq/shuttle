@@ -598,12 +598,63 @@ where
 
     #[instrument(skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
-        let container_id = self.container.id.as_ref().unwrap();
+        let Self { container } = self;
+
+        let container_id = container.id.as_ref().unwrap();
         let ContainerSettings {
             network_name,
             network_id,
             ..
         } = ctx.container_settings();
+
+        // Disconnect the bridge network before trying to start up
+        // For docker bug https://github.com/docker/cli/issues/1891
+        //
+        // Also disconnecting from all network because docker just losses track of their IDs sometimes when restarting
+        for network in safe_unwrap!(container.network_settings.networks).keys() {
+            ctx.docker().disconnect_network(network, DisconnectNetworkOptions{
+            container: container_id,
+            force: true,
+        })
+            .await
+            .or_else(|err| {
+                if matches!(err, DockerError::DockerResponseServerError { status_code, .. } if status_code == 500) {
+                    info!("already disconnected from the {network} network");
+                    Ok(())
+                } else {
+                    Err(err)
+                }
+            })?;
+        }
+
+        // Make sure the container is connected to the user network
+        let network_config = ConnectNetworkOptions {
+            container: container_id,
+            endpoint_config: EndpointSettings {
+                network_id: Some(network_id.to_string()),
+                ..Default::default()
+            },
+        };
+        ctx.docker()
+            .connect_network(network_name, network_config)
+            .await
+            .or_else(|err| {
+                if matches!(
+                    err,
+                    DockerError::DockerResponseServerError { status_code, .. } if status_code == 409
+                ) {
+                    info!("already connected to the shuttle network");
+                    Ok(())
+                } else {
+                    error!(
+                        error = &err as &dyn std::error::Error,
+                        "failed to connect to shuttle network"
+                    );
+                    Err(ProjectError::no_network(
+                        "failed to connect to shuttle network",
+                    ))
+                }
+            })?;
 
         ctx.docker()
             .start_container::<String>(container_id, None)
@@ -617,41 +668,7 @@ where
                 }
             })?;
 
-        // Make sure the container is connected to the user network only
-        let network_config = ConnectNetworkOptions {
-            container: container_id,
-            endpoint_config: EndpointSettings {
-                network_id: Some(network_id.to_string()),
-                ..Default::default()
-            },
-        };
-
-        ctx.docker().connect_network(network_name, network_config)
-            .await
-            .or_else(|err| {
-                if matches!(err, DockerError::DockerResponseServerError { status_code, .. } if status_code == 403) {
-                    info!("already connected to the shuttle network");
-                    Ok(())
-                } else {
-                    Err(err)
-                }
-            })?;
-
-        ctx.docker().disconnect_network("bridge", DisconnectNetworkOptions{
-            container: container_id,
-            force: true,
-        })
-            .await
-            .or_else(|err| {
-                if matches!(err, DockerError::DockerResponseServerError { status_code, .. } if status_code == 500) {
-                    info!("already disconnected from the bridge network");
-                    Ok(())
-                } else {
-                    Err(err)
-                }
-            })?;
-
-        let container = self.container.refresh(ctx).await?;
+        let container = container.refresh(ctx).await?;
 
         Ok(Self::Next::new(container))
     }

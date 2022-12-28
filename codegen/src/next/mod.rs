@@ -245,8 +245,7 @@ impl ToTokens for App {
                 use tower_service::Service;
 
                 let mut router = axum::Router::new()
-                    #(#endpoints)*
-                    .into_service();
+                    #(#endpoints)*;
 
                 let response = router.call(request).await.unwrap();
 

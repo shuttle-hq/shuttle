@@ -1095,37 +1095,47 @@ pub mod exec {
                         .inspect_container(safe_unwrap!(container.id), None)
                         .await
                     {
-                        if let Some(ContainerState {
-                            status: Some(ContainerStateStatusEnum::EXITED),
-                            ..
-                        }) = container.state
-                        {
-                            debug!("{} will be revived", project_name.clone());
-                            _ = gateway
-                                .new_task()
-                                .project(project_name)
-                                .and_then(task::run(|ctx| async move {
-                                    TaskResult::Done(Project::Stopped(ProjectStopped {
-                                        container: ctx.state.container().unwrap(),
+                        match container.state {
+                            Some(ContainerState {
+                                status: Some(ContainerStateStatusEnum::EXITED),
+                                ..
+                            }) => {
+                                debug!("{} will be revived", project_name.clone());
+                                _ = gateway
+                                    .new_task()
+                                    .project(project_name)
+                                    .and_then(task::run(|ctx| async move {
+                                        TaskResult::Done(Project::Stopped(ProjectStopped {
+                                            container: ctx.state.container().unwrap(),
+                                        }))
                                     }))
-                                }))
-                                .send(&sender)
-                                .await;
-                        } else if safe_unwrap!(container.network_settings.networks).is_empty() {
-                            debug!(
-                                "{} is not connected to a network so will be restarted",
-                                project_name.clone()
-                            );
-                            _ = gateway
-                                .new_task()
-                                .project(project_name)
-                                .and_then(task::run(|ctx| async move {
-                                    TaskResult::Done(Project::Stopping(ProjectStopping {
-                                        container: ctx.state.container().unwrap(),
+                                    .send(&sender)
+                                    .await;
+                            }
+                            Some(ContainerState {
+                                status: Some(ContainerStateStatusEnum::RUNNING),
+                                ..
+                            })
+                            | Some(ContainerState {
+                                status: Some(ContainerStateStatusEnum::CREATED),
+                                ..
+                            }) => {
+                                debug!(
+                                    "{} is errored but ready according to docker. So restarting it",
+                                    project_name.clone()
+                                );
+                                _ = gateway
+                                    .new_task()
+                                    .project(project_name)
+                                    .and_then(task::run(|ctx| async move {
+                                        TaskResult::Done(Project::Stopping(ProjectStopping {
+                                            container: ctx.state.container().unwrap(),
+                                        }))
                                     }))
-                                }))
-                                .send(&sender)
-                                .await;
+                                    .send(&sender)
+                                    .await;
+                            }
+                            _ => {}
                         }
                     }
                 }

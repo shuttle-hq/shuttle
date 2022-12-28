@@ -148,6 +148,7 @@ impl From<DockerError> for Error {
 #[serde(rename_all = "lowercase")]
 pub enum Project {
     Creating(ProjectCreating),
+    Attaching(ProjectAttaching),
     Starting(ProjectStarting),
     Started(ProjectStarted),
     Ready(ProjectReady),
@@ -160,6 +161,7 @@ pub enum Project {
 
 impl_from_variant!(Project:
                    ProjectCreating => Creating,
+                   ProjectAttaching => Attaching,
                    ProjectStarting => Starting,
                    ProjectStarted => Started,
                    ProjectReady => Ready,
@@ -222,6 +224,7 @@ impl Project {
             Self::Starting(_) => "starting",
             Self::Stopping(_) => "stopping",
             Self::Creating(_) => "creating",
+            Self::Attaching(_) => "attaching",
             Self::Destroying(_) => "destroying",
             Self::Destroyed(_) => "destroyed",
             Self::Errored(_) => "error",
@@ -232,6 +235,7 @@ impl Project {
         match self {
             Self::Starting(ProjectStarting { container, .. })
             | Self::Started(ProjectStarted { container, .. })
+            | Self::Attaching(ProjectAttaching { container, .. })
             | Self::Ready(ProjectReady { container, .. })
             | Self::Stopping(ProjectStopping { container })
             | Self::Stopped(ProjectStopped { container })
@@ -258,6 +262,7 @@ impl From<Project> for shuttle_common::models::project::State {
     fn from(project: Project) -> Self {
         match project {
             Project::Creating(_) => Self::Creating,
+            Project::Attaching(_) => Self::Attaching,
             Project::Starting(_) => Self::Starting,
             Project::Started(_) => Self::Started,
             Project::Ready(_) => Self::Ready,
@@ -285,6 +290,17 @@ where
 
         let mut new = match self {
             Self::Creating(creating) => creating.next(ctx).await.into_try_state(),
+            Self::Attaching(attaching) => match attaching.next(ctx).await {
+                Err(ProjectError {
+                    kind: ProjectErrorKind::NoNetwork,
+                    ctx,
+                    ..
+                }) => {
+                    // Restart the container to try and connect to the network again
+                    Ok(ctx.unwrap().stop().unwrap())
+                }
+                attaching => attaching.into_try_state(),
+            },
             Self::Starting(ready) => ready.next(ctx).await.into_try_state(),
             Self::Started(started) => match started.next(ctx).await {
                 Ok(ProjectReadying::Ready(ready)) => Ok(ready.into()),
@@ -302,11 +318,6 @@ where
         if let Ok(Self::Errored(errored)) = &mut new {
             errored.ctx = Some(Box::new(previous));
             error!(error = ?errored, "state for project errored");
-
-            if errored.kind == ProjectErrorKind::NoNetwork {
-                // Restart the container to try and connect to the network again
-                new = Ok(errored.ctx.clone().unwrap().stop().unwrap());
-            }
         }
 
         let new_state = new.as_ref().unwrap().state();
@@ -357,6 +368,7 @@ where
     async fn refresh(self, ctx: &Ctx) -> Result<Self, Self::Error> {
         let refreshed = match self {
             Self::Creating(creating) => Self::Creating(creating),
+            Self::Attaching(attaching) => Self::Attaching(attaching),
             Self::Starting(ProjectStarting { container })
             | Self::Started(ProjectStarted { container, .. })
             | Self::Ready(ProjectReady { container, .. })
@@ -556,7 +568,7 @@ impl<Ctx> State<Ctx> for ProjectCreating
 where
     Ctx: DockerContext,
 {
-    type Next = ProjectStarting;
+    type Next = ProjectAttaching;
     type Error = ProjectError;
 
     #[instrument(skip_all)]
@@ -579,21 +591,21 @@ where
                 }
             })
             .await?;
-        Ok(ProjectStarting { container })
+        Ok(ProjectAttaching { container })
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct ProjectStarting {
+pub struct ProjectAttaching {
     container: ContainerInspectResponse,
 }
 
 #[async_trait]
-impl<Ctx> State<Ctx> for ProjectStarting
+impl<Ctx> State<Ctx> for ProjectAttaching
 where
     Ctx: DockerContext,
 {
-    type Next = ProjectStarted;
+    type Next = ProjectStarting;
     type Error = ProjectError;
 
     #[instrument(skip_all)]
@@ -655,6 +667,31 @@ where
                     ))
                 }
             })?;
+
+        let container = container.refresh(ctx).await?;
+
+        Ok(ProjectStarting { container })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ProjectStarting {
+    container: ContainerInspectResponse,
+}
+
+#[async_trait]
+impl<Ctx> State<Ctx> for ProjectStarting
+where
+    Ctx: DockerContext,
+{
+    type Next = ProjectStarted;
+    type Error = ProjectError;
+
+    #[instrument(skip_all)]
+    async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
+        let Self { container } = self;
+
+        let container_id = container.id.as_ref().unwrap();
 
         ctx.docker()
             .start_container::<String>(container_id, None)
@@ -806,7 +843,7 @@ impl Service {
 
         let target = safe_unwrap!(network.ip_address)
             .parse()
-            .map_err(|_| ProjectError::no_network("project did not join the network"))?;
+            .map_err(|_| ProjectError::internal("project did not join the network"))?;
 
         Ok(Self {
             name: resource_name,
@@ -1150,6 +1187,7 @@ pub mod exec {
 pub mod tests {
 
     use bollard::models::ContainerState;
+    use bollard::service::NetworkSettings;
     use futures::prelude::*;
     use hyper::{Body, Request, StatusCode};
 
@@ -1172,7 +1210,21 @@ pub mod tests {
                 image: None,
                 from: None,
             }),
-            #[assertion = "Container created, assigned an `id`"]
+            #[assertion = "Container created, attach network"]
+            Ok(Project::Attaching(ProjectAttaching {
+                container: ContainerInspectResponse {
+                    state: Some(ContainerState {
+                        status: Some(ContainerStateStatusEnum::CREATED),
+                        ..
+                    }),
+                    network_settings: Some(NetworkSettings {
+                        networks: Some(networks),
+                        ..
+                    }),
+                    ..
+                }
+            })) if networks.keys().collect::<Vec<_>>() == vec!["bridge"],
+            #[assertion = "Container attached, assigned an `id`"]
             Ok(Project::Starting(ProjectStarting {
                 container: ContainerInspectResponse {
                     id: Some(container_id),
@@ -1180,9 +1232,13 @@ pub mod tests {
                         status: Some(ContainerStateStatusEnum::CREATED),
                         ..
                     }),
+                    network_settings: Some(NetworkSettings {
+                        networks: Some(networks),
+                        ..
+                    }),
                     ..
                 }
-            })),
+            })) if networks.keys().collect::<Vec<_>>() == vec![&ctx.container_settings.network_name],
             #[assertion = "Container started, in a running state"]
             Ok(Project::Started(ProjectStarted {
                 container: ContainerInspectResponse {

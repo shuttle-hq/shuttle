@@ -689,9 +689,7 @@ where
 
     #[instrument(skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
-        let Self { container } = self;
-
-        let container_id = container.id.as_ref().unwrap();
+        let container_id = self.container.id.as_ref().unwrap();
 
         ctx.docker()
             .start_container::<String>(container_id, None)
@@ -705,7 +703,7 @@ where
                 }
             })?;
 
-        let container = container.refresh(ctx).await?;
+        let container = self.container.refresh(ctx).await?;
 
         Ok(Self::Next::new(container))
     }
@@ -839,7 +837,7 @@ impl Service {
         let network = safe_unwrap!(container.network_settings.networks)
             .values()
             .next()
-            .ok_or_else(|| ProjectError::no_network("project was not linked to a network"))?;
+            .ok_or_else(|| ProjectError::internal("project was not linked to a network"))?;
 
         let target = safe_unwrap!(network.ip_address)
             .parse()

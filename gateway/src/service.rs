@@ -814,11 +814,22 @@ pub mod tests {
         assert_eq!(custom_domain.certificate, certificate);
         assert_eq!(custom_domain.private_key, private_key);
 
-        assert_err_kind!(
-            svc.create_custom_domain(project_name.clone(), &domain, certificate, private_key)
-                .await,
-            ErrorKind::CustomDomainAlreadyExists
-        );
+        // Should auto replace the domain details
+        let certificate = "dummy certificate update";
+        let private_key = "dummy private key update";
+
+        svc.create_custom_domain(project_name.clone(), &domain, certificate, private_key)
+            .await
+            .unwrap();
+
+        let custom_domain = svc
+            .project_details_for_custom_domain(&domain)
+            .await
+            .unwrap();
+
+        assert_eq!(custom_domain.project_name, project_name);
+        assert_eq!(custom_domain.certificate, certificate);
+        assert_eq!(custom_domain.private_key, private_key);
 
         Ok(())
     }

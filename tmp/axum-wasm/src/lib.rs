@@ -13,8 +13,7 @@ where
 
     let mut router = axum::Router::new()
         .route("/hello", axum::routing::get(hello))
-        .route("/goodbye", axum::routing::get(goodbye))
-        .into_service();
+        .route("/goodbye", axum::routing::get(goodbye));
 
     let response = router.call(request).await.unwrap();
 

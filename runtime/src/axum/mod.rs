@@ -231,7 +231,7 @@ impl RouterInner {
             .unwrap()
             .into_func()
             .unwrap()
-            .typed::<(RawFd, RawFd), (), _>(&store)
+            .typed::<(RawFd, RawFd), ()>(&store)
             .unwrap()
             .call(&mut store, (3, 4))
             .unwrap();
@@ -323,7 +323,7 @@ pub mod tests {
     #[tokio::test]
     async fn axum() {
         let axum = Router::new("axum.wasm");
-        let mut inner = axum.inner;
+        let inner = axum.inner;
 
         // GET /hello
         let request: Request<Body> = Request::builder()
@@ -333,7 +333,7 @@ pub mod tests {
             .body(Body::empty())
             .unwrap();
 
-        let res = inner.handle_request(request).await.unwrap();
+        let res = inner.clone().handle_request(request).await.unwrap();
 
         assert_eq!(res.status(), StatusCode::OK);
         assert_eq!(
@@ -356,7 +356,7 @@ pub mod tests {
             .body(Body::from("Goodbye world body"))
             .unwrap();
 
-        let res = inner.handle_request(request).await.unwrap();
+        let res = inner.clone().handle_request(request).await.unwrap();
 
         assert_eq!(res.status(), StatusCode::OK);
         assert_eq!(
@@ -379,7 +379,7 @@ pub mod tests {
             .body(Body::empty())
             .unwrap();
 
-        let res = inner.handle_request(request).await.unwrap();
+        let res = inner.clone().handle_request(request).await.unwrap();
 
         assert_eq!(res.status(), StatusCode::NOT_FOUND);
     }

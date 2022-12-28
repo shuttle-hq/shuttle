@@ -25,7 +25,7 @@ use dialoguer::{theme::ColorfulTheme, Confirm, FuzzySelect, Input, Password};
 use factory::LocalFactory;
 use flate2::write::GzEncoder;
 use flate2::Compression;
-use futures::StreamExt;
+use futures::{StreamExt, TryFutureExt};
 use git2::{Repository, StatusOptions};
 use ignore::overrides::OverrideBuilder;
 use ignore::WalkBuilder;
@@ -422,24 +422,34 @@ impl Shuttle {
         let (mut runtime, mut runtime_client) = runtime::start(BINARY_BYTES, is_wasm).await?;
 
         let load_request = tonic::Request::new(LoadRequest {
-            path: so_path.into_os_string().into_string().unwrap(),
+            path: so_path
+                .into_os_string()
+                .into_string()
+                .expect("to convert path to string"),
             service_name: service_name.clone(),
         });
         trace!("loading service");
-        let response = runtime_client.load(load_request).await;
+        let _ = runtime_client
+            .load(load_request)
+            .or_else(|err| async {
+                runtime.kill().await?;
 
-        if let Err(e) = response {
-            error!("failed to load service: {}", e);
-        }
+                Err(err)
+            })
+            .await?;
 
         let mut stream = runtime_client
             .subscribe_logs(tonic::Request::new(SubscribeLogsRequest {}))
-            .await
-            .unwrap()
+            .or_else(|err| async {
+                runtime.kill().await?;
+
+                Err(err)
+            })
+            .await?
             .into_inner();
 
         tokio::spawn(async move {
-            while let Some(log) = stream.message().await.unwrap() {
+            while let Some(log) = stream.message().await.expect("to get log from stream") {
                 let log: shuttle_common::LogItem = log.into();
                 println!("{log}");
             }
@@ -452,28 +462,17 @@ impl Shuttle {
         };
 
         trace!(?start_request, "starting service");
-        let response = match runtime_client
+        let response = runtime_client
             .start(tonic::Request::new(start_request))
-            .await
-        {
-            Ok(response) => response.into_inner(),
-            Err(error) => {
-                error!(
-                    error = &error as &dyn std::error::Error,
-                    "failed to start service"
-                );
+            .or_else(|err| async {
+                runtime.kill().await?;
 
-                runtime.kill().await.unwrap();
-
-                return Ok(());
-            }
-        };
+                Err(err)
+            })
+            .await?
+            .into_inner();
 
         trace!(response = ?response,  "client response: ");
-
-        if !response.success {
-            todo!();
-        }
 
         let factory = LocalFactory::new(
             self.ctx.project_name().clone(),
@@ -489,7 +488,7 @@ impl Shuttle {
             addr
         );
 
-        runtime.wait().await.unwrap();
+        runtime.wait().await?;
 
         Ok(())
     }

@@ -109,7 +109,7 @@ cargo run --manifest-path ../../../Cargo.toml --bin cargo-shuttle -- logs
 The steps outlined above starts all the services used by shuttle locally (ie. both `gateway` and `deployer`). However, sometimes you will want to quickly test changes to `deployer` only. To do this replace `make up` with the following:
 
 ```bash
-docker-compose -f docker-compose.rendered.yml up provisioner
+docker compose -f docker-compose.rendered.yml up provisioner
 ```
 
 This prevents `gateway` from starting up. Now you can start deployer only using:

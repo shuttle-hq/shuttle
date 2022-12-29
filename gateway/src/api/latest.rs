@@ -106,10 +106,10 @@ async fn get_project(
 
 async fn get_projects_list(
     State(RouterState { service, .. }): State<RouterState>,
-    _: User,
+    User { name, .. }: User,
 ) -> Result<AxumJson<Vec<project::Response>>, Error> {
     let projects = service
-        .iter_projects_list()
+        .iter_user_projects_detailed(name.clone())
         .await?
         .into_iter()
         .map(|project| project::Response {

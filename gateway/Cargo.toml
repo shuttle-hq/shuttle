@@ -30,7 +30,6 @@ opentelemetry-http = "0.7.0"
 pem = "1.1.0"
 rand = "0.8.5"
 rcgen = "0.10.0"
-rustc_version_runtime = "0.2.1"
 rustls = "0.20.7"
 rustls-pemfile = "1.0.1"
 serde = { workspace = true, features = [ "derive" ] }

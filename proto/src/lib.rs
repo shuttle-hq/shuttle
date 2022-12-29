@@ -53,6 +53,36 @@ pub mod provisioner {
         }
     }
 
+    impl From<database_request::DbType> for Option<database::Type> {
+        fn from(db_type: database_request::DbType) -> Self {
+            match db_type {
+                database_request::DbType::Shared(Shared {
+                    engine: Some(engine),
+                }) => match engine {
+                    shared::Engine::Postgres(_) => {
+                        Some(database::Type::Shared(SharedEngine::Postgres))
+                    }
+                    shared::Engine::Mongodb(_) => {
+                        Some(database::Type::Shared(SharedEngine::MongoDb))
+                    }
+                },
+                database_request::DbType::AwsRds(AwsRds {
+                    engine: Some(engine),
+                }) => match engine {
+                    aws_rds::Engine::Postgres(_) => {
+                        Some(database::Type::AwsRds(AwsRdsEngine::Postgres))
+                    }
+                    aws_rds::Engine::Mysql(_) => Some(database::Type::AwsRds(AwsRdsEngine::MySql)),
+                    aws_rds::Engine::Mariadb(_) => {
+                        Some(database::Type::AwsRds(AwsRdsEngine::MariaDB))
+                    }
+                },
+                database_request::DbType::Shared(Shared { engine: None })
+                | database_request::DbType::AwsRds(AwsRds { engine: None }) => None,
+            }
+        }
+    }
+
     impl Display for aws_rds::Engine {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
@@ -172,13 +202,14 @@ pub mod runtime {
     pub async fn start(
         binary_bytes: &[u8],
         wasm: bool,
+        provisioner_address: &str,
     ) -> anyhow::Result<(process::Child, runtime_client::RuntimeClient<Channel>)> {
         let flag = if wasm { "--axum" } else { "--legacy" };
 
         let runtime_executable = get_runtime_executable(binary_bytes);
 
         let runtime = process::Command::new(runtime_executable)
-            .args([flag, "--provisioner-address", "https://localhost:5000"])
+            .args([flag, "--provisioner-address", &provisioner_address])
             .spawn()
             .context("spawning runtime process")?;
 

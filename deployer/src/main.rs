@@ -40,7 +40,13 @@ async fn main() {
         .with(opentelemetry)
         .init();
 
-    let (mut runtime, mut runtime_client) = runtime::start(BINARY_BYTES, false).await.unwrap();
+    let (mut runtime, mut runtime_client) = runtime::start(
+        BINARY_BYTES,
+        false,
+        &args.provisioner_address.uri().to_string(),
+    )
+    .await
+    .unwrap();
 
     let sender = persistence.get_log_sender();
     let mut stream = runtime_client

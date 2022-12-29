@@ -3,7 +3,8 @@ use std::{net::SocketAddr, path::PathBuf};
 use clap::Parser;
 use fqdn::FQDN;
 use hyper::Uri;
-use shuttle_common::{project::ProjectName, Port};
+use shuttle_common::project::ProjectName;
+use tonic::transport::Endpoint;
 
 /// Program to handle the deploys for a single project
 /// Handling includes, building, testing, and running each service
@@ -15,12 +16,8 @@ pub struct Args {
     pub state: String,
 
     /// Address to connect to the provisioning service
-    #[clap(long)]
-    pub provisioner_address: String,
-
-    /// Port provisioner is running on
-    #[clap(long, default_value = "5000")]
-    pub provisioner_port: Port,
+    #[clap(long, default_value = "provisioner:5000")]
+    pub provisioner_address: Endpoint,
 
     /// FQDN where the proxy can be reached at
     #[clap(long)]

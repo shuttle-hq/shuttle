@@ -1,8 +1,8 @@
 mod args;
 mod client;
 pub mod config;
-mod factory;
 mod init;
+mod provisioner_server;
 
 use shuttle_common::project::ProjectName;
 use shuttle_proto::runtime::{self, LoadRequest, StartRequest, SubscribeLogsRequest};
@@ -22,20 +22,20 @@ use clap_complete::{generate, Shell};
 use config::RequestContext;
 use crossterm::style::Stylize;
 use dialoguer::{theme::ColorfulTheme, Confirm, FuzzySelect, Input, Password};
-use factory::LocalFactory;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use futures::{StreamExt, TryFutureExt};
 use git2::{Repository, StatusOptions};
 use ignore::overrides::OverrideBuilder;
 use ignore::WalkBuilder;
+use provisioner_server::LocalProvisioner;
 use shuttle_common::models::{project, secret};
-use shuttle_service::loader::{build_crate, Loader, Runtime};
+use shuttle_service::loader::{build_crate, Runtime};
 use shuttle_service::Logger;
 use std::fmt::Write;
 use strum::IntoEnumIterator;
 use tar::Builder;
-use tracing::{error, trace};
+use tracing::trace;
 use uuid::Uuid;
 
 use crate::args::{DeploymentCommand, ProjectCommand};
@@ -419,7 +419,22 @@ impl Shuttle {
             Runtime::Legacy(path) => (false, path),
         };
 
-        let (mut runtime, mut runtime_client) = runtime::start(BINARY_BYTES, is_wasm).await?;
+        let provisioner = LocalProvisioner::new()?;
+        let provisioner_server = provisioner.start(SocketAddr::new(
+            Ipv4Addr::LOCALHOST.into(),
+            run_args.port + 1,
+        ));
+        let (mut runtime, mut runtime_client) = runtime::start(
+            BINARY_BYTES,
+            is_wasm,
+            &format!("http://localhost:{}", run_args.port + 1),
+        )
+        .await
+        .map_err(|err| {
+            provisioner_server.abort();
+
+            err
+        })?;
 
         let load_request = tonic::Request::new(LoadRequest {
             path: so_path
@@ -432,6 +447,7 @@ impl Shuttle {
         let _ = runtime_client
             .load(load_request)
             .or_else(|err| async {
+                provisioner_server.abort();
                 runtime.kill().await?;
 
                 Err(err)
@@ -441,6 +457,7 @@ impl Shuttle {
         let mut stream = runtime_client
             .subscribe_logs(tonic::Request::new(SubscribeLogsRequest {}))
             .or_else(|err| async {
+                provisioner_server.abort();
                 runtime.kill().await?;
 
                 Err(err)
@@ -465,6 +482,7 @@ impl Shuttle {
         let response = runtime_client
             .start(tonic::Request::new(start_request))
             .or_else(|err| async {
+                provisioner_server.abort();
                 runtime.kill().await?;
 
                 Err(err)
@@ -474,11 +492,6 @@ impl Shuttle {
 
         trace!(response = ?response,  "client response: ");
 
-        let factory = LocalFactory::new(
-            self.ctx.project_name().clone(),
-            secrets,
-            working_directory.to_path_buf(),
-        )?;
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), run_args.port);
 
         println!(

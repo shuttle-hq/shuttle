@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use opentelemetry::global;
 use portpicker::pick_unused_port;
 use shuttle_common::project::ProjectName as ServiceName;
-use shuttle_common::storage_manager::StorageManager;
+use shuttle_common::storage_manager::ArtifactsStorageManager;
 use shuttle_proto::runtime::{runtime_client::RuntimeClient, LoadRequest, StartRequest};
 
 use tokio::task::JoinError;
@@ -29,7 +29,7 @@ pub async fn task(
     runtime_client: RuntimeClient<Channel>,
     kill_send: KillSender,
     active_deployment_getter: impl ActiveDeploymentsGetter,
-    storage_manager: StorageManager,
+    storage_manager: ArtifactsStorageManager,
 ) {
     info!("Run task started");
 
@@ -171,7 +171,7 @@ impl Built {
     #[allow(clippy::too_many_arguments)]
     async fn handle(
         self,
-        storage_manager: StorageManager,
+        storage_manager: ArtifactsStorageManager,
         runtime_client: RuntimeClient<Channel>,
         kill_recv: KillReceiver,
         kill_old_deployments: impl futures::Future<Output = Result<()>>,
@@ -259,7 +259,7 @@ mod tests {
         time::Duration,
     };
 
-    use shuttle_common::storage_manager::StorageManager;
+    use shuttle_common::storage_manager::ArtifactsStorageManager;
     use shuttle_proto::runtime::runtime_client::RuntimeClient;
     use tempdir::TempDir;
     use tokio::{
@@ -276,11 +276,11 @@ mod tests {
 
     const RESOURCES_PATH: &str = "tests/resources";
 
-    fn get_storage_manager() -> StorageManager {
+    fn get_storage_manager() -> ArtifactsStorageManager {
         let tmp_dir = TempDir::new("shuttle_run_test").unwrap();
         let path = tmp_dir.into_path();
 
-        StorageManager::new(path)
+        ArtifactsStorageManager::new(path)
     }
 
     async fn kill_old_deployments() -> crate::error::Result<()> {
@@ -478,7 +478,7 @@ mod tests {
         );
     }
 
-    fn make_so_and_built(crate_name: &str) -> (Built, StorageManager) {
+    fn make_so_and_built(crate_name: &str) -> (Built, ArtifactsStorageManager) {
         let crate_dir: PathBuf = [RESOURCES_PATH, crate_name].iter().collect();
 
         Command::new("cargo")

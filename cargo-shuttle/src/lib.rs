@@ -31,7 +31,6 @@ use ignore::WalkBuilder;
 use provisioner_server::LocalProvisioner;
 use shuttle_common::models::{project, secret};
 use shuttle_service::loader::{build_crate, Runtime};
-use shuttle_service::Logger;
 use std::fmt::Write;
 use strum::IntoEnumIterator;
 use tar::Builder;
@@ -427,6 +426,7 @@ impl Shuttle {
         let (mut runtime, mut runtime_client) = runtime::start(
             BINARY_BYTES,
             is_wasm,
+            runtime::StorageManagerType::WorkingDir(working_directory.to_path_buf()),
             &format!("http://localhost:{}", run_args.port + 1),
         )
         .await

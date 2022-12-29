@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 pub use queue::Queued;
 pub use run::{ActiveDeploymentsGetter, Built};
-use shuttle_common::storage_manager::StorageManager;
+use shuttle_common::storage_manager::ArtifactsStorageManager;
 use shuttle_proto::runtime::runtime_client::RuntimeClient;
 use tonic::transport::Channel;
 use tracing::{instrument, Span};
@@ -94,7 +94,7 @@ where
         let (queue_send, queue_recv) = mpsc::channel(QUEUE_BUFFER_SIZE);
         let (run_send, run_recv) = mpsc::channel(RUN_BUFFER_SIZE);
         let (kill_send, _) = broadcast::channel(KILL_BUFFER_SIZE);
-        let storage_manager = StorageManager::new(artifacts_path);
+        let storage_manager = ArtifactsStorageManager::new(artifacts_path);
 
         let run_send_clone = run_send.clone();
 
@@ -128,7 +128,7 @@ pub struct DeploymentManager {
     queue_send: QueueSender,
     run_send: RunSender,
     kill_send: KillSender,
-    storage_manager: StorageManager,
+    storage_manager: ArtifactsStorageManager,
 }
 
 /// ```no-test
@@ -180,7 +180,7 @@ impl DeploymentManager {
         }
     }
 
-    pub fn storage_manager(&self) -> StorageManager {
+    pub fn storage_manager(&self) -> ArtifactsStorageManager {
         self.storage_manager.clone()
     }
 }

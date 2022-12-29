@@ -43,6 +43,7 @@ async fn main() {
     let (mut runtime, mut runtime_client) = runtime::start(
         BINARY_BYTES,
         false,
+        runtime::StorageManagerType::Artifacts(args.artifacts_path.clone()),
         &args.provisioner_address.uri().to_string(),
     )
     .await

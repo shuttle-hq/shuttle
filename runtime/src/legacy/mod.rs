@@ -31,17 +31,24 @@ use crate::provisioner_factory::{AbstractFactory, AbstractProvisionerFactory};
 
 mod error;
 
-pub struct Legacy {
+pub struct Legacy<S>
+where
+    S: StorageManager,
+{
     // Mutexes are for interior mutability
     so_path: Mutex<Option<PathBuf>>,
     logs_rx: Mutex<Option<UnboundedReceiver<LogItem>>>,
     logs_tx: Mutex<UnboundedSender<LogItem>>,
     provisioner_address: Endpoint,
     kill_tx: Mutex<Option<oneshot::Sender<String>>>,
+    storage_manager: S,
 }
 
-impl Legacy {
-    pub fn new(provisioner_address: Endpoint) -> Self {
+impl<S> Legacy<S>
+where
+    S: StorageManager,
+{
+    pub fn new(provisioner_address: Endpoint, storage_manager: S) -> Self {
         let (tx, rx) = mpsc::unbounded_channel();
 
         Self {
@@ -50,12 +57,16 @@ impl Legacy {
             logs_tx: Mutex::new(tx),
             kill_tx: Mutex::new(None),
             provisioner_address,
+            storage_manager,
         }
     }
 }
 
 #[async_trait]
-impl Runtime for Legacy {
+impl<S> Runtime for Legacy<S>
+where
+    S: StorageManager + 'static,
+{
     async fn load(&self, request: Request<LoadRequest>) -> Result<Response<LoadResponse>, Status> {
         let so_path = request.into_inner().path;
         trace!(so_path, "loading");
@@ -87,8 +98,6 @@ impl Runtime for Legacy {
             .map_err(|err| Status::from_error(Box::new(err)))?
             .clone();
 
-        let storage_manager = StorageManager::new(so_path.clone());
-
         let StartRequest {
             deployment_id,
             service_name,
@@ -102,7 +111,7 @@ impl Runtime for Legacy {
         let deployment_id = Uuid::from_slice(&deployment_id).unwrap();
 
         let mut factory =
-            abstract_factory.get_factory(service_name, deployment_id, storage_manager);
+            abstract_factory.get_factory(service_name, deployment_id, self.storage_manager.clone());
 
         let logs_tx = self.logs_tx.lock().unwrap().clone();
 

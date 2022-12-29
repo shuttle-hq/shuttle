@@ -11,7 +11,7 @@ use tracing::{debug, info, trace};
 use uuid::Uuid;
 
 /// Trait to make it easy to get a factory (service locator) for each service being started
-pub trait AbstractFactory: Send + 'static {
+pub trait AbstractFactory<S: StorageManager>: Send + 'static {
     type Output: Factory;
 
     /// Get a factory for a specific service
@@ -19,7 +19,7 @@ pub trait AbstractFactory: Send + 'static {
         &self,
         service_name: ServiceName,
         deployment_id: Uuid,
-        storage_manager: StorageManager,
+        storage_manager: S,
     ) -> Self::Output;
 }
 
@@ -29,14 +29,17 @@ pub struct AbstractProvisionerFactory {
     provisioner_client: ProvisionerClient<Channel>,
 }
 
-impl AbstractFactory for AbstractProvisionerFactory {
-    type Output = ProvisionerFactory;
+impl<S> AbstractFactory<S> for AbstractProvisionerFactory
+where
+    S: StorageManager,
+{
+    type Output = ProvisionerFactory<S>;
 
     fn get_factory(
         &self,
         service_name: ServiceName,
         deployment_id: Uuid,
-        storage_manager: StorageManager,
+        storage_manager: S,
     ) -> Self::Output {
         ProvisionerFactory::new(
             self.provisioner_client.clone(),
@@ -54,21 +57,27 @@ impl AbstractProvisionerFactory {
 }
 
 /// A factory (service locator) which goes through the provisioner crate
-pub struct ProvisionerFactory {
+pub struct ProvisionerFactory<S>
+where
+    S: StorageManager,
+{
     service_name: ServiceName,
     deployment_id: Uuid,
-    storage_manager: StorageManager,
+    storage_manager: S,
     provisioner_client: ProvisionerClient<Channel>,
     info: Option<DatabaseReadyInfo>,
     secrets: Option<BTreeMap<String, String>>,
 }
 
-impl ProvisionerFactory {
+impl<S> ProvisionerFactory<S>
+where
+    S: StorageManager,
+{
     pub(crate) fn new(
         provisioner_client: ProvisionerClient<Channel>,
         service_name: ServiceName,
         deployment_id: Uuid,
-        storage_manager: StorageManager,
+        storage_manager: S,
     ) -> Self {
         Self {
             provisioner_client,
@@ -82,7 +91,10 @@ impl ProvisionerFactory {
 }
 
 #[async_trait]
-impl Factory for ProvisionerFactory {
+impl<S> Factory for ProvisionerFactory<S>
+where
+    S: StorageManager + Sync + Send,
+{
     async fn get_db_connection_string(
         &mut self,
         db_type: database::Type,

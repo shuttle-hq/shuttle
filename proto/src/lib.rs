@@ -111,6 +111,11 @@ pub mod runtime {
     use tracing::info;
     use uuid::Uuid;
 
+    pub enum StorageManagerType {
+        Artifacts(PathBuf),
+        WorkingDir(PathBuf),
+    }
+
     tonic::include_proto!("runtime");
 
     impl From<shuttle_common::LogItem> for LogItem {
@@ -202,14 +207,28 @@ pub mod runtime {
     pub async fn start(
         binary_bytes: &[u8],
         wasm: bool,
+        storage_manager_type: StorageManagerType,
         provisioner_address: &str,
     ) -> anyhow::Result<(process::Child, runtime_client::RuntimeClient<Channel>)> {
-        let flag = if wasm { "--axum" } else { "--legacy" };
+        let runtime_flag = if wasm { "--axum" } else { "--legacy" };
+
+        let (storage_manager_type, storage_manager_path) = match storage_manager_type {
+            StorageManagerType::Artifacts(path) => ("artifacts", path),
+            StorageManagerType::WorkingDir(path) => ("working-dir", path),
+        };
 
         let runtime_executable = get_runtime_executable(binary_bytes);
 
         let runtime = process::Command::new(runtime_executable)
-            .args([flag, "--provisioner-address", &provisioner_address])
+            .args([
+                runtime_flag,
+                "--provisioner-address",
+                provisioner_address,
+                "--storage-manager-type",
+                storage_manager_type,
+                "--storage-manager-path",
+                &storage_manager_path.display().to_string(),
+            ])
             .spawn()
             .context("spawning runtime process")?;
 

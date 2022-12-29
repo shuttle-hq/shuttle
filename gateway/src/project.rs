@@ -481,9 +481,6 @@ impl ProjectCreating {
             name: self.container_name(ctx),
         };
 
-        let rustup_toolchain =
-            std::env::var("RUSTUP_TOOLCHAIN").expect("rustup toolchain should be set");
-
         let container_config = self
             .from
             .as_ref()
@@ -518,9 +515,6 @@ impl ProjectCreating {
                     ],
                     "Env": [
                         "RUST_LOG=debug",
-                        // If we don't set this, users' dependencies with a `rust-toolchain.toml`
-                        // override will compile with incompatible versions of rust.
-                        format!("RUSTUP_TOOLCHAIN={rustup_toolchain}")
                     ]
                 })
             });

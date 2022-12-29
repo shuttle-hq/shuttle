@@ -9,6 +9,7 @@ use std::sync::Mutex;
 
 use async_trait::async_trait;
 use cap_std::os::unix::net::UnixStream;
+use futures::TryStreamExt;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response};
 use shuttle_common::wasm::{RequestWrapper, ResponseWrapper};
@@ -197,10 +198,12 @@ impl RouterInner {
             .unwrap();
 
         let (mut parts_stream, parts_client) = UnixStream::pair().unwrap();
-        let (mut body_stream, body_client) = UnixStream::pair().unwrap();
+        let (body_read_stream, body_read_client) = UnixStream::pair().unwrap();
+        let (mut body_write_stream, body_write_client) = UnixStream::pair().unwrap();
 
         let parts_client = WasiUnixStream::from_cap_std(parts_client);
-        let body_client = WasiUnixStream::from_cap_std(body_client);
+        let body_read_client = WasiUnixStream::from_cap_std(body_read_client);
+        let body_write_client = WasiUnixStream::from_cap_std(body_write_client);
 
         store
             .data_mut()
@@ -208,7 +211,11 @@ impl RouterInner {
 
         store
             .data_mut()
-            .insert_file(4, Box::new(body_client), FileCaps::all());
+            .insert_file(4, Box::new(body_write_client), FileCaps::all());
+
+        store
+            .data_mut()
+            .insert_file(5, Box::new(body_read_client), FileCaps::all());
 
         let (parts, body) = req.into_parts();
 
@@ -219,21 +226,19 @@ impl RouterInner {
         parts_stream.write_all(&request_rmp).unwrap();
 
         // write body
-        body_stream
+        body_write_stream
             .write_all(hyper::body::to_bytes(body).await.unwrap().as_ref())
             .unwrap();
-        // signal to the receiver that end of file has been reached
-        body_stream.write_all(&[0]).unwrap();
 
-        println!("calling inner Router");
+        // println!("calling inner Router");
         self.linker
             .get(&mut store, "axum", "__SHUTTLE_Axum_call")
             .unwrap()
             .into_func()
             .unwrap()
-            .typed::<(RawFd, RawFd), ()>(&store)
+            .typed::<(RawFd, RawFd, RawFd), ()>(&store)
             .unwrap()
-            .call(&mut store, (3, 4))
+            .call(&mut store, (3, 4, 5))
             .unwrap();
 
         // read response parts from host
@@ -243,21 +248,11 @@ impl RouterInner {
         let wrapper: ResponseWrapper = rmps::from_read(reader).unwrap();
 
         // read response body from wasm router
-        let mut body_buf = Vec::new();
-        let mut c_buf: [u8; 1] = [0; 1];
-        loop {
-            body_stream.read_exact(&mut c_buf).unwrap();
-            if c_buf[0] == 0 {
-                break;
-            } else {
-                body_buf.push(c_buf[0]);
-            }
-        }
+        let reader = BufReader::new(body_read_stream);
+        let stream = futures::stream::iter(reader.bytes()).try_chunks(2);
+        let body = hyper::Body::wrap_stream(stream);
 
-        let response: Response<Body> = wrapper
-            .into_response_builder()
-            .body(body_buf.into())
-            .unwrap();
+        let response: Response<Body> = wrapper.into_response_builder().body(body).unwrap();
 
         Ok(response)
     }

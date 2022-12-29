@@ -7,7 +7,7 @@ use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, RequestBuilder};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use serde::Deserialize;
-use shuttle_common::models::{deployment, project, secret, service, user, ToJson};
+use shuttle_common::models::{deployment, project, secret, service, ToJson};
 use shuttle_common::project::ProjectName;
 use shuttle_common::{ApiKey, ApiUrl, LogItem};
 use tokio::net::TcpStream;
@@ -31,16 +31,6 @@ impl Client {
 
     pub fn set_api_key(&mut self, api_key: ApiKey) {
         self.api_key = Some(api_key);
-    }
-
-    pub async fn auth(&self, username: String) -> Result<user::Response> {
-        let path = format!("/users/{}", username);
-
-        self.post(path, Option::<String>::None)
-            .await
-            .context("failed to get API key from Shuttle server")?
-            .to_json()
-            .await
     }
 
     pub async fn deploy(

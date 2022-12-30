@@ -2178,6 +2178,7 @@ dependencies = [
  "hashbrown",
  "lock_api",
  "parking_lot_core 0.9.3",
+ "serde",
 ]
 
 [[package]]
@@ -4405,6 +4406,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "poise"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2ca787e4e516076de1995a83ee05fbdfed71d072ea0da3df018318db42a87803"
+dependencies = [
+ "async-trait",
+ "derivative",
+ "futures-core",
+ "futures-util",
+ "log",
+ "once_cell",
+ "parking_lot 0.12.1",
+ "poise_macros",
+ "regex",
+ "serenity",
+ "tokio",
+]
+
+[[package]]
+name = "poise_macros"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b80c1f4e04114527f9d41ed6bb31707a095276f51bb0aef3ca11f062b25a67c4"
+dependencies = [
+ "darling 0.14.1",
+ "proc-macro2 1.0.47",
+ "quote 1.0.21",
+ "syn 1.0.104",
+]
+
+[[package]]
 name = "polling"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5667,12 +5699,16 @@ dependencies = [
  "bitflags",
  "bytes 1.3.0",
  "cfg-if 1.0.0",
+ "chrono",
+ "dashmap",
  "flate2",
  "futures",
  "mime",
  "mime_guess",
+ "parking_lot 0.12.1",
  "percent-encoding",
  "reqwest",
+ "rustversion",
  "serde",
  "serde-value",
  "serde_json",
@@ -5970,6 +6006,7 @@ dependencies = [
  "num_cpus",
  "pipe",
  "poem",
+ "poise",
  "portpicker",
  "rocket",
  "salvo",

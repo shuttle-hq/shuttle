@@ -112,6 +112,12 @@ impl Client {
         self.get(path).await
     }
 
+    pub async fn get_projects_list(&self) -> Result<Vec<project::Response>> {
+        let path = "/projects".to_string();
+
+        self.get(path).await
+    }
+
     pub async fn delete_project(&self, project: &ProjectName) -> Result<project::Response> {
         let path = format!("/projects/{}", project.as_str());
 

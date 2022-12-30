@@ -97,6 +97,7 @@ impl Shuttle {
                     Command::Project(ProjectCommand::Status { follow }) => {
                         self.project_status(&client, follow).await
                     }
+                    Command::Project(ProjectCommand::List) => self.projects_list(&client).await,
                     Command::Project(ProjectCommand::Rm) => self.project_delete(&client).await,
                     _ => {
                         unreachable!("commands that don't need a client have already been matched")
@@ -504,6 +505,15 @@ impl Shuttle {
             client,
         )
         .await?;
+
+        Ok(())
+    }
+
+    async fn projects_list(&self, client: &Client) -> Result<()> {
+        let projects = client.get_projects_list().await?;
+        let projects_table = project::get_table(&projects);
+
+        println!("{projects_table}");
 
         Ok(())
     }

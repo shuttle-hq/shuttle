@@ -1,19 +1,21 @@
-pub fn handle_request<B>(req: http::Request<B>) -> axum::response::Response
-where
-    B: axum::body::HttpBody + Send + 'static,
-{
+use axum::{
+    body::BoxBody,
+    extract::BodyStream,
+    response::{IntoResponse, Response},
+};
+use futures::TryStreamExt;
+
+pub fn handle_request(req: http::Request<BoxBody>) -> axum::response::Response {
     futures_executor::block_on(app(req))
 }
 
-async fn app<B>(request: http::Request<B>) -> axum::response::Response
-where
-    B: axum::body::HttpBody + Send + 'static,
-{
+async fn app(request: http::Request<BoxBody>) -> axum::response::Response {
     use tower_service::Service;
 
     let mut router = axum::Router::new()
         .route("/hello", axum::routing::get(hello))
-        .route("/goodbye", axum::routing::get(goodbye));
+        .route("/goodbye", axum::routing::get(goodbye))
+        .route("/uppercase", axum::routing::post(uppercase));
 
     let response = router.call(request).await.unwrap();
 
@@ -28,6 +30,17 @@ async fn goodbye() -> &'static str {
     "Goodbye, World!"
 }
 
+// Map the bytes of the body stream to uppercase and return the stream directly.
+async fn uppercase(body: BodyStream) -> impl IntoResponse {
+    let chunk_stream = body.map_ok(|chunk| {
+        chunk
+            .iter()
+            .map(|byte| byte.to_ascii_uppercase())
+            .collect::<Vec<u8>>()
+    });
+    Response::new(axum::body::StreamBody::new(chunk_stream))
+}
+
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern "C" fn __SHUTTLE_Axum_call(
@@ -35,9 +48,8 @@ pub extern "C" fn __SHUTTLE_Axum_call(
     fd_4: std::os::wasi::prelude::RawFd,
     fd_5: std::os::wasi::prelude::RawFd,
 ) {
-    use axum::body::{Body, HttpBody};
-    use futures::stream::TryStreamExt;
-    use std::io::{BufReader, Read, Write};
+    use axum::body::HttpBody;
+    use std::io::{Read, Write};
     use std::os::wasi::io::FromRawFd;
     // println!("inner handler awoken; interacting with fd={fd_3},{fd_4}");
 
@@ -49,15 +61,19 @@ pub extern "C" fn __SHUTTLE_Axum_call(
     // deserialize request parts from rust messagepack
     let wrapper: shuttle_common::wasm::RequestWrapper = rmp_serde::from_read(reader).unwrap();
 
-    // file descriptor 4 for reading http body into wasm
-    let body_read_stream = unsafe { std::fs::File::from_raw_fd(fd_4) };
+    // file descriptor 5 for reading http body into wasm
+    let mut body_read_stream = unsafe { std::fs::File::from_raw_fd(fd_5) };
 
-    let reader = BufReader::new(body_read_stream);
-    let stream = futures::stream::iter(reader.bytes()).try_chunks(2);
-    let body = Body::wrap_stream(stream);
+    let mut reader = std::io::BufReader::new(&mut body_read_stream);
+    let mut body_buf = Vec::new();
+    reader.read_to_end(&mut body_buf).unwrap();
 
-    let request: http::Request<axum::body::Body> =
-        wrapper.into_request_builder().body(body).unwrap();
+    let body = axum::body::Body::from(body_buf);
+
+    let request = wrapper
+        .into_request_builder()
+        .body(axum::body::boxed(body))
+        .unwrap();
 
     // println!("inner router received request: {:?}", &request);
     let res = handle_request(request);
@@ -70,8 +86,8 @@ pub extern "C" fn __SHUTTLE_Axum_call(
     // write response parts
     parts_fd.write_all(&response_parts).unwrap();
 
-    // file descriptor 5 for writing http body to host
-    let mut body_write_stream = unsafe { std::fs::File::from_raw_fd(fd_5) };
+    // file descriptor 4 for writing http body to host
+    let mut body_write_stream = unsafe { std::fs::File::from_raw_fd(fd_4) };
 
     // write body if there is one
     if let Some(body) = futures_executor::block_on(body.data()) {

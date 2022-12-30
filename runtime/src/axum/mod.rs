@@ -17,7 +17,7 @@ use shuttle_proto::runtime::{
     SubscribeLogsRequest,
 };
 use shuttle_service::ServiceName;
-use tokio::sync::oneshot;
+use tokio::sync::{mpsc, oneshot};
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::Status;
 use tracing::{error, trace};
@@ -93,7 +93,9 @@ impl Runtime for AxumWasm {
         &self,
         _request: tonic::Request<SubscribeLogsRequest>,
     ) -> Result<tonic::Response<Self::SubscribeLogsStream>, Status> {
-        todo!()
+        let (_tx, rx) = mpsc::channel(1);
+
+        Ok(tonic::Response::new(ReceiverStream::new(rx)))
     }
 
     async fn stop(

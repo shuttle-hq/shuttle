@@ -1,6 +1,8 @@
 use std::{env, process::Command};
 
 fn main() {
+    println!("cargo:rerun-if-changed=runtime");
+
     // Build binary for runtime so that it can be embedded in the binary for deployer
     let out_dir = env::var_os("OUT_DIR").unwrap();
     Command::new("cargo")

@@ -103,7 +103,7 @@ where
         &mut self,
         db_type: database::Type,
     ) -> Result<String, shuttle_service::Error> {
-        info!("Provisioning a {db_type} on the shuttle servers. This can take a while...");
+        info!("Provisioning a {db_type}. This can take a while...");
 
         if let Some(ref info) = self.info {
             debug!("A database has already been provisioned for this deployment, so reusing it");
@@ -135,7 +135,6 @@ where
     }
 
     async fn get_secrets(&mut self) -> Result<BTreeMap<String, String>, shuttle_service::Error> {
-        debug!("Returning previously fetched secrets");
         Ok(self.secrets.clone())
     }
 

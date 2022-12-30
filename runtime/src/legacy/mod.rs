@@ -110,7 +110,7 @@ where
             .as_ref()
             .ok_or_else(|| -> error::Error {
                 error::Error::Start(anyhow!(
-                    "trying to secrets from a service that was not loaded"
+                    "trying to get secrets from a service that was not loaded"
                 ))
             })
             .map_err(|err| Status::from_error(Box::new(err)))?
@@ -142,7 +142,7 @@ where
         trace!(%service_address, "starting");
         let service = load_service(service_address, so_path, &mut factory, logger)
             .await
-            .unwrap();
+            .map_err(|error| Status::internal(error.to_string()))?;
 
         let (kill_tx, kill_rx) = tokio::sync::oneshot::channel();
 

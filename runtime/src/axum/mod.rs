@@ -387,7 +387,7 @@ pub mod tests {
             .version(Version::HTTP_11)
             .header("test", HeaderValue::from_static("invalid"))
             .uri("https://axum-wasm.example/uppercase")
-            .body("uppercase me please".into())
+            .body("this should be uppercased".into())
             .unwrap();
 
         let res = inner.clone().handle_request(request).await.unwrap();
@@ -401,7 +401,7 @@ pub mod tests {
                 .cloned()
                 .collect::<Vec<u8>>()
                 .as_ref(),
-            b"UPPERCASE ME PLEASE"
+            b"THIS SHOULD BE UPPERCASED"
         );
     }
 }

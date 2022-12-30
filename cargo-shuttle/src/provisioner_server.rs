@@ -28,6 +28,8 @@ use tonic::{
 };
 use tracing::{error, trace};
 
+/// A provisioner for local runs
+/// It uses Docker to create Databases
 pub struct LocalProvisioner {
     docker: Docker,
 }

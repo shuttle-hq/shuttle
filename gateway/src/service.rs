@@ -706,6 +706,14 @@ pub mod tests {
                 account_name: neo.clone(),
             }
         );
+        assert_eq!(
+            svc.iter_user_projects_detailed(neo.clone())
+                .await
+                .unwrap()
+                .map(|item| item.0)
+                .collect::<Vec<_>>(),
+            vec![matrix.clone()]
+        );
 
         let mut work = svc
             .new_task()

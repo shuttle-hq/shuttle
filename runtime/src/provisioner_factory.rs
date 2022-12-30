@@ -19,6 +19,7 @@ pub trait AbstractFactory<S: StorageManager>: Send + 'static {
         &self,
         service_name: ServiceName,
         deployment_id: Uuid,
+        secrets: BTreeMap<String, String>,
         storage_manager: S,
     ) -> Self::Output;
 }
@@ -39,12 +40,14 @@ where
         &self,
         service_name: ServiceName,
         deployment_id: Uuid,
+        secrets: BTreeMap<String, String>,
         storage_manager: S,
     ) -> Self::Output {
         ProvisionerFactory::new(
             self.provisioner_client.clone(),
             service_name,
             deployment_id,
+            secrets,
             storage_manager,
         )
     }
@@ -66,7 +69,7 @@ where
     storage_manager: S,
     provisioner_client: ProvisionerClient<Channel>,
     info: Option<DatabaseReadyInfo>,
-    secrets: Option<BTreeMap<String, String>>,
+    secrets: BTreeMap<String, String>,
 }
 
 impl<S> ProvisionerFactory<S>
@@ -77,6 +80,7 @@ where
         provisioner_client: ProvisionerClient<Channel>,
         service_name: ServiceName,
         deployment_id: Uuid,
+        secrets: BTreeMap<String, String>,
         storage_manager: S,
     ) -> Self {
         Self {
@@ -85,7 +89,7 @@ where
             deployment_id,
             storage_manager,
             info: None,
-            secrets: None,
+            secrets,
         }
     }
 }
@@ -131,12 +135,8 @@ where
     }
 
     async fn get_secrets(&mut self) -> Result<BTreeMap<String, String>, shuttle_service::Error> {
-        if let Some(ref secrets) = self.secrets {
-            debug!("Returning previously fetched secrets");
-            Ok(secrets.clone())
-        } else {
-            todo!()
-        }
+        debug!("Returning previously fetched secrets");
+        Ok(self.secrets.clone())
     }
 
     fn get_service_name(&self) -> ServiceName {

@@ -13,7 +13,7 @@ use tonic::transport::Channel;
 use tracing::{instrument, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
-use crate::persistence::{SecretRecorder, State};
+use crate::persistence::{SecretGetter, SecretRecorder, State};
 use tokio::sync::{broadcast, mpsc};
 use uuid::Uuid;
 
@@ -23,20 +23,22 @@ const QUEUE_BUFFER_SIZE: usize = 100;
 const RUN_BUFFER_SIZE: usize = 100;
 const KILL_BUFFER_SIZE: usize = 10;
 
-pub struct DeploymentManagerBuilder<LR, SR, ADG, QC> {
+pub struct DeploymentManagerBuilder<LR, SR, ADG, SG, QC> {
     build_log_recorder: Option<LR>,
     secret_recorder: Option<SR>,
     active_deployment_getter: Option<ADG>,
     artifacts_path: Option<PathBuf>,
     runtime_client: Option<RuntimeClient<Channel>>,
+    secret_getter: Option<SG>,
     queue_client: Option<QC>,
 }
 
-impl<LR, SR, ADG, QC> DeploymentManagerBuilder<LR, SR, ADG, QC>
+impl<LR, SR, ADG, SG, QC> DeploymentManagerBuilder<LR, SR, ADG, SG, QC>
 where
     LR: LogRecorder,
     SR: SecretRecorder,
     ADG: ActiveDeploymentsGetter,
+    SG: SecretGetter,
     QC: BuildQueueClient,
 {
     pub fn build_log_recorder(mut self, build_log_recorder: LR) -> Self {
@@ -69,6 +71,12 @@ where
         self
     }
 
+    pub fn secret_getter(mut self, secret_getter: SG) -> Self {
+        self.secret_getter = Some(secret_getter);
+
+        self
+    }
+
     pub fn runtime(mut self, runtime_client: RuntimeClient<Channel>) -> Self {
         self.runtime_client = Some(runtime_client);
 
@@ -90,6 +98,7 @@ where
         let artifacts_path = self.artifacts_path.expect("artifacts path to be set");
         let queue_client = self.queue_client.expect("a queue client to be set");
         let runtime_client = self.runtime_client.expect("a runtime client to be set");
+        let secret_getter = self.secret_getter.expect("a secret getter to be set");
 
         let (queue_send, queue_recv) = mpsc::channel(QUEUE_BUFFER_SIZE);
         let (run_send, run_recv) = mpsc::channel(RUN_BUFFER_SIZE);
@@ -111,6 +120,7 @@ where
             runtime_client,
             kill_send.clone(),
             active_deployment_getter,
+            secret_getter,
             storage_manager.clone(),
         ));
 
@@ -148,13 +158,14 @@ pub struct DeploymentManager {
 impl DeploymentManager {
     /// Create a new deployment manager. Manages one or more 'pipelines' for
     /// processing service building, loading, and deployment.
-    pub fn builder<LR, SR, ADG, QC>() -> DeploymentManagerBuilder<LR, SR, ADG, QC> {
+    pub fn builder<LR, SR, ADG, SG, QC>() -> DeploymentManagerBuilder<LR, SR, ADG, SG, QC> {
         DeploymentManagerBuilder {
             build_log_recorder: None,
             secret_recorder: None,
             active_deployment_getter: None,
             artifacts_path: None,
             runtime_client: None,
+            secret_getter: None,
             queue_client: None,
         }
     }

@@ -6,7 +6,7 @@ use tonic::transport::Endpoint;
 #[derive(Parser, Debug)]
 pub struct Args {
     /// Address to reach provisioner at
-    #[arg(long, default_value = "localhost:5000")]
+    #[arg(long, default_value = "http://localhost:5000")]
     pub provisioner_address: Endpoint,
 
     /// Is this runtime for a legacy service

@@ -1,4 +1,6 @@
 use std::{
+    collections::BTreeMap,
+    iter::FromIterator,
     net::{Ipv4Addr, SocketAddr},
     ops::DerefMut,
     path::PathBuf,
@@ -41,6 +43,7 @@ where
     logs_tx: Mutex<UnboundedSender<LogItem>>,
     provisioner_address: Endpoint,
     kill_tx: Mutex<Option<oneshot::Sender<String>>>,
+    secrets: Mutex<Option<BTreeMap<String, String>>>,
     storage_manager: S,
 }
 
@@ -57,6 +60,7 @@ where
             logs_tx: Mutex::new(tx),
             kill_tx: Mutex::new(None),
             provisioner_address,
+            secrets: Mutex::new(None),
             storage_manager,
         }
     }
@@ -68,11 +72,13 @@ where
     S: StorageManager + 'static,
 {
     async fn load(&self, request: Request<LoadRequest>) -> Result<Response<LoadResponse>, Status> {
-        let so_path = request.into_inner().path;
-        trace!(so_path, "loading");
+        let LoadRequest { path, secrets, .. } = request.into_inner();
+        trace!(path, "loading");
 
-        let so_path = PathBuf::from(so_path);
+        let so_path = PathBuf::from(path);
         *self.so_path.lock().unwrap() = Some(so_path);
+
+        *self.secrets.lock().unwrap() = Some(BTreeMap::from_iter(secrets.into_iter()));
 
         let message = LoadResponse { success: true };
         Ok(Response::new(message))
@@ -97,6 +103,18 @@ where
             })
             .map_err(|err| Status::from_error(Box::new(err)))?
             .clone();
+        let secrets = self
+            .secrets
+            .lock()
+            .unwrap()
+            .as_ref()
+            .ok_or_else(|| -> error::Error {
+                error::Error::Start(anyhow!(
+                    "trying to secrets from a service that was not loaded"
+                ))
+            })
+            .map_err(|err| Status::from_error(Box::new(err)))?
+            .clone();
 
         let StartRequest {
             deployment_id,
@@ -110,8 +128,12 @@ where
 
         let deployment_id = Uuid::from_slice(&deployment_id).unwrap();
 
-        let mut factory =
-            abstract_factory.get_factory(service_name, deployment_id, self.storage_manager.clone());
+        let mut factory = abstract_factory.get_factory(
+            service_name,
+            deployment_id,
+            secrets,
+            self.storage_manager.clone(),
+        );
 
         let logs_tx = self.logs_tx.lock().unwrap().clone();
 
@@ -185,7 +207,7 @@ where
 }
 
 /// Run the service until a stop signal is received
-#[instrument(skip(service))]
+#[instrument(skip(service, kill_rx))]
 async fn run_until_stopped(
     service: LoadedService,
     addr: SocketAddr,

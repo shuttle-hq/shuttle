@@ -22,6 +22,9 @@ message LoadRequest {
 
   // Path to compiled file to load for service
   string path = 2;
+
+  // Secrets that belong to this deployment
+  map<string, string> secrets = 10;
 }
 
 message LoadResponse {

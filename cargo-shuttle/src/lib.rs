@@ -6,7 +6,7 @@ mod provisioner_server;
 
 use shuttle_common::project::ProjectName;
 use shuttle_proto::runtime::{self, LoadRequest, StartRequest, SubscribeLogsRequest};
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fs::{read_to_string, File};
 use std::io::stdout;
@@ -398,18 +398,18 @@ impl Shuttle {
         trace!("loading secrets");
         let secrets_path = working_directory.join("Secrets.toml");
 
-        let secrets: BTreeMap<String, String> =
-            if let Ok(secrets_str) = read_to_string(secrets_path) {
-                let secrets: BTreeMap<String, String> =
-                    secrets_str.parse::<toml::Value>()?.try_into()?;
+        let secrets: HashMap<String, String> = if let Ok(secrets_str) = read_to_string(secrets_path)
+        {
+            let secrets: HashMap<String, String> =
+                secrets_str.parse::<toml::Value>()?.try_into()?;
 
-                trace!(keys = ?secrets.keys(), "available secrets");
+            trace!(keys = ?secrets.keys(), "available secrets");
 
-                secrets
-            } else {
-                trace!("no Secrets.toml was found");
-                Default::default()
-            };
+            secrets
+        } else {
+            trace!("no Secrets.toml was found");
+            Default::default()
+        };
 
         let service_name = self.ctx.project_name().to_string();
 
@@ -442,6 +442,7 @@ impl Shuttle {
                 .into_string()
                 .expect("to convert path to string"),
             service_name: service_name.clone(),
+            secrets,
         });
         trace!("loading service");
         let _ = runtime_client

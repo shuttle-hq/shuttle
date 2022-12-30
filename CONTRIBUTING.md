@@ -225,9 +225,8 @@ The rest are the following libraries:
 
 Lastly, the `user service` is not a folder in this repository, but is the user service that will be deployed by `deployer`.
 
-
 ## Windows Considerations
-Currently, if you try to use 'make images' on Windows, you may find that the shell files cannot be read by Bash/WSL. This is due to the fact that Windows may have pulled the files in CRLF format rather than LF, which causes problems with Bash as to run the commands, Linux needs the file in LF format. 
+Currently, if you try to use 'make images' on Windows, you may find that the shell files cannot be read by Bash/WSL. This is due to the fact that Windows may have pulled the files in CRLF format rather than LF[^1], which causes problems with Bash as to run the commands, Linux needs the file in LF format. 
 
 Thankfully, we can fix this problem by simply using the `git config core.autocrlf` command to change how Git handles line endings. It takes a single argument:
 
@@ -237,11 +236,10 @@ git config --global core.autocrlf input
 
 This should allow you to run `make images` and other Make commands with no issues.
 
-
 If you need to change it back for whatever reason, you can just change the last argument from 'input' to 'true' like so:
 ```
 git config --global core.autocrlf true
 ```
 After you run this command, you should be able to checkout projects that are maintained using CRLF (Windows) again.
 
-You can learn more about this particular issue [here](https://git-scm.com/book/en/v2/Customizing-Git-Git-Configuration#_core_autocrlf) (from the 'Pro Git' book, which is completely free and if you don't use Git regularly, it's a great way to learn it).
+[^1]: https://git-scm.com/book/en/v2/Customizing-Git-Git-Configuration#_core_autocrlf

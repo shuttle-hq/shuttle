@@ -10,6 +10,7 @@ use std::sync::Mutex;
 use async_trait::async_trait;
 use cap_std::os::unix::net::UnixStream;
 use futures::TryStreamExt;
+use hyper::body::HttpBody;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response};
 use shuttle_common::wasm::{RequestWrapper, ResponseWrapper};
@@ -223,10 +224,24 @@ impl RouterInner {
         // write request parts
         parts_stream.write_all(&request_rmp).unwrap();
 
+        // To protect our server, reject requests with bodies larger than
+        // 64kbs of data.
+        let body_size = body.size_hint().upper().unwrap_or(u64::MAX);
+
+        if body_size > 1024 * 64 {
+            let response = Response::builder()
+                .status(hyper::http::StatusCode::PAYLOAD_TOO_LARGE)
+                .body(Body::empty())
+                .unwrap();
+
+            // Return early if body is too big
+            return Ok(response);
+        }
+
+        let body_bytes = hyper::body::to_bytes(body).await.unwrap();
+
         // write body to axum
-        body_write_stream
-            .write_all(hyper::body::to_bytes(body).await.unwrap().as_ref())
-            .unwrap();
+        body_write_stream.write_all(body_bytes.as_ref()).unwrap();
 
         // drop stream to signal EOF
         drop(body_write_stream);

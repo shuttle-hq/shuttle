@@ -119,7 +119,7 @@ commands:
         default: ""
     steps:
       - run:
-          name: "Set git tag in the environment"
+          name: Set git tag in the environment"
           command: |
             echo TAG=$(git describe --tags) >> $BASH_ENV
       - run:
@@ -132,6 +132,8 @@ commands:
             mkdir -p artifacts/<< parameters.target >>
             cp $BASH_ENV artifacts/bash.env
             tar -cvzf artifacts/<< parameters.target >>/cargo-shuttle-$TAG-<< parameters.target >>.tar.gz shuttle
+      # Persist the bash environment to the workspace as well, we need it for the release job.
+      # https://discuss.circleci.com/t/share-environment-variable-between-different-job/45647/4
       - persist_to_workspace:
           root: artifacts
           paths:
@@ -362,15 +364,14 @@ jobs:
       - run:
           name: "Set tag in environment"
           command: |
-            cat artifacts/bash.env
             cat artifacts/bash.env >> "$BASH_ENV"
+            rm bash.env
       - run:
           name: "Publish Release on GitHub"
+          # Since each binary is in a sub directory named after its target, we flatten
+          # the artifacts directory before passing it to ghr
           command: |
-            ls artifacts
             find artifacts -mindepth 2 -type f -exec mv -t artifacts {} +
-            ls artifacts
-            echo ${TAG}
             go install github.com/tcnksm/ghr@v0.16.0
             ghr -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} -delete -draft ${TAG} ./artifacts/
 

@@ -6,13 +6,13 @@ orbs:
   win: circleci/windows@5.0
 
 executors:
-    docker-rust:
-      docker:
-        - image: cimg/rust:1.65.0
-    image-ubuntu:
-      machine:
-        image: ubuntu-2204:2022.04.1
-        docker_layer_caching: true
+  docker-rust:
+    docker:
+      - image: cimg/rust:1.65.0
+  image-ubuntu:
+    machine:
+      image: ubuntu-2204:2022.04.1
+      docker_layer_caching: true
 
 # sscache steps are from this guide
 # https://medium.com/@edouard.oger/rust-caching-on-circleci-using-sccache-c996344f0115

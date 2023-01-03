@@ -362,8 +362,9 @@ jobs:
             ls artifacts
             find artifacts -mindepth 2 -type f -exec mv -t artifacts {} +
             ls artifacts
+            echo ${TAG}
             go install github.com/tcnksm/ghr@v0.16.0
-            ghr -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} -delete -draft $TAG artifacts/
+            ghr -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} -delete -draft ${TAG} ./artifacts/
 
 workflows:
   version: 2

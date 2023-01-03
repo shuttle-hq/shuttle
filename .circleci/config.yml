@@ -358,8 +358,6 @@ jobs:
           at: artifacts
       - run:
           name: "Publish Release on GitHub"
-          environment:
-            GITHUB_TOKEN: $GITHUB_TOKEN
           command: |
             find artifacts -mindepth 2 -type f -exec mv -t artifacts {} +
             go install github.com/tcnksm/ghr@v0.16.0

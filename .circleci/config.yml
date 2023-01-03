@@ -120,7 +120,9 @@ commands:
     steps:
       - run:
           name: "Set git tag in the environment"
-          command: echo TAG=$(git describe --tags) >> "$BASH_ENV"
+          command: |
+            echo TAG=$(git describe --tags) >> $BASH_ENV
+            printenv TAG
       - run:
           name: Make artifact
           command: |
@@ -129,11 +131,13 @@ commands:
             mv LICENSE shuttle/
             mv README.md shuttle/
             mkdir -p artifacts/<< parameters.target >>
+            cp $BASH_ENV artifacts/bash.env
             tar -cvzf artifacts/<< parameters.target >>/cargo-shuttle-$TAG-<< parameters.target >>.tar.gz shuttle
       - persist_to_workspace:
           root: artifacts
           paths:
             - << parameters.target >>/*
+            - bash.env
 
 jobs:
   workspace-fmt:
@@ -360,6 +364,8 @@ jobs:
           name: "Publish Release on GitHub"
           command: |
             ls artifacts
+            cat bash.env > $BASH_ENV
+            printenv TAG
             find artifacts -mindepth 2 -type f -exec mv -t artifacts {} +
             ls artifacts
             echo ${TAG}

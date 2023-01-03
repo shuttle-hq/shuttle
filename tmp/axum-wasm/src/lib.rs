@@ -51,7 +51,7 @@ pub extern "C" fn __SHUTTLE_Axum_call(
     use axum::body::HttpBody;
     use std::io::{Read, Write};
     use std::os::wasi::io::FromRawFd;
-    // println!("inner handler awoken; interacting with fd={fd_3},{fd_4}");
+    println!("inner handler awoken; interacting with fd={fd_3},{fd_4}");
 
     // file descriptor 3 for reading and writing http parts
     let mut parts_fd = unsafe { std::fs::File::from_raw_fd(fd_3) };
@@ -75,7 +75,7 @@ pub extern "C" fn __SHUTTLE_Axum_call(
         .body(axum::body::boxed(body))
         .unwrap();
 
-    // println!("inner router received request: {:?}", &request);
+    println!("inner router received request: {:?}", &request);
     let res = handle_request(request);
 
     let (parts, mut body) = res.into_parts();

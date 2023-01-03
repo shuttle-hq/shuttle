@@ -365,7 +365,7 @@ jobs:
           name: "Set tag in environment"
           command: |
             cat artifacts/bash.env >> "$BASH_ENV"
-            rm bash.env
+            rm artifacts/bash.env
       - run:
           name: "Publish Release on GitHub"
           # Since each binary is in a sub directory named after its target, we flatten

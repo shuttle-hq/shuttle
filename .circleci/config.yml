@@ -360,10 +360,14 @@ jobs:
       - attach_workspace:
           at: artifacts
       - run:
+          name: "Set tag in environment"
+          command: |
+            cat artifacts/bash.env
+            cat artifacts/bash.env >> "$BASH_ENV"
+      - run:
           name: "Publish Release on GitHub"
           command: |
             ls artifacts
-            cat artifacts/bash.env > $BASH_ENV
             find artifacts -mindepth 2 -type f -exec mv -t artifacts {} +
             ls artifacts
             echo ${TAG}

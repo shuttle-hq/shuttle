@@ -264,7 +264,7 @@ extern crate shuttle_codegen;
 /// | `ShuttlePoem`                         | web-poem     | [poem](https://docs.rs/poem/1.3.35)         | 1.3.35     | [GitHub](https://github.com/shuttle-hq/examples/tree/main/poem/hello-world)           |
 /// | `Result<T, shuttle_service::Error>`   | web-tower    | [tower](https://docs.rs/tower/0.4.12)       | 0.14.12    | [GitHub](https://github.com/shuttle-hq/examples/tree/main/tower/hello-world)          |
 /// | `ShuttleSerenity`                     | bot-serenity | [serenity](https://docs.rs/serenity/0.11.5) | 0.11.5     | [GitHub](https://github.com/shuttle-hq/examples/tree/main/serenity/hello-world)       |
-/// | `ShuttlePoise`                        | bot-poise    | [poise](https://docs.rs/poise/0.5.2)        | 0.5.2      | TODO                                                                                  |
+/// | `ShuttlePoise`                        | bot-poise    | [poise](https://docs.rs/poise/0.5.2)        | 0.5.2      | [GitHub](https://github.com/shuttle-hq/examples/tree/main/poise/hello-world)          |
 /// | `ShuttleActixWeb`                     | web-actix-web| [actix-web](https://docs.rs/actix-web/4.2.1)| 4.2.1      | [GitHub](https://github.com/shuttle-hq/examples/tree/main/actix-web/hello-world)           |
 
 ///

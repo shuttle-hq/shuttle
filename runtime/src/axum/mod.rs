@@ -198,24 +198,22 @@ impl RouterInner {
             .unwrap();
 
         let (mut parts_stream, parts_client) = UnixStream::pair().unwrap();
-        let (body_read_stream, body_read_client) = UnixStream::pair().unwrap();
         let (mut body_write_stream, body_write_client) = UnixStream::pair().unwrap();
+        let (body_read_stream, body_read_client) = UnixStream::pair().unwrap();
 
         let parts_client = WasiUnixStream::from_cap_std(parts_client);
-        let body_read_client = WasiUnixStream::from_cap_std(body_read_client);
         let body_write_client = WasiUnixStream::from_cap_std(body_write_client);
+        let body_read_client = WasiUnixStream::from_cap_std(body_read_client);
 
         store
             .data_mut()
             .insert_file(3, Box::new(parts_client), FileCaps::all());
-
         store
             .data_mut()
-            .insert_file(4, Box::new(body_read_client), FileCaps::all());
-
+            .insert_file(4, Box::new(body_write_client), FileCaps::all());
         store
             .data_mut()
-            .insert_file(5, Box::new(body_write_client), FileCaps::all());
+            .insert_file(5, Box::new(body_read_client), FileCaps::all());
 
         let (parts, body) = req.into_parts();
 
@@ -233,7 +231,7 @@ impl RouterInner {
         // drop stream to signal EOF
         drop(body_write_stream);
 
-        // println!("calling inner Router");
+        println!("calling inner Router");
         self.linker
             .get(&mut store, "axum", "__SHUTTLE_Axum_call")
             .unwrap()

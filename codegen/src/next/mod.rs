@@ -268,11 +268,9 @@ pub(crate) fn wasi_bindings(app: App) -> proc_macro2::TokenStream {
             fd_5: std::os::wasi::prelude::RawFd,
         ) {
             use axum::body::HttpBody;
-            use futures::TryStreamExt;
             use std::io::{Read, Write};
             use std::os::wasi::io::FromRawFd;
-
-            println!("inner handler awoken; interacting with fd={fd_3},{fd_4}");
+            println!("inner handler awoken; interacting with fd={fd_3},{fd_4},{fd_4}");
 
             // file descriptor 3 for reading and writing http parts
             let mut parts_fd = unsafe { std::fs::File::from_raw_fd(fd_3) };
@@ -282,8 +280,8 @@ pub(crate) fn wasi_bindings(app: App) -> proc_macro2::TokenStream {
             // deserialize request parts from rust messagepack
             let wrapper: shuttle_common::wasm::RequestWrapper = rmp_serde::from_read(reader).unwrap();
 
-            // file descriptor 5 for reading http body into wasm
-            let mut body_read_stream = unsafe { std::fs::File::from_raw_fd(fd_5) };
+            // file descriptor 4 for reading http body into wasm
+            let mut body_read_stream = unsafe { std::fs::File::from_raw_fd(fd_4) };
 
             let mut reader = std::io::BufReader::new(&mut body_read_stream);
             let mut body_buf = Vec::new();
@@ -297,7 +295,7 @@ pub(crate) fn wasi_bindings(app: App) -> proc_macro2::TokenStream {
                 .unwrap();
 
             println!("inner router received request: {:?}", &request);
-            let res = futures_executor::block_on(__app(request));
+            let res = handle_request(request);
 
             let (parts, mut body) = res.into_parts();
 
@@ -307,8 +305,8 @@ pub(crate) fn wasi_bindings(app: App) -> proc_macro2::TokenStream {
             // write response parts
             parts_fd.write_all(&response_parts).unwrap();
 
-            // file descriptor 4 for writing http body to host
-            let mut body_write_stream = unsafe { std::fs::File::from_raw_fd(fd_4) };
+            // file descriptor 5 for writing http body to host
+            let mut body_write_stream = unsafe { std::fs::File::from_raw_fd(fd_5) };
 
             // write body if there is one
             if let Some(body) = futures_executor::block_on(body.data()) {

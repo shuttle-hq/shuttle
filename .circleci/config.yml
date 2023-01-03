@@ -363,7 +363,7 @@ jobs:
           name: "Publish Release on GitHub"
           command: |
             ls artifacts
-            cat bash.env > $BASH_ENV
+            cat artifacts/bash.env > $BASH_ENV
             find artifacts -mindepth 2 -type f -exec mv -t artifacts {} +
             ls artifacts
             echo ${TAG}

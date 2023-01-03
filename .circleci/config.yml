@@ -122,7 +122,6 @@ commands:
           name: "Set git tag in the environment"
           command: |
             echo TAG=$(git describe --tags) >> $BASH_ENV
-            printenv TAG
       - run:
           name: Make artifact
           command: |
@@ -365,7 +364,6 @@ jobs:
           command: |
             ls artifacts
             cat bash.env > $BASH_ENV
-            printenv TAG
             find artifacts -mindepth 2 -type f -exec mv -t artifacts {} +
             ls artifacts
             echo ${TAG}

@@ -103,8 +103,75 @@ impl ResponseWrapper {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
+struct Log {
+    message: String,
+}
+
+impl Log {
+    pub fn into_bytes(self) -> Vec<u8> {
+        let mut buf = Vec::new();
+
+        self.append_bytes(&mut buf);
+
+        buf
+    }
+}
+
+trait Bytesable {
+    /// Add self to bytes vec
+    fn append_bytes(self, buf: &mut Vec<u8>);
+
+    /// Get self from bytes vec
+    fn from_bytes<I: Iterator<Item = u8>>(iter: &mut I) -> Self;
+}
+
+impl Bytesable for usize {
+    fn append_bytes(self, buf: &mut Vec<u8>) {
+        buf.extend_from_slice(&self.to_le_bytes());
+    }
+
+    fn from_bytes<I: Iterator<Item = u8>>(iter: &mut I) -> Self {
+        let mut buf = [0; usize::BITS as usize / 8];
+        buf.fill_with(|| iter.next().unwrap());
+
+        usize::from_le_bytes(buf)
+    }
+}
+
+impl Bytesable for String {
+    fn append_bytes(self, buf: &mut Vec<u8>) {
+        self.len().append_bytes(buf);
+        buf.extend_from_slice(self.as_bytes());
+    }
+
+    fn from_bytes<I: Iterator<Item = u8>>(iter: &mut I) -> Self {
+        let length = usize::from_bytes(iter);
+
+        let mut vec = vec![0; length];
+        vec.fill_with(|| iter.next().unwrap());
+
+        String::from_utf8(vec).unwrap()
+    }
+}
+
+impl Bytesable for Log {
+    fn append_bytes(self, buf: &mut Vec<u8>) {
+        self.message.append_bytes(buf);
+    }
+
+    fn from_bytes<I: Iterator<Item = u8>>(iter: &mut I) -> Self {
+        Self {
+            message: String::from_bytes(iter),
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
+    use std::io::{Read, Write};
+    use std::os::unix::net::UnixStream;
+
     use super::*;
     use hyper::body::Body;
     use hyper::http::HeaderValue;
@@ -156,5 +223,43 @@ mod test {
         );
         assert_eq!(back.status, StatusCode::NOT_MODIFIED);
         assert_eq!(back.version, Version::HTTP_11);
+    }
+
+    #[test]
+    fn log_roundtrip() {
+        let log = Log {
+            message: "Hello test".to_string(),
+        };
+
+        let mut buf = Vec::new();
+        log.clone().append_bytes(&mut buf);
+        let mut iter = buf.into_iter();
+
+        let actual = Log::from_bytes(&mut iter);
+
+        assert_eq!(log, actual);
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn logs_over_socket() {
+        let (rx, mut tx) = UnixStream::pair().unwrap();
+        let log1 = Log {
+            message: "First message".to_string(),
+        };
+        let log2 = Log {
+            message: "Second message".to_string(),
+        };
+
+        tx.write(&log1.clone().into_bytes()).unwrap();
+        tx.write(&log2.clone().into_bytes()).unwrap();
+
+        let mut rx = rx.bytes().filter_map(Result::ok);
+
+        let actual = Log::from_bytes(&mut rx);
+        assert_eq!(log1, actual);
+
+        let actual = Log::from_bytes(&mut rx);
+        assert_eq!(log2, actual);
     }
 }

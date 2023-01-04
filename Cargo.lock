@@ -6347,6 +6347,7 @@ dependencies = [
  "async-trait",
  "cap-std",
  "clap 4.0.27",
+ "futures",
  "hyper",
  "rmp-serde",
  "shuttle-common",

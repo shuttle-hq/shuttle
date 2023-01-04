@@ -238,15 +238,12 @@ impl ToTokens for App {
         let Self { endpoints } = self;
 
         let app = quote!(
-            async fn __app<B>(request: http::Request<B>) -> axum::response::Response
-            where
-                B: axum::body::HttpBody + Send + 'static,
+            async fn __app(request: http::Request<axum::body::BoxBody>,) -> axum::response::Response
             {
                 use tower_service::Service;
 
                 let mut router = axum::Router::new()
-                    #(#endpoints)*
-                    .into_service();
+                    #(#endpoints)*;
 
                 let response = router.call(request).await.unwrap();
 
@@ -268,12 +265,12 @@ pub(crate) fn wasi_bindings(app: App) -> proc_macro2::TokenStream {
         pub extern "C" fn __SHUTTLE_Axum_call(
             fd_3: std::os::wasi::prelude::RawFd,
             fd_4: std::os::wasi::prelude::RawFd,
+            fd_5: std::os::wasi::prelude::RawFd,
         ) {
             use axum::body::HttpBody;
             use std::io::{Read, Write};
             use std::os::wasi::io::FromRawFd;
-
-            println!("inner handler awoken; interacting with fd={fd_3},{fd_4}");
+            println!("inner handler awoken; interacting with fd={fd_3},{fd_4},{fd_5}");
 
             // file descriptor 3 for reading and writing http parts
             let mut parts_fd = unsafe { std::fs::File::from_raw_fd(fd_3) };
@@ -283,28 +280,22 @@ pub(crate) fn wasi_bindings(app: App) -> proc_macro2::TokenStream {
             // deserialize request parts from rust messagepack
             let wrapper: shuttle_common::wasm::RequestWrapper = rmp_serde::from_read(reader).unwrap();
 
-            // file descriptor 4 for reading and writing http body
-            let mut body_fd = unsafe { std::fs::File::from_raw_fd(fd_4) };
+            // file descriptor 4 for reading http body into wasm
+            let mut body_read_stream = unsafe { std::fs::File::from_raw_fd(fd_4) };
 
-            // read body from host
+            let mut reader = std::io::BufReader::new(&mut body_read_stream);
             let mut body_buf = Vec::new();
-            let mut c_buf: [u8; 1] = [0; 1];
-            loop {
-                body_fd.read(&mut c_buf).unwrap();
-                if c_buf[0] == 0 {
-                    break;
-                } else {
-                    body_buf.push(c_buf[0]);
-                }
-            }
+            reader.read_to_end(&mut body_buf).unwrap();
 
-            let request: http::Request<axum::body::Body> = wrapper
+            let body = axum::body::Body::from(body_buf);
+
+            let request = wrapper
                 .into_request_builder()
-                .body(body_buf.into())
+                .body(axum::body::boxed(body))
                 .unwrap();
 
             println!("inner router received request: {:?}", &request);
-            let res = futures_executor::block_on(__app(request));
+            let res = handle_request(request);
 
             let (parts, mut body) = res.into_parts();
 
@@ -314,12 +305,13 @@ pub(crate) fn wasi_bindings(app: App) -> proc_macro2::TokenStream {
             // write response parts
             parts_fd.write_all(&response_parts).unwrap();
 
+            // file descriptor 5 for writing http body to host
+            let mut body_write_stream = unsafe { std::fs::File::from_raw_fd(fd_5) };
+
             // write body if there is one
             if let Some(body) = futures_executor::block_on(body.data()) {
-                body_fd.write_all(body.unwrap().as_ref()).unwrap();
+                body_write_stream.write_all(body.unwrap().as_ref()).unwrap();
             }
-            // signal to the reader that end of file has been reached
-            body_fd.write(&[0]).unwrap();
         }
     )
 }
@@ -367,16 +359,14 @@ mod tests {
 
         let actual = quote!(#app);
         let expected = quote!(
-            async fn __app<B>(request: http::Request<B>) -> axum::response::Response
-            where
-                B: axum::body::HttpBody + Send + 'static,
-            {
+            async fn __app(
+                request: http::Request<axum::body::BoxBody>,
+            ) -> axum::response::Response {
                 use tower_service::Service;
 
                 let mut router = axum::Router::new()
                     .route("/hello", axum::routing::get(hello))
-                    .route("/goodbye", axum::routing::post(goodbye))
-                    .into_service();
+                    .route("/goodbye", axum::routing::post(goodbye));
 
                 let response = router.call(request).await.unwrap();
 

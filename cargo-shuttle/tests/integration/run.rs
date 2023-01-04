@@ -1,4 +1,5 @@
 use cargo_shuttle::{Args, Command, ProjectArgs, RunArgs, Shuttle};
+use local_ip_address::local_ip;
 use portpicker::pick_unused_port;
 use reqwest::StatusCode;
 use std::{fs::canonicalize, process::exit, time::Duration};
@@ -8,7 +9,7 @@ use tokio::time::sleep;
 async fn cargo_shuttle_run(working_directory: &str) -> u16 {
     let working_directory = canonicalize(working_directory).unwrap();
     let port = pick_unused_port().unwrap();
-    let run_args = RunArgs { port };
+    let run_args = RunArgs { port, router_ip: false};
 
     let runner = Shuttle::new().unwrap().run(Args {
         api_url: Some("http://shuttle.invalid:80".to_string()),
@@ -358,4 +359,69 @@ async fn thruster_hello_world() {
         .unwrap();
 
     assert_eq!(request_text, "Hello, World!");
+}
+
+/// creates a `cargo-shuttle` run instance with some reasonable defaults set, but using the router IP instead.
+async fn cargo_shuttle_run_with_router_ip(working_directory: &str) -> u16 {
+    let working_directory = canonicalize(working_directory).unwrap();
+    let port = pick_unused_port().unwrap();
+    let ip = local_ip().unwrap();
+    let run_args = RunArgs { port, router_ip: true };
+
+    let runner = Shuttle::new().unwrap().run(Args {
+        api_url: Some("http://shuttle.invalid:80".to_string()),
+        project_args: ProjectArgs {
+            working_directory: working_directory.clone(),
+            name: None,
+        },
+        cmd: Command::Run(run_args),
+    });
+
+    let working_directory_clone = working_directory.clone();
+
+    tokio::spawn(async move {
+        sleep(Duration::from_secs(600)).await;
+
+        println!(
+            "run test for '{}' took too long. Did it fail to shutdown?",
+            working_directory_clone.display()
+        );
+        exit(1);
+    });
+
+    tokio::spawn(runner);
+
+    // Wait for service to be responsive
+    while (reqwest::Client::new()
+        .get(format!("http://{ip}:{port}"))
+        .send()
+        .await)
+        .is_err()
+    {
+        println!(
+            "waiting for '{}' to start up...",
+            working_directory.display()
+        );
+        sleep(Duration::from_millis(350)).await;
+    }
+
+    port
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn rocket_hello_world_with_router_ip() {
+
+    let port = cargo_shuttle_run_with_router_ip("../examples/rocket/hello-world").await;
+    let ip = local_ip().unwrap();
+
+        let request_text = reqwest::Client::new()
+        .get(format!("http://{ip:?}:{port}/hello"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+
+    assert_eq!(request_text, "Hello, world!");
 }

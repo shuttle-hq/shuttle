@@ -27,6 +27,7 @@ use futures::StreamExt;
 use git2::{Repository, StatusOptions};
 use ignore::overrides::OverrideBuilder;
 use ignore::WalkBuilder;
+use local_ip_address::local_ip;
 use shuttle_common::models::{project, secret};
 use shuttle_service::loader::{build_crate, Loader};
 use shuttle_service::Logger;
@@ -405,7 +406,8 @@ impl Shuttle {
             secrets,
             working_directory.to_path_buf(),
         )?;
-        let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), run_args.port);
+        let addr = SocketAddr::new(if run_args.router_ip 
+                                    {local_ip().unwrap()} else {Ipv4Addr::LOCALHOST.into()}, run_args.port);
 
         trace!("loading project");
         println!(

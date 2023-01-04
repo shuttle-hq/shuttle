@@ -143,6 +143,9 @@ pub struct RunArgs {
     /// port to start service on
     #[clap(long, default_value = "8000")]
     pub port: u16,
+    /// use router ip address instead of localhost
+    #[clap(long)]
+    pub router_ip: bool
 }
 
 #[derive(Parser, Debug)]

@@ -8,11 +8,7 @@ use tokio::time::sleep;
 async fn cargo_shuttle_run(working_directory: &str, router_ip: bool) -> u16 {
     let working_directory = canonicalize(working_directory).unwrap();
 
-    let url = if !router_ip {
-        "localhost"
-    } else {
-        "0.0.0.0"
-    };
+    let url = if !router_ip { "localhost" } else { "0.0.0.0" };
 
     let port = pick_unused_port().unwrap();
 
@@ -380,10 +376,9 @@ async fn thruster_hello_world() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn rocket_hello_world_with_router_ip() {
-
     let port = cargo_shuttle_run("../examples/rocket/hello-world", true).await;
 
-        let request_text = reqwest::Client::new()
+    let request_text = reqwest::Client::new()
         .get(format!("http://0.0.0.0:{port}/hello"))
         .send()
         .await

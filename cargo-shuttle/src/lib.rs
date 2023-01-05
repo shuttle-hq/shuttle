@@ -406,7 +406,7 @@ impl Shuttle {
             working_directory.to_path_buf(),
         )?;
         let addr = if run_args.router_ip {
-            std::net::IpAddr::V4(Ipv4Addr::new(0,0,0,0))
+            std::net::IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))
         } else {
             Ipv4Addr::LOCALHOST.into()
         };

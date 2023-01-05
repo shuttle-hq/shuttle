@@ -145,7 +145,7 @@ pub struct RunArgs {
     pub port: u16,
     /// use router ip address instead of localhost
     #[clap(long)]
-    pub router_ip: bool
+    pub router_ip: bool,
 }
 
 #[derive(Parser, Debug)]

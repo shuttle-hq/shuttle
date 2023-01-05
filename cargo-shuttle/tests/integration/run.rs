@@ -8,18 +8,24 @@ use tokio::time::sleep;
 async fn cargo_shuttle_run(working_directory: &str, router_ip: bool) -> u16 {
     let working_directory = canonicalize(working_directory).unwrap();
 
-    let url = if router_ip == false {
+    let url = if !router_ip {
         "localhost"
     } else {
         "0.0.0.0"
     };
-    
+
     let port = pick_unused_port().unwrap();
 
-    let run_args = if router_ip == false {
-        RunArgs { port, router_ip: false}
+    let run_args = if !router_ip {
+        RunArgs {
+            port,
+            router_ip: false,
+        }
     } else {
-        RunArgs { port, router_ip: true}
+        RunArgs {
+            port,
+            router_ip: true,
+        }
     };
 
     let runner = Shuttle::new().unwrap().run(Args {

@@ -28,7 +28,6 @@ headers = "0.3.8"
 indicatif = "0.17.2"
 ignore = "0.4.18"
 indoc = "1.0.7"
-local-ip-address = "0.5.0"
 log = "0.4.17"
 openssl = { version = '0.10', optional = true }
 portpicker = "0.1.1"

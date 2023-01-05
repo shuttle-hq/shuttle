@@ -62,7 +62,7 @@ impl Runtime for AxumWasm {
         let wasm_path = request.into_inner().path;
         trace!(wasm_path, "loading");
 
-        let router = Router::new(wasm_path);
+        let router = RouterBuilder::new().src(wasm_path).build();
 
         *self.router.lock().unwrap() = Some(router);
 
@@ -78,14 +78,14 @@ impl Runtime for AxumWasm {
         let port = 7002;
         let address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
 
-        let router = self.router.lock().unwrap().take().unwrap();
-
         let (kill_tx, kill_rx) = tokio::sync::oneshot::channel();
 
         *self.kill_tx.lock().unwrap() = Some(kill_tx);
 
+        let router = self.router.lock().unwrap().take().unwrap();
+
         // TODO: split `into_server` up into build and run functions
-        tokio::spawn(router.into_server(address, kill_rx));
+        tokio::spawn(run_until_stopped(router, address, kill_rx));
 
         *self.port.lock().unwrap() = Some(port);
 
@@ -140,7 +140,7 @@ struct RouterBuilder {
 }
 
 impl RouterBuilder {
-    pub fn new() -> Self {
+    fn new() -> Self {
         let engine = Engine::default();
 
         let mut linker: Linker<WasiCtx> = Linker::new(&engine);
@@ -153,37 +153,37 @@ impl RouterBuilder {
         }
     }
 
-    pub fn src<P: AsRef<Path>>(mut self, src: P) -> Self {
+    fn src<P: AsRef<Path>>(mut self, src: P) -> Self {
         self.src = Some(src.as_ref().to_path_buf());
         self
     }
 
-    pub fn build(self) -> Router {
+    fn build(self) -> Router {
         let file = self.src.unwrap();
         let module = Module::from_file(&self.engine, file).unwrap();
 
         for export in module.exports() {
             println!("export: {}", export.name());
         }
-        let inner = RouterInner {
+
+        Router {
             linker: self.linker,
             engine: self.engine,
             module,
-        };
-        Router { inner }
+        }
     }
 }
 
 #[derive(Clone)]
-struct RouterInner {
+struct Router {
     linker: Linker<WasiCtx>,
     engine: Engine,
     module: Module,
 }
 
-impl RouterInner {
+impl Router {
     /// Send a HTTP request with body to given endpoint on the axum-wasm router and return the response
-    pub async fn handle_request(
+    async fn handle_request(
         &mut self,
         req: hyper::Request<Body>,
     ) -> Result<Response<Body>, Infallible> {
@@ -274,56 +274,35 @@ impl RouterInner {
     }
 }
 
-#[derive(Clone)]
-struct Router {
-    inner: RouterInner,
-}
+async fn run_until_stopped(
+    router: Router,
+    address: SocketAddr,
+    kill_rx: tokio::sync::oneshot::Receiver<String>,
+) {
+    let make_service = make_service_fn(move |_conn| {
+        let router = router.clone();
+        async move {
+            Ok::<_, Infallible>(service_fn(move |req: Request<Body>| {
+                let mut router = router.clone();
+                async move { Ok::<_, Infallible>(router.handle_request(req).await.unwrap()) }
+            }))
+        }
+    });
 
-impl Router {
-    pub fn builder() -> RouterBuilder {
-        RouterBuilder::new()
-    }
+    let server = hyper::Server::bind(&address).serve(make_service);
 
-    pub fn new<P: AsRef<Path>>(src: P) -> Self {
-        Self::builder().src(src).build()
-    }
-
-    /// Consume the router, build and run server until a stop signal is received via the
-    /// kill receiver
-    // TODO: figure out how to handle the complicated generics for hyper::Server and
-    // hyper::MakeServiceFn and split this up into `build` and `run_until_stopped` functions
-    pub async fn into_server(
-        self,
-        address: SocketAddr,
-        kill_rx: tokio::sync::oneshot::Receiver<String>,
-    ) {
-        let router = self.inner;
-
-        let make_service = make_service_fn(move |_conn| {
-            let router = router.clone();
-            async move {
-                Ok::<_, Infallible>(service_fn(move |req: Request<Body>| {
-                    let mut router = router.clone();
-                    async move { Ok::<_, Infallible>(router.handle_request(req).await.unwrap()) }
-                }))
+    trace!("starting hyper server on: {}", &address);
+    tokio::select! {
+        _ = server => {
+            trace!("axum wasm server stopped");
+        },
+        message = kill_rx => {
+            match message {
+                Ok(msg) => trace!("{msg}"),
+                Err(_) => trace!("the sender dropped")
             }
-        });
-
-        let server = hyper::Server::bind(&address).serve(make_service);
-
-        trace!("starting hyper server on: {}", &address);
-        tokio::select! {
-            _ = server => {
-                trace!("axum wasm server stopped");
-            },
-            message = kill_rx => {
-                match message {
-                    Ok(msg) => trace!("{msg}"),
-                    Err(_) => trace!("the sender dropped")
-                }
-            }
-        };
-    }
+        }
+    };
 }
 
 #[cfg(test)]
@@ -333,8 +312,7 @@ pub mod tests {
 
     #[tokio::test]
     async fn axum() {
-        let axum = Router::new("axum.wasm");
-        let inner = axum.inner;
+        let router = RouterBuilder::new().src("axum.wasm").build();
 
         // GET /hello
         let request: Request<Body> = Request::builder()
@@ -344,7 +322,7 @@ pub mod tests {
             .body(Body::empty())
             .unwrap();
 
-        let res = inner.clone().handle_request(request).await.unwrap();
+        let res = router.clone().handle_request(request).await.unwrap();
 
         assert_eq!(res.status(), StatusCode::OK);
         assert_eq!(
@@ -367,7 +345,7 @@ pub mod tests {
             .body(Body::from("Goodbye world body"))
             .unwrap();
 
-        let res = inner.clone().handle_request(request).await.unwrap();
+        let res = router.clone().handle_request(request).await.unwrap();
 
         assert_eq!(res.status(), StatusCode::OK);
         assert_eq!(
@@ -390,7 +368,7 @@ pub mod tests {
             .body(Body::empty())
             .unwrap();
 
-        let res = inner.clone().handle_request(request).await.unwrap();
+        let res = router.clone().handle_request(request).await.unwrap();
 
         assert_eq!(res.status(), StatusCode::NOT_FOUND);
 
@@ -403,7 +381,7 @@ pub mod tests {
             .body("this should be uppercased".into())
             .unwrap();
 
-        let res = inner.clone().handle_request(request).await.unwrap();
+        let res = router.clone().handle_request(request).await.unwrap();
 
         assert_eq!(res.status(), StatusCode::OK);
         assert_eq!(

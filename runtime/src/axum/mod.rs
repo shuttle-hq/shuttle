@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Mutex;
 
+use anyhow::Context;
 use async_trait::async_trait;
 use cap_std::os::unix::net::UnixStream;
 use futures::TryStreamExt;
@@ -62,7 +63,11 @@ impl Runtime for AxumWasm {
         let wasm_path = request.into_inner().path;
         trace!(wasm_path, "loading");
 
-        let router = RouterBuilder::new().src(wasm_path).build();
+        let router = RouterBuilder::new()
+            .map_err(|err| Status::from_error(err.into()))?
+            .src(wasm_path)
+            .build()
+            .map_err(|err| Status::from_error(err.into()))?;
 
         *self.router.lock().unwrap() = Some(router);
 
@@ -82,7 +87,13 @@ impl Runtime for AxumWasm {
 
         *self.kill_tx.lock().unwrap() = Some(kill_tx);
 
-        let router = self.router.lock().unwrap().take().unwrap();
+        let router = self
+            .router
+            .lock()
+            .unwrap()
+            .take()
+            .context("tried to start a service that was not loaded")
+            .map_err(|err| Status::from_error(err.into()))?;
 
         // TODO: split `into_server` up into build and run functions
         tokio::spawn(run_until_stopped(router, address, kill_rx));
@@ -128,7 +139,9 @@ impl Runtime for AxumWasm {
 
             Ok(tonic::Response::new(StopResponse { success: true }))
         } else {
-            Err(Status::internal("failed to stop deployment"))
+            Err(Status::internal(
+                "trying to stop a service that was not started",
+            ))
         }
     }
 }
@@ -140,17 +153,17 @@ struct RouterBuilder {
 }
 
 impl RouterBuilder {
-    fn new() -> Self {
+    fn new() -> anyhow::Result<Self> {
         let engine = Engine::default();
 
         let mut linker: Linker<WasiCtx> = Linker::new(&engine);
-        wasmtime_wasi::add_to_linker(&mut linker, |s| s).unwrap();
+        wasmtime_wasi::add_to_linker(&mut linker, |s| s)?;
 
-        Self {
+        Ok(Self {
             engine,
             linker,
             src: None,
-        }
+        })
     }
 
     fn src<P: AsRef<Path>>(mut self, src: P) -> Self {
@@ -158,19 +171,19 @@ impl RouterBuilder {
         self
     }
 
-    fn build(self) -> Router {
-        let file = self.src.unwrap();
-        let module = Module::from_file(&self.engine, file).unwrap();
+    fn build(self) -> anyhow::Result<Router> {
+        let file = self.src.expect("module path should be set");
+        let module = Module::from_file(&self.engine, file)?;
 
         for export in module.exports() {
             println!("export: {}", export.name());
         }
 
-        Router {
+        Ok(Router {
             linker: self.linker,
             engine: self.engine,
             module,
-        }
+        })
     }
 }
 
@@ -312,7 +325,11 @@ pub mod tests {
 
     #[tokio::test]
     async fn axum() {
-        let router = RouterBuilder::new().src("axum.wasm").build();
+        let router = RouterBuilder::new()
+            .unwrap()
+            .src("axum.wasm")
+            .build()
+            .unwrap();
 
         // GET /hello
         let request: Request<Body> = Request::builder()

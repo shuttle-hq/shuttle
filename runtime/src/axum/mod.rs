@@ -6,6 +6,7 @@ use std::os::unix::prelude::RawFd;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use anyhow::Context;
 use async_trait::async_trait;
 use cap_std::os::unix::net::UnixStream;
 use futures::TryStreamExt;
@@ -59,7 +60,11 @@ impl Runtime for AxumWasm {
         let wasm_path = request.into_inner().path;
         trace!(wasm_path, "loading");
 
-        let router = Router::new(wasm_path);
+        let router = RouterBuilder::new()
+            .map_err(|err| Status::from_error(err.into()))?
+            .src(wasm_path)
+            .build()
+            .map_err(|err| Status::from_error(err.into()))?;
 
         *self.router.lock().unwrap() = Some(router);
 
@@ -75,14 +80,19 @@ impl Runtime for AxumWasm {
         let StartRequest { port, .. } = request.into_inner();
         let address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port as u16);
 
-        let router = self.router.lock().unwrap().take().unwrap();
-
         let (kill_tx, kill_rx) = tokio::sync::oneshot::channel();
 
         *self.kill_tx.lock().unwrap() = Some(kill_tx);
 
-        // TODO: split `into_server` up into build and run functions
-        tokio::spawn(router.into_server(address, kill_rx));
+        let router = self
+            .router
+            .lock()
+            .unwrap()
+            .take()
+            .context("tried to start a service that was not loaded")
+            .map_err(|err| Status::internal(err.to_string()))?;
+
+        tokio::spawn(run_until_stopped(router, address, kill_rx));
 
         let message = StartResponse { success: true };
 
@@ -122,7 +132,9 @@ impl Runtime for AxumWasm {
 
             Ok(tonic::Response::new(StopResponse { success: true }))
         } else {
-            Err(Status::internal("failed to stop deployment"))
+            Err(Status::internal(
+                "trying to stop a service that was not started",
+            ))
         }
     }
 }
@@ -134,67 +146,68 @@ struct RouterBuilder {
 }
 
 impl RouterBuilder {
-    pub fn new() -> Self {
+    fn new() -> anyhow::Result<Self> {
         let engine = Engine::default();
 
         let mut linker: Linker<WasiCtx> = Linker::new(&engine);
-        wasmtime_wasi::add_to_linker(&mut linker, |s| s).unwrap();
+        wasmtime_wasi::add_to_linker(&mut linker, |s| s)?;
 
-        Self {
+        Ok(Self {
             engine,
             linker,
             src: None,
-        }
+        })
     }
 
-    pub fn src<P: AsRef<Path>>(mut self, src: P) -> Self {
+    fn src<P: AsRef<Path>>(mut self, src: P) -> Self {
         self.src = Some(src.as_ref().to_path_buf());
         self
     }
 
-    pub fn build(self) -> Router {
-        let file = self.src.unwrap();
-        let module = Module::from_file(&self.engine, file).unwrap();
+    fn build(self) -> anyhow::Result<Router> {
+        let file = self.src.expect("module path should be set");
+        let module = Module::from_file(&self.engine, file)?;
 
         for export in module.exports() {
             println!("export: {}", export.name());
         }
-        let inner = RouterInner {
+
+        Ok(Router {
             linker: self.linker,
             engine: self.engine,
             module,
-        };
-        Router { inner }
+        })
     }
 }
 
 #[derive(Clone)]
-struct RouterInner {
+struct Router {
     linker: Linker<WasiCtx>,
     engine: Engine,
     module: Module,
 }
 
-impl RouterInner {
+impl Router {
     /// Send a HTTP request with body to given endpoint on the axum-wasm router and return the response
-    pub async fn handle_request(
+    async fn handle_request(
         &mut self,
         req: hyper::Request<Body>,
-    ) -> Result<Response<Body>, Infallible> {
+    ) -> anyhow::Result<Response<Body>> {
         let wasi = WasiCtxBuilder::new()
             .inherit_stdio()
             .inherit_args()
-            .unwrap()
+            .context("failed to read args")?
             .build();
 
         let mut store = Store::new(&self.engine, wasi);
-        self.linker
-            .module(&mut store, "axum", &self.module)
-            .unwrap();
+        self.linker.module(&mut store, "axum", &self.module)?;
 
-        let (mut parts_stream, parts_client) = UnixStream::pair().unwrap();
-        let (mut body_write_stream, body_write_client) = UnixStream::pair().unwrap();
-        let (body_read_stream, body_read_client) = UnixStream::pair().unwrap();
+        let (mut parts_stream, parts_client) =
+            UnixStream::pair().context("failed to open parts unixstream")?;
+        let (mut body_write_stream, body_write_client) =
+            UnixStream::pair().context("failed to open body write unixstream")?;
+        let (body_read_stream, body_read_client) =
+            UnixStream::pair().context("failed to open body read unixstream")?;
 
         let parts_client = WasiUnixStream::from_cap_std(parts_client);
         let body_write_client = WasiUnixStream::from_cap_std(body_write_client);
@@ -212,11 +225,13 @@ impl RouterInner {
 
         let (parts, body) = req.into_parts();
 
-        // serialise request parts to rmp
+        // Serialise request parts to rmp
         let request_rmp = RequestWrapper::from(parts).into_rmp();
 
-        // write request parts
-        parts_stream.write_all(&request_rmp).unwrap();
+        // Write request parts to wasm module
+        parts_stream
+            .write_all(&request_rmp)
+            .context("failed to write http parts to wasm")?;
 
         // To protect our server, reject requests with bodies larger than
         // 64kbs of data.
@@ -226,98 +241,98 @@ impl RouterInner {
             let response = Response::builder()
                 .status(hyper::http::StatusCode::PAYLOAD_TOO_LARGE)
                 .body(Body::empty())
-                .unwrap();
+                .expect("building request with empty body should not fail");
 
             // Return early if body is too big
             return Ok(response);
         }
 
-        let body_bytes = hyper::body::to_bytes(body).await.unwrap();
+        let body_bytes = hyper::body::to_bytes(body)
+            .await
+            .context("failed to concatenate request body buffers")?;
 
-        // write body to axum
-        body_write_stream.write_all(body_bytes.as_ref()).unwrap();
+        // Write body to wasm
+        body_write_stream
+            .write_all(body_bytes.as_ref())
+            .context("failed to write body to wasm")?;
 
-        // drop stream to signal EOF
+        // Drop stream to signal EOF
         drop(body_write_stream);
 
-        println!("calling inner Router");
+        // Call our function in wasm, telling it to route the request we've written to it
+        // and write back a response
+        trace!("calling inner Router");
         self.linker
             .get(&mut store, "axum", "__SHUTTLE_Axum_call")
-            .unwrap()
+            .expect("wasm module should be loaded and the router function should be available")
             .into_func()
-            .unwrap()
-            .typed::<(RawFd, RawFd, RawFd), ()>(&store)
-            .unwrap()
-            .call(&mut store, (3, 4, 5))
-            .unwrap();
+            .expect("router function should be a function")
+            .typed::<(RawFd, RawFd, RawFd), ()>(&store)?
+            .call(&mut store, (3, 4, 5))?;
 
-        // read response parts from host
+        // Read response parts from wasm
         let reader = BufReader::new(&mut parts_stream);
 
-        // deserialize response parts from rust messagepack
-        let wrapper: ResponseWrapper = rmps::from_read(reader).unwrap();
+        // Deserialize response parts from rust messagepack
+        let wrapper: ResponseWrapper =
+            rmps::from_read(reader).context("failed to deserialize response parts")?;
 
-        // read response body from wasm and stream it to our hyper server
+        // Read response body from wasm, convert it to a Stream and pass it to hyper
         let reader = BufReader::new(body_read_stream);
         let stream = futures::stream::iter(reader.bytes()).try_chunks(2);
         let body = hyper::Body::wrap_stream(stream);
 
-        let response: Response<Body> = wrapper.into_response_builder().body(body).unwrap();
+        let response: Response<Body> = wrapper
+            .into_response_builder()
+            .body(body)
+            .context("failed to construct http response")?;
 
         Ok(response)
     }
 }
 
-#[derive(Clone)]
-struct Router {
-    inner: RouterInner,
-}
-
-impl Router {
-    pub fn builder() -> RouterBuilder {
-        RouterBuilder::new()
-    }
-
-    pub fn new<P: AsRef<Path>>(src: P) -> Self {
-        Self::builder().src(src).build()
-    }
-
-    /// Consume the router, build and run server until a stop signal is received via the
-    /// kill receiver
-    // TODO: figure out how to handle the complicated generics for hyper::Server and
-    // hyper::MakeServiceFn and split this up into `build` and `run_until_stopped` functions
-    pub async fn into_server(
-        self,
-        address: SocketAddr,
-        kill_rx: tokio::sync::oneshot::Receiver<String>,
-    ) {
-        let router = self.inner;
-
-        let make_service = make_service_fn(move |_conn| {
-            let router = router.clone();
-            async move {
-                Ok::<_, Infallible>(service_fn(move |req: Request<Body>| {
-                    let mut router = router.clone();
-                    async move { Ok::<_, Infallible>(router.handle_request(req).await.unwrap()) }
-                }))
-            }
-        });
-
-        let server = hyper::Server::bind(&address).serve(make_service);
-
-        trace!("starting hyper server on: {}", &address);
-        tokio::select! {
-            _ = server => {
-                trace!("axum wasm server stopped");
-            },
-            message = kill_rx => {
-                match message {
-                    Ok(msg) => trace!("{msg}"),
-                    Err(_) => trace!("the sender dropped")
+/// Start a hyper server with a service that calls an axum router in WASM,
+/// and a kill receiver for stopping the server.
+async fn run_until_stopped(
+    router: Router,
+    address: SocketAddr,
+    kill_rx: tokio::sync::oneshot::Receiver<String>,
+) {
+    let make_service = make_service_fn(move |_conn| {
+        let router = router.clone();
+        async move {
+            Ok::<_, Infallible>(service_fn(move |req: Request<Body>| {
+                let mut router = router.clone();
+                async move {
+                    Ok::<_, Infallible>(match router.handle_request(req).await {
+                        Ok(res) => res,
+                        Err(err) => {
+                            error!("error sending request: {}", err);
+                            Response::builder()
+                                .status(hyper::http::StatusCode::INTERNAL_SERVER_ERROR)
+                                .body(Body::empty())
+                                .expect("building request with empty body should not fail")
+                        }
+                    })
                 }
+            }))
+        }
+    });
+
+    let server = hyper::Server::bind(&address).serve(make_service);
+
+    trace!("starting hyper server on: {}", &address);
+    tokio::select! {
+        _ = server => {
+            trace!("axum wasm server stopped");
+        },
+        message = kill_rx => {
+            match message {
+                Ok(msg) => trace!("{msg}"),
+                Err(_) => trace!("the sender dropped")
             }
-        };
-    }
+        }
+    };
 }
 
 #[cfg(test)]
@@ -327,8 +342,11 @@ pub mod tests {
 
     #[tokio::test]
     async fn axum() {
-        let axum = Router::new("axum.wasm");
-        let inner = axum.inner;
+        let router = RouterBuilder::new()
+            .unwrap()
+            .src("axum.wasm")
+            .build()
+            .unwrap();
 
         // GET /hello
         let request: Request<Body> = Request::builder()
@@ -338,7 +356,7 @@ pub mod tests {
             .body(Body::empty())
             .unwrap();
 
-        let res = inner.clone().handle_request(request).await.unwrap();
+        let res = router.clone().handle_request(request).await.unwrap();
 
         assert_eq!(res.status(), StatusCode::OK);
         assert_eq!(
@@ -361,7 +379,7 @@ pub mod tests {
             .body(Body::from("Goodbye world body"))
             .unwrap();
 
-        let res = inner.clone().handle_request(request).await.unwrap();
+        let res = router.clone().handle_request(request).await.unwrap();
 
         assert_eq!(res.status(), StatusCode::OK);
         assert_eq!(
@@ -384,7 +402,7 @@ pub mod tests {
             .body(Body::empty())
             .unwrap();
 
-        let res = inner.clone().handle_request(request).await.unwrap();
+        let res = router.clone().handle_request(request).await.unwrap();
 
         assert_eq!(res.status(), StatusCode::NOT_FOUND);
 
@@ -397,7 +415,7 @@ pub mod tests {
             .body("this should be uppercased".into())
             .unwrap();
 
-        let res = inner.clone().handle_request(request).await.unwrap();
+        let res = router.clone().handle_request(request).await.unwrap();
 
         assert_eq!(res.status(), StatusCode::OK);
         assert_eq!(

@@ -93,7 +93,7 @@ impl Runtime for AxumWasm {
             .unwrap()
             .take()
             .context("tried to start a service that was not loaded")
-            .map_err(|err| Status::from_error(err.into()))?;
+            .map_err(|err| Status::internal(err.to_string()))?;
 
         // TODO: split `into_server` up into build and run functions
         tokio::spawn(run_until_stopped(router, address, kill_rx));
@@ -199,21 +199,22 @@ impl Router {
     async fn handle_request(
         &mut self,
         req: hyper::Request<Body>,
-    ) -> Result<Response<Body>, Infallible> {
+    ) -> anyhow::Result<Response<Body>> {
         let wasi = WasiCtxBuilder::new()
             .inherit_stdio()
             .inherit_args()
-            .unwrap()
+            .context("failed to read args")?
             .build();
 
         let mut store = Store::new(&self.engine, wasi);
-        self.linker
-            .module(&mut store, "axum", &self.module)
-            .unwrap();
+        self.linker.module(&mut store, "axum", &self.module)?;
 
-        let (mut parts_stream, parts_client) = UnixStream::pair().unwrap();
-        let (mut body_write_stream, body_write_client) = UnixStream::pair().unwrap();
-        let (body_read_stream, body_read_client) = UnixStream::pair().unwrap();
+        let (mut parts_stream, parts_client) =
+            UnixStream::pair().context("failed to open unixstream")?;
+        let (mut body_write_stream, body_write_client) =
+            UnixStream::pair().context("failed to open unixstream")?;
+        let (body_read_stream, body_read_client) =
+            UnixStream::pair().context("failed to open unixstream")?;
 
         let parts_client = WasiUnixStream::from_cap_std(parts_client);
         let body_write_client = WasiUnixStream::from_cap_std(body_write_client);
@@ -235,7 +236,9 @@ impl Router {
         let request_rmp = RequestWrapper::from(parts).into_rmp();
 
         // write request parts
-        parts_stream.write_all(&request_rmp).unwrap();
+        parts_stream
+            .write_all(&request_rmp)
+            .context("failed to write http parts to wasm")?;
 
         // To protect our server, reject requests with bodies larger than
         // 64kbs of data.
@@ -245,16 +248,20 @@ impl Router {
             let response = Response::builder()
                 .status(hyper::http::StatusCode::PAYLOAD_TOO_LARGE)
                 .body(Body::empty())
-                .unwrap();
+                .expect("building request with empty body should not fail");
 
             // Return early if body is too big
             return Ok(response);
         }
 
-        let body_bytes = hyper::body::to_bytes(body).await.unwrap();
+        let body_bytes = hyper::body::to_bytes(body)
+            .await
+            .context("failed to concatenate request body buffers")?;
 
         // write body to axum
-        body_write_stream.write_all(body_bytes.as_ref()).unwrap();
+        body_write_stream
+            .write_all(body_bytes.as_ref())
+            .context("failed to write body to wasm")?;
 
         // drop stream to signal EOF
         drop(body_write_stream);
@@ -262,26 +269,28 @@ impl Router {
         println!("calling inner Router");
         self.linker
             .get(&mut store, "axum", "__SHUTTLE_Axum_call")
-            .unwrap()
+            .expect("wasm module should be loaded and the router function should be available")
             .into_func()
-            .unwrap()
-            .typed::<(RawFd, RawFd, RawFd), ()>(&store)
-            .unwrap()
-            .call(&mut store, (3, 4, 5))
-            .unwrap();
+            .expect("router function should be a function")
+            .typed::<(RawFd, RawFd, RawFd), ()>(&store)?
+            .call(&mut store, (3, 4, 5))?;
 
         // read response parts from host
         let reader = BufReader::new(&mut parts_stream);
 
         // deserialize response parts from rust messagepack
-        let wrapper: ResponseWrapper = rmps::from_read(reader).unwrap();
+        let wrapper: ResponseWrapper =
+            rmps::from_read(reader).context("failed to deserialize response parts")?;
 
         // read response body from wasm and stream it to our hyper server
         let reader = BufReader::new(body_read_stream);
         let stream = futures::stream::iter(reader.bytes()).try_chunks(2);
         let body = hyper::Body::wrap_stream(stream);
 
-        let response: Response<Body> = wrapper.into_response_builder().body(body).unwrap();
+        let response: Response<Body> = wrapper
+            .into_response_builder()
+            .body(body)
+            .context("failed to construct response body")?;
 
         Ok(response)
     }
@@ -297,7 +306,18 @@ async fn run_until_stopped(
         async move {
             Ok::<_, Infallible>(service_fn(move |req: Request<Body>| {
                 let mut router = router.clone();
-                async move { Ok::<_, Infallible>(router.handle_request(req).await.unwrap()) }
+                async move {
+                    Ok::<_, Infallible>(match router.handle_request(req).await {
+                        Ok(res) => res,
+                        Err(err) => {
+                            error!("error sending request: {}", err);
+                            Response::builder()
+                                .status(hyper::http::StatusCode::INTERNAL_SERVER_ERROR)
+                                .body(Body::empty())
+                                .expect("building request with empty body should not fail")
+                        }
+                    })
+                }
             }))
         }
     });

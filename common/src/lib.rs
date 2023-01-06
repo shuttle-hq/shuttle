@@ -7,6 +7,8 @@ pub mod log;
 pub mod models;
 pub mod project;
 pub mod storage_manager;
+#[cfg(feature = "tracing")]
+pub mod tracing;
 #[cfg(feature = "axum-wasm")]
 pub mod wasm;
 

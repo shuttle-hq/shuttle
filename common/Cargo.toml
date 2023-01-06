@@ -33,5 +33,6 @@ cap-std = "1.0.2"
 [features]
 backend = ["async-trait", "axum"]
 display = ["comfy-table", "crossterm"]
-axum-wasm = ["http-serde", "hyper", "rmp-serde", "serde_json", "tracing-subscriber"]
+tracing = ["serde_json"]
+axum-wasm = ["http-serde", "hyper", "rmp-serde", "tracing", "tracing-subscriber"]
 models = ["anyhow", "async-trait", "display", "http", "reqwest", "serde_json"]

@@ -148,7 +148,7 @@ impl Log {
     pub fn into_bytes(self) -> Vec<u8> {
         let mut buf = Vec::new();
 
-        self.append_bytes(&mut buf);
+        buf.add(self);
 
         buf
     }
@@ -199,14 +199,14 @@ impl_bytesable!(u32, u64, i64);
 
 impl Bytesable for String {
     fn append_bytes(self, buf: &mut Vec<u8>) {
-        (self.len() as u64).append_bytes(buf);
+        buf.add(self.len() as u64);
         buf.extend_from_slice(self.as_bytes());
     }
 
     fn from_bytes<I: Iterator<Item = u8>>(iter: &mut I) -> Option<Self> {
-        let length = u64::from_bytes(iter)? as usize;
+        let length: u64 = iter.get()?;
 
-        let mut vec = vec![0; length];
+        let mut vec = vec![0; length as usize];
         vec.iter_mut().try_fill_with(iter)?;
 
         String::from_utf8(vec).ok()
@@ -215,11 +215,11 @@ impl Bytesable for String {
 
 impl Bytesable for Level {
     fn append_bytes(self, buf: &mut Vec<u8>) {
-        (self as u32).append_bytes(buf);
+        buf.add(self as u32);
     }
 
     fn from_bytes<I: Iterator<Item = u8>>(iter: &mut I) -> Option<Self> {
-        let i = u32::from_bytes(iter)?;
+        let i: u32 = iter.get()?;
 
         let res = match i {
             0 => Self::Trace,
@@ -236,11 +236,11 @@ impl Bytesable for Level {
 
 impl Bytesable for DateTime<Utc> {
     fn append_bytes(self, buf: &mut Vec<u8>) {
-        self.naive_utc().timestamp_millis().append_bytes(buf);
+        buf.add(self.naive_utc().timestamp_millis());
     }
 
     fn from_bytes<I: Iterator<Item = u8>>(iter: &mut I) -> Option<Self> {
-        let millis = i64::from_bytes(iter)?;
+        let millis: i64 = iter.get()?;
 
         let datetime = NaiveDateTime::from_timestamp_millis(millis)?;
 
@@ -250,14 +250,14 @@ impl Bytesable for DateTime<Utc> {
 
 impl Bytesable for Vec<u8> {
     fn append_bytes(self, buf: &mut Vec<u8>) {
-        (self.len() as u64).append_bytes(buf);
+        buf.add(self.len() as u64);
         buf.extend_from_slice(&self);
     }
 
     fn from_bytes<I: Iterator<Item = u8>>(iter: &mut I) -> Option<Self> {
-        let length = u64::from_bytes(iter)? as usize;
+        let length: u64 = iter.get()?;
 
-        let mut vec = vec![0; length];
+        let mut vec = vec![0; length as usize];
         vec.iter_mut().try_fill_with(iter)?;
 
         Some(vec)
@@ -485,10 +485,10 @@ mod test {
         };
 
         let mut buf = Vec::new();
-        log.clone().append_bytes(&mut buf);
+        buf.add(log.clone());
         let mut iter = buf.into_iter();
 
-        let actual = Log::from_bytes(&mut iter);
+        let actual = iter.get::<Log>();
 
         assert_eq!(log, actual.unwrap());
         assert_eq!(iter.next(), None);
@@ -519,15 +519,15 @@ mod test {
 
         let mut rx = rx.bytes().filter_map(Result::ok);
 
-        let actual = Log::from_bytes(&mut rx).unwrap();
+        let actual = rx.get::<Log>().unwrap();
         assert_eq!(log1, actual);
 
-        let actual = Log::from_bytes(&mut rx).unwrap();
+        let actual = rx.get::<Log>().unwrap();
         assert_eq!(log2, actual);
 
         // Make sure the closed channel (end) is handled correctly
         drop(tx);
-        assert_eq!(Log::from_bytes(&mut rx), None);
+        assert_eq!(rx.get::<Log>(), None);
     }
 
     #[test]
@@ -536,7 +536,8 @@ mod test {
         let mut rx = rx.bytes().filter_map(Result::ok);
 
         let logger = Logger::new(tx);
-        let to_tuple = |log: Log| {
+        let to_tuple = |log: Option<Log>| {
+            let log = log.unwrap();
             let fields: serde_json::Map<String, serde_json::Value> =
                 serde_json::from_slice(&log.fields).unwrap();
 
@@ -553,19 +554,13 @@ mod test {
         tracing::error!("logger");
 
         assert_eq!(
-            to_tuple(Log::from_bytes(&mut rx).unwrap()),
+            to_tuple(rx.get::<Log>()),
             ("this is".to_string(), Level::Debug)
         );
+        assert_eq!(to_tuple(rx.get::<Log>()), ("hi".to_string(), Level::Info));
+        assert_eq!(to_tuple(rx.get::<Log>()), ("from".to_string(), Level::Warn));
         assert_eq!(
-            to_tuple(Log::from_bytes(&mut rx).unwrap()),
-            ("hi".to_string(), Level::Info)
-        );
-        assert_eq!(
-            to_tuple(Log::from_bytes(&mut rx).unwrap()),
-            ("from".to_string(), Level::Warn)
-        );
-        assert_eq!(
-            to_tuple(Log::from_bytes(&mut rx).unwrap()),
+            to_tuple(rx.get::<Log>()),
             ("logger".to_string(), Level::Error)
         );
     }

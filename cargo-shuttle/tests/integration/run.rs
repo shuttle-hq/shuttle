@@ -5,28 +5,18 @@ use std::{fs::canonicalize, process::exit, time::Duration};
 use tokio::time::sleep;
 
 /// creates a `cargo-shuttle` run instance with some reasonable defaults set.
-async fn cargo_shuttle_run(working_directory: &str, router_ip: bool) -> String {
+async fn cargo_shuttle_run(working_directory: &str, external: bool) -> String {
     let working_directory = canonicalize(working_directory).unwrap();
 
     let port = pick_unused_port().unwrap();
 
-    let url = if !router_ip {
+    let url = if !external {
         format!("http://localhost:{port}")
     } else {
         format!("http://0.0.0.0:{port}")
     };
 
-    let run_args = if !router_ip {
-        RunArgs {
-            port,
-            external: false,
-        }
-    } else {
-        RunArgs {
-            port,
-            external: true,
-        }
-    };
+    let run_args = RunArgs { port, external };
 
     let runner = Shuttle::new().unwrap().run(Args {
         api_url: Some("http://shuttle.invalid:80".to_string()),

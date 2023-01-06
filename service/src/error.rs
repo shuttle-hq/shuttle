@@ -6,6 +6,8 @@ use thiserror::Error;
 pub enum Error {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
+    #[error("Database error: {0}")]
+    Database(String),
     #[error("Panic occurred in shuttle_service::main`: {0}")]
     BuildPanic(String),
     #[error("Panic occurred in `Service::bind`: {0}")]

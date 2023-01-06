@@ -14,7 +14,8 @@ futures-executor = "0.3.21"
 http = "0.2.7"
 tower-service = "0.3.1"
 rmp-serde = { version = "1.1.1" }
-futures = "0.3.25"
+tracing = "0.1.37"
+tracing-subscriber = "0.3.16"
 
 [dependencies.shuttle-codegen]
 path = "../../codegen"

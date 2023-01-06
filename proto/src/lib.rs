@@ -204,6 +204,41 @@ pub mod runtime {
         }
     }
 
+    impl From<shuttle_common::wasm::Log> for LogItem {
+        fn from(log: shuttle_common::wasm::Log) -> Self {
+            let file = if log.file.is_empty() {
+                None
+            } else {
+                Some(log.file)
+            };
+
+            let line = if log.line == 0 { None } else { Some(log.line) };
+
+            Self {
+                id: Default::default(),
+                timestamp: Some(Timestamp::from(SystemTime::from(log.timestamp))),
+                state: LogState::Running as i32,
+                level: LogLevel::from(log.level) as i32,
+                file,
+                line,
+                target: log.target,
+                fields: log.fields,
+            }
+        }
+    }
+
+    impl From<shuttle_common::wasm::Level> for LogLevel {
+        fn from(level: shuttle_common::wasm::Level) -> Self {
+            match level {
+                shuttle_common::wasm::Level::Trace => Self::Trace,
+                shuttle_common::wasm::Level::Debug => Self::Debug,
+                shuttle_common::wasm::Level::Info => Self::Info,
+                shuttle_common::wasm::Level::Warn => Self::Warn,
+                shuttle_common::wasm::Level::Error => Self::Error,
+            }
+        }
+    }
+
     pub async fn start(
         binary_bytes: &[u8],
         wasm: bool,

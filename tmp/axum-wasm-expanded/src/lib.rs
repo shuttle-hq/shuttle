@@ -44,15 +44,26 @@ async fn uppercase(body: BodyStream) -> impl IntoResponse {
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern "C" fn __SHUTTLE_Axum_call(
+    fd_2: std::os::wasi::prelude::RawFd,
     fd_3: std::os::wasi::prelude::RawFd,
     fd_4: std::os::wasi::prelude::RawFd,
     fd_5: std::os::wasi::prelude::RawFd,
 ) {
     use axum::body::HttpBody;
+    use shuttle_common::wasm::Logger;
     use std::io::{Read, Write};
     use std::os::wasi::io::FromRawFd;
+    use tracing::trace;
+    use tracing_subscriber::prelude::*;
 
-    println!("inner handler awoken; interacting with fd={fd_3},{fd_4},{fd_5}");
+    println!("inner handler awoken; interacting with fd={fd_2},{fd_3},{fd_4},{fd_5}");
+
+    // file descriptor 2 for writing logs to
+    let logs_fd = unsafe { std::fs::File::from_raw_fd(fd_2) };
+
+    tracing_subscriber::registry()
+        .with(Logger::new(logs_fd))
+        .init(); // this sets the subscriber as the global default and also adds a compatibility layer for capturing `log::Record`s
 
     // file descriptor 3 for reading and writing http parts
     let mut parts_fd = unsafe { std::fs::File::from_raw_fd(fd_3) };

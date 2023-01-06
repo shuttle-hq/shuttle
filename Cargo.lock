@@ -6192,6 +6192,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "axum",
+ "cap-std",
  "chrono",
  "comfy-table",
  "crossterm",
@@ -6206,6 +6207,7 @@ dependencies = [
  "serde_json",
  "strum",
  "tracing",
+ "tracing-subscriber",
  "uuid 1.2.2",
 ]
 

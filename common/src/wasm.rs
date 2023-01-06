@@ -154,6 +154,7 @@ impl Log {
     }
 }
 
+/// Like [slice::fill_with] but allows unwrapping of [Option]s
 trait TryFillWith: Sized {
     fn try_fill_with<I: Iterator<Item = u8>>(self, iter: &mut I) -> Option<()>;
 }
@@ -168,6 +169,7 @@ impl<'a> TryFillWith for IterMut<'a, u8> {
     }
 }
 
+/// Convert a structure to and from bytes (array of u8)
 pub trait Bytesable: Sized {
     /// Add self to bytes vec
     fn append_bytes(self, buf: &mut Vec<u8>);

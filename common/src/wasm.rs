@@ -114,7 +114,7 @@ impl ResponseWrapper {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Log {
     pub level: Level,
     pub timestamp: DateTime<Utc>,
@@ -124,7 +124,7 @@ pub struct Log {
     pub fields: Vec<u8>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Level {
     Trace,
     Debug,
@@ -355,7 +355,8 @@ where
             }
         };
 
-        self.writer
+        let _ = self
+            .writer
             .lock()
             .expect("to get lock on writer")
             .write(&item.into_bytes())
@@ -465,8 +466,8 @@ mod test {
             fields: Default::default(),
         };
 
-        tx.write(&log1.clone().into_bytes()).unwrap();
-        tx.write(&log2.clone().into_bytes()).unwrap();
+        let _ = tx.write(&log1.clone().into_bytes()).unwrap();
+        let _ = tx.write(&log2.clone().into_bytes()).unwrap();
 
         let mut rx = rx.bytes().filter_map(Result::ok);
 

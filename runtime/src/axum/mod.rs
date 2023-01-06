@@ -41,7 +41,13 @@ pub struct AxumWasm {
 
 impl AxumWasm {
     pub fn new() -> Self {
-        let (tx, rx) = mpsc::channel(1);
+        // Allow about 2^15 = 32k logs of backpressure
+        // We know the wasm currently handles about 16k requests per second (req / sec) so 16k seems to be a safe number
+        // As we make performance gains elsewhere this might eventually become the new bottleneck to increase :D
+        //
+        // Testing has shown that a number half the req / sec yields poor performance. A number the same as the req / sec
+        // seems acceptable so going with double the number for some headroom
+        let (tx, rx) = mpsc::channel(1 << 15);
 
         Self {
             router: Mutex::new(None),

@@ -95,7 +95,6 @@ impl Runtime for AxumWasm {
             .context("tried to start a service that was not loaded")
             .map_err(|err| Status::internal(err.to_string()))?;
 
-        // TODO: split `into_server` up into build and run functions
         tokio::spawn(run_until_stopped(router, address, kill_rx));
 
         *self.port.lock().unwrap() = Some(port);
@@ -232,10 +231,10 @@ impl Router {
 
         let (parts, body) = req.into_parts();
 
-        // serialise request parts to rmp
+        // Serialise request parts to rmp
         let request_rmp = RequestWrapper::from(parts).into_rmp();
 
-        // write request parts
+        // Write request parts to wasm module
         parts_stream
             .write_all(&request_rmp)
             .context("failed to write http parts to wasm")?;
@@ -258,15 +257,17 @@ impl Router {
             .await
             .context("failed to concatenate request body buffers")?;
 
-        // write body to axum
+        // Write body to wasm
         body_write_stream
             .write_all(body_bytes.as_ref())
             .context("failed to write body to wasm")?;
 
-        // drop stream to signal EOF
+        // Drop stream to signal EOF
         drop(body_write_stream);
 
-        println!("calling inner Router");
+        // Call our function in wasm, telling it to route the request we've written to it
+        // and write back a response
+        trace!("calling inner Router");
         self.linker
             .get(&mut store, "axum", "__SHUTTLE_Axum_call")
             .expect("wasm module should be loaded and the router function should be available")
@@ -275,14 +276,14 @@ impl Router {
             .typed::<(RawFd, RawFd, RawFd), ()>(&store)?
             .call(&mut store, (3, 4, 5))?;
 
-        // read response parts from host
+        // Read response parts from wasm
         let reader = BufReader::new(&mut parts_stream);
 
-        // deserialize response parts from rust messagepack
+        // Deserialize response parts from rust messagepack
         let wrapper: ResponseWrapper =
             rmps::from_read(reader).context("failed to deserialize response parts")?;
 
-        // read response body from wasm and stream it to our hyper server
+        // Read response body from wasm, convert it to a Stream and pass it to hyper
         let reader = BufReader::new(body_read_stream);
         let stream = futures::stream::iter(reader.bytes()).try_chunks(2);
         let body = hyper::Body::wrap_stream(stream);
@@ -296,6 +297,8 @@ impl Router {
     }
 }
 
+/// Start a hyper server with a service that calls an axum router in WASM,
+/// and a kill receiver for stopping the server.
 async fn run_until_stopped(
     router: Router,
     address: SocketAddr,

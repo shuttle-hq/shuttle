@@ -295,7 +295,7 @@ pub(crate) fn wasi_bindings(app: App) -> proc_macro2::TokenStream {
                 .unwrap();
 
             println!("inner router received request: {:?}", &request);
-            let res = handle_request(request);
+            let res = futures_executor::block_on(__app(request));
 
             let (parts, mut body) = res.into_parts();
 

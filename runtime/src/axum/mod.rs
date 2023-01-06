@@ -8,6 +8,8 @@ use std::str::FromStr;
 
 use async_trait::async_trait;
 use cap_std::os::unix::net::UnixStream;
+use futures::TryStreamExt;
+use hyper::body::HttpBody;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response};
 use shuttle_common::wasm::{RequestWrapper, ResponseWrapper};
@@ -191,18 +193,22 @@ impl RouterInner {
             .unwrap();
 
         let (mut parts_stream, parts_client) = UnixStream::pair().unwrap();
-        let (mut body_stream, body_client) = UnixStream::pair().unwrap();
+        let (mut body_write_stream, body_write_client) = UnixStream::pair().unwrap();
+        let (body_read_stream, body_read_client) = UnixStream::pair().unwrap();
 
         let parts_client = WasiUnixStream::from_cap_std(parts_client);
-        let body_client = WasiUnixStream::from_cap_std(body_client);
+        let body_write_client = WasiUnixStream::from_cap_std(body_write_client);
+        let body_read_client = WasiUnixStream::from_cap_std(body_read_client);
 
         store
             .data_mut()
             .insert_file(3, Box::new(parts_client), FileCaps::all());
-
         store
             .data_mut()
-            .insert_file(4, Box::new(body_client), FileCaps::all());
+            .insert_file(4, Box::new(body_write_client), FileCaps::all());
+        store
+            .data_mut()
+            .insert_file(5, Box::new(body_read_client), FileCaps::all());
 
         let (parts, body) = req.into_parts();
 
@@ -212,12 +218,27 @@ impl RouterInner {
         // write request parts
         parts_stream.write_all(&request_rmp).unwrap();
 
-        // write body
-        body_stream
-            .write_all(hyper::body::to_bytes(body).await.unwrap().as_ref())
-            .unwrap();
-        // signal to the receiver that end of file has been reached
-        body_stream.write_all(&[0]).unwrap();
+        // To protect our server, reject requests with bodies larger than
+        // 64kbs of data.
+        let body_size = body.size_hint().upper().unwrap_or(u64::MAX);
+
+        if body_size > 1024 * 64 {
+            let response = Response::builder()
+                .status(hyper::http::StatusCode::PAYLOAD_TOO_LARGE)
+                .body(Body::empty())
+                .unwrap();
+
+            // Return early if body is too big
+            return Ok(response);
+        }
+
+        let body_bytes = hyper::body::to_bytes(body).await.unwrap();
+
+        // write body to axum
+        body_write_stream.write_all(body_bytes.as_ref()).unwrap();
+
+        // drop stream to signal EOF
+        drop(body_write_stream);
 
         println!("calling inner Router");
         self.linker
@@ -225,9 +246,9 @@ impl RouterInner {
             .unwrap()
             .into_func()
             .unwrap()
-            .typed::<(RawFd, RawFd), ()>(&store)
+            .typed::<(RawFd, RawFd, RawFd), ()>(&store)
             .unwrap()
-            .call(&mut store, (3, 4))
+            .call(&mut store, (3, 4, 5))
             .unwrap();
 
         // read response parts from host
@@ -236,22 +257,12 @@ impl RouterInner {
         // deserialize response parts from rust messagepack
         let wrapper: ResponseWrapper = rmps::from_read(reader).unwrap();
 
-        // read response body from wasm router
-        let mut body_buf = Vec::new();
-        let mut c_buf: [u8; 1] = [0; 1];
-        loop {
-            body_stream.read_exact(&mut c_buf).unwrap();
-            if c_buf[0] == 0 {
-                break;
-            } else {
-                body_buf.push(c_buf[0]);
-            }
-        }
+        // read response body from wasm and stream it to our hyper server
+        let reader = BufReader::new(body_read_stream);
+        let stream = futures::stream::iter(reader.bytes()).try_chunks(2);
+        let body = hyper::Body::wrap_stream(stream);
 
-        let response: Response<Body> = wrapper
-            .into_response_builder()
-            .body(body_buf.into())
-            .unwrap();
+        let response: Response<Body> = wrapper.into_response_builder().body(body).unwrap();
 
         Ok(response)
     }
@@ -376,5 +387,28 @@ pub mod tests {
         let res = inner.clone().handle_request(request).await.unwrap();
 
         assert_eq!(res.status(), StatusCode::NOT_FOUND);
+
+        // POST /uppercase
+        let request: Request<Body> = Request::builder()
+            .method(Method::POST)
+            .version(Version::HTTP_11)
+            .header("test", HeaderValue::from_static("invalid"))
+            .uri("https://axum-wasm.example/uppercase")
+            .body("this should be uppercased".into())
+            .unwrap();
+
+        let res = inner.clone().handle_request(request).await.unwrap();
+
+        assert_eq!(res.status(), StatusCode::OK);
+        assert_eq!(
+            &hyper::body::to_bytes(res.into_body())
+                .await
+                .unwrap()
+                .iter()
+                .cloned()
+                .collect::<Vec<u8>>()
+                .as_ref(),
+            b"THIS SHOULD BE UPPERCASED"
+        );
     }
 }

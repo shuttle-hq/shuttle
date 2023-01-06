@@ -23,6 +23,7 @@ uuid = { workspace = true, features = ["v4"] }
 wasi-common = "4.0.0"
 wasmtime = "4.0.0"
 wasmtime-wasi = "4.0.0"
+futures = "0.3.25"
 
 [dependencies.shuttle-common]
 workspace = true

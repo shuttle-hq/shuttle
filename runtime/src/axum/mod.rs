@@ -374,11 +374,20 @@ impl Router {
 pub mod tests {
     use super::*;
     use hyper::{http::HeaderValue, Method, Request, StatusCode, Version};
+    use uuid::Uuid;
 
     #[tokio::test]
     async fn axum() {
         let axum = Router::new("axum.wasm");
         let inner = axum.inner;
+        let id = Uuid::default().as_bytes().to_vec();
+        let (tx, mut rx) = mpsc::channel(1);
+
+        tokio::spawn(async move {
+            while let Some(log) = rx.recv().await {
+                println!("{log:?}");
+            }
+        });
 
         // GET /hello
         let request: Request<Body> = Request::builder()
@@ -388,7 +397,11 @@ pub mod tests {
             .body(Body::empty())
             .unwrap();
 
-        let res = inner.clone().handle_request(request).await.unwrap();
+        let res = inner
+            .clone()
+            .handle_request(id.clone(), request, tx.clone())
+            .await
+            .unwrap();
 
         assert_eq!(res.status(), StatusCode::OK);
         assert_eq!(
@@ -411,7 +424,11 @@ pub mod tests {
             .body(Body::from("Goodbye world body"))
             .unwrap();
 
-        let res = inner.clone().handle_request(request).await.unwrap();
+        let res = inner
+            .clone()
+            .handle_request(id.clone(), request, tx.clone())
+            .await
+            .unwrap();
 
         assert_eq!(res.status(), StatusCode::OK);
         assert_eq!(
@@ -434,7 +451,11 @@ pub mod tests {
             .body(Body::empty())
             .unwrap();
 
-        let res = inner.clone().handle_request(request).await.unwrap();
+        let res = inner
+            .clone()
+            .handle_request(id.clone(), request, tx.clone())
+            .await
+            .unwrap();
 
         assert_eq!(res.status(), StatusCode::NOT_FOUND);
 
@@ -447,7 +468,7 @@ pub mod tests {
             .body("this should be uppercased".into())
             .unwrap();
 
-        let res = inner.clone().handle_request(request).await.unwrap();
+        let res = inner.clone().handle_request(id, request, tx).await.unwrap();
 
         assert_eq!(res.status(), StatusCode::OK);
         assert_eq!(

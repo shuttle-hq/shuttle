@@ -271,7 +271,6 @@ pub(crate) fn wasi_bindings(app: App) -> proc_macro2::TokenStream {
             use shuttle_common::wasm::Logger;
             use std::io::{Read, Write};
             use std::os::wasi::io::FromRawFd;
-            use tracing::trace;
             use tracing_subscriber::prelude::*;
 
             println!("inner handler awoken; interacting with fd={},{},{},{}", fd_2, fd_3, fd_4, fd_5);

@@ -4,6 +4,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use futures::TryStreamExt;
+use tracing::debug;
 
 pub fn handle_request(req: http::Request<BoxBody>) -> axum::response::Response {
     futures_executor::block_on(app(req))
@@ -23,15 +24,18 @@ async fn app(request: http::Request<BoxBody>) -> axum::response::Response {
 }
 
 async fn hello() -> &'static str {
+    debug!("in hello()");
     "Hello, World!"
 }
 
 async fn goodbye() -> &'static str {
+    debug!("in goodbye()");
     "Goodbye, World!"
 }
 
 // Map the bytes of the body stream to uppercase and return the stream directly.
 async fn uppercase(body: BodyStream) -> impl IntoResponse {
+    debug!("in uppercase()");
     let chunk_stream = body.map_ok(|chunk| {
         chunk
             .iter()
@@ -53,7 +57,6 @@ pub extern "C" fn __SHUTTLE_Axum_call(
     use shuttle_common::wasm::Logger;
     use std::io::{Read, Write};
     use std::os::wasi::io::FromRawFd;
-    use tracing::trace;
     use tracing_subscriber::prelude::*;
 
     println!("inner handler awoken; interacting with fd={fd_2},{fd_3},{fd_4},{fd_5}");

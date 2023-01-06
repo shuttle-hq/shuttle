@@ -88,7 +88,7 @@ async fn rocket_secrets() {
 // This example uses a shared Postgres. Thus local runs should create a docker container for it.
 #[tokio::test(flavor = "multi_thread")]
 async fn rocket_postgres() {
-    let url = cargo_shuttle_run("../examples/rocket/secrets", false).await;
+    let url = cargo_shuttle_run("../examples/rocket/postgres", false).await;
     let client = reqwest::Client::new();
 
     let post_text = client
@@ -117,7 +117,7 @@ async fn rocket_postgres() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn rocket_authentication() {
-    let url = cargo_shuttle_run("../examples/rocket/secrets", false).await;
+    let url = cargo_shuttle_run("../examples/rocket/authentication", false).await;
     let client = reqwest::Client::new();
 
     let public_text = client
@@ -173,7 +173,7 @@ async fn rocket_authentication() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn actix_web_hello_world() {
-    let url = cargo_shuttle_run("../examples/rocket/secrets", false).await;
+    let url = cargo_shuttle_run("../examples/actix-web/hello-world", false).await;
 
     let request_text = reqwest::Client::new()
         .get(format!("{url}/hello"))
@@ -189,7 +189,7 @@ async fn actix_web_hello_world() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn axum_hello_world() {
-    let url = cargo_shuttle_run("../examples/rocket/secrets", false).await;
+    let url = cargo_shuttle_run("../examples/axum/hello-world", false).await;
 
     let request_text = reqwest::Client::new()
         .get(format!("{url}/hello"))
@@ -205,7 +205,7 @@ async fn axum_hello_world() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn tide_hello_world() {
-    let url = cargo_shuttle_run("../examples/rocket/secrets", false).await;
+    let url = cargo_shuttle_run("../examples/tide/hello-world", false).await;
 
     let request_text = reqwest::Client::new()
         .get(format!("{url}/hello"))
@@ -221,7 +221,7 @@ async fn tide_hello_world() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn tower_hello_world() {
-    let url = cargo_shuttle_run("../examples/rocket/secrets", false).await;
+    let url = cargo_shuttle_run("../examples/tower/hello-world", false).await;
 
     let request_text = reqwest::Client::new()
         .get(format!("{url}/hello"))

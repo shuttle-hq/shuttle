@@ -196,6 +196,8 @@ macro_rules! impl_bytesable {
     };
 }
 
+// Never implement for usize because it could map to u64 in the runtime and a u32 inside wasm
+// This will cause the deserialization step to fail
 impl_bytesable!(u32, u64, i64);
 
 impl Bytesable for String {

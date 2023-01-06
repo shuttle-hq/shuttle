@@ -8,8 +8,6 @@ pub enum Error {
     Io(#[from] std::io::Error),
     #[error("Database error: {0}")]
     Database(String),
-    #[error("Secret error: {0}")]
-    Secret(String),
     #[error("Panic occurred in shuttle_service::main`: {0}")]
     BuildPanic(String),
     #[error("Panic occurred in `Service::bind`: {0}")]
@@ -19,12 +17,3 @@ pub enum Error {
 }
 
 pub type CustomError = anyhow::Error;
-
-// This is implemented manually as defining `Error::Database(#[from] mongodb::error::Error)` resulted in a
-// segfault even with a feature guard.
-#[cfg(feature = "mongodb-integration")]
-impl From<mongodb::error::Error> for Error {
-    fn from(e: mongodb::error::Error) -> Self {
-        Error::Database(e.to_string())
-    }
-}

@@ -26,7 +26,6 @@ pub type ApiKey = String;
 pub type ApiUrl = String;
 pub type Host = String;
 pub type DeploymentId = Uuid;
-pub type Port = u16;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatabaseReadyInfo {

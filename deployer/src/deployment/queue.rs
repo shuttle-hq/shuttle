@@ -3,7 +3,7 @@ use super::gateway_client::BuildQueueClient;
 use super::{Built, QueueReceiver, RunSender, State};
 use crate::error::{Error, Result, TestError};
 use crate::persistence::{LogLevel, SecretRecorder};
-use shuttle_common::storage_manager::StorageManager;
+use shuttle_common::storage_manager::{ArtifactsStorageManager, StorageManager};
 
 use cargo::util::interning::InternedString;
 use cargo_metadata::Message;
@@ -36,7 +36,7 @@ pub async fn task(
     run_send: RunSender,
     log_recorder: impl LogRecorder,
     secret_recorder: impl SecretRecorder,
-    storage_manager: StorageManager,
+    storage_manager: ArtifactsStorageManager,
     queue_client: impl BuildQueueClient,
 ) {
     info!("Queue task started");
@@ -147,7 +147,7 @@ impl Queued {
     #[instrument(skip(self, storage_manager, log_recorder, secret_recorder), fields(id = %self.id, state = %State::Building))]
     async fn handle(
         self,
-        storage_manager: StorageManager,
+        storage_manager: ArtifactsStorageManager,
         log_recorder: impl LogRecorder,
         secret_recorder: impl SecretRecorder,
     ) -> Result<Built> {
@@ -200,7 +200,7 @@ impl Queued {
         });
 
         let project_path = project_path.canonicalize()?;
-        let so_path = build_deployment(self.id, &project_path, false, tx.clone()).await?;
+        let so_path = build_deployment(self.id, &project_path, tx.clone()).await?;
 
         if self.will_run_tests {
             info!(
@@ -309,10 +309,9 @@ async fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<
 async fn build_deployment(
     deployment_id: Uuid,
     project_path: &Path,
-    wasm: bool,
     tx: crossbeam_channel::Sender<Message>,
 ) -> Result<PathBuf> {
-    let runtime_path = build_crate(deployment_id, project_path, true, wasm, tx)
+    let runtime_path = build_crate(deployment_id, project_path, true, tx)
         .await
         .map_err(|e| Error::Build(e.into()))?;
 
@@ -384,7 +383,7 @@ async fn run_pre_deploy_tests(
 /// Store 'so' file in the libs folder
 #[instrument(skip(storage_manager, so_path, id))]
 async fn store_lib(
-    storage_manager: &StorageManager,
+    storage_manager: &ArtifactsStorageManager,
     so_path: impl AsRef<Path>,
     id: &Uuid,
 ) -> Result<()> {
@@ -399,7 +398,7 @@ async fn store_lib(
 mod tests {
     use std::{collections::BTreeMap, fs::File, io::Write, path::Path};
 
-    use shuttle_common::storage_manager::StorageManager;
+    use shuttle_common::storage_manager::ArtifactsStorageManager;
     use tempdir::TempDir;
     use tokio::fs;
     use uuid::Uuid;
@@ -529,7 +528,7 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
     async fn store_lib() {
         let libs_dir = TempDir::new("lib-store").unwrap();
         let libs_p = libs_dir.path();
-        let storage_manager = StorageManager::new(libs_p.to_path_buf());
+        let storage_manager = ArtifactsStorageManager::new(libs_p.to_path_buf());
 
         let build_p = storage_manager.builds_path().unwrap();
 

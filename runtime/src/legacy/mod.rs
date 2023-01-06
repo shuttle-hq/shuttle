@@ -1,4 +1,6 @@
 use std::{
+    collections::BTreeMap,
+    iter::FromIterator,
     net::{Ipv4Addr, SocketAddr},
     ops::DerefMut,
     path::PathBuf,
@@ -31,39 +33,52 @@ use crate::provisioner_factory::{AbstractFactory, AbstractProvisionerFactory};
 
 mod error;
 
-pub struct Legacy {
+pub struct Legacy<S>
+where
+    S: StorageManager,
+{
     // Mutexes are for interior mutability
     so_path: Mutex<Option<PathBuf>>,
-    port: Mutex<Option<u16>>,
     logs_rx: Mutex<Option<UnboundedReceiver<LogItem>>>,
     logs_tx: Mutex<UnboundedSender<LogItem>>,
     provisioner_address: Endpoint,
     kill_tx: Mutex<Option<oneshot::Sender<String>>>,
+    secrets: Mutex<Option<BTreeMap<String, String>>>,
+    storage_manager: S,
 }
 
-impl Legacy {
-    pub fn new(provisioner_address: Endpoint) -> Self {
+impl<S> Legacy<S>
+where
+    S: StorageManager,
+{
+    pub fn new(provisioner_address: Endpoint, storage_manager: S) -> Self {
         let (tx, rx) = mpsc::unbounded_channel();
 
         Self {
             so_path: Mutex::new(None),
-            port: Mutex::new(None),
             logs_rx: Mutex::new(Some(rx)),
             logs_tx: Mutex::new(tx),
             kill_tx: Mutex::new(None),
             provisioner_address,
+            secrets: Mutex::new(None),
+            storage_manager,
         }
     }
 }
 
 #[async_trait]
-impl Runtime for Legacy {
+impl<S> Runtime for Legacy<S>
+where
+    S: StorageManager + 'static,
+{
     async fn load(&self, request: Request<LoadRequest>) -> Result<Response<LoadResponse>, Status> {
-        let so_path = request.into_inner().path;
-        trace!(so_path, "loading");
+        let LoadRequest { path, secrets, .. } = request.into_inner();
+        trace!(path, "loading");
 
-        let so_path = PathBuf::from(so_path);
+        let so_path = PathBuf::from(path);
         *self.so_path.lock().unwrap() = Some(so_path);
+
+        *self.secrets.lock().unwrap() = Some(BTreeMap::from_iter(secrets.into_iter()));
 
         let message = LoadResponse { success: true };
         Ok(Response::new(message))
@@ -73,9 +88,6 @@ impl Runtime for Legacy {
         &self,
         request: Request<StartRequest>,
     ) -> Result<Response<StartResponse>, Status> {
-        let service_port = 7001;
-        let service_address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), service_port);
-
         let provisioner_client = ProvisionerClient::connect(self.provisioner_address.clone())
             .await
             .expect("failed to connect to provisioner");
@@ -91,21 +103,37 @@ impl Runtime for Legacy {
             })
             .map_err(|err| Status::from_error(Box::new(err)))?
             .clone();
-
-        let storage_manager = StorageManager::new(so_path.clone());
+        let secrets = self
+            .secrets
+            .lock()
+            .unwrap()
+            .as_ref()
+            .ok_or_else(|| -> error::Error {
+                error::Error::Start(anyhow!(
+                    "trying to get secrets from a service that was not loaded"
+                ))
+            })
+            .map_err(|err| Status::from_error(Box::new(err)))?
+            .clone();
 
         let StartRequest {
             deployment_id,
             service_name,
+            port,
         } = request.into_inner();
+        let service_address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port as u16);
 
         let service_name = ServiceName::from_str(service_name.as_str())
             .map_err(|err| Status::from_error(Box::new(err)))?;
 
-        let deployment_id = Uuid::from_str(std::str::from_utf8(&deployment_id).unwrap()).unwrap();
+        let deployment_id = Uuid::from_slice(&deployment_id).unwrap();
 
-        let mut factory =
-            abstract_factory.get_factory(service_name, deployment_id, storage_manager);
+        let mut factory = abstract_factory.get_factory(
+            service_name,
+            deployment_id,
+            secrets,
+            self.storage_manager.clone(),
+        );
 
         let logs_tx = self.logs_tx.lock().unwrap().clone();
 
@@ -114,7 +142,7 @@ impl Runtime for Legacy {
         trace!(%service_address, "starting");
         let service = load_service(service_address, so_path, &mut factory, logger)
             .await
-            .unwrap();
+            .map_err(|error| Status::internal(error.to_string()))?;
 
         let (kill_tx, kill_rx) = tokio::sync::oneshot::channel();
 
@@ -123,12 +151,7 @@ impl Runtime for Legacy {
         // start service as a background task with a kill receiver
         tokio::spawn(run_until_stopped(service, service_address, kill_rx));
 
-        *self.port.lock().unwrap() = Some(service_port);
-
-        let message = StartResponse {
-            success: true,
-            port: service_port as u32,
-        };
+        let message = StartResponse { success: true };
 
         Ok(Response::new(message))
     }
@@ -184,7 +207,7 @@ impl Runtime for Legacy {
 }
 
 /// Run the service until a stop signal is received
-#[instrument(skip(service))]
+#[instrument(skip(service, kill_rx))]
 async fn run_until_stopped(
     service: LoadedService,
     addr: SocketAddr,

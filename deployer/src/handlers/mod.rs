@@ -16,6 +16,7 @@ use opentelemetry_http::HeaderExtractor;
 use shuttle_common::backends::metrics::Metrics;
 use shuttle_common::models::secret;
 use shuttle_common::project::ProjectName;
+use shuttle_common::storage_manager::StorageManager;
 use shuttle_common::LogItem;
 use shuttle_service::loader::clean_crate;
 use tower_http::auth::RequireAuthorizationLayer;

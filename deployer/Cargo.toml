@@ -27,6 +27,7 @@ opentelemetry = { version = "0.18.0", features = ["rt-tokio"] }
 opentelemetry-datadog = { version = "0.6.0", features = ["reqwest-client"] }
 opentelemetry-http = "0.7.0"
 pipe = "0.4.0"
+portpicker = "0.1.1"
 serde = { workspace = true }
 serde_json = { workspace = true }
 sqlx = { version = "0.6.2", features = ["runtime-tokio-native-tls", "sqlite", "chrono", "json", "migrate", "uuid"] }
@@ -35,7 +36,7 @@ tar = "0.4.38"
 thiserror = { workspace = true }
 tokio = { version = "1.22.0", features = ["fs", "process"] }
 toml = "0.5.9"
-tonic = "0.8.3"
+tonic = { workspace = true }
 tower = { version = "0.4.13", features = ["make"] }
 tower-http = { version = "0.3.4", features = ["auth", "trace"] }
 tracing = { workspace = true }

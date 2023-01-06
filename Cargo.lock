@@ -1530,6 +1530,7 @@ dependencies = [
  "serde",
  "serde_json",
  "shuttle-common",
+ "shuttle-proto",
  "shuttle-secrets",
  "shuttle-service",
  "sqlx",
@@ -1542,6 +1543,7 @@ dependencies = [
  "tokiotest-httpserver",
  "toml",
  "toml_edit 0.15.0",
+ "tonic",
  "tracing",
  "tracing-subscriber",
  "url",
@@ -6232,6 +6234,7 @@ dependencies = [
  "opentelemetry-datadog",
  "opentelemetry-http",
  "pipe",
+ "portpicker",
  "rand 0.8.5",
  "serde",
  "serde_json",
@@ -6307,11 +6310,16 @@ dependencies = [
 name = "shuttle-proto"
 version = "0.8.0"
 dependencies = [
+ "anyhow",
+ "chrono",
  "prost",
  "prost-types",
  "shuttle-common",
+ "tokio",
  "tonic",
  "tonic-build",
+ "tracing",
+ "uuid 1.2.2",
 ]
 
 [[package]]

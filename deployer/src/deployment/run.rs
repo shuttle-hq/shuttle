@@ -7,8 +7,9 @@ use std::{
 
 use async_trait::async_trait;
 use opentelemetry::global;
+use portpicker::pick_unused_port;
 use shuttle_common::project::ProjectName as ServiceName;
-use shuttle_common::storage_manager::StorageManager;
+use shuttle_common::storage_manager::ArtifactsStorageManager;
 use shuttle_proto::runtime::{runtime_client::RuntimeClient, LoadRequest, StartRequest};
 
 use tokio::task::JoinError;
@@ -18,17 +19,20 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
 use super::{KillReceiver, KillSender, RunReceiver, State};
-use crate::error::{Error, Result};
+use crate::{
+    error::{Error, Result},
+    persistence::SecretGetter,
+};
 
-/// Run a task which takes runnable deploys from a channel and starts them up with a factory provided by the
-/// abstract factory and a runtime logger provided by the logger factory
+/// Run a task which takes runnable deploys from a channel and starts them up on our runtime
 /// A deploy is killed when it receives a signal from the kill channel
 pub async fn task(
     mut recv: RunReceiver,
     runtime_client: RuntimeClient<Channel>,
     kill_send: KillSender,
     active_deployment_getter: impl ActiveDeploymentsGetter,
-    storage_manager: StorageManager,
+    secret_getter: impl SecretGetter,
+    storage_manager: ArtifactsStorageManager,
 ) {
     info!("Run task started");
 
@@ -39,12 +43,9 @@ pub async fn task(
 
         let kill_send = kill_send.clone();
         let kill_recv = kill_send.subscribe();
+        let secret_getter = secret_getter.clone();
         let storage_manager = storage_manager.clone();
 
-        // todo: this is the port the legacy runtime is hardcoded to start services on
-        let port = 7001;
-
-        let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
         let _service_name = match ServiceName::from_str(&built.service_name) {
             Ok(name) => name,
             Err(err) => {
@@ -82,8 +83,8 @@ pub async fn task(
             async move {
                 if let Err(err) = built
                     .handle(
-                        addr,
                         storage_manager,
+                        secret_getter,
                         runtime_client,
                         kill_recv,
                         old_deployments_killer,
@@ -171,12 +172,12 @@ pub struct Built {
 }
 
 impl Built {
-    #[instrument(skip(self, storage_manager, runtime_client, kill_recv, kill_old_deployments, cleanup), fields(id = %self.id, state = %State::Loading))]
+    #[instrument(skip(self, storage_manager, secret_getter, runtime_client, kill_recv, kill_old_deployments, cleanup), fields(id = %self.id, state = %State::Loading))]
     #[allow(clippy::too_many_arguments)]
     async fn handle(
         self,
-        address: SocketAddr,
-        storage_manager: StorageManager,
+        storage_manager: ArtifactsStorageManager,
+        secret_getter: impl SecretGetter,
         runtime_client: RuntimeClient<Channel>,
         kill_recv: KillReceiver,
         kill_old_deployments: impl futures::Future<Output = Result<()>>,
@@ -186,14 +187,32 @@ impl Built {
     ) -> Result<()> {
         let so_path = storage_manager.deployment_library_path(&self.id)?;
 
+        let port = match pick_unused_port() {
+            Some(port) => port,
+            None => {
+                return Err(Error::PrepareRun(
+                    "could not find a free port to deploy service on".to_string(),
+                ))
+            }
+        };
+
+        let address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
+
         kill_old_deployments.await?;
 
         info!("got handle for deployment");
         // Execute loaded service
+        load(
+            self.service_name.clone(),
+            self.service_id,
+            so_path,
+            secret_getter,
+            runtime_client.clone(),
+        )
+        .await;
         tokio::spawn(run(
             self.id,
             self.service_name,
-            so_path,
             runtime_client,
             address,
             kill_recv,
@@ -204,26 +223,30 @@ impl Built {
     }
 }
 
-#[instrument(skip(runtime_client, _kill_recv, _cleanup), fields(address = %_address, state = %State::Running))]
-async fn run(
-    id: Uuid,
+async fn load(
     service_name: String,
+    service_id: Uuid,
     so_path: PathBuf,
+    secret_getter: impl SecretGetter,
     mut runtime_client: RuntimeClient<Channel>,
-    _address: SocketAddr,
-    _kill_recv: KillReceiver,
-    _cleanup: impl FnOnce(std::result::Result<std::result::Result<(), shuttle_service::Error>, JoinError>)
-        + Send
-        + 'static,
 ) {
     info!(
         "loading project from: {}",
         so_path.clone().into_os_string().into_string().unwrap()
     );
 
+    let secrets = secret_getter
+        .get_secrets(&service_id)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|secret| (secret.key, secret.value));
+    let secrets = HashMap::from_iter(secrets);
+
     let load_request = tonic::Request::new(LoadRequest {
         path: so_path.into_os_string().into_string().unwrap(),
         service_name: service_name.clone(),
+        secrets,
     });
     info!("loading service");
     let response = runtime_client.load(load_request).await;
@@ -231,10 +254,23 @@ async fn run(
     if let Err(e) = response {
         info!("failed to load service: {}", e);
     }
+}
 
+#[instrument(skip(runtime_client, _kill_recv, _cleanup), fields(state = %State::Running))]
+async fn run(
+    id: Uuid,
+    service_name: String,
+    mut runtime_client: RuntimeClient<Channel>,
+    address: SocketAddr,
+    _kill_recv: KillReceiver,
+    _cleanup: impl FnOnce(std::result::Result<std::result::Result<(), shuttle_service::Error>, JoinError>)
+        + Send
+        + 'static,
+) {
     let start_request = tonic::Request::new(StartRequest {
         deployment_id: id.as_bytes().to_vec(),
         service_name,
+        port: address.port() as u32,
     });
 
     info!("starting service");
@@ -245,14 +281,10 @@ async fn run(
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        net::{Ipv4Addr, SocketAddr},
-        path::PathBuf,
-        process::Command,
-        time::Duration,
-    };
+    use std::{path::PathBuf, process::Command, time::Duration};
 
-    use shuttle_common::storage_manager::StorageManager;
+    use async_trait::async_trait;
+    use shuttle_common::storage_manager::ArtifactsStorageManager;
     use shuttle_proto::runtime::runtime_client::RuntimeClient;
     use tempdir::TempDir;
     use tokio::{
@@ -263,17 +295,20 @@ mod tests {
     use tonic::transport::Channel;
     use uuid::Uuid;
 
-    use crate::error::Error;
+    use crate::{
+        error::Error,
+        persistence::{Secret, SecretGetter},
+    };
 
     use super::Built;
 
     const RESOURCES_PATH: &str = "tests/resources";
 
-    fn get_storage_manager() -> StorageManager {
+    fn get_storage_manager() -> ArtifactsStorageManager {
         let tmp_dir = TempDir::new("shuttle_run_test").unwrap();
         let path = tmp_dir.into_path();
 
-        StorageManager::new(path)
+        ArtifactsStorageManager::new(path)
     }
 
     async fn kill_old_deployments() -> crate::error::Result<()> {
@@ -284,6 +319,22 @@ mod tests {
         RuntimeClient::connect("http://127.0.0.1:6001")
             .await
             .unwrap()
+    }
+
+    #[derive(Clone)]
+    struct StubSecretGetter;
+
+    #[async_trait]
+    impl SecretGetter for StubSecretGetter {
+        type Err = std::io::Error;
+
+        async fn get_secrets(&self, _service_id: &Uuid) -> Result<Vec<Secret>, Self::Err> {
+            Ok(Default::default())
+        }
+    }
+
+    fn get_secret_getter() -> StubSecretGetter {
+        StubSecretGetter
     }
 
     // This test uses the kill signal to make sure a service does stop when asked to
@@ -305,12 +356,12 @@ mod tests {
             );
             cleanup_send.send(()).unwrap();
         };
-        let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
+        let secret_getter = get_secret_getter();
 
         built
             .handle(
-                addr,
                 storage_manager,
+                secret_getter,
                 get_runtime_client().await,
                 kill_recv,
                 kill_old_deployments(),
@@ -350,12 +401,12 @@ mod tests {
             );
             cleanup_send.send(()).unwrap();
         };
-        let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
+        let secret_getter = get_secret_getter();
 
         built
             .handle(
-                addr,
                 storage_manager,
+                secret_getter,
                 get_runtime_client().await,
                 kill_recv,
                 kill_old_deployments(),
@@ -389,12 +440,12 @@ mod tests {
             );
             cleanup_send.send(()).unwrap();
         };
-        let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
+        let secret_getter = get_secret_getter();
 
         built
             .handle(
-                addr,
                 storage_manager,
+                secret_getter,
                 get_runtime_client().await,
                 kill_recv,
                 kill_old_deployments(),
@@ -416,12 +467,12 @@ mod tests {
         let (_kill_send, kill_recv) = broadcast::channel(1);
 
         let handle_cleanup = |_result| panic!("the service shouldn't even start");
-        let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
+        let secret_getter = get_secret_getter();
 
         let result = built
             .handle(
-                addr,
                 storage_manager,
+                secret_getter,
                 get_runtime_client().await,
                 kill_recv,
                 kill_old_deployments(),
@@ -447,13 +498,13 @@ mod tests {
         let (_kill_send, kill_recv) = broadcast::channel(1);
 
         let handle_cleanup = |_result| panic!("no service means no cleanup");
-        let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 8001);
+        let secret_getter = get_secret_getter();
         let storage_manager = get_storage_manager();
 
         let result = built
             .handle(
-                addr,
                 storage_manager,
+                secret_getter,
                 get_runtime_client().await,
                 kill_recv,
                 kill_old_deployments(),
@@ -471,7 +522,7 @@ mod tests {
         );
     }
 
-    fn make_so_and_built(crate_name: &str) -> (Built, StorageManager) {
+    fn make_so_and_built(crate_name: &str) -> (Built, ArtifactsStorageManager) {
         let crate_dir: PathBuf = [RESOURCES_PATH, crate_name].iter().collect();
 
         Command::new("cargo")

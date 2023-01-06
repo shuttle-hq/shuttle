@@ -9,55 +9,53 @@ use bollard::{
 };
 use crossterm::{
     cursor::{MoveDown, MoveUp},
-    style::Stylize,
     terminal::{Clear, ClearType},
     QueueableCommand,
 };
 use futures::StreamExt;
 use portpicker::pick_unused_port;
-use shuttle_common::{
-    database::{AwsRdsEngine, SharedEngine},
-    DatabaseReadyInfo,
+use shuttle_common::database::{AwsRdsEngine, SharedEngine};
+use shuttle_proto::provisioner::{
+    provisioner_server::{Provisioner, ProvisionerServer},
+    DatabaseRequest, DatabaseResponse,
 };
-use shuttle_service::{database::Type, error::CustomError, Factory, ServiceName};
-use std::{
-    collections::{BTreeMap, HashMap},
-    io::stdout,
-    path::PathBuf,
-    time::Duration,
+use shuttle_service::database::Type;
+use std::{collections::HashMap, io::stdout, net::SocketAddr, time::Duration};
+use tokio::{task::JoinHandle, time::sleep};
+use tonic::{
+    transport::{self, Server},
+    Request, Response, Status,
 };
-use tokio::time::sleep;
 use tracing::{error, trace};
 
-pub struct LocalFactory {
+/// A provisioner for local runs
+/// It uses Docker to create Databases
+pub struct LocalProvisioner {
     docker: Docker,
-    service_name: ServiceName,
-    secrets: BTreeMap<String, String>,
-    working_directory: PathBuf,
 }
 
-impl LocalFactory {
-    pub fn new(
-        service_name: ServiceName,
-        secrets: BTreeMap<String, String>,
-        working_directory: PathBuf,
-    ) -> Result<Self> {
+impl LocalProvisioner {
+    pub fn new() -> Result<Self> {
         Ok(Self {
             docker: Docker::connect_with_local_defaults()?,
-            service_name,
-            secrets,
-            working_directory,
         })
     }
-}
 
-#[async_trait]
-impl Factory for LocalFactory {
+    pub fn start(self, address: SocketAddr) -> JoinHandle<Result<(), transport::Error>> {
+        tokio::spawn(async move {
+            Server::builder()
+                .add_service(ProvisionerServer::new(self))
+                .serve(address)
+                .await
+        })
+    }
+
     async fn get_db_connection_string(
-        &mut self,
+        &self,
+        service_name: &str,
         db_type: Type,
-    ) -> Result<String, shuttle_service::Error> {
-        trace!("getting sql string for service '{}'", self.service_name);
+    ) -> Result<DatabaseResponse, Status> {
+        trace!("getting sql string for service '{}'", service_name);
 
         let EngineConfig {
             r#type,
@@ -70,7 +68,7 @@ impl Factory for LocalFactory {
             env,
             is_ready_cmd,
         } = db_type_to_config(db_type);
-        let container_name = format!("shuttle_{}_{}", self.service_name, r#type);
+        let container_name = format!("shuttle_{}_{}", service_name, r#type);
 
         let container = match self.docker.inspect_container(&container_name, None).await {
             Ok(container) => {
@@ -118,7 +116,7 @@ impl Factory for LocalFactory {
             }
             Err(error) => {
                 error!("got unexpected error while inspecting docker container: {error}");
-                return Err(shuttle_service::Error::Custom(CustomError::new(error)));
+                return Err(Status::internal(error.to_string()));
             }
         };
 
@@ -153,52 +151,24 @@ impl Factory for LocalFactory {
 
         self.wait_for_ready(&container_name, is_ready_cmd).await?;
 
-        let db_info = DatabaseReadyInfo::new(
+        let res = DatabaseResponse {
             engine,
             username,
             password,
             database_name,
             port,
-            "localhost".to_string(),
-            "localhost".to_string(),
-        );
+            address_private: "localhost".to_string(),
+            address_public: "localhost".to_string(),
+        };
 
-        let conn_str = db_info.connection_string_private();
-
-        println!(
-            "{:>12} can be reached at {}\n",
-            "DB ready".bold().cyan(),
-            conn_str
-        );
-
-        Ok(conn_str)
+        Ok(res)
     }
 
-    async fn get_secrets(
-        &mut self,
-    ) -> Result<std::collections::BTreeMap<String, String>, shuttle_service::Error> {
-        Ok(self.secrets.clone())
-    }
-
-    fn get_service_name(&self) -> ServiceName {
-        self.service_name.clone()
-    }
-
-    fn get_build_path(&self) -> Result<PathBuf, shuttle_service::Error> {
-        Ok(self.working_directory.clone())
-    }
-
-    fn get_storage_path(&self) -> Result<PathBuf, shuttle_service::Error> {
-        Ok(self.working_directory.clone())
-    }
-}
-
-impl LocalFactory {
     async fn wait_for_ready(
         &self,
         container_name: &str,
         is_ready_cmd: Vec<String>,
-    ) -> Result<(), shuttle_service::Error> {
+    ) -> Result<(), Status> {
         loop {
             trace!("waiting for '{container_name}' to be ready for connections");
 
@@ -273,6 +243,27 @@ impl LocalFactory {
             .expect("to reset cursor position");
 
         Ok(())
+    }
+}
+
+#[async_trait]
+impl Provisioner for LocalProvisioner {
+    async fn provision_database(
+        &self,
+        request: Request<DatabaseRequest>,
+    ) -> Result<Response<DatabaseResponse>, Status> {
+        let DatabaseRequest {
+            project_name,
+            db_type,
+        } = request.into_inner();
+
+        let db_type: Option<Type> = db_type.unwrap().into();
+
+        let res = self
+            .get_db_connection_string(&project_name, db_type.unwrap())
+            .await?;
+
+        Ok(Response::new(res))
     }
 }
 

@@ -1,11 +1,12 @@
 mod args;
 mod client;
 pub mod config;
-mod factory;
 mod init;
+mod provisioner_server;
 
 use shuttle_common::project::ProjectName;
-use std::collections::BTreeMap;
+use shuttle_proto::runtime::{self, LoadRequest, StartRequest, SubscribeLogsRequest};
+use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fs::{read_to_string, File};
 use std::io::stdout;
@@ -21,25 +22,25 @@ use clap_complete::{generate, Shell};
 use config::RequestContext;
 use crossterm::style::Stylize;
 use dialoguer::{theme::ColorfulTheme, Confirm, FuzzySelect, Input, Password};
-use factory::LocalFactory;
 use flate2::write::GzEncoder;
 use flate2::Compression;
-use futures::StreamExt;
+use futures::{StreamExt, TryFutureExt};
 use git2::{Repository, StatusOptions};
 use ignore::overrides::OverrideBuilder;
 use ignore::WalkBuilder;
+use provisioner_server::LocalProvisioner;
 use shuttle_common::models::{project, secret};
-use shuttle_service::loader::{build_crate, Loader, Runtime};
-use shuttle_service::Logger;
+use shuttle_service::loader::{build_crate, Runtime};
 use std::fmt::Write;
 use strum::IntoEnumIterator;
 use tar::Builder;
-use tokio::sync::mpsc;
 use tracing::trace;
 use uuid::Uuid;
 
 use crate::args::{DeploymentCommand, ProjectCommand};
 use crate::client::Client;
+
+const BINARY_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/release/shuttle-runtime"));
 
 pub struct Shuttle {
     ctx: RequestContext,
@@ -392,60 +393,116 @@ impl Shuttle {
             "Building".bold().green(),
             working_directory.display()
         );
-        let so_path = match build_crate(id, working_directory, false, false, tx).await? {
-            Runtime::Legacy(path) => path,
-            Runtime::Next(_) => todo!(),
-        };
+        let runtime = build_crate(id, working_directory, false, tx).await?;
 
         trace!("loading secrets");
         let secrets_path = working_directory.join("Secrets.toml");
 
-        let secrets: BTreeMap<String, String> =
-            if let Ok(secrets_str) = read_to_string(secrets_path) {
-                let secrets: BTreeMap<String, String> =
-                    secrets_str.parse::<toml::Value>()?.try_into()?;
+        let secrets: HashMap<String, String> = if let Ok(secrets_str) = read_to_string(secrets_path)
+        {
+            let secrets: HashMap<String, String> =
+                secrets_str.parse::<toml::Value>()?.try_into()?;
 
-                trace!(keys = ?secrets.keys(), "available secrets");
+            trace!(keys = ?secrets.keys(), "available secrets");
 
-                secrets
-            } else {
-                trace!("no Secrets.toml was found");
-                Default::default()
-            };
+            secrets
+        } else {
+            trace!("no Secrets.toml was found");
+            Default::default()
+        };
 
-        let loader = Loader::from_so_file(so_path)?;
+        let service_name = self.ctx.project_name().to_string();
 
-        let mut factory = LocalFactory::new(
-            self.ctx.project_name().clone(),
+        let (is_wasm, so_path) = match runtime {
+            Runtime::Next(path) => (true, path),
+            Runtime::Legacy(path) => (false, path),
+        };
+
+        let provisioner = LocalProvisioner::new()?;
+        let provisioner_server = provisioner.start(SocketAddr::new(
+            Ipv4Addr::LOCALHOST.into(),
+            run_args.port + 1,
+        ));
+        let (mut runtime, mut runtime_client) = runtime::start(
+            BINARY_BYTES,
+            is_wasm,
+            runtime::StorageManagerType::WorkingDir(working_directory.to_path_buf()),
+            &format!("http://localhost:{}", run_args.port + 1),
+        )
+        .await
+        .map_err(|err| {
+            provisioner_server.abort();
+
+            err
+        })?;
+
+        let load_request = tonic::Request::new(LoadRequest {
+            path: so_path
+                .into_os_string()
+                .into_string()
+                .expect("to convert path to string"),
+            service_name: service_name.clone(),
             secrets,
-            working_directory.to_path_buf(),
-        )?;
+        });
+        trace!("loading service");
+        let _ = runtime_client
+            .load(load_request)
+            .or_else(|err| async {
+                provisioner_server.abort();
+                runtime.kill().await?;
+
+                Err(err)
+            })
+            .await?;
+
+        let mut stream = runtime_client
+            .subscribe_logs(tonic::Request::new(SubscribeLogsRequest {}))
+            .or_else(|err| async {
+                provisioner_server.abort();
+                runtime.kill().await?;
+
+                Err(err)
+            })
+            .await?
+            .into_inner();
+
+        tokio::spawn(async move {
+            while let Some(log) = stream.message().await.expect("to get log from stream") {
+                let log: shuttle_common::LogItem = log.into();
+                println!("{log}");
+            }
+        });
+
+        let start_request = StartRequest {
+            deployment_id: id.as_bytes().to_vec(),
+            service_name,
+            port: run_args.port as u32,
+        };
+
+        trace!(?start_request, "starting service");
+        let response = runtime_client
+            .start(tonic::Request::new(start_request))
+            .or_else(|err| async {
+                provisioner_server.abort();
+                runtime.kill().await?;
+
+                Err(err)
+            })
+            .await?
+            .into_inner();
+
+        trace!(response = ?response,  "client response: ");
+
         let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), run_args.port);
 
-        trace!("loading project");
         println!(
             "\n{:>12} {} on http://{}",
             "Starting".bold().green(),
             self.ctx.project_name(),
             addr
         );
-        let (tx, mut rx) = mpsc::unbounded_channel();
 
-        tokio::spawn(async move {
-            while let Some(log) = rx.recv().await {
-                println!("{log}");
-            }
-        });
-
-        let logger = Logger::new(tx, id);
-        let (handle, so) = loader.load(&mut factory, addr, logger).await?;
-
-        handle.await??;
-
-        tokio::task::spawn_blocking(move || {
-            trace!("closing so file");
-            so.close().unwrap();
-        });
+        runtime.wait().await?;
 
         Ok(())
     }

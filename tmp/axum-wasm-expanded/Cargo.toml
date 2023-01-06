@@ -1,5 +1,5 @@
 [package]
-name = "shuttle-axum"
+name = "shuttle-axum-expanded"
 version = "0.1.0"
 edition = "2021"
 
@@ -14,12 +14,6 @@ futures-executor = "0.3.21"
 http = "0.2.7"
 tower-service = "0.3.1"
 rmp-serde = { version = "1.1.1" }
-futures = "0.3.25"
-
-[dependencies.shuttle-codegen]
-path = "../../codegen"
-features = ["next"]
-version = "0.8.0"
 
 [dependencies.shuttle-common]
 path = "../../common"

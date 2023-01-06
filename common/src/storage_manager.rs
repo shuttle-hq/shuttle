@@ -2,13 +2,25 @@ use std::{fs, io, path::PathBuf};
 
 use uuid::Uuid;
 
-/// Manager to take care of directories for storing project, services and deployment files
+pub trait StorageManager: Clone + Sync + Send {
+    /// Path for a specific service build files
+    fn service_build_path<S: AsRef<str>>(&self, service_name: S) -> Result<PathBuf, io::Error>;
+
+    /// Path to folder for storing deployment files
+    fn deployment_storage_path<S: AsRef<str>>(
+        &self,
+        service_name: S,
+        deployment_id: &Uuid,
+    ) -> Result<PathBuf, io::Error>;
+}
+
+/// Manager to take care of directories for storing project, services and deployment files for deployer
 #[derive(Clone)]
-pub struct StorageManager {
+pub struct ArtifactsStorageManager {
     artifacts_path: PathBuf,
 }
 
-impl StorageManager {
+impl ArtifactsStorageManager {
     pub fn new(artifacts_path: PathBuf) -> Self {
         Self { artifacts_path }
     }
@@ -16,14 +28,6 @@ impl StorageManager {
     /// Path of the directory that contains extracted service Cargo projects.
     pub fn builds_path(&self) -> Result<PathBuf, io::Error> {
         let builds_path = self.artifacts_path.join("shuttle-builds");
-        fs::create_dir_all(&builds_path)?;
-
-        Ok(builds_path)
-    }
-
-    /// Path for a specific service
-    pub fn service_build_path<S: AsRef<str>>(&self, service_name: S) -> Result<PathBuf, io::Error> {
-        let builds_path = self.builds_path()?.join(service_name.as_ref());
         fs::create_dir_all(&builds_path)?;
 
         Ok(builds_path)
@@ -51,9 +55,17 @@ impl StorageManager {
 
         Ok(storage_path)
     }
+}
 
-    /// Path to folder for storing deployment files
-    pub fn deployment_storage_path<S: AsRef<str>>(
+impl StorageManager for ArtifactsStorageManager {
+    fn service_build_path<S: AsRef<str>>(&self, service_name: S) -> Result<PathBuf, io::Error> {
+        let builds_path = self.builds_path()?.join(service_name.as_ref());
+        fs::create_dir_all(&builds_path)?;
+
+        Ok(builds_path)
+    }
+
+    fn deployment_storage_path<S: AsRef<str>>(
         &self,
         service_name: S,
         deployment_id: &Uuid,
@@ -65,5 +77,31 @@ impl StorageManager {
         fs::create_dir_all(&storage_path)?;
 
         Ok(storage_path)
+    }
+}
+
+/// Manager to take care of directories for storing project, services and deployment files for the local runner
+#[derive(Clone)]
+pub struct WorkingDirStorageManager {
+    working_dir: PathBuf,
+}
+
+impl WorkingDirStorageManager {
+    pub fn new(working_dir: PathBuf) -> Self {
+        Self { working_dir }
+    }
+}
+
+impl StorageManager for WorkingDirStorageManager {
+    fn service_build_path<S: AsRef<str>>(&self, _service_name: S) -> Result<PathBuf, io::Error> {
+        Ok(self.working_dir.clone())
+    }
+
+    fn deployment_storage_path<S: AsRef<str>>(
+        &self,
+        _service_name: S,
+        _deployment_id: &Uuid,
+    ) -> Result<PathBuf, io::Error> {
+        Ok(self.working_dir.clone())
     }
 }

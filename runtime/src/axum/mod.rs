@@ -5,7 +5,6 @@ use std::ops::DerefMut;
 use std::os::unix::prelude::RawFd;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::sync::Mutex;
 
 use async_trait::async_trait;
 use cap_std::os::unix::net::UnixStream;
@@ -20,7 +19,7 @@ use shuttle_proto::runtime::{
     SubscribeLogsRequest,
 };
 use shuttle_service::ServiceName;
-use tokio::sync::oneshot;
+use tokio::sync::{mpsc, oneshot};
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::Status;
 use tracing::{error, trace};
@@ -33,7 +32,6 @@ extern crate rmp_serde as rmps;
 
 pub struct AxumWasm {
     router: std::sync::Mutex<Option<Router>>,
-    port: Mutex<Option<u16>>,
     kill_tx: std::sync::Mutex<Option<oneshot::Sender<String>>>,
 }
 
@@ -41,7 +39,6 @@ impl AxumWasm {
     pub fn new() -> Self {
         Self {
             router: std::sync::Mutex::new(None),
-            port: std::sync::Mutex::new(None),
             kill_tx: std::sync::Mutex::new(None),
         }
     }
@@ -73,10 +70,10 @@ impl Runtime for AxumWasm {
 
     async fn start(
         &self,
-        _request: tonic::Request<StartRequest>,
+        request: tonic::Request<StartRequest>,
     ) -> Result<tonic::Response<StartResponse>, Status> {
-        let port = 7002;
-        let address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
+        let StartRequest { port, .. } = request.into_inner();
+        let address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port as u16);
 
         let router = self.router.lock().unwrap().take().unwrap();
 
@@ -87,12 +84,7 @@ impl Runtime for AxumWasm {
         // TODO: split `into_server` up into build and run functions
         tokio::spawn(router.into_server(address, kill_rx));
 
-        *self.port.lock().unwrap() = Some(port);
-
-        let message = StartResponse {
-            success: true,
-            port: port as u32,
-        };
+        let message = StartResponse { success: true };
 
         Ok(tonic::Response::new(message))
     }
@@ -103,7 +95,9 @@ impl Runtime for AxumWasm {
         &self,
         _request: tonic::Request<SubscribeLogsRequest>,
     ) -> Result<tonic::Response<Self::SubscribeLogsStream>, Status> {
-        todo!()
+        let (_tx, rx) = mpsc::channel(1);
+
+        Ok(tonic::Response::new(ReceiverStream::new(rx)))
     }
 
     async fn stop(

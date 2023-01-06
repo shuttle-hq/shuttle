@@ -30,6 +30,7 @@ pub async fn start(persistence: Persistence, runtime_client: RuntimeClient<Chann
         .active_deployment_getter(persistence.clone())
         .artifacts_path(args.artifacts_path)
         .runtime(runtime_client)
+        .secret_getter(persistence.clone())
         .queue_client(GatewayClient::new(args.gateway_uri))
         .build();
 

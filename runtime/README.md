@@ -1,5 +1,15 @@
 # How to run
 
+## The easy way
+Both the legacy and next examples can be run using the local client:
+
+``` bash
+cd path/to/example
+cargo run --manifest ../../../Cargo.toml --bin cargo-shuttle -- run
+```
+
+When a more fine controlled testing is needed, use the instructions below.
+
 ## axum-wasm
 
 Compile the wasm axum router:

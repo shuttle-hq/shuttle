@@ -53,6 +53,36 @@ pub mod provisioner {
         }
     }
 
+    impl From<database_request::DbType> for Option<database::Type> {
+        fn from(db_type: database_request::DbType) -> Self {
+            match db_type {
+                database_request::DbType::Shared(Shared {
+                    engine: Some(engine),
+                }) => match engine {
+                    shared::Engine::Postgres(_) => {
+                        Some(database::Type::Shared(SharedEngine::Postgres))
+                    }
+                    shared::Engine::Mongodb(_) => {
+                        Some(database::Type::Shared(SharedEngine::MongoDb))
+                    }
+                },
+                database_request::DbType::AwsRds(AwsRds {
+                    engine: Some(engine),
+                }) => match engine {
+                    aws_rds::Engine::Postgres(_) => {
+                        Some(database::Type::AwsRds(AwsRdsEngine::Postgres))
+                    }
+                    aws_rds::Engine::Mysql(_) => Some(database::Type::AwsRds(AwsRdsEngine::MySql)),
+                    aws_rds::Engine::Mariadb(_) => {
+                        Some(database::Type::AwsRds(AwsRdsEngine::MariaDB))
+                    }
+                },
+                database_request::DbType::Shared(Shared { engine: None })
+                | database_request::DbType::AwsRds(AwsRds { engine: None }) => None,
+            }
+        }
+    }
+
     impl Display for aws_rds::Engine {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
@@ -65,9 +95,26 @@ pub mod provisioner {
 }
 
 pub mod runtime {
-    use std::time::SystemTime;
+    use std::{
+        env::temp_dir,
+        fs::OpenOptions,
+        io::Write,
+        path::PathBuf,
+        time::{Duration, SystemTime},
+    };
 
+    use anyhow::Context;
+    use chrono::DateTime;
     use prost_types::Timestamp;
+    use tokio::process;
+    use tonic::transport::{Channel, Endpoint};
+    use tracing::info;
+    use uuid::Uuid;
+
+    pub enum StorageManagerType {
+        Artifacts(PathBuf),
+        WorkingDir(PathBuf),
+    }
 
     tonic::include_proto!("runtime");
 
@@ -112,5 +159,116 @@ pub mod runtime {
                 shuttle_common::log::Level::Error => Self::Error,
             }
         }
+    }
+
+    impl From<LogItem> for shuttle_common::LogItem {
+        fn from(log: LogItem) -> Self {
+            Self {
+                id: Uuid::from_slice(&log.id).unwrap(),
+                timestamp: DateTime::from(SystemTime::try_from(log.timestamp.unwrap()).unwrap()),
+                state: LogState::from_i32(log.state).unwrap().into(),
+                level: LogLevel::from_i32(log.level).unwrap().into(),
+                file: log.file,
+                line: log.line,
+                target: log.target,
+                fields: log.fields,
+            }
+        }
+    }
+
+    impl From<LogState> for shuttle_common::deployment::State {
+        fn from(state: LogState) -> Self {
+            match state {
+                LogState::Queued => Self::Queued,
+                LogState::Building => Self::Building,
+                LogState::Built => Self::Built,
+                LogState::Loading => Self::Loading,
+                LogState::Running => Self::Running,
+                LogState::Completed => Self::Completed,
+                LogState::Stopped => Self::Stopped,
+                LogState::Crashed => Self::Crashed,
+                LogState::Unknown => Self::Unknown,
+            }
+        }
+    }
+
+    impl From<LogLevel> for shuttle_common::log::Level {
+        fn from(level: LogLevel) -> Self {
+            match level {
+                LogLevel::Trace => Self::Trace,
+                LogLevel::Debug => Self::Debug,
+                LogLevel::Info => Self::Info,
+                LogLevel::Warn => Self::Warn,
+                LogLevel::Error => Self::Error,
+            }
+        }
+    }
+
+    pub async fn start(
+        binary_bytes: &[u8],
+        wasm: bool,
+        storage_manager_type: StorageManagerType,
+        provisioner_address: &str,
+    ) -> anyhow::Result<(process::Child, runtime_client::RuntimeClient<Channel>)> {
+        let runtime_flag = if wasm { "--axum" } else { "--legacy" };
+
+        let (storage_manager_type, storage_manager_path) = match storage_manager_type {
+            StorageManagerType::Artifacts(path) => ("artifacts", path),
+            StorageManagerType::WorkingDir(path) => ("working-dir", path),
+        };
+
+        let runtime_executable = get_runtime_executable(binary_bytes);
+
+        let runtime = process::Command::new(runtime_executable)
+            .args([
+                runtime_flag,
+                "--provisioner-address",
+                provisioner_address,
+                "--storage-manager-type",
+                storage_manager_type,
+                "--storage-manager-path",
+                &storage_manager_path.display().to_string(),
+            ])
+            .spawn()
+            .context("spawning runtime process")?;
+
+        // Sleep because the timeout below does not seem to work
+        // TODO: investigate why
+        tokio::time::sleep(Duration::from_secs(2)).await;
+
+        info!("connecting runtime client");
+        let conn = Endpoint::new("http://127.0.0.1:6001")
+            .context("creating runtime client endpoint")?
+            .connect_timeout(Duration::from_secs(5));
+
+        let runtime_client = runtime_client::RuntimeClient::connect(conn)
+            .await
+            .context("connecting runtime client")?;
+
+        Ok((runtime, runtime_client))
+    }
+
+    fn get_runtime_executable(binary_bytes: &[u8]) -> PathBuf {
+        let tmp_dir = temp_dir();
+
+        let path = tmp_dir.join("shuttle-runtime");
+        let mut open_options = OpenOptions::new();
+        open_options.write(true).create(true).truncate(true);
+
+        #[cfg(target_family = "unix")]
+        {
+            use std::os::unix::prelude::OpenOptionsExt;
+
+            open_options.mode(0o755);
+        }
+
+        let mut file = open_options
+            .open(&path)
+            .expect("to create runtime executable file");
+
+        file.write_all(binary_bytes)
+            .expect("to write out binary file");
+
+        path
     }
 }

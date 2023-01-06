@@ -62,7 +62,9 @@ tokio = { version = "1.22.0", features = ["macros"] }
 uuid = { workspace = true, features = ["v4"] }
 
 [features]
-codegen = ["shuttle-codegen"]
+default = ["codegen"]
+
+codegen = ["shuttle-codegen/frameworks"]
 loader = ["cargo", "libloading"]
 
 web-actix-web = ["actix-web", "num_cpus"]

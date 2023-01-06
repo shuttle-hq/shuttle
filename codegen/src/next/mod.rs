@@ -255,7 +255,6 @@ impl ToTokens for App {
     }
 }
 
-#[allow(dead_code)]
 pub(crate) fn wasi_bindings(app: App) -> proc_macro2::TokenStream {
     quote!(
         #app
@@ -270,7 +269,8 @@ pub(crate) fn wasi_bindings(app: App) -> proc_macro2::TokenStream {
             use axum::body::HttpBody;
             use std::io::{Read, Write};
             use std::os::wasi::io::FromRawFd;
-            println!("inner handler awoken; interacting with fd={fd_3},{fd_4},{fd_5}");
+
+            println!("inner handler awoken; interacting with fd={},{},{}", fd_3, fd_4, fd_5);
 
             // file descriptor 3 for reading and writing http parts
             let mut parts_fd = unsafe { std::fs::File::from_raw_fd(fd_3) };
@@ -295,7 +295,7 @@ pub(crate) fn wasi_bindings(app: App) -> proc_macro2::TokenStream {
                 .unwrap();
 
             println!("inner router received request: {:?}", &request);
-            let res = handle_request(request);
+            let res = futures_executor::block_on(__app(request));
 
             let (parts, mut body) = res.into_parts();
 

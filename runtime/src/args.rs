@@ -1,17 +1,36 @@
-use clap::Parser;
+use std::path::PathBuf;
+
+use clap::{Parser, ValueEnum};
 use tonic::transport::Endpoint;
 
 #[derive(Parser, Debug)]
 pub struct Args {
     /// Address to reach provisioner at
-    #[clap(long, default_value = "localhost:5000")]
+    #[arg(long, default_value = "http://localhost:5000")]
     pub provisioner_address: Endpoint,
 
     /// Is this runtime for a legacy service
-    #[clap(long, conflicts_with("axum"))]
+    #[arg(long, conflicts_with("axum"))]
     pub legacy: bool,
 
     /// Is this runtime for an axum-wasm service
-    #[clap(long, conflicts_with("legacy"))]
+    #[arg(long, conflicts_with("legacy"))]
     pub axum: bool,
+
+    /// Type of storage manager to start
+    #[arg(long, value_enum)]
+    pub storage_manager_type: StorageManagerType,
+
+    /// Path to use for storage manager
+    #[arg(long)]
+    pub storage_manager_path: PathBuf,
+}
+
+#[derive(Clone, Debug, ValueEnum)]
+pub enum StorageManagerType {
+    /// Use a deloyer artifacts directory
+    Artifacts,
+
+    /// Use a local working directory
+    WorkingDir,
 }

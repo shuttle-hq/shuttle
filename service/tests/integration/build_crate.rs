@@ -6,15 +6,9 @@ use shuttle_service::loader::{build_crate, Runtime};
 async fn not_shuttle() {
     let (tx, _) = crossbeam_channel::unbounded();
     let project_path = format!("{}/tests/resources/not-shuttle", env!("CARGO_MANIFEST_DIR"));
-    let so_path = match build_crate(
-        Default::default(),
-        Path::new(&project_path),
-        false,
-        false,
-        tx,
-    )
-    .await
-    .unwrap()
+    let so_path = match build_crate(Default::default(), Path::new(&project_path), false, tx)
+        .await
+        .unwrap()
     {
         Runtime::Legacy(path) => path,
         _ => unreachable!(),
@@ -37,15 +31,9 @@ async fn not_shuttle() {
 async fn not_lib() {
     let (tx, _) = crossbeam_channel::unbounded();
     let project_path = format!("{}/tests/resources/not-lib", env!("CARGO_MANIFEST_DIR"));
-    build_crate(
-        Default::default(),
-        Path::new(&project_path),
-        false,
-        false,
-        tx,
-    )
-    .await
-    .unwrap();
+    build_crate(Default::default(), Path::new(&project_path), false, tx)
+        .await
+        .unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -53,14 +41,7 @@ async fn not_cdylib() {
     let (tx, _) = crossbeam_channel::unbounded();
     let project_path = format!("{}/tests/resources/not-cdylib", env!("CARGO_MANIFEST_DIR"));
     assert!(matches!(
-        build_crate(
-            Default::default(),
-            Path::new(&project_path),
-            false,
-            false,
-            tx
-        )
-        .await,
+        build_crate(Default::default(), Path::new(&project_path), false, tx).await,
         Ok(Runtime::Legacy(_))
     ));
     assert!(PathBuf::from(project_path)
@@ -73,14 +54,7 @@ async fn is_cdylib() {
     let (tx, _) = crossbeam_channel::unbounded();
     let project_path = format!("{}/tests/resources/is-cdylib", env!("CARGO_MANIFEST_DIR"));
     assert!(matches!(
-        build_crate(
-            Default::default(),
-            Path::new(&project_path),
-            false,
-            false,
-            tx
-        )
-        .await,
+        build_crate(Default::default(), Path::new(&project_path), false, tx).await,
         Ok(Runtime::Legacy(_))
     ));
     assert!(PathBuf::from(project_path)
@@ -96,13 +70,7 @@ async fn not_found() {
         "{}/tests/resources/non-existing",
         env!("CARGO_MANIFEST_DIR")
     );
-    build_crate(
-        Default::default(),
-        Path::new(&project_path),
-        false,
-        false,
-        tx,
-    )
-    .await
-    .unwrap();
+    build_crate(Default::default(), Path::new(&project_path), false, tx)
+        .await
+        .unwrap();
 }

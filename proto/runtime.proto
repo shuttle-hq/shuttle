@@ -22,6 +22,9 @@ message LoadRequest {
 
   // Path to compiled file to load for service
   string path = 2;
+
+  // Secrets that belong to this deployment
+  map<string, string> secrets = 10;
 }
 
 message LoadResponse {
@@ -34,16 +37,13 @@ message StartRequest {
   bytes deployment_id = 1;
   // Name of service to start
   string service_name = 2;
+  // Port to start the service on
+  uint32 port = 3;
 }
 
 message StartResponse {
   // Was the start successful
   bool success = 1;
-
-  // todo: find a way to add optional flag here
-  // Optional port the service was started on
-  // This is likely to be None for bots
-  uint32 port = 2;
 }
 
 message StopRequest {

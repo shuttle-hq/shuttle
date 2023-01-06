@@ -411,7 +411,7 @@ mod tests {
             deploy_layer::LogType, gateway_client::BuildQueueClient, ActiveDeploymentsGetter,
             Built, DeploymentManager, Queued,
         },
-        persistence::{SecretRecorder, State},
+        persistence::{Secret, SecretGetter, SecretRecorder, State},
     };
 
     use super::{DeployLayer, Log, LogRecorder};
@@ -533,6 +533,18 @@ mod tests {
             _id: Uuid,
         ) -> Result<(), crate::deployment::gateway_client::Error> {
             Ok(())
+        }
+    }
+
+    #[derive(Clone)]
+    struct StubSecretGetter;
+
+    #[async_trait::async_trait]
+    impl SecretGetter for StubSecretGetter {
+        type Err = std::io::Error;
+
+        async fn get_secrets(&self, _service_id: &Uuid) -> Result<Vec<Secret>, Self::Err> {
+            Ok(Default::default())
         }
     }
 
@@ -944,6 +956,7 @@ mod tests {
             .secret_recorder(RECORDER.clone())
             .active_deployment_getter(StubActiveDeploymentGetter)
             .artifacts_path(PathBuf::from("/tmp"))
+            .secret_getter(StubSecretGetter)
             .runtime(get_runtime_client().await)
             .queue_client(StubBuildQueueClient)
             .build()

@@ -16,6 +16,8 @@ pub enum Error {
     Build(#[source] Box<dyn StdError + Send>),
     #[error("Load error: {0}")]
     Load(#[from] LoaderError),
+    #[error("Prepare to run error: {0}")]
+    PrepareRun(String),
     #[error("Run error: {0}")]
     Run(#[from] shuttle_service::Error),
     #[error("Pre-deployment test failure: {0}")]

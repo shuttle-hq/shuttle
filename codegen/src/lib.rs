@@ -1,27 +1,33 @@
+#[cfg(feature = "next")]
 mod next;
+#[cfg(feature = "frameworks")]
 mod shuttle_main;
 
-use next::App;
 use proc_macro::TokenStream;
 use proc_macro_error::proc_macro_error;
-use syn::{parse_macro_input, File};
 
+#[cfg(feature = "frameworks")]
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
     shuttle_main::r#impl(attr, item)
 }
 
+#[cfg(feature = "next")]
 #[proc_macro_error]
 #[proc_macro]
 pub fn app(item: TokenStream) -> TokenStream {
+    use next::App;
+    use syn::{parse_macro_input, File};
+
     let mut file = parse_macro_input!(item as File);
 
     let app = App::from_file(&mut file);
+    let bindings = next::wasi_bindings(app);
 
     quote::quote!(
         #file
-        #app
+        #bindings
     )
     .into()
 }

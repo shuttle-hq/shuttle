@@ -93,4 +93,5 @@ pub extern "C" fn __SHUTTLE_Axum_call(
     // write body if there is one
     if let Some(body) = futures_executor::block_on(body.data()) {
         body_write_stream.write_all(body.unwrap().as_ref()).unwrap();
+    }
 }

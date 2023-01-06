@@ -10,6 +10,7 @@ crate-type = [ "cdylib" ]
 # most axum features can be enabled, but "tokio" and "ws" depend on socket2
 # via "hyper/tcp" which is not compatible with wasi
 axum = { version = "0.6.0", default-features = false }
+futures = "0.3.25"
 futures-executor = "0.3.21"
 http = "0.2.7"
 tower-service = "0.3.1"

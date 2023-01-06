@@ -1,4 +1,4 @@
-use hyper::http::{self, HeaderMap, Method, Request, Response, StatusCode, Uri, Version};
+use http::{self, HeaderMap, Method, Request, Response, StatusCode, Uri, Version};
 use rmps::Serializer;
 use serde::{Deserialize, Serialize};
 

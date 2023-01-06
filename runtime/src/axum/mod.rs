@@ -209,11 +209,11 @@ impl Router {
         self.linker.module(&mut store, "axum", &self.module)?;
 
         let (mut parts_stream, parts_client) =
-            UnixStream::pair().context("failed to open unixstream")?;
+            UnixStream::pair().context("failed to open parts unixstream")?;
         let (mut body_write_stream, body_write_client) =
-            UnixStream::pair().context("failed to open unixstream")?;
+            UnixStream::pair().context("failed to open body write unixstream")?;
         let (body_read_stream, body_read_client) =
-            UnixStream::pair().context("failed to open unixstream")?;
+            UnixStream::pair().context("failed to open body read unixstream")?;
 
         let parts_client = WasiUnixStream::from_cap_std(parts_client);
         let body_write_client = WasiUnixStream::from_cap_std(body_write_client);
@@ -291,7 +291,7 @@ impl Router {
         let response: Response<Body> = wrapper
             .into_response_builder()
             .body(body)
-            .context("failed to construct response body")?;
+            .context("failed to construct http response")?;
 
         Ok(response)
     }

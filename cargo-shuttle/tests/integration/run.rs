@@ -19,12 +19,12 @@ async fn cargo_shuttle_run(working_directory: &str, router_ip: bool) -> String {
     let run_args = if !router_ip {
         RunArgs {
             port,
-            router_ip: false,
+            external: false,
         }
     } else {
         RunArgs {
             port,
-            router_ip: true,
+            external: true,
         }
     };
 

@@ -26,7 +26,7 @@ pub struct Args {
     pub shared_mongodb_uri: String,
 
     /// Fully qualified domain name this provisioner instance is reachable at
-    #[clap(long, env = "PROVISIONER_FQDN", parse(try_from_str = parse_fqdn))]
+    #[clap(long, env = "PROVISIONER_FQDN", value_parser = parse_fqdn)]
     pub fqdn: FQDN,
 
     /// Address the provisioned PostgreSQL DB can be reached at on the internal network

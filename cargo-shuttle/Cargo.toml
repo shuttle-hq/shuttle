@@ -15,8 +15,8 @@ cargo = "0.65.0"
 cargo-edit = { version = "0.11.6", features = ["cli"] }
 cargo_metadata = "0.15.2"
 chrono = { workspace = true }
-clap = { version = "3.2.17", features = ["derive", "env"] }
-clap_complete = "3.2.5"
+clap = { version = "4.0.27", features = ["derive", "env"] }
+clap_complete = "4.0.7"
 crossbeam-channel = "0.5.6"
 crossterm = "0.25.0"
 dialoguer = { version = "0.10.2", features = ["fuzzy-select"] }
@@ -36,7 +36,10 @@ reqwest-middleware = "0.2.0"
 reqwest-retry = "0.2.0"
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-sqlx = { version = "0.6.2", features = ["runtime-tokio-native-tls", "postgres"] }
+sqlx = { version = "0.6.2", features = [
+  "runtime-tokio-native-tls",
+  "postgres",
+] }
 strum = { version = "0.24.1", features = ["derive"] }
 tar = "0.4.38"
 tokio = { version = "1.22.0", features = ["macros"] }
@@ -51,7 +54,7 @@ webbrowser = "0.8.2"
 
 [dependencies.shuttle-common]
 workspace = true
-features= ["models"]
+features = ["models"]
 
 [dependencies.shuttle-secrets]
 version = "0.8.0"

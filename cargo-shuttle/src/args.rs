@@ -5,6 +5,7 @@ use std::{
     path::PathBuf,
 };
 
+use clap::builder::PossibleValue;
 use clap::Parser;
 use clap_complete::Shell;
 use shuttle_common::project::ProjectName;
@@ -18,10 +19,10 @@ use crate::init::Framework;
     about,
     // Cargo passes in the subcommand name to the invoked executable. Use a
     // hidden, optional positional argument to deal with it.
-    arg(clap::Arg::with_name("dummy")
-        .possible_value("shuttle")
+    arg(clap::Arg::new("dummy") 
+        .value_parser([PossibleValue::new("shuttle")])
         .required(false)
-        .hidden(true))
+        .hide(true))
 )]
 pub struct Args {
     /// run this command against the api at the supplied url
@@ -38,12 +39,7 @@ pub struct Args {
 #[derive(Parser, Debug)]
 pub struct ProjectArgs {
     /// Specify the working directory
-    #[clap(
-        global = true,
-        long,
-        parse(try_from_os_str = parse_path),
-        default_value = ".",
-    )]
+    #[clap(global = true, long, value_parser, default_value = ".")]
     pub working_directory: PathBuf,
     /// Specify the name of the project (overrides crate name)
     #[clap(global = true, long)]
@@ -186,10 +182,7 @@ pub struct InitArgs {
     #[clap(flatten)]
     pub login_args: LoginArgs,
     /// Path to initialize a new shuttle project
-    #[clap(
-        parse(try_from_os_str = parse_init_path),
-        default_value = ".",
-    )]
+    #[clap(value_parser, default_value = ".")]
     pub path: PathBuf,
 }
 

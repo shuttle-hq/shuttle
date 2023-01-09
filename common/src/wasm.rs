@@ -5,7 +5,7 @@ use std::{
 };
 
 use chrono::{DateTime, NaiveDateTime, Utc};
-use hyper::http::{HeaderMap, Method, Request, Response, StatusCode, Uri, Version};
+use http::{HeaderMap, Method, Request, Response, StatusCode, Uri, Version};
 use rmps::Serializer;
 use serde::{Deserialize, Serialize};
 use tracing::Subscriber;
@@ -31,8 +31,8 @@ pub struct RequestWrapper {
     pub headers: HeaderMap,
 }
 
-impl From<hyper::http::request::Parts> for RequestWrapper {
-    fn from(parts: hyper::http::request::Parts) -> Self {
+impl From<http::request::Parts> for RequestWrapper {
+    fn from(parts: http::request::Parts) -> Self {
         RequestWrapper {
             method: parts.method,
             uri: parts.uri,
@@ -52,7 +52,7 @@ impl RequestWrapper {
     }
 
     /// Consume the wrapper and return a request builder with `Parts` set
-    pub fn into_request_builder(self) -> hyper::http::request::Builder {
+    pub fn into_request_builder(self) -> http::request::Builder {
         let mut request = Request::builder()
             .method(self.method)
             .version(self.version)
@@ -80,8 +80,8 @@ pub struct ResponseWrapper {
     pub headers: HeaderMap,
 }
 
-impl From<hyper::http::response::Parts> for ResponseWrapper {
-    fn from(parts: hyper::http::response::Parts) -> Self {
+impl From<http::response::Parts> for ResponseWrapper {
+    fn from(parts: http::response::Parts) -> Self {
         ResponseWrapper {
             status: parts.status,
             version: parts.version,
@@ -100,7 +100,7 @@ impl ResponseWrapper {
     }
 
     /// Consume the wrapper and return a response builder with `Parts` set
-    pub fn into_response_builder(self) -> hyper::http::response::Builder {
+    pub fn into_response_builder(self) -> http::response::Builder {
         let mut response = Response::builder()
             .status(self.status)
             .version(self.version);
@@ -374,8 +374,8 @@ mod test {
 
     use super::*;
     use chrono::SubsecRound;
+    use http::HeaderValue;
     use hyper::body::Body;
-    use hyper::http::HeaderValue;
     use tracing_subscriber::prelude::*;
 
     #[test]

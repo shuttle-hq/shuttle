@@ -14,7 +14,7 @@ use uuid::Uuid;
 use crate::init::Framework;
 
 #[derive(Parser)]
-#[clap(
+#[command(
     version,
     about,
     // Cargo passes in the subcommand name to the invoked executable. Use a
@@ -27,11 +27,11 @@ use crate::init::Framework;
 pub struct Args {
     /// run this command against the api at the supplied url
     /// (allows targeting a custom deployed instance for this command only)
-    #[clap(long, env = "SHUTTLE_API")]
+    #[arg(long, env = "SHUTTLE_API")]
     pub api_url: Option<String>,
-    #[clap(flatten)]
+    #[command(flatten)]
     pub project_args: ProjectArgs,
-    #[clap(subcommand)]
+    #[command(subcommand)]
     pub cmd: Command,
 }
 
@@ -39,10 +39,10 @@ pub struct Args {
 #[derive(Parser, Debug)]
 pub struct ProjectArgs {
     /// Specify the working directory
-    #[clap(global = true, long, value_parser, default_value = ".")]
+    #[arg(global = true, long)]
     pub working_directory: PathBuf,
     /// Specify the name of the project (overrides crate name)
-    #[clap(global = true, long)]
+    #[arg(global = true, long)]
     pub name: Option<ProjectName>,
 }
 
@@ -51,17 +51,17 @@ pub enum Command {
     /// deploy a shuttle service
     Deploy(DeployArgs),
     /// manage deployments of a shuttle service
-    #[clap(subcommand)]
+    #[command(subcommand)]
     Deployment(DeploymentCommand),
     /// create a new shuttle service
     Init(InitArgs),
     /// generate shell completions
     Generate {
         /// which shell
-        #[clap(short, long, env, default_value_t = Shell::Bash)]
+        #[arg(short, long, env, default_value_t = Shell::Bash)]
         shell: Shell,
         /// output to file or stdout by default
-        #[clap(short, long, env)]
+        #[arg(short, long, env)]
         output: Option<PathBuf>,
     },
     /// view the status of a shuttle service
@@ -71,7 +71,7 @@ pub enum Command {
         /// Deployment ID to get logs for. Defaults to currently running deployment
         id: Option<Uuid>,
 
-        #[clap(short, long)]
+        #[arg(short, long)]
         /// Follow log output
         follow: bool,
     },
@@ -86,7 +86,7 @@ pub enum Command {
     /// run a shuttle service locally
     Run(RunArgs),
     /// manage a project on shuttle
-    #[clap(subcommand)]
+    #[command(subcommand)]
     Project(ProjectCommand),
 }
 
@@ -111,7 +111,7 @@ pub enum ProjectCommand {
     Rm,
     /// show the status of this project's environment on shuttle
     Status {
-        #[clap(short, long)]
+        #[arg(short, long)]
         /// Follow status of project command
         follow: bool,
     },
@@ -120,69 +120,69 @@ pub enum ProjectCommand {
 #[derive(Parser, Clone, Debug)]
 pub struct LoginArgs {
     /// api key for the shuttle platform
-    #[clap(long)]
+    #[arg(long)]
     pub api_key: Option<String>,
 }
 
 #[derive(Parser)]
 pub struct DeployArgs {
     /// allow dirty working directories to be packaged
-    #[clap(long)]
+    #[arg(long)]
     pub allow_dirty: bool,
     /// allows pre-deploy tests to be skipped
-    #[clap(long)]
+    #[arg(long)]
     pub no_test: bool,
 }
 
 #[derive(Parser, Debug)]
 pub struct RunArgs {
     /// port to start service on
-    #[clap(long, default_value = "8000")]
+    #[arg(long, default_value = "8000")]
     pub port: u16,
 }
 
 #[derive(Parser, Debug)]
 pub struct InitArgs {
     /// Initialize with actix-web framework
-    #[clap(long="actix-web", conflicts_with_all = &["axum", "rocket", "tide", "tower", "poem", "serenity", "warp", "salvo", "thruster", "no-framework"])]
+    #[arg(long="actix-web", conflicts_with_all = &["axum", "rocket", "tide", "tower", "poem", "serenity", "warp", "salvo", "thruster", "no-framework"])]
     pub actix_web: bool,
     /// Initialize with axum framework
-    #[clap(long, conflicts_with_all = &["actix-web","rocket", "tide", "tower", "poem", "serenity", "warp", "salvo", "thruster", "no-framework"])]
+    #[arg(long, conflicts_with_all = &["actix-web","rocket", "tide", "tower", "poem", "serenity", "warp", "salvo", "thruster", "no-framework"])]
     pub axum: bool,
     /// Initialize with rocket framework
-    #[clap(long, conflicts_with_all = &["actix-web","axum", "tide", "tower", "poem", "serenity", "warp", "salvo", "thruster", "no-framework"])]
+    #[arg(long, conflicts_with_all = &["actix-web","axum", "tide", "tower", "poem", "serenity", "warp", "salvo", "thruster", "no-framework"])]
     pub rocket: bool,
     /// Initialize with tide framework
-    #[clap(long, conflicts_with_all = &["actix-web","axum", "rocket", "tower", "poem", "serenity", "warp", "salvo", "thruster", "no-framework"])]
+    #[arg(long, conflicts_with_all = &["actix-web","axum", "rocket", "tower", "poem", "serenity", "warp", "salvo", "thruster", "no-framework"])]
     pub tide: bool,
     /// Initialize with tower framework
-    #[clap(long, conflicts_with_all = &["actix-web","axum", "rocket", "tide", "poem", "serenity", "warp", "salvo", "thruster", "no-framework"])]
+    #[arg(long, conflicts_with_all = &["actix-web","axum", "rocket", "tide", "poem", "serenity", "warp", "salvo", "thruster", "no-framework"])]
     pub tower: bool,
     /// Initialize with poem framework
-    #[clap(long, conflicts_with_all = &["actix-web","axum", "rocket", "tide", "tower", "serenity", "warp", "salvo", "thruster", "no-framework"])]
+    #[arg(long, conflicts_with_all = &["actix-web","axum", "rocket", "tide", "tower", "serenity", "warp", "salvo", "thruster", "no-framework"])]
     pub poem: bool,
     /// Initialize with salvo framework
-    #[clap(long, conflicts_with_all = &["actix-web","axum", "rocket", "tide", "tower", "poem", "warp", "serenity", "thruster", "no-framework"])]
+    #[arg(long, conflicts_with_all = &["actix-web","axum", "rocket", "tide", "tower", "poem", "warp", "serenity", "thruster", "no-framework"])]
     pub salvo: bool,
     /// Initialize with serenity framework
-    #[clap(long, conflicts_with_all = &["actix-web","axum", "rocket", "tide", "tower", "poem", "warp", "salvo", "thruster", "no-framework"])]
+    #[arg(long, conflicts_with_all = &["actix-web","axum", "rocket", "tide", "tower", "poem", "warp", "salvo", "thruster", "no-framework"])]
     pub serenity: bool,
     /// Initialize with warp framework
-    #[clap(long, conflicts_with_all = &["actix-web","axum", "rocket", "tide", "tower", "poem", "serenity", "salvo", "thruster", "no-framework"])]
+    #[arg(long, conflicts_with_all = &["actix-web","axum", "rocket", "tide", "tower", "poem", "serenity", "salvo", "thruster", "no-framework"])]
     pub warp: bool,
     /// Initialize with thruster framework
-    #[clap(long, conflicts_with_all = &["actix-web","axum", "rocket", "tide", "tower", "poem", "warp", "salvo", "serenity", "no-framework"])]
+    #[arg(long, conflicts_with_all = &["actix-web","axum", "rocket", "tide", "tower", "poem", "warp", "salvo", "serenity", "no-framework"])]
     pub thruster: bool,
     /// Initialize without a framework
-    #[clap(long, conflicts_with_all = &["actix-web","axum", "rocket", "tide", "tower", "poem", "warp", "salvo", "serenity", "thruster"])]
+    #[arg(long, conflicts_with_all = &["actix-web","axum", "rocket", "tide", "tower", "poem", "warp", "salvo", "serenity", "thruster"])]
     pub no_framework: bool,
     /// Whether to create the environment for this project on Shuttle
-    #[clap(long)]
+    #[arg(long)]
     pub new: bool,
-    #[clap(flatten)]
+    #[command(flatten)]
     pub login_args: LoginArgs,
     /// Path to initialize a new shuttle project
-    #[clap(value_parser, default_value = ".")]
+    #[arg()]
     pub path: PathBuf,
 }
 

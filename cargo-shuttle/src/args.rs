@@ -148,37 +148,40 @@ pub struct RunArgs {
 #[derive(Parser, Debug)]
 pub struct InitArgs {
     /// Initialize with actix-web framework
-    #[clap(long="actix-web", conflicts_with_all = &["axum", "rocket", "tide", "tower", "poem", "serenity", "warp", "salvo", "thruster", "no-framework"])]
+    #[clap(long="actix-web", conflicts_with_all = &["axum", "rocket", "tide", "tower", "poem", "serenity", "poise", "warp", "salvo", "thruster", "no-framework"])]
     pub actix_web: bool,
     /// Initialize with axum framework
-    #[clap(long, conflicts_with_all = &["actix-web","rocket", "tide", "tower", "poem", "serenity", "warp", "salvo", "thruster", "no-framework"])]
+    #[clap(long, conflicts_with_all = &["actix-web","rocket", "tide", "tower", "poem", "serenity", "poise", "warp", "salvo", "thruster", "no-framework"])]
     pub axum: bool,
     /// Initialize with rocket framework
-    #[clap(long, conflicts_with_all = &["actix-web","axum", "tide", "tower", "poem", "serenity", "warp", "salvo", "thruster", "no-framework"])]
+    #[clap(long, conflicts_with_all = &["actix-web","axum", "tide", "tower", "poem", "serenity", "poise", "warp", "salvo", "thruster", "no-framework"])]
     pub rocket: bool,
     /// Initialize with tide framework
-    #[clap(long, conflicts_with_all = &["actix-web","axum", "rocket", "tower", "poem", "serenity", "warp", "salvo", "thruster", "no-framework"])]
+    #[clap(long, conflicts_with_all = &["actix-web","axum", "rocket", "tower", "poem", "serenity", "poise", "warp", "salvo", "thruster", "no-framework"])]
     pub tide: bool,
     /// Initialize with tower framework
-    #[clap(long, conflicts_with_all = &["actix-web","axum", "rocket", "tide", "poem", "serenity", "warp", "salvo", "thruster", "no-framework"])]
+    #[clap(long, conflicts_with_all = &["actix-web","axum", "rocket", "tide", "poem", "serenity", "poise", "warp", "salvo", "thruster", "no-framework"])]
     pub tower: bool,
     /// Initialize with poem framework
-    #[clap(long, conflicts_with_all = &["actix-web","axum", "rocket", "tide", "tower", "serenity", "warp", "salvo", "thruster", "no-framework"])]
+    #[clap(long, conflicts_with_all = &["actix-web","axum", "rocket", "tide", "tower", "serenity", "poise", "warp", "salvo", "thruster", "no-framework"])]
     pub poem: bool,
     /// Initialize with salvo framework
-    #[clap(long, conflicts_with_all = &["actix-web","axum", "rocket", "tide", "tower", "poem", "warp", "serenity", "thruster", "no-framework"])]
+    #[clap(long, conflicts_with_all = &["actix-web","axum", "rocket", "tide", "tower", "poem", "warp", "serenity", "poise", "thruster", "no-framework"])]
     pub salvo: bool,
     /// Initialize with serenity framework
-    #[clap(long, conflicts_with_all = &["actix-web","axum", "rocket", "tide", "tower", "poem", "warp", "salvo", "thruster", "no-framework"])]
+    #[clap(long, conflicts_with_all = &["actix-web","axum", "rocket", "tide", "tower", "poem", "warp", "poise", "salvo", "thruster", "no-framework"])]
     pub serenity: bool,
+    /// Initialize with poise framework
+    #[clap(long, conflicts_with_all = &["actix-web","axum", "rocket", "tide", "tower", "poem", "warp", "serenity", "salvo", "thruster", "no-framework"])]
+    pub poise: bool,
     /// Initialize with warp framework
-    #[clap(long, conflicts_with_all = &["actix-web","axum", "rocket", "tide", "tower", "poem", "serenity", "salvo", "thruster", "no-framework"])]
+    #[clap(long, conflicts_with_all = &["actix-web","axum", "rocket", "tide", "tower", "poem", "serenity", "poise", "salvo", "thruster", "no-framework"])]
     pub warp: bool,
     /// Initialize with thruster framework
-    #[clap(long, conflicts_with_all = &["actix-web","axum", "rocket", "tide", "tower", "poem", "warp", "salvo", "serenity", "no-framework"])]
+    #[clap(long, conflicts_with_all = &["actix-web","axum", "rocket", "tide", "tower", "poem", "warp", "salvo", "serenity", "poise", "no-framework"])]
     pub thruster: bool,
     /// Initialize without a framework
-    #[clap(long, conflicts_with_all = &["actix-web","axum", "rocket", "tide", "tower", "poem", "warp", "salvo", "serenity", "thruster"])]
+    #[clap(long, conflicts_with_all = &["actix-web","axum", "rocket", "tide", "tower", "poem", "warp", "salvo", "serenity", "poise", "thruster"])]
     pub no_framework: bool,
     /// Whether to create the environment for this project on Shuttle
     #[clap(long)]
@@ -209,6 +212,8 @@ impl InitArgs {
             Some(Framework::Poem)
         } else if self.salvo {
             Some(Framework::Salvo)
+        } else if self.poise {
+            Some(Framework::Poise)
         } else if self.serenity {
             Some(Framework::Serenity)
         } else if self.warp {
@@ -257,6 +262,7 @@ mod tests {
             poem: false,
             salvo: false,
             serenity: false,
+            poise: false,
             warp: false,
             thruster: false,
             no_framework: false,
@@ -274,6 +280,7 @@ mod tests {
             "poem" => init_args.poem = true,
             "salvo" => init_args.salvo = true,
             "serenity" => init_args.serenity = true,
+            "poise" => init_args.poise = true,
             "warp" => init_args.warp = true,
             "thruster" => init_args.thruster = true,
             "none" => init_args.no_framework = true,

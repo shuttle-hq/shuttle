@@ -143,6 +143,9 @@ pub struct RunArgs {
     /// port to start service on
     #[clap(long, default_value = "8000")]
     pub port: u16,
+    /// use 0.0.0.0 instead of localhost (for usage with local external devices)
+    #[clap(long)]
+    pub external: bool,
 }
 
 #[derive(Parser, Debug)]

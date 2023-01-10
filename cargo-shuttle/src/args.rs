@@ -171,7 +171,7 @@ pub struct InitArgs {
     #[arg(long, conflicts_with_all = &["actix_web","axum", "rocket", "tide", "tower", "poem", "warp", "poise", "salvo", "thruster", "no_framework"])]
     pub serenity: bool,
     /// Initialize with poise framework
-    #[clap(long, conflicts_with_all = &["actix-web","axum", "rocket", "tide", "tower", "poem", "warp", "serenity", "salvo", "thruster", "no-framework"])]
+    #[clap(long, conflicts_with_all = &["actix_web","axum", "rocket", "tide", "tower", "poem", "warp", "serenity", "salvo", "thruster", "no_framework"])]
     pub poise: bool,
     /// Initialize with warp framework
     #[arg(long, conflicts_with_all = &["actix_web","axum", "rocket", "tide", "tower", "poem", "serenity", "poise", "salvo", "thruster", "no_framework"])]

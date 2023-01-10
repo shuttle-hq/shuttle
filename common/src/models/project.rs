@@ -18,6 +18,7 @@ pub struct Response {
 #[strum(serialize_all = "lowercase")]
 pub enum State {
     Creating,
+    Attaching,
     Starting,
     Started,
     Ready,
@@ -42,10 +43,10 @@ impl Display for Response {
 impl State {
     pub fn get_color(&self) -> Color {
         match self {
-            State::Creating | State::Starting | State::Started => Color::Cyan,
-            State::Ready => Color::Green,
-            State::Stopped | State::Stopping | State::Destroying | State::Destroyed => Color::Blue,
-            State::Errored => Color::Red,
+            Self::Creating | Self::Attaching | Self::Starting | Self::Started => Color::Cyan,
+            Self::Ready => Color::Green,
+            Self::Stopped | Self::Stopping | Self::Destroying | Self::Destroyed => Color::Blue,
+            Self::Errored => Color::Red,
         }
     }
 }

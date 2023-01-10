@@ -1,11 +1,11 @@
 use std::{
-    ffi::OsStr,
+    ffi::OsString,
     fs::{canonicalize, create_dir_all},
     io::{self, ErrorKind},
     path::PathBuf,
 };
 
-use clap::builder::PossibleValue;
+use clap::builder::{OsStringValueParser, PossibleValue, TypedValueParser};
 use clap::Parser;
 use clap_complete::Shell;
 use shuttle_common::project::ProjectName;
@@ -39,10 +39,10 @@ pub struct Args {
 #[derive(Parser, Debug)]
 pub struct ProjectArgs {
     /// Specify the working directory
-    #[arg(global = true, long)]
+    #[arg(global = true, long, default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_path))]
     pub working_directory: PathBuf,
     /// Specify the name of the project (overrides crate name)
-    #[arg(global = true, long, default_value = ".")]
+    #[arg(global = true, long)]
     pub name: Option<ProjectName>,
 }
 
@@ -182,7 +182,7 @@ pub struct InitArgs {
     #[command(flatten)]
     pub login_args: LoginArgs,
     /// Path to initialize a new shuttle project
-    #[arg(default_value = ".")]
+    #[arg(default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_path) )]
     pub path: PathBuf,
 }
 
@@ -217,21 +217,21 @@ impl InitArgs {
 }
 
 // Helper function to parse and return the absolute path
-fn parse_path(path: &OsStr) -> Result<PathBuf, io::Error> {
-    canonicalize(path).map_err(|e| {
+fn parse_path(path: OsString) -> Result<PathBuf, String> {
+    canonicalize(&path).map_err(|e| format!("could not turn {path:?} into a real path: {e}"))
+}
+
+// Helper function to parse, create if not exists, and return the absolute path
+pub(crate) fn parse_init_path(path: OsString) -> Result<PathBuf, io::Error> {
+    // Create the directory if does not exist
+    create_dir_all(&path)?;
+
+    parse_path(path.clone()).map_err(|e| {
         io::Error::new(
             ErrorKind::InvalidInput,
             format!("could not turn {path:?} into a real path: {e}"),
         )
     })
-}
-
-// Helper function to parse, create if not exists, and return the absolute path
-pub(crate) fn parse_init_path(path: &OsStr) -> Result<PathBuf, io::Error> {
-    // Create the directory if does not exist
-    create_dir_all(path)?;
-
-    parse_path(path)
 }
 
 #[cfg(test)]

@@ -34,6 +34,8 @@ pub async fn start(persistence: Persistence, runtime_client: RuntimeClient<Chann
         .queue_client(GatewayClient::new(args.gateway_uri))
         .build();
 
+    persistence.cleanup_invalid_states().await.unwrap();
+
     let runnable_deployments = persistence.get_all_runnable_deployments().await.unwrap();
     info!(count = %runnable_deployments.len(), "enqueuing runnable deployments");
     for existing_deployment in runnable_deployments {

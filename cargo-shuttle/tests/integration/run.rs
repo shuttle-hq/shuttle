@@ -5,10 +5,18 @@ use std::{fs::canonicalize, process::exit, time::Duration};
 use tokio::time::sleep;
 
 /// creates a `cargo-shuttle` run instance with some reasonable defaults set.
-async fn cargo_shuttle_run(working_directory: &str) -> u16 {
+async fn cargo_shuttle_run(working_directory: &str, external: bool) -> String {
     let working_directory = canonicalize(working_directory).unwrap();
+
     let port = pick_unused_port().unwrap();
-    let run_args = RunArgs { port };
+
+    let url = if !external {
+        format!("http://localhost:{port}")
+    } else {
+        format!("http://0.0.0.0:{port}")
+    };
+
+    let run_args = RunArgs { port, external };
 
     let runner = Shuttle::new().unwrap().run(Args {
         api_url: Some("http://shuttle.invalid:80".to_string()),
@@ -34,12 +42,7 @@ async fn cargo_shuttle_run(working_directory: &str) -> u16 {
     tokio::spawn(runner);
 
     // Wait for service to be responsive
-    while (reqwest::Client::new()
-        .get(format!("http://localhost:{port}"))
-        .send()
-        .await)
-        .is_err()
-    {
+    while (reqwest::Client::new().get(url.clone()).send().await).is_err() {
         println!(
             "waiting for '{}' to start up...",
             working_directory.display()
@@ -47,15 +50,15 @@ async fn cargo_shuttle_run(working_directory: &str) -> u16 {
         sleep(Duration::from_millis(350)).await;
     }
 
-    port
+    url
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn rocket_hello_world() {
-    let port = cargo_shuttle_run("../examples/rocket/hello-world").await;
+    let url = cargo_shuttle_run("../examples/rocket/hello-world", false).await;
 
     let request_text = reqwest::Client::new()
-        .get(format!("http://localhost:{port}/hello"))
+        .get(format!("{url}/hello"))
         .send()
         .await
         .unwrap()
@@ -68,10 +71,10 @@ async fn rocket_hello_world() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn rocket_secrets() {
-    let port = cargo_shuttle_run("../examples/rocket/secrets").await;
+    let url = cargo_shuttle_run("../examples/rocket/secrets", false).await;
 
     let request_text = reqwest::Client::new()
-        .get(format!("http://localhost:{port}/secret"))
+        .get(format!("{url}/secret"))
         .send()
         .await
         .unwrap()
@@ -85,11 +88,11 @@ async fn rocket_secrets() {
 // This example uses a shared Postgres. Thus local runs should create a docker container for it.
 #[tokio::test(flavor = "multi_thread")]
 async fn rocket_postgres() {
-    let port = cargo_shuttle_run("../examples/rocket/postgres").await;
+    let url = cargo_shuttle_run("../examples/rocket/postgres", false).await;
     let client = reqwest::Client::new();
 
     let post_text = client
-        .post(format!("http://localhost:{port}/todo"))
+        .post(format!("{url}/todo"))
         .body("{\"note\": \"Deploy to shuttle\"}")
         .send()
         .await
@@ -101,7 +104,7 @@ async fn rocket_postgres() {
     assert_eq!(post_text, "{\"id\":1,\"note\":\"Deploy to shuttle\"}");
 
     let request_text = client
-        .get(format!("http://localhost:{port}/todo/1"))
+        .get(format!("{url}/todo/1"))
         .send()
         .await
         .unwrap()
@@ -114,11 +117,11 @@ async fn rocket_postgres() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn rocket_authentication() {
-    let port = cargo_shuttle_run("../examples/rocket/authentication").await;
+    let url = cargo_shuttle_run("../examples/rocket/authentication", false).await;
     let client = reqwest::Client::new();
 
     let public_text = client
-        .get(format!("http://localhost:{port}/public"))
+        .get(format!("{url}/public"))
         .send()
         .await
         .unwrap()
@@ -132,7 +135,7 @@ async fn rocket_authentication() {
     );
 
     let private_status = client
-        .get(format!("http://localhost:{port}/private"))
+        .get(format!("{url}/private"))
         .send()
         .await
         .unwrap()
@@ -141,7 +144,7 @@ async fn rocket_authentication() {
     assert_eq!(private_status, StatusCode::FORBIDDEN);
 
     let body = client
-        .post(format!("http://localhost:{port}/login"))
+        .post(format!("{url}/login"))
         .body("{\"username\": \"username\", \"password\": \"password\"}")
         .send()
         .await
@@ -153,7 +156,7 @@ async fn rocket_authentication() {
     let token = format!("Bearer  {}", json["token"].as_str().unwrap());
 
     let private_text = client
-        .get(format!("http://localhost:{port}/private"))
+        .get(format!("{url}/private"))
         .header("Authorization", token)
         .send()
         .await
@@ -170,10 +173,10 @@ async fn rocket_authentication() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn actix_web_hello_world() {
-    let port = cargo_shuttle_run("../examples/actix-web/hello-world").await;
+    let url = cargo_shuttle_run("../examples/actix-web/hello-world", false).await;
 
     let request_text = reqwest::Client::new()
-        .get(format!("http://localhost:{port}/hello"))
+        .get(format!("{url}/hello"))
         .send()
         .await
         .unwrap()
@@ -186,10 +189,10 @@ async fn actix_web_hello_world() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn axum_hello_world() {
-    let port = cargo_shuttle_run("../examples/axum/hello-world").await;
+    let url = cargo_shuttle_run("../examples/axum/hello-world", false).await;
 
     let request_text = reqwest::Client::new()
-        .get(format!("http://localhost:{port}/hello"))
+        .get(format!("{url}/hello"))
         .send()
         .await
         .unwrap()
@@ -202,10 +205,10 @@ async fn axum_hello_world() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn tide_hello_world() {
-    let port = cargo_shuttle_run("../examples/tide/hello-world").await;
+    let url = cargo_shuttle_run("../examples/tide/hello-world", false).await;
 
     let request_text = reqwest::Client::new()
-        .get(format!("http://localhost:{port}/hello"))
+        .get(format!("{url}/hello"))
         .send()
         .await
         .unwrap()
@@ -218,10 +221,10 @@ async fn tide_hello_world() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn tower_hello_world() {
-    let port = cargo_shuttle_run("../examples/tower/hello-world").await;
+    let url = cargo_shuttle_run("../examples/tower/hello-world", false).await;
 
     let request_text = reqwest::Client::new()
-        .get(format!("http://localhost:{port}/hello"))
+        .get(format!("{url}/hello"))
         .send()
         .await
         .unwrap()
@@ -234,10 +237,10 @@ async fn tower_hello_world() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn warp_hello_world() {
-    let port = cargo_shuttle_run("../examples/warp/hello-world").await;
+    let url = cargo_shuttle_run("../examples/warp/hello-world", false).await;
 
     let request_text = reqwest::Client::new()
-        .get(format!("http://localhost:{port}/hello"))
+        .get(format!("{url}/hello"))
         .send()
         .await
         .unwrap()
@@ -250,10 +253,10 @@ async fn warp_hello_world() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn poem_hello_world() {
-    let port = cargo_shuttle_run("../examples/poem/hello-world").await;
+    let url = cargo_shuttle_run("../examples/poem/hello-world", false).await;
 
     let request_text = reqwest::Client::new()
-        .get(format!("http://localhost:{port}/hello"))
+        .get(format!("{url}/hello"))
         .send()
         .await
         .unwrap()
@@ -267,11 +270,11 @@ async fn poem_hello_world() {
 // This example uses a shared Postgres. Thus local runs should create a docker container for it.
 #[tokio::test(flavor = "multi_thread")]
 async fn poem_postgres() {
-    let port = cargo_shuttle_run("../examples/poem/postgres").await;
+    let url = cargo_shuttle_run("../examples/poem/postgres", false).await;
     let client = reqwest::Client::new();
 
     let post_text = client
-        .post(format!("http://localhost:{port}/todo"))
+        .post(format!("{url}/todo"))
         .body("{\"note\": \"Deploy to shuttle\"}")
         .header("content-type", "application/json")
         .send()
@@ -284,7 +287,7 @@ async fn poem_postgres() {
     assert_eq!(post_text, "{\"id\":1,\"note\":\"Deploy to shuttle\"}");
 
     let request_text = client
-        .get(format!("http://localhost:{port}/todo/1"))
+        .get(format!("{url}/todo/1"))
         .send()
         .await
         .unwrap()
@@ -298,12 +301,12 @@ async fn poem_postgres() {
 // This example uses a shared MongoDb. Thus local runs should create a docker container for it.
 #[tokio::test(flavor = "multi_thread")]
 async fn poem_mongodb() {
-    let port = cargo_shuttle_run("../examples/poem/mongodb").await;
+    let url = cargo_shuttle_run("../examples/poem/mongodb", false).await;
     let client = reqwest::Client::new();
 
     // Post a todo note and get the persisted todo objectId
     let post_text = client
-        .post(format!("http://localhost:{port}/todo"))
+        .post(format!("{url}/todo"))
         .body("{\"note\": \"Deploy to shuttle\"}")
         .header("content-type", "application/json")
         .send()
@@ -317,7 +320,7 @@ async fn poem_mongodb() {
     assert_eq!(post_text.len(), 24);
 
     let request_text = client
-        .get(format!("http://localhost:{port}/todo/{post_text}"))
+        .get(format!("{url}/todo/{post_text}"))
         .send()
         .await
         .unwrap()
@@ -330,10 +333,10 @@ async fn poem_mongodb() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn salvo_hello_world() {
-    let port = cargo_shuttle_run("../examples/salvo/hello-world").await;
+    let url = cargo_shuttle_run("../examples/salvo/hello-world", false).await;
 
     let request_text = reqwest::Client::new()
-        .get(format!("http://localhost:{port}/hello"))
+        .get(format!("{url}/hello"))
         .send()
         .await
         .unwrap()
@@ -346,10 +349,10 @@ async fn salvo_hello_world() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn thruster_hello_world() {
-    let port = cargo_shuttle_run("../examples/thruster/hello-world").await;
+    let url = cargo_shuttle_run("../examples/thruster/hello-world", false).await;
 
     let request_text = reqwest::Client::new()
-        .get(format!("http://localhost:{port}/hello"))
+        .get(format!("{url}/hello"))
         .send()
         .await
         .unwrap()
@@ -358,4 +361,20 @@ async fn thruster_hello_world() {
         .unwrap();
 
     assert_eq!(request_text, "Hello, World!");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn rocket_hello_world_with_router_ip() {
+    let url = cargo_shuttle_run("../examples/rocket/hello-world", true).await;
+
+    let request_text = reqwest::Client::new()
+        .get(format!("{url}/hello"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+
+    assert_eq!(request_text, "Hello, world!");
 }

@@ -26,7 +26,7 @@ Build the required images with:
 make images
 ```
 
-> Note: The current [Makefile](https://github.com/shuttle-hq/shuttle/blob/main/Makefile) does not work on Windows systems, if you want to build the local environment on Windows you could use [Windows Subsystem for Linux](https://learn.microsoft.com/en-us/windows/wsl/install).
+> Note: The current [Makefile](https://github.com/shuttle-hq/shuttle/blob/main/Makefile) does not work on Windows systems by itself - if you want to build the local environment on Windows you could use [Windows Subsystem for Linux](https://learn.microsoft.com/en-us/windows/wsl/install). Additional Windows considerations are listed at the bottom of this page.
 
 The images get built with [cargo-chef](https://github.com/LukeMathWalker/cargo-chef) and therefore support incremental builds (most of the time). So they will be much faster to re-build after an incremental change in your code - should you wish to deploy it locally straight away.
 
@@ -109,7 +109,7 @@ cargo run --manifest-path ../../../Cargo.toml --bin cargo-shuttle -- logs
 The steps outlined above starts all the services used by shuttle locally (ie. both `gateway` and `deployer`). However, sometimes you will want to quickly test changes to `deployer` only. To do this replace `make up` with the following:
 
 ```bash
-docker-compose -f docker-compose.rendered.yml up provisioner
+docker compose -f docker-compose.rendered.yml up provisioner
 ```
 
 This prevents `gateway` from starting up. Now you can start deployer only using:
@@ -224,3 +224,22 @@ The rest are the following libraries:
 - `e2e` just contains tests which starts up the `deployer` in a container and then deploys services to it using `cargo-shuttle`.
 
 Lastly, the `user service` is not a folder in this repository, but is the user service that will be deployed by `deployer`.
+
+## Windows Considerations
+Currently, if you try to use 'make images' on Windows, you may find that the shell files cannot be read by Bash/WSL. This is due to the fact that Windows may have pulled the files in CRLF format rather than LF[^1], which causes problems with Bash as to run the commands, Linux needs the file in LF format. 
+
+Thankfully, we can fix this problem by simply using the `git config core.autocrlf` command to change how Git handles line endings. It takes a single argument:
+
+```
+git config --global core.autocrlf input
+```
+
+This should allow you to run `make images` and other Make commands with no issues.
+
+If you need to change it back for whatever reason, you can just change the last argument from 'input' to 'true' like so:
+```
+git config --global core.autocrlf true
+```
+After you run this command, you should be able to checkout projects that are maintained using CRLF (Windows) again.
+
+[^1]: https://git-scm.com/book/en/v2/Customizing-Git-Git-Configuration#_core_autocrlf

@@ -77,10 +77,15 @@ To initialize a shuttle project with boilerplates, run `cargo shuttle init [OPTI
 Currently, `cargo shuttle init` supports the following frameworks:
 
 - `--axum`: for [axum](https://github.com/tokio-rs/axum) framework
+- `--actix-web`: for [actix web](https://actix.rs/) framework
 - `--poem`: for [poem](https://github.com/poem-web/poem) framework
 - `--rocket`: for [rocket](https://rocket.rs/) framework
+- `--salvo`: for [salvo](https://salvo.rs/) framework
+- `--serenity`: for [serenity](https://serenity.rs/) discord bot framework
+- `--thruster`: for [thruster](https://github.com/thruster-rs/Thruster) framework
 - `--tide`: for [tide](https://github.com/http-rs/tide) framework
 - `--tower`: for [tower](https://github.com/tower-rs/tower) library
+- `--warp`: for [warp](https://github.com/seanmonstar/warp) framework
 
 For example, running the following command will initialize a project for [rocket](https://rocket.rs/):
 
@@ -175,14 +180,6 @@ Check the logs of your deployed shuttle project with:
 
 ```sh
 $ cargo shuttle logs
-```
-
-### Subcommand: `auth`
-
-Run the following to create user credentials for shuttle platform:
-
-```sh
-$ cargo shuttle auth your-desired-username
 ```
 
 ### Subcommand: `delete`

@@ -24,5 +24,5 @@ pub fn build_so_create_loader(resources: &str, crate_name: &str) -> Result<Loade
 
     let so_path = crate_dir.join("target/release").join(lib_name);
 
-    Loader::from_so_file(&so_path)
+    Loader::from_so_file(so_path)
 }

@@ -54,6 +54,7 @@ optional = true
 
 [dependencies.shuttle-common]
 workspace = true
+features = ["tracing"]
 
 [dev-dependencies]
 portpicker = "0.1.1"

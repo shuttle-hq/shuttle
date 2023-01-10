@@ -21,7 +21,7 @@
 
 use chrono::{DateTime, Utc};
 use serde_json::json;
-use shuttle_common::STATE_MESSAGE;
+use shuttle_common::{tracing::JsonVisitor, STATE_MESSAGE};
 use shuttle_proto::runtime;
 use std::{net::SocketAddr, str::FromStr, time::SystemTime};
 use tracing::{error, field::Visit, span, warn, Metadata, Subscriber};
@@ -218,36 +218,17 @@ where
                 event.record(&mut visitor);
                 let metadata = event.metadata();
 
-                // Extract details from log::Log interface which is different from tracing
-                let target = if let Some(target) = visitor.0.remove("log.target") {
-                    target.as_str().unwrap_or_default().to_string()
-                } else {
-                    metadata.target().to_string()
-                };
-
-                let line = if let Some(line) = visitor.0.remove("log.line") {
-                    line.as_u64().and_then(|u| u32::try_from(u).ok())
-                } else {
-                    metadata.line()
-                };
-
-                let file = if let Some(file) = visitor.0.remove("log.file") {
-                    file.as_str().map(str::to_string)
-                } else {
-                    metadata.file().map(str::to_string)
-                };
-
-                visitor.0.remove("log.module_path");
-
                 self.recorder.record(Log {
                     id: details.id,
                     state: details.state,
                     level: metadata.level().into(),
                     timestamp: Utc::now(),
-                    file,
-                    line,
-                    target,
-                    fields: serde_json::Value::Object(visitor.0),
+                    file: visitor.file.or_else(|| metadata.file().map(str::to_string)),
+                    line: visitor.line.or_else(|| metadata.line()),
+                    target: visitor
+                        .target
+                        .unwrap_or_else(|| metadata.target().to_string()),
+                    fields: serde_json::Value::Object(visitor.fields),
                     r#type: LogType::Event,
                     address: None,
                 });
@@ -352,39 +333,6 @@ impl Visit for NewStateVisitor {
         } else if field.name() == Self::ADDRESS_IDENT {
             self.details.address = Some(format!("{value:?}"));
         }
-    }
-}
-
-#[derive(Default)]
-struct JsonVisitor(serde_json::Map<String, serde_json::Value>);
-
-impl Visit for JsonVisitor {
-    fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
-        self.0.insert(field.name().to_string(), json!(value));
-    }
-    fn record_bool(&mut self, field: &tracing::field::Field, value: bool) {
-        self.0.insert(field.name().to_string(), json!(value));
-    }
-    fn record_u64(&mut self, field: &tracing::field::Field, value: u64) {
-        self.0.insert(field.name().to_string(), json!(value));
-    }
-    fn record_i64(&mut self, field: &tracing::field::Field, value: i64) {
-        self.0.insert(field.name().to_string(), json!(value));
-    }
-    fn record_f64(&mut self, field: &tracing::field::Field, value: f64) {
-        self.0.insert(field.name().to_string(), json!(value));
-    }
-    fn record_error(
-        &mut self,
-        field: &tracing::field::Field,
-        value: &(dyn std::error::Error + 'static),
-    ) {
-        self.0
-            .insert(field.name().to_string(), json!(value.to_string()));
-    }
-    fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
-        self.0
-            .insert(field.name().to_string(), json!(format!("{value:?}")));
     }
 }
 

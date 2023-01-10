@@ -12,10 +12,11 @@ crate-type = [ "cdylib" ]
 axum = { version = "0.6.0", default-features = false }
 futures = "0.3.25"
 futures-executor = "0.3.21"
-futures = "0.3.25"
 http = "0.2.7"
 tower-service = "0.3.1"
 rmp-serde = { version = "1.1.1" }
+tracing = "0.1.37"
+tracing-subscriber = "0.3.16"
 
 [dependencies.shuttle-common]
 path = "../../common"

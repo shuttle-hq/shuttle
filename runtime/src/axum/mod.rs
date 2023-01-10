@@ -5,6 +5,7 @@ use std::ops::DerefMut;
 use std::os::unix::prelude::RawFd;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::sync::Mutex;
 
 use anyhow::Context;
 use async_trait::async_trait;
@@ -13,13 +14,14 @@ use futures::TryStreamExt;
 use hyper::body::HttpBody;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response};
-use shuttle_common::wasm::{RequestWrapper, ResponseWrapper};
+use shuttle_common::wasm::{Bytesable, Log, RequestWrapper, ResponseWrapper};
 use shuttle_proto::runtime::runtime_server::Runtime;
 use shuttle_proto::runtime::{
     self, LoadRequest, LoadResponse, StartRequest, StartResponse, StopRequest, StopResponse,
     SubscribeLogsRequest,
 };
 use shuttle_service::ServiceName;
+use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::{mpsc, oneshot};
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::Status;
@@ -31,16 +33,33 @@ use wasmtime_wasi::{WasiCtx, WasiCtxBuilder};
 
 extern crate rmp_serde as rmps;
 
+const LOGS_FD: u32 = 20;
+const PARTS_FD: u32 = 3;
+const BODY_WRITE_FD: u32 = 4;
+const BODY_READ_FD: u32 = 5;
+
 pub struct AxumWasm {
-    router: std::sync::Mutex<Option<Router>>,
-    kill_tx: std::sync::Mutex<Option<oneshot::Sender<String>>>,
+    router: Mutex<Option<Router>>,
+    logs_rx: Mutex<Option<Receiver<Result<runtime::LogItem, Status>>>>,
+    logs_tx: Mutex<Sender<Result<runtime::LogItem, Status>>>,
+    kill_tx: Mutex<Option<oneshot::Sender<String>>>,
 }
 
 impl AxumWasm {
     pub fn new() -> Self {
+        // Allow about 2^15 = 32k logs of backpressure
+        // We know the wasm currently handles about 16k requests per second (req / sec) so 16k seems to be a safe number
+        // As we make performance gains elsewhere this might eventually become the new bottleneck to increase :D
+        //
+        // Testing has shown that a number half the req / sec yields poor performance. A number the same as the req / sec
+        // seems acceptable so going with double the number for some headroom
+        let (tx, rx) = mpsc::channel(1 << 15);
+
         Self {
-            router: std::sync::Mutex::new(None),
-            kill_tx: std::sync::Mutex::new(None),
+            router: Mutex::new(None),
+            logs_rx: Mutex::new(Some(rx)),
+            logs_tx: Mutex::new(tx),
+            kill_tx: Mutex::new(None),
         }
     }
 }
@@ -77,8 +96,15 @@ impl Runtime for AxumWasm {
         &self,
         request: tonic::Request<StartRequest>,
     ) -> Result<tonic::Response<StartResponse>, Status> {
-        let StartRequest { port, .. } = request.into_inner();
+        let StartRequest {
+            deployment_id,
+            port,
+            ..
+        } = request.into_inner();
+
         let address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port as u16);
+
+        let logs_tx = self.logs_tx.lock().unwrap().clone();
 
         let (kill_tx, kill_rx) = tokio::sync::oneshot::channel();
 
@@ -92,7 +118,13 @@ impl Runtime for AxumWasm {
             .context("tried to start a service that was not loaded")
             .map_err(|err| Status::internal(err.to_string()))?;
 
-        tokio::spawn(run_until_stopped(router, address, kill_rx));
+        tokio::spawn(run_until_stopped(
+            router,
+            deployment_id,
+            address,
+            logs_tx,
+            kill_rx,
+        ));
 
         let message = StartResponse { success: true };
 
@@ -105,9 +137,13 @@ impl Runtime for AxumWasm {
         &self,
         _request: tonic::Request<SubscribeLogsRequest>,
     ) -> Result<tonic::Response<Self::SubscribeLogsStream>, Status> {
-        let (_tx, rx) = mpsc::channel(1);
+        let logs_rx = self.logs_rx.lock().unwrap().deref_mut().take();
 
-        Ok(tonic::Response::new(ReceiverStream::new(rx)))
+        if let Some(logs_rx) = logs_rx {
+            Ok(tonic::Response::new(ReceiverStream::new(logs_rx)))
+        } else {
+            Err(Status::internal("logs have already been subscribed to"))
+        }
     }
 
     async fn stop(
@@ -191,7 +227,9 @@ impl Router {
     /// Send a HTTP request with body to given endpoint on the axum-wasm router and return the response
     async fn handle_request(
         &mut self,
+        deployment_id: Vec<u8>,
         req: hyper::Request<Body>,
+        logs_tx: Sender<Result<runtime::LogItem, Status>>,
     ) -> anyhow::Result<Response<Body>> {
         let wasi = WasiCtxBuilder::new()
             .inherit_stdio()
@@ -202,6 +240,8 @@ impl Router {
         let mut store = Store::new(&self.engine, wasi);
         self.linker.module(&mut store, "axum", &self.module)?;
 
+        let (logs_stream, logs_client) =
+            UnixStream::pair().context("failed to open logs unixstream")?;
         let (mut parts_stream, parts_client) =
             UnixStream::pair().context("failed to open parts unixstream")?;
         let (mut body_write_stream, body_write_client) =
@@ -209,19 +249,35 @@ impl Router {
         let (body_read_stream, body_read_client) =
             UnixStream::pair().context("failed to open body read unixstream")?;
 
+        let logs_client = WasiUnixStream::from_cap_std(logs_client);
         let parts_client = WasiUnixStream::from_cap_std(parts_client);
         let body_write_client = WasiUnixStream::from_cap_std(body_write_client);
         let body_read_client = WasiUnixStream::from_cap_std(body_read_client);
 
         store
             .data_mut()
-            .insert_file(3, Box::new(parts_client), FileCaps::all());
+            .insert_file(LOGS_FD, Box::new(logs_client), FileCaps::all());
+
         store
             .data_mut()
-            .insert_file(4, Box::new(body_write_client), FileCaps::all());
+            .insert_file(PARTS_FD, Box::new(parts_client), FileCaps::all());
         store
             .data_mut()
-            .insert_file(5, Box::new(body_read_client), FileCaps::all());
+            .insert_file(BODY_WRITE_FD, Box::new(body_write_client), FileCaps::all());
+        store
+            .data_mut()
+            .insert_file(BODY_READ_FD, Box::new(body_read_client), FileCaps::all());
+
+        tokio::task::spawn(async move {
+            let mut iter = logs_stream.bytes().filter_map(Result::ok);
+
+            while let Some(log) = Log::from_bytes(&mut iter) {
+                let mut log: runtime::LogItem = log.into();
+                log.id = deployment_id.clone();
+
+                logs_tx.send(Ok(log)).await.unwrap();
+            }
+        });
 
         let (parts, body) = req.into_parts();
 
@@ -261,14 +317,22 @@ impl Router {
 
         // Call our function in wasm, telling it to route the request we've written to it
         // and write back a response
-        trace!("calling inner Router");
+        trace!("calling Router");
         self.linker
             .get(&mut store, "axum", "__SHUTTLE_Axum_call")
             .expect("wasm module should be loaded and the router function should be available")
             .into_func()
             .expect("router function should be a function")
-            .typed::<(RawFd, RawFd, RawFd), ()>(&store)?
-            .call(&mut store, (3, 4, 5))?;
+            .typed::<(RawFd, RawFd, RawFd, RawFd), ()>(&store)?
+            .call(
+                &mut store,
+                (
+                    LOGS_FD as i32,
+                    PARTS_FD as i32,
+                    BODY_WRITE_FD as i32,
+                    BODY_READ_FD as i32,
+                ),
+            )?;
 
         // Read response parts from wasm
         let reader = BufReader::new(&mut parts_stream);
@@ -295,25 +359,33 @@ impl Router {
 /// and a kill receiver for stopping the server.
 async fn run_until_stopped(
     router: Router,
+    deployment_id: Vec<u8>,
     address: SocketAddr,
+    logs_tx: Sender<Result<runtime::LogItem, Status>>,
     kill_rx: tokio::sync::oneshot::Receiver<String>,
 ) {
     let make_service = make_service_fn(move |_conn| {
+        let deployment_id = deployment_id.clone();
         let router = router.clone();
+        let logs_tx = logs_tx.clone();
         async move {
             Ok::<_, Infallible>(service_fn(move |req: Request<Body>| {
+                let deployment_id = deployment_id.clone();
                 let mut router = router.clone();
+                let logs_tx = logs_tx.clone();
                 async move {
-                    Ok::<_, Infallible>(match router.handle_request(req).await {
-                        Ok(res) => res,
-                        Err(err) => {
-                            error!("error sending request: {}", err);
-                            Response::builder()
-                                .status(hyper::http::StatusCode::INTERNAL_SERVER_ERROR)
-                                .body(Body::empty())
-                                .expect("building request with empty body should not fail")
-                        }
-                    })
+                    Ok::<_, Infallible>(
+                        match router.handle_request(deployment_id, req, logs_tx).await {
+                            Ok(res) => res,
+                            Err(err) => {
+                                error!("error sending request: {}", err);
+                                Response::builder()
+                                    .status(hyper::http::StatusCode::INTERNAL_SERVER_ERROR)
+                                    .body(Body::empty())
+                                    .expect("building request with empty body should not fail")
+                            }
+                        },
+                    )
                 }
             }))
         }
@@ -339,6 +411,7 @@ async fn run_until_stopped(
 pub mod tests {
     use super::*;
     use hyper::{http::HeaderValue, Method, Request, StatusCode, Version};
+    use uuid::Uuid;
 
     #[tokio::test]
     async fn axum() {
@@ -347,6 +420,14 @@ pub mod tests {
             .src("axum.wasm")
             .build()
             .unwrap();
+        let id = Uuid::default().as_bytes().to_vec();
+        let (tx, mut rx) = mpsc::channel(1);
+
+        tokio::spawn(async move {
+            while let Some(log) = rx.recv().await {
+                println!("{log:?}");
+            }
+        });
 
         // GET /hello
         let request: Request<Body> = Request::builder()
@@ -356,7 +437,11 @@ pub mod tests {
             .body(Body::empty())
             .unwrap();
 
-        let res = router.clone().handle_request(request).await.unwrap();
+        let res = router
+            .clone()
+            .handle_request(id.clone(), request, tx.clone())
+            .await
+            .unwrap();
 
         assert_eq!(res.status(), StatusCode::OK);
         assert_eq!(
@@ -379,7 +464,11 @@ pub mod tests {
             .body(Body::from("Goodbye world body"))
             .unwrap();
 
-        let res = router.clone().handle_request(request).await.unwrap();
+        let res = router
+            .clone()
+            .handle_request(id.clone(), request, tx.clone())
+            .await
+            .unwrap();
 
         assert_eq!(res.status(), StatusCode::OK);
         assert_eq!(
@@ -402,7 +491,11 @@ pub mod tests {
             .body(Body::empty())
             .unwrap();
 
-        let res = router.clone().handle_request(request).await.unwrap();
+        let res = router
+            .clone()
+            .handle_request(id.clone(), request, tx.clone())
+            .await
+            .unwrap();
 
         assert_eq!(res.status(), StatusCode::NOT_FOUND);
 
@@ -415,7 +508,11 @@ pub mod tests {
             .body("this should be uppercased".into())
             .unwrap();
 
-        let res = router.clone().handle_request(request).await.unwrap();
+        let res = router
+            .clone()
+            .handle_request(id, request, tx)
+            .await
+            .unwrap();
 
         assert_eq!(res.status(), StatusCode::OK);
         assert_eq!(

@@ -23,13 +23,16 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true, optional = true }
 strum = { version = "0.24.1", features = ["derive"] }
 tracing = { workspace = true }
+tracing-subscriber = { workspace = true, optional = true }
 uuid = { workspace = true, features = ["v4", "serde"] }
 
 [dev-dependencies]
+cap-std = "1.0.2"
 hyper = "0.14.3"
 
 [features]
 backend = ["async-trait", "axum"]
 display = ["comfy-table", "crossterm"]
-axum-wasm = ["http-serde", "http", "rmp-serde"]
+tracing = ["serde_json"]
+axum-wasm = ["http-serde", "http", "rmp-serde", "tracing", "tracing-subscriber"]
 models = ["anyhow", "async-trait", "display", "http", "reqwest", "serde_json"]

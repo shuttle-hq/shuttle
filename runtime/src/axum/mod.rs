@@ -33,6 +33,11 @@ use wasmtime_wasi::{WasiCtx, WasiCtxBuilder};
 
 extern crate rmp_serde as rmps;
 
+const LOGS_FD: u32 = 20;
+const PARTS_FD: u32 = 3;
+const BODY_WRITE_FD: u32 = 4;
+const BODY_READ_FD: u32 = 5;
+
 pub struct AxumWasm {
     router: Mutex<Option<Router>>,
     logs_rx: Mutex<Option<Receiver<Result<runtime::LogItem, Status>>>>,
@@ -251,17 +256,17 @@ impl Router {
 
         store
             .data_mut()
-            .insert_file(2, Box::new(logs_client), FileCaps::all());
+            .insert_file(LOGS_FD, Box::new(logs_client), FileCaps::all());
 
         store
             .data_mut()
-            .insert_file(3, Box::new(parts_client), FileCaps::all());
+            .insert_file(PARTS_FD, Box::new(parts_client), FileCaps::all());
         store
             .data_mut()
-            .insert_file(4, Box::new(body_write_client), FileCaps::all());
+            .insert_file(BODY_WRITE_FD, Box::new(body_write_client), FileCaps::all());
         store
             .data_mut()
-            .insert_file(5, Box::new(body_read_client), FileCaps::all());
+            .insert_file(BODY_READ_FD, Box::new(body_read_client), FileCaps::all());
 
         tokio::task::spawn(async move {
             let mut iter = logs_stream.bytes().filter_map(Result::ok);
@@ -319,7 +324,15 @@ impl Router {
             .into_func()
             .expect("router function should be a function")
             .typed::<(RawFd, RawFd, RawFd, RawFd), ()>(&store)?
-            .call(&mut store, (2, 3, 4, 5))?;
+            .call(
+                &mut store,
+                (
+                    LOGS_FD as i32,
+                    PARTS_FD as i32,
+                    BODY_WRITE_FD as i32,
+                    BODY_READ_FD as i32,
+                ),
+            )?;
 
         // Read response parts from wasm
         let reader = BufReader::new(&mut parts_stream);

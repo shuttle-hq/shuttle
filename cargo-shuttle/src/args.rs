@@ -141,7 +141,7 @@ pub struct DeployArgs {
 #[derive(Parser, Debug)]
 pub struct RunArgs {
     /// port to start service on
-    #[clap(long, default_value = "8000")]
+    #[clap(long, env, default_value = "8000")]
     pub port: u16,
     /// use 0.0.0.0 instead of localhost (for usage with local external devices)
     #[clap(long)]

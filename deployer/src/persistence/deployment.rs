@@ -64,4 +64,5 @@ pub struct DeploymentRunnable {
     pub id: Uuid,
     pub service_name: String,
     pub service_id: Uuid,
+    pub is_next: bool,
 }

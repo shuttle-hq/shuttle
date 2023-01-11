@@ -833,6 +833,7 @@ mod tests {
                 service_name: "run-test".to_string(),
                 service_id: Uuid::new_v4(),
                 tracing_context: Default::default(),
+                is_next: false,
             })
             .await;
 

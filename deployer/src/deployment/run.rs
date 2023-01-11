@@ -169,6 +169,7 @@ pub struct Built {
     pub service_name: String,
     pub service_id: Uuid,
     pub tracing_context: HashMap<String, String>,
+    pub is_next: bool,
 }
 
 impl Built {
@@ -494,6 +495,7 @@ mod tests {
             service_name: "test".to_string(),
             service_id: Uuid::new_v4(),
             tracing_context: Default::default(),
+            is_next: false,
         };
         let (_kill_send, kill_recv) = broadcast::channel(1);
 
@@ -554,6 +556,7 @@ mod tests {
                 service_name: crate_name.to_string(),
                 service_id: Uuid::new_v4(),
                 tracing_context: Default::default(),
+                is_next: false,
             },
             storage_manager,
         )

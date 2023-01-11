@@ -200,7 +200,7 @@ impl Queued {
         });
 
         let project_path = project_path.canonicalize()?;
-        let so_path = build_deployment(self.id, &project_path, tx.clone()).await?;
+        let runtime = build_deployment(self.id, &project_path, tx.clone()).await?;
 
         if self.will_run_tests {
             info!(
@@ -213,13 +213,14 @@ impl Queued {
 
         info!("Moving built library");
 
-        store_lib(&storage_manager, so_path, &self.id).await?;
+        store_lib(&storage_manager, &runtime, &self.id).await?;
 
         let built = Built {
             id: self.id,
             service_name: self.service_name,
             service_id: self.service_id,
             tracing_context: Default::default(),
+            is_next: matches!(runtime, Runtime::Next(_)),
         };
 
         Ok(built)
@@ -310,15 +311,10 @@ async fn build_deployment(
     deployment_id: Uuid,
     project_path: &Path,
     tx: crossbeam_channel::Sender<Message>,
-) -> Result<PathBuf> {
-    let runtime_path = build_crate(deployment_id, project_path, true, tx)
+) -> Result<Runtime> {
+    build_crate(deployment_id, project_path, true, tx)
         .await
-        .map_err(|e| Error::Build(e.into()))?;
-
-    match runtime_path {
-        Runtime::Legacy(so_path) => Ok(so_path),
-        Runtime::Next(_) => todo!(),
-    }
+        .map_err(|e| Error::Build(e.into()))
 }
 
 #[instrument(skip(project_path, tx))]
@@ -381,12 +377,17 @@ async fn run_pre_deploy_tests(
 }
 
 /// Store 'so' file in the libs folder
-#[instrument(skip(storage_manager, so_path, id))]
+#[instrument(skip(storage_manager, runtime, id))]
 async fn store_lib(
     storage_manager: &ArtifactsStorageManager,
-    so_path: impl AsRef<Path>,
+    runtime: &Runtime,
     id: &Uuid,
 ) -> Result<()> {
+    let so_path = match runtime {
+        Runtime::Next(path) => path,
+        Runtime::Legacy(path) => path,
+    };
+
     let new_so_path = storage_manager.deployment_library_path(id)?;
 
     fs::rename(so_path, new_so_path).await?;
@@ -399,6 +400,7 @@ mod tests {
     use std::{collections::BTreeMap, fs::File, io::Write, path::Path};
 
     use shuttle_common::storage_manager::ArtifactsStorageManager;
+    use shuttle_service::loader::Runtime;
     use tempdir::TempDir;
     use tokio::fs;
     use uuid::Uuid;
@@ -533,11 +535,12 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
         let build_p = storage_manager.builds_path().unwrap();
 
         let so_path = build_p.join("xyz.so");
+        let runtime = Runtime::Legacy(so_path.clone());
         let id = Uuid::new_v4();
 
         fs::write(&so_path, "barfoo").await.unwrap();
 
-        super::store_lib(&storage_manager, &so_path, &id)
+        super::store_lib(&storage_manager, &runtime, &id)
             .await
             .unwrap();
 

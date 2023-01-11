@@ -3,18 +3,19 @@ pub mod gateway_client;
 mod queue;
 mod run;
 
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 pub use queue::Queued;
 pub use run::{ActiveDeploymentsGetter, Built};
 use shuttle_common::storage_manager::ArtifactsStorageManager;
-use shuttle_proto::runtime::runtime_client::RuntimeClient;
-use tonic::transport::Channel;
 use tracing::{instrument, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
-use crate::persistence::{DeploymentUpdater, SecretGetter, SecretRecorder, State};
-use tokio::sync::{broadcast, mpsc};
+use crate::{
+    persistence::{DeploymentUpdater, SecretGetter, SecretRecorder, State},
+    RuntimeManager,
+};
+use tokio::sync::{broadcast, mpsc, Mutex};
 use uuid::Uuid;
 
 use self::{deploy_layer::LogRecorder, gateway_client::BuildQueueClient};
@@ -28,7 +29,7 @@ pub struct DeploymentManagerBuilder<LR, SR, ADG, DU, SG, QC> {
     secret_recorder: Option<SR>,
     active_deployment_getter: Option<ADG>,
     artifacts_path: Option<PathBuf>,
-    runtime_client: Option<RuntimeClient<Channel>>,
+    runtime_manager: Option<Arc<Mutex<RuntimeManager>>>,
     deployment_updater: Option<DU>,
     secret_getter: Option<SG>,
     queue_client: Option<QC>,
@@ -79,8 +80,8 @@ where
         self
     }
 
-    pub fn runtime(mut self, runtime_client: RuntimeClient<Channel>) -> Self {
-        self.runtime_client = Some(runtime_client);
+    pub fn runtime(mut self, runtime_manager: Arc<Mutex<RuntimeManager>>) -> Self {
+        self.runtime_manager = Some(runtime_manager);
 
         self
     }
@@ -105,7 +106,7 @@ where
             .expect("an active deployment getter to be set");
         let artifacts_path = self.artifacts_path.expect("artifacts path to be set");
         let queue_client = self.queue_client.expect("a queue client to be set");
-        let runtime_client = self.runtime_client.expect("a runtime client to be set");
+        let runtime_manager = self.runtime_manager.expect("a runtime manager to be set");
         let deployment_updater = self
             .deployment_updater
             .expect("a deployment updater to be set");
@@ -129,7 +130,7 @@ where
         ));
         tokio::spawn(run::task(
             run_recv,
-            runtime_client,
+            runtime_manager,
             deployment_updater,
             kill_send.clone(),
             active_deployment_getter,
@@ -171,13 +172,14 @@ pub struct DeploymentManager {
 impl DeploymentManager {
     /// Create a new deployment manager. Manages one or more 'pipelines' for
     /// processing service building, loading, and deployment.
-    pub fn builder<LR, SR, ADG, DU, SG, QC>() -> DeploymentManagerBuilder<LR, SR, ADG, DU, SG, QC> {
+    pub fn builder<'a, LR, SR, ADG, DU, SG, QC>(
+    ) -> DeploymentManagerBuilder<LR, SR, ADG, DU, SG, QC> {
         DeploymentManagerBuilder {
             build_log_recorder: None,
             secret_recorder: None,
             active_deployment_getter: None,
             artifacts_path: None,
-            runtime_client: None,
+            runtime_manager: None,
             deployment_updater: None,
             secret_getter: None,
             queue_client: None,

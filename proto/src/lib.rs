@@ -244,6 +244,7 @@ pub mod runtime {
         wasm: bool,
         storage_manager_type: StorageManagerType,
         provisioner_address: &str,
+        port: u16,
     ) -> anyhow::Result<(process::Child, runtime_client::RuntimeClient<Channel>)> {
         let runtime_flag = if wasm { "--axum" } else { "--legacy" };
 
@@ -252,11 +253,13 @@ pub mod runtime {
             StorageManagerType::WorkingDir(path) => ("working-dir", path),
         };
 
-        let runtime_executable = get_runtime_executable(binary_bytes);
+        let runtime_executable = get_runtime_executable(binary_bytes, runtime_flag);
 
         let runtime = process::Command::new(runtime_executable)
             .args([
                 runtime_flag,
+                "--port",
+                &port.to_string(),
                 "--provisioner-address",
                 provisioner_address,
                 "--storage-manager-type",
@@ -272,7 +275,7 @@ pub mod runtime {
         tokio::time::sleep(Duration::from_secs(2)).await;
 
         info!("connecting runtime client");
-        let conn = Endpoint::new("http://127.0.0.1:6001")
+        let conn = Endpoint::new(format!("http://127.0.0.1:{port}"))
             .context("creating runtime client endpoint")?
             .connect_timeout(Duration::from_secs(5));
 
@@ -283,10 +286,11 @@ pub mod runtime {
         Ok((runtime, runtime_client))
     }
 
-    fn get_runtime_executable(binary_bytes: &[u8]) -> PathBuf {
+    fn get_runtime_executable(binary_bytes: &[u8], variant: &str) -> PathBuf {
         let tmp_dir = temp_dir();
 
-        let path = tmp_dir.join("shuttle-runtime");
+        // Give it a unique name based on the variant to allow both variants to start up at the same time
+        let path = tmp_dir.join(format!("shuttle-runtime{variant}"));
         let mut open_options = OpenOptions::new();
         open_options.write(true).create(true).truncate(true);
 

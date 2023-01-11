@@ -2,8 +2,7 @@ use std::process::exit;
 
 use clap::Parser;
 use opentelemetry::global;
-use shuttle_deployer::{start, start_proxy, Args, DeployLayer, Persistence};
-use shuttle_proto::runtime::{self, SubscribeLogsRequest};
+use shuttle_deployer::{start, start_proxy, Args, DeployLayer, Persistence, RuntimeManager};
 use tokio::select;
 use tracing::{error, trace};
 use tracing_subscriber::prelude::*;
@@ -40,40 +39,19 @@ async fn main() {
         .with(opentelemetry)
         .init();
 
-    let (mut runtime, mut runtime_client) = runtime::start(
+    let runtime_manager = RuntimeManager::new(
         BINARY_BYTES,
-        false,
-        runtime::StorageManagerType::Artifacts(args.artifacts_path.clone()),
-        &args.provisioner_address.uri().to_string(),
-    )
-    .await
-    .unwrap();
-
-    let sender = persistence.get_log_sender();
-    let mut stream = runtime_client
-        .subscribe_logs(tonic::Request::new(SubscribeLogsRequest {}))
-        .await
-        .unwrap()
-        .into_inner();
-
-    let logs_task = tokio::spawn(async move {
-        while let Some(log) = stream.message().await.unwrap() {
-            sender.send(log.into()).expect("to send log to persistence");
-        }
-    });
+        args.artifacts_path.clone(),
+        args.provisioner_address.uri().to_string(),
+        persistence.get_log_sender(),
+    );
 
     select! {
         _ = start_proxy(args.proxy_address, args.proxy_fqdn.clone(), persistence.clone()) => {
             error!("Proxy stopped.")
         },
-        _ = start(persistence, runtime_client, args) => {
+        _ = start(persistence, runtime_manager, args) => {
             error!("Deployment service stopped.")
-        },
-        _ = runtime.wait() => {
-            error!("Legacy runtime stopped.")
-        },
-        _ = logs_task => {
-            error!("Logs task stopped")
         },
     }
 

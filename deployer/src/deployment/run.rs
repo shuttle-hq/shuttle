@@ -3,6 +3,7 @@ use std::{
     net::{Ipv4Addr, SocketAddr},
     path::PathBuf,
     str::FromStr,
+    sync::Arc,
 };
 
 use async_trait::async_trait;
@@ -12,7 +13,7 @@ use shuttle_common::project::ProjectName as ServiceName;
 use shuttle_common::storage_manager::ArtifactsStorageManager;
 use shuttle_proto::runtime::{runtime_client::RuntimeClient, LoadRequest, StartRequest};
 
-use tokio::task::JoinError;
+use tokio::{sync::Mutex, task::JoinError};
 use tonic::transport::Channel;
 use tracing::{debug_span, error, info, instrument, trace, Instrument};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -22,13 +23,14 @@ use super::{KillReceiver, KillSender, RunReceiver, State};
 use crate::{
     error::{Error, Result},
     persistence::{DeploymentUpdater, SecretGetter},
+    RuntimeManager,
 };
 
 /// Run a task which takes runnable deploys from a channel and starts them up on our runtime
 /// A deploy is killed when it receives a signal from the kill channel
 pub async fn task(
     mut recv: RunReceiver,
-    runtime_client: RuntimeClient<Channel>,
+    runtime_manager: Arc<Mutex<RuntimeManager>>,
     deployment_updater: impl DeploymentUpdater,
     kill_send: KillSender,
     active_deployment_getter: impl ActiveDeploymentsGetter,
@@ -73,7 +75,7 @@ pub async fn task(
             Err(err) if err.is_cancelled() => stopped_cleanup(&id),
             Err(err) => start_crashed_cleanup(&id, err),
         };
-        let runtime_client = runtime_client.clone();
+        let runtime_manager = runtime_manager.clone();
 
         tokio::spawn(async move {
             let parent_cx = global::get_text_map_propagator(|propagator| {
@@ -87,7 +89,7 @@ pub async fn task(
                     .handle(
                         storage_manager,
                         secret_getter,
-                        runtime_client,
+                        runtime_manager,
                         deployment_updater,
                         kill_recv,
                         old_deployments_killer,
@@ -176,13 +178,13 @@ pub struct Built {
 }
 
 impl Built {
-    #[instrument(skip(self, storage_manager, secret_getter, runtime_client, deployment_updater, kill_recv, kill_old_deployments, cleanup), fields(id = %self.id, state = %State::Loading))]
+    #[instrument(skip(self, storage_manager, secret_getter, runtime_manager, deployment_updater, kill_recv, kill_old_deployments, cleanup), fields(id = %self.id, state = %State::Loading))]
     #[allow(clippy::too_many_arguments)]
     async fn handle(
         self,
         storage_manager: ArtifactsStorageManager,
         secret_getter: impl SecretGetter,
-        runtime_client: RuntimeClient<Channel>,
+        runtime_manager: Arc<Mutex<RuntimeManager>>,
         deployment_updater: impl DeploymentUpdater,
         kill_recv: KillReceiver,
         kill_old_deployments: impl futures::Future<Output = Result<()>>,
@@ -202,6 +204,11 @@ impl Built {
         };
 
         let address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
+        let runtime_client = runtime_manager
+            .lock()
+            .await
+            .get_runtime_client(self.is_next)
+            .await;
 
         kill_old_deployments.await?;
 
@@ -290,23 +297,22 @@ async fn run(
 
 #[cfg(test)]
 mod tests {
-    use std::{net::SocketAddr, path::PathBuf, process::Command, time::Duration};
+    use std::{net::SocketAddr, path::PathBuf, process::Command, sync::Arc, time::Duration};
 
     use async_trait::async_trait;
     use shuttle_common::storage_manager::ArtifactsStorageManager;
-    use shuttle_proto::runtime::runtime_client::RuntimeClient;
     use tempdir::TempDir;
     use tokio::{
-        sync::{broadcast, oneshot},
+        sync::{broadcast, oneshot, Mutex},
         task::JoinError,
         time::sleep,
     };
-    use tonic::transport::Channel;
     use uuid::Uuid;
 
     use crate::{
         error::Error,
         persistence::{DeploymentUpdater, Secret, SecretGetter},
+        RuntimeManager,
     };
 
     use super::Built;
@@ -324,10 +330,12 @@ mod tests {
         Ok(())
     }
 
-    async fn get_runtime_client() -> RuntimeClient<Channel> {
-        RuntimeClient::connect("http://127.0.0.1:6001")
-            .await
-            .unwrap()
+    fn get_runtime_manager() -> Arc<Mutex<RuntimeManager>> {
+        let tmp_dir = TempDir::new("shuttle_run_test").unwrap();
+        let path = tmp_dir.into_path();
+        let (tx, _rx) = crossbeam_channel::unbounded();
+
+        RuntimeManager::new(&[0u8; 8], path, "http://provisioner:8000".to_string(), tx)
     }
 
     #[derive(Clone)]
@@ -387,7 +395,7 @@ mod tests {
             .handle(
                 storage_manager,
                 secret_getter,
-                get_runtime_client().await,
+                get_runtime_manager(),
                 StubDeploymentUpdater,
                 kill_recv,
                 kill_old_deployments(),
@@ -433,7 +441,7 @@ mod tests {
             .handle(
                 storage_manager,
                 secret_getter,
-                get_runtime_client().await,
+                get_runtime_manager(),
                 StubDeploymentUpdater,
                 kill_recv,
                 kill_old_deployments(),
@@ -473,7 +481,7 @@ mod tests {
             .handle(
                 storage_manager,
                 secret_getter,
-                get_runtime_client().await,
+                get_runtime_manager(),
                 StubDeploymentUpdater,
                 kill_recv,
                 kill_old_deployments(),
@@ -501,7 +509,7 @@ mod tests {
             .handle(
                 storage_manager,
                 secret_getter,
-                get_runtime_client().await,
+                get_runtime_manager(),
                 StubDeploymentUpdater,
                 kill_recv,
                 kill_old_deployments(),
@@ -535,7 +543,7 @@ mod tests {
             .handle(
                 storage_manager,
                 secret_getter,
-                get_runtime_client().await,
+                get_runtime_manager(),
                 StubDeploymentUpdater,
                 kill_recv,
                 kill_old_deployments(),

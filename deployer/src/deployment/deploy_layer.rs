@@ -322,13 +322,12 @@ mod tests {
         time::Duration,
     };
 
-    use crate::persistence::DeploymentUpdater;
+    use crate::{persistence::DeploymentUpdater, RuntimeManager};
     use axum::body::Bytes;
     use ctor::ctor;
     use flate2::{write::GzEncoder, Compression};
-    use shuttle_proto::runtime::runtime_client::RuntimeClient;
+    use tempdir::TempDir;
     use tokio::{select, time::sleep};
-    use tonic::transport::Channel;
     use tracing_subscriber::prelude::*;
     use uuid::Uuid;
 
@@ -399,10 +398,12 @@ mod tests {
         }
     }
 
-    async fn get_runtime_client() -> RuntimeClient<Channel> {
-        RuntimeClient::connect("http://127.0.0.1:6001")
-            .await
-            .unwrap()
+    fn get_runtime_manager() -> Arc<tokio::sync::Mutex<RuntimeManager>> {
+        let tmp_dir = TempDir::new("shuttle_run_test").unwrap();
+        let path = tmp_dir.into_path();
+        let (tx, _rx) = crossbeam_channel::unbounded();
+
+        RuntimeManager::new(&[0u8; 8], path, "http://provisioner:8000".to_string(), tx)
     }
 
     #[async_trait::async_trait]
@@ -867,7 +868,7 @@ mod tests {
             .active_deployment_getter(StubActiveDeploymentGetter)
             .artifacts_path(PathBuf::from("/tmp"))
             .secret_getter(StubSecretGetter)
-            .runtime(get_runtime_client().await)
+            .runtime(get_runtime_manager())
             .deployment_updater(StubDeploymentUpdater)
             .queue_client(StubBuildQueueClient)
             .build()

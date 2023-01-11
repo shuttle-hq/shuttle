@@ -416,6 +416,7 @@ impl Shuttle {
             is_wasm,
             runtime::StorageManagerType::WorkingDir(working_directory.to_path_buf()),
             &format!("http://localhost:{}", run_args.port + 1),
+            run_args.port + 2,
         )
         .await
         .map_err(|err| {

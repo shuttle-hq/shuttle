@@ -28,7 +28,7 @@ make images
 
 > Note: The current [Makefile](https://github.com/shuttle-hq/shuttle/blob/main/Makefile) does not work on Windows systems by itself - if you want to build the local environment on Windows you could use [Windows Subsystem for Linux](https://learn.microsoft.com/en-us/windows/wsl/install). Additional Windows considerations are listed at the bottom of this page.
 
-> Note: The stack uses [panamax][panamax] by default to mirror crates.io content. We do this in order to avoid overloading upstream mirrors and hitting rate limits. After syncing the cache, expect to see the panamax volume take about 100GiB of space. This may not be desirable for local testing. To avoid using panamax, run `USE_PANAMAX=disable make images` instead.
+> Note: The stack uses [panamax](https://github.com/panamax-rs/panamax) by default to mirror crates.io content. We do this in order to avoid overloading upstream mirrors and hitting rate limits. After syncing the cache, expect to see the panamax volume take about 100GiB of space. This may not be desirable for local testing. To avoid using panamax, run `USE_PANAMAX=disable make images` instead.
 
 The images get built with [cargo-chef](https://github.com/LukeMathWalker/cargo-chef) and therefore support incremental builds (most of the time). So they will be much faster to re-build after an incremental change in your code - should you wish to deploy it locally straight away.
 
@@ -245,4 +245,3 @@ git config --global core.autocrlf true
 After you run this command, you should be able to checkout projects that are maintained using CRLF (Windows) again.
 
 [^1]: https://git-scm.com/book/en/v2/Customizing-Git-Git-Configuration#_core_autocrlf
-[panamax]: https://github.com/panamax-rs/panamax

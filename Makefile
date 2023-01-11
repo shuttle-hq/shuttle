@@ -67,6 +67,11 @@ PANAMAX_TAG?=1.0.6
 
 RUST_LOG?=debug
 
+USE_PANAMAX?=enable
+ifeq ($(USE_PANAMAX), enable)
+PREPARE_ARGS+=-p 
+endif
+
 DOCKER_COMPOSE_ENV=STACK=$(STACK) BACKEND_TAG=$(BACKEND_TAG) DEPLOYER_TAG=$(DEPLOYER_TAG) PROVISIONER_TAG=$(PROVISIONER_TAG) POSTGRES_TAG=${POSTGRES_TAG} PANAMAX_TAG=${PANAMAX_TAG} APPS_FQDN=$(APPS_FQDN) DB_FQDN=$(DB_FQDN) POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) RUST_LOG=$(RUST_LOG) CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) MONGO_INITDB_ROOT_USERNAME=$(MONGO_INITDB_ROOT_USERNAME) MONGO_INITDB_ROOT_PASSWORD=$(MONGO_INITDB_ROOT_PASSWORD) DD_ENV=$(DD_ENV) USE_TLS=$(USE_TLS)
 
 .PHONY: images clean src up down deploy shuttle-% postgres docker-compose.rendered.yml test bump-% deploy-examples publish publish-% --validate-version
@@ -111,7 +116,8 @@ down: docker-compose.rendered.yml
 shuttle-%: ${SRC} Cargo.lock
 	docker buildx build \
 	       --build-arg folder=$(*) \
-		   --build-arg RUSTUP_TOOLCHAIN=$(RUSTUP_TOOLCHAIN) \
+               --build-arg prepare_args=$(PREPARE_ARGS) \
+	       --build-arg RUSTUP_TOOLCHAIN=$(RUSTUP_TOOLCHAIN) \
 	       --tag $(CONTAINER_REGISTRY)/$(*):$(COMMIT_SHA) \
 	       --tag $(CONTAINER_REGISTRY)/$(*):$(TAG) \
 	       --tag $(CONTAINER_REGISTRY)/$(*):latest \

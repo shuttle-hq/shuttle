@@ -36,8 +36,9 @@ COPY --from=cache /build/ /usr/src/shuttle/
 
 FROM shuttle-common
 ARG folder
+ARG prepare_args
 COPY ${folder}/prepare.sh /prepare.sh
-RUN /prepare.sh
+RUN /prepare.sh "${prepare_args}"
 COPY --from=builder /build/target/debug/shuttle-${folder} /usr/local/bin/service
 ARG RUSTUP_TOOLCHAIN
 ENV RUSTUP_TOOLCHAIN=${RUSTUP_TOOLCHAIN}

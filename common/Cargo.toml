@@ -34,5 +34,5 @@ hyper = "0.14.3"
 backend = ["async-trait", "axum"]
 display = ["comfy-table", "crossterm"]
 tracing = ["serde_json"]
-axum-wasm = ["http-serde", "http", "rmp-serde", "tracing", "tracing-subscriber"]
+wasm = ["http-serde", "http", "rmp-serde", "tracing", "tracing-subscriber"]
 models = ["anyhow", "async-trait", "display", "http", "reqwest", "serde_json"]

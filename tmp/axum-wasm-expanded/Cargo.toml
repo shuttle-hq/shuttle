@@ -20,5 +20,5 @@ tracing-subscriber = "0.3.16"
 
 [dependencies.shuttle-common]
 path = "../../common"
-features = ["axum-wasm"]
+features = ["wasm"]
 version = "0.8.0"

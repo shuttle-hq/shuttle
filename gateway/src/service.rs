@@ -276,6 +276,25 @@ impl GatewayService {
             .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotFound))
     }
 
+    pub async fn iter_user_projects_detailed(
+        &self,
+        account_name: AccountName,
+    ) -> Result<impl Iterator<Item = (ProjectName, Project)>, Error> {
+        let iter =
+            query("SELECT project_name, project_state FROM projects WHERE account_name = ?1")
+                .bind(account_name)
+                .fetch_all(&self.db)
+                .await?
+                .into_iter()
+                .map(|row| {
+                    (
+                        row.get("project_name"),
+                        row.get::<SqlxJson<Project>, _>("project_state").0,
+                    )
+                });
+        Ok(iter)
+    }
+
     pub async fn update_project(
         &self,
         project_name: &ProjectName,
@@ -687,6 +706,14 @@ pub mod tests {
                 account_name: neo.clone(),
             }
         );
+        assert_eq!(
+            svc.iter_user_projects_detailed(neo.clone())
+                .await
+                .unwrap()
+                .map(|item| item.0)
+                .collect::<Vec<_>>(),
+            vec![matrix.clone()]
+        );
 
         let mut work = svc
             .new_task()
@@ -814,11 +841,22 @@ pub mod tests {
         assert_eq!(custom_domain.certificate, certificate);
         assert_eq!(custom_domain.private_key, private_key);
 
-        assert_err_kind!(
-            svc.create_custom_domain(project_name.clone(), &domain, certificate, private_key)
-                .await,
-            ErrorKind::CustomDomainAlreadyExists
-        );
+        // Should auto replace the domain details
+        let certificate = "dummy certificate update";
+        let private_key = "dummy private key update";
+
+        svc.create_custom_domain(project_name.clone(), &domain, certificate, private_key)
+            .await
+            .unwrap();
+
+        let custom_domain = svc
+            .project_details_for_custom_domain(&domain)
+            .await
+            .unwrap();
+
+        assert_eq!(custom_domain.project_name, project_name);
+        assert_eq!(custom_domain.certificate, certificate);
+        assert_eq!(custom_domain.private_key, private_key);
 
         Ok(())
     }

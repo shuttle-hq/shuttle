@@ -1,4 +1,7 @@
-use comfy_table::Color;
+use comfy_table::{
+    modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, Cell, CellAlignment, Color,
+    ContentArrangement, Table,
+};
 use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
@@ -15,6 +18,7 @@ pub struct Response {
 #[strum(serialize_all = "lowercase")]
 pub enum State {
     Creating,
+    Attaching,
     Starting,
     Started,
     Ready,
@@ -39,10 +43,10 @@ impl Display for Response {
 impl State {
     pub fn get_color(&self) -> Color {
         match self {
-            State::Creating | State::Starting | State::Started => Color::Cyan,
-            State::Ready => Color::Green,
-            State::Stopped | State::Stopping | State::Destroying | State::Destroyed => Color::Blue,
-            State::Errored => Color::Red,
+            Self::Creating | Self::Attaching | Self::Starting | Self::Started => Color::Cyan,
+            Self::Ready => Color::Green,
+            Self::Stopped | Self::Stopping | Self::Destroying | Self::Destroyed => Color::Blue,
+            Self::Errored => Color::Red,
         }
     }
 }
@@ -51,4 +55,40 @@ impl State {
 pub struct AdminResponse {
     pub project_name: String,
     pub account_name: String,
+}
+
+pub fn get_table(projects: &Vec<Response>) -> String {
+    if projects.is_empty() {
+        format!(
+            "{}\n",
+            "No projects are linked to this account".yellow().bold()
+        )
+    } else {
+        let mut table = Table::new();
+        table
+            .load_preset(UTF8_FULL)
+            .apply_modifier(UTF8_ROUND_CORNERS)
+            .set_content_arrangement(ContentArrangement::DynamicFullWidth)
+            .set_header(vec![
+                Cell::new("Project Name").set_alignment(CellAlignment::Center),
+                Cell::new("Status").set_alignment(CellAlignment::Center),
+            ]);
+
+        for project in projects.iter() {
+            table.add_row(vec![
+                Cell::new(&project.name),
+                Cell::new(&project.state)
+                    .fg(project.state.get_color())
+                    .set_alignment(CellAlignment::Center),
+            ]);
+        }
+
+        format!(
+            r#"
+These projects are linked to this account
+{}
+"#,
+            table,
+        )
+    }
 }

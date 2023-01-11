@@ -63,7 +63,7 @@ path = "../resources/secrets"
 
 [dependencies.shuttle-service]
 workspace = true
-features = ["loader", "codegen"]
+features = ["loader"]
 
 [features]
 vendored-openssl = ["openssl/vendored"]

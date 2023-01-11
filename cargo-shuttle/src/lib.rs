@@ -14,7 +14,6 @@ use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, bail, Context, Result};
-use args::AuthArgs;
 pub use args::{Args, Command, DeployArgs, InitArgs, LoginArgs, ProjectArgs, RunArgs};
 use cargo_metadata::Message;
 use clap::CommandFactory;
@@ -95,11 +94,11 @@ impl Shuttle {
                     Command::Delete => self.delete(&client).await,
                     Command::Clean => self.clean(&client).await,
                     Command::Secrets => self.secrets(&client).await,
-                    Command::Auth(auth_args) => self.auth(auth_args, &client).await,
                     Command::Project(ProjectCommand::New) => self.project_create(&client).await,
                     Command::Project(ProjectCommand::Status { follow }) => {
                         self.project_status(&client, follow).await
                     }
+                    Command::Project(ProjectCommand::List) => self.projects_list(&client).await,
                     Command::Project(ProjectCommand::Rm) => self.project_delete(&client).await,
                     _ => {
                         unreachable!("commands that don't need a client have already been matched")
@@ -246,17 +245,6 @@ impl Shuttle {
         let api_key = api_key_str.trim().parse()?;
 
         self.ctx.set_api_key(api_key)?;
-
-        Ok(())
-    }
-
-    async fn auth(&mut self, auth_args: AuthArgs, client: &Client) -> Result<()> {
-        let user = client.auth(auth_args.username).await?;
-
-        self.ctx.set_api_key(user.key)?;
-
-        println!("User authorized!!!");
-        println!("Run `cargo shuttle init --help` next");
 
         Ok(())
     }
@@ -493,7 +481,13 @@ impl Shuttle {
 
         trace!(response = ?response,  "client response: ");
 
-        let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), run_args.port);
+        let addr = if run_args.external {
+            std::net::IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))
+        } else {
+            Ipv4Addr::LOCALHOST.into()
+        };
+
+        let addr = SocketAddr::new(addr, run_args.port);
 
         println!(
             "\n{:>12} {} on http://{}",
@@ -577,6 +571,15 @@ impl Shuttle {
             client,
         )
         .await?;
+
+        Ok(())
+    }
+
+    async fn projects_list(&self, client: &Client) -> Result<()> {
+        let projects = client.get_projects_list().await?;
+        let projects_table = project::get_table(&projects);
+
+        println!("{projects_table}");
 
         Ok(())
     }

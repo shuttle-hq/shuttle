@@ -320,7 +320,7 @@ fn check_version(summary: &Summary) -> anyhow::Result<()> {
     {
         shuttle.version_req()
     } else {
-        return Err(anyhow!("this crate does not use the shutte service"));
+        return Err(anyhow!("this crate does not use the shuttle service"));
     };
 
     if version_req.matches(&valid_version) {

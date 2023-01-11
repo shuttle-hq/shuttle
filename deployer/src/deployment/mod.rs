@@ -13,7 +13,7 @@ use tonic::transport::Channel;
 use tracing::{instrument, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
-use crate::persistence::{SecretGetter, SecretRecorder, State};
+use crate::persistence::{DeploymentUpdater, SecretGetter, SecretRecorder, State};
 use tokio::sync::{broadcast, mpsc};
 use uuid::Uuid;
 
@@ -23,21 +23,23 @@ const QUEUE_BUFFER_SIZE: usize = 100;
 const RUN_BUFFER_SIZE: usize = 100;
 const KILL_BUFFER_SIZE: usize = 10;
 
-pub struct DeploymentManagerBuilder<LR, SR, ADG, SG, QC> {
+pub struct DeploymentManagerBuilder<LR, SR, ADG, DU, SG, QC> {
     build_log_recorder: Option<LR>,
     secret_recorder: Option<SR>,
     active_deployment_getter: Option<ADG>,
     artifacts_path: Option<PathBuf>,
     runtime_client: Option<RuntimeClient<Channel>>,
+    deployment_updater: Option<DU>,
     secret_getter: Option<SG>,
     queue_client: Option<QC>,
 }
 
-impl<LR, SR, ADG, SG, QC> DeploymentManagerBuilder<LR, SR, ADG, SG, QC>
+impl<LR, SR, ADG, DU, SG, QC> DeploymentManagerBuilder<LR, SR, ADG, DU, SG, QC>
 where
     LR: LogRecorder,
     SR: SecretRecorder,
     ADG: ActiveDeploymentsGetter,
+    DU: DeploymentUpdater,
     SG: SecretGetter,
     QC: BuildQueueClient,
 {
@@ -83,6 +85,12 @@ where
         self
     }
 
+    pub fn deployment_updater(mut self, deployment_updater: DU) -> Self {
+        self.deployment_updater = Some(deployment_updater);
+
+        self
+    }
+
     /// Creates two Tokio tasks, one for building queued services, the other for
     /// executing/deploying built services. Two multi-producer, single consumer
     /// channels are also created which are for moving on-going service
@@ -98,6 +106,9 @@ where
         let artifacts_path = self.artifacts_path.expect("artifacts path to be set");
         let queue_client = self.queue_client.expect("a queue client to be set");
         let runtime_client = self.runtime_client.expect("a runtime client to be set");
+        let deployment_updater = self
+            .deployment_updater
+            .expect("a deployment updater to be set");
         let secret_getter = self.secret_getter.expect("a secret getter to be set");
 
         let (queue_send, queue_recv) = mpsc::channel(QUEUE_BUFFER_SIZE);
@@ -110,6 +121,7 @@ where
         tokio::spawn(queue::task(
             queue_recv,
             run_send_clone,
+            deployment_updater.clone(),
             build_log_recorder,
             secret_recorder,
             storage_manager.clone(),
@@ -118,6 +130,7 @@ where
         tokio::spawn(run::task(
             run_recv,
             runtime_client,
+            deployment_updater,
             kill_send.clone(),
             active_deployment_getter,
             secret_getter,
@@ -158,13 +171,14 @@ pub struct DeploymentManager {
 impl DeploymentManager {
     /// Create a new deployment manager. Manages one or more 'pipelines' for
     /// processing service building, loading, and deployment.
-    pub fn builder<LR, SR, ADG, SG, QC>() -> DeploymentManagerBuilder<LR, SR, ADG, SG, QC> {
+    pub fn builder<LR, SR, ADG, DU, SG, QC>() -> DeploymentManagerBuilder<LR, SR, ADG, DU, SG, QC> {
         DeploymentManagerBuilder {
             build_log_recorder: None,
             secret_recorder: None,
             active_deployment_getter: None,
             artifacts_path: None,
             runtime_client: None,
+            deployment_updater: None,
             secret_getter: None,
             queue_client: None,
         }

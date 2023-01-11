@@ -1,5 +1,6 @@
 use std::{net::SocketAddr, str::FromStr};
 
+use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use sqlx::{sqlite::SqliteRow, FromRow, Row};
 use tracing::error;
@@ -14,6 +15,7 @@ pub struct Deployment {
     pub state: State,
     pub last_update: DateTime<Utc>,
     pub address: Option<SocketAddr>,
+    pub is_next: bool,
 }
 
 impl FromRow<'_, SqliteRow> for Deployment {
@@ -36,6 +38,7 @@ impl FromRow<'_, SqliteRow> for Deployment {
             state: row.try_get("state")?,
             last_update: row.try_get("last_update")?,
             address,
+            is_next: row.try_get("is_next")?,
         })
     }
 }
@@ -51,12 +54,23 @@ impl From<Deployment> for shuttle_common::models::deployment::Response {
     }
 }
 
+/// Update the details of a deployment
+#[async_trait]
+pub trait DeploymentUpdater: Clone + Send + Sync + 'static {
+    type Err: std::error::Error + Send;
+
+    /// Set the address for a deployment
+    async fn set_address(&self, id: &Uuid, address: &SocketAddr) -> Result<(), Self::Err>;
+
+    /// Set if a deployment is build on shuttle-next
+    async fn set_is_next(&self, id: &Uuid, is_next: bool) -> Result<(), Self::Err>;
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct DeploymentState {
     pub id: Uuid,
     pub state: State,
     pub last_update: DateTime<Utc>,
-    pub address: Option<SocketAddr>,
 }
 
 #[derive(sqlx::FromRow, Debug, PartialEq, Eq)]

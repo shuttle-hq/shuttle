@@ -2,7 +2,7 @@ use super::deploy_layer::{Log, LogRecorder, LogType};
 use super::gateway_client::BuildQueueClient;
 use super::{Built, QueueReceiver, RunSender, State};
 use crate::error::{Error, Result, TestError};
-use crate::persistence::{LogLevel, SecretRecorder};
+use crate::persistence::{DeploymentUpdater, LogLevel, SecretRecorder};
 use shuttle_common::storage_manager::{ArtifactsStorageManager, StorageManager};
 
 use cargo::util::interning::InternedString;
@@ -34,6 +34,7 @@ use tokio::fs;
 pub async fn task(
     mut recv: QueueReceiver,
     run_send: RunSender,
+    deployment_updater: impl DeploymentUpdater,
     log_recorder: impl LogRecorder,
     secret_recorder: impl SecretRecorder,
     storage_manager: ArtifactsStorageManager,
@@ -46,6 +47,7 @@ pub async fn task(
 
         info!("Queued deployment at the front of the queue: {id}");
 
+        let deployment_updater = deployment_updater.clone();
         let run_send_cloned = run_send.clone();
         let log_recorder = log_recorder.clone();
         let secret_recorder = secret_recorder.clone();
@@ -71,7 +73,12 @@ pub async fn task(
                 }
 
                 match queued
-                    .handle(storage_manager, log_recorder, secret_recorder)
+                    .handle(
+                        storage_manager,
+                        deployment_updater,
+                        log_recorder,
+                        secret_recorder,
+                    )
                     .await
                 {
                     Ok(built) => promote_to_run(built, run_send_cloned).await,
@@ -144,10 +151,11 @@ pub struct Queued {
 }
 
 impl Queued {
-    #[instrument(skip(self, storage_manager, log_recorder, secret_recorder), fields(id = %self.id, state = %State::Building))]
+    #[instrument(skip(self, storage_manager, deployment_updater, log_recorder, secret_recorder), fields(id = %self.id, state = %State::Building))]
     async fn handle(
         self,
         storage_manager: ArtifactsStorageManager,
+        deployment_updater: impl DeploymentUpdater,
         log_recorder: impl LogRecorder,
         secret_recorder: impl SecretRecorder,
     ) -> Result<Built> {
@@ -180,7 +188,6 @@ impl Queued {
                         target: String::new(),
                         fields: json!({ "build_line": line }),
                         r#type: LogType::Event,
-                        address: None,
                     },
                     message => Log {
                         id,
@@ -192,7 +199,6 @@ impl Queued {
                         target: String::new(),
                         fields: serde_json::to_value(message).unwrap(),
                         r#type: LogType::Event,
-                        address: None,
                     },
                 };
                 log_recorder.record(log);
@@ -215,12 +221,19 @@ impl Queued {
 
         store_lib(&storage_manager, &runtime, &self.id).await?;
 
+        let is_next = matches!(runtime, Runtime::Next(_));
+
+        deployment_updater
+            .set_is_next(&id, is_next)
+            .await
+            .map_err(|e| Error::Build(Box::new(e)))?;
+
         let built = Built {
             id: self.id,
             service_name: self.service_name,
             service_id: self.service_id,
             tracing_context: Default::default(),
-            is_next: matches!(runtime, Runtime::Next(_)),
+            is_next,
         };
 
         Ok(built)

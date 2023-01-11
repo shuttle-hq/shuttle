@@ -23,8 +23,8 @@ use chrono::{DateTime, Utc};
 use serde_json::json;
 use shuttle_common::{tracing::JsonVisitor, STATE_MESSAGE};
 use shuttle_proto::runtime;
-use std::{net::SocketAddr, str::FromStr, time::SystemTime};
-use tracing::{error, field::Visit, span, warn, Metadata, Subscriber};
+use std::{str::FromStr, time::SystemTime};
+use tracing::{field::Visit, span, warn, Metadata, Subscriber};
 use tracing_subscriber::Layer;
 use uuid::Uuid;
 
@@ -63,8 +63,6 @@ pub struct Log {
     pub fields: serde_json::Value,
 
     pub r#type: LogType,
-
-    pub address: Option<String>,
 }
 
 impl From<Log> for persistence::Log {
@@ -106,23 +104,10 @@ impl From<Log> for shuttle_common::LogItem {
 
 impl From<Log> for DeploymentState {
     fn from(log: Log) -> Self {
-        let address = if let Some(address_str) = log.address {
-            match SocketAddr::from_str(&address_str) {
-                Ok(address) => Some(address),
-                Err(err) => {
-                    error!(error = %err, "failed to convert to [SocketAddr]");
-                    None
-                }
-            }
-        } else {
-            None
-        };
-
         Self {
             id: log.id,
             state: log.state,
             last_update: log.timestamp,
-            address,
         }
     }
 }
@@ -139,7 +124,6 @@ impl From<runtime::LogItem> for Log {
             target: log.target,
             fields: serde_json::from_slice(&log.fields).unwrap(),
             r#type: LogType::Event,
-            address: None,
         }
     }
 }
@@ -230,7 +214,6 @@ where
                         .unwrap_or_else(|| metadata.target().to_string()),
                     fields: serde_json::Value::Object(visitor.fields),
                     r#type: LogType::Event,
-                    address: None,
                 });
                 break;
             }
@@ -274,7 +257,6 @@ where
             target: metadata.target().to_string(),
             fields: Default::default(),
             r#type: LogType::State,
-            address: details.address.clone(),
         });
 
         extensions.insert::<ScopeDetails>(details);
@@ -286,7 +268,6 @@ where
 struct ScopeDetails {
     id: Uuid,
     state: State,
-    address: Option<String>,
 }
 
 impl From<&tracing::Level> for LogLevel {
@@ -314,9 +295,6 @@ impl NewStateVisitor {
     /// Field containing the deployment state identifier
     const STATE_IDENT: &'static str = "state";
 
-    /// Field containing the deployment address identifier
-    const ADDRESS_IDENT: &'static str = "address";
-
     fn is_valid(metadata: &Metadata) -> bool {
         metadata.is_span()
             && metadata.fields().field(Self::ID_IDENT).is_some()
@@ -330,8 +308,6 @@ impl Visit for NewStateVisitor {
             self.details.state = State::from_str(&format!("{value:?}")).unwrap_or_default();
         } else if field.name() == Self::ID_IDENT {
             self.details.id = Uuid::try_parse(&format!("{value:?}")).unwrap_or_default();
-        } else if field.name() == Self::ADDRESS_IDENT {
-            self.details.address = Some(format!("{value:?}"));
         }
     }
 }
@@ -340,11 +316,13 @@ impl Visit for NewStateVisitor {
 mod tests {
     use std::{
         fs::read_dir,
+        net::SocketAddr,
         path::PathBuf,
         sync::{Arc, Mutex},
         time::Duration,
     };
 
+    use crate::persistence::DeploymentUpdater;
     use axum::body::Bytes;
     use ctor::ctor;
     use flate2::{write::GzEncoder, Compression};
@@ -383,7 +361,6 @@ mod tests {
     struct StateLog {
         id: Uuid,
         state: State,
-        has_address: bool,
     }
 
     impl From<Log> for StateLog {
@@ -391,7 +368,6 @@ mod tests {
             Self {
                 id: log.id,
                 state: log.state,
-                has_address: log.address.is_some(),
             }
         }
     }
@@ -446,6 +422,22 @@ mod tests {
     impl<R: LogRecorder> LogRecorder for Arc<Mutex<R>> {
         fn record(&self, event: Log) {
             self.lock().unwrap().record(event);
+        }
+    }
+
+    #[derive(Clone)]
+    struct StubDeploymentUpdater;
+
+    #[async_trait::async_trait]
+    impl DeploymentUpdater for StubDeploymentUpdater {
+        type Err = std::io::Error;
+
+        async fn set_address(&self, _id: &Uuid, _address: &SocketAddr) -> Result<(), Self::Err> {
+            Ok(())
+        }
+
+        async fn set_is_next(&self, _id: &Uuid, _is_next: bool) -> Result<(), Self::Err> {
+            Ok(())
         }
     }
 
@@ -527,27 +519,22 @@ mod tests {
                         StateLog {
                             id,
                             state: State::Queued,
-                            has_address: false,
                         },
                         StateLog {
                             id,
                             state: State::Building,
-                            has_address: false,
                         },
                         StateLog {
                             id,
                             state: State::Built,
-                            has_address: false,
                         },
                         StateLog {
                             id,
                             state: State::Loading,
-                            has_address: true,
                         },
                         StateLog {
                             id,
                             state: State::Running,
-                            has_address: true,
                         },
                     ]
                 );
@@ -577,32 +564,26 @@ mod tests {
                 StateLog {
                     id,
                     state: State::Queued,
-                    has_address: false,
                 },
                 StateLog {
                     id,
                     state: State::Building,
-                    has_address: false,
                 },
                 StateLog {
                     id,
                     state: State::Built,
-                    has_address: false,
                 },
                 StateLog {
                     id,
                     state: State::Loading,
-                    has_address: true,
                 },
                 StateLog {
                     id,
                     state: State::Running,
-                    has_address: true,
                 },
                 StateLog {
                     id,
                     state: State::Stopped,
-                    has_address: false,
                 },
             ]
         );
@@ -639,32 +620,26 @@ mod tests {
                         StateLog {
                             id,
                             state: State::Queued,
-                            has_address: false,
                         },
                         StateLog {
                             id,
                             state: State::Building,
-                            has_address: false,
                         },
                         StateLog {
                             id,
                             state: State::Built,
-                            has_address: false,
                         },
                         StateLog {
                             id,
                             state: State::Loading,
-                            has_address: true,
                         },
                         StateLog {
                             id,
                             state: State::Running,
-                            has_address: true,
                         },
                         StateLog {
                             id,
                             state: State::Completed,
-                            has_address: false,
                         },
                     ]
                 );
@@ -712,32 +687,26 @@ mod tests {
                         StateLog {
                             id,
                             state: State::Queued,
-                            has_address: false,
                         },
                         StateLog {
                             id,
                             state: State::Building,
-                            has_address: false,
                         },
                         StateLog {
                             id,
                             state: State::Built,
-                            has_address: false,
                         },
                         StateLog {
                             id,
                             state: State::Loading,
-                            has_address: true,
                         },
                         StateLog {
                             id,
                             state: State::Running,
-                            has_address: true,
                         },
                         StateLog {
                             id,
                             state: State::Crashed,
-                            has_address: false,
                         },
                     ]
                 );
@@ -785,27 +754,22 @@ mod tests {
                         StateLog {
                             id,
                             state: State::Queued,
-                            has_address: false,
                         },
                         StateLog {
                             id,
                             state: State::Building,
-                            has_address: false,
                         },
                         StateLog {
                             id,
                             state: State::Built,
-                            has_address: false,
                         },
                         StateLog {
                             id,
                             state: State::Loading,
-                            has_address: true,
                         },
                         StateLog {
                             id,
                             state: State::Crashed,
-                            has_address: false,
                         },
                     ]
                 );
@@ -855,17 +819,14 @@ mod tests {
                 StateLog {
                     id,
                     state: State::Built,
-                    has_address: false,
                 },
                 StateLog {
                     id,
                     state: State::Loading,
-                    has_address: true,
                 },
                 StateLog {
                     id,
                     state: State::Crashed,
-                    has_address: false,
                 },
             ]
         );
@@ -907,6 +868,7 @@ mod tests {
             .artifacts_path(PathBuf::from("/tmp"))
             .secret_getter(StubSecretGetter)
             .runtime(get_runtime_client().await)
+            .deployment_updater(StubDeploymentUpdater)
             .queue_client(StubBuildQueueClient)
             .build()
     }

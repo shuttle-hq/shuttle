@@ -27,7 +27,7 @@ use tracing::{error, info, instrument, trace};
 use uuid::Uuid;
 
 use self::deployment::DeploymentRunnable;
-pub use self::deployment::{Deployment, DeploymentState};
+pub use self::deployment::{Deployment, DeploymentState, DeploymentUpdater};
 pub use self::error::Error as PersistenceError;
 pub use self::log::{Level as LogLevel, Log};
 pub use self::resource::{Resource, ResourceRecorder, Type as ResourceType};
@@ -158,13 +158,14 @@ impl Persistence {
         let deployment = deployment.into();
 
         sqlx::query(
-            "INSERT INTO deployments (id, service_id, state, last_update, address) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO deployments (id, service_id, state, last_update, address, is_next) VALUES (?, ?, ?, ?, ?, ?)",
         )
         .bind(deployment.id)
         .bind(deployment.service_id)
         .bind(deployment.state)
         .bind(deployment.last_update)
         .bind(deployment.address.map(|socket| socket.to_string()))
+        .bind(deployment.is_next)
         .execute(&self.pool)
         .await
         .map(|_| ())
@@ -304,12 +305,9 @@ impl Persistence {
 async fn update_deployment(pool: &SqlitePool, state: impl Into<DeploymentState>) -> Result<()> {
     let state = state.into();
 
-    // TODO: Handle moving to 'active_deployments' table for State::Running.
-
-    sqlx::query("UPDATE deployments SET state = ?, last_update = ?, address = ? WHERE id = ?")
+    sqlx::query("UPDATE deployments SET state = ?, last_update = ? WHERE id = ?")
         .bind(state.state)
         .bind(state.last_update)
-        .bind(state.address.map(|socket| socket.to_string()))
         .bind(state.id)
         .execute(pool)
         .await
@@ -443,6 +441,31 @@ impl AddressGetter for Persistence {
 }
 
 #[async_trait::async_trait]
+impl DeploymentUpdater for Persistence {
+    type Err = Error;
+
+    async fn set_address(&self, id: &Uuid, address: &SocketAddr) -> Result<()> {
+        sqlx::query("UPDATE deployments SET address = ? WHERE id = ?")
+            .bind(address.to_string())
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .map(|_| ())
+            .map_err(Error::from)
+    }
+
+    async fn set_is_next(&self, id: &Uuid, is_next: bool) -> Result<()> {
+        sqlx::query("UPDATE deployments SET is_next = ? WHERE id = ?")
+            .bind(is_next)
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .map(|_| ())
+            .map_err(Error::from)
+    }
+}
+
+#[async_trait::async_trait]
 impl ActiveDeploymentsGetter for Persistence {
     type Err = Error;
 
@@ -493,7 +516,9 @@ mod tests {
             state: State::Queued,
             last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 43, 33).unwrap(),
             address: None,
+            is_next: false,
         };
+        let address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 12345);
 
         p.insert_deployment(deployment.clone()).await.unwrap();
         assert_eq!(p.get_deployment(&id).await.unwrap().unwrap(), deployment);
@@ -504,13 +529,18 @@ mod tests {
                 id,
                 state: State::Built,
                 last_update: Utc::now(),
-                address: None,
             },
         )
         .await
         .unwrap();
+
+        p.set_address(&id, &address).await.unwrap();
+        p.set_is_next(&id, true).await.unwrap();
+
         let update = p.get_deployment(&id).await.unwrap().unwrap();
         assert_eq!(update.state, State::Built);
+        assert_eq!(update.address, Some(address));
+        assert_eq!(update.is_next, true);
         assert_ne!(
             update.last_update,
             Utc.with_ymd_and_hms(2022, 4, 25, 4, 43, 33).unwrap()
@@ -530,6 +560,7 @@ mod tests {
             state: State::Crashed,
             last_update: Utc.with_ymd_and_hms(2022, 4, 25, 7, 29, 35).unwrap(),
             address: None,
+            is_next: false,
         };
         let deployment_stopped = Deployment {
             id: Uuid::new_v4(),
@@ -537,6 +568,7 @@ mod tests {
             state: State::Stopped,
             last_update: Utc.with_ymd_and_hms(2022, 4, 25, 7, 49, 35).unwrap(),
             address: None,
+            is_next: false,
         };
         let deployment_other = Deployment {
             id: Uuid::new_v4(),
@@ -544,6 +576,7 @@ mod tests {
             state: State::Running,
             last_update: Utc.with_ymd_and_hms(2022, 4, 25, 7, 39, 39).unwrap(),
             address: None,
+            is_next: false,
         };
         let deployment_running = Deployment {
             id: Uuid::new_v4(),
@@ -551,6 +584,7 @@ mod tests {
             state: State::Running,
             last_update: Utc.with_ymd_and_hms(2022, 4, 25, 7, 48, 29).unwrap(),
             address: Some(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 9876)),
+            is_next: true,
         };
 
         for deployment in [
@@ -590,6 +624,7 @@ mod tests {
             state: State::Crashed,
             last_update: Utc::now(),
             address: None,
+            is_next: false,
         };
         let deployment_stopped = Deployment {
             id: Uuid::new_v4(),
@@ -597,6 +632,7 @@ mod tests {
             state: State::Stopped,
             last_update: Utc::now(),
             address: None,
+            is_next: false,
         };
         let deployment_running = Deployment {
             id: Uuid::new_v4(),
@@ -604,6 +640,7 @@ mod tests {
             state: State::Running,
             last_update: Utc::now(),
             address: Some(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 9876)),
+            is_next: false,
         };
         let deployment_queued = Deployment {
             id: queued_id,
@@ -611,6 +648,7 @@ mod tests {
             state: State::Queued,
             last_update: Utc::now(),
             address: None,
+            is_next: false,
         };
         let deployment_building = Deployment {
             id: building_id,
@@ -618,6 +656,7 @@ mod tests {
             state: State::Building,
             last_update: Utc::now(),
             address: None,
+            is_next: false,
         };
         let deployment_built = Deployment {
             id: built_id,
@@ -625,6 +664,7 @@ mod tests {
             state: State::Built,
             last_update: Utc::now(),
             address: None,
+            is_next: true,
         };
         let deployment_loading = Deployment {
             id: loading_id,
@@ -632,6 +672,7 @@ mod tests {
             state: State::Loading,
             last_update: Utc::now(),
             address: None,
+            is_next: false,
         };
 
         for deployment in [
@@ -690,6 +731,7 @@ mod tests {
                 state: State::Built,
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 29, 33).unwrap(),
                 address: None,
+                is_next: false,
             },
             Deployment {
                 id: id_1,
@@ -697,6 +739,7 @@ mod tests {
                 state: State::Running,
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 29, 44).unwrap(),
                 address: None,
+                is_next: false,
             },
             Deployment {
                 id: id_2,
@@ -704,6 +747,7 @@ mod tests {
                 state: State::Running,
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 33, 48).unwrap(),
                 address: None,
+                is_next: true,
             },
             Deployment {
                 id: Uuid::new_v4(),
@@ -711,6 +755,7 @@ mod tests {
                 state: State::Crashed,
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 38, 52).unwrap(),
                 address: None,
+                is_next: true,
             },
             Deployment {
                 id: id_3,
@@ -718,6 +763,7 @@ mod tests {
                 state: State::Running,
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 42, 32).unwrap(),
                 address: None,
+                is_next: false,
             },
         ] {
             p.insert_deployment(deployment).await.unwrap();
@@ -762,6 +808,7 @@ mod tests {
                 state: State::Running,
                 last_update: Utc::now(),
                 address: None,
+                is_next: true,
             },
             Deployment {
                 id: Uuid::new_v4(),
@@ -769,6 +816,7 @@ mod tests {
                 state: State::Running,
                 last_update: Utc::now(),
                 address: None,
+                is_next: false,
             },
         ];
 
@@ -878,7 +926,6 @@ mod tests {
             target: "tests::log_recorder_event".to_string(),
             fields: json!({"message": "job queued"}),
             r#type: deploy_layer::LogType::Event,
-            address: None,
         };
 
         p.record(event);
@@ -913,6 +960,7 @@ mod tests {
             state: State::Queued, // Should be different from the state recorded below
             last_update: Utc.with_ymd_and_hms(2022, 4, 29, 2, 39, 39).unwrap(),
             address: None,
+            is_next: false,
         })
         .await
         .unwrap();
@@ -926,7 +974,6 @@ mod tests {
             target: String::new(),
             fields: serde_json::Value::Null,
             r#type: deploy_layer::LogType::State,
-            address: Some("127.0.0.1:12345".to_string()),
         };
 
         p.record(state);
@@ -952,7 +999,8 @@ mod tests {
                 service_id,
                 state: State::Running,
                 last_update: Utc.with_ymd_and_hms(2022, 4, 29, 2, 39, 59).unwrap(),
-                address: Some(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 12345)),
+                address: None,
+                is_next: false,
             }
         );
     }
@@ -1129,6 +1177,7 @@ mod tests {
                 state: State::Built,
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 29, 33).unwrap(),
                 address: None,
+                is_next: false,
             },
             Deployment {
                 id: Uuid::new_v4(),
@@ -1136,6 +1185,7 @@ mod tests {
                 state: State::Stopped,
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 29, 44).unwrap(),
                 address: None,
+                is_next: false,
             },
             Deployment {
                 id: id_1,
@@ -1143,6 +1193,7 @@ mod tests {
                 state: State::Running,
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 33, 48).unwrap(),
                 address: None,
+                is_next: false,
             },
             Deployment {
                 id: Uuid::new_v4(),
@@ -1150,6 +1201,7 @@ mod tests {
                 state: State::Crashed,
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 38, 52).unwrap(),
                 address: None,
+                is_next: false,
             },
             Deployment {
                 id: id_2,
@@ -1157,6 +1209,7 @@ mod tests {
                 state: State::Running,
                 last_update: Utc.with_ymd_and_hms(2022, 4, 25, 4, 42, 32).unwrap(),
                 address: None,
+                is_next: true,
             },
         ] {
             p.insert_deployment(deployment).await.unwrap();

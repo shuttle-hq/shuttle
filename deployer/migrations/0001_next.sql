@@ -1,0 +1,1 @@
+ALTER TABLE deployments ADD is_next BOOLEAN DEFAULT 0 NOT NULL;

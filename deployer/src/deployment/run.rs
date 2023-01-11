@@ -21,7 +21,7 @@ use uuid::Uuid;
 use super::{KillReceiver, KillSender, RunReceiver, State};
 use crate::{
     error::{Error, Result},
-    persistence::SecretGetter,
+    persistence::{DeploymentUpdater, SecretGetter},
 };
 
 /// Run a task which takes runnable deploys from a channel and starts them up on our runtime
@@ -29,6 +29,7 @@ use crate::{
 pub async fn task(
     mut recv: RunReceiver,
     runtime_client: RuntimeClient<Channel>,
+    deployment_updater: impl DeploymentUpdater,
     kill_send: KillSender,
     active_deployment_getter: impl ActiveDeploymentsGetter,
     secret_getter: impl SecretGetter,
@@ -41,6 +42,7 @@ pub async fn task(
 
         info!("Built deployment at the front of run queue: {id}");
 
+        let deployment_updater = deployment_updater.clone();
         let kill_send = kill_send.clone();
         let kill_recv = kill_send.subscribe();
         let secret_getter = secret_getter.clone();
@@ -86,6 +88,7 @@ pub async fn task(
                         storage_manager,
                         secret_getter,
                         runtime_client,
+                        deployment_updater,
                         kill_recv,
                         old_deployments_killer,
                         cleanup,
@@ -173,13 +176,14 @@ pub struct Built {
 }
 
 impl Built {
-    #[instrument(skip(self, storage_manager, secret_getter, runtime_client, kill_recv, kill_old_deployments, cleanup), fields(id = %self.id, state = %State::Loading))]
+    #[instrument(skip(self, storage_manager, secret_getter, runtime_client, deployment_updater, kill_recv, kill_old_deployments, cleanup), fields(id = %self.id, state = %State::Loading))]
     #[allow(clippy::too_many_arguments)]
     async fn handle(
         self,
         storage_manager: ArtifactsStorageManager,
         secret_getter: impl SecretGetter,
         runtime_client: RuntimeClient<Channel>,
+        deployment_updater: impl DeploymentUpdater,
         kill_recv: KillReceiver,
         kill_old_deployments: impl futures::Future<Output = Result<()>>,
         cleanup: impl FnOnce(std::result::Result<std::result::Result<(), shuttle_service::Error>, JoinError>)
@@ -216,6 +220,7 @@ impl Built {
             self.service_name,
             runtime_client,
             address,
+            deployment_updater,
             kill_recv,
             cleanup,
         ));
@@ -257,17 +262,20 @@ async fn load(
     }
 }
 
-#[instrument(skip(runtime_client, _kill_recv, _cleanup), fields(state = %State::Running))]
+#[instrument(skip(runtime_client, deployment_updater, _kill_recv, _cleanup), fields(state = %State::Running))]
 async fn run(
     id: Uuid,
     service_name: String,
     mut runtime_client: RuntimeClient<Channel>,
     address: SocketAddr,
+    deployment_updater: impl DeploymentUpdater,
     _kill_recv: KillReceiver,
     _cleanup: impl FnOnce(std::result::Result<std::result::Result<(), shuttle_service::Error>, JoinError>)
         + Send
         + 'static,
 ) {
+    deployment_updater.set_address(&id, &address).await.unwrap();
+
     let start_request = tonic::Request::new(StartRequest {
         deployment_id: id.as_bytes().to_vec(),
         service_name,
@@ -282,7 +290,7 @@ async fn run(
 
 #[cfg(test)]
 mod tests {
-    use std::{path::PathBuf, process::Command, time::Duration};
+    use std::{net::SocketAddr, path::PathBuf, process::Command, time::Duration};
 
     use async_trait::async_trait;
     use shuttle_common::storage_manager::ArtifactsStorageManager;
@@ -298,7 +306,7 @@ mod tests {
 
     use crate::{
         error::Error,
-        persistence::{Secret, SecretGetter},
+        persistence::{DeploymentUpdater, Secret, SecretGetter},
     };
 
     use super::Built;
@@ -338,6 +346,22 @@ mod tests {
         StubSecretGetter
     }
 
+    #[derive(Clone)]
+    struct StubDeploymentUpdater;
+
+    #[async_trait]
+    impl DeploymentUpdater for StubDeploymentUpdater {
+        type Err = std::io::Error;
+
+        async fn set_address(&self, _id: &Uuid, _address: &SocketAddr) -> Result<(), Self::Err> {
+            Ok(())
+        }
+
+        async fn set_is_next(&self, _id: &Uuid, _is_next: bool) -> Result<(), Self::Err> {
+            Ok(())
+        }
+    }
+
     // This test uses the kill signal to make sure a service does stop when asked to
     #[tokio::test]
     async fn can_be_killed() {
@@ -364,6 +388,7 @@ mod tests {
                 storage_manager,
                 secret_getter,
                 get_runtime_client().await,
+                StubDeploymentUpdater,
                 kill_recv,
                 kill_old_deployments(),
                 handle_cleanup,
@@ -409,6 +434,7 @@ mod tests {
                 storage_manager,
                 secret_getter,
                 get_runtime_client().await,
+                StubDeploymentUpdater,
                 kill_recv,
                 kill_old_deployments(),
                 handle_cleanup,
@@ -448,6 +474,7 @@ mod tests {
                 storage_manager,
                 secret_getter,
                 get_runtime_client().await,
+                StubDeploymentUpdater,
                 kill_recv,
                 kill_old_deployments(),
                 handle_cleanup,
@@ -475,6 +502,7 @@ mod tests {
                 storage_manager,
                 secret_getter,
                 get_runtime_client().await,
+                StubDeploymentUpdater,
                 kill_recv,
                 kill_old_deployments(),
                 handle_cleanup,
@@ -508,6 +536,7 @@ mod tests {
                 storage_manager,
                 secret_getter,
                 get_runtime_client().await,
+                StubDeploymentUpdater,
                 kill_recv,
                 kill_old_deployments(),
                 handle_cleanup,

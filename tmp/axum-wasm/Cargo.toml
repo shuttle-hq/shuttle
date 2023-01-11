@@ -25,5 +25,5 @@ version = "0.8.0"
 
 [dependencies.shuttle-common]
 path = "../../common"
-features = ["axum-wasm"]
+features = ["wasm"]
 version = "0.8.0"

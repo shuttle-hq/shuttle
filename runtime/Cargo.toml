@@ -27,7 +27,7 @@ futures = "0.3.25"
 
 [dependencies.shuttle-common]
 workspace = true
-features = ["axum-wasm"]
+features = ["wasm"]
 
 [dependencies.shuttle-proto]
 workspace = true

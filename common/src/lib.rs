@@ -9,7 +9,7 @@ pub mod project;
 pub mod storage_manager;
 #[cfg(feature = "tracing")]
 pub mod tracing;
-#[cfg(feature = "axum-wasm")]
+#[cfg(feature = "wasm")]
 pub mod wasm;
 
 use serde::{Deserialize, Serialize};

@@ -307,8 +307,7 @@ pub mod runtime {
                 .output()
                 .expect("failed to install the shuttle runtime");
         }
-        let path = tmp_dir.join("bin/shuttle-runtime");
 
-        path
+        tmp_dir.join("bin/shuttle-runtime")
     }
 }

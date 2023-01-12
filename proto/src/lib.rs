@@ -96,7 +96,6 @@ pub mod provisioner {
 
 pub mod runtime {
     use std::{
-        env::temp_dir,
         path::PathBuf,
         process::Command,
         time::{Duration, SystemTime},

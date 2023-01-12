@@ -97,9 +97,8 @@ pub mod provisioner {
 pub mod runtime {
     use std::{
         env::temp_dir,
-        fs::OpenOptions,
-        io::Write,
         path::PathBuf,
+        process::Command,
         time::{Duration, SystemTime},
     };
 
@@ -240,7 +239,6 @@ pub mod runtime {
     }
 
     pub async fn start(
-        binary_bytes: &[u8],
         wasm: bool,
         storage_manager_type: StorageManagerType,
         provisioner_address: &str,
@@ -252,7 +250,7 @@ pub mod runtime {
             StorageManagerType::WorkingDir(path) => ("working-dir", path),
         };
 
-        let runtime_executable = get_runtime_executable(binary_bytes);
+        let runtime_executable = get_runtime_executable();
 
         let runtime = process::Command::new(runtime_executable)
             .args([
@@ -283,26 +281,35 @@ pub mod runtime {
         Ok((runtime, runtime_client))
     }
 
-    fn get_runtime_executable(binary_bytes: &[u8]) -> PathBuf {
+    fn get_runtime_executable() -> PathBuf {
         let tmp_dir = temp_dir();
 
-        let path = tmp_dir.join("shuttle-runtime");
-        let mut open_options = OpenOptions::new();
-        open_options.write(true).create(true).truncate(true);
+        let dev = std::env::var("SHUTTLE_DEV");
 
-        #[cfg(target_family = "unix")]
-        {
-            use std::os::unix::prelude::OpenOptionsExt;
-
-            open_options.mode(0o755);
+        if dev.is_ok() {
+            Command::new("cargo")
+                .arg("install")
+                .arg("shuttle-runtime")
+                .arg("--root")
+                .arg(&tmp_dir)
+                .arg("--path")
+                .arg("../../runtime")
+                .output()
+                .expect("failed to install the shuttle runtime");
+        } else {
+            Command::new("cargo")
+                .arg("install")
+                .arg("shuttle-runtime")
+                .arg("--root")
+                .arg(&tmp_dir)
+                .arg("--git")
+                .arg("https://github.com/shuttle-hq/shuttle")
+                .arg("--branch")
+                .arg("shuttle-next")
+                .output()
+                .expect("failed to install the shuttle runtime");
         }
-
-        let mut file = open_options
-            .open(&path)
-            .expect("to create runtime executable file");
-
-        file.write_all(binary_bytes)
-            .expect("to write out binary file");
+        let path = tmp_dir.join("bin/shuttle-runtime");
 
         path
     }

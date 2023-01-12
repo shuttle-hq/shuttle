@@ -282,14 +282,10 @@ pub mod runtime {
     }
 
     fn get_runtime_executable() -> PathBuf {
-        let tmp_dir = temp_dir();
-
         if cfg!(debug_assertions) {
             Command::new("cargo")
                 .arg("install")
                 .arg("shuttle-runtime")
-                .arg("--root")
-                .arg(&tmp_dir)
                 .arg("--path")
                 .arg("../../runtime")
                 .output()
@@ -298,8 +294,6 @@ pub mod runtime {
             Command::new("cargo")
                 .arg("install")
                 .arg("shuttle-runtime")
-                .arg("--root")
-                .arg(&tmp_dir)
                 .arg("--git")
                 .arg("https://github.com/shuttle-hq/shuttle")
                 .arg("--branch")
@@ -308,6 +302,8 @@ pub mod runtime {
                 .expect("failed to install the shuttle runtime");
         }
 
-        tmp_dir.join("bin/shuttle-runtime")
+        let cargo_home = home::cargo_home().expect("failed to find cargo home directory");
+
+        cargo_home.join("bin/shuttle-runtime")
     }
 }

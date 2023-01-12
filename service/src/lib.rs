@@ -680,3 +680,4 @@ pub type ShuttlePoise<T, E> = Result<std::sync::Arc<poise::Framework<T, E>>, Err
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const NAME: &str = env!("CARGO_PKG_NAME");
+pub const NEXT_NAME: &str = "shuttle-next";

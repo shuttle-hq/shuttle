@@ -22,7 +22,7 @@ use futures::FutureExt;
 use uuid::Uuid;
 
 use crate::error::CustomError;
-use crate::{logger, Bootstrapper, NAME, VERSION};
+use crate::{logger, Bootstrapper, NAME, NEXT_NAME, VERSION};
 use crate::{Error, Factory, ServeHandle};
 
 const ENTRYPOINT_SYMBOL_NAME: &[u8] = b"_create_service\0";
@@ -296,17 +296,10 @@ fn make_name_unique(summary: &mut Summary, deployment_id: Uuid) {
 }
 
 fn is_next(summary: &Summary) -> bool {
-    let features = if let Some(shuttle) = summary
+    summary
         .dependencies()
         .iter()
-        .find(|dependency| dependency.package_name() == "shuttle-codegen")
-    {
-        shuttle.features()
-    } else {
-        &[]
-    };
-
-    features.contains(&InternedString::new("next"))
+        .any(|dependency| dependency.package_name() == NEXT_NAME)
 }
 
 /// Check that the crate being build is compatible with this version of loader

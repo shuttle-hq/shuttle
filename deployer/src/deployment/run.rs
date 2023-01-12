@@ -208,7 +208,8 @@ impl Built {
             .lock()
             .await
             .get_runtime_client(self.is_next)
-            .await;
+            .await
+            .map_err(|e| Error::Runtime(e))?;
 
         kill_old_deployments.await?;
 

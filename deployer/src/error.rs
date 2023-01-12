@@ -30,6 +30,8 @@ pub enum Error {
     OldCleanup(#[source] Box<dyn StdError + Send>),
     #[error("Gateway client error: {0}")]
     GatewayClient(#[from] gateway_client::Error),
+    #[error("Failed to get runtime: {0}")]
+    Runtime(#[source] anyhow::Error),
 }
 
 #[derive(Error, Debug)]

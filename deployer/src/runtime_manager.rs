@@ -1,5 +1,6 @@
 use std::{path::PathBuf, sync::Arc};
 
+use anyhow::Context;
 use shuttle_proto::runtime::{self, runtime_client::RuntimeClient, SubscribeLogsRequest};
 use tokio::sync::Mutex;
 use tonic::transport::Channel;
@@ -33,66 +34,59 @@ impl RuntimeManager {
         }))
     }
 
-    pub async fn get_runtime_client(&mut self, is_next: bool) -> RuntimeClient<Channel> {
+    pub async fn get_runtime_client(
+        &mut self,
+        is_next: bool,
+    ) -> anyhow::Result<RuntimeClient<Channel>> {
         if is_next {
-            self.get_next_runtime_client().await
-        } else {
-            self.get_legacy_runtime_client().await
-        }
-    }
-
-    async fn get_legacy_runtime_client(&mut self) -> RuntimeClient<Channel> {
-        if let Some(ref runtime_client) = self.legacy {
-            runtime_client.clone()
-        } else {
-            let (_runtime, mut runtime_client) = runtime::start(
-                &self.binary_bytes,
-                false,
-                runtime::StorageManagerType::Artifacts(self.artifacts_path.clone()),
-                &self.provisioner_address,
-                6001,
-            )
-            .await
-            .unwrap();
-
-            let sender = self.log_sender.clone();
-            let mut stream = runtime_client
-                .subscribe_logs(tonic::Request::new(SubscribeLogsRequest {}))
-                .await
-                .unwrap()
-                .into_inner();
-
-            tokio::spawn(async move {
-                while let Some(log) = stream.message().await.unwrap() {
-                    sender.send(log.into()).expect("to send log to persistence");
-                }
-            });
-
-            self.legacy = Some(runtime_client.clone());
-
-            runtime_client
-        }
-    }
-
-    async fn get_next_runtime_client(&mut self) -> RuntimeClient<Channel> {
-        if let Some(ref runtime_client) = self.next {
-            runtime_client.clone()
-        } else {
-            let (_runtime, mut runtime_client) = runtime::start(
-                &self.binary_bytes,
-                true,
-                runtime::StorageManagerType::Artifacts(self.artifacts_path.clone()),
-                &self.provisioner_address,
+            Self::get_runtime_client_helper(
+                &mut self.next,
                 6002,
+                &self.binary_bytes,
+                self.artifacts_path.clone(),
+                &self.provisioner_address,
+                self.log_sender.clone(),
             )
             .await
-            .unwrap();
+        } else {
+            Self::get_runtime_client_helper(
+                &mut self.legacy,
+                6001,
+                &self.binary_bytes,
+                self.artifacts_path.clone(),
+                &self.provisioner_address,
+                self.log_sender.clone(),
+            )
+            .await
+        }
+    }
 
-            let sender = self.log_sender.clone();
+    async fn get_runtime_client_helper(
+        runtime_option: &mut Option<RuntimeClient<Channel>>,
+        port: u16,
+        binary_bytes: &[u8],
+        artifacts_path: PathBuf,
+        provisioner_address: &str,
+        log_sender: crossbeam_channel::Sender<deploy_layer::Log>,
+    ) -> anyhow::Result<RuntimeClient<Channel>> {
+        if let Some(ref runtime_client) = runtime_option {
+            Ok(runtime_client.clone())
+        } else {
+            let (_runtime, mut runtime_client) = runtime::start(
+                binary_bytes,
+                true,
+                runtime::StorageManagerType::Artifacts(artifacts_path),
+                provisioner_address,
+                port,
+            )
+            .await
+            .context("failed to start shuttle runtime")?;
+
+            let sender = log_sender;
             let mut stream = runtime_client
                 .subscribe_logs(tonic::Request::new(SubscribeLogsRequest {}))
                 .await
-                .unwrap()
+                .context("subscribing to runtime logs stream")?
                 .into_inner();
 
             tokio::spawn(async move {
@@ -101,9 +95,9 @@ impl RuntimeManager {
                 }
             });
 
-            self.next = Some(runtime_client.clone());
+            *runtime_option = Some(runtime_client.clone());
 
-            runtime_client
+            Ok(runtime_client)
         }
     }
 }

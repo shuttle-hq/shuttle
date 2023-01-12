@@ -284,9 +284,7 @@ pub mod runtime {
     fn get_runtime_executable() -> PathBuf {
         let tmp_dir = temp_dir();
 
-        let dev = std::env::var("SHUTTLE_DEV");
-
-        if dev.is_ok() {
+        if cfg!(debug_assertions) {
             Command::new("cargo")
                 .arg("install")
                 .arg("shuttle-runtime")

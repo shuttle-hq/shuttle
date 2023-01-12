@@ -6345,6 +6345,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "shuttle-next"
+version = "0.8.0"
+dependencies = [
+ "axum",
+ "futures-executor",
+ "http 0.2.8",
+ "rmp-serde",
+ "shuttle-codegen",
+ "shuttle-common",
+ "tower-service",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "shuttle-proto"
 version = "0.8.0"
 dependencies = [

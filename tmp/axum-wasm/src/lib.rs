@@ -1,6 +1,6 @@
 use tracing::debug;
 
-shuttle_codegen::app! {
+shuttle_next::app! {
     #[shuttle_codegen::endpoint(method = get, route = "/hello")]
     async fn hello() -> &'static str {
         debug!("called hello()");

@@ -18,7 +18,7 @@ tokio = { version = "=1.22.0", features = ["full"] }
 tokio-stream = "0.1.11"
 tonic = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 uuid = { workspace = true, features = ["v4"] }
 wasi-common = "4.0.0"
 wasmtime = "4.0.0"

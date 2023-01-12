@@ -1,11 +1,16 @@
 #[cfg(feature = "backend")]
 pub mod backends;
+#[cfg(feature = "service")]
 pub mod database;
+#[cfg(feature = "service")]
 pub mod deployment;
+#[cfg(feature = "service")]
 pub mod log;
 #[cfg(feature = "models")]
 pub mod models;
+#[cfg(feature = "service")]
 pub mod project;
+#[cfg(feature = "service")]
 pub mod storage_manager;
 #[cfg(feature = "tracing")]
 pub mod tracing;
@@ -13,9 +18,12 @@ pub mod tracing;
 pub mod wasm;
 
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "service")]
 use uuid::Uuid;
 
+#[cfg(feature = "service")]
 pub use log::Item as LogItem;
+#[cfg(feature = "service")]
 pub use log::STATE_MESSAGE;
 
 #[cfg(debug_assertions)]
@@ -27,6 +35,7 @@ pub const API_URL_DEFAULT: &str = "https://api.shuttle.rs";
 pub type ApiKey = String;
 pub type ApiUrl = String;
 pub type Host = String;
+#[cfg(feature = "service")]
 pub type DeploymentId = Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

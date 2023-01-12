@@ -27,3 +27,7 @@ version = "0.8.0"
 path = "../../common"
 features = ["axum-wasm"]
 version = "0.8.0"
+
+[dev-dependencies]
+tokio = { version = "1.22.0", features = ["macros", "rt-multi-thread"] }
+hyper = "0.14.23"

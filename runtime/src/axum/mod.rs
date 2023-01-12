@@ -268,14 +268,14 @@ impl Router {
             .data_mut()
             .insert_file(BODY_READ_FD, Box::new(body_read_client), FileCaps::all());
 
-        tokio::task::spawn(async move {
+        tokio::task::spawn_blocking(move || {
             let mut iter = logs_stream.bytes().filter_map(Result::ok);
 
             while let Some(log) = Log::from_bytes(&mut iter) {
                 let mut log: runtime::LogItem = log.into();
                 log.id = deployment_id.clone();
 
-                logs_tx.send(Ok(log)).await.unwrap();
+                logs_tx.blocking_send(Ok(log)).unwrap();
             }
         });
 

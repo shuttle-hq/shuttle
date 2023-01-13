@@ -307,7 +307,7 @@ pub mod runtime {
                 .arg("--git")
                 .arg("https://github.com/shuttle-hq/shuttle")
                 .arg("--branch")
-                .arg("shuttle-next")
+                .arg("production")
                 .output()
                 .expect("failed to install the shuttle runtime");
         }

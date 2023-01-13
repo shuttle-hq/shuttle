@@ -282,11 +282,13 @@ pub mod runtime {
 
     fn get_runtime_executable() -> PathBuf {
         if cfg!(debug_assertions) {
+            let manifest_dir = env!("CARGO_MANIFEST_DIR");
+
             Command::new("cargo")
                 .arg("install")
                 .arg("shuttle-runtime")
                 .arg("--path")
-                .arg("../../runtime")
+                .arg(format!("{manifest_dir}/../runtime"))
                 .output()
                 .expect("failed to install the shuttle runtime");
         } else {

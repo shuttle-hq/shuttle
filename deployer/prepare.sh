@@ -16,7 +16,7 @@ shuttle-secrets = { path = "/usr/src/shuttle/resources/secrets" }
 shuttle-static-folder = { path = "/usr/src/shuttle/resources/static-folder" }' > $CARGO_HOME/config.toml
 
 # Install the shuttle runtime
-cargo install shuttle-runtime --git "https://github.com/shuttle-hq/shuttle" --branch "shuttle-next"
+cargo install shuttle-runtime --path "/usr/src/shuttle/runtime" 
 
 # Make future crates requests to our own mirror
 echo '

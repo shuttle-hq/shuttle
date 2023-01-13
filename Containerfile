@@ -37,6 +37,10 @@ COPY --from=cache /build/ /usr/src/shuttle/
 FROM shuttle-common
 ARG folder
 COPY ${folder}/prepare.sh /prepare.sh
+RUN curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v21.9/protoc-21.9-linux-x86_64.zip &&\
+    unzip -o protoc-21.9-linux-x86_64.zip -d /usr bin/protoc &&\
+    unzip -o protoc-21.9-linux-x86_64.zip -d /usr/ 'include/*' &&\
+    rm -f protoc-21.9-linux-x86_64.zip
 RUN /prepare.sh
 COPY --from=builder /build/target/debug/shuttle-${folder} /usr/local/bin/service
 ARG RUSTUP_TOOLCHAIN

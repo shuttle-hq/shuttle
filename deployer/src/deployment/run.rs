@@ -50,14 +50,6 @@ pub async fn task(
         let secret_getter = secret_getter.clone();
         let storage_manager = storage_manager.clone();
 
-        let _service_name = match ServiceName::from_str(&built.service_name) {
-            Ok(name) => name,
-            Err(err) => {
-                start_crashed_cleanup(&id, err);
-                continue;
-            }
-        };
-
         let old_deployments_killer = kill_old_deployments(
             built.service_id,
             id,
@@ -278,14 +270,14 @@ async fn load(
     }
 }
 
-#[instrument(skip(runtime_client, deployment_updater, _kill_recv, _cleanup), fields(state = %State::Running))]
+#[instrument(skip(runtime_client, deployment_updater, kill_recv, _cleanup), fields(state = %State::Running))]
 async fn run(
     id: Uuid,
     service_name: String,
     mut runtime_client: RuntimeClient<Channel>,
     address: SocketAddr,
     deployment_updater: impl DeploymentUpdater,
-    _kill_recv: KillReceiver,
+    mut kill_recv: KillReceiver,
     _cleanup: impl FnOnce(std::result::Result<std::result::Result<(), shuttle_service::Error>, JoinError>)
         + Send
         + 'static,
@@ -294,14 +286,33 @@ async fn run(
 
     let start_request = tonic::Request::new(StartRequest {
         deployment_id: id.as_bytes().to_vec(),
-        service_name,
+        service_name: service_name.clone(),
         port: address.port() as u32,
     });
 
     info!("starting service");
     let response = runtime_client.start(start_request).await.unwrap();
 
-    info!(response = ?response.into_inner(),  "client response: ");
+    info!(response = ?response.into_inner(),  "start client response: ");
+
+    while let Ok(kill_id) = kill_recv.recv().await {
+        if kill_id == id {
+            let stop_request = tonic::Request::new(StopRequest {
+                deployment_id: id.as_bytes().to_vec(),
+                service_name,
+            });
+            let response = runtime_client.stop(stop_request).await.unwrap();
+
+            info!(response = ?response.into_inner(),  "stop client response: ");
+
+            info!("deployment '{id}' killed");
+
+            stopped_cleanup(&id);
+            return;
+        }
+    }
+
+    completed_cleanup(&id);
 }
 
 #[cfg(test)]

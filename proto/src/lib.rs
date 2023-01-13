@@ -281,16 +281,25 @@ pub mod runtime {
     }
 
     fn get_runtime_executable() -> PathBuf {
+        // When this library is compiled in debug mode with `cargo run --bin cargo-shuttle`,
+        // install the checked-out local version of `shuttle-runtime
         if cfg!(debug_assertions) {
+            // Path to cargo-shuttle
             let manifest_dir = env!("CARGO_MANIFEST_DIR");
+
+            // Canonicalized path to shuttle-runtime
+            let path = std::fs::canonicalize(format!("{manifest_dir}/../runtime"))
+                .expect("failed to canonicalize path to runtime");
 
             Command::new("cargo")
                 .arg("install")
                 .arg("shuttle-runtime")
                 .arg("--path")
-                .arg(format!("{manifest_dir}/../runtime"))
+                .arg(path)
                 .output()
                 .expect("failed to install the shuttle runtime");
+        // When this library is compiled in release mode with `cargo install cargo-shuttle`,
+        // install the latest released `shuttle-runtime`
         } else {
             Command::new("cargo")
                 .arg("install")

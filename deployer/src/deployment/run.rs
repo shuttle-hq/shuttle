@@ -2,20 +2,20 @@ use std::{
     collections::HashMap,
     net::{Ipv4Addr, SocketAddr},
     path::PathBuf,
-    str::FromStr,
     sync::Arc,
 };
 
 use async_trait::async_trait;
 use opentelemetry::global;
 use portpicker::pick_unused_port;
-use shuttle_common::project::ProjectName as ServiceName;
 use shuttle_common::storage_manager::ArtifactsStorageManager;
-use shuttle_proto::runtime::{runtime_client::RuntimeClient, LoadRequest, StartRequest};
+use shuttle_proto::runtime::{
+    runtime_client::RuntimeClient, LoadRequest, StartRequest, StopRequest,
+};
 
-use tokio::{sync::Mutex, task::JoinError};
+use tokio::sync::Mutex;
 use tonic::transport::Channel;
-use tracing::{debug_span, error, info, instrument, trace, Instrument};
+use tracing::{debug, debug_span, error, info, instrument, trace, Instrument};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
@@ -222,7 +222,7 @@ impl Built {
             secret_getter,
             runtime_client.clone(),
         )
-        .await;
+        .await?;
         tokio::spawn(run(
             self.id,
             self.service_name,
@@ -243,7 +243,7 @@ async fn load(
     so_path: PathBuf,
     secret_getter: impl SecretGetter,
     mut runtime_client: RuntimeClient<Channel>,
-) {
+) -> Result<()> {
     info!(
         "loading project from: {}",
         so_path.clone().into_os_string().into_string().unwrap()
@@ -262,11 +262,19 @@ async fn load(
         service_name: service_name.clone(),
         secrets,
     });
-    info!("loading service");
+
+    debug!("loading service");
     let response = runtime_client.load(load_request).await;
 
-    if let Err(e) = response {
-        info!("failed to load service: {}", e);
+    match response {
+        Ok(response) => {
+            info!(response = ?response.into_inner(),  "loading response: ");
+            Ok(())
+        }
+        Err(error) => {
+            error!(%error, "failed to load service");
+            Err(Error::Load(error.to_string()))
+        }
     }
 }
 
@@ -336,7 +344,9 @@ mod tests {
         let path = tmp_dir.into_path();
         let (tx, _rx) = crossbeam_channel::unbounded();
 
-        RuntimeManager::new(&[0u8; 8], path, "http://provisioner:8000".to_string(), tx)
+        let file = std::fs::read("../target/debug/shuttle-runtime").unwrap();
+
+        RuntimeManager::new(&file, path, "http://provisioner:8000".to_string(), tx)
     }
 
     #[derive(Clone)]
@@ -553,10 +563,7 @@ mod tests {
             .await;
 
         assert!(
-            matches!(
-                result,
-                Err(Error::Load(shuttle_service::loader::LoaderError::Load(_)))
-            ),
+            matches!(result, Err(Error::Load(_))),
             "expected missing 'so' error: {:?}",
             result
         );

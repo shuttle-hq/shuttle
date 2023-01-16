@@ -6023,9 +6023,9 @@ dependencies = [
 
 [[package]]
 name = "serde_path_to_error"
-version = "0.1.8"
+version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "184c643044780f7ceb59104cef98a5a6f12cb2288a7bc701ab93a362b49fd47d"
+checksum = "26b04f22b563c91331a10074bda3dd5492e3cc39d56bd557e91c0af42b6c7341"
 dependencies = [
  "serde",
 ]
@@ -6345,11 +6345,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "shuttle-next"
+version = "0.8.0"
+dependencies = [
+ "axum",
+ "futures-executor",
+ "http 0.2.8",
+ "rmp-serde",
+ "shuttle-codegen",
+ "shuttle-common",
+ "tower-service",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "shuttle-proto"
 version = "0.8.0"
 dependencies = [
  "anyhow",
  "chrono",
+ "home",
  "prost",
  "prost-types",
  "shuttle-common",

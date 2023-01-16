@@ -8,8 +8,6 @@ use tracing::{error, trace};
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{fmt, EnvFilter};
 
-const BINARY_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/release/shuttle-runtime"));
-
 // The `multi_thread` is needed to prevent a deadlock in shuttle_service::loader::build_crate() which spawns two threads
 // Without this, both threads just don't start up
 #[tokio::main(flavor = "multi_thread")]
@@ -40,7 +38,6 @@ async fn main() {
         .init();
 
     let runtime_manager = RuntimeManager::new(
-        BINARY_BYTES,
         args.artifacts_path.clone(),
         args.provisioner_address.uri().to_string(),
         persistence.get_log_sender(),

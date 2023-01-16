@@ -14,7 +14,6 @@ pub struct RuntimeManager {
     legacy_process: Option<Arc<std::sync::Mutex<process::Child>>>,
     next: Option<RuntimeClient<Channel>>,
     next_process: Option<Arc<std::sync::Mutex<process::Child>>>,
-    binary_bytes: Vec<u8>,
     artifacts_path: PathBuf,
     provisioner_address: String,
     log_sender: crossbeam_channel::Sender<deploy_layer::Log>,
@@ -22,7 +21,6 @@ pub struct RuntimeManager {
 
 impl RuntimeManager {
     pub fn new(
-        binary_bytes: &[u8],
         artifacts_path: PathBuf,
         provisioner_address: String,
         log_sender: crossbeam_channel::Sender<deploy_layer::Log>,
@@ -32,7 +30,6 @@ impl RuntimeManager {
             legacy_process: None,
             next: None,
             next_process: None,
-            binary_bytes: binary_bytes.to_vec(),
             artifacts_path,
             provisioner_address,
             log_sender,
@@ -49,7 +46,6 @@ impl RuntimeManager {
                 &mut self.next_process,
                 is_next,
                 6002,
-                &self.binary_bytes,
                 self.artifacts_path.clone(),
                 &self.provisioner_address,
                 self.log_sender.clone(),
@@ -61,7 +57,6 @@ impl RuntimeManager {
                 &mut self.legacy_process,
                 is_next,
                 6001,
-                &self.binary_bytes,
                 self.artifacts_path.clone(),
                 &self.provisioner_address,
                 self.log_sender.clone(),
@@ -70,13 +65,12 @@ impl RuntimeManager {
         }
     }
 
-    #[instrument(skip(runtime_option, process_option, binary_bytes, log_sender))]
+    #[instrument(skip(runtime_option, process_option, log_sender))]
     async fn get_runtime_client_helper<'a>(
         runtime_option: &'a mut Option<RuntimeClient<Channel>>,
         process_option: &mut Option<Arc<std::sync::Mutex<process::Child>>>,
         is_next: bool,
         port: u16,
-        binary_bytes: &[u8],
         artifacts_path: PathBuf,
         provisioner_address: &str,
         log_sender: crossbeam_channel::Sender<deploy_layer::Log>,
@@ -87,7 +81,6 @@ impl RuntimeManager {
         } else {
             trace!("making new client");
             let (process, runtime_client) = runtime::start(
-                binary_bytes,
                 is_next,
                 runtime::StorageManagerType::Artifacts(artifacts_path),
                 provisioner_address,

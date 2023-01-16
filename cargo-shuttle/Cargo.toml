@@ -45,7 +45,7 @@ toml = "0.5.9"
 toml_edit = "0.15.0"
 tonic = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 url = "2.3.1"
 uuid = { workspace = true, features = ["v4"] }
 webbrowser = "0.8.2"

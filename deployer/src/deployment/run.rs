@@ -323,7 +323,6 @@ mod tests {
     use tempdir::TempDir;
     use tokio::{
         sync::{broadcast, oneshot, Mutex},
-        task::JoinError,
         time::sleep,
     };
     use tonic::{Response, Status};
@@ -355,9 +354,7 @@ mod tests {
         let path = tmp_dir.into_path();
         let (tx, _rx) = crossbeam_channel::unbounded();
 
-        let file = std::fs::read("../target/debug/shuttle-runtime").unwrap();
-
-        RuntimeManager::new(&file, path, "http://localhost:5000".to_string(), tx)
+        RuntimeManager::new(path, "http://localhost:5000".to_string(), tx)
     }
 
     #[derive(Clone)]

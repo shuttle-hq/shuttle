@@ -203,7 +203,7 @@ impl ToTokens for Endpoint {
             }
         };
 
-        let route = quote!(.route(#route, axum::routing::#method(#function)));
+        let route = quote!(.route(#route, shuttle_next::routing::#method(#function)));
 
         route.to_tokens(tokens);
     }
@@ -238,11 +238,11 @@ impl ToTokens for App {
         let Self { endpoints } = self;
 
         let app = quote!(
-            async fn __app(request: http::Request<axum::body::BoxBody>,) -> axum::response::Response
+            async fn __app(request: shuttle_next::Request<shuttle_next::body::BoxBody>,) -> shuttle_next::response::Response
             {
-                use tower_service::Service;
+                use shuttle_next::Service;
 
-                let mut router = axum::Router::new()
+                let mut router = shuttle_next::Router::new()
                     #(#endpoints)*;
 
                 let response = router.call(request).await.unwrap();
@@ -268,18 +268,18 @@ pub(crate) fn wasi_bindings(app: App) -> proc_macro2::TokenStream {
             body_read_fd: std::os::wasi::prelude::RawFd,
             body_write_fd: std::os::wasi::prelude::RawFd,
         ) {
-            use axum::body::HttpBody;
-            use shuttle_common::wasm::Logger;
+            use shuttle_next::body::{Body, HttpBody};
+            use shuttle_next::tracing_prelude::*;
+            use shuttle_next::Logger;
             use std::io::{Read, Write};
             use std::os::wasi::io::FromRawFd;
-            use tracing_subscriber::prelude::*;
 
             println!("inner handler awoken; interacting with fd={},{},{},{}", logs_fd, parts_fd, body_read_fd, body_write_fd);
 
             // file descriptor 2 for writing logs to
             let logs_fd = unsafe { std::fs::File::from_raw_fd(logs_fd) };
 
-            tracing_subscriber::registry()
+            shuttle_next::tracing_registry()
                 .with(Logger::new(logs_fd))
                 .init(); // this sets the subscriber as the global default and also adds a compatibility layer for capturing `log::Record`s
 
@@ -289,7 +289,7 @@ pub(crate) fn wasi_bindings(app: App) -> proc_macro2::TokenStream {
             let reader = std::io::BufReader::new(&mut parts_fd);
 
             // deserialize request parts from rust messagepack
-            let wrapper: shuttle_common::wasm::RequestWrapper = rmp_serde::from_read(reader).unwrap();
+            let wrapper: shuttle_next::RequestWrapper = shuttle_next::from_read(reader).unwrap();
 
             // file descriptor 4 for reading http body into wasm
             let mut body_read_stream = unsafe { std::fs::File::from_raw_fd(body_read_fd) };
@@ -298,20 +298,20 @@ pub(crate) fn wasi_bindings(app: App) -> proc_macro2::TokenStream {
             let mut body_buf = Vec::new();
             reader.read_to_end(&mut body_buf).unwrap();
 
-            let body = axum::body::Body::from(body_buf);
+            let body = Body::from(body_buf);
 
             let request = wrapper
                 .into_request_builder()
-                .body(axum::body::boxed(body))
+                .body(shuttle_next::body::boxed(body))
                 .unwrap();
 
             println!("inner router received request: {:?}", &request);
-            let res = futures_executor::block_on(__app(request));
+            let res = shuttle_next::block_on(__app(request));
 
             let (parts, mut body) = res.into_parts();
 
             // wrap and serialize response parts as rmp
-            let response_parts = shuttle_common::wasm::ResponseWrapper::from(parts).into_rmp();
+            let response_parts = shuttle_next::ResponseWrapper::from(parts).into_rmp();
 
             // write response parts
             parts_fd.write_all(&response_parts).unwrap();
@@ -320,7 +320,7 @@ pub(crate) fn wasi_bindings(app: App) -> proc_macro2::TokenStream {
             let mut body_write_stream = unsafe { std::fs::File::from_raw_fd(body_write_fd) };
 
             // write body if there is one
-            if let Some(body) = futures_executor::block_on(body.data()) {
+            if let Some(body) = shuttle_next::block_on(body.data()) {
                 body_write_stream.write_all(body.unwrap().as_ref()).unwrap();
             }
         }
@@ -346,7 +346,7 @@ mod tests {
         };
 
         let actual = quote!(#endpoint);
-        let expected = quote!(.route("/hello", axum::routing::get(hello)));
+        let expected = quote!(.route("/hello", shuttle_next::routing::get(hello)));
 
         assert_eq!(actual.to_string(), expected.to_string());
     }
@@ -371,13 +371,13 @@ mod tests {
         let actual = quote!(#app);
         let expected = quote!(
             async fn __app(
-                request: http::Request<axum::body::BoxBody>,
-            ) -> axum::response::Response {
-                use tower_service::Service;
+                request: shuttle_next::Request<shuttle_next::body::BoxBody>,
+            ) -> shuttle_next::response::Response {
+                use shuttle_next::Service;
 
-                let mut router = axum::Router::new()
-                    .route("/hello", axum::routing::get(hello))
-                    .route("/goodbye", axum::routing::post(goodbye));
+                let mut router = shuttle_next::Router::new()
+                    .route("/hello", shuttle_next::routing::get(hello))
+                    .route("/goodbye", shuttle_next::routing::post(goodbye));
 
                 let response = router.call(request).await.unwrap();
 

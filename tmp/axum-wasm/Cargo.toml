@@ -7,26 +7,8 @@ edition = "2021"
 crate-type = [ "cdylib" ]
 
 [dependencies]
-# most axum features can be enabled, but "tokio" and "ws" depend on socket2
-# via "hyper/tcp" which is not compatible with wasi
-axum = { version = "0.6.0", default-features = false }
-futures-executor = "0.3.21"
-futures = "0.3.25"
-http = "0.2.7"
-tower-service = "0.3.1"
-rmp-serde = { version = "1.1.1" }
+shuttle-next = "0.8.0"
 tracing = "0.1.37"
-tracing-subscriber = "0.3.16"
-
-[dependencies.shuttle-codegen]
-path = "../../codegen"
-features = ["next"]
-version = "0.8.0"
-
-[dependencies.shuttle-common]
-path = "../../common"
-features = ["axum-wasm"]
-version = "0.8.0"
 
 [dev-dependencies]
 tokio = { version = "1.22.0", features = ["macros", "rt-multi-thread"] }

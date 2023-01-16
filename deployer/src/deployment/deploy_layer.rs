@@ -403,7 +403,7 @@ mod tests {
         let path = tmp_dir.into_path();
         let (tx, _rx) = crossbeam_channel::unbounded();
 
-        RuntimeManager::new(&[0u8; 8], path, "http://provisioner:8000".to_string(), tx)
+        RuntimeManager::new(path, "http://provisioner:8000".to_string(), tx)
     }
 
     #[async_trait::async_trait]

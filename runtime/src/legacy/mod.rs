@@ -3,6 +3,7 @@ use std::{
     iter::FromIterator,
     net::{Ipv4Addr, SocketAddr},
     ops::DerefMut,
+    path::PathBuf,
     str::FromStr,
     sync::Mutex,
 };
@@ -18,8 +19,8 @@ use shuttle_proto::{
     },
 };
 use shuttle_service::{
-    loader::{LoadedService, Loader, LoaderError},
-    Logger, ServiceName,
+    loader::{LoadedService, Loader},
+    Factory, Logger, ServiceName,
 };
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::sync::oneshot;
@@ -37,7 +38,7 @@ where
     S: StorageManager,
 {
     // Mutexes are for interior mutability
-    loader: Mutex<Option<Loader>>,
+    so_path: Mutex<Option<PathBuf>>,
     logs_rx: Mutex<Option<UnboundedReceiver<LogItem>>>,
     logs_tx: Mutex<UnboundedSender<LogItem>>,
     provisioner_address: Endpoint,
@@ -54,7 +55,7 @@ where
         let (tx, rx) = mpsc::unbounded_channel();
 
         Self {
-            loader: Mutex::new(None),
+            so_path: Mutex::new(None),
             logs_rx: Mutex::new(Some(rx)),
             logs_tx: Mutex::new(tx),
             kill_tx: Mutex::new(None),
@@ -74,11 +75,8 @@ where
         let LoadRequest { path, secrets, .. } = request.into_inner();
         trace!(path, "loading");
 
-        *self.loader.lock().unwrap() =
-            Some(Loader::from_so_file(path).map_err(|error| match error {
-                LoaderError::Load(error) => Status::not_found(error.to_string()),
-                LoaderError::GetEntrypoint(error) => Status::invalid_argument(error.to_string()),
-            })?);
+        let so_path = PathBuf::from(path);
+        *self.so_path.lock().unwrap() = Some(so_path);
 
         *self.secrets.lock().unwrap() = Some(BTreeMap::from_iter(secrets.into_iter()));
 
@@ -90,21 +88,23 @@ where
         &self,
         request: Request<StartRequest>,
     ) -> Result<Response<StartResponse>, Status> {
+        trace!("legacy starting");
+
         let provisioner_client = ProvisionerClient::connect(self.provisioner_address.clone())
             .await
             .expect("failed to connect to provisioner");
         let abstract_factory = AbstractProvisionerFactory::new(provisioner_client);
 
-        let loader = self
-            .loader
+        let so_path = self
+            .so_path
             .lock()
             .unwrap()
-            .take()
+            .as_ref()
             .ok_or_else(|| -> error::Error {
                 error::Error::Start(anyhow!("trying to start a service that was not loaded"))
             })
-            .map_err(|err| Status::from_error(Box::new(err)))?;
-
+            .map_err(|err| Status::from_error(Box::new(err)))?
+            .clone();
         let secrets = self
             .secrets
             .lock()
@@ -117,6 +117,8 @@ where
             })
             .map_err(|err| Status::from_error(Box::new(err)))?
             .clone();
+
+        trace!("prepare done");
 
         let StartRequest {
             deployment_id,
@@ -136,14 +138,14 @@ where
             secrets,
             self.storage_manager.clone(),
         );
+        trace!("got factory");
 
         let logs_tx = self.logs_tx.lock().unwrap().clone();
 
         let logger = Logger::new(logs_tx, deployment_id);
 
         trace!(%service_address, "starting");
-        let service = loader
-            .load(&mut factory, service_address, logger)
+        let service = load_service(service_address, so_path, &mut factory, logger)
             .await
             .map_err(|error| Status::internal(error.to_string()))?;
 
@@ -235,4 +237,16 @@ async fn run_until_stopped(
         trace!("closing .so file");
         library.close().unwrap();
     });
+}
+
+#[instrument(skip(addr, so_path, factory, logger))]
+async fn load_service(
+    addr: SocketAddr,
+    so_path: PathBuf,
+    factory: &mut dyn Factory,
+    logger: Logger,
+) -> error::Result<LoadedService> {
+    let loader = Loader::from_so_file(so_path)?;
+
+    Ok(loader.load(factory, addr, logger).await?)
 }

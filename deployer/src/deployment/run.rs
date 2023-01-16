@@ -196,9 +196,8 @@ impl Built {
         };
 
         let address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
+        let mut runtime_manager = runtime_manager.lock().await.clone();
         let runtime_client = runtime_manager
-            .lock()
-            .await
             .get_runtime_client(self.is_next)
             .await
             .map_err(|e| Error::Runtime(e))?;
@@ -212,18 +211,26 @@ impl Built {
             self.service_id,
             so_path,
             secret_getter,
-            runtime_client.clone(),
+            runtime_client,
         )
         .await?;
-        tokio::spawn(run(
-            self.id,
-            self.service_name,
-            runtime_client,
-            address,
-            deployment_updater,
-            kill_recv,
-            cleanup,
-        ));
+
+        // Move runtime manager to this thread so that the runtime lives long enough
+        tokio::spawn(async move {
+            let runtime_client = runtime_manager
+                .get_runtime_client(self.is_next)
+                .await
+                .unwrap();
+            run(
+                self.id,
+                self.service_name,
+                runtime_client,
+                address,
+                deployment_updater,
+                kill_recv,
+            )
+            .await
+        });
 
         Ok(())
     }
@@ -234,7 +241,7 @@ async fn load(
     service_id: Uuid,
     so_path: PathBuf,
     secret_getter: impl SecretGetter,
-    mut runtime_client: RuntimeClient<Channel>,
+    runtime_client: &mut RuntimeClient<Channel>,
 ) -> Result<()> {
     info!(
         "loading project from: {}",
@@ -274,7 +281,7 @@ async fn load(
 async fn run(
     id: Uuid,
     service_name: String,
-    mut runtime_client: RuntimeClient<Channel>,
+    runtime_client: &mut RuntimeClient<Channel>,
     address: SocketAddr,
     deployment_updater: impl DeploymentUpdater,
     mut kill_recv: KillReceiver,
@@ -357,7 +364,7 @@ mod tests {
 
         let file = std::fs::read("../target/debug/shuttle-runtime").unwrap();
 
-        RuntimeManager::new(&file, path, "http://provisioner:8000".to_string(), tx)
+        RuntimeManager::new(&file, path, "http://localhost:5000".to_string(), tx)
     }
 
     #[derive(Clone)]

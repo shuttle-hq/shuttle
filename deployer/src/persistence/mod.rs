@@ -540,7 +540,7 @@ mod tests {
         let update = p.get_deployment(&id).await.unwrap().unwrap();
         assert_eq!(update.state, State::Built);
         assert_eq!(update.address, Some(address));
-        assert_eq!(update.is_next, true);
+        assert!(update.is_next);
         assert_ne!(
             update.last_update,
             Utc.with_ymd_and_hms(2022, 4, 25, 4, 43, 33).unwrap()

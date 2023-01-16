@@ -195,7 +195,7 @@ impl Built {
         let runtime_client = runtime_manager
             .get_runtime_client(self.is_next)
             .await
-            .map_err(|e| Error::Runtime(e))?;
+            .map_err(Error::Runtime)?;
 
         kill_old_deployments.await?;
 
@@ -438,7 +438,7 @@ mod tests {
         let (_kill_send, kill_recv) = broadcast::channel(1);
         let (cleanup_send, cleanup_recv) = oneshot::channel();
 
-        let handle_cleanup = |result: std::result::Result<Response<StopResponse>, Status>| {
+        let handle_cleanup = |_result: std::result::Result<Response<StopResponse>, Status>| {
             // let result = result.unwrap();
             // assert!(
             //     result.is_ok(),
@@ -475,7 +475,7 @@ mod tests {
         let (_kill_send, kill_recv) = broadcast::channel(1);
         let (cleanup_send, cleanup_recv): (oneshot::Sender<()>, _) = oneshot::channel();
 
-        let handle_cleanup = |result: std::result::Result<Response<StopResponse>, Status>| {
+        let handle_cleanup = |_result: std::result::Result<Response<StopResponse>, Status>| {
             // let result = result.unwrap();
             // assert!(
             //     matches!(result, Err(shuttle_service::Error::BindPanic(ref msg)) if msg == "panic in bind"),

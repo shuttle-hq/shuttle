@@ -172,8 +172,7 @@ pub struct DeploymentManager {
 impl DeploymentManager {
     /// Create a new deployment manager. Manages one or more 'pipelines' for
     /// processing service building, loading, and deployment.
-    pub fn builder<'a, LR, SR, ADG, DU, SG, QC>(
-    ) -> DeploymentManagerBuilder<LR, SR, ADG, DU, SG, QC> {
+    pub fn builder<LR, SR, ADG, DU, SG, QC>() -> DeploymentManagerBuilder<LR, SR, ADG, DU, SG, QC> {
         DeploymentManagerBuilder {
             build_log_recorder: None,
             secret_recorder: None,

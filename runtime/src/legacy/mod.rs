@@ -76,6 +76,11 @@ where
         trace!(path, "loading");
 
         let so_path = PathBuf::from(path);
+
+        if !so_path.exists() {
+            return Err(Status::not_found("'.so' to load does not exist"));
+        }
+
         *self.so_path.lock().unwrap() = Some(so_path);
 
         *self.secrets.lock().unwrap() = Some(BTreeMap::from_iter(secrets.into_iter()));

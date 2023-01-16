@@ -10,4 +10,4 @@ crate-type = ["cdylib"]
 
 [dependencies]
 rocket = "0.5.0-rc.2"
-shuttle-service = { path = "../../../../service", features = ["codegen", "web-rocket"] }
+shuttle-service = { path = "../../../../service", features = ["web-rocket"] }

@@ -174,7 +174,6 @@ impl Runtime for AxumWasm {
         }
     }
 }
-
 struct RouterBuilder {
     engine: Engine,
     linker: Linker<WasiCtx>,
@@ -409,15 +408,32 @@ async fn run_until_stopped(
 
 #[cfg(test)]
 pub mod tests {
+    use std::process::Command;
+
     use super::*;
     use hyper::{http::HeaderValue, Method, Request, StatusCode, Version};
     use uuid::Uuid;
 
+    // Compile axum wasm module
+    fn compile_module() {
+        Command::new("cargo")
+            .arg("build")
+            .arg("--target")
+            .arg("wasm32-wasi")
+            .current_dir("../tmp/axum-wasm-expanded")
+            .spawn()
+            .unwrap()
+            .wait()
+            .unwrap();
+    }
+
     #[tokio::test]
     async fn axum() {
+        compile_module();
+
         let router = RouterBuilder::new()
             .unwrap()
-            .src("axum.wasm")
+            .src("../tmp/axum-wasm-expanded/target/wasm32-wasi/debug/shuttle_axum_expanded.wasm")
             .build()
             .unwrap();
         let id = Uuid::default().as_bytes().to_vec();

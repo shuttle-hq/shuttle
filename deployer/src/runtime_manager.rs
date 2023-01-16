@@ -45,7 +45,6 @@ impl RuntimeManager {
                 &mut self.next,
                 &mut self.next_process,
                 is_next,
-                6002,
                 self.artifacts_path.clone(),
                 &self.provisioner_address,
                 self.log_sender.clone(),
@@ -56,7 +55,6 @@ impl RuntimeManager {
                 &mut self.legacy,
                 &mut self.legacy_process,
                 is_next,
-                6001,
                 self.artifacts_path.clone(),
                 &self.provisioner_address,
                 self.log_sender.clone(),
@@ -70,7 +68,6 @@ impl RuntimeManager {
         runtime_option: &'a mut Option<RuntimeClient<Channel>>,
         process_option: &mut Option<Arc<std::sync::Mutex<process::Child>>>,
         is_next: bool,
-        port: u16,
         artifacts_path: PathBuf,
         provisioner_address: &str,
         log_sender: crossbeam_channel::Sender<deploy_layer::Log>,
@@ -80,6 +77,8 @@ impl RuntimeManager {
             Ok(runtime_client)
         } else {
             trace!("making new client");
+            let port = portpicker::pick_unused_port().context("failed to find available port")?;
+
             let (process, runtime_client) = runtime::start(
                 is_next,
                 runtime::StorageManagerType::Artifacts(artifacts_path),

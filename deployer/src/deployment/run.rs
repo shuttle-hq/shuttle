@@ -292,25 +292,40 @@ async fn run(
     });
 
     info!("starting service");
-    let response = runtime_client.start(start_request).await.unwrap();
+    let response = runtime_client.start(start_request).await;
 
-    info!(response = ?response.into_inner(),  "start client response: ");
+    match response {
+        Ok(response) => {
+            info!(response = ?response.into_inner(),  "start client response: ");
 
-    let mut response = Err(Status::unknown("not stopped yet"));
+            let mut response = Err(Status::unknown("not stopped yet"));
 
-    while let Ok(kill_id) = kill_recv.recv().await {
-        if kill_id == id {
+            while let Ok(kill_id) = kill_recv.recv().await {
+                if kill_id == id {
+                    let stop_request = tonic::Request::new(StopRequest {
+                        deployment_id: id.as_bytes().to_vec(),
+                        service_name: service_name.clone(),
+                    });
+                    response = runtime_client.stop(stop_request).await;
+
+                    break;
+                }
+            }
+
+            cleanup(response);
+        }
+        Err(status) => {
+            error!("failed to start service, status code: {}", status);
+
             let stop_request = tonic::Request::new(StopRequest {
                 deployment_id: id.as_bytes().to_vec(),
                 service_name: service_name.clone(),
             });
-            response = runtime_client.stop(stop_request).await;
+            let stop_response = runtime_client.stop(stop_request).await;
 
-            break;
+            cleanup(stop_response);
         }
     }
-
-    cleanup(response);
 }
 
 #[cfg(test)]
@@ -473,7 +488,7 @@ mod tests {
     async fn panic_in_bind() {
         let (built, storage_manager) = make_so_and_built("bind-panic");
         let (_kill_send, kill_recv) = broadcast::channel(1);
-        let (cleanup_send, cleanup_recv): (oneshot::Sender<()>, _) = oneshot::channel();
+        let (cleanup_send, cleanup_recv) = oneshot::channel();
 
         let handle_cleanup = |_result: std::result::Result<Response<StopResponse>, Status>| {
             // let result = result.unwrap();
@@ -510,11 +525,15 @@ mod tests {
     async fn panic_in_main() {
         let (built, storage_manager) = make_so_and_built("main-panic");
         let (_kill_send, kill_recv) = broadcast::channel(1);
+        let (cleanup_send, cleanup_recv) = oneshot::channel();
 
-        let handle_cleanup = |_result| panic!("the service shouldn't even start");
+        let handle_cleanup = |_result| {
+            cleanup_send.send(()).unwrap();
+        };
+
         let secret_getter = get_secret_getter();
 
-        let result = built
+        built
             .handle(
                 storage_manager,
                 secret_getter,
@@ -524,13 +543,13 @@ mod tests {
                 kill_old_deployments(),
                 handle_cleanup,
             )
-            .await;
+            .await
+            .unwrap();
 
-        assert!(
-            matches!(result, Err(Error::Run(shuttle_service::Error::BuildPanic(ref msg))) if msg == "main panic"),
-            "expected inner error from main: {:?}",
-            result
-        );
+        tokio::select! {
+            _ = sleep(Duration::from_secs(5)) => panic!("cleanup should have been called"),
+            Ok(()) = cleanup_recv => {}
+        }
     }
 
     #[tokio::test]

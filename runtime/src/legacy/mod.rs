@@ -76,6 +76,11 @@ where
         trace!(path, "loading");
 
         let so_path = PathBuf::from(path);
+
+        if !so_path.exists() {
+            return Err(Status::not_found("'.so' to load does not exist"));
+        }
+
         *self.so_path.lock().unwrap() = Some(so_path);
 
         *self.secrets.lock().unwrap() = Some(BTreeMap::from_iter(secrets.into_iter()));
@@ -88,6 +93,8 @@ where
         &self,
         request: Request<StartRequest>,
     ) -> Result<Response<StartResponse>, Status> {
+        trace!("legacy starting");
+
         let provisioner_client = ProvisionerClient::connect(self.provisioner_address.clone())
             .await
             .expect("failed to connect to provisioner");
@@ -116,6 +123,8 @@ where
             .map_err(|err| Status::from_error(Box::new(err)))?
             .clone();
 
+        trace!("prepare done");
+
         let StartRequest {
             deployment_id,
             service_name,
@@ -134,6 +143,7 @@ where
             secrets,
             self.storage_manager.clone(),
         );
+        trace!("got factory");
 
         let logs_tx = self.logs_tx.lock().unwrap().clone();
 

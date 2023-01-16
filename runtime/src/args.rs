@@ -5,6 +5,10 @@ use tonic::transport::Endpoint;
 
 #[derive(Parser, Debug)]
 pub struct Args {
+    /// Port to start runtime on
+    #[arg(long)]
+    pub port: u16,
+
     /// Address to reach provisioner at
     #[arg(long, default_value = "http://localhost:5000")]
     pub provisioner_address: Endpoint,

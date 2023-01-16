@@ -2,8 +2,6 @@ use std::error::Error as StdError;
 use std::io;
 use thiserror::Error;
 
-use shuttle_service::loader::LoaderError;
-
 use cargo::util::errors::CargoTestError;
 
 use crate::deployment::gateway_client;
@@ -15,7 +13,7 @@ pub enum Error {
     #[error("Build error: {0}")]
     Build(#[source] Box<dyn StdError + Send>),
     #[error("Load error: {0}")]
-    Load(#[from] LoaderError),
+    Load(String),
     #[error("Prepare to run error: {0}")]
     PrepareRun(String),
     #[error("Run error: {0}")]
@@ -30,6 +28,8 @@ pub enum Error {
     OldCleanup(#[source] Box<dyn StdError + Send>),
     #[error("Gateway client error: {0}")]
     GatewayClient(#[from] gateway_client::Error),
+    #[error("Failed to get runtime: {0}")]
+    Runtime(#[source] anyhow::Error),
 }
 
 #[derive(Error, Debug)]

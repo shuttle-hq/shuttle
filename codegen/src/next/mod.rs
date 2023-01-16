@@ -259,6 +259,7 @@ pub(crate) fn wasi_bindings(app: App) -> proc_macro2::TokenStream {
     quote!(
         #app
 
+        #[cfg(not(test))]
         #[no_mangle]
         #[allow(non_snake_case)]
         pub extern "C" fn __SHUTTLE_Axum_call(

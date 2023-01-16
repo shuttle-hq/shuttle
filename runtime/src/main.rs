@@ -27,7 +27,7 @@ async fn main() {
 
     trace!(args = ?args, "parsed args");
 
-    let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 6001);
+    let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), args.port);
 
     let provisioner_address = args.provisioner_address;
     let mut server_builder =

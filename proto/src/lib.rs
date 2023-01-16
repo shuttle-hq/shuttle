@@ -241,6 +241,7 @@ pub mod runtime {
         wasm: bool,
         storage_manager_type: StorageManagerType,
         provisioner_address: &str,
+        port: u16,
     ) -> anyhow::Result<(process::Child, runtime_client::RuntimeClient<Channel>)> {
         let runtime_flag = if wasm { "--axum" } else { "--legacy" };
 
@@ -254,6 +255,8 @@ pub mod runtime {
         let runtime = process::Command::new(runtime_executable)
             .args([
                 runtime_flag,
+                "--port",
+                &port.to_string(),
                 "--provisioner-address",
                 provisioner_address,
                 "--storage-manager-type",
@@ -269,7 +272,7 @@ pub mod runtime {
         tokio::time::sleep(Duration::from_secs(2)).await;
 
         info!("connecting runtime client");
-        let conn = Endpoint::new("http://127.0.0.1:6001")
+        let conn = Endpoint::new(format!("http://127.0.0.1:{port}"))
             .context("creating runtime client endpoint")?
             .connect_timeout(Duration::from_secs(5));
 

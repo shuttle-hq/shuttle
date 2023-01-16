@@ -72,6 +72,8 @@ impl Loader {
         addr: SocketAddr,
         logger: logger::Logger,
     ) -> Result<LoadedService, Error> {
+        trace!("loading service");
+
         let mut bootstrapper = self.bootstrapper;
 
         AssertUnwindSafe(bootstrapper.bootstrap(factory, logger))

@@ -224,6 +224,7 @@ async fn post_service(
         state: State::Queued,
         last_update: Utc::now(),
         address: None,
+        is_next: false,
     };
 
     let mut data = Vec::new();

@@ -1,4 +1,4 @@
-use std::{convert::Infallible, net::SocketAddr};
+use std::{convert::Infallible, net::SocketAddr, sync::Arc};
 
 pub use args::Args;
 pub use deployment::deploy_layer::DeployLayer;
@@ -10,8 +10,8 @@ use hyper::{
 };
 pub use persistence::Persistence;
 use proxy::AddressGetter;
-use shuttle_proto::runtime::runtime_client::RuntimeClient;
-use tonic::transport::Channel;
+pub use runtime_manager::RuntimeManager;
+use tokio::sync::Mutex;
 use tracing::{error, info};
 
 use crate::deployment::gateway_client::GatewayClient;
@@ -22,14 +22,20 @@ mod error;
 mod handlers;
 mod persistence;
 mod proxy;
+mod runtime_manager;
 
-pub async fn start(persistence: Persistence, runtime_client: RuntimeClient<Channel>, args: Args) {
+pub async fn start(
+    persistence: Persistence,
+    runtime_manager: Arc<Mutex<RuntimeManager>>,
+    args: Args,
+) {
     let deployment_manager = DeploymentManager::builder()
         .build_log_recorder(persistence.clone())
         .secret_recorder(persistence.clone())
         .active_deployment_getter(persistence.clone())
         .artifacts_path(args.artifacts_path)
-        .runtime(runtime_client)
+        .runtime(runtime_manager)
+        .deployment_updater(persistence.clone())
         .secret_getter(persistence.clone())
         .queue_client(GatewayClient::new(args.gateway_uri))
         .build();
@@ -44,6 +50,7 @@ pub async fn start(persistence: Persistence, runtime_client: RuntimeClient<Chann
             service_name: existing_deployment.service_name,
             service_id: existing_deployment.service_id,
             tracing_context: Default::default(),
+            is_next: existing_deployment.is_next,
         };
         deployment_manager.run_push(built).await;
     }

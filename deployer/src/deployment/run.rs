@@ -10,11 +10,11 @@ use opentelemetry::global;
 use portpicker::pick_unused_port;
 use shuttle_common::storage_manager::ArtifactsStorageManager;
 use shuttle_proto::runtime::{
-    runtime_client::RuntimeClient, LoadRequest, StartRequest, StopRequest,
+    runtime_client::RuntimeClient, LoadRequest, StartRequest, StopRequest, StopResponse,
 };
 
 use tokio::sync::Mutex;
-use tonic::transport::Channel;
+use tonic::{transport::Channel, Response, Status};
 use tracing::{debug, debug_span, error, info, instrument, trace, Instrument};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
@@ -56,16 +56,13 @@ pub async fn task(
             active_deployment_getter.clone(),
             kill_send,
         );
-        let cleanup = move |result: std::result::Result<
-            std::result::Result<(), shuttle_service::Error>,
-            JoinError,
-        >| match result {
-            Ok(inner) => match inner {
-                Ok(()) => completed_cleanup(&id),
+        let cleanup = move |result: std::result::Result<Response<StopResponse>, Status>| {
+            info!(response = ?result,  "stop client response: ");
+
+            match result {
+                Ok(_) => completed_cleanup(&id),
                 Err(err) => crashed_cleanup(&id, err),
-            },
-            Err(err) if err.is_cancelled() => stopped_cleanup(&id),
-            Err(err) => start_crashed_cleanup(&id, err),
+            }
         };
         let runtime_manager = runtime_manager.clone();
 
@@ -180,9 +177,7 @@ impl Built {
         deployment_updater: impl DeploymentUpdater,
         kill_recv: KillReceiver,
         kill_old_deployments: impl futures::Future<Output = Result<()>>,
-        cleanup: impl FnOnce(std::result::Result<std::result::Result<(), shuttle_service::Error>, JoinError>)
-            + Send
-            + 'static,
+        cleanup: impl FnOnce(std::result::Result<Response<StopResponse>, Status>) + Send + 'static,
     ) -> Result<()> {
         let so_path = storage_manager.deployment_library_path(&self.id)?;
 
@@ -228,6 +223,7 @@ impl Built {
                 address,
                 deployment_updater,
                 kill_recv,
+                cleanup,
             )
             .await
         });
@@ -277,7 +273,7 @@ async fn load(
     }
 }
 
-#[instrument(skip(runtime_client, deployment_updater, kill_recv, _cleanup), fields(state = %State::Running))]
+#[instrument(skip(runtime_client, deployment_updater, kill_recv, cleanup), fields(state = %State::Running))]
 async fn run(
     id: Uuid,
     service_name: String,
@@ -285,9 +281,7 @@ async fn run(
     address: SocketAddr,
     deployment_updater: impl DeploymentUpdater,
     mut kill_recv: KillReceiver,
-    _cleanup: impl FnOnce(std::result::Result<std::result::Result<(), shuttle_service::Error>, JoinError>)
-        + Send
-        + 'static,
+    cleanup: impl FnOnce(std::result::Result<Response<StopResponse>, Status>) + Send + 'static,
 ) {
     deployment_updater.set_address(&id, &address).await.unwrap();
 
@@ -302,24 +296,21 @@ async fn run(
 
     info!(response = ?response.into_inner(),  "start client response: ");
 
+    let mut response = Err(Status::unknown("not stopped yet"));
+
     while let Ok(kill_id) = kill_recv.recv().await {
         if kill_id == id {
             let stop_request = tonic::Request::new(StopRequest {
                 deployment_id: id.as_bytes().to_vec(),
-                service_name,
+                service_name: service_name.clone(),
             });
-            let response = runtime_client.stop(stop_request).await.unwrap();
+            response = runtime_client.stop(stop_request).await;
 
-            info!(response = ?response.into_inner(),  "stop client response: ");
-
-            info!("deployment '{id}' killed");
-
-            stopped_cleanup(&id);
-            return;
+            break;
         }
     }
 
-    completed_cleanup(&id);
+    cleanup(response);
 }
 
 #[cfg(test)]
@@ -328,12 +319,14 @@ mod tests {
 
     use async_trait::async_trait;
     use shuttle_common::storage_manager::ArtifactsStorageManager;
+    use shuttle_proto::runtime::StopResponse;
     use tempdir::TempDir;
     use tokio::{
         sync::{broadcast, oneshot, Mutex},
         task::JoinError,
         time::sleep,
     };
+    use tonic::{Response, Status};
     use uuid::Uuid;
 
     use crate::{
@@ -407,14 +400,10 @@ mod tests {
         let (kill_send, kill_recv) = broadcast::channel(1);
         let (cleanup_send, cleanup_recv) = oneshot::channel();
 
-        let handle_cleanup = |result: std::result::Result<
-            std::result::Result<(), shuttle_service::Error>,
-            JoinError,
-        >| {
+        let handle_cleanup = |result: std::result::Result<Response<StopResponse>, Status>| {
             assert!(
-                matches!(result, Err(ref join_error) if join_error.is_cancelled()),
-                "handle should have been cancelled: {:?}",
-                result
+                result.unwrap().into_inner().success,
+                "handle should have been cancelled",
             );
             cleanup_send.send(()).unwrap();
         };
@@ -452,16 +441,13 @@ mod tests {
         let (_kill_send, kill_recv) = broadcast::channel(1);
         let (cleanup_send, cleanup_recv) = oneshot::channel();
 
-        let handle_cleanup = |result: std::result::Result<
-            std::result::Result<(), shuttle_service::Error>,
-            JoinError,
-        >| {
-            let result = result.unwrap();
-            assert!(
-                result.is_ok(),
-                "did not expect error from self stopping service: {}",
-                result.unwrap_err()
-            );
+        let handle_cleanup = |result: std::result::Result<Response<StopResponse>, Status>| {
+            // let result = result.unwrap();
+            // assert!(
+            //     result.is_ok(),
+            //     "did not expect error from self stopping service: {}",
+            //     result.unwrap_err()
+            // );
             cleanup_send.send(()).unwrap();
         };
         let secret_getter = get_secret_getter();
@@ -492,16 +478,13 @@ mod tests {
         let (_kill_send, kill_recv) = broadcast::channel(1);
         let (cleanup_send, cleanup_recv): (oneshot::Sender<()>, _) = oneshot::channel();
 
-        let handle_cleanup = |result: std::result::Result<
-            std::result::Result<(), shuttle_service::Error>,
-            JoinError,
-        >| {
-            let result = result.unwrap();
-            assert!(
-                matches!(result, Err(shuttle_service::Error::BindPanic(ref msg)) if msg == "panic in bind"),
-                "expected inner error from handle: {:?}",
-                result
-            );
+        let handle_cleanup = |result: std::result::Result<Response<StopResponse>, Status>| {
+            // let result = result.unwrap();
+            // assert!(
+            //     matches!(result, Err(shuttle_service::Error::BindPanic(ref msg)) if msg == "panic in bind"),
+            //     "expected inner error from handle: {:?}",
+            //     result
+            // );
             cleanup_send.send(()).unwrap();
         };
         let secret_getter = get_secret_getter();

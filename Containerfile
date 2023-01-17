@@ -25,7 +25,7 @@ COPY --from=planner /build/recipe.json recipe.json
 RUN cargo chef cook --recipe-path recipe.json
 COPY --from=cache /build .
 ARG folder
-RUN cargo build --bin shuttle-${folder}
+RUN cargo build --bin shuttle-${folder} --release
 
 ARG RUSTUP_TOOLCHAIN
 FROM rust:${RUSTUP_TOOLCHAIN}-buster as shuttle-common
@@ -43,7 +43,7 @@ FROM shuttle-common
 ARG folder
 COPY ${folder}/prepare.sh /prepare.sh
 RUN /prepare.sh
-COPY --from=builder /build/target/debug/shuttle-${folder} /usr/local/bin/service
+COPY --from=builder /build/target/release/shuttle-${folder} /usr/local/bin/service
 ARG RUSTUP_TOOLCHAIN
 ENV RUSTUP_TOOLCHAIN=${RUSTUP_TOOLCHAIN}
 ENTRYPOINT ["/usr/local/bin/service"]

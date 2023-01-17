@@ -287,7 +287,7 @@ pub mod runtime {
         // When this library is compiled in debug mode with `cargo run --bin cargo-shuttle`,
         // install the checked-out local version of `shuttle-runtime
         if cfg!(debug_assertions) {
-            // Path to cargo-shuttle
+            // Path to calling crate root
             let manifest_dir = env!("CARGO_MANIFEST_DIR");
 
             // Canonicalized path to shuttle-runtime

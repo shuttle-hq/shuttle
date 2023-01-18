@@ -24,7 +24,7 @@ use tonic::{transport::Endpoint, Request, Response, Status};
 use tracing::{error, instrument, trace};
 use uuid::Uuid;
 
-use crate::provisioner_factory::{AbstractFactory, AbstractProvisionerFactory};
+use crate::provisioner_factory::ProvisionerFactory;
 
 mod error;
 
@@ -94,7 +94,6 @@ where
             .await
             .context("failed to connect to provisioner")
             .map_err(|err| Status::internal(err.to_string()))?;
-        let abstract_factory = AbstractProvisionerFactory::new(provisioner_client);
 
         let so_path = self
             .so_path
@@ -136,7 +135,8 @@ where
         let deployment_id = Uuid::from_slice(&deployment_id)
             .map_err(|error| Status::invalid_argument(error.to_string()))?;
 
-        let mut factory = abstract_factory.get_factory(
+        let mut factory = ProvisionerFactory::new(
+            provisioner_client,
             service_name,
             deployment_id,
             secrets,

@@ -13,6 +13,7 @@ service Runtime {
   // Stop a started service
   rpc Stop(StopRequest) returns (StopResponse);
 
+  // Subscribe to runtime logs
   rpc SubscribeLogs(SubscribeLogsRequest) returns (stream LogItem);
 }
 

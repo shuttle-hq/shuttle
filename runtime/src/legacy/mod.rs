@@ -10,7 +10,7 @@ use std::{
 
 use anyhow::anyhow;
 use async_trait::async_trait;
-use shuttle_common::{storage_manager::StorageManager, LogItem};
+use shuttle_common::{deployment::State, storage_manager::StorageManager, LogItem};
 use shuttle_proto::{
     provisioner::provisioner_client::ProvisionerClient,
     runtime::{
@@ -26,7 +26,7 @@ use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{transport::Endpoint, Request, Response, Status};
-use tracing::{error, instrument, trace};
+use tracing::{error, info, instrument, trace};
 use uuid::Uuid;
 
 use crate::provisioner_factory::{AbstractFactory, AbstractProvisionerFactory};
@@ -147,7 +147,7 @@ where
 
         let logs_tx = self.logs_tx.lock().unwrap().clone();
 
-        let logger = Logger::new(logs_tx, deployment_id);
+        let logger = Logger::new(logs_tx, deployment_id.clone());
 
         trace!(%service_address, "starting");
         let service = load_service(service_address, so_path, &mut factory, logger)
@@ -159,7 +159,12 @@ where
         *self.kill_tx.lock().unwrap() = Some(kill_tx);
 
         // start service as a background task with a kill receiver
-        tokio::spawn(run_until_stopped(service, service_address, kill_rx));
+        tokio::spawn(run_until_stopped(
+            service,
+            service_address,
+            kill_rx,
+            deployment_id,
+        ));
 
         let message = StartResponse { success: true };
 
@@ -215,24 +220,34 @@ where
 }
 
 /// Run the service until a stop signal is received
-#[instrument(skip(service, kill_rx))]
+#[instrument(skip(service, kill_rx), fields(state = %State::Running))]
 async fn run_until_stopped(
     service: LoadedService,
     addr: SocketAddr,
     kill_rx: tokio::sync::oneshot::Receiver<String>,
+    deployment_id: Uuid,
 ) {
     let (handle, library) = service;
 
     trace!("starting deployment on {}", &addr);
     tokio::select! {
-        _ = handle => {
-            trace!("deployment stopped on {}", &addr);
+        res = handle => {
+            match res.unwrap() {
+                Ok(_) => {
+                    completed_cleanup(&deployment_id);
+                }
+                Err(error) => {
+                    crashed_cleanup(&deployment_id, error);
+                }
+            }
         },
         message = kill_rx => {
             match message {
-                Ok(msg) => trace!("{msg}"),
+                Ok(_) => {
+                    stopped_cleanup(&deployment_id);
+                }
                 Err(_) => trace!("the sender dropped")
-            }
+            };
         }
     }
 
@@ -252,4 +267,22 @@ async fn load_service(
     let loader = Loader::from_so_file(so_path)?;
 
     Ok(loader.load(factory, addr, logger).await?)
+}
+
+#[instrument(skip(_id), fields(id = %_id, state = %State::Stopped))]
+fn stopped_cleanup(_id: &Uuid) {
+    info!("service was stopped by the user");
+}
+
+#[instrument(skip(_id), fields(id = %_id, state = %State::Crashed))]
+fn crashed_cleanup(_id: &Uuid, error: impl std::error::Error + 'static) {
+    error!(
+        error = &error as &dyn std::error::Error,
+        "service encountered an error"
+    );
+}
+
+#[instrument(skip(_id), fields(id = %_id, state = %State::Completed))]
+fn completed_cleanup(_id: &Uuid) {
+    info!("service finished all on its own");
 }

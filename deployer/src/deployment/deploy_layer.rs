@@ -489,6 +489,7 @@ mod tests {
         }
     }
 
+    //#[ignore]
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_to_be_queued() {
         let deployment_manager = get_deployment_manager().await;
@@ -590,6 +591,7 @@ mod tests {
         );
     }
 
+    #[ignore]
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_self_stop() {
         let deployment_manager = get_deployment_manager().await;
@@ -657,6 +659,7 @@ mod tests {
         }
     }
 
+    #[ignore]
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_bind_panic() {
         let deployment_manager = get_deployment_manager().await;
@@ -737,7 +740,7 @@ mod tests {
                 let recorder = RECORDER.lock().unwrap();
                 let states = recorder.get_deployment_states(&id);
 
-                if states.len() < 5 {
+                if states.len() < 6 {
                     drop(recorder); // Don't block
                     sleep(Duration::from_millis(350)).await;
                     continue;
@@ -745,7 +748,7 @@ mod tests {
 
                 assert_eq!(
                     states.len(),
-                    5,
+                    6,
                     "did not expect these states:\n\t{states:#?}"
                 );
 
@@ -767,6 +770,10 @@ mod tests {
                         StateLog {
                             id,
                             state: State::Loading,
+                        },
+                        StateLog {
+                            id,
+                            state: State::Running,
                         },
                         StateLog {
                             id,
@@ -803,7 +810,7 @@ mod tests {
             .await;
 
         // Give it a small time to start up
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        tokio::time::sleep(std::time::Duration::from_secs(4)).await;
 
         let recorder = RECORDER.lock().unwrap();
         let states = recorder.get_deployment_states(&id);

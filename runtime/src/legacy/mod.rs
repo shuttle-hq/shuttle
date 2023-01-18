@@ -35,7 +35,7 @@ where
     // Mutexes are for interior mutability
     so_path: Mutex<Option<PathBuf>>,
     logs_rx: Mutex<Option<UnboundedReceiver<LogItem>>>,
-    logs_tx: Mutex<UnboundedSender<LogItem>>,
+    logs_tx: UnboundedSender<LogItem>,
     provisioner_address: Endpoint,
     kill_tx: Mutex<Option<oneshot::Sender<String>>>,
     secrets: Mutex<Option<BTreeMap<String, String>>>,
@@ -52,7 +52,7 @@ where
         Self {
             so_path: Mutex::new(None),
             logs_rx: Mutex::new(Some(rx)),
-            logs_tx: Mutex::new(tx),
+            logs_tx: tx,
             kill_tx: Mutex::new(None),
             provisioner_address,
             secrets: Mutex::new(None),
@@ -144,7 +144,7 @@ where
         );
         trace!("got factory");
 
-        let logs_tx = self.logs_tx.lock().unwrap().clone();
+        let logs_tx = self.logs_tx.clone();
 
         let logger = Logger::new(logs_tx, deployment_id);
 

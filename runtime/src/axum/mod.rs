@@ -41,7 +41,7 @@ const BODY_READ_FD: u32 = 5;
 pub struct AxumWasm {
     router: Mutex<Option<Router>>,
     logs_rx: Mutex<Option<Receiver<Result<runtime::LogItem, Status>>>>,
-    logs_tx: Mutex<Sender<Result<runtime::LogItem, Status>>>,
+    logs_tx: Sender<Result<runtime::LogItem, Status>>,
     kill_tx: Mutex<Option<oneshot::Sender<String>>>,
 }
 
@@ -58,7 +58,7 @@ impl AxumWasm {
         Self {
             router: Mutex::new(None),
             logs_rx: Mutex::new(Some(rx)),
-            logs_tx: Mutex::new(tx),
+            logs_tx: tx,
             kill_tx: Mutex::new(None),
         }
     }
@@ -104,7 +104,7 @@ impl Runtime for AxumWasm {
             .context("invalid socket address")
             .map_err(|err| Status::invalid_argument(err.to_string()))?;
 
-        let logs_tx = self.logs_tx.lock().unwrap().clone();
+        let logs_tx = self.logs_tx.clone();
 
         let (kill_tx, kill_rx) = tokio::sync::oneshot::channel();
 

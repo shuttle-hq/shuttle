@@ -10,7 +10,8 @@ use opentelemetry::global;
 use portpicker::pick_unused_port;
 use shuttle_common::storage_manager::ArtifactsStorageManager;
 use shuttle_proto::runtime::{
-    runtime_client::RuntimeClient, LoadRequest, StartRequest, StopRequest, StopResponse,
+    runtime_client::RuntimeClient, LoadRequest, StartRequest, StartResponse, StopRequest,
+    StopResponse,
 };
 
 use tokio::sync::Mutex;
@@ -25,6 +26,12 @@ use crate::{
     persistence::{DeploymentUpdater, SecretGetter},
     RuntimeManager,
 };
+
+#[derive(Debug)]
+enum RuntimeResponse {
+    Start(std::result::Result<Response<StartResponse>, Status>),
+    Stop(std::result::Result<Response<StopResponse>, Status>),
+}
 
 /// Run a task which takes runnable deploys from a channel and starts them up on our runtime
 /// A deploy is killed when it receives a signal from the kill channel
@@ -56,12 +63,18 @@ pub async fn task(
             active_deployment_getter.clone(),
             kill_send,
         );
-        let cleanup = move |result: std::result::Result<Response<StopResponse>, Status>| {
-            info!(response = ?result,  "stop client response: ");
+        let cleanup = move |res: RuntimeResponse| {
+            info!(response = ?res,  "stop client response: ");
 
-            match result {
-                Ok(_) => stopped_cleanup(&id),
-                Err(err) => crashed_cleanup(&id, err),
+            match res {
+                RuntimeResponse::Start(r) => match r {
+                    Ok(_) => {}
+                    Err(err) => start_crashed_cleanup(&id, err),
+                },
+                RuntimeResponse::Stop(r) => match r {
+                    Ok(_) => stopped_cleanup(&id),
+                    Err(err) => crashed_cleanup(&id, err),
+                },
             }
         };
         let runtime_manager = runtime_manager.clone();
@@ -177,7 +190,7 @@ impl Built {
         deployment_updater: impl DeploymentUpdater,
         kill_recv: KillReceiver,
         kill_old_deployments: impl futures::Future<Output = Result<()>>,
-        cleanup: impl FnOnce(std::result::Result<Response<StopResponse>, Status>) + Send + 'static,
+        cleanup: impl FnOnce(RuntimeResponse) + Send + 'static,
     ) -> Result<()> {
         let so_path = storage_manager.deployment_library_path(&self.id)?;
 
@@ -281,7 +294,7 @@ async fn run(
     address: SocketAddr,
     deployment_updater: impl DeploymentUpdater,
     mut kill_recv: KillReceiver,
-    cleanup: impl FnOnce(std::result::Result<Response<StopResponse>, Status>) + Send + 'static,
+    cleanup: impl FnOnce(RuntimeResponse) + Send + 'static,
 ) {
     deployment_updater.set_address(&id, &address).await.unwrap();
 
@@ -298,7 +311,7 @@ async fn run(
         Ok(response) => {
             info!(response = ?response.into_inner(),  "start client response: ");
 
-            let mut response = Err(Status::unknown("not stopped yet"));
+            let mut response = RuntimeResponse::Stop(Err(Status::unknown("not stopped yet")));
 
             while let Ok(kill_id) = kill_recv.recv().await {
                 if kill_id == id {
@@ -306,7 +319,7 @@ async fn run(
                         deployment_id: id.as_bytes().to_vec(),
                         service_name: service_name.clone(),
                     });
-                    response = runtime_client.stop(stop_request).await;
+                    response = RuntimeResponse::Stop(runtime_client.stop(stop_request).await);
 
                     break;
                 }
@@ -314,16 +327,10 @@ async fn run(
 
             cleanup(response);
         }
-        Err(status) => {
+        Err(ref status) => {
             error!("failed to start service, status code: {}", status);
 
-            let stop_request = tonic::Request::new(StopRequest {
-                deployment_id: id.as_bytes().to_vec(),
-                service_name: service_name.clone(),
-            });
-            let stop_response = runtime_client.stop(stop_request).await;
-
-            cleanup(stop_response);
+            cleanup(RuntimeResponse::Start(response));
         }
     }
 }
@@ -349,7 +356,7 @@ mod tests {
         RuntimeManager,
     };
 
-    use super::Built;
+    use super::{Built, RuntimeResponse};
 
     const RESOURCES_PATH: &str = "tests/resources";
 
@@ -412,11 +419,15 @@ mod tests {
         let (kill_send, kill_recv) = broadcast::channel(1);
         let (cleanup_send, cleanup_recv) = oneshot::channel();
 
-        let handle_cleanup = |result: std::result::Result<Response<StopResponse>, Status>| {
-            assert!(
-                result.unwrap().into_inner().success,
-                "handle should have been cancelled",
-            );
+        let handle_cleanup = |result: RuntimeResponse| {
+            if let RuntimeResponse::Stop(res) = result {
+                assert!(
+                    res.unwrap().into_inner().success,
+                    "handle should have been cancelled",
+                );
+            } else {
+                panic!("killing a service should return a stop response");
+            };
             cleanup_send.send(()).unwrap();
         };
         let secret_getter = get_secret_getter();
@@ -454,7 +465,7 @@ mod tests {
         let (_kill_send, kill_recv) = broadcast::channel(1);
         let (cleanup_send, cleanup_recv) = oneshot::channel();
 
-        let handle_cleanup = |_result: std::result::Result<Response<StopResponse>, Status>| {
+        let handle_cleanup = |_result: RuntimeResponse| {
             // let result = result.unwrap();
             // assert!(
             //     result.is_ok(),
@@ -492,7 +503,7 @@ mod tests {
         let (_kill_send, kill_recv) = broadcast::channel(1);
         let (cleanup_send, cleanup_recv) = oneshot::channel();
 
-        let handle_cleanup = |_result: std::result::Result<Response<StopResponse>, Status>| {
+        let handle_cleanup = |_result: RuntimeResponse| {
             // let result = result.unwrap();
             // assert!(
             //     matches!(result, Err(shuttle_service::Error::BindPanic(ref msg)) if msg == "panic in bind"),

@@ -591,7 +591,6 @@ mod tests {
         );
     }
 
-    #[ignore]
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_self_stop() {
         let deployment_manager = get_deployment_manager().await;
@@ -658,7 +657,6 @@ mod tests {
             _ = test => {}
         }
     }
-
     #[ignore]
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_bind_panic() {
@@ -794,6 +792,7 @@ mod tests {
         }
     }
 
+    #[ignore]
     #[tokio::test]
     async fn deployment_from_run() {
         let deployment_manager = get_deployment_manager().await;

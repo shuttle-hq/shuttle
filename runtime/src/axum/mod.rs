@@ -40,7 +40,7 @@ const BODY_FD: u32 = 4;
 pub struct AxumWasm {
     router: Mutex<Option<Router>>,
     logs_rx: Mutex<Option<Receiver<Result<runtime::LogItem, Status>>>>,
-    logs_tx: Mutex<Sender<Result<runtime::LogItem, Status>>>,
+    logs_tx: Sender<Result<runtime::LogItem, Status>>,
     kill_tx: Mutex<Option<oneshot::Sender<String>>>,
 }
 
@@ -57,7 +57,7 @@ impl AxumWasm {
         Self {
             router: Mutex::new(None),
             logs_rx: Mutex::new(Some(rx)),
-            logs_tx: Mutex::new(tx),
+            logs_tx: tx,
             kill_tx: Mutex::new(None),
         }
     }
@@ -103,7 +103,7 @@ impl Runtime for AxumWasm {
             .context("invalid socket address")
             .map_err(|err| Status::invalid_argument(err.to_string()))?;
 
-        let logs_tx = self.logs_tx.lock().unwrap().clone();
+        let logs_tx = self.logs_tx.clone();
 
         let (kill_tx, kill_rx) = tokio::sync::oneshot::channel();
 
@@ -200,7 +200,7 @@ impl RouterBuilder {
     }
 
     fn build(self) -> anyhow::Result<Router> {
-        let file = self.src.expect("module path should be set");
+        let file = self.src.context("module path should be set")?;
         let module = Module::from_file(&self.engine, file)?;
 
         for export in module.exports() {
@@ -268,14 +268,16 @@ impl Router {
                 let mut log: runtime::LogItem = log.into();
                 log.id = deployment_id.clone();
 
-                logs_tx.blocking_send(Ok(log)).unwrap();
+                logs_tx.blocking_send(Ok(log)).expect("to send log");
             }
         });
 
         let (parts, body) = req.into_parts();
 
         // Serialise request parts to rmp
-        let request_rmp = RequestWrapper::from(parts).into_rmp();
+        let request_rmp = RequestWrapper::from(parts)
+            .into_rmp()
+            .context("failed to make request wrapper")?;
 
         // Write request parts to wasm module
         parts_stream
@@ -315,9 +317,9 @@ impl Router {
         trace!("calling Router");
         self.linker
             .get(&mut store, "axum", "__SHUTTLE_Axum_call")
-            .expect("wasm module should be loaded and the router function should be available")
+            .context("wasm module should be loaded and the router function should be available")?
             .into_func()
-            .expect("router function should be a function")
+            .context("router function should be a function")?
             .typed::<(RawFd, RawFd, RawFd), ()>(&store)?
             .call(
                 &mut store,

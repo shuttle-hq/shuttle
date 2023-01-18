@@ -24,7 +24,7 @@ use tonic::{transport::Endpoint, Request, Response, Status};
 use tracing::{error, instrument, trace};
 use uuid::Uuid;
 
-use crate::provisioner_factory::{AbstractFactory, AbstractProvisionerFactory};
+use crate::provisioner_factory::ProvisionerFactory;
 
 mod error;
 
@@ -35,7 +35,7 @@ where
     // Mutexes are for interior mutability
     so_path: Mutex<Option<PathBuf>>,
     logs_rx: Mutex<Option<UnboundedReceiver<LogItem>>>,
-    logs_tx: Mutex<UnboundedSender<LogItem>>,
+    logs_tx: UnboundedSender<LogItem>,
     provisioner_address: Endpoint,
     kill_tx: Mutex<Option<oneshot::Sender<String>>>,
     secrets: Mutex<Option<BTreeMap<String, String>>>,
@@ -52,7 +52,7 @@ where
         Self {
             so_path: Mutex::new(None),
             logs_rx: Mutex::new(Some(rx)),
-            logs_tx: Mutex::new(tx),
+            logs_tx: tx,
             kill_tx: Mutex::new(None),
             provisioner_address,
             secrets: Mutex::new(None),
@@ -92,8 +92,8 @@ where
 
         let provisioner_client = ProvisionerClient::connect(self.provisioner_address.clone())
             .await
-            .expect("failed to connect to provisioner");
-        let abstract_factory = AbstractProvisionerFactory::new(provisioner_client);
+            .context("failed to connect to provisioner")
+            .map_err(|err| Status::internal(err.to_string()))?;
 
         let so_path = self
             .so_path
@@ -132,9 +132,11 @@ where
         let service_name = ServiceName::from_str(service_name.as_str())
             .map_err(|err| Status::from_error(Box::new(err)))?;
 
-        let deployment_id = Uuid::from_slice(&deployment_id).unwrap();
+        let deployment_id = Uuid::from_slice(&deployment_id)
+            .map_err(|error| Status::invalid_argument(error.to_string()))?;
 
-        let mut factory = abstract_factory.get_factory(
+        let mut factory = ProvisionerFactory::new(
+            provisioner_client,
             service_name,
             deployment_id,
             secrets,
@@ -142,7 +144,7 @@ where
         );
         trace!("got factory");
 
-        let logs_tx = self.logs_tx.lock().unwrap().clone();
+        let logs_tx = self.logs_tx.clone();
 
         let logger = Logger::new(logs_tx, deployment_id);
 
@@ -177,7 +179,7 @@ where
             // Move logger items into stream to be returned
             tokio::spawn(async move {
                 while let Some(log) = logs_rx.recv().await {
-                    tx.send(Ok(log.into())).await.unwrap();
+                    tx.send(Ok(log.into())).await.expect("to send log");
                 }
             });
 

@@ -11,8 +11,10 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use http::StatusCode;
 use serde::de::DeserializeOwned;
+use thiserror::Error;
 use tracing::trace;
 
+/// A to_json wrapper for handling our error states
 #[async_trait]
 pub trait ToJson {
     async fn to_json<T: DeserializeOwned>(self) -> Result<T>;
@@ -47,4 +49,15 @@ impl ToJson for reqwest::Response {
             Err(res.into())
         }
     }
+}
+
+/// Errors that can occur when changing types. Especially from prost
+#[derive(Error, Debug)]
+pub enum ParseError {
+    #[error("failed to parse UUID: {0}")]
+    Uuid(#[from] uuid::Error),
+    #[error("failed to parse timestamp: {0}")]
+    Timestamp(#[from] prost_types::TimestampError),
+    #[error("failed to parse serde: {0}")]
+    Serde(#[from] serde_json::Error),
 }

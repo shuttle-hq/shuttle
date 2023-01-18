@@ -10,55 +10,6 @@ use tonic::{transport::Channel, Request};
 use tracing::{debug, info, trace};
 use uuid::Uuid;
 
-/// Trait to make it easy to get a factory (service locator) for each service being started
-pub trait AbstractFactory<S: StorageManager>: Send + 'static {
-    type Output: Factory;
-
-    /// Get a factory for a specific service
-    fn get_factory(
-        &self,
-        service_name: ServiceName,
-        deployment_id: Uuid,
-        secrets: BTreeMap<String, String>,
-        storage_manager: S,
-    ) -> Self::Output;
-}
-
-/// An abstract factory that makes factories which uses provisioner
-#[derive(Clone)]
-pub struct AbstractProvisionerFactory {
-    provisioner_client: ProvisionerClient<Channel>,
-}
-
-impl<S> AbstractFactory<S> for AbstractProvisionerFactory
-where
-    S: StorageManager,
-{
-    type Output = ProvisionerFactory<S>;
-
-    fn get_factory(
-        &self,
-        service_name: ServiceName,
-        deployment_id: Uuid,
-        secrets: BTreeMap<String, String>,
-        storage_manager: S,
-    ) -> Self::Output {
-        ProvisionerFactory::new(
-            self.provisioner_client.clone(),
-            service_name,
-            deployment_id,
-            secrets,
-            storage_manager,
-        )
-    }
-}
-
-impl AbstractProvisionerFactory {
-    pub fn new(provisioner_client: ProvisionerClient<Channel>) -> Self {
-        Self { provisioner_client }
-    }
-}
-
 /// A factory (service locator) which goes through the provisioner crate
 pub struct ProvisionerFactory<S>
 where

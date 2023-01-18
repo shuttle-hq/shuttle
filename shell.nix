@@ -12,8 +12,8 @@ in
     ];
     buildInputs = with nixpkgs; [
       ((rustChannelOf{ channel = "1.65.0"; }).rust.override {
-        targets = ["wasm32-wasi"];
         extensions = ["rust-src"];
+        targets = ["wasm32-wasi"];
       })
       cargo-watch
       terraform

@@ -15,7 +15,6 @@ use crate::tracing::JsonVisitor;
 
 extern crate rmp_serde as rmps;
 
-// todo: add http extensions field
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RequestWrapper {
     #[serde(with = "http_serde::method")]

@@ -265,16 +265,13 @@ pub(crate) fn wasi_bindings(app: App) -> proc_macro2::TokenStream {
         pub extern "C" fn __SHUTTLE_Axum_call(
             logs_fd: std::os::wasi::prelude::RawFd,
             parts_fd: std::os::wasi::prelude::RawFd,
-            body_read_fd: std::os::wasi::prelude::RawFd,
-            body_write_fd: std::os::wasi::prelude::RawFd,
+            body_fd: std::os::wasi::prelude::RawFd,
         ) {
             use shuttle_next::body::{Body, HttpBody};
             use shuttle_next::tracing_prelude::*;
             use shuttle_next::Logger;
             use std::io::{Read, Write};
             use std::os::wasi::io::FromRawFd;
-
-            println!("inner handler awoken; interacting with fd={},{},{},{}", logs_fd, parts_fd, body_read_fd, body_write_fd);
 
             // file descriptor 2 for writing logs to
             let logs_fd = unsafe { std::fs::File::from_raw_fd(logs_fd) };
@@ -291,10 +288,10 @@ pub(crate) fn wasi_bindings(app: App) -> proc_macro2::TokenStream {
             // deserialize request parts from rust messagepack
             let wrapper: shuttle_next::RequestWrapper = shuttle_next::from_read(reader).unwrap();
 
-            // file descriptor 4 for reading http body into wasm
-            let mut body_read_stream = unsafe { std::fs::File::from_raw_fd(body_read_fd) };
+            // file descriptor 4 for reading and writing http body
+            let mut body_stream = unsafe { std::fs::File::from_raw_fd(body_fd) };
 
-            let mut reader = std::io::BufReader::new(&mut body_read_stream);
+            let mut reader = std::io::BufReader::new(&mut body_stream);
             let mut body_buf = Vec::new();
             reader.read_to_end(&mut body_buf).unwrap();
 
@@ -305,7 +302,6 @@ pub(crate) fn wasi_bindings(app: App) -> proc_macro2::TokenStream {
                 .body(shuttle_next::body::boxed(body))
                 .unwrap();
 
-            println!("inner router received request: {:?}", &request);
             let res = shuttle_next::block_on(__app(request));
 
             let (parts, mut body) = res.into_parts();
@@ -316,12 +312,9 @@ pub(crate) fn wasi_bindings(app: App) -> proc_macro2::TokenStream {
             // write response parts
             parts_fd.write_all(&response_parts).unwrap();
 
-            // file descriptor 5 for writing http body to host
-            let mut body_write_stream = unsafe { std::fs::File::from_raw_fd(body_write_fd) };
-
             // write body if there is one
             if let Some(body) = shuttle_next::block_on(body.data()) {
-                body_write_stream.write_all(body.unwrap().as_ref()).unwrap();
+                body_stream.write_all(body.unwrap().as_ref()).unwrap();
             }
         }
     )

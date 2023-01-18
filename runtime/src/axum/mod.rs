@@ -1,6 +1,6 @@
 use std::convert::Infallible;
 use std::io::{BufReader, Read, Write};
-use std::net::SocketAddr;
+use std::net::{Shutdown, SocketAddr};
 use std::ops::DerefMut;
 use std::os::unix::prelude::RawFd;
 use std::path::{Path, PathBuf};
@@ -35,8 +35,7 @@ extern crate rmp_serde as rmps;
 
 const LOGS_FD: u32 = 20;
 const PARTS_FD: u32 = 3;
-const BODY_WRITE_FD: u32 = 4;
-const BODY_READ_FD: u32 = 5;
+const BODY_FD: u32 = 4;
 
 pub struct AxumWasm {
     router: Mutex<Option<Router>>,
@@ -244,15 +243,12 @@ impl Router {
             UnixStream::pair().context("failed to open logs unixstream")?;
         let (mut parts_stream, parts_client) =
             UnixStream::pair().context("failed to open parts unixstream")?;
-        let (mut body_write_stream, body_write_client) =
+        let (mut body_stream, body_client) =
             UnixStream::pair().context("failed to open body write unixstream")?;
-        let (body_read_stream, body_read_client) =
-            UnixStream::pair().context("failed to open body read unixstream")?;
 
         let logs_client = WasiUnixStream::from_cap_std(logs_client);
         let parts_client = WasiUnixStream::from_cap_std(parts_client);
-        let body_write_client = WasiUnixStream::from_cap_std(body_write_client);
-        let body_read_client = WasiUnixStream::from_cap_std(body_read_client);
+        let body_client = WasiUnixStream::from_cap_std(body_client);
 
         store
             .data_mut()
@@ -263,10 +259,7 @@ impl Router {
             .insert_file(PARTS_FD, Box::new(parts_client), FileCaps::all());
         store
             .data_mut()
-            .insert_file(BODY_WRITE_FD, Box::new(body_write_client), FileCaps::all());
-        store
-            .data_mut()
-            .insert_file(BODY_READ_FD, Box::new(body_read_client), FileCaps::all());
+            .insert_file(BODY_FD, Box::new(body_client), FileCaps::all());
 
         tokio::task::spawn_blocking(move || {
             let mut iter = logs_stream.bytes().filter_map(Result::ok);
@@ -310,12 +303,14 @@ impl Router {
             .context("failed to concatenate request body buffers")?;
 
         // Write body to wasm
-        body_write_stream
+        body_stream
             .write_all(body_bytes.as_ref())
             .context("failed to write body to wasm")?;
 
-        // Drop stream to signal EOF
-        drop(body_write_stream);
+        // Shut down the write part of the stream to signal EOF
+        body_stream
+            .shutdown(Shutdown::Write)
+            .expect("failed to shut down body write half");
 
         // Call our function in wasm, telling it to route the request we've written to it
         // and write back a response
@@ -325,15 +320,10 @@ impl Router {
             .context("wasm module should be loaded and the router function should be available")?
             .into_func()
             .context("router function should be a function")?
-            .typed::<(RawFd, RawFd, RawFd, RawFd), ()>(&store)?
+            .typed::<(RawFd, RawFd, RawFd), ()>(&store)?
             .call(
                 &mut store,
-                (
-                    LOGS_FD as i32,
-                    PARTS_FD as i32,
-                    BODY_WRITE_FD as i32,
-                    BODY_READ_FD as i32,
-                ),
+                (LOGS_FD as i32, PARTS_FD as i32, BODY_FD as i32),
             )?;
 
         // Read response parts from wasm
@@ -344,7 +334,7 @@ impl Router {
             rmps::from_read(reader).context("failed to deserialize response parts")?;
 
         // Read response body from wasm, convert it to a Stream and pass it to hyper
-        let reader = BufReader::new(body_read_stream);
+        let reader = BufReader::new(body_stream);
         let stream = futures::stream::iter(reader.bytes()).try_chunks(2);
         let body = hyper::Body::wrap_stream(stream);
 
@@ -411,17 +401,36 @@ async fn run_until_stopped(
 
 #[cfg(test)]
 pub mod tests {
+    use std::process::Command;
+
     use super::*;
     use hyper::{http::HeaderValue, Method, Request, StatusCode, Version};
     use uuid::Uuid;
 
+    // Compile axum wasm module
+    fn compile_module() {
+        Command::new("cargo")
+            .arg("build")
+            .arg("--target")
+            .arg("wasm32-wasi")
+            .current_dir("tests/resources/axum-wasm-expanded")
+            .spawn()
+            .unwrap()
+            .wait()
+            .unwrap();
+    }
+
     #[tokio::test]
     async fn axum() {
+        compile_module();
+
         let router = RouterBuilder::new()
             .unwrap()
             .src("axum.wasm")
+            .src("tests/resources/axum-wasm-expanded/target/wasm32-wasi/debug/shuttle_axum_expanded.wasm")
             .build()
             .unwrap();
+
         let id = Uuid::default().as_bytes().to_vec();
         let (tx, mut rx) = mpsc::channel(1);
 

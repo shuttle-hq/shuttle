@@ -341,13 +341,11 @@ mod tests {
 
     use async_trait::async_trait;
     use shuttle_common::storage_manager::ArtifactsStorageManager;
-    use shuttle_proto::runtime::StopResponse;
     use tempdir::TempDir;
     use tokio::{
         sync::{broadcast, oneshot, Mutex},
         time::sleep,
     };
-    use tonic::{Response, Status};
     use uuid::Uuid;
 
     use crate::{

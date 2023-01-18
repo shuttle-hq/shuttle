@@ -1,8 +1,8 @@
 use proc_macro_error::emit_error;
 use quote::{quote, ToTokens};
 use syn::{
-    parenthesized, parse::Parse, parse2, punctuated::Punctuated, token::Paren, Expr, File, Ident,
-    Item, ItemFn, Lit, LitStr, Token,
+    parenthesized, parse::Parse, parse2, punctuated::Punctuated, token::Paren, Expr, ExprLit, File,
+    Ident, Item, ItemFn, Lit, LitStr, Token,
 };
 
 #[derive(Debug, Eq, PartialEq)]
@@ -136,10 +136,13 @@ impl Endpoint {
                         );
                         has_err = true;
                     }
-                    if let Expr::Lit(literal) = value {
-                        if let Some(Lit::Str(literal)) = Some(literal.lit) {
-                            route = Some(literal);
-                        }
+
+                    if let Expr::Lit(ExprLit {
+                        lit: Lit::Str(literal),
+                        ..
+                    }) = value
+                    {
+                        route = Some(literal);
                     }
                 }
                 _ => {

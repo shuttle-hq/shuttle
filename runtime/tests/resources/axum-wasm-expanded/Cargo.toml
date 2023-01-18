@@ -1,3 +1,5 @@
+[workspace]
+
 [package]
 name = "shuttle-axum-expanded"
 version = "0.1.0"
@@ -8,5 +10,5 @@ crate-type = [ "cdylib" ]
 
 [dependencies]
 futures = "0.3.25"
-shuttle-next = "0.8.0"
+shuttle-next = { path = "../../../../next" }
 tracing = "0.1.37"

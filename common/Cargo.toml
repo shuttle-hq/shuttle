@@ -16,12 +16,14 @@ crossterm =  { version = "0.25.0", optional = true }
 http = { version = "0.2.8", optional = true }
 http-serde = { version = "1.1.2", optional = true }
 once_cell = { workspace = true, optional = true }
+prost-types = { workspace = true, optional = true }
 reqwest = { version = "0.11.13", optional = true }
 rmp-serde = { version = "1.1.1", optional = true }
 rustrict = { version = "0.5.5", optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true, optional = true }
 strum = { version = "0.24.1", features = ["derive"], optional = true }
+thiserror = { workspace = true, optional = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, optional = true }
 uuid = { workspace = true, features = ["v4", "serde"], optional = true }
@@ -35,5 +37,5 @@ backend = ["async-trait", "axum"]
 display = ["comfy-table", "crossterm"]
 tracing = ["serde_json"]
 wasm = ["http-serde", "http", "rmp-serde", "tracing", "tracing-subscriber"]
-models = ["anyhow", "async-trait", "display", "http", "reqwest", "serde_json", "service"]
+models = ["anyhow", "async-trait", "display", "http", "prost-types", "reqwest", "serde_json", "service", "thiserror"]
 service = ["chrono/serde", "once_cell", "rustrict", "serde/derive", "strum", "uuid"]

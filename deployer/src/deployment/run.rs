@@ -241,19 +241,23 @@ async fn load(
 ) -> Result<()> {
     info!(
         "loading project from: {}",
-        so_path.clone().into_os_string().into_string().unwrap()
+        so_path
+            .clone()
+            .into_os_string()
+            .into_string()
+            .unwrap_or_default()
     );
 
     let secrets = secret_getter
         .get_secrets(&service_id)
         .await
-        .unwrap()
+        .map_err(|e| Error::SecretsGet(Box::new(e)))?
         .into_iter()
         .map(|secret| (secret.key, secret.value));
     let secrets = HashMap::from_iter(secrets);
 
     let load_request = tonic::Request::new(LoadRequest {
-        path: so_path.into_os_string().into_string().unwrap(),
+        path: so_path.into_os_string().into_string().unwrap_or_default(),
         service_name: service_name.clone(),
         secrets,
     });
@@ -283,7 +287,10 @@ async fn run(
     mut kill_recv: KillReceiver,
     cleanup: impl FnOnce(std::result::Result<Response<StopResponse>, Status>) + Send + 'static,
 ) {
-    deployment_updater.set_address(&id, &address).await.unwrap();
+    deployment_updater
+        .set_address(&id, &address)
+        .await
+        .expect("to set deployment address");
 
     let start_request = tonic::Request::new(StartRequest {
         deployment_id: id.as_bytes().to_vec(),
@@ -292,7 +299,10 @@ async fn run(
     });
 
     info!("starting service");
-    let response = runtime_client.start(start_request).await.unwrap();
+    let response = runtime_client
+        .start(start_request)
+        .await
+        .expect("to start deployment");
 
     info!(response = ?response.into_inner(),  "start client response: ");
 

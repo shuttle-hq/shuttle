@@ -44,11 +44,11 @@ impl From<http::request::Parts> for RequestWrapper {
 
 impl RequestWrapper {
     /// Serialize a RequestWrapper to the Rust MessagePack data format
-    pub fn into_rmp(self) -> Vec<u8> {
+    pub fn into_rmp(self) -> Result<Vec<u8>, rmps::encode::Error> {
         let mut buf = Vec::new();
-        self.serialize(&mut Serializer::new(&mut buf)).unwrap();
+        self.serialize(&mut Serializer::new(&mut buf))?;
 
-        buf
+        Ok(buf)
     }
 
     /// Consume the wrapper and return a request builder with `Parts` set
@@ -60,7 +60,7 @@ impl RequestWrapper {
 
         request
             .headers_mut()
-            .unwrap()
+            .unwrap() // Safe to unwrap as we just made the builder
             .extend(self.headers.into_iter());
 
         request
@@ -92,11 +92,11 @@ impl From<http::response::Parts> for ResponseWrapper {
 
 impl ResponseWrapper {
     /// Serialize a ResponseWrapper into the Rust MessagePack data format
-    pub fn into_rmp(self) -> Vec<u8> {
+    pub fn into_rmp(self) -> Result<Vec<u8>, rmps::encode::Error> {
         let mut buf = Vec::new();
-        self.serialize(&mut Serializer::new(&mut buf)).unwrap();
+        self.serialize(&mut Serializer::new(&mut buf))?;
 
-        buf
+        Ok(buf)
     }
 
     /// Consume the wrapper and return a response builder with `Parts` set
@@ -107,7 +107,7 @@ impl ResponseWrapper {
 
         response
             .headers_mut()
-            .unwrap()
+            .unwrap() // Safe to unwrap since we just made the builder
             .extend(self.headers.into_iter());
 
         response
@@ -389,7 +389,7 @@ mod test {
             .unwrap();
 
         let (parts, _) = request.into_parts();
-        let rmp = RequestWrapper::from(parts).into_rmp();
+        let rmp = RequestWrapper::from(parts).into_rmp().unwrap();
 
         let back: RequestWrapper = rmps::from_slice(&rmp).unwrap();
 
@@ -415,7 +415,7 @@ mod test {
             .unwrap();
 
         let (parts, _) = response.into_parts();
-        let rmp = ResponseWrapper::from(parts).into_rmp();
+        let rmp = ResponseWrapper::from(parts).into_rmp().unwrap();
 
         let back: ResponseWrapper = rmps::from_slice(&rmp).unwrap();
 

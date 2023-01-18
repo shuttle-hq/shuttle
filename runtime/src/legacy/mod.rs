@@ -92,7 +92,8 @@ where
 
         let provisioner_client = ProvisionerClient::connect(self.provisioner_address.clone())
             .await
-            .expect("failed to connect to provisioner");
+            .context("failed to connect to provisioner")
+            .map_err(|err| Status::internal(err.to_string()))?;
         let abstract_factory = AbstractProvisionerFactory::new(provisioner_client);
 
         let so_path = self
@@ -132,7 +133,8 @@ where
         let service_name = ServiceName::from_str(service_name.as_str())
             .map_err(|err| Status::from_error(Box::new(err)))?;
 
-        let deployment_id = Uuid::from_slice(&deployment_id).unwrap();
+        let deployment_id = Uuid::from_slice(&deployment_id)
+            .map_err(|error| Status::invalid_argument(error.to_string()))?;
 
         let mut factory = abstract_factory.get_factory(
             service_name,
@@ -177,7 +179,7 @@ where
             // Move logger items into stream to be returned
             tokio::spawn(async move {
                 while let Some(log) = logs_rx.recv().await {
-                    tx.send(Ok(log.into())).await.unwrap();
+                    tx.send(Ok(log.into())).await.expect("to send log");
                 }
             });
 

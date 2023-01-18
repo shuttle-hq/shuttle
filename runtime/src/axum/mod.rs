@@ -201,7 +201,7 @@ impl RouterBuilder {
     }
 
     fn build(self) -> anyhow::Result<Router> {
-        let file = self.src.expect("module path should be set");
+        let file = self.src.context("module path should be set")?;
         let module = Module::from_file(&self.engine, file)?;
 
         for export in module.exports() {
@@ -275,14 +275,16 @@ impl Router {
                 let mut log: runtime::LogItem = log.into();
                 log.id = deployment_id.clone();
 
-                logs_tx.blocking_send(Ok(log)).unwrap();
+                logs_tx.blocking_send(Ok(log)).expect("to send log");
             }
         });
 
         let (parts, body) = req.into_parts();
 
         // Serialise request parts to rmp
-        let request_rmp = RequestWrapper::from(parts).into_rmp();
+        let request_rmp = RequestWrapper::from(parts)
+            .into_rmp()
+            .context("failed to make request wrapper")?;
 
         // Write request parts to wasm module
         parts_stream
@@ -320,9 +322,9 @@ impl Router {
         trace!("calling Router");
         self.linker
             .get(&mut store, "axum", "__SHUTTLE_Axum_call")
-            .expect("wasm module should be loaded and the router function should be available")
+            .context("wasm module should be loaded and the router function should be available")?
             .into_func()
-            .expect("router function should be a function")
+            .context("router function should be a function")?
             .typed::<(RawFd, RawFd, RawFd, RawFd), ()>(&store)?
             .call(
                 &mut store,

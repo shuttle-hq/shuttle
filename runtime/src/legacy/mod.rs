@@ -1,14 +1,9 @@
 use std::{
-    collections::BTreeMap,
-    iter::FromIterator,
-    net::{Ipv4Addr, SocketAddr},
-    ops::DerefMut,
-    path::PathBuf,
-    str::FromStr,
-    sync::Mutex,
+    collections::BTreeMap, iter::FromIterator, net::SocketAddr, ops::DerefMut, path::PathBuf,
+    str::FromStr, sync::Mutex,
 };
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use shuttle_common::{storage_manager::StorageManager, LogItem};
 use shuttle_proto::{
@@ -128,9 +123,11 @@ where
         let StartRequest {
             deployment_id,
             service_name,
-            port,
+            ip,
         } = request.into_inner();
-        let service_address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port as u16);
+        let service_address = SocketAddr::from_str(&ip)
+            .context("invalid socket address")
+            .map_err(|err| Status::invalid_argument(err.to_string()))?;
 
         let service_name = ServiceName::from_str(service_name.as_str())
             .map_err(|err| Status::from_error(Box::new(err)))?;

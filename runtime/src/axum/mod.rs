@@ -1,6 +1,6 @@
 use std::convert::Infallible;
 use std::io::{BufReader, Read, Write};
-use std::net::{Ipv4Addr, SocketAddr};
+use std::net::SocketAddr;
 use std::ops::DerefMut;
 use std::os::unix::prelude::RawFd;
 use std::path::{Path, PathBuf};
@@ -97,12 +97,12 @@ impl Runtime for AxumWasm {
         request: tonic::Request<StartRequest>,
     ) -> Result<tonic::Response<StartResponse>, Status> {
         let StartRequest {
-            deployment_id,
-            port,
-            ..
+            deployment_id, ip, ..
         } = request.into_inner();
 
-        let address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port as u16);
+        let address = SocketAddr::from_str(&ip)
+            .context("invalid socket address")
+            .map_err(|err| Status::invalid_argument(err.to_string()))?;
 
         let logs_tx = self.logs_tx.lock().unwrap().clone();
 

@@ -288,7 +288,7 @@ async fn run(
     let start_request = tonic::Request::new(StartRequest {
         deployment_id: id.as_bytes().to_vec(),
         service_name: service_name.clone(),
-        port: address.port() as u32,
+        ip: address.to_string(),
     });
 
     info!("starting service");

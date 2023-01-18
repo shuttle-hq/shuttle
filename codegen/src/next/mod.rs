@@ -124,7 +124,23 @@ impl Endpoint {
                         has_err = true;
                     }
                     if let Expr::Path(path) = value {
-                        method = Some(path.path.segments[0].ident.clone());
+                        let method_ident = Some(path.path.segments[0].ident.clone());
+
+                        // Unwrap is safe because we just set the value
+                        match method_ident.as_ref().unwrap().to_string().as_str() {
+                            "get" | "post" | "delete" | "put" | "options" | "head" | "trace"
+                            | "patch" => {
+                                method = method_ident;
+                            }
+                            _ => {
+                                emit_error!(
+                                    method_ident,
+                                    "method is not supported";
+                                    hint = "Try one of the following: `get`, `post`, `delete`, `put`, `options`, `head`, `trace` or `patch`"
+                                );
+                                has_err = true;
+                            }
+                        };
                     };
                 }
                 "route" => {
@@ -194,17 +210,6 @@ impl ToTokens for Endpoint {
             method,
             function,
         } = self;
-
-        match method.to_string().as_str() {
-            "get" | "post" | "delete" | "put" | "options" | "head" | "trace" | "patch" => {}
-            _ => {
-                emit_error!(
-                    method,
-                    "method is not supported";
-                    hint = "Try one of the following: `get`, `post`, `delete`, `put`, `options`, `head`, `trace` or `patch`"
-                )
-            }
-        };
 
         let route = quote!(.route(#route, shuttle_next::routing::#method(#function)));
 

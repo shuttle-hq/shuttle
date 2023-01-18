@@ -354,39 +354,80 @@ mod tests {
 
     #[test]
     fn app_to_token() {
-        let app = App {
-            endpoints: vec![
-                Endpoint {
-                    route: parse_quote!("/hello"),
-                    method: parse_quote!(get),
-                    function: parse_quote!(hello),
+        let cases = vec![
+            (
+                App {
+                    endpoints: vec![
+                        Endpoint {
+                            route: parse_quote!("/hello"),
+                            method: parse_quote!(get),
+                            function: parse_quote!(hello),
+                        },
+                        Endpoint {
+                            route: parse_quote!("/goodbye"),
+                            method: parse_quote!(post),
+                            function: parse_quote!(goodbye),
+                        },
+                    ],
                 },
-                Endpoint {
-                    route: parse_quote!("/goodbye"),
-                    method: parse_quote!(post),
-                    function: parse_quote!(goodbye),
+                quote!(
+                    async fn __app(
+                        request: shuttle_next::Request<shuttle_next::body::BoxBody>,
+                    ) -> shuttle_next::response::Response {
+                        use shuttle_next::Service;
+
+                        let mut router = shuttle_next::Router::new()
+                            .route("/hello", shuttle_next::routing::get(hello))
+                            .route("/goodbye", shuttle_next::routing::post(goodbye));
+
+                        let response = router.call(request).await.unwrap();
+
+                        response
+                    }
+                ),
+            ),
+            (
+                App {
+                    endpoints: vec![
+                        Endpoint {
+                            route: parse_quote!("/hello"),
+                            method: parse_quote!(get),
+                            function: parse_quote!(hello),
+                        },
+                        Endpoint {
+                            route: parse_quote!("/goodbye"),
+                            method: parse_quote!(get),
+                            function: parse_quote!(get_goodbye),
+                        },
+                        Endpoint {
+                            route: parse_quote!("/goodbye"),
+                            method: parse_quote!(post),
+                            function: parse_quote!(post_goodbye),
+                        },
+                    ],
                 },
-            ],
-        };
+                quote!(
+                    async fn __app(
+                        request: shuttle_next::Request<shuttle_next::body::BoxBody>,
+                    ) -> shuttle_next::response::Response {
+                        use shuttle_next::Service;
 
-        let actual = quote!(#app);
-        let expected = quote!(
-            async fn __app(
-                request: shuttle_next::Request<shuttle_next::body::BoxBody>,
-            ) -> shuttle_next::response::Response {
-                use shuttle_next::Service;
+                        let mut router = shuttle_next::Router::new()
+                            .route("/hello", shuttle_next::routing::get(hello))
+                            .route("/goodbye", shuttle_next::routing::get(get_goodbye).shuttle_next::routing::post(post_goodbye));
 
-                let mut router = shuttle_next::Router::new()
-                    .route("/hello", shuttle_next::routing::get(hello))
-                    .route("/goodbye", shuttle_next::routing::post(goodbye));
+                        let response = router.call(request).await.unwrap();
 
-                let response = router.call(request).await.unwrap();
+                        response
+                    }
+                ),
+            ),
+        ];
 
-                response
-            }
-        );
-
-        assert_eq!(actual.to_string(), expected.to_string());
+        for (app, expected) in cases {
+            let actual = quote!(#app);
+            assert_eq!(actual.to_string(), expected.to_string());
+        }
     }
 
     #[test]

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use proc_macro_error::emit_error;
 use quote::{quote, ToTokens};
 use syn::{
@@ -203,6 +205,18 @@ impl Endpoint {
     }
 }
 
+#[derive(Debug, Eq, PartialEq)]
+pub struct EndpointChain {
+    route: LitStr,
+    handlers: Vec<Handler>,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct Handler {
+    method: Ident,
+    function: Ident,
+}
+
 impl ToTokens for Endpoint {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let Self {
@@ -212,6 +226,26 @@ impl ToTokens for Endpoint {
         } = self;
 
         let route = quote!(.route(#route, shuttle_next::routing::#method(#function)));
+
+        route.to_tokens(tokens);
+    }
+}
+
+impl ToTokens for Handler {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        let Self { method, function } = self;
+
+        let handler = quote!(shuttle_next::routing::#method(#function));
+
+        handler.to_tokens(tokens);
+    }
+}
+
+impl ToTokens for EndpointChain {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        let Self { route, handlers } = self;
+
+        let route = quote!(.route(#route, #(#handlers).*));
 
         route.to_tokens(tokens);
     }
@@ -245,13 +279,35 @@ impl ToTokens for App {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let Self { endpoints } = self;
 
+        let mut endpoint_chains = endpoints
+            .iter()
+            .fold(HashMap::new(), |mut grouped, endpoint| {
+                grouped
+                    .entry(endpoint.route.clone())
+                    .or_insert_with(Vec::new)
+                    .push(Handler {
+                        method: endpoint.method.clone(),
+                        function: endpoint.function.clone(),
+                    });
+                grouped
+            })
+            .into_iter()
+            .map(|(key, value)| EndpointChain {
+                route: key,
+                handlers: value,
+            })
+            .collect::<Vec<EndpointChain>>();
+
+        // Sort endpoints by route alphabetically to ensure test consistency
+        endpoint_chains.sort_by(|a, b| a.route.value().cmp(&b.route.value()));
+
         let app = quote!(
             async fn __app(request: shuttle_next::Request<shuttle_next::body::BoxBody>,) -> shuttle_next::response::Response
             {
                 use shuttle_next::Service;
 
                 let mut router = shuttle_next::Router::new()
-                    #(#endpoints)*;
+                    #(#endpoint_chains)*;
 
                 let response = router.call(request).await.unwrap();
 
@@ -377,8 +433,8 @@ mod tests {
                         use shuttle_next::Service;
 
                         let mut router = shuttle_next::Router::new()
-                            .route("/hello", shuttle_next::routing::get(hello))
-                            .route("/goodbye", shuttle_next::routing::post(goodbye));
+                            .route("/goodbye", shuttle_next::routing::post(goodbye))
+                            .route("/hello", shuttle_next::routing::get(hello));
 
                         let response = router.call(request).await.unwrap();
 
@@ -413,8 +469,8 @@ mod tests {
                         use shuttle_next::Service;
 
                         let mut router = shuttle_next::Router::new()
-                            .route("/hello", shuttle_next::routing::get(hello))
-                            .route("/goodbye", shuttle_next::routing::get(get_goodbye).shuttle_next::routing::post(post_goodbye));
+                            .route("/goodbye", shuttle_next::routing::get(get_goodbye).shuttle_next::routing::post(post_goodbye))
+                            .route("/hello", shuttle_next::routing::get(hello));
 
                         let response = router.call(request).await.unwrap();
 

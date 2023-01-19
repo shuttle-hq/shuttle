@@ -92,7 +92,9 @@ pub extern "C" fn __SHUTTLE_Axum_call(
     let (parts, mut body) = res.into_parts();
 
     // wrap and serialize response parts as rmp
-    let response_parts = shuttle_next::ResponseWrapper::from(parts).into_rmp();
+    let response_parts = shuttle_next::ResponseWrapper::from(parts)
+        .into_rmp()
+        .expect("failed to serialize response");
 
     // write response parts
     parts_fd.write_all(&response_parts).unwrap();

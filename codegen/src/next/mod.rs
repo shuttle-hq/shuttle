@@ -225,7 +225,7 @@ impl ToTokens for Endpoint {
             function,
         } = self;
 
-        let route = quote!(.route(#route, shuttle_next::routing::#method(#function)));
+        let route = quote!(.route(#route, #method(#function)));
 
         route.to_tokens(tokens);
     }
@@ -235,7 +235,7 @@ impl ToTokens for Handler {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let Self { method, function } = self;
 
-        let handler = quote!(shuttle_next::routing::#method(#function));
+        let handler = quote!(#method(#function));
 
         handler.to_tokens(tokens);
     }
@@ -281,15 +281,26 @@ impl ToTokens for App {
 
         let mut endpoint_chains = endpoints
             .iter()
-            .fold(HashMap::new(), |mut grouped, endpoint| {
-                grouped
-                    .entry(endpoint.route.clone())
-                    .or_insert_with(Vec::new)
-                    .push(Handler {
-                        method: endpoint.method.clone(),
-                        function: endpoint.function.clone(),
-                    });
-                grouped
+            .fold(HashMap::new(), |mut chain, endpoint| {
+                let route = endpoint.route.clone();
+                let entry = chain
+                    .entry(route.clone())
+                    .or_insert_with(Vec::<Handler>::new);
+
+                let method = endpoint.method.clone();
+                let function = endpoint.function.clone();
+
+                if entry.iter().any(|handler| handler.method == method) {
+                    emit_error!(
+                        method,
+                        "only one method of each type is allowed per route";
+                        hint = format!("Remove one of the {} methods on the \"{}\" route.", method, route.value())
+                    );
+                } else {
+                    entry.push(Handler { method, function });
+                }
+
+                chain
             })
             .into_iter()
             .map(|(key, value)| EndpointChain {
@@ -304,6 +315,7 @@ impl ToTokens for App {
         let app = quote!(
             async fn __app(request: shuttle_next::Request<shuttle_next::body::BoxBody>,) -> shuttle_next::response::Response
             {
+                use shuttle_next::routing::*;
                 use shuttle_next::Service;
 
                 let mut router = shuttle_next::Router::new()
@@ -371,7 +383,9 @@ pub(crate) fn wasi_bindings(app: App) -> proc_macro2::TokenStream {
             let (parts, mut body) = res.into_parts();
 
             // wrap and serialize response parts as rmp
-            let response_parts = shuttle_next::ResponseWrapper::from(parts).into_rmp();
+            let response_parts = shuttle_next::ResponseWrapper::from(parts)
+                .into_rmp()
+                .expect("failed to serialize response");
 
             // write response parts
             parts_fd.write_all(&response_parts).unwrap();
@@ -403,7 +417,7 @@ mod tests {
         };
 
         let actual = quote!(#endpoint);
-        let expected = quote!(.route("/hello", shuttle_next::routing::get(hello)));
+        let expected = quote!(.route("/hello", get(hello)));
 
         assert_eq!(actual.to_string(), expected.to_string());
     }
@@ -430,11 +444,12 @@ mod tests {
                     async fn __app(
                         request: shuttle_next::Request<shuttle_next::body::BoxBody>,
                     ) -> shuttle_next::response::Response {
+                        use shuttle_next::routing::*;
                         use shuttle_next::Service;
 
                         let mut router = shuttle_next::Router::new()
-                            .route("/goodbye", shuttle_next::routing::post(goodbye))
-                            .route("/hello", shuttle_next::routing::get(hello));
+                            .route("/goodbye", post(goodbye))
+                            .route("/hello", get(hello));
 
                         let response = router.call(request).await.unwrap();
 
@@ -466,11 +481,12 @@ mod tests {
                     async fn __app(
                         request: shuttle_next::Request<shuttle_next::body::BoxBody>,
                     ) -> shuttle_next::response::Response {
+                        use shuttle_next::routing::*;
                         use shuttle_next::Service;
 
                         let mut router = shuttle_next::Router::new()
-                            .route("/goodbye", shuttle_next::routing::get(get_goodbye).shuttle_next::routing::post(post_goodbye))
-                            .route("/hello", shuttle_next::routing::get(hello));
+                            .route("/goodbye", get(get_goodbye).post(post_goodbye))
+                            .route("/hello", get(hello));
 
                         let response = router.call(request).await.unwrap();
 

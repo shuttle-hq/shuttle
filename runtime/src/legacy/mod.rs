@@ -10,7 +10,7 @@ use std::{
 
 use anyhow::anyhow;
 use async_trait::async_trait;
-use shuttle_common::{deployment::State, storage_manager::StorageManager, LogItem};
+use shuttle_common::{storage_manager::StorageManager, LogItem};
 use shuttle_proto::{
     provisioner::provisioner_client::ProvisionerClient,
     runtime::{

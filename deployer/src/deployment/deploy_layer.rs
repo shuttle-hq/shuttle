@@ -353,7 +353,7 @@ mod tests {
           Ok(value) => {
             value
               .to_ascii_lowercase()
-              .split(",")
+              .split(',')
               .map(|filter| match filter.trim() {
                 "new" => FmtSpan::NEW,
                 "enter" => FmtSpan::ENTER,
@@ -527,7 +527,7 @@ mod tests {
 
     async fn test_states(id: &Uuid, expected_states: Vec<StateLog>) {
         loop {
-            let states = RECORDER.lock().unwrap().get_deployment_states(&id);
+            let states = RECORDER.lock().unwrap().get_deployment_states(id);
 
             if *states == expected_states {
                 break;

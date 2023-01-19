@@ -4,7 +4,6 @@ use std::net::{Ipv4Addr, SocketAddr};
 use std::ops::DerefMut;
 use std::os::unix::prelude::RawFd;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use std::sync::Mutex;
 
 use anyhow::Context;
@@ -18,14 +17,14 @@ use shuttle_common::wasm::{Bytesable, Log, RequestWrapper, ResponseWrapper};
 use shuttle_proto::runtime::runtime_server::Runtime;
 use shuttle_proto::runtime::{
     self, LoadRequest, LoadResponse, StartRequest, StartResponse, StopRequest, StopResponse,
-    SubscribeLogsRequest,
+    SubscribeLogsRequest, SubscribeStopRequest, SubscribeStopResponse,
 };
-use shuttle_service::ServiceName;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::{mpsc, oneshot};
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::Status;
 use tracing::{error, trace};
+use uuid::Uuid;
 use wasi_common::file::FileCaps;
 use wasmtime::{Engine, Linker, Module, Store};
 use wasmtime_wasi::sync::net::UnixStream as WasiUnixStream;
@@ -150,16 +149,14 @@ impl Runtime for AxumWasm {
         &self,
         request: tonic::Request<StopRequest>,
     ) -> Result<tonic::Response<StopResponse>, Status> {
-        let request = request.into_inner();
-
-        let service_name = ServiceName::from_str(request.service_name.as_str())
-            .map_err(|err| Status::from_error(Box::new(err)))?;
+        let StopRequest { deployment_id } = request.into_inner();
+        let deployment_id = Uuid::from_slice(&deployment_id).unwrap();
 
         let kill_tx = self.kill_tx.lock().unwrap().deref_mut().take();
 
         if let Some(kill_tx) = kill_tx {
             if kill_tx
-                .send(format!("stopping deployment: {}", &service_name))
+                .send(format!("stopping deployment: {}", &deployment_id))
                 .is_err()
             {
                 error!("the receiver dropped");
@@ -172,6 +169,18 @@ impl Runtime for AxumWasm {
                 "trying to stop a service that was not started",
             ))
         }
+    }
+
+    type SubscribeStopStream = ReceiverStream<Result<SubscribeStopResponse, Status>>;
+
+    async fn subscribe_stop(
+        &self,
+        _request: tonic::Request<SubscribeStopRequest>,
+    ) -> Result<tonic::Response<Self::SubscribeStopStream>, Status> {
+        // Next does not really have a stopped state. Endpoints are loaded if and when needed until a request is done
+        let (_tx, rx) = mpsc::channel(1);
+
+        Ok(tonic::Response::new(ReceiverStream::new(rx)))
     }
 }
 struct RouterBuilder {

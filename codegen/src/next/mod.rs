@@ -206,8 +206,8 @@ impl Endpoint {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub struct EndpointChain {
-    route: LitStr,
+pub struct EndpointChain<'a> {
+    route: &'a LitStr,
     handlers: Vec<Handler>,
 }
 
@@ -241,7 +241,7 @@ impl ToTokens for Handler {
     }
 }
 
-impl ToTokens for EndpointChain {
+impl<'a> ToTokens for EndpointChain<'a> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let Self { route, handlers } = self;
 
@@ -282,9 +282,8 @@ impl ToTokens for App {
         let mut endpoint_chains = endpoints
             .iter()
             .fold(HashMap::new(), |mut chain, endpoint| {
-                let route = endpoint.route.clone();
                 let entry = chain
-                    .entry(route.clone())
+                    .entry(&endpoint.route)
                     .or_insert_with(Vec::<Handler>::new);
 
                 let method = endpoint.method.clone();
@@ -294,7 +293,7 @@ impl ToTokens for App {
                     emit_error!(
                         method,
                         "only one method of each type is allowed per route";
-                        hint = format!("Remove one of the {} methods on the \"{}\" route.", method, route.value())
+                        hint = format!("Remove one of the {} methods on the \"{}\" route.", method, endpoint.route.value())
                     );
                 } else {
                     entry.push(Handler { method, function });

@@ -49,6 +49,7 @@ CONTAINER_REGISTRY=public.ecr.aws/shuttle
 DD_ENV=production
 # make sure we only ever go to production with `--tls=enable`
 USE_TLS=enable
+CARGO_PROFILE=release
 else
 DOCKER_COMPOSE_FILES=-f docker-compose.yml -f docker-compose.dev.yml
 STACK?=shuttle-dev
@@ -57,6 +58,7 @@ DB_FQDN=db.unstable.shuttle.rs
 CONTAINER_REGISTRY=public.ecr.aws/shuttle-dev
 DD_ENV=unstable
 USE_TLS?=disable
+CARGO_PROFILE=debug
 endif
 
 POSTGRES_EXTRA_PATH?=./extras/postgres
@@ -112,6 +114,7 @@ shuttle-%: ${SRC} Cargo.lock
 	docker buildx build \
 	       --build-arg folder=$(*) \
 		   --build-arg RUSTUP_TOOLCHAIN=$(RUSTUP_TOOLCHAIN) \
+		   --build-arg CARGO_PROFILE=$(CARGO_PROFILE) \
 	       --tag $(CONTAINER_REGISTRY)/$(*):$(COMMIT_SHA) \
 	       --tag $(CONTAINER_REGISTRY)/$(*):$(TAG) \
 	       --tag $(CONTAINER_REGISTRY)/$(*):latest \

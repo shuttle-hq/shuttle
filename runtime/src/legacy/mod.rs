@@ -258,7 +258,7 @@ where
 }
 
 /// Run the service until a stop signal is received
-#[instrument(skip(service, stopped_tx, kill_rx), fields(state = %State::Running))]
+#[instrument(skip(service, stopped_tx, kill_rx))]
 async fn run_until_stopped(
     service: LoadedService,
     addr: SocketAddr,

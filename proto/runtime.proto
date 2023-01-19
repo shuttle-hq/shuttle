@@ -65,7 +65,10 @@ message SubscribeStopRequest {
 }
 
 message SubscribeStopResponse {
+  // Reason the service has stopped
   StopReason reason = 1;
+
+  // Any extra message to go with the reason. If there are any
   string message = 2;
 }
 

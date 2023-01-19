@@ -55,7 +55,7 @@ pub async fn task(
             runtime_manager.clone(),
         );
         let cleanup = move |response: SubscribeStopResponse| {
-            info!(response = ?response,  "stop client response: ");
+            debug!(response = ?response,  "stop client response: ");
 
             match StopReason::from_i32(response.reason).unwrap_or_default() {
                 StopReason::Request => stopped_cleanup(&id),

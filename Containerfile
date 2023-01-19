@@ -26,7 +26,7 @@ RUN cargo chef cook --recipe-path recipe.json
 COPY --from=cache /build .
 ARG folder
 ARG CARGO_PROFILE
-# if the PROD env isn't set, use default debug profile
+# if CARGO_PROFILE is release, pass --release, else use default debug profile
 RUN cargo build --bin shuttle-${folder} $(if [ "$CARGO_PROFILE" = "release" ]; then echo --${CARGO_PROFILE}; fi)
 
 ARG RUSTUP_TOOLCHAIN

@@ -96,6 +96,7 @@ pub mod provisioner {
 
 pub mod runtime {
     use std::{
+        convert::TryFrom,
         path::PathBuf,
         process::Command,
         time::{Duration, SystemTime},
@@ -104,6 +105,7 @@ pub mod runtime {
     use anyhow::Context;
     use chrono::DateTime;
     use prost_types::Timestamp;
+    use shuttle_common::models::ParseError;
     use tokio::process;
     use tonic::transport::{Channel, Endpoint};
     use tracing::info;
@@ -159,18 +161,20 @@ pub mod runtime {
         }
     }
 
-    impl From<LogItem> for shuttle_common::LogItem {
-        fn from(log: LogItem) -> Self {
-            Self {
-                id: Uuid::from_slice(&log.id).unwrap(),
-                timestamp: DateTime::from(SystemTime::try_from(log.timestamp.unwrap()).unwrap()),
-                state: LogState::from_i32(log.state).unwrap().into(),
-                level: LogLevel::from_i32(log.level).unwrap().into(),
+    impl TryFrom<LogItem> for shuttle_common::LogItem {
+        type Error = ParseError;
+
+        fn try_from(log: LogItem) -> Result<Self, Self::Error> {
+            Ok(Self {
+                id: Uuid::from_slice(&log.id)?,
+                timestamp: DateTime::from(SystemTime::try_from(log.timestamp.unwrap_or_default())?),
+                state: LogState::from_i32(log.state).unwrap_or_default().into(),
+                level: LogLevel::from_i32(log.level).unwrap_or_default().into(),
                 file: log.file,
                 line: log.line,
                 target: log.target,
                 fields: log.fields,
-            }
+            })
         }
     }
 

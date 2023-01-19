@@ -21,9 +21,9 @@
 
 use chrono::{DateTime, Utc};
 use serde_json::json;
-use shuttle_common::{tracing::JsonVisitor, STATE_MESSAGE};
+use shuttle_common::{models::ParseError, tracing::JsonVisitor, STATE_MESSAGE};
 use shuttle_proto::runtime;
-use std::{str::FromStr, time::SystemTime};
+use std::{convert::TryFrom, str::FromStr, time::SystemTime};
 use tracing::{field::Visit, span, warn, Metadata, Subscriber};
 use tracing_subscriber::Layer;
 use uuid::Uuid;
@@ -112,19 +112,25 @@ impl From<Log> for DeploymentState {
     }
 }
 
-impl From<runtime::LogItem> for Log {
-    fn from(log: runtime::LogItem) -> Self {
-        Self {
-            id: Uuid::from_slice(&log.id).unwrap(),
-            state: runtime::LogState::from_i32(log.state).unwrap().into(),
-            level: runtime::LogLevel::from_i32(log.level).unwrap().into(),
-            timestamp: DateTime::from(SystemTime::try_from(log.timestamp.unwrap()).unwrap()),
+impl TryFrom<runtime::LogItem> for Log {
+    type Error = ParseError;
+
+    fn try_from(log: runtime::LogItem) -> Result<Self, Self::Error> {
+        Ok(Self {
+            id: Uuid::from_slice(&log.id)?,
+            state: runtime::LogState::from_i32(log.state)
+                .unwrap_or_default()
+                .into(),
+            level: runtime::LogLevel::from_i32(log.level)
+                .unwrap_or_default()
+                .into(),
+            timestamp: DateTime::from(SystemTime::try_from(log.timestamp.unwrap_or_default())?),
             file: log.file,
             line: log.line,
             target: log.target,
-            fields: serde_json::from_slice(&log.fields).unwrap(),
+            fields: serde_json::from_slice(&log.fields)?,
             r#type: LogType::Event,
-        }
+        })
     }
 }
 

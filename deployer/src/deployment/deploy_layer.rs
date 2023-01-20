@@ -357,33 +357,35 @@ mod tests {
             use ::tracing_subscriber::fmt::format::FmtSpan;
 
             match ::std::env::var("RUST_LOG_SPAN_EVENTS") {
-          Ok(value) => {
-            value
-              .to_ascii_lowercase()
-              .split(',')
-              .map(|filter| match filter.trim() {
-                "new" => FmtSpan::NEW,
-                "enter" => FmtSpan::ENTER,
-                "exit" => FmtSpan::EXIT,
-                "close" => FmtSpan::CLOSE,
-                "active" => FmtSpan::ACTIVE,
-                "full" => FmtSpan::FULL,
-                _ => panic!("test-log: RUST_LOG_SPAN_EVENTS must contain filters separated by `,`.\n\t\
-                  For example: `active` or `new,close`\n\t\
-                  Supported filters: new, enter, exit, close, active, full\n\t\
-                  Got: {}", value),
-              })
-              .fold(FmtSpan::NONE, |acc, filter| filter | acc)
-          },
-          Err(::std::env::VarError::NotUnicode(_)) =>
-            panic!("test-log: RUST_LOG_SPAN_EVENTS must contain a valid UTF-8 string"),
-          Err(::std::env::VarError::NotPresent) => FmtSpan::NONE,
-        }
+                Ok(value) => {
+                    value
+                        .to_ascii_lowercase()
+                        .split(',')
+                        .map(|filter| match filter.trim() {
+                            "new" => FmtSpan::NEW,
+                            "enter" => FmtSpan::ENTER,
+                            "exit" => FmtSpan::EXIT,
+                            "close" => FmtSpan::CLOSE,
+                            "active" => FmtSpan::ACTIVE,
+                            "full" => FmtSpan::FULL,
+                            _ => panic!("test-log: RUST_LOG_SPAN_EVENTS must contain filters separated by `,`.\n\t\
+                                         For example: `active` or `new,close`\n\t\
+                                         Supported filters: new, enter, exit, close, active, full\n\t\
+                                         Got: {}", value),
+                        })
+                        .fold(FmtSpan::NONE, |acc, filter| filter | acc)
+                },
+                Err(::std::env::VarError::NotUnicode(_)) =>
+                    panic!("test-log: RUST_LOG_SPAN_EVENTS must contain a valid UTF-8 string"),
+                Err(::std::env::VarError::NotPresent) => FmtSpan::NONE,
+            }
         };
         let fmt_layer = fmt::layer()
             .with_test_writer()
             .with_span_events(event_filter);
-        let filter_layer = EnvFilter::from_default_env();
+        let filter_layer = EnvFilter::try_from_default_env()
+            .or_else(|_| EnvFilter::try_new("info"))
+            .unwrap();
 
         tracing_subscriber::registry()
             .with(DeployLayer::new(Arc::clone(&recorder)))

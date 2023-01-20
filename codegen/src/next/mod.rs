@@ -126,13 +126,12 @@ impl Endpoint {
                         has_err = true;
                     }
                     if let Expr::Path(path) = value {
-                        let method_ident = Some(path.path.segments[0].ident.clone());
+                        let method_ident = path.path.segments[0].ident.clone();
 
-                        // Unwrap is safe because we just set the value
-                        match method_ident.as_ref().unwrap().to_string().as_str() {
+                        match method_ident.as_ref().to_string().as_str() {
                             "get" | "post" | "delete" | "put" | "options" | "head" | "trace"
                             | "patch" => {
-                                method = method_ident;
+                                method = Some(method_ident);
                             }
                             _ => {
                                 emit_error!(

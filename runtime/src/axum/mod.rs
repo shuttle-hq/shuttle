@@ -1,9 +1,10 @@
 use std::convert::Infallible;
 use std::io::{BufReader, Read, Write};
-use std::net::{Ipv4Addr, SocketAddr};
+use std::net::{Shutdown, SocketAddr};
 use std::ops::DerefMut;
 use std::os::unix::prelude::RawFd;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::Mutex;
 
 use anyhow::Context;
@@ -34,13 +35,12 @@ extern crate rmp_serde as rmps;
 
 const LOGS_FD: u32 = 20;
 const PARTS_FD: u32 = 3;
-const BODY_WRITE_FD: u32 = 4;
-const BODY_READ_FD: u32 = 5;
+const BODY_FD: u32 = 4;
 
 pub struct AxumWasm {
     router: Mutex<Option<Router>>,
     logs_rx: Mutex<Option<Receiver<Result<runtime::LogItem, Status>>>>,
-    logs_tx: Mutex<Sender<Result<runtime::LogItem, Status>>>,
+    logs_tx: Sender<Result<runtime::LogItem, Status>>,
     kill_tx: Mutex<Option<oneshot::Sender<String>>>,
 }
 
@@ -57,7 +57,7 @@ impl AxumWasm {
         Self {
             router: Mutex::new(None),
             logs_rx: Mutex::new(Some(rx)),
-            logs_tx: Mutex::new(tx),
+            logs_tx: tx,
             kill_tx: Mutex::new(None),
         }
     }
@@ -96,14 +96,14 @@ impl Runtime for AxumWasm {
         request: tonic::Request<StartRequest>,
     ) -> Result<tonic::Response<StartResponse>, Status> {
         let StartRequest {
-            deployment_id,
-            port,
-            ..
+            deployment_id, ip, ..
         } = request.into_inner();
 
-        let address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port as u16);
+        let address = SocketAddr::from_str(&ip)
+            .context("invalid socket address")
+            .map_err(|err| Status::invalid_argument(err.to_string()))?;
 
-        let logs_tx = self.logs_tx.lock().unwrap().clone();
+        let logs_tx = self.logs_tx.clone();
 
         let (kill_tx, kill_rx) = tokio::sync::oneshot::channel();
 
@@ -209,7 +209,7 @@ impl RouterBuilder {
     }
 
     fn build(self) -> anyhow::Result<Router> {
-        let file = self.src.expect("module path should be set");
+        let file = self.src.context("module path should be set")?;
         let module = Module::from_file(&self.engine, file)?;
 
         for export in module.exports() {
@@ -252,15 +252,12 @@ impl Router {
             UnixStream::pair().context("failed to open logs unixstream")?;
         let (mut parts_stream, parts_client) =
             UnixStream::pair().context("failed to open parts unixstream")?;
-        let (mut body_write_stream, body_write_client) =
+        let (mut body_stream, body_client) =
             UnixStream::pair().context("failed to open body write unixstream")?;
-        let (body_read_stream, body_read_client) =
-            UnixStream::pair().context("failed to open body read unixstream")?;
 
         let logs_client = WasiUnixStream::from_cap_std(logs_client);
         let parts_client = WasiUnixStream::from_cap_std(parts_client);
-        let body_write_client = WasiUnixStream::from_cap_std(body_write_client);
-        let body_read_client = WasiUnixStream::from_cap_std(body_read_client);
+        let body_client = WasiUnixStream::from_cap_std(body_client);
 
         store
             .data_mut()
@@ -271,10 +268,7 @@ impl Router {
             .insert_file(PARTS_FD, Box::new(parts_client), FileCaps::all());
         store
             .data_mut()
-            .insert_file(BODY_WRITE_FD, Box::new(body_write_client), FileCaps::all());
-        store
-            .data_mut()
-            .insert_file(BODY_READ_FD, Box::new(body_read_client), FileCaps::all());
+            .insert_file(BODY_FD, Box::new(body_client), FileCaps::all());
 
         tokio::task::spawn_blocking(move || {
             let mut iter = logs_stream.bytes().filter_map(Result::ok);
@@ -283,14 +277,16 @@ impl Router {
                 let mut log: runtime::LogItem = log.into();
                 log.id = deployment_id.clone();
 
-                logs_tx.blocking_send(Ok(log)).unwrap();
+                logs_tx.blocking_send(Ok(log)).expect("to send log");
             }
         });
 
         let (parts, body) = req.into_parts();
 
         // Serialise request parts to rmp
-        let request_rmp = RequestWrapper::from(parts).into_rmp();
+        let request_rmp = RequestWrapper::from(parts)
+            .into_rmp()
+            .context("failed to make request wrapper")?;
 
         // Write request parts to wasm module
         parts_stream
@@ -316,30 +312,27 @@ impl Router {
             .context("failed to concatenate request body buffers")?;
 
         // Write body to wasm
-        body_write_stream
+        body_stream
             .write_all(body_bytes.as_ref())
             .context("failed to write body to wasm")?;
 
-        // Drop stream to signal EOF
-        drop(body_write_stream);
+        // Shut down the write part of the stream to signal EOF
+        body_stream
+            .shutdown(Shutdown::Write)
+            .expect("failed to shut down body write half");
 
         // Call our function in wasm, telling it to route the request we've written to it
         // and write back a response
         trace!("calling Router");
         self.linker
             .get(&mut store, "axum", "__SHUTTLE_Axum_call")
-            .expect("wasm module should be loaded and the router function should be available")
+            .context("wasm module should be loaded and the router function should be available")?
             .into_func()
-            .expect("router function should be a function")
-            .typed::<(RawFd, RawFd, RawFd, RawFd), ()>(&store)?
+            .context("router function should be a function")?
+            .typed::<(RawFd, RawFd, RawFd), ()>(&store)?
             .call(
                 &mut store,
-                (
-                    LOGS_FD as i32,
-                    PARTS_FD as i32,
-                    BODY_WRITE_FD as i32,
-                    BODY_READ_FD as i32,
-                ),
+                (LOGS_FD as i32, PARTS_FD as i32, BODY_FD as i32),
             )?;
 
         // Read response parts from wasm
@@ -350,7 +343,7 @@ impl Router {
             rmps::from_read(reader).context("failed to deserialize response parts")?;
 
         // Read response body from wasm, convert it to a Stream and pass it to hyper
-        let reader = BufReader::new(body_read_stream);
+        let reader = BufReader::new(body_stream);
         let stream = futures::stream::iter(reader.bytes()).try_chunks(2);
         let body = hyper::Body::wrap_stream(stream);
 
@@ -429,7 +422,7 @@ pub mod tests {
             .arg("build")
             .arg("--target")
             .arg("wasm32-wasi")
-            .current_dir("../tmp/axum-wasm-expanded")
+            .current_dir("tests/resources/axum-wasm-expanded")
             .spawn()
             .unwrap()
             .wait()
@@ -442,9 +435,10 @@ pub mod tests {
 
         let router = RouterBuilder::new()
             .unwrap()
-            .src("../tmp/axum-wasm-expanded/target/wasm32-wasi/debug/shuttle_axum_expanded.wasm")
+            .src("tests/resources/axum-wasm-expanded/target/wasm32-wasi/debug/shuttle_axum_expanded.wasm")
             .build()
             .unwrap();
+
         let id = Uuid::default().as_bytes().to_vec();
         let (tx, mut rx) = mpsc::channel(1);
 

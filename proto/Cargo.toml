@@ -11,7 +11,7 @@ anyhow = { workspace = true }
 chrono = { workspace = true }
 home = "0.5.4"
 prost = "0.11.2"
-prost-types = "0.11.0"
+prost-types = { workspace = true }
 tokio = { version = "1.22.0", features = ["process"] }
 tonic = { workspace = true }
 tracing = { workspace = true }

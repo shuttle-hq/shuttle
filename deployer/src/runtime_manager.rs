@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{convert::TryInto, path::PathBuf, sync::Arc};
 
 use anyhow::Context;
 use shuttle_proto::runtime::{
@@ -134,7 +134,9 @@ impl RuntimeManager {
 
             tokio::spawn(async move {
                 while let Ok(Some(log)) = stream.message().await {
-                    sender.send(log.into()).expect("to send log to persistence");
+                    if let Ok(log) = log.try_into() {
+                        sender.send(log).expect("to send log to persistence");
+                    }
                 }
             });
 

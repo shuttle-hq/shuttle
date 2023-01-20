@@ -24,6 +24,8 @@ pub enum Error {
     SecretsParse(#[from] toml::de::Error),
     #[error("Failed to set secrets: {0}")]
     SecretsSet(#[source] Box<dyn StdError + Send>),
+    #[error("Failed to get secrets: {0}")]
+    SecretsGet(#[source] Box<dyn StdError + Send>),
     #[error("Failed to cleanup old deployments: {0}")]
     OldCleanup(#[source] Box<dyn StdError + Send>),
     #[error("Gateway client error: {0}")]

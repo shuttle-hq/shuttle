@@ -89,6 +89,7 @@ commands:
             shuttle-aws-rds = { path = "$PWD/resources/aws-rds" }
             shuttle-next = { path = "$PWD/next" }
             shuttle-persist = { path = "$PWD/resources/persist" }
+            shuttle-next = { path = "$PWD/next" }
             shuttle-shared-db = { path = "$PWD/resources/shared-db" }
             shuttle-secrets = { path = "$PWD/resources/secrets" }
             shuttle-static-folder = { path = "$PWD/resources/static-folder" }

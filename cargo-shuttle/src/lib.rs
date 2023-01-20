@@ -7,6 +7,7 @@ mod provisioner_server;
 use shuttle_common::project::ProjectName;
 use shuttle_proto::runtime::{self, LoadRequest, StartRequest, SubscribeLogsRequest};
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::ffi::OsString;
 use std::fs::{read_to_string, File};
 use std::io::stdout;
@@ -454,15 +455,23 @@ impl Shuttle {
 
         tokio::spawn(async move {
             while let Ok(Some(log)) = stream.message().await {
-                let log: shuttle_common::LogItem = log.into();
+                let log: shuttle_common::LogItem = log.try_into().expect("to convert log");
                 println!("{log}");
             }
         });
 
+        let addr = if run_args.external {
+            std::net::IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))
+        } else {
+            Ipv4Addr::LOCALHOST.into()
+        };
+
+        let addr = SocketAddr::new(addr, run_args.port);
+
         let start_request = StartRequest {
             deployment_id: id.as_bytes().to_vec(),
             service_name,
-            port: run_args.port as u32,
+            ip: addr.to_string(),
         };
 
         trace!(?start_request, "starting service");
@@ -478,15 +487,6 @@ impl Shuttle {
             .into_inner();
 
         trace!(response = ?response,  "client response: ");
-
-        // TODO: move to runtime
-        let addr = if run_args.external {
-            std::net::IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))
-        } else {
-            Ipv4Addr::LOCALHOST.into()
-        };
-
-        let addr = SocketAddr::new(addr, run_args.port);
 
         println!(
             "\n{:>12} {} on http://{}",

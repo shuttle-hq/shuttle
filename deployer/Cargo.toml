@@ -39,9 +39,9 @@ toml = "0.5.9"
 tonic = { workspace = true }
 tower = { version = "0.4.13", features = ["make"] }
 tower-http = { version = "0.3.4", features = ["auth", "trace"] }
-tracing = { workspace = true }
+tracing = { workspace = true, features = ["default"] }
 tracing-opentelemetry = "0.18.0"
-tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
+tracing-subscriber = { workspace = true, features = ["default", "env-filter", "fmt"] }
 uuid = { workspace = true, features = ["v4"] }
 
 [dependencies.shuttle-common]

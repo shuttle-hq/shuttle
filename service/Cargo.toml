@@ -37,8 +37,8 @@ thruster = { version = "1.3.0", optional = true }
 tide = { version = "0.16.0", optional = true }
 tokio = { version = "=1.22.0", features = ["rt", "rt-multi-thread", "sync"] }
 tower = { version = "0.4.13", features = ["make"], optional = true }
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tracing = { workspace = true, features = ["default"] }
+tracing-subscriber = { workspace = true, features = ["default", "env-filter"] }
 uuid = { workspace = true, features = ["v4"] }
 warp = { version = "0.3.3", optional = true }
 

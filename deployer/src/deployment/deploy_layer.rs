@@ -603,7 +603,10 @@ mod tests {
         );
 
         select! {
-            _ = sleep(Duration::from_secs(180)) => panic!("states should go into 'Running' for a valid service: {:#?}", RECORDER.lock().unwrap().get_deployment_states(&id)),
+            _ = sleep(Duration::from_secs(180)) => {
+                let states = RECORDER.lock().unwrap().get_deployment_states(&id);
+                panic!("states should go into 'Running' for a valid service: {:#?}", states);
+            },
             _ = test => {}
         };
 
@@ -612,8 +615,7 @@ mod tests {
 
         sleep(Duration::from_secs(1)).await;
 
-        let recorder = RECORDER.lock().unwrap();
-        let states = recorder.get_deployment_states(&id);
+        let states = RECORDER.lock().unwrap().get_deployment_states(&id);
 
         assert_eq!(
             *states,
@@ -686,7 +688,8 @@ mod tests {
 
         select! {
             _ = sleep(Duration::from_secs(180)) => {
-                panic!("states should go into 'Completed' when a service stops by itself: {:#?}", RECORDER.lock().unwrap().get_deployment_states(&id));
+                let states = RECORDER.lock().unwrap().get_deployment_states(&id);
+                panic!("states should go into 'Completed' when a service stops by itself: {:#?}", states);
             }
             _ = test => {}
         }
@@ -732,7 +735,8 @@ mod tests {
 
         select! {
             _ = sleep(Duration::from_secs(180)) => {
-                panic!("states should go into 'Crashed' panicing in bind: {:#?}", RECORDER.lock().unwrap().get_deployment_states(&id));
+                let states = RECORDER.lock().unwrap().get_deployment_states(&id);
+                panic!("states should go into 'Crashed' panicing in bind: {:#?}", states);
             }
             _ = test => {}
         }
@@ -778,7 +782,8 @@ mod tests {
 
         select! {
             _ = sleep(Duration::from_secs(180)) => {
-                panic!("states should go into 'Crashed' when panicing in main: {:#?}", RECORDER.lock().unwrap().get_deployment_states(&id));
+                let states = RECORDER.lock().unwrap().get_deployment_states(&id);
+                panic!("states should go into 'Crashed' when panicing in main: {:#?}", states);
             }
             _ = test => {}
         }
@@ -818,7 +823,10 @@ mod tests {
         );
 
         select! {
-            _ = sleep(Duration::from_secs(30)) => panic!("from running should start in built and end in crash for invalid: {:#?}", RECORDER.lock().unwrap().get_deployment_states(&id)),
+            _ = sleep(Duration::from_secs(30)) => {
+                let states = RECORDER.lock().unwrap().get_deployment_states(&id);
+                panic!("from running should start in built and end in crash for invalid: {:#?}", states)
+            },
             _ = test => {}
         };
     }

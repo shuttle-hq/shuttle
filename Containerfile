@@ -22,7 +22,7 @@ RUN cargo chef prepare --recipe-path recipe.json
 
 FROM shuttle-build AS builder
 COPY --from=planner /build/recipe.json recipe.json
-RUN cargo chef cook --recipe-path recipe.json
+RUN cargo chef cook $(if [ "$CARGO_PROFILE" = "release" ]; then echo --${CARGO_PROFILE}; fi) --recipe-path recipe.json
 COPY --from=cache /build .
 ARG folder
 ARG CARGO_PROFILE

@@ -470,7 +470,7 @@ mod tests {
         let path = tmp_dir.into_path();
         let (tx, _rx) = crossbeam_channel::unbounded();
 
-        RuntimeManager::new(path, format!("http://{}", provisioner_addr.to_string()), tx)
+        RuntimeManager::new(path, format!("http://{}", provisioner_addr), tx)
     }
 
     #[async_trait::async_trait]

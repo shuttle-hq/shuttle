@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{cmp::Ordering, collections::BTreeMap};
 
 use proc_macro_error::emit_error;
 use quote::{quote, ToTokens};
@@ -128,7 +128,7 @@ impl Endpoint {
                     if let Expr::Path(path) = value {
                         let method_ident = path.path.segments[0].ident.clone();
 
-                        match method_ident.as_ref().to_string().as_str() {
+                        match method_ident.to_string().as_str() {
                             "get" | "post" | "delete" | "put" | "options" | "head" | "trace"
                             | "patch" => {
                                 method = Some(method_ident);
@@ -274,15 +274,32 @@ impl App {
     }
 }
 
+/// This wrapper allows us to implement Ord for syn::LitStr, so we can
+/// ensure consistent ordering when building the endpoint handler chains.
+#[derive(Eq, PartialEq, Hash)]
+struct OrderedLitStr<'a>(&'a syn::LitStr);
+
+impl<'a> Ord for OrderedLitStr<'a> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.0.value().cmp(&other.0.value())
+    }
+}
+
+impl<'a> PartialOrd for OrderedLitStr<'a> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 impl ToTokens for App {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let Self { endpoints } = self;
 
-        let mut endpoint_chains = endpoints
+        let endpoint_chains = endpoints
             .iter()
-            .fold(HashMap::new(), |mut chain, endpoint| {
+            .fold(BTreeMap::new(), |mut chain, endpoint| {
                 let entry = chain
-                    .entry(&endpoint.route)
+                    .entry(OrderedLitStr(&endpoint.route))
                     .or_insert_with(Vec::<Handler>::new);
 
                 let method = endpoint.method.clone();
@@ -302,13 +319,10 @@ impl ToTokens for App {
             })
             .into_iter()
             .map(|(key, value)| EndpointChain {
-                route: key,
+                route: key.0,
                 handlers: value,
             })
             .collect::<Vec<EndpointChain>>();
-
-        // Sort endpoints by route alphabetically to ensure test consistency
-        endpoint_chains.sort_by(|a, b| a.route.value().cmp(&b.route.value()));
 
         let app = quote!(
             async fn __app(request: shuttle_next::Request<shuttle_next::body::BoxBody>,) -> shuttle_next::response::Response

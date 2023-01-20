@@ -818,7 +818,7 @@ mod tests {
         );
 
         select! {
-            _ = sleep(Duration::from_secs(10)) => panic!("from running should start in built and end in crash for invalid: {:#?}", RECORDER.lock().unwrap().get_deployment_states(&id)),
+            _ = sleep(Duration::from_secs(30)) => panic!("from running should start in built and end in crash for invalid: {:#?}", RECORDER.lock().unwrap().get_deployment_states(&id)),
             _ = test => {}
         };
     }

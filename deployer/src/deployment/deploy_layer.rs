@@ -316,18 +316,25 @@ impl Visit for NewStateVisitor {
 mod tests {
     use std::{
         fs::read_dir,
-        net::SocketAddr,
+        net::{Ipv4Addr, SocketAddr},
         path::PathBuf,
         sync::{Arc, Mutex},
         time::Duration,
     };
 
     use crate::{persistence::DeploymentUpdater, RuntimeManager};
+    use async_trait::async_trait;
     use axum::body::Bytes;
     use ctor::ctor;
     use flate2::{write::GzEncoder, Compression};
+    use portpicker::pick_unused_port;
+    use shuttle_proto::provisioner::{
+        provisioner_server::{Provisioner, ProvisionerServer},
+        DatabaseRequest, DatabaseResponse,
+    };
     use tempdir::TempDir;
     use tokio::{select, time::sleep};
+    use tonic::transport::Server;
     use tracing_subscriber::{fmt, prelude::*, EnvFilter};
     use uuid::Uuid;
 
@@ -434,12 +441,36 @@ mod tests {
         }
     }
 
+    struct ProvisionerMock;
+
+    #[async_trait]
+    impl Provisioner for ProvisionerMock {
+        async fn provision_database(
+            &self,
+            _request: tonic::Request<DatabaseRequest>,
+        ) -> Result<tonic::Response<DatabaseResponse>, tonic::Status> {
+            panic!("no run tests should request a db");
+        }
+    }
+
     fn get_runtime_manager() -> Arc<tokio::sync::Mutex<RuntimeManager>> {
+        let provisioner_addr =
+            SocketAddr::new(Ipv4Addr::LOCALHOST.into(), pick_unused_port().unwrap());
+        let mock = ProvisionerMock;
+
+        tokio::spawn(async move {
+            Server::builder()
+                .add_service(ProvisionerServer::new(mock))
+                .serve(provisioner_addr)
+                .await
+                .unwrap();
+        });
+
         let tmp_dir = TempDir::new("shuttle_run_test").unwrap();
         let path = tmp_dir.into_path();
         let (tx, _rx) = crossbeam_channel::unbounded();
 
-        RuntimeManager::new(path, "http://localhost:5000".to_string(), tx)
+        RuntimeManager::new(path, format!("http://{}", provisioner_addr.to_string()), tx)
     }
 
     #[async_trait::async_trait]

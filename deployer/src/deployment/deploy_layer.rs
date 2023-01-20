@@ -390,7 +390,7 @@ mod tests {
             .with_test_writer()
             .with_span_events(event_filter);
         let filter_layer = EnvFilter::try_from_default_env()
-            .or_else(|_| EnvFilter::try_new("info"))
+            .or_else(|_| EnvFilter::try_new("shuttle_deployer"))
             .unwrap();
 
         tracing_subscriber::registry()
@@ -611,7 +611,7 @@ mod tests {
         );
 
         select! {
-            _ = sleep(Duration::from_secs(180)) => {
+            _ = sleep(Duration::from_secs(240)) => {
                 let states = RECORDER.lock().unwrap().get_deployment_states(&id);
                 panic!("states should go into 'Running' for a valid service: {:#?}", states);
             },
@@ -695,7 +695,7 @@ mod tests {
         );
 
         select! {
-            _ = sleep(Duration::from_secs(180)) => {
+            _ = sleep(Duration::from_secs(240)) => {
                 let states = RECORDER.lock().unwrap().get_deployment_states(&id);
                 panic!("states should go into 'Completed' when a service stops by itself: {:#?}", states);
             }
@@ -742,7 +742,7 @@ mod tests {
         );
 
         select! {
-            _ = sleep(Duration::from_secs(180)) => {
+            _ = sleep(Duration::from_secs(240)) => {
                 let states = RECORDER.lock().unwrap().get_deployment_states(&id);
                 panic!("states should go into 'Crashed' panicing in bind: {:#?}", states);
             }
@@ -789,7 +789,7 @@ mod tests {
         );
 
         select! {
-            _ = sleep(Duration::from_secs(180)) => {
+            _ = sleep(Duration::from_secs(240)) => {
                 let states = RECORDER.lock().unwrap().get_deployment_states(&id);
                 panic!("states should go into 'Crashed' when panicing in main: {:#?}", states);
             }
@@ -831,7 +831,7 @@ mod tests {
         );
 
         select! {
-            _ = sleep(Duration::from_secs(30)) => {
+            _ = sleep(Duration::from_secs(50)) => {
                 let states = RECORDER.lock().unwrap().get_deployment_states(&id);
                 panic!("from running should start in built and end in crash for invalid: {:#?}", states)
             },

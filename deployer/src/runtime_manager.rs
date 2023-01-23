@@ -11,6 +11,8 @@ use uuid::Uuid;
 
 use crate::deployment::deploy_layer;
 
+const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
+
 #[derive(Clone)]
 pub struct RuntimeManager {
     legacy: Option<RuntimeClient<Channel>>,
@@ -113,13 +115,41 @@ impl RuntimeManager {
             Ok(runtime_client.clone())
         } else {
             trace!("making new client");
+
             let port = portpicker::pick_unused_port().context("failed to find available port")?;
+
+            let get_runtime_executable = || {
+                if cfg!(debug_assertions) {
+                    // If we're running deployer natively, install shuttle-runtime using the
+                    // version of runtime from the calling repo.
+                    let path = std::fs::canonicalize(format!("{MANIFEST_DIR}/../runtime"));
+
+                    // The path will not be valid if we are in a deployer container, in which
+                    // case we don't try to install and use the one installed in deploy.sh.
+                    if let Ok(path) = path {
+                        std::process::Command::new("cargo")
+                            .arg("install")
+                            .arg("shuttle-runtime")
+                            .arg("--path")
+                            .arg(path)
+                            .output()
+                            .expect("failed to install the local version of shuttle-runtime");
+                    }
+                }
+
+                // If we're in a deployer built with the containerfile, the runtime will have
+                // been installed in deploy.sh.
+                home::cargo_home()
+                    .expect("failed to find path to cargo home")
+                    .join("bin/shuttle-runtime")
+            };
 
             let (process, runtime_client) = runtime::start(
                 is_next,
                 runtime::StorageManagerType::Artifacts(artifacts_path),
                 provisioner_address,
                 port,
+                get_runtime_executable,
             )
             .await
             .context("failed to start shuttle runtime")?;

@@ -8,6 +8,8 @@ use tracing::{info, instrument, trace};
 
 use crate::deployment::deploy_layer;
 
+const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
+
 #[derive(Clone)]
 pub struct RuntimeManager {
     legacy: Option<RuntimeClient<Channel>>,
@@ -80,11 +82,33 @@ impl RuntimeManager {
             Ok(runtime_client)
         } else {
             trace!("making new client");
+
+            let get_runtime_executable = || {
+                if cfg!(debug_assertions) {
+                    // Canonicalized path to shuttle-runtime for dev to work on windows
+                    let path = std::fs::canonicalize(format!("{MANIFEST_DIR}/../runtime"))
+                        .expect("path to shuttle-runtime does not exist or is invalid");
+
+                    std::process::Command::new("cargo")
+                        .arg("install")
+                        .arg("shuttle-runtime")
+                        .arg("--path")
+                        .arg(path)
+                        .output()
+                        .expect("failed to install the local version of shuttle-runtime");
+                };
+
+                home::home_dir()
+                    .expect("failed to find path to cargo home")
+                    .join("bin/shuttle-runtime")
+            };
+
             let (process, runtime_client) = runtime::start(
                 is_next,
                 runtime::StorageManagerType::Artifacts(artifacts_path),
                 provisioner_address,
                 port,
+                get_runtime_executable,
             )
             .await
             .context("failed to start shuttle runtime")?;

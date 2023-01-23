@@ -1438,7 +1438,7 @@ dependencies = [
  "percent-encoding",
  "rustc-workspace-hack",
  "rustfix",
- "semver 1.0.14",
+ "semver 1.0.16",
  "serde",
  "serde_ignored",
  "serde_json",
@@ -1475,7 +1475,7 @@ dependencies = [
  "native-tls",
  "pathdiff",
  "regex",
- "semver 1.0.14",
+ "semver 1.0.16",
  "serde",
  "serde_derive",
  "serde_json",
@@ -1517,6 +1517,7 @@ dependencies = [
  "futures",
  "git2",
  "headers",
+ "home",
  "ignore",
  "indicatif",
  "indoc",
@@ -1581,7 +1582,7 @@ checksum = "982a0cf6a99c350d7246035613882e376d58cebe571785abc5da4f648d53ac0a"
 dependencies = [
  "camino",
  "cargo-platform",
- "semver 1.0.14",
+ "semver 1.0.16",
  "serde",
  "serde_json",
  "thiserror",
@@ -2065,7 +2066,7 @@ dependencies = [
  "num_cpus",
  "rayon",
  "rustc-hash",
- "semver 1.0.14",
+ "semver 1.0.16",
  "serde",
  "serde_derive",
  "serde_json",
@@ -5673,7 +5674,7 @@ version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bfa0f585226d2e68097d4f95d113b15b83a82e819ab25717ec0590d9584ef366"
 dependencies = [
- "semver 1.0.14",
+ "semver 1.0.16",
 ]
 
 [[package]]
@@ -5939,9 +5940,9 @@ dependencies = [
 
 [[package]]
 name = "semver"
-version = "1.0.14"
+version = "1.0.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e25dfac463d778e353db5be2449d1cce89bd6fd23c9f1ea21310ce6e5a1b29c4"
+checksum = "58bc9567378fc7690d6b2addae4e60ac2eeea07becb2c64b9f218b53865cba2a"
 dependencies = [
  "serde",
 ]
@@ -6267,6 +6268,7 @@ dependencies = [
  "fqdn",
  "futures",
  "hex 0.4.3",
+ "home",
  "hyper",
  "hyper-reverse-proxy 0.5.2-dev (git+https://github.com/chesedo/hyper-reverse-proxy?branch=master)",
  "once_cell",
@@ -8487,13 +8489,13 @@ dependencies = [
 
 [[package]]
 name = "which"
-version = "4.2.5"
+version = "4.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c4fb54e6113b6a8772ee41c3404fb0301ac79604489467e0a9ce1f3e97c24ae"
+checksum = "2441c784c52b289a054b7201fc93253e288f094e2f4be9058343127c4226a269"
 dependencies = [
  "either",
- "lazy_static",
  "libc",
+ "once_cell",
 ]
 
 [[package]]

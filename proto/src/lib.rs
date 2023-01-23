@@ -98,7 +98,6 @@ pub mod runtime {
     use std::{
         convert::TryFrom,
         path::PathBuf,
-        process::Command,
         time::{Duration, SystemTime},
     };
 
@@ -246,6 +245,7 @@ pub mod runtime {
         storage_manager_type: StorageManagerType,
         provisioner_address: &str,
         port: u16,
+        get_runtime_executable: impl FnOnce() -> PathBuf,
     ) -> anyhow::Result<(process::Child, runtime_client::RuntimeClient<Channel>)> {
         let runtime_flag = if wasm { "--axum" } else { "--legacy" };
 
@@ -285,56 +285,5 @@ pub mod runtime {
             .context("connecting runtime client")?;
 
         Ok((runtime, runtime_client))
-    }
-
-    /// If the calling crate is cargo-shuttle, try to install shuttle-runtime from
-    /// a local version if this library is compiled in debug mode or from the production
-    /// branch of the shuttle repo if it's compiled in release mode.
-    ///
-    /// If the calling crate is deployer, use the version of shuttle-runtime installed in
-    /// deployer/prepare.sh.
-    ///
-    /// **Important:** When called by deployer, this function expects that shuttle-runtime
-    /// was installed in prepare.sh.
-    fn get_runtime_executable() -> PathBuf {
-        let current_crate = env!("CARGO_PKG_NAME");
-
-        if current_crate == "cargo-shuttle" {
-            // When this library is compiled in debug mode with `cargo run --bin cargo-shuttle`,
-            // install the checked-out local version of `shuttle-runtime
-            if cfg!(debug_assertions) {
-                // Path to calling crate root
-                let manifest_dir = env!("CARGO_MANIFEST_DIR");
-
-                // Canonicalized path to shuttle-runtime for dev to work on windows
-                let path = std::fs::canonicalize(format!("{manifest_dir}/../runtime"))
-                    .expect("path to shuttle-runtime does not exist or is invalid");
-
-                Command::new("cargo")
-                    .arg("install")
-                    .arg("shuttle-runtime")
-                    .arg("--path")
-                    .arg(path)
-                    .output()
-                    .expect("failed to install the shuttle runtime");
-
-            // When this library is compiled in release mode with `cargo install cargo-shuttle`,
-            // install the latest released `shuttle-runtime`
-            } else {
-                Command::new("cargo")
-                    .arg("install")
-                    .arg("shuttle-runtime")
-                    .arg("--git")
-                    .arg("https://github.com/shuttle-hq/shuttle")
-                    .arg("--branch")
-                    .arg("production")
-                    .output()
-                    .expect("failed to install the shuttle runtime");
-            }
-        }
-
-        let cargo_home = home::cargo_home().expect("failed to find cargo home directory");
-
-        cargo_home.join("bin/shuttle-runtime")
     }
 }

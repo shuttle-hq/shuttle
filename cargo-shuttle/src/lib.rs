@@ -4,6 +4,7 @@ pub mod config;
 mod init;
 mod provisioner_server;
 
+use cargo::util::ToSemver;
 use shuttle_common::project::ProjectName;
 use shuttle_proto::runtime::{self, LoadRequest, StartRequest, SubscribeLogsRequest};
 use std::collections::HashMap;
@@ -39,6 +40,9 @@ use uuid::Uuid;
 use crate::args::{DeploymentCommand, ProjectCommand};
 use crate::client::Client;
 use crate::provisioner_server::LocalProvisioner;
+
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
 
 pub struct Shuttle {
     ctx: RequestContext,
@@ -410,11 +414,53 @@ impl Shuttle {
             Ipv4Addr::LOCALHOST.into(),
             run_args.port + 1,
         ));
+
+        let get_runtime_executable = || {
+            let runtime_path = home::cargo_home()
+                .expect("failed to find cargo home dir")
+                .join("bin/shuttle-runtime");
+
+            if cfg!(debug_assertions) {
+                // Canonicalized path to shuttle-runtime for dev to work on windows
+                let path = std::fs::canonicalize(format!("{MANIFEST_DIR}/../runtime"))
+                    .expect("path to shuttle-runtime does not exist or is invalid");
+
+                std::process::Command::new("cargo")
+                    .arg("install")
+                    .arg("shuttle-runtime")
+                    .arg("--path")
+                    .arg(path)
+                    .output()
+                    .expect("failed to install the shuttle runtime");
+            } else {
+                // If the version of cargo-shuttle is different from shuttle-runtime,
+                // or it isn't installed, try to install shuttle-runtime from the production
+                // branch.
+                if let Err(err) = check_version(&runtime_path) {
+                    trace!("{}", err);
+
+                    trace!("installing shuttle-runtime");
+                    std::process::Command::new("cargo")
+                        .arg("install")
+                        .arg("shuttle-runtime")
+                        .arg("--git")
+                        .arg("https://github.com/shuttle-hq/shuttle")
+                        .arg("--branch")
+                        .arg("production")
+                        .output()
+                        .expect("failed to install the shuttle runtime");
+                };
+            };
+
+            runtime_path
+        };
+
         let (mut runtime, mut runtime_client) = runtime::start(
             is_wasm,
             runtime::StorageManagerType::WorkingDir(working_directory.to_path_buf()),
             &format!("http://localhost:{}", run_args.port + 1),
             run_args.port + 2,
+            get_runtime_executable,
         )
         .await
         .map_err(|err| {
@@ -769,6 +815,40 @@ impl Shuttle {
         }
 
         Ok(())
+    }
+}
+
+fn check_version(runtime_path: &PathBuf) -> Result<()> {
+    let valid_version = VERSION.to_semver().unwrap();
+
+    if !runtime_path.try_exists()? {
+        bail!("shuttle-runtime is not installed");
+    }
+
+    // Get runtime version from shuttle-runtime cli
+    let runtime_version = std::process::Command::new("cargo")
+        .arg("shuttle-runtime")
+        .arg("--version")
+        .output()
+        .context("failed to check the shuttle-runtime version")?
+        .stdout;
+
+    // Parse the version, splitting the version from the name and
+    // and pass it to `to_semver()`.
+    let runtime_version = std::str::from_utf8(&runtime_version)
+        .expect("shuttle-runtime version should be valid utf8")
+        .split_once(' ')
+        .expect("shuttle-runtime version should be in the `name version` format")
+        .1
+        .to_semver()
+        .context("failed to convert runtime version to semver")?;
+
+    if runtime_version == valid_version {
+        Ok(())
+    } else {
+        Err(anyhow!(
+            "shuttle-runtime and cargo-shuttle are not the same version"
+        ))
     }
 }
 

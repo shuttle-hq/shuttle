@@ -85,10 +85,12 @@ impl RuntimeManager {
 
             let get_runtime_executable = || {
                 if cfg!(debug_assertions) {
-                    // If we're running deployer natively, use the version of runtime from
-                    // the repo.
+                    // If we're running deployer natively, install shuttle-runtime using the
+                    // version of runtime from the calling repo.
                     let path = std::fs::canonicalize(format!("{MANIFEST_DIR}/../runtime"));
 
+                    // The path will not be valid if we are in a deployer container, in which
+                    // case we don't try to install and use the one installed in deploy.sh.
                     if let Ok(path) = path {
                         std::process::Command::new("cargo")
                             .arg("install")
@@ -97,16 +99,14 @@ impl RuntimeManager {
                             .arg(path)
                             .output()
                             .expect("failed to install the local version of shuttle-runtime");
-
-                        return home::cargo_home()
-                            .expect("failed to find path to cargo home")
-                            .join("bin/shuttle-runtime");
                     }
                 }
 
-                // If we're in a deployer built with the containerfile, use the runtime installed
-                // in deploy.sh
-                PathBuf::from("/usr/local/cargo/bin/shuttle-runtime")
+                // If we're in a deployer built with the containerfile, the runtime will have
+                // been installed in deploy.sh.
+                home::cargo_home()
+                    .expect("failed to find path to cargo home")
+                    .join("bin/shuttle-runtime")
             };
 
             let (process, runtime_client) = runtime::start(

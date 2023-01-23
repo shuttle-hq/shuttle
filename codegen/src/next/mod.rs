@@ -307,6 +307,8 @@ impl ToTokens for App {
             })
             .collect::<Vec<EndpointChain>>();
 
+        // syn::LitStr does not implement Ord, so rather than using a BTreeMap to build the chains, we
+        // use a HashMap and then sort the endpoint chains to ensure the output is deterministic.
         endpoint_chains.sort_by(|a, b| a.route.value().cmp(&b.route.value()));
 
         let app = quote!(

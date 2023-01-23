@@ -15,6 +15,9 @@ shuttle-shared-db = { path = "/usr/src/shuttle/resources/shared-db" }
 shuttle-secrets = { path = "/usr/src/shuttle/resources/secrets" }
 shuttle-static-folder = { path = "/usr/src/shuttle/resources/static-folder" }' > $CARGO_HOME/config.toml
 
+# Add the wasm32-wasi target
+rustup target add wasm32-wasi
+
 # Install the shuttle runtime
 cargo install shuttle-runtime --path "/usr/src/shuttle/runtime" 
 

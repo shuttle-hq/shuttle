@@ -4,6 +4,7 @@ use clap::{Parser, ValueEnum};
 use tonic::transport::Endpoint;
 
 #[derive(Parser, Debug)]
+#[command(version)]
 pub struct Args {
     /// Port to start runtime on
     #[arg(long)]

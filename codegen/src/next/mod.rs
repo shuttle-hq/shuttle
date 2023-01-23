@@ -434,6 +434,7 @@ mod tests {
     }
 
     #[test]
+    #[rustfmt::skip::macros(quote)]
     fn app_to_token() {
         let cases = vec![
             (

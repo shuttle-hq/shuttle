@@ -19,6 +19,7 @@ crossbeam-channel = "0.5.6"
 flate2 = "1.0.25"
 fqdn = "0.2.3"
 futures = "0.3.25"
+home = "0.5.4"
 hyper = { version = "0.14.23", features = ["client", "http1", "http2", "tcp" ] }
 # not great, but waiting for WebSocket changes to be merged
 hyper-reverse-proxy = { git = "https://github.com/chesedo/hyper-reverse-proxy", branch = "master" }

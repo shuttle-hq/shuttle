@@ -818,7 +818,7 @@ impl Shuttle {
     }
 }
 
-fn check_version(runtime_path: &PathBuf) -> Result<()> {
+fn check_version(runtime_path: &Path) -> Result<()> {
     let valid_version = VERSION.to_semver().unwrap();
 
     if !runtime_path.try_exists()? {

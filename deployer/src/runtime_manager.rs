@@ -85,22 +85,28 @@ impl RuntimeManager {
 
             let get_runtime_executable = || {
                 if cfg!(debug_assertions) {
-                    // Canonicalized path to shuttle-runtime for dev to work on windows
-                    let path = std::fs::canonicalize(format!("{MANIFEST_DIR}/../runtime"))
-                        .expect("path to shuttle-runtime does not exist or is invalid");
+                    // If we're running deployer natively, use the version of runtime from
+                    // the repo.
+                    let path = std::fs::canonicalize(format!("{MANIFEST_DIR}/../runtime"));
 
-                    std::process::Command::new("cargo")
-                        .arg("install")
-                        .arg("shuttle-runtime")
-                        .arg("--path")
-                        .arg(path)
-                        .output()
-                        .expect("failed to install the local version of shuttle-runtime");
-                };
+                    if let Ok(path) = path {
+                        std::process::Command::new("cargo")
+                            .arg("install")
+                            .arg("shuttle-runtime")
+                            .arg("--path")
+                            .arg(path)
+                            .output()
+                            .expect("failed to install the local version of shuttle-runtime");
 
-                home::home_dir()
-                    .expect("failed to find path to cargo home")
-                    .join("bin/shuttle-runtime")
+                        return home::home_dir()
+                            .expect("failed to find path to cargo home")
+                            .join("bin/shuttle-runtime");
+                    }
+                }
+
+                // If we're in a deployer built with the containerfile, use the runtime installed
+                // in deploy.sh
+                PathBuf::from("/usr/local/cargo/bin/shuttle-runtime")
             };
 
             let (process, runtime_client) = runtime::start(

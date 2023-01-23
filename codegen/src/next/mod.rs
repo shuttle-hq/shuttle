@@ -244,7 +244,7 @@ impl<'a> ToTokens for EndpointChain<'a> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let Self { route, handlers } = self;
 
-        let route = quote!(.route(#route, #(#handlers).*));
+        let route = quote!(.route(#route, shuttle_next::routing::#(#handlers).*));
 
         route.to_tokens(tokens);
     }
@@ -327,7 +327,6 @@ impl ToTokens for App {
         let app = quote!(
             async fn __app(request: shuttle_next::Request<shuttle_next::body::BoxBody>,) -> shuttle_next::response::Response
             {
-                use shuttle_next::routing::*;
                 use shuttle_next::Service;
 
                 let mut router = shuttle_next::Router::new()
@@ -456,12 +455,11 @@ mod tests {
                     async fn __app(
                         request: shuttle_next::Request<shuttle_next::body::BoxBody>,
                     ) -> shuttle_next::response::Response {
-                        use shuttle_next::routing::*;
                         use shuttle_next::Service;
 
                         let mut router = shuttle_next::Router::new()
-                            .route("/goodbye", post(goodbye))
-                            .route("/hello", get(hello));
+                            .route("/goodbye", shuttle_next::routing::post(goodbye))
+                            .route("/hello", shuttle_next::routing::get(hello));
 
                         let response = router.call(request).await.unwrap();
 
@@ -493,12 +491,14 @@ mod tests {
                     async fn __app(
                         request: shuttle_next::Request<shuttle_next::body::BoxBody>,
                     ) -> shuttle_next::response::Response {
-                        use shuttle_next::routing::*;
                         use shuttle_next::Service;
 
                         let mut router = shuttle_next::Router::new()
-                            .route("/goodbye", get(get_goodbye).post(post_goodbye))
-                            .route("/hello", get(hello));
+                            .route(
+                                "/goodbye",
+                                shuttle_next::routing::get(get_goodbye).post(post_goodbye)
+                            )
+                            .route("/hello", shuttle_next::routing::get(hello));
 
                         let response = router.call(request).await.unwrap();
 

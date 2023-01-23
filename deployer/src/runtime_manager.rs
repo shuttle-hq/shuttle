@@ -98,7 +98,7 @@ impl RuntimeManager {
                             .output()
                             .expect("failed to install the local version of shuttle-runtime");
 
-                        return home::home_dir()
+                        return home::cargo_home()
                             .expect("failed to find path to cargo home")
                             .join("bin/shuttle-runtime");
                     }

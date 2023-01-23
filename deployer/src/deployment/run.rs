@@ -547,7 +547,6 @@ mod tests {
                 secret_getter,
                 runtime_manager.clone(),
                 StubDeploymentUpdater,
-                // kill_recv,
                 kill_old_deployments(),
                 handle_cleanup,
             )

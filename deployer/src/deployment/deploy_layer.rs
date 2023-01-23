@@ -457,7 +457,7 @@ mod tests {
             &self,
             _request: tonic::Request<DatabaseRequest>,
         ) -> Result<tonic::Response<DatabaseResponse>, tonic::Status> {
-            panic!("no run tests should request a db");
+            panic!("no deploy layer tests should request a db");
         }
     }
 

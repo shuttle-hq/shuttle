@@ -10,6 +10,7 @@ message DatabaseRequest {
   oneof db_type {
     Shared Shared = 10;
     AwsRds AwsRds = 11;
+    ElastiCache ElastiCache = 12;
   };
 }
 
@@ -29,6 +30,14 @@ message AwsRds {
 }
 
 message RdsConfig {
+
+}
+
+message ElastiCache {
+  ElastiCacheConfig elasticache = 1;
+}
+
+message ElastiCacheConfig {
 
 }
 

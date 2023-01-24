@@ -8,6 +8,7 @@ use strum::Display;
 pub enum Type {
     AwsRds(AwsRdsEngine),
     Shared(SharedEngine),
+    ElastiCache,
 }
 
 #[derive(Clone, Debug, Deserialize, Display, Serialize)]
@@ -32,6 +33,7 @@ impl Display for Type {
         match self {
             Type::AwsRds(rds_type) => write!(f, "aws_rds::{rds_type}"),
             Type::Shared(shared_type) => write!(f, "shared::{shared_type}"),
+            Type::ElastiCache => write!(f, "elasticache"),
         }
     }
 }

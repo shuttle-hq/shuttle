@@ -1,3 +1,4 @@
+use aws_sdk_elasticache::error::{CreateCacheClusterError, DescribeCacheClustersError};
 use aws_sdk_rds::{
     error::{CreateDBInstanceError, DescribeDBInstancesError},
     types::SdkError,
@@ -28,6 +29,12 @@ pub enum Error {
 
     #[error("failed to get description of RDS instance: {0}")]
     DescribeRDSInstance(#[from] SdkError<DescribeDBInstancesError>),
+
+    #[error("failed to create ElastiCache cluster: {0}")]
+    CreateElastiCacheCluster(#[from] SdkError<CreateCacheClusterError>),
+
+    #[error("failed to get description of ElastiCache cluster: {0}")]
+    DescribeElastiCacheCluster(#[from] SdkError<DescribeCacheClustersError>),
 
     #[error["plain error: {0}"]]
     Plain(String),

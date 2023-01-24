@@ -49,6 +49,12 @@ pub mod provisioner {
                         engine: Some(engine),
                     })
                 }
+                database::Type::ElastiCache => {
+                    let config = ElastiCacheConfig {};
+                    database_request::DbType::ElastiCache(ElastiCache {
+                        elasticache: Some(config),
+                    })
+                }
             }
         }
     }

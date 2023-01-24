@@ -2,15 +2,17 @@ use std::time::Duration;
 
 pub use args::Args;
 use aws_config::timeout;
+use aws_sdk_elasticache::error::ModifyCacheClusterErrorKind;
+use aws_sdk_elasticache::model::CacheCluster;
 use aws_sdk_rds::{error::ModifyDBInstanceErrorKind, model::DbInstance, types::SdkError, Client};
 pub use error::Error;
 use mongodb::{bson::doc, options::ClientOptions};
 use rand::Rng;
-use shuttle_proto::provisioner::provisioner_server::Provisioner;
 pub use shuttle_proto::provisioner::provisioner_server::ProvisionerServer;
 use shuttle_proto::provisioner::{
     aws_rds, database_request::DbType, shared, AwsRds, DatabaseRequest, DatabaseResponse, Shared,
 };
+use shuttle_proto::provisioner::{provisioner_server::Provisioner, ElastiCache};
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use tokio::time::sleep;
 use tonic::{Request, Response, Status};
@@ -22,9 +24,11 @@ mod error;
 const AWS_RDS_CLASS: &str = "db.t4g.micro";
 const MASTER_USERNAME: &str = "master";
 const RDS_SUBNET_GROUP: &str = "shuttle_rds";
+const ELASTICACHE_SUBNET_GROUP: &str = "shuttle_elasticache";
 
 pub struct MyProvisioner {
     pool: PgPool,
+    elasticache_client: aws_sdk_elasticache::Client,
     rds_client: aws_sdk_rds::Client,
     mongodb_client: mongodb::Client,
     fqdn: String,
@@ -39,6 +43,7 @@ impl MyProvisioner {
         fqdn: String,
         internal_pg_address: String,
         internal_mongodb_address: String,
+        internal_redis_address: String,
     ) -> Result<Self, Error> {
         let pool = PgPoolOptions::new()
             .min_connections(4)
@@ -62,8 +67,11 @@ impl MyProvisioner {
 
         let rds_client = aws_sdk_rds::Client::new(&aws_config);
 
+        let elasticache_client = aws_sdk_elasticache::Client::new(&aws_config);
+
         Ok(Self {
             pool,
+            elasticache_client,
             rds_client,
             mongodb_client,
             fqdn,
@@ -237,9 +245,9 @@ impl MyProvisioner {
             Ok(_) => {
                 wait_for_instance(client, &instance_name, "resetting-master-credentials").await?;
             }
-            Err(SdkError::ServiceError { err, .. }) => {
-                if let ModifyDBInstanceErrorKind::DbInstanceNotFoundFault(_) = err.kind {
-                    debug!("creating new AWS RDS {instance_name}");
+            Err(SdkError::ServiceError(err)) => {
+                if let ModifyDBInstanceErrorKind::DbInstanceNotFoundFault(_) = err.err().kind {
+                    debug!("creating new AWS {instance_name}");
 
                     client
                         .create_db_instance()
@@ -262,7 +270,7 @@ impl MyProvisioner {
                 } else {
                     return Err(Error::Plain(format!(
                         "got unexpected error from AWS RDS service: {}",
-                        err
+                        err.err()
                     )));
                 }
             }
@@ -298,6 +306,81 @@ impl MyProvisioner {
             port: engine_to_port(engine),
         })
     }
+
+    async fn request_elasticache(&self, project_name: &str) -> Result<DatabaseResponse, Error> {
+        let client = &self.elasticache_client;
+
+        let password = generate_password();
+        let cluster_name = format!("{}-elasticache", project_name);
+
+        debug!("trying to get AWS ElastiCache cluster: {cluster_name}");
+        let cluster = client
+            .modify_cache_cluster()
+            .cache_cluster_id(&cluster_name)
+            .auth_token(&password)
+            .send()
+            .await;
+
+        match cluster {
+            Ok(_) => {
+                wait_for_cluster(client, &cluster_name, "resetting-master-credentials").await?;
+            }
+            Err(SdkError::ServiceError(err)) => {
+                if let ModifyCacheClusterErrorKind::CacheClusterNotFoundFault(_) = err.err().kind {
+                    debug!("creating new AWS ElastiCache {cluster_name}");
+
+                    client
+                        .create_cache_cluster()
+                        .cache_cluster_id(&cluster_name)
+                        .auth_token(&password)
+                        .engine("redis")
+                        .engine_version("redis6.2")
+                        .cache_node_type(AWS_RDS_CLASS)
+                        .num_cache_nodes(1)
+                        .cache_subnet_group_name(ELASTICACHE_SUBNET_GROUP)
+                        .send()
+                        .await?
+                        .cache_cluster()
+                        .expect("to be able to create cluster");
+
+                    wait_for_cluster(client, &cluster_name, "creating").await?;
+                } else {
+                    return Err(Error::Plain(format!(
+                        "got unexpected error from AWS ElastiCache service: {}",
+                        err.err()
+                    )));
+                }
+            }
+            Err(unexpected) => {
+                return Err(Error::Plain(format!(
+                    "got unexpected error from AWS during API call: {}",
+                    unexpected
+                )))
+            }
+        };
+
+        // Wait for up
+        let cluster = wait_for_cluster(client, &cluster_name, "available").await?;
+
+        let address = cluster
+            .configuration_endpoint()
+            .expect("cluster to have an endpoint")
+            .address()
+            .expect("endpoint to have an address");
+
+        Ok(DatabaseResponse {
+            engine: "redis".to_owned(),
+            username: "redis".to_owned(),
+            password,
+            database_name: cluster
+                .cache_cluster_id()
+                .expect("cluster to have an ID")
+                .to_owned(),
+            address_private: address.to_owned(),
+            address_public: address.to_owned(),
+            port: "6379".to_owned(),
+        })
+    }
 }
 
 #[tonic::async_trait]
@@ -318,6 +401,9 @@ impl Provisioner for MyProvisioner {
             DbType::AwsRds(AwsRds { engine }) => {
                 self.request_aws_rds(&request.project_name, engine.expect("oneof to be set"))
                     .await?
+            }
+            DbType::ElastiCache(ElastiCache { .. }) => {
+                self.request_elasticache(&request.project_name).await?
             }
         };
 
@@ -359,6 +445,38 @@ async fn wait_for_instance(
 
         if status == wait_for {
             return Ok(instance);
+        }
+
+        sleep(Duration::from_secs(1)).await;
+    }
+}
+
+async fn wait_for_cluster(
+    client: &aws_sdk_elasticache::Client,
+    name: &str,
+    wait_for: &str,
+) -> Result<CacheCluster, Error> {
+    debug!("waiting for {name} to enter {wait_for} state");
+    loop {
+        let cluster = client
+            .describe_cache_clusters()
+            .cache_cluster_id(name)
+            .send()
+            .await?
+            .cache_clusters()
+            .expect("aws to return clusters")
+            .get(0)
+            .expect("to find the cluster just created or modified")
+            .clone();
+
+        let status = cluster
+            .cache_cluster_status()
+            .as_ref()
+            .expect("instance to have a status")
+            .clone();
+
+        if status == wait_for {
+            return Ok(cluster);
         }
 
         sleep(Duration::from_secs(1)).await;

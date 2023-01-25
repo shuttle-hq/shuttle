@@ -6,6 +6,7 @@ use strum::{Display, EnumString};
 pub enum Type {
     AwsRds(AwsRdsType),
     Shared(SharedType),
+    ElastiCache(ElastiCacheType),
 }
 
 #[derive(Clone, Copy, Debug, Display, EnumString, Eq, PartialEq)]
@@ -23,11 +24,18 @@ pub enum SharedType {
     MongoDb,
 }
 
+#[derive(Clone, Copy, Debug, Display, EnumString, Eq, PartialEq)]
+#[strum(serialize_all = "lowercase")]
+pub enum ElastiCacheType {
+    Redis,
+}
+
 impl From<Type> for shuttle_common::database::Type {
     fn from(r#type: Type) -> Self {
         match r#type {
             Type::AwsRds(rds_type) => Self::AwsRds(rds_type.into()),
             Type::Shared(shared_type) => Self::Shared(shared_type.into()),
+            Type::ElastiCache(elasticache_type) => Self::ElastiCache(elasticache_type.into()),
         }
     }
 }
@@ -51,11 +59,22 @@ impl From<SharedType> for shuttle_common::database::SharedEngine {
     }
 }
 
+impl From<ElastiCacheType> for shuttle_common::database::ElastiCacheEngine {
+    fn from(shared_type: ElastiCacheType) -> Self {
+        match shared_type {
+            ElastiCacheType::Redis => Self::Redis,
+        }
+    }
+}
+
 impl From<shuttle_common::database::Type> for Type {
     fn from(r#type: shuttle_common::database::Type) -> Self {
         match r#type {
             shuttle_common::database::Type::AwsRds(rds_type) => Self::AwsRds(rds_type.into()),
             shuttle_common::database::Type::Shared(shared_type) => Self::Shared(shared_type.into()),
+            shuttle_common::database::Type::ElastiCache(elasticache_type) => {
+                Self::ElastiCache(elasticache_type.into())
+            }
         }
     }
 }
@@ -84,6 +103,7 @@ impl Display for Type {
         match self {
             Type::AwsRds(rds_type) => write!(f, "aws_rds::{rds_type}"),
             Type::Shared(shared_type) => write!(f, "shared::{shared_type}"),
+            Type::ElastiCache(elasticache_type) => write!(f, "shared::{elasticache_type}"),
         }
     }
 }
@@ -99,6 +119,9 @@ impl FromStr for Type {
                 )),
                 "shared" => Ok(Self::Shared(
                     SharedType::from_str(rest).map_err(|e| e.to_string())?,
+                )),
+                "elasticache" => Ok(Self::ElastiCache(
+                    ElastiCacheType::from_str(rest).map_err(|e| e.to_string())?,
                 )),
                 _ => Err(format!("'{prefix}' is an unknown database type")),
             }

@@ -44,7 +44,6 @@ impl MyProvisioner {
         fqdn: String,
         internal_pg_address: String,
         internal_mongodb_address: String,
-        internal_redis_address: String,
     ) -> Result<Self, Error> {
         let pool = PgPoolOptions::new()
             .min_connections(4)

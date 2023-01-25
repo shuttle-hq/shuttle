@@ -15,6 +15,7 @@ exclude = [
   "e2e",
   "examples",
   "resources/aws-rds",
+  "resources/elasticache",
   "resources/persist",
   "resources/secrets",
   "resources/shared-db",

@@ -16,7 +16,7 @@ use crossterm::{
 use futures::StreamExt;
 use portpicker::pick_unused_port;
 use shuttle_common::{
-    database::{AwsRdsEngine, SharedEngine},
+    database::{AwsRdsEngine, ElastiCacheEngine, SharedEngine},
     DatabaseReadyInfo,
 };
 use shuttle_service::{database::Type, error::CustomError, Factory, ServiceName};
@@ -410,6 +410,17 @@ fn db_type_to_config(db_type: Type) -> EngineConfig {
                 "-e".to_string(),
                 "show databases;".to_string(),
             ],
+        },
+        Type::ElastiCache(ElastiCacheEngine::Redis) => EngineConfig {
+            r#type: "elasticache_redis".to_string(),
+            image: "redis:6.2.10".to_string(),
+            engine: "redis".to_string(),
+            username: "root".to_string(),
+            password: "redis".to_string(),
+            database_name: "redis".to_string(),
+            port: "6379/tcp".to_string(),
+            env: Some(vec!["REDIS_PASSWORD=redis".to_string()]),
+            is_ready_cmd: vec!["redis-cli".to_string(), "ping".to_string()],
         },
     }
 }

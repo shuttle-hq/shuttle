@@ -89,6 +89,8 @@ pub enum Command {
     Login(LoginArgs),
     /// run a shuttle service locally
     Run(RunArgs),
+    /// Open an issue on github and provide feedback.
+    Feedback,
     /// manage a project on shuttle
     #[clap(subcommand)]
     Project(ProjectCommand),

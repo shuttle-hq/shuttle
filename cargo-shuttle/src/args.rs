@@ -146,6 +146,9 @@ pub struct RunArgs {
     /// use 0.0.0.0 instead of localhost (for usage with local external devices)
     #[clap(long)]
     pub external: bool,
+    /// use prod secrets instead of dev secrets
+    #[clap(long)]
+    pub prod_secrets: bool,
 }
 
 #[derive(Parser, Debug)]

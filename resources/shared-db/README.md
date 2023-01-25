@@ -11,3 +11,10 @@ Add `shuttle-shared-db` to the dependencies for your service. Every type of shar
 
 An example using the Rocket framework can be found on [GitHub](https://github.com/shuttle-hq/examples/tree/main/rocket/postgres)
 
+### Postgres
+This resource has the following options
+
+| Option    | Type | Description                                                                                                    |
+|-----------|------|----------------------------------------------------------------------------------------------------------------|
+| local_uri | &str | Don't spin a local docker instance of postgres, but rather connect to this URI instead for `cargo shuttle run` |
+

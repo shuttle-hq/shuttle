@@ -292,7 +292,7 @@ use tokio::task::JoinHandle;
 #[cfg(feature = "loader")]
 pub mod loader;
 
-pub use shuttle_common::project::ProjectName as ServiceName;
+pub use shuttle_common::{deployment::Environment, project::ProjectName as ServiceName};
 
 /// Factories can be used to request the provisioning of additional resources (like databases).
 ///
@@ -314,6 +314,9 @@ pub trait Factory: Send + Sync {
 
     /// Get the name for the service being deployed
     fn get_service_name(&self) -> ServiceName;
+
+    /// Get the environment for this deployment
+    fn get_environment(&self) -> Environment;
 
     /// Get the path where the build files are stored for this service
     fn get_build_path(&self) -> Result<PathBuf, crate::Error>;

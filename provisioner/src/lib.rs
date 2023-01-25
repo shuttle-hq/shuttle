@@ -10,7 +10,8 @@ use mongodb::{bson::doc, options::ClientOptions};
 use rand::Rng;
 pub use shuttle_proto::provisioner::provisioner_server::ProvisionerServer;
 use shuttle_proto::provisioner::{
-    aws_rds, database_request::DbType, shared, AwsRds, DatabaseRequest, DatabaseResponse, Shared,
+    aws_rds, database_request::DbType, elasti_cache, shared, AwsRds, DatabaseRequest,
+    DatabaseResponse, Shared,
 };
 use shuttle_proto::provisioner::{provisioner_server::Provisioner, ElastiCache};
 use sqlx::{postgres::PgPoolOptions, PgPool};
@@ -307,7 +308,11 @@ impl MyProvisioner {
         })
     }
 
-    async fn request_elasticache(&self, project_name: &str) -> Result<DatabaseResponse, Error> {
+    async fn request_elasticache(
+        &self,
+        project_name: &str,
+        engine: elasti_cache::Engine,
+    ) -> Result<DatabaseResponse, Error> {
         let client = &self.elasticache_client;
 
         let password = generate_password();
@@ -333,8 +338,8 @@ impl MyProvisioner {
                         .create_cache_cluster()
                         .cache_cluster_id(&cluster_name)
                         .auth_token(&password)
-                        .engine("redis")
-                        .engine_version("redis6.2")
+                        .engine(engine.to_string())
+                        .engine_version("redis6.2") // TODO: pass this through with the DB_request as well
                         .cache_node_type(AWS_RDS_CLASS)
                         .num_cache_nodes(1)
                         .cache_subnet_group_name(ELASTICACHE_SUBNET_GROUP)
@@ -402,8 +407,9 @@ impl Provisioner for MyProvisioner {
                 self.request_aws_rds(&request.project_name, engine.expect("oneof to be set"))
                     .await?
             }
-            DbType::ElastiCache(ElastiCache { .. }) => {
-                self.request_elasticache(&request.project_name).await?
+            DbType::ElastiCache(ElastiCache { engine }) => {
+                self.request_elasticache(&request.project_name, engine.expect("oneof to be set"))
+                    .await?
             }
         };
 

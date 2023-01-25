@@ -34,7 +34,9 @@ message RdsConfig {
 }
 
 message ElastiCache {
-  ElastiCacheConfig elasticache = 1;
+  oneof engine {
+    ElastiCacheConfig redis = 1;
+  }
 }
 
 message ElastiCacheConfig {

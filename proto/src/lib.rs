@@ -6,7 +6,7 @@ pub mod provisioner {
     use std::fmt::Display;
 
     use shuttle_common::{
-        database::{self, AwsRdsEngine, SharedEngine},
+        database::{self, AwsRdsEngine, ElastiCacheEngine, SharedEngine},
         DatabaseReadyInfo,
     };
 
@@ -49,10 +49,13 @@ pub mod provisioner {
                         engine: Some(engine),
                     })
                 }
-                database::Type::ElastiCache => {
+                database::Type::ElastiCache(engine) => {
                     let config = ElastiCacheConfig {};
+                    let engine = match engine {
+                        ElastiCacheEngine::Redis => elasti_cache::Engine::Redis(config),
+                    };
                     database_request::DbType::ElastiCache(ElastiCache {
-                        elasticache: Some(config),
+                        engine: Some(engine),
                     })
                 }
             }
@@ -65,6 +68,13 @@ pub mod provisioner {
                 Self::Mariadb(_) => write!(f, "mariadb"),
                 Self::Mysql(_) => write!(f, "mysql"),
                 Self::Postgres(_) => write!(f, "postgres"),
+            }
+        }
+    }
+    impl Display for elasti_cache::Engine {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                Self::Redis(_) => write!(f, "redis"),
             }
         }
     }

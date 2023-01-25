@@ -1,13 +1,12 @@
 #![doc = include_str!("../README.md")]
 
 use async_trait::async_trait;
-use shuttle_service::{database, error::CustomError, Error, Factory, ResourceBuilder};
-use tokio::runtime::Runtime;
+use shuttle_service::{database, error::CustomError, Error, Factory, ResourceBuilder, Runtime};
 
-pub struct ElastiCache;
+pub struct Redis;
 
 #[async_trait]
-impl ResourceBuilder<redis::aio::Connection> for ElastiCache {
+impl ResourceBuilder<redis::Client> for Redis {
     fn new() -> Self {
         Self {}
     }
@@ -15,25 +14,16 @@ impl ResourceBuilder<redis::aio::Connection> for ElastiCache {
     async fn build(
         self,
         factory: &mut dyn Factory,
-        runtime: &Runtime,
-    ) -> Result<redis::aio::Connection, Error> {
+        _runtime: &Runtime,
+    ) -> Result<redis::Client, Error> {
         let connection_string = factory
             .get_db_connection_string(database::Type::ElastiCache(
                 database::ElastiCacheEngine::Redis,
             ))
             .await?;
 
-        // A redis connection cannot cross runtime boundaries, so make sure to create the connection on the service end
-        let conn = runtime
-            .spawn(async move {
-                let client = redis::Client::open(connection_string)
-                    .expect("connection string should be valid");
-                client.get_async_connection().await
-            })
-            .await
-            .map_err(CustomError::new)?
-            .map_err(CustomError::new)?;
+        let client = redis::Client::open(connection_string).map_err(CustomError::new)?;
 
-        Ok(conn)
+        Ok(client)
     }
 }

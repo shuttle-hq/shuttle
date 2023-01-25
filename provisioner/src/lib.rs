@@ -366,23 +366,35 @@ impl MyProvisioner {
         // Wait for up
         let cluster = wait_for_cluster(client, &cluster_name, "available").await?;
 
-        let address = cluster
-            .configuration_endpoint()
-            .expect("cluster to have an endpoint")
+        let name = cluster
+            .cache_cluster_id()
+            .expect("cluster to have an ID")
+            .to_owned();
+
+        let endpoint = cluster
+            .cache_nodes
+            .expect("cluster to have a slice of nodes")
+            .first()
+            .expect("cluster should have one node")
+            .endpoint()
+            .expect("node should have an endpoint")
+            .to_owned();
+
+        let address = endpoint
             .address()
-            .expect("endpoint to have an address");
+            .expect("endpoint should have an address")
+            .to_owned();
+
+        let port = endpoint.port();
 
         Ok(DatabaseResponse {
             engine: "redis".to_owned(),
             username: "redis".to_owned(),
             password,
-            database_name: cluster
-                .cache_cluster_id()
-                .expect("cluster to have an ID")
-                .to_owned(),
-            address_private: address.to_owned(),
-            address_public: address.to_owned(),
-            port: "6379".to_owned(),
+            database_name: name,
+            address_private: address.clone(),
+            address_public: address,
+            port: port.to_string(),
         })
     }
 }

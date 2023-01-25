@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-elasticache"
-version = "0.1.0"
+version = "0.8.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Plugin to provision AWS Elasticache"
@@ -9,5 +9,4 @@ keywords = ["shuttle-service", "elasticache"]
 [dependencies]
 async-trait = "0.1.56"
 shuttle-service = { path = "../../service", version = "0.8.0", default-features = false }
-redis = { version = "0.22.3", features = ["tokio-comp", "aio"]}
-tokio = { version = "1.22.0", features = ["rt"] }
+redis = { version = "0.22.3" }

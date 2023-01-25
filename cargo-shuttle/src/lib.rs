@@ -227,7 +227,7 @@ impl Shuttle {
     }
 
     /// Provide feedback on GitHub.
-    async fn feedback(&mut self) -> Result<()> {
+    async fn feedback(&self) -> Result<()> {
         let url = "https://github.com/shuttle-hq/shuttle/issues/new";
         let _ = webbrowser::open(url);
 

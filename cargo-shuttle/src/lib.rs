@@ -73,6 +73,7 @@ impl Shuttle {
             Command::Init(init_args) => self.init(init_args, args.project_args).await,
             Command::Generate { shell, output } => self.complete(shell, output).await,
             Command::Login(login_args) => self.login(login_args).await,
+            Command::Logout => self.logout().await,
             Command::Run(run_args) => self.local_run(run_args).await,
             need_client => {
                 let mut client = Client::new(self.ctx.api_url());
@@ -245,6 +246,13 @@ impl Shuttle {
 
         self.ctx.set_api_key(api_key)?;
 
+        Ok(())
+    }
+
+    async fn logout(&mut self) -> Result<()> {
+        self.ctx.set_api_key("".to_string())?;
+
+        println!("Successfully logged out of shuttle.");
         Ok(())
     }
 

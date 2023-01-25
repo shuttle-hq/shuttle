@@ -98,6 +98,14 @@ impl From<shuttle_common::database::SharedEngine> for SharedType {
     }
 }
 
+impl From<shuttle_common::database::ElastiCacheEngine> for ElastiCacheType {
+    fn from(shared_type: shuttle_common::database::ElastiCacheEngine) -> Self {
+        match shared_type {
+            shuttle_common::database::ElastiCacheEngine::Redis => Self::Redis,
+        }
+    }
+}
+
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

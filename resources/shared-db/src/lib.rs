@@ -72,14 +72,16 @@ impl Postgres {
 }
 
 #[cfg(feature = "mongodb")]
-pub struct MongoDb;
+pub struct MongoDb {
+    local_uri: Option<String>,
+}
 
 /// Get a `mongodb::Database` from any factory
 #[cfg(feature = "mongodb")]
 #[async_trait]
 impl ResourceBuilder<mongodb::Database> for MongoDb {
     fn new() -> Self {
-        Self {}
+        Self { local_uri: None }
     }
 
     async fn build(
@@ -87,10 +89,24 @@ impl ResourceBuilder<mongodb::Database> for MongoDb {
         factory: &mut dyn Factory,
         runtime: &Runtime,
     ) -> Result<mongodb::Database, crate::Error> {
-        let connection_string = factory
-            .get_db_connection_string(database::Type::Shared(database::SharedEngine::MongoDb))
-            .await
-            .map_err(CustomError::new)?;
+        let connection_string = match factory.get_environment() {
+            shuttle_service::Environment::Production => factory
+                .get_db_connection_string(database::Type::Shared(database::SharedEngine::MongoDb))
+                .await
+                .map_err(CustomError::new)?,
+            shuttle_service::Environment::Local => {
+                if let Some(local_uri) = self.local_uri {
+                    local_uri
+                } else {
+                    factory
+                        .get_db_connection_string(database::Type::Shared(
+                            database::SharedEngine::MongoDb,
+                        ))
+                        .await
+                        .map_err(CustomError::new)?
+                }
+            }
+        };
 
         let mut client_options = mongodb::options::ClientOptions::parse(connection_string)
             .await
@@ -115,5 +131,15 @@ impl ResourceBuilder<mongodb::Database> for MongoDb {
                 "mongodb connection string missing default database".into(),
             )),
         }
+    }
+}
+
+#[cfg(feature = "mongodb")]
+impl MongoDb {
+    /// Use a custom connection string for local runs
+    pub fn local_uri(mut self, local_uri: &str) -> Self {
+        self.local_uri = Some(local_uri.to_string());
+
+        self
     }
 }

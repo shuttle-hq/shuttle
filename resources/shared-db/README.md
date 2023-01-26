@@ -16,5 +16,12 @@ This resource has the following options
 
 | Option    | Type | Description                                                                                                    |
 |-----------|------|----------------------------------------------------------------------------------------------------------------|
-| local_uri | &str | Don't spin a local docker instance of postgres, but rather connect to this URI instead for `cargo shuttle run` |
+| local_uri | &str | Don't spin a local docker instance of Postgres, but rather connect to this URI instead for `cargo shuttle run` |
+
+### MongoDB
+This resource has the following options
+
+| Option    | Type | Description                                                                                                   |
+|-----------|------|---------------------------------------------------------------------------------------------------------------|
+| local_uri | &str | Don't spin a local docker instance of MongoDB, but rather connect to this URI instead for `cargo shuttle run` |
 

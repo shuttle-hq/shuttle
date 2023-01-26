@@ -1422,7 +1422,7 @@ dependencies = [
  "cargo-edit",
  "cargo_metadata",
  "chrono",
- "clap 3.2.23",
+ "clap 4.0.27",
  "clap_complete",
  "crossbeam-channel",
  "crossterm",
@@ -1602,11 +1602,11 @@ dependencies = [
 
 [[package]]
 name = "clap_complete"
-version = "3.2.5"
+version = "4.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f7a2e0a962c45ce25afce14220bc24f9dade0a1787f185cecf96bfba7847cd8"
+checksum = "10861370d2ba66b0f5989f83ebf35db6421713fd92351790e7fdd6c36774c56b"
 dependencies = [
- "clap 3.2.23",
+ "clap 4.0.27",
 ]
 
 [[package]]
@@ -5958,7 +5958,7 @@ version = "0.8.0"
 dependencies = [
  "aws-config",
  "aws-sdk-rds",
- "clap 3.2.23",
+ "clap 4.0.27",
  "ctor",
  "fqdn",
  "mongodb",

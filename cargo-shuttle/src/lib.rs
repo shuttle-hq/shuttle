@@ -150,7 +150,7 @@ impl Shuttle {
                 .default(".".to_owned())
                 .interact()?;
             println!();
-            args::parse_init_path(&OsString::from(directory_str))?
+            args::parse_init_path(OsString::from(directory_str))?
         } else {
             args.path.clone()
         };

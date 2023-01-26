@@ -14,6 +14,8 @@ pub enum Error {
     BuildPanic(String),
     #[error("Panic occurred in `Service::bind`: {0}")]
     BindPanic(String),
+    #[error("Failed to interpolate string: {0}")]
+    StringInterpolation(#[from] strfmt::FmtError),
     #[error("Custom error: {0}")]
     Custom(#[from] CustomError),
 }

@@ -20,4 +20,4 @@ Each engine can take in the following options:
 
 | Option    | Type | Description                                                                                                  |
 |-----------|------|--------------------------------------------------------------------------------------------------------------|
-| local_uri | &str | Don't spin a local docker instance of the DB, but rather connect to this URI instead for `cargo shuttle run` |
+| local_uri | &str | Don't spin up a local docker instance of the DB, but rather connect to this URI instead for `cargo shuttle run` |

@@ -220,6 +220,7 @@ pub use async_trait::async_trait;
 
 // Pub uses by `codegen`
 pub use anyhow::Context;
+pub use strfmt::strfmt;
 pub use tokio::runtime::Runtime;
 pub use tracing;
 pub use tracing_subscriber;

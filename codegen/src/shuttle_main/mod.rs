@@ -3,8 +3,8 @@ use proc_macro_error::emit_error;
 use quote::{quote, ToTokens};
 use syn::{
     parenthesized, parse::Parse, parse2, parse_macro_input, parse_quote, punctuated::Punctuated,
-    spanned::Spanned, token::Paren, Attribute, Expr, FnArg, Ident, ItemFn, Pat, PatIdent, Path,
-    ReturnType, Signature, Stmt, Token, Type,
+    spanned::Spanned, token::Paren, Attribute, Expr, ExprLit, FnArg, Ident, ItemFn, Lit, Pat,
+    PatIdent, Path, ReturnType, Signature, Stmt, Token, Type,
 };
 
 pub(crate) fn r#impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -94,16 +94,6 @@ impl Parse for BuilderOptions {
             paren_token: parenthesized!(content in input),
             options: content.parse_terminated(BuilderOption::parse)?,
         })
-    }
-}
-
-impl ToTokens for BuilderOptions {
-    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-        let (methods, values): (Vec<_>, Vec<_>) =
-            self.options.iter().map(|o| (&o.ident, &o.value)).unzip();
-        let chain = quote!(#(.#methods(#values))*);
-
-        chain.to_tokens(tokens);
     }
 }
 
@@ -203,10 +193,33 @@ impl ToTokens for Wrapper {
         let mut fn_inputs_builder: Vec<_> = Vec::with_capacity(self.fn_inputs.len());
         let mut fn_inputs_builder_options: Vec<_> = Vec::with_capacity(self.fn_inputs.len());
 
+        let mut needs_vars = false;
+
         for input in self.fn_inputs.iter() {
             fn_inputs.push(&input.ident);
             fn_inputs_builder.push(&input.builder.path);
-            fn_inputs_builder_options.push(&input.builder.options);
+
+            let (methods, values): (Vec<_>, Vec<_>) = input
+                .builder
+                .options
+                .options
+                .iter()
+                .map(|o| {
+                    let value = match &o.value {
+                        Expr::Lit(ExprLit {
+                            lit: Lit::Str(str), ..
+                        }) => {
+                            needs_vars = true;
+                            quote!(&shuttle_service::strfmt(#str, &vars)?)
+                        }
+                        other => quote!(#other),
+                    };
+
+                    (&o.ident, value)
+                })
+                .unzip();
+            let chain = quote!(#(.#methods(#values))*);
+            fn_inputs_builder_options.push(chain);
         }
 
         let factory_ident: Ident = if self.fn_inputs.is_empty() {
@@ -221,6 +234,14 @@ impl ToTokens for Wrapper {
             Some(parse_quote!(
                 use shuttle_service::ResourceBuilder;
             ))
+        };
+
+        let vars: Option<Stmt> = if needs_vars {
+            Some(parse_quote!(
+                let vars = std::collections::HashMap::from_iter(factory.get_secrets().await?.into_iter().map(|(key, value)| (format!("secrets.{}", key), value)));
+            ))
+        } else {
+            None
         };
 
         let wrapper = quote! {
@@ -259,6 +280,7 @@ impl ToTokens for Wrapper {
                     }
                 })?;
 
+                #vars
                 #(let #fn_inputs = #fn_inputs_builder::new()#fn_inputs_builder_options.build(#factory_ident, runtime).await.context(format!("failed to provision {}", stringify!(#fn_inputs_builder)))?;)*
 
                 runtime.spawn(async {
@@ -500,7 +522,8 @@ mod tests {
             boolean = true,
             integer = 5,
             float = 2.65,
-            enum_variant = SomeEnum::Variant1
+            enum_variant = SomeEnum::Variant1,
+            sensitive = "user:{secrets.password}"
         ));
 
         let mut expected: BuilderOptions = Default::default();
@@ -511,25 +534,11 @@ mod tests {
         expected
             .options
             .push(parse_quote!(enum_variant = SomeEnum::Variant1));
+        expected
+            .options
+            .push(parse_quote!(sensitive = "user:{secrets.password}"));
 
         assert_eq!(input, expected);
-    }
-
-    #[test]
-    fn tokenize_builder_options() {
-        let mut input: BuilderOptions = Default::default();
-        input.options.push(parse_quote!(string = "string_val"));
-        input.options.push(parse_quote!(boolean = true));
-        input.options.push(parse_quote!(integer = 5));
-        input.options.push(parse_quote!(float = 2.65));
-        input
-            .options
-            .push(parse_quote!(enum_variant = SomeEnum::Variant1));
-
-        let actual = quote!(#input);
-        let expected = quote!(.string("string_val").boolean(true).integer(5).float(2.65).enum_variant(SomeEnum::Variant1));
-
-        assert_eq!(actual.to_string(), expected.to_string());
     }
 
     #[test]
@@ -627,7 +636,8 @@ mod tests {
                     }
                 })?;
 
-                let pool = shuttle_shared_db::Postgres::new().size("10Gb").public(false).build(factory, runtime).await.context(format!("failed to provision {}", stringify!(shuttle_shared_db::Postgres)))?;
+                let vars = std::collections::HashMap::from_iter(factory.get_secrets().await?.into_iter().map(|(key, value)| (format!("secrets.{}", key), value)));
+                let pool = shuttle_shared_db::Postgres::new().size(&shuttle_service::strfmt("10Gb", &vars)?).public(false).build(factory, runtime).await.context(format!("failed to provision {}", stringify!(shuttle_shared_db::Postgres)))?;
 
                 runtime.spawn(async {
                     complex(pool)

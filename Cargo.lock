@@ -6015,6 +6015,7 @@ dependencies = [
  "shuttle-codegen",
  "shuttle-common",
  "sqlx",
+ "strfmt",
  "sync_wrapper",
  "thiserror",
  "thruster",
@@ -6335,6 +6336,12 @@ name = "stdweb-internal-runtime"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "213701ba3370744dcd1a12960caa4843b3d68b4d1c0a5d575e0d65b2ee9d16c0"
+
+[[package]]
+name = "strfmt"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "26cdabcdab6da7e8c2ac1160e917ec83e78bbe3e10325e17d532718c67a4828f"
 
 [[package]]
 name = "stringprep"

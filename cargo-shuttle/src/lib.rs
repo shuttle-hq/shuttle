@@ -73,6 +73,7 @@ impl Shuttle {
             Command::Init(init_args) => self.init(init_args, args.project_args).await,
             Command::Generate { shell, output } => self.complete(shell, output).await,
             Command::Login(login_args) => self.login(login_args).await,
+            Command::Feedback => self.feedback().await,
             Command::Run(run_args) => self.local_run(run_args).await,
             need_client => {
                 let mut client = Client::new(self.ctx.api_url());
@@ -223,6 +224,15 @@ impl Shuttle {
         }
 
         self.ctx.load_local(project_args)
+    }
+
+    /// Provide feedback on GitHub.
+    async fn feedback(&self) -> Result<()> {
+        let url = "https://github.com/shuttle-hq/shuttle/issues/new";
+        let _ = webbrowser::open(url);
+
+        println!("\nIf your browser did not open automatically, go to {url}");
+        Ok(())
     }
 
     /// Log in with the given API key or after prompting the user for one.

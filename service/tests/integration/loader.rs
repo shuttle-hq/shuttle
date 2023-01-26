@@ -58,7 +58,7 @@ impl Factory for DummyFactory {
     }
 
     fn get_environment(&self) -> shuttle_service::Environment {
-        panic!("did not expect any loader test to get the environent")
+        shuttle_service::Environment::Local
     }
 
     async fn get_secrets(&mut self) -> Result<BTreeMap<String, String>, Error> {

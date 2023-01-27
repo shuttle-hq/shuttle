@@ -382,76 +382,76 @@ workflows:
   version: 2
   ci:
     jobs:
-      #  - workspace-fmt
-      #  - workspace-clippy:
-      #      name: workspace-clippy-<< matrix.framework >>
-      #      requires:
-      #        - workspace-fmt
-      #      matrix:
-      #        parameters:
-      #          framework: ["web-actix-web", "web-axum", "web-rocket", "web-poem", "web-thruster", "web-tide", "web-tower","web-warp", "web-salvo", "bot-serenity", "bot-poise"]
-      #  - check-standalone:
-      #      matrix:
-      #        parameters:
-      #          path:
-      #            - resources/aws-rds
-      #            - resources/persist
-      #            - resources/secrets
-      #            - resources/shared-db
-      #            - resources/static-folder
-      #  - service-test:
-      #      requires:
-      #        - workspace-clippy
-      #  - platform-test:
-      #      requires:
-      #        - workspace-clippy
-      #      matrix:
-      #        parameters:
-      #          crate: ["shuttle-deployer", "cargo-shuttle", "shuttle-codegen", "shuttle-common", "shuttle-proto", "shuttle-provisioner"]
-      #  - e2e-test:
-      #      requires:
-      #        - service-test
-      #        - platform-test
-      #        - check-standalone
-      #      filters:
-      #        branches:
-      #          only: production
-      #  - build-and-push:
-      #      requires:
-      #        - e2e-test
-      #      filters:
-      #        branches:
-      #          only: production
+       - workspace-fmt
+       - workspace-clippy:
+           name: workspace-clippy-<< matrix.framework >>
+           requires:
+             - workspace-fmt
+           matrix:
+             parameters:
+               framework: ["web-actix-web", "web-axum", "web-rocket", "web-poem", "web-thruster", "web-tide", "web-tower","web-warp", "web-salvo", "bot-serenity", "bot-poise"]
+       - check-standalone:
+           matrix:
+             parameters:
+               path:
+                 - resources/aws-rds
+                 - resources/persist
+                 - resources/secrets
+                 - resources/shared-db
+                 - resources/static-folder
+       - service-test:
+           requires:
+             - workspace-clippy
+       - platform-test:
+           requires:
+             - workspace-clippy
+           matrix:
+             parameters:
+               crate: ["shuttle-deployer", "cargo-shuttle", "shuttle-codegen", "shuttle-common", "shuttle-proto", "shuttle-provisioner"]
+       - e2e-test:
+           requires:
+             - service-test
+             - platform-test
+             - check-standalone
+           filters:
+             branches:
+               only: production
+       - build-and-push:
+           requires:
+             - e2e-test
+           filters:
+             branches:
+               only: production
        - build-binaries-linux:
            name: build-binaries-x86_64
            image: ubuntu-2204:2022.04.1
            target: x86_64-unknown-linux-musl
            resource_class: medium
-          #  filters:
-          #    branches:
-          #      only: production
+           filters:
+             branches:
+               only: production
        - build-binaries-linux:
            name: build-binaries-aarch64
            image: ubuntu-2004:202101-01
            target: aarch64-unknown-linux-musl
            resource_class: arm.medium
-          #  filters:
-          #    branches:
-          #      only: production
-      #  - build-binaries-windows
-          # filters:
-          #   branches:
-          #     only: production
-       - build-binaries-mac
-          # filters:
-          #   branches:
-          #    only: production
+           filters:
+             branches:
+               only: production
+       - build-binaries-windows:
+          filters:
+            branches:
+              only: production
+       - build-binaries-mac:
+          filters:
+            branches:
+             only: production
        - publish-github-release:
           requires:
             - build-binaries-x86_64
             - build-binaries-aarch64
-            # - build-binaries-windows
+            - build-binaries-windows
             - build-binaries-mac
-          # filters:
-          #   branches:
-          #    only: production
+          filters:
+            branches:
+             only: production

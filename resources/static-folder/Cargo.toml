@@ -13,5 +13,5 @@ shuttle-service = { path = "../../service", version = "0.8.0", default-features 
 tokio = { version = "1.19.2", features = ["rt"] }
 
 [dev-dependencies]
-tempdir = "0.3.7"
+tempfile = "3.3.0"
 tokio = { version = "1.19.2", features = ["macros"] }

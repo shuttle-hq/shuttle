@@ -5,7 +5,7 @@ use shuttle_common::{database, DatabaseReadyInfo};
 use shuttle_proto::provisioner::{
     database_request::DbType, provisioner_client::ProvisionerClient, DatabaseRequest,
 };
-use shuttle_service::{Factory, ServiceName};
+use shuttle_service::{Environment, Factory, ServiceName};
 use thiserror::Error;
 use tonic::{
     transport::{Channel, Endpoint},
@@ -192,6 +192,10 @@ impl<R: ResourceRecorder, S: SecretGetter> Factory for ProvisionerFactory<R, S> 
 
     fn get_service_name(&self) -> ServiceName {
         self.service_name.clone()
+    }
+
+    fn get_environment(&self) -> Environment {
+        Environment::Production
     }
 
     fn get_build_path(&self) -> Result<PathBuf, shuttle_service::Error> {

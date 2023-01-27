@@ -19,7 +19,7 @@ use shuttle_common::{
     database::{AwsRdsEngine, SharedEngine},
     DatabaseReadyInfo,
 };
-use shuttle_service::{database::Type, error::CustomError, Factory, ServiceName};
+use shuttle_service::{database::Type, error::CustomError, Environment, Factory, ServiceName};
 use std::{
     collections::{BTreeMap, HashMap},
     io::stdout,
@@ -182,6 +182,10 @@ impl Factory for LocalFactory {
 
     fn get_service_name(&self) -> ServiceName {
         self.service_name.clone()
+    }
+
+    fn get_environment(&self) -> Environment {
+        Environment::Local
     }
 
     fn get_build_path(&self) -> Result<PathBuf, shuttle_service::Error> {

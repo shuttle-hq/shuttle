@@ -104,6 +104,23 @@ async fn get_project(
     Ok(AxumJson(response))
 }
 
+async fn get_projects_list(
+    State(RouterState { service, .. }): State<RouterState>,
+    User { name, .. }: User,
+) -> Result<AxumJson<Vec<project::Response>>, Error> {
+    let projects = service
+        .iter_user_projects_detailed(name.clone())
+        .await?
+        .into_iter()
+        .map(|project| project::Response {
+            name: project.0.to_string(),
+            state: project.1.into(),
+        })
+        .collect();
+
+    Ok(AxumJson(projects))
+}
+
 #[instrument(skip_all, fields(%project))]
 async fn post_project(
     State(RouterState {
@@ -457,6 +474,7 @@ impl ApiBuilder {
         self.router = self
             .router
             .route("/", get(get_status))
+            .route("/projects", get(get_projects_list))
             .route(
                 "/projects/:project_name",
                 get(get_project).delete(delete_project).post(post_project),

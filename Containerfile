@@ -1,5 +1,6 @@
 #syntax=docker/dockerfile-upstream:1.4.0-rc1
-FROM rust:1.65.0-buster as shuttle-build
+ARG RUSTUP_TOOLCHAIN
+FROM rust:${RUSTUP_TOOLCHAIN}-buster as shuttle-build
 RUN apt-get update &&\
     apt-get install -y curl
 # download protoc binary and unzip it in usr/bin
@@ -21,12 +22,14 @@ RUN cargo chef prepare --recipe-path recipe.json
 
 FROM shuttle-build AS builder
 COPY --from=planner /build/recipe.json recipe.json
-RUN cargo chef cook --recipe-path recipe.json
+ARG CARGO_PROFILE
+RUN cargo chef cook $(if [ "$CARGO_PROFILE" = "release" ]; then echo --${CARGO_PROFILE}; fi) --recipe-path recipe.json
 COPY --from=cache /build .
 ARG folder
-RUN cargo build --bin shuttle-${folder}
+RUN cargo build --bin shuttle-${folder} $(if [ "$CARGO_PROFILE" = "release" ]; then echo --${CARGO_PROFILE}; fi)
 
-FROM rust:1.65.0-buster as shuttle-common
+ARG RUSTUP_TOOLCHAIN
+FROM rust:${RUSTUP_TOOLCHAIN}-buster as shuttle-common
 RUN apt-get update &&\
     apt-get install -y curl
 RUN rustup component add rust-src
@@ -36,5 +39,8 @@ FROM shuttle-common
 ARG folder
 COPY ${folder}/prepare.sh /prepare.sh
 RUN /prepare.sh
-COPY --from=builder /build/target/debug/shuttle-${folder} /usr/local/bin/service
+ARG CARGO_PROFILE
+COPY --from=builder /build/target/${CARGO_PROFILE}/shuttle-${folder} /usr/local/bin/service
+ARG RUSTUP_TOOLCHAIN
+ENV RUSTUP_TOOLCHAIN=${RUSTUP_TOOLCHAIN}
 ENTRYPOINT ["/usr/local/bin/service"]

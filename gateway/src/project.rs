@@ -8,6 +8,8 @@ use bollard::container::{
 };
 use bollard::errors::Error as DockerError;
 use bollard::models::{ContainerInspectResponse, ContainerStateStatusEnum};
+use bollard::network::{ConnectNetworkOptions, DisconnectNetworkOptions};
+use bollard::service::EndpointSettings;
 use bollard::system::EventsOptions;
 use fqdn::FQDN;
 use futures::prelude::*;
@@ -19,7 +21,7 @@ use once_cell::sync::Lazy;
 use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Serialize};
 use tokio::time::{self, timeout};
-use tracing::{debug, error, instrument};
+use tracing::{debug, error, info, instrument};
 
 use crate::{
     ContainerSettings, DockerContext, EndState, Error, ErrorKind, IntoTryState, ProjectName,
@@ -146,6 +148,7 @@ impl From<DockerError> for Error {
 #[serde(rename_all = "lowercase")]
 pub enum Project {
     Creating(ProjectCreating),
+    Attaching(ProjectAttaching),
     Starting(ProjectStarting),
     Started(ProjectStarted),
     Ready(ProjectReady),
@@ -158,6 +161,7 @@ pub enum Project {
 
 impl_from_variant!(Project:
                    ProjectCreating => Creating,
+                   ProjectAttaching => Attaching,
                    ProjectStarting => Starting,
                    ProjectStarted => Started,
                    ProjectReady => Ready,
@@ -220,6 +224,7 @@ impl Project {
             Self::Starting(_) => "starting",
             Self::Stopping(_) => "stopping",
             Self::Creating(_) => "creating",
+            Self::Attaching(_) => "attaching",
             Self::Destroying(_) => "destroying",
             Self::Destroyed(_) => "destroyed",
             Self::Errored(_) => "error",
@@ -230,6 +235,7 @@ impl Project {
         match self {
             Self::Starting(ProjectStarting { container, .. })
             | Self::Started(ProjectStarted { container, .. })
+            | Self::Attaching(ProjectAttaching { container, .. })
             | Self::Ready(ProjectReady { container, .. })
             | Self::Stopping(ProjectStopping { container })
             | Self::Stopped(ProjectStopped { container })
@@ -256,6 +262,7 @@ impl From<Project> for shuttle_common::models::project::State {
     fn from(project: Project) -> Self {
         match project {
             Project::Creating(_) => Self::Creating,
+            Project::Attaching(_) => Self::Attaching,
             Project::Starting(_) => Self::Starting,
             Project::Started(_) => Self::Started,
             Project::Ready(_) => Self::Ready,
@@ -283,6 +290,17 @@ where
 
         let mut new = match self {
             Self::Creating(creating) => creating.next(ctx).await.into_try_state(),
+            Self::Attaching(attaching) => match attaching.next(ctx).await {
+                Err(ProjectError {
+                    kind: ProjectErrorKind::NoNetwork,
+                    ctx,
+                    ..
+                }) => {
+                    // Restart the container to try and connect to the network again
+                    Ok(ctx.unwrap().stop().unwrap())
+                }
+                attaching => attaching.into_try_state(),
+            },
             Self::Starting(ready) => ready.next(ctx).await.into_try_state(),
             Self::Started(started) => match started.next(ctx).await {
                 Ok(ProjectReadying::Ready(ready)) => Ok(ready.into()),
@@ -350,6 +368,7 @@ where
     async fn refresh(self, ctx: &Ctx) -> Result<Self, Self::Error> {
         let refreshed = match self {
             Self::Creating(creating) => Self::Creating(creating),
+            Self::Attaching(attaching) => Self::Attaching(attaching),
             Self::Starting(ProjectStarting { container })
             | Self::Started(ProjectStarted { container, .. })
             | Self::Ready(ProjectReady { container, .. })
@@ -463,8 +482,6 @@ impl ProjectCreating {
             image: default_image,
             prefix,
             provisioner_host,
-            network_name,
-            network_id,
             fqdn: public,
             ..
         } = ctx.container_settings();
@@ -521,14 +538,6 @@ impl ProjectCreating {
 
         let mut config = Config::<String>::from(container_config);
 
-        config.networking_config = deserialize_json!({
-            "EndpointsConfig": {
-                network_name: {
-                    "NetworkID": network_id
-                }
-            }
-        });
-
         config.host_config = deserialize_json!({
             "Mounts": [{
                 "Target": "/opt/shuttle",
@@ -559,7 +568,7 @@ impl<Ctx> State<Ctx> for ProjectCreating
 where
     Ctx: DockerContext,
 {
-    type Next = ProjectStarting;
+    type Next = ProjectAttaching;
     type Error = ProjectError;
 
     #[instrument(skip_all)]
@@ -582,6 +591,85 @@ where
                 }
             })
             .await?;
+        Ok(ProjectAttaching { container })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ProjectAttaching {
+    container: ContainerInspectResponse,
+}
+
+#[async_trait]
+impl<Ctx> State<Ctx> for ProjectAttaching
+where
+    Ctx: DockerContext,
+{
+    type Next = ProjectStarting;
+    type Error = ProjectError;
+
+    #[instrument(skip_all)]
+    async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
+        let Self { container } = self;
+
+        let container_id = container.id.as_ref().unwrap();
+        let ContainerSettings {
+            network_name,
+            network_id,
+            ..
+        } = ctx.container_settings();
+
+        // Disconnect the bridge network before trying to start up
+        // For docker bug https://github.com/docker/cli/issues/1891
+        //
+        // Also disconnecting from all network because docker just losses track of their IDs sometimes when restarting
+        for network in safe_unwrap!(container.network_settings.networks).keys() {
+            ctx.docker().disconnect_network(network, DisconnectNetworkOptions{
+            container: container_id,
+            force: true,
+        })
+            .await
+            .or_else(|err| {
+                if matches!(err, DockerError::DockerResponseServerError { status_code, .. } if status_code == 500) {
+                    info!("already disconnected from the {network} network");
+                    Ok(())
+                } else {
+                    Err(err)
+                }
+            })?;
+        }
+
+        // Make sure the container is connected to the user network
+        let network_config = ConnectNetworkOptions {
+            container: container_id,
+            endpoint_config: EndpointSettings {
+                network_id: Some(network_id.to_string()),
+                ..Default::default()
+            },
+        };
+        ctx.docker()
+            .connect_network(network_name, network_config)
+            .await
+            .or_else(|err| {
+                if matches!(
+                    err,
+                    DockerError::DockerResponseServerError { status_code, .. } if status_code == 409
+                ) {
+                    info!("already connected to the shuttle network");
+                    Ok(())
+                } else {
+                    error!(
+                        error = &err as &dyn std::error::Error,
+                        "failed to connect to shuttle network"
+                    );
+                    Err(ProjectError::no_network(
+                        "failed to connect to shuttle network",
+                    ))
+                }
+            })?;
+
+        let container = container.refresh(ctx).await?;
+
         Ok(ProjectStarting { container })
     }
 }
@@ -602,6 +690,7 @@ where
     #[instrument(skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let container_id = self.container.id.as_ref().unwrap();
+
         ctx.docker()
             .start_container::<String>(container_id, None)
             .await
@@ -916,6 +1005,7 @@ where
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ProjectErrorKind {
     Internal,
+    NoNetwork,
 }
 
 /// A runtime error coming from inside a project
@@ -930,6 +1020,14 @@ impl ProjectError {
     pub fn internal<S: AsRef<str>>(message: S) -> Self {
         Self {
             kind: ProjectErrorKind::Internal,
+            message: message.as_ref().to_string(),
+            ctx: None,
+        }
+    }
+
+    pub fn no_network<S: AsRef<str>>(message: S) -> Self {
+        Self {
+            kind: ProjectErrorKind::NoNetwork,
             message: message.as_ref().to_string(),
             ctx: None,
         }
@@ -1032,22 +1130,47 @@ pub mod exec {
                         .inspect_container(safe_unwrap!(container.id), None)
                         .await
                     {
-                        if let Some(ContainerState {
-                            status: Some(ContainerStateStatusEnum::EXITED),
-                            ..
-                        }) = container.state
-                        {
-                            debug!("{} will be revived", project_name.clone());
-                            _ = gateway
-                                .new_task()
-                                .project(project_name)
-                                .and_then(task::run(|ctx| async move {
-                                    TaskResult::Done(Project::Stopped(ProjectStopped {
-                                        container: ctx.state.container().unwrap(),
+                        match container.state {
+                            Some(ContainerState {
+                                status: Some(ContainerStateStatusEnum::EXITED),
+                                ..
+                            }) => {
+                                debug!("{} will be revived", project_name.clone());
+                                _ = gateway
+                                    .new_task()
+                                    .project(project_name)
+                                    .and_then(task::run(|ctx| async move {
+                                        TaskResult::Done(Project::Stopped(ProjectStopped {
+                                            container: ctx.state.container().unwrap(),
+                                        }))
                                     }))
-                                }))
-                                .send(&sender)
-                                .await;
+                                    .send(&sender)
+                                    .await;
+                            }
+                            Some(ContainerState {
+                                status: Some(ContainerStateStatusEnum::RUNNING),
+                                ..
+                            })
+                            | Some(ContainerState {
+                                status: Some(ContainerStateStatusEnum::CREATED),
+                                ..
+                            }) => {
+                                debug!(
+                                    "{} is errored but ready according to docker. So restarting it",
+                                    project_name.clone()
+                                );
+                                _ = gateway
+                                    .new_task()
+                                    .project(project_name)
+                                    .and_then(task::run(|ctx| async move {
+                                        TaskResult::Done(Project::Stopping(ProjectStopping {
+                                            container: ctx.state.container().unwrap(),
+                                        }))
+                                    }))
+                                    .send(&sender)
+                                    .await;
+                            }
+                            _ => {}
                         }
                     }
                 }
@@ -1062,6 +1185,7 @@ pub mod exec {
 pub mod tests {
 
     use bollard::models::ContainerState;
+    use bollard::service::NetworkSettings;
     use futures::prelude::*;
     use hyper::{Body, Request, StatusCode};
 
@@ -1084,7 +1208,21 @@ pub mod tests {
                 image: None,
                 from: None,
             }),
-            #[assertion = "Container created, assigned an `id`"]
+            #[assertion = "Container created, attach network"]
+            Ok(Project::Attaching(ProjectAttaching {
+                container: ContainerInspectResponse {
+                    state: Some(ContainerState {
+                        status: Some(ContainerStateStatusEnum::CREATED),
+                        ..
+                    }),
+                    network_settings: Some(NetworkSettings {
+                        networks: Some(networks),
+                        ..
+                    }),
+                    ..
+                }
+            })) if networks.keys().collect::<Vec<_>>() == vec!["bridge"],
+            #[assertion = "Container attached, assigned an `id`"]
             Ok(Project::Starting(ProjectStarting {
                 container: ContainerInspectResponse {
                     id: Some(container_id),
@@ -1092,9 +1230,13 @@ pub mod tests {
                         status: Some(ContainerStateStatusEnum::CREATED),
                         ..
                     }),
+                    network_settings: Some(NetworkSettings {
+                        networks: Some(networks),
+                        ..
+                    }),
                     ..
                 }
-            })),
+            })) if networks.keys().collect::<Vec<_>>() == vec![&ctx.container_settings.network_name],
             #[assertion = "Container started, in a running state"]
             Ok(Project::Started(ProjectStarted {
                 container: ContainerInspectResponse {

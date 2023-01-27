@@ -366,8 +366,8 @@ jobs:
           name: "Set tag in environment"
           command: |
             for file in artifacts/*.env; do
-              cat artifacts/${file##*/}.env >> "$BASH_ENV";
-              rm artifacts/${file##*/}.env;
+              cat artifacts/${file##*/} >> "$BASH_ENV";
+              rm artifacts/${file##*/};
             done
       - run:
           name: "Publish Release on GitHub"

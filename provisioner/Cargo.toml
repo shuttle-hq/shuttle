@@ -10,12 +10,15 @@ publish = false
 [dependencies]
 aws-config = "0.51.0"
 aws-sdk-rds = "0.21.0"
-clap = { version = "3.2.17", features = ["derive", "env"] }
+clap = { version = "4.0.27", features = ["derive", "env"] }
 fqdn = "0.2.3"
 mongodb = "2.3.1"
 prost = "0.11.2"
 rand = "0.8.5"
-sqlx = { version = "0.6.2", features = ["postgres", "runtime-tokio-native-tls"] }
+sqlx = { version = "0.6.2", features = [
+  "postgres",
+  "runtime-tokio-native-tls",
+] }
 thiserror = { workspace = true }
 tokio = { version = "1.22.0", features = ["macros", "rt-multi-thread"] }
 tonic = "0.8.3"

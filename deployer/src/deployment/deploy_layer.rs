@@ -489,6 +489,10 @@ mod tests {
             panic!("did not expect any deploy_layer test to get the service name")
         }
 
+        fn get_environment(&self) -> shuttle_service::Environment {
+            panic!("did not expect any deploy_layer test to get the environment")
+        }
+
         fn get_build_path(&self) -> Result<PathBuf, shuttle_service::Error> {
             panic!("did not expect any deploy_layer test to get the build path")
         }

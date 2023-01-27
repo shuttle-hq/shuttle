@@ -15,3 +15,9 @@ Add `shuttle-aws-rds` to the dependencies for your service. Every engine is behi
 
 An example using the Tide framework can be found on [GitHub](https://github.com/shuttle-hq/examples/tree/main/tide/postgres)
 
+### Options
+Each engine can take in the following options:
+
+| Option    | Type | Description                                                                                                  |
+|-----------|------|--------------------------------------------------------------------------------------------------------------|
+| local_uri | &str | Don't spin up a local docker instance of the DB, but rather connect to this URI instead for `cargo shuttle run` |

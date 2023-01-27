@@ -20,6 +20,7 @@ pub enum Framework {
     Poem,
     Salvo,
     Serenity,
+    Poise,
     Warp,
     Thruster,
     None,
@@ -39,6 +40,7 @@ impl Framework {
             Framework::Poem => Box::new(ShuttleInitPoem),
             Framework::Salvo => Box::new(ShuttleInitSalvo),
             Framework::Serenity => Box::new(ShuttleInitSerenity),
+            Framework::Poise => Box::new(ShuttleInitPoise),
             Framework::Warp => Box::new(ShuttleInitWarp),
             Framework::Thruster => Box::new(ShuttleInitThruster),
             Framework::None => Box::new(ShuttleInitNoOp),
@@ -443,6 +445,106 @@ impl ShuttleInit for ShuttleInitSerenity {
 
             Ok(client)
         }"#}
+    }
+}
+
+pub struct ShuttleInitPoise;
+
+impl ShuttleInit for ShuttleInitPoise {
+    fn set_cargo_dependencies(
+        &self,
+        dependencies: &mut Table,
+        manifest_path: &Path,
+        url: &Url,
+        get_dependency_version_fn: GetDependencyVersionFn,
+    ) {
+        set_inline_table_dependency_features(
+            "shuttle-service",
+            dependencies,
+            vec!["bot-poise".to_string()],
+        );
+
+        set_key_value_dependency_version(
+            "anyhow",
+            dependencies,
+            manifest_path,
+            url,
+            false,
+            get_dependency_version_fn,
+        );
+
+        set_key_value_dependency_version(
+            "poise",
+            dependencies,
+            manifest_path,
+            url,
+            false,
+            get_dependency_version_fn,
+        );
+
+        set_key_value_dependency_version(
+            "shuttle-secrets",
+            dependencies,
+            manifest_path,
+            url,
+            false,
+            get_dependency_version_fn,
+        );
+
+        set_key_value_dependency_version(
+            "tracing",
+            dependencies,
+            manifest_path,
+            url,
+            false,
+            get_dependency_version_fn,
+        );
+    }
+
+    fn get_boilerplate_code_for_framework(&self) -> &'static str {
+        indoc! {r#"
+        use anyhow::Context as _;
+		use poise::serenity_prelude as serenity;
+		use shuttle_secrets::SecretStore;
+		use shuttle_service::ShuttlePoise;
+
+		struct Data {} // User data, which is stored and accessible in all command invocations
+		type Error = Box<dyn std::error::Error + Send + Sync>;
+		type Context<'a> = poise::Context<'a, Data, Error>;
+
+		/// Responds with "world!"
+		#[poise::command(slash_command)]
+		async fn hello(ctx: Context<'_>) -> Result<(), Error> {
+			ctx.say("world!").await?;
+			Ok(())
+		}
+
+		#[shuttle_service::main]
+		async fn poise(#[shuttle_secrets::Secrets] secret_store: SecretStore) -> ShuttlePoise<Data, Error> {
+			// Get the discord token set in `Secrets.toml`
+			let discord_token = secret_store
+				.get("DISCORD_TOKEN")
+				.context("'DISCORD_TOKEN' was not found")?;
+
+			let framework = poise::Framework::builder()
+				.options(poise::FrameworkOptions {
+					commands: vec![hello()],
+					..Default::default()
+				})
+				.token(discord_token)
+				.intents(serenity::GatewayIntents::non_privileged())
+				.setup(|ctx, _ready, framework| {
+					Box::pin(async move {
+						poise::builtins::register_globally(ctx, &framework.options().commands).await?;
+						Ok(Data {})
+					})
+				})
+				.build()
+				.await
+				.map_err(shuttle_service::error::CustomError::new)?;
+
+			Ok(framework)
+		}"#}
     }
 }
 
@@ -1121,6 +1223,41 @@ mod shuttle_init_tests {
             shuttle-secrets = "1.0"
             tracing = "1.0"
         "#};
+
+        assert_eq!(cargo_toml.to_string(), expected);
+    }
+
+    #[test]
+    fn test_set_cargo_dependencies_poise() {
+        let mut cargo_toml = cargo_toml_factory();
+        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
+        let manifest_path = PathBuf::new();
+        let url = Url::parse("https://shuttle.rs").unwrap();
+
+        set_inline_table_dependency_version(
+            "shuttle-service",
+            dependencies,
+            &manifest_path,
+            &url,
+            false,
+            mock_get_latest_dependency_version,
+        );
+
+        ShuttleInitPoise.set_cargo_dependencies(
+            dependencies,
+            &manifest_path,
+            &url,
+            mock_get_latest_dependency_version,
+        );
+
+        let expected = indoc! {r#"
+			[dependencies]
+			shuttle-service = { version = "1.0", features = ["bot-poise"] }
+			anyhow = "1.0"
+			poise = "1.0"
+			shuttle-secrets = "1.0"
+			tracing = "1.0"
+		"#};
 
         assert_eq!(cargo_toml.to_string(), expected);
     }

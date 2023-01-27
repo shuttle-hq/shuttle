@@ -27,7 +27,7 @@
 //! be a library crate with a `shuttle-service` dependency with the `web-rocket` feature on the `shuttle-service` dependency.
 //!
 //! ```toml
-//! shuttle-service = { version = "0.8.0", features = ["web-rocket"] }
+//! shuttle-service = { version = "0.9.0", features = ["web-rocket"] }
 //! ```
 //!
 //! A boilerplate code for your rocket project can also be found in `src/lib.rs`:
@@ -108,7 +108,7 @@
 //! Add `shuttle-shared-db` as a dependency with the `postgres` feature, and add `sqlx` as a dependency with the `runtime-tokio-native-tls` and `postgres` features inside `Cargo.toml`:
 //!
 //! ```toml
-//! shuttle-shared-db = { version = "0.8.0", features = ["postgres"] }
+//! shuttle-shared-db = { version = "0.9.0", features = ["postgres"] }
 //! sqlx = { version = "0.6.2", features = ["runtime-tokio-native-tls", "postgres"] }
 //! ```
 //!
@@ -220,6 +220,7 @@ pub use async_trait::async_trait;
 
 // Pub uses by `codegen`
 pub use anyhow::Context;
+pub use strfmt::strfmt;
 pub use tokio::runtime::Runtime;
 pub use tracing;
 pub use tracing_subscriber;
@@ -264,6 +265,7 @@ extern crate shuttle_codegen;
 /// | `ShuttlePoem`                         | web-poem     | [poem](https://docs.rs/poem/1.3.35)         | 1.3.35     | [GitHub](https://github.com/shuttle-hq/examples/tree/main/poem/hello-world)           |
 /// | `Result<T, shuttle_service::Error>`   | web-tower    | [tower](https://docs.rs/tower/0.4.12)       | 0.14.12    | [GitHub](https://github.com/shuttle-hq/examples/tree/main/tower/hello-world)          |
 /// | `ShuttleSerenity`                     | bot-serenity | [serenity](https://docs.rs/serenity/0.11.5) | 0.11.5     | [GitHub](https://github.com/shuttle-hq/examples/tree/main/serenity/hello-world)       |
+/// | `ShuttlePoise`                        | bot-poise    | [poise](https://docs.rs/poise/0.5.2)        | 0.5.2      | [GitHub](https://github.com/shuttle-hq/examples/tree/main/poise/hello-world)          |
 /// | `ShuttleActixWeb`                     | web-actix-web| [actix-web](https://docs.rs/actix-web/4.2.1)| 4.2.1      | [GitHub](https://github.com/shuttle-hq/examples/tree/main/actix-web/hello-world)           |
 
 ///
@@ -291,7 +293,7 @@ use tokio::task::JoinHandle;
 #[cfg(feature = "loader")]
 pub mod loader;
 
-pub use shuttle_common::project::ProjectName as ServiceName;
+pub use shuttle_common::{deployment::Environment, project::ProjectName as ServiceName};
 
 /// Factories can be used to request the provisioning of additional resources (like databases).
 ///
@@ -313,6 +315,9 @@ pub trait Factory: Send + Sync {
 
     /// Get the name for the service being deployed
     fn get_service_name(&self) -> ServiceName;
+
+    /// Get the environment for this deployment
+    fn get_environment(&self) -> Environment;
 
     /// Get the path where the build files are stored for this service
     fn get_build_path(&self) -> Result<PathBuf, crate::Error>;
@@ -660,6 +665,23 @@ impl Service for serenity::Client {
 
 #[cfg(feature = "bot-serenity")]
 pub type ShuttleSerenity = Result<serenity::Client, Error>;
+
+#[cfg(feature = "bot-poise")]
+#[async_trait]
+impl<T, E> Service for std::sync::Arc<poise::Framework<T, E>>
+where
+    T: std::marker::Send + std::marker::Sync + 'static,
+    E: std::marker::Send + std::marker::Sync + 'static,
+{
+    async fn bind(mut self: Box<Self>, _addr: SocketAddr) -> Result<(), error::Error> {
+        self.start().await.map_err(error::CustomError::new)?;
+
+        Ok(())
+    }
+}
+
+#[cfg(feature = "bot-poise")]
+pub type ShuttlePoise<T, E> = Result<std::sync::Arc<poise::Framework<T, E>>, Error>;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const NAME: &str = env!("CARGO_PKG_NAME");

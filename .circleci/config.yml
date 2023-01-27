@@ -450,7 +450,7 @@ workflows:
           requires:
             - build-binaries-x86_64
             - build-binaries-aarch64
-            - build-binaries-windows
+            # - build-binaries-windows
             - build-binaries-mac
           # filters:
           #   branches:

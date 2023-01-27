@@ -3,6 +3,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
+use cargo::core::find_workspace_root;
 use cargo::ops::NewOptions;
 use cargo_edit::{find, get_latest_dependency, registry_url};
 use indoc::indoc;
@@ -669,7 +670,12 @@ pub fn cargo_shuttle_init(path: PathBuf, framework: Framework) -> Result<()> {
     let mut dependencies = Table::new();
 
     // Set "shuttle-service" version to `[dependencies]` table
-    let manifest_path = find(Some(path.as_path())).unwrap();
+    let config = cargo::util::config::Config::default().unwrap();
+    let workspace_root = find_workspace_root(&path, &config).unwrap();
+    let manifest_path = match workspace_root {
+        None => find(Some(path.as_path())).unwrap(),
+        Some(root) => find(Some(root.as_path())).unwrap(),
+    };
     let url = registry_url(manifest_path.as_path(), None).expect("Could not find registry URL");
 
     set_inline_table_dependency_version(

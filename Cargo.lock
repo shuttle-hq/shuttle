@@ -1412,7 +1412,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-shuttle"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -1422,7 +1422,7 @@ dependencies = [
  "cargo-edit",
  "cargo_metadata",
  "chrono",
- "clap 3.2.23",
+ "clap 4.0.27",
  "clap_complete",
  "crossbeam-channel",
  "crossterm",
@@ -1602,11 +1602,11 @@ dependencies = [
 
 [[package]]
 name = "clap_complete"
-version = "3.2.5"
+version = "4.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f7a2e0a962c45ce25afce14220bc24f9dade0a1787f185cecf96bfba7847cd8"
+checksum = "10861370d2ba66b0f5989f83ebf35db6421713fd92351790e7fdd6c36774c56b"
 dependencies = [
- "clap 3.2.23",
+ "clap 4.0.27",
 ]
 
 [[package]]
@@ -5797,7 +5797,7 @@ checksum = "45bb67a18fa91266cc7807181f62f9178a6873bfad7dc788c42e6430db40184f"
 
 [[package]]
 name = "shuttle-admin"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "clap 4.0.27",
@@ -5814,7 +5814,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-codegen"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "pretty_assertions",
  "proc-macro-error",
@@ -5826,7 +5826,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-common"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5847,7 +5847,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-deployer"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5895,7 +5895,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-gateway"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "acme2",
  "anyhow",
@@ -5944,7 +5944,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-proto"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "prost",
  "shuttle-common",
@@ -5954,11 +5954,11 @@ dependencies = [
 
 [[package]]
 name = "shuttle-provisioner"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "aws-config",
  "aws-sdk-rds",
- "clap 3.2.23",
+ "clap 4.0.27",
  "ctor",
  "fqdn",
  "mongodb",
@@ -5979,7 +5979,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-secrets"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "async-trait",
  "shuttle-service",
@@ -5988,7 +5988,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-service"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "actix-web",
  "anyhow",
@@ -6015,6 +6015,7 @@ dependencies = [
  "shuttle-codegen",
  "shuttle-common",
  "sqlx",
+ "strfmt",
  "sync_wrapper",
  "thiserror",
  "thruster",
@@ -6335,6 +6336,12 @@ name = "stdweb-internal-runtime"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "213701ba3370744dcd1a12960caa4843b3d68b4d1c0a5d575e0d65b2ee9d16c0"
+
+[[package]]
+name = "strfmt"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "26cdabcdab6da7e8c2ac1160e917ec83e78bbe3e10325e17d532718c67a4828f"
 
 [[package]]
 name = "stringprep"

@@ -7,7 +7,7 @@ mod init;
 use shuttle_common::project::ProjectName;
 use std::collections::BTreeMap;
 use std::ffi::OsString;
-use std::fs::{read_to_string, File};
+use std::fs::{read_dir, read_to_string, File};
 use std::io::stdout;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
@@ -208,9 +208,15 @@ impl Shuttle {
     }
 
     fn find_root_directory(dir: &Path) -> Option<PathBuf> {
-        dir.ancestors()
-            .find(|ancestor| ancestor.join("Cargo.toml").exists())
-            .map(|path| path.to_path_buf())
+        let ancestors = dir.ancestors();
+        while let Some(p) = ancestors.next() {
+            let has_cargo = read_dir(p)?
+                .into_iter()
+                .any(|p| p.unwrap().file_name() == OsString::from("Cargo.lock"));
+            if has_cargo {
+                return Ok(PathBuf::from(p));
+            }
+        }
     }
 
     pub fn load_project(&mut self, project_args: &mut ProjectArgs) -> Result<()> {

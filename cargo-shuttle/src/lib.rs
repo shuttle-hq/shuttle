@@ -209,14 +209,16 @@ impl Shuttle {
 
     fn find_root_directory(dir: &Path) -> Option<PathBuf> {
         let ancestors = dir.ancestors();
-        while let Some(p) = ancestors.next() {
-            let has_cargo = read_dir(p)?
+        for p in ancestors {
+            let has_cargo = read_dir(p)
+                .unwrap()
                 .into_iter()
-                .any(|p| p.unwrap().file_name() == OsString::from("Cargo.lock"));
+                .any(|p| p.unwrap().file_name() == *"Cargo.lock");
             if has_cargo {
-                return Ok(PathBuf::from(p));
+                return Some(PathBuf::from(p));
             }
         }
+        None
     }
 
     pub fn load_project(&mut self, project_args: &mut ProjectArgs) -> Result<()> {

@@ -460,7 +460,8 @@ workflows:
           #    only: production
        - publish-github-release:
           requires:
-            - build-binaries-x86_64
+            - build-binaries-x86_64-gnu
+            - build-binaries-x86_64-musl
             - build-binaries-aarch64
             - build-binaries-windows
             - build-binaries-mac

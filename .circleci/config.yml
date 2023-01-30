@@ -122,10 +122,12 @@ commands:
           name: Set git tag in the environment
           command: |
             echo TAG=$(git describe --tags) >> $BASH_ENV
+          shell: bash.exe
       - run:
           name: Set binary directory in the environment
           command: |
             echo BIN_DIR=cargo-shuttle-<< parameters.target >>-$TAG >> $BASH_ENV
+          shell: bash.exe
       - run:
           name: Make artifact
           command: |
@@ -136,6 +138,7 @@ commands:
             mkdir -p artifacts/<< parameters.target >>
             cp $BASH_ENV artifacts/<< parameters.target >>.env
             tar -cvzf artifacts/<< parameters.target >>/cargo-shuttle-$TAG-<< parameters.target >>.tar.gz $BIN_DIR
+          shell: bash.exe
       # Persist the bash environment to the workspace as well, we need it for the release job.
       # Make sure the name is unique, since the binaries will be built in parallel.
       # https://discuss.circleci.com/t/share-environment-variable-between-different-job/45647/4

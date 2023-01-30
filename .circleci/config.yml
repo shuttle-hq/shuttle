@@ -334,14 +334,16 @@ jobs:
           command: |
             wget -OutFile "C:\rustup-init.exe" https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe
             C:\rustup-init.exe -y --default-toolchain 1.65.0 --target x86_64-pc-windows-msvc
+          shell: powershell.exe
       - run:
           name: Build
           command: |
             # From https://github.com/alexcrichton/openssl-src-rs/issues/45
             # Because of https://github.com/openssl/openssl/issues/9048
-            export OPENSSL_SRC_PERL="C:\Strawberry\perl\bin\perl.exe"
+            $env:OPENSSL_SRC_PERL=OPENSSL_SRC_PERL="C:\Strawberry\perl\bin\perl.exe"
             # "vendored-openssl" is from https://github.com/cross-rs/cross/issues/229#issuecomment-597898074
             ..\.cargo\bin\cargo.exe build --release --package cargo-shuttle --features vendored-openssl --target x86_64-pc-windows-msvc
+          shell: powershell.exe
       - make-artifact:
           target: x86_64-pc-windows-msvc
           suffix: ".exe"

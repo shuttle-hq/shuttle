@@ -125,7 +125,7 @@ commands:
       - run:
           name: Make artifact
           command: |
-            mkdir cargo-shuttle-<< parameters.target >>-$TAG
+            mkdir -p cargo-shuttle-<< parameters.target >>-$TAG
             mv target/<< parameters.target >>/release/cargo-shuttle<< parameters.suffix >> \ 
               cargo-shuttle-<< parameters.target >>-$TAG/cargo-shuttle-<< parameters.target >><< parameters.suffix >>
             mv LICENSE cargo-shuttle-<< parameters.target >>-$TAG/

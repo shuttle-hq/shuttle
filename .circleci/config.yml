@@ -125,13 +125,17 @@ commands:
       - run:
           name: Make artifact
           command: |
-            mkdir shuttle
-            mv target/<< parameters.target >>/release/cargo-shuttle<< parameters.suffix >> shuttle/cargo-shuttle<< parameters.suffix >>
-            mv LICENSE shuttle/
-            mv README.md shuttle/
+            BIN_FOLDER=cargo-shuttle-<< parameters.target >>-$TAG
+            mkdir $BIN_FOLDER
+            
+            mv target/<< parameters.target >>/release/cargo-shuttle<< parameters.suffix >> \ 
+              $BIN_FOLDER/cargo-shuttle-<< parameters.target >><< parameters.suffix >>
+            mv LICENSE $BIN_FOLDER/
+            mv README.md $BIN_FOLDER/
             mkdir -p artifacts/<< parameters.target >>
             cp $BASH_ENV artifacts/<< parameters.target >>.env
-            tar -cvzf artifacts/<< parameters.target >>/cargo-shuttle-$TAG-<< parameters.target >>.tar.gz shuttle
+            tar -cvzf artifacts/<< parameters.target >>/cargo-shuttle-$TAG-<< parameters.target >>.tar.gz \ 
+              $BIN_FOLDER
       # Persist the bash environment to the workspace as well, we need it for the release job.
       # Make sure the name is unique, since the binaries will be built in parallel.
       # https://discuss.circleci.com/t/share-environment-variable-between-different-job/45647/4

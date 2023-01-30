@@ -339,7 +339,7 @@ jobs:
           command: |
             # From https://github.com/alexcrichton/openssl-src-rs/issues/45
             # Because of https://github.com/openssl/openssl/issues/9048
-            OPENSSL_SRC_PERL="C:\Strawberry\perl\bin\perl.exe"
+            export OPENSSL_SRC_PERL="C:\Strawberry\perl\bin\perl.exe"
             # "vendored-openssl" is from https://github.com/cross-rs/cross/issues/229#issuecomment-597898074
             ..\.cargo\bin\cargo.exe build --release --package cargo-shuttle --features vendored-openssl --target x86_64-pc-windows-msvc
       - make-artifact:
@@ -426,27 +426,27 @@ workflows:
       #      filters:
       #        branches:
       #          only: production
-       - build-binaries-linux:
-           name: build-binaries-x86_64-gnu
-           image: ubuntu-2204:2022.04.1
-           target: x86_64-unknown-linux-gnu
-           resource_class: medium
+      #  - build-binaries-linux:
+      #      name: build-binaries-x86_64-gnu
+      #      image: ubuntu-2204:2022.04.1
+      #      target: x86_64-unknown-linux-gnu
+      #      resource_class: medium
           #  filters:
           #    branches:
           #      only: production
-       - build-binaries-linux:
-           name: build-binaries-x86_64-musl
-           image: ubuntu-2204:2022.04.1
-           target: x86_64-unknown-linux-musl
-           resource_class: medium
+      #  - build-binaries-linux:
+      #      name: build-binaries-x86_64-musl
+      #      image: ubuntu-2204:2022.04.1
+      #      target: x86_64-unknown-linux-musl
+      #      resource_class: medium
           #  filters:
           #    branches:
           #      only: production
-       - build-binaries-linux:
-           name: build-binaries-aarch64
-           image: ubuntu-2004:202101-01
-           target: aarch64-unknown-linux-musl
-           resource_class: arm.medium
+      #  - build-binaries-linux:
+      #      name: build-binaries-aarch64
+      #      image: ubuntu-2004:202101-01
+      #      target: aarch64-unknown-linux-musl
+      #      resource_class: arm.medium
           #  filters:
           #    branches:
           #      only: production
@@ -454,17 +454,17 @@ workflows:
           # filters:
           #   branches:
           #     only: production
-       - build-binaries-mac
+      #  - build-binaries-mac
           # filters:
           #   branches:
           #    only: production
        - publish-github-release:
           requires:
-            - build-binaries-x86_64-gnu
-            - build-binaries-x86_64-musl
-            - build-binaries-aarch64
+            # - build-binaries-x86_64-gnu
+            # - build-binaries-x86_64-musl
+            # - build-binaries-aarch64
             - build-binaries-windows
-            - build-binaries-mac
+            # - build-binaries-mac
           # filters:
           #   branches:
           #    only: production

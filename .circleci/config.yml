@@ -323,7 +323,7 @@ jobs:
     executor:
       name: win/server-2022
       size: medium
-    shell: bash.exe
+      shell: bash.exe
     environment:
       CARGO_NET_GIT_FETCH_WITH_CLI: "true"
     steps:

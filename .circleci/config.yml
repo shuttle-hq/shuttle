@@ -122,12 +122,10 @@ commands:
           name: Set git tag in the environment
           command: |
             echo TAG=$(git describe --tags) >> $BASH_ENV
-          shell: bash.exe
       - run:
           name: Set binary directory in the environment
           command: |
             echo BIN_DIR=cargo-shuttle-<< parameters.target >>-$TAG >> $BASH_ENV
-          shell: bash.exe
       - run:
           name: Make artifact
           command: |
@@ -138,7 +136,6 @@ commands:
             mkdir -p artifacts/<< parameters.target >>
             cp $BASH_ENV artifacts/<< parameters.target >>.env
             tar -cvzf artifacts/<< parameters.target >>/cargo-shuttle-$TAG-<< parameters.target >>.tar.gz $BIN_DIR
-          shell: bash.exe
       # Persist the bash environment to the workspace as well, we need it for the release job.
       # Make sure the name is unique, since the binaries will be built in parallel.
       # https://discuss.circleci.com/t/share-environment-variable-between-different-job/45647/4
@@ -326,6 +323,7 @@ jobs:
     executor:
       name: win/server-2022
       size: medium
+    shell: bash.exe
     environment:
       CARGO_NET_GIT_FETCH_WITH_CLI: "true"
     steps:
@@ -336,6 +334,7 @@ jobs:
           command: |
             wget -OutFile "C:\rustup-init.exe" https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe
             C:\rustup-init.exe -y --default-toolchain 1.65.0 --target x86_64-pc-windows-msvc
+          shell: powershell.exe
       - run:
           name: Build
           command: |
@@ -344,6 +343,7 @@ jobs:
             $env:OPENSSL_SRC_PERL="C:\Strawberry\perl\bin\perl.exe"
             # "vendored-openssl" is from https://github.com/cross-rs/cross/issues/229#issuecomment-597898074
             ..\.cargo\bin\cargo.exe build --release --package cargo-shuttle --features vendored-openssl --target x86_64-pc-windows-msvc
+          shell: powershell.exe
       - make-artifact:
           target: x86_64-pc-windows-msvc
           suffix: ".exe"

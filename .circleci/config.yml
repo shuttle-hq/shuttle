@@ -130,15 +130,16 @@ commands:
             mv LICENSE shuttle/
             mv README.md shuttle/
             mkdir -p artifacts/<< parameters.target >>
-            cp $BASH_ENV artifacts/bash.env
+            cp $BASH_ENV artifacts/<< parameters.target >>.env
             tar -cvzf artifacts/<< parameters.target >>/cargo-shuttle-$TAG-<< parameters.target >>.tar.gz shuttle
       # Persist the bash environment to the workspace as well, we need it for the release job.
+      # Make sure the name is unique, since the binaries will be built in parallel.
       # https://discuss.circleci.com/t/share-environment-variable-between-different-job/45647/4
       - persist_to_workspace:
           root: artifacts
           paths:
             - << parameters.target >>/*
-            - bash.env
+            - << parameters.target >>.env
 
 jobs:
   workspace-fmt:
@@ -364,8 +365,10 @@ jobs:
       - run:
           name: "Set tag in environment"
           command: |
-            cat artifacts/bash.env >> "$BASH_ENV"
-            rm artifacts/bash.env
+            for file in artifacts/*.env; do
+              cat artifacts/${file##*/} >> "$BASH_ENV";
+              rm artifacts/${file##*/};
+            done
       - run:
           name: "Publish Release on GitHub"
           # Since each binary is in a sub directory named after its target, we flatten

@@ -385,9 +385,9 @@ impl Shuttle {
         trace!("loading secrets");
 
         let secrets_filename = if run_args.prod_secrets {
-            "Secrets.toml"
+            "Secrets.toml".to_string()
         } else {
-            "Secrets.dev.toml"
+            "Secrets.dev.toml".to_string()
         };
 
         let secrets_path = working_directory.join(&secrets_filename);

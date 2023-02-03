@@ -260,7 +260,7 @@ impl Shuttle {
     }
 
     async fn logout(&mut self) -> Result<()> {
-        self.ctx.set_api_key("".to_string())?;
+        self.ctx.clear_api_key()?;
 
         println!("Successfully logged out of shuttle.");
         Ok(())

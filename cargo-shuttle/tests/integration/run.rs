@@ -16,7 +16,11 @@ async fn cargo_shuttle_run(working_directory: &str, external: bool) -> String {
         format!("http://0.0.0.0:{port}")
     };
 
-    let run_args = RunArgs { port, external, release: false };
+    let run_args = RunArgs {
+        port,
+        external,
+        release: false,
+    };
 
     let runner = Shuttle::new().unwrap().run(Args {
         api_url: Some("http://shuttle.invalid:80".to_string()),

@@ -380,11 +380,12 @@ impl Shuttle {
             "Building".bold().green(),
             working_directory.display()
         );
-        let so_path = build_crate(id, working_directory, false, tx).await?;
+
+        let so_path = build_crate(id, working_directory, run_args.release, tx).await?;
 
         trace!("loading secrets");
 
-        let secrets_filename = if run_args.prod_secrets {
+        let secrets_filename = if run_args.prod_secrets || run_args.release {
             "Secrets.toml".to_string()
         } else {
             "Secrets.dev.toml".to_string()

@@ -149,6 +149,12 @@ pub struct RunArgs {
     /// use prod secrets instead of dev secrets
     #[clap(long)]
     pub prod_secrets: bool,
+    /// run local deployment in release mode instead of debug
+    #[clap(long)]
+    pub release: bool,
+    /// simulate production (runs both --prod-secrets and --release flag)
+    #[clap(long)]
+    pub simulate_prod: bool,
 }
 
 #[derive(Parser, Debug)]

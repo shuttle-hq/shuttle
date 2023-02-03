@@ -106,7 +106,7 @@ pub async fn build_crate(
     project_path: &Path,
     release_mode: bool,
     tx: Sender<Message>,
-) -> anyhow::Result<PathBuf> {
+) -> anyhow::Result<Vec<PathBuf>> {
     let (read, write) = pipe::pipe();
     let project_path = project_path.to_owned();
 
@@ -144,7 +144,11 @@ pub async fn build_crate(
     let opts = get_compile_options(&config, release_mode)?;
     let compilation = compile(&ws, &opts);
 
-    Ok(compilation?.cdylibs[0].path.clone())
+    Ok(compilation?
+        .cdylibs
+        .into_iter()
+        .map(|item| item.path)
+        .collect())
 }
 
 pub fn clean_crate(project_path: &Path, release_mode: bool) -> anyhow::Result<Vec<String>> {

@@ -67,7 +67,7 @@ pub fn get_table(projects: &Vec<Response>, filter: Option<State>) -> String {
         let projects = match filter {
             Some(state) => projects
                 .iter()
-                .filter(|project| project.state != state)
+                .filter(|project| project.state == state)
                 .cloned()
                 .collect::<Vec<Response>>(),
             None => projects.to_owned(),

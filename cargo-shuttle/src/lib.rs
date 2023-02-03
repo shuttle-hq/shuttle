@@ -4,7 +4,9 @@ pub mod config;
 mod factory;
 mod init;
 
+use shuttle_common::models::project::State;
 use shuttle_common::project::ProjectName;
+
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fs::{read_to_string, File};
@@ -73,7 +75,6 @@ impl Shuttle {
             Command::Init(init_args) => self.init(init_args, args.project_args).await,
             Command::Generate { shell, output } => self.complete(shell, output).await,
             Command::Login(login_args) => self.login(login_args).await,
-            Command::Logout => self.logout().await,
             Command::Feedback => self.feedback().await,
             Command::Run(run_args) => self.local_run(run_args).await,
             need_client => {
@@ -99,7 +100,9 @@ impl Shuttle {
                     Command::Project(ProjectCommand::Status { follow }) => {
                         self.project_status(&client, follow).await
                     }
-                    Command::Project(ProjectCommand::List) => self.projects_list(&client).await,
+                    Command::Project(ProjectCommand::List { filter }) => {
+                        self.projects_list(&client, filter).await
+                    }
                     Command::Project(ProjectCommand::Rm) => self.project_delete(&client).await,
                     _ => {
                         unreachable!("commands that don't need a client have already been matched")
@@ -256,13 +259,6 @@ impl Shuttle {
 
         self.ctx.set_api_key(api_key)?;
 
-        Ok(())
-    }
-
-    async fn logout(&mut self) -> Result<()> {
-        self.ctx.set_api_key("".to_string())?;
-
-        println!("Successfully logged out of shuttle.");
         Ok(())
     }
 
@@ -533,9 +529,18 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn projects_list(&self, client: &Client) -> Result<()> {
+    async fn projects_list(&self, client: &Client, filter: Option<String>) -> Result<()> {
+        let filter = filter.unwrap_or_else(|| "none".to_string());
+
+        let filter = match filter.trim() {
+            "ready" => Some(State::Ready),
+            "errored" => Some(State::Errored),
+            "destroyed" => Some(State::Destroyed),
+            _ => None,
+        };
+
         let projects = client.get_projects_list().await?;
-        let projects_table = project::get_table(&projects);
+        let projects_table = project::get_table(&projects, filter);
 
         println!("{projects_table}");
 

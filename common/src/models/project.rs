@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use strum::Display;
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone)]
 pub struct Response {
     pub name: String,
     pub state: State,
@@ -57,13 +57,22 @@ pub struct AdminResponse {
     pub account_name: String,
 }
 
-pub fn get_table(projects: &Vec<Response>) -> String {
+pub fn get_table(projects: &Vec<Response>, filter: Option<State>) -> String {
     if projects.is_empty() {
         format!(
             "{}\n",
             "No projects are linked to this account".yellow().bold()
         )
     } else {
+        let projects = match filter {
+            Some(state) => projects
+                .iter()
+                .filter(|project| project.state != state)
+                .cloned()
+                .collect::<Vec<Response>>(),
+            None => projects.to_owned(),
+        };
+
         let mut table = Table::new();
         table
             .load_preset(UTF8_FULL)

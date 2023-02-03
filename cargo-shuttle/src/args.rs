@@ -83,8 +83,6 @@ pub enum Command {
     Secrets,
     /// login to the shuttle platform
     Login(LoginArgs),
-    /// log out of the shuttle platform
-    Logout,
     /// run a shuttle service locally
     Run(RunArgs),
     /// Open an issue on github and provide feedback.
@@ -110,7 +108,11 @@ pub enum ProjectCommand {
     /// create an environment for this project on shuttle
     New,
     /// list all projects belonging to the calling account
-    List,
+    List {
+        #[arg(long)]
+        /// Follow status of project command
+        filter: Option<String>,
+    },
     /// remove this project environment from shuttle
     Rm,
     /// show the status of this project's environment on shuttle

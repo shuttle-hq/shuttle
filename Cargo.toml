@@ -25,6 +25,7 @@ exclude = [
 version = "0.9.0"
 edition = "2021"
 license = "Apache-2.0"
+repository = "https://github.com/shuttle-hq/shuttle"
 
 # https://doc.rust-lang.org/cargo/reference/workspaces.html#the-workspacedependencies-table
 [workspace.dependencies]

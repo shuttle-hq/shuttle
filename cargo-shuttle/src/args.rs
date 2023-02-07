@@ -83,6 +83,8 @@ pub enum Command {
     Secrets,
     /// login to the shuttle platform
     Login(LoginArgs),
+    /// log out of the shuttle platform
+    Logout,
     /// run a shuttle service locally
     Run(RunArgs),
     /// Open an issue on github and provide feedback.

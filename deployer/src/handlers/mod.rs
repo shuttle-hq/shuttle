@@ -277,6 +277,10 @@ async fn delete_service(
             .map(Into::into)
             .collect();
 
+        // TODO wrap this in a transaction
+        persistence
+            .delete_deployments_by_service_id(&service.id)
+            .await?;
         persistence.delete_service(&service.id).await?;
 
         let response = shuttle_common::models::service::Detailed {

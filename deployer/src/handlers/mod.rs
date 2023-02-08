@@ -45,7 +45,7 @@ pub fn make_router(
         .route("/projects/:project_name/services", get(list_services))
         .route(
             "/projects/:project_name/services/:service_name",
-            get(get_service).post(post_service).delete(delete_service),
+            get(get_service).post(post_service).delete(stop_service),
         )
         .route(
             "/projects/:project_name/services/:service_name/summary",
@@ -250,7 +250,7 @@ async fn post_service(
 }
 
 #[instrument(skip_all, fields(%project_name, %service_name))]
-async fn delete_service(
+async fn stop_service(
     Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
     Path((project_name, service_name)): Path<(String, String)>,
@@ -276,8 +276,6 @@ async fn delete_service(
             .into_iter()
             .map(Into::into)
             .collect();
-
-        persistence.delete_service(&service.id).await?;
 
         let response = shuttle_common::models::service::Detailed {
             name: service.name,

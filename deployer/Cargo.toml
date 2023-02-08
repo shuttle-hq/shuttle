@@ -19,7 +19,7 @@ crossbeam-channel = "0.5.6"
 flate2 = "1.0.25"
 fqdn = "0.2.3"
 futures = "0.3.25"
-hyper = { version = "0.14.23", features = ["client", "http1", "http2", "tcp" ] }
+hyper = { version = "0.14.23", features = ["client", "http1", "http2", "tcp"] }
 # not great, but waiting for WebSocket changes to be merged
 hyper-reverse-proxy = { git = "https://github.com/chesedo/hyper-reverse-proxy", branch = "master" }
 once_cell = { workspace = true }
@@ -30,7 +30,14 @@ pipe = "0.4.0"
 portpicker = "0.1.1"
 serde = { workspace = true }
 serde_json = { workspace = true }
-sqlx = { version = "0.6.2", features = ["runtime-tokio-native-tls", "sqlite", "chrono", "json", "migrate", "uuid"] }
+sqlx = { version = "0.6.2", features = [
+  "runtime-tokio-native-tls",
+  "sqlite",
+  "chrono",
+  "json",
+  "migrate",
+  "uuid",
+] }
 strum = { version = "0.24.1", features = ["derive"] }
 tar = "0.4.38"
 thiserror = { workspace = true }
@@ -46,7 +53,7 @@ uuid = { workspace = true, features = ["v4"] }
 
 [dependencies.shuttle-common]
 workspace = true
-features= ["backend", "models"]
+features = ["backend", "models"]
 
 [dependencies.shuttle-proto]
 workspace = true
@@ -59,4 +66,4 @@ features = ["loader"]
 ctor = "0.1.26"
 hex = "0.4.3"
 rand = "0.8.5"
-tempdir = "0.3.7"
+tempfile = "3.3.0"

@@ -11,7 +11,7 @@ pub use shuttle_proto::provisioner::provisioner_server::ProvisionerServer;
 use shuttle_proto::provisioner::{
     aws_rds, database_request::DbType, shared, AwsRds, DatabaseRequest, DatabaseResponse, Shared,
 };
-use sqlx::{postgres::PgPoolOptions, PgPool};
+use sqlx::{postgres::PgPoolOptions, ConnectOptions, Executor, PgPool};
 use tokio::time::sleep;
 use tonic::{Request, Response, Status};
 use tracing::{debug, info};
@@ -164,6 +164,23 @@ impl MyProvisioner {
                 .execute(&self.pool)
                 .await
                 .map_err(|e| Error::CreateDB(e.to_string()))?;
+
+            // Make sure database can't see other databases or other users
+            // For #557
+            let options = self.pool.connect_options().clone().database(&database_name);
+            let mut conn = options.connect().await?;
+
+            let stmts = vec![
+                "REVOKE ALL ON pg_user FROM public;",
+                "REVOKE ALL ON pg_roles FROM public;",
+                "REVOKE ALL ON pg_database FROM public;",
+            ];
+
+            for stmt in stmts {
+                conn.execute(stmt)
+                    .await
+                    .map_err(|e| Error::CreateDB(e.to_string()))?;
+            }
         }
 
         Ok(database_name)

@@ -57,22 +57,13 @@ pub struct AdminResponse {
     pub account_name: String,
 }
 
-pub fn get_table(projects: &Vec<Response>, filter: Option<State>) -> String {
+pub fn get_table(projects: &Vec<Response>) -> String {
     if projects.is_empty() {
         format!(
             "{}\n",
             "No projects are linked to this account".yellow().bold()
         )
     } else {
-        let projects = match filter {
-            Some(state) => projects
-                .iter()
-                .filter(|project| project.state == state)
-                .cloned()
-                .collect::<Vec<Response>>(),
-            None => projects.to_owned(),
-        };
-
         let mut table = Table::new();
         table
             .load_preset(UTF8_FULL)

@@ -4,7 +4,6 @@ pub mod config;
 mod factory;
 mod init;
 
-use shuttle_common::models::project::State;
 use shuttle_common::project::ProjectName;
 
 use std::collections::BTreeMap;
@@ -530,17 +529,12 @@ impl Shuttle {
     }
 
     async fn projects_list(&self, client: &Client, filter: Option<String>) -> Result<()> {
-        let filter = filter.unwrap_or_else(|| "none".to_string());
-
-        let filter = match filter.trim() {
-            "ready" => Some(State::Ready),
-            "errored" => Some(State::Errored),
-            "destroyed" => Some(State::Destroyed),
-            _ => None,
+        let projects = match filter {
+            Some(filter) => client.get_projects_list_filtered(filter).await?,
+            None => client.get_projects_list().await?,
         };
 
-        let projects = client.get_projects_list().await?;
-        let projects_table = project::get_table(&projects, filter);
+        let projects_table = project::get_table(&projects);
 
         println!("{projects_table}");
 

@@ -110,7 +110,7 @@ pub enum ProjectCommand {
     /// list all projects belonging to the calling account
     List {
         #[arg(long)]
-        /// Follow status of project command
+        /// Return projects filtered by a given project status
         filter: Option<String>,
     },
     /// remove this project environment from shuttle

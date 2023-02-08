@@ -56,7 +56,7 @@ impl Client {
             .await
     }
 
-    pub async fn delete_service(&self, project: &ProjectName) -> Result<service::Detailed> {
+    pub async fn stop_service(&self, project: &ProjectName) -> Result<service::Detailed> {
         let path = format!(
             "/projects/{}/services/{}",
             project.as_str(),

@@ -57,7 +57,7 @@ impl Shuttle {
             Command::Deploy(..)
                 | Command::Deployment(..)
                 | Command::Project(..)
-                | Command::Delete
+                | Command::Stop
                 | Command::Clean
                 | Command::Secrets
                 | Command::Status
@@ -92,7 +92,7 @@ impl Shuttle {
                     Command::Deployment(DeploymentCommand::Status { id }) => {
                         self.deployment_get(&client, id).await
                     }
-                    Command::Delete => self.delete(&client).await,
+                    Command::Stop => self.stop(&client).await,
                     Command::Clean => self.clean(&client).await,
                     Command::Secrets => self.secrets(&client).await,
                     Command::Project(ProjectCommand::New) => self.project_create(&client).await,
@@ -266,13 +266,13 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn delete(&self, client: &Client) -> Result<()> {
-        let service = client.delete_service(self.ctx.project_name()).await?;
+    async fn stop(&self, client: &Client) -> Result<()> {
+        let service = client.stop_service(self.ctx.project_name()).await?;
 
         println!(
             r#"{}
 {}"#,
-            "Successfully deleted service".bold(),
+            "Successfully stopped service".bold(),
             service
         );
 

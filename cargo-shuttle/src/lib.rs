@@ -403,7 +403,7 @@ impl Shuttle {
 
         trace!("loading secrets");
 
-        let secrets_filename = if run_args.prod_secrets || run_args.release {
+        let secrets_filename = if run_args.prod_secrets {
             "Secrets.toml".to_string()
         } else {
             "Secrets.dev.toml".to_string()

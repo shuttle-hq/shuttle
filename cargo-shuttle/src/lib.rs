@@ -73,6 +73,7 @@ impl Shuttle {
             Command::Init(init_args) => self.init(init_args, args.project_args).await,
             Command::Generate { shell, output } => self.complete(shell, output).await,
             Command::Login(login_args) => self.login(login_args).await,
+            Command::Logout => self.logout().await,
             Command::Feedback => self.feedback().await,
             Command::Run(run_args) => self.local_run(run_args).await,
             need_client => {
@@ -258,6 +259,13 @@ impl Shuttle {
         Ok(())
     }
 
+    async fn logout(&mut self) -> Result<()> {
+        self.ctx.clear_api_key()?;
+
+        println!("Successfully logged out of shuttle.");
+        Ok(())
+    }
+
     async fn delete(&self, client: &Client) -> Result<()> {
         let service = client.delete_service(self.ctx.project_name()).await?;
 
@@ -390,7 +398,7 @@ impl Shuttle {
             "Building".bold().green(),
             working_directory.display()
         );
-        let so_path = build_crate(id, working_directory, false, tx).await?;
+        let so_path = build_crate(id, working_directory, run_args.release, tx).await?;
 
         trace!("loading secrets");
         let secrets_path = working_directory.join("Secrets.toml");

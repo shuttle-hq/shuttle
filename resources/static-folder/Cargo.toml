@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-static-folder"
-version = "0.8.0"
+version = "0.9.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Plugin to get a static folder at runtime on shuttle"
@@ -9,7 +9,7 @@ keywords = ["shuttle-service", "static-folder"]
 
 [dependencies]
 async-trait = "0.1.56"
-shuttle-service = { path = "../../service", version = "0.8.0", default-features = false }
+shuttle-service = { path = "../../service", version = "0.9.0", default-features = false }
 tokio = { version = "1.19.2", features = ["rt"] }
 
 [dev-dependencies]

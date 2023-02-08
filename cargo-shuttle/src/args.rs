@@ -83,6 +83,8 @@ pub enum Command {
     Secrets,
     /// login to the shuttle platform
     Login(LoginArgs),
+    /// log out of the shuttle platform
+    Logout,
     /// run a shuttle service locally
     Run(RunArgs),
     /// Open an issue on github and provide feedback.
@@ -142,8 +144,11 @@ pub struct RunArgs {
     #[arg(long, default_value = "8000")]
     pub port: u16,
     /// use 0.0.0.0 instead of localhost (for usage with local external devices)
-    #[clap(long)]
+    #[arg(long)]
     pub external: bool,
+    /// Use release mode for building the project.
+    #[arg(long, short = 'r')]
+    pub release: bool,
 }
 
 #[derive(Parser, Debug)]

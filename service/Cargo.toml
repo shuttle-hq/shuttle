@@ -1,8 +1,9 @@
 [package]
 name = "shuttle-service"
-version = "0.8.0"
+version = "0.9.0"
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 description = "Service traits and macros to deploy on the shuttle platform (https://www.shuttle.rs/)"
 homepage = "https://www.shuttle.rs"
 

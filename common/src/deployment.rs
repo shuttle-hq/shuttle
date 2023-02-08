@@ -15,3 +15,9 @@ pub enum State {
     Crashed,
     Unknown,
 }
+
+/// This which environment is this deployment taking place
+pub enum Environment {
+    Local,
+    Production,
+}

@@ -289,7 +289,7 @@ mod tests {
 
     use shuttle_common::database;
     use shuttle_service::{Factory, Logger};
-    use tempdir::TempDir;
+    use tempfile::Builder;
     use tokio::{
         sync::{broadcast, mpsc, oneshot},
         task::JoinError,
@@ -324,6 +324,10 @@ mod tests {
             panic!("no test should get the service name");
         }
 
+        fn get_environment(&self) -> shuttle_service::Environment {
+            panic!("no test should get the environment");
+        }
+
         fn get_build_path(&self) -> Result<PathBuf, shuttle_service::Error> {
             panic!("no test should get the build path");
         }
@@ -334,7 +338,7 @@ mod tests {
     }
 
     fn get_storage_manager() -> StorageManager {
-        let tmp_dir = TempDir::new("shuttle_run_test").unwrap();
+        let tmp_dir = Builder::new().prefix("shuttle_run_test").tempdir().unwrap();
         let path = tmp_dir.into_path();
 
         StorageManager::new(path)

@@ -1,4 +1,5 @@
 use once_cell::sync::OnceCell;
+use rustrict::{Censor, Type};
 use serde::de::Error as DeError;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashSet;
@@ -15,8 +16,6 @@ use std::str::FromStr;
 /// - It does not contain profanity.
 /// - It is not a reserved word.
 ///
-use rustrict::{Censor, Type};
-
 #[derive(Clone, Serialize, Debug, Eq, PartialEq)]
 pub struct ProjectName(String);
 

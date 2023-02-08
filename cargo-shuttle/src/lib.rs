@@ -4,6 +4,7 @@ pub mod config;
 mod factory;
 mod init;
 
+use shuttle_common::models::project::State;
 use shuttle_common::project::ProjectName;
 
 use std::collections::BTreeMap;
@@ -12,6 +13,7 @@ use std::fs::{read_to_string, File};
 use std::io::stdout;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use anyhow::{anyhow, bail, Context, Result};
 pub use args::{Args, Command, DeployArgs, InitArgs, LoginArgs, ProjectArgs, RunArgs};
@@ -530,7 +532,15 @@ impl Shuttle {
 
     async fn projects_list(&self, client: &Client, filter: Option<String>) -> Result<()> {
         let projects = match filter {
-            Some(filter) => client.get_projects_list_filtered(filter).await?,
+            Some(result) => {
+                if let Ok(filter) = State::from_str(result.trim()) {
+                    client
+                        .get_projects_list_filtered(filter.to_string())
+                        .await?
+                } else {
+                    return Err(anyhow!("That's not a valid project status!"));
+                }
+            }
             None => client.get_projects_list().await?,
         };
 

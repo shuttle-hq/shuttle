@@ -532,8 +532,8 @@ impl Shuttle {
 
     async fn projects_list(&self, client: &Client, filter: Option<String>) -> Result<()> {
         let projects = match filter {
-            Some(result) => {
-                if let Ok(filter) = State::from_str(result.trim()) {
+            Some(filter) => {
+                if let Ok(filter) = State::from_str(filter.trim()) {
                     client
                         .get_projects_list_filtered(filter.to_string())
                         .await?

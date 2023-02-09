@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::convert::{identity, Infallible};
 use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
@@ -8,6 +9,7 @@ use bollard::container::{
 use bollard::errors::Error as DockerError;
 use bollard::models::{ContainerInspectResponse, ContainerStateStatusEnum};
 use bollard::network::{ConnectNetworkOptions, DisconnectNetworkOptions};
+use bollard::system::EventsOptions;
 use fqdn::FQDN;
 use futures::prelude::*;
 use http::uri::InvalidUri;
@@ -62,6 +64,7 @@ macro_rules! impl_from_variant {
 
 const RUNTIME_API_PORT: u16 = 8001;
 const MAX_RESTARTS: usize = 5;
+const MAX_REBOOTS: usize = 3;
 
 // Client used for health checks
 static CLIENT: Lazy<Client<HttpConnector>> = Lazy::new(Client::new);
@@ -150,6 +153,7 @@ pub enum Project {
     Restarting(ProjectRestarting),
     Started(ProjectStarted),
     Ready(ProjectReady),
+    Rebooting(ProjectRebooting),
     Stopping(ProjectStopping),
     Stopped(ProjectStopped),
     Destroying(ProjectDestroying),
@@ -161,10 +165,12 @@ impl_from_variant!(Project:
                    ProjectCreating => Creating,
                    ProjectAttaching => Attaching,
                    ProjectStarting => Starting,
+                   ProjectRestarting => Restarting,
                    ProjectStarted => Started,
                    ProjectReady => Ready,
                    ProjectStopping => Stopping,
                    ProjectStopped => Stopped,
+                   ProjectRebooting => Rebooting,
                    ProjectDestroying => Destroying,
                    ProjectDestroyed => Destroyed,
                    ProjectError => Errored);
@@ -177,6 +183,17 @@ impl Project {
             Err(Error::custom(
                 ErrorKind::InvalidOperation,
                 format!("cannot stop a project in the `{}` state", self.state()),
+            ))
+        }
+    }
+
+    pub fn reboot(self) -> Result<Self, Error> {
+        if let Some(container) = self.container() {
+            Ok(Self::Rebooting(ProjectRebooting { container }))
+        } else {
+            Err(Error::custom(
+                ErrorKind::InvalidOperation,
+                format!("cannot reboot a project in the `{}` state", self.state()),
             ))
         }
     }
@@ -225,6 +242,7 @@ impl Project {
                 "restarting"
             }
             Self::Stopping(_) => "stopping",
+            Self::Rebooting(_) => "rebooting",
             Self::Creating(_) => "creating",
             Self::Attaching(_) => "attaching",
             Self::Destroying(_) => "destroying",
@@ -242,6 +260,7 @@ impl Project {
             | Self::Ready(ProjectReady { container, .. })
             | Self::Stopping(ProjectStopping { container, .. })
             | Self::Stopped(ProjectStopped { container, .. })
+            | Self::Rebooting(ProjectRebooting { container, .. })
             | Self::Destroying(ProjectDestroying { container }) => Some(container.clone()),
             Self::Errored(ProjectError { ctx: Some(ctx), .. }) => ctx.container(),
             Self::Errored(_) | Self::Creating(_) | Self::Destroyed(_) => None,
@@ -258,6 +277,7 @@ impl Project {
             | Self::Ready(_)
             | Self::Stopping(_)
             | Self::Stopped(_)
+            | Self::Rebooting(_)
             | Self::Attaching(_)
             | Self::Destroying(_)
             | Self::Destroyed(_) => None,
@@ -288,6 +308,7 @@ impl From<Project> for shuttle_common::models::project::State {
             Project::Ready(_) => Self::Ready,
             Project::Stopping(_) => Self::Stopping,
             Project::Stopped(_) => Self::Stopped,
+            Project::Rebooting(_) => Self::Rebooting,
             Project::Destroying(_) => Self::Destroying,
             Project::Destroyed(_) => Self::Destroyed,
             Project::Errored(_) => Self::Errored,
@@ -347,6 +368,7 @@ where
             Self::Ready(ready) => ready.next(ctx).await.into_try_state(),
             Self::Stopped(stopped) => stopped.next(ctx).await.into_try_state(),
             Self::Stopping(stopping) => stopping.next(ctx).await.into_try_state(),
+            Self::Rebooting(rebooting) => rebooting.next(ctx).await.into_try_state(),
             Self::Destroying(destroying) => destroying.next(ctx).await.into_try_state(),
             Self::Destroyed(destroyed) => destroyed.next(ctx).await.into_try_state(),
             Self::Errored(errored) => Ok(Self::Errored(errored)),
@@ -468,6 +490,7 @@ where
                 Err(err) => return Err(err.into()),
             },
             Self::Stopped(stopped) => Self::Stopped(stopped),
+            Self::Rebooting(rebooting) => Self::Rebooting(rebooting),
             Self::Destroying(destroying) => Self::Destroying(destroying),
             Self::Destroyed(destroyed) => Self::Destroyed(destroyed),
             Self::Errored(err) => Self::Errored(err),
@@ -977,6 +1000,70 @@ impl Service {
         let is_healthy = matches!(resp, Ok(Ok(res)) if res.status().is_success());
         self.last_check = Some(HealthCheckRecord::new(is_healthy));
         is_healthy
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ProjectRebooting {
+    container: ContainerInspectResponse,
+}
+
+#[async_trait]
+impl<Ctx> State<Ctx> for ProjectRebooting
+where
+    Ctx: DockerContext,
+{
+    type Next = ProjectStarting;
+
+    type Error = ProjectError;
+
+    #[instrument(skip_all)]
+    async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
+        let Self { mut container } = self;
+        ctx.docker()
+            .stop_container(
+                container.id.as_ref().unwrap(),
+                Some(StopContainerOptions { t: 30 }),
+            )
+            .await?;
+
+        container = container.refresh(ctx).await?;
+        let since = (chrono::Utc::now() - chrono::Duration::minutes(15))
+            .timestamp()
+            .to_string();
+        let until = chrono::Utc::now().timestamp().to_string();
+
+        // Filter and collect `start` events for this project in the last 15 minutes
+        let start_events = ctx
+            .docker()
+            .events(Some(EventsOptions::<&str> {
+                since: Some(since),
+                until: Some(until),
+                filters: HashMap::from([
+                    ("container", vec![safe_unwrap!(container.id).as_str()]),
+                    ("event", vec!["start"]),
+                ]),
+            }))
+            .try_collect::<Vec<_>>()
+            .await?;
+
+        let start_event_count = start_events.len();
+        debug!(
+            "project started {} times in the last 15 minutes",
+            start_event_count
+        );
+
+        // If stopped, and has not restarted too much, try to restart
+        if start_event_count < MAX_REBOOTS {
+            Ok(ProjectStarting {
+                container,
+                restart_count: 0,
+            })
+        } else {
+            Err(ProjectError::internal(
+                "too many restarts in the last 15 minutes",
+            ))
+        }
     }
 }
 

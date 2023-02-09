@@ -25,6 +25,7 @@ pub enum State {
     Ready,
     Stopping,
     Stopped,
+    Rebooting,
     Destroying,
     Destroyed,
     Errored,
@@ -48,7 +49,8 @@ impl State {
             | Self::Attaching
             | Self::Starting
             | Self::Restarting
-            | Self::Started => Color::Cyan,
+            | Self::Started
+            | Self::Rebooting => Color::Cyan,
             Self::Ready => Color::Green,
             Self::Stopped | Self::Stopping | Self::Destroying | Self::Destroyed => Color::Blue,
             Self::Errored => Color::Red,

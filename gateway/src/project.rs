@@ -63,6 +63,7 @@ macro_rules! impl_from_variant {
 }
 
 const RUNTIME_API_PORT: u16 = 8001;
+const MAX_RECREATES: usize = 5;
 const MAX_RESTARTS: usize = 5;
 const MAX_REBOOTS: usize = 3;
 
@@ -149,6 +150,7 @@ impl From<DockerError> for Error {
 pub enum Project {
     Creating(ProjectCreating),
     Attaching(ProjectAttaching),
+    Recreating(ProjectRecreating),
     Starting(ProjectStarting),
     Restarting(ProjectRestarting),
     Started(ProjectStarted),
@@ -164,6 +166,7 @@ pub enum Project {
 impl_from_variant!(Project:
                    ProjectCreating => Creating,
                    ProjectAttaching => Attaching,
+                   ProjectRecreating => Recreating,
                    ProjectStarting => Starting,
                    ProjectRestarting => Restarting,
                    ProjectStarted => Started,
@@ -237,6 +240,7 @@ impl Project {
             Self::Ready(_) => "ready",
             Self::Stopped(_) => "stopped",
             Self::Starting(_) => "starting",
+            Self::Recreating(_) => "recreating",
             Self::Restarting(ProjectRestarting { restart_count, .. }) => {
                 // format!("restarting (attempt {restart_count})")
                 "restarting"
@@ -255,6 +259,7 @@ impl Project {
         match self {
             Self::Starting(ProjectStarting { container, .. })
             | Self::Started(ProjectStarted { container, .. })
+            | Self::Recreating(ProjectRecreating { container, .. })
             | Self::Restarting(ProjectRestarting { container, .. })
             | Self::Attaching(ProjectAttaching { container, .. })
             | Self::Ready(ProjectReady { container, .. })
@@ -273,6 +278,7 @@ impl Project {
             | Self::Restarting(ProjectRestarting { restart_count, .. }) => Some(*restart_count),
             Self::Errored(_)
             | Self::Creating(_)
+            | Self::Recreating(_)
             | Self::Started(_)
             | Self::Ready(_)
             | Self::Stopping(_)
@@ -302,6 +308,7 @@ impl From<Project> for shuttle_common::models::project::State {
         match project {
             Project::Creating(_) => Self::Creating,
             Project::Attaching(_) => Self::Attaching,
+            Project::Recreating(_) => Self::Recreating,
             Project::Starting(_) => Self::Starting,
             Project::Restarting(_) => Self::Restarting,
             Project::Started(_) => Self::Started,
@@ -331,16 +338,20 @@ where
 
         let mut new = match self {
             Self::Creating(creating) => creating.next(ctx).await.into_try_state(),
-            Self::Attaching(attaching) => match attaching.next(ctx).await {
+            Self::Attaching(attaching) => match attaching.clone().next(ctx).await {
                 Err(ProjectError {
                     kind: ProjectErrorKind::NoNetwork,
                     ..
                 }) => {
-                    // Restart the container to try and connect to the network again
-                    Ok(previous.clone().stop().unwrap())
+                    // Recreate the container to try and connect to the network again
+                    Ok(Self::Recreating(ProjectRecreating {
+                        container: attaching.container,
+                        recreate_count: attaching.recreate_count,
+                    }))
                 }
                 attaching => attaching.into_try_state(),
             },
+            Self::Recreating(recreating) => recreating.next(ctx).await.into_try_state(),
             Self::Starting(ready) => match ready.next(ctx).await {
                 Err(error) => {
                     error!(
@@ -456,7 +467,7 @@ where
                 }) => {
                     // container not found, let's try to recreate it
                     // with the same image
-                    Self::Creating(ProjectCreating::from_container(container, ctx)?)
+                    Self::Creating(ProjectCreating::from_container(container, ctx, 0)?)
                 }
                 Err(err) => return Err(err.into()),
             },
@@ -485,10 +496,11 @@ where
                 }) => {
                     // container not found, let's try to recreate it
                     // with the same image
-                    Self::Creating(ProjectCreating::from_container(container, ctx)?)
+                    Self::Creating(ProjectCreating::from_container(container, ctx, 0)?)
                 }
                 Err(err) => return Err(err.into()),
             },
+            Self::Recreating(recreating) => Self::Recreating(recreating),
             Self::Stopped(stopped) => Self::Stopped(stopped),
             Self::Rebooting(rebooting) => Self::Rebooting(rebooting),
             Self::Destroying(destroying) => Self::Destroying(destroying),
@@ -511,6 +523,9 @@ pub struct ProjectCreating {
     /// Configuration will be extracted from there if specified (will
     /// take precedence over other overrides)
     from: Option<ContainerInspectResponse>,
+    // Use default for backward compatibility. Can be removed when all projects in the DB have this property set
+    #[serde(default)]
+    recreate_count: usize,
 }
 
 impl ProjectCreating {
@@ -521,12 +536,14 @@ impl ProjectCreating {
             fqdn: None,
             image: None,
             from: None,
+            recreate_count: 0,
         }
     }
 
     pub fn from_container<Ctx: DockerContext>(
         container: ContainerInspectResponse,
         ctx: &Ctx,
+        recreate_count: usize,
     ) -> Result<Self, ProjectError> {
         let project_name = container.project_name(&ctx.container_settings().prefix)?;
         let initial_key = container.initial_key()?;
@@ -537,6 +554,7 @@ impl ProjectCreating {
             fqdn: None,
             image: None,
             from: Some(container),
+            recreate_count,
         })
     }
 
@@ -676,6 +694,7 @@ where
     #[instrument(skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let container_name = self.container_name(ctx);
+        let recreate_count = self.recreate_count;
         let container = ctx
             .docker()
             // If container already exists, use that
@@ -693,13 +712,19 @@ where
                 }
             })
             .await?;
-        Ok(ProjectAttaching { container })
+        Ok(ProjectAttaching {
+            container,
+            recreate_count,
+        })
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProjectAttaching {
     container: ContainerInspectResponse,
+    // Use default for backward compatibility. Can be removed when all projects in the DB have this property set
+    #[serde(default)]
+    recreate_count: usize,
 }
 
 #[async_trait]
@@ -712,7 +737,7 @@ where
 
     #[instrument(skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
-        let Self { container } = self;
+        let Self { container, .. } = self;
 
         let container_id = container.id.as_ref().unwrap();
         let ContainerSettings { network_name, .. } = ctx.container_settings();
@@ -769,6 +794,57 @@ where
             container,
             restart_count: 0,
         })
+    }
+}
+
+// Special state to try and recreate a container if it failed to be created
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ProjectRecreating {
+    container: ContainerInspectResponse,
+    recreate_count: usize,
+}
+
+#[async_trait]
+impl<Ctx> State<Ctx> for ProjectRecreating
+where
+    Ctx: DockerContext,
+{
+    type Next = ProjectCreating;
+    type Error = ProjectError;
+
+    #[instrument(skip_all)]
+    async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
+        let Self {
+            container,
+            recreate_count,
+        } = self;
+        let container_id = container.id.as_ref().unwrap();
+
+        ctx.docker()
+            .stop_container(container_id, Some(StopContainerOptions { t: 1 }))
+            .await
+            .unwrap_or(());
+        ctx.docker()
+            .remove_container(
+                container_id,
+                Some(RemoveContainerOptions {
+                    force: true,
+                    ..Default::default()
+                }),
+            )
+            .await
+            .unwrap_or(());
+
+        // If stopped, and has not restarted too much, try to restart
+        if recreate_count < MAX_RECREATES {
+            Ok(ProjectCreating::from_container(
+                container,
+                ctx,
+                recreate_count + 1,
+            )?)
+        } else {
+            Err(ProjectError::internal("too many recreates"))
+        }
     }
 }
 
@@ -1375,6 +1451,7 @@ pub mod tests {
                 fqdn: None,
                 image: None,
                 from: None,
+                recreate_count: 0,
             }),
             #[assertion = "Container created, attach network"]
             Ok(Project::Attaching(ProjectAttaching {
@@ -1388,7 +1465,8 @@ pub mod tests {
                         ..
                     }),
                     ..
-                }
+                },
+                recreate_count: 0,
             })) if networks.keys().collect::<Vec<_>>() == vec!["bridge"],
             #[assertion = "Container attached, assigned an `id`"]
             Ok(Project::Starting(ProjectStarting {

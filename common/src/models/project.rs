@@ -19,6 +19,7 @@ pub struct Response {
 pub enum State {
     Creating,
     Attaching,
+    Recreating,
     Starting,
     Restarting,
     Started,
@@ -47,6 +48,7 @@ impl State {
         match self {
             Self::Creating
             | Self::Attaching
+            | Self::Recreating
             | Self::Starting
             | Self::Restarting
             | Self::Started

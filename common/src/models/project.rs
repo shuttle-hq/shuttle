@@ -20,6 +20,7 @@ pub enum State {
     Creating,
     Attaching,
     Starting,
+    Restarting,
     Started,
     Ready,
     Stopping,
@@ -43,7 +44,11 @@ impl Display for Response {
 impl State {
     pub fn get_color(&self) -> Color {
         match self {
-            Self::Creating | Self::Attaching | Self::Starting | Self::Started => Color::Cyan,
+            Self::Creating
+            | Self::Attaching
+            | Self::Starting
+            | Self::Restarting
+            | Self::Started => Color::Cyan,
             Self::Ready => Color::Green,
             Self::Stopped | Self::Stopping | Self::Destroying | Self::Destroyed => Color::Blue,
             Self::Errored => Color::Red,

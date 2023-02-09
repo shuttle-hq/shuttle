@@ -600,9 +600,7 @@ pub mod tests {
                 },
             };
 
-            let settings = ContainerSettings::builder(&docker)
-                .from_args(&args.context)
-                .await;
+            let settings = ContainerSettings::builder().from_args(&args.context).await;
 
             let hyper = HyperClient::builder().build(HttpConnector::new());
 

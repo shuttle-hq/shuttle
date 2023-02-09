@@ -17,7 +17,7 @@ use hyper::Client;
 use once_cell::sync::Lazy;
 use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Serialize};
-use tokio::time::{self, timeout, sleep};
+use tokio::time::{self, sleep, timeout};
 use tracing::{debug, error, info, instrument};
 
 use crate::{
@@ -317,7 +317,10 @@ where
             },
             Self::Starting(ready) => match ready.next(ctx).await {
                 Err(error) => {
-                    error!("project failed to start. Will restart it");
+                    error!(
+                        error = &error as &dyn std::error::Error,
+                        "project failed to start. Will restart it"
+                    );
                     Ok(previous.clone().stop().unwrap())
                 }
                 starting => starting.into_try_state(),
@@ -650,11 +653,7 @@ where
         let Self { container } = self;
 
         let container_id = container.id.as_ref().unwrap();
-        let ContainerSettings {
-            network_name,
-            network_id,
-            ..
-        } = ctx.container_settings();
+        let ContainerSettings { network_name, .. } = ctx.container_settings();
 
         // Disconnect the bridge network before trying to start up
         // For docker bug https://github.com/docker/cli/issues/1891
@@ -679,10 +678,7 @@ where
         // Make sure the container is connected to the user network
         let network_config = ConnectNetworkOptions {
             container: container_id,
-            endpoint_config: EndpointSettings {
-                network_id: Some(network_id.to_string()),
-                ..Default::default()
-            },
+            endpoint_config: Default::default(),
         };
         ctx.docker()
             .connect_network(network_name, network_config)
@@ -968,16 +964,13 @@ where
     type Error = ProjectError;
 
     #[instrument(skip_all)]
-    async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
+    async fn next(self, _ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let Self {
             container,
             restart_count,
         } = self;
 
-        debug!(
-            "project restarted {} times",
-            restart_count
-        );
+        debug!("project restarted {} times", restart_count);
 
         // If stopped, and has not restarted too much, try to restart
         if restart_count < MAX_RESTARTS {
@@ -987,9 +980,7 @@ where
                 restart_count: restart_count + 1,
             })
         } else {
-            Err(ProjectError::internal(
-                "too many restarts",
-            ))
+            Err(ProjectError::internal("too many restarts"))
         }
     }
 }

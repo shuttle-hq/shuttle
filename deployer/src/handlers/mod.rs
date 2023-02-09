@@ -256,9 +256,7 @@ async fn stop_service(
     Path((project_name, service_name)): Path<(String, String)>,
 ) -> Result<Json<shuttle_common::models::service::Detailed>> {
     if let Some(service) = persistence.get_service_by_name(&service_name).await? {
-        let old_deployments = persistence
-            .delete_deployments_by_service_id(&service.id)
-            .await?;
+        let old_deployments = persistence.get_deployments(&service.id).await?;
 
         for deployment in old_deployments.iter() {
             deployment_manager.kill(deployment.id).await;

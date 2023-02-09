@@ -234,24 +234,43 @@ impl Project {
             .map(|target_ip| SocketAddr::new(target_ip, RUNTIME_API_PORT)))
     }
 
-    pub fn state(&self) -> &'static str {
+    pub fn state(&self) -> String {
         match self {
-            Self::Started(_) => "started",
-            Self::Ready(_) => "ready",
-            Self::Stopped(_) => "stopped",
-            Self::Starting(_) => "starting",
-            Self::Recreating(_) => "recreating",
-            Self::Restarting(ProjectRestarting { restart_count, .. }) => {
-                // format!("restarting (attempt {restart_count})")
-                "restarting"
+            Self::Started(_) => "started".to_string(),
+            Self::Ready(_) => "ready".to_string(),
+            Self::Stopped(_) => "stopped".to_string(),
+            Self::Starting(ProjectStarting { restart_count, .. }) => {
+                if *restart_count > 0 {
+                    format!("starting (attempt {restart_count})")
+                } else {
+                    "starting".to_string()
+                }
             }
-            Self::Stopping(_) => "stopping",
-            Self::Rebooting(_) => "rebooting",
-            Self::Creating(_) => "creating",
-            Self::Attaching(_) => "attaching",
-            Self::Destroying(_) => "destroying",
-            Self::Destroyed(_) => "destroyed",
-            Self::Errored(_) => "error",
+            Self::Recreating(ProjectRecreating { recreate_count, .. }) => {
+                format!("recreating (attempt {recreate_count})")
+            }
+            Self::Restarting(ProjectRestarting { restart_count, .. }) => {
+                format!("restarting (attempt {restart_count})")
+            }
+            Self::Stopping(_) => "stopping".to_string(),
+            Self::Rebooting(_) => "rebooting".to_string(),
+            Self::Creating(ProjectCreating { recreate_count, .. }) => {
+                if *recreate_count > 0 {
+                    format!("creating (attempt {recreate_count})")
+                } else {
+                    "creating".to_string()
+                }
+            }
+            Self::Attaching(ProjectAttaching { recreate_count, .. }) => {
+                if *recreate_count > 0 {
+                    format!("attaching (attempt {recreate_count})")
+                } else {
+                    "attaching".to_string()
+                }
+            }
+            Self::Destroying(_) => "destroying".to_string(),
+            Self::Destroyed(_) => "destroyed".to_string(),
+            Self::Errored(_) => "error".to_string(),
         }
     }
 
@@ -269,24 +288,6 @@ impl Project {
             | Self::Destroying(ProjectDestroying { container }) => Some(container.clone()),
             Self::Errored(ProjectError { ctx: Some(ctx), .. }) => ctx.container(),
             Self::Errored(_) | Self::Creating(_) | Self::Destroyed(_) => None,
-        }
-    }
-
-    pub fn restart_count(&self) -> Option<usize> {
-        match self {
-            Self::Starting(ProjectStarting { restart_count, .. })
-            | Self::Restarting(ProjectRestarting { restart_count, .. }) => Some(*restart_count),
-            Self::Errored(_)
-            | Self::Creating(_)
-            | Self::Recreating(_)
-            | Self::Started(_)
-            | Self::Ready(_)
-            | Self::Stopping(_)
-            | Self::Stopped(_)
-            | Self::Rebooting(_)
-            | Self::Attaching(_)
-            | Self::Destroying(_)
-            | Self::Destroyed(_) => None,
         }
     }
 
@@ -352,7 +353,7 @@ where
                 attaching => attaching.into_try_state(),
             },
             Self::Recreating(recreating) => recreating.next(ctx).await.into_try_state(),
-            Self::Starting(ready) => match ready.next(ctx).await {
+            Self::Starting(starting) => match starting.clone().next(ctx).await {
                 Err(error) => {
                     error!(
                         error = &error as &dyn std::error::Error,
@@ -360,12 +361,8 @@ where
                     );
 
                     Ok(Self::Restarting(ProjectRestarting {
-                        container: previous
-                            .container()
-                            .expect("starting state should have a container"),
-                        restart_count: previous
-                            .restart_count()
-                            .expect("starting state should have a restart count"),
+                        container: starting.container,
+                        restart_count: starting.restart_count,
                     }))
                 }
                 starting => starting.into_try_state(),
@@ -835,8 +832,8 @@ where
             .await
             .unwrap_or(());
 
-        // If stopped, and has not restarted too much, try to restart
         if recreate_count < MAX_RECREATES {
+            sleep(Duration::from_secs(5)).await;
             Ok(ProjectCreating::from_container(
                 container,
                 ctx,
@@ -902,15 +899,22 @@ where
     type Error = ProjectError;
 
     #[instrument(skip_all)]
-    async fn next(self, _ctx: &Ctx) -> Result<Self::Next, Self::Error> {
+    async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let Self {
             container,
             restart_count,
         } = self;
 
+        let container_id = container.id.as_ref().unwrap();
+
+        // Stop it just to be safe
+        ctx.docker()
+            .stop_container(container_id, Some(StopContainerOptions { t: 1 }))
+            .await
+            .unwrap_or(());
+
         debug!("project restarted {} times", restart_count);
 
-        // If stopped, and has not restarted too much, try to restart
         if restart_count < MAX_RESTARTS {
             sleep(Duration::from_secs(5)).await;
             Ok(ProjectStarting {

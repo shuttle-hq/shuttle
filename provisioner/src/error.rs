@@ -17,6 +17,9 @@ pub enum Error {
     #[error("failed to create DB: {0}")]
     CreateDB(String),
 
+    #[error("failed to drop DB: {0}")]
+    DeleteDB(String),
+
     #[error("unexpected sqlx error: {0}")]
     UnexpectedSqlx(#[from] sqlx::Error),
 

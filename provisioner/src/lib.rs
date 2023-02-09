@@ -6,11 +6,11 @@ use aws_sdk_rds::{error::ModifyDBInstanceErrorKind, model::DbInstance, types::Sd
 pub use error::Error;
 use mongodb::{bson::doc, options::ClientOptions};
 use rand::Rng;
-use shuttle_proto::provisioner::provisioner_server::Provisioner;
 pub use shuttle_proto::provisioner::provisioner_server::ProvisionerServer;
 use shuttle_proto::provisioner::{
     aws_rds, database_request::DbType, shared, AwsRds, DatabaseRequest, DatabaseResponse, Shared,
 };
+use shuttle_proto::provisioner::{provisioner_server::Provisioner, DatabaseDeletionResponse};
 use sqlx::{postgres::PgPoolOptions, ConnectOptions, Executor, PgPool};
 use tokio::time::sleep;
 use tonic::{Request, Response, Status};
@@ -315,6 +315,77 @@ impl MyProvisioner {
             port: engine_to_port(engine),
         })
     }
+
+    async fn delete_shared_db(
+        &self,
+        project_name: &str,
+        engine: shared::Engine,
+    ) -> Result<DatabaseDeletionResponse, Error> {
+        match engine {
+            shared::Engine::Postgres(_) => self.delete_pg(project_name).await?,
+            shared::Engine::Mongodb(_) => self.delete_mongodb(project_name).await?,
+        }
+        Ok(DatabaseDeletionResponse {})
+    }
+
+    async fn delete_pg(&self, project_name: &str) -> Result<(), Error> {
+        let database_name = format!("db-{project_name}");
+        // TODO: do we need to delete the role?
+
+        // Idenfitiers cannot be used as query parameters
+        let drop_db_query = format!("DROP DATABASE \"{database_name}\";");
+
+        // Drop the database. Note that this can fail if there are still active connections to it
+        sqlx::query(&drop_db_query)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| Error::DeleteDB(e.to_string()))?;
+
+        Ok(())
+    }
+
+    async fn delete_mongodb(&self, project_name: &str) -> Result<(), Error> {
+        let database_name = format!("mongodb-{project_name}");
+        let db = self.mongodb_client.database(&database_name);
+
+        // dropping a database in mongodb doesn't delete any associated users
+        // TODO: do we need to delete them?
+
+        db.drop(None)
+            .await
+            .map_err(|e| Error::DeleteDB(e.to_string()))?;
+
+        Ok(())
+    }
+
+    async fn delete_aws_rds(
+        &self,
+        project_name: &str,
+        engine: aws_rds::Engine,
+    ) -> Result<DatabaseDeletionResponse, Error> {
+        let client = &self.rds_client;
+        let instance_name = format!("{project_name}-{engine}");
+
+        // try to delete the db instance
+        let delete_result = client
+            .delete_db_instance()
+            .db_instance_identifier(&instance_name)
+            .send()
+            .await;
+
+        // Did we get an error that wasn't "db instance not found"
+        if let Err(SdkError::ServiceError { err, .. }) = delete_result {
+            if !err.is_db_instance_not_found_fault() {
+                return Err(Error::Plain(format!(
+                    "got unexpected error from AWS RDS service: {err}"
+                )));
+            }
+        }
+
+        // TODO: do we need an else after the above if where we wait for the db instance to be deleted?
+
+        Ok(DatabaseDeletionResponse {})
+    }
 }
 
 #[tonic::async_trait]
@@ -334,6 +405,28 @@ impl Provisioner for MyProvisioner {
             }
             DbType::AwsRds(AwsRds { engine }) => {
                 self.request_aws_rds(&request.project_name, engine.expect("oneof to be set"))
+                    .await?
+            }
+        };
+
+        Ok(Response::new(reply))
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn delete_database(
+        &self,
+        request: Request<DatabaseRequest>,
+    ) -> Result<Response<DatabaseDeletionResponse>, Status> {
+        let request = request.into_inner();
+        let db_type = request.db_type.unwrap();
+
+        let reply = match db_type {
+            DbType::Shared(Shared { engine }) => {
+                self.delete_shared_db(&request.project_name, engine.expect("oneof to be set"))
+                    .await?
+            }
+            DbType::AwsRds(AwsRds { engine }) => {
+                self.delete_aws_rds(&request.project_name, engine.expect("oneof to be set"))
                     .await?
             }
         };

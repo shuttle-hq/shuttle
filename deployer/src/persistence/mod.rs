@@ -243,20 +243,6 @@ impl Persistence {
             .map_err(Error::from)
     }
 
-    pub async fn delete_deployments_by_service_id(
-        &self,
-        service_id: &Uuid,
-    ) -> Result<Vec<Deployment>> {
-        let deployments = self.get_deployments(service_id).await?;
-
-        let _ = sqlx::query("DELETE FROM deployments WHERE service_id = ?")
-            .bind(service_id)
-            .execute(&self.pool)
-            .await;
-
-        Ok(deployments)
-    }
-
     pub async fn get_all_services(&self) -> Result<Vec<Service>> {
         sqlx::query_as("SELECT * FROM services")
             .fetch_all(&self.pool)
@@ -743,49 +729,6 @@ mod tests {
                 },
             ]
         );
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn deployment_deletion() {
-        let (p, _) = Persistence::new_in_memory().await;
-
-        let service_id = add_service(&p.pool).await.unwrap();
-
-        let deployments = [
-            Deployment {
-                id: Uuid::new_v4(),
-                service_id,
-                state: State::Running,
-                last_update: Utc::now(),
-                address: None,
-            },
-            Deployment {
-                id: Uuid::new_v4(),
-                service_id,
-                state: State::Running,
-                last_update: Utc::now(),
-                address: None,
-            },
-        ];
-
-        for deployment in deployments.iter() {
-            p.insert_deployment(deployment.clone()).await.unwrap();
-        }
-
-        assert!(!p.get_deployments(&service_id).await.unwrap().is_empty());
-
-        // This should error since deployments are linked to this service
-        p.delete_service(&service_id).await.unwrap_err();
-        assert_eq!(
-            p.delete_deployments_by_service_id(&service_id)
-                .await
-                .unwrap(),
-            deployments
-        );
-
-        // It should not be safe to delete
-        p.delete_service(&service_id).await.unwrap();
-        assert!(p.get_deployments(&service_id).await.unwrap().is_empty());
     }
 
     #[tokio::test(flavor = "multi_thread")]

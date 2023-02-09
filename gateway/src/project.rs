@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::convert::{identity, Infallible};
 use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
@@ -9,8 +8,6 @@ use bollard::container::{
 use bollard::errors::Error as DockerError;
 use bollard::models::{ContainerInspectResponse, ContainerStateStatusEnum};
 use bollard::network::{ConnectNetworkOptions, DisconnectNetworkOptions};
-use bollard::service::EndpointSettings;
-use bollard::system::EventsOptions;
 use fqdn::FQDN;
 use futures::prelude::*;
 use http::uri::InvalidUri;
@@ -20,7 +17,7 @@ use hyper::Client;
 use once_cell::sync::Lazy;
 use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Serialize};
-use tokio::time::{self, timeout};
+use tokio::time::{self, timeout, sleep};
 use tracing::{debug, error, info, instrument};
 
 use crate::{
@@ -64,7 +61,7 @@ macro_rules! impl_from_variant {
 }
 
 const RUNTIME_API_PORT: u16 = 8001;
-const MAX_RESTARTS: usize = 3;
+const MAX_RESTARTS: usize = 5;
 
 // Client used for health checks
 static CLIENT: Lazy<Client<HttpConnector>> = Lazy::new(Client::new);
@@ -174,7 +171,10 @@ impl_from_variant!(Project:
 impl Project {
     pub fn stop(self) -> Result<Self, Error> {
         if let Some(container) = self.container() {
-            Ok(Self::Stopping(ProjectStopping { container }))
+            Ok(Self::Stopping(ProjectStopping {
+                container,
+                restart_count: self.restart_count().unwrap(),
+            }))
         } else {
             Err(Error::custom(
                 ErrorKind::InvalidOperation,
@@ -237,11 +237,26 @@ impl Project {
             | Self::Started(ProjectStarted { container, .. })
             | Self::Attaching(ProjectAttaching { container, .. })
             | Self::Ready(ProjectReady { container, .. })
-            | Self::Stopping(ProjectStopping { container })
-            | Self::Stopped(ProjectStopped { container })
+            | Self::Stopping(ProjectStopping { container, .. })
+            | Self::Stopped(ProjectStopped { container, .. })
             | Self::Destroying(ProjectDestroying { container }) => Some(container.clone()),
             Self::Errored(ProjectError { ctx: Some(ctx), .. }) => ctx.container(),
             Self::Errored(_) | Self::Creating(_) | Self::Destroyed(_) => None,
+        }
+    }
+
+    pub fn restart_count(&self) -> Option<usize> {
+        match self {
+            Self::Starting(ProjectStarting { restart_count, .. })
+            | Self::Started(ProjectStarted { restart_count, .. })
+            | Self::Ready(ProjectReady { restart_count, .. })
+            | Self::Stopping(ProjectStopping { restart_count, .. })
+            | Self::Stopped(ProjectStopped { restart_count, .. }) => Some(*restart_count),
+            Self::Errored(_)
+            | Self::Creating(_)
+            | Self::Attaching(_)
+            | Self::Destroying(_)
+            | Self::Destroyed(_) => None,
         }
     }
 
@@ -293,15 +308,20 @@ where
             Self::Attaching(attaching) => match attaching.next(ctx).await {
                 Err(ProjectError {
                     kind: ProjectErrorKind::NoNetwork,
-                    ctx,
                     ..
                 }) => {
                     // Restart the container to try and connect to the network again
-                    Ok(ctx.unwrap().stop().unwrap())
+                    Ok(previous.clone().stop().unwrap())
                 }
                 attaching => attaching.into_try_state(),
             },
-            Self::Starting(ready) => ready.next(ctx).await.into_try_state(),
+            Self::Starting(ready) => match ready.next(ctx).await {
+                Err(error) => {
+                    error!("project failed to start. Will restart it");
+                    Ok(previous.clone().stop().unwrap())
+                }
+                starting => starting.into_try_state(),
+            },
             Self::Started(started) => match started.next(ctx).await {
                 Ok(ProjectReadying::Ready(ready)) => Ok(ready.into()),
                 Ok(ProjectReadying::Started(started)) => Ok(started.into()),
@@ -369,23 +389,40 @@ where
         let refreshed = match self {
             Self::Creating(creating) => Self::Creating(creating),
             Self::Attaching(attaching) => Self::Attaching(attaching),
-            Self::Starting(ProjectStarting { container })
-            | Self::Started(ProjectStarted { container, .. })
-            | Self::Ready(ProjectReady { container, .. })
-            | Self::Stopping(ProjectStopping { container })
-            | Self::Stopped(ProjectStopped { container }) => match container
-                .clone()
-                .refresh(ctx)
-                .await
-            {
+            Self::Starting(ProjectStarting {
+                container,
+                restart_count,
+            })
+            | Self::Started(ProjectStarted {
+                container,
+                restart_count,
+                ..
+            })
+            | Self::Ready(ProjectReady {
+                container,
+                restart_count,
+                ..
+            })
+            | Self::Stopping(ProjectStopping {
+                container,
+                restart_count,
+            })
+            | Self::Stopped(ProjectStopped {
+                container,
+                restart_count,
+            }) => match container.clone().refresh(ctx).await {
                 Ok(container) => match container.state.as_ref().unwrap().status.as_ref().unwrap() {
                     ContainerStateStatusEnum::RUNNING => {
-                        Self::Started(ProjectStarted::new(container))
+                        Self::Started(ProjectStarted::new(container, restart_count))
                     }
-                    ContainerStateStatusEnum::CREATED => {
-                        Self::Starting(ProjectStarting { container })
-                    }
-                    ContainerStateStatusEnum::EXITED => Self::Stopped(ProjectStopped { container }),
+                    ContainerStateStatusEnum::CREATED => Self::Starting(ProjectStarting {
+                        container,
+                        restart_count,
+                    }),
+                    ContainerStateStatusEnum::EXITED => Self::Stopped(ProjectStopped {
+                        container,
+                        restart_count,
+                    }),
                     _ => {
                         return Err(Error::custom(
                             ErrorKind::Internal,
@@ -670,13 +707,18 @@ where
 
         let container = container.refresh(ctx).await?;
 
-        Ok(ProjectStarting { container })
+        Ok(ProjectStarting {
+            container,
+            restart_count: 0,
+        })
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProjectStarting {
     container: ContainerInspectResponse,
+    #[serde(default)]
+    restart_count: usize,
 }
 
 #[async_trait]
@@ -705,7 +747,7 @@ where
 
         let container = self.container.refresh(ctx).await?;
 
-        Ok(Self::Next::new(container))
+        Ok(Self::Next::new(container, self.restart_count))
     }
 }
 
@@ -713,13 +755,16 @@ where
 pub struct ProjectStarted {
     container: ContainerInspectResponse,
     service: Option<Service>,
+    #[serde(default)]
+    restart_count: usize,
 }
 
 impl ProjectStarted {
-    pub fn new(container: ContainerInspectResponse) -> Self {
+    pub fn new(container: ContainerInspectResponse, restart_count: usize) -> Self {
         Self {
             container,
             service: None,
+            restart_count,
         }
     }
 }
@@ -749,7 +794,11 @@ where
         };
 
         if service.is_healthy().await {
-            Ok(Self::Next::Ready(ProjectReady { container, service }))
+            Ok(Self::Next::Ready(ProjectReady {
+                container,
+                service,
+                restart_count: self.restart_count,
+            }))
         } else {
             let started_at =
                 chrono::DateTime::parse_from_rfc3339(safe_unwrap!(container.state.started_at))
@@ -766,6 +815,7 @@ where
             Ok(Self::Next::Started(ProjectStarted {
                 container,
                 service: Some(service),
+                restart_count: self.restart_count,
             }))
         }
     }
@@ -775,6 +825,8 @@ where
 pub struct ProjectReady {
     container: ContainerInspectResponse,
     service: Service,
+    #[serde(default)]
+    restart_count: usize,
 }
 
 #[async_trait]
@@ -868,6 +920,8 @@ impl Service {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProjectStopping {
     container: ContainerInspectResponse,
+    #[serde(default)]
+    restart_count: usize,
 }
 
 #[async_trait]
@@ -881,7 +935,10 @@ where
 
     #[instrument(skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
-        let Self { container } = self;
+        let Self {
+            container,
+            restart_count,
+        } = self;
         ctx.docker()
             .stop_container(
                 container.id.as_ref().unwrap(),
@@ -890,6 +947,7 @@ where
             .await?;
         Ok(Self::Next {
             container: container.refresh(ctx).await?,
+            restart_count,
         })
     }
 }
@@ -897,6 +955,8 @@ where
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProjectStopped {
     container: ContainerInspectResponse,
+    #[serde(default)]
+    restart_count: usize,
 }
 
 #[async_trait]
@@ -909,39 +969,26 @@ where
 
     #[instrument(skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
-        let container = self.container;
+        let Self {
+            container,
+            restart_count,
+        } = self;
 
-        let since = (chrono::Utc::now() - chrono::Duration::minutes(15))
-            .timestamp()
-            .to_string();
-        let until = chrono::Utc::now().timestamp().to_string();
-
-        // Filter and collect `start` events for this project in the last 15 minutes
-        let start_events = ctx
-            .docker()
-            .events(Some(EventsOptions::<&str> {
-                since: Some(since),
-                until: Some(until),
-                filters: HashMap::from([
-                    ("container", vec![safe_unwrap!(container.id).as_str()]),
-                    ("event", vec!["start"]),
-                ]),
-            }))
-            .try_collect::<Vec<_>>()
-            .await?;
-
-        let start_event_count = start_events.len();
         debug!(
-            "project started {} times in the last 15 minutes",
-            start_event_count
+            "project restarted {} times",
+            restart_count
         );
 
         // If stopped, and has not restarted too much, try to restart
-        if start_event_count < MAX_RESTARTS {
-            Ok(ProjectStarting { container })
+        if restart_count < MAX_RESTARTS {
+            sleep(Duration::from_secs(5)).await;
+            Ok(ProjectStarting {
+                container,
+                restart_count: restart_count + 1,
+            })
         } else {
             Err(ProjectError::internal(
-                "too many restarts in the last 15 minutes",
+                "too many restarts",
             ))
         }
     }
@@ -1142,6 +1189,7 @@ pub mod exec {
                                     .and_then(task::run(|ctx| async move {
                                         TaskResult::Done(Project::Stopped(ProjectStopped {
                                             container: ctx.state.container().unwrap(),
+                                            restart_count: 0,
                                         }))
                                     }))
                                     .send(&sender)
@@ -1165,6 +1213,7 @@ pub mod exec {
                                     .and_then(task::run(|ctx| async move {
                                         TaskResult::Done(Project::Stopping(ProjectStopping {
                                             container: ctx.state.container().unwrap(),
+                                            restart_count: 0,
                                         }))
                                     }))
                                     .send(&sender)
@@ -1235,7 +1284,8 @@ pub mod tests {
                         ..
                     }),
                     ..
-                }
+                },
+                restart_count: 0
             })) if networks.keys().collect::<Vec<_>>() == vec![&ctx.container_settings.network_name],
             #[assertion = "Container started, in a running state"]
             Ok(Project::Started(ProjectStarted {
@@ -1304,7 +1354,8 @@ pub mod tests {
                         ..
                     }),
                     ..
-                }
+                },
+                restart_count: 0
             })),
         );
 

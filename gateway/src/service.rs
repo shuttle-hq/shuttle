@@ -19,14 +19,15 @@ use sqlx::migrate::Migrator;
 use sqlx::sqlite::SqlitePool;
 use sqlx::types::Json as SqlxJson;
 use sqlx::{query, Error as SqlxError, Row};
-use tracing::{debug, Span};
+use tokio::sync::mpsc::Sender;
+use tracing::{debug, trace, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::acme::CustomDomain;
 use crate::args::ContextArgs;
-use crate::auth::{Key, Permissions, ScopedUser, User};
+use crate::auth::{Key, Permissions, User};
 use crate::project::Project;
-use crate::task::{BoxedTask, TaskBuilder};
+use crate::task::{self, BoxedTask, TaskBuilder};
 use crate::worker::TaskRouter;
 use crate::{AccountName, DockerContext, Error, ErrorKind, ProjectDetails, ProjectName};
 
@@ -189,13 +190,12 @@ impl GatewayService {
 
     pub async fn route(
         &self,
-        scoped_user: &ScopedUser,
+        project: &Project,
+        project_name: &ProjectName,
+        account_name: &AccountName,
         mut req: Request<Body>,
     ) -> Result<Response<Body>, Error> {
-        let project_name = &scoped_user.scope;
-        let target_ip = self
-            .find_project(project_name)
-            .await?
+        let target_ip = project
             .target_ip()?
             .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotReady))?;
 
@@ -211,7 +211,7 @@ impl GatewayService {
         let headers = req.headers_mut();
         headers.append(
             "X-Shuttle-Account-Name",
-            HeaderValue::from_str(&scoped_user.user.name.to_string()).unwrap(),
+            HeaderValue::from_str(&account_name.to_string()).unwrap(),
         );
 
         let cx = Span::current().context();
@@ -556,6 +556,33 @@ impl GatewayService {
     /// Create a builder for a new [ProjectTask]
     pub fn new_task(self: &Arc<Self>) -> TaskBuilder {
         TaskBuilder::new(self.clone())
+    }
+
+    /// Find a project by name. And start the project if it is idle, waiting for it to start up
+    pub async fn find_or_start_project(
+        self: &Arc<Self>,
+        project_name: &ProjectName,
+        task_sender: Sender<BoxedTask>,
+    ) -> Result<Project, Error> {
+        let mut project = self.find_project(project_name).await?;
+
+        // Start the project if it is idle
+        if project.is_stopped() {
+            trace!(%project_name, "starting up idle project");
+
+            let handle = self
+                .new_task()
+                .project(project_name.clone())
+                .and_then(task::start())
+                .send(&task_sender)
+                .await?;
+
+            // Wait for project to come up and set new state
+            handle.await;
+            project = self.find_project(project_name).await?;
+        }
+
+        Ok(project)
     }
 
     pub fn task_router(&self) -> TaskRouter<BoxedTask> {

@@ -151,11 +151,12 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
 
     let mut api_builder = ApiBuilder::new()
         .with_service(Arc::clone(&gateway))
-        .with_sender(sender)
+        .with_sender(sender.clone())
         .binding_to(args.control);
 
     let mut user_builder = UserServiceBuilder::new()
         .with_service(Arc::clone(&gateway))
+        .with_task_sender(sender)
         .with_public(args.context.proxy_fqdn.clone())
         .with_user_proxy_binding_to(args.user)
         .with_bouncer(args.bouncer);

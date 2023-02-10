@@ -180,11 +180,18 @@ async fn delete_project(
 
 #[instrument(skip_all, fields(scope = %scoped_user.scope))]
 async fn route_project(
-    State(RouterState { service, .. }): State<RouterState>,
+    State(RouterState {
+        service, sender, ..
+    }): State<RouterState>,
     scoped_user: ScopedUser,
     req: Request<Body>,
 ) -> Result<Response<Body>, Error> {
-    service.route(&scoped_user, req).await
+    let project_name = scoped_user.scope;
+    let project = service.find_or_start_project(&project_name, sender).await?;
+
+    service
+        .route(&project, &project_name, &scoped_user.user.name, req)
+        .await
 }
 
 async fn get_status(State(RouterState { sender, .. }): State<RouterState>) -> Response<Body> {

@@ -1,10 +1,11 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::convert::{identity, Infallible};
 use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
 
 use bollard::container::{
-    Config, CreateContainerOptions, RemoveContainerOptions, StopContainerOptions,
+    Config, CreateContainerOptions, RemoveContainerOptions, Stats, StatsOptions,
+    StopContainerOptions,
 };
 use bollard::errors::Error as DockerError;
 use bollard::models::{ContainerInspectResponse, ContainerStateStatusEnum};
@@ -66,6 +67,9 @@ const RUNTIME_API_PORT: u16 = 8001;
 const MAX_RECREATES: usize = 5;
 const MAX_RESTARTS: usize = 5;
 const MAX_REBOOTS: usize = 3;
+
+// Timeframe before a project is considered idle
+const IDLE_MINUTES: u64 = 30;
 
 // Client used for health checks
 static CLIENT: Lazy<Client<HttpConnector>> = Lazy::new(Client::new);
@@ -213,12 +217,30 @@ impl Project {
         }
     }
 
+    pub fn start(self) -> Result<Self, Error> {
+        if let Some(container) = self.container() {
+            Ok(Self::Starting(ProjectStarting {
+                container,
+                restart_count: 0,
+            }))
+        } else {
+            Err(Error::custom(
+                ErrorKind::InvalidOperation,
+                format!("cannot start a project in the `{}` state", self.state()),
+            ))
+        }
+    }
+
     pub fn is_ready(&self) -> bool {
         matches!(self, Self::Ready(_))
     }
 
     pub fn is_destroyed(&self) -> bool {
         matches!(self, Self::Destroyed(_))
+    }
+
+    pub fn is_stopped(&self) -> bool {
+        matches!(self, Self::Stopped(_))
     }
 
     pub fn target_ip(&self) -> Result<Option<IpAddr>, Error> {
@@ -381,6 +403,7 @@ where
             Self::Started(started) => match started.next(ctx).await {
                 Ok(ProjectReadying::Ready(ready)) => Ok(ready.into()),
                 Ok(ProjectReadying::Started(started)) => Ok(started.into()),
+                Ok(ProjectReadying::Idle(stopping)) => Ok(stopping.into()),
                 Err(err) => Ok(Self::Errored(err)),
             },
             Self::Ready(ready) => ready.next(ctx).await.into_try_state(),
@@ -456,7 +479,7 @@ where
             {
                 Ok(container) => match safe_unwrap!(container.state.status) {
                     ContainerStateStatusEnum::RUNNING => {
-                        Self::Started(ProjectStarted::new(container))
+                        Self::Started(ProjectStarted::new(container, VecDeque::new()))
                     }
                     ContainerStateStatusEnum::CREATED => Self::Starting(ProjectStarting {
                         container,
@@ -479,8 +502,8 @@ where
                 }
                 Err(err) => return Err(err.into()),
             },
-            Self::Started(ProjectStarted { container, .. })
-            | Self::Ready(ProjectReady { container, .. })
+            Self::Started(ProjectStarted { container, stats, .. })
+            | Self::Ready(ProjectReady { container, stats, .. })
              => match container
                 .clone()
                 .refresh(ctx)
@@ -488,7 +511,7 @@ where
             {
                 Ok(container) => match safe_unwrap!(container.state.status) {
                     ContainerStateStatusEnum::RUNNING => {
-                        Self::Started(ProjectStarted::new(container))
+                        Self::Started(ProjectStarted::new(container, stats))
                     }
                     // Restart the container if it went down
                     ContainerStateStatusEnum::EXITED => Self::Restarting(ProjectRestarting  { container, restart_count: 0 }),
@@ -912,7 +935,7 @@ where
 
         let container = container.refresh(ctx).await?;
 
-        Ok(Self::Next::new(container))
+        Ok(Self::Next::new(container, VecDeque::new()))
     }
 }
 
@@ -964,13 +987,17 @@ where
 pub struct ProjectStarted {
     container: ContainerInspectResponse,
     service: Option<Service>,
+    // Use default for backward compatibility. Can be removed when all projects in the DB have this property set
+    #[serde(default)]
+    stats: VecDeque<Stats>,
 }
 
 impl ProjectStarted {
-    pub fn new(container: ContainerInspectResponse) -> Self {
+    pub fn new(container: ContainerInspectResponse, stats: VecDeque<Stats>) -> Self {
         Self {
             container,
             service: None,
+            stats,
         }
     }
 }
@@ -979,6 +1006,7 @@ impl ProjectStarted {
 pub enum ProjectReadying {
     Ready(ProjectReady),
     Started(ProjectStarted),
+    Idle(ProjectStopping),
 }
 
 #[async_trait]
@@ -991,14 +1019,80 @@ where
 
     #[instrument(skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
-        let container = self.container.refresh(ctx).await?;
-        let mut service = match self.service {
+        let Self {
+            container,
+            service,
+            mut stats,
+        } = self;
+        let container = container.refresh(ctx).await?;
+        let mut service = match service {
             Some(service) => service,
             None => Service::from_container(ctx, container.clone())?,
         };
 
         if service.is_healthy().await {
-            Ok(Self::Next::Ready(ProjectReady { container, service }))
+            let new_stat = ctx
+                .docker()
+                .stats(
+                    safe_unwrap!(container.name.strip_prefix("/")),
+                    Some(StatsOptions {
+                        one_shot: true,
+                        stream: false,
+                    }),
+                )
+                .next()
+                .await
+                .unwrap()?;
+
+            stats.push_back(new_stat.clone());
+
+            let mut last = None;
+
+            while stats.len() > (IDLE_MINUTES as usize) {
+                last = stats.pop_front();
+            }
+
+            if let Some(last) = last {
+                let cpu_per_minute = (new_stat.cpu_stats.cpu_usage.total_usage
+                    - last.cpu_stats.cpu_usage.total_usage)
+                    / IDLE_MINUTES;
+
+                debug!(
+                    "{} has {} CPU usage per minute",
+                    service.name, cpu_per_minute
+                );
+
+                // From analysis we know the following kind of CPU usage for different kinds of idle projects
+                // Web framework uses 6_200_000 CPU per minute
+                // Serenity uses 20_000_000 CPU per minute
+                //
+                // We want to make sure we are able to stop these kinds of projects
+                //
+                // Now, the following kind of CPU usage has been observed for different kinds of projects having
+                // 2 web requests / processing 2 discord messages per minute
+                // Web framework uses 100_000_000 CPU per minute
+                // Serenity uses 30_000_000 CPU per minute
+                //
+                // And projects at these levels we will want to start keeping active. However, the 30_000_000
+                // for an "active" discord will be to close to the 20_000_000 of an idle framework. And
+                // discord will have more traffic in anyway. So using the 100_000_000 threshold of an
+                // active framework for now
+                if cpu_per_minute < 100_000_000 {
+                    Ok(Self::Next::Idle(ProjectStopping { container }))
+                } else {
+                    Ok(Self::Next::Ready(ProjectReady {
+                        container,
+                        service,
+                        stats,
+                    }))
+                }
+            } else {
+                Ok(Self::Next::Ready(ProjectReady {
+                    container,
+                    service,
+                    stats,
+                }))
+            }
         } else {
             let started_at =
                 chrono::DateTime::parse_from_rfc3339(safe_unwrap!(container.state.started_at))
@@ -1015,6 +1109,7 @@ where
             Ok(Self::Next::Started(ProjectStarted {
                 container,
                 service: Some(service),
+                stats,
             }))
         }
     }
@@ -1024,6 +1119,9 @@ where
 pub struct ProjectReady {
     container: ContainerInspectResponse,
     service: Service,
+    // Use default for backward compatibility. Can be removed when all projects in the DB have this property set
+    #[serde(default)]
+    stats: VecDeque<Stats>,
 }
 
 #[async_trait]

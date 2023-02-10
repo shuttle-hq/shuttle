@@ -693,7 +693,7 @@ pub mod tests {
         let api_client = world.client(api_addr);
         let api = ApiBuilder::new()
             .with_service(Arc::clone(&service))
-            .with_sender(log_out)
+            .with_sender(log_out.clone())
             .with_default_routes()
             .binding_to(api_addr);
 
@@ -701,6 +701,7 @@ pub mod tests {
         let proxy_client = world.client(user_addr);
         let user = UserServiceBuilder::new()
             .with_service(Arc::clone(&service))
+            .with_task_sender(log_out.clone())
             .with_public(world.fqdn())
             .with_user_proxy_binding_to(user_addr);
 

@@ -513,7 +513,7 @@ where
             {
                 Ok(container) => match safe_unwrap!(container.state.status) {
                     ContainerStateStatusEnum::RUNNING => {
-                        Self::Started(ProjectStarted::new(container))
+                        Self::Stopping(ProjectStopping{ container })
                     }
                     ContainerStateStatusEnum::EXITED => Self::Stopped(ProjectStopped { container }),
                     _ => {

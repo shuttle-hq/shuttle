@@ -14,7 +14,7 @@ use shuttle_gateway::task;
 use shuttle_gateway::tls::{make_tls_acceptor, ChainAndPrivateKey};
 use shuttle_gateway::worker::{Worker, WORKER_QUEUE_SIZE};
 use sqlx::migrate::MigrateDatabase;
-use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, PSqliteSynchronous};
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous};
 use sqlx::{query, Sqlite, SqlitePool};
 use std::io::{self, Cursor};
 use std::path::{Path, PathBuf};

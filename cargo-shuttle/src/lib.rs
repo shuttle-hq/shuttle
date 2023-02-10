@@ -523,7 +523,12 @@ impl Shuttle {
 
     async fn project_create(&self, client: &Client) -> Result<()> {
         self.wait_with_spinner(
-            &[project::State::Ready, project::State::Errored],
+            &[
+                project::State::Ready,
+                project::State::Errored {
+                    message: Default::default(),
+                },
+            ],
             Client::create_project,
             self.ctx.project_name(),
             client,
@@ -549,7 +554,9 @@ impl Shuttle {
                     &[
                         project::State::Ready,
                         project::State::Destroyed,
-                        project::State::Errored,
+                        project::State::Errored {
+                            message: Default::default(),
+                        },
                     ],
                     Client::get_project,
                     self.ctx.project_name(),
@@ -612,7 +619,12 @@ impl Shuttle {
 
     async fn project_delete(&self, client: &Client) -> Result<()> {
         self.wait_with_spinner(
-            &[project::State::Destroyed, project::State::Errored],
+            &[
+                project::State::Destroyed,
+                project::State::Errored {
+                    message: Default::default(),
+                },
+            ],
             Client::delete_project,
             self.ctx.project_name(),
             client,

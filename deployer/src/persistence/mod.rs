@@ -20,7 +20,9 @@ use chrono::Utc;
 use serde_json::json;
 use shuttle_common::STATE_MESSAGE;
 use sqlx::migrate::{MigrateDatabase, Migrator};
-use sqlx::sqlite::{Sqlite, SqlitePool};
+use sqlx::sqlite::{
+    Sqlite, SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqliteSynchronous,
+};
 use tokio::sync::broadcast::{self, Receiver, Sender};
 use tokio::task::JoinHandle;
 use tracing::{error, info, instrument, trace};

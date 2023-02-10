@@ -453,7 +453,7 @@ where
                 .refresh(ctx)
                 .await
             {
-                Ok(container) => match container.state.as_ref().unwrap().status.as_ref().unwrap() {
+                Ok(container) => match safe_unwrap!(container.state.status) {
                     ContainerStateStatusEnum::RUNNING => {
                         Self::Started(ProjectStarted::new(container))
                     }
@@ -486,7 +486,7 @@ where
                 .refresh(ctx)
                 .await
             {
-                Ok(container) => match container.state.as_ref().unwrap().status.as_ref().unwrap() {
+                Ok(container) => match safe_unwrap!(container.state.status) {
                     ContainerStateStatusEnum::RUNNING => {
                         Self::Started(ProjectStarted::new(container))
                     }
@@ -746,7 +746,7 @@ where
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let Self { container, .. } = self;
 
-        let container_id = container.id.as_ref().unwrap();
+        let container_id = safe_unwrap!(container.id);
         let ContainerSettings { network_name, .. } = ctx.container_settings();
 
         // Disconnect the bridge network before trying to start up
@@ -825,7 +825,7 @@ where
             container,
             recreate_count,
         } = self;
-        let container_id = container.id.as_ref().unwrap();
+        let container_id = safe_unwrap!(container.id);
 
         ctx.docker()
             .stop_container(container_id, Some(StopContainerOptions { t: 1 }))
@@ -873,7 +873,8 @@ where
 
     #[instrument(skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
-        let container_id = self.container.id.as_ref().unwrap();
+        let Self { container, .. } = self;
+        let container_id = safe_unwrap!(container.id);
 
         ctx.docker()
             .start_container::<String>(container_id, None)
@@ -887,7 +888,7 @@ where
                 }
             })?;
 
-        let container = self.container.refresh(ctx).await?;
+        let container = container.refresh(ctx).await?;
 
         Ok(Self::Next::new(container))
     }
@@ -915,7 +916,7 @@ where
             restart_count,
         } = self;
 
-        let container_id = container.id.as_ref().unwrap();
+        let container_id = safe_unwrap!(container.id);
 
         // Stop it just to be safe
         ctx.docker()
@@ -1112,7 +1113,7 @@ where
         let Self { mut container } = self;
         ctx.docker()
             .stop_container(
-                container.id.as_ref().unwrap(),
+                safe_unwrap!(container.id),
                 Some(StopContainerOptions { t: 30 }),
             )
             .await?;
@@ -1176,7 +1177,7 @@ where
         let Self { container } = self;
         ctx.docker()
             .stop_container(
-                container.id.as_ref().unwrap(),
+                safe_unwrap!(container.id),
                 Some(StopContainerOptions { t: 30 }),
             )
             .await?;
@@ -1220,7 +1221,8 @@ where
 
     #[instrument(skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
-        let container_id = self.container.id.as_ref().unwrap();
+        let Self { container } = self;
+        let container_id = safe_unwrap!(container.id);
         ctx.docker()
             .stop_container(container_id, Some(StopContainerOptions { t: 1 }))
             .await
@@ -1236,7 +1238,7 @@ where
             .await
             .unwrap_or(());
         Ok(Self::Next {
-            destroyed: Some(self.container),
+            destroyed: Some(container),
         })
     }
 }

@@ -415,7 +415,10 @@ where
     Ctx: DockerContext,
 {
     fn is_done(&self) -> bool {
-        matches!(self, Self::Errored(_) | Self::Ready(_) | Self::Destroyed(_))
+        matches!(
+            self,
+            Self::Errored(_) | Self::Ready(_) | Self::Destroyed(_) | Self::Stopped(_)
+        )
     }
 }
 

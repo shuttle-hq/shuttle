@@ -307,11 +307,21 @@ impl Project {
 impl From<Project> for shuttle_common::models::project::State {
     fn from(project: Project) -> Self {
         match project {
-            Project::Creating(_) => Self::Creating,
-            Project::Attaching(_) => Self::Attaching,
-            Project::Recreating(_) => Self::Recreating,
-            Project::Starting(_) => Self::Starting,
-            Project::Restarting(_) => Self::Restarting,
+            Project::Creating(ProjectCreating { recreate_count, .. }) => {
+                Self::Creating { recreate_count }
+            }
+            Project::Attaching(ProjectAttaching { recreate_count, .. }) => {
+                Self::Attaching { recreate_count }
+            }
+            Project::Recreating(ProjectRecreating { recreate_count, .. }) => {
+                Self::Recreating { recreate_count }
+            }
+            Project::Starting(ProjectStarting { restart_count, .. }) => {
+                Self::Starting { restart_count }
+            }
+            Project::Restarting(ProjectRestarting { restart_count, .. }) => {
+                Self::Restarting { restart_count }
+            }
             Project::Started(_) => Self::Started,
             Project::Ready(_) => Self::Ready,
             Project::Stopping(_) => Self::Stopping,
@@ -319,7 +329,7 @@ impl From<Project> for shuttle_common::models::project::State {
             Project::Rebooting(_) => Self::Rebooting,
             Project::Destroying(_) => Self::Destroying,
             Project::Destroyed(_) => Self::Destroyed,
-            Project::Errored(_) => Self::Errored,
+            Project::Errored(ProjectError { message, .. }) => Self::Errored { message },
         }
     }
 }

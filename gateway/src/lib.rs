@@ -339,7 +339,9 @@ pub mod tests {
     use hyper::http::Uri;
     use hyper::{Body, Client as HyperClient, Request, Response, StatusCode};
     use rand::distributions::{Alphanumeric, DistString, Distribution, Uniform};
-    use shuttle_common::models::{project, service, user};
+    use shuttle_common::deployment::State;
+    use shuttle_common::log;
+    use shuttle_common::models::{deployment, project, service, user};
     use sqlx::SqlitePool;
     use tokio::sync::mpsc::channel;
 
@@ -713,6 +715,7 @@ pub mod tests {
         let User { key, name, .. } = service.create_user("neo".parse().unwrap()).await.unwrap();
         service.set_super_user(&name, true).await.unwrap();
 
+        println!("Creating trinity user");
         let user::Response { key, .. } = api_client
             .request(
                 Request::post("/users/trinity")
@@ -729,6 +732,7 @@ pub mod tests {
 
         let authorization = Authorization::bearer(key.as_str()).unwrap();
 
+        println!("Creating the matrix project");
         api_client
             .request(
                 Request::post("/projects/matrix")
@@ -764,6 +768,7 @@ pub mod tests {
             tokio::time::sleep(Duration::from_secs(1)).await;
         });
 
+        println!("get matrix project status");
         api_client
             .request(
                 Request::get("/projects/matrix/status")
@@ -776,6 +781,7 @@ pub mod tests {
             .unwrap();
 
         // === deployment test BEGIN ===
+        println!("deploy the matrix project");
         api_client
             .request({
                 let mut data = Vec::new();
@@ -791,9 +797,9 @@ pub mod tests {
             .unwrap();
 
         timed_loop!(wait: 1, max: 600, {
-            let service: service::Summary = api_client
+            let service: service::Detailed = api_client
                 .request(
-                    Request::get("/projects/matrix/services/matrix/summary")
+                    Request::get("/projects/matrix/services/matrix")
                         .with_header(&authorization)
                         .body(Body::empty())
                         .unwrap(),
@@ -804,11 +810,35 @@ pub mod tests {
                 })
                 .await
                 .unwrap();
-            if service.deployment.is_some() {
-                break;
+
+                match service.deployments.first() {
+                    Some(deployment::Response{ state: State::Running, .. }) => break,
+                    Some(deployment::Response{ state: State::Crashed, id, .. }) => {
+                        let logs: Vec<log::Item> = api_client
+                            .request(
+                                Request::get(format!("/projects/matrix/deployments/{id}/logs"))
+                                    .with_header(&authorization)
+                                    .body(Body::empty())
+                                    .unwrap(),
+                            )
+                            .map_ok(|resp| {
+                                assert_eq!(resp.status(), StatusCode::OK);
+                                serde_json::from_slice(resp.body()).unwrap()
+                            })
+                            .await
+                            .unwrap();
+
+                        for log in logs {
+                            println!("{log}");
+                        }
+
+                        panic!("deployment failed");
+                    },
+                    _ => {},
             }
         });
 
+        println!("make request on the matrix project");
         proxy_client
             .request(
                 Request::get("/hello")
@@ -828,6 +858,7 @@ pub mod tests {
             .unwrap();
         // === deployment test END ===
 
+        println!("delete matrix project");
         api_client
             .request(
                 Request::delete("/projects/matrix")

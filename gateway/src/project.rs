@@ -461,7 +461,7 @@ where
                         container,
                         restart_count,
                     }),
-                    ContainerStateStatusEnum::EXITED => Self::Stopped(ProjectStopped { container }),
+                    ContainerStateStatusEnum::EXITED => Self::Restarting(ProjectRestarting  { container, restart_count: 0 }),
                     _ => {
                         return Err(Error::custom(
                             ErrorKind::Internal,
@@ -480,7 +480,6 @@ where
             },
             Self::Started(ProjectStarted { container, .. })
             | Self::Ready(ProjectReady { container, .. })
-            | Self::Stopping(ProjectStopping { container })
              => match container
                 .clone()
                 .refresh(ctx)
@@ -490,7 +489,8 @@ where
                     ContainerStateStatusEnum::RUNNING => {
                         Self::Started(ProjectStarted::new(container))
                     }
-                    ContainerStateStatusEnum::EXITED => Self::Stopped(ProjectStopped { container }),
+                    // Restart the container if it went down
+                    ContainerStateStatusEnum::EXITED => Self::Restarting(ProjectRestarting  { container, restart_count: 0 }),
                     _ => {
                         return Err(Error::custom(
                             ErrorKind::Internal,
@@ -505,6 +505,26 @@ where
                     // with the same image
                     Self::Creating(ProjectCreating::from_container(container, ctx, 0)?)
                 }
+                Err(err) => return Err(err.into()),
+            },
+            Self::Stopping(ProjectStopping { container })
+             => match container
+                .clone()
+                .refresh(ctx)
+                .await
+            {
+                Ok(container) => match safe_unwrap!(container.state.status) {
+                    ContainerStateStatusEnum::RUNNING => {
+                        Self::Started(ProjectStarted::new(container))
+                    }
+                    ContainerStateStatusEnum::EXITED => Self::Stopped(ProjectStopped { container }),
+                    _ => {
+                        return Err(Error::custom(
+                            ErrorKind::Internal,
+                            "container resource has drifted out of sync from a stopping state: cannot recover",
+                        ))
+                    }
+                },
                 Err(err) => return Err(err.into()),
             },
             Self::Recreating(recreating) => Self::Recreating(recreating),

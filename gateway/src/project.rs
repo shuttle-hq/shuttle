@@ -19,7 +19,7 @@ use hyper::Client;
 use once_cell::sync::Lazy;
 use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Serialize};
-use tokio::time::{self, sleep, timeout};
+use tokio::time::{sleep, timeout};
 use tracing::{debug, error, info, instrument};
 
 use crate::{
@@ -988,8 +988,6 @@ where
 
     #[instrument(skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
-        time::sleep(Duration::from_secs(1)).await;
-
         let container = self.container.refresh(ctx).await?;
         let mut service = match self.service {
             Some(service) => service,
@@ -1533,7 +1531,7 @@ pub mod tests {
             })) if id == container_id,
         );
 
-        let delay = time::sleep(Duration::from_secs(10));
+        let delay = sleep(Duration::from_secs(10));
         futures::pin_mut!(delay);
         let mut project_readying = project_started
             .unwrap()

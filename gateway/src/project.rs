@@ -446,9 +446,7 @@ where
         let refreshed = match self {
             Self::Creating(creating) => Self::Creating(creating),
             Self::Attaching(attaching) => Self::Attaching(attaching),
-            Self::Starting(ProjectStarting { container, restart_count })
-            | Self::Restarting(ProjectRestarting { container, restart_count })
-             => match container
+            Self::Starting(ProjectStarting { container, restart_count }) => match container
                 .clone()
                 .refresh(ctx)
                 .await
@@ -527,6 +525,7 @@ where
                 },
                 Err(err) => return Err(err.into()),
             },
+            Self::Restarting(restarting) => Self::Restarting(restarting),
             Self::Recreating(recreating) => Self::Recreating(recreating),
             Self::Stopped(stopped) => Self::Stopped(stopped),
             Self::Rebooting(rebooting) => Self::Rebooting(rebooting),

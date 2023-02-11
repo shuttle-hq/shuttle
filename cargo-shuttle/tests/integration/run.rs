@@ -20,7 +20,6 @@ async fn cargo_shuttle_run(working_directory: &str, external: bool) -> String {
         port,
         external,
         release: false,
-        prod_secrets: true,
     };
 
     let runner = Shuttle::new().unwrap().run(Args {

@@ -403,13 +403,11 @@ impl Shuttle {
 
         trace!("loading secrets");
 
-        let secrets_filename = if run_args.prod_secrets {
-            "Secrets.toml".to_string()
+        let secrets_path = if working_directory.join("Secrets.dev.toml").exists() {
+            working_directory.join("Secrets.dev.toml")
         } else {
-            "Secrets.dev.toml".to_string()
+            working_directory.join("Secrets.toml")
         };
-
-        let secrets_path = working_directory.join(&secrets_filename);
 
         let secrets: BTreeMap<String, String> =
             if let Ok(secrets_str) = read_to_string(secrets_path) {
@@ -420,7 +418,7 @@ impl Shuttle {
 
                 secrets
             } else {
-                trace!("no {} was found", secrets_filename);
+                trace!("no Secrets.toml was found");
                 Default::default()
             };
 

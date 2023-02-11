@@ -149,9 +149,6 @@ pub struct RunArgs {
     /// Use release mode for building the project.
     #[arg(long, short = 'r')]
     pub release: bool,
-    /// Use production secrets in a local environment.
-    #[arg(long, short = 'r')]
-    pub prod_secrets: bool,
 }
 
 #[derive(Parser, Debug)]

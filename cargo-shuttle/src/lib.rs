@@ -4,6 +4,7 @@ pub mod config;
 mod factory;
 mod init;
 
+use indicatif::ProgressBar;
 use shuttle_common::project::ProjectName;
 use std::collections::BTreeMap;
 use std::ffi::OsString;
@@ -57,7 +58,7 @@ impl Shuttle {
             Command::Deploy(..)
                 | Command::Deployment(..)
                 | Command::Project(..)
-                | Command::Delete
+                | Command::Stop
                 | Command::Clean
                 | Command::Secrets
                 | Command::Status
@@ -73,6 +74,7 @@ impl Shuttle {
             Command::Init(init_args) => self.init(init_args, args.project_args).await,
             Command::Generate { shell, output } => self.complete(shell, output).await,
             Command::Login(login_args) => self.login(login_args).await,
+            Command::Logout => self.logout().await,
             Command::Feedback => self.feedback().await,
             Command::Run(run_args) => self.local_run(run_args).await,
             need_client => {
@@ -91,7 +93,7 @@ impl Shuttle {
                     Command::Deployment(DeploymentCommand::Status { id }) => {
                         self.deployment_get(&client, id).await
                     }
-                    Command::Delete => self.delete(&client).await,
+                    Command::Stop => self.stop(&client).await,
                     Command::Clean => self.clean(&client).await,
                     Command::Secrets => self.secrets(&client).await,
                     Command::Project(ProjectCommand::New) => self.project_create(&client).await,
@@ -258,13 +260,35 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn delete(&self, client: &Client) -> Result<()> {
-        let service = client.delete_service(self.ctx.project_name()).await?;
+    async fn logout(&mut self) -> Result<()> {
+        self.ctx.clear_api_key()?;
+
+        println!("Successfully logged out of shuttle.");
+        Ok(())
+    }
+
+    async fn stop(&self, client: &Client) -> Result<()> {
+        let mut service = client.stop_service(self.ctx.project_name()).await?;
+
+        let progress_bar = create_spinner();
+        loop {
+            let Some(ref deployment) = service.deployment else {
+                break;
+            };
+
+            if let shuttle_common::deployment::State::Stopped = deployment.state {
+                break;
+            }
+
+            progress_bar.set_message(format!("Stopping {}", deployment.id));
+            service = client.get_service_summary(self.ctx.project_name()).await?;
+        }
+        progress_bar.finish_and_clear();
 
         println!(
             r#"{}
 {}"#,
-            "Successfully deleted service".bold(),
+            "Successfully stopped service".bold(),
             service
         );
 
@@ -390,10 +414,16 @@ impl Shuttle {
             "Building".bold().green(),
             working_directory.display()
         );
-        let so_path = build_crate(id, working_directory, false, tx).await?;
+
+        let so_path = build_crate(id, working_directory, run_args.release, tx).await?;
 
         trace!("loading secrets");
-        let secrets_path = working_directory.join("Secrets.toml");
+
+        let secrets_path = if working_directory.join("Secrets.dev.toml").exists() {
+            working_directory.join("Secrets.dev.toml")
+        } else {
+            working_directory.join("Secrets.toml")
+        };
 
         let secrets: BTreeMap<String, String> =
             if let Ok(secrets_str) = read_to_string(secrets_path) {
@@ -515,7 +545,12 @@ impl Shuttle {
 
     async fn project_create(&self, client: &Client) -> Result<()> {
         self.wait_with_spinner(
-            &[project::State::Ready, project::State::Errored],
+            &[
+                project::State::Ready,
+                project::State::Errored {
+                    message: Default::default(),
+                },
+            ],
             Client::create_project,
             self.ctx.project_name(),
             client,
@@ -541,7 +576,9 @@ impl Shuttle {
                     &[
                         project::State::Ready,
                         project::State::Destroyed,
-                        project::State::Errored,
+                        project::State::Errored {
+                            message: Default::default(),
+                        },
                     ],
                     Client::get_project,
                     self.ctx.project_name(),
@@ -570,41 +607,29 @@ impl Shuttle {
         Fut: std::future::Future<Output = Result<project::Response>> + 'a,
     {
         let mut project = f(client, project_name).await?;
-        let pb = indicatif::ProgressBar::new_spinner();
-        pb.enable_steady_tick(std::time::Duration::from_millis(350));
-        pb.set_style(
-            indicatif::ProgressStyle::with_template("{spinner:.orange} {msg}")
-                .unwrap()
-                .tick_strings(&[
-                    "( ●    )",
-                    "(  ●   )",
-                    "(   ●  )",
-                    "(    ● )",
-                    "(     ●)",
-                    "(    ● )",
-                    "(   ●  )",
-                    "(  ●   )",
-                    "( ●    )",
-                    "(●     )",
-                    "(●●●●●●)",
-                ]),
-        );
+
+        let progress_bar = create_spinner();
         loop {
             if states_to_check.contains(&project.state) {
                 break;
             }
 
-            pb.set_message(format!("{project}"));
+            progress_bar.set_message(format!("{project}"));
             project = client.get_project(project_name).await?;
         }
-        pb.finish_and_clear();
+        progress_bar.finish_and_clear();
         println!("{project}");
         Ok(())
     }
 
     async fn project_delete(&self, client: &Client) -> Result<()> {
         self.wait_with_spinner(
-            &[project::State::Destroyed, project::State::Errored],
+            &[
+                project::State::Destroyed,
+                project::State::Errored {
+                    message: Default::default(),
+                },
+            ],
             Client::delete_project,
             self.ctx.project_name(),
             client,
@@ -721,6 +746,30 @@ impl Shuttle {
 
         Ok(())
     }
+}
+
+fn create_spinner() -> ProgressBar {
+    let pb = indicatif::ProgressBar::new_spinner();
+    pb.enable_steady_tick(std::time::Duration::from_millis(350));
+    pb.set_style(
+        indicatif::ProgressStyle::with_template("{spinner:.orange} {msg}")
+            .unwrap()
+            .tick_strings(&[
+                "( ●    )",
+                "(  ●   )",
+                "(   ●  )",
+                "(    ● )",
+                "(     ●)",
+                "(    ● )",
+                "(   ●  )",
+                "(  ●   )",
+                "( ●    )",
+                "(●     )",
+                "(●●●●●●)",
+            ]),
+    );
+
+    pb
 }
 
 pub enum CommandOutcome {

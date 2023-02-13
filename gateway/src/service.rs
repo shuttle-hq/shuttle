@@ -1,11 +1,9 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::body::Body;
 use axum::headers::{Authorization, HeaderMapExt};
 use axum::http::Request;
 use axum::response::Response;
-use bollard::network::ListNetworksOptions;
 use bollard::{Docker, API_DEFAULT_VERSION};
 use fqdn::Fqdn;
 use http::HeaderValue;
@@ -43,8 +41,7 @@ impl From<SqlxError> for Error {
     }
 }
 
-pub struct ContainerSettingsBuilder<'d> {
-    docker: &'d Docker,
+pub struct ContainerSettingsBuilder {
     prefix: Option<String>,
     image: Option<String>,
     provisioner: Option<String>,
@@ -52,10 +49,15 @@ pub struct ContainerSettingsBuilder<'d> {
     fqdn: Option<String>,
 }
 
-impl<'d> ContainerSettingsBuilder<'d> {
-    pub fn new(docker: &'d Docker) -> Self {
+impl Default for ContainerSettingsBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ContainerSettingsBuilder {
+    pub fn new() -> Self {
         Self {
-            docker,
             prefix: None,
             image: None,
             provisioner: None,
@@ -107,37 +109,12 @@ impl<'d> ContainerSettingsBuilder<'d> {
         self
     }
 
-    /// Resolves the Docker network ID for the given network name.
-    ///
-    /// # Panics
-    /// If no such Docker network can be found.
-    async fn resolve_network_id(&self, network_name: &str) -> String {
-        self.docker
-            .list_networks(Some(ListNetworksOptions {
-                filters: HashMap::from([("name", vec![network_name])]),
-            }))
-            .await
-            .unwrap()
-            .into_iter()
-            .find_map(|network| {
-                network.name.as_ref().and_then(|name| {
-                    if name == network_name {
-                        network.id
-                    } else {
-                        None
-                    }
-                })
-            })
-            .unwrap_or_else(|| panic!("cannot find a Docker network with name=`{network_name}`"))
-    }
-
     pub async fn build(mut self) -> ContainerSettings {
         let prefix = self.prefix.take().unwrap();
         let image = self.image.take().unwrap();
         let provisioner_host = self.provisioner.take().unwrap();
 
         let network_name = self.network_name.take().unwrap();
-        let network_id = self.resolve_network_id(&network_name).await;
         let fqdn = self.fqdn.take().unwrap();
 
         ContainerSettings {
@@ -145,7 +122,6 @@ impl<'d> ContainerSettingsBuilder<'d> {
             image,
             provisioner_host,
             network_name,
-            network_id,
             fqdn,
         }
     }
@@ -157,13 +133,12 @@ pub struct ContainerSettings {
     pub image: String,
     pub provisioner_host: String,
     pub network_name: String,
-    pub network_id: String,
     pub fqdn: String,
 }
 
 impl ContainerSettings {
-    pub fn builder(docker: &Docker) -> ContainerSettingsBuilder {
-        ContainerSettingsBuilder::new(docker)
+    pub fn builder() -> ContainerSettingsBuilder {
+        ContainerSettingsBuilder::new()
     }
 }
 
@@ -199,7 +174,7 @@ impl GatewayService {
     pub async fn init(args: ContextArgs, db: SqlitePool) -> Self {
         let docker = Docker::connect_with_unix(&args.docker_host, 60, API_DEFAULT_VERSION).unwrap();
 
-        let container_settings = ContainerSettings::builder(&docker).from_args(&args).await;
+        let container_settings = ContainerSettings::builder().from_args(&args).await;
 
         let provider = GatewayContextProvider::new(docker, container_settings);
 

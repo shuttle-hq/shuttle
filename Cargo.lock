@@ -1412,7 +1412,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-shuttle"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -4700,19 +4700,6 @@ dependencies = [
 
 [[package]]
 name = "rand"
-version = "0.4.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "552840b97013b1a26992c11eac34bdd778e464601a4c2054b5f0bff7c6761293"
-dependencies = [
- "fuchsia-cprng",
- "libc",
- "rand_core 0.3.1",
- "rdrand",
- "winapi",
-]
-
-[[package]]
-name = "rand"
 version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6d71dacdc3c88c1fde3885a3be3fbab9f35724e6ce99467f7d9c5026132184ca"
@@ -5797,7 +5784,7 @@ checksum = "45bb67a18fa91266cc7807181f62f9178a6873bfad7dc788c42e6430db40184f"
 
 [[package]]
 name = "shuttle-admin"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "anyhow",
  "clap 4.0.27",
@@ -5814,7 +5801,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-codegen"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "pretty_assertions",
  "proc-macro-error",
@@ -5826,7 +5813,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-common"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5847,7 +5834,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-deployer"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5880,7 +5867,7 @@ dependencies = [
  "sqlx",
  "strum",
  "tar",
- "tempdir",
+ "tempfile",
  "thiserror",
  "tokio",
  "toml",
@@ -5895,7 +5882,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-gateway"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "acme2",
  "anyhow",
@@ -5944,7 +5931,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-proto"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "prost",
  "shuttle-common",
@@ -5954,7 +5941,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-provisioner"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "aws-config",
  "aws-sdk-rds",
@@ -5979,7 +5966,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-secrets"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "async-trait",
  "shuttle-service",
@@ -5988,7 +5975,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-service"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "actix-web",
  "anyhow",
@@ -6467,16 +6454,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "36794203e10c86e5998179e260869d156e0674f02d5451b4a3fb9fd86d02aaab"
 dependencies = [
  "tokio",
-]
-
-[[package]]
-name = "tempdir"
-version = "0.3.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15f2b5fb00ccdf689e0149d1b1b3c03fead81c2b37735d812fa8bddbbf41b6d8"
-dependencies = [
- "rand 0.4.6",
- "remove_dir_all",
 ]
 
 [[package]]

@@ -69,6 +69,7 @@ const MAX_RESTARTS: usize = 5;
 const MAX_REBOOTS: usize = 3;
 
 // Timeframe before a project is considered idle
+// Note: we currently do a refresh every minute so the code that uses this is expected to run once per minute
 const IDLE_MINUTES: u64 = 30;
 
 // Client used for health checks
@@ -1034,7 +1035,7 @@ where
             let new_stat = ctx
                 .docker()
                 .stats(
-                    safe_unwrap!(container.name.strip_prefix("/")),
+                    safe_unwrap!(container.id),
                     Some(StatsOptions {
                         one_shot: true,
                         stream: false,
@@ -1073,7 +1074,7 @@ where
                 // Web framework uses 100_000_000 CPU per minute
                 // Serenity uses 30_000_000 CPU per minute
                 //
-                // And projects at these levels we will want to start keeping active. However, the 30_000_000
+                // And projects at these levels we will want to keep active. However, the 30_000_000
                 // for an "active" discord will be to close to the 20_000_000 of an idle framework. And
                 // discord will have more traffic in anyway. So using the 100_000_000 threshold of an
                 // active framework for now

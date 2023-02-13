@@ -301,7 +301,7 @@ impl GatewayService {
         filter: String,
     ) -> Result<impl Iterator<Item = (ProjectName, Project)>, Error> {
         let iter =
-            query("SELECT project_name, project_state FROM projects WHERE account_name = ?1 AND WHERE project_state = ?2")
+            query("SELECT project_name, project_state FROM projects WHERE account_name = ?1 AND project_state = ?2")
                 .bind(account_name)
                 .bind(filter)
                 .fetch_all(&self.db)
@@ -631,6 +631,7 @@ pub mod tests {
     use std::str::FromStr;
 
     use fqdn::FQDN;
+    use sqlx::sqlite;
 
     use super::*;
     use crate::auth::AccountTier;
@@ -734,6 +735,15 @@ pub mod tests {
                 .map(|item| item.0)
                 .collect::<Vec<_>>(),
             vec![matrix.clone()]
+        );
+
+        assert_eq!(
+            svc.iter_user_projects_detailed_filtered(neo.clone(), "ready".to_string())
+                .await
+                .unwrap()
+                .expect("to get one project with its user and proper project status")
+                .collect::<Vec<_>>(),
+            vec![matrix.clone(), "ready"]
         );
 
         let mut work = svc

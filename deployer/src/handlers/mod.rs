@@ -253,13 +253,16 @@ async fn post_service(
 async fn stop_service(
     Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
+    Extension(proxy_fqdn): Extension<FQDN>,
     Path((project_name, service_name)): Path<(String, String)>,
-) -> Result<Json<shuttle_common::models::service::Detailed>> {
+) -> Result<Json<shuttle_common::models::service::Summary>> {
     if let Some(service) = persistence.get_service_by_name(&service_name).await? {
-        let old_deployments = persistence.get_deployments(&service.id).await?;
+        let running_deployment = persistence.get_active_deployment(&service.id).await?;
 
-        for deployment in old_deployments.iter() {
+        if let Some(ref deployment) = running_deployment {
             deployment_manager.kill(deployment.id).await;
+        } else {
+            return Err(Error::NotFound);
         }
 
         let resources = persistence
@@ -268,18 +271,12 @@ async fn stop_service(
             .into_iter()
             .map(Into::into)
             .collect();
-        let secrets = persistence
-            .get_secrets(&service.id)
-            .await?
-            .into_iter()
-            .map(Into::into)
-            .collect();
 
-        let response = shuttle_common::models::service::Detailed {
+        let response = shuttle_common::models::service::Summary {
             name: service.name,
-            deployments: old_deployments.into_iter().map(Into::into).collect(),
+            deployment: running_deployment.map(Into::into),
             resources,
-            secrets,
+            uri: format!("https://{proxy_fqdn}"),
         };
 
         Ok(Json(response))

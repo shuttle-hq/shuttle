@@ -5800,6 +5800,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "shuttle-auth"
+version = "0.1.0"
+dependencies = [
+ "clap 4.0.27",
+]
+
+[[package]]
 name = "shuttle-codegen"
 version = "0.10.0"
 dependencies = [

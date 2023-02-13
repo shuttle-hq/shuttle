@@ -5804,6 +5804,13 @@ name = "shuttle-auth"
 version = "0.1.0"
 dependencies = [
  "clap 4.0.27",
+ "opentelemetry",
+ "opentelemetry-datadog",
+ "opentelemetry-http",
+ "tokio",
+ "tracing",
+ "tracing-opentelemetry",
+ "tracing-subscriber",
 ]
 
 [[package]]

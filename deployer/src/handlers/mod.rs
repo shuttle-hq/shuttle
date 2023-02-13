@@ -45,7 +45,7 @@ pub fn make_router(
         .route("/projects/:project_name/services", get(list_services))
         .route(
             "/projects/:project_name/services/:service_name",
-            get(get_service).post(post_service).delete(delete_service),
+            get(get_service).post(post_service).delete(stop_service),
         )
         .route(
             "/projects/:project_name/services/:service_name/summary",
@@ -250,18 +250,19 @@ async fn post_service(
 }
 
 #[instrument(skip_all, fields(%project_name, %service_name))]
-async fn delete_service(
+async fn stop_service(
     Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
+    Extension(proxy_fqdn): Extension<FQDN>,
     Path((project_name, service_name)): Path<(String, String)>,
-) -> Result<Json<shuttle_common::models::service::Detailed>> {
+) -> Result<Json<shuttle_common::models::service::Summary>> {
     if let Some(service) = persistence.get_service_by_name(&service_name).await? {
-        let old_deployments = persistence
-            .delete_deployments_by_service_id(&service.id)
-            .await?;
+        let running_deployment = persistence.get_active_deployment(&service.id).await?;
 
-        for deployment in old_deployments.iter() {
+        if let Some(ref deployment) = running_deployment {
             deployment_manager.kill(deployment.id).await;
+        } else {
+            return Err(Error::NotFound);
         }
 
         let resources = persistence
@@ -270,20 +271,12 @@ async fn delete_service(
             .into_iter()
             .map(Into::into)
             .collect();
-        let secrets = persistence
-            .get_secrets(&service.id)
-            .await?
-            .into_iter()
-            .map(Into::into)
-            .collect();
 
-        persistence.delete_service(&service.id).await?;
-
-        let response = shuttle_common::models::service::Detailed {
+        let response = shuttle_common::models::service::Summary {
             name: service.name,
-            deployments: old_deployments.into_iter().map(Into::into).collect(),
+            deployment: running_deployment.map(Into::into),
             resources,
-            secrets,
+            uri: format!("https://{proxy_fqdn}"),
         };
 
         Ok(Json(response))

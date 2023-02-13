@@ -574,6 +574,8 @@ impl GatewayService {
                 .new_task()
                 .project(project_name.clone())
                 .and_then(task::start())
+                .and_then(task::run_until_done())
+                .and_then(task::check_health())
                 .send(&task_sender)
                 .await?;
 

@@ -4,8 +4,8 @@ use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
 
 use bollard::container::{
-    Config, CreateContainerOptions, RemoveContainerOptions, Stats, StatsOptions,
-    StopContainerOptions,
+    Config, CreateContainerOptions, KillContainerOptions, RemoveContainerOptions, Stats,
+    StatsOptions, StopContainerOptions,
 };
 use bollard::errors::Error as DockerError;
 use bollard::models::{ContainerInspectResponse, ContainerStateStatusEnum};
@@ -1293,10 +1293,18 @@ where
     #[instrument(skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let Self { container } = self;
+
+        // Stopping a docker containers sends a SIGTERM which will stop the tokio runtime that deployer starts up.
+        // Killing this runtime causes the deployment to enter the `completed` state and it therefore does not
+        // start up again when starting up the project's container. Luckily the kill command allows us to change the
+        // signal to prevent this from happenning.
+        //
+        // In some future state when all deployers hadle `SIGTERM` correctly, this can be changed to docker stop
+        // safely.
         ctx.docker()
-            .stop_container(
+            .kill_container(
                 safe_unwrap!(container.id),
-                Some(StopContainerOptions { t: 30 }),
+                Some(KillContainerOptions { signal: "SIGKILL" }),
             )
             .await?;
         Ok(Self::Next {

@@ -4,6 +4,7 @@ pub mod config;
 mod factory;
 mod init;
 
+use indicatif::ProgressBar;
 use shuttle_common::project::ProjectName;
 use std::collections::BTreeMap;
 use std::ffi::OsString;
@@ -267,7 +268,22 @@ impl Shuttle {
     }
 
     async fn stop(&self, client: &Client) -> Result<()> {
-        let service = client.stop_service(self.ctx.project_name()).await?;
+        let mut service = client.stop_service(self.ctx.project_name()).await?;
+
+        let progress_bar = create_spinner();
+        loop {
+            let Some(ref deployment) = service.deployment else {
+                break;
+            };
+
+            if let shuttle_common::deployment::State::Stopped = deployment.state {
+                break;
+            }
+
+            progress_bar.set_message(format!("Stopping {}", deployment.id));
+            service = client.get_service_summary(self.ctx.project_name()).await?;
+        }
+        progress_bar.finish_and_clear();
 
         println!(
             r#"{}
@@ -591,34 +607,17 @@ impl Shuttle {
         Fut: std::future::Future<Output = Result<project::Response>> + 'a,
     {
         let mut project = f(client, project_name).await?;
-        let pb = indicatif::ProgressBar::new_spinner();
-        pb.enable_steady_tick(std::time::Duration::from_millis(350));
-        pb.set_style(
-            indicatif::ProgressStyle::with_template("{spinner:.orange} {msg}")
-                .unwrap()
-                .tick_strings(&[
-                    "( ●    )",
-                    "(  ●   )",
-                    "(   ●  )",
-                    "(    ● )",
-                    "(     ●)",
-                    "(    ● )",
-                    "(   ●  )",
-                    "(  ●   )",
-                    "( ●    )",
-                    "(●     )",
-                    "(●●●●●●)",
-                ]),
-        );
+
+        let progress_bar = create_spinner();
         loop {
             if states_to_check.contains(&project.state) {
                 break;
             }
 
-            pb.set_message(format!("{project}"));
+            progress_bar.set_message(format!("{project}"));
             project = client.get_project(project_name).await?;
         }
-        pb.finish_and_clear();
+        progress_bar.finish_and_clear();
         println!("{project}");
         Ok(())
     }
@@ -747,6 +746,30 @@ impl Shuttle {
 
         Ok(())
     }
+}
+
+fn create_spinner() -> ProgressBar {
+    let pb = indicatif::ProgressBar::new_spinner();
+    pb.enable_steady_tick(std::time::Duration::from_millis(350));
+    pb.set_style(
+        indicatif::ProgressStyle::with_template("{spinner:.orange} {msg}")
+            .unwrap()
+            .tick_strings(&[
+                "( ●    )",
+                "(  ●   )",
+                "(   ●  )",
+                "(    ● )",
+                "(     ●)",
+                "(    ● )",
+                "(   ●  )",
+                "(  ●   )",
+                "( ●    )",
+                "(●     )",
+                "(●●●●●●)",
+            ]),
+    );
+
+    pb
 }
 
 pub enum CommandOutcome {

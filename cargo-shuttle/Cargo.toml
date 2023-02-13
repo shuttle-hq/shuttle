@@ -16,7 +16,7 @@ cargo = "0.65.0"
 cargo-edit = { version = "0.11.6", features = ["cli"] }
 cargo_metadata = "0.15.2"
 chrono = { workspace = true }
-clap = { version = "4.0.27", features = ["derive", "env"] }
+clap = { workspace = true, features = ["env"] }
 clap_complete = "4.0.7"
 crossbeam-channel = "0.5.6"
 crossterm = "0.25.0"

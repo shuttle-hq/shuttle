@@ -398,10 +398,16 @@ impl Shuttle {
             "Building".bold().green(),
             working_directory.display()
         );
+
         let so_path = build_crate(id, working_directory, run_args.release, tx).await?;
 
         trace!("loading secrets");
-        let secrets_path = working_directory.join("Secrets.toml");
+
+        let secrets_path = if working_directory.join("Secrets.dev.toml").exists() {
+            working_directory.join("Secrets.dev.toml")
+        } else {
+            working_directory.join("Secrets.toml")
+        };
 
         let secrets: BTreeMap<String, String> =
             if let Ok(secrets_str) = read_to_string(secrets_path) {

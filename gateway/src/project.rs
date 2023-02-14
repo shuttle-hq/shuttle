@@ -1442,8 +1442,9 @@ pub mod exec {
                                         .new_task()
                                         .project(project_name)
                                         .and_then(task::run(|ctx| async move {
-                                            TaskResult::Done(Project::Rebooting(ProjectRebooting {
+                                            TaskResult::Done(Project::Starting(ProjectStarting {
                                                 container: ctx.state.container().unwrap(),
+                                                restart_count: 0,
                                             }))
                                         }))
                                         .send(&sender)

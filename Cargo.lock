@@ -5803,6 +5803,7 @@ dependencies = [
 name = "shuttle-auth"
 version = "0.1.0"
 dependencies = [
+ "axum",
  "clap 4.0.27",
  "opentelemetry",
  "opentelemetry-datadog",

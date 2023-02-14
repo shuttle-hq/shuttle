@@ -1,6 +1,6 @@
 use clap::Parser;
 use opentelemetry::global;
-use shuttle_auth::Args;
+use shuttle_auth::{start, Args};
 use tracing::trace;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
@@ -43,4 +43,6 @@ async fn main() {
     //         .unwrap()
     //         .to_string_lossy()
     // );
+
+    start(args).await;
 }

@@ -6,6 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+axum = { workspace = true }
 clap = { workspace = true }
 opentelemetry = { workspace = true }
 opentelemetry-datadog = { workspace = true }

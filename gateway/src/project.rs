@@ -1400,10 +1400,63 @@ pub mod exec {
             .await
             .expect("could not list projects")
         {
-            if let Project::Errored(ProjectError { ctx: Some(ctx), .. }) =
-                gateway.find_project(&project_name).await.unwrap()
-            {
-                if let Some(container) = ctx.container() {
+            match gateway.find_project(&project_name).await.unwrap() {
+                Project::Errored(ProjectError { ctx: Some(ctx), .. }) => {
+                    if let Some(container) = ctx.container() {
+                        if let Ok(container) = gateway
+                            .context()
+                            .docker()
+                            .inspect_container(safe_unwrap!(container.id), None)
+                            .await
+                        {
+                            match container.state {
+                                Some(ContainerState {
+                                    status: Some(ContainerStateStatusEnum::EXITED),
+                                    ..
+                                }) => {
+                                    debug!("{} will be revived", project_name.clone());
+                                    _ = gateway
+                                        .new_task()
+                                        .project(project_name)
+                                        .and_then(task::run(|ctx| async move {
+                                            TaskResult::Done(Project::Rebooting(ProjectRebooting {
+                                                container: ctx.state.container().unwrap(),
+                                            }))
+                                        }))
+                                        .send(&sender)
+                                        .await;
+                                }
+                                Some(ContainerState {
+                                    status: Some(ContainerStateStatusEnum::RUNNING),
+                                    ..
+                                })
+                                | Some(ContainerState {
+                                    status: Some(ContainerStateStatusEnum::CREATED),
+                                    ..
+                                }) => {
+                                    debug!(
+                                    "{} is errored but ready according to docker. So restarting it",
+                                    project_name.clone()
+                                );
+                                    _ = gateway
+                                        .new_task()
+                                        .project(project_name)
+                                        .and_then(task::run(|ctx| async move {
+                                            TaskResult::Done(Project::Starting(ProjectStarting {
+                                                container: ctx.state.container().unwrap(),
+                                                restart_count: 0,
+                                            }))
+                                        }))
+                                        .send(&sender)
+                                        .await;
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+                // Currently nothing should enter the stopped state
+                Project::Stopped(ProjectStopped { container }) => {
                     if let Ok(container) = gateway
                         .context()
                         .docker()
@@ -1411,39 +1464,12 @@ pub mod exec {
                         .await
                     {
                         match container.state {
-                            Some(ContainerState {
-                                status: Some(ContainerStateStatusEnum::EXITED),
-                                ..
-                            }) => {
-                                debug!("{} will be revived", project_name.clone());
+                            Some(_) => {
                                 _ = gateway
                                     .new_task()
                                     .project(project_name)
                                     .and_then(task::run(|ctx| async move {
-                                        TaskResult::Done(Project::Stopped(ProjectStopped {
-                                            container: ctx.state.container().unwrap(),
-                                        }))
-                                    }))
-                                    .send(&sender)
-                                    .await;
-                            }
-                            Some(ContainerState {
-                                status: Some(ContainerStateStatusEnum::RUNNING),
-                                ..
-                            })
-                            | Some(ContainerState {
-                                status: Some(ContainerStateStatusEnum::CREATED),
-                                ..
-                            }) => {
-                                debug!(
-                                    "{} is errored but ready according to docker. So restarting it",
-                                    project_name.clone()
-                                );
-                                _ = gateway
-                                    .new_task()
-                                    .project(project_name)
-                                    .and_then(task::run(|ctx| async move {
-                                        TaskResult::Done(Project::Stopping(ProjectStopping {
+                                        TaskResult::Done(Project::Rebooting(ProjectRebooting {
                                             container: ctx.state.container().unwrap(),
                                         }))
                                     }))
@@ -1454,6 +1480,7 @@ pub mod exec {
                         }
                     }
                 }
+                _ => {}
             }
         }
 

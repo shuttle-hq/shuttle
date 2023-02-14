@@ -23,9 +23,9 @@ hyper = { version = "0.14.23", features = ["client", "http1", "http2", "tcp"] }
 # not great, but waiting for WebSocket changes to be merged
 hyper-reverse-proxy = { git = "https://github.com/chesedo/hyper-reverse-proxy", branch = "master" }
 once_cell = { workspace = true }
-opentelemetry = { version = "0.18.0", features = ["rt-tokio"] }
-opentelemetry-datadog = { version = "0.6.0", features = ["reqwest-client"] }
-opentelemetry-http = "0.7.0"
+opentelemetry = { workspace = true }
+opentelemetry-datadog = { workspace = true }
+opentelemetry-http = { workspace = true }
 pipe = "0.4.0"
 portpicker = "0.1.1"
 serde = { workspace = true }
@@ -47,7 +47,7 @@ tonic = "0.8.3"
 tower = { version = "0.4.13", features = ["make"] }
 tower-http = { version = "0.3.4", features = ["auth", "trace"] }
 tracing = { workspace = true }
-tracing-opentelemetry = "0.18.0"
+tracing-opentelemetry = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 uuid = { workspace = true, features = ["v4"] }
 

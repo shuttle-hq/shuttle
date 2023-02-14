@@ -13,7 +13,7 @@ axum-server = { version = "0.4.4", features = [ "tls-rustls" ] }
 base64 = "0.13.1"
 bollard = "0.13.0"
 chrono = { workspace = true }
-clap = { version = "4.0.27", features = [ "derive" ] }
+clap = { workspace = true }
 fqdn = "0.2.3"
 futures = "0.3.25"
 http = "0.2.8"
@@ -24,9 +24,9 @@ instant-acme = "0.1.1"
 lazy_static = "1.4.0"
 num_cpus = "1.14.0"
 once_cell = { workspace = true }
-opentelemetry = { version = "0.18.0", features = ["rt-tokio"] }
-opentelemetry-datadog = { version = "0.6.0", features = ["reqwest-client"] }
-opentelemetry-http = "0.7.0"
+opentelemetry = { workspace = true }
+opentelemetry-datadog = { workspace = true }
+opentelemetry-http = { workspace = true }
 pem = "1.1.0"
 rand = "0.8.5"
 rcgen = "0.10.0"
@@ -40,7 +40,7 @@ tokio = { version = "1.22.0", features = [ "full" ] }
 tower = { version = "0.4.13", features = [ "steer" ] }
 tower-http = { version = "0.3.4", features = ["trace"] }
 tracing = { workspace = true }
-tracing-opentelemetry = "0.18.0"
+tracing-opentelemetry = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 ttl_cache = "0.5.1"
 uuid = { workspace = true, features = [ "v4" ] }

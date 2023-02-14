@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = { workspace = true }
-clap = { version = "4.0.27", features = [ "derive", "env" ] }
+clap = { workspace = true, features = ["env"] }
 dirs = "4.0.0"
 reqwest = { version = "0.11.13", features = ["json"] }
 serde = { workspace = true, features = ["derive"] }

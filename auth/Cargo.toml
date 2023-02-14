@@ -12,6 +12,11 @@ opentelemetry = { workspace = true }
 opentelemetry-datadog = { workspace = true }
 opentelemetry-http = { workspace = true }
 tokio = { version = "1.22.0", features = [ "full" ] }
+tower-http = { workspace = true }
 tracing = { workspace = true }
 tracing-opentelemetry = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
+
+[dependencies.shuttle-common]
+workspace = true
+features = ["backend"]

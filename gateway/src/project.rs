@@ -1420,7 +1420,7 @@ pub mod exec {
                                     .new_task()
                                     .project(project_name)
                                     .and_then(task::run(|ctx| async move {
-                                        TaskResult::Done(Project::Stopped(ProjectStopped {
+                                        TaskResult::Done(Project::Rebooting(ProjectRebooting {
                                             container: ctx.state.container().unwrap(),
                                         }))
                                     }))
@@ -1443,7 +1443,7 @@ pub mod exec {
                                     .new_task()
                                     .project(project_name)
                                     .and_then(task::run(|ctx| async move {
-                                        TaskResult::Done(Project::Stopping(ProjectStopping {
+                                        TaskResult::Done(Project::Rebooting(ProjectRebooting {
                                             container: ctx.state.container().unwrap(),
                                         }))
                                     }))

@@ -95,7 +95,7 @@ impl TraceLayer<MakeSpanSimple> {
 }
 
 impl TraceLayer<MakeSpanPropagation> {
-    /// Switch to the span maker which add propagation details from the request headers
+    /// Switch to the span maker which adds propagation details from the request headers
     pub fn with_propagation(self) -> Self {
         self
     }
@@ -106,7 +106,7 @@ pub trait MakeSpanBuilder {
     fn new(fn_span: FnSpan) -> Self;
 }
 
-/// Simple span maker which records the default traces with the extra given by the user
+/// Simple span maker which records the span given by the user
 #[derive(Clone)]
 pub struct MakeSpanSimple {
     fn_span: FnSpan,
@@ -124,7 +124,7 @@ impl tower_http::trace::MakeSpan<Body> for MakeSpanSimple {
     }
 }
 
-/// Span maker which records the default traces, those given by the user and extract a propagation context
+/// Span maker which records the span given by the user and extracts a propagation context
 /// from the request headers.
 #[derive(Clone)]
 pub struct MakeSpanPropagation {
@@ -164,7 +164,7 @@ impl tower_http::trace::OnResponse<BoxBody> for OnResponseStatusCode {
     }
 }
 
-/// Simple macro to record the following default for each request:
+/// Simple macro to record the following defaults for each request:
 /// - The URI
 /// - The method
 /// - The status code

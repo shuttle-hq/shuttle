@@ -7,8 +7,11 @@ use axum::Json;
 use serde::{ser::SerializeMap, Serialize};
 use shuttle_common::models::error::ApiError;
 
+// TODO: separate error enum for handlers?
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum Error {
+pub enum Error {
+    #[error("User could not be found")]
+    UserNotFound,
     #[error("Database error: {0}")]
     Database(#[from] sqlx::Error),
     #[error(transparent)]

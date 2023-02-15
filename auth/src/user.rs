@@ -1,20 +1,15 @@
 use std::{fmt::Formatter, str::FromStr};
 
+use async_trait::async_trait;
 use serde::{Deserialize, Deserializer, Serialize};
-use sqlx::{query_as, FromRow, Pool, Sqlite};
+use sqlx::{query, Pool, Row, Sqlite};
 
 use crate::error::Error;
 
-#[async_trait::async_trait]
+#[async_trait]
 pub(crate) trait UserManagement {
     async fn create_user(&self, name: UserName) -> Result<User, Error>;
     async fn get_user(&self, name: UserName) -> Result<User, Error>;
-}
-
-#[derive(Clone, FromRow, Serialize, Deserialize)]
-pub(crate) struct User {
-    pub name: UserName,
-    pub secret: String,
 }
 
 #[derive(Clone)]
@@ -22,35 +17,132 @@ pub(crate) struct UserManager {
     pub(crate) pool: Pool<Sqlite>,
 }
 
-#[async_trait::async_trait]
+#[async_trait]
 impl UserManagement for UserManager {
     async fn create_user(&self, name: UserName) -> Result<User, Error> {
         // TODO: generate a secret
-        let secret = "my_secret";
+        let secret = "my_secret".to_owned();
 
-        let user = query_as("INSERT INTO users (user_name, key) VALUES (?1, ?2)")
+        query("INSERT INTO users (user_name, secret) VALUES (?1, ?2)")
             .bind(&name)
-            .bind(secret)
-            .fetch_one(&self.pool)
+            .bind(&secret)
+            .execute(&self.pool)
             .await?;
 
-        Ok(user)
+        Ok(User::new_with_defaults(name, secret))
     }
 
     // TODO: get from token?
     async fn get_user(&self, name: UserName) -> Result<User, Error> {
-        let user = query_as("SELECT user_name, secret FROM users WHERE user_name = ?1")
+        query("SELECT user_name, secret, super_user, account_tier FROM users WHERE user_name = ?1")
             .bind(&name)
-            .fetch_one(&self.pool)
-            .await?;
+            .fetch_optional(&self.pool)
+            .await?
+            .map(|row| {
+                let permissions = Permissions::builder()
+                    .super_user(row.try_get("super_user").unwrap())
+                    .tier(row.try_get("account_tier").unwrap())
+                    .build();
 
-        Ok(user)
+                User {
+                    name,
+                    secret: row.try_get("secret").unwrap(),
+                    permissions,
+                }
+            })
+            .ok_or(Error::UserNotFound)
+    }
+}
+
+#[derive(Clone, Deserialize, PartialEq, Eq, Serialize, Debug)]
+pub struct User {
+    pub name: UserName,
+    pub secret: String,
+    pub permissions: Permissions,
+}
+
+impl User {
+    #[allow(unused)]
+    pub fn is_super_user(&self) -> bool {
+        self.permissions.is_super_user()
+    }
+
+    pub fn new_with_defaults(name: UserName, secret: String) -> Self {
+        Self {
+            name,
+            secret,
+            permissions: Permissions::default(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Deserialize, PartialEq, Eq, Serialize, Debug, sqlx::Type)]
+#[sqlx(rename_all = "lowercase")]
+pub enum AccountTier {
+    Basic,
+    Pro,
+    Team,
+}
+
+#[derive(Default)]
+pub struct PermissionsBuilder {
+    tier: Option<AccountTier>,
+    super_user: Option<bool>,
+}
+
+impl PermissionsBuilder {
+    pub fn super_user(mut self, is_super_user: bool) -> Self {
+        self.super_user = Some(is_super_user);
+        self
+    }
+
+    pub fn tier(mut self, tier: AccountTier) -> Self {
+        self.tier = Some(tier);
+        self
+    }
+
+    pub fn build(self) -> Permissions {
+        Permissions {
+            tier: self.tier.unwrap_or(AccountTier::Basic),
+            super_user: self.super_user.unwrap_or_default(),
+        }
+    }
+}
+
+#[derive(Clone, Deserialize, PartialEq, Eq, Serialize, Debug)]
+pub struct Permissions {
+    pub tier: AccountTier,
+    pub super_user: bool,
+}
+
+impl Default for Permissions {
+    fn default() -> Self {
+        Self {
+            tier: AccountTier::Basic,
+            super_user: false,
+        }
+    }
+}
+
+impl Permissions {
+    pub fn builder() -> PermissionsBuilder {
+        PermissionsBuilder::default()
+    }
+
+    #[allow(unused)]
+    pub fn tier(&self) -> &AccountTier {
+        &self.tier
+    }
+
+    #[allow(unused)]
+    pub fn is_super_user(&self) -> bool {
+        self.super_user
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, sqlx::Type, Serialize)]
 #[sqlx(transparent)]
-pub(crate) struct UserName(String);
+pub struct UserName(String);
 
 impl FromStr for UserName {
     type Err = Error;

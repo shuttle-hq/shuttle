@@ -16,7 +16,7 @@ pub(crate) async fn get_user(
     Path(user_name): Path<UserName>,
 ) -> Result<Json<User>, Error> {
     let user = user_manager.get_user(user_name).await?;
-
+    // TODO: use the user response struct in common, or create a new one
     Ok(Json(user))
 }
 
@@ -26,7 +26,7 @@ pub(crate) async fn post_user(
     Path(user_name): Path<UserName>,
 ) -> Result<Json<User>, Error> {
     let user = user_manager.create_user(user_name).await?;
-
+    // TODO: use the user response struct in common, or create a new one
     Ok(Json(user))
 }
 

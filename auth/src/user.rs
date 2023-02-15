@@ -25,7 +25,7 @@ pub(crate) struct UserManager {
 #[async_trait::async_trait]
 impl UserManagement for UserManager {
     async fn create_user(&self, name: UserName) -> Result<User, Error> {
-        // TODO: generate a public key
+        // TODO: generate a secret
         let secret = "my_secret";
 
         let user = query_as("INSERT INTO users (user_name, key) VALUES (?1, ?2)")

@@ -38,7 +38,6 @@ sqlx = { version = "0.6.2", features = [ "sqlite", "json", "runtime-tokio-native
 strum = { version = "0.24.1", features = ["derive"] }
 tokio = { version = "1.22.0", features = [ "full" ] }
 tower = { version = "0.4.13", features = [ "steer" ] }
-tower-http = { version = "0.3.4", features = ["trace"] }
 tracing = { workspace = true }
 tracing-opentelemetry = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }

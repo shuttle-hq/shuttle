@@ -35,6 +35,7 @@ models = ["anyhow", "async-trait", "display", "http", "reqwest", "serde_json"]
 
 [dev-dependencies]
 axum = { workspace = true }
+hyper = "0.14.23"
 tokio = { version = "1.22.0", features = ["macros", "rt-multi-thread"] }
 tower = { version = "0.4", features = ["util"] }
 tracing-fluent-assertions = "0.3.0"

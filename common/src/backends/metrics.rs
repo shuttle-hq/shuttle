@@ -198,14 +198,11 @@ macro_rules! request_span {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
-
     use axum::{
-        body::Body, extract::Path, http::Request, middleware::from_extractor,
+        body::Body, extract::Path, http::Request, http::StatusCode, middleware::from_extractor,
         response::IntoResponse, routing::get, Router,
     };
-    use once_cell::sync::OnceCell;
-    use tokio::time::sleep;
+    use hyper::body;
     use tower::ServiceExt;
     use tracing::field;
     use tracing_fluent_assertions::{AssertionRegistry, AssertionsLayer};
@@ -221,99 +218,96 @@ mod tests {
         format!("hello {user_name}")
     }
 
-    fn get_assertion_registry() -> &'static AssertionRegistry {
-        static REGISTRY: OnceCell<AssertionRegistry> = OnceCell::new();
-        REGISTRY.get_or_init(|| {
-            let assertion_registry = AssertionRegistry::default();
-            let base_subscriber = Registry::default();
-            let subscriber = base_subscriber.with(AssertionsLayer::new(&assertion_registry));
-            tracing::subscriber::set_global_default(subscriber).unwrap();
-
-            assertion_registry
-        })
-    }
-
     #[tokio::test]
-    async fn basic() {
-        let assertion_registry = get_assertion_registry();
-        let router: Router<()> = Router::new()
-            .route("/hello", get(hello))
-            .route_layer(from_extractor::<Metrics>())
-            .layer(
-                TraceLayer::new(|request| request_span!(request))
+    async fn trace_layer() {
+        let assertion_registry = AssertionRegistry::default();
+        let base_subscriber = Registry::default();
+        let subscriber = base_subscriber.with(AssertionsLayer::new(&assertion_registry));
+        tracing::subscriber::set_global_default(subscriber).unwrap();
+
+        // Put in own block to make sure assertion to not interfere with the next test
+        {
+            let router: Router<()> = Router::new()
+                .route("/hello", get(hello))
+                .route_layer(from_extractor::<Metrics>())
+                .layer(
+                    TraceLayer::new(|request| request_span!(request))
+                        .without_propagation()
+                        .build(),
+                );
+
+            let request_span = assertion_registry
+                .build()
+                .with_name("request")
+                .with_span_field("http.uri")
+                .with_span_field("http.method")
+                .with_span_field("http.status_code")
+                .with_span_field("request.path")
+                .was_closed()
+                .finalize();
+
+            let response = router
+                .oneshot(
+                    Request::builder()
+                        .uri("/hello")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(response.status(), StatusCode::OK);
+
+            let body = body::to_bytes(response.into_body()).await.unwrap();
+
+            assert_eq!(&body[..], b"hello");
+            request_span.assert();
+        }
+
+        {
+            let router: Router<()> = Router::new()
+                .route("/hello/:user_name", get(hello_user))
+                .route_layer(from_extractor::<Metrics>())
+                .layer(
+                    TraceLayer::new(|request| {
+                        request_span!(
+                            request,
+                            request.params.user_name = field::Empty,
+                            extra = "value"
+                        )
+                    })
                     .without_propagation()
                     .build(),
-            );
+                );
 
-        let request_span = assertion_registry
-            .build()
-            .with_name("request")
-            .with_span_field("http.uri")
-            .with_span_field("http.method")
-            .with_span_field("http.status_code")
-            .with_span_field("request.path")
-            .was_created()
-            .finalize();
+            let request_span = assertion_registry
+                .build()
+                .with_name("request")
+                .with_span_field("http.uri")
+                .with_span_field("http.method")
+                .with_span_field("http.status_code")
+                .with_span_field("request.path")
+                .with_span_field("request.params.user_name")
+                .with_span_field("extra")
+                .was_closed()
+                .finalize();
 
-        router
-            .oneshot(
-                Request::builder()
-                    .uri("/hello")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+            let response = router
+                .oneshot(
+                    Request::builder()
+                        .uri("/hello/ferries")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
 
-        // Give time for the span to be recorded
-        sleep(Duration::from_millis(100)).await;
+            assert_eq!(response.status(), StatusCode::OK);
 
-        request_span.assert();
-    }
+            let body = body::to_bytes(response.into_body()).await.unwrap();
 
-    #[tokio::test]
-    async fn complex() {
-        let assertion_registry = get_assertion_registry();
-        let router: Router<()> = Router::new()
-            .route("/hello/:user_name", get(hello_user))
-            .route_layer(from_extractor::<Metrics>())
-            .layer(
-                TraceLayer::new(|request| {
-                    request_span!(
-                        request,
-                        request.params.user_name = field::Empty,
-                        extra = "value"
-                    )
-                })
-                .without_propagation()
-                .build(),
-            );
-
-        let request_span = assertion_registry
-            .build()
-            .with_name("request")
-            .with_span_field("http.uri")
-            .with_span_field("http.method")
-            .with_span_field("http.status_code")
-            .with_span_field("request.path")
-            .with_span_field("request.params.user_name")
-            .with_span_field("extra")
-            .was_created()
-            .finalize();
-
-        router
-            .oneshot(
-                Request::builder()
-                    .uri("/hello/ferries")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        // Give time for the span to be recorded
-        sleep(Duration::from_millis(100)).await;
-
-        request_span.assert();
+            assert_eq!(&body[..], b"hello ferries");
+            request_span.assert();
+        }
     }
 }

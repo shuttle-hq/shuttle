@@ -5837,6 +5837,7 @@ dependencies = [
  "comfy-table",
  "crossterm",
  "http 0.2.8",
+ "hyper",
  "once_cell",
  "opentelemetry",
  "opentelemetry-http",

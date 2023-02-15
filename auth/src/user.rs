@@ -26,11 +26,11 @@ pub(crate) struct UserManager {
 impl UserManagement for UserManager {
     async fn create_user(&self, name: UserName) -> Result<User, Error> {
         // TODO: generate a public key
-        let public_key = "my_public_key";
+        let secret = "my_secret";
 
         let user = query_as("INSERT INTO users (user_name, key) VALUES (?1, ?2)")
             .bind(&name)
-            .bind(&public_key)
+            .bind(secret)
             .fetch_one(&self.pool)
             .await?;
 
@@ -39,7 +39,7 @@ impl UserManagement for UserManager {
 
     // TODO: get from token?
     async fn get_user(&self, name: UserName) -> Result<User, Error> {
-        let user = query_as("SELECT user_name, public_key FROM users WHERE user_name = ?1")
+        let user = query_as("SELECT user_name, secret FROM users WHERE user_name = ?1")
             .bind(&name)
             .fetch_one(&self.pool)
             .await?;

@@ -22,4 +22,4 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [dependencies.shuttle-common]
 workspace = true
-features = ["backend"]
+features = ["backend", "models"]

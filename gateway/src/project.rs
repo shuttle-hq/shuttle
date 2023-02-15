@@ -1463,20 +1463,17 @@ pub mod exec {
                         .inspect_container(safe_unwrap!(container.id), None)
                         .await
                     {
-                        match container.state {
-                            Some(_) => {
-                                _ = gateway
-                                    .new_task()
-                                    .project(project_name)
-                                    .and_then(task::run(|ctx| async move {
-                                        TaskResult::Done(Project::Rebooting(ProjectRebooting {
-                                            container: ctx.state.container().unwrap(),
-                                        }))
+                        if container.state.is_some() {
+                            _ = gateway
+                                .new_task()
+                                .project(project_name)
+                                .and_then(task::run(|ctx| async move {
+                                    TaskResult::Done(Project::Rebooting(ProjectRebooting {
+                                        container: ctx.state.container().unwrap(),
                                     }))
-                                    .send(&sender)
-                                    .await;
-                            }
-                            _ => {}
+                                }))
+                                .send(&sender)
+                                .await;
                         }
                     }
                 }

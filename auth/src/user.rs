@@ -14,7 +14,7 @@ pub(crate) trait UserManagement {
 #[derive(Clone, FromRow, Serialize, Deserialize)]
 pub(crate) struct User {
     pub name: UserName,
-    pub public_key: String,
+    pub secret: String,
 }
 
 #[derive(Clone)]

@@ -8,8 +8,8 @@ use crate::error::Error;
 
 #[async_trait]
 pub(crate) trait UserManagement {
-    async fn create_user(&self, name: UserName) -> Result<User, Error>;
-    async fn get_user(&self, name: UserName) -> Result<User, Error>;
+    async fn create_user(&self, name: AccountName) -> Result<User, Error>;
+    async fn get_user(&self, name: AccountName) -> Result<User, Error>;
 }
 
 #[derive(Clone)]
@@ -19,11 +19,11 @@ pub(crate) struct UserManager {
 
 #[async_trait]
 impl UserManagement for UserManager {
-    async fn create_user(&self, name: UserName) -> Result<User, Error> {
+    async fn create_user(&self, name: AccountName) -> Result<User, Error> {
         // TODO: generate a secret
         let secret = "my_secret".to_owned();
 
-        query("INSERT INTO users (user_name, secret) VALUES (?1, ?2)")
+        query("INSERT INTO users (account_name, secret) VALUES (?1, ?2)")
             .bind(&name)
             .bind(&secret)
             .execute(&self.pool)
@@ -33,8 +33,8 @@ impl UserManagement for UserManager {
     }
 
     // TODO: get from token?
-    async fn get_user(&self, name: UserName) -> Result<User, Error> {
-        query("SELECT user_name, secret, super_user, account_tier FROM users WHERE user_name = ?1")
+    async fn get_user(&self, name: AccountName) -> Result<User, Error> {
+        query("SELECT account_name, secret, super_user, account_tier FROM users WHERE account_name = ?1")
             .bind(&name)
             .fetch_optional(&self.pool)
             .await?
@@ -56,7 +56,7 @@ impl UserManagement for UserManager {
 
 #[derive(Clone, Deserialize, PartialEq, Eq, Serialize, Debug)]
 pub struct User {
-    pub name: UserName,
+    pub name: AccountName,
     pub secret: String,
     pub permissions: Permissions,
 }
@@ -67,7 +67,7 @@ impl User {
         self.permissions.is_super_user()
     }
 
-    pub fn new_with_defaults(name: UserName, secret: String) -> Self {
+    pub fn new_with_defaults(name: AccountName, secret: String) -> Self {
         Self {
             name,
             secret,
@@ -142,9 +142,9 @@ impl Permissions {
 
 #[derive(Debug, Clone, PartialEq, Eq, sqlx::Type, Serialize)]
 #[sqlx(transparent)]
-pub struct UserName(String);
+pub struct AccountName(String);
 
-impl FromStr for UserName {
+impl FromStr for AccountName {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -152,13 +152,13 @@ impl FromStr for UserName {
     }
 }
 
-impl std::fmt::Display for UserName {
+impl std::fmt::Display for AccountName {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)
     }
 }
 
-impl<'de> Deserialize<'de> for UserName {
+impl<'de> Deserialize<'de> for AccountName {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,

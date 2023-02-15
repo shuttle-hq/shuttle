@@ -7,15 +7,15 @@ use tracing::instrument;
 use crate::{
     api::builder::RouterState,
     error::Error,
-    user::{User, UserManagement, UserName},
+    user::{AccountName, User, UserManagement},
 };
 
 #[instrument(skip(user_manager))]
 pub(crate) async fn get_user(
     State(RouterState { user_manager }): State<RouterState>,
-    Path(user_name): Path<UserName>,
+    Path(account_name): Path<AccountName>,
 ) -> Result<Json<User>, Error> {
-    let user = user_manager.get_user(user_name).await?;
+    let user = user_manager.get_user(account_name).await?;
     // TODO: use the user response struct in common, or create a new one
     Ok(Json(user))
 }
@@ -23,9 +23,9 @@ pub(crate) async fn get_user(
 #[instrument(skip(user_manager))]
 pub(crate) async fn post_user(
     State(RouterState { user_manager }): State<RouterState>,
-    Path(user_name): Path<UserName>,
+    Path(account_name): Path<AccountName>,
 ) -> Result<Json<User>, Error> {
-    let user = user_manager.create_user(user_name).await?;
+    let user = user_manager.create_user(account_name).await?;
     // TODO: use the user response struct in common, or create a new one
     Ok(Json(user))
 }

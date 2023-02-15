@@ -1,8 +1,15 @@
+use std::str::FromStr;
+
 use clap::Parser;
 use opentelemetry::global;
 use shuttle_auth::{start, Args};
-use tracing::trace;
+use sqlx::migrate::{MigrateDatabase, Migrator};
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous};
+use sqlx::{Sqlite, SqlitePool};
+use tracing::{info, trace};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+
+pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
 #[tokio::main]
 async fn main() {
@@ -32,17 +39,26 @@ async fn main() {
     let db_path = args.state.join("authentication.sqlite");
     let db_uri = db_path.to_str().unwrap();
 
-    println!("db_uri: {db_uri}");
-    // if !db_path.exists() {
-    //     Sqlite::create_database(db_uri).await.unwrap();
-    // }
+    if !db_path.exists() {
+        Sqlite::create_database(db_uri).await.unwrap();
+    }
 
-    // info!(
-    //     "state db: {}",
-    //     std::fs::canonicalize(&args.state)
-    //         .unwrap()
-    //         .to_string_lossy()
-    // );
+    info!(
+        "state db: {}",
+        std::fs::canonicalize(&args.state)
+            .unwrap()
+            .to_string_lossy()
+    );
 
-    start(args).await;
+    // https://phiresky.github.io/blog/2020/sqlite-performance-tuning/
+    let sqlite_options = SqliteConnectOptions::from_str(db_uri)
+        .unwrap()
+        .journal_mode(SqliteJournalMode::Wal)
+        .synchronous(SqliteSynchronous::Normal);
+
+    let db = SqlitePool::connect_with(sqlite_options).await.unwrap();
+
+    MIGRATIONS.run(&db).await.unwrap();
+
+    start(args, db).await;
 }

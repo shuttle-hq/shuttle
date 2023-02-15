@@ -6,10 +6,15 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-axum = { workspace = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+axum = { workspace = true, features = ["macros"]}
 clap = { workspace = true }
 opentelemetry = { workspace = true }
 opentelemetry-datadog = { workspace = true }
+serde = { workspace = true, features = [ "derive" ] }
+sqlx = { version = "0.6.2", features = [ "sqlite", "json", "runtime-tokio-native-tls", "migrate" ] }
+thiserror = { workspace = true }
 tokio = { version = "1.22.0", features = [ "full" ] }
 tracing = { workspace = true }
 tracing-opentelemetry = { workspace = true }

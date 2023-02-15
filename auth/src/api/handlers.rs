@@ -1,5 +1,4 @@
 use axum::{
-    debug_handler,
     extract::{Path, State},
     Json,
 };
@@ -11,7 +10,6 @@ use crate::{
     user::{User, UserManagement, UserName},
 };
 
-#[debug_handler]
 #[instrument(skip(user_manager))]
 pub(crate) async fn get_user(
     State(RouterState { user_manager }): State<RouterState>,
@@ -22,7 +20,6 @@ pub(crate) async fn get_user(
     Ok(Json(user))
 }
 
-#[debug_handler]
 #[instrument(skip(user_manager))]
 pub(crate) async fn post_user(
     State(RouterState { user_manager }): State<RouterState>,

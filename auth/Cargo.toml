@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
-axum = { workspace = true, features = ["macros"]}
+axum = { workspace = true }
 clap = { workspace = true }
 opentelemetry = { workspace = true }
 opentelemetry-datadog = { workspace = true }

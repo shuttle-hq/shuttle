@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
 use shuttle_common::models::error::ErrorKind;
 use shuttle_common::models::{project, stats, user};
+use shuttle_common::request_span;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::{Mutex, MutexGuard};
 use tracing::{field, instrument};
@@ -435,16 +436,16 @@ impl ApiBuilder {
 
     pub fn with_default_traces(mut self) -> Self {
         self.router = self.router.route_layer(from_extractor::<Metrics>()).layer(
-            TraceLayer::new()
-                .extra_fields(|_| {
-                    vec![
-                        ("account_name", Box::new(field::Empty)),
-                        ("request.params.project_name", Box::new(field::Empty)),
-                        ("request.params.account_name", Box::new(field::Empty)),
-                    ]
-                })
-                .without_propagation()
-                .build(),
+            TraceLayer::new(|request| {
+                request_span!(
+                    request,
+                    account_name = field::Empty,
+                    request.params.project_name = field::Empty,
+                    request.params.account_name = field::Empty
+                )
+            })
+            .without_propagation()
+            .build(),
         );
         self
     }

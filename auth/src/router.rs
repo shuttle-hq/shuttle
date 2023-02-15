@@ -3,7 +3,10 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use shuttle_common::backends::metrics::{Metrics, TraceLayer};
+use shuttle_common::{
+    backends::metrics::{Metrics, TraceLayer},
+    request_span,
+};
 use tracing::field;
 
 pub fn new() -> Router {
@@ -17,10 +20,11 @@ pub fn new() -> Router {
         .route("/user/:account_name", get(get_user).post(post_user))
         .route_layer(from_extractor::<Metrics>())
         .layer(
-            TraceLayer::new()
-                .extra_fields(|_| vec![("request.params.account_name", Box::new(field::Empty))])
-                .with_propagation()
-                .build(),
+            TraceLayer::new(|request| {
+                request_span!(request, request.params.account_name = field::Empty)
+            })
+            .with_propagation()
+            .build(),
         )
 }
 

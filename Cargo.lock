@@ -5845,9 +5845,13 @@ dependencies = [
  "serde",
  "serde_json",
  "strum",
+ "tokio",
+ "tower",
  "tower-http 0.3.4",
  "tracing",
+ "tracing-fluent-assertions",
  "tracing-opentelemetry",
+ "tracing-subscriber",
  "uuid 1.2.2",
 ]
 
@@ -7084,6 +7088,17 @@ checksum = "24eb03ba0eab1fd845050058ce5e616558e8f8d8fca633e6b163fe25c797213a"
 dependencies = [
  "once_cell",
  "valuable",
+]
+
+[[package]]
+name = "tracing-fluent-assertions"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12de1a8c6bcfee614305e836308b596bbac831137a04c61f7e5b0b0bf2cfeaf6"
+dependencies = [
+ "tracing",
+ "tracing-core",
+ "tracing-subscriber",
 ]
 
 [[package]]

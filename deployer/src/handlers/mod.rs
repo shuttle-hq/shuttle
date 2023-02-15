@@ -12,7 +12,7 @@ use futures::StreamExt;
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
 use shuttle_common::models::secret;
 use shuttle_common::project::ProjectName;
-use shuttle_common::LogItem;
+use shuttle_common::{request_span, LogItem};
 use shuttle_service::loader::clean_crate;
 use tower_http::auth::RequireAuthorizationLayer;
 use tracing::{debug, error, field, instrument, trace};
@@ -69,22 +69,22 @@ pub fn make_router(
         .route("/projects/:project_name/status", get(get_status))
         .route_layer(from_extractor::<Metrics>())
         .layer(
-            TraceLayer::new()
-                .extra_fields(|request| {
-                    let account_name = request
-                        .headers()
-                        .get("X-Shuttle-Account-Name")
-                        .map(|value| value.to_str().unwrap_or_default().to_string());
+            TraceLayer::new(|request| {
+                let account_name = request
+                    .headers()
+                    .get("X-Shuttle-Account-Name")
+                    .map(|value| value.to_str().unwrap_or_default().to_string());
 
-                    vec![
-                        ("account.name", Box::new(account_name)),
-                        ("request.params.project_name", Box::new(field::Empty)),
-                        ("request.params.service_name", Box::new(field::Empty)),
-                        ("request.params.deployment_id", Box::new(field::Empty)),
-                    ]
-                })
-                .with_propagation()
-                .build(),
+                request_span!(
+                    request,
+                    account.name = account_name,
+                    request.params.project_name = field::Empty,
+                    request.params.service_name = field::Empty,
+                    request.params.deployment_id = field::Empty,
+                )
+            })
+            .with_propagation()
+            .build(),
         )
         .route_layer(from_extractor::<project::ProjectNameGuard>())
         .layer(Extension(project_name))

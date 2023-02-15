@@ -32,3 +32,10 @@ uuid = { workspace = true, features = ["v4", "serde"] }
 backend = ["async-trait", "axum", "opentelemetry", "opentelemetry-http", "tower-http", "tracing-opentelemetry"]
 display = ["comfy-table", "crossterm"]
 models = ["anyhow", "async-trait", "display", "http", "reqwest", "serde_json"]
+
+[dev-dependencies]
+axum = { workspace = true }
+tokio = { version = "1.22.0", features = ["macros", "rt-multi-thread"] }
+tower = { version = "0.4", features = ["util"] }
+tracing-fluent-assertions = "0.3.0"
+tracing-subscriber = { version = "0.3", default-features = false }

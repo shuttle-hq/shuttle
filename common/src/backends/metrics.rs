@@ -4,13 +4,13 @@ use std::{collections::HashMap, convert::Infallible};
 
 use async_trait::async_trait;
 use axum::body::{Body, BoxBody};
-use axum::extract::{FromRequestParts, MatchedPath, Path};
+use axum::extract::{FromRequestParts, Path};
 use axum::http::{request::Parts, Request, Response};
 use opentelemetry::global;
 use opentelemetry_http::HeaderExtractor;
 use tower_http::classify::{ServerErrorsAsFailures, SharedClassifier};
 use tower_http::trace::DefaultOnRequest;
-use tracing::{debug, debug_span, field, Span, Value};
+use tracing::{debug, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 /// Used to record a bunch of metrics info
@@ -42,44 +42,32 @@ where
     }
 }
 
-type FnFields = fn(&Request<Body>) -> Vec<(&str, Box<dyn Value>)>;
+type FnSpan = fn(&Request<Body>) -> Span;
 
-/// Record the default tracing information for each request. These defaults are:
-/// - The URI
-/// - The method
-/// - The status code
-/// - The request path
+/// Record the tracing information for each request as given by the function to create a span
 pub struct TraceLayer<MakeSpan = MakeSpanSimple> {
-    fn_extra_fields: FnFields,
+    fn_span: FnSpan,
     make_span_type: PhantomData<MakeSpan>,
 }
-
-impl<MakeSpan> Default for TraceLayer<MakeSpan> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl<MakeSpan> TraceLayer<MakeSpan> {
-    pub fn new() -> Self {
-        Self {
-            fn_extra_fields: |_| Default::default(),
-            make_span_type: PhantomData,
-        }
-    }
-
-    /// Set a function to record extra tracing fields. These might be fields set by [Metrics].
+    /// Create a trace layer using the give function to create spans. The span fields might be set by [Metrics] later.
     ///
     /// # Example
     /// ```
-    /// TraceLayer::new()
-    ///     .extra_fields(|_| vec![("request.params.account_name", &field::Empty)])
-    ///     .build()
+    /// TraceLayer::new(|request| {
+    ///     request_span!(
+    ///         request,
+    ///         request.params.param = field::Empty
+    ///     )
+    /// })
+    ///     .without_propagation()
+    ///     .build();
     /// ```
-    pub fn extra_fields(mut self, fn_extra_fields: FnFields) -> Self {
-        self.fn_extra_fields = fn_extra_fields;
-
-        self
+    pub fn new(fn_span: FnSpan) -> Self {
+        Self {
+            fn_span,
+            make_span_type: PhantomData,
+        }
     }
 }
 
@@ -94,7 +82,7 @@ impl<MakeSpan: tower_http::trace::MakeSpan<Body> + MakeSpanBuilder> TraceLayer<M
         OnResponseStatusCode,
     > {
         tower_http::trace::TraceLayer::new_for_http()
-            .make_span_with(MakeSpan::new(self.fn_extra_fields))
+            .make_span_with(MakeSpan::new(self.fn_span))
             .on_response(OnResponseStatusCode)
     }
 }
@@ -115,24 +103,24 @@ impl TraceLayer<MakeSpanPropagation> {
 
 /// Helper trait to make a new span maker
 pub trait MakeSpanBuilder {
-    fn new(fn_extra_fields: FnFields) -> Self;
+    fn new(fn_span: FnSpan) -> Self;
 }
 
 /// Simple span maker which records the default traces with the extra given by the user
 #[derive(Clone)]
 pub struct MakeSpanSimple {
-    fn_extra_fields: FnFields,
+    fn_span: FnSpan,
 }
 
 impl MakeSpanBuilder for MakeSpanSimple {
-    fn new(fn_extra_fields: FnFields) -> Self {
-        Self { fn_extra_fields }
+    fn new(fn_span: FnSpan) -> Self {
+        Self { fn_span }
     }
 }
 
 impl tower_http::trace::MakeSpan<Body> for MakeSpanSimple {
     fn make_span(&mut self, request: &Request<Body>) -> Span {
-        get_span(request, self.fn_extra_fields)
+        (self.fn_span)(request)
     }
 }
 
@@ -140,18 +128,18 @@ impl tower_http::trace::MakeSpan<Body> for MakeSpanSimple {
 /// from the request headers.
 #[derive(Clone)]
 pub struct MakeSpanPropagation {
-    fn_extra_fields: FnFields,
+    fn_span: FnSpan,
 }
 
 impl MakeSpanBuilder for MakeSpanPropagation {
-    fn new(fn_extra_fields: FnFields) -> Self {
-        Self { fn_extra_fields }
+    fn new(fn_span: FnSpan) -> Self {
+        Self { fn_span }
     }
 }
 
 impl tower_http::trace::MakeSpan<Body> for MakeSpanPropagation {
     fn make_span(&mut self, request: &Request<Body>) -> Span {
-        let span = get_span(request, self.fn_extra_fields);
+        let span = (self.fn_span)(request);
 
         let parent_context = global::get_text_map_propagator(|propagator| {
             propagator.extract(&HeaderExtractor(request.headers()))
@@ -176,29 +164,156 @@ impl tower_http::trace::OnResponse<BoxBody> for OnResponseStatusCode {
     }
 }
 
-#[inline]
-fn get_span(request: &Request<Body>, fn_extra_fields: FnFields) -> Span {
-    let path = if let Some(path) = request.extensions().get::<MatchedPath>() {
-        path.as_str()
-    } else {
-        ""
+/// Simple macro to record the following default for each request:
+/// - The URI
+/// - The method
+/// - The status code
+/// - The request path
+#[macro_export]
+macro_rules! request_span {
+    ($request:expr, $($field:tt)*) => {
+        {
+        let path = if let Some(path) = $request.extensions().get::<axum::extract::MatchedPath>() {
+            path.as_str()
+        } else {
+            ""
+        };
+
+        tracing::debug_span!(
+            "request",
+            http.uri = %$request.uri(),
+            http.method = %$request.method(),
+            http.status_code = tracing::field::Empty,
+            // A bunch of extra things for metrics
+            // Should be able to make this clearer once `Valuable` support lands in tracing
+            request.path = path,
+            $($field)*
+        )
+        }
     };
+    ($request:expr) => {
+        $crate::request_span!($request, )
+    }
+}
 
-    let span = debug_span!(
-        "request",
-        http.uri = %request.uri(),
-        http.method = %request.method(),
-        http.status_code = field::Empty,
-        // A bunch of extra things for metrics
-        // Should be able to make this clearer once `Valuable` support lands in tracing
-        request.path = path,
-    );
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
 
-    let extra_fields = (fn_extra_fields)(request);
+    use axum::{
+        body::Body, extract::Path, http::Request, middleware::from_extractor,
+        response::IntoResponse, routing::get, Router,
+    };
+    use once_cell::sync::OnceCell;
+    use tokio::time::sleep;
+    use tower::ServiceExt;
+    use tracing::field;
+    use tracing_fluent_assertions::{AssertionRegistry, AssertionsLayer};
+    use tracing_subscriber::{layer::SubscriberExt, Registry};
 
-    for (key, value) in extra_fields {
-        span.record(key, value);
+    use super::{Metrics, TraceLayer};
+
+    async fn hello() -> impl IntoResponse {
+        "hello"
     }
 
-    span
+    async fn hello_user(Path(user_name): Path<String>) -> impl IntoResponse {
+        format!("hello {user_name}")
+    }
+
+    fn get_assertion_registry() -> &'static AssertionRegistry {
+        static REGISTRY: OnceCell<AssertionRegistry> = OnceCell::new();
+        REGISTRY.get_or_init(|| {
+            let assertion_registry = AssertionRegistry::default();
+            let base_subscriber = Registry::default();
+            let subscriber = base_subscriber.with(AssertionsLayer::new(&assertion_registry));
+            tracing::subscriber::set_global_default(subscriber).unwrap();
+
+            assertion_registry
+        })
+    }
+
+    #[tokio::test]
+    async fn basic() {
+        let assertion_registry = get_assertion_registry();
+        let router: Router<()> = Router::new()
+            .route("/hello", get(hello))
+            .route_layer(from_extractor::<Metrics>())
+            .layer(
+                TraceLayer::new(|request| request_span!(request))
+                    .without_propagation()
+                    .build(),
+            );
+
+        let request_span = assertion_registry
+            .build()
+            .with_name("request")
+            .with_span_field("http.uri")
+            .with_span_field("http.method")
+            .with_span_field("http.status_code")
+            .with_span_field("request.path")
+            .was_created()
+            .finalize();
+
+        router
+            .oneshot(
+                Request::builder()
+                    .uri("/hello")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        // Give time for the span to be recorded
+        sleep(Duration::from_millis(100)).await;
+
+        request_span.assert();
+    }
+
+    #[tokio::test]
+    async fn complex() {
+        let assertion_registry = get_assertion_registry();
+        let router: Router<()> = Router::new()
+            .route("/hello/:user_name", get(hello_user))
+            .route_layer(from_extractor::<Metrics>())
+            .layer(
+                TraceLayer::new(|request| {
+                    request_span!(
+                        request,
+                        request.params.user_name = field::Empty,
+                        extra = "value"
+                    )
+                })
+                .without_propagation()
+                .build(),
+            );
+
+        let request_span = assertion_registry
+            .build()
+            .with_name("request")
+            .with_span_field("http.uri")
+            .with_span_field("http.method")
+            .with_span_field("http.status_code")
+            .with_span_field("request.path")
+            .with_span_field("request.params.user_name")
+            .with_span_field("extra")
+            .was_created()
+            .finalize();
+
+        router
+            .oneshot(
+                Request::builder()
+                    .uri("/hello/ferries")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        // Give time for the span to be recorded
+        sleep(Duration::from_millis(100)).await;
+
+        request_span.assert();
+    }
 }

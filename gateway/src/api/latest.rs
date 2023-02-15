@@ -439,7 +439,7 @@ impl ApiBuilder {
             TraceLayer::new(|request| {
                 request_span!(
                     request,
-                    account_name = field::Empty,
+                    account.name = field::Empty,
                     request.params.project_name = field::Empty,
                     request.params.account_name = field::Empty
                 )

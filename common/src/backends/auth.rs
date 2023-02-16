@@ -10,6 +10,10 @@ use serde::{Deserialize, Serialize};
 use tower::{Layer, Service};
 use tracing::error;
 
+const EXP_MINUTES: i64 = 5;
+const ISS: &str = "shuttle";
+const BEARER: &str = "bearer";
+
 /// The scope of operations that can be performed on shuttle
 /// Every scope defaults to read and will use a suffix for updating tasks
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
@@ -57,12 +61,12 @@ impl Claim {
     /// Create a new claim for a user with the given scopes
     pub fn new(sub: String, scopes: Vec<Scope>) -> Self {
         let iat = Utc::now();
-        let exp = iat.add(Duration::minutes(5));
+        let exp = iat.add(Duration::minutes(EXP_MINUTES));
 
         Self {
             exp: exp.timestamp() as usize,
             iat: iat.timestamp() as usize,
-            iss: "shuttle".to_string(),
+            iss: ISS.to_string(),
             nbf: iat.timestamp() as usize,
             sub,
             scopes,
@@ -90,7 +94,7 @@ impl Claim {
 
     pub fn from_token(token: &str, decoding_key: &DecodingKey) -> Result<Self, StatusCode> {
         let mut validation = Validation::new(jsonwebtoken::Algorithm::EdDSA);
-        validation.set_issuer(&["shuttle"]);
+        validation.set_issuer(&[ISS]);
 
         let claim = decode(&token, decoding_key, &validation)
             .map_err(|err| {
@@ -177,7 +181,7 @@ where
     fn call(&mut self, mut req: Request<Body>) -> Self::Future {
         let status = if let Some(bearer) = req.headers().get(header::AUTHORIZATION) {
             if let Ok(value) = bearer.to_str() {
-                if let Some(token) = value.strip_prefix("bearer") {
+                if let Some(token) = value.strip_prefix(BEARER) {
                     let token = token.trim();
 
                     match Claim::from_token(token, &self.decoding_key) {

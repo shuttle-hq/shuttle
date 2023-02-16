@@ -34,25 +34,22 @@ impl UserManagement for UserManager {
 
     // TODO: get from token?
     async fn get_user(&self, name: AccountName) -> Result<User, Error> {
-        query(
-            "SELECT account_name, key, super_user, account_tier FROM users WHERE account_name = ?1",
-        )
-        .bind(&name)
-        .fetch_optional(&self.pool)
-        .await?
-        .map(|row| {
-            let permissions = Permissions::builder()
-                .super_user(row.try_get("super_user").unwrap())
-                .tier(row.try_get("account_tier").unwrap())
-                .build();
+        query("SELECT account_name, key, account_tier FROM users WHERE account_name = ?1")
+            .bind(&name)
+            .fetch_optional(&self.pool)
+            .await?
+            .map(|row| {
+                let permissions = Permissions::builder()
+                    .tier(row.try_get("account_tier").unwrap())
+                    .build();
 
-            User {
-                name,
-                key: row.try_get("key").unwrap(),
-                permissions,
-            }
-        })
-        .ok_or(Error::UserNotFound)
+                User {
+                    name,
+                    key: row.try_get("key").unwrap(),
+                    permissions,
+                }
+            })
+            .ok_or(Error::UserNotFound)
     }
 }
 
@@ -65,8 +62,8 @@ pub struct User {
 
 impl User {
     #[allow(unused)]
-    pub fn is_super_user(&self) -> bool {
-        self.permissions.is_super_user()
+    pub fn is_admin(&self) -> bool {
+        self.permissions.tier() == &AccountTier::Admin
     }
 
     pub fn new_with_defaults(name: AccountName, key: Key) -> Self {
@@ -134,20 +131,15 @@ pub enum AccountTier {
     Basic,
     Pro,
     Team,
+    Admin,
 }
 
 #[derive(Default)]
 pub struct PermissionsBuilder {
     tier: Option<AccountTier>,
-    super_user: Option<bool>,
 }
 
 impl PermissionsBuilder {
-    pub fn super_user(mut self, is_super_user: bool) -> Self {
-        self.super_user = Some(is_super_user);
-        self
-    }
-
     pub fn tier(mut self, tier: AccountTier) -> Self {
         self.tier = Some(tier);
         self
@@ -156,7 +148,6 @@ impl PermissionsBuilder {
     pub fn build(self) -> Permissions {
         Permissions {
             tier: self.tier.unwrap_or(AccountTier::Basic),
-            super_user: self.super_user.unwrap_or_default(),
         }
     }
 }
@@ -164,14 +155,12 @@ impl PermissionsBuilder {
 #[derive(Clone, Deserialize, PartialEq, Eq, Serialize, Debug)]
 pub struct Permissions {
     pub tier: AccountTier,
-    pub super_user: bool,
 }
 
 impl Default for Permissions {
     fn default() -> Self {
         Self {
             tier: AccountTier::Basic,
-            super_user: false,
         }
     }
 }
@@ -181,14 +170,8 @@ impl Permissions {
         PermissionsBuilder::default()
     }
 
-    #[allow(unused)]
     pub fn tier(&self) -> &AccountTier {
         &self.tier
-    }
-
-    #[allow(unused)]
-    pub fn is_super_user(&self) -> bool {
-        self.super_user
     }
 }
 

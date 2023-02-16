@@ -96,7 +96,7 @@ impl Claim {
         let mut validation = Validation::new(jsonwebtoken::Algorithm::EdDSA);
         validation.set_issuer(&[ISS]);
 
-        let claim = decode(&token, decoding_key, &validation)
+        let claim = decode(token, decoding_key, &validation)
             .map_err(|err| {
                 error!(
                     error = &err as &dyn std::error::Error,
@@ -296,7 +296,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .uri("/")
-                    .header("authorization", format!("{token}"))
+                    .header("authorization", token.clone())
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -354,7 +354,7 @@ mod tests {
 
         let doc = signature::Ed25519KeyPair::generate_pkcs8(&rand::SystemRandom::new()).unwrap();
         let encoding_key = EncodingKey::from_ed_der(doc.as_ref());
-        let token = claim.clone().into_token(&encoding_key).unwrap();
+        let token = claim.into_token(&encoding_key).unwrap();
 
         let (header, rest) = token.split_once('.').unwrap();
         let header = base64::decode_config(header, base64::URL_SAFE_NO_PAD).unwrap();
@@ -394,7 +394,7 @@ mod tests {
 
         let doc = signature::Ed25519KeyPair::generate_pkcs8(&rand::SystemRandom::new()).unwrap();
         let encoding_key = EncodingKey::from_ed_der(doc.as_ref());
-        let token = claim.clone().into_token(&encoding_key).unwrap();
+        let token = claim.into_token(&encoding_key).unwrap();
 
         let (header, rest) = token.split_once('.').unwrap();
         let header = base64::decode_config(header, base64::URL_SAFE_NO_PAD).unwrap();
@@ -426,7 +426,7 @@ mod tests {
 
         let doc = signature::Ed25519KeyPair::generate_pkcs8(&rand::SystemRandom::new()).unwrap();
         let encoding_key = EncodingKey::from_ed_der(doc.as_ref());
-        let token = claim.clone().into_token(&encoding_key).unwrap();
+        let token = claim.into_token(&encoding_key).unwrap();
 
         let (rest, _sig) = token.rsplit_once('.').unwrap();
 
@@ -449,7 +449,7 @@ mod tests {
 
         let doc = signature::Ed25519KeyPair::generate_pkcs8(&rand::SystemRandom::new()).unwrap();
         let encoding_key = EncodingKey::from_ed_der(doc.as_ref());
-        let token = claim.clone().into_token(&encoding_key).unwrap();
+        let token = claim.into_token(&encoding_key).unwrap();
 
         let (header, rest) = token.split_once('.').unwrap();
         let (claim, _sig) = rest.split_once('.').unwrap();

@@ -1,4 +1,7 @@
-use std::{fmt::Formatter, str::FromStr};
+use std::{
+    fmt::{Display, Formatter},
+    str::FromStr,
+};
 
 use async_trait::async_trait;
 use axum::{
@@ -45,16 +48,10 @@ impl UserManagement for UserManager {
             .bind(&name)
             .fetch_optional(&self.pool)
             .await?
-            .map(|row| {
-                let permissions = Permissions::builder()
-                    .tier(row.try_get("account_tier").unwrap())
-                    .build();
-
-                User {
-                    name,
-                    key: row.try_get("key").unwrap(),
-                    permissions,
-                }
+            .map(|row| User {
+                name,
+                key: row.try_get("key").unwrap(),
+                account_tier: row.try_get("account_tier").unwrap(),
             })
             .ok_or(Error::UserNotFound)
     }
@@ -64,16 +61,10 @@ impl UserManagement for UserManager {
             .bind(&key)
             .fetch_optional(&self.pool)
             .await?
-            .map(|row| {
-                let permissions = Permissions::builder()
-                    .tier(row.try_get("account_tier").unwrap())
-                    .build();
-
-                User {
-                    name: row.try_get("account_name").unwrap(),
-                    key,
-                    permissions,
-                }
+            .map(|row| User {
+                name: row.try_get("account_name").unwrap(),
+                key,
+                account_tier: row.try_get("account_tier").unwrap(),
             })
             .ok_or(Error::UserNotFound)
     }
@@ -83,20 +74,19 @@ impl UserManagement for UserManager {
 pub struct User {
     pub name: AccountName,
     pub key: Key,
-    pub permissions: Permissions,
+    pub account_tier: AccountTier,
 }
 
 impl User {
-    #[allow(unused)]
     pub fn is_admin(&self) -> bool {
-        self.permissions.tier() == &AccountTier::Admin
+        self.account_tier == AccountTier::Admin
     }
 
     pub fn new_with_defaults(name: AccountName, key: Key) -> Self {
         Self {
             name,
             key,
-            permissions: Permissions::default(),
+            account_tier: AccountTier::default(),
         }
     }
 
@@ -131,6 +121,16 @@ where
         Span::current().record("account.name", &user.name.to_string());
 
         Ok(user)
+    }
+}
+
+impl From<User> for shuttle_common::models::auth::UserResponse {
+    fn from(user: User) -> Self {
+        Self {
+            name: user.name.to_string(),
+            key: user.key.to_string(),
+            account_tier: user.account_tier.to_string(),
+        }
     }
 }
 
@@ -193,44 +193,20 @@ pub enum AccountTier {
     Admin,
 }
 
-#[derive(Default)]
-pub struct PermissionsBuilder {
-    tier: Option<AccountTier>,
-}
-
-impl PermissionsBuilder {
-    pub fn tier(mut self, tier: AccountTier) -> Self {
-        self.tier = Some(tier);
-        self
-    }
-
-    pub fn build(self) -> Permissions {
-        Permissions {
-            tier: self.tier.unwrap_or(AccountTier::Basic),
-        }
-    }
-}
-
-#[derive(Clone, Deserialize, PartialEq, Eq, Serialize, Debug)]
-pub struct Permissions {
-    pub tier: AccountTier,
-}
-
-impl Default for Permissions {
+impl Default for AccountTier {
     fn default() -> Self {
-        Self {
-            tier: AccountTier::Basic,
-        }
+        AccountTier::Basic
     }
 }
 
-impl Permissions {
-    pub fn builder() -> PermissionsBuilder {
-        PermissionsBuilder::default()
-    }
-
-    pub fn tier(&self) -> &AccountTier {
-        &self.tier
+impl Display for AccountTier {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AccountTier::Basic => write!(f, "basic"),
+            AccountTier::Pro => write!(f, "pro"),
+            AccountTier::Team => write!(f, "team"),
+            AccountTier::Admin => write!(f, "admin"),
+        }
     }
 }
 

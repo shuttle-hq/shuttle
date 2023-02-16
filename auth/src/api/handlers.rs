@@ -1,24 +1,24 @@
+use crate::{
+    api::builder::RouterState,
+    error::Error,
+    user::{AccountName, Admin, UserManagement},
+};
 use axum::{
     extract::{Path, State},
     Json,
 };
+use shuttle_common::models::auth;
 use tracing::instrument;
-
-use crate::{
-    api::builder::RouterState,
-    error::Error,
-    user::{AccountName, Admin, User, UserManagement},
-};
 
 #[instrument(skip(user_manager))]
 pub(crate) async fn get_user(
     _: Admin,
     State(RouterState { user_manager }): State<RouterState>,
     Path(account_name): Path<AccountName>,
-) -> Result<Json<User>, Error> {
+) -> Result<Json<auth::UserResponse>, Error> {
     let user = user_manager.get_user(account_name).await?;
-    // TODO: use the user response struct in common, or create a new one
-    Ok(Json(user))
+
+    Ok(Json(user.into()))
 }
 
 #[instrument(skip(user_manager))]
@@ -26,10 +26,10 @@ pub(crate) async fn post_user(
     _: Admin,
     State(RouterState { user_manager }): State<RouterState>,
     Path(account_name): Path<AccountName>,
-) -> Result<Json<User>, Error> {
+) -> Result<Json<auth::UserResponse>, Error> {
     let user = user_manager.create_user(account_name).await?;
-    // TODO: use the user response struct in common, or create a new one
-    Ok(Json(user))
+
+    Ok(Json(user.into()))
 }
 
 pub(crate) async fn login() {}

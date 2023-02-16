@@ -1,9 +1,7 @@
 mod error;
 
-use axum::body::{Body, BoxBody};
 use axum::extract::ws::{self, WebSocket};
-use axum::extract::{Extension, MatchedPath, Path, Query};
-use axum::http::{Request, Response};
+use axum::extract::{Extension, Path, Query};
 use axum::middleware::from_extractor;
 use axum::routing::{get, post, Router};
 use axum::{extract::BodyStream, Json};
@@ -11,24 +9,19 @@ use bytes::BufMut;
 use chrono::{TimeZone, Utc};
 use fqdn::FQDN;
 use futures::StreamExt;
-use opentelemetry::global;
-use opentelemetry_http::HeaderExtractor;
-use shuttle_common::backends::metrics::Metrics;
+use shuttle_common::backends::metrics::{Metrics, TraceLayer};
 use shuttle_common::models::secret;
 use shuttle_common::project::ProjectName;
-use shuttle_common::LogItem;
+use shuttle_common::{request_span, LogItem};
 use shuttle_service::loader::clean_crate;
 use tower_http::auth::RequireAuthorizationLayer;
-use tower_http::trace::TraceLayer;
-use tracing::{debug, debug_span, error, field, instrument, trace, Span};
-use tracing_opentelemetry::OpenTelemetrySpanExt;
+use tracing::{debug, error, field, instrument, trace};
 use uuid::Uuid;
 
 use crate::deployment::{DeploymentManager, Queued};
 use crate::persistence::{Deployment, Log, Persistence, SecretGetter, State};
 
 use std::collections::HashMap;
-use std::time::Duration;
 
 pub use {self::error::Error, self::error::Result};
 
@@ -45,7 +38,7 @@ pub fn make_router(
         .route("/projects/:project_name/services", get(list_services))
         .route(
             "/projects/:project_name/services/:service_name",
-            get(get_service).post(post_service).delete(delete_service),
+            get(get_service).post(post_service).delete(stop_service),
         )
         .route(
             "/projects/:project_name/services/:service_name/summary",
@@ -76,48 +69,22 @@ pub fn make_router(
         .route("/projects/:project_name/status", get(get_status))
         .route_layer(from_extractor::<Metrics>())
         .layer(
-            TraceLayer::new_for_http()
-                .make_span_with(|request: &Request<Body>| {
-                    let path = if let Some(path) = request.extensions().get::<MatchedPath>() {
-                        path.as_str()
-                    } else {
-                        ""
-                    };
+            TraceLayer::new(|request| {
+                let account_name = request
+                    .headers()
+                    .get("X-Shuttle-Account-Name")
+                    .map(|value| value.to_str().unwrap_or_default().to_string());
 
-                    let account_name = request
-                        .headers()
-                        .get("X-Shuttle-Account-Name")
-                        .map(|value| value.to_str().unwrap_or_default());
-
-                    let span = debug_span!(
-                        "request",
-                        http.uri = %request.uri(),
-                        http.method = %request.method(),
-                        http.status_code = field::Empty,
-                        account.name = account_name,
-                        // A bunch of extra things for metrics
-                        // Should be able to make this clearer once `Valuable` support lands in tracing
-                        request.path = path,
-                        request.params.project_name = field::Empty,
-                        request.params.service_name = field::Empty,
-                        request.params.deployment_id = field::Empty,
-                    );
-                    let parent_context = global::get_text_map_propagator(|propagator| {
-                        propagator.extract(&HeaderExtractor(request.headers()))
-                    });
-                    span.set_parent(parent_context);
-
-                    span
-                })
-                .on_response(
-                    |response: &Response<BoxBody>, latency: Duration, span: &Span| {
-                        span.record("http.status_code", response.status().as_u16());
-                        debug!(
-                            latency = format_args!("{} ns", latency.as_nanos()),
-                            "finished processing request"
-                        );
-                    },
-                ),
+                request_span!(
+                    request,
+                    account.name = account_name,
+                    request.params.project_name = field::Empty,
+                    request.params.service_name = field::Empty,
+                    request.params.deployment_id = field::Empty,
+                )
+            })
+            .with_propagation()
+            .build(),
         )
         .route_layer(from_extractor::<project::ProjectNameGuard>())
         .layer(Extension(project_name))
@@ -250,18 +217,19 @@ async fn post_service(
 }
 
 #[instrument(skip_all, fields(%project_name, %service_name))]
-async fn delete_service(
+async fn stop_service(
     Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
+    Extension(proxy_fqdn): Extension<FQDN>,
     Path((project_name, service_name)): Path<(String, String)>,
-) -> Result<Json<shuttle_common::models::service::Detailed>> {
+) -> Result<Json<shuttle_common::models::service::Summary>> {
     if let Some(service) = persistence.get_service_by_name(&service_name).await? {
-        let old_deployments = persistence
-            .delete_deployments_by_service_id(&service.id)
-            .await?;
+        let running_deployment = persistence.get_active_deployment(&service.id).await?;
 
-        for deployment in old_deployments.iter() {
+        if let Some(ref deployment) = running_deployment {
             deployment_manager.kill(deployment.id).await;
+        } else {
+            return Err(Error::NotFound);
         }
 
         let resources = persistence
@@ -270,20 +238,12 @@ async fn delete_service(
             .into_iter()
             .map(Into::into)
             .collect();
-        let secrets = persistence
-            .get_secrets(&service.id)
-            .await?
-            .into_iter()
-            .map(Into::into)
-            .collect();
 
-        persistence.delete_service(&service.id).await?;
-
-        let response = shuttle_common::models::service::Detailed {
+        let response = shuttle_common::models::service::Summary {
             name: service.name,
-            deployments: old_deployments.into_iter().map(Into::into).collect(),
+            deployment: running_deployment.map(Into::into),
             resources,
-            secrets,
+            uri: format!("https://{proxy_fqdn}"),
         };
 
         Ok(Json(response))

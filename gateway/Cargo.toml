@@ -28,7 +28,7 @@ opentelemetry = { workspace = true }
 opentelemetry-datadog = { workspace = true }
 opentelemetry-http = { workspace = true }
 pem = "1.1.0"
-rand = "0.8.5"
+rand = { workspace = true }
 rcgen = "0.10.0"
 rustls = "0.20.7"
 rustls-pemfile = "1.0.1"
@@ -52,7 +52,7 @@ features = ["backend", "models"]
 anyhow = { workspace = true }
 base64 = "0.13.1"
 colored = "2.0.0"
-portpicker = "0.1.1"
+portpicker = { workspace = true }
 snailquote = "0.3.1"
 tempfile = "3.3.0"
 

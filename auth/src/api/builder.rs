@@ -1,9 +1,9 @@
-use std::str::FromStr;
+use std::{net::SocketAddr, str::FromStr};
 
 use axum::{
     middleware::from_extractor,
     routing::{get, post},
-    Router,
+    Router, Server,
 };
 use shuttle_common::{
     backends::metrics::{Metrics, TraceLayer},
@@ -81,5 +81,14 @@ impl ApiBuilder {
 
         let user_manager = UserManager { pool };
         self.router.with_state(RouterState { user_manager })
+    }
+
+    pub async fn serve(self, address: SocketAddr) {
+        let router = self.into_router();
+
+        Server::bind(&address)
+            .serve(router.into_make_service())
+            .await
+            .unwrap_or_else(|_| panic!("Failed to bind to address: {}", address));
     }
 }

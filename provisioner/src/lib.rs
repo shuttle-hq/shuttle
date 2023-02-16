@@ -330,13 +330,20 @@ impl MyProvisioner {
 
     async fn delete_pg(&self, project_name: &str) -> Result<(), Error> {
         let database_name = format!("db-{project_name}");
-        // TODO: do we need to delete the role?
+        let role_name = format!("user-{project_name}");
 
         // Idenfitiers cannot be used as query parameters
         let drop_db_query = format!("DROP DATABASE \"{database_name}\";");
 
         // Drop the database. Note that this can fail if there are still active connections to it
         sqlx::query(&drop_db_query)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| Error::DeleteRole(e.to_string()))?;
+
+        // Drop the role
+        let drop_role_query = format!("DROP ROLE IF EXISTS \"{role_name}\"");
+        sqlx::query(&drop_role_query)
             .execute(&self.pool)
             .await
             .map_err(|e| Error::DeleteDB(e.to_string()))?;
@@ -349,7 +356,17 @@ impl MyProvisioner {
         let db = self.mongodb_client.database(&database_name);
 
         // dropping a database in mongodb doesn't delete any associated users
-        // TODO: do we need to delete them?
+        // so do that first
+
+        let drop_users_command = doc! {
+            "dropAllUsersFromDatabase": 1
+        };
+
+        db.run_command(drop_users_command, None)
+            .await
+            .map_err(|e| Error::DeleteRole(e.to_string()))?;
+
+        // drop the actual database
 
         db.drop(None)
             .await
@@ -381,8 +398,6 @@ impl MyProvisioner {
                 )));
             }
         }
-
-        // TODO: do we need an else after the above if where we wait for the db instance to be deleted?
 
         Ok(DatabaseDeletionResponse {})
     }

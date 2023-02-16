@@ -14,6 +14,9 @@ pub enum Error {
     #[error("failed to update role: {0}")]
     UpdateRole(String),
 
+    #[error("failed to drop role: {0}")]
+    DeleteRole(String),
+
     #[error("failed to create DB: {0}")]
     CreateDB(String),
 

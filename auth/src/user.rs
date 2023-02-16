@@ -89,14 +89,6 @@ impl User {
             account_tier: AccountTier::default(),
         }
     }
-
-    async fn retrieve_from_key(user_manager: &UserManager, key: Key) -> Result<User, Error> {
-        let user = user_manager.get_user_by_key(key).await?;
-
-        trace!(%user.name, "got account from key");
-
-        Ok(user)
-    }
 }
 
 #[async_trait]
@@ -112,7 +104,8 @@ where
 
         let RouterState { user_manager } = RouterState::from_ref(state);
 
-        let user = User::retrieve_from_key(&user_manager, key)
+        let user = user_manager
+            .get_user_by_key(key)
             .await
             // Absord any error into `Unauthorized`
             .map_err(|_| Error::Unauthorized)?;

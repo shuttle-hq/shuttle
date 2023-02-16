@@ -1,57 +1,65 @@
-use std::{
-    net::{Ipv4Addr, SocketAddr},
-    time::Duration,
-};
-
-use shuttle_auth::InitArgs;
+use axum::{body::Body, response::Response, Router};
+use hyper::http::{header::AUTHORIZATION, Request};
+use shuttle_auth::{sqlite_init, ApiBuilder};
+use sqlx::query;
+use tower::ServiceExt;
 
 pub(crate) const ADMIN_KEY: &str = "my-api-key";
 
 pub struct TestApp {
-    pub address: String,
-    pub api_client: reqwest::Client,
+    pub router: Router,
 }
 
-/// Spawn a new application as a background task with a new database
-/// for each test, ensuring test isolation.
-pub async fn spawn_app() -> TestApp {
-    let port = portpicker::pick_unused_port().unwrap();
+/// Initialize a router with an in-memory sqlite database for each test.
+pub async fn app() -> TestApp {
+    let sqlite_pool = sqlite_init("sqlite::memory:").await;
 
-    let address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
-
-    // Pass in init args to initialize the database with an admin user.
-    let init_args = InitArgs {
-        name: "admin".to_owned(),
-        key: Some(ADMIN_KEY.to_owned()),
-    };
-
-    _ = tokio::spawn(shuttle_auth::start(
-        "sqlite::memory:",
-        address,
-        Some(init_args),
-    ));
-
-    // Give the test-app time to start
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
-    let client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
+    query("INSERT INTO users (account_name, key, account_tier) VALUES (?1, ?2, ?3)")
+        .bind("admin")
+        .bind(ADMIN_KEY)
+        .bind("admin")
+        .execute(&sqlite_pool)
+        .await
         .unwrap();
 
-    TestApp {
-        address: format!("http://localhost:{port}"),
-        api_client: client,
-    }
+    let router = ApiBuilder::new()
+        .with_sqlite_pool(sqlite_pool)
+        .await
+        .into_router();
+
+    // Give the test-app time to start
+    // tokio::time::sleep(Duration::from_millis(500)).await;
+
+    TestApp { router }
 }
 
 impl TestApp {
-    pub async fn post_user(&self, name: &str) -> reqwest::Response {
-        self.api_client
-            .post(&format!("{}/user/{}", &self.address, name))
-            .bearer_auth(ADMIN_KEY)
-            .send()
+    pub async fn send_request(&self, request: Request<Body>) -> Response {
+        self.router
+            .clone()
+            .oneshot(request)
             .await
             .expect("Failed to execute request.")
+    }
+
+    pub async fn post_user(&self, name: &str) -> Response {
+        let request = Request::builder()
+            .uri(format!("/user/{name}"))
+            .method("POST")
+            .header(AUTHORIZATION, format!("Bearer {ADMIN_KEY}"))
+            .body(Body::empty())
+            .unwrap();
+
+        self.send_request(request).await
+    }
+
+    pub async fn get_user(&self, name: &str) -> Response {
+        let request = Request::builder()
+            .uri(format!("/user/{name}"))
+            .header(AUTHORIZATION, format!("Bearer {ADMIN_KEY}"))
+            .body(Body::empty())
+            .unwrap();
+
+        self.send_request(request).await
     }
 }

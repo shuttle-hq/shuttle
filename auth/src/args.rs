@@ -8,18 +8,21 @@ pub struct Args {
     #[arg(long, default_value = "./")]
     pub state: PathBuf,
 
-    /// Address to bind to
-    #[arg(long, default_value = "127.0.0.1:8000")]
-    pub address: SocketAddr,
-
     #[command(subcommand)]
     pub command: Commands,
 }
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    Start,
+    Start(StartArgs),
     Init(InitArgs),
+}
+
+#[derive(clap::Args, Debug, Clone)]
+pub struct StartArgs {
+    /// Address to bind to
+    #[arg(long, default_value = "127.0.0.1:8000")]
+    pub address: SocketAddr,
 }
 
 #[derive(clap::Args, Debug, Clone)]

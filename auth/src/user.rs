@@ -12,7 +12,7 @@ use axum::{
 };
 use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Deserializer, Serialize};
-use sqlx::{query, Pool, Row, Sqlite};
+use sqlx::{query, Row, SqlitePool};
 use tracing::{trace, Span};
 
 use crate::{api::RouterState, error::Error};
@@ -25,8 +25,8 @@ pub(crate) trait UserManagement {
 }
 
 #[derive(Clone)]
-pub(crate) struct UserManager {
-    pub(crate) pool: Pool<Sqlite>,
+pub struct UserManager {
+    pub pool: SqlitePool,
 }
 
 #[async_trait]

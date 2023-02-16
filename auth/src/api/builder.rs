@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, str::FromStr};
+use std::net::SocketAddr;
 
 use axum::{
     middleware::from_extractor,
@@ -9,33 +9,29 @@ use shuttle_common::{
     backends::metrics::{Metrics, TraceLayer},
     request_span,
 };
-use sqlx::{
-    migrate::Migrator,
-    query,
-    sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous},
-    Pool, Sqlite, SqlitePool,
-};
+use sqlx::SqlitePool;
 use tracing::field;
 
-use crate::{
-    args::InitArgs,
-    user::{Key, UserManager},
-};
+use crate::user::UserManager;
 
 use super::handlers::{
     convert_cookie, convert_key, get_public_key, get_user, login, logout, post_user, refresh_token,
 };
 
-pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
-
 #[derive(Clone)]
-pub(crate) struct RouterState {
+pub struct RouterState {
     pub user_manager: UserManager,
 }
 
 pub struct ApiBuilder {
     router: Router<RouterState>,
-    sqlite_pool: Option<Pool<Sqlite>>,
+    pool: Option<SqlitePool>,
+}
+
+impl Default for ApiBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ApiBuilder {
@@ -57,66 +53,26 @@ impl ApiBuilder {
                 .build(),
             );
 
-        Self {
-            router,
-            sqlite_pool: None,
-        }
+        Self { router, pool: None }
     }
 
     /// Connect and migrate an SQLite pool at the given URI.
-    pub async fn with_sqlite_pool(mut self, db_uri: &str) -> Self {
-        let sqlite_options = SqliteConnectOptions::from_str(db_uri)
-            .unwrap()
-            .create_if_missing(true)
-            // To see the sources for choosing these settings, see:
-            // https://github.com/shuttle-hq/shuttle/pull/623
-            .journal_mode(SqliteJournalMode::Wal)
-            .synchronous(SqliteSynchronous::Normal);
-
-        let pool = SqlitePool::connect_with(sqlite_options).await.unwrap();
-
-        MIGRATIONS.run(&pool).await.unwrap();
-
-        self.sqlite_pool = Some(pool);
-
-        self
-    }
-
-    /// Insert an admin user into the SQLite pool.
-    pub async fn init_db(mut self, args: InitArgs) -> Self {
-        let pool = self.sqlite_pool.expect("an sqlite pool is required");
-
-        let key = match args.key {
-            Some(ref key) => Key::from_str(key).unwrap(),
-            None => Key::new_random(),
-        };
-
-        query("INSERT INTO users (account_name, key, account_tier) VALUES (?1, ?2, 'admin')")
-            .bind(&args.name)
-            .bind(&key)
-            .execute(&pool)
-            .await
-            .expect("failed to insert admin user");
-
-        println!("`{}` created as admin user with key: {key}", args.name);
-
-        self.sqlite_pool = Some(pool);
+    pub async fn with_sqlite_pool(mut self, pool: SqlitePool) -> Self {
+        self.pool = Some(pool);
         self
     }
 
     pub fn into_router(self) -> Router {
-        let pool = self.sqlite_pool.expect("an sqlite pool is required");
+        let pool = self.pool.expect("an sqlite pool is required");
 
         let user_manager = UserManager { pool };
         self.router.with_state(RouterState { user_manager })
     }
+}
 
-    pub async fn serve(self, address: SocketAddr) {
-        let router = self.into_router();
-
-        Server::bind(&address)
-            .serve(router.into_make_service())
-            .await
-            .unwrap_or_else(|_| panic!("Failed to bind to address: {}", address));
-    }
+pub async fn serve(router: Router, address: SocketAddr) {
+    Server::bind(&address)
+        .serve(router.into_make_service())
+        .await
+        .unwrap_or_else(|_| panic!("Failed to bind to address: {}", address));
 }

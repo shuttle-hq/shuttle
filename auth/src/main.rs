@@ -1,12 +1,17 @@
+use std::io;
+
 use clap::Parser;
 use opentelemetry::global;
+use sqlx::migrate::Migrator;
 use tracing::{info, trace};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
-use shuttle_auth::{start, Args, Commands};
+use shuttle_auth::{init, sqlite_init, start, Args, Commands};
+
+pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
 #[tokio::main]
-async fn main() {
+async fn main() -> io::Result<()> {
     let args = Args::parse();
 
     trace!(args = ?args, "parsed args");
@@ -32,6 +37,10 @@ async fn main() {
 
     let db_path = args.state.join("authentication.sqlite");
 
+    let db_uri = db_path.to_str().unwrap();
+
+    let pool = sqlite_init(db_uri).await;
+
     info!(
         "state db: {}",
         std::fs::canonicalize(&args.state)
@@ -39,12 +48,8 @@ async fn main() {
             .to_string_lossy()
     );
 
-    let db_uri = db_path.to_str().unwrap();
-
-    // If the start command is called, start the auth server with given DB path and address.
-    // If the init command is called, do the same but insert an admin user as well.
     match args.command {
-        Commands::Start => start(db_uri, args.address, None).await,
-        Commands::Init(init_args) => start(db_uri, args.address, Some(init_args)).await,
+        Commands::Start(args) => start(pool, args).await,
+        Commands::Init(args) => init(pool, args).await,
     }
 }

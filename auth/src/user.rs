@@ -1,6 +1,7 @@
 use std::{fmt::Formatter, str::FromStr};
 
 use async_trait::async_trait;
+use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Deserializer, Serialize};
 use sqlx::{query, Pool, Row, Sqlite};
 
@@ -20,44 +21,45 @@ pub(crate) struct UserManager {
 #[async_trait]
 impl UserManagement for UserManager {
     async fn create_user(&self, name: AccountName) -> Result<User, Error> {
-        // TODO: generate a secret
-        let secret = "my_secret".to_owned();
+        let key = Key::new_random();
 
-        query("INSERT INTO users (account_name, secret) VALUES (?1, ?2)")
+        query("INSERT INTO users (account_name, key) VALUES (?1, ?2)")
             .bind(&name)
-            .bind(&secret)
+            .bind(&key)
             .execute(&self.pool)
             .await?;
 
-        Ok(User::new_with_defaults(name, secret))
+        Ok(User::new_with_defaults(name, key))
     }
 
     // TODO: get from token?
     async fn get_user(&self, name: AccountName) -> Result<User, Error> {
-        query("SELECT account_name, secret, super_user, account_tier FROM users WHERE account_name = ?1")
-            .bind(&name)
-            .fetch_optional(&self.pool)
-            .await?
-            .map(|row| {
-                let permissions = Permissions::builder()
-                    .super_user(row.try_get("super_user").unwrap())
-                    .tier(row.try_get("account_tier").unwrap())
-                    .build();
+        query(
+            "SELECT account_name, key, super_user, account_tier FROM users WHERE account_name = ?1",
+        )
+        .bind(&name)
+        .fetch_optional(&self.pool)
+        .await?
+        .map(|row| {
+            let permissions = Permissions::builder()
+                .super_user(row.try_get("super_user").unwrap())
+                .tier(row.try_get("account_tier").unwrap())
+                .build();
 
-                User {
-                    name,
-                    secret: row.try_get("secret").unwrap(),
-                    permissions,
-                }
-            })
-            .ok_or(Error::UserNotFound)
+            User {
+                name,
+                key: row.try_get("key").unwrap(),
+                permissions,
+            }
+        })
+        .ok_or(Error::UserNotFound)
     }
 }
 
 #[derive(Clone, Deserialize, PartialEq, Eq, Serialize, Debug)]
 pub struct User {
     pub name: AccountName,
-    pub secret: String,
+    pub key: Key,
     pub permissions: Permissions,
 }
 
@@ -67,12 +69,62 @@ impl User {
         self.permissions.is_super_user()
     }
 
-    pub fn new_with_defaults(name: AccountName, secret: String) -> Self {
+    pub fn new_with_defaults(name: AccountName, key: Key) -> Self {
         Self {
             name,
-            secret,
+            key,
             permissions: Permissions::default(),
         }
+    }
+}
+
+#[derive(Clone, Debug, sqlx::Type, PartialEq, Hash, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+#[sqlx(transparent)]
+pub struct Key(String);
+
+impl Key {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+// #[async_trait]
+// impl<S> FromRequestParts<S> for Key
+// where
+//     S: Send + Sync,
+// {
+//     type Rejection = Error;
+
+//     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+//         let key = TypedHeader::<Authorization<Bearer>>::from_request_parts(parts, state)
+//             .await
+//             .map_err(|_| Error::from(ErrorKind::KeyMissing))
+//             .and_then(|TypedHeader(Authorization(bearer))| bearer.token().trim().parse())?;
+
+//         trace!(%key, "got bearer key");
+
+//         Ok(key)
+//     }
+// }
+
+impl std::fmt::Display for Key {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl FromStr for Key {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self(s.to_string()))
+    }
+}
+
+impl Key {
+    pub fn new_random() -> Self {
+        Self(Alphanumeric.sample_string(&mut rand::thread_rng(), 16))
     }
 }
 

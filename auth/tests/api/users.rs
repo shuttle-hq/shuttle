@@ -12,7 +12,7 @@ async fn post_user() {
     let user: Value = serde_json::from_slice(&response.bytes().await.unwrap()).unwrap();
 
     assert_eq!(user["name"], "test-user");
-    assert_eq!(user["secret"], "my_secret");
+    assert!(user["key"].to_string().is_ascii());
 }
 
 #[tokio::test]

@@ -1,9 +1,13 @@
-use std::ops::Add;
+use std::{future::Future, ops::Add, pin::Pin};
 
+use bytes::Bytes;
 use chrono::{Duration, Utc};
-use http::StatusCode;
+use http::{header, Request, Response, StatusCode};
+use http_body::combinators::UnsyncBoxBody;
+use hyper::Body;
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
+use tower::{Layer, Service};
 use tracing::error;
 
 /// The scope of operations that can be performed on shuttle
@@ -84,7 +88,7 @@ impl Claim {
         })
     }
 
-    pub fn from_token(token: String, decoding_key: &DecodingKey) -> Result<Self, StatusCode> {
+    pub fn from_token(token: &str, decoding_key: &DecodingKey) -> Result<Self, StatusCode> {
         let mut validation = Validation::new(jsonwebtoken::Algorithm::EdDSA);
         validation.set_issuer(&["shuttle"]);
 
@@ -120,16 +124,112 @@ impl Claim {
     }
 }
 
+/// Layer to validate JWT tokens with a public key. Valid claims are added to the request extension
+#[derive(Clone)]
+pub struct JwtAuthenticationLayer {
+    decoding_key: DecodingKey,
+}
+
+impl JwtAuthenticationLayer {
+    /// Create a new layer to validate JWT tokens with the given public key
+    pub fn new(decoding_key: DecodingKey) -> Self {
+        Self { decoding_key }
+    }
+}
+
+impl<S> Layer<S> for JwtAuthenticationLayer {
+    type Service = JwtAuthentication<S>;
+
+    fn layer(&self, inner: S) -> Self::Service {
+        JwtAuthentication {
+            inner,
+            decoding_key: self.decoding_key.clone(),
+        }
+    }
+}
+
+/// Middleware for validating a valid JWT token is present on "authorization: bearer <token>"
+#[derive(Clone)]
+pub struct JwtAuthentication<S> {
+    inner: S,
+    decoding_key: DecodingKey,
+}
+
+impl<S, ResponseError> Service<Request<Body>> for JwtAuthentication<S>
+where
+    S: Service<Request<Body>, Response = Response<UnsyncBoxBody<Bytes, ResponseError>>>
+        + Send
+        + 'static,
+    S::Future: Send + 'static,
+{
+    type Response = S::Response;
+    type Error = S::Error;
+    type Future =
+        Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
+
+    fn poll_ready(
+        &mut self,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
+
+    fn call(&mut self, mut req: Request<Body>) -> Self::Future {
+        let status = if let Some(bearer) = req.headers().get(header::AUTHORIZATION) {
+            if let Ok(value) = bearer.to_str() {
+                if let Some(token) = value.strip_prefix("bearer") {
+                    let token = token.trim();
+
+                    match Claim::from_token(token, &self.decoding_key) {
+                        Ok(claim) => {
+                            req.extensions_mut().insert(claim);
+                            Ok(())
+                        }
+                        Err(code) => Err(code),
+                    }
+                } else {
+                    // "bearer" prefix is not present
+                    Err(StatusCode::BAD_REQUEST)
+                }
+            } else {
+                // value is not valid ASCII
+                Err(StatusCode::BAD_REQUEST)
+            }
+        } else {
+            // "authorization" header not present
+            Err(StatusCode::UNAUTHORIZED)
+        };
+
+        if let Err(status) = status {
+            // Could not validate claim
+            Box::pin(async move {
+                Ok(Response::builder()
+                    .status(status)
+                    .body(Default::default())
+                    .unwrap())
+            })
+        } else {
+            let future = self.inner.call(req);
+
+            Box::pin(async move { future.await })
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use axum::{routing::get, Extension, Router};
+    use http::{Request, StatusCode};
+    use hyper::{body, Body};
     use jsonwebtoken::{DecodingKey, EncodingKey};
     use ring::{
         hmac, rand,
         signature::{self, Ed25519KeyPair, KeyPair},
     };
     use serde_json::json;
+    use tower::{ServiceBuilder, ServiceExt};
 
-    use super::{Claim, Scope};
+    use super::{Claim, JwtAuthenticationLayer, Scope};
 
     #[test]
     fn to_token_and_back() {
@@ -145,9 +245,98 @@ mod tests {
         let pair = Ed25519KeyPair::from_pkcs8(doc.as_ref()).unwrap();
         let decoding_key = DecodingKey::from_ed_der(pair.public_key().as_ref());
 
-        let new = Claim::from_token(token, &decoding_key).unwrap();
+        let new = Claim::from_token(&token, &decoding_key).unwrap();
 
         assert_eq!(claim, new);
+    }
+
+    #[tokio::test]
+    async fn authorization_layer() {
+        let claim = Claim::new(
+            "ferries".to_string(),
+            vec![Scope::Deployment, Scope::Project],
+        );
+
+        let doc = signature::Ed25519KeyPair::generate_pkcs8(&rand::SystemRandom::new()).unwrap();
+        let encoding_key = EncodingKey::from_ed_der(doc.as_ref());
+        let pair = Ed25519KeyPair::from_pkcs8(doc.as_ref()).unwrap();
+        let decoding_key = DecodingKey::from_ed_der(pair.public_key().as_ref());
+
+        let router =
+            Router::new()
+                .route(
+                    "/",
+                    get(|Extension(claim): Extension<Claim>| async move {
+                        format!("Hello, {}", claim.sub)
+                    }),
+                )
+                .layer(ServiceBuilder::new().layer(JwtAuthenticationLayer::new(decoding_key)));
+
+        //////////////////////////////////////////////////////////////////////////
+        // Test token missing
+        //////////////////////////////////////////////////////////////////////////
+        let response = router
+            .clone()
+            .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        //////////////////////////////////////////////////////////////////////////
+        // Test bearer missing
+        //////////////////////////////////////////////////////////////////////////
+        let token = claim.clone().into_token(&encoding_key).unwrap();
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/")
+                    .header("authorization", format!("{token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        //////////////////////////////////////////////////////////////////////////
+        // Test valid
+        //////////////////////////////////////////////////////////////////////////
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/")
+                    .header("authorization", format!("bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        //////////////////////////////////////////////////////////////////////////
+        // Test valid extra padding
+        //////////////////////////////////////////////////////////////////////////
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/")
+                    .header("authorization", format!("bearer   {token}   "))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = body::to_bytes(response.into_body()).await.unwrap();
+
+        assert_eq!(&body[..], b"Hello, ferries");
     }
 
     // Test changing to a symmetric key is not possible
@@ -187,7 +376,7 @@ mod tests {
         let sig = base64::encode_config(sig, base64::URL_SAFE_NO_PAD);
         let token = format!("{msg}.{sig}");
 
-        Claim::from_token(token, &decoding_key).unwrap();
+        Claim::from_token(&token, &decoding_key).unwrap();
     }
 
     // Test removing the alg is not possible
@@ -219,7 +408,7 @@ mod tests {
         let pair = Ed25519KeyPair::from_pkcs8(doc.as_ref()).unwrap();
         let decoding_key = DecodingKey::from_ed_der(pair.public_key().as_ref());
 
-        Claim::from_token(token, &decoding_key).unwrap();
+        Claim::from_token(&token, &decoding_key).unwrap();
     }
 
     // Test removing the signature is not possible
@@ -242,7 +431,7 @@ mod tests {
         let pair = Ed25519KeyPair::from_pkcs8(doc.as_ref()).unwrap();
         let decoding_key = DecodingKey::from_ed_der(pair.public_key().as_ref());
 
-        Claim::from_token(token, &decoding_key).unwrap();
+        Claim::from_token(&token, &decoding_key).unwrap();
     }
 
     // Test changing the issuer is not possible
@@ -278,6 +467,6 @@ mod tests {
         let sig = base64::encode_config(sig, base64::URL_SAFE_NO_PAD);
         let token = format!("{msg}.{sig}");
 
-        Claim::from_token(token, &decoding_key).unwrap();
+        Claim::from_token(&token, &decoding_key).unwrap();
     }
 }

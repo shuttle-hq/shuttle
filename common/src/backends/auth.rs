@@ -129,6 +129,9 @@ impl Claim {
 }
 
 /// Layer to validate JWT tokens with a public key. Valid claims are added to the request extension
+///
+/// It can also be used with tonic. See:
+/// https://github.com/hyperium/tonic/blob/master/examples/src/tower/server.rs
 #[derive(Clone)]
 pub struct JwtAuthenticationLayer {
     decoding_key: DecodingKey,

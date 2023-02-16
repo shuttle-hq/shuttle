@@ -259,7 +259,7 @@ impl<'de> Deserialize<'de> for AccountName {
     {
         String::deserialize(deserializer)?
             .parse()
-            .map_err(|_err| todo!())
+            .map_err(serde::de::Error::custom)
     }
 }
 

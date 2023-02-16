@@ -5803,11 +5803,20 @@ dependencies = [
 name = "shuttle-auth"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "async-trait",
  "axum",
  "clap 4.0.27",
  "opentelemetry",
  "opentelemetry-datadog",
+ "portpicker",
+ "rand 0.8.5",
+ "reqwest",
+ "serde",
+ "serde_json",
  "shuttle-common",
+ "sqlx",
+ "thiserror",
  "tokio",
  "tracing",
  "tracing-opentelemetry",

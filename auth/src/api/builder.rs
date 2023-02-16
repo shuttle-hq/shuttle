@@ -96,7 +96,7 @@ impl ApiBuilder {
             .bind(&key)
             .execute(&pool)
             .await
-            .expect("failed to insert initialize with admin user");
+            .expect("failed to insert admin user");
 
         println!("`{}` created as admin user with key: {key}", args.name);
 

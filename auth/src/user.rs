@@ -1,16 +1,24 @@
 use std::{fmt::Formatter, str::FromStr};
 
 use async_trait::async_trait;
+use axum::{
+    extract::{FromRef, FromRequestParts},
+    headers::{authorization::Bearer, Authorization},
+    http::request::Parts,
+    TypedHeader,
+};
 use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Deserializer, Serialize};
 use sqlx::{query, Pool, Row, Sqlite};
+use tracing::{trace, Span};
 
-use crate::error::Error;
+use crate::{api::RouterState, error::Error};
 
 #[async_trait]
 pub(crate) trait UserManagement {
     async fn create_user(&self, name: AccountName) -> Result<User, Error>;
     async fn get_user(&self, name: AccountName) -> Result<User, Error>;
+    async fn get_user_by_key(&self, key: Key) -> Result<User, Error>;
 }
 
 #[derive(Clone)]
@@ -32,7 +40,6 @@ impl UserManagement for UserManager {
         Ok(User::new_with_defaults(name, key))
     }
 
-    // TODO: get from token?
     async fn get_user(&self, name: AccountName) -> Result<User, Error> {
         query("SELECT account_name, key, account_tier FROM users WHERE account_name = ?1")
             .bind(&name)
@@ -46,6 +53,25 @@ impl UserManagement for UserManager {
                 User {
                     name,
                     key: row.try_get("key").unwrap(),
+                    permissions,
+                }
+            })
+            .ok_or(Error::UserNotFound)
+    }
+
+    async fn get_user_by_key(&self, key: Key) -> Result<User, Error> {
+        query("SELECT account_name, key, account_tier FROM users WHERE key = ?1")
+            .bind(&key)
+            .fetch_optional(&self.pool)
+            .await?
+            .map(|row| {
+                let permissions = Permissions::builder()
+                    .tier(row.try_get("account_tier").unwrap())
+                    .build();
+
+                User {
+                    name: row.try_get("account_name").unwrap(),
+                    key,
                     permissions,
                 }
             })
@@ -73,6 +99,39 @@ impl User {
             permissions: Permissions::default(),
         }
     }
+
+    async fn retrieve_from_key(user_manager: &UserManager, key: Key) -> Result<User, Error> {
+        let user = user_manager.get_user_by_key(key).await?;
+
+        trace!(%user.name, "got account from key");
+
+        Ok(user)
+    }
+}
+
+#[async_trait]
+impl<S> FromRequestParts<S> for User
+where
+    S: Send + Sync,
+    RouterState: FromRef<S>,
+{
+    type Rejection = Error;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let key = Key::from_request_parts(parts, state).await?;
+
+        let RouterState { user_manager } = RouterState::from_ref(state);
+
+        let user = User::retrieve_from_key(&user_manager, key)
+            .await
+            // Absord any error into `Unauthorized`
+            .map_err(|_| Error::Unauthorized)?;
+
+        // Record current account name for tracing purposes
+        Span::current().record("account.name", &user.name.to_string());
+
+        Ok(user)
+    }
 }
 
 #[derive(Clone, Debug, sqlx::Type, PartialEq, Hash, Eq, Serialize, Deserialize)]
@@ -80,30 +139,30 @@ impl User {
 #[sqlx(transparent)]
 pub struct Key(String);
 
-impl Key {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-// #[async_trait]
-// impl<S> FromRequestParts<S> for Key
-// where
-//     S: Send + Sync,
-// {
-//     type Rejection = Error;
-
-//     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-//         let key = TypedHeader::<Authorization<Bearer>>::from_request_parts(parts, state)
-//             .await
-//             .map_err(|_| Error::from(ErrorKind::KeyMissing))
-//             .and_then(|TypedHeader(Authorization(bearer))| bearer.token().trim().parse())?;
-
-//         trace!(%key, "got bearer key");
-
-//         Ok(key)
+// impl Key {
+//     pub fn as_str(&self) -> &str {
+//         &self.0
 //     }
 // }
+
+#[async_trait]
+impl<S> FromRequestParts<S> for Key
+where
+    S: Send + Sync,
+{
+    type Rejection = Error;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let key = TypedHeader::<Authorization<Bearer>>::from_request_parts(parts, state)
+            .await
+            .map_err(|_| Error::KeyMissing)
+            .and_then(|TypedHeader(Authorization(bearer))| bearer.token().trim().parse())?;
+
+        trace!(%key, "got bearer key");
+
+        Ok(key)
+    }
+}
 
 impl std::fmt::Display for Key {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -201,5 +260,28 @@ impl<'de> Deserialize<'de> for AccountName {
         String::deserialize(deserializer)?
             .parse()
             .map_err(|_err| todo!())
+    }
+}
+
+pub struct Admin {
+    pub user: User,
+}
+
+#[async_trait]
+impl<S> FromRequestParts<S> for Admin
+where
+    S: Send + Sync,
+    RouterState: FromRef<S>,
+{
+    type Rejection = Error;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let user = User::from_request_parts(parts, state).await?;
+
+        if user.is_admin() {
+            Ok(Self { user })
+        } else {
+            Err(Error::Forbidden)
+        }
     }
 }

@@ -1,4 +1,4 @@
 mod builder;
 mod handlers;
 
-pub use builder::ApiBuilder;
+pub(crate) use builder::{ApiBuilder, RouterState};

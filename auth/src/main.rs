@@ -1,8 +1,9 @@
 use clap::Parser;
 use opentelemetry::global;
-use shuttle_auth::{start, Args};
 use tracing::{info, trace};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+
+use shuttle_auth::{start, Args, Commands};
 
 #[tokio::main]
 async fn main() {
@@ -40,5 +41,10 @@ async fn main() {
 
     let db_uri = db_path.to_str().unwrap();
 
-    start(args.address, db_uri).await;
+    // If the start command is called, start the auth server with given DB path and address.
+    // If the init command is called, do the same but insert an admin user as well.
+    match args.command {
+        Commands::Start => start(db_uri, args.address, None).await,
+        Commands::Init(init_args) => start(db_uri, args.address, Some(init_args)).await,
+    }
 }

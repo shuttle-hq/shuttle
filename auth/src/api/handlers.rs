@@ -7,11 +7,12 @@ use tracing::instrument;
 use crate::{
     api::builder::RouterState,
     error::Error,
-    user::{AccountName, User, UserManagement},
+    user::{AccountName, Admin, User, UserManagement},
 };
 
 #[instrument(skip(user_manager))]
 pub(crate) async fn get_user(
+    _: Admin,
     State(RouterState { user_manager }): State<RouterState>,
     Path(account_name): Path<AccountName>,
 ) -> Result<Json<User>, Error> {
@@ -22,6 +23,7 @@ pub(crate) async fn get_user(
 
 #[instrument(skip(user_manager))]
 pub(crate) async fn post_user(
+    _: Admin,
     State(RouterState { user_manager }): State<RouterState>,
     Path(account_name): Path<AccountName>,
 ) -> Result<Json<User>, Error> {

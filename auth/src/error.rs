@@ -12,6 +12,12 @@ use shuttle_common::models::error::ApiError;
 pub enum Error {
     #[error("User could not be found")]
     UserNotFound,
+    #[error("API key is missing.")]
+    KeyMissing,
+    #[error("Unauthorized.")]
+    Unauthorized,
+    #[error("Forbidden.")]
+    Forbidden,
     #[error("Database error: {0}")]
     Database(#[from] sqlx::Error),
     #[error(transparent)]
@@ -36,7 +42,10 @@ impl Serialize for Error {
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
         let code = match self {
-            Error::Database(_) => StatusCode::NOT_FOUND,
+            Error::Forbidden => StatusCode::FORBIDDEN,
+            Error::Unauthorized => StatusCode::UNAUTHORIZED,
+            Error::KeyMissing => StatusCode::BAD_REQUEST,
+            Error::Database(_) | Error::UserNotFound => StatusCode::NOT_FOUND,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
 

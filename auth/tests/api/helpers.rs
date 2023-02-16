@@ -3,6 +3,10 @@ use std::{
     time::Duration,
 };
 
+use shuttle_auth::InitArgs;
+
+pub(crate) const ADMIN_KEY: &str = "my-api-key";
+
 pub struct TestApp {
     pub address: String,
     pub api_client: reqwest::Client,
@@ -15,7 +19,17 @@ pub async fn spawn_app() -> TestApp {
 
     let address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
 
-    _ = tokio::spawn(shuttle_auth::start(address, "sqlite::memory:"));
+    // Pass in init args to initialize the database with an admin user.
+    let init_args = InitArgs {
+        name: "admin".to_owned(),
+        key: Some(ADMIN_KEY.to_owned()),
+    };
+
+    _ = tokio::spawn(shuttle_auth::start(
+        "sqlite::memory:",
+        address,
+        Some(init_args),
+    ));
 
     // Give the test-app time to start
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -35,6 +49,7 @@ impl TestApp {
     pub async fn post_user(&self, name: &str) -> reqwest::Response {
         self.api_client
             .post(&format!("{}/user/{}", &self.address, name))
+            .bearer_auth(ADMIN_KEY)
             .send()
             .await
             .expect("Failed to execute request.")

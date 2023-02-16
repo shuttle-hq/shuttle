@@ -11,12 +11,16 @@ use shuttle_common::{
 };
 use sqlx::{
     migrate::Migrator,
+    query,
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous},
     Pool, Sqlite, SqlitePool,
 };
 use tracing::field;
 
-use crate::user::UserManager;
+use crate::{
+    args::InitArgs,
+    user::{Key, UserManager},
+};
 
 use super::handlers::{
     convert_cookie, convert_key, get_public_key, get_user, login, logout, post_user, refresh_token,
@@ -59,11 +63,13 @@ impl ApiBuilder {
         }
     }
 
+    /// Connect and migrate an SQLite pool at the given URI.
     pub async fn with_sqlite_pool(mut self, db_uri: &str) -> Self {
-        // https://github.com/shuttle-hq/shuttle/pull/623
         let sqlite_options = SqliteConnectOptions::from_str(db_uri)
             .unwrap()
             .create_if_missing(true)
+            // To see the sources for choosing these settings, see:
+            // https://github.com/shuttle-hq/shuttle/pull/623
             .journal_mode(SqliteJournalMode::Wal)
             .synchronous(SqliteSynchronous::Normal);
 
@@ -73,6 +79,28 @@ impl ApiBuilder {
 
         self.sqlite_pool = Some(pool);
 
+        self
+    }
+
+    /// Insert an admin user into the SQLite pool.
+    pub async fn init_db(mut self, args: InitArgs) -> Self {
+        let pool = self.sqlite_pool.expect("an sqlite pool is required");
+
+        let key = match args.key {
+            Some(ref key) => Key::from_str(key).unwrap(),
+            None => Key::new_random(),
+        };
+
+        query("INSERT INTO users (account_name, key, account_tier) VALUES (?1, ?2, 'admin')")
+            .bind(&args.name)
+            .bind(&key)
+            .execute(&pool)
+            .await
+            .expect("failed to insert initialize with admin user");
+
+        println!("`{}` created as admin user with key: {key}", args.name);
+
+        self.sqlite_pool = Some(pool);
         self
     }
 

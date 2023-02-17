@@ -2,7 +2,10 @@ use jsonwebtoken::{DecodingKey, EncodingKey};
 use ring::signature::{Ed25519KeyPair, KeyPair};
 
 pub trait KeyManager: Send + Sync {
+    /// Get a private key for signing secrets
     fn private_key(&self) -> &EncodingKey;
+
+    /// Get a public key to verify signed secrets
     fn public_key(&self) -> &DecodingKey;
 }
 

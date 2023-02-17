@@ -13,7 +13,7 @@ use shuttle_common::backends::auth::Scope;
 use sqlx::{query, Row, SqlitePool};
 use tracing::{trace, Span};
 
-use crate::{api::RouterState, error::Error};
+use crate::{api::UserManagerState, error::Error};
 
 #[async_trait]
 pub trait UserManagement: Send + Sync {
@@ -94,14 +94,14 @@ impl User {
 impl<S> FromRequestParts<S> for User
 where
     S: Send + Sync,
-    RouterState: FromRef<S>,
+    UserManagerState: FromRef<S>,
 {
     type Rejection = Error;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let key = Key::from_request_parts(parts, state).await?;
 
-        let RouterState { user_manager, .. } = RouterState::from_ref(state);
+        let user_manager: UserManagerState = UserManagerState::from_ref(state);
 
         let user = user_manager
             .get_user_by_key(key)
@@ -240,7 +240,7 @@ pub struct Admin {
 impl<S> FromRequestParts<S> for Admin
 where
     S: Send + Sync,
-    RouterState: FromRef<S>,
+    UserManagerState: FromRef<S>,
 {
     type Rejection = Error;
 

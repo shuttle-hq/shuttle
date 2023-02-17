@@ -1,4 +1,4 @@
-use jsonwebtoken::{DecodingKey, EncodingKey};
+use jsonwebtoken::EncodingKey;
 use ring::signature::{Ed25519KeyPair, KeyPair};
 
 pub trait KeyManager: Send + Sync {
@@ -6,12 +6,12 @@ pub trait KeyManager: Send + Sync {
     fn private_key(&self) -> &EncodingKey;
 
     /// Get a public key to verify signed secrets
-    fn public_key(&self) -> &DecodingKey;
+    fn public_key(&self) -> &[u8];
 }
 
 pub struct EdDsaManager {
     encoding_key: EncodingKey,
-    decoding_key: DecodingKey,
+    public_key: Vec<u8>,
 }
 
 impl EdDsaManager {
@@ -20,11 +20,11 @@ impl EdDsaManager {
             .expect("to create a PKCS8 for edDSA");
         let encoding_key = EncodingKey::from_ed_der(doc.as_ref());
         let pair = Ed25519KeyPair::from_pkcs8(doc.as_ref()).expect("to create a key pair");
-        let decoding_key = DecodingKey::from_ed_der(pair.public_key().as_ref());
+        let public_key = pair.public_key();
 
         Self {
             encoding_key,
-            decoding_key,
+            public_key: public_key.as_ref().to_vec(),
         }
     }
 }
@@ -34,7 +34,7 @@ impl KeyManager for EdDsaManager {
         &self.encoding_key
     }
 
-    fn public_key(&self) -> &DecodingKey {
-        &self.decoding_key
+    fn public_key(&self) -> &[u8] {
+        &self.public_key
     }
 }

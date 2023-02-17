@@ -64,7 +64,7 @@ pub struct Claim {
     /// Not Before (as UTC timestamp).
     nbf: usize,
     /// Subject (whom token refers to).
-    sub: String,
+    pub sub: String,
     /// Scopes this token can access
     pub scopes: Vec<Scope>,
 }
@@ -104,11 +104,12 @@ impl Claim {
         })
     }
 
-    pub fn from_token(token: &str, decoding_key: &DecodingKey) -> Result<Self, StatusCode> {
+    pub fn from_token(token: &str, public_key: &[u8]) -> Result<Self, StatusCode> {
+        let decoding_key = DecodingKey::from_ed_der(public_key);
         let mut validation = Validation::new(jsonwebtoken::Algorithm::EdDSA);
         validation.set_issuer(&[ISS]);
 
-        let claim = decode(token, decoding_key, &validation)
+        let claim = decode(token, &decoding_key, &validation)
             .map_err(|err| {
                 error!(
                     error = &err as &dyn std::error::Error,
@@ -195,15 +196,13 @@ where
 
     fn call(&mut self, mut req: Request<Body>) -> Self::Future {
         let error = match req.headers().typed_try_get::<Authorization<Bearer>>() {
-            Ok(Some(bearer)) => {
-                match Claim::from_token(bearer.token().trim(), &self.decoding_key) {
-                    Ok(claim) => {
-                        req.extensions_mut().insert(claim);
-                        None
-                    }
-                    Err(code) => Some(code),
+            Ok(Some(bearer)) => match Claim::from_token(bearer.token().trim(), &[0; 64]) {
+                Ok(claim) => {
+                    req.extensions_mut().insert(claim);
+                    None
                 }
-            }
+                Err(code) => Some(code),
+            },
             Ok(None) => Some(StatusCode::UNAUTHORIZED),
             Err(_) => Some(StatusCode::BAD_REQUEST),
         };

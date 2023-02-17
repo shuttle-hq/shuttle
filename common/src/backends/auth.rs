@@ -2,7 +2,8 @@ use std::{future::Future, ops::Add, pin::Pin};
 
 use bytes::Bytes;
 use chrono::{Duration, Utc};
-use http::{header, Request, Response, StatusCode};
+use headers::{authorization::Bearer, Authorization, HeaderMapExt};
+use http::{Request, Response, StatusCode};
 use http_body::combinators::UnsyncBoxBody;
 use hyper::Body;
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
@@ -12,7 +13,6 @@ use tracing::error;
 
 const EXP_MINUTES: i64 = 5;
 const ISS: &str = "shuttle";
-const BEARER: &str = "bearer";
 
 /// The scope of operations that can be performed on shuttle
 /// Every scope defaults to read and will use a suffix for updating tasks
@@ -182,32 +182,21 @@ where
     }
 
     fn call(&mut self, mut req: Request<Body>) -> Self::Future {
-        let status = if let Some(bearer) = req.headers().get(header::AUTHORIZATION) {
-            if let Ok(value) = bearer.to_str() {
-                if let Some(token) = value.strip_prefix(BEARER) {
-                    let token = token.trim();
-
-                    match Claim::from_token(token, &self.decoding_key) {
-                        Ok(claim) => {
-                            req.extensions_mut().insert(claim);
-                            Ok(())
-                        }
-                        Err(code) => Err(code),
+        let error = match req.headers().typed_try_get::<Authorization<Bearer>>() {
+            Ok(Some(bearer)) => {
+                match Claim::from_token(bearer.token().trim(), &self.decoding_key) {
+                    Ok(claim) => {
+                        req.extensions_mut().insert(claim);
+                        None
                     }
-                } else {
-                    // "bearer" prefix is not present
-                    Err(StatusCode::BAD_REQUEST)
+                    Err(code) => Some(code),
                 }
-            } else {
-                // value is not valid ASCII
-                Err(StatusCode::BAD_REQUEST)
             }
-        } else {
-            // "authorization" header not present
-            Err(StatusCode::UNAUTHORIZED)
+            Ok(None) => Some(StatusCode::UNAUTHORIZED),
+            Err(_) => Some(StatusCode::BAD_REQUEST),
         };
 
-        if let Err(status) = status {
+        if let Some(status) = error {
             // Could not validate claim
             Box::pin(async move {
                 Ok(Response::builder()
@@ -316,7 +305,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .uri("/")
-                    .header("authorization", format!("bearer {token}"))
+                    .header("authorization", format!("Bearer {token}"))
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -333,7 +322,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .uri("/")
-                    .header("authorization", format!("bearer   {token}   "))
+                    .header("Authorization", format!("Bearer   {token}   "))
                     .body(Body::empty())
                     .unwrap(),
             )

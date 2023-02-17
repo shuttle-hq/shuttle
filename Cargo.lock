@@ -5863,6 +5863,7 @@ dependencies = [
  "chrono",
  "comfy-table",
  "crossterm",
+ "headers",
  "http 0.2.8",
  "http-body",
  "hyper",

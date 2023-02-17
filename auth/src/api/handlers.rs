@@ -1,6 +1,6 @@
 use crate::{
     error::Error,
-    user::{AccountName, AccountTier, Admin},
+    user::{AccountName, AccountTier, Admin, Key, User},
 };
 use axum::{
     extract::{Path, State},
@@ -12,7 +12,10 @@ use serde::{Deserialize, Serialize};
 use shuttle_common::{backends::auth::Claim, models::auth};
 use tracing::instrument;
 
-use super::builder::{KeyManagerState, UserManagerState};
+use super::{
+    builder::{KeyManagerState, UserManagerState},
+    RouterState,
+};
 
 #[instrument(skip(user_manager))]
 pub(crate) async fn get_user(
@@ -78,7 +81,29 @@ pub(crate) async fn convert_cookie(
     Ok(Json(response))
 }
 
-pub(crate) async fn convert_key() {}
+/// Convert a valid API-key bearer token to a JWT.
+pub(crate) async fn convert_key(
+    State(RouterState {
+        key_manager,
+        user_manager,
+    }): State<RouterState>,
+    key: Key,
+) -> Result<Json<shuttle_common::backends::auth::ConvertResponse>, StatusCode> {
+    let User {
+        name, account_tier, ..
+    } = user_manager
+        .get_user_by_key(key)
+        .await
+        .map_err(|_| StatusCode::UNAUTHORIZED)?;
+
+    let claim = Claim::new(name.to_string(), account_tier.into());
+
+    let response = shuttle_common::backends::auth::ConvertResponse {
+        token: claim.into_token(key_manager.private_key())?,
+    };
+
+    Ok(Json(response))
+}
 
 pub(crate) async fn refresh_token() {}
 

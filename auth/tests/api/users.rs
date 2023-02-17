@@ -16,7 +16,7 @@ async fn post_user() {
 
     let response = app.send_request(request).await;
 
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
     // POST user with invalid bearer token.
     let request = Request::builder()
@@ -75,7 +75,7 @@ async fn get_user() {
 
     let response = app.send_request(request).await;
 
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
     // GET user with invalid bearer token.
     let request = Request::builder()

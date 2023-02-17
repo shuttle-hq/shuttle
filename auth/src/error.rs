@@ -40,8 +40,7 @@ impl IntoResponse for Error {
     fn into_response(self) -> Response {
         let code = match self {
             Error::Forbidden => StatusCode::FORBIDDEN,
-            Error::Unauthorized => StatusCode::UNAUTHORIZED,
-            Error::KeyMissing => StatusCode::BAD_REQUEST,
+            Error::Unauthorized | Error::KeyMissing => StatusCode::UNAUTHORIZED,
             Error::Database(_) | Error::UserNotFound => StatusCode::NOT_FOUND,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };

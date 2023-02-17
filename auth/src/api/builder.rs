@@ -65,7 +65,7 @@ impl ApiBuilder {
             .route("/login", post(login))
             .route("/logout", post(logout))
             .route("/auth/session", get(convert_cookie))
-            .route("/auth/key", post(convert_key))
+            .route("/auth/key", get(convert_key))
             .route("/auth/refresh", post(refresh_token))
             .route("/public-key", get(get_public_key))
             .route("/user/:account_name", get(get_user))

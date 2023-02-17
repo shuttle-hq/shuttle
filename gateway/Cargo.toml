@@ -28,14 +28,14 @@ opentelemetry = { workspace = true }
 opentelemetry-datadog = { workspace = true }
 opentelemetry-http = { workspace = true }
 pem = "1.1.0"
-rand = "0.8.5"
+rand = { workspace = true }
 rcgen = "0.10.0"
 rustls = "0.20.7"
 rustls-pemfile = "1.0.1"
 serde = { workspace = true, features = [ "derive" ] }
 serde_json = { workspace = true }
 sqlx = { version = "0.6.2", features = [ "sqlite", "json", "runtime-tokio-native-tls", "migrate" ] }
-strum = { version = "0.24.1", features = ["derive"] }
+strum = { workspace = true }
 tokio = { version = "1.22.0", features = [ "full" ] }
 tower = { workspace = true, features = [ "steer" ] }
 tracing = { workspace = true }
@@ -52,7 +52,7 @@ features = ["backend", "models"]
 anyhow = { workspace = true }
 base64 = "0.13.1"
 colored = "2.0.0"
-portpicker = "0.1.1"
+portpicker = { workspace = true }
 snailquote = "0.3.1"
 tempfile = "3.3.0"
 

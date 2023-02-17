@@ -27,7 +27,7 @@ opentelemetry = { workspace = true }
 opentelemetry-datadog = { workspace = true }
 opentelemetry-http = { workspace = true }
 pipe = "0.4.0"
-portpicker = "0.1.1"
+portpicker = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sqlx = { version = "0.6.2", features = [
@@ -38,7 +38,7 @@ sqlx = { version = "0.6.2", features = [
   "migrate",
   "uuid",
 ] }
-strum = { version = "0.24.1", features = ["derive"] }
+strum = { workspace = true }
 tar = "0.4.38"
 thiserror = { workspace = true }
 tokio = { version = "1.22.0", features = ["fs"] }
@@ -65,5 +65,5 @@ features = ["loader"]
 [dev-dependencies]
 ctor = "0.1.26"
 hex = "0.4.3"
-rand = "0.8.5"
+rand = { workspace = true }
 tempfile = "3.3.0"

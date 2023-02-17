@@ -59,7 +59,7 @@ optional = true
 workspace = true
 
 [dev-dependencies]
-portpicker = "0.1.1"
+portpicker = { workspace = true }
 sqlx = { version = "0.6.2", features = ["runtime-tokio-native-tls", "postgres"] }
 tokio = { version = "1.22.0", features = ["macros"] }
 uuid = { workspace = true, features = ["v4"] }

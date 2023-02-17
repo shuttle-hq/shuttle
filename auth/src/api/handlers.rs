@@ -47,7 +47,7 @@ pub(crate) async fn login(
         .insert("account_name", user.name.clone())
         .expect("to set account name");
     session
-        .insert("account_tier", user.account_tier.clone())
+        .insert("account_tier", user.account_tier)
         .expect("to set account name");
 
     Ok(Json(user.into()))
@@ -63,11 +63,11 @@ pub(crate) async fn convert_cookie(
 ) -> Result<Json<shuttle_common::backends::auth::ConvertResponse>, StatusCode> {
     let account_name: String = session
         .get("account_name")
-        .ok_or_else(|| StatusCode::UNAUTHORIZED)?;
+        .ok_or(StatusCode::UNAUTHORIZED)?;
 
     let account_tier: AccountTier = session
         .get("account_tier")
-        .ok_or_else(|| StatusCode::UNAUTHORIZED)?;
+        .ok_or(StatusCode::UNAUTHORIZED)?;
 
     let claim = Claim::new(account_name, account_tier.into());
 

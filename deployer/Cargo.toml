@@ -19,7 +19,7 @@ crossbeam-channel = "0.5.6"
 flate2 = "1.0.25"
 fqdn = "0.2.3"
 futures = "0.3.25"
-hyper = { version = "0.14.23", features = ["client", "http1", "http2", "tcp"] }
+hyper = { workspace = true, features = ["client", "http1", "http2", "tcp"] }
 # not great, but waiting for WebSocket changes to be merged
 hyper-reverse-proxy = { git = "https://github.com/chesedo/hyper-reverse-proxy", branch = "master" }
 once_cell = { workspace = true }
@@ -44,7 +44,7 @@ thiserror = { workspace = true }
 tokio = { version = "1.22.0", features = ["fs"] }
 toml = "0.5.9"
 tonic = "0.8.3"
-tower = { version = "0.4.13", features = ["make"] }
+tower = { workspace = true, features = ["make"] }
 tower-http = { workspace = true, features = ["auth"] }
 tracing = { workspace = true }
 tracing-opentelemetry = { workspace = true }

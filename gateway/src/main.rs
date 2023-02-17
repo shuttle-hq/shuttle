@@ -14,9 +14,11 @@ use shuttle_gateway::task;
 use shuttle_gateway::tls::{make_tls_acceptor, ChainAndPrivateKey};
 use shuttle_gateway::worker::{Worker, WORKER_QUEUE_SIZE};
 use sqlx::migrate::MigrateDatabase;
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous};
 use sqlx::{query, Sqlite, SqlitePool};
 use std::io::{self, Cursor};
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::{debug, error, info, info_span, trace, warn, Instrument};
@@ -60,8 +62,13 @@ async fn main() -> io::Result<()> {
             .unwrap()
             .to_string_lossy()
     );
-    let db = SqlitePool::connect(db_uri).await.unwrap();
 
+    let sqlite_options = SqliteConnectOptions::from_str(db_uri)
+        .unwrap()
+        .journal_mode(SqliteJournalMode::Wal)
+        .synchronous(SqliteSynchronous::Normal);
+
+    let db = SqlitePool::connect_with(sqlite_options).await.unwrap();
     MIGRATIONS.run(&db).await.unwrap();
 
     match args.command {

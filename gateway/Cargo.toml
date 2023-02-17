@@ -13,34 +13,33 @@ axum-server = { version = "0.4.4", features = [ "tls-rustls" ] }
 base64 = "0.13.1"
 bollard = "0.13.0"
 chrono = { workspace = true }
-clap = { version = "4.0.27", features = [ "derive" ] }
+clap = { workspace = true }
 fqdn = "0.2.3"
 futures = "0.3.25"
 http = "0.2.8"
-hyper = { version = "0.14.23", features = [ "stream" ] }
+hyper = { workspace = true, features = [ "stream" ] }
 # not great, but waiting for WebSocket changes to be merged
 hyper-reverse-proxy = { git = "https://github.com/chesedo/hyper-reverse-proxy", branch = "bug/host_header" }
 instant-acme = "0.1.1"
 lazy_static = "1.4.0"
 num_cpus = "1.14.0"
 once_cell = { workspace = true }
-opentelemetry = { version = "0.18.0", features = ["rt-tokio"] }
-opentelemetry-datadog = { version = "0.6.0", features = ["reqwest-client"] }
-opentelemetry-http = "0.7.0"
+opentelemetry = { workspace = true }
+opentelemetry-datadog = { workspace = true }
+opentelemetry-http = { workspace = true }
 pem = "1.1.0"
-rand = "0.8.5"
+rand = { workspace = true }
 rcgen = "0.10.0"
 rustls = "0.20.7"
 rustls-pemfile = "1.0.1"
 serde = { workspace = true, features = [ "derive" ] }
 serde_json = { workspace = true }
 sqlx = { version = "0.6.2", features = [ "sqlite", "json", "runtime-tokio-native-tls", "migrate" ] }
-strum = { version = "0.24.1", features = ["derive"] }
+strum = { workspace = true }
 tokio = { version = "1.22.0", features = [ "full" ] }
-tower = { version = "0.4.13", features = [ "steer" ] }
-tower-http = { version = "0.3.4", features = ["trace"] }
+tower = { workspace = true, features = [ "steer" ] }
 tracing = { workspace = true }
-tracing-opentelemetry = "0.18.0"
+tracing-opentelemetry = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 ttl_cache = "0.5.1"
 uuid = { workspace = true, features = [ "v4" ] }
@@ -53,7 +52,7 @@ features = ["backend", "models"]
 anyhow = { workspace = true }
 base64 = "0.13.1"
 colored = "2.0.0"
-portpicker = "0.1.1"
+portpicker = { workspace = true }
 snailquote = "0.3.1"
 tempfile = "3.3.0"
 

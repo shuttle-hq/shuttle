@@ -1,9 +1,7 @@
 mod error;
 
-use axum::body::{Body, BoxBody};
 use axum::extract::ws::{self, WebSocket};
-use axum::extract::{Extension, MatchedPath, Path, Query};
-use axum::http::{Request, Response};
+use axum::extract::{Extension, Path, Query};
 use axum::middleware::from_extractor;
 use axum::routing::{get, post, Router};
 use axum::{extract::BodyStream, Json};
@@ -11,24 +9,19 @@ use bytes::BufMut;
 use chrono::{TimeZone, Utc};
 use fqdn::FQDN;
 use futures::StreamExt;
-use opentelemetry::global;
-use opentelemetry_http::HeaderExtractor;
-use shuttle_common::backends::metrics::Metrics;
+use shuttle_common::backends::metrics::{Metrics, TraceLayer};
 use shuttle_common::models::secret;
 use shuttle_common::project::ProjectName;
-use shuttle_common::LogItem;
+use shuttle_common::{request_span, LogItem};
 use shuttle_service::loader::clean_crate;
 use tower_http::auth::RequireAuthorizationLayer;
-use tower_http::trace::TraceLayer;
-use tracing::{debug, debug_span, error, field, instrument, trace, Span};
-use tracing_opentelemetry::OpenTelemetrySpanExt;
+use tracing::{debug, error, field, instrument, trace};
 use uuid::Uuid;
 
 use crate::deployment::{DeploymentManager, Queued};
 use crate::persistence::{Deployment, Log, Persistence, SecretGetter, State};
 
 use std::collections::HashMap;
-use std::time::Duration;
 
 pub use {self::error::Error, self::error::Result};
 
@@ -76,48 +69,22 @@ pub fn make_router(
         .route("/projects/:project_name/status", get(get_status))
         .route_layer(from_extractor::<Metrics>())
         .layer(
-            TraceLayer::new_for_http()
-                .make_span_with(|request: &Request<Body>| {
-                    let path = if let Some(path) = request.extensions().get::<MatchedPath>() {
-                        path.as_str()
-                    } else {
-                        ""
-                    };
+            TraceLayer::new(|request| {
+                let account_name = request
+                    .headers()
+                    .get("X-Shuttle-Account-Name")
+                    .map(|value| value.to_str().unwrap_or_default().to_string());
 
-                    let account_name = request
-                        .headers()
-                        .get("X-Shuttle-Account-Name")
-                        .map(|value| value.to_str().unwrap_or_default());
-
-                    let span = debug_span!(
-                        "request",
-                        http.uri = %request.uri(),
-                        http.method = %request.method(),
-                        http.status_code = field::Empty,
-                        account.name = account_name,
-                        // A bunch of extra things for metrics
-                        // Should be able to make this clearer once `Valuable` support lands in tracing
-                        request.path = path,
-                        request.params.project_name = field::Empty,
-                        request.params.service_name = field::Empty,
-                        request.params.deployment_id = field::Empty,
-                    );
-                    let parent_context = global::get_text_map_propagator(|propagator| {
-                        propagator.extract(&HeaderExtractor(request.headers()))
-                    });
-                    span.set_parent(parent_context);
-
-                    span
-                })
-                .on_response(
-                    |response: &Response<BoxBody>, latency: Duration, span: &Span| {
-                        span.record("http.status_code", response.status().as_u16());
-                        debug!(
-                            latency = format_args!("{} ns", latency.as_nanos()),
-                            "finished processing request"
-                        );
-                    },
-                ),
+                request_span!(
+                    request,
+                    account.name = account_name,
+                    request.params.project_name = field::Empty,
+                    request.params.service_name = field::Empty,
+                    request.params.deployment_id = field::Empty,
+                )
+            })
+            .with_propagation()
+            .build(),
         )
         .route_layer(from_extractor::<project::ProjectNameGuard>())
         .layer(Extension(project_name))

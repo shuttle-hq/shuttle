@@ -16,7 +16,7 @@ cargo = "0.65.0"
 cargo-edit = { version = "0.11.6", features = ["cli"] }
 cargo_metadata = "0.15.2"
 chrono = { workspace = true }
-clap = { version = "4.0.27", features = ["derive", "env"] }
+clap = { workspace = true, features = ["env"] }
 clap_complete = "4.0.7"
 crossbeam-channel = "0.5.6"
 crossterm = "0.25.0"
@@ -25,13 +25,13 @@ dirs = "4.0.0"
 flate2 = "1.0.25"
 futures = "0.3.25"
 git2 = "0.14.2"
-headers = "0.3.8"
+headers = { workspace = true }
 indicatif = "0.17.2"
 ignore = "0.4.18"
 indoc = "1.0.7"
 log = "0.4.17"
 openssl = { version = '0.10', optional = true }
-portpicker = "0.1.1"
+portpicker = { workspace = true }
 reqwest = { version = "0.11.13", features = ["json"] }
 reqwest-middleware = "0.2.0"
 reqwest-retry = "0.2.0"
@@ -41,7 +41,7 @@ sqlx = { version = "0.6.2", features = [
   "runtime-tokio-native-tls",
   "postgres",
 ] }
-strum = { version = "0.24.1", features = ["derive"] }
+strum = { workspace = true }
 tar = "0.4.38"
 tokio = { version = "1.22.0", features = ["macros"] }
 tokio-tungstenite = { version = "0.17.2", features = ["native-tls"] }

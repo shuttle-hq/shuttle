@@ -20,7 +20,9 @@ use chrono::Utc;
 use serde_json::json;
 use shuttle_common::STATE_MESSAGE;
 use sqlx::migrate::{MigrateDatabase, Migrator};
-use sqlx::sqlite::{Sqlite, SqlitePool};
+use sqlx::sqlite::{
+    Sqlite, SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqliteSynchronous,
+};
 use tokio::sync::broadcast::{self, Receiver, Sender};
 use tokio::task::JoinHandle;
 use tracing::{error, info, instrument, trace};
@@ -61,7 +63,13 @@ impl Persistence {
             std::fs::canonicalize(path).unwrap().to_string_lossy()
         );
 
-        let pool = SqlitePool::connect(path).await.unwrap();
+        let sqlite_options = SqliteConnectOptions::from_str(path)
+            .unwrap()
+            .journal_mode(SqliteJournalMode::Wal)
+            .synchronous(SqliteSynchronous::Normal);
+
+        let pool = SqlitePool::connect_with(sqlite_options).await.unwrap();
+
         Self::from_pool(pool).await
     }
 

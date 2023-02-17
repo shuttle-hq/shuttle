@@ -17,7 +17,7 @@ clap = { workspace = true }
 fqdn = "0.2.3"
 futures = "0.3.25"
 http = "0.2.8"
-hyper = { version = "0.14.23", features = [ "stream" ] }
+hyper = { workspace = true, features = [ "stream" ] }
 # not great, but waiting for WebSocket changes to be merged
 hyper-reverse-proxy = { git = "https://github.com/chesedo/hyper-reverse-proxy", branch = "bug/host_header" }
 instant-acme = "0.1.1"
@@ -37,7 +37,7 @@ serde_json = { workspace = true }
 sqlx = { version = "0.6.2", features = [ "sqlite", "json", "runtime-tokio-native-tls", "migrate" ] }
 strum = { version = "0.24.1", features = ["derive"] }
 tokio = { version = "1.22.0", features = [ "full" ] }
-tower = { version = "0.4.13", features = [ "steer" ] }
+tower = { workspace = true, features = [ "steer" ] }
 tracing = { workspace = true }
 tracing-opentelemetry = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }

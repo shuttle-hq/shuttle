@@ -58,6 +58,7 @@ pub struct Claim {
     nbf: usize,
     /// Subject (whom token refers to).
     sub: String,
+    /// Scopes this token can access
     pub scopes: Vec<Scope>,
 }
 

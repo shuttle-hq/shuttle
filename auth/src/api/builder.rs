@@ -57,7 +57,6 @@ impl ApiBuilder {
         Self { router, pool: None }
     }
 
-    /// Connect and migrate an SQLite pool at the given URI.
     pub fn with_sqlite_pool(mut self, pool: SqlitePool) -> Self {
         self.pool = Some(pool);
         self

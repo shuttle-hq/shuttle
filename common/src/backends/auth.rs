@@ -46,6 +46,13 @@ pub enum Scope {
     /// Add or update secrets of a project
     SecretWrite,
 }
+
+#[derive(Serialize)]
+/// Response used internally to pass around JWT token
+pub struct ConvertResponse {
+    pub token: String,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
 pub struct Claim {
     /// Expiration time (as UTC timestamp).

@@ -9,13 +9,14 @@ use axum::{
 };
 use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Deserializer, Serialize};
+use shuttle_common::backends::auth::Scope;
 use sqlx::{query, Row, SqlitePool};
 use tracing::{trace, Span};
 
-use crate::{api::RouterState, error::Error};
+use crate::{api::UserManagerState, error::Error};
 
 #[async_trait]
-pub(crate) trait UserManagement {
+pub trait UserManagement: Send + Sync {
     async fn create_user(&self, name: AccountName, tier: AccountTier) -> Result<User, Error>;
     async fn get_user(&self, name: AccountName) -> Result<User, Error>;
     async fn get_user_by_key(&self, key: Key) -> Result<User, Error>;
@@ -93,14 +94,14 @@ impl User {
 impl<S> FromRequestParts<S> for User
 where
     S: Send + Sync,
-    RouterState: FromRef<S>,
+    UserManagerState: FromRef<S>,
 {
     type Rejection = Error;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let key = Key::from_request_parts(parts, state).await?;
 
-        let RouterState { user_manager } = RouterState::from_ref(state);
+        let user_manager: UserManagerState = UserManagerState::from_ref(state);
 
         let user = user_manager
             .get_user_by_key(key)
@@ -186,6 +187,22 @@ impl Default for AccountTier {
     }
 }
 
+impl From<AccountTier> for Vec<Scope> {
+    fn from(_tier: AccountTier) -> Self {
+        vec![
+            Scope::Deployment,
+            Scope::DeploymentPush,
+            Scope::Logs,
+            Scope::Project,
+            Scope::ProjectCreate,
+            Scope::Resources,
+            Scope::ResourcesWrite,
+            Scope::Secret,
+            Scope::SecretWrite,
+        ]
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, sqlx::Type, Serialize)]
 #[sqlx(transparent)]
 pub struct AccountName(String);
@@ -223,7 +240,7 @@ pub struct Admin {
 impl<S> FromRequestParts<S> for Admin
 where
     S: Send + Sync,
-    RouterState: FromRef<S>,
+    UserManagerState: FromRef<S>,
 {
     type Rejection = Error;
 

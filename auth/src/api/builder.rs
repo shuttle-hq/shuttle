@@ -1,10 +1,13 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::Arc};
 
 use axum::{
+    extract::FromRef,
     middleware::from_extractor,
     routing::{get, post},
     Router, Server,
 };
+use axum_sessions::{async_session::MemoryStore, SessionLayer};
+use rand::RngCore;
 use shuttle_common::{
     backends::metrics::{Metrics, TraceLayer},
     request_span,
@@ -12,20 +15,42 @@ use shuttle_common::{
 use sqlx::SqlitePool;
 use tracing::field;
 
-use crate::user::UserManager;
+use crate::{
+    secrets::{EdDsaManager, KeyManager},
+    user::{UserManagement, UserManager},
+};
 
 use super::handlers::{
     convert_cookie, convert_key, get_public_key, get_user, login, logout, post_user, refresh_token,
 };
 
+pub type UserManagerState = Arc<Box<dyn UserManagement>>;
+pub type KeyManagerState = Arc<Box<dyn KeyManager>>;
+
 #[derive(Clone)]
 pub struct RouterState {
-    pub user_manager: UserManager,
+    pub user_manager: UserManagerState,
+    pub key_manager: KeyManagerState,
+}
+
+// Allow getting a user management state directly
+impl FromRef<RouterState> for UserManagerState {
+    fn from_ref(router_state: &RouterState) -> Self {
+        router_state.user_manager.clone()
+    }
+}
+
+// Allow getting a key manager state directly
+impl FromRef<RouterState> for KeyManagerState {
+    fn from_ref(router_state: &RouterState) -> Self {
+        router_state.key_manager.clone()
+    }
 }
 
 pub struct ApiBuilder {
     router: Router<RouterState>,
     pool: Option<SqlitePool>,
+    session_layer: Option<SessionLayer<MemoryStore>>,
 }
 
 impl Default for ApiBuilder {
@@ -39,7 +64,7 @@ impl ApiBuilder {
         let router = Router::new()
             .route("/login", post(login))
             .route("/logout", post(logout))
-            .route("/auth/session", post(convert_cookie))
+            .route("/auth/session", get(convert_cookie))
             .route("/auth/key", post(convert_key))
             .route("/auth/refresh", post(refresh_token))
             .route("/public-key", get(get_public_key))
@@ -58,7 +83,11 @@ impl ApiBuilder {
                 .build(),
             );
 
-        Self { router, pool: None }
+        Self {
+            router,
+            pool: None,
+            session_layer: None,
+        }
     }
 
     pub fn with_sqlite_pool(mut self, pool: SqlitePool) -> Self {
@@ -66,11 +95,31 @@ impl ApiBuilder {
         self
     }
 
+    pub fn with_sessions(mut self) -> Self {
+        let store = MemoryStore::new();
+        let mut secret = [0u8; 128];
+        rand::thread_rng().fill_bytes(&mut secret[..]);
+        self.session_layer = Some(
+            SessionLayer::new(store, &secret)
+                .with_cookie_name("shuttle.sid")
+                .with_session_ttl(Some(std::time::Duration::from_secs(60 * 60 * 24))) // One day
+                .with_secure(true),
+        );
+
+        self
+    }
+
     pub fn into_router(self) -> Router {
         let pool = self.pool.expect("an sqlite pool is required");
+        let session_layer = self.session_layer.expect("a session layer is required");
 
         let user_manager = UserManager { pool };
-        self.router.with_state(RouterState { user_manager })
+        let key_manager = EdDsaManager::new();
+
+        self.router.layer(session_layer).with_state(RouterState {
+            user_manager: Arc::new(Box::new(user_manager)),
+            key_manager: Arc::new(Box::new(key_manager)),
+        })
     }
 }
 

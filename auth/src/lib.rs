@@ -1,6 +1,7 @@
 mod api;
 mod args;
 mod error;
+mod secrets;
 mod user;
 
 use std::{io, str::FromStr};
@@ -24,7 +25,10 @@ pub use args::{Args, Commands, InitArgs};
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
 pub async fn start(pool: SqlitePool, args: StartArgs) -> io::Result<()> {
-    let router = api::ApiBuilder::new().with_sqlite_pool(pool).into_router();
+    let router = api::ApiBuilder::new()
+        .with_sqlite_pool(pool)
+        .with_sessions()
+        .into_router();
 
     info!(address=%args.address, "Binding to and listening at address");
 

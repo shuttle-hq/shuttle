@@ -1,7 +1,8 @@
 use axum_extra::extract::cookie::{self, Cookie};
 use http::{Request, StatusCode};
 use hyper::Body;
-use serde_json::json;
+use serde_json::{json, Value};
+use shuttle_common::backends::auth::Claim;
 
 use crate::helpers::app;
 
@@ -49,6 +50,25 @@ async fn session_flow() {
     let response = app.send_request(request).await;
 
     assert_eq!(response.status(), StatusCode::OK);
+
+    let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+    let convert: Value = serde_json::from_slice(&body).unwrap();
+    let token = convert["token"].as_str().unwrap();
+
+    let request = Request::builder()
+        .uri("/public-key")
+        .method("GET")
+        .body(Body::empty())
+        .unwrap();
+    let response = app.send_request(request).await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let public_key = hyper::body::to_bytes(response.into_body()).await.unwrap();
+
+    let claim = Claim::from_token(token, &public_key).unwrap();
+
+    assert_eq!(claim.sub, "session-user");
 
     // POST user logout
     let request = Request::builder()

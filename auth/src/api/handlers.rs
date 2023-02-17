@@ -107,7 +107,9 @@ pub(crate) async fn convert_key(
 
 pub(crate) async fn refresh_token() {}
 
-pub(crate) async fn get_public_key() {}
+pub(crate) async fn get_public_key(State(key_manager): State<KeyManagerState>) -> Vec<u8> {
+    key_manager.public_key().to_vec()
+}
 
 #[derive(Deserialize, Serialize)]
 pub struct LoginRequest {

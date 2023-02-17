@@ -64,7 +64,7 @@ pub struct Claim {
     /// Not Before (as UTC timestamp).
     nbf: usize,
     /// Subject (whom token refers to).
-    sub: String,
+    pub sub: String,
     /// Scopes this token can access
     pub scopes: Vec<Scope>,
 }
@@ -104,11 +104,12 @@ impl Claim {
         })
     }
 
-    pub fn from_token(token: &str, decoding_key: &DecodingKey) -> Result<Self, StatusCode> {
+    pub fn from_token(token: &str, public_key: &[u8]) -> Result<Self, StatusCode> {
+        let decoding_key = DecodingKey::from_ed_der(public_key);
         let mut validation = Validation::new(jsonwebtoken::Algorithm::EdDSA);
         validation.set_issuer(&[ISS]);
 
-        let claim = decode(token, decoding_key, &validation)
+        let claim = decode(token, &decoding_key, &validation)
             .map_err(|err| {
                 error!(
                     error = &err as &dyn std::error::Error,
@@ -145,25 +146,25 @@ impl Claim {
 /// It can also be used with tonic. See:
 /// https://github.com/hyperium/tonic/blob/master/examples/src/tower/server.rs
 #[derive(Clone)]
-pub struct JwtAuthenticationLayer {
-    decoding_key: DecodingKey,
+pub struct JwtAuthenticationLayer<F> {
+    /// User provided function to get the public key from
+    public_key_fn: F,
 }
 
-impl JwtAuthenticationLayer {
+impl<F: Fn() -> Vec<u8>> JwtAuthenticationLayer<F> {
     /// Create a new layer to validate JWT tokens with the given public key
-    pub fn new(decoding_key: DecodingKey) -> Self {
-        Self { decoding_key }
+    pub fn new(public_key_fn: F) -> Self {
+        Self { public_key_fn }
     }
 }
 
-impl<S> Layer<S> for JwtAuthenticationLayer {
+impl<S, F: Fn() -> Vec<u8>> Layer<S> for JwtAuthenticationLayer<F> {
     type Service = JwtAuthentication<S>;
 
     fn layer(&self, inner: S) -> Self::Service {
-        JwtAuthentication {
-            inner,
-            decoding_key: self.decoding_key.clone(),
-        }
+        let public_key = (self.public_key_fn)();
+
+        JwtAuthentication { inner, public_key }
     }
 }
 
@@ -171,7 +172,7 @@ impl<S> Layer<S> for JwtAuthenticationLayer {
 #[derive(Clone)]
 pub struct JwtAuthentication<S> {
     inner: S,
-    decoding_key: DecodingKey,
+    public_key: Vec<u8>,
 }
 
 impl<S, ResponseError> Service<Request<Body>> for JwtAuthentication<S>
@@ -195,15 +196,13 @@ where
 
     fn call(&mut self, mut req: Request<Body>) -> Self::Future {
         let error = match req.headers().typed_try_get::<Authorization<Bearer>>() {
-            Ok(Some(bearer)) => {
-                match Claim::from_token(bearer.token().trim(), &self.decoding_key) {
-                    Ok(claim) => {
-                        req.extensions_mut().insert(claim);
-                        None
-                    }
-                    Err(code) => Some(code),
+            Ok(Some(bearer)) => match Claim::from_token(bearer.token().trim(), &self.public_key) {
+                Ok(claim) => {
+                    req.extensions_mut().insert(claim);
+                    None
                 }
-            }
+                Err(code) => Some(code),
+            },
             Ok(None) => Some(StatusCode::UNAUTHORIZED),
             Err(_) => Some(StatusCode::BAD_REQUEST),
         };
@@ -229,7 +228,7 @@ mod tests {
     use axum::{routing::get, Extension, Router};
     use http::{Request, StatusCode};
     use hyper::{body, Body};
-    use jsonwebtoken::{DecodingKey, EncodingKey};
+    use jsonwebtoken::EncodingKey;
     use ring::{
         hmac, rand,
         signature::{self, Ed25519KeyPair, KeyPair},
@@ -251,9 +250,9 @@ mod tests {
         let token = claim.clone().into_token(&encoding_key).unwrap();
 
         let pair = Ed25519KeyPair::from_pkcs8(doc.as_ref()).unwrap();
-        let decoding_key = DecodingKey::from_ed_der(pair.public_key().as_ref());
+        let public_key = pair.public_key().as_ref();
 
-        let new = Claim::from_token(&token, &decoding_key).unwrap();
+        let new = Claim::from_token(&token, public_key).unwrap();
 
         assert_eq!(claim, new);
     }
@@ -268,7 +267,7 @@ mod tests {
         let doc = signature::Ed25519KeyPair::generate_pkcs8(&rand::SystemRandom::new()).unwrap();
         let encoding_key = EncodingKey::from_ed_der(doc.as_ref());
         let pair = Ed25519KeyPair::from_pkcs8(doc.as_ref()).unwrap();
-        let decoding_key = DecodingKey::from_ed_der(pair.public_key().as_ref());
+        let public_key = pair.public_key().as_ref().to_vec();
 
         let router =
             Router::new()
@@ -278,7 +277,10 @@ mod tests {
                         format!("Hello, {}", claim.sub)
                     }),
                 )
-                .layer(ServiceBuilder::new().layer(JwtAuthenticationLayer::new(decoding_key)));
+                .layer(
+                    ServiceBuilder::new()
+                        .layer(JwtAuthenticationLayer::new(move || public_key.clone())),
+                );
 
         //////////////////////////////////////////////////////////////////////////
         // Test token missing
@@ -375,7 +377,7 @@ mod tests {
         let msg = format!("{header}.{claim}");
 
         let pair = Ed25519KeyPair::from_pkcs8(doc.as_ref()).unwrap();
-        let decoding_key = DecodingKey::from_ed_der(pair.public_key().as_ref());
+        let public_key = pair.public_key().as_ref();
 
         let sig = hmac::sign(
             &hmac::Key::new(hmac::HMAC_SHA256, pair.public_key().as_ref()),
@@ -384,7 +386,7 @@ mod tests {
         let sig = base64::encode_config(sig, base64::URL_SAFE_NO_PAD);
         let token = format!("{msg}.{sig}");
 
-        Claim::from_token(&token, &decoding_key).unwrap();
+        Claim::from_token(&token, public_key).unwrap();
     }
 
     // Test removing the alg is not possible
@@ -414,9 +416,9 @@ mod tests {
         let token = format!("{header}.{claim}.");
 
         let pair = Ed25519KeyPair::from_pkcs8(doc.as_ref()).unwrap();
-        let decoding_key = DecodingKey::from_ed_der(pair.public_key().as_ref());
+        let public_key = pair.public_key().as_ref();
 
-        Claim::from_token(&token, &decoding_key).unwrap();
+        Claim::from_token(&token, public_key).unwrap();
     }
 
     // Test removing the signature is not possible
@@ -437,9 +439,9 @@ mod tests {
         let token = format!("{rest}.");
 
         let pair = Ed25519KeyPair::from_pkcs8(doc.as_ref()).unwrap();
-        let decoding_key = DecodingKey::from_ed_der(pair.public_key().as_ref());
+        let public_key = pair.public_key().as_ref();
 
-        Claim::from_token(&token, &decoding_key).unwrap();
+        Claim::from_token(&token, public_key).unwrap();
     }
 
     // Test changing the issuer is not possible
@@ -469,12 +471,12 @@ mod tests {
         let msg = format!("{header}.{claim}");
 
         let pair = Ed25519KeyPair::from_pkcs8(doc.as_ref()).unwrap();
-        let decoding_key = DecodingKey::from_ed_der(pair.public_key().as_ref());
+        let public_key = pair.public_key().as_ref();
 
         let sig = pair.sign(msg.as_bytes());
         let sig = base64::encode_config(sig, base64::URL_SAFE_NO_PAD);
         let token = format!("{msg}.{sig}");
 
-        Claim::from_token(&token, &decoding_key).unwrap();
+        Claim::from_token(&token, public_key).unwrap();
     }
 }

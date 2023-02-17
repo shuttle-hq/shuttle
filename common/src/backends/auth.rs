@@ -46,13 +46,17 @@ pub enum Scope {
     /// Add or update secrets of a project
     SecretWrite,
 }
-
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
 pub struct Claim {
+    /// Expiration time (as UTC timestamp).
     exp: usize,
+    /// Issued at (as UTC timestamp).
     iat: usize,
+    /// Issuer.
     iss: String,
+    /// Not Before (as UTC timestamp).
     nbf: usize,
+    /// Subject (whom token refers to).
     sub: String,
     pub scopes: Vec<Scope>,
 }

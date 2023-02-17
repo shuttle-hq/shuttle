@@ -6,14 +6,15 @@ use tower::ServiceExt;
 
 pub(crate) const ADMIN_KEY: &str = "my-api-key";
 
-pub struct TestApp {
+pub(crate) struct TestApp {
     pub router: Router,
 }
 
 /// Initialize a router with an in-memory sqlite database for each test.
-pub async fn app() -> TestApp {
+pub(crate) async fn app() -> TestApp {
     let sqlite_pool = sqlite_init("sqlite::memory:").await;
 
+    // Insert an admin user for the tests.
     query("INSERT INTO users (account_name, key, account_tier) VALUES (?1, ?2, ?3)")
         .bind("admin")
         .bind(ADMIN_KEY)
@@ -27,9 +28,6 @@ pub async fn app() -> TestApp {
         .await
         .into_router();
 
-    // Give the test-app time to start
-    // tokio::time::sleep(Duration::from_millis(500)).await;
-
     TestApp { router }
 }
 
@@ -42,9 +40,9 @@ impl TestApp {
             .expect("Failed to execute request.")
     }
 
-    pub async fn post_user(&self, name: &str) -> Response {
+    pub async fn post_user(&self, name: &str, tier: &str) -> Response {
         let request = Request::builder()
-            .uri(format!("/user/{name}"))
+            .uri(format!("/user/{name}/{tier}"))
             .method("POST")
             .header(AUTHORIZATION, format!("Bearer {ADMIN_KEY}"))
             .body(Body::empty())

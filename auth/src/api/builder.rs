@@ -43,7 +43,8 @@ impl ApiBuilder {
             .route("/auth/key", post(convert_key))
             .route("/auth/refresh", post(refresh_token))
             .route("/public-key", get(get_public_key))
-            .route("/user/:account_name", get(get_user).post(post_user))
+            .route("/user/:account_name", get(get_user))
+            .route("/user/:account_name/:account_tier", post(post_user))
             .route_layer(from_extractor::<Metrics>())
             .layer(
                 TraceLayer::new(|request| {

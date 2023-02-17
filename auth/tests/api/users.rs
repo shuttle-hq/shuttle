@@ -9,7 +9,7 @@ async fn post_user() {
 
     // POST user without bearer token.
     let request = Request::builder()
-        .uri("/user/test-user")
+        .uri("/user/test-user/basic")
         .method("POST")
         .body(Body::empty())
         .unwrap();
@@ -20,9 +20,9 @@ async fn post_user() {
 
     // POST user with invalid bearer token.
     let request = Request::builder()
-        .uri("/user/test-user")
+        .uri("/user/test-user/basic")
         .method("POST")
-        .header(AUTHORIZATION, format!("Bearer notadmin"))
+        .header(AUTHORIZATION, "Bearer notadmin")
         .body(Body::empty())
         .unwrap();
 
@@ -30,8 +30,8 @@ async fn post_user() {
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
-    // POST user with valid bearer token.
-    let response = app.post_user("test-user").await;
+    // POST user with valid bearer token and basic tier.
+    let response = app.post_user("test-user", "basic").await;
 
     assert_eq!(response.status(), StatusCode::OK);
 
@@ -39,6 +39,19 @@ async fn post_user() {
     let user: Value = serde_json::from_slice(&body).unwrap();
 
     assert_eq!(user["name"], "test-user");
+    assert_eq!(user["account_tier"], "basic");
+    assert!(user["key"].to_string().is_ascii());
+
+    // POST user with valid bearer token and pro tier.
+    let response = app.post_user("pro-user", "pro").await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+    let user: Value = serde_json::from_slice(&body).unwrap();
+
+    assert_eq!(user["name"], "pro-user");
+    assert_eq!(user["account_tier"], "pro");
     assert!(user["key"].to_string().is_ascii());
 }
 
@@ -47,7 +60,7 @@ async fn get_user() {
     let app = app().await;
 
     // POST user first so one exists in the database.
-    let response = app.post_user("test-user").await;
+    let response = app.post_user("test-user", "basic").await;
 
     assert_eq!(response.status(), StatusCode::OK);
 

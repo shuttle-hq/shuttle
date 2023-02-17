@@ -19,7 +19,7 @@ use crate::{api::RouterState, error::Error};
 
 #[async_trait]
 pub(crate) trait UserManagement {
-    async fn create_user(&self, name: AccountName) -> Result<User, Error>;
+    async fn create_user(&self, name: AccountName, tier: AccountTier) -> Result<User, Error>;
     async fn get_user(&self, name: AccountName) -> Result<User, Error>;
     async fn get_user_by_key(&self, key: Key) -> Result<User, Error>;
 }
@@ -31,16 +31,17 @@ pub struct UserManager {
 
 #[async_trait]
 impl UserManagement for UserManager {
-    async fn create_user(&self, name: AccountName) -> Result<User, Error> {
+    async fn create_user(&self, name: AccountName, tier: AccountTier) -> Result<User, Error> {
         let key = Key::new_random();
 
-        query("INSERT INTO users (account_name, key) VALUES (?1, ?2)")
+        query("INSERT INTO users (account_name, key, account_tier) VALUES (?1, ?2, ?3)")
             .bind(&name)
             .bind(&key)
+            .bind(tier)
             .execute(&self.pool)
             .await?;
 
-        Ok(User::new_with_defaults(name, key))
+        Ok(User::new(name, key, tier))
     }
 
     async fn get_user(&self, name: AccountName) -> Result<User, Error> {
@@ -82,11 +83,11 @@ impl User {
         self.account_tier == AccountTier::Admin
     }
 
-    pub fn new_with_defaults(name: AccountName, key: Key) -> Self {
+    pub fn new(name: AccountName, key: Key, account_tier: AccountTier) -> Self {
         Self {
             name,
             key,
-            account_tier: AccountTier::default(),
+            account_tier,
         }
     }
 }
@@ -179,6 +180,7 @@ impl Key {
 
 #[derive(Clone, Copy, Deserialize, PartialEq, Eq, Serialize, Debug, sqlx::Type)]
 #[sqlx(rename_all = "lowercase")]
+#[serde(rename_all = "lowercase")]
 pub enum AccountTier {
     Basic,
     Pro,

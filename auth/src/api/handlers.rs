@@ -1,7 +1,7 @@
 use crate::{
     api::builder::RouterState,
     error::Error,
-    user::{AccountName, Admin, UserManagement},
+    user::{AccountName, AccountTier, Admin, UserManagement},
 };
 use axum::{
     extract::{Path, State},
@@ -25,9 +25,9 @@ pub(crate) async fn get_user(
 pub(crate) async fn post_user(
     _: Admin,
     State(RouterState { user_manager }): State<RouterState>,
-    Path(account_name): Path<AccountName>,
+    Path((account_name, account_tier)): Path<(AccountName, AccountTier)>,
 ) -> Result<Json<auth::UserResponse>, Error> {
-    let user = user_manager.create_user(account_name).await?;
+    let user = user_manager.create_user(account_name, account_tier).await?;
 
     Ok(Json(user.into()))
 }

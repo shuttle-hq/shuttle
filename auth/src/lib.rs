@@ -24,10 +24,7 @@ pub use args::{Args, Commands, InitArgs};
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
 pub async fn start(pool: SqlitePool, args: StartArgs) -> io::Result<()> {
-    let router = api::ApiBuilder::new()
-        .with_sqlite_pool(pool)
-        .await
-        .into_router();
+    let router = api::ApiBuilder::new().with_sqlite_pool(pool).into_router();
 
     info!(address=%args.address, "Binding to and listening at address");
 

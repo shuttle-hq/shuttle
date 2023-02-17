@@ -7,7 +7,6 @@ use axum::Json;
 use serde::{ser::SerializeMap, Serialize};
 use shuttle_common::models::error::ApiError;
 
-// TODO: separate error enum for handlers?
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("User could not be found")]
@@ -24,8 +23,6 @@ pub enum Error {
     UnexpectedError(#[from] anyhow::Error),
 }
 
-// TODO: this is copy pasted from deployer handlers error, it needs to be adapted
-// to this crate
 impl Serialize for Error {
     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where

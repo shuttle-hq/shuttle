@@ -1,4 +1,4 @@
-use crate::helpers::{app, ADMIN_KEY};
+use crate::helpers::app;
 use axum::body::Body;
 use hyper::http::{header::AUTHORIZATION, Request, StatusCode};
 use serde_json::{self, Value};
@@ -80,7 +80,7 @@ async fn get_user() {
     // GET user with invalid bearer token.
     let request = Request::builder()
         .uri("/user/test-user")
-        .header(AUTHORIZATION, format!("Bearer notadmin"))
+        .header(AUTHORIZATION, "Bearer notadmin")
         .body(Body::empty())
         .unwrap();
 
@@ -89,13 +89,7 @@ async fn get_user() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
     // GET user that doesn't exist with valid bearer token.
-    let request = Request::builder()
-        .uri("/user/notfound")
-        .header(AUTHORIZATION, format!("Bearer {ADMIN_KEY}"))
-        .body(Body::empty())
-        .unwrap();
-
-    let response = app.send_request(request).await;
+    let response = app.get_user("not-test-user").await;
 
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 

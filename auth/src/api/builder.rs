@@ -48,7 +48,11 @@ impl ApiBuilder {
             .route_layer(from_extractor::<Metrics>())
             .layer(
                 TraceLayer::new(|request| {
-                    request_span!(request, request.params.account_name = field::Empty)
+                    request_span!(
+                        request,
+                        request.params.account_name = field::Empty,
+                        request.params.account_tier = field::Empty
+                    )
                 })
                 .with_propagation()
                 .build(),

@@ -41,7 +41,7 @@ sqlx = { version = "0.6.2", features = [
   "runtime-tokio-native-tls",
   "postgres",
 ] }
-strum = { version = "0.24.1", features = ["derive"] }
+strum = { workspace = true }
 tar = "0.4.38"
 tokio = { version = "1.22.0", features = ["macros"] }
 tokio-tungstenite = { version = "0.17.2", features = ["native-tls"] }

@@ -1,7 +1,4 @@
-use std::{
-    fmt::{Display, Formatter},
-    str::FromStr,
-};
+use std::{fmt::Formatter, str::FromStr};
 
 use async_trait::async_trait;
 use axum::{
@@ -133,12 +130,6 @@ impl From<User> for shuttle_common::models::auth::UserResponse {
 #[sqlx(transparent)]
 pub struct Key(String);
 
-// impl Key {
-//     pub fn as_str(&self) -> &str {
-//         &self.0
-//     }
-// }
-
 #[async_trait]
 impl<S> FromRequestParts<S> for Key
 where
@@ -178,9 +169,10 @@ impl Key {
     }
 }
 
-#[derive(Clone, Copy, Deserialize, PartialEq, Eq, Serialize, Debug, sqlx::Type)]
+#[derive(Clone, Copy, Deserialize, PartialEq, Eq, Serialize, Debug, sqlx::Type, strum::Display)]
 #[sqlx(rename_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
 pub enum AccountTier {
     Basic,
     Pro,
@@ -191,17 +183,6 @@ pub enum AccountTier {
 impl Default for AccountTier {
     fn default() -> Self {
         AccountTier::Basic
-    }
-}
-
-impl Display for AccountTier {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AccountTier::Basic => write!(f, "basic"),
-            AccountTier::Pro => write!(f, "pro"),
-            AccountTier::Team => write!(f, "team"),
-            AccountTier::Admin => write!(f, "admin"),
-        }
     }
 }
 

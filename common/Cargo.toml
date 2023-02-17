@@ -27,7 +27,7 @@ reqwest = { version = "0.11.13", optional = true }
 rustrict = "0.5.5"
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true, optional = true }
-strum = { version = "0.24.1", features = ["derive"] }
+strum = { workspace = true }
 tonic = { version = "0.8.3", optional = true }
 tower = { workspace = true, optional = true }
 tower-http = { workspace = true, optional = true }

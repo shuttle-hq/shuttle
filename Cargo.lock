@@ -5840,6 +5840,7 @@ dependencies = [
  "serde_json",
  "shuttle-common",
  "sqlx",
+ "strum",
  "thiserror",
  "tokio",
  "tower",

@@ -1,6 +1,6 @@
 use crate::{
     error::Error,
-    user::{AccountName, AccountTier, Admin, UserManagement, UserManager},
+    user::{AccountName, AccountTier, Admin},
 };
 use axum::{
     extract::{Path, State},
@@ -12,12 +12,12 @@ use serde::{Deserialize, Serialize};
 use shuttle_common::{backends::auth::Claim, models::auth};
 use tracing::instrument;
 
-use super::builder::KeyManagerState;
+use super::builder::{KeyManagerState, UserManagerState};
 
 #[instrument(skip(user_manager))]
 pub(crate) async fn get_user(
     _: Admin,
-    State(user_manager): State<UserManager>,
+    State(user_manager): State<UserManagerState>,
     Path(account_name): Path<AccountName>,
 ) -> Result<Json<auth::UserResponse>, Error> {
     let user = user_manager.get_user(account_name).await?;
@@ -28,7 +28,7 @@ pub(crate) async fn get_user(
 #[instrument(skip(user_manager))]
 pub(crate) async fn post_user(
     _: Admin,
-    State(user_manager): State<UserManager>,
+    State(user_manager): State<UserManagerState>,
     Path((account_name, account_tier)): Path<(AccountName, AccountTier)>,
 ) -> Result<Json<auth::UserResponse>, Error> {
     let user = user_manager.create_user(account_name, account_tier).await?;
@@ -38,7 +38,7 @@ pub(crate) async fn post_user(
 
 pub(crate) async fn login(
     mut session: WritableSession,
-    State(user_manager): State<UserManager>,
+    State(user_manager): State<UserManagerState>,
     Json(request): Json<LoginRequest>,
 ) -> Result<Json<auth::UserResponse>, Error> {
     let user = user_manager.get_user(request.account_name).await?;

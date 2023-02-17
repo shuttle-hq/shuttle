@@ -17,23 +17,24 @@ use tracing::field;
 
 use crate::{
     secrets::{EdDsaManager, KeyManager},
-    user::UserManager,
+    user::{UserManagement, UserManager},
 };
 
 use super::handlers::{
     convert_cookie, convert_key, get_public_key, get_user, login, logout, post_user, refresh_token,
 };
 
+pub type UserManagerState = Arc<Box<dyn UserManagement>>;
 pub type KeyManagerState = Arc<Box<dyn KeyManager>>;
 
 #[derive(Clone)]
 pub struct RouterState {
-    pub user_manager: UserManager,
+    pub user_manager: UserManagerState,
     pub key_manager: KeyManagerState,
 }
 
-// Allow getting a UserManager state directly
-impl FromRef<RouterState> for UserManager {
+// Allow getting a user management state directly
+impl FromRef<RouterState> for UserManagerState {
     fn from_ref(router_state: &RouterState) -> Self {
         router_state.user_manager.clone()
     }
@@ -112,11 +113,11 @@ impl ApiBuilder {
         let pool = self.pool.expect("an sqlite pool is required");
         let session_layer = self.session_layer.expect("a session layer is required");
 
+        let user_manager = UserManager { pool };
         let key_manager = EdDsaManager::new();
 
-        let user_manager = UserManager { pool };
         self.router.layer(session_layer).with_state(RouterState {
-            user_manager,
+            user_manager: Arc::new(Box::new(user_manager)),
             key_manager: Arc::new(Box::new(key_manager)),
         })
     }

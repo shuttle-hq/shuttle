@@ -16,7 +16,7 @@ use tracing::{trace, Span};
 use crate::{api::RouterState, error::Error};
 
 #[async_trait]
-pub(crate) trait UserManagement {
+pub trait UserManagement: Send + Sync {
     async fn create_user(&self, name: AccountName, tier: AccountTier) -> Result<User, Error>;
     async fn get_user(&self, name: AccountName) -> Result<User, Error>;
     async fn get_user_by_key(&self, key: Key) -> Result<User, Error>;

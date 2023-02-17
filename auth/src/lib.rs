@@ -1,6 +1,7 @@
 mod api;
 mod args;
 mod error;
+mod secrets;
 mod user;
 
 use std::{io, str::FromStr};

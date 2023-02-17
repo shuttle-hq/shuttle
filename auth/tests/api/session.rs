@@ -40,7 +40,15 @@ async fn session_flow() {
     assert_eq!(cookie.secure(), Some(true));
 
     // Test converting the cookie to a JWT
-    // TODO
+    let request = Request::builder()
+        .uri("/auth/session")
+        .method("GET")
+        .header("Cookie", cookie.stripped().to_string())
+        .body(Body::empty())
+        .unwrap();
+    let response = app.send_request(request).await;
+
+    assert_eq!(response.status(), StatusCode::OK);
 
     // POST user logout
     let request = Request::builder()
@@ -54,5 +62,13 @@ async fn session_flow() {
     assert_eq!(response.status(), StatusCode::OK);
 
     // Test cookie can no longer be converted to JWT
-    // TODO
+    let request = Request::builder()
+        .uri("/auth/session")
+        .method("GET")
+        .header("Cookie", cookie.stripped().to_string())
+        .body(Body::empty())
+        .unwrap();
+    let response = app.send_request(request).await;
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }

@@ -1,7 +1,6 @@
 use crate::{
-    api::builder::RouterState,
     error::Error,
-    user::{AccountName, AccountTier, Admin, UserManagement},
+    user::{AccountName, AccountTier, Admin, UserManagement, UserManager},
 };
 use axum::{
     extract::{Path, State},
@@ -13,10 +12,12 @@ use serde::{Deserialize, Serialize};
 use shuttle_common::{backends::auth::Claim, models::auth};
 use tracing::instrument;
 
+use super::builder::KeyManagerState;
+
 #[instrument(skip(user_manager))]
 pub(crate) async fn get_user(
     _: Admin,
-    State(RouterState { user_manager, .. }): State<RouterState>,
+    State(user_manager): State<UserManager>,
     Path(account_name): Path<AccountName>,
 ) -> Result<Json<auth::UserResponse>, Error> {
     let user = user_manager.get_user(account_name).await?;
@@ -27,7 +28,7 @@ pub(crate) async fn get_user(
 #[instrument(skip(user_manager))]
 pub(crate) async fn post_user(
     _: Admin,
-    State(RouterState { user_manager, .. }): State<RouterState>,
+    State(user_manager): State<UserManager>,
     Path((account_name, account_tier)): Path<(AccountName, AccountTier)>,
 ) -> Result<Json<auth::UserResponse>, Error> {
     let user = user_manager.create_user(account_name, account_tier).await?;
@@ -37,7 +38,7 @@ pub(crate) async fn post_user(
 
 pub(crate) async fn login(
     mut session: WritableSession,
-    State(RouterState { user_manager, .. }): State<RouterState>,
+    State(user_manager): State<UserManager>,
     Json(request): Json<LoginRequest>,
 ) -> Result<Json<auth::UserResponse>, Error> {
     let user = user_manager.get_user(request.account_name).await?;
@@ -58,7 +59,7 @@ pub(crate) async fn logout(mut session: WritableSession) {
 
 pub(crate) async fn convert_cookie(
     session: ReadableSession,
-    State(RouterState { encoding_key, .. }): State<RouterState>,
+    State(key_manager): State<KeyManagerState>,
 ) -> Result<Json<shuttle_common::backends::auth::ConvertResponse>, StatusCode> {
     let account_name: String = session
         .get("account_name")
@@ -71,7 +72,7 @@ pub(crate) async fn convert_cookie(
     let claim = Claim::new(account_name, account_tier.into());
 
     let response = shuttle_common::backends::auth::ConvertResponse {
-        token: claim.into_token(&encoding_key)?,
+        token: claim.into_token(key_manager.private_key())?,
     };
 
     Ok(Json(response))

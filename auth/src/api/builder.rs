@@ -1,14 +1,13 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::Arc};
 
 use axum::{
+    extract::FromRef,
     middleware::from_extractor,
     routing::{get, post},
     Router, Server,
 };
 use axum_sessions::{async_session::MemoryStore, SessionLayer};
-use jsonwebtoken::EncodingKey;
 use rand::RngCore;
-use ring::signature;
 use shuttle_common::{
     backends::metrics::{Metrics, TraceLayer},
     request_span,
@@ -16,16 +15,35 @@ use shuttle_common::{
 use sqlx::SqlitePool;
 use tracing::field;
 
-use crate::user::UserManager;
+use crate::{
+    secrets::{EdDsaManager, KeyManager},
+    user::UserManager,
+};
 
 use super::handlers::{
     convert_cookie, convert_key, get_public_key, get_user, login, logout, post_user, refresh_token,
 };
 
+pub type KeyManagerState = Arc<Box<dyn KeyManager>>;
+
 #[derive(Clone)]
 pub struct RouterState {
     pub user_manager: UserManager,
-    pub encoding_key: EncodingKey,
+    pub key_manager: KeyManagerState,
+}
+
+// Allow getting a UserManager state directly
+impl FromRef<RouterState> for UserManager {
+    fn from_ref(router_state: &RouterState) -> Self {
+        router_state.user_manager.clone()
+    }
+}
+
+// Allow getting a key manager state directly
+impl FromRef<RouterState> for KeyManagerState {
+    fn from_ref(router_state: &RouterState) -> Self {
+        router_state.key_manager.clone()
+    }
 }
 
 pub struct ApiBuilder {
@@ -94,14 +112,12 @@ impl ApiBuilder {
         let pool = self.pool.expect("an sqlite pool is required");
         let session_layer = self.session_layer.expect("a session layer is required");
 
-        let doc = signature::Ed25519KeyPair::generate_pkcs8(&ring::rand::SystemRandom::new())
-            .expect("to create a PKCS8 for edDSA");
-        let encoding_key = EncodingKey::from_ed_der(doc.as_ref());
+        let key_manager = EdDsaManager::new();
 
         let user_manager = UserManager { pool };
         self.router.layer(session_layer).with_state(RouterState {
             user_manager,
-            encoding_key,
+            key_manager: Arc::new(Box::new(key_manager)),
         })
     }
 }

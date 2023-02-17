@@ -9,6 +9,7 @@ use axum::{
 };
 use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Deserializer, Serialize};
+use shuttle_common::backends::auth::Scope;
 use sqlx::{query, Row, SqlitePool};
 use tracing::{trace, Span};
 
@@ -100,7 +101,7 @@ where
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let key = Key::from_request_parts(parts, state).await?;
 
-        let RouterState { user_manager } = RouterState::from_ref(state);
+        let RouterState { user_manager, .. } = RouterState::from_ref(state);
 
         let user = user_manager
             .get_user_by_key(key)
@@ -183,6 +184,22 @@ pub enum AccountTier {
 impl Default for AccountTier {
     fn default() -> Self {
         AccountTier::Basic
+    }
+}
+
+impl From<AccountTier> for Vec<Scope> {
+    fn from(_tier: AccountTier) -> Self {
+        vec![
+            Scope::Deployment,
+            Scope::DeploymentPush,
+            Scope::Logs,
+            Scope::Project,
+            Scope::ProjectCreate,
+            Scope::Resources,
+            Scope::ResourcesWrite,
+            Scope::Secret,
+            Scope::SecretWrite,
+        ]
     }
 }
 

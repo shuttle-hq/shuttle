@@ -631,7 +631,6 @@ pub mod tests {
     use std::str::FromStr;
 
     use fqdn::FQDN;
-    use sqlx::sqlite;
 
     use super::*;
     use crate::auth::AccountTier;
@@ -741,9 +740,17 @@ pub mod tests {
             svc.iter_user_projects_detailed_filtered(neo.clone(), "ready".to_string())
                 .await
                 .unwrap()
-                .expect("to get one project with its user and proper project status")
-                .collect::<Vec<_>>(),
-            vec![matrix.clone(), "ready"]
+                .next()
+                .expect("to get one project with its user and a valid Ready status"),
+            (matrix.clone(), project)
+        );
+
+        assert_eq!(
+            svc.iter_user_projects_detailed_filtered(neo.clone(), "destroyed".to_string())
+                .await
+                .unwrap()
+                .next(),
+            None
         );
 
         let mut work = svc

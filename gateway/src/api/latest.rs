@@ -33,6 +33,8 @@ use crate::tls::GatewayCertResolver;
 use crate::worker::WORKER_QUEUE_SIZE;
 use crate::{AccountName, Error, GatewayService, ProjectName};
 
+use super::auth_layer::ShuttleAuthLayer;
+
 pub const SVC_DEGRADED_THRESHOLD: usize = 128;
 
 #[derive(Serialize, Deserialize)]
@@ -468,6 +470,12 @@ impl ApiBuilder {
                 "/admin/stats/load",
                 get(get_load_admin).delete(delete_load_admin),
             );
+        self
+    }
+
+    pub fn with_auth_service(mut self, auth_address: SocketAddr) -> Self {
+        self.router = self.router.layer(ShuttleAuthLayer::new(auth_address));
+
         self
     }
 

@@ -1,3 +1,4 @@
+use std::net::Ipv4Addr;
 use std::sync::Arc;
 
 use axum::body::Body;
@@ -220,7 +221,7 @@ impl GatewayService {
         });
 
         let resp = PROXY_CLIENT
-            .call("127.0.0.1".parse().unwrap(), &target_url, req)
+            .call(Ipv4Addr::LOCALHOST.into(), &target_url, req)
             .await
             .map_err(|_| Error::from_kind(ErrorKind::ProjectUnavailable))?;
 

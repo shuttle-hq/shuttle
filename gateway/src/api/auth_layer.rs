@@ -5,6 +5,7 @@ use std::{
 
 use axum::{
     body::{boxed, HttpBody},
+    headers::{authorization::Bearer, Authorization, Header, HeaderMapExt},
     response::Response,
 };
 use futures::future::BoxFuture;
@@ -17,6 +18,7 @@ use hyper_reverse_proxy::ReverseProxy;
 use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
+use shuttle_common::backends::auth::ConvertResponse;
 use tower::{Layer, Service};
 use tracing::{error, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -54,7 +56,7 @@ pub struct ShuttleAuthService<S> {
 
 impl<S> Service<Request<Body>> for ShuttleAuthService<S>
 where
-    S: Service<Request<Body>, Response = Response>,
+    S: Service<Request<Body>, Response = Response> + Send + Clone + 'static,
     S::Future: Send + 'static,
 {
     type Response = S::Response;
@@ -110,10 +112,62 @@ where
                 }
             })
         } else {
-            let future = self.inner.call(req);
+            let mut this = self.clone();
 
             Box::pin(async move {
-                match future.await {
+                if let Some(value) = req.headers().typed_get::<Authorization<Bearer>>() {
+                    let target_url = format!("http://{}", this.auth_address);
+                    let token_request = make_token_request("/auth/key", value);
+
+                    let token_response = match PROXY_CLIENT
+                        .call(Ipv4Addr::LOCALHOST.into(), &target_url, token_request)
+                        .await
+                    {
+                        Ok(res) => res,
+                        Err(error) => {
+                            error!(?error, "failed to call authentication service");
+
+                            return Ok(Response::builder()
+                                .status(StatusCode::SERVICE_UNAVAILABLE)
+                                .body(boxed(Body::empty()))
+                                .unwrap());
+                        }
+                    };
+
+                    let body = match hyper::body::to_bytes(token_response.into_body()).await {
+                        Ok(body) => body,
+                        Err(error) => {
+                            error!(
+                                error = &error as &dyn std::error::Error,
+                                "failed to get response body"
+                            );
+
+                            return Ok(Response::builder()
+                                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                                .body(boxed(Body::empty()))
+                                .unwrap());
+                        }
+                    };
+                    let response: ConvertResponse = match serde_json::from_slice(&body) {
+                        Ok(response) => response,
+                        Err(error) => {
+                            error!(
+                                error = &error as &dyn std::error::Error,
+                                "failed to convert body to ConvertResponse"
+                            );
+
+                            return Ok(Response::builder()
+                                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                                .body(boxed(Body::empty()))
+                                .unwrap());
+                        }
+                    };
+
+                    req.headers_mut()
+                        .typed_insert(Authorization::bearer(&response.token).unwrap());
+                }
+
+                match this.inner.call(req).await {
                     Ok(response) => Ok(response),
                     Err(_) => {
                         error!("unexpected internal error from gateway");
@@ -127,4 +181,25 @@ where
             })
         }
     }
+}
+
+fn make_token_request(uri: &str, header: impl Header) -> Request<Body> {
+    let mut token_request = Request::builder().uri(uri);
+    token_request
+        .headers_mut()
+        .expect("manual request to be valid")
+        .typed_insert(header);
+
+    let cx = Span::current().context();
+
+    global::get_text_map_propagator(|propagator| {
+        propagator.inject_context(
+            &cx,
+            &mut HeaderInjector(token_request.headers_mut().expect("request to be valid")),
+        )
+    });
+
+    token_request
+        .body(Body::empty())
+        .expect("manual request to be valid")
 }

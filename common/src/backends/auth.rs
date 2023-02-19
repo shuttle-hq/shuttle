@@ -47,7 +47,7 @@ pub enum Scope {
     SecretWrite,
 }
 
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
 /// Response used internally to pass around JWT token
 pub struct ConvertResponse {
     pub token: String,

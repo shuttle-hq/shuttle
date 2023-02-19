@@ -5,7 +5,7 @@ use std::{
 
 use axum::{
     body::{boxed, HttpBody},
-    headers::{authorization::Bearer, Authorization, Header, HeaderMapExt},
+    headers::{authorization::Bearer, Authorization, Cookie, Header, HeaderMapExt},
     response::Response,
 };
 use futures::future::BoxFuture;
@@ -115,9 +115,18 @@ where
             let mut this = self.clone();
 
             Box::pin(async move {
-                if let Some(value) = req.headers().typed_get::<Authorization<Bearer>>() {
+                let mut auth_details = None;
+
+                if let Some(bearer) = req.headers().typed_get::<Authorization<Bearer>>() {
+                    auth_details = Some(make_token_request("/auth/key", bearer));
+                }
+
+                if let Some(cookie) = req.headers().typed_get::<Cookie>() {
+                    auth_details = Some(make_token_request("/auth/session", cookie));
+                }
+
+                if let Some(token_request) = auth_details {
                     let target_url = format!("http://{}", this.auth_address);
-                    let token_request = make_token_request("/auth/key", value);
 
                     let token_response = match PROXY_CLIENT
                         .call(Ipv4Addr::LOCALHOST.into(), &target_url, token_request)

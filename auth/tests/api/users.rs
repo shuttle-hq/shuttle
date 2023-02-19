@@ -9,7 +9,7 @@ async fn post_user() {
 
     // POST user without bearer token.
     let request = Request::builder()
-        .uri("/user/test-user/basic")
+        .uri("/users/test-user/basic")
         .method("POST")
         .body(Body::empty())
         .unwrap();
@@ -20,7 +20,7 @@ async fn post_user() {
 
     // POST user with invalid bearer token.
     let request = Request::builder()
-        .uri("/user/test-user/basic")
+        .uri("/users/test-user/basic")
         .method("POST")
         .header(AUTHORIZATION, "Bearer notadmin")
         .body(Body::empty())
@@ -69,7 +69,7 @@ async fn get_user() {
 
     // GET user without bearer token.
     let request = Request::builder()
-        .uri("/user/test-user")
+        .uri("/users/test-user")
         .body(Body::empty())
         .unwrap();
 
@@ -79,7 +79,7 @@ async fn get_user() {
 
     // GET user with invalid bearer token.
     let request = Request::builder()
-        .uri("/user/test-user")
+        .uri("/users/test-user")
         .header(AUTHORIZATION, "Bearer notadmin")
         .body(Body::empty())
         .unwrap();

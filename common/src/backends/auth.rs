@@ -1,4 +1,4 @@
-use std::{future::Future, ops::Add, pin::Pin};
+use std::{future::Future, net::SocketAddr, ops::Add, pin::Pin};
 
 use bytes::Bytes;
 use chrono::{Duration, Utc};
@@ -141,6 +141,33 @@ impl Claim {
     }
 }
 
+/// Get the public key for the Jwt layer
+pub trait PublicKeyGetter {
+    fn public_key(&self) -> Vec<u8>;
+}
+
+impl<F: Fn() -> Vec<u8>> PublicKeyGetter for F {
+    fn public_key(&self) -> Vec<u8> {
+        (self)()
+    }
+}
+
+pub struct AuthPublicKey {
+    auth_address: SocketAddr,
+}
+
+impl AuthPublicKey {
+    pub fn new(auth_address: SocketAddr) -> Self {
+        Self { auth_address }
+    }
+}
+
+impl PublicKeyGetter for AuthPublicKey {
+    fn public_key(&self) -> Vec<u8> {
+        todo!()
+    }
+}
+
 /// Layer to validate JWT tokens with a public key. Valid claims are added to the request extension
 ///
 /// It can also be used with tonic. See:
@@ -148,21 +175,21 @@ impl Claim {
 #[derive(Clone)]
 pub struct JwtAuthenticationLayer<F> {
     /// User provided function to get the public key from
-    public_key_fn: F,
+    public_key_getter: F,
 }
 
-impl<F: Fn() -> Vec<u8>> JwtAuthenticationLayer<F> {
+impl<F: PublicKeyGetter> JwtAuthenticationLayer<F> {
     /// Create a new layer to validate JWT tokens with the given public key
-    pub fn new(public_key_fn: F) -> Self {
-        Self { public_key_fn }
+    pub fn new(public_key_getter: F) -> Self {
+        Self { public_key_getter }
     }
 }
 
-impl<S, F: Fn() -> Vec<u8>> Layer<S> for JwtAuthenticationLayer<F> {
+impl<S, F: PublicKeyGetter> Layer<S> for JwtAuthenticationLayer<F> {
     type Service = JwtAuthentication<S>;
 
     fn layer(&self, inner: S) -> Self::Service {
-        let public_key = (self.public_key_fn)();
+        let public_key = self.public_key_getter.public_key();
 
         JwtAuthentication { inner, public_key }
     }

@@ -7,6 +7,7 @@ use axum::{
     Router, Server,
 };
 use axum_sessions::{async_session::MemoryStore, SessionLayer};
+use dashmap::DashMap;
 use rand::RngCore;
 use shuttle_common::{
     backends::metrics::{Metrics, TraceLayer},
@@ -17,7 +18,8 @@ use tracing::field;
 
 use crate::{
     secrets::{EdDsaManager, KeyManager},
-    user::{UserManagement, UserManager},
+    user::{Key, UserManagement, UserManager},
+    COOKIE_EXPIRATION,
 };
 
 use super::handlers::{
@@ -26,11 +28,13 @@ use super::handlers::{
 
 pub type UserManagerState = Arc<Box<dyn UserManagement>>;
 pub type KeyManagerState = Arc<Box<dyn KeyManager>>;
+pub type Cache = Arc<DashMap<Key, (usize, String)>>;
 
 #[derive(Clone)]
 pub struct RouterState {
     pub user_manager: UserManagerState,
     pub key_manager: KeyManagerState,
+    pub cache: Cache,
 }
 
 // Allow getting a user management state directly
@@ -47,10 +51,18 @@ impl FromRef<RouterState> for KeyManagerState {
     }
 }
 
+// Allow getting a cache state directly
+impl FromRef<RouterState> for Cache {
+    fn from_ref(router_state: &RouterState) -> Self {
+        router_state.cache.clone()
+    }
+}
+
 pub struct ApiBuilder {
     router: Router<RouterState>,
     pool: Option<SqlitePool>,
     session_layer: Option<SessionLayer<MemoryStore>>,
+    cache: Option<Cache>,
 }
 
 impl Default for ApiBuilder {
@@ -87,6 +99,7 @@ impl ApiBuilder {
             router,
             pool: None,
             session_layer: None,
+            cache: None,
         }
     }
 
@@ -102,9 +115,17 @@ impl ApiBuilder {
         self.session_layer = Some(
             SessionLayer::new(store, &secret)
                 .with_cookie_name("shuttle.sid")
-                .with_session_ttl(Some(std::time::Duration::from_secs(60 * 60 * 24))) // One day
+                .with_session_ttl(Some(COOKIE_EXPIRATION)) // One day
                 .with_secure(true),
         );
+
+        self
+    }
+
+    pub fn with_cache(mut self) -> Self {
+        let cache = Arc::new(DashMap::new());
+
+        self.cache = Some(cache);
 
         self
     }
@@ -112,6 +133,7 @@ impl ApiBuilder {
     pub fn into_router(self) -> Router {
         let pool = self.pool.expect("an sqlite pool is required");
         let session_layer = self.session_layer.expect("a session layer is required");
+        let cache = self.cache.expect("a cache is required");
 
         let user_manager = UserManager { pool };
         let key_manager = EdDsaManager::new();
@@ -119,6 +141,7 @@ impl ApiBuilder {
         self.router.layer(session_layer).with_state(RouterState {
             user_manager: Arc::new(Box::new(user_manager)),
             key_manager: Arc::new(Box::new(key_manager)),
+            cache,
         })
     }
 }

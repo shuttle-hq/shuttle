@@ -7,6 +7,7 @@ use axum::{
     Json,
 };
 use axum_sessions::extractors::{ReadableSession, WritableSession};
+use chrono::{TimeZone, Utc};
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
 use shuttle_common::{backends::auth::Claim, models::auth};
@@ -51,7 +52,7 @@ pub(crate) async fn login(
         .expect("to set account name");
     session
         .insert("account_tier", user.account_tier)
-        .expect("to set account name");
+        .expect("to set account tier");
 
     Ok(Json(user.into()))
 }
@@ -86,21 +87,43 @@ pub(crate) async fn convert_key(
     State(RouterState {
         key_manager,
         user_manager,
+        cache,
     }): State<RouterState>,
     key: Key,
 ) -> Result<Json<shuttle_common::backends::auth::ConvertResponse>, StatusCode> {
+    if let Some(val) = cache.get(&key) {
+        let (expiration, jwt) = val.value();
+
+        let expiration_timestamp = Utc
+            .timestamp_opt(*expiration as i64, 0)
+            .single()
+            .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        if expiration_timestamp < Utc::now() {
+            // Token is cached and not expired, return it.
+            let response = shuttle_common::backends::auth::ConvertResponse { token: jwt.clone() };
+            return Ok(Json(response));
+        }
+    }
+
     let User {
         name, account_tier, ..
     } = user_manager
-        .get_user_by_key(key)
+        .get_user_by_key(key.clone())
         .await
         .map_err(|_| StatusCode::UNAUTHORIZED)?;
 
     let claim = Claim::new(name.to_string(), account_tier.into());
 
-    let response = shuttle_common::backends::auth::ConvertResponse {
-        token: claim.into_token(key_manager.private_key())?,
-    };
+    // Expiration time (as UTC timestamp).
+    let exp = claim.exp;
+
+    let token = claim.into_token(key_manager.private_key())?;
+
+    // Cache the token.
+    cache.insert(key, (exp, token.clone()));
+
+    let response = shuttle_common::backends::auth::ConvertResponse { token };
 
     Ok(Json(response))
 }

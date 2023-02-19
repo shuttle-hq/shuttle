@@ -525,6 +525,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-session"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "07da4ce523b4e2ebaaf330746761df23a465b951a83d84bbce4233dabedae630"
+dependencies = [
+ "anyhow",
+ "async-lock",
+ "async-trait",
+ "base64 0.13.1",
+ "bincode",
+ "blake3",
+ "chrono",
+ "hmac 0.11.0",
+ "log",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "sha2 0.9.9",
+]
+
+[[package]]
 name = "async-sse"
 version = "4.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1010,6 +1031,46 @@ dependencies = [
 ]
 
 [[package]]
+name = "axum-extra"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f9a320103719de37b7b4da4c8eb629d4573f6bcfd3dfe80d3208806895ccf81d"
+dependencies = [
+ "axum",
+ "bytes 1.3.0",
+ "cookie 0.16.0",
+ "futures-util",
+ "http 0.2.8",
+ "mime",
+ "pin-project-lite 0.2.9",
+ "tokio",
+ "tower",
+ "tower-http 0.3.4",
+ "tower-layer",
+ "tower-service",
+]
+
+[[package]]
+name = "axum-extra"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "51227033e4d3acad15c879092ac8a228532707b5db5ff2628f638334f63e1b7a"
+dependencies = [
+ "axum",
+ "bytes 1.3.0",
+ "cookie 0.17.0",
+ "futures-util",
+ "http 0.2.8",
+ "mime",
+ "pin-project-lite 0.2.9",
+ "tokio",
+ "tower",
+ "tower-http 0.3.4",
+ "tower-layer",
+ "tower-service",
+]
+
+[[package]]
 name = "axum-server"
 version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1027,6 +1088,22 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "tower-service",
+]
+
+[[package]]
+name = "axum-sessions"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4b114309d293dd8a6fedebf09d5b8bbb0f7647b3d204ca0dd333b5f797aed5c8"
+dependencies = [
+ "async-session 3.0.0",
+ "axum",
+ "axum-extra 0.4.2",
+ "futures",
+ "http-body",
+ "tokio",
+ "tower",
+ "tracing",
 ]
 
 [[package]]
@@ -1412,7 +1489,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-shuttle"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -1813,6 +1890,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "cookie"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7efb37c3e1ccb1ff97164ad95ac1606e8ccd35b3fa0a7d99a304c7f4a428cc24"
+dependencies = [
+ "percent-encoding",
+ "time 0.3.11",
+ "version_check",
+]
+
+[[package]]
 name = "core-foundation"
 version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2028,6 +2116,16 @@ name = "crypto-mac"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bff07008ec701e8028e2ceb8f83f0e4274ee62bd2dbdc4fefff2e9a91824081a"
+dependencies = [
+ "generic-array",
+ "subtle",
+]
+
+[[package]]
+name = "crypto-mac"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1d1a86f49236c215f271d40892d5fc950490551400b02ef360692c29815c714"
 dependencies = [
  "generic-array",
  "subtle",
@@ -2992,6 +3090,16 @@ dependencies = [
 
 [[package]]
 name = "hmac"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2a2a2320eb7ec0ebe8da8f744d7812d9fc4cb4d09344ac01898dbcb6a20ae69b"
+dependencies = [
+ "crypto-mac 0.11.1",
+ "digest 0.9.0",
+]
+
+[[package]]
+name = "hmac"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c49c37c09c17a53d937dfbb742eb3a961d65a994e6bcdcf37e7399d0cc8ab5e"
@@ -3452,6 +3560,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3fac17f7123a73ca62df411b1bf727ccc805daa070338fda671c86dac1bdc27"
 dependencies = [
  "wasm-bindgen",
+]
+
+[[package]]
+name = "jsonwebtoken"
+version = "8.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09f4f04699947111ec1733e71778d763555737579e44b85844cae8e1940a1828"
+dependencies = [
+ "base64 0.13.1",
+ "pem",
+ "ring",
+ "serde",
+ "serde_json",
+ "simple_asn1",
 ]
 
 [[package]]
@@ -3923,6 +4045,17 @@ checksum = "77a8165726e8236064dbb45459242600304b42a5ea24ee2948e18e023bf7ba84"
 dependencies = [
  "overload",
  "winapi",
+]
+
+[[package]]
+name = "num-bigint"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f93ab6289c7b344a8a9f60f88d80aa20032336fe78da341afc91c8a2341fc75f"
+dependencies = [
+ "autocfg 1.1.0",
+ "num-integer",
+ "num-traits",
 ]
 
 [[package]]
@@ -4696,19 +4829,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbe448f377a7d6961e30f5955f9b8d106c3f5e449d493ee1b125c1d43c2b5179"
 dependencies = [
  "proc-macro2 1.0.47",
-]
-
-[[package]]
-name = "rand"
-version = "0.4.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "552840b97013b1a26992c11eac34bdd778e464601a4c2054b5f0bff7c6761293"
-dependencies = [
- "fuchsia-cprng",
- "libc",
- "rand_core 0.3.1",
- "rdrand",
- "winapi",
 ]
 
 [[package]]
@@ -5797,7 +5917,7 @@ checksum = "45bb67a18fa91266cc7807181f62f9178a6873bfad7dc788c42e6430db40184f"
 
 [[package]]
 name = "shuttle-admin"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "anyhow",
  "clap 4.0.27",
@@ -5813,8 +5933,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "shuttle-auth"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "axum",
+ "axum-extra 0.5.0",
+ "axum-sessions",
+ "clap 4.0.27",
+ "http 0.2.8",
+ "hyper",
+ "jsonwebtoken",
+ "opentelemetry",
+ "opentelemetry-datadog",
+ "rand 0.8.5",
+ "ring",
+ "serde",
+ "serde_json",
+ "shuttle-common",
+ "sqlx",
+ "strum",
+ "thiserror",
+ "tokio",
+ "tower",
+ "tracing",
+ "tracing-opentelemetry",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "shuttle-codegen"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "pretty_assertions",
  "proc-macro-error",
@@ -5826,28 +5976,44 @@ dependencies = [
 
 [[package]]
 name = "shuttle-common"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "anyhow",
  "async-trait",
  "axum",
+ "base64 0.13.1",
+ "bytes 1.3.0",
  "chrono",
  "comfy-table",
  "crossterm",
+ "headers",
  "http 0.2.8",
+ "http-body",
+ "hyper",
+ "jsonwebtoken",
  "once_cell",
+ "opentelemetry",
+ "opentelemetry-http",
  "reqwest",
+ "ring",
  "rustrict",
  "serde",
  "serde_json",
  "strum",
+ "tokio",
+ "tonic",
+ "tower",
+ "tower-http 0.3.4",
  "tracing",
+ "tracing-fluent-assertions",
+ "tracing-opentelemetry",
+ "tracing-subscriber",
  "uuid 1.2.2",
 ]
 
 [[package]]
 name = "shuttle-deployer"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5880,7 +6046,7 @@ dependencies = [
  "sqlx",
  "strum",
  "tar",
- "tempdir",
+ "tempfile",
  "thiserror",
  "tokio",
  "toml",
@@ -5895,7 +6061,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-gateway"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "acme2",
  "anyhow",
@@ -5934,7 +6100,6 @@ dependencies = [
  "tempfile",
  "tokio",
  "tower",
- "tower-http 0.3.4",
  "tracing",
  "tracing-opentelemetry",
  "tracing-subscriber",
@@ -5944,7 +6109,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-proto"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "prost",
  "shuttle-common",
@@ -5954,7 +6119,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-provisioner"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "aws-config",
  "aws-sdk-rds",
@@ -5979,7 +6144,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-secrets"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "async-trait",
  "shuttle-service",
@@ -5988,7 +6153,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-service"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "actix-web",
  "anyhow",
@@ -6065,6 +6230,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "38aabbeafa6f6dead8cebf246fe9fae1f9215c8d29b3a69f93bd62a9e4a3dcd6"
 dependencies = [
  "event-listener",
+]
+
+[[package]]
+name = "simple_asn1"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "adc4e5204eb1910f40f9cfa375f6f05b68c3abac4b6fd879c8ff5e7ae8a0a085"
+dependencies = [
+ "num-bigint",
+ "num-traits",
+ "thiserror",
+ "time 0.3.11",
 ]
 
 [[package]]
@@ -6470,16 +6647,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tempdir"
-version = "0.3.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15f2b5fb00ccdf689e0149d1b1b3c03fead81c2b37735d812fa8bddbbf41b6d8"
-dependencies = [
- "rand 0.4.6",
- "remove_dir_all",
-]
-
-[[package]]
 name = "tempfile"
 version = "3.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6655,7 +6822,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c459573f0dd2cc734b539047f57489ea875af8ee950860ded20cf93a79a1dee0"
 dependencies = [
  "async-h1",
- "async-session",
+ "async-session 2.0.1",
  "async-sse",
  "async-std",
  "async-trait",
@@ -7089,6 +7256,17 @@ checksum = "24eb03ba0eab1fd845050058ce5e616558e8f8d8fca633e6b163fe25c797213a"
 dependencies = [
  "once_cell",
  "valuable",
+]
+
+[[package]]
+name = "tracing-fluent-assertions"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12de1a8c6bcfee614305e836308b596bbac831137a04c61f7e5b0b0bf2cfeaf6"
+dependencies = [
+ "tracing",
+ "tracing-core",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -7914,9 +8092,9 @@ dependencies = [
 
 [[package]]
 name = "zeroize"
-version = "1.5.5"
+version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94693807d016b2f2d2e14420eb3bfcca689311ff775dcf113d74ea624b7cdf07"
+checksum = "4756f7db3f7b5574938c3eb1c117038b8e07f95ee6718c0efad4ac21508f1efd"
 
 [[package]]
 name = "zstd"

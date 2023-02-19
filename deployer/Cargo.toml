@@ -19,34 +19,41 @@ crossbeam-channel = "0.5.6"
 flate2 = "1.0.25"
 fqdn = "0.2.3"
 futures = "0.3.25"
-hyper = { version = "0.14.23", features = ["client", "http1", "http2", "tcp" ] }
+hyper = { workspace = true, features = ["client", "http1", "http2", "tcp"] }
 # not great, but waiting for WebSocket changes to be merged
 hyper-reverse-proxy = { git = "https://github.com/chesedo/hyper-reverse-proxy", branch = "master" }
 once_cell = { workspace = true }
-opentelemetry = { version = "0.18.0", features = ["rt-tokio"] }
-opentelemetry-datadog = { version = "0.6.0", features = ["reqwest-client"] }
-opentelemetry-http = "0.7.0"
+opentelemetry = { workspace = true }
+opentelemetry-datadog = { workspace = true }
+opentelemetry-http = { workspace = true }
 pipe = "0.4.0"
-portpicker = "0.1.1"
+portpicker = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-sqlx = { version = "0.6.2", features = ["runtime-tokio-native-tls", "sqlite", "chrono", "json", "migrate", "uuid"] }
-strum = { version = "0.24.1", features = ["derive"] }
+sqlx = { version = "0.6.2", features = [
+  "runtime-tokio-native-tls",
+  "sqlite",
+  "chrono",
+  "json",
+  "migrate",
+  "uuid",
+] }
+strum = { workspace = true }
 tar = "0.4.38"
 thiserror = { workspace = true }
 tokio = { version = "1.22.0", features = ["fs"] }
 toml = "0.5.9"
 tonic = "0.8.3"
-tower = { version = "0.4.13", features = ["make"] }
-tower-http = { version = "0.3.4", features = ["auth", "trace"] }
+tower = { workspace = true, features = ["make"] }
+tower-http = { workspace = true, features = ["auth"] }
 tracing = { workspace = true }
-tracing-opentelemetry = "0.18.0"
+tracing-opentelemetry = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 uuid = { workspace = true, features = ["v4"] }
 
 [dependencies.shuttle-common]
 workspace = true
-features= ["backend", "models"]
+features = ["backend", "models"]
 
 [dependencies.shuttle-proto]
 workspace = true
@@ -58,5 +65,5 @@ features = ["loader"]
 [dev-dependencies]
 ctor = "0.1.26"
 hex = "0.4.3"
-rand = "0.8.5"
-tempdir = "0.3.7"
+rand = { workspace = true }
+tempfile = "3.3.0"

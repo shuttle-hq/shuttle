@@ -76,12 +76,12 @@ impl From<Error> for shuttle_service::Error {
 
 #[cfg(test)]
 mod tests {
-    use std::fs::{self};
+    use std::fs;
     use std::path::PathBuf;
 
     use async_trait::async_trait;
     use shuttle_service::{Factory, ResourceBuilder};
-    use tempdir::TempDir;
+    use tempfile::{Builder, TempDir};
 
     use crate::StaticFolder;
 
@@ -102,7 +102,7 @@ mod tests {
     impl MockFactory {
         fn new() -> Self {
             Self {
-                temp_dir: TempDir::new("static_folder").unwrap(),
+                temp_dir: Builder::new().prefix("static_folder").tempdir().unwrap(),
             }
         }
 

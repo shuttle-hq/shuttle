@@ -119,19 +119,23 @@ commands:
         default: ""
     steps:
       - run:
-          name: Set git tag in the environment"
+          name: Set git tag in the environment
           command: |
             echo TAG=$(git describe --tags) >> $BASH_ENV
       - run:
+          name: Set binary directory in the environment
+          command: |
+            echo BIN_DIR=cargo-shuttle-<< parameters.target >>-$TAG >> $BASH_ENV
+      - run:
           name: Make artifact
           command: |
-            mkdir shuttle
-            mv target/<< parameters.target >>/release/cargo-shuttle<< parameters.suffix >> shuttle/cargo-shuttle<< parameters.suffix >>
-            mv LICENSE shuttle/
-            mv README.md shuttle/
+            mkdir $BIN_DIR
+            mv target/<< parameters.target >>/release/cargo-shuttle<< parameters.suffix >> $BIN_DIR/cargo-shuttle-<< parameters.target >><< parameters.suffix >>
+            mv LICENSE $BIN_DIR/
+            mv README.md $BIN_DIR/
             mkdir -p artifacts/<< parameters.target >>
             cp $BASH_ENV artifacts/<< parameters.target >>.env
-            tar -cvzf artifacts/<< parameters.target >>/cargo-shuttle-$TAG-<< parameters.target >>.tar.gz shuttle
+            tar -cvzf artifacts/<< parameters.target >>/cargo-shuttle-$TAG-<< parameters.target >>.tar.gz $BIN_DIR
       # Persist the bash environment to the workspace as well, we need it for the release job.
       # Make sure the name is unique, since the binaries will be built in parallel.
       # https://discuss.circleci.com/t/share-environment-variable-between-different-job/45647/4
@@ -319,6 +323,7 @@ jobs:
     executor:
       name: win/server-2022
       size: medium
+      shell: bash.exe
     environment:
       CARGO_NET_GIT_FETCH_WITH_CLI: "true"
     steps:
@@ -329,6 +334,7 @@ jobs:
           command: |
             wget -OutFile "C:\rustup-init.exe" https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe
             C:\rustup-init.exe -y --default-toolchain 1.65.0 --target x86_64-pc-windows-msvc
+          shell: powershell.exe
       - run:
           name: Build
           command: |
@@ -337,6 +343,7 @@ jobs:
             $env:OPENSSL_SRC_PERL="C:\Strawberry\perl\bin\perl.exe"
             # "vendored-openssl" is from https://github.com/cross-rs/cross/issues/229#issuecomment-597898074
             ..\.cargo\bin\cargo.exe build --release --package cargo-shuttle --features vendored-openssl --target x86_64-pc-windows-msvc
+          shell: powershell.exe
       - make-artifact:
           target: x86_64-pc-windows-msvc
           suffix: ".exe"
@@ -379,7 +386,6 @@ jobs:
             ghr -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} -delete -draft ${TAG} ./artifacts/
 
 workflows:
-  version: 2
   ci:
     jobs:
        - workspace-fmt
@@ -407,7 +413,7 @@ workflows:
              - workspace-clippy
            matrix:
              parameters:
-               crate: ["shuttle-deployer", "cargo-shuttle", "shuttle-codegen", "shuttle-common", "shuttle-proto", "shuttle-provisioner"]
+               crate: ["shuttle-auth", "shuttle-deployer", "cargo-shuttle", "shuttle-codegen", "shuttle-common", "shuttle-proto", "shuttle-provisioner"]
        - e2e-test:
            requires:
              - service-test
@@ -423,7 +429,15 @@ workflows:
              branches:
                only: production
        - build-binaries-linux:
-           name: build-binaries-x86_64
+           name: build-binaries-x86_64-gnu
+           image: ubuntu-2204:2022.04.1
+           target: x86_64-unknown-linux-gnu
+           resource_class: medium
+           filters:
+             branches:
+               only: production
+       - build-binaries-linux:
+           name: build-binaries-x86_64-musl
            image: ubuntu-2204:2022.04.1
            target: x86_64-unknown-linux-musl
            resource_class: medium
@@ -448,7 +462,8 @@ workflows:
              only: production
        - publish-github-release:
           requires:
-            - build-binaries-x86_64
+            - build-binaries-x86_64-gnu
+            - build-binaries-x86_64-musl
             - build-binaries-aarch64
             - build-binaries-windows
             - build-binaries-mac

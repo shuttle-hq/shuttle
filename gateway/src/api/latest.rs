@@ -15,6 +15,7 @@ use futures::Future;
 use http::StatusCode;
 use instant_acme::{AccountCredentials, ChallengeType};
 use serde::{Deserialize, Serialize};
+use shuttle_common::backends::auth::{public_key_from_auth, JwtAuthenticationLayer};
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
 use shuttle_common::models::error::ErrorKind;
 use shuttle_common::models::{project, stats, user};
@@ -473,8 +474,12 @@ impl ApiBuilder {
         self
     }
 
-    pub fn with_auth_service(mut self, auth_address: SocketAddr) -> Self {
-        self.router = self.router.layer(ShuttleAuthLayer::new(auth_address));
+    pub async fn with_auth_service(mut self, auth_address: SocketAddr) -> Self {
+        let public_key_fn = public_key_from_auth(auth_address).await;
+        self.router = self
+            .router
+            .layer(JwtAuthenticationLayer::new(public_key_fn))
+            .layer(ShuttleAuthLayer::new(auth_address));
 
         self
     }

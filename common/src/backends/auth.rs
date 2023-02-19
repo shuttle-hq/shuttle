@@ -5,7 +5,7 @@ use chrono::{Duration, Utc};
 use headers::{authorization::Bearer, Authorization, HeaderMapExt};
 use http::{Request, Response, StatusCode};
 use http_body::combinators::UnsyncBoxBody;
-use hyper::Body;
+use hyper::{body, Body, Client};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use tower::{Layer, Service};
@@ -141,31 +141,14 @@ impl Claim {
     }
 }
 
-/// Get the public key for the Jwt layer
-pub trait PublicKeyGetter {
-    fn public_key(&self) -> Vec<u8>;
-}
+pub async fn public_key_from_auth(auth_address: SocketAddr) -> impl Fn() -> Vec<u8> + Clone {
+    let client = Client::new();
+    let uri = format!("http://{auth_address}/public-key").parse().unwrap();
+    let res = client.get(uri).await.unwrap();
+    let buf = body::to_bytes(res).await.unwrap();
+    let key = buf.to_vec();
 
-impl<F: Fn() -> Vec<u8>> PublicKeyGetter for F {
-    fn public_key(&self) -> Vec<u8> {
-        (self)()
-    }
-}
-
-pub struct AuthPublicKey {
-    auth_address: SocketAddr,
-}
-
-impl AuthPublicKey {
-    pub fn new(auth_address: SocketAddr) -> Self {
-        Self { auth_address }
-    }
-}
-
-impl PublicKeyGetter for AuthPublicKey {
-    fn public_key(&self) -> Vec<u8> {
-        todo!()
-    }
+    move || key.clone()
 }
 
 /// Layer to validate JWT tokens with a public key. Valid claims are added to the request extension
@@ -175,21 +158,21 @@ impl PublicKeyGetter for AuthPublicKey {
 #[derive(Clone)]
 pub struct JwtAuthenticationLayer<F> {
     /// User provided function to get the public key from
-    public_key_getter: F,
+    public_key_fn: F,
 }
 
-impl<F: PublicKeyGetter> JwtAuthenticationLayer<F> {
+impl<F: Fn() -> Vec<u8>> JwtAuthenticationLayer<F> {
     /// Create a new layer to validate JWT tokens with the given public key
-    pub fn new(public_key_getter: F) -> Self {
-        Self { public_key_getter }
+    pub fn new(public_key_fn: F) -> Self {
+        Self { public_key_fn }
     }
 }
 
-impl<S, F: PublicKeyGetter> Layer<S> for JwtAuthenticationLayer<F> {
+impl<S, F: Fn() -> Vec<u8> + Clone> Layer<S> for JwtAuthenticationLayer<F> {
     type Service = JwtAuthentication<S>;
 
     fn layer(&self, inner: S) -> Self::Service {
-        let public_key = self.public_key_getter.public_key();
+        let public_key = (self.public_key_fn)();
 
         JwtAuthentication { inner, public_key }
     }

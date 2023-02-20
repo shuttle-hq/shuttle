@@ -9,11 +9,35 @@ use shuttle_common::backends::auth::ConvertResponse;
 use std::{
     future::Future,
     pin::Pin,
+    sync::{Arc, RwLock},
     task::{Context, Poll},
+    time::Duration,
 };
 use tower::{Layer, Service};
+use ttl_cache::TtlCache;
 
 use super::RouterState;
+
+pub trait CacheManagement: Send + Sync {
+    fn get(&self, key: &str) -> Option<String>;
+    fn insert(&self, key: &str, value: String, ttl: Duration) -> Option<String>;
+}
+
+pub struct CacheManager {
+    pub cache: Arc<RwLock<TtlCache<String, String>>>,
+}
+
+impl CacheManagement for CacheManager {
+    fn get(&self, key: &str) -> Option<String> {
+        self.cache.read().unwrap().get(key).cloned()
+    }
+    fn insert(&self, key: &str, value: String, ttl: Duration) -> Option<String> {
+        self.cache
+            .write()
+            .unwrap()
+            .insert(key.to_string(), value, ttl)
+    }
+}
 
 #[derive(Clone)]
 pub(crate) struct CacheLayer {
@@ -73,12 +97,9 @@ where
             });
         };
 
-        if let Some(jwt) = self.state.cache.read().unwrap().get(&key) {
+        if let Some(jwt) = self.state.cache_manager.get(&key) {
             // Token is cached and not expired, return it in the response.
-            let body = serde_json::to_string(&ConvertResponse {
-                token: jwt.to_owned(),
-            })
-            .unwrap();
+            let body = serde_json::to_string(&ConvertResponse { token: jwt }).unwrap();
 
             let body =
                 <Body as HttpBody>::map_err(Body::from(body), axum::Error::new).boxed_unsync();

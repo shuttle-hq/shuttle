@@ -24,7 +24,7 @@ use crate::{
 };
 
 use super::{
-    cache::CacheLayer,
+    cache::{CacheLayer, CacheManagement, CacheManager},
     handlers::{
         convert_cookie, convert_key, get_public_key, get_user, login, logout, post_user,
         refresh_token,
@@ -33,13 +33,13 @@ use super::{
 
 pub type UserManagerState = Arc<Box<dyn UserManagement>>;
 pub type KeyManagerState = Arc<Box<dyn KeyManager>>;
-pub type CacheState = Arc<RwLock<TtlCache<String, String>>>;
+pub type CacheManagerState = Arc<Box<dyn CacheManagement>>;
 
 #[derive(Clone)]
 pub struct RouterState {
     pub user_manager: UserManagerState,
     pub key_manager: KeyManagerState,
-    pub cache: CacheState,
+    pub cache_manager: CacheManagerState,
 }
 
 // Allow getting a user management state directly
@@ -57,9 +57,9 @@ impl FromRef<RouterState> for KeyManagerState {
 }
 
 // Allow getting a cache state directly
-impl FromRef<RouterState> for CacheState {
+impl FromRef<RouterState> for CacheManagerState {
     fn from_ref(router_state: &RouterState) -> Self {
-        router_state.cache.clone()
+        router_state.cache_manager.clone()
     }
 }
 
@@ -67,7 +67,7 @@ pub struct ApiBuilder {
     router: Router<RouterState>,
     pool: Option<SqlitePool>,
     session_layer: Option<SessionLayer<MemoryStore>>,
-    cache: Option<CacheState>,
+    cache: Option<Arc<RwLock<TtlCache<String, String>>>>,
 }
 
 impl Default for ApiBuilder {
@@ -120,11 +120,12 @@ impl ApiBuilder {
 
         let user_manager = UserManager { pool };
         let key_manager = EdDsaManager::new();
+        let cache_manager = CacheManager { cache };
 
         let state = RouterState {
             user_manager: Arc::new(Box::new(user_manager)),
             key_manager: Arc::new(Box::new(key_manager)),
-            cache,
+            cache_manager: Arc::new(Box::new(cache_manager)),
         };
 
         self.router

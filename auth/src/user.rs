@@ -131,6 +131,12 @@ impl From<User> for shuttle_common::models::auth::UserResponse {
 #[sqlx(transparent)]
 pub struct Key(String);
 
+impl Key {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 #[async_trait]
 impl<S> FromRequestParts<S> for Key
 where

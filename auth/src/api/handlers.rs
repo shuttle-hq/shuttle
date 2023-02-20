@@ -16,7 +16,7 @@ use shuttle_common::{backends::auth::Claim, models::auth};
 use tracing::instrument;
 
 use super::{
-    builder::{CacheState, KeyManagerState, UserManagerState},
+    builder::{CacheManagerState, KeyManagerState, UserManagerState},
     RouterState,
 };
 
@@ -66,7 +66,7 @@ pub(crate) async fn logout(mut session: WritableSession) {
 pub(crate) async fn convert_cookie(
     session: ReadableSession,
     State(key_manager): State<KeyManagerState>,
-    State(cache): State<CacheState>,
+    State(cache_manager): State<CacheManagerState>,
 ) -> Result<Json<shuttle_common::backends::auth::ConvertResponse>, StatusCode> {
     let account_name: String = session
         .get("account_name")
@@ -91,8 +91,8 @@ pub(crate) async fn convert_cookie(
     let duration = expiration_timestamp - Utc::now();
 
     // Cache the token.
-    cache.write().unwrap().insert(
-        session.id().to_owned(),
+    cache_manager.insert(
+        session.id(),
         token.clone(),
         Duration::from_secs(duration.num_seconds() as u64),
     );
@@ -107,7 +107,7 @@ pub(crate) async fn convert_key(
     State(RouterState {
         key_manager,
         user_manager,
-        cache,
+        cache_manager,
     }): State<RouterState>,
     key: Key,
 ) -> Result<Json<shuttle_common::backends::auth::ConvertResponse>, StatusCode> {
@@ -133,8 +133,8 @@ pub(crate) async fn convert_key(
     let duration = expiration_timestamp - Utc::now();
 
     // Cache the token.
-    cache.write().unwrap().insert(
-        key.to_string(),
+    cache_manager.insert(
+        key.as_str(),
         token.clone(),
         Duration::from_secs(duration.num_seconds() as u64),
     );

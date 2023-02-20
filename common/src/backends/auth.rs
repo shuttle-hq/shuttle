@@ -233,6 +233,88 @@ where
     }
 }
 
+/// Check that the required scopes are set on the [Claim] extension on a [Request]
+#[derive(Clone)]
+pub struct ScopedLayer {
+    required: Vec<Scope>,
+}
+
+impl ScopedLayer {
+    /// Scopes required to authenticate a request
+    pub fn new(required: Vec<Scope>) -> Self {
+        Self { required }
+    }
+}
+
+impl<S> Layer<S> for ScopedLayer {
+    type Service = Scoped<S>;
+
+    fn layer(&self, inner: S) -> Self::Service {
+        Scoped {
+            inner,
+            required: self.required.clone(),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct Scoped<S> {
+    inner: S,
+    required: Vec<Scope>,
+}
+
+impl<S, ResponseError> Service<Request<Body>> for Scoped<S>
+where
+    S: Service<Request<Body>, Response = Response<UnsyncBoxBody<Bytes, ResponseError>>>
+        + Send
+        + 'static,
+    S::Future: Send + 'static,
+{
+    type Response = S::Response;
+    type Error = S::Error;
+    type Future =
+        Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
+
+    fn poll_ready(
+        &mut self,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
+
+    fn call(&mut self, req: Request<Body>) -> Self::Future {
+        let claim = if let Some(claim) = req.extensions().get::<Claim>() {
+            claim
+        } else {
+            error!("claim extension is not set");
+
+            return Box::pin(async move {
+                Ok(Response::builder()
+                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                    .body(Default::default())
+                    .unwrap())
+            });
+        };
+
+        if self
+            .required
+            .iter()
+            .all(|scope| claim.scopes.contains(scope))
+        {
+            let future = self.inner.call(req);
+
+            Box::pin(async move { future.await })
+        } else {
+            Box::pin(async move {
+                Ok(Response::builder()
+                    .status(StatusCode::FORBIDDEN)
+                    .body(Default::default())
+                    .unwrap())
+            })
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use axum::{routing::get, Extension, Router};

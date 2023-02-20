@@ -13,7 +13,7 @@ use shuttle_common::{
     request_span,
 };
 use sqlx::SqlitePool;
-use tokio::sync::RwLock;
+use std::sync::RwLock;
 use tracing::field;
 use ttl_cache::TtlCache;
 
@@ -23,8 +23,12 @@ use crate::{
     COOKIE_EXPIRATION,
 };
 
-use super::handlers::{
-    convert_cookie, convert_key, get_public_key, get_user, login, logout, post_user, refresh_token,
+use super::{
+    cache::CacheLayer,
+    handlers::{
+        convert_cookie, convert_key, get_public_key, get_user, login, logout, post_user,
+        refresh_token,
+    },
 };
 
 pub type UserManagerState = Arc<Box<dyn UserManagement>>;
@@ -74,30 +78,8 @@ impl Default for ApiBuilder {
 
 impl ApiBuilder {
     pub fn new() -> Self {
-        let router = Router::new()
-            .route("/login", post(login))
-            .route("/logout", post(logout))
-            .route("/auth/session", get(convert_cookie))
-            .route("/auth/key", get(convert_key))
-            .route("/auth/refresh", post(refresh_token))
-            .route("/public-key", get(get_public_key))
-            .route("/user/:account_name", get(get_user))
-            .route("/user/:account_name/:account_tier", post(post_user))
-            .route_layer(from_extractor::<Metrics>())
-            .layer(
-                TraceLayer::new(|request| {
-                    request_span!(
-                        request,
-                        request.params.account_name = field::Empty,
-                        request.params.account_tier = field::Empty
-                    )
-                })
-                .with_propagation()
-                .build(),
-            );
-
         Self {
-            router,
+            router: Router::new(),
             pool: None,
             session_layer: None,
             cache: None,
@@ -139,11 +121,40 @@ impl ApiBuilder {
         let user_manager = UserManager { pool };
         let key_manager = EdDsaManager::new();
 
-        self.router.layer(session_layer).with_state(RouterState {
+        let state = RouterState {
             user_manager: Arc::new(Box::new(user_manager)),
             key_manager: Arc::new(Box::new(key_manager)),
             cache,
-        })
+        };
+
+        self.router
+            .route("/login", post(login))
+            .route("/logout", post(logout))
+            .route("/auth/session", get(convert_cookie))
+            .route(
+                "/auth/key",
+                get(convert_key).layer(CacheLayer {
+                    state: state.clone(),
+                }),
+            )
+            .route("/auth/refresh", post(refresh_token))
+            .route("/public-key", get(get_public_key))
+            .route("/user/:account_name", get(get_user))
+            .route("/user/:account_name/:account_tier", post(post_user))
+            .route_layer(from_extractor::<Metrics>())
+            .layer(
+                TraceLayer::new(|request| {
+                    request_span!(
+                        request,
+                        request.params.account_name = field::Empty,
+                        request.params.account_tier = field::Empty
+                    )
+                })
+                .with_propagation()
+                .build(),
+            )
+            .layer(session_layer)
+            .with_state(state)
     }
 }
 

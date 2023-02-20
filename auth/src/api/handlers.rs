@@ -93,13 +93,6 @@ pub(crate) async fn convert_key(
     }): State<RouterState>,
     key: Key,
 ) -> Result<Json<shuttle_common::backends::auth::ConvertResponse>, StatusCode> {
-    if let Some(jwt) = cache.read().await.get(&key) {
-        let response = shuttle_common::backends::auth::ConvertResponse {
-            token: jwt.to_owned(),
-        };
-        return Ok(Json(response));
-    }
-
     let User {
         name, account_tier, ..
     } = user_manager
@@ -122,7 +115,7 @@ pub(crate) async fn convert_key(
     let duration = expiration_timestamp - Utc::now();
 
     // Cache the token.
-    cache.write().await.insert(
+    cache.write().unwrap().insert(
         key,
         token.clone(),
         Duration::from_secs(duration.num_seconds() as u64),

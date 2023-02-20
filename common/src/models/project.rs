@@ -5,7 +5,7 @@ use comfy_table::{
 use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
-use strum::{Display, EnumString};
+use strum::EnumString;
 
 #[derive(Deserialize, Serialize, Clone)]
 pub struct Response {
@@ -13,8 +13,7 @@ pub struct Response {
     pub state: State,
 }
 
-
-#[derive(Clone, Debug, Deserialize, Display, Serialize, Eq, PartialEq, EnumString)]
+#[derive(Clone, Debug, Deserialize, Serialize, EnumString)]
 #[serde(rename_all = "lowercase")]
 pub enum State {
     Creating { recreate_count: usize },

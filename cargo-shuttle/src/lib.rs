@@ -4,8 +4,8 @@ pub mod config;
 mod factory;
 mod init;
 
-use shuttle_common::models::project::State;
 use indicatif::ProgressBar;
+use shuttle_common::models::project::State;
 use shuttle_common::project::ProjectName;
 
 use std::collections::BTreeMap;

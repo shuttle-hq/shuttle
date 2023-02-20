@@ -19,7 +19,7 @@ use ttl_cache::TtlCache;
 
 use crate::{
     secrets::{EdDsaManager, KeyManager},
-    user::{Key, UserManagement, UserManager},
+    user::{UserManagement, UserManager},
     COOKIE_EXPIRATION,
 };
 
@@ -33,13 +33,13 @@ use super::{
 
 pub type UserManagerState = Arc<Box<dyn UserManagement>>;
 pub type KeyManagerState = Arc<Box<dyn KeyManager>>;
-pub type Cache = Arc<RwLock<TtlCache<Key, String>>>;
+pub type CacheState = Arc<RwLock<TtlCache<String, String>>>;
 
 #[derive(Clone)]
 pub struct RouterState {
     pub user_manager: UserManagerState,
     pub key_manager: KeyManagerState,
-    pub cache: Cache,
+    pub cache: CacheState,
 }
 
 // Allow getting a user management state directly
@@ -57,7 +57,7 @@ impl FromRef<RouterState> for KeyManagerState {
 }
 
 // Allow getting a cache state directly
-impl FromRef<RouterState> for Cache {
+impl FromRef<RouterState> for CacheState {
     fn from_ref(router_state: &RouterState) -> Self {
         router_state.cache.clone()
     }
@@ -67,7 +67,7 @@ pub struct ApiBuilder {
     router: Router<RouterState>,
     pool: Option<SqlitePool>,
     session_layer: Option<SessionLayer<MemoryStore>>,
-    cache: Option<Cache>,
+    cache: Option<CacheState>,
 }
 
 impl Default for ApiBuilder {
@@ -130,7 +130,12 @@ impl ApiBuilder {
         self.router
             .route("/login", post(login))
             .route("/logout", post(logout))
-            .route("/auth/session", get(convert_cookie))
+            .route(
+                "/auth/session",
+                get(convert_cookie).layer(CacheLayer {
+                    state: state.clone(),
+                }),
+            )
             .route(
                 "/auth/key",
                 get(convert_key).layer(CacheLayer {

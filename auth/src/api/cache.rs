@@ -1,6 +1,6 @@
 use axum::{
     body::{Body, HttpBody},
-    headers::{authorization::Bearer, Authorization, HeaderMapExt},
+    headers::{authorization::Bearer, Authorization, Cookie, HeaderMapExt},
     http::Request,
     response::Response,
 };
@@ -9,12 +9,9 @@ use shuttle_common::backends::auth::ConvertResponse;
 use std::{
     future::Future,
     pin::Pin,
-    str::FromStr,
     task::{Context, Poll},
 };
 use tower::{Layer, Service};
-
-use crate::user::Key;
 
 use super::RouterState;
 
@@ -55,16 +52,26 @@ where
     }
 
     fn call(&mut self, request: Request<Body>) -> Self::Future {
-        let Ok(Some(token)) = request.headers().typed_try_get::<Authorization<Bearer>>() else {
+        let mut key = None;
+
+        if let Ok(Some(token)) = request.headers().typed_try_get::<Authorization<Bearer>>() {
+            key = Some(token.token().trim().to_string());
+        };
+
+        if let Ok(Some(cookie)) = request.headers().typed_try_get::<Cookie>() {
+            if let Some(id) = cookie.get("shuttle.sid") {
+                key = Some(id.to_string())
+            };
+        };
+
+        let Some(key) = key else {
             return Box::pin(async move {
                 Ok(Response::builder()
                     .status(StatusCode::UNAUTHORIZED)
                     .body(Default::default())
                     .unwrap())
-            })
+            });
         };
-
-        let key = Key::from_str(token.token().trim()).expect("key to be valid string");
 
         if let Some(jwt) = self.state.cache.read().unwrap().get(&key) {
             // Token is cached and not expired, return it in the response.

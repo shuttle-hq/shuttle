@@ -5944,7 +5944,6 @@ dependencies = [
  "axum-sessions",
  "chrono",
  "clap 4.0.27",
- "dashmap",
  "http 0.2.8",
  "hyper",
  "jsonwebtoken",
@@ -5963,6 +5962,7 @@ dependencies = [
  "tracing",
  "tracing-opentelemetry",
  "tracing-subscriber",
+ "ttl_cache",
 ]
 
 [[package]]

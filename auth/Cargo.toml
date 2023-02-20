@@ -11,7 +11,6 @@ axum = { workspace = true, features = ["headers"] }
 axum-sessions = "0.4.1"
 chrono = { workspace = true, features = ["serde"] }
 clap = { workspace = true }
-dashmap = "5.4.0"
 http = { workspace = true }
 jsonwebtoken = { workspace = true }
 opentelemetry = { workspace = true }
@@ -26,6 +25,7 @@ tokio = { version = "1.22.0", features = ["full"] }
 tracing = { workspace = true }
 tracing-opentelemetry = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
+ttl_cache = "0.5.1"
 
 [dependencies.shuttle-common]
 workspace = true

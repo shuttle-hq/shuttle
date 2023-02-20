@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::{
     error::Error,
     user::{AccountName, AccountTier, Admin, Key, User},
@@ -91,21 +93,11 @@ pub(crate) async fn convert_key(
     }): State<RouterState>,
     key: Key,
 ) -> Result<Json<shuttle_common::backends::auth::ConvertResponse>, StatusCode> {
-    if let Some(val) = cache.get(&key) {
-        let (expiration, jwt) = val.value();
-
-        let expiration_timestamp = Utc
-            .timestamp_opt(*expiration as i64, 0)
-            .single()
-            .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
-
-        if expiration_timestamp > Utc::now() {
-            // Token is cached and not expired, return it.
-            let response = shuttle_common::backends::auth::ConvertResponse {
-                token: jwt.to_owned(),
-            };
-            return Ok(Json(response));
-        }
+    if let Some(jwt) = cache.read().await.get(&key) {
+        let response = shuttle_common::backends::auth::ConvertResponse {
+            token: jwt.to_owned(),
+        };
+        return Ok(Json(response));
     }
 
     let User {
@@ -122,8 +114,19 @@ pub(crate) async fn convert_key(
 
     let token = claim.into_token(key_manager.private_key())?;
 
+    let expiration_timestamp = Utc
+        .timestamp_opt(exp as i64, 0)
+        .single()
+        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let duration = expiration_timestamp - Utc::now();
+
     // Cache the token.
-    cache.insert(key, (exp, token.clone()));
+    cache.write().await.insert(
+        key,
+        token.clone(),
+        Duration::from_secs(duration.num_seconds() as u64),
+    );
 
     let response = shuttle_common::backends::auth::ConvertResponse { token };
 

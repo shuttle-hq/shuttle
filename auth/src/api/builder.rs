@@ -7,14 +7,15 @@ use axum::{
     Router, Server,
 };
 use axum_sessions::{async_session::MemoryStore, SessionLayer};
-use dashmap::DashMap;
 use rand::RngCore;
 use shuttle_common::{
     backends::metrics::{Metrics, TraceLayer},
     request_span,
 };
 use sqlx::SqlitePool;
+use tokio::sync::RwLock;
 use tracing::field;
+use ttl_cache::TtlCache;
 
 use crate::{
     secrets::{EdDsaManager, KeyManager},
@@ -28,7 +29,7 @@ use super::handlers::{
 
 pub type UserManagerState = Arc<Box<dyn UserManagement>>;
 pub type KeyManagerState = Arc<Box<dyn KeyManager>>;
-pub type Cache = Arc<DashMap<Key, (usize, String)>>;
+pub type Cache = Arc<RwLock<TtlCache<Key, String>>>;
 
 #[derive(Clone)]
 pub struct RouterState {
@@ -123,7 +124,7 @@ impl ApiBuilder {
     }
 
     pub fn with_cache(mut self) -> Self {
-        let cache = Arc::new(DashMap::new());
+        let cache = Arc::new(RwLock::new(TtlCache::new(1000)));
 
         self.cache = Some(cache);
 

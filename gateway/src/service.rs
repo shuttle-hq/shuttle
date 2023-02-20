@@ -25,7 +25,7 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::acme::CustomDomain;
 use crate::args::ContextArgs;
-use crate::auth::{Key, Permissions, ScopedUser, User};
+use crate::auth::ScopedUser;
 use crate::project::Project;
 use crate::task::{BoxedTask, TaskBuilder};
 use crate::worker::TaskRouter;
@@ -303,26 +303,6 @@ impl GatewayService {
             .ok_or_else(|| Error::from(ErrorKind::ProjectNotFound))
     }
 
-    pub async fn key_from_account_name(&self, account_name: &AccountName) -> Result<Key, Error> {
-        let key = query("SELECT key FROM accounts WHERE account_name = ?1")
-            .bind(account_name)
-            .fetch_optional(&self.db)
-            .await?
-            .map(|row| row.try_get("key").unwrap())
-            .ok_or_else(|| Error::from(ErrorKind::UserNotFound))?;
-        Ok(key)
-    }
-
-    pub async fn account_name_from_key(&self, key: &Key) -> Result<AccountName, Error> {
-        let name = query("SELECT account_name FROM accounts WHERE key = ?1")
-            .bind(key)
-            .fetch_optional(&self.db)
-            .await?
-            .map(|row| row.try_get("account_name").unwrap())
-            .ok_or_else(|| Error::from(ErrorKind::UserNotFound))?;
-        Ok(name)
-    }
-
     pub async fn control_key_from_project_name(
         &self,
         project_name: &ProjectName,
@@ -334,71 +314,6 @@ impl GatewayService {
             .map(|row| row.try_get("initial_key").unwrap())
             .ok_or_else(|| Error::from(ErrorKind::ProjectNotFound))?;
         Ok(control_key)
-    }
-
-    pub async fn create_user(&self, name: AccountName) -> Result<User, Error> {
-        let key = Key::new_random();
-        query("INSERT INTO accounts (account_name, key) VALUES (?1, ?2)")
-            .bind(&name)
-            .bind(&key)
-            .execute(&self.db)
-            .await
-            .map_err(|err| {
-                // If the error is a broken PK constraint, this is a
-                // project name clash
-                if let Some(db_err) = err.as_database_error() {
-                    if db_err.code().unwrap() == "1555" {
-                        // SQLITE_CONSTRAINT_PRIMARYKEY
-                        return Error::from_kind(ErrorKind::UserAlreadyExists);
-                    }
-                }
-                // Otherwise this is internal
-                err.into()
-            })?;
-        Ok(User::new_with_defaults(name, key))
-    }
-
-    pub async fn get_permissions(&self, account_name: &AccountName) -> Result<Permissions, Error> {
-        let permissions =
-            query("SELECT super_user, account_tier FROM accounts WHERE account_name = ?1")
-                .bind(account_name)
-                .fetch_optional(&self.db)
-                .await?
-                .map(|row| {
-                    Permissions::builder()
-                        .super_user(row.try_get("super_user").unwrap())
-                        .tier(row.try_get("account_tier").unwrap())
-                        .build()
-                })
-                .unwrap_or_default(); // defaults to `false` (i.e. not super user)
-        Ok(permissions)
-    }
-
-    pub async fn set_super_user(
-        &self,
-        account_name: &AccountName,
-        super_user: bool,
-    ) -> Result<(), Error> {
-        query("UPDATE accounts SET super_user = ?1 WHERE account_name = ?2")
-            .bind(super_user)
-            .bind(account_name)
-            .execute(&self.db)
-            .await?;
-        Ok(())
-    }
-
-    pub async fn set_permissions(
-        &self,
-        account_name: &AccountName,
-        permissions: &Permissions,
-    ) -> Result<(), Error> {
-        query("UPDATE accounts SET super_user = ?1, account_tier = ?2 WHERE account_name = ?3")
-            .bind(permissions.super_user)
-            .bind(permissions.tier)
-            .bind(account_name)
-            .execute(&self.db)
-            .await?;
-        Ok(())
     }
 
     pub async fn iter_user_projects(

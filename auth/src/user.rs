@@ -116,7 +116,7 @@ where
     }
 }
 
-impl From<User> for shuttle_common::models::auth::UserResponse {
+impl From<User> for shuttle_common::models::user::Response {
     fn from(user: User) -> Self {
         Self {
             name: user.name.to_string(),
@@ -188,8 +188,8 @@ impl Default for AccountTier {
 }
 
 impl From<AccountTier> for Vec<Scope> {
-    fn from(_tier: AccountTier) -> Self {
-        vec![
+    fn from(tier: AccountTier) -> Self {
+        let mut base = vec![
             Scope::Deployment,
             Scope::DeploymentPush,
             Scope::Logs,
@@ -199,7 +199,19 @@ impl From<AccountTier> for Vec<Scope> {
             Scope::ResourcesWrite,
             Scope::Secret,
             Scope::SecretWrite,
-        ]
+        ];
+
+        if tier == AccountTier::Admin {
+            base.append(&mut vec![
+                Scope::User,
+                Scope::UserCreate,
+                Scope::AcmeCreate,
+                Scope::CustomDomainCreate,
+                Scope::Admin,
+            ]);
+        }
+
+        base
     }
 }
 

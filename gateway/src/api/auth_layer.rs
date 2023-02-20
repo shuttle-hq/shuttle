@@ -143,6 +143,15 @@ where
                         }
                     };
 
+                    // Bubble up auth errors
+                    if token_response.status() != StatusCode::OK {
+                        let (parts, body) = token_response.into_parts();
+                        let body =
+                            <Body as HttpBody>::map_err(body, axum::Error::new).boxed_unsync();
+
+                        return Ok(Response::from_parts(parts, body));
+                    }
+
                     let body = match hyper::body::to_bytes(token_response.into_body()).await {
                         Ok(body) => body,
                         Err(error) => {

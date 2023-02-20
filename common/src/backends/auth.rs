@@ -45,6 +45,21 @@ pub enum Scope {
 
     /// Add or update secrets of a project
     SecretWrite,
+
+    /// Get list of users
+    User,
+
+    /// Add or update users
+    UserCreate,
+
+    /// Create an ACME account
+    AcmeCreate,
+
+    /// Create a custom domain,
+    CustomDomainCreate,
+
+    /// Admin level scope to internals
+    Admin,
 }
 
 #[derive(Deserialize, Serialize)]

@@ -3,8 +3,6 @@ use std::{net::SocketAddr, path::PathBuf};
 use clap::{Parser, Subcommand, ValueEnum};
 use fqdn::FQDN;
 
-use crate::auth::Key;
-
 #[derive(Parser, Debug)]
 pub struct Args {
     /// Where to store gateway state (such as sqlite state, and certs)
@@ -24,7 +22,6 @@ pub enum UseTls {
 #[derive(Subcommand, Debug)]
 pub enum Commands {
     Start(StartArgs),
-    Init(InitArgs),
 }
 
 #[derive(clap::Args, Debug, Clone)]
@@ -46,16 +43,6 @@ pub struct StartArgs {
     pub use_tls: UseTls,
     #[command(flatten)]
     pub context: ContextArgs,
-}
-
-#[derive(clap::Args, Debug, Clone)]
-pub struct InitArgs {
-    /// Name of initial account to create
-    #[arg(long)]
-    pub name: String,
-    /// Key to assign to initial account
-    #[arg(long)]
-    pub key: Option<Key>,
 }
 
 #[derive(clap::Args, Debug, Clone)]

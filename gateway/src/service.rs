@@ -2,12 +2,11 @@ use std::net::Ipv4Addr;
 use std::sync::Arc;
 
 use axum::body::Body;
-use axum::headers::{Authorization, HeaderMapExt};
+use axum::headers::HeaderMapExt;
 use axum::http::Request;
 use axum::response::Response;
 use bollard::{Docker, API_DEFAULT_VERSION};
 use fqdn::Fqdn;
-use http::HeaderValue;
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
 use hyper::Client;
@@ -15,6 +14,7 @@ use hyper_reverse_proxy::ReverseProxy;
 use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
+use shuttle_common::backends::headers::{XShuttleAccountName, XShuttleAdminSecret};
 use sqlx::error::DatabaseError;
 use sqlx::migrate::Migrator;
 use sqlx::sqlite::SqlitePool;
@@ -46,6 +46,7 @@ pub struct ContainerSettingsBuilder {
     prefix: Option<String>,
     image: Option<String>,
     provisioner: Option<String>,
+    auth_uri: Option<String>,
     network_name: Option<String>,
     fqdn: Option<String>,
 }
@@ -62,6 +63,7 @@ impl ContainerSettingsBuilder {
             prefix: None,
             image: None,
             provisioner: None,
+            auth_uri: None,
             network_name: None,
             fqdn: None,
         }
@@ -72,6 +74,7 @@ impl ContainerSettingsBuilder {
             prefix,
             network_name,
             provisioner_host,
+            auth_uri,
             image,
             proxy_fqdn,
             ..
@@ -79,6 +82,7 @@ impl ContainerSettingsBuilder {
         self.prefix(prefix)
             .image(image)
             .provisioner_host(provisioner_host)
+            .auth_uri(auth_uri)
             .network_name(network_name)
             .fqdn(proxy_fqdn)
             .build()
@@ -100,6 +104,11 @@ impl ContainerSettingsBuilder {
         self
     }
 
+    pub fn auth_uri<S: ToString>(mut self, auth_uri: S) -> Self {
+        self.auth_uri = Some(auth_uri.to_string());
+        self
+    }
+
     pub fn network_name<S: ToString>(mut self, name: S) -> Self {
         self.network_name = Some(name.to_string());
         self
@@ -114,6 +123,7 @@ impl ContainerSettingsBuilder {
         let prefix = self.prefix.take().unwrap();
         let image = self.image.take().unwrap();
         let provisioner_host = self.provisioner.take().unwrap();
+        let auth_uri = self.auth_uri.take().unwrap();
 
         let network_name = self.network_name.take().unwrap();
         let fqdn = self.fqdn.take().unwrap();
@@ -122,6 +132,7 @@ impl ContainerSettingsBuilder {
             prefix,
             image,
             provisioner_host,
+            auth_uri,
             network_name,
             fqdn,
         }
@@ -133,6 +144,7 @@ pub struct ContainerSettings {
     pub prefix: String,
     pub image: String,
     pub provisioner_host: String,
+    pub auth_uri: String,
     pub network_name: String,
     pub fqdn: String,
 }
@@ -200,20 +212,15 @@ impl GatewayService {
             .target_ip()?
             .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotReady))?;
 
-        let control_key = self.control_key_from_project_name(project_name).await?;
-        let auth_header = Authorization::bearer(&control_key)
-            .map_err(|e| Error::source(ErrorKind::KeyMalformed, e))?;
-        req.headers_mut().typed_insert(auth_header);
-
         let target_url = format!("http://{target_ip}:8001");
 
         debug!(target_url, "routing control");
 
+        let control_key = self.control_key_from_project_name(project_name).await?;
+
         let headers = req.headers_mut();
-        headers.append(
-            "X-Shuttle-Account-Name",
-            HeaderValue::from_str(&scoped_user.user.name.to_string()).unwrap(),
-        );
+        headers.typed_insert(XShuttleAccountName(scoped_user.user.name.to_string()));
+        headers.typed_insert(XShuttleAdminSecret(control_key));
 
         let cx = Span::current().context();
         global::get_text_map_propagator(|propagator| {

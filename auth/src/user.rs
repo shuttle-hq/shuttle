@@ -193,6 +193,8 @@ impl From<AccountTier> for Vec<Scope> {
             Scope::Deployment,
             Scope::DeploymentPush,
             Scope::Logs,
+            Scope::Service,
+            Scope::ServiceCreate,
             Scope::Project,
             Scope::ProjectCreate,
             Scope::Resources,

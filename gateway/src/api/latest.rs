@@ -13,7 +13,7 @@ use axum::routing::{any, get, post};
 use axum::{Json as AxumJson, Router};
 use fqdn::FQDN;
 use futures::Future;
-use http::StatusCode;
+use http::{StatusCode, Uri};
 use instant_acme::{AccountCredentials, ChallengeType};
 use serde::{Deserialize, Serialize};
 use shuttle_common::backends::auth::{
@@ -467,12 +467,12 @@ impl ApiBuilder {
         self
     }
 
-    pub async fn with_auth_service(mut self, auth_address: SocketAddr) -> Self {
-        let public_key_fn = public_key_from_auth(auth_address).await;
+    pub async fn with_auth_service(mut self, auth_uri: Uri) -> Self {
+        let public_key_fn = public_key_from_auth(auth_uri.clone()).await;
         self.router = self
             .router
             .layer(JwtAuthenticationLayer::new(public_key_fn))
-            .layer(ShuttleAuthLayer::new(auth_address));
+            .layer(ShuttleAuthLayer::new(auth_uri));
 
         self
     }

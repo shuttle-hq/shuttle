@@ -201,7 +201,7 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
 
     let api_handle = api_builder
         .with_default_routes()
-        .with_auth_service(args.auth_service)
+        .with_auth_service(args.context.auth_uri)
         .await
         .with_default_traces()
         .serve();

@@ -1,7 +1,4 @@
-use std::{
-    convert::Infallible,
-    net::{Ipv4Addr, SocketAddr},
-};
+use std::{convert::Infallible, net::Ipv4Addr};
 
 use axum::{
     body::{boxed, HttpBody},
@@ -9,7 +6,7 @@ use axum::{
     response::Response,
 };
 use futures::future::BoxFuture;
-use http::{Request, StatusCode};
+use http::{Request, StatusCode, Uri};
 use hyper::{
     client::{connect::dns::GaiResolver, HttpConnector},
     Body, Client,
@@ -28,12 +25,12 @@ static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
 
 #[derive(Clone)]
 pub struct ShuttleAuthLayer {
-    auth_address: SocketAddr,
+    auth_uri: Uri,
 }
 
 impl ShuttleAuthLayer {
-    pub fn new(auth_address: SocketAddr) -> Self {
-        Self { auth_address }
+    pub fn new(auth_uri: Uri) -> Self {
+        Self { auth_uri }
     }
 }
 
@@ -43,7 +40,7 @@ impl<S> Layer<S> for ShuttleAuthLayer {
     fn layer(&self, inner: S) -> Self::Service {
         ShuttleAuthService {
             inner,
-            auth_address: self.auth_address,
+            auth_uri: self.auth_uri.clone(),
         }
     }
 }
@@ -51,7 +48,7 @@ impl<S> Layer<S> for ShuttleAuthLayer {
 #[derive(Clone)]
 pub struct ShuttleAuthService<S> {
     inner: S,
-    auth_address: SocketAddr,
+    auth_uri: Uri,
 }
 
 impl<S> Service<Request<Body>> for ShuttleAuthService<S>
@@ -80,7 +77,7 @@ where
         };
 
         if pass_to_auth {
-            let target_url = format!("http://{}", self.auth_address);
+            let target_url = self.auth_uri.to_string();
 
             let cx = Span::current().context();
 
@@ -126,7 +123,7 @@ where
                 }
 
                 if let Some(token_request) = auth_details {
-                    let target_url = format!("http://{}", this.auth_address);
+                    let target_url = this.auth_uri.to_string();
 
                     let token_response = match PROXY_CLIENT
                         .call(Ipv4Addr::LOCALHOST.into(), &target_url, token_request)

@@ -2,6 +2,8 @@ mod error;
 
 use axum::extract::ws::{self, WebSocket};
 use axum::extract::{Extension, Path, Query};
+use axum::handler::Handler;
+use axum::headers::HeaderMapExt;
 use axum::middleware::from_extractor;
 use axum::routing::{get, post, Router};
 use axum::{extract::BodyStream, Json};
@@ -9,12 +11,16 @@ use bytes::BufMut;
 use chrono::{TimeZone, Utc};
 use fqdn::FQDN;
 use futures::StreamExt;
+use hyper::Uri;
+use shuttle_common::backends::auth::{
+    public_key_from_auth, AdminSecretLayer, JwtAuthenticationLayer, Scope, ScopedLayer,
+};
+use shuttle_common::backends::headers::XShuttleAccountName;
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
 use shuttle_common::models::secret;
 use shuttle_common::project::ProjectName;
 use shuttle_common::{request_span, LogItem};
 use shuttle_service::loader::clean_crate;
-use tower_http::auth::RequireAuthorizationLayer;
 use tracing::{debug, error, field, instrument, trace};
 use uuid::Uuid;
 
@@ -27,44 +33,57 @@ pub use {self::error::Error, self::error::Result};
 
 mod project;
 
-pub fn make_router(
+pub async fn make_router(
     persistence: Persistence,
     deployment_manager: DeploymentManager,
     proxy_fqdn: FQDN,
     admin_secret: String,
+    auth_uri: Uri,
     project_name: ProjectName,
 ) -> Router {
+    let public_key_fn = public_key_from_auth(auth_uri).await;
+
     Router::new()
-        .route("/projects/:project_name/services", get(list_services))
+        .route(
+            "/projects/:project_name/services",
+            get(list_services.layer(ScopedLayer::new(vec![Scope::Service]))),
+        )
         .route(
             "/projects/:project_name/services/:service_name",
-            get(get_service).post(post_service).delete(stop_service),
+            get(get_service.layer(ScopedLayer::new(vec![Scope::Service])))
+                .post(post_service.layer(ScopedLayer::new(vec![Scope::ServiceCreate])))
+                .delete(stop_service.layer(ScopedLayer::new(vec![Scope::ServiceCreate]))),
         )
         .route(
             "/projects/:project_name/services/:service_name/summary",
-            get(get_service_summary),
+            get(get_service_summary).layer(ScopedLayer::new(vec![Scope::Service])),
         )
         .route(
             "/projects/:project_name/deployments/:deployment_id",
-            get(get_deployment).delete(delete_deployment),
+            get(get_deployment.layer(ScopedLayer::new(vec![Scope::Deployment])))
+                .delete(delete_deployment.layer(ScopedLayer::new(vec![Scope::DeploymentPush]))),
         )
         .route(
             "/projects/:project_name/ws/deployments/:deployment_id/logs",
-            get(get_logs_subscribe),
+            get(get_logs_subscribe.layer(ScopedLayer::new(vec![Scope::Logs]))),
         )
         .route(
             "/projects/:project_name/deployments/:deployment_id/logs",
-            get(get_logs),
+            get(get_logs.layer(ScopedLayer::new(vec![Scope::Logs]))),
         )
         .route(
             "/projects/:project_name/secrets/:service_name",
-            get(get_secrets),
+            get(get_secrets.layer(ScopedLayer::new(vec![Scope::Secret]))),
         )
-        .route("/projects/:project_name/clean", post(post_clean))
+        .route(
+            "/projects/:project_name/clean",
+            post(post_clean.layer(ScopedLayer::new(vec![Scope::DeploymentPush]))),
+        )
         .layer(Extension(persistence))
         .layer(Extension(deployment_manager))
         .layer(Extension(proxy_fqdn))
-        .layer(RequireAuthorizationLayer::bearer(&admin_secret))
+        .layer(JwtAuthenticationLayer::new(public_key_fn))
+        .layer(AdminSecretLayer::new(admin_secret))
         // This route should be below the auth bearer since it does not need authentication
         .route("/projects/:project_name/status", get(get_status))
         .route_layer(from_extractor::<Metrics>())
@@ -72,12 +91,12 @@ pub fn make_router(
             TraceLayer::new(|request| {
                 let account_name = request
                     .headers()
-                    .get("X-Shuttle-Account-Name")
-                    .map(|value| value.to_str().unwrap_or_default().to_string());
+                    .typed_get::<XShuttleAccountName>()
+                    .unwrap_or_default();
 
                 request_span!(
                     request,
-                    account.name = account_name,
+                    account.name = account_name.0,
                     request.params.project_name = field::Empty,
                     request.params.service_name = field::Empty,
                     request.params.deployment_id = field::Empty,

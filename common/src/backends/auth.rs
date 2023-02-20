@@ -1,18 +1,91 @@
-use std::{future::Future, net::SocketAddr, ops::Add, pin::Pin};
+use std::{future::Future, ops::Add, pin::Pin};
 
 use bytes::Bytes;
 use chrono::{Duration, Utc};
 use headers::{authorization::Bearer, Authorization, HeaderMapExt};
-use http::{Request, Response, StatusCode};
+use http::{Request, Response, StatusCode, Uri};
 use http_body::combinators::UnsyncBoxBody;
 use hyper::{body, Body, Client};
-use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
+use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header as JwtHeader, Validation};
 use serde::{Deserialize, Serialize};
 use tower::{Layer, Service};
-use tracing::error;
+use tracing::{error, trace};
+
+use super::headers::XShuttleAdminSecret;
 
 const EXP_MINUTES: i64 = 5;
 const ISS: &str = "shuttle";
+
+/// Layer to check the admin secret set by deployer is correct
+#[derive(Clone)]
+pub struct AdminSecretLayer {
+    secret: String,
+}
+
+impl AdminSecretLayer {
+    pub fn new(secret: String) -> Self {
+        Self { secret }
+    }
+}
+
+impl<S> Layer<S> for AdminSecretLayer {
+    type Service = AdminSecret<S>;
+
+    fn layer(&self, inner: S) -> Self::Service {
+        AdminSecret {
+            inner,
+            secret: self.secret.clone(),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct AdminSecret<S> {
+    inner: S,
+    secret: String,
+}
+
+impl<S, ResponseError> Service<Request<Body>> for AdminSecret<S>
+where
+    S: Service<Request<Body>, Response = Response<UnsyncBoxBody<Bytes, ResponseError>>>
+        + Send
+        + 'static,
+    S::Future: Send + 'static,
+{
+    type Response = S::Response;
+    type Error = S::Error;
+    type Future =
+        Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
+
+    fn poll_ready(
+        &mut self,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
+
+    fn call(&mut self, req: Request<Body>) -> Self::Future {
+        let error = match req.headers().typed_try_get::<XShuttleAdminSecret>() {
+            Ok(Some(secret)) if secret.0 == self.secret => None,
+            Ok(_) => Some(StatusCode::UNAUTHORIZED),
+            Err(_) => Some(StatusCode::BAD_REQUEST),
+        };
+
+        if let Some(status) = error {
+            // Could not validate claim
+            Box::pin(async move {
+                Ok(Response::builder()
+                    .status(status)
+                    .body(Default::default())
+                    .unwrap())
+            })
+        } else {
+            let future = self.inner.call(req);
+
+            Box::pin(async move { future.await })
+        }
+    }
+}
 
 /// The scope of operations that can be performed on shuttle
 /// Every scope defaults to read and will use a suffix for updating tasks
@@ -27,6 +100,12 @@ pub enum Scope {
 
     /// Read the logs of a deployment
     Logs,
+
+    /// Read the details of a service
+    Service,
+
+    /// Create a new service
+    ServiceCreate,
 
     /// Read the status of a project
     Project,
@@ -102,7 +181,7 @@ impl Claim {
 
     pub fn into_token(self, encoding_key: &EncodingKey) -> Result<String, StatusCode> {
         encode(
-            &Header::new(jsonwebtoken::Algorithm::EdDSA),
+            &JwtHeader::new(jsonwebtoken::Algorithm::EdDSA),
             &self,
             encoding_key,
         )
@@ -124,6 +203,7 @@ impl Claim {
         let mut validation = Validation::new(jsonwebtoken::Algorithm::EdDSA);
         validation.set_issuer(&[ISS]);
 
+        trace!(token, "converting token to claim");
         let claim = decode(token, &decoding_key, &validation)
             .map_err(|err| {
                 error!(
@@ -156,9 +236,9 @@ impl Claim {
     }
 }
 
-pub async fn public_key_from_auth(auth_address: SocketAddr) -> impl Fn() -> Vec<u8> + Clone {
+pub async fn public_key_from_auth(auth_uri: Uri) -> impl Fn() -> Vec<u8> + Clone {
     let client = Client::new();
-    let uri = format!("http://{auth_address}/public-key").parse().unwrap();
+    let uri = format!("{auth_uri}public-key").parse().unwrap();
     let res = client.get(uri).await.unwrap();
     let buf = body::to_bytes(res).await.unwrap();
     let key = buf.to_vec();

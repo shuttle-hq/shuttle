@@ -59,8 +59,10 @@ pub async fn start(
         deployment_manager,
         args.proxy_fqdn,
         args.admin_secret,
+        args.auth_uri,
         args.project,
-    );
+    )
+    .await;
     let make_service = router.into_make_service();
 
     info!(address=%args.api_address, "Binding to and listening at address");

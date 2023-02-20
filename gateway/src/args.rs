@@ -2,6 +2,7 @@ use std::{net::SocketAddr, path::PathBuf};
 
 use clap::{Parser, Subcommand, ValueEnum};
 use fqdn::FQDN;
+use http::Uri;
 
 #[derive(Parser, Debug)]
 pub struct Args {
@@ -35,9 +36,6 @@ pub struct StartArgs {
     /// Address to bind the user proxy to
     #[arg(long, default_value = "127.0.0.1:8000")]
     pub user: SocketAddr,
-    /// Address to reach the authentication service at
-    #[arg(long, default_value = "127.0.0.1:8008")]
-    pub auth_service: SocketAddr,
     /// Allows to disable the use of TLS in the user proxy service (DANGEROUS)
     #[arg(long, default_value = "enable")]
     pub use_tls: UseTls,
@@ -58,6 +56,9 @@ pub struct ContextArgs {
     /// the provisioner service
     #[arg(long, default_value = "provisioner")]
     pub provisioner_host: String,
+    /// Address to reach the authentication service at
+    #[arg(long, default_value = "http://127.0.0.1:8008")]
+    pub auth_uri: Uri,
     /// The Docker Network name in which to deploy user runtimes
     #[arg(long, default_value = "shuttle_default")]
     pub network_name: String,

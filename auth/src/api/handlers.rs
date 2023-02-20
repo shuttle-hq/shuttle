@@ -99,9 +99,11 @@ pub(crate) async fn convert_key(
             .single()
             .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
 
-        if expiration_timestamp < Utc::now() {
+        if expiration_timestamp > Utc::now() {
             // Token is cached and not expired, return it.
-            let response = shuttle_common::backends::auth::ConvertResponse { token: jwt.clone() };
+            let response = shuttle_common::backends::auth::ConvertResponse {
+                token: jwt.to_owned(),
+            };
             return Ok(Json(response));
         }
     }

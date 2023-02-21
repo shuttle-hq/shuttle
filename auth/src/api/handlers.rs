@@ -62,20 +62,18 @@ pub(crate) async fn logout(
     State(cache_manager): State<CacheManagerState>,
     headers: HeaderMap,
 ) {
-    // TODO: this is a POC, needs refactor and error handling.
+    // If there is a cookie, extract it and try to get the id.
     let cache_key = if let Ok(Some(cookie)) = headers.typed_try_get::<Cookie>() {
-        if let Some(id) = cookie.get("shuttle.sid") {
-            Some(id.to_string())
-        } else {
-            None
-        }
+        cookie.get("shuttle.sid").map(|id| id.to_string())
     } else {
         None
-    }
-    .unwrap();
+    };
 
-    // Clear the session's associated JWT from the cache.
-    cache_manager.invalidate(&cache_key);
+    // If there was an id in the cookie, clear it from the cache.
+    if let Some(key) = cache_key {
+        // Clear the session's associated JWT from the cache.
+        cache_manager.invalidate(&key);
+    }
 
     session.destroy();
 }

@@ -78,8 +78,30 @@ impl Default for ApiBuilder {
 
 impl ApiBuilder {
     pub fn new() -> Self {
+        let router = Router::new()
+            .route("/login", post(login))
+            .route("/logout", post(logout))
+            .route("/auth/session", get(convert_cookie))
+            .route("/auth/key", get(convert_key))
+            .route("/auth/refresh", post(refresh_token))
+            .route("/public-key", get(get_public_key))
+            .route("/user/:account_name", get(get_user))
+            .route("/user/:account_name/:account_tier", post(post_user))
+            .route_layer(from_extractor::<Metrics>())
+            .layer(
+                TraceLayer::new(|request| {
+                    request_span!(
+                        request,
+                        request.params.account_name = field::Empty,
+                        request.params.account_tier = field::Empty
+                    )
+                })
+                .with_propagation()
+                .build(),
+            );
+
         Self {
-            router: Router::new(),
+            router,
             pool: None,
             session_layer: None,
             cache: None,
@@ -118,9 +140,9 @@ impl ApiBuilder {
         let session_layer = self.session_layer.expect("a session layer is required");
         let cache = self.cache.expect("a cache is required");
 
+        let cache_manager = CacheManager { cache };
         let user_manager = UserManager { pool };
         let key_manager = EdDsaManager::new();
-        let cache_manager = CacheManager { cache };
 
         let state = RouterState {
             user_manager: Arc::new(Box::new(user_manager)),
@@ -129,37 +151,10 @@ impl ApiBuilder {
         };
 
         self.router
-            .route("/login", post(login))
-            .route("/logout", post(logout))
-            .route(
-                "/auth/session",
-                get(convert_cookie).layer(CacheLayer {
-                    state: state.clone(),
-                }),
-            )
-            .route(
-                "/auth/key",
-                get(convert_key).layer(CacheLayer {
-                    state: state.clone(),
-                }),
-            )
-            .route("/auth/refresh", post(refresh_token))
-            .route("/public-key", get(get_public_key))
-            .route("/user/:account_name", get(get_user))
-            .route("/user/:account_name/:account_tier", post(post_user))
-            .route_layer(from_extractor::<Metrics>())
-            .layer(
-                TraceLayer::new(|request| {
-                    request_span!(
-                        request,
-                        request.params.account_name = field::Empty,
-                        request.params.account_tier = field::Empty
-                    )
-                })
-                .with_propagation()
-                .build(),
-            )
             .layer(session_layer)
+            .layer(CacheLayer {
+                state: state.clone(),
+            })
             .with_state(state)
     }
 }

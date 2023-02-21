@@ -76,41 +76,47 @@ where
     }
 
     fn call(&mut self, request: Request<Body>) -> Self::Future {
-        let mut key = None;
+        let path = request.uri().path();
 
-        if let Ok(Some(token)) = request.headers().typed_try_get::<Authorization<Bearer>>() {
-            key = Some(token.token().trim().to_string());
-        };
+        // If the endpoint to convert a key or a cookie to a jwt is called, try the cache.
+        if ["/auth/key", "/auth/session"].contains(&path) {
+            let mut key = None;
 
-        if let Ok(Some(cookie)) = request.headers().typed_try_get::<Cookie>() {
-            if let Some(id) = cookie.get("shuttle.sid") {
-                key = Some(id.to_string())
+            if let Ok(Some(token)) = request.headers().typed_try_get::<Authorization<Bearer>>() {
+                key = Some(token.token().trim().to_string());
             };
-        };
 
-        let Some(key) = key else {
-            return Box::pin(async move {
-                Ok(Response::builder()
-                    .status(StatusCode::UNAUTHORIZED)
-                    .body(Default::default())
-                    .unwrap())
-            });
-        };
+            if let Ok(Some(cookie)) = request.headers().typed_try_get::<Cookie>() {
+                if let Some(id) = cookie.get("shuttle.sid") {
+                    key = Some(id.to_string())
+                };
+            };
 
-        if let Some(jwt) = self.state.cache_manager.get(&key) {
-            // Token is cached and not expired, return it in the response.
-            let body = serde_json::to_string(&ConvertResponse { token: jwt }).unwrap();
+            // Cookie and API key are missing, return 401.
+            let Some(key) = key else {
+                return Box::pin(async move {
+                    Ok(Response::builder()
+                        .status(StatusCode::UNAUTHORIZED)
+                        .body(Default::default())
+                        .unwrap())
+                });
+            };
 
-            let body =
-                <Body as HttpBody>::map_err(Body::from(body), axum::Error::new).boxed_unsync();
+            if let Some(jwt) = self.state.cache_manager.get(&key) {
+                // Token is cached and not expired, return it in the response.
+                let body = serde_json::to_string(&ConvertResponse { token: jwt }).unwrap();
 
-            return Box::pin(async move {
-                Ok(Response::builder()
-                    .status(StatusCode::OK)
-                    .header(CONTENT_TYPE, HeaderValue::from_static("application/json"))
-                    .body(body)
-                    .unwrap())
-            });
+                let body =
+                    <Body as HttpBody>::map_err(Body::from(body), axum::Error::new).boxed_unsync();
+
+                return Box::pin(async move {
+                    Ok(Response::builder()
+                        .status(StatusCode::OK)
+                        .header(CONTENT_TYPE, HeaderValue::from_static("application/json"))
+                        .body(body)
+                        .unwrap())
+                });
+            }
         }
 
         let future = self.inner.call(request);

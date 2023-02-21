@@ -1,16 +1,14 @@
-use std::time::Duration;
-
 use crate::{
     error::Error,
     user::{AccountName, AccountTier, Admin, Key, User},
 };
 use axum::{
     extract::{Path, State},
+    headers::{Cookie, HeaderMapExt},
     Json,
 };
 use axum_sessions::extractors::{ReadableSession, WritableSession};
-use chrono::{TimeZone, Utc};
-use http::StatusCode;
+use http::{HeaderMap, StatusCode};
 use serde::{Deserialize, Serialize};
 use shuttle_common::{backends::auth::Claim, models::auth};
 use tracing::instrument;
@@ -59,14 +57,32 @@ pub(crate) async fn login(
     Ok(Json(user.into()))
 }
 
-pub(crate) async fn logout(mut session: WritableSession) {
+pub(crate) async fn logout(
+    mut session: WritableSession,
+    State(cache_manager): State<CacheManagerState>,
+    headers: HeaderMap,
+) {
+    // TODO: this is a POC, needs refactor and error handling.
+    let cache_key = if let Ok(Some(cookie)) = headers.typed_try_get::<Cookie>() {
+        if let Some(id) = cookie.get("shuttle.sid") {
+            Some(id.to_string())
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+    .unwrap();
+
+    // Clear the session's associated JWT from the cache.
+    cache_manager.invalidate(&cache_key);
+
     session.destroy();
 }
 
 pub(crate) async fn convert_cookie(
     session: ReadableSession,
     State(key_manager): State<KeyManagerState>,
-    State(cache_manager): State<CacheManagerState>,
 ) -> Result<Json<shuttle_common::backends::auth::ConvertResponse>, StatusCode> {
     let account_name: String = session
         .get("account_name")
@@ -78,24 +94,7 @@ pub(crate) async fn convert_cookie(
 
     let claim = Claim::new(account_name, account_tier.into());
 
-    // Expiration time (as UTC timestamp).
-    let exp = claim.exp;
-
     let token = claim.into_token(key_manager.private_key())?;
-
-    let expiration_timestamp = Utc
-        .timestamp_opt(exp as i64, 0)
-        .single()
-        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    let duration = expiration_timestamp - Utc::now();
-
-    // Cache the token.
-    cache_manager.insert(
-        session.id(),
-        token.clone(),
-        Duration::from_secs(duration.num_seconds() as u64),
-    );
 
     let response = shuttle_common::backends::auth::ConvertResponse { token };
 
@@ -107,7 +106,7 @@ pub(crate) async fn convert_key(
     State(RouterState {
         key_manager,
         user_manager,
-        cache_manager,
+        ..
     }): State<RouterState>,
     key: Key,
 ) -> Result<Json<shuttle_common::backends::auth::ConvertResponse>, StatusCode> {
@@ -120,24 +119,7 @@ pub(crate) async fn convert_key(
 
     let claim = Claim::new(name.to_string(), account_tier.into());
 
-    // Expiration time (as UTC timestamp).
-    let exp = claim.exp;
-
     let token = claim.into_token(key_manager.private_key())?;
-
-    let expiration_timestamp = Utc
-        .timestamp_opt(exp as i64, 0)
-        .single()
-        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    let duration = expiration_timestamp - Utc::now();
-
-    // Cache the token.
-    cache_manager.insert(
-        key.as_str(),
-        token.clone(),
-        Duration::from_secs(duration.num_seconds() as u64),
-    );
 
     let response = shuttle_common::backends::auth::ConvertResponse { token };
 

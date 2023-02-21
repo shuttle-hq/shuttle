@@ -12,6 +12,7 @@ axum-sessions = "0.4.1"
 chrono = { workspace = true, features = ["serde"] }
 clap = { workspace = true }
 http = { workspace = true }
+hyper = { workspace = true }
 jsonwebtoken = { workspace = true }
 opentelemetry = { workspace = true }
 opentelemetry-datadog = { workspace = true }
@@ -35,4 +36,3 @@ features = ["backend", "models"]
 
 [dev-dependencies]
 axum-extra = { version = "0.5.0", features = ["cookie"] }
-hyper = { workspace = true }

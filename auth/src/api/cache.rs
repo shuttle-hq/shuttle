@@ -4,8 +4,10 @@ use axum::{
     http::Request,
     response::Response,
 };
+use chrono::{TimeZone, Utc};
 use http::{header::CONTENT_TYPE, HeaderValue, StatusCode};
-use shuttle_common::backends::auth::ConvertResponse;
+use serde_json::Value;
+use shuttle_common::backends::auth::{Claim, ConvertResponse};
 use std::{
     future::Future,
     pin::Pin,
@@ -21,6 +23,7 @@ use super::RouterState;
 pub trait CacheManagement: Send + Sync {
     fn get(&self, key: &str) -> Option<String>;
     fn insert(&self, key: &str, value: String, ttl: Duration) -> Option<String>;
+    fn invalidate(&self, key: &str) -> Option<String>;
 }
 
 pub struct CacheManager {
@@ -31,11 +34,19 @@ impl CacheManagement for CacheManager {
     fn get(&self, key: &str) -> Option<String> {
         self.cache.read().unwrap().get(key).cloned()
     }
+
     fn insert(&self, key: &str, value: String, ttl: Duration) -> Option<String> {
         self.cache
             .write()
             .unwrap()
             .insert(key.to_string(), value, ttl)
+    }
+
+    fn invalidate(&self, key: &str) -> Option<String> {
+        self.cache
+            .write()
+            .unwrap()
+            .remove(key)
     }
 }
 
@@ -115,6 +126,66 @@ where
                         .header(CONTENT_TYPE, HeaderValue::from_static("application/json"))
                         .body(body)
                         .unwrap())
+                });
+            } else {
+                // Cache was not hit, the convert endpoint will be called by the ShuttleAuthLayer,
+                // we will then extract the token from the response, decode it to get the expiration
+                // time and cache it.
+                let future = self.inner.call(request);
+
+                let public_key = self.state.key_manager.public_key();
+                let cache_manager = self.state.cache_manager.clone();
+
+                // TODO: error handling.
+                return Box::pin(async move {
+                    let response: Response = future.await?;
+
+                    let public_key = public_key.clone();
+
+                    let (parts, body) = response.into_parts();
+
+                    let bytes = hyper::body::to_bytes(body).await.unwrap();
+
+                    let Ok(value): Result<Value, _> = serde_json::from_slice(&bytes) else {
+                        return 
+                            Ok(Response::builder()
+                                .status(StatusCode::UNAUTHORIZED)
+                                .body(Default::default())
+                                .unwrap());
+                    };
+                    let Some(jwt) = value["token"].as_str() else {
+                        return 
+                            Ok(Response::builder()
+                                .status(StatusCode::UNAUTHORIZED)
+                                .body(Default::default())
+                                .unwrap());
+                        
+                    };
+
+                    let claim = Claim::from_token(jwt, &public_key).unwrap();
+
+                    // Expiration time (as UTC timestamp).
+                    let exp = claim.exp;
+
+                    let expiration_timestamp = Utc
+                        .timestamp_opt(exp as i64, 0)
+                        .single()
+                        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)
+                        .unwrap();
+
+                    let duration = expiration_timestamp - Utc::now();
+
+                    // Cache the token.
+                    cache_manager.insert(
+                        key.as_str(),
+                        jwt.to_owned(),
+                        Duration::from_secs(duration.num_seconds() as u64),
+                    );
+
+                    let body =
+                        <Body as HttpBody>::map_err(bytes.into(), axum::Error::new).boxed_unsync();
+
+                    Ok(Response::from_parts(parts, body))
                 });
             }
         }

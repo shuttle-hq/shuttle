@@ -23,6 +23,9 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
     Lazy::new(|| ReverseProxy::new(Client::new()));
 
+/// The idea of this layer is to do two things:
+/// 1. Forward all user related routes (`/login`, `/logout`, `/users/*`, etc) to our auth service
+/// 2. Upgrade all Authorization Bearer keys and session cookies to JWT tokens for internal communication inside and below gateway
 #[derive(Clone)]
 pub struct ShuttleAuthLayer {
     auth_uri: Uri,
@@ -71,12 +74,12 @@ where
     }
 
     fn call(&mut self, mut req: Request<Body>) -> Self::Future {
-        let pass_to_auth = match req.uri().path() {
+        let forward_to_auth = match req.uri().path() {
             "/login" | "/logout" => true,
             other => other.starts_with("/users"),
         };
 
-        if pass_to_auth {
+        if forward_to_auth {
             let target_url = self.auth_uri.to_string();
 
             let cx = Span::current().context();
@@ -109,6 +112,10 @@ where
                 }
             })
         } else {
+            // Enrich the current key | session
+
+            // TODO: read this page to get rid of this clone
+            // https://github.com/tower-rs/tower/blob/master/guides/building-a-middleware-from-scratch.md
             let mut this = self.clone();
 
             Box::pin(async move {
@@ -122,6 +129,7 @@ where
                     auth_details = Some(make_token_request("/auth/session", cookie));
                 }
 
+                // Only if there is something to upgrade
                 if let Some(token_request) = auth_details {
                     let target_url = this.auth_uri.to_string();
 

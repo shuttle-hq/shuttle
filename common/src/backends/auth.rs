@@ -161,6 +161,8 @@ pub struct Claim {
     pub sub: String,
     /// Scopes this token can access
     pub scopes: Vec<Scope>,
+    /// The original token that was parsed
+    token: Option<String>,
 }
 
 impl Claim {
@@ -176,26 +178,31 @@ impl Claim {
             nbf: iat.timestamp() as usize,
             sub,
             scopes,
+            token: None,
         }
     }
 
     pub fn into_token(self, encoding_key: &EncodingKey) -> Result<String, StatusCode> {
-        encode(
-            &JwtHeader::new(jsonwebtoken::Algorithm::EdDSA),
-            &self,
-            encoding_key,
-        )
-        .map_err(|err| {
-            error!(
-                error = &err as &dyn std::error::Error,
-                "failed to convert claim to token"
-            );
-            match err.kind() {
-                jsonwebtoken::errors::ErrorKind::Json(_) => StatusCode::INTERNAL_SERVER_ERROR,
-                jsonwebtoken::errors::ErrorKind::Crypto(_) => StatusCode::SERVICE_UNAVAILABLE,
-                _ => StatusCode::INTERNAL_SERVER_ERROR,
-            }
-        })
+        if let Some(token) = self.token {
+            Ok(token)
+        } else {
+            encode(
+                &JwtHeader::new(jsonwebtoken::Algorithm::EdDSA),
+                &self,
+                encoding_key,
+            )
+            .map_err(|err| {
+                error!(
+                    error = &err as &dyn std::error::Error,
+                    "failed to convert claim to token"
+                );
+                match err.kind() {
+                    jsonwebtoken::errors::ErrorKind::Json(_) => StatusCode::INTERNAL_SERVER_ERROR,
+                    jsonwebtoken::errors::ErrorKind::Crypto(_) => StatusCode::SERVICE_UNAVAILABLE,
+                    _ => StatusCode::INTERNAL_SERVER_ERROR,
+                }
+            })
+        }
     }
 
     pub fn from_token(token: &str, public_key: &[u8]) -> Result<Self, StatusCode> {
@@ -204,7 +211,7 @@ impl Claim {
         validation.set_issuer(&[ISS]);
 
         trace!(token, "converting token to claim");
-        let claim = decode(token, &decoding_key, &validation)
+        let mut claim: Self = decode(token, &decoding_key, &validation)
             .map_err(|err| {
                 error!(
                     error = &err as &dyn std::error::Error,
@@ -231,6 +238,8 @@ impl Claim {
                 }
             })?
             .claims;
+
+        claim.token = Some(token.to_string());
 
         Ok(claim)
     }
@@ -325,6 +334,54 @@ where
 
             Box::pin(async move { future.await })
         }
+    }
+}
+
+/// This layer takes a claim on a request extension and uses it's internal token to set the Authorization Bearer
+#[derive(Clone)]
+pub struct ClaimLayer;
+
+impl<S> Layer<S> for ClaimLayer {
+    type Service = ClaimService<S>;
+
+    fn layer(&self, inner: S) -> Self::Service {
+        ClaimService { inner }
+    }
+}
+
+#[derive(Clone)]
+pub struct ClaimService<S> {
+    inner: S,
+}
+
+impl<S, RequestError> Service<Request<UnsyncBoxBody<Bytes, RequestError>>> for ClaimService<S>
+where
+    S: Service<Request<UnsyncBoxBody<Bytes, RequestError>>> + Send + 'static,
+    S::Future: Send + 'static,
+{
+    type Response = S::Response;
+    type Error = S::Error;
+    type Future =
+        Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
+
+    fn poll_ready(
+        &mut self,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
+
+    fn call(&mut self, mut req: Request<UnsyncBoxBody<Bytes, RequestError>>) -> Self::Future {
+        if let Some(claim) = req.extensions().get::<Claim>() {
+            if let Some(token) = claim.token.clone() {
+                req.headers_mut()
+                    .typed_insert(Authorization::bearer(&token).expect("to set JWT token"));
+            }
+        }
+
+        let future = self.inner.call(req);
+
+        Box::pin(async move { future.await })
     }
 }
 
@@ -427,7 +484,7 @@ mod tests {
 
     #[test]
     fn to_token_and_back() {
-        let claim = Claim::new(
+        let mut claim = Claim::new(
             "ferries".to_string(),
             vec![Scope::Deployment, Scope::Project],
         );
@@ -435,6 +492,9 @@ mod tests {
         let doc = signature::Ed25519KeyPair::generate_pkcs8(&rand::SystemRandom::new()).unwrap();
         let encoding_key = EncodingKey::from_ed_der(doc.as_ref());
         let token = claim.clone().into_token(&encoding_key).unwrap();
+
+        // Make sure the token is set
+        claim.token = Some(token.clone());
 
         let pair = Ed25519KeyPair::from_pkcs8(doc.as_ref()).unwrap();
         let public_key = pair.public_key().as_ref();

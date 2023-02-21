@@ -13,7 +13,7 @@ use fqdn::FQDN;
 use futures::StreamExt;
 use hyper::Uri;
 use shuttle_common::backends::auth::{
-    public_key_from_auth, AdminSecretLayer, JwtAuthenticationLayer, Scope, ScopedLayer,
+    public_key_from_auth, AdminSecretLayer, Claim, JwtAuthenticationLayer, Scope, ScopedLayer,
 };
 use shuttle_common::backends::headers::XShuttleAccountName;
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
@@ -25,7 +25,7 @@ use tracing::{debug, error, field, instrument, trace};
 use uuid::Uuid;
 
 use crate::deployment::{DeploymentManager, Queued};
-use crate::persistence::{Deployment, Log, Persistence, SecretGetter, State};
+use crate::persistence::{Deployment, Log, Persistence, ResourceManager, SecretGetter, State};
 
 use std::collections::HashMap;
 
@@ -136,7 +136,7 @@ async fn get_service(
             .map(Into::into)
             .collect();
         let resources = persistence
-            .get_service_resources(&service.id)
+            .get_resources(&service.id)
             .await?
             .into_iter()
             .map(Into::into)
@@ -173,7 +173,7 @@ async fn get_service_summary(
             .await?
             .map(Into::into);
         let resources = persistence
-            .get_service_resources(&service.id)
+            .get_resources(&service.id)
             .await?
             .into_iter()
             .map(Into::into)
@@ -196,6 +196,7 @@ async fn get_service_summary(
 async fn post_service(
     Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
+    Extension(claim): Extension<Claim>,
     Path((project_name, service_name)): Path<(String, String)>,
     Query(params): Query<HashMap<String, String>>,
     mut stream: BodyStream,
@@ -228,6 +229,7 @@ async fn post_service(
         data,
         will_run_tests: !params.contains_key("no-test"),
         tracing_context: Default::default(),
+        claim: Some(claim),
     };
 
     deployment_manager.queue_push(queued).await;
@@ -252,7 +254,7 @@ async fn stop_service(
         }
 
         let resources = persistence
-            .get_service_resources(&service.id)
+            .get_resources(&service.id)
             .await?
             .into_iter()
             .map(Into::into)

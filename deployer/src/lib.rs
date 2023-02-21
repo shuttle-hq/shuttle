@@ -50,6 +50,7 @@ pub async fn start(
             service_name: existing_deployment.service_name,
             service_id: existing_deployment.service_id,
             tracing_context: Default::default(),
+            claim: None, // This will cause us to read the resource info from past provisions
         };
         deployment_manager.run_push(built).await;
     }

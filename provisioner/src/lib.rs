@@ -6,6 +6,7 @@ use aws_sdk_rds::{error::ModifyDBInstanceErrorKind, model::DbInstance, types::Sd
 pub use error::Error;
 use mongodb::{bson::doc, options::ClientOptions};
 use rand::Rng;
+use shuttle_common::backends::auth::{Claim, Scope};
 pub use shuttle_proto::provisioner::provisioner_server::ProvisionerServer;
 use shuttle_proto::provisioner::{
     aws_rds, database_request::DbType, shared, AwsRds, DatabaseRequest, DatabaseResponse, Shared,
@@ -410,6 +411,8 @@ impl Provisioner for MyProvisioner {
         &self,
         request: Request<DatabaseRequest>,
     ) -> Result<Response<DatabaseResponse>, Status> {
+        verify_claim(&request)?;
+
         let request = request.into_inner();
         let db_type = request.db_type.unwrap();
 
@@ -432,6 +435,8 @@ impl Provisioner for MyProvisioner {
         &self,
         request: Request<DatabaseRequest>,
     ) -> Result<Response<DatabaseDeletionResponse>, Status> {
+        verify_claim(&request)?;
+
         let request = request.into_inner();
         let db_type = request.db_type.unwrap();
 
@@ -447,6 +452,22 @@ impl Provisioner for MyProvisioner {
         };
 
         Ok(Response::new(reply))
+    }
+}
+
+/// Verify the claim on the request has the correct scope to call this service
+fn verify_claim<B>(request: &Request<B>) -> Result<(), Status> {
+    let claim = request
+        .extensions()
+        .get::<Claim>()
+        .ok_or(Status::internal("could not get claim"))?;
+
+    if claim.scopes.contains(&Scope::ResourcesWrite) {
+        Ok(())
+    } else {
+        Err(Status::permission_denied(
+            "does not have resource allocation scope",
+        ))
     }
 }
 

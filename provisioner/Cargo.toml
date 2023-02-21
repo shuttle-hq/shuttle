@@ -25,6 +25,10 @@ tonic = "0.8.3"
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
+[dependencies.shuttle-common]
+workspace = true
+features = ["backend"]
+
 [dependencies.shuttle-proto]
 workspace = true
 

@@ -100,6 +100,7 @@ services:
     depends_on:
       - postgres
       - mongodb
+      - auth
     environment:
       - RUST_LOG=${RUST_LOG}
     networks:
@@ -127,6 +128,7 @@ services:
       - "--internal-mongodb-address=mongodb"
       - "--internal-pg-address=postgres"
       - "--fqdn=${DB_FQDN}"
+      - "--auth-uri=http://auth:8000"
   postgres:
     image: "${CONTAINER_REGISTRY}/postgres:${POSTGRES_TAG}"
     restart: always

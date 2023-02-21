@@ -57,7 +57,7 @@ shuttle-static-folder = { path = "[base]/shuttle/resources/static-folder" }
 Prime gateway database with an admin user:
 
 ```bash
-docker compose --file docker-compose.rendered.yml --project-name shuttle-dev exec gateway /usr/local/bin/service --state=/var/lib/shuttle init --name admin --key test-key
+docker compose --file docker-compose.rendered.yml --project-name shuttle-dev exec auth /usr/local/bin/service --state=/var/lib/shuttle-auth init --name admin --key test-key
 ```
 
 Login to shuttle service in a new terminal window from the main shuttle directory:

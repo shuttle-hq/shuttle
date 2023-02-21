@@ -92,8 +92,8 @@ where
                 };
             };
 
-            // Cookie and API key are missing, return 401.
             let Some(key) = key else {
+                // Cookie and API key are missing, return 401.
                 return Box::pin(async move {
                     Ok(Response::builder()
                         .status(StatusCode::UNAUTHORIZED)

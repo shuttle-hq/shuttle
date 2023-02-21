@@ -5,13 +5,16 @@ mod factory;
 mod init;
 
 use indicatif::ProgressBar;
+use shuttle_common::models::project::State;
 use shuttle_common::project::ProjectName;
+
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fs::{read_to_string, File};
 use std::io::stdout;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use anyhow::{anyhow, bail, Context, Result};
 pub use args::{Args, Command, DeployArgs, InitArgs, LoginArgs, ProjectArgs, RunArgs};
@@ -100,7 +103,9 @@ impl Shuttle {
                     Command::Project(ProjectCommand::Status { follow }) => {
                         self.project_status(&client, follow).await
                     }
-                    Command::Project(ProjectCommand::List) => self.projects_list(&client).await,
+                    Command::Project(ProjectCommand::List { filter }) => {
+                        self.projects_list(&client, filter).await
+                    }
                     Command::Project(ProjectCommand::Rm) => self.project_delete(&client).await,
                     _ => {
                         unreachable!("commands that don't need a client have already been matched")
@@ -560,8 +565,20 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn projects_list(&self, client: &Client) -> Result<()> {
-        let projects = client.get_projects_list().await?;
+    async fn projects_list(&self, client: &Client, filter: Option<String>) -> Result<()> {
+        let projects = match filter {
+            Some(filter) => {
+                if let Ok(filter) = State::from_str(filter.trim()) {
+                    client
+                        .get_projects_list_filtered(filter.to_string())
+                        .await?
+                } else {
+                    return Err(anyhow!("That's not a valid project status!"));
+                }
+            }
+            None => client.get_projects_list().await?,
+        };
+
         let projects_table = project::get_table(&projects);
 
         println!("{projects_table}");

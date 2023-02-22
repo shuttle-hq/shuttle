@@ -28,6 +28,7 @@ rustrict = "0.5.5"
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true, optional = true }
 strum = { workspace = true }
+thiserror = { workspace = true, optional = true }
 tonic = { version = "0.8.3", optional = true }
 tower = { workspace = true, optional = true }
 tower-http = { workspace = true, optional = true }
@@ -36,7 +37,7 @@ tracing-opentelemetry = { workspace = true, optional = true }
 uuid = { workspace = true, features = ["v4", "serde"] }
 
 [features]
-backend = ["async-trait", "axum", "bytes", "http", "http-body", "hyper", "jsonwebtoken", "opentelemetry", "opentelemetry-http", "tower", "tower-http", "tracing-opentelemetry"]
+backend = ["async-trait", "axum", "bytes", "http", "http-body", "hyper/client", "jsonwebtoken", "opentelemetry", "opentelemetry-http", "thiserror", "tower", "tower-http", "tracing-opentelemetry"]
 display = ["comfy-table", "crossterm"]
 models = ["anyhow", "async-trait", "display", "http", "reqwest", "serde_json"]
 

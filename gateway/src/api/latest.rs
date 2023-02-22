@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use axum::body::Body;
 use axum::extract::{Extension, Path, State};
+use axum::handler::Handler;
 use axum::http::Request;
 use axum::middleware::from_extractor;
 use axum::response::Response;
@@ -12,12 +13,13 @@ use axum::routing::{any, get, post};
 use axum::{Json as AxumJson, Router};
 use fqdn::FQDN;
 use futures::Future;
-use http::StatusCode;
+use http::{StatusCode, Uri};
 use instant_acme::{AccountCredentials, ChallengeType};
 use serde::{Deserialize, Serialize};
+use shuttle_common::backends::auth::{AuthPublicKey, JwtAuthenticationLayer, Scope, ScopedLayer};
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
 use shuttle_common::models::error::ErrorKind;
-use shuttle_common::models::{project, stats, user};
+use shuttle_common::models::{project, stats};
 use shuttle_common::request_span;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::{Mutex, MutexGuard};
@@ -26,12 +28,14 @@ use ttl_cache::TtlCache;
 use uuid::Uuid;
 
 use crate::acme::{AcmeClient, CustomDomain};
-use crate::auth::{Admin, ScopedUser, User};
+use crate::auth::{ScopedUser, User};
 use crate::project::{Project, ProjectCreating};
 use crate::task::{self, BoxedTask, TaskResult};
 use crate::tls::GatewayCertResolver;
 use crate::worker::WORKER_QUEUE_SIZE;
-use crate::{AccountName, Error, GatewayService, ProjectName};
+use crate::{Error, GatewayService, ProjectName};
+
+use super::auth_layer::ShuttleAuthLayer;
 
 pub const SVC_DEGRADED_THRESHOLD: usize = 128;
 
@@ -68,28 +72,6 @@ impl StatusResponse {
     }
 }
 
-#[instrument(skip_all, fields(%account_name))]
-async fn get_user(
-    State(RouterState { service, .. }): State<RouterState>,
-    Path(account_name): Path<AccountName>,
-    _: Admin,
-) -> Result<AxumJson<user::Response>, Error> {
-    let user = User::retrieve_from_account_name(&service, account_name).await?;
-
-    Ok(AxumJson(user.into()))
-}
-
-#[instrument(skip_all, fields(%account_name))]
-async fn post_user(
-    State(RouterState { service, .. }): State<RouterState>,
-    Path(account_name): Path<AccountName>,
-    _: Admin,
-) -> Result<AxumJson<user::Response>, Error> {
-    let user = service.create_user(account_name).await?;
-
-    Ok(AxumJson(user.into()))
-}
-
 #[instrument(skip(service))]
 async fn get_project(
     State(RouterState { service, .. }): State<RouterState>,
@@ -110,6 +92,24 @@ async fn get_projects_list(
 ) -> Result<AxumJson<Vec<project::Response>>, Error> {
     let projects = service
         .iter_user_projects_detailed(name.clone())
+        .await?
+        .into_iter()
+        .map(|project| project::Response {
+            name: project.0.to_string(),
+            state: project.1.into(),
+        })
+        .collect();
+
+    Ok(AxumJson(projects))
+}
+
+async fn get_projects_list_with_filter(
+    State(RouterState { service, .. }): State<RouterState>,
+    User { name, .. }: User,
+    Path(project_status): Path<String>,
+) -> Result<AxumJson<Vec<project::Response>>, Error> {
+    let projects = service
+        .iter_user_projects_detailed_filtered(name.clone(), project_status)
         .await?
         .into_iter()
         .map(|project| project::Response {
@@ -241,7 +241,6 @@ async fn delete_load(
 
 #[instrument(skip_all)]
 async fn get_load_admin(
-    _: Admin,
     State(RouterState { running_builds, .. }): State<RouterState>,
 ) -> Result<AxumJson<stats::LoadResponse>, Error> {
     let mut running_builds = running_builds.lock().await;
@@ -253,7 +252,6 @@ async fn get_load_admin(
 
 #[instrument(skip_all)]
 async fn delete_load_admin(
-    _: Admin,
     State(RouterState { running_builds, .. }): State<RouterState>,
 ) -> Result<AxumJson<stats::LoadResponse>, Error> {
     let mut running_builds = running_builds.lock().await;
@@ -277,7 +275,6 @@ fn calculate_capacity(running_builds: &mut MutexGuard<TtlCache<Uuid, ()>>) -> st
 
 #[instrument(skip_all)]
 async fn revive_projects(
-    _: Admin,
     State(RouterState {
         service, sender, ..
     }): State<RouterState>,
@@ -289,7 +286,6 @@ async fn revive_projects(
 
 #[instrument(skip_all, fields(%email, ?acme_server))]
 async fn create_acme_account(
-    _: Admin,
     Extension(acme_client): Extension<AcmeClient>,
     Path(email): Path<String>,
     AxumJson(acme_server): AxumJson<Option<String>>,
@@ -301,7 +297,6 @@ async fn create_acme_account(
 
 #[instrument(skip_all, fields(%project_name, %fqdn))]
 async fn request_acme_certificate(
-    _: Admin,
     State(RouterState {
         service, sender, ..
     }): State<RouterState>,
@@ -363,7 +358,6 @@ async fn request_acme_certificate(
 }
 
 async fn get_projects(
-    _: Admin,
     State(RouterState { service, .. }): State<RouterState>,
 ) -> Result<AxumJson<Vec<project::AdminResponse>>, Error> {
     let projects = service
@@ -409,10 +403,16 @@ impl ApiBuilder {
     pub fn with_acme(mut self, acme: AcmeClient, resolver: Arc<GatewayCertResolver>) -> Self {
         self.router = self
             .router
-            .route("/admin/acme/:email", post(create_acme_account))
+            .route(
+                "/admin/acme/:email",
+                post(create_acme_account.layer(ScopedLayer::new(vec![Scope::AcmeCreate]))),
+            )
             .route(
                 "/admin/acme/request/:project_name/:fqdn",
-                post(request_acme_certificate),
+                post(
+                    request_acme_certificate
+                        .layer(ScopedLayer::new(vec![Scope::CustomDomainCreate])),
+                ),
             )
             .layer(Extension(acme))
             .layer(Extension(resolver));
@@ -454,20 +454,46 @@ impl ApiBuilder {
         self.router = self
             .router
             .route("/", get(get_status))
-            .route("/projects", get(get_projects_list))
+            .route(
+                "/projects",
+                get(get_projects_list.layer(ScopedLayer::new(vec![Scope::Project]))),
+            )
+            // .route(
+            //     "/projects/:state",
+            //     get(get_projects_list_with_filter.layer(ScopedLayer::new(vec![Scope::Project]))),
+            // )
             .route(
                 "/projects/:project_name",
-                get(get_project).delete(delete_project).post(post_project),
+                get(get_project.layer(ScopedLayer::new(vec![Scope::Project])))
+                    .delete(delete_project.layer(ScopedLayer::new(vec![Scope::ProjectCreate])))
+                    .post(post_project.layer(ScopedLayer::new(vec![Scope::ProjectCreate]))),
             )
-            .route("/users/:account_name", get(get_user).post(post_user))
             .route("/projects/:project_name/*any", any(route_project))
             .route("/stats/load", post(post_load).delete(delete_load))
-            .route("/admin/projects", get(get_projects))
-            .route("/admin/revive", post(revive_projects))
+            .route(
+                "/admin/projects",
+                get(get_projects.layer(ScopedLayer::new(vec![Scope::Admin]))),
+            )
+            .route(
+                "/admin/revive",
+                post(revive_projects.layer(ScopedLayer::new(vec![Scope::Admin]))),
+            )
             .route(
                 "/admin/stats/load",
-                get(get_load_admin).delete(delete_load_admin),
+                get(get_load_admin)
+                    .delete(delete_load_admin)
+                    .layer(ScopedLayer::new(vec![Scope::Admin])),
             );
+        self
+    }
+
+    pub fn with_auth_service(mut self, auth_uri: Uri) -> Self {
+        let auth_public_key = AuthPublicKey::new(auth_uri.clone());
+        self.router = self
+            .router
+            .layer(JwtAuthenticationLayer::new(auth_public_key))
+            .layer(ShuttleAuthLayer::new(auth_uri));
+
         self
     }
 
@@ -530,9 +556,10 @@ pub mod tests {
             .with_service(Arc::clone(&service))
             .with_sender(sender)
             .with_default_routes()
+            .with_auth_service(world.context().auth_uri)
             .into_router();
 
-        let neo = service.create_user("neo".parse().unwrap()).await?;
+        let neo_key = world.create_user("neo");
 
         let create_project = |project: &str| {
             Request::builder()
@@ -556,7 +583,7 @@ pub mod tests {
             .await
             .unwrap();
 
-        let authorization = Authorization::bearer(neo.key.as_str()).unwrap();
+        let authorization = Authorization::bearer(&neo_key).unwrap();
 
         router
             .call(create_project("matrix").with_header(&authorization))
@@ -614,9 +641,9 @@ pub mod tests {
             .await
             .unwrap();
 
-        let trinity = service.create_user("trinity".parse().unwrap()).await?;
+        let trinity_key = world.create_user("trinity");
 
-        let authorization = Authorization::bearer(trinity.key.as_str()).unwrap();
+        let authorization = Authorization::bearer(&trinity_key).unwrap();
 
         router
             .call(get_project("reloaded").with_header(&authorization))
@@ -632,9 +659,7 @@ pub mod tests {
             .await
             .unwrap();
 
-        service
-            .set_super_user(&"trinity".parse().unwrap(), true)
-            .await?;
+        world.set_super_user("trinity");
 
         router
             .call(get_project("reloaded").with_header(&authorization))
@@ -656,99 +681,6 @@ pub mod tests {
             .map_ok(|resp| {
                 assert_eq!(resp.status(), StatusCode::NOT_FOUND);
             })
-            .await
-            .unwrap();
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn api_create_get_users() -> anyhow::Result<()> {
-        let world = World::new().await;
-        let service = Arc::new(GatewayService::init(world.args(), world.pool()).await);
-
-        let (sender, mut receiver) = channel::<BoxedTask>(256);
-        tokio::spawn(async move {
-            while receiver.recv().await.is_some() {
-                // do not do any work with inbound requests
-            }
-        });
-
-        let mut router = ApiBuilder::new()
-            .with_service(Arc::clone(&service))
-            .with_sender(sender)
-            .with_default_routes()
-            .into_router();
-
-        let get_neo = || {
-            Request::builder()
-                .method("GET")
-                .uri("/users/neo")
-                .body(Body::empty())
-                .unwrap()
-        };
-
-        let post_trinity = || {
-            Request::builder()
-                .method("POST")
-                .uri("/users/trinity")
-                .body(Body::empty())
-                .unwrap()
-        };
-
-        router
-            .call(get_neo())
-            .map_ok(|resp| {
-                assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
-            })
-            .await
-            .unwrap();
-
-        let user = service.create_user("neo".parse().unwrap()).await?;
-
-        router
-            .call(get_neo())
-            .map_ok(|resp| {
-                assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
-            })
-            .await
-            .unwrap();
-
-        let authorization = Authorization::bearer(user.key.as_str()).unwrap();
-
-        router
-            .call(get_neo().with_header(&authorization))
-            .map_ok(|resp| {
-                assert_eq!(resp.status(), StatusCode::FORBIDDEN);
-            })
-            .await
-            .unwrap();
-
-        router
-            .call(post_trinity().with_header(&authorization))
-            .map_ok(|resp| assert_eq!(resp.status(), StatusCode::FORBIDDEN))
-            .await
-            .unwrap();
-
-        service.set_super_user(&user.name, true).await?;
-
-        router
-            .call(get_neo().with_header(&authorization))
-            .map_ok(|resp| {
-                assert_eq!(resp.status(), StatusCode::OK);
-            })
-            .await
-            .unwrap();
-
-        router
-            .call(post_trinity().with_header(&authorization))
-            .map_ok(|resp| assert_eq!(resp.status(), StatusCode::OK))
-            .await
-            .unwrap();
-
-        router
-            .call(post_trinity().with_header(&authorization))
-            .map_ok(|resp| assert_eq!(resp.status(), StatusCode::BAD_REQUEST))
             .await
             .unwrap();
 
@@ -778,6 +710,7 @@ pub mod tests {
             .with_service(Arc::clone(&service))
             .with_sender(sender)
             .with_default_routes()
+            .with_auth_service(world.context().auth_uri)
             .into_router();
 
         let get_status = || {
@@ -791,11 +724,10 @@ pub mod tests {
         let resp = router.call(get_status()).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
 
-        let neo: AccountName = "neo".parse().unwrap();
         let matrix: ProjectName = "matrix".parse().unwrap();
 
-        let neo = service.create_user(neo).await.unwrap();
-        let authorization = Authorization::bearer(neo.key.as_str()).unwrap();
+        let neo_key = world.create_user("neo");
+        let authorization = Authorization::bearer(&neo_key).unwrap();
 
         let create_project = Request::builder()
             .method("POST")

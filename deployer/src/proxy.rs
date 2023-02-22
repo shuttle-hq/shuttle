@@ -4,6 +4,7 @@ use std::{
 };
 
 use async_trait::async_trait;
+use axum::headers::HeaderMapExt;
 use fqdn::FQDN;
 use hyper::{
     client::{connect::dns::GaiResolver, HttpConnector},
@@ -14,6 +15,7 @@ use hyper_reverse_proxy::{ProxyError, ReverseProxy};
 use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderExtractor;
+use shuttle_common::backends::headers::XShuttleProject;
 use tracing::{error, field, instrument, trace, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
@@ -60,8 +62,8 @@ pub async fn handle(
 
     // We only have one service per project, and its name coincides
     // with that of the project
-    let service = match req.headers().get("X-Shuttle-Project") {
-        Some(project) => project.to_str().unwrap_or_default().to_owned(),
+    let service = match req.headers().typed_get::<XShuttleProject>() {
+        Some(project) => project.0,
         None => {
             trace!("proxy request has no X-Shuttle-Project header");
             return Ok(Response::builder()

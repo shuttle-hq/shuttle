@@ -43,7 +43,7 @@ impl TestApp {
 
     pub async fn post_user(&self, name: &str, tier: &str) -> Response {
         let request = Request::builder()
-            .uri(format!("/user/{name}/{tier}"))
+            .uri(format!("/users/{name}/{tier}"))
             .method("POST")
             .header(AUTHORIZATION, format!("Bearer {ADMIN_KEY}"))
             .body(Body::empty())
@@ -54,7 +54,7 @@ impl TestApp {
 
     pub async fn get_user(&self, name: &str) -> Response {
         let request = Request::builder()
-            .uri(format!("/user/{name}"))
+            .uri(format!("/users/{name}"))
             .header(AUTHORIZATION, format!("Bearer {ADMIN_KEY}"))
             .body(Body::empty())
             .unwrap();

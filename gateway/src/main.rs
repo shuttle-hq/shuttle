@@ -6,8 +6,7 @@ use opentelemetry::global;
 use shuttle_gateway::acme::{AcmeClient, CustomDomain};
 use shuttle_gateway::api::latest::{ApiBuilder, SVC_DEGRADED_THRESHOLD};
 use shuttle_gateway::args::StartArgs;
-use shuttle_gateway::args::{Args, Commands, InitArgs, UseTls};
-use shuttle_gateway::auth::Key;
+use shuttle_gateway::args::{Args, Commands, UseTls};
 use shuttle_gateway::proxy::UserServiceBuilder;
 use shuttle_gateway::service::{GatewayService, MIGRATIONS};
 use shuttle_gateway::task;
@@ -15,7 +14,7 @@ use shuttle_gateway::tls::{make_tls_acceptor, ChainAndPrivateKey};
 use shuttle_gateway::worker::{Worker, WORKER_QUEUE_SIZE};
 use sqlx::migrate::MigrateDatabase;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous};
-use sqlx::{query, Sqlite, SqlitePool};
+use sqlx::{Sqlite, SqlitePool};
 use std::io::{self, Cursor};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -73,7 +72,6 @@ async fn main() -> io::Result<()> {
 
     match args.command {
         Commands::Start(start_args) => start(db, args.state, start_args).await,
-        Commands::Init(init_args) => init(db, init_args).await,
     }
 }
 
@@ -203,6 +201,7 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
 
     let api_handle = api_builder
         .with_default_routes()
+        .with_auth_service(args.context.auth_uri)
         .with_default_traces()
         .serve();
 
@@ -217,23 +216,6 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
         _ = ambulance_handle => error!("ambulance handle finished"),
     );
 
-    Ok(())
-}
-
-async fn init(db: SqlitePool, args: InitArgs) -> io::Result<()> {
-    let key = match args.key {
-        Some(key) => key,
-        None => Key::new_random(),
-    };
-
-    query("INSERT INTO accounts (account_name, key, super_user) VALUES (?1, ?2, 1)")
-        .bind(&args.name)
-        .bind(&key)
-        .execute(&db)
-        .await
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-
-    println!("`{}` created as super user with key: {key}", args.name);
     Ok(())
 }
 

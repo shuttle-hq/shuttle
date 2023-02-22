@@ -6,7 +6,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use axum::headers::{Error as HeaderError, Header, HeaderMapExt, HeaderName, HeaderValue, Host};
+use axum::headers::{HeaderMapExt, Host};
 use axum::response::{IntoResponse, Response};
 use axum_server::accept::DefaultAcceptor;
 use axum_server::tls_rustls::RustlsAcceptor;
@@ -22,13 +22,14 @@ use hyper_reverse_proxy::ReverseProxy;
 use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
+use shuttle_common::backends::headers::XShuttleProject;
 use tower::{Service, ServiceBuilder};
 use tracing::{debug_span, error, field, trace};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::acme::{AcmeClient, ChallengeResponderLayer, CustomDomain};
 use crate::service::GatewayService;
-use crate::{Error, ErrorKind, ProjectName};
+use crate::{Error, ErrorKind};
 
 static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
     Lazy::new(|| ReverseProxy::new(Client::new()));
@@ -62,37 +63,6 @@ where
 
     fn call(&mut self, req: &'r AddrStream) -> Self::Future {
         ready(Ok(self.inner.as_responder_to(req)))
-    }
-}
-
-lazy_static::lazy_static! {
-    pub static ref X_SHUTTLE_PROJECT: HeaderName = HeaderName::from_static("x-shuttle-project");
-}
-
-pub struct XShuttleProject(ProjectName);
-
-impl Header for XShuttleProject {
-    fn name() -> &'static HeaderName {
-        &X_SHUTTLE_PROJECT
-    }
-
-    fn encode<E: Extend<HeaderValue>>(&self, values: &mut E) {
-        values.extend(std::iter::once(
-            HeaderValue::from_str(self.0.as_str()).unwrap(),
-        ));
-    }
-
-    fn decode<'i, I>(values: &mut I) -> Result<Self, HeaderError>
-    where
-        Self: Sized,
-        I: Iterator<Item = &'i HeaderValue>,
-    {
-        values
-            .last()
-            .and_then(|value| value.to_str().ok())
-            .and_then(|value| value.parse().ok())
-            .map(Self)
-            .ok_or_else(HeaderError::invalid)
     }
 }
 
@@ -139,7 +109,7 @@ impl UserProxy {
             };
 
         req.headers_mut()
-            .typed_insert(XShuttleProject(project_name.clone()));
+            .typed_insert(XShuttleProject(project_name.to_string()));
 
         let project = self.gateway.find_project(&project_name).await?;
 

@@ -110,7 +110,11 @@ pub enum ProjectCommand {
     /// create an environment for this project on shuttle
     New,
     /// list all projects belonging to the calling account
-    List,
+    List {
+        #[arg(long)]
+        /// Return projects filtered by a given project status
+        filter: Option<String>,
+    },
     /// remove this project environment from shuttle
     Rm,
     /// show the status of this project's environment on shuttle

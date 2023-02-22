@@ -201,10 +201,6 @@ impl Project {
         }
     }
 
-    pub fn create(project_name: ProjectName) -> Self {
-        Self::Creating(ProjectCreating::new_with_random_initial_key(project_name))
-    }
-
     pub fn destroy(self) -> Result<Self, Error> {
         if let Some(container) = self.container() {
             Ok(Self::Destroying(ProjectDestroying { container }))
@@ -615,6 +611,10 @@ impl ProjectCreating {
         &self.initial_key
     }
 
+    pub fn fqdn(&self) -> &Option<String> {
+        &self.fqdn
+    }
+
     fn container_name<C: DockerContext>(&self, ctx: &C) -> String {
         let prefix = &ctx.container_settings().prefix;
 
@@ -631,6 +631,7 @@ impl ProjectCreating {
             image: default_image,
             prefix,
             provisioner_host,
+            auth_uri,
             fqdn: public,
             ..
         } = ctx.container_settings();
@@ -678,9 +679,11 @@ impl ProjectCreating {
                         "/opt/shuttle",
                         "--state",
                         "/opt/shuttle/deployer.sqlite",
+                        "--auth-uri",
+                        auth_uri,
                     ],
                     "Env": [
-                        "RUST_LOG=debug",
+                        "RUST_LOG=debug,shuttle=trace",
                     ]
                 })
             });

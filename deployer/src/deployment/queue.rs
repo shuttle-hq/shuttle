@@ -11,6 +11,7 @@ use chrono::Utc;
 use crossbeam_channel::Sender;
 use opentelemetry::global;
 use serde_json::json;
+use shuttle_common::backends::auth::Claim;
 use shuttle_service::loader::{build_crate, get_config};
 use tokio::time::{sleep, timeout};
 use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument, Span};
@@ -141,6 +142,7 @@ pub struct Queued {
     pub data: Vec<u8>,
     pub will_run_tests: bool,
     pub tracing_context: HashMap<String, String>,
+    pub claim: Option<Claim>,
 }
 
 impl Queued {
@@ -220,6 +222,7 @@ impl Queued {
             service_name: self.service_name,
             service_id: self.service_id,
             tracing_context: Default::default(),
+            claim: self.claim,
         };
 
         Ok(built)

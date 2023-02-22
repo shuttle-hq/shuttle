@@ -32,7 +32,7 @@ use self::deployment::DeploymentRunnable;
 pub use self::deployment::{Deployment, DeploymentState};
 pub use self::error::Error as PersistenceError;
 pub use self::log::{Level as LogLevel, Log};
-pub use self::resource::{Resource, ResourceRecorder, Type as ResourceType};
+pub use self::resource::{Resource, ResourceManager, Type as ResourceType};
 use self::secret::Secret;
 pub use self::secret::{SecretGetter, SecretRecorder};
 pub use self::service::Service;
@@ -272,14 +272,6 @@ impl Persistence {
         .map_err(Error::from)
     }
 
-    pub async fn get_service_resources(&self, service_id: &Uuid) -> Result<Vec<Resource>> {
-        sqlx::query_as(r#"SELECT * FROM resources WHERE service_id = ?"#)
-            .bind(service_id)
-            .fetch_all(&self.pool)
-            .await
-            .map_err(Error::from)
-    }
-
     pub(crate) async fn get_deployment_logs(&self, id: &Uuid) -> Result<Vec<Log>> {
         // TODO: stress this a bit
         get_deployment_logs(&self.pool, id).await
@@ -353,7 +345,7 @@ impl LogRecorder for Persistence {
 }
 
 #[async_trait::async_trait]
-impl ResourceRecorder for Persistence {
+impl ResourceManager for Persistence {
     type Err = Error;
 
     async fn insert_resource(&self, resource: &Resource) -> Result<()> {
@@ -364,6 +356,14 @@ impl ResourceRecorder for Persistence {
             .execute(&self.pool)
             .await
             .map(|_| ())
+            .map_err(Error::from)
+    }
+
+    async fn get_resources(&self, service_id: &Uuid) -> Result<Vec<Resource>> {
+        sqlx::query_as(r#"SELECT * FROM resources WHERE service_id = ?"#)
+            .bind(service_id)
+            .fetch_all(&self.pool)
+            .await
             .map_err(Error::from)
     }
 }
@@ -944,7 +944,7 @@ mod tests {
             p.insert_resource(resource).await.unwrap();
         }
 
-        let resources = p.get_service_resources(&service_id).await.unwrap();
+        let resources = p.get_resources(&service_id).await.unwrap();
 
         assert_eq!(resources, vec![resource2, resource4]);
     }

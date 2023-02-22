@@ -52,7 +52,9 @@ features = ["backend", "models"]
 anyhow = { workspace = true }
 base64 = "0.13.1"
 colored = "2.0.0"
+jsonwebtoken = { workspace = true }
 portpicker = { workspace = true }
+ring = { workspace = true }
 snailquote = "0.3.1"
 tempfile = "3.3.0"
 

@@ -250,6 +250,21 @@ where
             }
         }
 
+        // If the route called is logout, invalidate the jwt stored with the cookie sid.
+        if path == "/logout" {
+            let cache_manager = self.cache_manager.clone();
+
+            let cache_key = if let Ok(Some(cookie)) = request.headers().typed_try_get::<Cookie>() {
+                cookie.get("shuttle.sid").map(|id| id.to_string())
+            } else {
+                None
+            };
+
+            if let Some(key) = cache_key {
+                cache_manager.invalidate(&key);
+            }
+        }
+
         let future = self.inner.call(request);
 
         Box::pin(async move {

@@ -611,7 +611,6 @@ impl ProjectCreating {
         &self.initial_key
     }
 
-    #[cfg(test)]
     pub fn fqdn(&self) -> &Option<String> {
         &self.fqdn
     }

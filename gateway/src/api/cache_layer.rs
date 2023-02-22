@@ -254,15 +254,11 @@ where
         if path == "/logout" {
             let cache_manager = self.cache_manager.clone();
 
-            let cache_key = if let Ok(Some(cookie)) = request.headers().typed_try_get::<Cookie>() {
-                cookie.get("shuttle.sid").map(|id| id.to_string())
-            } else {
-                None
+            if let Ok(Some(cookie)) = request.headers().typed_try_get::<Cookie>() {
+                if let Some(key) = cookie.get("shuttle.sid").map(|id| id.to_string()) {
+                    cache_manager.invalidate(&key);
+                }
             };
-
-            if let Some(key) = cache_key {
-                cache_manager.invalidate(&key);
-            }
         }
 
         let future = self.inner.call(request);

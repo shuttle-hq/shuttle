@@ -458,10 +458,10 @@ impl ApiBuilder {
                 "/projects",
                 get(get_projects_list.layer(ScopedLayer::new(vec![Scope::Project]))),
             )
-            .route(
-                "/projects/:state",
-                get(get_projects_list_with_filter.layer(ScopedLayer::new(vec![Scope::Project]))),
-            )
+            // .route(
+            //     "/projects/:state",
+            //     get(get_projects_list_with_filter.layer(ScopedLayer::new(vec![Scope::Project]))),
+            // )
             .route(
                 "/projects/:project_name",
                 get(get_project.layer(ScopedLayer::new(vec![Scope::Project])))

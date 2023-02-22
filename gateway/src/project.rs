@@ -201,10 +201,6 @@ impl Project {
         }
     }
 
-    pub fn create(project_name: ProjectName) -> Self {
-        Self::Creating(ProjectCreating::new_with_random_initial_key(project_name))
-    }
-
     pub fn destroy(self) -> Result<Self, Error> {
         if let Some(container) = self.container() {
             Ok(Self::Destroying(ProjectDestroying { container }))
@@ -613,6 +609,10 @@ impl ProjectCreating {
 
     pub fn initial_key(&self) -> &str {
         &self.initial_key
+    }
+
+    pub fn fqdn(&self) -> &Option<String> {
+        &self.fqdn
     }
 
     fn container_name<C: DockerContext>(&self, ctx: &C) -> String {

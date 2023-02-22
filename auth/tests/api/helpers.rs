@@ -26,7 +26,6 @@ pub(crate) async fn app() -> TestApp {
     let router = ApiBuilder::new()
         .with_sqlite_pool(sqlite_pool)
         .with_sessions()
-        .with_cache()
         .into_router();
 
     TestApp { router }

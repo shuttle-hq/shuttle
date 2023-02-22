@@ -30,7 +30,6 @@ pub async fn start(pool: SqlitePool, args: StartArgs) -> io::Result<()> {
     let router = api::ApiBuilder::new()
         .with_sqlite_pool(pool)
         .with_sessions()
-        .with_cache()
         .into_router();
 
     info!(address=%args.address, "Binding to and listening at address");

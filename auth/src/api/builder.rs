@@ -13,9 +13,7 @@ use shuttle_common::{
     request_span,
 };
 use sqlx::SqlitePool;
-use std::sync::RwLock;
 use tracing::field;
-use ttl_cache::TtlCache;
 
 use crate::{
     secrets::{EdDsaManager, KeyManager},
@@ -23,23 +21,17 @@ use crate::{
     COOKIE_EXPIRATION,
 };
 
-use super::{
-    cache::{CacheLayer, CacheManagement, CacheManager},
-    handlers::{
-        convert_cookie, convert_key, get_public_key, get_user, login, logout, post_user,
-        refresh_token,
-    },
+use super::handlers::{
+    convert_cookie, convert_key, get_public_key, get_user, login, logout, post_user, refresh_token,
 };
 
 pub type UserManagerState = Arc<Box<dyn UserManagement>>;
 pub type KeyManagerState = Arc<Box<dyn KeyManager>>;
-pub type CacheManagerState = Arc<Box<dyn CacheManagement>>;
 
 #[derive(Clone)]
 pub struct RouterState {
     pub user_manager: UserManagerState,
     pub key_manager: KeyManagerState,
-    pub cache_manager: CacheManagerState,
 }
 
 // Allow getting a user management state directly
@@ -56,18 +48,10 @@ impl FromRef<RouterState> for KeyManagerState {
     }
 }
 
-// Allow getting a cache state directly
-impl FromRef<RouterState> for CacheManagerState {
-    fn from_ref(router_state: &RouterState) -> Self {
-        router_state.cache_manager.clone()
-    }
-}
-
 pub struct ApiBuilder {
     router: Router<RouterState>,
     pool: Option<SqlitePool>,
     session_layer: Option<SessionLayer<MemoryStore>>,
-    cache: Option<Arc<RwLock<TtlCache<String, String>>>>,
 }
 
 impl Default for ApiBuilder {
@@ -104,7 +88,6 @@ impl ApiBuilder {
             router,
             pool: None,
             session_layer: None,
-            cache: None,
         }
     }
 
@@ -127,35 +110,19 @@ impl ApiBuilder {
         self
     }
 
-    pub fn with_cache(mut self) -> Self {
-        let cache = Arc::new(RwLock::new(TtlCache::new(1000)));
-
-        self.cache = Some(cache);
-
-        self
-    }
-
     pub fn into_router(self) -> Router {
         let pool = self.pool.expect("an sqlite pool is required");
         let session_layer = self.session_layer.expect("a session layer is required");
-        let cache = self.cache.expect("a cache is required");
 
-        let cache_manager = CacheManager { cache };
         let user_manager = UserManager { pool };
         let key_manager = EdDsaManager::new();
 
         let state = RouterState {
             user_manager: Arc::new(Box::new(user_manager)),
             key_manager: Arc::new(Box::new(key_manager)),
-            cache_manager: Arc::new(Box::new(cache_manager)),
         };
 
-        self.router
-            .layer(session_layer)
-            .layer(CacheLayer {
-                state: state.clone(),
-            })
-            .with_state(state)
+        self.router.layer(session_layer).with_state(state)
     }
 }
 

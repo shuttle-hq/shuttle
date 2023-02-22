@@ -4,17 +4,16 @@ use crate::{
 };
 use axum::{
     extract::{Path, State},
-    headers::{Cookie, HeaderMapExt},
     Json,
 };
 use axum_sessions::extractors::{ReadableSession, WritableSession};
-use http::{HeaderMap, StatusCode};
+use http::StatusCode;
 use serde::{Deserialize, Serialize};
 use shuttle_common::{backends::auth::Claim, models::user};
 use tracing::instrument;
 
 use super::{
-    builder::{CacheManagerState, KeyManagerState, UserManagerState},
+    builder::{KeyManagerState, UserManagerState},
     RouterState,
 };
 
@@ -57,24 +56,7 @@ pub(crate) async fn login(
     Ok(Json(user.into()))
 }
 
-pub(crate) async fn logout(
-    mut session: WritableSession,
-    State(cache_manager): State<CacheManagerState>,
-    headers: HeaderMap,
-) {
-    // If there is a cookie, extract it and try to get the id.
-    let cache_key = if let Ok(Some(cookie)) = headers.typed_try_get::<Cookie>() {
-        cookie.get("shuttle.sid").map(|id| id.to_string())
-    } else {
-        None
-    };
-
-    // If there was an id in the cookie, clear it from the cache.
-    if let Some(key) = cache_key {
-        // Clear the session's associated JWT from the cache.
-        cache_manager.invalidate(&key);
-    }
-
+pub(crate) async fn logout(mut session: WritableSession) {
     session.destroy();
 }
 
@@ -104,7 +86,6 @@ pub(crate) async fn convert_key(
     State(RouterState {
         key_manager,
         user_manager,
-        ..
     }): State<RouterState>,
     key: Key,
 ) -> Result<Json<shuttle_common::backends::auth::ConvertResponse>, StatusCode> {

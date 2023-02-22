@@ -5,6 +5,7 @@ use std::{
 
 use clap::Parser;
 use fqdn::FQDN;
+use tonic::transport::Uri;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -36,6 +37,10 @@ pub struct Args {
     /// Address the provisioned MongoDB can be reached at on the internal network
     #[arg(long, env = "PROVISIONER_MONGODB_ADDRESS", default_value = "mongodb")]
     pub internal_mongodb_address: String,
+
+    /// Address to reach the authentication service at
+    #[arg(long, default_value = "http://127.0.0.1:8008")]
+    pub auth_uri: Uri,
 }
 
 fn parse_fqdn(src: &str) -> Result<FQDN, String> {

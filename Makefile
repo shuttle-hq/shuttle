@@ -77,7 +77,7 @@ clean:
 	rm .shuttle-*
 	rm docker-compose.rendered.yml
 
-images: shuttle-provisioner shuttle-deployer shuttle-gateway postgres panamax
+images: shuttle-provisioner shuttle-deployer shuttle-gateway shuttle-auth postgres panamax
 
 postgres:
 	docker buildx build \

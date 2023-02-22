@@ -9,7 +9,7 @@ use axum::{
 use axum_sessions::extractors::{ReadableSession, WritableSession};
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
-use shuttle_common::{backends::auth::Claim, models::auth};
+use shuttle_common::{backends::auth::Claim, models::user};
 use tracing::instrument;
 
 use super::{
@@ -22,7 +22,7 @@ pub(crate) async fn get_user(
     _: Admin,
     State(user_manager): State<UserManagerState>,
     Path(account_name): Path<AccountName>,
-) -> Result<Json<auth::UserResponse>, Error> {
+) -> Result<Json<user::Response>, Error> {
     let user = user_manager.get_user(account_name).await?;
 
     Ok(Json(user.into()))
@@ -33,7 +33,7 @@ pub(crate) async fn post_user(
     _: Admin,
     State(user_manager): State<UserManagerState>,
     Path((account_name, account_tier)): Path<(AccountName, AccountTier)>,
-) -> Result<Json<auth::UserResponse>, Error> {
+) -> Result<Json<user::Response>, Error> {
     let user = user_manager.create_user(account_name, account_tier).await?;
 
     Ok(Json(user.into()))
@@ -43,7 +43,7 @@ pub(crate) async fn login(
     mut session: WritableSession,
     State(user_manager): State<UserManagerState>,
     Json(request): Json<LoginRequest>,
-) -> Result<Json<auth::UserResponse>, Error> {
+) -> Result<Json<user::Response>, Error> {
     let user = user_manager.get_user(request.account_name).await?;
 
     session

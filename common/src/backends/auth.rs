@@ -1,18 +1,93 @@
-use std::{future::Future, ops::Add, pin::Pin};
+use std::{convert::Infallible, future::Future, ops::Add, pin::Pin};
 
+use async_trait::async_trait;
 use bytes::Bytes;
 use chrono::{Duration, Utc};
 use headers::{authorization::Bearer, Authorization, HeaderMapExt};
-use http::{Request, Response, StatusCode};
+use http::{Request, Response, StatusCode, Uri};
 use http_body::combinators::UnsyncBoxBody;
-use hyper::Body;
-use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
+use hyper::{body, Body, Client};
+use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header as JwtHeader, Validation};
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 use tower::{Layer, Service};
-use tracing::error;
+use tracing::{error, trace};
+
+use super::headers::XShuttleAdminSecret;
 
 const EXP_MINUTES: i64 = 5;
 const ISS: &str = "shuttle";
+
+/// Layer to check the admin secret set by deployer is correct
+#[derive(Clone)]
+pub struct AdminSecretLayer {
+    secret: String,
+}
+
+impl AdminSecretLayer {
+    pub fn new(secret: String) -> Self {
+        Self { secret }
+    }
+}
+
+impl<S> Layer<S> for AdminSecretLayer {
+    type Service = AdminSecret<S>;
+
+    fn layer(&self, inner: S) -> Self::Service {
+        AdminSecret {
+            inner,
+            secret: self.secret.clone(),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct AdminSecret<S> {
+    inner: S,
+    secret: String,
+}
+
+impl<S, ResponseError> Service<Request<Body>> for AdminSecret<S>
+where
+    S: Service<Request<Body>, Response = Response<UnsyncBoxBody<Bytes, ResponseError>>>
+        + Send
+        + 'static,
+    S::Future: Send + 'static,
+{
+    type Response = S::Response;
+    type Error = S::Error;
+    type Future =
+        Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
+
+    fn poll_ready(
+        &mut self,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
+
+    fn call(&mut self, req: Request<Body>) -> Self::Future {
+        let error = match req.headers().typed_try_get::<XShuttleAdminSecret>() {
+            Ok(Some(secret)) if secret.0 == self.secret => None,
+            Ok(_) => Some(StatusCode::UNAUTHORIZED),
+            Err(_) => Some(StatusCode::BAD_REQUEST),
+        };
+
+        if let Some(status) = error {
+            // Could not validate claim
+            Box::pin(async move {
+                Ok(Response::builder()
+                    .status(status)
+                    .body(Default::default())
+                    .unwrap())
+            })
+        } else {
+            let future = self.inner.call(req);
+
+            Box::pin(async move { future.await })
+        }
+    }
+}
 
 /// The scope of operations that can be performed on shuttle
 /// Every scope defaults to read and will use a suffix for updating tasks
@@ -27,6 +102,12 @@ pub enum Scope {
 
     /// Read the logs of a deployment
     Logs,
+
+    /// Read the details of a service
+    Service,
+
+    /// Create a new service
+    ServiceCreate,
 
     /// Read the status of a project
     Project,
@@ -45,9 +126,24 @@ pub enum Scope {
 
     /// Add or update secrets of a project
     SecretWrite,
+
+    /// Get list of users
+    User,
+
+    /// Add or update users
+    UserCreate,
+
+    /// Create an ACME account
+    AcmeCreate,
+
+    /// Create a custom domain,
+    CustomDomainCreate,
+
+    /// Admin level scope to internals
+    Admin,
 }
 
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
 /// Response used internally to pass around JWT token
 pub struct ConvertResponse {
     pub token: String,
@@ -67,6 +163,8 @@ pub struct Claim {
     pub sub: String,
     /// Scopes this token can access
     pub scopes: Vec<Scope>,
+    /// The original token that was parsed
+    token: Option<String>,
 }
 
 impl Claim {
@@ -82,26 +180,31 @@ impl Claim {
             nbf: iat.timestamp() as usize,
             sub,
             scopes,
+            token: None,
         }
     }
 
     pub fn into_token(self, encoding_key: &EncodingKey) -> Result<String, StatusCode> {
-        encode(
-            &Header::new(jsonwebtoken::Algorithm::EdDSA),
-            &self,
-            encoding_key,
-        )
-        .map_err(|err| {
-            error!(
-                error = &err as &dyn std::error::Error,
-                "failed to convert claim to token"
-            );
-            match err.kind() {
-                jsonwebtoken::errors::ErrorKind::Json(_) => StatusCode::INTERNAL_SERVER_ERROR,
-                jsonwebtoken::errors::ErrorKind::Crypto(_) => StatusCode::SERVICE_UNAVAILABLE,
-                _ => StatusCode::INTERNAL_SERVER_ERROR,
-            }
-        })
+        if let Some(token) = self.token {
+            Ok(token)
+        } else {
+            encode(
+                &JwtHeader::new(jsonwebtoken::Algorithm::EdDSA),
+                &self,
+                encoding_key,
+            )
+            .map_err(|err| {
+                error!(
+                    error = &err as &dyn std::error::Error,
+                    "failed to convert claim to token"
+                );
+                match err.kind() {
+                    jsonwebtoken::errors::ErrorKind::Json(_) => StatusCode::INTERNAL_SERVER_ERROR,
+                    jsonwebtoken::errors::ErrorKind::Crypto(_) => StatusCode::SERVICE_UNAVAILABLE,
+                    _ => StatusCode::INTERNAL_SERVER_ERROR,
+                }
+            })
+        }
     }
 
     pub fn from_token(token: &str, public_key: &[u8]) -> Result<Self, StatusCode> {
@@ -109,7 +212,8 @@ impl Claim {
         let mut validation = Validation::new(jsonwebtoken::Algorithm::EdDSA);
         validation.set_issuer(&[ISS]);
 
-        let claim = decode(token, &decoding_key, &validation)
+        trace!(token, "converting token to claim");
+        let mut claim: Self = decode(token, &decoding_key, &validation)
             .map_err(|err| {
                 error!(
                     error = &err as &dyn std::error::Error,
@@ -137,8 +241,64 @@ impl Claim {
             })?
             .claims;
 
+        claim.token = Some(token.to_string());
+
         Ok(claim)
     }
+}
+
+/// Trait to get a public key asyncronously
+#[async_trait]
+pub trait PublicKeyFn: Send + Sync + Clone {
+    type Error: std::error::Error + Send;
+
+    async fn public_key(&self) -> Result<Vec<u8>, Self::Error>;
+}
+
+#[async_trait]
+impl<F, O> PublicKeyFn for F
+where
+    F: Fn() -> O + Sync + Send + Clone,
+    O: Future<Output = Vec<u8>> + Send,
+{
+    type Error = Infallible;
+
+    async fn public_key(&self) -> Result<Vec<u8>, Self::Error> {
+        Ok((self)().await)
+    }
+}
+
+#[derive(Clone)]
+pub struct AuthPublicKey {
+    auth_uri: Uri,
+}
+
+impl AuthPublicKey {
+    pub fn new(auth_uri: Uri) -> Self {
+        Self { auth_uri }
+    }
+}
+
+#[async_trait]
+impl PublicKeyFn for AuthPublicKey {
+    type Error = PublicKeyFnError;
+
+    async fn public_key(&self) -> Result<Vec<u8>, Self::Error> {
+        let client = Client::new();
+        let uri = format!("{}public-key", self.auth_uri).parse()?;
+        let res = client.get(uri).await?;
+        let buf = body::to_bytes(res).await?;
+        Ok(buf.to_vec())
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum PublicKeyFnError {
+    #[error("invalid uri: {0}")]
+    InvalidUri(#[from] http::uri::InvalidUri),
+
+    #[error("hyper error: {0}")]
+    Hyper(#[from] hyper::Error),
 }
 
 /// Layer to validate JWT tokens with a public key. Valid claims are added to the request extension
@@ -151,31 +311,180 @@ pub struct JwtAuthenticationLayer<F> {
     public_key_fn: F,
 }
 
-impl<F: Fn() -> Vec<u8>> JwtAuthenticationLayer<F> {
+impl<F: PublicKeyFn> JwtAuthenticationLayer<F> {
     /// Create a new layer to validate JWT tokens with the given public key
     pub fn new(public_key_fn: F) -> Self {
         Self { public_key_fn }
     }
 }
 
-impl<S, F: Fn() -> Vec<u8>> Layer<S> for JwtAuthenticationLayer<F> {
-    type Service = JwtAuthentication<S>;
+impl<S, F: PublicKeyFn> Layer<S> for JwtAuthenticationLayer<F> {
+    type Service = JwtAuthentication<S, F>;
 
     fn layer(&self, inner: S) -> Self::Service {
-        let public_key = (self.public_key_fn)();
-
-        JwtAuthentication { inner, public_key }
+        JwtAuthentication {
+            inner,
+            public_key_fn: self.public_key_fn.clone(),
+        }
     }
 }
 
 /// Middleware for validating a valid JWT token is present on "authorization: bearer <token>"
 #[derive(Clone)]
-pub struct JwtAuthentication<S> {
+pub struct JwtAuthentication<S, F> {
     inner: S,
-    public_key: Vec<u8>,
+    public_key_fn: F,
 }
 
-impl<S, ResponseError> Service<Request<Body>> for JwtAuthentication<S>
+impl<S, F, ResponseError> Service<Request<Body>> for JwtAuthentication<S, F>
+where
+    S: Service<Request<Body>, Response = Response<UnsyncBoxBody<Bytes, ResponseError>>>
+        + Send
+        + Clone
+        + 'static,
+    S::Future: Send + 'static,
+    F: PublicKeyFn + 'static,
+{
+    type Response = S::Response;
+    type Error = S::Error;
+    type Future =
+        Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
+
+    fn poll_ready(
+        &mut self,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
+
+    fn call(&mut self, mut req: Request<Body>) -> Self::Future {
+        match req.headers().typed_try_get::<Authorization<Bearer>>() {
+            Ok(Some(bearer)) => {
+                let mut this = self.clone();
+
+                Box::pin(async move {
+                    match this.public_key_fn.public_key().await {
+                        Ok(public_key) => {
+                            match Claim::from_token(bearer.token().trim(), &public_key) {
+                                Ok(claim) => {
+                                    req.extensions_mut().insert(claim);
+
+                                    this.inner.call(req).await
+                                }
+                                Err(code) => Ok(Response::builder()
+                                    .status(code)
+                                    .body(Default::default())
+                                    .unwrap()),
+                            }
+                        }
+                        Err(error) => {
+                            error!(
+                                error = &error as &dyn std::error::Error,
+                                "failed to get public key"
+                            );
+
+                            Ok(Response::builder()
+                                .status(StatusCode::SERVICE_UNAVAILABLE)
+                                .body(Default::default())
+                                .unwrap())
+                        }
+                    }
+                })
+            }
+            Ok(None) => {
+                let future = self.inner.call(req);
+
+                Box::pin(async move { future.await })
+            }
+            Err(_) => Box::pin(async move {
+                Ok(Response::builder()
+                    .status(StatusCode::BAD_REQUEST)
+                    .body(Default::default())
+                    .unwrap())
+            }),
+        }
+    }
+}
+
+/// This layer takes a claim on a request extension and uses it's internal token to set the Authorization Bearer
+#[derive(Clone)]
+pub struct ClaimLayer;
+
+impl<S> Layer<S> for ClaimLayer {
+    type Service = ClaimService<S>;
+
+    fn layer(&self, inner: S) -> Self::Service {
+        ClaimService { inner }
+    }
+}
+
+#[derive(Clone)]
+pub struct ClaimService<S> {
+    inner: S,
+}
+
+impl<S, RequestError> Service<Request<UnsyncBoxBody<Bytes, RequestError>>> for ClaimService<S>
+where
+    S: Service<Request<UnsyncBoxBody<Bytes, RequestError>>> + Send + 'static,
+    S::Future: Send + 'static,
+{
+    type Response = S::Response;
+    type Error = S::Error;
+    type Future =
+        Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
+
+    fn poll_ready(
+        &mut self,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
+
+    fn call(&mut self, mut req: Request<UnsyncBoxBody<Bytes, RequestError>>) -> Self::Future {
+        if let Some(claim) = req.extensions().get::<Claim>() {
+            if let Some(token) = claim.token.clone() {
+                req.headers_mut()
+                    .typed_insert(Authorization::bearer(&token).expect("to set JWT token"));
+            }
+        }
+
+        let future = self.inner.call(req);
+
+        Box::pin(async move { future.await })
+    }
+}
+
+/// Check that the required scopes are set on the [Claim] extension on a [Request]
+#[derive(Clone)]
+pub struct ScopedLayer {
+    required: Vec<Scope>,
+}
+
+impl ScopedLayer {
+    /// Scopes required to authenticate a request
+    pub fn new(required: Vec<Scope>) -> Self {
+        Self { required }
+    }
+}
+
+impl<S> Layer<S> for ScopedLayer {
+    type Service = Scoped<S>;
+
+    fn layer(&self, inner: S) -> Self::Service {
+        Scoped {
+            inner,
+            required: self.required.clone(),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct Scoped<S> {
+    inner: S,
+    required: Vec<Scope>,
+}
+
+impl<S, ResponseError> Service<Request<Body>> for Scoped<S>
 where
     S: Service<Request<Body>, Response = Response<UnsyncBoxBody<Bytes, ResponseError>>>
         + Send
@@ -194,31 +503,33 @@ where
         self.inner.poll_ready(cx)
     }
 
-    fn call(&mut self, mut req: Request<Body>) -> Self::Future {
-        let error = match req.headers().typed_try_get::<Authorization<Bearer>>() {
-            Ok(Some(bearer)) => match Claim::from_token(bearer.token().trim(), &self.public_key) {
-                Ok(claim) => {
-                    req.extensions_mut().insert(claim);
-                    None
-                }
-                Err(code) => Some(code),
-            },
-            Ok(None) => Some(StatusCode::UNAUTHORIZED),
-            Err(_) => Some(StatusCode::BAD_REQUEST),
-        };
+    fn call(&mut self, req: Request<Body>) -> Self::Future {
+        let Some(claim) = req.extensions().get::<Claim>() else {
+            error!("claim extension is not set");
 
-        if let Some(status) = error {
-            // Could not validate claim
-            Box::pin(async move {
+            return Box::pin(async move {
                 Ok(Response::builder()
-                    .status(status)
+                    .status(StatusCode::UNAUTHORIZED)
                     .body(Default::default())
                     .unwrap())
-            })
-        } else {
+            });
+        };
+
+        if self
+            .required
+            .iter()
+            .all(|scope| claim.scopes.contains(scope))
+        {
             let future = self.inner.call(req);
 
             Box::pin(async move { future.await })
+        } else {
+            Box::pin(async move {
+                Ok(Response::builder()
+                    .status(StatusCode::FORBIDDEN)
+                    .body(Default::default())
+                    .unwrap())
+            })
         }
     }
 }
@@ -236,11 +547,11 @@ mod tests {
     use serde_json::json;
     use tower::{ServiceBuilder, ServiceExt};
 
-    use super::{Claim, JwtAuthenticationLayer, Scope};
+    use super::{Claim, JwtAuthenticationLayer, Scope, ScopedLayer};
 
     #[test]
     fn to_token_and_back() {
-        let claim = Claim::new(
+        let mut claim = Claim::new(
             "ferries".to_string(),
             vec![Scope::Deployment, Scope::Project],
         );
@@ -248,6 +559,9 @@ mod tests {
         let doc = signature::Ed25519KeyPair::generate_pkcs8(&rand::SystemRandom::new()).unwrap();
         let encoding_key = EncodingKey::from_ed_der(doc.as_ref());
         let token = claim.clone().into_token(&encoding_key).unwrap();
+
+        // Make sure the token is set
+        claim.token = Some(token.clone());
 
         let pair = Ed25519KeyPair::from_pkcs8(doc.as_ref()).unwrap();
         let public_key = pair.public_key().as_ref();
@@ -279,7 +593,12 @@ mod tests {
                 )
                 .layer(
                     ServiceBuilder::new()
-                        .layer(JwtAuthenticationLayer::new(move || public_key.clone())),
+                        .layer(JwtAuthenticationLayer::new(move || {
+                            let public_key = public_key.clone();
+
+                            async move { public_key.clone() }
+                        }))
+                        .layer(ScopedLayer::new(vec![Scope::Project])),
                 );
 
         //////////////////////////////////////////////////////////////////////////

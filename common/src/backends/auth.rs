@@ -1,4 +1,4 @@
-use std::{future::Future, ops::Add, pin::Pin};
+use std::{convert::Infallible, future::Future, ops::Add, pin::Pin};
 
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -9,6 +9,7 @@ use http_body::combinators::UnsyncBoxBody;
 use hyper::{body, Body, Client};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header as JwtHeader, Validation};
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 use tower::{Layer, Service};
 use tracing::{error, trace};
 
@@ -249,7 +250,9 @@ impl Claim {
 /// Trait to get a public key asyncronously
 #[async_trait]
 pub trait PublicKeyFn: Send + Sync + Clone {
-    async fn public_key(&self) -> Vec<u8>;
+    type Error: std::error::Error + Send;
+
+    async fn public_key(&self) -> Result<Vec<u8>, Self::Error>;
 }
 
 #[async_trait]
@@ -258,8 +261,10 @@ where
     F: Fn() -> O + Sync + Send + Clone,
     O: Future<Output = Vec<u8>> + Send,
 {
-    async fn public_key(&self) -> Vec<u8> {
-        (self)().await
+    type Error = Infallible;
+
+    async fn public_key(&self) -> Result<Vec<u8>, Self::Error> {
+        Ok((self)().await)
     }
 }
 
@@ -276,13 +281,24 @@ impl AuthPublicKey {
 
 #[async_trait]
 impl PublicKeyFn for AuthPublicKey {
-    async fn public_key(&self) -> Vec<u8> {
+    type Error = PublicKeyFnError;
+
+    async fn public_key(&self) -> Result<Vec<u8>, Self::Error> {
         let client = Client::new();
-        let uri = format!("{}public-key", self.auth_uri).parse().unwrap();
-        let res = client.get(uri).await.unwrap();
-        let buf = body::to_bytes(res).await.unwrap();
-        buf.to_vec()
+        let uri = format!("{}public-key", self.auth_uri).parse()?;
+        let res = client.get(uri).await?;
+        let buf = body::to_bytes(res).await?;
+        Ok(buf.to_vec())
     }
+}
+
+#[derive(Debug, Error)]
+pub enum PublicKeyFnError {
+    #[error("invalid uri: {0}")]
+    InvalidUri(#[from] http::uri::InvalidUri),
+
+    #[error("hyper error: {0}")]
+    Hyper(#[from] hyper::Error),
 }
 
 /// Layer to validate JWT tokens with a public key. Valid claims are added to the request extension
@@ -347,18 +363,31 @@ where
                 let mut this = self.clone();
 
                 Box::pin(async move {
-                    let public_key = this.public_key_fn.public_key().await;
+                    match this.public_key_fn.public_key().await {
+                        Ok(public_key) => {
+                            match Claim::from_token(bearer.token().trim(), &public_key) {
+                                Ok(claim) => {
+                                    req.extensions_mut().insert(claim);
 
-                    match Claim::from_token(bearer.token().trim(), &public_key) {
-                        Ok(claim) => {
-                            req.extensions_mut().insert(claim);
-
-                            this.inner.call(req).await
+                                    this.inner.call(req).await
+                                }
+                                Err(code) => Ok(Response::builder()
+                                    .status(code)
+                                    .body(Default::default())
+                                    .unwrap()),
+                            }
                         }
-                        Err(code) => Ok(Response::builder()
-                            .status(code)
-                            .body(Default::default())
-                            .unwrap()),
+                        Err(error) => {
+                            error!(
+                                error = &error as &dyn std::error::Error,
+                                "failed to get public key"
+                            );
+
+                            Ok(Response::builder()
+                                .status(StatusCode::SERVICE_UNAVAILABLE)
+                                .body(Default::default())
+                                .unwrap())
+                        }
                     }
                 })
             }
@@ -475,9 +504,7 @@ where
     }
 
     fn call(&mut self, req: Request<Body>) -> Self::Future {
-        let claim = if let Some(claim) = req.extensions().get::<Claim>() {
-            claim
-        } else {
+        let Some(claim) = req.extensions().get::<Claim>() else {
             error!("claim extension is not set");
 
             return Box::pin(async move {

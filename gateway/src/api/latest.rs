@@ -16,9 +16,7 @@ use futures::Future;
 use http::{StatusCode, Uri};
 use instant_acme::{AccountCredentials, ChallengeType};
 use serde::{Deserialize, Serialize};
-use shuttle_common::backends::auth::{
-    public_key_from_auth, JwtAuthenticationLayer, Scope, ScopedLayer,
-};
+use shuttle_common::backends::auth::{AuthPublicKey, JwtAuthenticationLayer, Scope, ScopedLayer};
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
 use shuttle_common::models::error::ErrorKind;
 use shuttle_common::models::{project, stats};
@@ -467,11 +465,11 @@ impl ApiBuilder {
         self
     }
 
-    pub async fn with_auth_service(mut self, auth_uri: Uri) -> Self {
-        let public_key_fn = public_key_from_auth(auth_uri.clone()).await;
+    pub fn with_auth_service(mut self, auth_uri: Uri) -> Self {
+        let auth_public_key = AuthPublicKey::new(auth_uri.clone());
         self.router = self
             .router
-            .layer(JwtAuthenticationLayer::new(public_key_fn))
+            .layer(JwtAuthenticationLayer::new(auth_public_key))
             .layer(ShuttleAuthLayer::new(auth_uri));
 
         self
@@ -536,9 +534,10 @@ pub mod tests {
             .with_service(Arc::clone(&service))
             .with_sender(sender)
             .with_default_routes()
+            .with_auth_service(world.context().auth_uri)
             .into_router();
 
-        let neo = service.create_user("neo".parse().unwrap()).await?;
+        let neo_key = world.create_user("neo");
 
         let create_project = |project: &str| {
             Request::builder()
@@ -562,7 +561,7 @@ pub mod tests {
             .await
             .unwrap();
 
-        let authorization = Authorization::bearer(neo.key.as_str()).unwrap();
+        let authorization = Authorization::bearer(&neo_key).unwrap();
 
         router
             .call(create_project("matrix").with_header(&authorization))
@@ -620,9 +619,9 @@ pub mod tests {
             .await
             .unwrap();
 
-        let trinity = service.create_user("trinity".parse().unwrap()).await?;
+        let trinity_key = world.create_user("trinity");
 
-        let authorization = Authorization::bearer(trinity.key.as_str()).unwrap();
+        let authorization = Authorization::bearer(&trinity_key).unwrap();
 
         router
             .call(get_project("reloaded").with_header(&authorization))
@@ -638,9 +637,7 @@ pub mod tests {
             .await
             .unwrap();
 
-        service
-            .set_super_user(&"trinity".parse().unwrap(), true)
-            .await?;
+        world.set_super_user("trinity");
 
         router
             .call(get_project("reloaded").with_header(&authorization))
@@ -662,99 +659,6 @@ pub mod tests {
             .map_ok(|resp| {
                 assert_eq!(resp.status(), StatusCode::NOT_FOUND);
             })
-            .await
-            .unwrap();
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn api_create_get_users() -> anyhow::Result<()> {
-        let world = World::new().await;
-        let service = Arc::new(GatewayService::init(world.args(), world.pool()).await);
-
-        let (sender, mut receiver) = channel::<BoxedTask>(256);
-        tokio::spawn(async move {
-            while receiver.recv().await.is_some() {
-                // do not do any work with inbound requests
-            }
-        });
-
-        let mut router = ApiBuilder::new()
-            .with_service(Arc::clone(&service))
-            .with_sender(sender)
-            .with_default_routes()
-            .into_router();
-
-        let get_neo = || {
-            Request::builder()
-                .method("GET")
-                .uri("/users/neo")
-                .body(Body::empty())
-                .unwrap()
-        };
-
-        let post_trinity = || {
-            Request::builder()
-                .method("POST")
-                .uri("/users/trinity")
-                .body(Body::empty())
-                .unwrap()
-        };
-
-        router
-            .call(get_neo())
-            .map_ok(|resp| {
-                assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
-            })
-            .await
-            .unwrap();
-
-        let user = service.create_user("neo".parse().unwrap()).await?;
-
-        router
-            .call(get_neo())
-            .map_ok(|resp| {
-                assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
-            })
-            .await
-            .unwrap();
-
-        let authorization = Authorization::bearer(user.key.as_str()).unwrap();
-
-        router
-            .call(get_neo().with_header(&authorization))
-            .map_ok(|resp| {
-                assert_eq!(resp.status(), StatusCode::FORBIDDEN);
-            })
-            .await
-            .unwrap();
-
-        router
-            .call(post_trinity().with_header(&authorization))
-            .map_ok(|resp| assert_eq!(resp.status(), StatusCode::FORBIDDEN))
-            .await
-            .unwrap();
-
-        service.set_super_user(&user.name, true).await?;
-
-        router
-            .call(get_neo().with_header(&authorization))
-            .map_ok(|resp| {
-                assert_eq!(resp.status(), StatusCode::OK);
-            })
-            .await
-            .unwrap();
-
-        router
-            .call(post_trinity().with_header(&authorization))
-            .map_ok(|resp| assert_eq!(resp.status(), StatusCode::OK))
-            .await
-            .unwrap();
-
-        router
-            .call(post_trinity().with_header(&authorization))
-            .map_ok(|resp| assert_eq!(resp.status(), StatusCode::BAD_REQUEST))
             .await
             .unwrap();
 
@@ -784,6 +688,7 @@ pub mod tests {
             .with_service(Arc::clone(&service))
             .with_sender(sender)
             .with_default_routes()
+            .with_auth_service(world.context().auth_uri)
             .into_router();
 
         let get_status = || {
@@ -797,11 +702,10 @@ pub mod tests {
         let resp = router.call(get_status()).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
 
-        let neo: AccountName = "neo".parse().unwrap();
         let matrix: ProjectName = "matrix".parse().unwrap();
 
-        let neo = service.create_user(neo).await.unwrap();
-        let authorization = Authorization::bearer(neo.key.as_str()).unwrap();
+        let neo_key = world.create_user("neo");
+        let authorization = Authorization::bearer(&neo_key).unwrap();
 
         let create_project = Request::builder()
             .method("POST")

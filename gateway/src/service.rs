@@ -504,67 +504,12 @@ impl DockerContext for GatewayContext {
 
 #[cfg(test)]
 pub mod tests {
-
-    use std::str::FromStr;
-
     use fqdn::FQDN;
 
     use super::*;
-    use crate::auth::AccountTier;
     use crate::task::{self, TaskResult};
     use crate::tests::{assert_err_kind, World};
     use crate::{Error, ErrorKind};
-
-    #[tokio::test]
-    async fn service_create_find_user() -> anyhow::Result<()> {
-        let world = World::new().await;
-        let svc = GatewayService::init(world.args(), world.pool()).await;
-
-        let account_name: AccountName = "test_user_123".parse()?;
-
-        assert_err_kind!(
-            User::retrieve_from_account_name(&svc, account_name.clone()).await,
-            ErrorKind::UserNotFound
-        );
-
-        assert_err_kind!(
-            User::retrieve_from_key(&svc, Key::from_str("123").unwrap()).await,
-            ErrorKind::UserNotFound
-        );
-
-        let user = svc.create_user(account_name.clone()).await?;
-
-        assert_eq!(
-            User::retrieve_from_account_name(&svc, account_name.clone()).await?,
-            user
-        );
-
-        let User {
-            name,
-            key,
-            projects,
-            permissions,
-        } = user;
-
-        assert!(projects.is_empty());
-
-        assert!(!permissions.is_super_user());
-
-        assert_eq!(*permissions.tier(), AccountTier::Basic);
-
-        assert_eq!(name, account_name);
-
-        assert_err_kind!(
-            svc.create_user(account_name.clone()).await,
-            ErrorKind::UserAlreadyExists
-        );
-
-        let user_key = svc.key_from_account_name(&account_name).await?;
-
-        assert_eq!(key, user_key);
-
-        Ok(())
-    }
 
     #[tokio::test]
     async fn service_create_find_delete_project() -> anyhow::Result<()> {
@@ -581,9 +526,6 @@ pub mod tests {
                 Project::Creating(creating) if creating.project_name() == project_name
             )
         };
-
-        svc.create_user(neo.clone()).await.unwrap();
-        svc.create_user(trinity.clone()).await.unwrap();
 
         let project = svc
             .create_project(matrix.clone(), neo.clone())
@@ -654,7 +596,6 @@ pub mod tests {
         let neo: AccountName = "neo".parse().unwrap();
         let matrix: ProjectName = "matrix".parse().unwrap();
 
-        svc.create_user(neo.clone()).await.unwrap();
         svc.create_project(matrix.clone(), neo.clone())
             .await
             .unwrap();
@@ -713,8 +654,6 @@ pub mod tests {
         let domain: FQDN = "neo.the.matrix".parse().unwrap();
         let certificate = "dummy certificate";
         let private_key = "dummy private key";
-
-        svc.create_user(account.clone()).await.unwrap();
 
         assert_err_kind!(
             svc.project_details_for_custom_domain(&domain).await,

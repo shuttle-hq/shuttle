@@ -13,7 +13,7 @@ use fqdn::FQDN;
 use futures::StreamExt;
 use hyper::Uri;
 use shuttle_common::backends::auth::{
-    public_key_from_auth, AdminSecretLayer, Claim, JwtAuthenticationLayer, Scope, ScopedLayer,
+    AdminSecretLayer, AuthPublicKey, Claim, JwtAuthenticationLayer, Scope, ScopedLayer,
 };
 use shuttle_common::backends::headers::XShuttleAccountName;
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
@@ -41,8 +41,6 @@ pub async fn make_router(
     auth_uri: Uri,
     project_name: ProjectName,
 ) -> Router {
-    let public_key_fn = public_key_from_auth(auth_uri).await;
-
     Router::new()
         .route(
             "/projects/:project_name/services",
@@ -82,7 +80,7 @@ pub async fn make_router(
         .layer(Extension(persistence))
         .layer(Extension(deployment_manager))
         .layer(Extension(proxy_fqdn))
-        .layer(JwtAuthenticationLayer::new(public_key_fn))
+        .layer(JwtAuthenticationLayer::new(AuthPublicKey::new(auth_uri)))
         .layer(AdminSecretLayer::new(admin_secret))
         // This route should be below the auth bearer since it does not need authentication
         .route("/projects/:project_name/status", get(get_status))

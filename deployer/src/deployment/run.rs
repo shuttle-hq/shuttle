@@ -531,6 +531,7 @@ mod tests {
             service_name: "test".to_string(),
             service_id: Uuid::new_v4(),
             tracing_context: Default::default(),
+            claim: None,
         };
         let (_kill_send, kill_recv) = broadcast::channel(1);
 
@@ -594,6 +595,7 @@ mod tests {
                 service_name: crate_name.to_string(),
                 service_id: Uuid::new_v4(),
                 tracing_context: Default::default(),
+                claim: None,
             },
             storage_manager,
         )

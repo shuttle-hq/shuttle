@@ -74,6 +74,25 @@ where
     }
 
     fn call(&mut self, mut req: Request<Body>) -> Self::Future {
+        // Pass through status page
+        if req.uri().path() == "/" {
+            let future = self.inner.call(req);
+
+            return Box::pin(async move {
+                match future.await {
+                    Ok(response) => Ok(response),
+                    Err(_) => {
+                        error!("unexpected internal error from gateway");
+
+                        Ok(Response::builder()
+                            .status(StatusCode::SERVICE_UNAVAILABLE)
+                            .body(boxed(Body::empty()))
+                            .unwrap())
+                    }
+                }
+            });
+        }
+
         let forward_to_auth = match req.uri().path() {
             "/login" | "/logout" => true,
             other => other.starts_with("/users"),

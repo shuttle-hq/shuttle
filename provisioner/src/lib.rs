@@ -460,7 +460,7 @@ fn verify_claim<B>(request: &Request<B>) -> Result<(), Status> {
     let claim = request
         .extensions()
         .get::<Claim>()
-        .ok_or(Status::internal("could not get claim"))?;
+        .ok_or_else(|| Status::internal("could not get claim"))?;
 
     if claim.scopes.contains(&Scope::ResourcesWrite) {
         Ok(())

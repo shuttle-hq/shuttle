@@ -944,7 +944,7 @@ mod tests {
             p.insert_resource(resource).await.unwrap();
         }
 
-        let resources = p.get_service_resources(&service_id).await.unwrap();
+        let resources = p.get_resources(&service_id).await.unwrap();
 
         assert_eq!(resources, vec![resource2, resource4]);
     }

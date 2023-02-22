@@ -1,5 +1,6 @@
 use std::{future::Future, ops::Add, pin::Pin};
 
+use async_trait::async_trait;
 use bytes::Bytes;
 use chrono::{Duration, Utc};
 use headers::{authorization::Bearer, Authorization, HeaderMapExt};
@@ -245,14 +246,43 @@ impl Claim {
     }
 }
 
-pub async fn public_key_from_auth(auth_uri: Uri) -> impl Fn() -> Vec<u8> + Clone {
-    let client = Client::new();
-    let uri = format!("{auth_uri}public-key").parse().unwrap();
-    let res = client.get(uri).await.unwrap();
-    let buf = body::to_bytes(res).await.unwrap();
-    let key = buf.to_vec();
+/// Trait to get a public key asyncronously
+#[async_trait]
+pub trait PublicKeyFn: Send + Sync + Clone {
+    async fn public_key(&self) -> Vec<u8>;
+}
 
-    move || key.clone()
+#[async_trait]
+impl<F, O> PublicKeyFn for F
+where
+    F: Fn() -> O + Sync + Send + Clone,
+    O: Future<Output = Vec<u8>> + Send,
+{
+    async fn public_key(&self) -> Vec<u8> {
+        (self)().await
+    }
+}
+
+#[derive(Clone)]
+pub struct AuthPublicKey {
+    auth_uri: Uri,
+}
+
+impl AuthPublicKey {
+    pub fn new(auth_uri: Uri) -> Self {
+        Self { auth_uri }
+    }
+}
+
+#[async_trait]
+impl PublicKeyFn for AuthPublicKey {
+    async fn public_key(&self) -> Vec<u8> {
+        let client = Client::new();
+        let uri = format!("{}public-key", self.auth_uri).parse().unwrap();
+        let res = client.get(uri).await.unwrap();
+        let buf = body::to_bytes(res).await.unwrap();
+        buf.to_vec()
+    }
 }
 
 /// Layer to validate JWT tokens with a public key. Valid claims are added to the request extension
@@ -265,36 +295,39 @@ pub struct JwtAuthenticationLayer<F> {
     public_key_fn: F,
 }
 
-impl<F: Fn() -> Vec<u8>> JwtAuthenticationLayer<F> {
+impl<F: PublicKeyFn> JwtAuthenticationLayer<F> {
     /// Create a new layer to validate JWT tokens with the given public key
     pub fn new(public_key_fn: F) -> Self {
         Self { public_key_fn }
     }
 }
 
-impl<S, F: Fn() -> Vec<u8> + Clone> Layer<S> for JwtAuthenticationLayer<F> {
-    type Service = JwtAuthentication<S>;
+impl<S, F: PublicKeyFn> Layer<S> for JwtAuthenticationLayer<F> {
+    type Service = JwtAuthentication<S, F>;
 
     fn layer(&self, inner: S) -> Self::Service {
-        let public_key = (self.public_key_fn)();
-
-        JwtAuthentication { inner, public_key }
+        JwtAuthentication {
+            inner,
+            public_key_fn: self.public_key_fn.clone(),
+        }
     }
 }
 
 /// Middleware for validating a valid JWT token is present on "authorization: bearer <token>"
 #[derive(Clone)]
-pub struct JwtAuthentication<S> {
+pub struct JwtAuthentication<S, F> {
     inner: S,
-    public_key: Vec<u8>,
+    public_key_fn: F,
 }
 
-impl<S, ResponseError> Service<Request<Body>> for JwtAuthentication<S>
+impl<S, F, ResponseError> Service<Request<Body>> for JwtAuthentication<S, F>
 where
     S: Service<Request<Body>, Response = Response<UnsyncBoxBody<Bytes, ResponseError>>>
         + Send
+        + Clone
         + 'static,
     S::Future: Send + 'static,
+    F: PublicKeyFn + 'static,
 {
     type Response = S::Response;
     type Error = S::Error;
@@ -309,30 +342,37 @@ where
     }
 
     fn call(&mut self, mut req: Request<Body>) -> Self::Future {
-        let error = match req.headers().typed_try_get::<Authorization<Bearer>>() {
-            Ok(Some(bearer)) => match Claim::from_token(bearer.token().trim(), &self.public_key) {
-                Ok(claim) => {
-                    req.extensions_mut().insert(claim);
-                    None
-                }
-                Err(code) => Some(code),
-            },
-            Ok(None) => Some(StatusCode::UNAUTHORIZED),
-            Err(_) => Some(StatusCode::BAD_REQUEST),
-        };
+        match req.headers().typed_try_get::<Authorization<Bearer>>() {
+            Ok(Some(bearer)) => {
+                let mut this = self.clone();
 
-        if let Some(status) = error {
-            // Could not validate claim
-            Box::pin(async move {
+                Box::pin(async move {
+                    let public_key = this.public_key_fn.public_key().await;
+
+                    match Claim::from_token(bearer.token().trim(), &public_key) {
+                        Ok(claim) => {
+                            req.extensions_mut().insert(claim);
+
+                            this.inner.call(req).await
+                        }
+                        Err(code) => Ok(Response::builder()
+                            .status(code)
+                            .body(Default::default())
+                            .unwrap()),
+                    }
+                })
+            }
+            Ok(None) => {
+                let future = self.inner.call(req);
+
+                Box::pin(async move { future.await })
+            }
+            Err(_) => Box::pin(async move {
                 Ok(Response::builder()
-                    .status(status)
+                    .status(StatusCode::BAD_REQUEST)
                     .body(Default::default())
                     .unwrap())
-            })
-        } else {
-            let future = self.inner.call(req);
-
-            Box::pin(async move { future.await })
+            }),
         }
     }
 }
@@ -442,7 +482,7 @@ where
 
             return Box::pin(async move {
                 Ok(Response::builder()
-                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                    .status(StatusCode::UNAUTHORIZED)
                     .body(Default::default())
                     .unwrap())
             });
@@ -480,7 +520,7 @@ mod tests {
     use serde_json::json;
     use tower::{ServiceBuilder, ServiceExt};
 
-    use super::{Claim, JwtAuthenticationLayer, Scope};
+    use super::{Claim, JwtAuthenticationLayer, Scope, ScopedLayer};
 
     #[test]
     fn to_token_and_back() {
@@ -526,7 +566,12 @@ mod tests {
                 )
                 .layer(
                     ServiceBuilder::new()
-                        .layer(JwtAuthenticationLayer::new(move || public_key.clone())),
+                        .layer(JwtAuthenticationLayer::new(move || {
+                            let public_key = public_key.clone();
+
+                            async move { public_key.clone() }
+                        }))
+                        .layer(ScopedLayer::new(vec![Scope::Project])),
                 );
 
         //////////////////////////////////////////////////////////////////////////

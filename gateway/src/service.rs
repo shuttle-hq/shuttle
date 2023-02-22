@@ -25,7 +25,7 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use crate::acme::CustomDomain;
 use crate::args::ContextArgs;
 use crate::auth::{Key, Permissions, ScopedUser, User};
-use crate::project::Project;
+use crate::project::{Project, ProjectCreating};
 use crate::task::{BoxedTask, TaskBuilder};
 use crate::worker::TaskRouter;
 use crate::{AccountName, DockerContext, Error, ErrorKind, ProjectDetails, ProjectName};
@@ -449,7 +449,18 @@ impl GatewayService {
             let project = row.get::<SqlxJson<Project>, _>("project_state").0;
             if project.is_destroyed() {
                 // But is in `::Destroyed` state, recreate it
-                let project = Project::create(project_name.clone());
+                let mut creating = ProjectCreating::new_with_random_initial_key(project_name.clone());
+                // Restore previous custom domain, if any
+                match self.find_custom_domain_for_project(&project_name).await {
+                    Ok(custom_domain) => {
+                        creating = creating.with_fqdn(custom_domain.fqdn.to_string());
+                    }
+                    Err(error) if error.kind() == ErrorKind::CustomDomainNotFound => {
+                        // no previous custom domain
+                    },
+                    Err(error) => return Err(error),
+                }
+                let project = Project::Creating(creating);
                 self.update_project(&project_name, &project).await?;
                 Ok(project)
             } else {
@@ -477,7 +488,9 @@ impl GatewayService {
         project_name: ProjectName,
         account_name: AccountName,
     ) -> Result<Project, Error> {
-        let project = SqlxJson(Project::create(project_name.clone()));
+        let project = SqlxJson(Project::Creating(
+            ProjectCreating::new_with_random_initial_key(project_name.clone()),
+        ));
 
         query("INSERT INTO projects (project_name, account_name, initial_key, project_state) VALUES (?1, ?2, ?3, ?4)")
             .bind(&project_name)
@@ -534,6 +547,26 @@ impl GatewayService {
                 })
             })
             .map_err(|_| Error::from_kind(ErrorKind::Internal))
+    }
+
+    pub async fn find_custom_domain_for_project(
+        &self,
+        project_name: &ProjectName,
+    ) -> Result<CustomDomain, Error> {
+        let custom_domain = query(
+            "SELECT fqdn, project_name, certificate, private_key FROM custom_domains WHERE project_name = ?1",
+        )
+        .bind(project_name.to_string())
+        .fetch_optional(&self.db)
+        .await?
+        .map(|row| CustomDomain {
+            fqdn: row.get::<&str, _>("fqdn").parse().unwrap(),
+            project_name: row.try_get("project_name").unwrap(),
+            certificate: row.get("certificate"),
+            private_key: row.get("private_key"),
+        })
+        .ok_or_else(|| Error::from(ErrorKind::CustomDomainNotFound))?;
+        Ok(custom_domain)
     }
 
     pub async fn project_details_for_custom_domain(
@@ -870,6 +903,55 @@ pub mod tests {
         assert_eq!(custom_domain.project_name, project_name);
         assert_eq!(custom_domain.certificate, certificate);
         assert_eq!(custom_domain.private_key, private_key);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn service_create_custom_domain_destroy_recreate_project() -> anyhow::Result<()> {
+        let world = World::new().await;
+        let svc = Arc::new(GatewayService::init(world.args(), world.pool()).await);
+
+        let account: AccountName = "neo".parse().unwrap();
+        let project_name: ProjectName = "matrix".parse().unwrap();
+        let domain: FQDN = "neo.the.matrix".parse().unwrap();
+        let certificate = "dummy certificate";
+        let private_key = "dummy private key";
+
+        svc.create_user(account.clone()).await.unwrap();
+
+        assert_err_kind!(
+            svc.project_details_for_custom_domain(&domain).await,
+            ErrorKind::CustomDomainNotFound
+        );
+
+        let _ = svc
+            .create_project(project_name.clone(), account.clone())
+            .await
+            .unwrap();
+
+        svc.create_custom_domain(project_name.clone(), &domain, certificate, private_key)
+            .await
+            .unwrap();
+
+        let mut work = svc
+            .new_task()
+            .project(project_name.clone())
+            .and_then(task::destroy())
+            .build();
+
+        while let TaskResult::Pending(_) = work.poll(()).await {}
+        assert!(matches!(work.poll(()).await, TaskResult::Done(())));
+
+        let recreated_project = svc
+            .create_project(project_name.clone(), account.clone())
+            .await
+            .unwrap();
+
+        let Project::Creating(creating) = recreated_project else {
+            panic!("Project should be Creating");
+        };
+        assert_eq!(creating.fqdn(), &Some(domain.to_string()));
 
         Ok(())
     }

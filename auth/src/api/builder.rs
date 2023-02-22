@@ -103,7 +103,7 @@ impl ApiBuilder {
         self.session_layer = Some(
             SessionLayer::new(store, &secret)
                 .with_cookie_name("shuttle.sid")
-                .with_session_ttl(Some(COOKIE_EXPIRATION)) // One day
+                .with_session_ttl(Some(COOKIE_EXPIRATION))
                 .with_secure(true),
         );
 

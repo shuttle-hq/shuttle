@@ -1,10 +1,11 @@
-use std::{convert::Infallible, net::Ipv4Addr};
+use std::{convert::Infallible, net::Ipv4Addr, sync::Arc, time::Duration};
 
 use axum::{
     body::{boxed, HttpBody},
     headers::{authorization::Bearer, Authorization, Cookie, Header, HeaderMapExt},
     response::Response,
 };
+use chrono::{TimeZone, Utc};
 use futures::future::BoxFuture;
 use http::{Request, StatusCode, Uri};
 use hyper::{
@@ -17,8 +18,10 @@ use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
 use shuttle_common::backends::auth::ConvertResponse;
 use tower::{Layer, Service};
-use tracing::{error, Span};
+use tracing::{error, info, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
+
+use super::cache_layer::CacheManagement;
 
 static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
     Lazy::new(|| ReverseProxy::new(Client::new()));
@@ -29,11 +32,15 @@ static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
 #[derive(Clone)]
 pub struct ShuttleAuthLayer {
     auth_uri: Uri,
+    cache_manager: Arc<Box<dyn CacheManagement>>,
 }
 
 impl ShuttleAuthLayer {
-    pub fn new(auth_uri: Uri) -> Self {
-        Self { auth_uri }
+    pub fn new(auth_uri: Uri, cache_manager: Arc<Box<dyn CacheManagement>>) -> Self {
+        Self {
+            auth_uri,
+            cache_manager,
+        }
     }
 }
 
@@ -44,6 +51,7 @@ impl<S> Layer<S> for ShuttleAuthLayer {
         ShuttleAuthService {
             inner,
             auth_uri: self.auth_uri.clone(),
+            cache_manager: self.cache_manager.clone(),
         }
     }
 }
@@ -52,6 +60,7 @@ impl<S> Layer<S> for ShuttleAuthLayer {
 pub struct ShuttleAuthService<S> {
     inner: S,
     auth_uri: Uri,
+    cache_manager: Arc<Box<dyn CacheManagement>>,
 }
 
 impl<S> Service<Request<Body>> for ShuttleAuthService<S>
@@ -139,12 +148,17 @@ where
 
             Box::pin(async move {
                 let mut auth_details = None;
+                let mut cache_key = None;
 
                 if let Some(bearer) = req.headers().typed_get::<Authorization<Bearer>>() {
+                    cache_key = Some(bearer.token().trim().to_string());
                     auth_details = Some(make_token_request("/auth/key", bearer));
                 }
 
                 if let Some(cookie) = req.headers().typed_get::<Cookie>() {
+                    if let Some(id) = cookie.get("shuttle.sid") {
+                        cache_key = Some(id.to_string())
+                    };
                     auth_details = Some(make_token_request("/auth/session", cookie));
                 }
 
@@ -152,61 +166,97 @@ where
                 if let Some(token_request) = auth_details {
                     let target_url = this.auth_uri.to_string();
 
-                    let token_response = match PROXY_CLIENT
-                        .call(Ipv4Addr::LOCALHOST.into(), &target_url, token_request)
-                        .await
-                    {
-                        Ok(res) => res,
-                        Err(error) => {
-                            error!(?error, "failed to call authentication service");
+                    if let Some(key) = cache_key {
+                        // Check if the token is cached.
+                        if let Some(token) = this.cache_manager.get(&key) {
+                            info!("cache hit");
+                            // Token is cached and not expired, return it in the response.
+                            req.headers_mut()
+                                .typed_insert(Authorization::bearer(&token).unwrap());
+                        } else {
+                            info!("cache missed, sending convert request");
+                            // Token is not in the cache, send a convert request.
+                            let token_response = match PROXY_CLIENT
+                                .call(Ipv4Addr::LOCALHOST.into(), &target_url, token_request)
+                                .await
+                            {
+                                Ok(res) => res,
+                                Err(error) => {
+                                    error!(?error, "failed to call authentication service");
 
-                            return Ok(Response::builder()
-                                .status(StatusCode::SERVICE_UNAVAILABLE)
-                                .body(boxed(Body::empty()))
-                                .unwrap());
+                                    return Ok(Response::builder()
+                                        .status(StatusCode::SERVICE_UNAVAILABLE)
+                                        .body(boxed(Body::empty()))
+                                        .unwrap());
+                                }
+                            };
+
+                            // Bubble up auth errors
+                            if token_response.status() != StatusCode::OK {
+                                let (parts, body) = token_response.into_parts();
+                                let body = <Body as HttpBody>::map_err(body, axum::Error::new)
+                                    .boxed_unsync();
+
+                                return Ok(Response::from_parts(parts, body));
+                            }
+
+                            let body = match hyper::body::to_bytes(token_response.into_body()).await
+                            {
+                                Ok(body) => body,
+                                Err(error) => {
+                                    error!(
+                                        error = &error as &dyn std::error::Error,
+                                        "failed to get response body"
+                                    );
+
+                                    return Ok(Response::builder()
+                                        .status(StatusCode::INTERNAL_SERVER_ERROR)
+                                        .body(boxed(Body::empty()))
+                                        .unwrap());
+                                }
+                            };
+
+                            let response: ConvertResponse = match serde_json::from_slice(&body) {
+                                Ok(response) => response,
+                                Err(error) => {
+                                    error!(
+                                        error = &error as &dyn std::error::Error,
+                                        "failed to convert body to ConvertResponse"
+                                    );
+
+                                    return Ok(Response::builder()
+                                        .status(StatusCode::INTERNAL_SERVER_ERROR)
+                                        .body(boxed(Body::empty()))
+                                        .unwrap());
+                                }
+                            };
+
+                            match get_token_expiration(response.token.clone()) {
+                                Ok(expiration) => {
+                                    info!("inserting token into cache");
+                                    // Cache the token.
+                                    this.cache_manager.insert(
+                                        key.as_str(),
+                                        response.token.clone(),
+                                        expiration,
+                                    );
+                                }
+                                Err(status) => {
+                                    error!(
+                                        "failed to get token expiration when inserting into cache"
+                                    );
+                                    return Ok(Response::builder()
+                                        .status(status)
+                                        .body(boxed(Body::empty()))
+                                        .unwrap());
+                                }
+                            };
+
+                            info!("token inserted in cache, request proceeding");
+                            req.headers_mut()
+                                .typed_insert(Authorization::bearer(&response.token).unwrap());
                         }
                     };
-
-                    // Bubble up auth errors
-                    if token_response.status() != StatusCode::OK {
-                        let (parts, body) = token_response.into_parts();
-                        let body =
-                            <Body as HttpBody>::map_err(body, axum::Error::new).boxed_unsync();
-
-                        return Ok(Response::from_parts(parts, body));
-                    }
-
-                    let body = match hyper::body::to_bytes(token_response.into_body()).await {
-                        Ok(body) => body,
-                        Err(error) => {
-                            error!(
-                                error = &error as &dyn std::error::Error,
-                                "failed to get response body"
-                            );
-
-                            return Ok(Response::builder()
-                                .status(StatusCode::INTERNAL_SERVER_ERROR)
-                                .body(boxed(Body::empty()))
-                                .unwrap());
-                        }
-                    };
-                    let response: ConvertResponse = match serde_json::from_slice(&body) {
-                        Ok(response) => response,
-                        Err(error) => {
-                            error!(
-                                error = &error as &dyn std::error::Error,
-                                "failed to convert body to ConvertResponse"
-                            );
-
-                            return Ok(Response::builder()
-                                .status(StatusCode::INTERNAL_SERVER_ERROR)
-                                .body(boxed(Body::empty()))
-                                .unwrap());
-                        }
-                    };
-
-                    req.headers_mut()
-                        .typed_insert(Authorization::bearer(&response.token).unwrap());
                 }
 
                 match this.inner.call(req).await {
@@ -223,6 +273,31 @@ where
             })
         }
     }
+}
+
+fn get_token_expiration(token: String) -> Result<Duration, StatusCode> {
+    let (_header, rest) = token.split_once('.').unwrap();
+    let (claim, _sig) = rest.split_once('.').unwrap();
+    let claim = base64::decode_config(claim, base64::URL_SAFE_NO_PAD).unwrap();
+
+    let claim: serde_json::Map<String, serde_json::Value> = serde_json::from_slice(&claim).unwrap();
+
+    let Some(exp) = claim["exp"].as_i64() else {
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    };
+
+    let Some(expiration_timestamp) = Utc
+                        .timestamp_opt(exp, 0)
+                        .single()
+                        else {
+                            error!("expiration timestamp is out of range number");
+
+                            return Err(StatusCode::INTERNAL_SERVER_ERROR)
+                        };
+
+    let duration = expiration_timestamp - Utc::now();
+
+    Ok(std::time::Duration::from_secs(duration.num_seconds() as u64))
 }
 
 fn make_token_request(uri: &str, header: impl Header) -> Request<Body> {

@@ -36,7 +36,7 @@ use crate::worker::WORKER_QUEUE_SIZE;
 use crate::{Error, GatewayService, ProjectName};
 
 use super::auth_layer::ShuttleAuthLayer;
-use super::cache_layer::{CacheLayer, CacheManager};
+use super::cache_layer::CacheManager;
 
 pub const SVC_DEGRADED_THRESHOLD: usize = 128;
 
@@ -497,12 +497,15 @@ impl ApiBuilder {
 
         self.router = self
             .router
-            .layer(JwtAuthenticationLayer::new(auth_public_key.clone()))
-            .layer(ShuttleAuthLayer::new(auth_uri))
-            .layer(CacheLayer {
-                cache_manager: Arc::new(Box::new(cache_manager)),
-                public_key_fn: auth_public_key,
-            });
+            .layer(JwtAuthenticationLayer::new(auth_public_key))
+            .layer(ShuttleAuthLayer::new(
+                auth_uri,
+                Arc::new(Box::new(cache_manager)),
+            ));
+        // .layer(CacheLayer {
+        //     cache_manager: Arc::new(Box::new(cache_manager)),
+        //     public_key_fn: auth_public_key,
+        // });
 
         self
     }

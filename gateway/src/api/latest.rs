@@ -1,6 +1,6 @@
 use std::io::Cursor;
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use axum::body::Body;
@@ -36,6 +36,7 @@ use crate::worker::WORKER_QUEUE_SIZE;
 use crate::{Error, GatewayService, ProjectName};
 
 use super::auth_layer::ShuttleAuthLayer;
+use super::cache_layer::{CacheLayer, CacheManagement, CacheManager};
 
 pub const SVC_DEGRADED_THRESHOLD: usize = 128;
 
@@ -375,6 +376,11 @@ pub(crate) struct RouterState {
     pub service: Arc<GatewayService>,
     pub sender: Sender<BoxedTask>,
     pub running_builds: Arc<Mutex<TtlCache<Uuid, ()>>>,
+    // TODO: we need the cache manager in the state so we can invalidate
+    // keys from other layers than the cache_layer. When we know where we
+    // need it we can decide if we still need it in the state.
+    #[allow(unused)]
+    pub cache_manager: Arc<Box<dyn CacheManagement>>,
 }
 
 pub struct ApiBuilder {
@@ -382,6 +388,8 @@ pub struct ApiBuilder {
     service: Option<Arc<GatewayService>>,
     sender: Option<Sender<BoxedTask>>,
     bind: Option<SocketAddr>,
+    cache_manager: Option<Arc<Box<dyn CacheManagement>>>,
+    auth_public_key: Option<AuthPublicKey>,
 }
 
 impl Default for ApiBuilder {
@@ -397,6 +405,8 @@ impl ApiBuilder {
             service: None,
             sender: None,
             bind: None,
+            cache_manager: None,
+            auth_public_key: None,
         }
     }
 
@@ -497,9 +507,24 @@ impl ApiBuilder {
         self
     }
 
+    pub fn with_cache_manager(mut self, auth_uri: Uri) -> Self {
+        let cache = Arc::new(RwLock::new(TtlCache::new(1000)));
+
+        let cache_manager = CacheManager { cache };
+
+        self.cache_manager = Some(Arc::new(Box::new(cache_manager)));
+        self.auth_public_key = Some(AuthPublicKey::new(auth_uri));
+
+        self
+    }
+
     pub fn into_router(self) -> Router {
         let service = self.service.expect("a GatewayService is required");
         let sender = self.sender.expect("a task Sender is required");
+        let cache_manager = self.cache_manager.expect("a cache manager is required");
+        let auth_public_key = self
+            .auth_public_key
+            .expect("an auth public key is required");
 
         // Allow about 4 cores per build
         let mut concurrent_builds = num_cpus::get() / 4;
@@ -509,11 +534,17 @@ impl ApiBuilder {
 
         let running_builds = Arc::new(Mutex::new(TtlCache::new(concurrent_builds)));
 
-        self.router.with_state(RouterState {
-            service,
-            sender,
-            running_builds,
-        })
+        self.router
+            .layer(CacheLayer {
+                cache_manager: cache_manager.clone(),
+                public_key_fn: auth_public_key,
+            })
+            .with_state(RouterState {
+                service,
+                sender,
+                running_builds,
+                cache_manager,
+            })
     }
 
     pub fn serve(self) -> impl Future<Output = Result<(), hyper::Error>> {

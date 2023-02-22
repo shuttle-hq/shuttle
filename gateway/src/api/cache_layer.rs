@@ -50,6 +50,9 @@ impl CacheManagement for CacheManager {
 /// the auth endpoints that convert a cookie/api-key to a JWT: '/auth/key' and '/auth/session'.
 /// The layer will first check if the key/cookie-id is cached, if it is return it, if it isn't
 /// let the request go through, extract the JWT on the way back and cache it.
+///
+/// Additionaly, if a call is made to the '/logout' endpoint, the cached token for the cookie
+/// in that request will be invalidated.
 #[derive(Clone)]
 pub(crate) struct CacheLayer<F> {
     pub(crate) cache_manager: Arc<Box<dyn CacheManagement>>,

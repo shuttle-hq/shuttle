@@ -6,7 +6,7 @@ pub trait KeyManager: Send + Sync {
     fn private_key(&self) -> &EncodingKey;
 
     /// Get a public key to verify signed secrets
-    fn public_key(&self) -> Vec<u8>;
+    fn public_key(&self) -> &[u8];
 }
 
 pub struct EdDsaManager {
@@ -34,7 +34,7 @@ impl KeyManager for EdDsaManager {
         &self.encoding_key
     }
 
-    fn public_key(&self) -> Vec<u8> {
-        self.public_key.clone()
+    fn public_key(&self) -> &[u8] {
+        &self.public_key
     }
 }

@@ -18,7 +18,7 @@ use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
 use shuttle_common::backends::auth::ConvertResponse;
 use tower::{Layer, Service};
-use tracing::{error, info, Span};
+use tracing::{error, trace, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use super::cache_layer::CacheManagement;
@@ -107,6 +107,16 @@ where
             other => other.starts_with("/users"),
         };
 
+        if req.uri().path() == "/logout" {
+            let cache_manager = self.cache_manager.clone();
+
+            if let Ok(Some(cookie)) = req.headers().typed_try_get::<Cookie>() {
+                if let Some(key) = cookie.get("shuttle.sid").map(|id| id.to_string()) {
+                    cache_manager.invalidate(&key);
+                }
+            };
+        }
+
         if forward_to_auth {
             let target_url = self.auth_uri.to_string();
 
@@ -169,12 +179,12 @@ where
                     if let Some(key) = cache_key {
                         // Check if the token is cached.
                         if let Some(token) = this.cache_manager.get(&key) {
-                            info!("cache hit");
+                            trace!("JWT cache hit, setting token from cache on request");
                             // Token is cached and not expired, return it in the response.
                             req.headers_mut()
                                 .typed_insert(Authorization::bearer(&token).unwrap());
                         } else {
-                            info!("cache missed, sending convert request");
+                            trace!("JWT cache missed, sending convert token request");
                             // Token is not in the cache, send a convert request.
                             let token_response = match PROXY_CLIENT
                                 .call(Ipv4Addr::LOCALHOST.into(), &target_url, token_request)
@@ -233,7 +243,6 @@ where
 
                             match get_token_expiration(response.token.clone()) {
                                 Ok(expiration) => {
-                                    info!("inserting token into cache");
                                     // Cache the token.
                                     this.cache_manager.insert(
                                         key.as_str(),
@@ -252,7 +261,7 @@ where
                                 }
                             };
 
-                            info!("token inserted in cache, request proceeding");
+                            trace!("token inserted in cache, request proceeding");
                             req.headers_mut()
                                 .typed_insert(Authorization::bearer(&response.token).unwrap());
                         }

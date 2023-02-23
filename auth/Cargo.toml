@@ -9,26 +9,21 @@ anyhow = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true, features = ["headers"] }
 axum-sessions = "0.4.1"
-chrono = { workspace = true, features = ["serde"] }
 clap = { workspace = true }
 http = { workspace = true }
-hyper = { workspace = true }
 jsonwebtoken = { workspace = true }
 opentelemetry = { workspace = true }
 opentelemetry-datadog = { workspace = true }
 rand = { workspace = true }
 ring = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true }
 sqlx = { version = "0.6.2", features = ["sqlite", "json", "runtime-tokio-native-tls", "migrate"] }
 strum = { workspace = true }
 thiserror = { workspace = true }
 tokio = { version = "1.22.0", features = ["full"] }
-tower = { workspace = true, features = ["util"] }
 tracing = { workspace = true }
 tracing-opentelemetry = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
-ttl_cache = "0.5.1"
 
 [dependencies.shuttle-common]
 workspace = true
@@ -36,3 +31,6 @@ features = ["backend", "models"]
 
 [dev-dependencies]
 axum-extra = { version = "0.5.0", features = ["cookie"] }
+hyper = { workspace = true }
+serde_json = { workspace = true }
+tower = { workspace = true, features = ["util"] }

@@ -180,11 +180,13 @@ where
                         // Check if the token is cached.
                         if let Some(token) = this.cache_manager.get(&key) {
                             trace!("JWT cache hit, setting token from cache on request");
+
                             // Token is cached and not expired, return it in the response.
                             req.headers_mut()
                                 .typed_insert(Authorization::bearer(&token).unwrap());
                         } else {
                             trace!("JWT cache missed, sending convert token request");
+
                             // Token is not in the cache, send a convert request.
                             let token_response = match PROXY_CLIENT
                                 .call(Ipv4Addr::LOCALHOST.into(), &target_url, token_request)
@@ -241,7 +243,7 @@ where
                                 }
                             };
 
-                            match get_token_expiration(response.token.clone()) {
+                            match extract_token_expiration(response.token.clone()) {
                                 Ok(expiration) => {
                                     // Cache the token.
                                     this.cache_manager.insert(
@@ -252,7 +254,7 @@ where
                                 }
                                 Err(status) => {
                                     error!(
-                                        "failed to get token expiration when inserting into cache"
+                                        "failed to extract token expiration before inserting into cache"
                                     );
                                     return Ok(Response::builder()
                                         .status(status)
@@ -284,25 +286,29 @@ where
     }
 }
 
-fn get_token_expiration(token: String) -> Result<Duration, StatusCode> {
-    let (_header, rest) = token.split_once('.').unwrap();
-    let (claim, _sig) = rest.split_once('.').unwrap();
-    let claim = base64::decode_config(claim, base64::URL_SAFE_NO_PAD).unwrap();
+fn extract_token_expiration(token: String) -> Result<Duration, StatusCode> {
+    let (_header, rest) = token
+        .split_once('.')
+        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let claim: serde_json::Map<String, serde_json::Value> = serde_json::from_slice(&claim).unwrap();
+    let (claim, _sig) = rest
+        .split_once('.')
+        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let Some(exp) = claim["exp"].as_i64() else {
-        return Err(StatusCode::INTERNAL_SERVER_ERROR);
-    };
+    let claim = base64::decode_config(claim, base64::URL_SAFE_NO_PAD)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let Some(expiration_timestamp) = Utc
-                        .timestamp_opt(exp, 0)
-                        .single()
-                        else {
-                            error!("expiration timestamp is out of range number");
+    let claim: serde_json::Map<String, serde_json::Value> =
+        serde_json::from_slice(&claim).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-                            return Err(StatusCode::INTERNAL_SERVER_ERROR)
-                        };
+    let exp = claim["exp"]
+        .as_i64()
+        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let expiration_timestamp = Utc
+        .timestamp_opt(exp, 0)
+        .single()
+        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let duration = expiration_timestamp - Utc::now();
 

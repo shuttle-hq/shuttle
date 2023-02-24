@@ -36,7 +36,7 @@ use crate::worker::WORKER_QUEUE_SIZE;
 use crate::{Error, GatewayService, ProjectName};
 
 use super::auth_layer::ShuttleAuthLayer;
-use super::cache_layer::CacheManager;
+use super::cache::CacheManager;
 
 pub const SVC_DEGRADED_THRESHOLD: usize = 128;
 

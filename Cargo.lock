@@ -5942,7 +5942,6 @@ dependencies = [
  "axum",
  "axum-extra 0.5.0",
  "axum-sessions",
- "chrono",
  "clap 4.0.27",
  "http 0.2.8",
  "hyper",
@@ -5962,7 +5961,6 @@ dependencies = [
  "tracing",
  "tracing-opentelemetry",
  "tracing-subscriber",
- "ttl_cache",
 ]
 
 [[package]]

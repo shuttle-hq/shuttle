@@ -25,7 +25,6 @@ lazy_static = "1.4.0"
 num_cpus = "1.14.0"
 once_cell = { workspace = true }
 opentelemetry = { workspace = true }
-opentelemetry-datadog = { workspace = true }
 opentelemetry-http = { workspace = true }
 pem = "1.1.0"
 rand = { workspace = true }
@@ -40,7 +39,7 @@ tokio = { version = "1.22.0", features = [ "full" ] }
 tower = { workspace = true, features = [ "steer" ] }
 tracing = { workspace = true }
 tracing-opentelemetry = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tracing-subscriber = { workspace = true }
 ttl_cache = "0.5.1"
 uuid = { workspace = true, features = [ "v4" ] }
 

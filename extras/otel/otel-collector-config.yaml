@@ -39,7 +39,7 @@ processors:
   attributes:
     actions:
       - key: env
-        value: $(env:DD_ENV)
+        value: ${env:DD_ENV}
         action: insert
 
 exporters:

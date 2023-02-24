@@ -170,9 +170,9 @@ where
 
                 if let Some(cookie) = req.headers().typed_get::<Cookie>() {
                     if let Some(id) = cookie.get("shuttle.sid") {
-                        cache_key = Some(id.to_string())
+                        cache_key = Some(id.to_string());
+                        auth_details = Some(make_token_request("/auth/session", cookie));
                     };
-                    auth_details = Some(make_token_request("/auth/session", cookie));
                 }
 
                 // Only if there is something to upgrade

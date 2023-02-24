@@ -1,0 +1,28 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+
+processors:
+  batch:
+  attributes:
+    actions:
+      - key: env
+        value: $(env:DD_ENV)
+        action: insert
+
+exporters:
+  datadog:
+    api:
+      site: datadoghq.eu
+      key: ${env:DD_API_KEY}
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [attributes,batch]
+      exporters: [datadog]
+    logs:
+      receivers: [otlp]
+      processors: [attributes,batch]
+      exporters: [datadog]

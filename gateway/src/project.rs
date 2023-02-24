@@ -88,16 +88,11 @@ where
 pub trait ContainerInspectResponseExt {
     fn container(&self) -> &ContainerInspectResponse;
 
-    fn project_name(&self, prefix: &str) -> Result<ProjectName, ProjectError> {
-        // This version can't be enabled while there are active
-        // deployers before v0.8.0 since the don't have this label
-        // TODO: switch to this version when you notice all deployers
-        // are greater than v0.8.0
-        // let name = safe_unwrap!(container.config.labels.get("project.name")).to_string();
-
+    fn project_name(&self) -> Result<ProjectName, ProjectError> {
         let container = self.container();
-        let container_name = safe_unwrap!(container.name.strip_prefix("/")).to_string();
-        safe_unwrap!(container_name.strip_prefix(prefix).strip_suffix("_run"))
+
+        safe_unwrap!(container.config.labels.get("shuttle.project"))
+            .to_string()
             .parse::<ProjectName>()
             .map_err(|_| ProjectError::internal("invalid project name"))
     }
@@ -471,7 +466,7 @@ where
                 }) => {
                     // container not found, let's try to recreate it
                     // with the same image
-                    Self::Creating(ProjectCreating::from_container(container, ctx, 0)?)
+                    Self::Creating(ProjectCreating::from_container(container, 0)?)
                 }
                 Err(err) => return Err(err.into()),
             },
@@ -500,7 +495,7 @@ where
                 }) => {
                     // container not found, let's try to recreate it
                     // with the same image
-                    Self::Creating(ProjectCreating::from_container(container, ctx, 0)?)
+                    Self::Creating(ProjectCreating::from_container(container, 0)?)
                 }
                 Err(err) => return Err(err.into()),
             },
@@ -565,12 +560,11 @@ impl ProjectCreating {
         }
     }
 
-    pub fn from_container<Ctx: DockerContext>(
+    pub fn from_container(
         container: ContainerInspectResponse,
-        ctx: &Ctx,
         recreate_count: usize,
     ) -> Result<Self, ProjectError> {
-        let project_name = container.project_name(&ctx.container_settings().prefix)?;
+        let project_name = container.project_name()?;
         let initial_key = container.initial_key()?;
 
         Ok(Self {
@@ -871,7 +865,6 @@ where
             sleep(Duration::from_secs(5)).await;
             Ok(ProjectCreating::from_container(
                 container,
-                ctx,
                 recreate_count + 1,
             )?)
         } else {
@@ -997,7 +990,7 @@ where
         let container = self.container.refresh(ctx).await?;
         let mut service = match self.service {
             Some(service) => service,
-            None => Service::from_container(ctx, container.clone())?,
+            None => Service::from_container(container.clone())?,
         };
 
         if service.is_healthy().await {
@@ -1080,11 +1073,8 @@ pub struct Service {
 }
 
 impl Service {
-    pub fn from_container<Ctx: DockerContext>(
-        ctx: &Ctx,
-        container: ContainerInspectResponse,
-    ) -> Result<Self, ProjectError> {
-        let resource_name = container.project_name(&ctx.container_settings().prefix)?;
+    pub fn from_container(container: ContainerInspectResponse) -> Result<Self, ProjectError> {
+        let resource_name = container.project_name()?;
 
         let network = safe_unwrap!(container.network_settings.networks)
             .values()

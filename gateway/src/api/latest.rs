@@ -103,23 +103,23 @@ async fn get_projects_list(
     Ok(AxumJson(projects))
 }
 
-async fn get_projects_list_with_filter(
-    State(RouterState { service, .. }): State<RouterState>,
-    User { name, .. }: User,
-    Path(project_status): Path<String>,
-) -> Result<AxumJson<Vec<project::Response>>, Error> {
-    let projects = service
-        .iter_user_projects_detailed_filtered(name.clone(), project_status)
-        .await?
-        .into_iter()
-        .map(|project| project::Response {
-            name: project.0.to_string(),
-            state: project.1.into(),
-        })
-        .collect();
+// async fn get_projects_list_with_filter(
+//     State(RouterState { service, .. }): State<RouterState>,
+//     User { name, .. }: User,
+//     Path(project_status): Path<String>,
+// ) -> Result<AxumJson<Vec<project::Response>>, Error> {
+//     let projects = service
+//         .iter_user_projects_detailed_filtered(name.clone(), project_status)
+//         .await?
+//         .into_iter()
+//         .map(|project| project::Response {
+//             name: project.0.to_string(),
+//             state: project.1.into(),
+//         })
+//         .collect();
 
-    Ok(AxumJson(projects))
-}
+//     Ok(AxumJson(projects))
+// }
 
 #[instrument(skip_all, fields(%project))]
 async fn post_project(

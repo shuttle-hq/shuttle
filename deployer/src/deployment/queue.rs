@@ -11,6 +11,7 @@ use chrono::Utc;
 use crossbeam_channel::Sender;
 use opentelemetry::global;
 use serde_json::json;
+use shuttle_common::backends::auth::Claim;
 use shuttle_service::loader::{build_crate, get_config};
 use tokio::time::{sleep, timeout};
 use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument, Span};
@@ -141,6 +142,7 @@ pub struct Queued {
     pub data: Vec<u8>,
     pub will_run_tests: bool,
     pub tracing_context: HashMap<String, String>,
+    pub claim: Option<Claim>,
 }
 
 impl Queued {
@@ -220,6 +222,7 @@ impl Queued {
             service_name: self.service_name,
             service_id: self.service_id,
             tracing_context: Default::default(),
+            claim: self.claim,
         };
 
         Ok(built)
@@ -397,7 +400,7 @@ async fn store_lib(
 mod tests {
     use std::{collections::BTreeMap, fs::File, io::Write, path::Path};
 
-    use tempdir::TempDir;
+    use tempfile::Builder;
     use tokio::fs;
     use uuid::Uuid;
 
@@ -405,7 +408,10 @@ mod tests {
 
     #[tokio::test]
     async fn extract_tar_gz_data() {
-        let dir = TempDir::new("shuttle-extraction-test").unwrap();
+        let dir = Builder::new()
+            .prefix("shuttle-extraction-test")
+            .tempdir()
+            .unwrap();
         let p = dir.path();
 
         // Files whose content should be replaced with the archive
@@ -524,7 +530,7 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
 
     #[tokio::test]
     async fn store_lib() {
-        let libs_dir = TempDir::new("lib-store").unwrap();
+        let libs_dir = Builder::new().prefix("lib-store").tempdir().unwrap();
         let libs_p = libs_dir.path();
         let storage_manager = StorageManager::new(libs_p.to_path_buf());
 
@@ -552,7 +558,7 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
 
     #[tokio::test]
     async fn get_secrets() {
-        let temp = TempDir::new("secrets").unwrap();
+        let temp = Builder::new().prefix("secrets").tempdir().unwrap();
         let temp_p = temp.path();
 
         let secret_p = temp_p.join("Secrets.toml");

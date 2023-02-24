@@ -20,7 +20,9 @@ use chrono::Utc;
 use serde_json::json;
 use shuttle_common::STATE_MESSAGE;
 use sqlx::migrate::{MigrateDatabase, Migrator};
-use sqlx::sqlite::{Sqlite, SqlitePool};
+use sqlx::sqlite::{
+    Sqlite, SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqliteSynchronous,
+};
 use tokio::sync::broadcast::{self, Receiver, Sender};
 use tokio::task::JoinHandle;
 use tracing::{error, info, instrument, trace};
@@ -30,7 +32,7 @@ use self::deployment::DeploymentRunnable;
 pub use self::deployment::{Deployment, DeploymentState};
 pub use self::error::Error as PersistenceError;
 pub use self::log::{Level as LogLevel, Log};
-pub use self::resource::{Resource, ResourceRecorder, Type as ResourceType};
+pub use self::resource::{Resource, ResourceManager, Type as ResourceType};
 use self::secret::Secret;
 pub use self::secret::{SecretGetter, SecretRecorder};
 pub use self::service::Service;
@@ -61,7 +63,13 @@ impl Persistence {
             std::fs::canonicalize(path).unwrap().to_string_lossy()
         );
 
-        let pool = SqlitePool::connect(path).await.unwrap();
+        let sqlite_options = SqliteConnectOptions::from_str(path)
+            .unwrap()
+            .journal_mode(SqliteJournalMode::Wal)
+            .synchronous(SqliteSynchronous::Normal);
+
+        let pool = SqlitePool::connect_with(sqlite_options).await.unwrap();
+
         Self::from_pool(pool).await
     }
 
@@ -243,20 +251,6 @@ impl Persistence {
             .map_err(Error::from)
     }
 
-    pub async fn delete_deployments_by_service_id(
-        &self,
-        service_id: &Uuid,
-    ) -> Result<Vec<Deployment>> {
-        let deployments = self.get_deployments(service_id).await?;
-
-        let _ = sqlx::query("DELETE FROM deployments WHERE service_id = ?")
-            .bind(service_id)
-            .execute(&self.pool)
-            .await;
-
-        Ok(deployments)
-    }
-
     pub async fn get_all_services(&self) -> Result<Vec<Service>> {
         sqlx::query_as("SELECT * FROM services")
             .fetch_all(&self.pool)
@@ -276,14 +270,6 @@ impl Persistence {
         .fetch_all(&self.pool)
         .await
         .map_err(Error::from)
-    }
-
-    pub async fn get_service_resources(&self, service_id: &Uuid) -> Result<Vec<Resource>> {
-        sqlx::query_as(r#"SELECT * FROM resources WHERE service_id = ?"#)
-            .bind(service_id)
-            .fetch_all(&self.pool)
-            .await
-            .map_err(Error::from)
     }
 
     pub(crate) async fn get_deployment_logs(&self, id: &Uuid) -> Result<Vec<Log>> {
@@ -359,7 +345,7 @@ impl LogRecorder for Persistence {
 }
 
 #[async_trait::async_trait]
-impl ResourceRecorder for Persistence {
+impl ResourceManager for Persistence {
     type Err = Error;
 
     async fn insert_resource(&self, resource: &Resource) -> Result<()> {
@@ -370,6 +356,14 @@ impl ResourceRecorder for Persistence {
             .execute(&self.pool)
             .await
             .map(|_| ())
+            .map_err(Error::from)
+    }
+
+    async fn get_resources(&self, service_id: &Uuid) -> Result<Vec<Resource>> {
+        sqlx::query_as(r#"SELECT * FROM resources WHERE service_id = ?"#)
+            .bind(service_id)
+            .fetch_all(&self.pool)
+            .await
             .map_err(Error::from)
     }
 }
@@ -746,49 +740,6 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn deployment_deletion() {
-        let (p, _) = Persistence::new_in_memory().await;
-
-        let service_id = add_service(&p.pool).await.unwrap();
-
-        let deployments = [
-            Deployment {
-                id: Uuid::new_v4(),
-                service_id,
-                state: State::Running,
-                last_update: Utc::now(),
-                address: None,
-            },
-            Deployment {
-                id: Uuid::new_v4(),
-                service_id,
-                state: State::Running,
-                last_update: Utc::now(),
-                address: None,
-            },
-        ];
-
-        for deployment in deployments.iter() {
-            p.insert_deployment(deployment.clone()).await.unwrap();
-        }
-
-        assert!(!p.get_deployments(&service_id).await.unwrap().is_empty());
-
-        // This should error since deployments are linked to this service
-        p.delete_service(&service_id).await.unwrap_err();
-        assert_eq!(
-            p.delete_deployments_by_service_id(&service_id)
-                .await
-                .unwrap(),
-            deployments
-        );
-
-        // It should not be safe to delete
-        p.delete_service(&service_id).await.unwrap();
-        assert!(p.get_deployments(&service_id).await.unwrap().is_empty());
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
     async fn log_insert() {
         let (p, _) = Persistence::new_in_memory().await;
         let deployment_id = add_deployment(&p.pool).await.unwrap();
@@ -993,7 +944,7 @@ mod tests {
             p.insert_resource(resource).await.unwrap();
         }
 
-        let resources = p.get_service_resources(&service_id).await.unwrap();
+        let resources = p.get_resources(&service_id).await.unwrap();
 
         assert_eq!(resources, vec![resource2, resource4]);
     }

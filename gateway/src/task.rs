@@ -133,7 +133,7 @@ pub fn check_health() -> impl Task<ProjectContext, Output = Project, Error = Err
                 if ready.is_healthy().await {
                     TaskResult::Done(Project::Ready(ready))
                 } else {
-                    TaskResult::Done(Project::Ready(ready).stop().unwrap())
+                    TaskResult::Done(Project::Ready(ready).reboot().unwrap())
                 }
             }
             Ok(update) => TaskResult::Done(update),

@@ -109,6 +109,7 @@ where
             other => other.starts_with("/users"),
         };
 
+        // If logout is called, invalidate the cached JWT for the callers cookie.
         if req.uri().path() == "/logout" {
             let cache_manager = self.cache_manager.clone();
 

@@ -126,11 +126,13 @@ async fn post_project(
     State(RouterState {
         service, sender, ..
     }): State<RouterState>,
-    User { name, .. }: User,
+    User { name, claim, .. }: User,
     Path(project): Path<ProjectName>,
 ) -> Result<AxumJson<project::Response>, Error> {
+    let is_admin = claim.scopes.contains(&Scope::Admin);
+
     let state = service
-        .create_project(project.clone(), name.clone())
+        .create_project(project.clone(), name.clone(), is_admin)
         .await?;
 
     service

@@ -121,7 +121,7 @@ commands:
       - run:
           name: Set git tag in the environment
           command: |
-            echo TAG=$(git describe --tags) >> $BASH_ENV
+            echo TAG=$(git describe --tags --abbrev=0) >> $BASH_ENV
       - run:
           name: Set binary directory in the environment
           command: |
@@ -130,7 +130,7 @@ commands:
           name: Make artifact
           command: |
             mkdir $BIN_DIR
-            mv target/<< parameters.target >>/release/cargo-shuttle<< parameters.suffix >> $BIN_DIR/cargo-shuttle-<< parameters.target >><< parameters.suffix >>
+            mv target/<< parameters.target >>/release/cargo-shuttle<< parameters.suffix >> $BIN_DIR/cargo-shuttle<< parameters.suffix >>
             mv LICENSE $BIN_DIR/
             mv README.md $BIN_DIR/
             mkdir -p artifacts/<< parameters.target >>

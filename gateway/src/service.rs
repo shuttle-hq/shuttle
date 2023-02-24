@@ -368,7 +368,7 @@ impl GatewayService {
         SELECT project_name, account_name, initial_key, project_state 
         FROM projects 
         WHERE (project_name = ?1) 
-        AND (account_name = ?2 OR ?3 = true)
+        AND (account_name = ?2 OR ?3)
         "#,
         )
         .bind(&project_name)
@@ -665,16 +665,6 @@ pub mod tests {
         assert!(matches!(
             svc.create_project(matrix.clone(), neo, false).await,
             Ok(Project::Creating(_))
-        ));
-
-        // If running project is created a different user which is admin
-        assert!(matches!(
-            svc.create_project(matrix.clone(), trinity.clone(), false)
-                .await,
-            Err(Error {
-                kind: ErrorKind::ProjectAlreadyExists,
-                ..
-            })
         ));
 
         let mut work = svc

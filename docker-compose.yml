@@ -157,21 +157,19 @@ services:
       placement:
         constraints:
           - node.hostname==postgres
-  datadog-agent:
-    image: datadog/agent
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.72.0
+    command: [--config=/etc/otel-collector-config.yaml]
+    volumes:
+      - ./extras/otel/otel-collector-config.yaml:/etc/otel-collector-config.yaml
+      # Pull docker stats
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     restart: always
     networks:
       user-net:
-    volumes:
-      # Pull docker stats
-      - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
-      - DD_APM_ENABLED=true
-      - DD_APM_NON_LOCAL_TRAFFIC=true
-      - DD_SITE=datadoghq.eu
       - DD_API_KEY=${DD_API_KEY}
       - DD_ENV=${DD_ENV}
-      - DD_CONTAINER_LABELS_AS_TAGS={"project.name":"project_name"}
     deploy:
       placement:
         constraints:

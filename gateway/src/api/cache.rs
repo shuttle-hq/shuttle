@@ -14,6 +14,14 @@ pub struct CacheManager {
     pub cache: Arc<RwLock<TtlCache<String, String>>>,
 }
 
+impl CacheManager {
+    pub fn new() -> Self {
+        let cache = Arc::new(RwLock::new(TtlCache::new(1000)));
+
+        Self { cache }
+    }
+}
+
 impl CacheManagement for CacheManager {
     fn get(&self, key: &str) -> Option<String> {
         self.cache

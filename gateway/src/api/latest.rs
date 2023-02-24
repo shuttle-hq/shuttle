@@ -1,6 +1,6 @@
 use std::io::Cursor;
 use std::net::SocketAddr;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::time::Duration;
 
 use axum::body::Body;
@@ -491,9 +491,7 @@ impl ApiBuilder {
     pub fn with_auth_service(mut self, auth_uri: Uri) -> Self {
         let auth_public_key = AuthPublicKey::new(auth_uri.clone());
 
-        let cache = Arc::new(RwLock::new(TtlCache::new(1000)));
-
-        let cache_manager = CacheManager { cache };
+        let cache_manager = CacheManager::new();
 
         self.router = self
             .router
@@ -502,10 +500,6 @@ impl ApiBuilder {
                 auth_uri,
                 Arc::new(Box::new(cache_manager)),
             ));
-        // .layer(CacheLayer {
-        //     cache_manager: Arc::new(Box::new(cache_manager)),
-        //     public_key_fn: auth_public_key,
-        // });
 
         self
     }

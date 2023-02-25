@@ -321,7 +321,7 @@ fn extract_token_expiration(token: String) -> Result<Duration, StatusCode> {
     // used again.
     //
     // This number should never be negative since the JWT has just been created, and so should be
-    // safe to cast to u64. However, if the number *is* negative it would wrap and the TTL duration 
+    // safe to cast to u64. However, if the number *is* negative it would wrap and the TTL duration
     // would be near u64::MAX, so we use try_from to ensure that can't happen.
     let duration_minus_buffer = u64::try_from(duration.num_seconds() - 60)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;

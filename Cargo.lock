@@ -5994,6 +5994,7 @@ dependencies = [
  "once_cell",
  "opentelemetry",
  "opentelemetry-http",
+ "pin-project",
  "reqwest",
  "ring",
  "rustrict",

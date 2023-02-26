@@ -1,4 +1,10 @@
-use std::{convert::Infallible, future::Future, ops::Add, pin::Pin};
+use std::{
+    convert::Infallible,
+    future::Future,
+    ops::Add,
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -8,6 +14,7 @@ use http::{Request, Response, StatusCode, Uri};
 use http_body::combinators::UnsyncBoxBody;
 use hyper::{body, Body, Client};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header as JwtHeader, Validation};
+use pin_project::pin_project;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tower::{Layer, Service};
@@ -423,6 +430,25 @@ pub struct ClaimService<S> {
     inner: S,
 }
 
+#[pin_project]
+pub struct ClaimServiceFuture<F> {
+    #[pin]
+    response_future: F,
+}
+
+impl<F, Response, Error> Future for ClaimServiceFuture<F>
+where
+    F: Future<Output = Result<Response, Error>>,
+{
+    type Output = Result<Response, Error>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+
+        this.response_future.poll(cx)
+    }
+}
+
 impl<S, RequestError> Service<Request<UnsyncBoxBody<Bytes, RequestError>>> for ClaimService<S>
 where
     S: Service<Request<UnsyncBoxBody<Bytes, RequestError>>> + Send + 'static,
@@ -430,8 +456,7 @@ where
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future =
-        Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
+    type Future = ClaimServiceFuture<S::Future>;
 
     fn poll_ready(
         &mut self,
@@ -448,9 +473,9 @@ where
             }
         }
 
-        let future = self.inner.call(req);
+        let response_future = self.inner.call(req);
 
-        Box::pin(async move { future.await })
+        ClaimServiceFuture { response_future }
     }
 }
 

@@ -585,9 +585,9 @@ where
                 },
             }
         } else {
-            return ScopedFuture {
+            ScopedFuture {
                 state: ResponseState::Forbidden,
-            };
+            }
         }
     }
 }

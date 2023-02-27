@@ -18,7 +18,7 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use super::headers::XShuttleAdminSecret;
 
-const EXP_MINUTES: i64 = 5;
+pub const EXP_MINUTES: i64 = 5;
 const ISS: &str = "shuttle";
 
 /// Layer to check the admin secret set by deployer is correct

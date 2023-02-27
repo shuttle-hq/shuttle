@@ -16,7 +16,9 @@ use futures::Future;
 use http::{StatusCode, Uri};
 use instant_acme::{AccountCredentials, ChallengeType};
 use serde::{Deserialize, Serialize};
-use shuttle_common::backends::auth::{AuthPublicKey, JwtAuthenticationLayer, Scope, ScopedLayer};
+use shuttle_common::backends::auth::{
+    AuthPublicKey, JwtAuthenticationLayer, Scope, ScopedLayer, EXP_MINUTES,
+};
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
 use shuttle_common::models::error::ErrorKind;
 use shuttle_common::models::{project, stats};
@@ -221,7 +223,7 @@ async fn post_load(
 
     if load.has_capacity
         && running_builds
-            .insert(build.id, (), Duration::from_secs(60 * 10))
+            .insert(build.id, (), Duration::from_secs(60 * EXP_MINUTES as u64))
             .is_none()
     {
         // Only increase when an item was not already in the queue

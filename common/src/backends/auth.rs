@@ -1,4 +1,11 @@
-use std::{convert::Infallible, future::Future, ops::Add, pin::Pin, sync::Arc};
+use std::{
+    convert::Infallible,
+    future::Future,
+    ops::Add,
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
+};
 
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -8,6 +15,7 @@ use http::{Request, Response, StatusCode, Uri};
 use http_body::combinators::UnsyncBoxBody;
 use hyper::{body, Body, Client};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header as JwtHeader, Validation};
+use pin_project::pin_project;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tower::{Layer, Service};
@@ -450,6 +458,25 @@ pub struct ClaimService<S> {
     inner: S,
 }
 
+#[pin_project]
+pub struct ClaimServiceFuture<F> {
+    #[pin]
+    response_future: F,
+}
+
+impl<F, Response, Error> Future for ClaimServiceFuture<F>
+where
+    F: Future<Output = Result<Response, Error>>,
+{
+    type Output = Result<Response, Error>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+
+        this.response_future.poll(cx)
+    }
+}
+
 impl<S, RequestError> Service<Request<UnsyncBoxBody<Bytes, RequestError>>> for ClaimService<S>
 where
     S: Service<Request<UnsyncBoxBody<Bytes, RequestError>>> + Send + 'static,
@@ -457,8 +484,7 @@ where
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future =
-        Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
+    type Future = ClaimServiceFuture<S::Future>;
 
     fn poll_ready(
         &mut self,
@@ -475,9 +501,9 @@ where
             }
         }
 
-        let future = self.inner.call(req);
+        let response_future = self.inner.call(req);
 
-        Box::pin(async move { future.await })
+        ClaimServiceFuture { response_future }
     }
 }
 
@@ -510,18 +536,56 @@ pub struct Scoped<S> {
     inner: S,
     required: Vec<Scope>,
 }
+#[pin_project]
+pub struct ScopedFuture<F> {
+    #[pin]
+    state: ResponseState<F>,
+}
 
-impl<S, ResponseError> Service<Request<Body>> for Scoped<S>
+#[pin_project(project = ResponseStateProj)]
+pub enum ResponseState<F> {
+    Called {
+        #[pin]
+        inner: F,
+    },
+    Unauthorized,
+    Forbidden,
+}
+
+impl<F, Error> Future for ScopedFuture<F>
 where
-    S: Service<Request<Body>, Response = Response<UnsyncBoxBody<Bytes, ResponseError>>>
+    F: Future<Output = Result<axum::response::Response, Error>>,
+{
+    type Output = Result<axum::response::Response, Error>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+
+        match this.state.project() {
+            ResponseStateProj::Called { inner } => inner.poll(cx),
+            ResponseStateProj::Unauthorized => Poll::Ready(Ok(Response::builder()
+                .status(StatusCode::UNAUTHORIZED)
+                .body(Default::default())
+                .unwrap())),
+            ResponseStateProj::Forbidden => Poll::Ready(Ok(Response::builder()
+                .status(StatusCode::FORBIDDEN)
+                .body(Default::default())
+                .unwrap())),
+        }
+    }
+}
+
+impl<S> Service<Request<Body>> for Scoped<S>
+where
+    S: Service<Request<Body>, Response = http::Response<UnsyncBoxBody<bytes::Bytes, axum::Error>>>
         + Send
+        + Clone
         + 'static,
     S::Future: Send + 'static,
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future =
-        Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
+    type Future = ScopedFuture<S::Future>;
 
     fn poll_ready(
         &mut self,
@@ -534,12 +598,7 @@ where
         let Some(claim) = req.extensions().get::<Claim>() else {
             error!("claim extension is not set");
 
-            return Box::pin(async move {
-                Ok(Response::builder()
-                    .status(StatusCode::UNAUTHORIZED)
-                    .body(Default::default())
-                    .unwrap())
-            });
+            return ScopedFuture {state: ResponseState::Unauthorized};
         };
 
         if self
@@ -547,16 +606,16 @@ where
             .iter()
             .all(|scope| claim.scopes.contains(scope))
         {
-            let future = self.inner.call(req);
-
-            Box::pin(async move { future.await })
+            let response_future = self.inner.call(req);
+            ScopedFuture {
+                state: ResponseState::Called {
+                    inner: response_future,
+                },
+            }
         } else {
-            Box::pin(async move {
-                Ok(Response::builder()
-                    .status(StatusCode::FORBIDDEN)
-                    .body(Default::default())
-                    .unwrap())
-            })
+            ScopedFuture {
+                state: ResponseState::Forbidden,
+            }
         }
     }
 }

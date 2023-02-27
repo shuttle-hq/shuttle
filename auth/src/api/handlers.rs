@@ -51,7 +51,7 @@ pub(crate) async fn login(
         .expect("to set account name");
     session
         .insert("account_tier", user.account_tier)
-        .expect("to set account name");
+        .expect("to set account tier");
 
     Ok(Json(user.into()))
 }
@@ -74,9 +74,9 @@ pub(crate) async fn convert_cookie(
 
     let claim = Claim::new(account_name, account_tier.into());
 
-    let response = shuttle_common::backends::auth::ConvertResponse {
-        token: claim.into_token(key_manager.private_key())?,
-    };
+    let token = claim.into_token(key_manager.private_key())?;
+
+    let response = shuttle_common::backends::auth::ConvertResponse { token };
 
     Ok(Json(response))
 }
@@ -92,15 +92,15 @@ pub(crate) async fn convert_key(
     let User {
         name, account_tier, ..
     } = user_manager
-        .get_user_by_key(key)
+        .get_user_by_key(key.clone())
         .await
         .map_err(|_| StatusCode::UNAUTHORIZED)?;
 
     let claim = Claim::new(name.to_string(), account_tier.into());
 
-    let response = shuttle_common::backends::auth::ConvertResponse {
-        token: claim.into_token(key_manager.private_key())?,
-    };
+    let token = claim.into_token(key_manager.private_key())?;
+
+    let response = shuttle_common::backends::auth::ConvertResponse { token };
 
     Ok(Json(response))
 }

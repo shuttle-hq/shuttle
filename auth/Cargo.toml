@@ -11,16 +11,16 @@ axum = { workspace = true, features = ["headers"] }
 axum-sessions = "0.4.1"
 clap = { workspace = true }
 http = { workspace = true }
-jsonwebtoken = { workspace = true}
+jsonwebtoken = { workspace = true }
 opentelemetry = { workspace = true }
 opentelemetry-datadog = { workspace = true }
 rand = { workspace = true }
 ring = { workspace = true }
-serde = { workspace = true, features = [ "derive" ] }
-sqlx = { version = "0.6.2", features = [ "sqlite", "json", "runtime-tokio-native-tls", "migrate" ] }
+serde = { workspace = true, features = ["derive"] }
+sqlx = { version = "0.6.2", features = ["sqlite", "json", "runtime-tokio-native-tls", "migrate"] }
 strum = { workspace = true }
 thiserror = { workspace = true }
-tokio = { version = "1.22.0", features = [ "full" ] }
+tokio = { version = "1.22.0", features = ["full"] }
 tracing = { workspace = true }
 tracing-opentelemetry = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }

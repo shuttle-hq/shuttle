@@ -152,7 +152,7 @@ pub struct ConvertResponse {
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
 pub struct Claim {
     /// Expiration time (as UTC timestamp).
-    exp: usize,
+    pub exp: usize,
     /// Issued at (as UTC timestamp).
     iat: usize,
     /// Issuer.

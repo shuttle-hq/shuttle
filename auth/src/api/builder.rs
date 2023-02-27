@@ -18,6 +18,7 @@ use tracing::field;
 use crate::{
     secrets::{EdDsaManager, KeyManager},
     user::{UserManagement, UserManager},
+    COOKIE_EXPIRATION,
 };
 
 use super::handlers::{
@@ -102,7 +103,7 @@ impl ApiBuilder {
         self.session_layer = Some(
             SessionLayer::new(store, &secret)
                 .with_cookie_name("shuttle.sid")
-                .with_session_ttl(Some(std::time::Duration::from_secs(60 * 60 * 24))) // One day
+                .with_session_ttl(Some(COOKIE_EXPIRATION))
                 .with_secure(true),
         );
 
@@ -116,10 +117,12 @@ impl ApiBuilder {
         let user_manager = UserManager { pool };
         let key_manager = EdDsaManager::new();
 
-        self.router.layer(session_layer).with_state(RouterState {
+        let state = RouterState {
             user_manager: Arc::new(Box::new(user_manager)),
             key_manager: Arc::new(Box::new(key_manager)),
-        })
+        };
+
+        self.router.layer(session_layer).with_state(state)
     }
 }
 

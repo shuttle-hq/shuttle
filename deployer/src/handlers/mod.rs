@@ -28,7 +28,6 @@ use crate::deployment::{DeploymentManager, Queued};
 use crate::persistence::{Deployment, Log, Persistence, ResourceManager, SecretGetter, State};
 
 use std::collections::HashMap;
-use std::sync::Arc;
 
 pub use {self::error::Error, self::error::Result};
 

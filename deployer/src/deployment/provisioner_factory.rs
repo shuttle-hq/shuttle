@@ -2,7 +2,10 @@ use std::{collections::BTreeMap, path::PathBuf};
 
 use async_trait::async_trait;
 use shuttle_common::{
-    backends::auth::{Claim, ClaimLayer, ClaimService},
+    backends::{
+        auth::{Claim, ClaimLayer, ClaimService},
+        tracing::{InjectPropagation, InjectPropagationLayer},
+    },
     database, DatabaseReadyInfo,
 };
 use shuttle_proto::provisioner::{
@@ -61,7 +64,10 @@ impl<R: ResourceManager, S: SecretGetter> AbstractFactory for AbstractProvisione
         claim: Option<Claim>,
     ) -> Result<Self::Output, Self::Error> {
         let channel = self.provisioner_uri.clone().connect().await?;
-        let channel = ServiceBuilder::new().layer(ClaimLayer).service(channel);
+        let channel = ServiceBuilder::new()
+            .layer(ClaimLayer)
+            .layer(InjectPropagationLayer)
+            .service(channel);
 
         let provisioner_client = ProvisionerClient::new(channel);
 
@@ -102,7 +108,7 @@ pub struct ProvisionerFactory<R: ResourceManager, S: SecretGetter> {
     service_id: Uuid,
     deployment_id: Uuid,
     storage_manager: StorageManager,
-    provisioner_client: ProvisionerClient<ClaimService<Channel>>,
+    provisioner_client: ProvisionerClient<ClaimService<InjectPropagation<Channel>>>,
     info: Option<DatabaseReadyInfo>,
     resource_manager: R,
     secret_getter: S,

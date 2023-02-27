@@ -158,10 +158,8 @@ services:
         constraints:
           - node.hostname==postgres
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.72.0
-    command: [--config=/etc/otel-collector-config.yaml]
+    image: "${CONTAINER_REGISTRY}/otel:${OTEL_TAG}"
     volumes:
-      - ./extras/otel/otel-collector-config.yaml:/etc/otel-collector-config.yaml
       # Pull docker stats
       - /var/run/docker.sock:/var/run/docker.sock:ro
     restart: always

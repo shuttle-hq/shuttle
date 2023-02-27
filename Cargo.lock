@@ -4200,27 +4200,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "opentelemetry-datadog"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "171770efa142d2a19455b7e985037f560b2e75461f822dd1688bfd83c14856f6"
-dependencies = [
- "async-trait",
- "futures-core",
- "http 0.2.8",
- "indexmap",
- "itertools",
- "once_cell",
- "opentelemetry",
- "opentelemetry-http",
- "opentelemetry-semantic-conventions",
- "reqwest",
- "rmp",
- "thiserror",
- "url",
-]
-
-[[package]]
 name = "opentelemetry-http"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4230,16 +4209,38 @@ dependencies = [
  "bytes 1.3.0",
  "http 0.2.8",
  "opentelemetry_api",
- "reqwest",
 ]
 
 [[package]]
-name = "opentelemetry-semantic-conventions"
-version = "0.10.0"
+name = "opentelemetry-otlp"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b02e0230abb0ab6636d18e2ba8fa02903ea63772281340ccac18e0af3ec9eeb"
+checksum = "d1c928609d087790fc936a1067bdc310ae702bdf3b090c3f281b713622c8bbde"
 dependencies = [
+ "async-trait",
+ "futures",
+ "futures-util",
+ "http 0.2.8",
  "opentelemetry",
+ "opentelemetry-proto",
+ "prost",
+ "thiserror",
+ "tokio",
+ "tonic",
+]
+
+[[package]]
+name = "opentelemetry-proto"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d61a2f56df5574508dd86aaca016c917489e589ece4141df1b5e349af8d66c28"
+dependencies = [
+ "futures",
+ "futures-util",
+ "opentelemetry",
+ "prost",
+ "tonic",
+ "tonic-build",
 ]
 
 [[package]]
@@ -5284,17 +5285,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rmp"
-version = "0.8.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "44519172358fd6d58656c86ab8e7fbc9e1490c3e8f14d35ed78ca0dd07403c9f"
-dependencies = [
- "byteorder",
- "num-traits",
- "paste",
-]
-
-[[package]]
 name = "rocket"
 version = "0.5.0-rc.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5947,7 +5937,6 @@ dependencies = [
  "hyper",
  "jsonwebtoken",
  "opentelemetry",
- "opentelemetry-datadog",
  "rand 0.8.5",
  "ring",
  "serde",
@@ -5995,6 +5984,7 @@ dependencies = [
  "once_cell",
  "opentelemetry",
  "opentelemetry-http",
+ "opentelemetry-otlp",
  "pin-project",
  "reqwest",
  "ring",
@@ -6037,7 +6027,6 @@ dependencies = [
  "hyper-reverse-proxy 0.5.2-dev (git+https://github.com/chesedo/hyper-reverse-proxy?branch=master)",
  "once_cell",
  "opentelemetry",
- "opentelemetry-datadog",
  "opentelemetry-http",
  "pipe",
  "portpicker",
@@ -6087,7 +6076,6 @@ dependencies = [
  "num_cpus",
  "once_cell",
  "opentelemetry",
- "opentelemetry-datadog",
  "opentelemetry-http",
  "pem",
  "pin-project",

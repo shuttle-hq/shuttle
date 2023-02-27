@@ -316,7 +316,7 @@ fn extract_token_expiration(token: String) -> Result<Duration, StatusCode> {
 
     let duration = expiration_timestamp - Utc::now();
 
-    // We will use this duration to set the TTL for the JWT in the cache. We subtract 60 seconds
+    // We will use this duration to set the TTL for the JWT in the cache. We subtract 180 seconds
     // to make sure a token from the cache will still be valid in cases where it will be used to
     // authorize some operation, the operation takes some time, and then the token needs to be
     // used again.
@@ -324,7 +324,7 @@ fn extract_token_expiration(token: String) -> Result<Duration, StatusCode> {
     // This number should never be negative since the JWT has just been created, and so should be
     // safe to cast to u64. However, if the number *is* negative it would wrap and the TTL duration
     // would be near u64::MAX, so we use try_from to ensure that can't happen.
-    let duration_minus_buffer = u64::try_from(duration.num_seconds() - 60)
+    let duration_minus_buffer = u64::try_from(duration.num_seconds() - 180)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(std::time::Duration::from_secs(duration_minus_buffer))

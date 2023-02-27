@@ -46,7 +46,6 @@ hyper = "0.14.23"
 jsonwebtoken = { version = "8.2.0" }
 once_cell = "1.16.0"
 opentelemetry = { version = "0.18.0", features = ["rt-tokio"] }
-opentelemetry-datadog = { version = "0.6.0", features = ["reqwest-client"] }
 opentelemetry-http = "0.7.0"
 pin-project = "1.0.12"
 rand = "0.8.5"

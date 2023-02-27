@@ -23,7 +23,8 @@ jsonwebtoken = { workspace = true, optional = true }
 once_cell = { workspace = true }
 opentelemetry = { workspace = true, optional = true }
 opentelemetry-http = { workspace = true, optional = true }
-pin-project = { workspace = true } 
+opentelemetry-otlp = { version = "0.11.0", optional = true }
+pin-project = { workspace = true }
 reqwest = { version = "0.11.13", optional = true }
 rustrict = "0.5.5"
 serde = { workspace = true, features = ["derive"] }
@@ -35,11 +36,12 @@ tower = { workspace = true, optional = true }
 tower-http = { workspace = true, optional = true }
 tracing = { workspace = true }
 tracing-opentelemetry = { workspace = true, optional = true }
+tracing-subscriber = { workspace = true, optional = true }
 ttl_cache = { workspace = true, optional = true }
 uuid = { workspace = true, features = ["v4", "serde"] }
 
 [features]
-backend = ["async-trait", "axum", "bytes", "http", "http-body", "hyper/client", "jsonwebtoken", "opentelemetry", "opentelemetry-http", "thiserror", "tower", "tower-http", "tracing-opentelemetry", "ttl_cache"]
+backend = ["async-trait", "axum", "bytes", "http", "http-body", "hyper/client", "jsonwebtoken", "opentelemetry", "opentelemetry-http", "opentelemetry-otlp", "thiserror", "tower", "tower-http", "tracing-opentelemetry", "tracing-subscriber/env-filter", "ttl_cache"]
 display = ["comfy-table", "crossterm"]
 models = ["anyhow", "async-trait", "display", "http", "reqwest", "serde_json"]
 

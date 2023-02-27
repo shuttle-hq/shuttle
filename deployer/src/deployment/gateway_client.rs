@@ -1,8 +1,11 @@
 use hyper::{body, client::HttpConnector, Body, Client, Method, Request, Uri};
+use opentelemetry::global;
+use opentelemetry_http::HeaderInjector;
 use serde::{de::DeserializeOwned, Serialize};
 use shuttle_common::models::stats;
 use thiserror::Error;
-use tracing::trace;
+use tracing::{trace, Span};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
 #[derive(Error, Debug)]
@@ -67,10 +70,16 @@ impl GatewayClient {
         let uri = format!("{}{path}", self.base);
         trace!(uri, "calling gateway");
 
-        let req = Request::builder()
+        let mut req = Request::builder()
             .method(method)
             .uri(uri)
             .header("Content-Type", "application/json");
+
+        let cx = Span::current().context();
+
+        global::get_text_map_propagator(|propagator| {
+            propagator.inject_context(&cx, &mut HeaderInjector(req.headers_mut().unwrap()))
+        });
 
         let req = if let Some(body) = body {
             req.body(Body::from(serde_json::to_vec(&body)?))

@@ -28,6 +28,7 @@ opentelemetry = { workspace = true }
 opentelemetry-datadog = { workspace = true }
 opentelemetry-http = { workspace = true }
 pem = "1.1.0"
+pin-project = { workspace = true }
 rand = { workspace = true }
 rcgen = "0.10.0"
 rustls = "0.20.7"

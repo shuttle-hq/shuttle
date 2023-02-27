@@ -3,6 +3,7 @@ use std::{
     future::Future,
     ops::Add,
     pin::Pin,
+    sync::Arc,
     task::{Context, Poll},
 };
 
@@ -20,10 +21,14 @@ use thiserror::Error;
 use tower::{Layer, Service};
 use tracing::{error, trace};
 
-use super::headers::XShuttleAdminSecret;
+use super::{
+    cache::{CacheManagement, CacheManager},
+    headers::XShuttleAdminSecret,
+};
 
 const EXP_MINUTES: i64 = 5;
 const ISS: &str = "shuttle";
+const PUBLIC_KEY_CACHE_KEY: &str = "shuttle.public-key";
 
 /// Layer to check the admin secret set by deployer is correct
 #[derive(Clone)]
@@ -278,11 +283,16 @@ where
 #[derive(Clone)]
 pub struct AuthPublicKey {
     auth_uri: Uri,
+    cache_manager: Arc<Box<dyn CacheManagement<Value = Vec<u8>>>>,
 }
 
 impl AuthPublicKey {
     pub fn new(auth_uri: Uri) -> Self {
-        Self { auth_uri }
+        let public_key_cache_manager = CacheManager::new(1);
+        Self {
+            auth_uri,
+            cache_manager: Arc::new(Box::new(public_key_cache_manager)),
+        }
     }
 }
 
@@ -291,11 +301,25 @@ impl PublicKeyFn for AuthPublicKey {
     type Error = PublicKeyFnError;
 
     async fn public_key(&self) -> Result<Vec<u8>, Self::Error> {
-        let client = Client::new();
-        let uri = format!("{}public-key", self.auth_uri).parse()?;
-        let res = client.get(uri).await?;
-        let buf = body::to_bytes(res).await?;
-        Ok(buf.to_vec())
+        if let Some(public_key) = self.cache_manager.get(PUBLIC_KEY_CACHE_KEY) {
+            trace!("found public key in the cache, returning it");
+
+            Ok(public_key)
+        } else {
+            let client = Client::new();
+            let uri = format!("{}public-key", self.auth_uri).parse()?;
+            let res = client.get(uri).await?;
+            let buf = body::to_bytes(res).await?;
+
+            trace!("inserting public key from auth service into cache");
+            self.cache_manager.insert(
+                PUBLIC_KEY_CACHE_KEY,
+                buf.to_vec(),
+                std::time::Duration::from_secs(60),
+            );
+
+            Ok(buf.to_vec())
+        }
     }
 }
 
@@ -378,16 +402,20 @@ where
 
                                     this.inner.call(req).await
                                 }
-                                Err(code) => Ok(Response::builder()
-                                    .status(code)
-                                    .body(Default::default())
-                                    .unwrap()),
+                                Err(code) => {
+                                    error!(code = %code, "failed to decode JWT");
+
+                                    Ok(Response::builder()
+                                        .status(code)
+                                        .body(Default::default())
+                                        .unwrap())
+                                }
                             }
                         }
                         Err(error) => {
                             error!(
                                 error = &error as &dyn std::error::Error,
-                                "failed to get public key"
+                                "failed to get public key from auth service"
                             );
 
                             Ok(Response::builder()
@@ -653,7 +681,6 @@ mod tests {
                     ServiceBuilder::new()
                         .layer(JwtAuthenticationLayer::new(move || {
                             let public_key = public_key.clone();
-
                             async move { public_key.clone() }
                         }))
                         .layer(ScopedLayer::new(vec![Scope::Project])),

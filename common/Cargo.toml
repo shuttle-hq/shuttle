@@ -35,10 +35,11 @@ tower = { workspace = true, optional = true }
 tower-http = { workspace = true, optional = true }
 tracing = { workspace = true }
 tracing-opentelemetry = { workspace = true, optional = true }
+ttl_cache = { workspace = true, optional = true }
 uuid = { workspace = true, features = ["v4", "serde"] }
 
 [features]
-backend = ["async-trait", "axum", "bytes", "http", "http-body", "hyper/client", "jsonwebtoken", "opentelemetry", "opentelemetry-http", "thiserror", "tower", "tower-http", "tracing-opentelemetry"]
+backend = ["async-trait", "axum", "bytes", "http", "http-body", "hyper/client", "jsonwebtoken", "opentelemetry", "opentelemetry-http", "thiserror", "tower", "tower-http", "tracing-opentelemetry", "ttl_cache"]
 display = ["comfy-table", "crossterm"]
 models = ["anyhow", "async-trait", "display", "http", "reqwest", "serde_json"]
 

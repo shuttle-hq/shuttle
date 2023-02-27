@@ -5935,7 +5935,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-auth"
-version = "0.1.0"
+version = "0.10.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6011,6 +6011,7 @@ dependencies = [
  "tracing-fluent-assertions",
  "tracing-opentelemetry",
  "tracing-subscriber",
+ "ttl_cache",
  "uuid 1.2.2",
 ]
 

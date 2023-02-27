@@ -17,6 +17,7 @@ use http::{StatusCode, Uri};
 use instant_acme::{AccountCredentials, ChallengeType};
 use serde::{Deserialize, Serialize};
 use shuttle_common::backends::auth::{AuthPublicKey, JwtAuthenticationLayer, Scope, ScopedLayer};
+use shuttle_common::backends::cache::CacheManager;
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
 use shuttle_common::models::error::ErrorKind;
 use shuttle_common::models::{project, stats};
@@ -36,7 +37,6 @@ use crate::worker::WORKER_QUEUE_SIZE;
 use crate::{Error, GatewayService, ProjectName};
 
 use super::auth_layer::ShuttleAuthLayer;
-use super::cache::CacheManager;
 
 pub const SVC_DEGRADED_THRESHOLD: usize = 128;
 
@@ -493,14 +493,14 @@ impl ApiBuilder {
     pub fn with_auth_service(mut self, auth_uri: Uri) -> Self {
         let auth_public_key = AuthPublicKey::new(auth_uri.clone());
 
-        let cache_manager = CacheManager::new();
+        let jwt_cache_manager = CacheManager::new(1000);
 
         self.router = self
             .router
             .layer(JwtAuthenticationLayer::new(auth_public_key))
             .layer(ShuttleAuthLayer::new(
                 auth_uri,
-                Arc::new(Box::new(cache_manager)),
+                Arc::new(Box::new(jwt_cache_manager)),
             ));
 
         self

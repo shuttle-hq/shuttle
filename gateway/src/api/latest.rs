@@ -447,7 +447,7 @@ impl ApiBuilder {
                     request.params.account_name = field::Empty
                 )
             })
-            .without_propagation()
+            .with_propagation()
             .build(),
         );
         self

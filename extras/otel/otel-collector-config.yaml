@@ -38,6 +38,11 @@ receivers:
 
 processors:
   batch:
+    # Make small enough to be processed by datadog
+    # https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/exporter/datadogexporter#why-am-i-getting-errors-413---request-entity-too-large-how-do-i-fix-it
+    send_batch_max_size: 100
+    send_batch_size: 10
+    timeout: 10s
   attributes:
     actions:
       - key: env

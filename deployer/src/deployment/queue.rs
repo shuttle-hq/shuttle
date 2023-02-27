@@ -62,7 +62,7 @@ pub async fn task(
 
             async move {
                 match timeout(
-                    Duration::from_secs(60 * 5), // Timeout after 5 minutes if the build queue hangs or it takes too long for a slot to become available
+                    Duration::from_secs(60 * 3), // Timeout after 3 minutes if the build queue hangs or it takes too long for a slot to become available
                     wait_for_queue(queue_client.clone(), id),
                 )
                 .await

@@ -8,10 +8,13 @@ use http::{Request, Response, StatusCode, Uri};
 use http_body::combinators::UnsyncBoxBody;
 use hyper::{body, Body, Client};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header as JwtHeader, Validation};
+use opentelemetry::global;
+use opentelemetry_http::HeaderInjector;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tower::{Layer, Service};
-use tracing::{error, trace};
+use tracing::{error, trace, Span};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use super::headers::XShuttleAdminSecret;
 
@@ -285,8 +288,19 @@ impl PublicKeyFn for AuthPublicKey {
 
     async fn public_key(&self) -> Result<Vec<u8>, Self::Error> {
         let client = Client::new();
-        let uri = format!("{}public-key", self.auth_uri).parse()?;
-        let res = client.get(uri).await?;
+        let uri: Uri = format!("{}public-key", self.auth_uri).parse()?;
+        let mut request = Request::builder().uri(uri);
+
+        // Safe to unwrap since we just build it
+        let headers = request.headers_mut().unwrap();
+
+        let cx = Span::current().context();
+        global::get_text_map_propagator(|propagator| {
+            propagator.inject_context(&cx, &mut HeaderInjector(headers))
+        });
+
+        let res = client.request(request.body(Body::empty())?).await?;
+
         let buf = body::to_bytes(res).await?;
         Ok(buf.to_vec())
     }
@@ -299,6 +313,9 @@ pub enum PublicKeyFnError {
 
     #[error("hyper error: {0}")]
     Hyper(#[from] hyper::Error),
+
+    #[error("http error: {0}")]
+    Http(#[from] http::Error),
 }
 
 /// Layer to validate JWT tokens with a public key. Valid claims are added to the request extension

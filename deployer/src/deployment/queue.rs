@@ -101,6 +101,7 @@ fn build_failed(_id: &Uuid, error: impl std::error::Error + 'static) {
 
 #[instrument(skip(queue_client), fields(state = %State::Queued))]
 async fn wait_for_queue(queue_client: impl BuildQueueClient, id: Uuid) -> Result<()> {
+    trace!("getting a build slot");
     loop {
         let got_slot = queue_client.get_slot(id).await?;
 

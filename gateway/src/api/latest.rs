@@ -23,7 +23,7 @@ use shuttle_common::models::{project, stats};
 use shuttle_common::request_span;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::{Mutex, MutexGuard};
-use tracing::{field, instrument};
+use tracing::{field, instrument, trace};
 use ttl_cache::TtlCache;
 use uuid::Uuid;
 
@@ -215,6 +215,8 @@ async fn post_load(
     AxumJson(build): AxumJson<stats::LoadRequest>,
 ) -> Result<AxumJson<stats::LoadResponse>, Error> {
     let mut running_builds = running_builds.lock().await;
+
+    trace!(id = %build.id, "checking build queue");
     let mut load = calculate_capacity(&mut running_builds);
 
     if load.has_capacity
@@ -237,6 +239,7 @@ async fn delete_load(
     let mut running_builds = running_builds.lock().await;
     running_builds.remove(&build.id);
 
+    trace!(id = %build.id, "removing from build queue");
     let load = calculate_capacity(&mut running_builds);
 
     Ok(AxumJson(load))

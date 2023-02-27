@@ -36,3 +36,4 @@ package.json
 yarn.lock
 
 *.wasm
+*.sqlite*

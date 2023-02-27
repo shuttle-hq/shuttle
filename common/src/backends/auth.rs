@@ -377,14 +377,20 @@ where
                     if let Some(public_key) = this.cache_manager.get(PUBLIC_KEY_CACHE_KEY) {
                         match Claim::from_token(bearer.token().trim(), &public_key) {
                             Ok(claim) => {
+                                trace!("found public key in the cache and used it to decode JWT");
+
                                 req.extensions_mut().insert(claim);
 
                                 this.inner.call(req).await
                             }
-                            Err(code) => Ok(Response::builder()
-                                .status(code)
-                                .body(Default::default())
-                                .unwrap()),
+                            Err(code) => {
+                                error!(code = %code, "failed to decode JWT with public key from cache");
+
+                                Ok(Response::builder()
+                                    .status(code)
+                                    .body(Default::default())
+                                    .unwrap())
+                            }
                         }
                     } else {
                         // It isn't in the cache, fetch it with the public_key fn.
@@ -395,7 +401,7 @@ where
                                     Ok(claim) => {
                                         req.extensions_mut().insert(claim);
 
-                                        // Insert the public_key in the cache.
+                                        trace!("insert public key from auth service into cache");
                                         this.cache_manager.insert(
                                             PUBLIC_KEY_CACHE_KEY,
                                             public_key,
@@ -403,16 +409,20 @@ where
                                         );
                                         this.inner.call(req).await
                                     }
-                                    Err(code) => Ok(Response::builder()
-                                        .status(code)
-                                        .body(Default::default())
-                                        .unwrap()),
+                                    Err(code) => {
+                                        error!(code = %code, "failed to decode JWT with public key from auth service");
+
+                                        Ok(Response::builder()
+                                            .status(code)
+                                            .body(Default::default())
+                                            .unwrap())
+                                    }
                                 }
                             }
                             Err(error) => {
                                 error!(
                                     error = &error as &dyn std::error::Error,
-                                    "failed to get public key"
+                                    "failed to get public key from auth service"
                                 );
 
                                 Ok(Response::builder()

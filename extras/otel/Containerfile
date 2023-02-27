@@ -1,0 +1,10 @@
+ARG OTEL_TAG=
+
+FROM otel/opentelemetry-collector-contrib:${OTEL_TAG}
+
+COPY otel-collector-config.yaml /etc/otel-collector-config.yaml
+
+# Reset the user to allow reading from the docker.sock
+USER 0
+
+CMD ["--config=/etc/otel-collector-config.yaml"]

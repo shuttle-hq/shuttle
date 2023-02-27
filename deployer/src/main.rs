@@ -1,5 +1,5 @@
 use clap::Parser;
-use opentelemetry::global;
+use shuttle_common::backends::tracing::setup_tracing;
 use shuttle_deployer::{
     start, start_proxy, AbstractProvisionerFactory, Args, DeployLayer, Persistence,
     RuntimeLoggerFactory,
@@ -8,7 +8,6 @@ use tokio::select;
 use tonic::transport::Endpoint;
 use tracing::trace;
 use tracing_subscriber::prelude::*;
-use tracing_subscriber::{fmt, EnvFilter};
 
 // The `multi_thread` is needed to prevent a deadlock in shuttle_service::loader::build_crate() which spawns two threads
 // Without this, both threads just don't start up
@@ -18,26 +17,11 @@ async fn main() {
 
     trace!(args = ?args, "parsed args");
 
-    global::set_text_map_propagator(opentelemetry_datadog::DatadogPropagator::new());
-
-    let fmt_layer = fmt::layer();
-    let filter_layer = EnvFilter::try_from_default_env()
-        .or_else(|_| EnvFilter::try_new("info"))
-        .unwrap();
-
     let (persistence, _) = Persistence::new(&args.state).await;
-    let tracer = opentelemetry_datadog::new_pipeline()
-        .with_service_name("deployer")
-        .with_agent_endpoint("http://datadog-agent:8126")
-        .install_batch(opentelemetry::runtime::Tokio)
-        .unwrap();
-    let opentelemetry = tracing_opentelemetry::layer().with_tracer(tracer);
-    tracing_subscriber::registry()
-        .with(DeployLayer::new(persistence.clone()))
-        .with(filter_layer)
-        .with(fmt_layer)
-        .with(opentelemetry)
-        .init();
+    setup_tracing(
+        tracing_subscriber::registry().with(DeployLayer::new(persistence.clone())),
+        "deployer",
+    );
 
     let provisioner_uri = Endpoint::try_from(format!(
         "http://{}:{}",

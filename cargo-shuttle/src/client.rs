@@ -56,7 +56,7 @@ impl Client {
             .await
     }
 
-    pub async fn delete_service(&self, project: &ProjectName) -> Result<service::Detailed> {
+    pub async fn stop_service(&self, project: &ProjectName) -> Result<service::Summary> {
         let path = format!(
             "/projects/{}/services/{}",
             project.as_str(),
@@ -114,6 +114,15 @@ impl Client {
 
     pub async fn get_projects_list(&self) -> Result<Vec<project::Response>> {
         let path = "/projects".to_string();
+
+        self.get(path).await
+    }
+
+    pub async fn get_projects_list_filtered(
+        &self,
+        filter: String,
+    ) -> Result<Vec<project::Response>> {
+        let path = format!("/projects/{filter}");
 
         self.get(path).await
     }

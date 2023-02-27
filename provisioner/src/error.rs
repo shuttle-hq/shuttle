@@ -14,8 +14,14 @@ pub enum Error {
     #[error("failed to update role: {0}")]
     UpdateRole(String),
 
+    #[error("failed to drop role: {0}")]
+    DeleteRole(String),
+
     #[error("failed to create DB: {0}")]
     CreateDB(String),
+
+    #[error("failed to drop DB: {0}")]
+    DeleteDB(String),
 
     #[error("unexpected sqlx error: {0}")]
     UnexpectedSqlx(#[from] sqlx::Error),

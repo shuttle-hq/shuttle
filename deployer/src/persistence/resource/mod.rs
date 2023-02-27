@@ -9,11 +9,13 @@ use uuid::Uuid;
 
 pub use self::database::Type as DatabaseType;
 
+/// Types that can record and retrieve resource allocations
 #[async_trait::async_trait]
-pub trait ResourceRecorder: Clone + Send + Sync + 'static {
+pub trait ResourceManager: Clone + Send + Sync + 'static {
     type Err: std::error::Error;
 
     async fn insert_resource(&self, resource: &Resource) -> Result<(), Self::Err>;
+    async fn get_resources(&self, service_id: &Uuid) -> Result<Vec<Resource>, Self::Err>;
 }
 
 #[derive(sqlx::FromRow, Debug, Eq, PartialEq)]

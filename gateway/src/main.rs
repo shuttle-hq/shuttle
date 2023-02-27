@@ -2,25 +2,25 @@ use clap::Parser;
 use fqdn::FQDN;
 use futures::prelude::*;
 use instant_acme::{AccountCredentials, ChallengeType};
-use opentelemetry::global;
+use shuttle_common::backends::tracing::setup_tracing;
 use shuttle_gateway::acme::{AcmeClient, CustomDomain};
 use shuttle_gateway::api::latest::{ApiBuilder, SVC_DEGRADED_THRESHOLD};
 use shuttle_gateway::args::StartArgs;
-use shuttle_gateway::args::{Args, Commands, InitArgs, UseTls};
-use shuttle_gateway::auth::Key;
+use shuttle_gateway::args::{Args, Commands, UseTls};
 use shuttle_gateway::proxy::UserServiceBuilder;
 use shuttle_gateway::service::{GatewayService, MIGRATIONS};
 use shuttle_gateway::task;
 use shuttle_gateway::tls::{make_tls_acceptor, ChainAndPrivateKey};
 use shuttle_gateway::worker::{Worker, WORKER_QUEUE_SIZE};
 use sqlx::migrate::MigrateDatabase;
-use sqlx::{query, Sqlite, SqlitePool};
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous};
+use sqlx::{Sqlite, SqlitePool};
 use std::io::{self, Cursor};
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::{debug, error, info, info_span, trace, warn, Instrument};
-use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> io::Result<()> {
@@ -28,24 +28,7 @@ async fn main() -> io::Result<()> {
 
     trace!(args = ?args, "parsed args");
 
-    global::set_text_map_propagator(opentelemetry_datadog::DatadogPropagator::new());
-
-    let fmt_layer = fmt::layer();
-    let filter_layer = EnvFilter::try_from_default_env()
-        .or_else(|_| EnvFilter::try_new("info"))
-        .unwrap();
-
-    let tracer = opentelemetry_datadog::new_pipeline()
-        .with_service_name("gateway")
-        .with_agent_endpoint("http://datadog-agent:8126")
-        .install_batch(opentelemetry::runtime::Tokio)
-        .unwrap();
-    let opentelemetry = tracing_opentelemetry::layer().with_tracer(tracer);
-    tracing_subscriber::registry()
-        .with(filter_layer)
-        .with(fmt_layer)
-        .with(opentelemetry)
-        .init();
+    setup_tracing(tracing_subscriber::registry(), "gateway");
 
     let db_path = args.state.join("gateway.sqlite");
     let db_uri = db_path.to_str().unwrap();
@@ -60,13 +43,17 @@ async fn main() -> io::Result<()> {
             .unwrap()
             .to_string_lossy()
     );
-    let db = SqlitePool::connect(db_uri).await.unwrap();
 
+    let sqlite_options = SqliteConnectOptions::from_str(db_uri)
+        .unwrap()
+        .journal_mode(SqliteJournalMode::Wal)
+        .synchronous(SqliteSynchronous::Normal);
+
+    let db = SqlitePool::connect_with(sqlite_options).await.unwrap();
     MIGRATIONS.run(&db).await.unwrap();
 
     match args.command {
         Commands::Start(start_args) => start(db, args.state, start_args).await,
-        Commands::Init(init_args) => init(db, init_args).await,
     }
 }
 
@@ -196,6 +183,7 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
 
     let api_handle = api_builder
         .with_default_routes()
+        .with_auth_service(args.context.auth_uri)
         .with_default_traces()
         .serve();
 
@@ -210,23 +198,6 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
         _ = ambulance_handle => error!("ambulance handle finished"),
     );
 
-    Ok(())
-}
-
-async fn init(db: SqlitePool, args: InitArgs) -> io::Result<()> {
-    let key = match args.key {
-        Some(key) => key,
-        None => Key::new_random(),
-    };
-
-    query("INSERT INTO accounts (account_name, key, super_user) VALUES (?1, ?2, 1)")
-        .bind(&args.name)
-        .bind(&key)
-        .execute(&db)
-        .await
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-
-    println!("`{}` created as super user with key: {key}", args.name);
     Ok(())
 }
 

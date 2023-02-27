@@ -15,6 +15,7 @@ use hyper::Uri;
 use shuttle_common::backends::auth::{
     AdminSecretLayer, AuthPublicKey, Claim, JwtAuthenticationLayer, Scope, ScopedLayer,
 };
+use shuttle_common::backends::cache::CacheManager;
 use shuttle_common::backends::headers::XShuttleAccountName;
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
 use shuttle_common::models::secret;
@@ -41,6 +42,7 @@ pub async fn make_router(
     auth_uri: Uri,
     project_name: ProjectName,
 ) -> Router {
+    let public_key_cache_manager = CacheManager::new();
     Router::new()
         .route(
             "/projects/:project_name/services",
@@ -80,7 +82,10 @@ pub async fn make_router(
         .layer(Extension(persistence))
         .layer(Extension(deployment_manager))
         .layer(Extension(proxy_fqdn))
-        .layer(JwtAuthenticationLayer::new(AuthPublicKey::new(auth_uri)))
+        .layer(JwtAuthenticationLayer::new(
+            AuthPublicKey::new(auth_uri),
+            Arc::new(Box::new(public_key_cache_manager)),
+        ))
         .layer(AdminSecretLayer::new(admin_secret))
         // This route should be below the auth bearer since it does not need authentication
         .route("/projects/:project_name/status", get(get_status))

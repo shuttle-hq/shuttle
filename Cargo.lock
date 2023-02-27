@@ -6010,6 +6010,7 @@ dependencies = [
  "tracing-fluent-assertions",
  "tracing-opentelemetry",
  "tracing-subscriber",
+ "ttl_cache",
  "uuid 1.2.2",
 ]
 

@@ -1,7 +1,10 @@
-use std::{net::SocketAddr, time::Duration};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use clap::Parser;
-use shuttle_common::backends::auth::{AuthPublicKey, JwtAuthenticationLayer};
+use shuttle_common::backends::{
+    auth::{AuthPublicKey, JwtAuthenticationLayer},
+    cache::CacheManager,
+};
 use shuttle_provisioner::{Args, MyProvisioner, ProvisionerServer};
 use tonic::transport::Server;
 
@@ -31,10 +34,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .await
     .unwrap();
 
+    let public_key_cache_manager = CacheManager::new();
+
     println!("starting provisioner on {}", addr);
     Server::builder()
         .http2_keepalive_interval(Some(Duration::from_secs(30))) // Prevent deployer clients from loosing connection #ENG-219
-        .layer(JwtAuthenticationLayer::new(AuthPublicKey::new(auth_uri)))
+        .layer(JwtAuthenticationLayer::new(
+            AuthPublicKey::new(auth_uri),
+            Arc::new(Box::new(public_key_cache_manager)),
+        ))
         .add_service(ProvisionerServer::new(provisioner))
         .serve(addr)
         .await?;

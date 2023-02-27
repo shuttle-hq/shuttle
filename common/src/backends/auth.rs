@@ -1,4 +1,4 @@
-use std::{convert::Infallible, future::Future, ops::Add, pin::Pin};
+use std::{convert::Infallible, future::Future, ops::Add, pin::Pin, sync::Arc};
 
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -13,7 +13,7 @@ use thiserror::Error;
 use tower::{Layer, Service};
 use tracing::{error, trace};
 
-use super::headers::XShuttleAdminSecret;
+use super::{cache::CacheManagement, headers::XShuttleAdminSecret};
 
 const EXP_MINUTES: i64 = 5;
 const ISS: &str = "shuttle";
@@ -309,12 +309,19 @@ pub enum PublicKeyFnError {
 pub struct JwtAuthenticationLayer<F> {
     /// User provided function to get the public key from
     public_key_fn: F,
+    cache_manager: Arc<Box<dyn CacheManagement<Value = Vec<u8>>>>,
 }
 
 impl<F: PublicKeyFn> JwtAuthenticationLayer<F> {
     /// Create a new layer to validate JWT tokens with the given public key
-    pub fn new(public_key_fn: F) -> Self {
-        Self { public_key_fn }
+    pub fn new(
+        public_key_fn: F,
+        cache_manager: Arc<Box<dyn CacheManagement<Value = Vec<u8>>>>,
+    ) -> Self {
+        Self {
+            public_key_fn,
+            cache_manager,
+        }
     }
 }
 
@@ -325,6 +332,7 @@ impl<S, F: PublicKeyFn> Layer<S> for JwtAuthenticationLayer<F> {
         JwtAuthentication {
             inner,
             public_key_fn: self.public_key_fn.clone(),
+            cache_manager: self.cache_manager.clone(),
         }
     }
 }
@@ -334,6 +342,7 @@ impl<S, F: PublicKeyFn> Layer<S> for JwtAuthenticationLayer<F> {
 pub struct JwtAuthentication<S, F> {
     inner: S,
     public_key_fn: F,
+    cache_manager: Arc<Box<dyn CacheManagement<Value = Vec<u8>>>>,
 }
 
 impl<S, F, ResponseError> Service<Request<Body>> for JwtAuthentication<S, F>
@@ -363,30 +372,55 @@ where
                 let mut this = self.clone();
 
                 Box::pin(async move {
-                    match this.public_key_fn.public_key().await {
-                        Ok(public_key) => {
-                            match Claim::from_token(bearer.token().trim(), &public_key) {
-                                Ok(claim) => {
-                                    req.extensions_mut().insert(claim);
+                    let bearer_token = bearer.token().trim();
 
-                                    this.inner.call(req).await
-                                }
-                                Err(code) => Ok(Response::builder()
-                                    .status(code)
-                                    .body(Default::default())
-                                    .unwrap()),
+                    // First check if the public_key is in the cache.
+                    if let Some(public_key) = this.cache_manager.get(bearer_token) {
+                        match Claim::from_token(bearer_token, &public_key) {
+                            Ok(claim) => {
+                                req.extensions_mut().insert(claim);
+
+                                this.inner.call(req).await
                             }
-                        }
-                        Err(error) => {
-                            error!(
-                                error = &error as &dyn std::error::Error,
-                                "failed to get public key"
-                            );
-
-                            Ok(Response::builder()
-                                .status(StatusCode::SERVICE_UNAVAILABLE)
+                            Err(code) => Ok(Response::builder()
+                                .status(code)
                                 .body(Default::default())
-                                .unwrap())
+                                .unwrap()),
+                        }
+                    } else {
+                        // It isn't in the cache, fetch it with the public_key fn.
+                        match this.public_key_fn.public_key().await {
+                            Ok(public_key) => {
+                                let bearer_token = bearer.token().trim();
+                                match Claim::from_token(bearer_token, &public_key) {
+                                    Ok(claim) => {
+                                        req.extensions_mut().insert(claim);
+
+                                        // Insert the public_key in the cache.
+                                        this.cache_manager.insert(
+                                            bearer_token,
+                                            public_key,
+                                            std::time::Duration::from_secs(60),
+                                        );
+                                        this.inner.call(req).await
+                                    }
+                                    Err(code) => Ok(Response::builder()
+                                        .status(code)
+                                        .body(Default::default())
+                                        .unwrap()),
+                                }
+                            }
+                            Err(error) => {
+                                error!(
+                                    error = &error as &dyn std::error::Error,
+                                    "failed to get public key"
+                                );
+
+                                Ok(Response::builder()
+                                    .status(StatusCode::SERVICE_UNAVAILABLE)
+                                    .body(Default::default())
+                                    .unwrap())
+                            }
                         }
                     }
                 })
@@ -536,6 +570,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use axum::{routing::get, Extension, Router};
     use http::{Request, StatusCode};
     use hyper::{body, Body};
@@ -546,6 +582,8 @@ mod tests {
     };
     use serde_json::json;
     use tower::{ServiceBuilder, ServiceExt};
+
+    use crate::backends::cache::CacheManager;
 
     use super::{Claim, JwtAuthenticationLayer, Scope, ScopedLayer};
 
@@ -583,6 +621,7 @@ mod tests {
         let pair = Ed25519KeyPair::from_pkcs8(doc.as_ref()).unwrap();
         let public_key = pair.public_key().as_ref().to_vec();
 
+        let cache_manager = CacheManager::new();
         let router =
             Router::new()
                 .route(
@@ -593,11 +632,13 @@ mod tests {
                 )
                 .layer(
                     ServiceBuilder::new()
-                        .layer(JwtAuthenticationLayer::new(move || {
-                            let public_key = public_key.clone();
-
-                            async move { public_key.clone() }
-                        }))
+                        .layer(JwtAuthenticationLayer::new(
+                            move || {
+                                let public_key = public_key.clone();
+                                async move { public_key.clone() }
+                            },
+                            Arc::new(Box::new(cache_manager)),
+                        ))
                         .layer(ScopedLayer::new(vec![Scope::Project])),
                 );
 

@@ -34,7 +34,7 @@ tower = { workspace = true, optional = true }
 tower-http = { workspace = true, optional = true }
 tracing = { workspace = true }
 tracing-opentelemetry = { workspace = true, optional = true }
-ttl_cache = { version = "0.5.1", optional = true }
+ttl_cache = { workspace = true, optional = true }
 uuid = { workspace = true, features = ["v4", "serde"] }
 
 [features]

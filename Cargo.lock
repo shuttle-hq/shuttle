@@ -5935,7 +5935,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-auth"
-version = "0.1.0"
+version = "0.10.0"
 dependencies = [
  "anyhow",
  "async-trait",

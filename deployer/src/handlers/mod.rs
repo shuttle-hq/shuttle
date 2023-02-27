@@ -43,7 +43,7 @@ pub async fn make_router(
     auth_uri: Uri,
     project_name: ProjectName,
 ) -> Router {
-    let public_key_cache_manager = CacheManager::new();
+    let public_key_cache_manager = CacheManager::new(1);
     Router::new()
         .route(
             "/projects/:project_name/services",

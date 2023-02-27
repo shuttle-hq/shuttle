@@ -34,7 +34,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .await
     .unwrap();
 
-    let public_key_cache_manager = CacheManager::new();
+    let public_key_cache_manager = CacheManager::new(1);
 
     println!("starting provisioner on {}", addr);
     Server::builder()

@@ -17,16 +17,10 @@ pub struct CacheManager<T> {
 }
 
 impl<T> CacheManager<T> {
-    pub fn new() -> Self {
-        let cache = Arc::new(RwLock::new(TtlCache::new(1000)));
+    pub fn new(capacity: usize) -> Self {
+        let cache = Arc::new(RwLock::new(TtlCache::new(capacity)));
 
         Self { cache }
-    }
-}
-
-impl<T> Default for CacheManager<T> {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

@@ -17,6 +17,7 @@ use super::{cache::CacheManagement, headers::XShuttleAdminSecret};
 
 const EXP_MINUTES: i64 = 5;
 const ISS: &str = "shuttle";
+const PUBLIC_KEY_CACHE_KEY: &str = "shuttle.public-key";
 
 /// Layer to check the admin secret set by deployer is correct
 #[derive(Clone)]
@@ -372,11 +373,9 @@ where
                 let mut this = self.clone();
 
                 Box::pin(async move {
-                    let bearer_token = bearer.token().trim();
-
                     // First check if the public_key is in the cache.
-                    if let Some(public_key) = this.cache_manager.get(bearer_token) {
-                        match Claim::from_token(bearer_token, &public_key) {
+                    if let Some(public_key) = this.cache_manager.get(PUBLIC_KEY_CACHE_KEY) {
+                        match Claim::from_token(bearer.token().trim(), &public_key) {
                             Ok(claim) => {
                                 req.extensions_mut().insert(claim);
 
@@ -398,7 +397,7 @@ where
 
                                         // Insert the public_key in the cache.
                                         this.cache_manager.insert(
-                                            bearer_token,
+                                            PUBLIC_KEY_CACHE_KEY,
                                             public_key,
                                             std::time::Duration::from_secs(60),
                                         );
@@ -621,7 +620,7 @@ mod tests {
         let pair = Ed25519KeyPair::from_pkcs8(doc.as_ref()).unwrap();
         let public_key = pair.public_key().as_ref().to_vec();
 
-        let cache_manager = CacheManager::new();
+        let cache_manager = CacheManager::new(1);
         let router =
             Router::new()
                 .route(

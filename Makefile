@@ -67,9 +67,12 @@ POSTGRES_TAG?=14
 PANAMAX_EXTRA_PATH?=./extras/panamax
 PANAMAX_TAG?=1.0.6
 
+OTEL_EXTRA_PATH?=./extras/otel
+OTEL_TAG?=0.72.0
+
 RUST_LOG?=debug
 
-DOCKER_COMPOSE_ENV=STACK=$(STACK) BACKEND_TAG=$(BACKEND_TAG) DEPLOYER_TAG=$(DEPLOYER_TAG) PROVISIONER_TAG=$(PROVISIONER_TAG) POSTGRES_TAG=${POSTGRES_TAG} PANAMAX_TAG=${PANAMAX_TAG} APPS_FQDN=$(APPS_FQDN) DB_FQDN=$(DB_FQDN) POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) RUST_LOG=$(RUST_LOG) CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) MONGO_INITDB_ROOT_USERNAME=$(MONGO_INITDB_ROOT_USERNAME) MONGO_INITDB_ROOT_PASSWORD=$(MONGO_INITDB_ROOT_PASSWORD) DD_ENV=$(DD_ENV) USE_TLS=$(USE_TLS)
+DOCKER_COMPOSE_ENV=STACK=$(STACK) BACKEND_TAG=$(BACKEND_TAG) DEPLOYER_TAG=$(DEPLOYER_TAG) PROVISIONER_TAG=$(PROVISIONER_TAG) POSTGRES_TAG=${POSTGRES_TAG} PANAMAX_TAG=${PANAMAX_TAG} OTEL_TAG=${OTEL_TAG} APPS_FQDN=$(APPS_FQDN) DB_FQDN=$(DB_FQDN) POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) RUST_LOG=$(RUST_LOG) CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) MONGO_INITDB_ROOT_USERNAME=$(MONGO_INITDB_ROOT_USERNAME) MONGO_INITDB_ROOT_PASSWORD=$(MONGO_INITDB_ROOT_PASSWORD) DD_ENV=$(DD_ENV) USE_TLS=$(USE_TLS)
 
 .PHONY: images clean src up down deploy shuttle-% postgres docker-compose.rendered.yml test bump-% deploy-examples publish publish-% --validate-version
 
@@ -77,7 +80,7 @@ clean:
 	rm .shuttle-*
 	rm docker-compose.rendered.yml
 
-images: shuttle-provisioner shuttle-deployer shuttle-gateway shuttle-auth postgres panamax
+images: shuttle-provisioner shuttle-deployer shuttle-gateway shuttle-auth postgres panamax otel
 
 postgres:
 	docker buildx build \
@@ -94,6 +97,14 @@ panamax:
 	       $(BUILDX_FLAGS) \
 	       -f $(PANAMAX_EXTRA_PATH)/Containerfile \
 	       $(PANAMAX_EXTRA_PATH)
+
+otel:
+	docker buildx build \
+	       --build-arg OTEL_TAG=$(OTEL_TAG) \
+	       --tag $(CONTAINER_REGISTRY)/otel:$(OTEL_TAG) \
+	       $(BUILDX_FLAGS) \
+	       -f $(OTEL_EXTRA_PATH)/Containerfile \
+	       $(OTEL_EXTRA_PATH)
 
 docker-compose.rendered.yml: docker-compose.yml docker-compose.dev.yml
 	$(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE) $(DOCKER_COMPOSE_FILES) $(DOCKER_COMPOSE_CONFIG_FLAGS) -p $(STACK) config > $@

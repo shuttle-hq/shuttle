@@ -33,6 +33,8 @@ receivers:
         - targets: ['0.0.0.0:8888']
   docker_stats:
     endpoint: unix:///var/run/docker.sock
+    timeout: 20s
+    api_version: 1.41
 
 processors:
   batch:

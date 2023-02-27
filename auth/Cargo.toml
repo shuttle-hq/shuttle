@@ -1,7 +1,9 @@
 [package]
 name = "shuttle-auth"
-version = "0.11.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
@@ -13,7 +15,6 @@ clap = { workspace = true }
 http = { workspace = true }
 jsonwebtoken = { workspace = true }
 opentelemetry = { workspace = true }
-opentelemetry-datadog = { workspace = true }
 rand = { workspace = true }
 ring = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
@@ -23,7 +24,7 @@ thiserror = { workspace = true }
 tokio = { version = "1.22.0", features = ["full"] }
 tracing = { workspace = true }
 tracing-opentelemetry = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tracing-subscriber = { workspace = true }
 
 [dependencies.shuttle-common]
 workspace = true

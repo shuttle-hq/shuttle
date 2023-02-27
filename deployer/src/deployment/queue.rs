@@ -62,7 +62,7 @@ pub async fn task(
 
             async move {
                 match timeout(
-                    Duration::from_secs(60 * 5), // Timeout after 5 minutes if the build queue hangs or it takes too long for a slot to become available
+                    Duration::from_secs(60 * 3), // Timeout after 3 minutes if the build queue hangs or it takes too long for a slot to become available
                     wait_for_queue(queue_client.clone(), id),
                 )
                 .await
@@ -75,11 +75,15 @@ pub async fn task(
                     .handle(storage_manager, log_recorder, secret_recorder)
                     .await
                 {
-                    Ok(built) => promote_to_run(built, run_send_cloned).await,
-                    Err(err) => build_failed(&id, err),
+                    Ok(built) => {
+                        remove_from_queue(queue_client, id).await;
+                        promote_to_run(built, run_send_cloned).await
+                    }
+                    Err(err) => {
+                        remove_from_queue(queue_client, id).await;
+                        build_failed(&id, err)
+                    }
                 }
-
-                remove_from_queue(queue_client, id).await
             }
             .instrument(span)
             .await
@@ -97,6 +101,7 @@ fn build_failed(_id: &Uuid, error: impl std::error::Error + 'static) {
 
 #[instrument(skip(queue_client), fields(state = %State::Queued))]
 async fn wait_for_queue(queue_client: impl BuildQueueClient, id: Uuid) -> Result<()> {
+    trace!("getting a build slot");
     loop {
         let got_slot = queue_client.get_slot(id).await?;
 

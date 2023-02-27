@@ -24,7 +24,6 @@ hyper = { workspace = true, features = ["client", "http1", "http2", "tcp"] }
 hyper-reverse-proxy = { git = "https://github.com/chesedo/hyper-reverse-proxy", branch = "master" }
 once_cell = { workspace = true }
 opentelemetry = { workspace = true }
-opentelemetry-datadog = { workspace = true }
 opentelemetry-http = { workspace = true }
 pipe = "0.4.0"
 portpicker = { workspace = true }

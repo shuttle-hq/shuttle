@@ -5925,7 +5925,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-auth"
-version = "0.1.0"
+version = "0.10.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5985,6 +5985,7 @@ dependencies = [
  "opentelemetry",
  "opentelemetry-http",
  "opentelemetry-otlp",
+ "pin-project",
  "reqwest",
  "ring",
  "rustrict",
@@ -6000,6 +6001,7 @@ dependencies = [
  "tracing-fluent-assertions",
  "tracing-opentelemetry",
  "tracing-subscriber",
+ "ttl_cache",
  "uuid 1.2.2",
 ]
 
@@ -6076,6 +6078,7 @@ dependencies = [
  "opentelemetry",
  "opentelemetry-http",
  "pem",
+ "pin-project",
  "portpicker",
  "rand 0.8.5",
  "rcgen",

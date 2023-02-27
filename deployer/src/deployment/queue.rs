@@ -75,11 +75,15 @@ pub async fn task(
                     .handle(storage_manager, log_recorder, secret_recorder)
                     .await
                 {
-                    Ok(built) => promote_to_run(built, run_send_cloned).await,
-                    Err(err) => build_failed(&id, err),
+                    Ok(built) => {
+                        remove_from_queue(queue_client, id).await;
+                        promote_to_run(built, run_send_cloned).await
+                    }
+                    Err(err) => {
+                        remove_from_queue(queue_client, id).await;
+                        build_failed(&id, err)
+                    }
                 }
-
-                remove_from_queue(queue_client, id).await
             }
             .instrument(span)
             .await

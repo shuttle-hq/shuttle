@@ -6088,6 +6088,7 @@ dependencies = [
  "opentelemetry-datadog",
  "opentelemetry-http",
  "pem",
+ "pin-project",
  "portpicker",
  "rand 0.8.5",
  "rcgen",

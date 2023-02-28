@@ -65,6 +65,6 @@ service:
       processors: [attributes, batch]
       exporters: [datadog]
     metrics:
-      receivers: [hostmetrics, prometheus/otel, docker_stats, otlp]
+      receivers: [hostmetrics, prometheus/otel, otlp]
       processors: [batch]
       exporters: [datadog]

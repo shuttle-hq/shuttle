@@ -67,7 +67,7 @@ POSTGRES_EXTRA_PATH?=./extras/postgres
 POSTGRES_TAG?=14
 
 PANAMAX_EXTRA_PATH?=./extras/panamax
-PANAMAX_TAG?=1.0.6
+PANAMAX_TAG?=1.0.12
 
 OTEL_EXTRA_PATH?=./extras/otel
 OTEL_TAG?=0.72.0

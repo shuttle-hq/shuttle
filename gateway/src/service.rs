@@ -361,18 +361,28 @@ impl GatewayService {
         &self,
         project_name: ProjectName,
         account_name: AccountName,
+        is_admin: bool,
     ) -> Result<Project, Error> {
-        if let Some(row) = query("SELECT project_name, account_name, initial_key, project_state FROM projects WHERE project_name = ?1 AND account_name = ?2")
-            .bind(&project_name)
-            .bind(&account_name)
-            .fetch_optional(&self.db)
-            .await?
+        if let Some(row) = query(
+            r#"
+        SELECT project_name, account_name, initial_key, project_state 
+        FROM projects 
+        WHERE (project_name = ?1) 
+        AND (account_name = ?2 OR ?3)
+        "#,
+        )
+        .bind(&project_name)
+        .bind(&account_name)
+        .bind(is_admin)
+        .fetch_optional(&self.db)
+        .await?
         {
             // If the project already exists and belongs to this account
             let project = row.get::<SqlxJson<Project>, _>("project_state").0;
             if project.is_destroyed() {
                 // But is in `::Destroyed` state, recreate it
-                let mut creating = ProjectCreating::new_with_random_initial_key(project_name.clone());
+                let mut creating =
+                    ProjectCreating::new_with_random_initial_key(project_name.clone());
                 // Restore previous custom domain, if any
                 match self.find_custom_domain_for_project(&project_name).await {
                     Ok(custom_domain) => {
@@ -380,7 +390,7 @@ impl GatewayService {
                     }
                     Err(error) if error.kind() == ErrorKind::CustomDomainNotFound => {
                         // no previous custom domain
-                    },
+                    }
                     Err(error) => return Err(error),
                 }
                 let project = Project::Creating(creating);
@@ -582,7 +592,7 @@ pub mod tests {
         };
 
         let project = svc
-            .create_project(matrix.clone(), neo.clone())
+            .create_project(matrix.clone(), neo.clone(), false)
             .await
             .unwrap();
 
@@ -643,7 +653,8 @@ pub mod tests {
 
         // If recreated by a different user
         assert!(matches!(
-            svc.create_project(matrix.clone(), trinity.clone()).await,
+            svc.create_project(matrix.clone(), trinity.clone(), false)
+                .await,
             Err(Error {
                 kind: ErrorKind::ProjectAlreadyExists,
                 ..
@@ -652,7 +663,28 @@ pub mod tests {
 
         // If recreated by the same user
         assert!(matches!(
-            svc.create_project(matrix, neo).await,
+            svc.create_project(matrix.clone(), neo, false).await,
+            Ok(Project::Creating(_))
+        ));
+
+        let mut work = svc
+            .new_task()
+            .project(matrix.clone())
+            .and_then(task::destroy())
+            .build();
+
+        while let TaskResult::Pending(_) = work.poll(()).await {}
+        assert!(matches!(work.poll(()).await, TaskResult::Done(())));
+
+        // After project has been destroyed again...
+        assert!(matches!(
+            svc.find_project(&matrix).await,
+            Ok(Project::Destroyed(_))
+        ));
+
+        // If recreated by an admin
+        assert!(matches!(
+            svc.create_project(matrix, trinity, true).await,
             Ok(Project::Creating(_))
         ));
 
@@ -667,7 +699,7 @@ pub mod tests {
         let neo: AccountName = "neo".parse().unwrap();
         let matrix: ProjectName = "matrix".parse().unwrap();
 
-        svc.create_project(matrix.clone(), neo.clone())
+        svc.create_project(matrix.clone(), neo.clone(), false)
             .await
             .unwrap();
 
@@ -732,7 +764,7 @@ pub mod tests {
         );
 
         let _ = svc
-            .create_project(project_name.clone(), account.clone())
+            .create_project(project_name.clone(), account.clone(), false)
             .await
             .unwrap();
 
@@ -786,7 +818,7 @@ pub mod tests {
         );
 
         let _ = svc
-            .create_project(project_name.clone(), account.clone())
+            .create_project(project_name.clone(), account.clone(), false)
             .await
             .unwrap();
 
@@ -804,7 +836,7 @@ pub mod tests {
         assert!(matches!(work.poll(()).await, TaskResult::Done(())));
 
         let recreated_project = svc
-            .create_project(project_name.clone(), account.clone())
+            .create_project(project_name.clone(), account.clone(), false)
             .await
             .unwrap();
 

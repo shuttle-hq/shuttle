@@ -1008,7 +1008,7 @@ dependencies = [
  "tokio",
  "tokio-tungstenite",
  "tower",
- "tower-http 0.3.4",
+ "tower-http 0.3.5",
  "tower-layer",
  "tower-service",
 ]
@@ -1045,7 +1045,7 @@ dependencies = [
  "pin-project-lite 0.2.9",
  "tokio",
  "tower",
- "tower-http 0.3.4",
+ "tower-http 0.3.5",
  "tower-layer",
  "tower-service",
 ]
@@ -1065,7 +1065,7 @@ dependencies = [
  "pin-project-lite 0.2.9",
  "tokio",
  "tower",
- "tower-http 0.3.4",
+ "tower-http 0.3.5",
  "tower-layer",
  "tower-service",
 ]
@@ -1489,7 +1489,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-shuttle"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -2268,13 +2268,14 @@ dependencies = [
 
 [[package]]
 name = "dashmap"
-version = "5.3.4"
+version = "5.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3495912c9c1ccf2e18976439f4443f3fee0fd61f424ff99fde6a66b15ecb448f"
+checksum = "907076dfda823b0b36d2a1bb5f90c96660a5bbcd7729e10727f07858f22c4edc"
 dependencies = [
  "cfg-if 1.0.0",
  "hashbrown",
  "lock_api",
+ "once_cell",
  "parking_lot_core 0.9.3",
  "serde",
 ]
@@ -2966,9 +2967,9 @@ dependencies = [
 
 [[package]]
 name = "hashbrown"
-version = "0.12.1"
+version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db0d4cf898abf0081f964436dc980e96670a0f36863e4b83aaacdb65c9d7ccc3"
+checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
 dependencies = [
  "ahash",
 ]
@@ -3721,9 +3722,9 @@ checksum = "e34f76eb3611940e0e7d53a9aaa4e6a3151f69541a282fd0dad5571420c53ff1"
 
 [[package]]
 name = "lock_api"
-version = "0.4.7"
+version = "0.4.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "327fa5b6a6940e4699ec49a9beae1ea4845c6bab9314e4f84ac68742139d8c53"
+checksum = "435011366fe56583b16cf956f9df0095b405b82d76425bc8981c0e22e60ec4df"
 dependencies = [
  "autocfg 1.1.0",
  "scopeguard",
@@ -4199,27 +4200,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "opentelemetry-datadog"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "171770efa142d2a19455b7e985037f560b2e75461f822dd1688bfd83c14856f6"
-dependencies = [
- "async-trait",
- "futures-core",
- "http 0.2.8",
- "indexmap",
- "itertools",
- "once_cell",
- "opentelemetry",
- "opentelemetry-http",
- "opentelemetry-semantic-conventions",
- "reqwest",
- "rmp",
- "thiserror",
- "url",
-]
-
-[[package]]
 name = "opentelemetry-http"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4229,16 +4209,38 @@ dependencies = [
  "bytes 1.3.0",
  "http 0.2.8",
  "opentelemetry_api",
- "reqwest",
 ]
 
 [[package]]
-name = "opentelemetry-semantic-conventions"
-version = "0.10.0"
+name = "opentelemetry-otlp"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b02e0230abb0ab6636d18e2ba8fa02903ea63772281340ccac18e0af3ec9eeb"
+checksum = "d1c928609d087790fc936a1067bdc310ae702bdf3b090c3f281b713622c8bbde"
 dependencies = [
+ "async-trait",
+ "futures",
+ "futures-util",
+ "http 0.2.8",
  "opentelemetry",
+ "opentelemetry-proto",
+ "prost",
+ "thiserror",
+ "tokio",
+ "tonic",
+]
+
+[[package]]
+name = "opentelemetry-proto"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d61a2f56df5574508dd86aaca016c917489e589ece4141df1b5e349af8d66c28"
+dependencies = [
+ "futures",
+ "futures-util",
+ "opentelemetry",
+ "prost",
+ "tonic",
+ "tonic-build",
 ]
 
 [[package]]
@@ -5283,17 +5285,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rmp"
-version = "0.8.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "44519172358fd6d58656c86ab8e7fbc9e1490c3e8f14d35ed78ca0dd07403c9f"
-dependencies = [
- "byteorder",
- "num-traits",
- "paste",
-]
-
-[[package]]
 name = "rocket"
 version = "0.5.0-rc.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5917,7 +5908,7 @@ checksum = "45bb67a18fa91266cc7807181f62f9178a6873bfad7dc788c42e6430db40184f"
 
 [[package]]
 name = "shuttle-admin"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "anyhow",
  "clap 4.0.27",
@@ -5934,7 +5925,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-auth"
-version = "0.1.0"
+version = "0.11.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5946,7 +5937,6 @@ dependencies = [
  "hyper",
  "jsonwebtoken",
  "opentelemetry",
- "opentelemetry-datadog",
  "rand 0.8.5",
  "ring",
  "serde",
@@ -5964,7 +5954,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-codegen"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "pretty_assertions",
  "proc-macro-error",
@@ -5976,7 +5966,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-common"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5994,6 +5984,8 @@ dependencies = [
  "once_cell",
  "opentelemetry",
  "opentelemetry-http",
+ "opentelemetry-otlp",
+ "pin-project",
  "reqwest",
  "ring",
  "rustrict",
@@ -6004,17 +5996,18 @@ dependencies = [
  "tokio",
  "tonic",
  "tower",
- "tower-http 0.3.4",
+ "tower-http 0.3.5",
  "tracing",
  "tracing-fluent-assertions",
  "tracing-opentelemetry",
  "tracing-subscriber",
+ "ttl_cache",
  "uuid 1.2.2",
 ]
 
 [[package]]
 name = "shuttle-deployer"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6034,7 +6027,6 @@ dependencies = [
  "hyper-reverse-proxy 0.5.2-dev (git+https://github.com/chesedo/hyper-reverse-proxy?branch=master)",
  "once_cell",
  "opentelemetry",
- "opentelemetry-datadog",
  "opentelemetry-http",
  "pipe",
  "portpicker",
@@ -6061,7 +6053,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-gateway"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "acme2",
  "anyhow",
@@ -6084,9 +6076,9 @@ dependencies = [
  "num_cpus",
  "once_cell",
  "opentelemetry",
- "opentelemetry-datadog",
  "opentelemetry-http",
  "pem",
+ "pin-project",
  "portpicker",
  "rand 0.8.5",
  "rcgen",
@@ -6111,7 +6103,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-proto"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "prost",
  "shuttle-common",
@@ -6121,7 +6113,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-provisioner"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "aws-config",
  "aws-sdk-rds",
@@ -6147,7 +6139,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-secrets"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "async-trait",
  "shuttle-service",
@@ -6156,7 +6148,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-service"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "actix-web",
  "anyhow",
@@ -7196,9 +7188,9 @@ dependencies = [
 
 [[package]]
 name = "tower-http"
-version = "0.3.4"
+version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c530c8675c1dbf98facee631536fa116b5fb6382d7dd6dc1b118d970eafe3ba"
+checksum = "f873044bf02dd1e8239e9c1293ea39dad76dc594ec16185d0a1bf31d8dc8d858"
 dependencies = [
  "bitflags",
  "bytes 1.3.0",

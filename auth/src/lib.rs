@@ -4,7 +4,7 @@ mod error;
 mod secrets;
 mod user;
 
-use std::{io, str::FromStr};
+use std::{io, str::FromStr, time::Duration};
 
 use args::StartArgs;
 use sqlx::{
@@ -21,6 +21,8 @@ use crate::{
 };
 pub use api::ApiBuilder;
 pub use args::{Args, Commands, InitArgs};
+
+pub const COOKIE_EXPIRATION: Duration = Duration::from_secs(60 * 60 * 24); // One day
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 

@@ -1,4 +1,11 @@
-use std::{convert::Infallible, future::Future, ops::Add, pin::Pin};
+use std::{
+    convert::Infallible,
+    future::Future,
+    ops::Add,
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
+};
 
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -8,15 +15,23 @@ use http::{Request, Response, StatusCode, Uri};
 use http_body::combinators::UnsyncBoxBody;
 use hyper::{body, Body, Client};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header as JwtHeader, Validation};
+use opentelemetry::global;
+use opentelemetry_http::HeaderInjector;
+use pin_project::pin_project;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tower::{Layer, Service};
-use tracing::{error, trace};
+use tracing::{error, trace, Span};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
-use super::headers::XShuttleAdminSecret;
+use super::{
+    cache::{CacheManagement, CacheManager},
+    headers::XShuttleAdminSecret,
+};
 
-const EXP_MINUTES: i64 = 5;
+pub const EXP_MINUTES: i64 = 5;
 const ISS: &str = "shuttle";
+const PUBLIC_KEY_CACHE_KEY: &str = "shuttle.public-key";
 
 /// Layer to check the admin secret set by deployer is correct
 #[derive(Clone)]
@@ -152,7 +167,7 @@ pub struct ConvertResponse {
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
 pub struct Claim {
     /// Expiration time (as UTC timestamp).
-    exp: usize,
+    pub exp: usize,
     /// Issued at (as UTC timestamp).
     iat: usize,
     /// Issuer.
@@ -271,11 +286,16 @@ where
 #[derive(Clone)]
 pub struct AuthPublicKey {
     auth_uri: Uri,
+    cache_manager: Arc<Box<dyn CacheManagement<Value = Vec<u8>>>>,
 }
 
 impl AuthPublicKey {
     pub fn new(auth_uri: Uri) -> Self {
-        Self { auth_uri }
+        let public_key_cache_manager = CacheManager::new(1);
+        Self {
+            auth_uri,
+            cache_manager: Arc::new(Box::new(public_key_cache_manager)),
+        }
     }
 }
 
@@ -284,11 +304,35 @@ impl PublicKeyFn for AuthPublicKey {
     type Error = PublicKeyFnError;
 
     async fn public_key(&self) -> Result<Vec<u8>, Self::Error> {
-        let client = Client::new();
-        let uri = format!("{}public-key", self.auth_uri).parse()?;
-        let res = client.get(uri).await?;
-        let buf = body::to_bytes(res).await?;
-        Ok(buf.to_vec())
+        if let Some(public_key) = self.cache_manager.get(PUBLIC_KEY_CACHE_KEY) {
+            trace!("found public key in the cache, returning it");
+
+            Ok(public_key)
+        } else {
+            let client = Client::new();
+            let uri: Uri = format!("{}public-key", self.auth_uri).parse()?;
+            let mut request = Request::builder().uri(uri);
+
+            // Safe to unwrap since we just build it
+            let headers = request.headers_mut().unwrap();
+
+            let cx = Span::current().context();
+            global::get_text_map_propagator(|propagator| {
+                propagator.inject_context(&cx, &mut HeaderInjector(headers))
+            });
+
+            let res = client.request(request.body(Body::empty())?).await?;
+            let buf = body::to_bytes(res).await?;
+
+            trace!("inserting public key from auth service into cache");
+            self.cache_manager.insert(
+                PUBLIC_KEY_CACHE_KEY,
+                buf.to_vec(),
+                std::time::Duration::from_secs(60),
+            );
+
+            Ok(buf.to_vec())
+        }
     }
 }
 
@@ -299,6 +343,9 @@ pub enum PublicKeyFnError {
 
     #[error("hyper error: {0}")]
     Hyper(#[from] hyper::Error),
+
+    #[error("http error: {0}")]
+    Http(#[from] http::Error),
 }
 
 /// Layer to validate JWT tokens with a public key. Valid claims are added to the request extension
@@ -371,16 +418,20 @@ where
 
                                     this.inner.call(req).await
                                 }
-                                Err(code) => Ok(Response::builder()
-                                    .status(code)
-                                    .body(Default::default())
-                                    .unwrap()),
+                                Err(code) => {
+                                    error!(code = %code, "failed to decode JWT");
+
+                                    Ok(Response::builder()
+                                        .status(code)
+                                        .body(Default::default())
+                                        .unwrap())
+                                }
                             }
                         }
                         Err(error) => {
                             error!(
                                 error = &error as &dyn std::error::Error,
-                                "failed to get public key"
+                                "failed to get public key from auth service"
                             );
 
                             Ok(Response::builder()
@@ -423,6 +474,25 @@ pub struct ClaimService<S> {
     inner: S,
 }
 
+#[pin_project]
+pub struct ClaimServiceFuture<F> {
+    #[pin]
+    response_future: F,
+}
+
+impl<F, Response, Error> Future for ClaimServiceFuture<F>
+where
+    F: Future<Output = Result<Response, Error>>,
+{
+    type Output = Result<Response, Error>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+
+        this.response_future.poll(cx)
+    }
+}
+
 impl<S, RequestError> Service<Request<UnsyncBoxBody<Bytes, RequestError>>> for ClaimService<S>
 where
     S: Service<Request<UnsyncBoxBody<Bytes, RequestError>>> + Send + 'static,
@@ -430,8 +500,7 @@ where
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future =
-        Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
+    type Future = ClaimServiceFuture<S::Future>;
 
     fn poll_ready(
         &mut self,
@@ -448,9 +517,9 @@ where
             }
         }
 
-        let future = self.inner.call(req);
+        let response_future = self.inner.call(req);
 
-        Box::pin(async move { future.await })
+        ClaimServiceFuture { response_future }
     }
 }
 
@@ -483,18 +552,56 @@ pub struct Scoped<S> {
     inner: S,
     required: Vec<Scope>,
 }
+#[pin_project]
+pub struct ScopedFuture<F> {
+    #[pin]
+    state: ResponseState<F>,
+}
 
-impl<S, ResponseError> Service<Request<Body>> for Scoped<S>
+#[pin_project(project = ResponseStateProj)]
+pub enum ResponseState<F> {
+    Called {
+        #[pin]
+        inner: F,
+    },
+    Unauthorized,
+    Forbidden,
+}
+
+impl<F, Error> Future for ScopedFuture<F>
 where
-    S: Service<Request<Body>, Response = Response<UnsyncBoxBody<Bytes, ResponseError>>>
+    F: Future<Output = Result<axum::response::Response, Error>>,
+{
+    type Output = Result<axum::response::Response, Error>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+
+        match this.state.project() {
+            ResponseStateProj::Called { inner } => inner.poll(cx),
+            ResponseStateProj::Unauthorized => Poll::Ready(Ok(Response::builder()
+                .status(StatusCode::UNAUTHORIZED)
+                .body(Default::default())
+                .unwrap())),
+            ResponseStateProj::Forbidden => Poll::Ready(Ok(Response::builder()
+                .status(StatusCode::FORBIDDEN)
+                .body(Default::default())
+                .unwrap())),
+        }
+    }
+}
+
+impl<S> Service<Request<Body>> for Scoped<S>
+where
+    S: Service<Request<Body>, Response = http::Response<UnsyncBoxBody<bytes::Bytes, axum::Error>>>
         + Send
+        + Clone
         + 'static,
     S::Future: Send + 'static,
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future =
-        Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
+    type Future = ScopedFuture<S::Future>;
 
     fn poll_ready(
         &mut self,
@@ -507,12 +614,7 @@ where
         let Some(claim) = req.extensions().get::<Claim>() else {
             error!("claim extension is not set");
 
-            return Box::pin(async move {
-                Ok(Response::builder()
-                    .status(StatusCode::UNAUTHORIZED)
-                    .body(Default::default())
-                    .unwrap())
-            });
+            return ScopedFuture {state: ResponseState::Unauthorized};
         };
 
         if self
@@ -520,16 +622,16 @@ where
             .iter()
             .all(|scope| claim.scopes.contains(scope))
         {
-            let future = self.inner.call(req);
-
-            Box::pin(async move { future.await })
+            let response_future = self.inner.call(req);
+            ScopedFuture {
+                state: ResponseState::Called {
+                    inner: response_future,
+                },
+            }
         } else {
-            Box::pin(async move {
-                Ok(Response::builder()
-                    .status(StatusCode::FORBIDDEN)
-                    .body(Default::default())
-                    .unwrap())
-            })
+            ScopedFuture {
+                state: ResponseState::Forbidden,
+            }
         }
     }
 }
@@ -595,7 +697,6 @@ mod tests {
                     ServiceBuilder::new()
                         .layer(JwtAuthenticationLayer::new(move || {
                             let public_key = public_key.clone();
-
                             async move { public_key.clone() }
                         }))
                         .layer(ScopedLayer::new(vec![Scope::Project])),

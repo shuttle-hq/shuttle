@@ -2,7 +2,7 @@ use clap::Parser;
 use fqdn::FQDN;
 use futures::prelude::*;
 use instant_acme::{AccountCredentials, ChallengeType};
-use opentelemetry::global;
+use shuttle_common::backends::tracing::setup_tracing;
 use shuttle_gateway::acme::{AcmeClient, CustomDomain};
 use shuttle_gateway::api::latest::{ApiBuilder, SVC_DEGRADED_THRESHOLD};
 use shuttle_gateway::args::StartArgs;
@@ -21,7 +21,6 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::{debug, error, info, info_span, trace, warn, Instrument};
-use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> io::Result<()> {
@@ -29,24 +28,7 @@ async fn main() -> io::Result<()> {
 
     trace!(args = ?args, "parsed args");
 
-    global::set_text_map_propagator(opentelemetry_datadog::DatadogPropagator::new());
-
-    let fmt_layer = fmt::layer();
-    let filter_layer = EnvFilter::try_from_default_env()
-        .or_else(|_| EnvFilter::try_new("info"))
-        .unwrap();
-
-    let tracer = opentelemetry_datadog::new_pipeline()
-        .with_service_name("gateway")
-        .with_agent_endpoint("http://datadog-agent:8126")
-        .install_batch(opentelemetry::runtime::Tokio)
-        .unwrap();
-    let opentelemetry = tracing_opentelemetry::layer().with_tracer(tracer);
-    tracing_subscriber::registry()
-        .with(filter_layer)
-        .with(fmt_layer)
-        .with(opentelemetry)
-        .init();
+    setup_tracing(tracing_subscriber::registry(), "gateway");
 
     let db_path = args.state.join("gateway.sqlite");
     let db_uri = db_path.to_str().unwrap();

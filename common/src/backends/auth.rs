@@ -26,6 +26,7 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use super::{
     cache::{CacheManagement, CacheManager},
+    future::ResponseFuture,
     headers::XShuttleAdminSecret,
 };
 
@@ -474,25 +475,6 @@ pub struct ClaimService<S> {
     inner: S,
 }
 
-#[pin_project]
-pub struct ClaimServiceFuture<F> {
-    #[pin]
-    response_future: F,
-}
-
-impl<F, Response, Error> Future for ClaimServiceFuture<F>
-where
-    F: Future<Output = Result<Response, Error>>,
-{
-    type Output = Result<Response, Error>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.project();
-
-        this.response_future.poll(cx)
-    }
-}
-
 impl<S, RequestError> Service<Request<UnsyncBoxBody<Bytes, RequestError>>> for ClaimService<S>
 where
     S: Service<Request<UnsyncBoxBody<Bytes, RequestError>>> + Send + 'static,
@@ -500,7 +482,7 @@ where
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future = ClaimServiceFuture<S::Future>;
+    type Future = ResponseFuture<S::Future>;
 
     fn poll_ready(
         &mut self,
@@ -519,7 +501,7 @@ where
 
         let response_future = self.inner.call(req);
 
-        ClaimServiceFuture { response_future }
+        ResponseFuture { response_future }
     }
 }
 

@@ -499,9 +499,9 @@ where
             }
         }
 
-        let response_future = self.inner.call(req);
+        let future = self.inner.call(req);
 
-        ResponseFuture { response_future }
+        ResponseFuture { future }
     }
 }
 

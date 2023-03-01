@@ -9,7 +9,7 @@ use pin_project::pin_project;
 #[pin_project]
 pub struct ResponseFuture<F> {
     #[pin]
-    pub response_future: F,
+    pub future: F,
 }
 
 impl<F, Response, Error> Future for ResponseFuture<F>
@@ -21,6 +21,6 @@ where
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
 
-        this.response_future.poll(cx)
+        this.future.poll(cx)
     }
 }

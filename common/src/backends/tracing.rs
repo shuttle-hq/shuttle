@@ -140,6 +140,7 @@ where
         let parent_context = global::get_text_map_propagator(|propagator| {
             propagator.extract(&HeaderExtractor(req.headers()))
         });
+
         span.set_parent(parent_context);
 
         let response_future = self.inner.call(req);
@@ -191,8 +192,8 @@ where
             propagator.inject_context(&cx, &mut HeaderInjector(req.headers_mut()))
         });
 
-        let response_future = self.inner.call(req);
+        let future = self.inner.call(req);
 
-        ResponseFuture { response_future }
+        ResponseFuture { future }
     }
 }

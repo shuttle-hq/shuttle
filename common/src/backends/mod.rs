@@ -1,6 +1,6 @@
 pub mod auth;
 pub mod cache;
-pub mod future;
+mod future;
 pub mod headers;
 pub mod metrics;
 pub mod tracing;

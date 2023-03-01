@@ -3,11 +3,14 @@ ARG RUSTUP_TOOLCHAIN
 FROM rust:${RUSTUP_TOOLCHAIN}-buster as shuttle-build
 RUN apt-get update &&\
     apt-get install -y curl
+
 # download protoc binary and unzip it in usr/bin
-RUN curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v21.9/protoc-21.9-linux-x86_64.zip &&\
-    unzip -o protoc-21.9-linux-x86_64.zip -d /usr bin/protoc &&\
-    unzip -o protoc-21.9-linux-x86_64.zip -d /usr/ 'include/*' &&\
-    rm -f protoc-21.9-linux-x86_64.zip
+ARG PROTOC_ARCH
+RUN curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v21.9/protoc-21.9-linux-${PROTOC_ARCH}.zip &&\
+    unzip -o protoc-21.9-linux-${PROTOC_ARCH}.zip -d /usr bin/protoc &&\
+    unzip -o protoc-21.9-linux-${PROTOC_ARCH}.zip -d /usr/ 'include/*' &&\
+    rm -f protoc-21.9-linux-${PROTOC_ARCH}.zip
+
 RUN cargo install cargo-chef
 WORKDIR /build
 

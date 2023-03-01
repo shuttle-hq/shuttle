@@ -51,6 +51,30 @@ async fn main() {
                 .await
                 .expect("to get a certificate challenge response")
         }
+        Command::Acme(AcmeCommand::RenewCustomDomainCertificate {
+            fqdn,
+            project,
+            credentials,
+        }) => {
+            let credentials = fs::read_to_string(credentials).expect("to read credentials file");
+            let credentials =
+                serde_json::from_str(&credentials).expect("to parse content of credentials file");
+
+            client
+                .acme_renew_custom_domain_certificate(&fqdn, &project, &credentials)
+                .await
+                .expect("to get a certificate challenge response")
+        }
+        Command::Acme(AcmeCommand::RenewGatewayCertificate { credentials }) => {
+            let credentials = fs::read_to_string(credentials).expect("to read credentials file");
+            let credentials =
+                serde_json::from_str(&credentials).expect("to parse content of credentials file");
+
+            client
+                .acme_renew_gateway_certificate(&credentials)
+                .await
+                .expect("to get a certificate challenge response")
+        }
         Command::ProjectNames => {
             let projects = client
                 .get_projects()

@@ -61,6 +61,30 @@ pub enum AcmeCommand {
         #[arg(long)]
         credentials: PathBuf,
     },
+
+    /// Renew the certificate for a FQDN
+    RenewCustomDomainCertificate {
+        /// Fqdn to renew the certificate for
+        #[arg(long)]
+        fqdn: String,
+
+        /// Project to renew the certificate for
+        #[arg(long)]
+        project: ProjectName,
+
+        /// Path to acme credentials file
+        /// This should have been created with `acme create-account`
+        #[arg(long)]
+        credentials: PathBuf,
+    },
+
+    /// Renew certificate for the shuttle gateway
+    RenewGatewayCertificate {
+        /// Path to acme credentials file
+        /// This should have been created with `acme create-account`
+        #[arg(long)]
+        credentials: PathBuf,
+    },
 }
 
 #[derive(Subcommand, Debug)]

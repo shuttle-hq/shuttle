@@ -32,6 +32,11 @@ pub struct CustomDomain {
     pub private_key: String,
 }
 
+pub enum AcmeCredentials<'a> {
+    InMemory(AccountCredentials<'a>),
+    GatewayState,
+}
+
 /// An ACME client implementation that completes Http01 challenges
 /// It is safe to clone this type as it functions as a singleton
 #[derive(Clone, Default)]
@@ -60,7 +65,8 @@ impl AcmeClient {
         self.0.lock().await.remove(token);
     }
 
-    /// Create a new ACME account that can be restored using by deserializing the returned JSON into a [instant_acme::AccountCredentials]
+    /// Create a new ACME account that can be restored by using the deserialization
+    /// of the returned JSON into a [instant_acme::AccountCredentials]
     pub async fn create_account(
         &self,
         email: &str,
@@ -101,15 +107,8 @@ impl AcmeClient {
     ) -> Result<(String, String), AcmeClientError> {
         trace!(identifier, "requesting acme certificate");
 
-        let account = Account::from_credentials(credentials).map_err(|error| {
-            error!(
-                error = &error as &dyn std::error::Error,
-                "failed to convert acme credentials into account"
-            );
-            AcmeClientError::AccountCreation
-        })?;
-
-        let (mut order, state) = account
+        let (mut order, state) = AccountWrapper::from(credentials)
+            .0
             .new_order(&NewOrder {
                 identifiers: &[Identifier::Dns(identifier.to_string())],
             })
@@ -285,6 +284,24 @@ impl AcmeClient {
             .await;
 
         res
+    }
+}
+
+#[derive(Clone)]
+pub struct AccountWrapper(pub Account);
+
+impl<'a> From<AccountCredentials<'a>> for AccountWrapper {
+    fn from(value: AccountCredentials<'a>) -> Self {
+        AccountWrapper(
+            Account::from_credentials(value)
+                .map_err(|error| {
+                    error!(
+                        error = &error as &dyn std::error::Error,
+                        "failed to convert acme credentials into account"
+                    );
+                })
+                .expect("Malformed account credentials."),
+        )
     }
 }
 

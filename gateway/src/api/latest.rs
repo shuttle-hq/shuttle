@@ -1,5 +1,6 @@
 use std::io::Cursor;
 use std::net::SocketAddr;
+use std::ops::Sub;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -28,14 +29,17 @@ use tokio::sync::{Mutex, MutexGuard};
 use tracing::{field, instrument, trace};
 use ttl_cache::TtlCache;
 use uuid::Uuid;
+use x509_parser::parse_x509_certificate;
+use x509_parser::time::ASN1Time;
 
 use crate::acme::{AcmeClient, CustomDomain};
 use crate::auth::{ScopedUser, User};
 use crate::project::{ContainerInspectResponseExt, Project, ProjectCreating};
+use crate::service::GatewayService;
 use crate::task::{self, BoxedTask, TaskResult};
 use crate::tls::GatewayCertResolver;
 use crate::worker::WORKER_QUEUE_SIZE;
-use crate::{Error, GatewayService, ProjectName};
+use crate::{Error, ProjectName};
 
 use super::auth_layer::ShuttleAuthLayer;
 
@@ -321,7 +325,7 @@ async fn create_acme_account(
 }
 
 #[instrument(skip_all, fields(%project_name, %fqdn))]
-async fn request_acme_certificate(
+async fn request_custom_domain_acme_certificate(
     State(RouterState {
         service, sender, ..
     }): State<RouterState>,
@@ -334,31 +338,17 @@ async fn request_acme_certificate(
         .parse()
         .map_err(|_err| Error::from(ErrorKind::InvalidCustomDomain))?;
 
-    let (certs, private_key) = match service.project_details_for_custom_domain(&fqdn).await {
-        Ok(CustomDomain {
-            certificate,
-            private_key,
-            ..
-        }) => (certificate, private_key),
-        Err(err) if err.kind() == ErrorKind::CustomDomainNotFound => {
-            let (certs, private_key) = acme_client
-                .create_certificate(&fqdn.to_string(), ChallengeType::Http01, credentials)
-                .await?;
-            service
-                .create_custom_domain(project_name.clone(), &fqdn, &certs, &private_key)
-                .await?;
-            (certs, private_key)
-        }
-        Err(err) => return Err(err),
-    };
+    let (certs, private_key) = service
+        .create_custom_domain_certificate(&fqdn, &acme_client, &project_name, credentials)
+        .await?;
 
     let project = service.find_project(&project_name).await?;
     let idle_minutes = project.container().unwrap().idle_minutes();
 
-    // destroy and recreate the project with the new domain
+    // Destroy and recreate the project with the new domain.
     service
         .new_task()
-        .project(project_name)
+        .project(project_name.clone())
         .and_then(task::destroy())
         .and_then(task::run_until_done())
         .and_then(task::run({
@@ -385,7 +375,79 @@ async fn request_acme_certificate(
         .serve_pem(&fqdn.to_string(), Cursor::new(buf))
         .await?;
 
-    Ok("certificate created".to_string())
+    Ok(format!(
+        "New certificate created for {} project.",
+        project_name
+    ))
+}
+
+#[instrument(skip_all, fields(%project_name, %fqdn))]
+async fn renew_custom_domain_acme_certificate(
+    State(RouterState { service, .. }): State<RouterState>,
+    Extension(acme_client): Extension<AcmeClient>,
+    Extension(resolver): Extension<Arc<GatewayCertResolver>>,
+    Path((project_name, fqdn)): Path<(ProjectName, String)>,
+    AxumJson(credentials): AxumJson<AccountCredentials<'_>>,
+) -> Result<String, Error> {
+    let fqdn: FQDN = fqdn
+        .parse()
+        .map_err(|_err| Error::from(ErrorKind::InvalidCustomDomain))?;
+    // Try retrieve the current certificate if any.
+    match service.project_details_for_custom_domain(&fqdn).await {
+        Ok(CustomDomain { certificate, .. }) => {
+            let (_, x509_cert_chain) = parse_x509_certificate(certificate.as_bytes())
+                .unwrap_or_else(|_| {
+                    panic!(
+                        "Malformed existing X509 certificate for {} project.",
+                        project_name
+                    )
+                });
+            let diff = x509_cert_chain
+                .validity()
+                .not_after
+                .sub(ASN1Time::now())
+                .unwrap();
+            // If current certificate validity less_or_eq than 30 days, attempt renewal.
+            if diff.whole_days() <= 30 {
+                return match acme_client
+                    .create_certificate(&fqdn.to_string(), ChallengeType::Http01, credentials)
+                    .await
+                {
+                    // If successfuly created, save the certificate in memory to be
+                    // served in the future.
+                    Ok((certs, private_key)) => {
+                        let mut buf = Vec::new();
+                        buf.extend(certs.as_bytes());
+                        buf.extend(private_key.as_bytes());
+                        resolver
+                            .serve_pem(&fqdn.to_string(), Cursor::new(buf))
+                            .await?;
+                        Ok(format!("Certificate renewed for {} project.", project_name))
+                    }
+                    Err(err) => Err(err.into()),
+                };
+            } else {
+                Ok(format!(
+                    "Certificate renewal skipped, {} project certificate still valid for {} days.",
+                    project_name, diff
+                ))
+            }
+        }
+        Err(err) => Err(err),
+    }
+}
+
+#[instrument(skip_all)]
+async fn renew_gateway_acme_certificate(
+    State(RouterState { service, .. }): State<RouterState>,
+    Extension(acme_client): Extension<AcmeClient>,
+    Extension(resolver): Extension<Arc<GatewayCertResolver>>,
+    AxumJson(credentials): AxumJson<AccountCredentials<'_>>,
+) -> Result<String, Error> {
+    service
+        .renew_certificate(&acme_client, resolver, credentials)
+        .await;
+    Ok("Renewed the gate certificate.".to_string())
 }
 
 async fn get_projects(
@@ -440,8 +502,22 @@ impl ApiBuilder {
             .route(
                 "/admin/acme/request/:project_name/:fqdn",
                 post(
-                    request_acme_certificate
+                    request_custom_domain_acme_certificate
                         .layer(ScopedLayer::new(vec![Scope::CustomDomainCreate])),
+                ),
+            )
+            .route(
+                "/admin/acme/renew/:project_name/:fqdn",
+                post(
+                    renew_custom_domain_acme_certificate
+                        .layer(ScopedLayer::new(vec![Scope::CustomDomainCertificateRenew])),
+                ),
+            )
+            .route(
+                "/admin/acme/gateway/renew",
+                post(
+                    renew_gateway_acme_certificate
+                        .layer(ScopedLayer::new(vec![Scope::GatewayCertificateRenew])),
                 ),
             )
             .layer(Extension(acme))
@@ -583,7 +659,7 @@ pub mod tests {
     #[tokio::test]
     async fn api_create_get_delete_projects() -> anyhow::Result<()> {
         let world = World::new().await;
-        let service = Arc::new(GatewayService::init(world.args(), world.pool()).await);
+        let service = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await);
 
         let (sender, mut receiver) = channel::<BoxedTask>(256);
         tokio::spawn(async move {
@@ -593,7 +669,7 @@ pub mod tests {
         });
 
         let mut router = ApiBuilder::new()
-            .with_service(Arc::clone(&service))
+            .with_service(Arc::<GatewayService>::clone(&service))
             .with_sender(sender)
             .with_default_routes()
             .with_auth_service(world.context().auth_uri)
@@ -733,7 +809,7 @@ pub mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn status() {
         let world = World::new().await;
-        let service = Arc::new(GatewayService::init(world.args(), world.pool()).await);
+        let service = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await);
 
         let (sender, mut receiver) = channel::<BoxedTask>(1);
         let (ctl_send, ctl_recv) = oneshot::channel();
@@ -750,7 +826,7 @@ pub mod tests {
         });
 
         let mut router = ApiBuilder::new()
-            .with_service(Arc::clone(&service))
+            .with_service(Arc::<GatewayService>::clone(&service))
             .with_sender(sender)
             .with_default_routes()
             .with_auth_service(world.context().auth_uri)

@@ -63,6 +63,12 @@ CARGO_PROFILE=debug
 RUST_LOG?=shuttle=trace,debug
 endif
 
+ARCH=$(shell uname -m)
+PROTOC_ARCH=$(ARCH)
+ifeq ($(ARCH), arm64)
+PROTOC_ARCH=aarch_64
+endif
+
 POSTGRES_EXTRA_PATH?=./extras/postgres
 POSTGRES_TAG?=14
 
@@ -90,6 +96,7 @@ images: shuttle-provisioner shuttle-deployer shuttle-gateway shuttle-auth postgr
 
 postgres:
 	docker buildx build \
+              --build-arg PROTOC_ARCH=$(PROTOC_ARCH) \
 	       --build-arg POSTGRES_TAG=$(POSTGRES_TAG) \
 	       --tag $(CONTAINER_REGISTRY)/postgres:$(POSTGRES_TAG) \
 	       $(BUILDX_FLAGS) \
@@ -134,6 +141,7 @@ down: docker-compose.rendered.yml
 
 shuttle-%: ${SRC} Cargo.lock
 	docker buildx build \
+	       --build-arg PROTOC_ARCH=$(PROTOC_ARCH) \
 	       --build-arg folder=$(*) \
            --build-arg prepare_args=$(PREPARE_ARGS) \
 	       --build-arg RUSTUP_TOOLCHAIN=$(RUSTUP_TOOLCHAIN) \

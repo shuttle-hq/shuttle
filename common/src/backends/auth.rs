@@ -1,11 +1,4 @@
-use std::{
-    convert::Infallible,
-    future::Future,
-    ops::Add,
-    pin::Pin,
-    sync::Arc,
-    task::{Context, Poll},
-};
+use std::{convert::Infallible, future::Future, ops::Add, pin::Pin, sync::Arc};
 
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -17,7 +10,6 @@ use hyper::{body, Body, Client};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header as JwtHeader, Validation};
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
-use pin_project::pin_project;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tower::{Layer, Service};
@@ -26,9 +18,8 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use super::{
     cache::{CacheManagement, CacheManager},
-    future::ResponseFuture,
+    future::{ResponseFuture, StatusCodeFuture},
     headers::XShuttleAdminSecret,
-    StatusCodeFuture,
 };
 
 pub const EXP_MINUTES: i64 = 5;

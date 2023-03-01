@@ -1,4 +1,8 @@
-use std::{future::Future, pin::Pin};
+use std::{
+    future::Future,
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 use http::{Request, Response};
 use opentelemetry::{
@@ -9,10 +13,13 @@ use opentelemetry::{
 };
 use opentelemetry_http::{HeaderExtractor, HeaderInjector};
 use opentelemetry_otlp::WithExportConfig;
+use pin_project::pin_project;
 use tower::{Layer, Service};
-use tracing::{debug_span, Span, Subscriber};
+use tracing::{debug_span, instrument::Instrumented, Instrument, Span, Subscriber};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use tracing_subscriber::{fmt, prelude::*, registry::LookupSpan, EnvFilter};
+
+use super::future::ResponseFuture;
 
 pub fn setup_tracing<S>(subscriber: S, service_name: &str)
 where
@@ -67,6 +74,36 @@ pub struct ExtractPropagation<S> {
     inner: S,
 }
 
+#[pin_project]
+pub struct ExtractPropagationFuture<F> {
+    #[pin]
+    response_future: F,
+}
+
+impl<F, Body, Error> Future for ExtractPropagationFuture<F>
+where
+    F: Future<Output = Result<Response<Body>, Error>>,
+{
+    type Output = Result<Response<Body>, Error>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+
+        match this.response_future.poll(cx) {
+            Poll::Ready(result) => match result {
+                Ok(response) => {
+                    Span::current().record("http.status_code", response.status().as_u16());
+
+                    Poll::Ready(Ok(response))
+                }
+                other => Poll::Ready(other),
+            },
+
+            Poll::Pending => Poll::Pending,
+        }
+    }
+}
+
 impl<S, Body, ResponseBody> Service<Request<Body>> for ExtractPropagation<S>
 where
     S: Service<Request<Body>, Response = Response<ResponseBody>> + Send + 'static,
@@ -74,8 +111,7 @@ where
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future =
-        Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
+    type Future = ExtractPropagationFuture<Instrumented<S::Future>>;
 
     fn poll_ready(
         &mut self,
@@ -95,21 +131,12 @@ where
         let parent_context = global::get_text_map_propagator(|propagator| {
             propagator.extract(&HeaderExtractor(req.headers()))
         });
+
         span.set_parent(parent_context);
 
-        let future = self.inner.call(req);
+        let response_future = self.inner.call(req).instrument(span);
 
-        Box::pin(async move {
-            let _guard = span.enter();
-
-            match future.await {
-                Ok(response) => {
-                    span.record("http.status_code", response.status().as_u16());
-                    Ok(response)
-                }
-                other => other,
-            }
-        })
+        ExtractPropagationFuture { response_future }
     }
 }
 
@@ -137,8 +164,7 @@ where
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future =
-        Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
+    type Future = ResponseFuture<S::Future>;
 
     fn poll_ready(
         &mut self,
@@ -156,6 +182,6 @@ where
 
         let future = self.inner.call(req);
 
-        Box::pin(async move { future.await })
+        ResponseFuture { future }
     }
 }

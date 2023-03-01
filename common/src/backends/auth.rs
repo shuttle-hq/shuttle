@@ -28,7 +28,7 @@ use super::{
     cache::{CacheManagement, CacheManager},
     future::ResponseFuture,
     headers::XShuttleAdminSecret,
-    ResponseState, StatusCodeFuture,
+    StatusCodeFuture,
 };
 
 pub const EXP_MINUTES: i64 = 5;
@@ -87,16 +87,10 @@ where
             Ok(Some(secret)) if secret.0 == self.secret => {
                 let future = self.inner.call(req);
 
-                StatusCodeFuture {
-                    state: ResponseState::Called { inner: future },
-                }
+                StatusCodeFuture::Poll(future)
             }
-            Ok(_) => StatusCodeFuture {
-                state: ResponseState::Unauthorized,
-            },
-            Err(_) => StatusCodeFuture {
-                state: ResponseState::BadRequest,
-            },
+            Ok(_) => StatusCodeFuture::Code(StatusCode::UNAUTHORIZED),
+            Err(_) => StatusCodeFuture::Code(StatusCode::BAD_REQUEST),
         }
     }
 }
@@ -554,7 +548,7 @@ where
         let Some(claim) = req.extensions().get::<Claim>() else {
             error!("claim extension is not set");
 
-            return StatusCodeFuture {state: ResponseState::Unauthorized};
+            return StatusCodeFuture::Code(StatusCode::UNAUTHORIZED);
         };
 
         if self
@@ -563,15 +557,9 @@ where
             .all(|scope| claim.scopes.contains(scope))
         {
             let response_future = self.inner.call(req);
-            StatusCodeFuture {
-                state: ResponseState::Called {
-                    inner: response_future,
-                },
-            }
+            StatusCodeFuture::Poll(response_future)
         } else {
-            StatusCodeFuture {
-                state: ResponseState::Forbidden,
-            }
+            StatusCodeFuture::Code(StatusCode::FORBIDDEN)
         }
     }
 }

@@ -16,21 +16,13 @@ pub mod metrics;
 pub mod tracing;
 
 /// Future for layers that might return a different status code
-#[pin_project]
-pub struct StatusCodeFuture<F> {
-    #[pin]
-    state: ResponseState<F>,
-}
+#[pin_project(project = StatusCodeProj)]
+pub enum StatusCodeFuture<F> {
+    // A future that should be polled
+    Poll(#[pin] F),
 
-#[pin_project(project = ResponseStateProj)]
-pub enum ResponseState<F> {
-    Called {
-        #[pin]
-        inner: F,
-    },
-    Unauthorized,
-    Forbidden,
-    BadRequest,
+    // A status code to return
+    Code(StatusCode),
 }
 
 impl<F, Error> Future for StatusCodeFuture<F>
@@ -42,18 +34,10 @@ where
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
 
-        match this.state.project() {
-            ResponseStateProj::Called { inner } => inner.poll(cx),
-            ResponseStateProj::Unauthorized => Poll::Ready(Ok(Response::builder()
-                .status(StatusCode::UNAUTHORIZED)
-                .body(Default::default())
-                .unwrap())),
-            ResponseStateProj::Forbidden => Poll::Ready(Ok(Response::builder()
-                .status(StatusCode::FORBIDDEN)
-                .body(Default::default())
-                .unwrap())),
-            ResponseStateProj::BadRequest => Poll::Ready(Ok(Response::builder()
-                .status(StatusCode::BAD_REQUEST)
+        match this {
+            StatusCodeProj::Poll(inner) => inner.poll(cx),
+            StatusCodeProj::Code(status_code) => Poll::Ready(Ok(Response::builder()
+                .status(*status_code)
                 .body(Default::default())
                 .unwrap())),
         }

@@ -182,6 +182,6 @@ where
 
         let future = self.inner.call(req);
 
-        ResponseFuture { future }
+        ResponseFuture(future)
     }
 }

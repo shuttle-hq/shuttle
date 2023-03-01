@@ -8,11 +8,9 @@ use axum::response::Response;
 use http::StatusCode;
 use pin_project::pin_project;
 
+// Future for layers that just return the inner response
 #[pin_project]
-pub struct ResponseFuture<F> {
-    #[pin]
-    pub future: F,
-}
+pub struct ResponseFuture<F>(#[pin] pub F);
 
 impl<F, Response, Error> Future for ResponseFuture<F>
 where
@@ -23,7 +21,7 @@ where
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
 
-        this.future.poll(cx)
+        this.0.poll(cx)
     }
 }
 

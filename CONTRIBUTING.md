@@ -28,7 +28,7 @@ You should now be ready to setup a local environment to test code changes to cor
 From the root of the shuttle repo, build the required images with:
 
 ```bash
-make images
+USE_PANAMAX=disabled make images
 ```
 
 > Note: The stack uses [panamax](https://github.com/panamax-rs/panamax) by default to mirror crates.io content. We do this in order to avoid overloading upstream mirrors and hitting rate limits. After syncing the cache, expect to see the panamax volume take about 100GiB of space. This may not be desirable for local testing. To avoid using panamax, run `USE_PANAMAX=disable make images` instead.
@@ -38,7 +38,7 @@ The images get built with [cargo-chef](https://github.com/LukeMathWalker/cargo-c
 You can now start a local deployment of shuttle and the required containers with:
 
 ```bash
-make up
+USE_PANAMAX=disabled make up
 ```
 
 > Note: Other useful commands can be found within the [Makefile](https://github.com/shuttle-hq/shuttle/blob/main/Makefile).

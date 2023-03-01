@@ -1,20 +1,27 @@
 use std::{collections::BTreeMap, path::PathBuf};
 
 use async_trait::async_trait;
-use shuttle_common::{database, DatabaseReadyInfo};
+use shuttle_common::{
+    backends::{
+        auth::{Claim, ClaimLayer, ClaimService},
+        tracing::{InjectPropagation, InjectPropagationLayer},
+    },
+    database, DatabaseReadyInfo,
+};
 use shuttle_proto::provisioner::{
     database_request::DbType, provisioner_client::ProvisionerClient, DatabaseRequest,
 };
-use shuttle_service::{Factory, ServiceName};
+use shuttle_service::{Environment, Factory, ServiceName};
 use thiserror::Error;
 use tonic::{
     transport::{Channel, Endpoint},
     Request,
 };
+use tower::ServiceBuilder;
 use tracing::{debug, info, trace};
 use uuid::Uuid;
 
-use crate::persistence::{Resource, ResourceRecorder, ResourceType, SecretGetter};
+use crate::persistence::{Resource, ResourceManager, ResourceType, SecretGetter};
 
 use super::storage_manager::StorageManager;
 
@@ -31,19 +38,20 @@ pub trait AbstractFactory: Send + Sync + 'static {
         service_id: Uuid,
         deployment_id: Uuid,
         storage_manager: StorageManager,
+        claim: Option<Claim>,
     ) -> Result<Self::Output, Self::Error>;
 }
 
 /// An abstract factory that makes factories which uses provisioner
 #[derive(Clone)]
-pub struct AbstractProvisionerFactory<R: ResourceRecorder, S: SecretGetter> {
+pub struct AbstractProvisionerFactory<R: ResourceManager, S: SecretGetter> {
     provisioner_uri: Endpoint,
-    resource_recorder: R,
+    resource_manager: R,
     secret_getter: S,
 }
 
 #[async_trait]
-impl<R: ResourceRecorder, S: SecretGetter> AbstractFactory for AbstractProvisionerFactory<R, S> {
+impl<R: ResourceManager, S: SecretGetter> AbstractFactory for AbstractProvisionerFactory<R, S> {
     type Output = ProvisionerFactory<R, S>;
     type Error = ProvisionerError;
 
@@ -53,26 +61,36 @@ impl<R: ResourceRecorder, S: SecretGetter> AbstractFactory for AbstractProvision
         service_id: Uuid,
         deployment_id: Uuid,
         storage_manager: StorageManager,
+        claim: Option<Claim>,
     ) -> Result<Self::Output, Self::Error> {
-        let provisioner_client = ProvisionerClient::connect(self.provisioner_uri.clone()).await?;
+        let channel = self.provisioner_uri.clone().connect().await?;
+        let channel = ServiceBuilder::new()
+            .layer(ClaimLayer)
+            .layer(InjectPropagationLayer)
+            .service(channel);
 
-        Ok(ProvisionerFactory::new(
+        let provisioner_client = ProvisionerClient::new(channel);
+
+        Ok(ProvisionerFactory {
             provisioner_client,
             service_name,
             service_id,
             deployment_id,
             storage_manager,
-            self.resource_recorder.clone(),
-            self.secret_getter.clone(),
-        ))
+            resource_manager: self.resource_manager.clone(),
+            secret_getter: self.secret_getter.clone(),
+            claim,
+            info: None,
+            secrets: None,
+        })
     }
 }
 
-impl<R: ResourceRecorder, S: SecretGetter> AbstractProvisionerFactory<R, S> {
-    pub fn new(provisioner_uri: Endpoint, resource_recorder: R, secret_getter: S) -> Self {
+impl<R: ResourceManager, S: SecretGetter> AbstractProvisionerFactory<R, S> {
+    pub fn new(provisioner_uri: Endpoint, resource_manager: R, secret_getter: S) -> Self {
         Self {
             provisioner_uri,
-            resource_recorder,
+            resource_manager,
             secret_getter,
         }
     }
@@ -85,82 +103,103 @@ pub enum ProvisionerError {
 }
 
 /// A factory (service locator) which goes through the provisioner crate
-pub struct ProvisionerFactory<R: ResourceRecorder, S: SecretGetter> {
+pub struct ProvisionerFactory<R: ResourceManager, S: SecretGetter> {
     service_name: ServiceName,
     service_id: Uuid,
     deployment_id: Uuid,
     storage_manager: StorageManager,
-    provisioner_client: ProvisionerClient<Channel>,
+    provisioner_client: ProvisionerClient<ClaimService<InjectPropagation<Channel>>>,
     info: Option<DatabaseReadyInfo>,
-    resource_recorder: R,
+    resource_manager: R,
     secret_getter: S,
     secrets: Option<BTreeMap<String, String>>,
-}
-
-impl<R: ResourceRecorder, S: SecretGetter> ProvisionerFactory<R, S> {
-    pub(crate) fn new(
-        provisioner_client: ProvisionerClient<Channel>,
-        service_name: ServiceName,
-        service_id: Uuid,
-        deployment_id: Uuid,
-        storage_manager: StorageManager,
-        resource_recorder: R,
-        secret_getter: S,
-    ) -> Self {
-        Self {
-            provisioner_client,
-            service_name,
-            service_id,
-            deployment_id,
-            storage_manager,
-            info: None,
-            resource_recorder,
-            secret_getter,
-            secrets: None,
-        }
-    }
+    claim: Option<Claim>,
 }
 
 #[async_trait]
-impl<R: ResourceRecorder, S: SecretGetter> Factory for ProvisionerFactory<R, S> {
+impl<R: ResourceManager, S: SecretGetter> Factory for ProvisionerFactory<R, S> {
     async fn get_db_connection_string(
         &mut self,
         db_type: database::Type,
     ) -> Result<String, shuttle_service::Error> {
-        info!("Provisioning a {db_type} on the shuttle servers. This can take a while...");
-
         if let Some(ref info) = self.info {
             debug!("A database has already been provisioned for this deployment, so reusing it");
             return Ok(info.connection_string_private());
         }
 
         let r#type = ResourceType::Database(db_type.clone().into());
-        let db_type: DbType = db_type.into();
 
-        let request = Request::new(DatabaseRequest {
-            project_name: self.service_name.to_string(),
-            db_type: Some(db_type),
-        });
+        // Try to get the database info from provisioner if possible
+        let info = if let Some(claim) = self.claim.clone() {
+            info!("Provisioning a {db_type} on the shuttle servers. This can take a while...");
 
-        let response = self
-            .provisioner_client
-            .provision_database(request)
-            .await
-            .map_err(shuttle_service::error::CustomError::new)?
-            .into_inner();
+            let db_type: DbType = db_type.into();
 
-        let info: DatabaseReadyInfo = response.into();
+            let mut request = Request::new(DatabaseRequest {
+                project_name: self.service_name.to_string(),
+                db_type: Some(db_type),
+            });
+
+            request.extensions_mut().insert(claim);
+
+            let response = self
+                .provisioner_client
+                .provision_database(request)
+                .await
+                .map_err(shuttle_service::error::CustomError::new)?
+                .into_inner();
+
+            let info: DatabaseReadyInfo = response.into();
+
+            self.resource_manager
+                .insert_resource(&Resource {
+                    service_id: self.service_id,
+                    r#type,
+                    data: serde_json::to_value(&info).map_err(|err| {
+                        shuttle_service::Error::Database(format!(
+                            "failed to convert DatabaseReadyInfo to json: {err}",
+                        ))
+                    })?,
+                })
+                .await
+                .map_err(|err| {
+                    shuttle_service::Error::Database(format!("failed to store resource: {err}"))
+                })?;
+
+            info
+        } else {
+            info!("Getting a {db_type} from a previous provision");
+
+            let resources = self
+                .resource_manager
+                .get_resources(&self.service_id)
+                .await
+                .map_err(|err| {
+                    shuttle_service::Error::Database(format!("failed to get resources: {err}"))
+                })?;
+
+            let info = resources.into_iter().find_map(|resource| {
+                if resource.r#type == r#type {
+                    Some(resource.data)
+                } else {
+                    None
+                }
+            });
+
+            if let Some(info) = info {
+                serde_json::from_value(info).map_err(|err| {
+                    shuttle_service::Error::Database(format!(
+                        "failed to convert json to DatabaseReadyInfo: {err}",
+                    ))
+                })?
+            } else {
+                return Err(shuttle_service::Error::Database(
+                    "could not find resource from past resources".to_string(),
+                ));
+            }
+        };
+
         let conn_str = info.connection_string_private();
-
-        self.resource_recorder
-            .insert_resource(&Resource {
-                service_id: self.service_id,
-                r#type,
-                data: serde_json::to_value(&info).unwrap(),
-            })
-            .await
-            .unwrap();
-
         self.info = Some(info);
 
         info!("Done provisioning database");
@@ -192,6 +231,10 @@ impl<R: ResourceRecorder, S: SecretGetter> Factory for ProvisionerFactory<R, S> 
 
     fn get_service_name(&self) -> ServiceName {
         self.service_name.clone()
+    }
+
+    fn get_environment(&self) -> Environment {
+        Environment::Production
     }
 
     fn get_build_path(&self) -> Result<PathBuf, shuttle_service::Error> {

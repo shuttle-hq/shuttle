@@ -1,5 +1,6 @@
 version: "3.7"
 volumes:
+  auth-vol:
   gateway-vol:
   postgres-vol:
   panamax-crates-vol:
@@ -12,10 +13,40 @@ networks:
       config:
         - subnet: 10.99.0.0/16
 services:
+  auth:
+    image: "${CONTAINER_REGISTRY}/auth:${BACKEND_TAG}"
+    ports:
+      - 8008:8000
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        order: start-first
+        failure_action: rollback
+        delay: 10s
+      rollback_config:
+        parallelism: 0
+        order: stop-first
+      placement:
+        constraints:
+          - node.hostname==controller
+    networks:
+      user-net:
+    volumes:
+      - auth-vol:/var/lib/shuttle-auth
+    environment:
+      - RUST_LOG=${RUST_LOG}
+    command:
+      - "--state=/var/lib/shuttle-auth"
+      - "start"
+      - "--address=0.0.0.0:8000"
   gateway:
     image: "${CONTAINER_REGISTRY}/gateway:${BACKEND_TAG}"
     depends_on:
       - provisioner
+      - auth
     ports:
       - 7999:7999
       - 8000:8000
@@ -54,6 +85,7 @@ services:
       - "--prefix=shuttle_"
       - "--network-name=${STACK}_user-net"
       - "--docker-host=/var/run/docker.sock"
+      - "--auth-uri=http://auth:8000"
       - "--provisioner-host=provisioner"
       - "--proxy-fqdn=${APPS_FQDN}"
       - "--use-tls=${USE_TLS}"
@@ -68,6 +100,7 @@ services:
     depends_on:
       - postgres
       - mongodb
+      - auth
     environment:
       - RUST_LOG=${RUST_LOG}
     networks:
@@ -95,6 +128,7 @@ services:
       - "--internal-mongodb-address=mongodb"
       - "--internal-pg-address=postgres"
       - "--fqdn=${DB_FQDN}"
+      - "--auth-uri=http://auth:8000"
   postgres:
     image: "${CONTAINER_REGISTRY}/postgres:${POSTGRES_TAG}"
     restart: always
@@ -123,21 +157,17 @@ services:
       placement:
         constraints:
           - node.hostname==postgres
-  datadog-agent:
-    image: datadog/agent
-    restart: always
-    networks:
-      user-net:
+  otel-collector:
+    image: "${CONTAINER_REGISTRY}/otel:${OTEL_TAG}"
     volumes:
       # Pull docker stats
       - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: always
+    networks:
+      user-net:
     environment:
-      - DD_APM_ENABLED=true
-      - DD_APM_NON_LOCAL_TRAFFIC=true
-      - DD_SITE=datadoghq.eu
       - DD_API_KEY=${DD_API_KEY}
       - DD_ENV=${DD_ENV}
-      - DD_CONTAINER_LABELS_AS_TAGS={"project.name":"project_name"}
     deploy:
       placement:
         constraints:

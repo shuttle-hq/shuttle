@@ -2,8 +2,7 @@ use std::{net::SocketAddr, path::PathBuf};
 
 use clap::{Parser, Subcommand, ValueEnum};
 use fqdn::FQDN;
-
-use crate::auth::Key;
+use http::Uri;
 
 #[derive(Parser, Debug)]
 pub struct Args {
@@ -24,7 +23,6 @@ pub enum UseTls {
 #[derive(Subcommand, Debug)]
 pub enum Commands {
     Start(StartArgs),
-    Init(InitArgs),
 }
 
 #[derive(clap::Args, Debug, Clone)]
@@ -46,16 +44,6 @@ pub struct StartArgs {
 }
 
 #[derive(clap::Args, Debug, Clone)]
-pub struct InitArgs {
-    /// Name of initial account to create
-    #[arg(long)]
-    pub name: String,
-    /// Key to assign to initial account
-    #[arg(long)]
-    pub key: Option<Key>,
-}
-
-#[derive(clap::Args, Debug, Clone)]
 pub struct ContextArgs {
     /// Default image to deploy user runtimes into
     #[arg(long, default_value = "public.ecr.aws/shuttle/deployer:latest")]
@@ -68,6 +56,9 @@ pub struct ContextArgs {
     /// the provisioner service
     #[arg(long, default_value = "provisioner")]
     pub provisioner_host: String,
+    /// Address to reach the authentication service at
+    #[arg(long, default_value = "http://127.0.0.1:8008")]
+    pub auth_uri: Uri,
     /// The Docker Network name in which to deploy user runtimes
     #[arg(long, default_value = "shuttle_default")]
     pub network_name: String,

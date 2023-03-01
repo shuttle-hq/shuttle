@@ -355,6 +355,7 @@ mod tests {
     use axum::body::Bytes;
     use ctor::ctor;
     use flate2::{write::GzEncoder, Compression};
+    use shuttle_common::backends::auth::Claim;
     use shuttle_service::Logger;
     use tokio::{select, sync::mpsc, time::sleep};
     use tracing_subscriber::prelude::*;
@@ -463,6 +464,7 @@ mod tests {
             _service_id: Uuid,
             _deployment_id: Uuid,
             _storage_manager: StorageManager,
+            _claim: Option<Claim>,
         ) -> Result<Self::Output, Self::Error> {
             Ok(StubProvisionerFactory)
         }
@@ -487,6 +489,10 @@ mod tests {
 
         fn get_service_name(&self) -> shuttle_service::ServiceName {
             panic!("did not expect any deploy_layer test to get the service name")
+        }
+
+        fn get_environment(&self) -> shuttle_service::Environment {
+            panic!("did not expect any deploy_layer test to get the environment")
         }
 
         fn get_build_path(&self) -> Result<PathBuf, shuttle_service::Error> {
@@ -886,6 +892,7 @@ mod tests {
                 service_name: "run-test".to_string(),
                 service_id: Uuid::new_v4(),
                 tracing_context: Default::default(),
+                claim: None,
             })
             .await;
 
@@ -936,6 +943,7 @@ mod tests {
                 data: Bytes::from("violets are red").to_vec(),
                 will_run_tests: false,
                 tracing_context: Default::default(),
+                claim: None,
             })
             .await;
 
@@ -992,6 +1000,7 @@ mod tests {
             data: bytes,
             will_run_tests: false,
             tracing_context: Default::default(),
+            claim: None,
         }
     }
 }

@@ -136,6 +136,10 @@ impl GlobalConfig {
         self.api_key.replace(api_key)
     }
 
+    pub fn clear_api_key(&mut self) {
+        self.api_key = None;
+    }
+
     pub fn api_url(&self) -> Option<ApiKey> {
         self.api_url.clone()
     }
@@ -375,6 +379,11 @@ impl RequestContext {
         Ok(res)
     }
 
+    pub fn clear_api_key(&mut self) -> Result<()> {
+        self.global.as_mut().unwrap().clear_api_key();
+        self.global.save()?;
+        Ok(())
+    }
     /// Get the current project name.
     ///
     /// # Panics

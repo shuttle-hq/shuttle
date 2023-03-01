@@ -3,22 +3,23 @@
 ## Raise an Issue
 
 Raising [issues](https://github.com/shuttle-hq/shuttle/issues) is encouraged.
+
 ## Docs
 
 If you found an error in our docs, or you simply want to make them better, contributions to our [docs](https://github.com/shuttle-hq/shuttle-docs)
 are always appreciated!
 
 ## Running Locally
+
 You can use Docker and docker-compose to test shuttle locally during development. See the [Docker install](https://docs.docker.com/get-docker/)
 and [docker-compose install](https://docs.docker.com/compose/install/) instructions if you do not have them installed already.
 
 > Note for Windows: The current [Makefile](https://github.com/shuttle-hq/shuttle/blob/main/Makefile) does not work on Windows systems by itself - if you want to build the local environment on Windows you could use [Windows Subsystem for Linux](https://learn.microsoft.com/en-us/windows/wsl/install). Additional Windows considerations are listed at the bottom of this page.
-
 > Note for Linux: When building on Linux systems, if the error unknown flag: --build-arg is received, install the docker-buildx package using the package management tool for your particular system.
 
 Clone the shuttle repository (or your fork):
 
-```
+```bash
 git clone git@github.com:shuttle-hq/shuttle.git
 cd shuttle
 ```
@@ -45,7 +46,7 @@ The API is now accessible on `localhost:8000` (for app proxies) and `localhost:8
 
 In order to test local changes to the library crates, you may want to add the below to a `.cargo/config.toml` file. (See [Overriding Dependencies](https://doc.rust-lang.org/cargo/reference/overriding-dependencies.html) for more)
 
-``` toml
+```toml
 [patch.crates-io]
 shuttle-service = { path = "[base]/shuttle/service" }
 shuttle-common = { path = "[base]/shuttle/common" }
@@ -182,6 +183,7 @@ We will squash commits before merging to main. If you do want to squash commits,
 after the review process has started, the commit history can be useful for reviewers.
 
 Before committing:
+
 - Make sure your commits don't trigger any warnings from Clippy by running: `cargo clippy --tests --all-targets`. If you have a good reason to contradict Clippy, insert an `#[allow(clippy::<lint>)]` macro, so that it won't complain.
 - Make sure your code is correctly formatted: `cargo fmt --all --check`.
 - Make sure your `Cargo.toml`'s are sorted: `cargo +nightly sort --workspace`. This command uses the [cargo-sort crate](https://crates.io/crates/cargo-sort) to sort the `Cargo.toml` dependencies alphabetically.
@@ -227,6 +229,7 @@ graph BT
 First, `provisioner`, `gateway`, `deployer`, and `cargo-shuttle` are binary crates with `provisioner`, `gateway` and `deployer` being backend services. The `cargo-shuttle` binary is the `cargo shuttle` command used by users.
 
 The rest are the following libraries:
+
 - `common` contains shared models and functions used by the other libraries and binaries.
 - `codegen` contains our proc-macro code which gets exposed to user services from `service` by the `codegen` feature flag. The redirect through `service` is to make it available under the prettier name of `shuttle_service::main`.
 - `service` is where our special `Service` trait is defined. Anything implementing this `Service` can be loaded by the `deployer` and the local runner in `cargo-shuttle`.
@@ -238,20 +241,22 @@ Lastly, the `user service` is not a folder in this repository, but is the user s
 
 ## Windows Considerations
 
-Currently, if you try to use 'make images' on Windows, you may find that the shell files cannot be read by Bash/WSL. This is due to the fact that Windows may have pulled the files in CRLF format rather than LF[^1], which causes problems with Bash as to run the commands, Linux needs the file in LF format. 
+Currently, if you try to use 'make images' on Windows, you may find that the shell files cannot be read by Bash/WSL. This is due to the fact that Windows may have pulled the files in CRLF format rather than LF[^1], which causes problems with Bash as to run the commands, Linux needs the file in LF format.
 
 Thankfully, we can fix this problem by simply using the `git config core.autocrlf` command to change how Git handles line endings. It takes a single argument:
 
-```
+```bash
 git config --global core.autocrlf input
 ```
 
 This should allow you to run `make images` and other Make commands with no issues.
 
 If you need to change it back for whatever reason, you can just change the last argument from 'input' to 'true' like so:
-```
+
+```bash
 git config --global core.autocrlf true
 ```
+
 After you run this command, you should be able to checkout projects that are maintained using CRLF (Windows) again.
 
 [^1]: https://git-scm.com/book/en/v2/Customizing-Git-Git-Configuration#_core_autocrlf

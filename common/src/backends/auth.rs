@@ -63,17 +63,16 @@ pub struct AdminSecret<S> {
     secret: String,
 }
 
-impl<S, ResponseError> Service<Request<Body>> for AdminSecret<S>
+impl<S> Service<Request<Body>> for AdminSecret<S>
 where
-    S: Service<Request<Body>, Response = Response<UnsyncBoxBody<Bytes, ResponseError>>>
+    S: Service<Request<Body>, Response = Response<UnsyncBoxBody<Bytes, axum::Error>>>
         + Send
         + 'static,
     S::Future: Send + 'static,
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future =
-        Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
+    type Future = StatusCodeFuture<S::Future>;
 
     fn poll_ready(
         &mut self,
@@ -83,24 +82,20 @@ where
     }
 
     fn call(&mut self, req: Request<Body>) -> Self::Future {
-        let error = match req.headers().typed_try_get::<XShuttleAdminSecret>() {
-            Ok(Some(secret)) if secret.0 == self.secret => None,
-            Ok(_) => Some(StatusCode::UNAUTHORIZED),
-            Err(_) => Some(StatusCode::BAD_REQUEST),
-        };
+        match req.headers().typed_try_get::<XShuttleAdminSecret>() {
+            Ok(Some(secret)) if secret.0 == self.secret => {
+                let future = self.inner.call(req);
 
-        if let Some(status) = error {
-            // Could not validate claim
-            Box::pin(async move {
-                Ok(Response::builder()
-                    .status(status)
-                    .body(Default::default())
-                    .unwrap())
-            })
-        } else {
-            let future = self.inner.call(req);
-
-            Box::pin(async move { future.await })
+                StatusCodeFuture {
+                    state: ResponseState::Called { inner: future },
+                }
+            }
+            Ok(_) => StatusCodeFuture {
+                state: ResponseState::Unauthorized,
+            },
+            Err(_) => StatusCodeFuture {
+                state: ResponseState::BadRequest,
+            },
         }
     }
 }
@@ -534,8 +529,10 @@ pub struct Scoped<S> {
     inner: S,
     required: Vec<Scope>,
 }
+
+/// Future for layers that might return a different status code
 #[pin_project]
-pub struct ScopedFuture<F> {
+pub struct StatusCodeFuture<F> {
     #[pin]
     state: ResponseState<F>,
 }
@@ -548,9 +545,10 @@ pub enum ResponseState<F> {
     },
     Unauthorized,
     Forbidden,
+    BadRequest,
 }
 
-impl<F, Error> Future for ScopedFuture<F>
+impl<F, Error> Future for StatusCodeFuture<F>
 where
     F: Future<Output = Result<axum::response::Response, Error>>,
 {
@@ -569,6 +567,10 @@ where
                 .status(StatusCode::FORBIDDEN)
                 .body(Default::default())
                 .unwrap())),
+            ResponseStateProj::BadRequest => Poll::Ready(Ok(Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body(Default::default())
+                .unwrap())),
         }
     }
 }
@@ -583,7 +585,7 @@ where
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future = ScopedFuture<S::Future>;
+    type Future = StatusCodeFuture<S::Future>;
 
     fn poll_ready(
         &mut self,
@@ -596,7 +598,7 @@ where
         let Some(claim) = req.extensions().get::<Claim>() else {
             error!("claim extension is not set");
 
-            return ScopedFuture {state: ResponseState::Unauthorized};
+            return StatusCodeFuture {state: ResponseState::Unauthorized};
         };
 
         if self
@@ -605,13 +607,13 @@ where
             .all(|scope| claim.scopes.contains(scope))
         {
             let response_future = self.inner.call(req);
-            ScopedFuture {
+            StatusCodeFuture {
                 state: ResponseState::Called {
                     inner: response_future,
                 },
             }
         } else {
-            ScopedFuture {
+            StatusCodeFuture {
                 state: ResponseState::Forbidden,
             }
         }

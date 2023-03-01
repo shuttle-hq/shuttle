@@ -14,7 +14,7 @@ use opentelemetry::{
 use opentelemetry_http::{HeaderExtractor, HeaderInjector};
 use opentelemetry_otlp::WithExportConfig;
 use pin_project::pin_project;
-use tower::{BoxError, Layer, Service};
+use tower::{Layer, Service};
 use tracing::{debug_span, Span, Subscriber};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use tracing_subscriber::{fmt, prelude::*, registry::LookupSpan, EnvFilter};
@@ -84,9 +84,8 @@ pub struct ExtractPropagationFuture<F> {
 impl<F, Body, Error> Future for ExtractPropagationFuture<F>
 where
     F: Future<Output = Result<Response<Body>, Error>>,
-    Error: Into<BoxError>,
 {
-    type Output = Result<Response<Body>, BoxError>;
+    type Output = Result<Response<Body>, Error>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
@@ -94,18 +93,14 @@ where
         let _guard = this.span.enter();
 
         match this.response_future.poll(cx) {
-            Poll::Ready(result) => {
-                let result = result.map_err(Into::into);
-
-                match result {
-                    Ok(response) => {
-                        this.span
-                            .record("http.status_code", response.status().as_u16());
-                        Poll::Ready(Ok(response))
-                    }
-                    other => Poll::Ready(other),
+            Poll::Ready(result) => match result {
+                Ok(response) => {
+                    this.span
+                        .record("http.status_code", response.status().as_u16());
+                    Poll::Ready(Ok(response))
                 }
-            }
+                other => Poll::Ready(other),
+            },
 
             Poll::Pending => Poll::Pending,
         }
@@ -116,17 +111,16 @@ impl<S, Body, ResponseBody> Service<Request<Body>> for ExtractPropagation<S>
 where
     S: Service<Request<Body>, Response = Response<ResponseBody>> + Send + 'static,
     S::Future: Send + 'static,
-    S::Error: Into<BoxError>,
 {
     type Response = S::Response;
-    type Error = BoxError;
+    type Error = S::Error;
     type Future = ExtractPropagationFuture<S::Future>;
 
     fn poll_ready(
         &mut self,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), Self::Error>> {
-        self.inner.poll_ready(cx).map_err(Into::into)
+        self.inner.poll_ready(cx)
     }
 
     fn call(&mut self, req: Request<Body>) -> Self::Future {

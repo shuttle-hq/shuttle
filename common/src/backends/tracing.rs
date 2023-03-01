@@ -112,9 +112,9 @@ where
     }
 }
 
-impl<S, Body> Service<Request<Body>> for ExtractPropagation<S>
+impl<S, Body, ResponseBody> Service<Request<Body>> for ExtractPropagation<S>
 where
-    S: Service<Request<Body>, Response = Response<Body>> + Send + 'static,
+    S: Service<Request<Body>, Response = Response<ResponseBody>> + Send + 'static,
     S::Future: Send + 'static,
     S::Error: Into<BoxError>,
 {

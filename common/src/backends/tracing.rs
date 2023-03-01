@@ -92,16 +92,19 @@ where
         let this = self.project();
 
         let _guard = this.span.enter();
+
         match this.response_future.poll(cx) {
             Poll::Ready(result) => {
                 let result = result.map_err(Into::into);
 
-                if let Ok(response) = result {
-                    this.span
-                        .record("http.status_code", response.status().as_u16());
+                match result {
+                    Ok(response) => {
+                        this.span
+                            .record("http.status_code", response.status().as_u16());
+                        Poll::Ready(Ok(response))
+                    }
+                    other => Poll::Ready(other),
                 }
-
-                Poll::Ready(result)
             }
 
             Poll::Pending => Poll::Pending,
@@ -123,7 +126,7 @@ where
         &mut self,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), Self::Error>> {
-        self.inner.poll_ready(cx)
+        self.inner.poll_ready(cx).map_err(Into::into)
     }
 
     fn call(&mut self, req: Request<Body>) -> Self::Future {

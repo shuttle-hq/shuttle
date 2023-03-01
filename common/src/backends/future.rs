@@ -9,7 +9,7 @@ use pin_project::pin_project;
 #[pin_project]
 pub struct ResponseFuture<F> {
     #[pin]
-    response_future: F,
+    pub response_future: F,
 }
 
 impl<F, Response, Error> Future for ResponseFuture<F>

@@ -58,11 +58,4 @@ body:
       options:
         - label: I have searched the issues and there are none like this.
           required: true
-  - type: checkboxes
-    id: terms
-    attributes:
-      label: Code of Conduct
-      description: By submitting this issue, you agree to follow our [Code of Conduct](https://github.com/shuttle-hq/shuttle/blob/main/CODE_OF_CONDUCT.md)
-      options:
-        - label: I agree to follow shuttle's Code of Conduct
-          required: true
+

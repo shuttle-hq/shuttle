@@ -93,8 +93,12 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
         let gateway = Arc::clone(&gateway);
         let sender = sender.clone();
         async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(60));
+            interval.tick().await; // first tick is immediate
+
             loop {
-                tokio::time::sleep(Duration::from_secs(60)).await;
+                interval.tick().await;
+
                 if sender.capacity() < WORKER_QUEUE_SIZE - SVC_DEGRADED_THRESHOLD {
                     // if degraded, don't stack more health checks
                     warn!(

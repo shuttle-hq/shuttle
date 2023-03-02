@@ -1,4 +1,5 @@
 mod args;
+mod cargo_builder;
 mod client;
 pub mod config;
 mod factory;

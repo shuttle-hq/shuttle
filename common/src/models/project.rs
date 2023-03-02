@@ -7,6 +7,9 @@ use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use strum::EnumString;
 
+// Timeframe before a project is considered idle
+pub const IDLE_MINUTES: u64 = 30;
+
 #[derive(Deserialize, Serialize, Clone)]
 pub struct Response {
     pub name: String,
@@ -153,6 +156,12 @@ impl State {
             Self::Errored { .. } => Color::Red,
         }
     }
+}
+
+/// Config when creating a new project
+#[derive(Deserialize, Serialize)]
+pub struct Config {
+    pub idle_minutes: u64,
 }
 
 #[derive(Deserialize, Serialize)]

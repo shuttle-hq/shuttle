@@ -1,11 +1,4 @@
-use std::{
-    convert::Infallible,
-    future::Future,
-    ops::Add,
-    pin::Pin,
-    sync::Arc,
-    task::{Context, Poll},
-};
+use std::{convert::Infallible, future::Future, ops::Add, pin::Pin, sync::Arc};
 
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -17,7 +10,6 @@ use hyper::{body, Body, Client};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header as JwtHeader, Validation};
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
-use pin_project::pin_project;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tower::{Layer, Service};
@@ -26,6 +18,7 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use super::{
     cache::{CacheManagement, CacheManager},
+    future::{ResponseFuture, StatusCodeFuture},
     headers::XShuttleAdminSecret,
 };
 
@@ -62,17 +55,16 @@ pub struct AdminSecret<S> {
     secret: String,
 }
 
-impl<S, ResponseError> Service<Request<Body>> for AdminSecret<S>
+impl<S> Service<Request<Body>> for AdminSecret<S>
 where
-    S: Service<Request<Body>, Response = Response<UnsyncBoxBody<Bytes, ResponseError>>>
+    S: Service<Request<Body>, Response = Response<UnsyncBoxBody<Bytes, axum::Error>>>
         + Send
         + 'static,
     S::Future: Send + 'static,
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future =
-        Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
+    type Future = StatusCodeFuture<S::Future>;
 
     fn poll_ready(
         &mut self,
@@ -82,24 +74,14 @@ where
     }
 
     fn call(&mut self, req: Request<Body>) -> Self::Future {
-        let error = match req.headers().typed_try_get::<XShuttleAdminSecret>() {
-            Ok(Some(secret)) if secret.0 == self.secret => None,
-            Ok(_) => Some(StatusCode::UNAUTHORIZED),
-            Err(_) => Some(StatusCode::BAD_REQUEST),
-        };
+        match req.headers().typed_try_get::<XShuttleAdminSecret>() {
+            Ok(Some(secret)) if secret.0 == self.secret => {
+                let future = self.inner.call(req);
 
-        if let Some(status) = error {
-            // Could not validate claim
-            Box::pin(async move {
-                Ok(Response::builder()
-                    .status(status)
-                    .body(Default::default())
-                    .unwrap())
-            })
-        } else {
-            let future = self.inner.call(req);
-
-            Box::pin(async move { future.await })
+                StatusCodeFuture::Poll(future)
+            }
+            Ok(_) => StatusCodeFuture::Code(StatusCode::UNAUTHORIZED),
+            Err(_) => StatusCodeFuture::Code(StatusCode::BAD_REQUEST),
         }
     }
 }
@@ -474,25 +456,6 @@ pub struct ClaimService<S> {
     inner: S,
 }
 
-#[pin_project]
-pub struct ClaimServiceFuture<F> {
-    #[pin]
-    response_future: F,
-}
-
-impl<F, Response, Error> Future for ClaimServiceFuture<F>
-where
-    F: Future<Output = Result<Response, Error>>,
-{
-    type Output = Result<Response, Error>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.project();
-
-        this.response_future.poll(cx)
-    }
-}
-
 impl<S, RequestError> Service<Request<UnsyncBoxBody<Bytes, RequestError>>> for ClaimService<S>
 where
     S: Service<Request<UnsyncBoxBody<Bytes, RequestError>>> + Send + 'static,
@@ -500,7 +463,7 @@ where
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future = ClaimServiceFuture<S::Future>;
+    type Future = ResponseFuture<S::Future>;
 
     fn poll_ready(
         &mut self,
@@ -517,9 +480,9 @@ where
             }
         }
 
-        let response_future = self.inner.call(req);
+        let future = self.inner.call(req);
 
-        ClaimServiceFuture { response_future }
+        ResponseFuture(future)
     }
 }
 
@@ -552,44 +515,6 @@ pub struct Scoped<S> {
     inner: S,
     required: Vec<Scope>,
 }
-#[pin_project]
-pub struct ScopedFuture<F> {
-    #[pin]
-    state: ResponseState<F>,
-}
-
-#[pin_project(project = ResponseStateProj)]
-pub enum ResponseState<F> {
-    Called {
-        #[pin]
-        inner: F,
-    },
-    Unauthorized,
-    Forbidden,
-}
-
-impl<F, Error> Future for ScopedFuture<F>
-where
-    F: Future<Output = Result<axum::response::Response, Error>>,
-{
-    type Output = Result<axum::response::Response, Error>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.project();
-
-        match this.state.project() {
-            ResponseStateProj::Called { inner } => inner.poll(cx),
-            ResponseStateProj::Unauthorized => Poll::Ready(Ok(Response::builder()
-                .status(StatusCode::UNAUTHORIZED)
-                .body(Default::default())
-                .unwrap())),
-            ResponseStateProj::Forbidden => Poll::Ready(Ok(Response::builder()
-                .status(StatusCode::FORBIDDEN)
-                .body(Default::default())
-                .unwrap())),
-        }
-    }
-}
 
 impl<S> Service<Request<Body>> for Scoped<S>
 where
@@ -601,7 +526,7 @@ where
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future = ScopedFuture<S::Future>;
+    type Future = StatusCodeFuture<S::Future>;
 
     fn poll_ready(
         &mut self,
@@ -614,7 +539,7 @@ where
         let Some(claim) = req.extensions().get::<Claim>() else {
             error!("claim extension is not set");
 
-            return ScopedFuture {state: ResponseState::Unauthorized};
+            return StatusCodeFuture::Code(StatusCode::UNAUTHORIZED);
         };
 
         if self
@@ -623,15 +548,9 @@ where
             .all(|scope| claim.scopes.contains(scope))
         {
             let response_future = self.inner.call(req);
-            ScopedFuture {
-                state: ResponseState::Called {
-                    inner: response_future,
-                },
-            }
+            StatusCodeFuture::Poll(response_future)
         } else {
-            ScopedFuture {
-                state: ResponseState::Forbidden,
-            }
+            StatusCodeFuture::Code(StatusCode::FORBIDDEN)
         }
     }
 }

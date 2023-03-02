@@ -8,7 +8,7 @@ use std::{
 use clap::builder::{OsStringValueParser, PossibleValue, TypedValueParser};
 use clap::Parser;
 use clap_complete::Shell;
-use shuttle_common::project::ProjectName;
+use shuttle_common::{models::project::IDLE_MINUTES, project::ProjectName};
 use uuid::Uuid;
 
 use crate::init::Framework;
@@ -108,7 +108,11 @@ pub enum DeploymentCommand {
 #[derive(Parser)]
 pub enum ProjectCommand {
     /// create an environment for this project on shuttle
-    New,
+    New {
+        #[arg(long, default_value_t = IDLE_MINUTES)]
+        /// How long to wait before putting the project in an idle state due to inactivity. 0 means the project will never idle
+        idle_minutes: u64,
+    },
     /// list all projects belonging to the calling account
     List {
         #[arg(long)]

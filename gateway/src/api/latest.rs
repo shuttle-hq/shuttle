@@ -32,7 +32,7 @@ use uuid::Uuid;
 
 use crate::acme::{AcmeClient, CustomDomain};
 use crate::auth::{ScopedUser, User};
-use crate::project::{Project, ProjectCreating};
+use crate::project::{ContainerInspectResponseExt, Project, ProjectCreating};
 use crate::task::{self, BoxedTask, TaskResult};
 use crate::tls::GatewayCertResolver;
 use crate::worker::WORKER_QUEUE_SIZE;
@@ -131,11 +131,12 @@ async fn post_project(
     }): State<RouterState>,
     User { name, claim, .. }: User,
     Path(project): Path<ProjectName>,
+    AxumJson(config): AxumJson<project::Config>,
 ) -> Result<AxumJson<project::Response>, Error> {
     let is_admin = claim.scopes.contains(&Scope::Admin);
 
     let state = service
-        .create_project(project.clone(), name.clone(), is_admin)
+        .create_project(project.clone(), name.clone(), is_admin, config.idle_minutes)
         .await?;
 
     service
@@ -185,11 +186,18 @@ async fn delete_project(
 
 #[instrument(skip_all, fields(scope = %scoped_user.scope))]
 async fn route_project(
-    State(RouterState { service, .. }): State<RouterState>,
+    State(RouterState {
+        service, sender, ..
+    }): State<RouterState>,
     scoped_user: ScopedUser,
     req: Request<Body>,
 ) -> Result<Response<Body>, Error> {
-    service.route(&scoped_user, req).await
+    let project_name = scoped_user.scope;
+    let project = service.find_or_start_project(&project_name, sender).await?;
+
+    service
+        .route(&project, &project_name, &scoped_user.user.name, req)
+        .await
 }
 
 async fn get_status(State(RouterState { sender, .. }): State<RouterState>) -> Response<Body> {
@@ -335,6 +343,9 @@ async fn request_acme_certificate(
         Err(err) => return Err(err),
     };
 
+    let project = service.find_project(&project_name).await?;
+    let idle_minutes = project.container().unwrap().idle_minutes();
+
     // destroy and recreate the project with the new domain
     service
         .new_task()
@@ -346,8 +357,11 @@ async fn request_acme_certificate(
             move |ctx| {
                 let fqdn = fqdn.clone();
                 async move {
-                    let creating = ProjectCreating::new_with_random_initial_key(ctx.project_name)
-                        .with_fqdn(fqdn);
+                    let creating = ProjectCreating::new_with_random_initial_key(
+                        ctx.project_name,
+                        idle_minutes,
+                    )
+                    .with_fqdn(fqdn);
                     TaskResult::Done(Project::Creating(creating))
                 }
             }

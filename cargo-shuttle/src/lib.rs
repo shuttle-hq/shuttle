@@ -161,7 +161,8 @@ impl Shuttle {
                     .interact()?;
                 println!();
             } else {
-                directory_str = project_args.working_directory
+                directory_str = project_args
+                    .working_directory
                     .into_os_string()
                     .into_string()
                     .unwrap()?;

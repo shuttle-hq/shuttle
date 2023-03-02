@@ -1639,6 +1639,7 @@ pub mod tests {
                 image: None,
                 from: None,
                 recreate_count: 0,
+                idle_minutes: 0,
             }),
             #[assertion = "Container created, attach network"]
             Ok(Project::Attaching(ProjectAttaching {

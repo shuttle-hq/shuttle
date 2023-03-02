@@ -152,12 +152,20 @@ impl Shuttle {
 
         // 3. Confirm the project directory
         let path = if interactive {
-            println!("Where should we create this project?");
-            let directory_str: String = Input::with_theme(&theme)
-                .with_prompt("Directory")
-                .default(".".to_owned())
-                .interact()?;
-            println!();
+            let mut directory_str: String = String::new();
+            if project_args.working_directory.as_os_str().is_empty() {
+                println!("Where should we create this project?");
+                directory_str = Input::with_theme(&theme)
+                    .with_prompt("Directory")
+                    .default(".".to_owned())
+                    .interact()?;
+                println!();
+            } else {
+                directory_str = project_args.working_directory
+                    .into_os_string()
+                    .into_string()
+                    .unwrap()?;
+            }
             args::parse_init_path(OsString::from(directory_str))?
         } else {
             args.path.clone()

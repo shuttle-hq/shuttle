@@ -99,15 +99,18 @@ pub trait ContainerInspectResponseExt {
             .map_err(|_| ProjectError::internal("invalid project name"))
     }
 
-    fn idle_minutes(&self) -> Result<u64, ProjectError> {
+    fn idle_minutes(&self) -> u64 {
         let container = self.container();
 
-        Ok(
-            safe_unwrap!(container.config.labels.get("shuttle.idle_minutes"))
-                .to_string()
-                .parse::<u64>()
-                .unwrap_or(IDLE_MINUTES),
-        )
+        if let Some(config) = &container.config {
+            if let Some(labels) = &config.labels {
+                if let Some(idle_minutes) = labels.get("shuttle.idle_minutes") {
+                    return idle_minutes.parse::<u64>().unwrap_or(IDLE_MINUTES);
+                }
+            }
+        }
+
+        IDLE_MINUTES
     }
 
     fn find_arg_and_then<'s, F, O>(&'s self, find: &str, and_then: F) -> Result<O, ProjectError>
@@ -600,7 +603,7 @@ impl ProjectCreating {
         recreate_count: usize,
     ) -> Result<Self, ProjectError> {
         let project_name = container.project_name()?;
-        let idle_minutes = container.idle_minutes()?;
+        let idle_minutes = container.idle_minutes();
         let initial_key = container.initial_key()?;
 
         Ok(Self {
@@ -1044,7 +1047,7 @@ where
         };
 
         if service.is_healthy().await {
-            let idle_minutes = container.idle_minutes()?;
+            let idle_minutes = container.idle_minutes();
 
             // Idle minutes of `0` means it is disabled and the project will always stay up
             if idle_minutes < 1 {

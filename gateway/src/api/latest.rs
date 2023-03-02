@@ -344,7 +344,7 @@ async fn request_acme_certificate(
     };
 
     let project = service.find_project(&project_name).await?;
-    let idle_minutes = project.container().unwrap().idle_minutes()?;
+    let idle_minutes = project.container().unwrap().idle_minutes();
 
     // destroy and recreate the project with the new domain
     service

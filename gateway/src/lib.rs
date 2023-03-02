@@ -770,13 +770,14 @@ pub mod tests {
         let api_client = world.client(world.args.control);
         let api = ApiBuilder::new()
             .with_service(Arc::clone(&service))
-            .with_sender(log_out)
+            .with_sender(log_out.clone())
             .with_default_routes()
             .with_auth_service(world.context().auth_uri)
             .binding_to(world.args.control);
 
         let user = UserServiceBuilder::new()
             .with_service(Arc::clone(&service))
+            .with_task_sender(log_out.clone())
             .with_public(world.fqdn())
             .with_user_proxy_binding_to(world.args.user);
 

@@ -5,7 +5,7 @@ mod factory;
 mod init;
 
 use indicatif::ProgressBar;
-use shuttle_common::models::project::State;
+use shuttle_common::models::project::{State, IDLE_MINUTES};
 use shuttle_common::project::ProjectName;
 
 use std::collections::BTreeMap;
@@ -99,7 +99,9 @@ impl Shuttle {
                     Command::Stop => self.stop(&client).await,
                     Command::Clean => self.clean(&client).await,
                     Command::Secrets => self.secrets(&client).await,
-                    Command::Project(ProjectCommand::New) => self.project_create(&client).await,
+                    Command::Project(ProjectCommand::New { idle_minutes }) => {
+                        self.project_create(&client, idle_minutes).await
+                    }
                     Command::Project(ProjectCommand::Status { follow }) => {
                         self.project_status(&client, follow).await
                     }
@@ -208,7 +210,7 @@ impl Shuttle {
             self.load_project(&mut project_args)?;
             let mut client = Client::new(self.ctx.api_url());
             client.set_api_key(self.ctx.api_key()?);
-            self.project_create(&client).await?;
+            self.project_create(&client, IDLE_MINUTES).await?;
         }
 
         Ok(())
@@ -548,7 +550,9 @@ impl Shuttle {
         }
     }
 
-    async fn project_create(&self, client: &Client) -> Result<()> {
+    async fn project_create(&self, client: &Client, idle_minutes: u64) -> Result<()> {
+        let config = project::Config { idle_minutes };
+
         self.wait_with_spinner(
             &[
                 project::State::Ready,
@@ -556,7 +560,7 @@ impl Shuttle {
                     message: Default::default(),
                 },
             ],
-            Client::create_project,
+            client.create_project(self.ctx.project_name(), config),
             self.ctx.project_name(),
             client,
         )
@@ -597,7 +601,7 @@ impl Shuttle {
                             message: Default::default(),
                         },
                     ],
-                    Client::get_project,
+                    client.get_project(self.ctx.project_name()),
                     self.ctx.project_name(),
                     client,
                 )
@@ -612,18 +616,17 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn wait_with_spinner<'a, F, Fut>(
+    async fn wait_with_spinner<'a, Fut>(
         &self,
         states_to_check: &[project::State],
-        f: F,
+        fut: Fut,
         project_name: &'a ProjectName,
         client: &'a Client,
     ) -> Result<(), anyhow::Error>
     where
-        F: Fn(&'a Client, &'a ProjectName) -> Fut,
         Fut: std::future::Future<Output = Result<project::Response>> + 'a,
     {
-        let mut project = f(client, project_name).await?;
+        let mut project = fut.await?;
 
         let progress_bar = create_spinner();
         loop {
@@ -647,7 +650,7 @@ impl Shuttle {
                     message: Default::default(),
                 },
             ],
-            Client::delete_project,
+            client.delete_project(self.ctx.project_name()),
             self.ctx.project_name(),
             client,
         )

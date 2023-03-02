@@ -20,14 +20,14 @@ use sqlx::migrate::Migrator;
 use sqlx::sqlite::SqlitePool;
 use sqlx::types::Json as SqlxJson;
 use sqlx::{query, Error as SqlxError, Row};
-use tracing::{debug, Span};
+use tokio::sync::mpsc::Sender;
+use tracing::{debug, trace, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::acme::CustomDomain;
 use crate::args::ContextArgs;
-use crate::auth::ScopedUser;
 use crate::project::{Project, ProjectCreating};
-use crate::task::{BoxedTask, TaskBuilder};
+use crate::task::{self, BoxedTask, TaskBuilder};
 use crate::worker::TaskRouter;
 use crate::{AccountName, DockerContext, Error, ErrorKind, ProjectDetails, ProjectName};
 
@@ -202,13 +202,12 @@ impl GatewayService {
 
     pub async fn route(
         &self,
-        scoped_user: &ScopedUser,
+        project: &Project,
+        project_name: &ProjectName,
+        account_name: &AccountName,
         mut req: Request<Body>,
     ) -> Result<Response<Body>, Error> {
-        let project_name = &scoped_user.scope;
-        let target_ip = self
-            .find_project(project_name)
-            .await?
+        let target_ip = project
             .target_ip()?
             .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotReady))?;
 
@@ -219,7 +218,7 @@ impl GatewayService {
         let control_key = self.control_key_from_project_name(project_name).await?;
 
         let headers = req.headers_mut();
-        headers.typed_insert(XShuttleAccountName(scoped_user.user.name.to_string()));
+        headers.typed_insert(XShuttleAccountName(account_name.to_string()));
         headers.typed_insert(XShuttleAdminSecret(control_key));
 
         let cx = Span::current().context();
@@ -362,6 +361,7 @@ impl GatewayService {
         project_name: ProjectName,
         account_name: AccountName,
         is_admin: bool,
+        idle_minutes: u64,
     ) -> Result<Project, Error> {
         if let Some(row) = query(
             r#"
@@ -381,8 +381,10 @@ impl GatewayService {
             let project = row.get::<SqlxJson<Project>, _>("project_state").0;
             if project.is_destroyed() {
                 // But is in `::Destroyed` state, recreate it
-                let mut creating =
-                    ProjectCreating::new_with_random_initial_key(project_name.clone());
+                let mut creating = ProjectCreating::new_with_random_initial_key(
+                    project_name.clone(),
+                    idle_minutes,
+                );
                 // Restore previous custom domain, if any
                 match self.find_custom_domain_for_project(&project_name).await {
                     Ok(custom_domain) => {
@@ -409,7 +411,8 @@ impl GatewayService {
                 // Otherwise attempt to create a new one. This will fail
                 // outright if the project already exists (this happens if
                 // it belongs to another account).
-                self.insert_project(project_name, account_name).await
+                self.insert_project(project_name, account_name, idle_minutes)
+                    .await
             } else {
                 Err(Error::from_kind(ErrorKind::InvalidProjectName))
             }
@@ -420,9 +423,10 @@ impl GatewayService {
         &self,
         project_name: ProjectName,
         account_name: AccountName,
+        idle_minutes: u64,
     ) -> Result<Project, Error> {
         let project = SqlxJson(Project::Creating(
-            ProjectCreating::new_with_random_initial_key(project_name.clone()),
+            ProjectCreating::new_with_random_initial_key(project_name.clone(), idle_minutes),
         ));
 
         query("INSERT INTO projects (project_name, account_name, initial_key, project_state) VALUES (?1, ?2, ?3, ?4)")
@@ -545,6 +549,35 @@ impl GatewayService {
         TaskBuilder::new(self.clone())
     }
 
+    /// Find a project by name. And start the project if it is idle, waiting for it to start up
+    pub async fn find_or_start_project(
+        self: &Arc<Self>,
+        project_name: &ProjectName,
+        task_sender: Sender<BoxedTask>,
+    ) -> Result<Project, Error> {
+        let mut project = self.find_project(project_name).await?;
+
+        // Start the project if it is idle
+        if project.is_stopped() {
+            trace!(%project_name, "starting up idle project");
+
+            let handle = self
+                .new_task()
+                .project(project_name.clone())
+                .and_then(task::start())
+                .and_then(task::run_until_done())
+                .and_then(task::check_health())
+                .send(&task_sender)
+                .await?;
+
+            // Wait for project to come up and set new state
+            handle.await;
+            project = self.find_project(project_name).await?;
+        }
+
+        Ok(project)
+    }
+
     pub fn task_router(&self) -> TaskRouter<BoxedTask> {
         self.task_router.clone()
     }
@@ -592,7 +625,7 @@ pub mod tests {
         };
 
         let project = svc
-            .create_project(matrix.clone(), neo.clone(), false)
+            .create_project(matrix.clone(), neo.clone(), false, 0)
             .await
             .unwrap();
 
@@ -653,7 +686,7 @@ pub mod tests {
 
         // If recreated by a different user
         assert!(matches!(
-            svc.create_project(matrix.clone(), trinity.clone(), false)
+            svc.create_project(matrix.clone(), trinity.clone(), false, 0)
                 .await,
             Err(Error {
                 kind: ErrorKind::ProjectAlreadyExists,
@@ -663,7 +696,7 @@ pub mod tests {
 
         // If recreated by the same user
         assert!(matches!(
-            svc.create_project(matrix.clone(), neo, false).await,
+            svc.create_project(matrix.clone(), neo, false, 0).await,
             Ok(Project::Creating(_))
         ));
 
@@ -684,7 +717,7 @@ pub mod tests {
 
         // If recreated by an admin
         assert!(matches!(
-            svc.create_project(matrix, trinity, true).await,
+            svc.create_project(matrix, trinity, true, 0).await,
             Ok(Project::Creating(_))
         ));
 
@@ -699,7 +732,7 @@ pub mod tests {
         let neo: AccountName = "neo".parse().unwrap();
         let matrix: ProjectName = "matrix".parse().unwrap();
 
-        svc.create_project(matrix.clone(), neo.clone(), false)
+        svc.create_project(matrix.clone(), neo.clone(), false, 0)
             .await
             .unwrap();
 
@@ -764,7 +797,7 @@ pub mod tests {
         );
 
         let _ = svc
-            .create_project(project_name.clone(), account.clone(), false)
+            .create_project(project_name.clone(), account.clone(), false, 0)
             .await
             .unwrap();
 
@@ -818,7 +851,7 @@ pub mod tests {
         );
 
         let _ = svc
-            .create_project(project_name.clone(), account.clone(), false)
+            .create_project(project_name.clone(), account.clone(), false, 0)
             .await
             .unwrap();
 
@@ -836,7 +869,7 @@ pub mod tests {
         assert!(matches!(work.poll(()).await, TaskResult::Done(())));
 
         let recreated_project = svc
-            .create_project(project_name.clone(), account.clone(), false)
+            .create_project(project_name.clone(), account.clone(), false, 0)
             .await
             .unwrap();
 

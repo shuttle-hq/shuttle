@@ -21,3 +21,5 @@ services:
         >&2 echo "DBs are available - starting provisioner"
 
         exec /usr/local/bin/service "$${@:0}"
+    ports:
+      - 5000:8000

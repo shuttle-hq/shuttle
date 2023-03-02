@@ -694,7 +694,7 @@ impl ProjectCreating {
                     "Labels": {
                         "shuttle.prefix": prefix,
                         "shuttle.project": project_name,
-                        "shuttle.idle_minutes": idle_minutes,
+                        "shuttle.idle_minutes": format!("{idle_minutes}"),
                     },
                     "Cmd": [
                         "--admin-secret",

@@ -23,12 +23,14 @@ use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
 use shuttle_common::backends::headers::XShuttleProject;
+use tokio::sync::mpsc::Sender;
 use tower::{Service, ServiceBuilder};
 use tracing::{debug_span, error, field, trace};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::acme::{AcmeClient, ChallengeResponderLayer, CustomDomain};
 use crate::service::GatewayService;
+use crate::task::BoxedTask;
 use crate::{Error, ErrorKind};
 
 static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =

@@ -86,10 +86,16 @@ impl Client {
         self.get(path).await
     }
 
-    pub async fn create_project(&self, project: &ProjectName) -> Result<project::Response> {
+    pub async fn create_project(
+        &self,
+        project: &ProjectName,
+        config: project::Config,
+    ) -> Result<project::Response> {
         let path = format!("/projects/{}", project.as_str());
 
-        self.post(path, Option::<String>::None)
+        let config = serde_json::to_string(&config)?;
+
+        self.post(path, Some(config))
             .await
             .context("failed to make create project request")?
             .to_json()

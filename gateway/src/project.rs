@@ -20,6 +20,7 @@ use hyper::Client;
 use once_cell::sync::Lazy;
 use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Serialize};
+use shuttle_common::models::project::IDLE_MINUTES;
 use tokio::time::{sleep, timeout};
 use tracing::{debug, error, info, instrument};
 
@@ -68,10 +69,6 @@ const MAX_RECREATES: usize = 5;
 const MAX_RESTARTS: usize = 5;
 const MAX_REBOOTS: usize = 3;
 
-// Timeframe before a project is considered idle
-// Note: we currently do a refresh every minute so the code that uses this is expected to run once per minute
-const IDLE_MINUTES: u64 = 30;
-
 // Client used for health checks
 static CLIENT: Lazy<Client<HttpConnector>> = Lazy::new(Client::new);
 // Health check must succeed within 10 seconds
@@ -100,6 +97,17 @@ pub trait ContainerInspectResponseExt {
             .to_string()
             .parse::<ProjectName>()
             .map_err(|_| ProjectError::internal("invalid project name"))
+    }
+
+    fn idle_minutes(&self) -> Result<u64, ProjectError> {
+        let container = self.container();
+
+        Ok(
+            safe_unwrap!(container.config.labels.get("shuttle.idle_minutes"))
+                .to_string()
+                .parse::<u64>()
+                .unwrap_or(IDLE_MINUTES),
+        )
     }
 
     fn find_arg_and_then<'s, F, O>(&'s self, find: &str, and_then: F) -> Result<O, ProjectError>
@@ -570,10 +578,12 @@ pub struct ProjectCreating {
     // Use default for backward compatibility. Can be removed when all projects in the DB have this property set
     #[serde(default)]
     recreate_count: usize,
+    /// Label set on container as to how many minutes to wait before a project is considered idle
+    idle_minutes: u64,
 }
 
 impl ProjectCreating {
-    pub fn new(project_name: ProjectName, initial_key: String) -> Self {
+    pub fn new(project_name: ProjectName, initial_key: String, idle_minutes: u64) -> Self {
         Self {
             project_name,
             initial_key,
@@ -581,6 +591,7 @@ impl ProjectCreating {
             image: None,
             from: None,
             recreate_count: 0,
+            idle_minutes,
         }
     }
 
@@ -589,6 +600,7 @@ impl ProjectCreating {
         recreate_count: usize,
     ) -> Result<Self, ProjectError> {
         let project_name = container.project_name()?;
+        let idle_minutes = container.idle_minutes()?;
         let initial_key = container.initial_key()?;
 
         Ok(Self {
@@ -598,6 +610,7 @@ impl ProjectCreating {
             image: None,
             from: Some(container),
             recreate_count,
+            idle_minutes,
         })
     }
 
@@ -611,9 +624,9 @@ impl ProjectCreating {
         self
     }
 
-    pub fn new_with_random_initial_key(project_name: ProjectName) -> Self {
+    pub fn new_with_random_initial_key(project_name: ProjectName, idle_minutes: u64) -> Self {
         let initial_key = Alphanumeric.sample_string(&mut rand::thread_rng(), 32);
-        Self::new(project_name, initial_key)
+        Self::new(project_name, initial_key, idle_minutes)
     }
 
     pub fn with_image(mut self, image: String) -> Self {
@@ -659,6 +672,7 @@ impl ProjectCreating {
             project_name,
             fqdn,
             image,
+            idle_minutes,
             ..
         } = &self;
 
@@ -677,6 +691,7 @@ impl ProjectCreating {
                     "Labels": {
                         "shuttle.prefix": prefix,
                         "shuttle.project": project_name,
+                        "shuttle.idle_minutes": idle_minutes,
                     },
                     "Cmd": [
                         "--admin-secret",
@@ -744,7 +759,8 @@ where
     #[instrument(skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let container_name = self.container_name(ctx);
-        let recreate_count = self.recreate_count;
+        let Self { recreate_count, .. } = self;
+
         let container = ctx
             .docker()
             // If container already exists, use that
@@ -1028,54 +1044,71 @@ where
         };
 
         if service.is_healthy().await {
-            let new_stat = ctx
-                .docker()
-                .stats(
-                    safe_unwrap!(container.id),
-                    Some(StatsOptions {
-                        one_shot: true,
-                        stream: false,
-                    }),
-                )
-                .next()
-                .await
-                .unwrap()?;
+            let idle_minutes = container.idle_minutes()?;
 
-            stats.push_back(new_stat.clone());
+            // Idle minutes of `0` means it is disabled and the project will always stay up
+            if idle_minutes < 1 {
+                Ok(Self::Next::Ready(ProjectReady {
+                    container,
+                    service,
+                    stats,
+                }))
+            } else {
+                let new_stat = ctx
+                    .docker()
+                    .stats(
+                        safe_unwrap!(container.id),
+                        Some(StatsOptions {
+                            one_shot: true,
+                            stream: false,
+                        }),
+                    )
+                    .next()
+                    .await
+                    .unwrap()?;
 
-            let mut last = None;
+                stats.push_back(new_stat.clone());
 
-            while stats.len() > (IDLE_MINUTES as usize) {
-                last = stats.pop_front();
-            }
+                let mut last = None;
 
-            if let Some(last) = last {
-                let cpu_per_minute = (new_stat.cpu_stats.cpu_usage.total_usage
-                    - last.cpu_stats.cpu_usage.total_usage)
-                    / IDLE_MINUTES;
+                while stats.len() > (idle_minutes as usize) {
+                    last = stats.pop_front();
+                }
 
-                debug!(
-                    "{} has {} CPU usage per minute",
-                    service.name, cpu_per_minute
-                );
+                if let Some(last) = last {
+                    let cpu_per_minute = (new_stat.cpu_stats.cpu_usage.total_usage
+                        - last.cpu_stats.cpu_usage.total_usage)
+                        / idle_minutes;
 
-                // From analysis we know the following kind of CPU usage for different kinds of idle projects
-                // Web framework uses 6_200_000 CPU per minute
-                // Serenity uses 20_000_000 CPU per minute
-                //
-                // We want to make sure we are able to stop these kinds of projects
-                //
-                // Now, the following kind of CPU usage has been observed for different kinds of projects having
-                // 2 web requests / processing 2 discord messages per minute
-                // Web framework uses 100_000_000 CPU per minute
-                // Serenity uses 30_000_000 CPU per minute
-                //
-                // And projects at these levels we will want to keep active. However, the 30_000_000
-                // for an "active" discord will be to close to the 20_000_000 of an idle framework. And
-                // discord will have more traffic in anyway. So using the 100_000_000 threshold of an
-                // active framework for now
-                if cpu_per_minute < 100_000_000 {
-                    Ok(Self::Next::Idle(ProjectStopping { container }))
+                    debug!(
+                        "{} has {} CPU usage per minute",
+                        service.name, cpu_per_minute
+                    );
+
+                    // From analysis we know the following kind of CPU usage for different kinds of idle projects
+                    // Web framework uses 6_200_000 CPU per minute
+                    // Serenity uses 20_000_000 CPU per minute
+                    //
+                    // We want to make sure we are able to stop these kinds of projects
+                    //
+                    // Now, the following kind of CPU usage has been observed for different kinds of projects having
+                    // 2 web requests / processing 2 discord messages per minute
+                    // Web framework uses 100_000_000 CPU per minute
+                    // Serenity uses 30_000_000 CPU per minute
+                    //
+                    // And projects at these levels we will want to keep active. However, the 30_000_000
+                    // for an "active" discord will be to close to the 20_000_000 of an idle framework. And
+                    // discord will have more traffic in anyway. So using the 100_000_000 threshold of an
+                    // active framework for now
+                    if cpu_per_minute < 100_000_000 {
+                        Ok(Self::Next::Idle(ProjectStopping { container }))
+                    } else {
+                        Ok(Self::Next::Ready(ProjectReady {
+                            container,
+                            service,
+                            stats,
+                        }))
+                    }
                 } else {
                     Ok(Self::Next::Ready(ProjectReady {
                         container,
@@ -1083,12 +1116,6 @@ where
                         stats,
                     }))
                 }
-            } else {
-                Ok(Self::Next::Ready(ProjectReady {
-                    container,
-                    service,
-                    stats,
-                }))
             }
         } else {
             let started_at =

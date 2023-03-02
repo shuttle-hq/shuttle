@@ -5966,7 +5966,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-common"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6007,7 +6007,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-deployer"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "anyhow",
  "async-trait",

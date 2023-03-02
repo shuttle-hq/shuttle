@@ -8,7 +8,7 @@ use std::{
 use async_trait::async_trait;
 use opentelemetry::global;
 use portpicker::pick_unused_port;
-use shuttle_common::project::ProjectName as ServiceName;
+use shuttle_common::{backends::auth::Claim, project::ProjectName as ServiceName};
 use shuttle_service::{
     loader::{LoadedService, Loader},
     Factory, Logger,
@@ -72,6 +72,7 @@ pub async fn task(
                 built.service_id,
                 built.id,
                 storage_manager.clone(),
+                built.claim.clone(),
             )
             .await
         {
@@ -198,6 +199,7 @@ pub struct Built {
     pub service_name: String,
     pub service_id: Uuid,
     pub tracing_context: HashMap<String, String>,
+    pub claim: Option<Claim>,
 }
 
 impl Built {
@@ -529,6 +531,7 @@ mod tests {
             service_name: "test".to_string(),
             service_id: Uuid::new_v4(),
             tracing_context: Default::default(),
+            claim: None,
         };
         let (_kill_send, kill_recv) = broadcast::channel(1);
 
@@ -592,6 +595,7 @@ mod tests {
                 service_name: crate_name.to_string(),
                 service_id: Uuid::new_v4(),
                 tracing_context: Default::default(),
+                claim: None,
             },
             storage_manager,
         )

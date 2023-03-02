@@ -93,16 +93,11 @@ where
 pub trait ContainerInspectResponseExt {
     fn container(&self) -> &ContainerInspectResponse;
 
-    fn project_name(&self, prefix: &str) -> Result<ProjectName, ProjectError> {
-        // This version can't be enabled while there are active
-        // deployers before v0.8.0 since the don't have this label
-        // TODO: switch to this version when you notice all deployers
-        // are greater than v0.8.0
-        // let name = safe_unwrap!(container.config.labels.get("project.name")).to_string();
-
+    fn project_name(&self) -> Result<ProjectName, ProjectError> {
         let container = self.container();
-        let container_name = safe_unwrap!(container.name.strip_prefix("/")).to_string();
-        safe_unwrap!(container_name.strip_prefix(prefix).strip_suffix("_run"))
+
+        safe_unwrap!(container.config.labels.get("shuttle.project"))
+            .to_string()
             .parse::<ProjectName>()
             .map_err(|_| ProjectError::internal("invalid project name"))
     }
@@ -204,10 +199,6 @@ impl Project {
                 format!("cannot reboot a project in the `{}` state", self.state()),
             ))
         }
-    }
-
-    pub fn create(project_name: ProjectName) -> Self {
-        Self::Creating(ProjectCreating::new_with_random_initial_key(project_name))
     }
 
     pub fn destroy(self) -> Result<Self, Error> {
@@ -499,7 +490,7 @@ where
                 }) => {
                     // container not found, let's try to recreate it
                     // with the same image
-                    Self::Creating(ProjectCreating::from_container(container, ctx, 0)?)
+                    Self::Creating(ProjectCreating::from_container(container, 0)?)
                 }
                 Err(err) => return Err(err.into()),
             },
@@ -528,7 +519,7 @@ where
                 }) => {
                     // container not found, let's try to recreate it
                     // with the same image
-                    Self::Creating(ProjectCreating::from_container(container, ctx, 0)?)
+                    Self::Creating(ProjectCreating::from_container(container, 0)?)
                 }
                 Err(err) => return Err(err.into()),
             },
@@ -593,12 +584,11 @@ impl ProjectCreating {
         }
     }
 
-    pub fn from_container<Ctx: DockerContext>(
+    pub fn from_container(
         container: ContainerInspectResponse,
-        ctx: &Ctx,
         recreate_count: usize,
     ) -> Result<Self, ProjectError> {
-        let project_name = container.project_name(&ctx.container_settings().prefix)?;
+        let project_name = container.project_name()?;
         let initial_key = container.initial_key()?;
 
         Ok(Self {
@@ -639,6 +629,10 @@ impl ProjectCreating {
         &self.initial_key
     }
 
+    pub fn fqdn(&self) -> &Option<String> {
+        &self.fqdn
+    }
+
     fn container_name<C: DockerContext>(&self, ctx: &C) -> String {
         let prefix = &ctx.container_settings().prefix;
 
@@ -655,6 +649,7 @@ impl ProjectCreating {
             image: default_image,
             prefix,
             provisioner_host,
+            auth_uri,
             fqdn: public,
             ..
         } = ctx.container_settings();
@@ -702,9 +697,11 @@ impl ProjectCreating {
                         "/opt/shuttle",
                         "--state",
                         "/opt/shuttle/deployer.sqlite",
+                        "--auth-uri",
+                        auth_uri,
                     ],
                     "Env": [
-                        "RUST_LOG=debug",
+                        "RUST_LOG=debug,shuttle=trace",
                     ]
                 })
             });
@@ -892,7 +889,6 @@ where
             sleep(Duration::from_secs(5)).await;
             Ok(ProjectCreating::from_container(
                 container,
-                ctx,
                 recreate_count + 1,
             )?)
         } else {
@@ -1028,7 +1024,7 @@ where
         let container = container.refresh(ctx).await?;
         let mut service = match service {
             Some(service) => service,
-            None => Service::from_container(ctx, container.clone())?,
+            None => Service::from_container(container.clone())?,
         };
 
         if service.is_healthy().await {
@@ -1176,11 +1172,8 @@ pub struct Service {
 }
 
 impl Service {
-    pub fn from_container<Ctx: DockerContext>(
-        ctx: &Ctx,
-        container: ContainerInspectResponse,
-    ) -> Result<Self, ProjectError> {
-        let resource_name = container.project_name(&ctx.container_settings().prefix)?;
+    pub fn from_container(container: ContainerInspectResponse) -> Result<Self, ProjectError> {
+        let resource_name = container.project_name()?;
 
         let network = safe_unwrap!(container.network_settings.networks)
             .values()
@@ -1507,60 +1500,84 @@ pub mod exec {
             .await
             .expect("could not list projects")
         {
-            if let Project::Errored(ProjectError { ctx: Some(ctx), .. }) =
-                gateway.find_project(&project_name).await.unwrap()
-            {
-                if let Some(container) = ctx.container() {
+            match gateway.find_project(&project_name).await.unwrap() {
+                Project::Errored(ProjectError { ctx: Some(ctx), .. }) => {
+                    if let Some(container) = ctx.container() {
+                        if let Ok(container) = gateway
+                            .context()
+                            .docker()
+                            .inspect_container(safe_unwrap!(container.id), None)
+                            .await
+                        {
+                            match container.state {
+                                Some(ContainerState {
+                                    status: Some(ContainerStateStatusEnum::EXITED),
+                                    ..
+                                }) => {
+                                    debug!("{} will be revived", project_name.clone());
+                                    _ = gateway
+                                        .new_task()
+                                        .project(project_name)
+                                        .and_then(task::run(|ctx| async move {
+                                            TaskResult::Done(Project::Rebooting(ProjectRebooting {
+                                                container: ctx.state.container().unwrap(),
+                                            }))
+                                        }))
+                                        .send(&sender)
+                                        .await;
+                                }
+                                Some(ContainerState {
+                                    status: Some(ContainerStateStatusEnum::RUNNING),
+                                    ..
+                                })
+                                | Some(ContainerState {
+                                    status: Some(ContainerStateStatusEnum::CREATED),
+                                    ..
+                                }) => {
+                                    debug!(
+                                    "{} is errored but ready according to docker. So restarting it",
+                                    project_name.clone()
+                                );
+                                    _ = gateway
+                                        .new_task()
+                                        .project(project_name)
+                                        .and_then(task::run(|ctx| async move {
+                                            TaskResult::Done(Project::Starting(ProjectStarting {
+                                                container: ctx.state.container().unwrap(),
+                                                restart_count: 0,
+                                            }))
+                                        }))
+                                        .send(&sender)
+                                        .await;
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+                // Currently nothing should enter the stopped state
+                Project::Stopped(ProjectStopped { container }) => {
                     if let Ok(container) = gateway
                         .context()
                         .docker()
                         .inspect_container(safe_unwrap!(container.id), None)
                         .await
                     {
-                        match container.state {
-                            Some(ContainerState {
-                                status: Some(ContainerStateStatusEnum::EXITED),
-                                ..
-                            }) => {
-                                debug!("{} will be revived", project_name.clone());
-                                _ = gateway
-                                    .new_task()
-                                    .project(project_name)
-                                    .and_then(task::run(|ctx| async move {
-                                        TaskResult::Done(Project::Stopped(ProjectStopped {
-                                            container: ctx.state.container().unwrap(),
-                                        }))
+                        if container.state.is_some() {
+                            _ = gateway
+                                .new_task()
+                                .project(project_name)
+                                .and_then(task::run(|ctx| async move {
+                                    TaskResult::Done(Project::Rebooting(ProjectRebooting {
+                                        container: ctx.state.container().unwrap(),
                                     }))
-                                    .send(&sender)
-                                    .await;
-                            }
-                            Some(ContainerState {
-                                status: Some(ContainerStateStatusEnum::RUNNING),
-                                ..
-                            })
-                            | Some(ContainerState {
-                                status: Some(ContainerStateStatusEnum::CREATED),
-                                ..
-                            }) => {
-                                debug!(
-                                    "{} is errored but ready according to docker. So restarting it",
-                                    project_name.clone()
-                                );
-                                _ = gateway
-                                    .new_task()
-                                    .project(project_name)
-                                    .and_then(task::run(|ctx| async move {
-                                        TaskResult::Done(Project::Stopping(ProjectStopping {
-                                            container: ctx.state.container().unwrap(),
-                                        }))
-                                    }))
-                                    .send(&sender)
-                                    .await;
-                            }
-                            _ => {}
+                                }))
+                                .send(&sender)
+                                .await;
                         }
                     }
                 }
+                _ => {}
             }
         }
 

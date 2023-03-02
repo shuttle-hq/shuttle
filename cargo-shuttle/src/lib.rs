@@ -4,13 +4,17 @@ pub mod config;
 mod factory;
 mod init;
 
+use indicatif::ProgressBar;
+use shuttle_common::models::project::State;
 use shuttle_common::project::ProjectName;
+
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fs::{read_to_string, File};
 use std::io::stdout;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use anyhow::{anyhow, bail, Context, Result};
 pub use args::{Args, Command, DeployArgs, InitArgs, LoginArgs, ProjectArgs, RunArgs};
@@ -99,7 +103,9 @@ impl Shuttle {
                     Command::Project(ProjectCommand::Status { follow }) => {
                         self.project_status(&client, follow).await
                     }
-                    Command::Project(ProjectCommand::List) => self.projects_list(&client).await,
+                    Command::Project(ProjectCommand::List { filter }) => {
+                        self.projects_list(&client, filter).await
+                    }
                     Command::Project(ProjectCommand::Rm) => self.project_delete(&client).await,
                     _ => {
                         unreachable!("commands that don't need a client have already been matched")
@@ -267,7 +273,22 @@ impl Shuttle {
     }
 
     async fn stop(&self, client: &Client) -> Result<()> {
-        let service = client.stop_service(self.ctx.project_name()).await?;
+        let mut service = client.stop_service(self.ctx.project_name()).await?;
+
+        let progress_bar = create_spinner();
+        loop {
+            let Some(ref deployment) = service.deployment else {
+                break;
+            };
+
+            if let shuttle_common::deployment::State::Stopped = deployment.state {
+                break;
+            }
+
+            progress_bar.set_message(format!("Stopping {}", deployment.id));
+            service = client.get_service_summary(self.ctx.project_name()).await?;
+        }
+        progress_bar.finish_and_clear();
 
         println!(
             r#"{}
@@ -398,10 +419,16 @@ impl Shuttle {
             "Building".bold().green(),
             working_directory.display()
         );
+
         let so_path = build_crate(id, working_directory, run_args.release, tx).await?;
 
         trace!("loading secrets");
-        let secrets_path = working_directory.join("Secrets.toml");
+
+        let secrets_path = if working_directory.join("Secrets.dev.toml").exists() {
+            working_directory.join("Secrets.dev.toml")
+        } else {
+            working_directory.join("Secrets.toml")
+        };
 
         let secrets: BTreeMap<String, String> =
             if let Ok(secrets_str) = read_to_string(secrets_path) {
@@ -538,8 +565,20 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn projects_list(&self, client: &Client) -> Result<()> {
-        let projects = client.get_projects_list().await?;
+    async fn projects_list(&self, client: &Client, filter: Option<String>) -> Result<()> {
+        let projects = match filter {
+            Some(filter) => {
+                if let Ok(filter) = State::from_str(filter.trim()) {
+                    client
+                        .get_projects_list_filtered(filter.to_string())
+                        .await?
+                } else {
+                    return Err(anyhow!("That's not a valid project status!"));
+                }
+            }
+            None => client.get_projects_list().await?,
+        };
+
         let projects_table = project::get_table(&projects);
 
         println!("{projects_table}");
@@ -585,34 +624,17 @@ impl Shuttle {
         Fut: std::future::Future<Output = Result<project::Response>> + 'a,
     {
         let mut project = f(client, project_name).await?;
-        let pb = indicatif::ProgressBar::new_spinner();
-        pb.enable_steady_tick(std::time::Duration::from_millis(350));
-        pb.set_style(
-            indicatif::ProgressStyle::with_template("{spinner:.orange} {msg}")
-                .unwrap()
-                .tick_strings(&[
-                    "( ●    )",
-                    "(  ●   )",
-                    "(   ●  )",
-                    "(    ● )",
-                    "(     ●)",
-                    "(    ● )",
-                    "(   ●  )",
-                    "(  ●   )",
-                    "( ●    )",
-                    "(●     )",
-                    "(●●●●●●)",
-                ]),
-        );
+
+        let progress_bar = create_spinner();
         loop {
             if states_to_check.contains(&project.state) {
                 break;
             }
 
-            pb.set_message(format!("{project}"));
+            progress_bar.set_message(format!("{project}"));
             project = client.get_project(project_name).await?;
         }
-        pb.finish_and_clear();
+        progress_bar.finish_and_clear();
         println!("{project}");
         Ok(())
     }
@@ -741,6 +763,30 @@ impl Shuttle {
 
         Ok(())
     }
+}
+
+fn create_spinner() -> ProgressBar {
+    let pb = indicatif::ProgressBar::new_spinner();
+    pb.enable_steady_tick(std::time::Duration::from_millis(350));
+    pb.set_style(
+        indicatif::ProgressStyle::with_template("{spinner:.orange} {msg}")
+            .unwrap()
+            .tick_strings(&[
+                "( ●    )",
+                "(  ●   )",
+                "(   ●  )",
+                "(    ● )",
+                "(     ●)",
+                "(    ● )",
+                "(   ●  )",
+                "(  ●   )",
+                "( ●    )",
+                "(●     )",
+                "(●●●●●●)",
+            ]),
+    );
+
+    pb
 }
 
 pub enum CommandOutcome {

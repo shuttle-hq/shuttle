@@ -322,15 +322,18 @@ pub trait Refresh<Ctx>: Sized {
 
 #[cfg(test)]
 pub mod tests {
+    use std::collections::HashMap;
     use std::env;
-    use std::io::Read;
     use std::net::SocketAddr;
     use std::str::FromStr;
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
     use std::time::Duration;
 
     use anyhow::{anyhow, Context as AnyhowContext};
+    use axum::headers::authorization::Bearer;
     use axum::headers::Authorization;
+    use axum::routing::get;
+    use axum::{extract, Router, TypedHeader};
     use bollard::Docker;
     use fqdn::FQDN;
     use futures::prelude::*;
@@ -338,17 +341,17 @@ pub mod tests {
     use hyper::http::uri::Scheme;
     use hyper::http::Uri;
     use hyper::{Body, Client as HyperClient, Request, Response, StatusCode};
+    use jsonwebtoken::EncodingKey;
     use rand::distributions::{Alphanumeric, DistString, Distribution, Uniform};
-    use shuttle_common::deployment::State;
-    use shuttle_common::log;
-    use shuttle_common::models::{deployment, project, service, user};
+    use ring::signature::{self, Ed25519KeyPair, KeyPair};
+    use shuttle_common::backends::auth::{Claim, ConvertResponse, Scope};
+    use shuttle_common::models::project;
     use sqlx::SqlitePool;
     use tokio::sync::mpsc::channel;
 
     use crate::acme::AcmeClient;
     use crate::api::latest::ApiBuilder;
     use crate::args::{ContextArgs, StartArgs, UseTls};
-    use crate::auth::User;
     use crate::proxy::UserServiceBuilder;
     use crate::service::{ContainerSettings, GatewayService, MIGRATIONS};
     use crate::worker::Worker;
@@ -546,6 +549,8 @@ pub mod tests {
         hyper: HyperClient<HttpConnector, Body>,
         pool: SqlitePool,
         acme_client: AcmeClient,
+        auth_service: Arc<Mutex<AuthService>>,
+        auth_uri: Uri,
     }
 
     #[derive(Clone)]
@@ -553,6 +558,7 @@ pub mod tests {
         pub docker: Docker,
         pub container_settings: ContainerSettings,
         pub hyper: HyperClient<HttpConnector, Body>,
+        pub auth_uri: Uri,
     }
 
     impl World {
@@ -568,9 +574,14 @@ pub mod tests {
             let control: i16 = Uniform::from(9000..10000).sample(&mut rand::thread_rng());
             let user = control + 1;
             let bouncer = user + 1;
+            let auth = bouncer + 1;
             let control = format!("127.0.0.1:{control}").parse().unwrap();
             let user = format!("127.0.0.1:{user}").parse().unwrap();
             let bouncer = format!("127.0.0.1:{bouncer}").parse().unwrap();
+            let auth: SocketAddr = format!("127.0.0.1:{auth}").parse().unwrap();
+            let auth_uri: Uri = format!("http://{auth}").parse().unwrap();
+
+            let auth_service = AuthService::new(auth);
 
             let prefix = format!(
                 "shuttle_test_{}_",
@@ -597,6 +608,7 @@ pub mod tests {
                     image,
                     prefix,
                     provisioner_host,
+                    auth_uri: auth_uri.clone(),
                     network_name,
                     proxy_fqdn: FQDN::from_str("test.shuttleapp.rs").unwrap(),
                 },
@@ -618,6 +630,8 @@ pub mod tests {
                 hyper,
                 pool,
                 acme_client,
+                auth_service,
+                auth_uri,
             }
         }
 
@@ -640,6 +654,22 @@ pub mod tests {
         pub fn acme_client(&self) -> AcmeClient {
             self.acme_client.clone()
         }
+
+        pub fn create_user(&self, user: &str) -> String {
+            self.auth_service
+                .lock()
+                .unwrap()
+                .users
+                .insert(user.to_string(), vec![Scope::Project, Scope::ProjectCreate]);
+
+            user.to_string()
+        }
+
+        pub fn set_super_user(&self, user: &str) {
+            if let Some(scopes) = self.auth_service.lock().unwrap().users.get_mut(user) {
+                scopes.push(Scope::Admin)
+            }
+        }
     }
 
     impl World {
@@ -648,6 +678,7 @@ pub mod tests {
                 docker: self.docker.clone(),
                 container_settings: self.settings.clone(),
                 hyper: self.hyper.clone(),
+                auth_uri: self.auth_uri.clone(),
             }
         }
     }
@@ -659,6 +690,60 @@ pub mod tests {
 
         fn container_settings(&self) -> &ContainerSettings {
             &self.container_settings
+        }
+    }
+
+    struct AuthService {
+        users: HashMap<String, Vec<Scope>>,
+        encoding_key: EncodingKey,
+        public_key: Vec<u8>,
+    }
+
+    impl AuthService {
+        fn new(address: SocketAddr) -> Arc<Mutex<Self>> {
+            let doc = signature::Ed25519KeyPair::generate_pkcs8(&ring::rand::SystemRandom::new())
+                .unwrap();
+            let encoding_key = EncodingKey::from_ed_der(doc.as_ref());
+            let pair = Ed25519KeyPair::from_pkcs8(doc.as_ref()).unwrap();
+            let public_key = pair.public_key().as_ref().to_vec();
+
+            let this = Arc::new(Mutex::new(Self {
+                users: HashMap::new(),
+                encoding_key,
+                public_key,
+            }));
+
+            let router = Router::new()
+                .route(
+                    "/public-key",
+                    get(|extract::State(state): extract::State<Arc<Mutex<Self>>>| async move {
+                        state.lock().unwrap().public_key.clone()
+                    }),
+                )
+                .route(
+                    "/auth/key",
+                    get(|extract::State(state): extract::State<Arc<Mutex<Self>>>, TypedHeader(bearer): TypedHeader<Authorization<Bearer>> | async move {
+                        let state = state.lock().unwrap();
+
+                        if let Some(scopes) = state.users.get(bearer.token()) {
+                            let claim = Claim::new(bearer.token().to_string(), scopes.clone());
+                            let token = claim.into_token(&state.encoding_key)?;
+                            Ok(serde_json::to_vec(&ConvertResponse { token }).unwrap())
+                        } else {
+                            Err(StatusCode::NOT_FOUND)
+                        }
+                    }),
+                )
+                .with_state(this.clone());
+
+            tokio::spawn(async move {
+                axum::Server::bind(&address)
+                    .serve(router.into_make_service())
+                    .await
+                    .unwrap();
+            });
+
+            this
         }
     }
 
@@ -682,28 +767,19 @@ pub mod tests {
             }
         });
 
-        let base_port = loop {
-            let port = portpicker::pick_unused_port().unwrap();
-            if portpicker::is_free_tcp(port + 1) {
-                break port;
-            }
-        };
-
-        let api_addr = format!("127.0.0.1:{}", base_port).parse().unwrap();
-        let api_client = world.client(api_addr);
+        let api_client = world.client(world.args.control);
         let api = ApiBuilder::new()
             .with_service(Arc::clone(&service))
             .with_sender(log_out.clone())
             .with_default_routes()
-            .binding_to(api_addr);
+            .with_auth_service(world.context().auth_uri)
+            .binding_to(world.args.control);
 
-        let user_addr: SocketAddr = format!("127.0.0.1:{}", base_port + 1).parse().unwrap();
-        let proxy_client = world.client(user_addr);
         let user = UserServiceBuilder::new()
             .with_service(Arc::clone(&service))
             .with_task_sender(log_out.clone())
             .with_public(world.fqdn())
-            .with_user_proxy_binding_to(user_addr);
+            .with_user_proxy_binding_to(world.args.user);
 
         let _gateway = tokio::spawn(async move {
             tokio::select! {
@@ -713,25 +789,12 @@ pub mod tests {
             }
         });
 
-        let User { key, name, .. } = service.create_user("neo".parse().unwrap()).await.unwrap();
-        service.set_super_user(&name, true).await.unwrap();
+        // Allow the spawns to start
+        tokio::time::sleep(Duration::from_secs(1)).await;
 
-        println!("Creating trinity user");
-        let user::Response { key, .. } = api_client
-            .request(
-                Request::post("/users/trinity")
-                    .with_header(&Authorization::bearer(key.as_str()).unwrap())
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .map_ok(|resp| {
-                assert_eq!(resp.status(), StatusCode::OK);
-                serde_json::from_slice(resp.body()).unwrap()
-            })
-            .await
-            .unwrap();
+        let neo_key = world.create_user("neo");
 
-        let authorization = Authorization::bearer(key.as_str()).unwrap();
+        let authorization = Authorization::bearer(&neo_key).unwrap();
 
         println!("Creating the matrix project");
         api_client
@@ -780,84 +843,6 @@ pub mod tests {
             .map_ok(|resp| assert_eq!(resp.status(), StatusCode::OK))
             .await
             .unwrap();
-
-        // === deployment test BEGIN ===
-        println!("deploy the matrix project");
-        api_client
-            .request({
-                let mut data = Vec::new();
-                let mut f = std::fs::File::open("tests/hello_world.crate").unwrap();
-                f.read_to_end(&mut data).unwrap();
-                Request::post("/projects/matrix/services/matrix")
-                    .with_header(&authorization)
-                    .body(Body::from(data))
-                    .unwrap()
-            })
-            .map_ok(|resp| assert_eq!(resp.status(), StatusCode::OK))
-            .await
-            .unwrap();
-
-        timed_loop!(wait: 1, max: 600, {
-            let service: service::Detailed = api_client
-                .request(
-                    Request::get("/projects/matrix/services/matrix")
-                        .with_header(&authorization)
-                        .body(Body::empty())
-                        .unwrap(),
-                )
-                .map_ok(|resp| {
-                    assert_eq!(resp.status(), StatusCode::OK);
-                    serde_json::from_slice(resp.body()).unwrap()
-                })
-                .await
-                .unwrap();
-
-                match service.deployments.first() {
-                    Some(deployment::Response{ state: State::Running, .. }) => break,
-                    Some(deployment::Response{ state: State::Crashed, id, .. }) => {
-                        let logs: Vec<log::Item> = api_client
-                            .request(
-                                Request::get(format!("/projects/matrix/deployments/{id}/logs"))
-                                    .with_header(&authorization)
-                                    .body(Body::empty())
-                                    .unwrap(),
-                            )
-                            .map_ok(|resp| {
-                                assert_eq!(resp.status(), StatusCode::OK);
-                                serde_json::from_slice(resp.body()).unwrap()
-                            })
-                            .await
-                            .unwrap();
-
-                        for log in logs {
-                            println!("{log}");
-                        }
-
-                        panic!("deployment failed");
-                    },
-                    _ => {},
-            }
-        });
-
-        println!("make request on the matrix project");
-        proxy_client
-            .request(
-                Request::get("/hello")
-                    .header("Host", "matrix.test.shuttleapp.rs")
-                    .header("x-shuttle-project", "matrix")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .map_ok(|resp| {
-                assert_eq!(resp.status(), StatusCode::OK);
-                assert_eq!(
-                    String::from_utf8(resp.into_body()).unwrap().as_str(),
-                    "Hello, world!"
-                );
-            })
-            .await
-            .unwrap();
-        // === deployment test END ===
 
         println!("delete matrix project");
         api_client

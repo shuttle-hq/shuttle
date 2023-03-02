@@ -123,8 +123,11 @@ deploy: docker-compose.yml
 test:
 	cd e2e; POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) APPS_FQDN=$(APPS_FQDN) cargo test $(CARGO_TEST_FLAGS) -- --nocapture
 
+# Start the containers locally. This does not start panamax by default,
+# to start panamax locally run this command with the COMPOSE_PROFILES=panamax 
+# environment variable.
 up: docker-compose.rendered.yml
-	COMPOSE_PROFILES=$(COMPOSE_PROFILES) CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) $(DOCKER_COMPOSE) -f $< -p $(STACK) up -d $(DOCKER_COMPOSE_FLAGS)
+	CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) $(DOCKER_COMPOSE) -f $< -p $(STACK) up -d $(DOCKER_COMPOSE_FLAGS)
 
 down: docker-compose.rendered.yml
 	CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) $(DOCKER_COMPOSE) -f $< -p $(STACK) down $(DOCKER_COMPOSE_FLAGS)

@@ -165,7 +165,7 @@ impl Shuttle {
                     .working_directory
                     .into_os_string()
                     .into_string()
-                    .unwrap()?;
+                    .unwrap();
             }
             args::parse_init_path(OsString::from(directory_str))?
         } else {

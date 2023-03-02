@@ -1489,7 +1489,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-shuttle"
-version = "0.11.0"
+version = "0.11.2"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -5958,7 +5958,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-common"
-version = "0.11.1"
+version = "0.11.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6045,7 +6045,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-gateway"
-version = "0.11.0"
+version = "0.11.2"
 dependencies = [
  "acme2",
  "anyhow",

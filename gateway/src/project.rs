@@ -1,10 +1,11 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::convert::{identity, Infallible};
 use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
 
 use bollard::container::{
-    Config, CreateContainerOptions, RemoveContainerOptions, StopContainerOptions,
+    Config, CreateContainerOptions, KillContainerOptions, RemoveContainerOptions, Stats,
+    StatsOptions, StopContainerOptions,
 };
 use bollard::errors::Error as DockerError;
 use bollard::models::{ContainerInspectResponse, ContainerStateStatusEnum};
@@ -19,6 +20,7 @@ use hyper::Client;
 use once_cell::sync::Lazy;
 use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Serialize};
+use shuttle_common::models::project::IDLE_MINUTES;
 use tokio::time::{sleep, timeout};
 use tracing::{debug, error, info, instrument};
 
@@ -95,6 +97,20 @@ pub trait ContainerInspectResponseExt {
             .to_string()
             .parse::<ProjectName>()
             .map_err(|_| ProjectError::internal("invalid project name"))
+    }
+
+    fn idle_minutes(&self) -> u64 {
+        let container = self.container();
+
+        if let Some(config) = &container.config {
+            if let Some(labels) = &config.labels {
+                if let Some(idle_minutes) = labels.get("shuttle.idle_minutes") {
+                    return idle_minutes.parse::<u64>().unwrap_or(IDLE_MINUTES);
+                }
+            }
+        }
+
+        IDLE_MINUTES
     }
 
     fn find_arg_and_then<'s, F, O>(&'s self, find: &str, and_then: F) -> Result<O, ProjectError>
@@ -204,12 +220,30 @@ impl Project {
         }
     }
 
+    pub fn start(self) -> Result<Self, Error> {
+        if let Some(container) = self.container() {
+            Ok(Self::Starting(ProjectStarting {
+                container,
+                restart_count: 0,
+            }))
+        } else {
+            Err(Error::custom(
+                ErrorKind::InvalidOperation,
+                format!("cannot start a project in the `{}` state", self.state()),
+            ))
+        }
+    }
+
     pub fn is_ready(&self) -> bool {
         matches!(self, Self::Ready(_))
     }
 
     pub fn is_destroyed(&self) -> bool {
         matches!(self, Self::Destroyed(_))
+    }
+
+    pub fn is_stopped(&self) -> bool {
+        matches!(self, Self::Stopped(_))
     }
 
     pub fn target_ip(&self) -> Result<Option<IpAddr>, Error> {
@@ -372,6 +406,7 @@ where
             Self::Started(started) => match started.next(ctx).await {
                 Ok(ProjectReadying::Ready(ready)) => Ok(ready.into()),
                 Ok(ProjectReadying::Started(started)) => Ok(started.into()),
+                Ok(ProjectReadying::Idle(stopping)) => Ok(stopping.into()),
                 Err(err) => Ok(Self::Errored(err)),
             },
             Self::Ready(ready) => ready.next(ctx).await.into_try_state(),
@@ -447,7 +482,7 @@ where
             {
                 Ok(container) => match safe_unwrap!(container.state.status) {
                     ContainerStateStatusEnum::RUNNING => {
-                        Self::Started(ProjectStarted::new(container))
+                        Self::Started(ProjectStarted::new(container, VecDeque::new()))
                     }
                     ContainerStateStatusEnum::CREATED => Self::Starting(ProjectStarting {
                         container,
@@ -470,8 +505,8 @@ where
                 }
                 Err(err) => return Err(err.into()),
             },
-            Self::Started(ProjectStarted { container, .. })
-            | Self::Ready(ProjectReady { container, .. })
+            Self::Started(ProjectStarted { container, stats, .. })
+            | Self::Ready(ProjectReady { container, stats, .. })
              => match container
                 .clone()
                 .refresh(ctx)
@@ -479,7 +514,7 @@ where
             {
                 Ok(container) => match safe_unwrap!(container.state.status) {
                     ContainerStateStatusEnum::RUNNING => {
-                        Self::Started(ProjectStarted::new(container))
+                        Self::Started(ProjectStarted::new(container, stats))
                     }
                     // Restart the container if it went down
                     ContainerStateStatusEnum::EXITED => Self::Restarting(ProjectRestarting  { container, restart_count: 0 }),
@@ -546,10 +581,12 @@ pub struct ProjectCreating {
     // Use default for backward compatibility. Can be removed when all projects in the DB have this property set
     #[serde(default)]
     recreate_count: usize,
+    /// Label set on container as to how many minutes to wait before a project is considered idle
+    idle_minutes: u64,
 }
 
 impl ProjectCreating {
-    pub fn new(project_name: ProjectName, initial_key: String) -> Self {
+    pub fn new(project_name: ProjectName, initial_key: String, idle_minutes: u64) -> Self {
         Self {
             project_name,
             initial_key,
@@ -557,6 +594,7 @@ impl ProjectCreating {
             image: None,
             from: None,
             recreate_count: 0,
+            idle_minutes,
         }
     }
 
@@ -565,6 +603,7 @@ impl ProjectCreating {
         recreate_count: usize,
     ) -> Result<Self, ProjectError> {
         let project_name = container.project_name()?;
+        let idle_minutes = container.idle_minutes();
         let initial_key = container.initial_key()?;
 
         Ok(Self {
@@ -574,6 +613,7 @@ impl ProjectCreating {
             image: None,
             from: Some(container),
             recreate_count,
+            idle_minutes,
         })
     }
 
@@ -587,9 +627,9 @@ impl ProjectCreating {
         self
     }
 
-    pub fn new_with_random_initial_key(project_name: ProjectName) -> Self {
+    pub fn new_with_random_initial_key(project_name: ProjectName, idle_minutes: u64) -> Self {
         let initial_key = Alphanumeric.sample_string(&mut rand::thread_rng(), 32);
-        Self::new(project_name, initial_key)
+        Self::new(project_name, initial_key, idle_minutes)
     }
 
     pub fn with_image(mut self, image: String) -> Self {
@@ -635,6 +675,7 @@ impl ProjectCreating {
             project_name,
             fqdn,
             image,
+            idle_minutes,
             ..
         } = &self;
 
@@ -653,6 +694,7 @@ impl ProjectCreating {
                     "Labels": {
                         "shuttle.prefix": prefix,
                         "shuttle.project": project_name,
+                        "shuttle.idle_minutes": format!("{idle_minutes}"),
                     },
                     "Cmd": [
                         "--admin-secret",
@@ -720,7 +762,8 @@ where
     #[instrument(skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let container_name = self.container_name(ctx);
-        let recreate_count = self.recreate_count;
+        let Self { recreate_count, .. } = self;
+
         let container = ctx
             .docker()
             // If container already exists, use that
@@ -908,7 +951,7 @@ where
 
         let container = container.refresh(ctx).await?;
 
-        Ok(Self::Next::new(container))
+        Ok(Self::Next::new(container, VecDeque::new()))
     }
 }
 
@@ -960,13 +1003,17 @@ where
 pub struct ProjectStarted {
     container: ContainerInspectResponse,
     service: Option<Service>,
+    // Use default for backward compatibility. Can be removed when all projects in the DB have this property set
+    #[serde(default)]
+    stats: VecDeque<Stats>,
 }
 
 impl ProjectStarted {
-    pub fn new(container: ContainerInspectResponse) -> Self {
+    pub fn new(container: ContainerInspectResponse, stats: VecDeque<Stats>) -> Self {
         Self {
             container,
             service: None,
+            stats,
         }
     }
 }
@@ -975,6 +1022,7 @@ impl ProjectStarted {
 pub enum ProjectReadying {
     Ready(ProjectReady),
     Started(ProjectStarted),
+    Idle(ProjectStopping),
 }
 
 #[async_trait]
@@ -987,14 +1035,91 @@ where
 
     #[instrument(skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
-        let container = self.container.refresh(ctx).await?;
-        let mut service = match self.service {
+        let Self {
+            container,
+            service,
+            mut stats,
+        } = self;
+        let container = container.refresh(ctx).await?;
+        let mut service = match service {
             Some(service) => service,
             None => Service::from_container(container.clone())?,
         };
 
         if service.is_healthy().await {
-            Ok(Self::Next::Ready(ProjectReady { container, service }))
+            let idle_minutes = container.idle_minutes();
+
+            // Idle minutes of `0` means it is disabled and the project will always stay up
+            if idle_minutes < 1 {
+                Ok(Self::Next::Ready(ProjectReady {
+                    container,
+                    service,
+                    stats,
+                }))
+            } else {
+                let new_stat = ctx
+                    .docker()
+                    .stats(
+                        safe_unwrap!(container.id),
+                        Some(StatsOptions {
+                            one_shot: true,
+                            stream: false,
+                        }),
+                    )
+                    .next()
+                    .await
+                    .unwrap()?;
+
+                stats.push_back(new_stat.clone());
+
+                let mut last = None;
+
+                while stats.len() > (idle_minutes as usize) {
+                    last = stats.pop_front();
+                }
+
+                if let Some(last) = last {
+                    let cpu_per_minute = (new_stat.cpu_stats.cpu_usage.total_usage
+                        - last.cpu_stats.cpu_usage.total_usage)
+                        / idle_minutes;
+
+                    debug!(
+                        "{} has {} CPU usage per minute",
+                        service.name, cpu_per_minute
+                    );
+
+                    // From analysis we know the following kind of CPU usage for different kinds of idle projects
+                    // Web framework uses 6_200_000 CPU per minute
+                    // Serenity uses 20_000_000 CPU per minute
+                    //
+                    // We want to make sure we are able to stop these kinds of projects
+                    //
+                    // Now, the following kind of CPU usage has been observed for different kinds of projects having
+                    // 2 web requests / processing 2 discord messages per minute
+                    // Web framework uses 100_000_000 CPU per minute
+                    // Serenity uses 30_000_000 CPU per minute
+                    //
+                    // And projects at these levels we will want to keep active. However, the 30_000_000
+                    // for an "active" discord will be to close to the 20_000_000 of an idle framework. And
+                    // discord will have more traffic in anyway. So using the 100_000_000 threshold of an
+                    // active framework for now
+                    if cpu_per_minute < 100_000_000 {
+                        Ok(Self::Next::Idle(ProjectStopping { container }))
+                    } else {
+                        Ok(Self::Next::Ready(ProjectReady {
+                            container,
+                            service,
+                            stats,
+                        }))
+                    }
+                } else {
+                    Ok(Self::Next::Ready(ProjectReady {
+                        container,
+                        service,
+                        stats,
+                    }))
+                }
+            }
         } else {
             let started_at =
                 chrono::DateTime::parse_from_rfc3339(safe_unwrap!(container.state.started_at))
@@ -1011,6 +1136,7 @@ where
             Ok(Self::Next::Started(ProjectStarted {
                 container,
                 service: Some(service),
+                stats,
             }))
         }
     }
@@ -1020,6 +1146,9 @@ where
 pub struct ProjectReady {
     container: ContainerInspectResponse,
     service: Service,
+    // Use default for backward compatibility. Can be removed when all projects in the DB have this property set
+    #[serde(default)]
+    stats: VecDeque<Stats>,
 }
 
 #[async_trait]
@@ -1188,10 +1317,18 @@ where
     #[instrument(skip_all)]
     async fn next(self, ctx: &Ctx) -> Result<Self::Next, Self::Error> {
         let Self { container } = self;
+
+        // Stopping a docker containers sends a SIGTERM which will stop the tokio runtime that deployer starts up.
+        // Killing this runtime causes the deployment to enter the `completed` state and it therefore does not
+        // start up again when starting up the project's container. Luckily the kill command allows us to change the
+        // signal to prevent this from happenning.
+        //
+        // In some future state when all deployers hadle `SIGTERM` correctly, this can be changed to docker stop
+        // safely.
         ctx.docker()
-            .stop_container(
+            .kill_container(
                 safe_unwrap!(container.id),
-                Some(StopContainerOptions { t: 30 }),
+                Some(KillContainerOptions { signal: "SIGKILL" }),
             )
             .await?;
         Ok(Self::Next {
@@ -1505,6 +1642,7 @@ pub mod tests {
                 image: None,
                 from: None,
                 recreate_count: 0,
+                idle_minutes: 0,
             }),
             #[assertion = "Container created, attach network"]
             Ok(Project::Attaching(ProjectAttaching {

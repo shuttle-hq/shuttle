@@ -20,9 +20,7 @@ use chrono::Utc;
 use serde_json::json;
 use shuttle_common::STATE_MESSAGE;
 use sqlx::migrate::{MigrateDatabase, Migrator};
-use sqlx::sqlite::{
-    Sqlite, SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqliteSynchronous,
-};
+use sqlx::sqlite::{Sqlite, SqliteConnectOptions, SqliteJournalMode, SqlitePool};
 use tokio::sync::broadcast::{self, Receiver, Sender};
 use tokio::task::JoinHandle;
 use tracing::{error, info, instrument, trace};
@@ -63,10 +61,17 @@ impl Persistence {
             std::fs::canonicalize(path).unwrap().to_string_lossy()
         );
 
+        // We have found in the past that setting synchronous to anything other than the default (normal) breaks the
+        // broadcast channel in deployer. The broken symptoms are that the ws socket connections won't get any logs
+        // from the broadcast channel and would then close. When users did deploys, this would make it seem like the
+        // deploy is done (while it is still building for most of the time) and the status of the previous deployment
+        // would be returned to the user.
+        //
+        // If you want to activate a faster synchronous mode, then also do proper testing to confirm this bug is no
+        // longer present.
         let sqlite_options = SqliteConnectOptions::from_str(path)
             .unwrap()
-            .journal_mode(SqliteJournalMode::Wal)
-            .synchronous(SqliteSynchronous::Normal);
+            .journal_mode(SqliteJournalMode::Wal);
 
         let pool = SqlitePool::connect_with(sqlite_options).await.unwrap();
 

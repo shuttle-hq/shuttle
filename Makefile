@@ -72,7 +72,13 @@ PANAMAX_TAG?=1.0.12
 OTEL_EXTRA_PATH?=./extras/otel
 OTEL_TAG?=0.72.0
 
-DOCKER_COMPOSE_ENV=STACK=$(STACK) BACKEND_TAG=$(BACKEND_TAG) DEPLOYER_TAG=$(DEPLOYER_TAG) PROVISIONER_TAG=$(PROVISIONER_TAG) POSTGRES_TAG=${POSTGRES_TAG} PANAMAX_TAG=${PANAMAX_TAG} OTEL_TAG=${OTEL_TAG} APPS_FQDN=$(APPS_FQDN) DB_FQDN=$(DB_FQDN) POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) RUST_LOG=$(RUST_LOG) CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) MONGO_INITDB_ROOT_USERNAME=$(MONGO_INITDB_ROOT_USERNAME) MONGO_INITDB_ROOT_PASSWORD=$(MONGO_INITDB_ROOT_PASSWORD) DD_ENV=$(DD_ENV) USE_TLS=$(USE_TLS)
+USE_PANAMAX?=enable
+ifeq ($(USE_PANAMAX), enable)
+PREPARE_ARGS+=-p 
+COMPOSE_PROFILES+=panamax
+endif
+
+DOCKER_COMPOSE_ENV=STACK=$(STACK) BACKEND_TAG=$(BACKEND_TAG) DEPLOYER_TAG=$(DEPLOYER_TAG) PROVISIONER_TAG=$(PROVISIONER_TAG) POSTGRES_TAG=${POSTGRES_TAG} PANAMAX_TAG=${PANAMAX_TAG} OTEL_TAG=${OTEL_TAG} APPS_FQDN=$(APPS_FQDN) DB_FQDN=$(DB_FQDN) POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) RUST_LOG=$(RUST_LOG) CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) MONGO_INITDB_ROOT_USERNAME=$(MONGO_INITDB_ROOT_USERNAME) MONGO_INITDB_ROOT_PASSWORD=$(MONGO_INITDB_ROOT_PASSWORD) DD_ENV=$(DD_ENV) USE_TLS=$(USE_TLS) COMPOSE_PROFILES=$(COMPOSE_PROFILES)
 
 .PHONY: images clean src up down deploy shuttle-% postgres docker-compose.rendered.yml test bump-% deploy-examples publish publish-% --validate-version
 
@@ -91,12 +97,14 @@ postgres:
 	       $(POSTGRES_EXTRA_PATH)
 
 panamax:
-	docker buildx build \
-	       --build-arg PANAMAX_TAG=$(PANAMAX_TAG) \
-	       --tag $(CONTAINER_REGISTRY)/panamax:$(PANAMAX_TAG) \
-	       $(BUILDX_FLAGS) \
-	       -f $(PANAMAX_EXTRA_PATH)/Containerfile \
-	       $(PANAMAX_EXTRA_PATH)
+	if [ $(USE_PANAMAX) = "enable" ]; then \
+		docker buildx build \
+			--build-arg PANAMAX_TAG=$(PANAMAX_TAG) \
+			--tag $(CONTAINER_REGISTRY)/panamax:$(PANAMAX_TAG) \
+			$(BUILDX_FLAGS) \
+			-f $(PANAMAX_EXTRA_PATH)/Containerfile \
+			$(PANAMAX_EXTRA_PATH); \
+	fi
 
 otel:
 	docker buildx build \
@@ -115,6 +123,9 @@ deploy: docker-compose.yml
 test:
 	cd e2e; POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) APPS_FQDN=$(APPS_FQDN) cargo test $(CARGO_TEST_FLAGS) -- --nocapture
 
+# Start the containers locally. This does not start panamax by default,
+# to start panamax locally run this command with the COMPOSE_PROFILES=panamax 
+# environment variable.
 up: docker-compose.rendered.yml
 	CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) $(DOCKER_COMPOSE) -f $< -p $(STACK) up -d $(DOCKER_COMPOSE_FLAGS)
 
@@ -124,7 +135,8 @@ down: docker-compose.rendered.yml
 shuttle-%: ${SRC} Cargo.lock
 	docker buildx build \
 	       --build-arg folder=$(*) \
-		   --build-arg RUSTUP_TOOLCHAIN=$(RUSTUP_TOOLCHAIN) \
+           --build-arg prepare_args=$(PREPARE_ARGS) \
+	       --build-arg RUSTUP_TOOLCHAIN=$(RUSTUP_TOOLCHAIN) \
 		   --build-arg CARGO_PROFILE=$(CARGO_PROFILE) \
 	       --tag $(CONTAINER_REGISTRY)/$(*):$(COMMIT_SHA) \
 	       --tag $(CONTAINER_REGISTRY)/$(*):$(TAG) \

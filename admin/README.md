@@ -1,6 +1,10 @@
-_Small utility used by the shuttle admin for common tasks_
+# Admin
+
+<!-- markdownlint-disable-next-line -->
+*Small utility used by the shuttle admin for common tasks*
 
 ## How to test custom domain certificates locally
+
 For local testing it is easiest to use the [Pebble](https://github.com/letsencrypt/pebble) server. So install it using
 whatever method works for your system. It is included in the nix environment if you use it though.
 
@@ -31,4 +35,4 @@ cargo run -p shuttle-admin -- --api-url http://localhost:8001 acme create-accoun
 
 Safe the account JSON in a local file and use it to test creating new certificate. However, you'll the FQDN you're
 using for testnig to resolve to your local machine. So create an `A` record for it on your DNS with the value
-`127.0.0.1`. And Bob's your uncle 🎉 
+`127.0.0.1`. And Bob's your uncle 🎉

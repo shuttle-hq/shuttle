@@ -61,7 +61,7 @@ impl Persistence {
             std::fs::canonicalize(path).unwrap().to_string_lossy()
         );
 
-        // We have found in the past that setting synchronous to anything other than the default (normal) breaks the
+        // We have found in the past that setting synchronous to anything other than the default (full) breaks the
         // broadcast channel in deployer. The broken symptoms are that the ws socket connections won't get any logs
         // from the broadcast channel and would then close. When users did deploys, this would make it seem like the
         // deploy is done (while it is still building for most of the time) and the status of the previous deployment

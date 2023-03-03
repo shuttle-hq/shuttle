@@ -37,7 +37,7 @@ use crate::auth::{ScopedUser, User};
 use crate::project::{ContainerInspectResponseExt, Project, ProjectCreating};
 use crate::service::GatewayService;
 use crate::task::{self, BoxedTask, TaskResult};
-use crate::tls::GatewayCertResolver;
+use crate::tls::{GatewayCertResolver, RENEWAL_VALIDITY_THRESHOLD_IN_DAYS};
 use crate::worker::WORKER_QUEUE_SIZE;
 use crate::{Error, ProjectName};
 
@@ -408,7 +408,7 @@ async fn renew_custom_domain_acme_certificate(
                 .sub(ASN1Time::now())
                 .unwrap();
             // If current certificate validity less_or_eq than 30 days, attempt renewal.
-            if diff.whole_days() <= 30 {
+            if diff.whole_days() <= RENEWAL_VALIDITY_THRESHOLD_IN_DAYS {
                 return match acme_client
                     .create_certificate(&fqdn.to_string(), ChallengeType::Http01, credentials)
                     .await

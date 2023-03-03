@@ -2,7 +2,7 @@ use clap::Parser;
 use futures::prelude::*;
 
 use shuttle_common::backends::tracing::setup_tracing;
-use shuttle_gateway::acme::{AcmeClient, AcmeCredentials, CustomDomain};
+use shuttle_gateway::acme::{AcmeClient, CustomDomain};
 use shuttle_gateway::api::latest::{ApiBuilder, SVC_DEGRADED_THRESHOLD};
 use shuttle_gateway::args::StartArgs;
 use shuttle_gateway::args::{Args, Commands, UseTls};
@@ -179,11 +179,7 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
         tokio::spawn(async move {
             // Make sure we have a certificate for ourselves.
             gateway
-                .fetch_certificate(
-                    &acme_client,
-                    resolver.clone(),
-                    AcmeCredentials::GatewayState,
-                )
+                .fetch_certificate(&acme_client, resolver.clone(), gateway.credentials())
                 .await;
         });
     } else {

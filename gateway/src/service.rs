@@ -30,11 +30,11 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use x509_parser::parse_x509_certificate;
 use x509_parser::time::ASN1Time;
 
-use crate::acme::{AccountWrapper, AcmeClient, AcmeCredentials, CustomDomain};
+use crate::acme::{AccountWrapper, AcmeClient, CustomDomain};
 use crate::args::ContextArgs;
 use crate::project::{Project, ProjectCreating};
 use crate::task::{self, BoxedTask, TaskBuilder};
-use crate::tls::{ChainAndPrivateKey, GatewayCertResolver};
+use crate::tls::{ChainAndPrivateKey, GatewayCertResolver, RENEWAL_VALIDITY_THRESHOLD_IN_DAYS};
 use crate::worker::TaskRouter;
 use crate::{AccountName, DockerContext, Error, ErrorKind, ProjectDetails, ProjectName};
 
@@ -612,7 +612,7 @@ impl GatewayService {
         &self,
         acme: &AcmeClient,
         resolver: Arc<GatewayCertResolver>,
-        creds: AcmeCredentials<'_>,
+        creds: AccountCredentials<'_>,
     ) -> ChainAndPrivateKey {
         let tls_path = self.state_location.join("ssl.pem");
         match ChainAndPrivateKey::load_pem(&tls_path) {
@@ -622,24 +622,6 @@ impl GatewayService {
                     "no valid certificate found at {}, creating one...",
                     tls_path.display()
                 );
-
-                let creds = match creds {
-                    AcmeCredentials::InMemory(creds) => creds,
-                    AcmeCredentials::GatewayState => {
-                        let creds_path = self.state_location.join("acme.json");
-                        if !creds_path.exists() {
-                            panic!(
-                                "no ACME credentials found at {}, cannot continue with certificate creation",
-                                creds_path.display()
-                            );
-                        }
-
-                        let creds =
-                            std::fs::File::open(creds_path).expect("Invalid credentials path");
-                        serde_json::from_reader(&creds)
-                            .expect("Can not parse admin credentials from path")
-                    }
-                };
 
                 let certs = self.create_certificate(acme, resolver, creds).await;
                 certs.clone().save_pem(&tls_path).unwrap();
@@ -658,11 +640,7 @@ impl GatewayService {
     ) {
         let account = AccountWrapper::from(creds).0;
         let certs = self
-            .fetch_certificate(
-                acme,
-                resolver.clone(),
-                AcmeCredentials::InMemory(account.credentials()),
-            )
+            .fetch_certificate(acme, resolver.clone(), account.credentials())
             .await;
         // Safe to unwrap because a 'ChainAndPrivateKey' is built from a PEM.
         let chain_and_pk = certs.into_pem().unwrap();
@@ -670,7 +648,7 @@ impl GatewayService {
         let (_, x509_cert) = parse_x509_certificate(chain_and_pk.as_bytes()).unwrap();
         let diff = x509_cert.validity().not_after.sub(ASN1Time::now()).unwrap();
 
-        if diff.whole_days() <= 30 {
+        if diff.whole_days() <= RENEWAL_VALIDITY_THRESHOLD_IN_DAYS {
             let tls_path = self.state_location.join("ssl.pem");
             let certs = self
                 .create_certificate(acme, resolver.clone(), account.credentials())
@@ -719,6 +697,19 @@ impl GatewayService {
 
     pub fn task_router(&self) -> TaskRouter<BoxedTask> {
         self.task_router.clone()
+    }
+
+    pub fn credentials(&self) -> AccountCredentials<'_> {
+        let creds_path = self.state_location.join("acme.json");
+        if !creds_path.exists() {
+            panic!(
+                "no ACME credentials found at {}, cannot continue with certificate creation",
+                creds_path.display()
+            );
+        }
+
+        serde_json::from_reader(std::fs::File::open(creds_path).expect("Invalid credentials path"))
+            .expect("Can not parse admin credentials from path")
     }
 }
 

@@ -14,6 +14,7 @@ use instant_acme::{
     Identifier, KeyAuthorization, LetsEncrypt, NewAccount, NewOrder, Order, OrderStatus,
 };
 use rcgen::{Certificate, CertificateParams, DistinguishedName};
+
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use tower::{Layer, Service};
@@ -30,11 +31,6 @@ pub struct CustomDomain {
     pub project_name: ProjectName,
     pub certificate: String,
     pub private_key: String,
-}
-
-pub enum AcmeCredentials<'a> {
-    InMemory(AccountCredentials<'a>),
-    GatewayState,
 }
 
 /// An ACME client implementation that completes Http01 challenges

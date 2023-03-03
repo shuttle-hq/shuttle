@@ -78,7 +78,9 @@ pub enum AcmeCommand {
         credentials: serde_json::Value,
     },
 
-    /// Renew the certificate for the shuttle gateway
+    /// Renew the certificate for the shuttle gateway.
+    /// Note: this step should be completed manually in terms
+    /// of DNS-01 challenge completion.
     RenewGateway {
         /// Path to acme credentials file
         /// This should have been created with `acme create-account`

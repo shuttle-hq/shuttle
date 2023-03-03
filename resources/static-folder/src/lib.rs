@@ -33,11 +33,7 @@ impl<'a> ResourceBuilder<PathBuf> for StaticFolder<'a> {
         Self { folder: "static" }
     }
 
-    async fn build(
-        self,
-        factory: &mut dyn Factory,
-        _runtime: &Runtime,
-    ) -> Result<PathBuf, shuttle_service::Error> {
+    async fn build(self, factory: &mut dyn Factory) -> Result<PathBuf, shuttle_service::Error> {
         let folder = Path::new(self.folder);
 
         // Prevent users from users from reading anything outside of their crate's build folder

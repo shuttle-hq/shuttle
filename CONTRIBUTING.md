@@ -164,7 +164,7 @@ To run the unit tests for a specific crate, from the root of the repository run:
 cargo test --package <crate-name> --all-features --lib -- --nocapture
 ```
 
-To run the integration tests for a spesific crate (if it has any), from the root of the repository run:
+To run the integration tests for a specific crate (if it has any), from the root of the repository run:
 
 ```bash
 # replace <crate-name> with the name of the crate to test, e.g. `cargo-shuttle`

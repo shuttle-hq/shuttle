@@ -30,14 +30,14 @@ pub struct PersistInstance {
 }
 
 impl PersistInstance {
-    pub fn save<T: Serialize>(&self, key: &str, struc: T) -> Result<(), PersistError> {
+    pub fn save<T: Serialize>(&self, key: &str, struct: T) -> Result<(), PersistError> {
         let storage_folder = self.get_storage_folder();
         fs::create_dir_all(storage_folder).map_err(PersistError::CreateFolder)?;
 
         let file_path = self.get_storage_file(key);
         let file = File::create(file_path).map_err(PersistError::Open)?;
         let mut writer = BufWriter::new(file);
-        Ok(serialize_into(&mut writer, &struc).map_err(PersistError::Serialize))?
+        Ok(serialize_into(&mut writer, &struct).map_err(PersistError::Serialize))?
     }
 
     pub fn load<T>(&self, key: &str) -> Result<T, PersistError>

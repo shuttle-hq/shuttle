@@ -33,7 +33,7 @@ impl ToJson for reqwest::Response {
             status_code,
             StatusCode::OK | StatusCode::SWITCHING_PROTOCOLS
         ) {
-            serde_json::from_slice(&full).context("failed to parse a successfull response")
+            serde_json::from_slice(&full).context("failed to parse a successful response")
         } else {
             trace!("parsing response to common error");
             let res: error::ApiError = match serde_json::from_slice(&full) {

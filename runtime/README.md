@@ -57,8 +57,8 @@ curl  localhost:7002/goodbye
 ```
 
 ## shuttle-legacy
-
-Load and run an .so library that implements `shuttle_service::Service`. 
+This will no loger load a `.so` will the code to start the runtime will be codegened for all services.
+An example can be found in `src/bin/rocket.rs` which contains the secrets rocket example at the bottom and the codegen at the top.
 
 To test, first start a provisioner from the root directory using:
 
@@ -66,10 +66,10 @@ To test, first start a provisioner from the root directory using:
 docker-compose -f docker-compose.rendered.yml up provisioner
 ```
 
-Then in another shell, start the runtime using the clap CLI:
+Then in another shell, start the wrapped runtime using the clap CLI:
 
 ```bash
-cargo run -- --legacy --provisioner-address http://localhost:5000
+cargo run -- --port 6001 --storage-manager-type working-dir --storage-manager-path ./
 ```
 
 Or directly (this is the path hardcoded in `deployer::start`):
@@ -77,24 +77,23 @@ Or directly (this is the path hardcoded in `deployer::start`):
 # first, make sure the shuttle-runtime binary is built
 cargo build
 # then
-/home/<path to shuttle repo>/target/debug/shuttle-runtime --legacy --provisioner-address http://localhost:5000
+/home/<path to shuttle repo>/target/debug/shuttle-runtime --port 6001 --storage-manager-type working-dir --storage-manager-path ./
 ```
 
-Pass the path to `deployer::start`
-Then in another shell, load a `.so` file and start it up:
+Then in another shell, load the service and start it up:
 
 ``` bash
 # load
-grpcurl -plaintext -import-path ../proto -proto runtime.proto -d '{"service_name": "Tonic", "path": "/home/<path to shuttle>/examples/rocket/hello-world/target/debug/libhello_world.so"}' localhost:6001 runtime.Runtime/Load
+grpcurl -plaintext -import-path ../proto -proto runtime.proto -d '{"service_name": "Tonic", "path": "/home/<path to shuttle>/examples/rocket/hello-world/target/debug/libhello_world.so", "secrets": {"MY_API_KEY": "test"}}' localhost:6001 runtime.Runtime/Load
 
 # run (this deployment id is default uuid encoded as base64)
-grpcurl -plaintext -import-path ../proto -proto runtime.proto -d '{"service_name": "Tonic", "deployment_id": "MDAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAw"}' localhost:6001 runtime.Runtime/Start
+grpcurl -plaintext -import-path ../proto -proto runtime.proto -d '{"service_name": "Tonic", "deployment_id": "MDAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAw", "ip": "127.0.0.1:8000"}' localhost:6001 runtime.Runtime/Start
 
 # subscribe to logs
 grpcurl -plaintext -import-path ../proto -proto runtime.proto localhost:6001 runtime.Runtime/SubscribeLogs
 
 # stop (the service started in the legacy runtime can't currently be stopped)
-grpcurl -plaintext -import-path ../proto -proto runtime.proto -d '{"service_name": "Tonic"}' localhost:6001 runtime.Runtime/Stop
+grpcurl -plaintext -import-path ../proto -proto runtime.proto -d '{}' localhost:6001 runtime.Runtime/Stop
 ```
 
 ## Running the tests

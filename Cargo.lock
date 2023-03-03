@@ -6415,8 +6415,10 @@ dependencies = [
  "futures",
  "hyper",
  "rmp-serde",
+ "rocket",
  "shuttle-common",
  "shuttle-proto",
+ "shuttle-secrets",
  "shuttle-service",
  "thiserror",
  "tokio",
@@ -6436,7 +6438,6 @@ version = "0.8.0"
 dependencies = [
  "async-trait",
  "shuttle-service",
- "tokio",
 ]
 
 [[package]]

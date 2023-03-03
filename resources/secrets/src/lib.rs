@@ -3,7 +3,6 @@ use std::collections::BTreeMap;
 use async_trait::async_trait;
 
 use shuttle_service::{Error, Factory, ResourceBuilder};
-use tokio::runtime::Runtime;
 
 pub struct Secrets;
 
@@ -14,11 +13,7 @@ impl ResourceBuilder<SecretStore> for Secrets {
         Self {}
     }
 
-    async fn build(
-        self,
-        factory: &mut dyn Factory,
-        _runtime: &Runtime,
-    ) -> Result<SecretStore, Error> {
+    async fn build(self, factory: &mut dyn Factory) -> Result<SecretStore, Error> {
         let secrets = factory.get_secrets().await?;
 
         Ok(SecretStore { secrets })

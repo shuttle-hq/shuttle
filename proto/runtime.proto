@@ -36,8 +36,6 @@ message LoadResponse {
 message StartRequest {
   // Id to associate with the deployment being started
   bytes deployment_id = 1;
-  // Name of service to start
-  string service_name = 2;
   // Address and port to start the service on
   string ip = 3;
 }
@@ -47,12 +45,7 @@ message StartResponse {
   bool success = 1;
 }
 
-message StopRequest {
-  // Id to associate with the deployment being stopped
-  bytes deployment_id = 1;
-  // Name of service to stop
-  string service_name = 2;
-}
+message StopRequest {}
 
 message StopResponse {
   // Was the stop successful

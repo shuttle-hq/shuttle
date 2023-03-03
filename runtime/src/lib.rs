@@ -1,8 +1,9 @@
 mod args;
 mod axum;
 mod legacy;
-pub mod provisioner_factory;
+mod provisioner_factory;
 
 pub use args::{Args, StorageManagerType};
 pub use axum::AxumWasm;
-pub use legacy::Legacy;
+pub use legacy::{start, Legacy};
+pub use provisioner_factory::ProvisionerFactory;

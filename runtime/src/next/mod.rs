@@ -98,9 +98,7 @@ impl Runtime for AxumWasm {
         &self,
         request: tonic::Request<StartRequest>,
     ) -> Result<tonic::Response<StartResponse>, Status> {
-        let StartRequest {
-            deployment_id, ip, ..
-        } = request.into_inner();
+        let StartRequest { deployment_id, ip } = request.into_inner();
 
         let address = SocketAddr::from_str(&ip)
             .context("invalid socket address")

@@ -540,18 +540,19 @@ pub type ShuttleWarp<T> = Result<warp::filters::BoxedFilter<T>, Error>;
 
 #[cfg(feature = "web-axum")]
 #[async_trait]
-impl Service for sync_wrapper::SyncWrapper<axum::Router> {
+impl Service for axum::Router {
     async fn bind(mut self, addr: SocketAddr) -> Result<(), error::Error> {
-        let router = self.into_inner();
-
         axum::Server::bind(&addr)
-            .serve(router.into_make_service())
+            .serve(self.into_make_service())
             .await
             .map_err(error::CustomError::new)?;
 
         Ok(())
     }
 }
+
+#[cfg(feature = "web-axum")]
+pub type ShuttleAxum = Result<axum::Router, Error>;
 
 #[cfg(feature = "web-actix-web")]
 #[async_trait]
@@ -574,9 +575,6 @@ where
 }
 #[cfg(feature = "web-actix-web")]
 pub type ShuttleActixWeb<F> = Result<F, Error>;
-
-#[cfg(feature = "web-axum")]
-pub type ShuttleAxum = Result<sync_wrapper::SyncWrapper<axum::Router>, Error>;
 
 #[cfg(feature = "web-salvo")]
 #[async_trait]

@@ -3,8 +3,8 @@
 all: axum
 
 axum:
-	cd ../tmp/axum-wasm-expanded; cargo build --target wasm32-wasi
-	cp ../tmp/axum-wasm-expanded/target/wasm32-wasi/debug/shuttle_axum_expanded.wasm axum.wasm
+	cd tests/resources/axum-wasm-expanded; cargo build --target wasm32-wasi
+	cp tests/resources/axum-wasm-expanded/target/wasm32-wasi/debug/shuttle_axum_expanded.wasm axum.wasm
 
 test: axum
 	cargo test --all-features -- --nocapture

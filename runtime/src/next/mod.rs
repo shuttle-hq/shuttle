@@ -30,6 +30,10 @@ use wasmtime::{Engine, Linker, Module, Store};
 use wasmtime_wasi::sync::net::UnixStream as WasiUnixStream;
 use wasmtime_wasi::{WasiCtx, WasiCtxBuilder};
 
+mod args;
+
+pub use self::args::NextArgs;
+
 extern crate rmp_serde as rmps;
 
 const LOGS_FD: u32 = 20;

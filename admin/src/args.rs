@@ -1,6 +1,6 @@
-use std::path::PathBuf;
+use std::{fs, io, path::PathBuf};
 
-use clap::{Parser, Subcommand};
+use clap::{Error, Parser, Subcommand};
 use shuttle_common::project::ProjectName;
 
 #[derive(Parser, Debug)]
@@ -47,7 +47,7 @@ pub enum AcmeCommand {
     },
 
     /// Request a certificate for a FQDN
-    RequestCertificate {
+    Request {
         /// Fqdn to request certificate for
         #[arg(long)]
         fqdn: String,
@@ -58,12 +58,12 @@ pub enum AcmeCommand {
 
         /// Path to acme credentials file
         /// This should have been created with `acme create-account`
-        #[arg(long)]
-        credentials: PathBuf,
+        #[arg(long, value_parser = load_credentials)]
+        credentials: serde_json::Value,
     },
 
     /// Renew the certificate for a FQDN
-    RenewCustomDomainCertificate {
+    RenewCustomDomain {
         /// Fqdn to renew the certificate for
         #[arg(long)]
         fqdn: String,
@@ -74,16 +74,16 @@ pub enum AcmeCommand {
 
         /// Path to acme credentials file
         /// This should have been created with `acme create-account`
-        #[arg(long)]
-        credentials: PathBuf,
+        #[arg(long, value_parser = load_credentials)]
+        credentials: serde_json::Value,
     },
 
-    /// Renew certificate for the shuttle gateway
-    RenewGatewayCertificate {
+    /// Renew the certificate for the shuttle gateway
+    RenewGateway {
         /// Path to acme credentials file
         /// This should have been created with `acme create-account`
-        #[arg(long)]
-        credentials: PathBuf,
+        #[arg(long, value_parser = load_credentials)]
+        credentials: serde_json::Value,
     },
 }
 
@@ -95,4 +95,9 @@ pub enum StatsCommand {
         #[arg(long)]
         clear: bool,
     },
+}
+
+fn load_credentials(s: &str) -> Result<serde_json::Value, Error> {
+    let credentials = fs::read_to_string(PathBuf::from(s))?;
+    serde_json::from_str(&credentials).map_err(|err| Error::from(io::Error::from(err)))
 }

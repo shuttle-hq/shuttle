@@ -20,7 +20,6 @@ use shuttle_proto::runtime::{
     self, LoadRequest, LoadResponse, StartRequest, StartResponse, StopRequest, StopResponse,
     SubscribeLogsRequest,
 };
-use shuttle_service::ServiceName;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::{mpsc, oneshot};
 use tokio_stream::wrappers::ReceiverStream;
@@ -149,18 +148,12 @@ impl Runtime for AxumWasm {
         &self,
         request: tonic::Request<StopRequest>,
     ) -> Result<tonic::Response<StopResponse>, Status> {
-        let request = request.into_inner();
-
-        let service_name = ServiceName::from_str(request.service_name.as_str())
-            .map_err(|err| Status::from_error(Box::new(err)))?;
+        let _request = request.into_inner();
 
         let kill_tx = self.kill_tx.lock().unwrap().deref_mut().take();
 
         if let Some(kill_tx) = kill_tx {
-            if kill_tx
-                .send(format!("stopping deployment: {}", &service_name))
-                .is_err()
-            {
+            if kill_tx.send(format!("stopping deployment")).is_err() {
                 error!("the receiver dropped");
                 return Err(Status::internal("failed to stop deployment"));
             }

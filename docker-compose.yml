@@ -173,8 +173,6 @@ services:
         constraints:
           - node.hostname==controller
   panamax:
-    profiles:
-      - panamax
     image: "${CONTAINER_REGISTRY}/panamax:${PANAMAX_TAG}"
     restart: always
     networks:
@@ -191,8 +189,6 @@ services:
         constraints:
           - node.hostname==controller
   deck-chores:
-    profiles:
-      - panamax
     image: funkyfuture/deck-chores:1
     restart: unless-stopped
     environment:

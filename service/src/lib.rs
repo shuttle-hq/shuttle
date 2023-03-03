@@ -509,7 +509,7 @@ impl<T> Service for T
 where
     T: poem::Endpoint + Sync + Send + 'static,
 {
-    async fn bind(mut self: Box<Self>, addr: SocketAddr) -> Result<(), error::Error> {
+    async fn bind(mut self, addr: SocketAddr) -> Result<(), error::Error> {
         poem::Server::new(poem::listener::TcpListener::bind(addr))
             .run(self)
             .await
@@ -529,7 +529,7 @@ where
     T: Send + Sync + Clone + 'static + warp::Filter,
     T::Extract: warp::reply::Reply,
 {
-    async fn bind(mut self: Box<Self>, addr: SocketAddr) -> Result<(), error::Error> {
+    async fn bind(mut self, addr: SocketAddr) -> Result<(), error::Error> {
         warp::serve(*self).run(addr).await;
         Ok(())
     }
@@ -540,12 +540,10 @@ pub type ShuttleWarp<T> = Result<warp::filters::BoxedFilter<T>, Error>;
 
 #[cfg(feature = "web-axum")]
 #[async_trait]
-impl Service for sync_wrapper::SyncWrapper<axum::Router> {
-    async fn bind(mut self: Box<Self>, addr: SocketAddr) -> Result<(), error::Error> {
-        let router = self.into_inner();
-
+impl Service for axum::Router {
+    async fn bind(mut self, addr: SocketAddr) -> Result<(), error::Error> {
         axum::Server::bind(&addr)
-            .serve(router.into_make_service())
+            .serve(self.into_make_service())
             .await
             .map_err(error::CustomError::new)?;
 
@@ -553,13 +551,16 @@ impl Service for sync_wrapper::SyncWrapper<axum::Router> {
     }
 }
 
+#[cfg(feature = "web-axum")]
+pub type ShuttleAxum = Result<axum::Router, Error>;
+
 #[cfg(feature = "web-actix-web")]
 #[async_trait]
 impl<F> Service for F
 where
     F: FnOnce(&mut actix_web::web::ServiceConfig) + Sync + Send + Clone + 'static,
 {
-    async fn bind(mut self: Box<Self>, addr: SocketAddr) -> Result<(), Error> {
+    async fn bind(mut self, addr: SocketAddr) -> Result<(), Error> {
         // Start a worker for each cpu, but no more than 4.
         let worker_count = num_cpus::get().max(4);
 
@@ -575,13 +576,10 @@ where
 #[cfg(feature = "web-actix-web")]
 pub type ShuttleActixWeb<F> = Result<F, Error>;
 
-#[cfg(feature = "web-axum")]
-pub type ShuttleAxum = Result<sync_wrapper::SyncWrapper<axum::Router>, Error>;
-
 #[cfg(feature = "web-salvo")]
 #[async_trait]
 impl Service for salvo::Router {
-    async fn bind(mut self: Box<Self>, addr: SocketAddr) -> Result<(), error::Error> {
+    async fn bind(mut self, addr: SocketAddr) -> Result<(), error::Error> {
         salvo::Server::new(salvo::listener::TcpListener::bind(addr))
             .serve(self)
             .await;
@@ -599,7 +597,7 @@ impl<T> Service for T
 where
     T: thruster::ThrusterServer + Sync + Send + 'static,
 {
-    async fn bind(mut self: Box<Self>, addr: SocketAddr) -> Result<(), error::Error> {
+    async fn bind(mut self, addr: SocketAddr) -> Result<(), error::Error> {
         self.build(&addr.ip().to_string(), addr.port()).await;
 
         Ok(())
@@ -615,7 +613,7 @@ impl<T> Service for tide::Server<T>
 where
     T: Clone + Send + Sync + 'static,
 {
-    async fn bind(mut self: Box<Self>, addr: SocketAddr) -> Result<(), error::Error> {
+    async fn bind(mut self, addr: SocketAddr) -> Result<(), error::Error> {
         self.listen(addr).await.map_err(error::CustomError::new)?;
 
         Ok(())
@@ -637,7 +635,7 @@ where
     T::Error: std::error::Error + Send + Sync,
     T::Future: std::future::Future + Send + Sync,
 {
-    async fn bind(mut self: Box<Self>, addr: SocketAddr) -> Result<(), error::Error> {
+    async fn bind(mut self, addr: SocketAddr) -> Result<(), error::Error> {
         let shared = tower::make::Shared::new(self);
         hyper::Server::bind(&addr)
             .serve(shared)
@@ -651,7 +649,7 @@ where
 #[cfg(feature = "bot-serenity")]
 #[async_trait]
 impl Service for serenity::Client {
-    async fn bind(mut self: Box<Self>, _addr: SocketAddr) -> Result<(), error::Error> {
+    async fn bind(mut self, _addr: SocketAddr) -> Result<(), error::Error> {
         self.start().await.map_err(error::CustomError::new)?;
 
         Ok(())
@@ -668,7 +666,7 @@ where
     T: std::marker::Send + std::marker::Sync + 'static,
     E: std::marker::Send + std::marker::Sync + 'static,
 {
-    async fn bind(mut self: Box<Self>, _addr: SocketAddr) -> Result<(), error::Error> {
+    async fn bind(mut self, _addr: SocketAddr) -> Result<(), error::Error> {
         self.start().await.map_err(error::CustomError::new)?;
 
         Ok(())

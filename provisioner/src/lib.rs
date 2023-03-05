@@ -3,6 +3,7 @@ use std::time::Duration;
 pub use args::Args;
 use aws_config::timeout;
 use aws_sdk_rds::{error::ModifyDBInstanceErrorKind, model::DbInstance, types::SdkError, Client};
+use aws_sdk_s3::model::CreateBucketConfiguration;
 pub use error::Error;
 use mongodb::{bson::doc, options::ClientOptions};
 use rand::Rng;
@@ -12,6 +13,9 @@ use shuttle_proto::provisioner::{
     aws_rds, database_request::DbType, shared, AwsRds, DatabaseRequest, DatabaseResponse, Shared,
 };
 use shuttle_proto::provisioner::{provisioner_server::Provisioner, DatabaseDeletionResponse};
+use shuttle_proto::provisioner::{
+    storage_request, StorageDeletionResponse, StorageRequest, StorageResponse,
+};
 use sqlx::{postgres::PgPoolOptions, ConnectOptions, Executor, PgPool};
 use tokio::time::sleep;
 use tonic::{Request, Response, Status};
@@ -27,6 +31,7 @@ const RDS_SUBNET_GROUP: &str = "shuttle_rds";
 pub struct MyProvisioner {
     pool: PgPool,
     rds_client: aws_sdk_rds::Client,
+    s3_client: aws_sdk_s3::Client,
     mongodb_client: mongodb::Client,
     fqdn: String,
     internal_pg_address: String,
@@ -63,9 +68,12 @@ impl MyProvisioner {
 
         let rds_client = aws_sdk_rds::Client::new(&aws_config);
 
+        let s3_client = aws_sdk_s3::Client::new(&aws_config);
+
         Ok(Self {
             pool,
             rds_client,
+            s3_client,
             mongodb_client,
             fqdn,
             internal_pg_address,
@@ -402,6 +410,44 @@ impl MyProvisioner {
 
         Ok(DatabaseDeletionResponse {})
     }
+
+    async fn create_s3_bucket(
+        &self,
+        project_name: &str,
+        bucket_name: &str,
+    ) -> Result<StorageDeletionResponse, Error> {
+        let client = &self.s3_client;
+        let bucket = format!("{project_name}-${bucket_name}");
+
+        let create_result = client.create_bucket().bucket(bucket).send().await;
+
+        if let Err(err) = create_result {
+            return Err(Error::Plain(format!(
+                "got unexpected error from AWS S3 service while creating bucket: {err}"
+            )));
+        }
+
+        Ok(StorageDeletionResponse {})
+    }
+
+    async fn delete_s3_bucket(
+        &self,
+        project_name: &str,
+        bucket_name: &str,
+    ) -> Result<StorageDeletionResponse, Error> {
+        let client = &self.s3_client;
+        let bucket = format!("{project_name}-${bucket_name}");
+
+        let delete_result = client.delete_bucket().bucket(bucket).send().await;
+
+        if let Err(SdkError::ServiceError { err, .. }) = delete_result {
+            return Err(Error::Plain(format!(
+                "got unexpected error from AWS S3 service: {err}"
+            )));
+        }
+
+        Ok(StorageDeletionResponse {})
+    }
 }
 
 #[tonic::async_trait]
@@ -452,6 +498,22 @@ impl Provisioner for MyProvisioner {
         };
 
         Ok(Response::new(reply))
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn provision_storage(
+        &self,
+        request: Request<StorageRequest>,
+    ) -> Result<Response<StorageResponse>, Status> {
+        Err(Status::new(tonic::Code::Cancelled, "unimplemented"))
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn delete_storage(
+        &self,
+        request: Request<StorageRequest>,
+    ) -> Result<Response<StorageDeletionResponse>, Status> {
+        Err(Status::new(tonic::Code::Cancelled, "unimplemented"))
     }
 }
 

@@ -9,6 +9,8 @@ publish = false
 
 [dependencies]
 aws-config = "0.51.0"
+aws-creds = "0.34.0"
+aws-sdk-s3 = "0.21.0"
 aws-sdk-rds = "0.21.0"
 clap = { workspace = true, features = ["env"] }
 fqdn = "0.2.3"

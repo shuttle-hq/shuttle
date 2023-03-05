@@ -3,7 +3,7 @@ use std::fs::{read_to_string, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use crate::cargo_builder::CargoBuilder;
+use crate::cargo_builder::{ Dependency, CargoBuilder };
 use anyhow::Result;
 use cargo::ops::NewOptions;
 use cargo_edit::{find, get_latest_dependency, registry_url};
@@ -827,12 +827,14 @@ pub fn cargo_shuttle_init(path: PathBuf, framework: Framework) -> Result<()> {
     let dependency = vec!["actix-web"];
     let features = HashMap::from([("shuttle-service", vec!["web-actix-web"])]);
 
-    //cargo_builder.add_dependency("axum".to_owned());
-    //cargo_builder.add_dependency_var(
-    //"axum1".to_owned(),
-    //"features".to_owned(),
-    //["my-feature".to_owned()],
-    //);
+    cargo_builder.add_dependency(Dependency::new("axum".to_owned()));
+
+    let features = Array::from_iter(["my-feature"]);
+    cargo_builder.add_dependency_var(
+        Dependency::new("axum1".to_owned()),
+        "features".to_owned(),
+        features,
+    );
     //cargo_builder.add_dependency_var(
     //"axum".to_owned(),
     //"features".to_owned(),

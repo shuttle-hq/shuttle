@@ -7,7 +7,6 @@ use std::{
     fs::rename,
     path::{Path, PathBuf},
 };
-use tokio::runtime::Runtime;
 
 pub struct StaticFolder<'a> {
     /// The folder to reach at runtime. Defaults to `static`
@@ -167,8 +166,7 @@ mod tests {
         // Call plugin
         let static_folder = StaticFolder::new();
 
-        let runtime = tokio::runtime::Runtime::new().unwrap();
-        let actual_folder = static_folder.build(&mut factory, &runtime).await.unwrap();
+        let actual_folder = static_folder.build(&mut factory).await.unwrap();
 
         assert_eq!(
             actual_folder,
@@ -181,8 +179,6 @@ mod tests {
             "Hello, test!",
             "expected file content to match"
         );
-
-        runtime.shutdown_background();
     }
 
     #[tokio::test]
@@ -190,15 +186,12 @@ mod tests {
     async fn cannot_use_absolute_path() {
         let mut factory = MockFactory::new();
         let static_folder = StaticFolder::new();
-        let runtime = tokio::runtime::Runtime::new().unwrap();
 
         let _ = static_folder
             .folder("/etc")
-            .build(&mut factory, &runtime)
+            .build(&mut factory)
             .await
             .unwrap();
-
-        runtime.shutdown_background();
     }
 
     #[tokio::test]
@@ -213,13 +206,10 @@ mod tests {
         // Call plugin
         let static_folder = StaticFolder::new();
 
-        let runtime = tokio::runtime::Runtime::new().unwrap();
         let _ = static_folder
             .folder("../escape")
-            .build(&mut factory, &runtime)
+            .build(&mut factory)
             .await
             .unwrap();
-
-        runtime.shutdown_background();
     }
 }

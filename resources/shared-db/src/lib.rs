@@ -19,7 +19,7 @@ impl ResourceBuilder<sqlx::PgPool> for Postgres {
             .get_db_connection_string(database::Type::Shared(database::SharedEngine::Postgres))
             .await?;
 
-        sqlx::postgres::PgPoolOptions::new()
+        let pool = sqlx::postgres::PgPoolOptions::new()
             .min_connections(1)
             .max_connections(5)
             .connect(&connection_string)
@@ -53,7 +53,6 @@ impl ResourceBuilder<mongodb::Database> for MongoDb {
         client_options.min_pool_size = Some(1);
         client_options.max_pool_size = Some(5);
 
-        // A mongodb client cannot cross runtime boundaries, so make sure to create the client on the service end
         let client = mongodb::Client::with_options(client_options).map_err(CustomError::new)?;
 
         // Return a handle to the database defined at the end of the connection string, which is the users provisioned

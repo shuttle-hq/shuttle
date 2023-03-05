@@ -831,7 +831,7 @@ pub fn cargo_shuttle_init(path: PathBuf, framework: Framework) -> Result<()> {
 
     let features = Array::from_iter(["my-feature"]);
     cargo_builder.add_dependency_var(
-        Dependency::new("axum".to_owned()),
+        Dependency::new("axum1".to_owned()),
         "features".to_owned(),
         features,
     );

@@ -9,7 +9,7 @@ use toml_edit::{value, Array, Document, Item, Table, Value};
 pub struct CargoBuilder {
     path: PathBuf,
     packages: HashMap<String, String>,
-    dependencies: HashMap<String, Vec<HashMap<String, Item>>>,
+    dependencies: HashMap<String, HashMap<String, Item>>,
 }
 
 pub struct Dependency {
@@ -50,17 +50,15 @@ impl CargoBuilder {
         attribute_name: String,
         dep_value: V,
     ) -> &mut Self {
-        let attribute = HashMap::from([(attribute_name, value(dep_value))]);
         match self.dependencies.get_mut(&dependency.name) {
             Some(x) => {
-                println!("add to current!");
-                x.push(attribute);
+                x.entry(attribute_name).or_insert(value(dep_value));
             }
             None => {
-                println!("added new!");
-                self.dependencies
-                    .entry(dependency.name)
-                    .or_insert(vec![attribute]);
+                self.dependencies.insert(
+                    dependency.name,
+                    HashMap::from([(attribute_name, value(dep_value))]),
+                );
             }
         }
         self
@@ -88,12 +86,12 @@ impl CargoBuilder {
         // Loop over main dependency name
         for (name, dep_attribute) in self.dependencies {
             // Loop over child values vector of 'version' / 'features' etc.
-            for dep in dep_attribute.into_iter() {
-                //
-                for (dep_type, dep_value) in dep {
-                    cargo_doc["dependencies"][name.to_owned()][dep_type] = dep_value;
-                }
+            //for dep in dep_attribute.into_iter() {
+            //
+            for (dep_type, dep_value) in dep_attribute {
+                cargo_doc["dependencies"][name.to_owned()][dep_type] = dep_value;
             }
+            //}
         }
 
         let mut cargo_toml = File::create(self.path).expect("oh I see");

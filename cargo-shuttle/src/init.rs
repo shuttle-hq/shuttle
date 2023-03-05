@@ -831,10 +831,11 @@ pub fn cargo_shuttle_init(path: PathBuf, framework: Framework) -> Result<()> {
 
     let features = Array::from_iter(["my-feature"]);
     cargo_builder.add_dependency_var(
-        Dependency::new("axum1".to_owned()),
+        Dependency::new("axum".to_owned()),
         "features".to_owned(),
         features,
     );
+
     //cargo_builder.add_dependency_var(
     //"axum".to_owned(),
     //"features".to_owned(),
@@ -845,9 +846,9 @@ pub fn cargo_shuttle_init(path: PathBuf, framework: Framework) -> Result<()> {
     // with version logic added
     //toml.addDependencyVar("shuttle_service", "features", vec!["dsfdsf"]);
 
-    let cargo_doc = cargo_builder.build();
+    let cargo_doc = cargo_builder.build()?;
 
-    //panic!("end");
+    panic!("end");
 
     /*
     fn set_inline_table_dependency_version(
@@ -875,7 +876,7 @@ pub fn cargo_shuttle_init(path: PathBuf, framework: Framework) -> Result<()> {
     //get_latest_dependency_version,
     //);
 
-    panic!("Woohoo!");
+    //panic!("Woohoo!");
     //let init_config = framework.init_config();
 
     //// Set framework-specific dependencies to the `dependencies` table

@@ -100,7 +100,7 @@ impl Parse for BuilderOption {
 }
 
 impl Loader {
-    pub(crate) fn from_item_fn(item_fn: &mut ItemFn) -> Self {
+    pub(crate) fn from_item_fn(item_fn: &mut ItemFn) -> Option<Self> {
         let inputs: Vec<_> = item_fn
             .sig
             .inputs
@@ -127,12 +127,14 @@ impl Loader {
             })
             .collect();
 
-        let type_path = check_return_type(item_fn.sig.clone());
-
-        Self {
-            fn_ident: item_fn.sig.ident.clone(),
-            fn_inputs: inputs,
-            fn_return: type_path.unwrap(),
+        if let Some(type_path) = check_return_type(item_fn.sig.clone()) {
+            Some(Self {
+                fn_ident: item_fn.sig.ident.clone(),
+                fn_inputs: inputs,
+                fn_return: type_path,
+            })
+        } else {
+            None
         }
     }
 }
@@ -246,7 +248,7 @@ mod tests {
             async fn simple() -> ShuttleAxum {}
         );
 
-        let actual = Loader::from_item_fn(&mut input);
+        let actual = Loader::from_item_fn(&mut input).unwrap();
         let expected_ident: Ident = parse_quote!(simple);
 
         assert_eq!(actual.fn_ident, expected_ident);
@@ -280,7 +282,7 @@ mod tests {
             async fn complex(#[shuttle_shared_db::Postgres] pool: PgPool) -> ShuttleTide {}
         );
 
-        let actual = Loader::from_item_fn(&mut input);
+        let actual = Loader::from_item_fn(&mut input).unwrap();
         let expected_ident: Ident = parse_quote!(complex);
         let expected_inputs: Vec<Input> = vec![Input {
             ident: parse_quote!(pool),
@@ -394,7 +396,7 @@ mod tests {
             }
         );
 
-        let actual = Loader::from_item_fn(&mut input);
+        let actual = Loader::from_item_fn(&mut input).unwrap();
         let expected_ident: Ident = parse_quote!(complex);
         let mut expected_inputs: Vec<Input> = vec![Input {
             ident: parse_quote!(pool),

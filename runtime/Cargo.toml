@@ -46,4 +46,4 @@ workspace = true
 
 [dependencies.shuttle-service]
 workspace = true
-features = ["loader", "web-rocket"] # TODO: remove web-rocket
+features = ["builder", "web-rocket"] # TODO: remove web-rocket

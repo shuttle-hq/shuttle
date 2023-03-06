@@ -283,8 +283,8 @@ extern crate shuttle_codegen;
 /// More [shuttle managed resources can be found here](https://github.com/shuttle-hq/shuttle/tree/main/resources)
 pub use shuttle_codegen::main;
 
-#[cfg(feature = "loader")]
-pub mod loader;
+#[cfg(feature = "builder")]
+pub mod builder;
 
 pub use shuttle_common::project::ProjectName as ServiceName;
 

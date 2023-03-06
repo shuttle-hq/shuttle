@@ -58,14 +58,14 @@ features = ["tracing", "service"]
 [dev-dependencies]
 portpicker = "0.1.1"
 sqlx = { version = "0.6.2", features = ["runtime-tokio-native-tls", "postgres"] }
-tokio = { version = "1.22.0", features = ["macros"] }
+tokio = { version = "1.22.0", features = ["macros", "rt"] }
 uuid = { workspace = true, features = ["v4"] }
 
 [features]
 default = ["codegen"]
 
 codegen = ["shuttle-codegen/frameworks"]
-loader = ["cargo"]
+builder = ["cargo"]
 
 web-actix-web = ["actix-web", "num_cpus"]
 web-axum = ["axum"]

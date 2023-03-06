@@ -383,6 +383,7 @@ impl Shuttle {
             "Building".bold().green(),
             working_directory.display()
         );
+
         let runtime = build_crate(working_directory, false, tx).await?;
 
         trace!("loading secrets");
@@ -414,12 +415,62 @@ impl Shuttle {
             run_args.port + 1,
         ));
 
+        let runtime_path = || {
+            if is_wasm {
+                let runtime_path = home::cargo_home()
+                    .expect("failed to find cargo home dir")
+                    .join("bin/shuttle-next");
+
+                if cfg!(debug_assertions) {
+                    // Canonicalized path to shuttle-runtime for dev to work on windows
+                    let path = std::fs::canonicalize(format!("{MANIFEST_DIR}/../runtime"))
+                        .expect("path to shuttle-runtime does not exist or is invalid");
+
+                    // TODO: Add --features next here when https://github.com/shuttle-hq/shuttle/pull/688 is merged
+                    std::process::Command::new("cargo")
+                        .arg("install")
+                        .arg("shuttle-runtime")
+                        .arg("--path")
+                        .arg(path)
+                        .arg("--bin")
+                        .arg("shuttle-next")
+                        .output()
+                        .expect("failed to install the shuttle runtime");
+                } else {
+                    // If the version of cargo-shuttle is different from shuttle-runtime,
+                    // or it isn't installed, try to install shuttle-runtime from the production
+                    // branch.
+                    if let Err(err) = check_version(&runtime_path) {
+                        trace!("{}", err);
+
+                        trace!("installing shuttle-runtime");
+                        // TODO: Add --features next here when https://github.com/shuttle-hq/shuttle/pull/688 is merged
+                        std::process::Command::new("cargo")
+                            .arg("install")
+                            .arg("shuttle-runtime")
+                            .arg("--bin")
+                            .arg("shuttle-next")
+                            .arg("--git")
+                            .arg("https://github.com/shuttle-hq/shuttle")
+                            .arg("--branch")
+                            .arg("production")
+                            .output()
+                            .expect("failed to install the shuttle runtime");
+                    };
+                };
+
+                runtime_path
+            } else {
+                bin_path.clone()
+            }
+        };
+
         let (mut runtime, mut runtime_client) = runtime::start(
             is_wasm,
             runtime::StorageManagerType::WorkingDir(working_directory.to_path_buf()),
             &format!("http://localhost:{}", run_args.port + 1),
             run_args.port + 2,
-            bin_path.clone(),
+            runtime_path,
         )
         .await
         .map_err(|err| {

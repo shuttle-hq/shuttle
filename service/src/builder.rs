@@ -62,13 +62,12 @@ pub async fn build_crate(
     check_no_panic(&ws)?;
 
     let opts = get_compile_options(&config, release_mode, is_next)?;
-    let compilation = compile(&ws, &opts);
+    let compilation = compile(&ws, &opts)?;
 
-    let path = compilation?.binaries[0].path.clone();
     Ok(if is_next {
-        Runtime::Next(path)
+        Runtime::Next(compilation.cdylibs[0].path.clone())
     } else {
-        Runtime::Legacy(path)
+        Runtime::Legacy(compilation.binaries[0].path.clone())
     })
 }
 

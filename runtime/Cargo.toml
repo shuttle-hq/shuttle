@@ -10,7 +10,7 @@ publish = false
 name = "rocket"
 
 [[bin]]
-name = "next"
+name = "shuttle-next"
 
 [dependencies]
 anyhow = { workspace = true }

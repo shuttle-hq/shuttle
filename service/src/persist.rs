@@ -9,7 +9,6 @@ use std::io::BufReader;
 use std::io::BufWriter;
 use std::path::PathBuf;
 use thiserror::Error;
-use tokio::runtime::Runtime;
 
 #[derive(Error, Debug)]
 pub enum PersistError {
@@ -70,11 +69,7 @@ impl ResourceBuilder<PersistInstance> for Persist {
         Self {}
     }
 
-    async fn build(
-        self,
-        factory: &mut dyn Factory,
-        _runtime: &Runtime,
-    ) -> Result<PersistInstance, crate::Error> {
+    async fn build(self, factory: &mut dyn Factory) -> Result<PersistInstance, crate::Error> {
         Ok(PersistInstance {
             service_name: factory.get_service_name(),
         })

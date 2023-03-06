@@ -329,8 +329,6 @@ pub trait Factory: Send + Sync {
 /// You may want to create your own managed resource by implementing this trait for some builder `B` to construct resource `T`. [`Factory`] can be used to provision resources
 /// on shuttle's servers if your resource will need any.
 ///
-/// The biggest thing to look out for is that your resource object might panic when it crosses the boundary between the shuttle's backend runtime and the runtime
-/// of services. These resources should be created on the passed in `runtime` for this trait to prevent these panics.
 ///
 /// Your resource will be available on a [shuttle_service::main][main] function as follow:
 /// ```
@@ -371,7 +369,6 @@ pub trait Factory: Send + Sync {
 ///     async fn build(
 ///         self,
 ///         factory: &mut dyn Factory,
-///         _runtime: &Runtime,
 ///     ) -> Result<Resource, shuttle_service::Error> {
 ///         Ok(Resource { name: self.name })
 ///     }

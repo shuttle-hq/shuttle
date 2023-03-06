@@ -10,34 +10,7 @@ use syn::{
 pub(crate) fn r#impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut fn_decl = parse_macro_input!(item as ItemFn);
 
-    let wrapper = Wrapper::from_item_fn(&mut fn_decl);
-
-    let return_type = wrapper.fn_return.clone();
-
-    let fn_ident = &wrapper.fn_ident;
-    let mut fn_inputs: Vec<_> = Vec::with_capacity(wrapper.fn_inputs.len());
-    let mut fn_inputs_builder: Vec<_> = Vec::with_capacity(wrapper.fn_inputs.len());
-    let mut fn_inputs_builder_options: Vec<_> = Vec::with_capacity(wrapper.fn_inputs.len());
-
-    for input in wrapper.fn_inputs.iter() {
-        fn_inputs.push(&input.ident);
-        fn_inputs_builder.push(&input.builder.path);
-        fn_inputs_builder_options.push(&input.builder.options);
-    }
-
-    let factory_ident: Ident = if wrapper.fn_inputs.is_empty() {
-        parse_quote!(_factory)
-    } else {
-        parse_quote!(factory)
-    };
-
-    let extra_imports: Option<Stmt> = if wrapper.fn_inputs.is_empty() {
-        None
-    } else {
-        Some(parse_quote!(
-            use shuttle_service::ResourceBuilder;
-        ))
-    };
+    let loader = Loader::from_item_fn(&mut fn_decl);
 
     let expanded = quote! {
         #[tokio::main]
@@ -45,16 +18,7 @@ pub(crate) fn r#impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
             shuttle_runtime::start(loader).await;
         }
 
-        async fn loader<S: shuttle_service::StorageManager>(
-            mut factory: shuttle_runtime::ProvisionerFactory<S>,
-        ) -> #return_type {
-            use shuttle_service::Context;
-            #extra_imports
-
-            #(let #fn_inputs = #fn_inputs_builder::new()#fn_inputs_builder_options.build(&mut #factory_ident).await.context(format!("failed to provision {}", stringify!(#fn_inputs_builder)))?;)*
-
-            #fn_ident(#(#fn_inputs),*).await
-        }
+        #loader
 
         #fn_decl
     };
@@ -62,7 +26,7 @@ pub(crate) fn r#impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
     expanded.into()
 }
 
-struct Wrapper {
+struct Loader {
     fn_ident: Ident,
     fn_inputs: Vec<Input>,
     fn_return: TypePath,
@@ -135,7 +99,7 @@ impl Parse for BuilderOption {
     }
 }
 
-impl Wrapper {
+impl Loader {
     pub(crate) fn from_item_fn(item_fn: &mut ItemFn) -> Self {
         let inputs: Vec<_> = item_fn
             .sig
@@ -221,10 +185,12 @@ fn attribute_to_builder(pat_ident: &PatIdent, attrs: Vec<Attribute>) -> syn::Res
     Ok(builder)
 }
 
-/*
-impl ToTokens for Wrapper {
+impl ToTokens for Loader {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let fn_ident = &self.fn_ident;
+
+        let return_type = &self.fn_return;
+
         let mut fn_inputs: Vec<_> = Vec::with_capacity(self.fn_inputs.len());
         let mut fn_inputs_builder: Vec<_> = Vec::with_capacity(self.fn_inputs.len());
         let mut fn_inputs_builder_options: Vec<_> = Vec::with_capacity(self.fn_inputs.len());
@@ -249,70 +215,23 @@ impl ToTokens for Wrapper {
             ))
         };
 
-        let wrapper = quote! {
-            async fn __shuttle_wrapper(
-                #factory_ident: &mut dyn shuttle_service::Factory,
-                runtime: &shuttle_service::Runtime,
-                logger: shuttle_service::Logger,
-            ) {
+        let loader = quote! {
+            async fn loader<S: shuttle_service::StorageManager>(
+                mut #factory_ident: shuttle_runtime::ProvisionerFactory<S>,
+            ) -> #return_type {
                 use shuttle_service::Context;
-                use shuttle_service::tracing_subscriber::prelude::*;
                 #extra_imports
 
-                runtime.spawn_blocking(move || {
-                    let filter_layer =
-                        shuttle_service::tracing_subscriber::EnvFilter::try_from_default_env()
-                            .or_else(|_| shuttle_service::tracing_subscriber::EnvFilter::try_new("INFO"))
-                            .unwrap();
+                #(let #fn_inputs = #fn_inputs_builder::new()#fn_inputs_builder_options.build(&mut #factory_ident).await.context(format!("failed to provision {}", stringify!(#fn_inputs_builder)))?;)*
 
-                    shuttle_service::tracing_subscriber::registry()
-                        .with(filter_layer)
-                        .with(logger)
-                        .init(); // this sets the subscriber as the global default and also adds a compatibility layer for capturing `log::Record`s
-                })
-                .await
-                .map_err(|e| {
-                    if e.is_panic() {
-                        let mes = e
-                            .into_panic()
-                            .downcast_ref::<&str>()
-                            .map(|x| x.to_string())
-                            .unwrap_or_else(|| "panicked setting logger".to_string());
-
-                        shuttle_service::Error::BuildPanic(mes)
-                    } else {
-                        shuttle_service::Error::Custom(shuttle_service::error::CustomError::new(e).context("failed to set logger"))
-                    }
-                })?;
-
-                #(let #fn_inputs = #fn_inputs_builder::new()#fn_inputs_builder_options.build(#factory_ident, runtime).await.context(format!("failed to provision {}", stringify!(#fn_inputs_builder)))?;)*
-
-                runtime.spawn(async {
-                    #fn_ident(#(#fn_inputs),*)
-                        .await
-                        .map(|ok| Box::new(ok) as Box<dyn shuttle_service::Service>)
-                })
-                    .await
-                    .map_err(|e| {
-                        if e.is_panic() {
-                            let mes = e
-                                .into_panic()
-                                .downcast_ref::<&str>()
-                                .map(|x| x.to_string())
-                                .unwrap_or_else(|| "panicked calling main".to_string());
-
-                            shuttle_service::Error::BuildPanic(mes)
-                        } else {
-                            shuttle_service::Error::Custom(shuttle_service::error::CustomError::new(e).context("failed to call main"))
-                        }
-                    })?
+                #fn_ident(#(#fn_inputs),*).await
             }
         };
 
-        wrapper.to_tokens(tokens);
+        loader.to_tokens(tokens);
     }
 }
-*/
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;

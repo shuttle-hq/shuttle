@@ -37,7 +37,7 @@ impl PersistInstance {
         let file_path = self.get_storage_file(key);
         let file = File::create(file_path).map_err(PersistError::Open)?;
         let mut writer = BufWriter::new(file);
-        Ok(serialize_into(&mut writer, &struct).map_err(PersistError::Serialize))?
+        Ok(serialize_into(&mut writer, &struc).map_err(PersistError::Serialize))?
     }
 
     pub fn load<T>(&self, key: &str) -> Result<T, PersistError>

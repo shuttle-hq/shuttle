@@ -30,7 +30,7 @@ use git2::{Repository, StatusOptions};
 use ignore::overrides::OverrideBuilder;
 use ignore::WalkBuilder;
 use shuttle_common::models::{project, secret};
-use shuttle_service::loader::{build_crate, Runtime};
+use shuttle_service::builder::{build_crate, Runtime};
 use std::fmt::Write;
 use strum::IntoEnumIterator;
 use tar::Builder;
@@ -376,7 +376,6 @@ impl Shuttle {
         });
 
         let working_directory = self.ctx.working_directory();
-        let id = Default::default();
 
         trace!("building project");
         println!(
@@ -384,7 +383,7 @@ impl Shuttle {
             "Building".bold().green(),
             working_directory.display()
         );
-        let runtime = build_crate(id, working_directory, false, tx).await?;
+        let runtime = build_crate(working_directory, false, tx).await?;
 
         trace!("loading secrets");
         let secrets_path = working_directory.join("Secrets.toml");
@@ -515,7 +514,7 @@ impl Shuttle {
         let addr = SocketAddr::new(addr, run_args.port);
 
         let start_request = StartRequest {
-            deployment_id: id.as_bytes().to_vec(),
+            deployment_id: Uuid::default().as_bytes().to_vec(),
             ip: addr.to_string(),
         };
 

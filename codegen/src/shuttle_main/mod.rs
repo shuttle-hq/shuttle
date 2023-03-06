@@ -4,7 +4,7 @@ use quote::{quote, ToTokens};
 use syn::{
     parenthesized, parse::Parse, parse2, parse_macro_input, parse_quote, punctuated::Punctuated,
     spanned::Spanned, token::Paren, Attribute, Expr, FnArg, Ident, ItemFn, Pat, PatIdent, Path,
-    ReturnType, Signature, Stmt, Token, Type,
+    ReturnType, Signature, Stmt, Token, Type, TypePath,
 };
 
 pub(crate) fn r#impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -12,34 +12,51 @@ pub(crate) fn r#impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let wrapper = Wrapper::from_item_fn(&mut fn_decl);
 
-    let expanded = quote! {
-        #wrapper
+    let return_type = wrapper.fn_return.clone();
 
-        fn __binder(
-            service: Box<dyn shuttle_service::Service>,
-            addr: std::net::SocketAddr,
-            runtime: &shuttle_service::Runtime,
-        ) -> shuttle_service::ServeHandle {
+    let fn_ident = &wrapper.fn_ident;
+    let mut fn_inputs: Vec<_> = Vec::with_capacity(wrapper.fn_inputs.len());
+    let mut fn_inputs_builder: Vec<_> = Vec::with_capacity(wrapper.fn_inputs.len());
+    let mut fn_inputs_builder_options: Vec<_> = Vec::with_capacity(wrapper.fn_inputs.len());
+
+    for input in wrapper.fn_inputs.iter() {
+        fn_inputs.push(&input.ident);
+        fn_inputs_builder.push(&input.builder.path);
+        fn_inputs_builder_options.push(&input.builder.options);
+    }
+
+    let factory_ident: Ident = if wrapper.fn_inputs.is_empty() {
+        parse_quote!(_factory)
+    } else {
+        parse_quote!(factory)
+    };
+
+    let extra_imports: Option<Stmt> = if wrapper.fn_inputs.is_empty() {
+        None
+    } else {
+        Some(parse_quote!(
+            use shuttle_service::ResourceBuilder;
+        ))
+    };
+
+    let expanded = quote! {
+        #[tokio::main]
+        async fn main() {
+            shuttle_runtime::start(loader).await;
+        }
+
+        async fn loader<S: shuttle_service::StorageManager>(
+            mut factory: shuttle_runtime::ProvisionerFactory<S>,
+        ) -> #return_type {
             use shuttle_service::Context;
-            runtime.spawn(async move { service.bind(addr).await.context("failed to bind service").map_err(Into::into) })
+            #extra_imports
+
+            #(let #fn_inputs = #fn_inputs_builder::new()#fn_inputs_builder_options.build(&mut #factory_ident).await.context(format!("failed to provision {}", stringify!(#fn_inputs_builder)))?;)*
+
+            #fn_ident(#(#fn_inputs),*).await
         }
 
         #fn_decl
-
-        #[no_mangle]
-        pub extern "C" fn _create_service() -> *mut shuttle_service::Bootstrapper {
-            let builder: shuttle_service::StateBuilder<Box<dyn shuttle_service::Service>> =
-                |factory, runtime, logger| Box::pin(__shuttle_wrapper(factory, runtime, logger));
-
-            let bootstrapper = shuttle_service::Bootstrapper::new(
-                builder,
-                __binder,
-                shuttle_service::Runtime::new().unwrap(),
-            );
-
-            let boxed = Box::new(bootstrapper);
-            Box::into_raw(boxed)
-        }
     };
 
     expanded.into()
@@ -48,6 +65,7 @@ pub(crate) fn r#impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
 struct Wrapper {
     fn_ident: Ident,
     fn_inputs: Vec<Input>,
+    fn_return: TypePath,
 }
 
 #[derive(Debug, PartialEq)]
@@ -145,31 +163,38 @@ impl Wrapper {
             })
             .collect();
 
-        check_return_type(&item_fn.sig);
+        let type_path = check_return_type(item_fn.sig.clone());
 
         Self {
             fn_ident: item_fn.sig.ident.clone(),
             fn_inputs: inputs,
+            fn_return: type_path.unwrap(),
         }
     }
 }
 
-fn check_return_type(signature: &Signature) {
-    match &signature.output {
-        ReturnType::Default => emit_error!(
-            signature,
-            "shuttle_service::main functions need to return a service";
-            hint = "See the docs for services with first class support";
-            doc = "https://docs.rs/shuttle-service/latest/shuttle_service/attr.main.html#shuttle-supported-services"
-        ),
-        ReturnType::Type(_, r#type) => match r#type.as_ref() {
-            Type::Path(_) => {}
-            _ => emit_error!(
-                r#type,
-                "shuttle_service::main functions need to return a first class service or 'Result<impl Service, shuttle_service::Error>";
+fn check_return_type(signature: Signature) -> Option<TypePath> {
+    match signature.output {
+        ReturnType::Default => {
+            emit_error!(
+                signature,
+                "shuttle_service::main functions need to return a service";
                 hint = "See the docs for services with first class support";
                 doc = "https://docs.rs/shuttle-service/latest/shuttle_service/attr.main.html#shuttle-supported-services"
-            ),
+            );
+            None
+        }
+        ReturnType::Type(_, r#type) => match *r#type {
+            Type::Path(path) => Some(path),
+            _ => {
+                emit_error!(
+                    r#type,
+                    "shuttle_service::main functions need to return a first class service or 'Result<impl Service, shuttle_service::Error>";
+                    hint = "See the docs for services with first class support";
+                    doc = "https://docs.rs/shuttle-service/latest/shuttle_service/attr.main.html#shuttle-supported-services"
+                );
+                None
+            }
         },
     }
 }
@@ -196,6 +221,7 @@ fn attribute_to_builder(pat_ident: &PatIdent, attrs: Vec<Attribute>) -> syn::Res
     Ok(builder)
 }
 
+/*
 impl ToTokens for Wrapper {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let fn_ident = &self.fn_ident;
@@ -228,7 +254,7 @@ impl ToTokens for Wrapper {
                 #factory_ident: &mut dyn shuttle_service::Factory,
                 runtime: &shuttle_service::Runtime,
                 logger: shuttle_service::Logger,
-            ) -> Result<Box<dyn shuttle_service::Service>, shuttle_service::Error> {
+            ) {
                 use shuttle_service::Context;
                 use shuttle_service::tracing_subscriber::prelude::*;
                 #extra_imports
@@ -286,7 +312,7 @@ impl ToTokens for Wrapper {
         wrapper.to_tokens(tokens);
     }
 }
-
+*/
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -313,6 +339,7 @@ mod tests {
         let input = Wrapper {
             fn_ident: parse_quote!(simple),
             fn_inputs: Vec::new(),
+            fn_return: parse_quote!(ShuttleSimple),
         };
 
         let actual = quote!(#input);
@@ -426,6 +453,7 @@ mod tests {
                     },
                 },
             ],
+            fn_return: parse_quote!(ShuttleComplex),
         };
 
         let actual = quote!(#input);
@@ -577,6 +605,7 @@ mod tests {
                     options: Default::default(),
                 },
             }],
+            fn_return: parse_quote!(ShuttleComplex),
         };
 
         input.fn_inputs[0]

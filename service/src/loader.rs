@@ -141,8 +141,6 @@ pub async fn build_crate(
     let mut ws = Workspace::new(&manifest_path, &config)?;
 
     let current = ws.current_mut().map_err(|_| anyhow!("A Shuttle project cannot have a virtual manifest file - please ensure your Cargo.toml file specifies it as a library."))?;
-    let manifest = current.manifest_mut();
-    ensure_cdylib(manifest)?;
 
     let summary = current.manifest_mut().summary_mut();
     make_name_unique(summary, deployment_id);
@@ -156,7 +154,7 @@ pub async fn build_crate(
     let opts = get_compile_options(&config, release_mode, is_next)?;
     let compilation = compile(&ws, &opts);
 
-    let path = compilation?.cdylibs[0].path.clone();
+    let path = compilation?.binaries[0].path.clone();
     Ok(if is_next {
         Runtime::Next(path)
     } else {

@@ -231,6 +231,7 @@ mod logger;
 pub use logger::Logger;
 
 pub use shuttle_common::database;
+pub use shuttle_common::storage_manager::StorageManager;
 
 #[cfg(feature = "codegen")]
 extern crate shuttle_codegen;
@@ -399,7 +400,7 @@ pub type ServeHandle = JoinHandle<Result<(), error::Error>>;
 // TODO: our current state machine in the api crate stores this service and can move it across
 // threads (handlers) causing `Service` to need `Sync`. We should remove this restriction
 #[async_trait]
-pub trait Service: Send + Sync {
+pub trait Service: Send {
     /// This function is run exactly once on each instance of a deployment.
     ///
     /// The deployer expects this instance of [Service][Service] to bind to the passed [SocketAddr][SocketAddr].

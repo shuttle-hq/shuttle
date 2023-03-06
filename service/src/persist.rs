@@ -30,7 +30,7 @@ pub struct PersistInstance {
 }
 
 impl PersistInstance {
-    pub fn save<T: Serialize>(&self, key: &str, struct: T) -> Result<(), PersistError> {
+    pub fn save<T: Serialize>(&self, key: &str, struc: T) -> Result<(), PersistError> {
         let storage_folder = self.get_storage_folder();
         fs::create_dir_all(storage_folder).map_err(PersistError::CreateFolder)?;
 

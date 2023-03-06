@@ -9,6 +9,9 @@ publish = false
 [[bin]]
 name = "rocket"
 
+[[bin]]
+name = "next"
+
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
@@ -23,6 +26,7 @@ tonic = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 uuid = { workspace = true, features = ["v4"] }
+# TODO: bump these crates to 6.0 when we bump rust to >= 1.66
 wasi-common = "4.0.0"
 wasmtime = "4.0.0"
 wasmtime-wasi = "4.0.0"
@@ -35,7 +39,7 @@ rocket = "0.5.0-rc.2"
 
 [dependencies.shuttle-common]
 workspace = true
-features = ["wasm"]
+features = ["wasm", "service"]
 
 [dependencies.shuttle-proto]
 workspace = true

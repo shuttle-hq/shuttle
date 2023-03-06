@@ -14,14 +14,6 @@ pub struct Args {
     #[arg(long, default_value = "http://localhost:5000")]
     pub provisioner_address: Endpoint,
 
-    /// Is this runtime for a legacy service
-    #[arg(long, conflicts_with("axum"))]
-    pub legacy: bool,
-
-    /// Is this runtime for an axum-wasm service
-    #[arg(long, conflicts_with("legacy"))]
-    pub axum: bool,
-
     /// Type of storage manager to start
     #[arg(long, value_enum)]
     pub storage_manager_type: StorageManagerType,

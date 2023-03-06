@@ -36,7 +36,11 @@ use tonic::{
 use tracing::{error, instrument, trace};
 use uuid::Uuid;
 
-use crate::{provisioner_factory::ProvisionerFactory, Args};
+use crate::provisioner_factory::ProvisionerFactory;
+
+use self::args::Args;
+
+mod args;
 
 pub async fn start(
     loader: impl Loader<ProvisionerFactory<WorkingDirStorageManager>> + Send + 'static,

@@ -218,7 +218,6 @@ impl Built {
                 .unwrap();
             run(
                 self.id,
-                self.service_name,
                 runtime_client,
                 address,
                 deployment_updater,
@@ -280,7 +279,6 @@ async fn load(
 #[instrument(skip(runtime_client, deployment_updater, kill_recv, cleanup), fields(state = %State::Running))]
 async fn run(
     id: Uuid,
-    service_name: String,
     runtime_client: &mut RuntimeClient<Channel>,
     address: SocketAddr,
     deployment_updater: impl DeploymentUpdater,
@@ -294,7 +292,6 @@ async fn run(
 
     let start_request = tonic::Request::new(StartRequest {
         deployment_id: id.as_bytes().to_vec(),
-        service_name: service_name.clone(),
         ip: address.to_string(),
     });
 
@@ -310,10 +307,7 @@ async fn run(
 
     while let Ok(kill_id) = kill_recv.recv().await {
         if kill_id == id {
-            let stop_request = tonic::Request::new(StopRequest {
-                deployment_id: id.as_bytes().to_vec(),
-                service_name: service_name.clone(),
-            });
+            let stop_request = tonic::Request::new(StopRequest {});
             response = runtime_client.stop(stop_request).await;
 
             break;

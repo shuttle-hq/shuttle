@@ -30,6 +30,10 @@ use wasmtime::{Engine, Linker, Module, Store};
 use wasmtime_wasi::sync::net::UnixStream as WasiUnixStream;
 use wasmtime_wasi::{WasiCtx, WasiCtxBuilder};
 
+mod args;
+
+pub use self::args::NextArgs;
+
 extern crate rmp_serde as rmps;
 
 const LOGS_FD: u32 = 20;
@@ -94,9 +98,7 @@ impl Runtime for AxumWasm {
         &self,
         request: tonic::Request<StartRequest>,
     ) -> Result<tonic::Response<StartResponse>, Status> {
-        let StartRequest {
-            deployment_id, ip, ..
-        } = request.into_inner();
+        let StartRequest { deployment_id, ip } = request.into_inner();
 
         let address = SocketAddr::from_str(&ip)
             .context("invalid socket address")

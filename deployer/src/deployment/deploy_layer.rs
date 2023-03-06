@@ -807,7 +807,7 @@ mod tests {
 
         select! {
             _ = sleep(Duration::from_secs(180)) => {
-                panic!("states should go into 'Crashed' panicing in bind");
+                panic!("states should go into 'Crashed' panicking in bind");
             }
             _ = test => {}
         }
@@ -875,7 +875,7 @@ mod tests {
 
         select! {
             _ = sleep(Duration::from_secs(180)) => {
-                panic!("states should go into 'Crashed' when panicing in main");
+                panic!("states should go into 'Crashed' when panicking in main");
             }
             _ = test => {}
         }

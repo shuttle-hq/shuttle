@@ -244,7 +244,7 @@ impl Claim {
     }
 }
 
-/// Trait to get a public key asyncronously
+/// Trait to get a public key asynchronously
 #[async_trait]
 pub trait PublicKeyFn: Send + Sync + Clone {
     type Error: std::error::Error + Send;

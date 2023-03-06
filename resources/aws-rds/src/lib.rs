@@ -28,7 +28,6 @@ macro_rules! aws_engine {
                         .get_db_connection_string(Type::AwsRds(AwsRdsEngine::$struct_ident))
                         .await?;
 
-                    // A sqlx Pool cannot cross runtime boundaries, so make sure to create the Pool on the service end
                     let pool = $options_path::new()
                         .min_connections(1)
                         .max_connections(5)

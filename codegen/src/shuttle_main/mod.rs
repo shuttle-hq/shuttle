@@ -222,7 +222,18 @@ impl ToTokens for Loader {
                 mut #factory_ident: shuttle_runtime::ProvisionerFactory<S>,
             ) -> #return_type {
                 use shuttle_service::Context;
+                use shuttle_service::tracing_subscriber::prelude::*;
                 #extra_imports
+
+                let filter_layer =
+                    shuttle_service::tracing_subscriber::EnvFilter::try_from_default_env()
+                        .or_else(|_| shuttle_service::tracing_subscriber::EnvFilter::try_new("INFO"))
+                        .unwrap();
+
+                shuttle_service::tracing_subscriber::registry()
+                    .with(filter_layer)
+                    .with(logger)
+                    .init();
 
                 #(let #fn_inputs = #fn_inputs_builder::new()#fn_inputs_builder_options.build(&mut #factory_ident).await.context(format!("failed to provision {}", stringify!(#fn_inputs_builder)))?;)*
 
@@ -269,6 +280,18 @@ mod tests {
                 mut _factory: shuttle_runtime::ProvisionerFactory<S>,
             ) -> ShuttleSimple {
                 use shuttle_service::Context;
+                use shuttle_service::tracing_subscriber::prelude::*;
+
+                let filter_layer =
+                    shuttle_service::tracing_subscriber::EnvFilter::try_from_default_env()
+                        .or_else(|_| shuttle_service::tracing_subscriber::EnvFilter::try_new("INFO"))
+                        .unwrap();
+
+                shuttle_service::tracing_subscriber::registry()
+                    .with(filter_layer)
+                    .with(logger)
+                    .init();
+
                 simple().await
             }
         };
@@ -336,7 +359,18 @@ mod tests {
                 mut factory: shuttle_runtime::ProvisionerFactory<S>,
             ) -> ShuttleComplex {
                 use shuttle_service::Context;
+                use shuttle_service::tracing_subscriber::prelude::*;
                 use shuttle_service::ResourceBuilder;
+
+                let filter_layer =
+                    shuttle_service::tracing_subscriber::EnvFilter::try_from_default_env()
+                        .or_else(|_| shuttle_service::tracing_subscriber::EnvFilter::try_new("INFO"))
+                        .unwrap();
+
+                shuttle_service::tracing_subscriber::registry()
+                    .with(filter_layer)
+                    .with(logger)
+                    .init();
 
                 let pool = shuttle_shared_db::Postgres::new().build(&mut factory).await.context(format!("failed to provision {}", stringify!(shuttle_shared_db::Postgres)))?;
                 let redis = shuttle_shared_db::Redis::new().build(&mut factory).await.context(format!("failed to provision {}", stringify!(shuttle_shared_db::Redis)))?;
@@ -452,7 +486,18 @@ mod tests {
                 mut factory: shuttle_runtime::ProvisionerFactory<S>,
             ) -> ShuttleComplex {
                 use shuttle_service::Context;
+                use shuttle_service::tracing_subscriber::prelude::*;
                 use shuttle_service::ResourceBuilder;
+
+                let filter_layer =
+                    shuttle_service::tracing_subscriber::EnvFilter::try_from_default_env()
+                        .or_else(|_| shuttle_service::tracing_subscriber::EnvFilter::try_new("INFO"))
+                        .unwrap();
+
+                shuttle_service::tracing_subscriber::registry()
+                    .with(filter_layer)
+                    .with(logger)
+                    .init();
 
                 let pool = shuttle_shared_db::Postgres::new().size("10Gb").public(false).build(&mut factory).await.context(format!("failed to provision {}", stringify!(shuttle_shared_db::Postgres)))?;
 

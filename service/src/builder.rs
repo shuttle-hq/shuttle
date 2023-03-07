@@ -179,12 +179,7 @@ fn is_next(summary: &Summary) -> bool {
 
 /// Make sure the project is a binary for legacy projects.
 fn ensure_binary(manifest: &Manifest) -> anyhow::Result<()> {
-    if manifest
-        .targets()
-        .iter()
-        .find(|target| target.is_bin())
-        .is_some()
-    {
+    if manifest.targets().iter().any(|target| target.is_bin()) {
         Ok(())
     } else {
         bail!("Your Shuttle project must be a binary.")

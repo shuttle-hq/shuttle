@@ -6,7 +6,7 @@ async fn main() {
 
 async fn loader<S: shuttle_common::storage_manager::StorageManager>(
     mut factory: shuttle_runtime::ProvisionerFactory<S>,
-    logger: shuttle_runtime::Logger,
+    _logger: shuttle_runtime::Logger,
 ) -> shuttle_service::ShuttleRocket {
     use shuttle_service::ResourceBuilder;
 

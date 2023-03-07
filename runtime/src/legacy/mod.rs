@@ -11,7 +11,7 @@ use std::{
 use anyhow::Context;
 use async_trait::async_trait;
 use clap::Parser;
-use futures::Future;
+use core::future::Future;
 use shuttle_common::{
     storage_manager::{StorageManager, WorkingDirStorageManager},
     LogItem,

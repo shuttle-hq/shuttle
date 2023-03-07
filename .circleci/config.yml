@@ -168,7 +168,7 @@ jobs:
       - run: |
           cargo clippy --tests \
                        --all-targets \
-                       --features="codegen,loader,<< parameters.framework >>" \
+                       --features="codegen,builder,<< parameters.framework >>" \
                        --no-deps -- \
                        --D warnings \
                        -A clippy::let-unit-value \
@@ -210,10 +210,10 @@ jobs:
       - restore-cargo-cache
       - run:
           name: Run unit tests
-          command: cargo test --package shuttle-service --features="codegen,loader" --lib -- --nocapture
+          command: cargo test --package shuttle-service --features="codegen,builder" --lib -- --nocapture
       - run:
           name: Run integration tests
-          command: cargo test --package shuttle-service --features="codegen,loader" --test '*' -- --nocapture
+          command: cargo test --package shuttle-service --features="codegen,builder" --test '*' -- --nocapture
       - save-cargo-cache
   platform-test:
     parameters:

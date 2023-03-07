@@ -8,6 +8,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use tokio::runtime::Runtime;
+use tracing::{error, trace};
 
 pub struct StaticFolder<'a> {
     /// The folder to reach at runtime. Defaults to `static`
@@ -40,22 +41,35 @@ impl<'a> ResourceBuilder<PathBuf> for StaticFolder<'a> {
     ) -> Result<PathBuf, shuttle_service::Error> {
         let folder = Path::new(self.folder);
 
+        trace!(?folder, "building static folder");
+
         // Prevent users from users from reading anything outside of their crate's build folder
         if folder.is_absolute() {
+            error!("the static folder cannot be an absolute path");
             return Err(Error::AbsolutePath)?;
         }
 
         let input_dir = factory.get_build_path()?.join(self.folder);
+
+        trace!(input_directory = ?input_dir, "got input directory");
 
         match input_dir.canonicalize() {
             Ok(canonical_path) if canonical_path != input_dir => return Err(Error::TransversedUp)?,
             Ok(_) => {
                 // The path did not change to outside the crate's build folder
             }
-            Err(err) => return Err(err)?,
+            Err(err) => {
+                error!(
+                    error = &err as &dyn std::error::Error,
+                    "failed to get static folder"
+                );
+                return Err(err)?;
+            }
         }
 
         let output_dir = factory.get_storage_path()?.join(self.folder);
+
+        trace!(output_directory = ?output_dir, "got output directory");
 
         rename(input_dir, output_dir.clone())?;
 

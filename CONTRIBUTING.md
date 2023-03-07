@@ -24,6 +24,9 @@ git clone git@github.com:shuttle-hq/shuttle.git
 cd shuttle
 ```
 
+> Note: We need the git tags for the local development workflow, but they may not be included when you clone the repository.
+To make sure you have them, run `git fetch upstream --tags`, where upstream is the name of the shuttle remote repository.
+
 You should now be ready to setup a local environment to test code changes to core `shuttle` packages as follows:
 
 From the root of the shuttle repo, build the required images with:

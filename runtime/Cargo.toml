@@ -11,14 +11,12 @@ name = "rocket"
 
 [[bin]]
 name = "next"
+required-features = ["next"]
 
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
-cap-std = "1.0.2"
 clap ={ version = "4.0.18", features = ["derive"] }
-hyper = { version = "0.14.23", features = ["server"] }
-rmp-serde = { version = "1.1.1" }
 thiserror = { workspace = true }
 tokio = { version = "1.22.0", features = ["full"] }
 tokio-stream = "0.1.11"
@@ -26,11 +24,15 @@ tonic = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 uuid = { workspace = true, features = ["v4"] }
+
 # TODO: bump these crates to 6.0 when we bump rust to >= 1.66
-wasi-common = "4.0.0"
-wasmtime = "4.0.0"
-wasmtime-wasi = "4.0.0"
-futures = "0.3.25"
+cap-std = { version = "1.0.2", optional = true }
+futures = { version = "0.3.25", optional = true }
+hyper = { version = "0.14.23", optional = true }
+rmp-serde = { version = "1.1.1", optional = true }
+wasi-common = { version = "4.0.0", optional = true }
+wasmtime = { version = "4.0.0", optional = true }
+wasmtime-wasi = { version = "4.0.0", optional = true }
 
 # For rocket.rs
 # TODO: remove
@@ -39,7 +41,7 @@ rocket = "0.5.0-rc.2"
 
 [dependencies.shuttle-common]
 workspace = true
-features = ["wasm", "service"]
+features = ["service"]
 
 [dependencies.shuttle-proto]
 workspace = true
@@ -47,3 +49,16 @@ workspace = true
 [dependencies.shuttle-service]
 workspace = true
 features = ["builder", "web-rocket"] # TODO: remove web-rocket
+
+[features]
+next = [
+    "cap-std", 
+    "futures", 
+    "hyper/server", 
+    "rmp-serde", 
+    "futures", 
+    "wasi-common", 
+    "wasmtime", 
+    "wasmtime-wasi",
+    "shuttle-common/wasm"
+]

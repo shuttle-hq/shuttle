@@ -21,7 +21,7 @@ make axum
 Run the test:
 
 ```bash
-cargo test axum -- --nocapture
+cargo test --features next axum -- --nocapture
 
 # or, run tests
 make test
@@ -30,7 +30,7 @@ make test
 Load and run:
 
 ```bash
-cargo run --bin next -- --port 6001
+cargo run --features next --bin next -- --port 6001
 ```
 
 In another terminal:

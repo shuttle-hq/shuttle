@@ -247,27 +247,32 @@ pub mod runtime {
         port: u16,
         get_runtime_executable: impl FnOnce() -> PathBuf,
     ) -> anyhow::Result<(process::Child, runtime_client::RuntimeClient<Channel>)> {
-        let runtime_flag = if wasm { "--axum" } else { "--legacy" };
-
         let (storage_manager_type, storage_manager_path) = match storage_manager_type {
             StorageManagerType::Artifacts(path) => ("artifacts", path),
             StorageManagerType::WorkingDir(path) => ("working-dir", path),
         };
 
-        let runtime_executable = get_runtime_executable();
+        let port = &port.to_string();
+        let storage_manager_path = &storage_manager_path.display().to_string();
+        let runtime_executable_path = get_runtime_executable();
 
-        let runtime = process::Command::new(runtime_executable)
-            .args([
-                runtime_flag,
+        let args = if wasm {
+            vec!["--port", port]
+        } else {
+            vec![
                 "--port",
-                &port.to_string(),
+                port,
                 "--provisioner-address",
                 provisioner_address,
                 "--storage-manager-type",
                 storage_manager_type,
                 "--storage-manager-path",
-                &storage_manager_path.display().to_string(),
-            ])
+                storage_manager_path,
+            ]
+        };
+
+        let runtime = process::Command::new(runtime_executable_path)
+            .args(&args)
             .spawn()
             .context("spawning runtime process")?;
 

@@ -10,13 +10,15 @@ publish = false
 name = "rocket"
 
 [[bin]]
-name = "next"
+name = "shuttle-next"
 required-features = ["next"]
 
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
+chrono = { workspace = true }
 clap ={ version = "4.0.18", features = ["derive"] }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { version = "1.22.0", features = ["full"] }
 tokio-stream = "0.1.11"

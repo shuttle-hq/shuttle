@@ -1,8 +1,8 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, Context};
+use anyhow::{anyhow, bail, Context};
 use cargo::core::compiler::{CompileKind, CompileMode, CompileTarget, MessageFormat};
-use cargo::core::{Shell, Summary, Verbosity, Workspace};
+use cargo::core::{Manifest, Shell, Summary, Verbosity, Workspace};
 use cargo::ops::{clean, compile, CleanOptions, CompileOptions};
 use cargo::util::interning::InternedString;
 use cargo::util::{homedir, ToSemver};
@@ -51,13 +51,15 @@ pub async fn build_crate(
     let manifest_path = project_path.join("Cargo.toml");
     let mut ws = Workspace::new(&manifest_path, &config)?;
 
-    let current = ws.current_mut().map_err(|_| anyhow!("A Shuttle project cannot have a virtual manifest file - please ensure your Cargo.toml file specifies it as a library."))?;
+    let current = ws.current_mut().map_err(|_| anyhow!("A Shuttle project cannot have a virtual manifest file - please ensure the `package` table is present in your Cargo.toml file."))?;
 
     let summary = current.manifest_mut().summary_mut();
-
     let is_next = is_next(summary);
     if !is_next {
         check_version(summary)?;
+        ensure_binary(current.manifest())?;
+    } else {
+        ensure_cdylib(current.manifest_mut())?;
     }
     check_no_panic(&ws)?;
 
@@ -171,6 +173,42 @@ fn is_next(summary: &Summary) -> bool {
         .dependencies()
         .iter()
         .any(|dependency| dependency.package_name() == NEXT_NAME)
+}
+
+/// Make sure the project is a binary for legacy projects.
+fn ensure_binary(manifest: &Manifest) -> anyhow::Result<()> {
+    if manifest
+        .targets()
+        .iter()
+        .find(|target| target.is_bin())
+        .is_some()
+    {
+        Ok(())
+    } else {
+        bail!("Your Shuttle project must be a binary.")
+    }
+}
+
+/// Make sure "cdylib" is set for shuttle-next projects, else set it if possible.
+fn ensure_cdylib(manifest: &mut Manifest) -> anyhow::Result<()> {
+    if let Some(target) = manifest
+        .targets_mut()
+        .iter_mut()
+        .find(|target| target.is_lib())
+    {
+        if !target.is_cdylib() {
+            *target = cargo::core::manifest::Target::lib_target(
+                target.name(),
+                vec![cargo::core::compiler::CrateType::Cdylib],
+                target.src_path().path().unwrap().to_path_buf(),
+                target.edition(),
+            );
+        }
+
+        Ok(())
+    } else {
+        bail!("Your Shuttle project must be a library. Please add `[lib]` to your Cargo.toml file.")
+    }
 }
 
 /// Check that the crate being build is compatible with this version of loader

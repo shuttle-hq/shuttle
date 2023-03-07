@@ -9,3 +9,4 @@ pub use logger::Logger;
 #[cfg(feature = "next")]
 pub use next::{AxumWasm, NextArgs};
 pub use provisioner_factory::ProvisionerFactory;
+pub use shuttle_common::storage_manager::StorageManager;

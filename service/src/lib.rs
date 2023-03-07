@@ -224,7 +224,6 @@ pub mod error;
 pub use error::Error;
 
 pub use shuttle_common::database;
-pub use shuttle_common::storage_manager::StorageManager;
 
 #[cfg(feature = "codegen")]
 extern crate shuttle_codegen;

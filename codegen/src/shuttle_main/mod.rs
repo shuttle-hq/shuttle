@@ -218,7 +218,7 @@ impl ToTokens for Loader {
         };
 
         let loader = quote! {
-            async fn loader<S: shuttle_service::StorageManager>(
+            async fn loader<S: shuttle_runtime::StorageManager>(
                 mut #factory_ident: shuttle_runtime::ProvisionerFactory<S>,
                 logger: shuttle_runtime::Logger,
             ) -> #return_type {
@@ -277,7 +277,7 @@ mod tests {
 
         let actual = quote!(#input);
         let expected = quote! {
-            async fn loader<S: shuttle_service::StorageManager>(
+            async fn loader<S: shuttle_runtime::StorageManager>(
                 mut _factory: shuttle_runtime::ProvisionerFactory<S>,
                 logger: shuttle_runtime::Logger,
             ) -> ShuttleSimple {
@@ -357,7 +357,7 @@ mod tests {
 
         let actual = quote!(#input);
         let expected = quote! {
-            async fn loader<S: shuttle_service::StorageManager>(
+            async fn loader<S: shuttle_runtime::StorageManager>(
                 mut factory: shuttle_runtime::ProvisionerFactory<S>,
                 logger: shuttle_runtime::Logger,
             ) -> ShuttleComplex {
@@ -485,7 +485,7 @@ mod tests {
 
         let actual = quote!(#input);
         let expected = quote! {
-            async fn loader<S: shuttle_service::StorageManager>(
+            async fn loader<S: shuttle_runtime::StorageManager>(
                 mut factory: shuttle_runtime::ProvisionerFactory<S>,
                 logger: shuttle_runtime::Logger,
             ) -> ShuttleComplex {

@@ -220,7 +220,7 @@ impl ToTokens for Loader {
         let loader = quote! {
             async fn loader<S: shuttle_service::StorageManager>(
                 mut #factory_ident: shuttle_runtime::ProvisionerFactory<S>,
-                logger: shuttle_service::Logger,
+                logger: shuttle_runtime::Logger,
             ) -> #return_type {
                 use shuttle_service::Context;
                 use shuttle_service::tracing_subscriber::prelude::*;
@@ -279,7 +279,7 @@ mod tests {
         let expected = quote! {
             async fn loader<S: shuttle_service::StorageManager>(
                 mut _factory: shuttle_runtime::ProvisionerFactory<S>,
-                logger: shuttle_service::Logger,
+                logger: shuttle_runtime::Logger,
             ) -> ShuttleSimple {
                 use shuttle_service::Context;
                 use shuttle_service::tracing_subscriber::prelude::*;
@@ -359,7 +359,7 @@ mod tests {
         let expected = quote! {
             async fn loader<S: shuttle_service::StorageManager>(
                 mut factory: shuttle_runtime::ProvisionerFactory<S>,
-                logger: shuttle_service::Logger,
+                logger: shuttle_runtime::Logger,
             ) -> ShuttleComplex {
                 use shuttle_service::Context;
                 use shuttle_service::tracing_subscriber::prelude::*;
@@ -487,7 +487,7 @@ mod tests {
         let expected = quote! {
             async fn loader<S: shuttle_service::StorageManager>(
                 mut factory: shuttle_runtime::ProvisionerFactory<S>,
-                logger: shuttle_service::Logger,
+                logger: shuttle_runtime::Logger,
             ) -> ShuttleComplex {
                 use shuttle_service::Context;
                 use shuttle_service::tracing_subscriber::prelude::*;

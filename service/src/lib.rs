@@ -223,9 +223,6 @@ pub use tracing_subscriber;
 pub mod error;
 pub use error::Error;
 
-mod logger;
-pub use logger::Logger;
-
 pub use shuttle_common::database;
 pub use shuttle_common::storage_manager::StorageManager;
 

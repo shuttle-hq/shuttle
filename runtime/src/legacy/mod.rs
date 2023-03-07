@@ -36,7 +36,7 @@ use tonic::{
 use tracing::{error, instrument, trace};
 use uuid::Uuid;
 
-use crate::provisioner_factory::ProvisionerFactory;
+use crate::{provisioner_factory::ProvisionerFactory, Logger};
 
 use self::args::Args;
 
@@ -103,14 +103,14 @@ where
     async fn load(
         self,
         factory: Fac,
-        logger: shuttle_service::Logger,
+        logger: Logger,
     ) -> Result<Self::Service, shuttle_service::Error>;
 }
 
 #[async_trait]
 impl<F, O, Fac, S> Loader<Fac> for F
 where
-    F: FnOnce(Fac, shuttle_service::Logger) -> O + Send,
+    F: FnOnce(Fac, Logger) -> O + Send,
     O: Future<Output = Result<S, shuttle_service::Error>> + Send,
     Fac: Factory + 'static,
     S: Service,
@@ -120,7 +120,7 @@ where
     async fn load(
         self,
         factory: Fac,
-        logger: shuttle_service::Logger,
+        logger: Logger,
     ) -> Result<Self::Service, shuttle_service::Error> {
         (self)(factory, logger).await
     }
@@ -163,7 +163,7 @@ where
         trace!("got factory");
 
         let logs_tx = self.logs_tx.clone();
-        let logger = shuttle_service::Logger::new(logs_tx, deployment_id);
+        let logger = Logger::new(logs_tx, deployment_id);
 
         let loader = self.loader.lock().unwrap().deref_mut().take().unwrap();
 

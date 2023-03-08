@@ -46,6 +46,7 @@ impl Framework {
             //Framework::Warp => Box::new(ShuttleInitWarp),
             //Framework::Thruster => Box::new(ShuttleInitThruster),
             Framework::None => Box::new(ShuttleInitNoOp),
+            _ => Box::new(ShuttleInitNoOp),
         }
     }
 }
@@ -792,8 +793,8 @@ pub fn cargo_shuttle_init(path: PathBuf, framework: Framework) -> Result<()> {
     //fn get_minimum_dependencies() -> Vec<&str>;
     //fn get_dependency_features() -> HashMap<&str, vec![&str]>;
     let dependencies = init_config.get_minimum_dependencies();
-    for dep in dependencies.iter_mut() {
-        cargo_builder.add_dependency(Dependency::new(dep.to_string()));
+    for &dep in dependencies.iter() {
+        cargo_builder.add_dependency(Dependency::new(dep.to_owned()));
     }
 
     let dependency_attributes = init_config.get_dependency_attributes();
@@ -801,11 +802,12 @@ pub fn cargo_shuttle_init(path: PathBuf, framework: Framework) -> Result<()> {
         // HashMap<&str, HashMap<&str, Value>>;
         for (name, value) in attribute {
             // HashMap<&str, HashMap<&str, Value>>;
-            cargo_builder.add_dependency_var(
-                Dependency::new(dependency.to_owned()),
-                name.to_owned(),
-                value,
-            );
+            println!("{}", value);
+            //cargo_builder.add_dependency_var(
+            //Dependency::new(dependency.to_owned()),
+            //name.to_owned(),
+            //value,
+            //);
         }
     }
     //let features = Array::from_iter(["my-feature"]);

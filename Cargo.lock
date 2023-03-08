@@ -6400,7 +6400,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "bollard",
  "cap-std",
  "chrono",
  "clap 4.0.27",

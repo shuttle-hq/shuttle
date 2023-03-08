@@ -11,7 +11,7 @@ use crate::helpers::{spawn_runtime, TestRuntime};
 #[tokio::test]
 #[should_panic(expected = "panic in bind")]
 async fn bind_panic() {
-    let project_path = "/home/oddgrd/dev/shuttle/runtime/tests/resources/bind-panic".to_owned();
+    let project_path = format!("{}/tests/resources/bind-panic", env!("CARGO_MANIFEST_DIR"));
 
     let TestRuntime {
         bin_path,

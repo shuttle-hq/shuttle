@@ -53,7 +53,6 @@ workspace = true
 features = ["builder", "web-rocket"] # TODO: remove web-rocket
 
 [dev-dependencies]
-bollard = "0.13.0"
 crossbeam-channel = "0.5.6"
 portpicker = "0.1.1"
 futures = { version = "0.3.25" }

@@ -62,14 +62,14 @@ pub async fn start(
         args.admin_secret,
         args.project,
     );
-    let make_service = router.into_make_service();
 
     info!(address=%args.api_address, "Binding to and listening at address");
 
-    axum::Server::bind(&args.api_address)
-        .serve(make_service)
-        .await
-        .unwrap_or_else(|_| panic!("Failed to bind to address: {}", args.api_address));
+    let server = axum::Server::bind(&args.api_address).serve(router.into_make_service());
+
+    if let Err(_) = server.await {
+        panic!("Failed to bind to address: {}", args.api_address)
+    }
 }
 
 pub async fn start_proxy(

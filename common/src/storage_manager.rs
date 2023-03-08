@@ -33,19 +33,19 @@ impl ArtifactsStorageManager {
         Ok(builds_path)
     }
 
-    /// The directory in which compiled '.so' files are stored.
-    pub fn libraries_path(&self) -> Result<PathBuf, io::Error> {
-        let libs_path = self.artifacts_path.join("shuttle-libs");
-        fs::create_dir_all(&libs_path)?;
+    /// The directory in which compiled executables are stored.
+    pub fn executables_path(&self) -> Result<PathBuf, io::Error> {
+        let executables_path = self.artifacts_path.join("shuttle-executables");
+        fs::create_dir_all(&executables_path)?;
 
-        Ok(libs_path)
+        Ok(executables_path)
     }
 
-    /// Path to `.so` for a service
-    pub fn deployment_library_path(&self, deployment_id: &Uuid) -> Result<PathBuf, io::Error> {
-        let library_path = self.libraries_path()?.join(deployment_id.to_string());
+    /// Path to executable for a service
+    pub fn deployment_executable_path(&self, deployment_id: &Uuid) -> Result<PathBuf, io::Error> {
+        let executable_path = self.executables_path()?.join(deployment_id.to_string());
 
-        Ok(library_path)
+        Ok(executable_path)
     }
 
     /// Path of the directory to store user files

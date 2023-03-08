@@ -64,7 +64,7 @@ And to deploy it, write:
 
 ```bash
 cargo shuttle project new
-cargo shuttle project status // until the project is "ready"
+cargo shuttle project status # until the project is "ready"
 cargo shuttle deploy
 ```
 

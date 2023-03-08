@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use shuttle_service::builder::{build_crate, Runtime};
 
 #[tokio::test]
-#[should_panic]
+#[should_panic(expected = "1 job failed")]
 async fn not_shuttle() {
     let (tx, _) = crossbeam_channel::unbounded();
     let project_path = format!("{}/tests/resources/not-shuttle", env!("CARGO_MANIFEST_DIR"));
@@ -23,7 +23,7 @@ async fn not_bin() {
     }
 }
 
-#[tokio::test(flavor = "multi_thread")]
+#[tokio::test]
 async fn is_bin() {
     let (tx, _) = crossbeam_channel::unbounded();
     let project_path = format!("{}/tests/resources/is-bin", env!("CARGO_MANIFEST_DIR"));

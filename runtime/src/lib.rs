@@ -10,3 +10,4 @@ pub use logger::Logger;
 pub use next::{AxumWasm, NextArgs};
 pub use provisioner_factory::ProvisionerFactory;
 pub use shuttle_common::storage_manager::StorageManager;
+pub use shuttle_service::{main, Error, Service};

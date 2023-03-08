@@ -7,6 +7,5 @@ edition = "2021"
 [workspace]
 
 [dependencies]
-shuttle-service = { path = "../../../../service" }
 shuttle-runtime = { path = "../../../" }
 tokio = { version = "1.22.0" }

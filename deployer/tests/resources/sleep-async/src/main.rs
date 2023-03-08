@@ -14,10 +14,7 @@ async fn simple() -> Result<SleepService, shuttle_service::Error> {
 
 #[shuttle_service::async_trait]
 impl Service for SleepService {
-    async fn bind(
-        mut self: Box<Self>,
-        _: std::net::SocketAddr,
-    ) -> Result<(), shuttle_service::error::Error> {
+    async fn bind(mut self, _: std::net::SocketAddr) -> Result<(), shuttle_service::error::Error> {
         let duration = Duration::from_secs(self.duration);
 
         sleep(duration).await;

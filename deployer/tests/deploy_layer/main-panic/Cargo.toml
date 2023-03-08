@@ -3,12 +3,11 @@ name = "main-panic"
 version = "0.1.0"
 edition = "2021"
 
-[lib]
-crate-type = ["cdylib"]
-
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [workspace]
 
 [dependencies]
-shuttle-service = "0.8.0"
+shuttle-service = { path = "../../../../service" }
+shuttle-runtime = { path = "../../../../runtime" }
+tokio = "1.22"

@@ -4,7 +4,6 @@ use shuttle_service::{
     error::{CustomError, Error as ShuttleError},
     Factory, ResourceBuilder,
 };
-use std::fs::create_dir_all;
 use std::path::{Path, PathBuf};
 use tokio::runtime::Runtime;
 use tracing::{error, trace};
@@ -67,15 +66,13 @@ impl<'a> ResourceBuilder<PathBuf> for StaticFolder<'a> {
             }
         }
 
-        let output_dir = factory.get_storage_path()?.join(self.folder);
+        let output_dir = factory.get_storage_path()?;
 
         trace!(output_directory = ?output_dir, "got output directory");
 
-        create_dir_all(&output_dir)?;
-
         let copy_options = CopyOptions::new().overwrite(true);
         match copy(&input_dir, &output_dir, &copy_options) {
-            Ok(_) => Ok(output_dir),
+            Ok(_) => Ok(output_dir.join(self.folder)),
             Err(error) => {
                 error!(
                     error = &error as &dyn std::error::Error,

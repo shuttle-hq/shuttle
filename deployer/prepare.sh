@@ -19,7 +19,7 @@ shuttle-static-folder = { path = "/usr/src/shuttle/resources/static-folder" }' >
 rustup target add wasm32-wasi
 
 # Install the shuttle runtime
-cargo install shuttle-runtime --path "/usr/src/shuttle/runtime" 
+cargo install shuttle-runtime --path "/usr/src/shuttle/runtime" --bin shuttle-next --features next
 
 # Make future crates requests to our own mirror
 echo '

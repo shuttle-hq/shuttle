@@ -434,6 +434,8 @@ impl Shuttle {
                         .arg(path)
                         .arg("--bin")
                         .arg("shuttle-next")
+                        .arg("--features")
+                        .arg("next")
                         .output()
                         .expect("failed to install the shuttle runtime");
                 } else {
@@ -454,6 +456,8 @@ impl Shuttle {
                             .arg("https://github.com/shuttle-hq/shuttle")
                             .arg("--branch")
                             .arg("production")
+                            .arg("--features")
+                            .arg("next")
                             .output()
                             .expect("failed to install the shuttle runtime");
                     };

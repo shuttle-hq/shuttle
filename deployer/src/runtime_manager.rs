@@ -102,6 +102,8 @@ impl RuntimeManager {
                                 .arg(path)
                                 .arg("--bin")
                                 .arg("shuttle-next")
+                                .arg("--features")
+                                .arg("next")
                                 .output()
                                 .expect("failed to install the local version of shuttle-runtime");
                         }

@@ -231,7 +231,7 @@ where
         let kill_tx = self.kill_tx.lock().unwrap().deref_mut().take();
 
         if let Some(kill_tx) = kill_tx {
-            if kill_tx.send(format!("stopping deployment")).is_err() {
+            if kill_tx.send("stopping deployment".to_owned()).is_err() {
                 error!("the receiver dropped");
                 return Err(Status::internal("failed to stop deployment"));
             }

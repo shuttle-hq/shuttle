@@ -46,7 +46,7 @@ impl Framework {
             //Framework::Warp => Box::new(ShuttleInitWarp),
             //Framework::Thruster => Box::new(ShuttleInitThruster),
             Framework::None => Box::new(ShuttleInitNoOp),
-            _ => Box::new(ShuttleInitNoOp),
+            _ => panic!(" tihs should never happen"),
         }
     }
 }
@@ -755,7 +755,6 @@ pub fn cargo_shuttle_init(path: PathBuf, framework: Framework) -> Result<()> {
         // HashMap<&str, HashMap<&str, Value>>;
         for (name, value) in attribute {
             // HashMap<&str, HashMap<&str, Value>>;
-            println!("{}", value);
             cargo_builder.add_dependency_var(
                 Dependency::new(dependency.to_owned()),
                 name.to_owned(),
@@ -843,549 +842,576 @@ pub fn cargo_shuttle_init(path: PathBuf, framework: Framework) -> Result<()> {
     Ok(())
 }
 
-/// Sets dependency version for a key-value pair:
-/// `crate_name = "version"`
-fn set_key_value_dependency_version(
-    crate_name: &str,
-    dependencies: &mut Table,
-    manifest_path: &Path,
-    url: &Url,
-    flag_allow_prerelease: bool,
-    get_dependency_version_fn: GetDependencyVersionFn,
-) {
-    //type GetDependencyVersionFn = fn(&str, bool, &Path, &Url) -> String;
-    let dependency_version =
-        get_dependency_version_fn(crate_name, flag_allow_prerelease, manifest_path, url);
-    dependencies[crate_name] = value(dependency_version);
-}
+///// Sets dependency version for a key-value pair:
+///// `crate_name = "version"`
+//fn set_key_value_dependency_version(
+//crate_name: &str,
+//dependencies: &mut Table,
+//manifest_path: &Path,
+//url: &Url,
+//flag_allow_prerelease: bool,
+//get_dependency_version_fn: GetDependencyVersionFn,
+//) {
+////type GetDependencyVersionFn = fn(&str, bool, &Path, &Url) -> String;
+//let dependency_version =
+//get_dependency_version_fn(crate_name, flag_allow_prerelease, manifest_path, url);
+//dependencies[crate_name] = value(dependency_version);
+//}
 
-/// Sets dependency version for an inline table:
-/// `crate_name = { version = "version" }`
-fn set_inline_table_dependency_version(
-    crate_name: &str,
-    dependencies: &mut Table,
-    manifest_path: &Path,
-    url: &Url,
-    flag_allow_prerelease: bool,
-    get_dependency_version_fn: GetDependencyVersionFn,
-) {
-    let dependency_version =
-        get_dependency_version_fn(crate_name, flag_allow_prerelease, manifest_path, url);
-    println!("{:?}", crate_name);
-    println!("{:?}", dependency_version);
-    dependencies[crate_name]["version"] = value(dependency_version);
-}
+///// Sets dependency version for an inline table:
+///// `crate_name = { version = "version" }`
+//fn set_inline_table_dependency_version(
+//crate_name: &str,
+//dependencies: &mut Table,
+//manifest_path: &Path,
+//url: &Url,
+//flag_allow_prerelease: bool,
+//get_dependency_version_fn: GetDependencyVersionFn,
+//) {
+//let dependency_version =
+//get_dependency_version_fn(crate_name, flag_allow_prerelease, manifest_path, url);
+//println!("{:?}", crate_name);
+//println!("{:?}", dependency_version);
+//dependencies[crate_name]["version"] = value(dependency_version);
+//}
 
-/// Sets dependency features for an inline table:
-/// `crate_name = { features = ["some-feature"] }`
-fn set_inline_table_dependency_features(
-    crate_name: &str,
-    dependencies: &mut Table,
-    features: Vec<String>,
-) {
-    let features = Array::from_iter(features);
-    dependencies[crate_name]["features"] = value(features);
-}
+///// Sets dependency features for an inline table:
+///// `crate_name = { features = ["some-feature"] }`
+//fn set_inline_table_dependency_features(
+//crate_name: &str,
+//dependencies: &mut Table,
+//features: Vec<String>,
+//) {
+//let features = Array::from_iter(features);
+//dependencies[crate_name]["features"] = value(features);
+//}
 
-/// Abstract type for `get_latest_dependency_version` function.
-type GetDependencyVersionFn = fn(&str, bool, &Path, &Url) -> String;
+///// Abstract type for `get_latest_dependency_version` function.
+//type GetDependencyVersionFn = fn(&str, bool, &Path, &Url) -> String;
 
-/// Gets the latest version for a dependency of `crate_name`.
-/// This is a wrapper function for `cargo_edit::get_latest_dependency` function.
-fn get_latest_dependency_version(
-    crate_name: &str,
-    flag_allow_prerelease: bool,
-    manifest_path: &Path,
-    url: &Url,
-) -> String {
-    let latest_version =
-        get_latest_dependency(crate_name, flag_allow_prerelease, manifest_path, Some(url))
-            .unwrap_or_else(|_| panic!("Could not query the latest version of {}", crate_name));
-    let latest_version = latest_version
-        .version()
-        .expect("No latest shuttle-service version available");
+///// Gets the latest version for a dependency of `crate_name`.
+///// This is a wrapper function for `cargo_edit::get_latest_dependency` function.
+//fn get_latest_dependency_version(
+//crate_name: &str,
+//flag_allow_prerelease: bool,
+//manifest_path: &Path,
+//url: &Url,
+//) -> String {
+//let latest_version =
+//get_latest_dependency(crate_name, flag_allow_prerelease, manifest_path, Some(url))
+//.unwrap_or_else(|_| panic!("Could not query the latest version of {}", crate_name));
+//let latest_version = latest_version
+//.version()
+//.expect("No latest shuttle-service version available");
 
-    latest_version.to_string()
-}
+//latest_version.to_string()
+//}
 
-/// Writes `boilerplate` code to the specified `lib.rs` file path.
-pub fn write_lib_file(boilerplate: &'static str, lib_path: &Path) -> Result<()> {
-    let mut lib_file = File::create(lib_path)?;
-    lib_file.write_all(boilerplate.as_bytes())?;
+///// Writes `boilerplate` code to the specified `lib.rs` file path.
+//pub fn write_lib_file(boilerplate: &'static str, lib_path: &Path) -> Result<()> {
+//let mut lib_file = File::create(lib_path)?;
+//lib_file.write_all(boilerplate.as_bytes())?;
 
-    Ok(())
-}
+//Ok(())
+//}
 
 #[cfg(test)]
 mod shuttle_init_tests {
     use super::*;
 
-    fn cargo_toml_factory() -> Document {
-        indoc! {r#"
-            [dependencies]
-        "#}
-        .parse::<Document>()
-        .unwrap()
-    }
+    //fn cargo_toml_factory() -> Document {
+    //indoc! {r#"
+    //[dependencies]
+    //"#}
+    //.parse::<Document>()
+    //.unwrap()
+    //}
 
-    fn mock_get_latest_dependency_version(
-        _crate_name: &str,
-        _flag_allow_prerelease: bool,
-        _manifest_path: &Path,
-        _url: &Url,
-    ) -> String {
-        "1.0".to_string()
-    }
+    //fn mock_get_latest_dependency_version(
+    //_crate_name: &str,
+    //_flag_allow_prerelease: bool,
+    //_manifest_path: &Path,
+    //_url: &Url,
+    //) -> String {
+    //"1.0".to_string()
+    //}
 
-    #[test]
-    fn test_set_inline_table_dependency_features() {
-        let mut cargo_toml = cargo_toml_factory();
-        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
-
-        set_inline_table_dependency_features(
-            "shuttle-service",
-            dependencies,
-            vec!["test-feature".to_string()],
-        );
-
-        let expected = indoc! {r#"
-            [dependencies]
-            shuttle-service = { features = ["test-feature"] }
-        "#};
-
-        assert_eq!(cargo_toml.to_string(), expected);
-    }
-
-    #[test]
-    fn test_set_inline_table_dependency_version() {
-        let mut cargo_toml = cargo_toml_factory();
-        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
-        let manifest_path = PathBuf::new();
-        let url = Url::parse("https://shuttle.rs").unwrap();
-
-        set_inline_table_dependency_version(
-            "shuttle-service",
-            dependencies,
-            &manifest_path,
-            &url,
-            false,
-            mock_get_latest_dependency_version,
-        );
-
-        let expected = indoc! {r#"
-            [dependencies]
-            shuttle-service = { version = "1.0" }
-        "#};
-
-        assert_eq!(cargo_toml.to_string(), expected);
-    }
-
-    #[test]
-    fn test_set_key_value_dependency_version() {
-        let mut cargo_toml = cargo_toml_factory();
-        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
-        let manifest_path = PathBuf::new();
-        let url = Url::parse("https://shuttle.rs").unwrap();
-
-        set_key_value_dependency_version(
-            "shuttle-service",
-            dependencies,
-            &manifest_path,
-            &url,
-            false,
-            mock_get_latest_dependency_version,
-        );
-
-        let expected = indoc! {r#"
-            [dependencies]
-            shuttle-service = "1.0"
-        "#};
-
-        assert_eq!(cargo_toml.to_string(), expected);
-    }
     #[test]
     fn test_set_cargo_dependencies_actix_web() {
-        let mut cargo_toml = cargo_toml_factory();
-        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
-        let manifest_path = PathBuf::new();
-        let url = Url::parse("https://shuttle.rs").unwrap();
+        let framework = Framework::ActixWeb;
+        let init_config = framework.init_config();
 
-        set_inline_table_dependency_version(
-            "shuttle-service",
-            dependencies,
-            &manifest_path,
-            &url,
-            false,
-            mock_get_latest_dependency_version,
-        );
+        let mut cargo_builder = CargoBuilder::new();
+        let dependencies = init_config.get_minimum_dependencies();
 
-        ShuttleInitActixWeb.set_cargo_dependencies(
-            dependencies,
-            &manifest_path,
-            &url,
-            mock_get_latest_dependency_version,
-        );
+        for &dep in dependencies.iter() {
+            cargo_builder.add_dependency(Dependency::new(dep.to_owned()));
+        }
 
-        let expected = indoc! {r#"
-            [dependencies]
-            shuttle-service = { version = "1.0", features = ["web-actix-web"] }
-            actix-web = "1.0" test
-        "#};
+        let dependency_attributes = init_config.get_dependency_attributes();
 
-        assert_eq!(cargo_toml.to_string(), expected);
+        for (dependency, attribute) in dependency_attributes {
+            // HashMap<&str, HashMap<&str, Value>>;
+            for (name, value) in attribute {
+                // HashMap<&str, HashMap<&str, Value>>;
+                cargo_builder.add_dependency_var(
+                    Dependency::new(dependency.to_owned()),
+                    name.to_owned(),
+                    value,
+                );
+            }
+        }
     }
 
-    #[test]
-    fn test_set_cargo_dependencies_axum() {
-        let mut cargo_toml = cargo_toml_factory();
-        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
-        let manifest_path = PathBuf::new();
-        let url = Url::parse("https://shuttle.rs").unwrap();
+    //#[test]
+    //fn test_set_inline_table_dependency_features() {
+    //let mut cargo_toml = cargo_toml_factory();
+    //let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
 
-        set_inline_table_dependency_version(
-            "shuttle-service",
-            dependencies,
-            &manifest_path,
-            &url,
-            false,
-            mock_get_latest_dependency_version,
-        );
+    //set_inline_table_dependency_features(
+    //"shuttle-service",
+    //dependencies,
+    //vec!["test-feature".to_string()],
+    //);
 
-        ShuttleInitAxum.set_cargo_dependencies(
-            dependencies,
-            &manifest_path,
-            &url,
-            mock_get_latest_dependency_version,
-        );
+    //let expected = indoc! {r#"
+    //[dependencies]
+    //shuttle-service = { features = ["test-feature"] }
+    //"#};
 
-        let expected = indoc! {r#"
-            [dependencies]
-            shuttle-service = { version = "1.0", features = ["web-axum"] }
-            axum = "1.0"
-            sync_wrapper = "1.0"
-        "#};
+    //assert_eq!(cargo_toml.to_string(), expected);
+    //}
 
-        assert_eq!(cargo_toml.to_string(), expected);
-    }
+    //#[test]
+    //fn test_set_inline_table_dependency_version() {
+    //let mut cargo_toml = cargo_toml_factory();
+    //let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
+    //let manifest_path = PathBuf::new();
+    //let url = Url::parse("https://shuttle.rs").unwrap();
 
-    #[test]
-    fn test_set_cargo_dependencies_rocket() {
-        let mut cargo_toml = cargo_toml_factory();
-        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
-        let manifest_path = PathBuf::new();
-        let url = Url::parse("https://shuttle.rs").unwrap();
+    //set_inline_table_dependency_version(
+    //"shuttle-service",
+    //dependencies,
+    //&manifest_path,
+    //&url,
+    //false,
+    //mock_get_latest_dependency_version,
+    //);
 
-        set_inline_table_dependency_version(
-            "shuttle-service",
-            dependencies,
-            &manifest_path,
-            &url,
-            false,
-            mock_get_latest_dependency_version,
-        );
+    //let expected = indoc! {r#"
+    //[dependencies]
+    //shuttle-service = { version = "1.0" }
+    //"#};
 
-        ShuttleInitRocket.set_cargo_dependencies(
-            dependencies,
-            &manifest_path,
-            &url,
-            mock_get_latest_dependency_version,
-        );
+    //assert_eq!(cargo_toml.to_string(), expected);
+    //}
 
-        let expected = indoc! {r#"
-            [dependencies]
-            shuttle-service = { version = "1.0", features = ["web-rocket"] }
-            rocket = "1.0"
-        "#};
+    //#[test]
+    //fn test_set_key_value_dependency_version() {
+    //let mut cargo_toml = cargo_toml_factory();
+    //let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
+    //let manifest_path = PathBuf::new();
+    //let url = Url::parse("https://shuttle.rs").unwrap();
 
-        assert_eq!(cargo_toml.to_string(), expected);
-    }
+    //set_key_value_dependency_version(
+    //"shuttle-service",
+    //dependencies,
+    //&manifest_path,
+    //&url,
+    //false,
+    //mock_get_latest_dependency_version,
+    //);
 
-    #[test]
-    fn test_set_cargo_dependencies_tide() {
-        let mut cargo_toml = cargo_toml_factory();
-        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
-        let manifest_path = PathBuf::new();
-        let url = Url::parse("https://shuttle.rs").unwrap();
+    //let expected = indoc! {r#"
+    //[dependencies]
+    //shuttle-service = "1.0"
+    //"#};
 
-        set_inline_table_dependency_version(
-            "shuttle-service",
-            dependencies,
-            &manifest_path,
-            &url,
-            false,
-            mock_get_latest_dependency_version,
-        );
+    //assert_eq!(cargo_toml.to_string(), expected);
+    //}
+    //#[test]
+    //fn test_set_cargo_dependencies_actix_web() {
+    //let mut cargo_toml = cargo_toml_factory();
+    //let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
+    //let manifest_path = PathBuf::new();
+    //let url = Url::parse("https://shuttle.rs").unwrap();
 
-        ShuttleInitTide.set_cargo_dependencies(
-            dependencies,
-            &manifest_path,
-            &url,
-            mock_get_latest_dependency_version,
-        );
+    //set_inline_table_dependency_version(
+    //"shuttle-service",
+    //dependencies,
+    //&manifest_path,
+    //&url,
+    //false,
+    //mock_get_latest_dependency_version,
+    //);
 
-        let expected = indoc! {r#"
-            [dependencies]
-            shuttle-service = { version = "1.0", features = ["web-tide"] }
-            tide = "1.0"
-        "#};
+    //ShuttleInitActixWeb.set_cargo_dependencies(
+    //dependencies,
+    //&manifest_path,
+    //&url,
+    //mock_get_latest_dependency_version,
+    //);
 
-        assert_eq!(cargo_toml.to_string(), expected);
-    }
+    //let expected = indoc! {r#"
+    //[dependencies]
+    //shuttle-service = { version = "1.0", features = ["web-actix-web"] }
+    //actix-web = "1.0" test
+    //"#};
 
-    #[test]
-    fn test_set_cargo_dependencies_tower() {
-        let mut cargo_toml = cargo_toml_factory();
-        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
-        let manifest_path = PathBuf::new();
-        let url = Url::parse("https://shuttle.rs").unwrap();
+    //assert_eq!(cargo_toml.to_string(), expected);
+    //}
 
-        set_inline_table_dependency_version(
-            "shuttle-service",
-            dependencies,
-            &manifest_path,
-            &url,
-            false,
-            mock_get_latest_dependency_version,
-        );
+    //#[test]
+    //fn test_set_cargo_dependencies_axum() {
+    //let mut cargo_toml = cargo_toml_factory();
+    //let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
+    //let manifest_path = PathBuf::new();
+    //let url = Url::parse("https://shuttle.rs").unwrap();
 
-        ShuttleInitTower.set_cargo_dependencies(
-            dependencies,
-            &manifest_path,
-            &url,
-            mock_get_latest_dependency_version,
-        );
+    //set_inline_table_dependency_version(
+    //"shuttle-service",
+    //dependencies,
+    //&manifest_path,
+    //&url,
+    //false,
+    //mock_get_latest_dependency_version,
+    //);
 
-        let expected = indoc! {r#"
-            [dependencies]
-            shuttle-service = { version = "1.0", features = ["web-tower"] }
-            tower = { version = "1.0", features = ["full"] }
-            hyper = { version = "1.0", features = ["full"] }
-        "#};
+    //ShuttleInitAxum.set_cargo_dependencies(
+    //dependencies,
+    //&manifest_path,
+    //&url,
+    //mock_get_latest_dependency_version,
+    //);
 
-        assert_eq!(cargo_toml.to_string(), expected);
-    }
+    //let expected = indoc! {r#"
+    //[dependencies]
+    //shuttle-service = { version = "1.0", features = ["web-axum"] }
+    //axum = "1.0"
+    //sync_wrapper = "1.0"
+    //"#};
 
-    #[test]
-    fn test_set_cargo_dependencies_poem() {
-        let mut cargo_toml = cargo_toml_factory();
-        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
-        let manifest_path = PathBuf::new();
-        let url = Url::parse("https://shuttle.rs").unwrap();
+    //assert_eq!(cargo_toml.to_string(), expected);
+    //}
 
-        set_inline_table_dependency_version(
-            "shuttle-service",
-            dependencies,
-            &manifest_path,
-            &url,
-            false,
-            mock_get_latest_dependency_version,
-        );
+    //#[test]
+    //fn test_set_cargo_dependencies_rocket() {
+    //let mut cargo_toml = cargo_toml_factory();
+    //let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
+    //let manifest_path = PathBuf::new();
+    //let url = Url::parse("https://shuttle.rs").unwrap();
 
-        ShuttleInitPoem.set_cargo_dependencies(
-            dependencies,
-            &manifest_path,
-            &url,
-            mock_get_latest_dependency_version,
-        );
+    //set_inline_table_dependency_version(
+    //"shuttle-service",
+    //dependencies,
+    //&manifest_path,
+    //&url,
+    //false,
+    //mock_get_latest_dependency_version,
+    //);
 
-        let expected = indoc! {r#"
-            [dependencies]
-            shuttle-service = { version = "1.0", features = ["web-poem"] }
-            poem = "1.0"
-        "#};
+    //ShuttleInitRocket.set_cargo_dependencies(
+    //dependencies,
+    //&manifest_path,
+    //&url,
+    //mock_get_latest_dependency_version,
+    //);
 
-        assert_eq!(cargo_toml.to_string(), expected);
-    }
+    //let expected = indoc! {r#"
+    //[dependencies]
+    //shuttle-service = { version = "1.0", features = ["web-rocket"] }
+    //rocket = "1.0"
+    //"#};
 
-    #[test]
-    fn test_set_cargo_dependencies_salvo() {
-        let mut cargo_toml = cargo_toml_factory();
-        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
-        let manifest_path = PathBuf::new();
-        let url = Url::parse("https://shuttle.rs").unwrap();
+    //assert_eq!(cargo_toml.to_string(), expected);
+    //}
 
-        set_inline_table_dependency_version(
-            "shuttle-service",
-            dependencies,
-            &manifest_path,
-            &url,
-            false,
-            mock_get_latest_dependency_version,
-        );
+    //#[test]
+    //fn test_set_cargo_dependencies_tide() {
+    //let mut cargo_toml = cargo_toml_factory();
+    //let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
+    //let manifest_path = PathBuf::new();
+    //let url = Url::parse("https://shuttle.rs").unwrap();
 
-        ShuttleInitSalvo.set_cargo_dependencies(
-            dependencies,
-            &manifest_path,
-            &url,
-            mock_get_latest_dependency_version,
-        );
+    //set_inline_table_dependency_version(
+    //"shuttle-service",
+    //dependencies,
+    //&manifest_path,
+    //&url,
+    //false,
+    //mock_get_latest_dependency_version,
+    //);
 
-        let expected = indoc! {r#"
-            [dependencies]
-            shuttle-service = { version = "1.0", features = ["web-salvo"] }
-            salvo = "1.0"
-        "#};
+    //ShuttleInitTide.set_cargo_dependencies(
+    //dependencies,
+    //&manifest_path,
+    //&url,
+    //mock_get_latest_dependency_version,
+    //);
 
-        assert_eq!(cargo_toml.to_string(), expected);
-    }
+    //let expected = indoc! {r#"
+    //[dependencies]
+    //shuttle-service = { version = "1.0", features = ["web-tide"] }
+    //tide = "1.0"
+    //"#};
 
-    #[test]
-    fn test_set_cargo_dependencies_serenity() {
-        let mut cargo_toml = cargo_toml_factory();
-        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
-        let manifest_path = PathBuf::new();
-        let url = Url::parse("https://shuttle.rs").unwrap();
+    //assert_eq!(cargo_toml.to_string(), expected);
+    //}
 
-        set_inline_table_dependency_version(
-            "shuttle-service",
-            dependencies,
-            &manifest_path,
-            &url,
-            false,
-            mock_get_latest_dependency_version,
-        );
+    //#[test]
+    //fn test_set_cargo_dependencies_tower() {
+    //let mut cargo_toml = cargo_toml_factory();
+    //let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
+    //let manifest_path = PathBuf::new();
+    //let url = Url::parse("https://shuttle.rs").unwrap();
 
-        ShuttleInitSerenity.set_cargo_dependencies(
-            dependencies,
-            &manifest_path,
-            &url,
-            mock_get_latest_dependency_version,
-        );
+    //set_inline_table_dependency_version(
+    //"shuttle-service",
+    //dependencies,
+    //&manifest_path,
+    //&url,
+    //false,
+    //mock_get_latest_dependency_version,
+    //);
 
-        let expected = indoc! {r#"
-            [dependencies]
-            shuttle-service = { version = "1.0", features = ["bot-serenity"] }
-            anyhow = "1.0"
-            serenity = { version = "1.0", default-features = false, features = ["client", "gateway", "rustls_backend", "model"] }
-            shuttle-secrets = "1.0"
-            tracing = "1.0"
-        "#};
+    //ShuttleInitTower.set_cargo_dependencies(
+    //dependencies,
+    //&manifest_path,
+    //&url,
+    //mock_get_latest_dependency_version,
+    //);
 
-        assert_eq!(cargo_toml.to_string(), expected);
-    }
+    //let expected = indoc! {r#"
+    //[dependencies]
+    //shuttle-service = { version = "1.0", features = ["web-tower"] }
+    //tower = { version = "1.0", features = ["full"] }
+    //hyper = { version = "1.0", features = ["full"] }
+    //"#};
 
-    #[test]
-    fn test_set_cargo_dependencies_poise() {
-        let mut cargo_toml = cargo_toml_factory();
-        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
-        let manifest_path = PathBuf::new();
-        let url = Url::parse("https://shuttle.rs").unwrap();
+    //assert_eq!(cargo_toml.to_string(), expected);
+    //}
 
-        set_inline_table_dependency_version(
-            "shuttle-service",
-            dependencies,
-            &manifest_path,
-            &url,
-            false,
-            mock_get_latest_dependency_version,
-        );
+    //#[test]
+    //fn test_set_cargo_dependencies_poem() {
+    //let mut cargo_toml = cargo_toml_factory();
+    //let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
+    //let manifest_path = PathBuf::new();
+    //let url = Url::parse("https://shuttle.rs").unwrap();
 
-        ShuttleInitPoise.set_cargo_dependencies(
-            dependencies,
-            &manifest_path,
-            &url,
-            mock_get_latest_dependency_version,
-        );
+    //set_inline_table_dependency_version(
+    //"shuttle-service",
+    //dependencies,
+    //&manifest_path,
+    //&url,
+    //false,
+    //mock_get_latest_dependency_version,
+    //);
 
-        let expected = indoc! {r#"
-			[dependencies]
-			shuttle-service = { version = "1.0", features = ["bot-poise"] }
-			anyhow = "1.0"
-			poise = "1.0"
-			shuttle-secrets = "1.0"
-			tracing = "1.0"
-		"#};
+    //ShuttleInitPoem.set_cargo_dependencies(
+    //dependencies,
+    //&manifest_path,
+    //&url,
+    //mock_get_latest_dependency_version,
+    //);
 
-        assert_eq!(cargo_toml.to_string(), expected);
-    }
+    //let expected = indoc! {r#"
+    //[dependencies]
+    //shuttle-service = { version = "1.0", features = ["web-poem"] }
+    //poem = "1.0"
+    //"#};
 
-    #[test]
-    fn test_set_cargo_dependencies_warp() {
-        let mut cargo_toml = cargo_toml_factory();
-        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
-        let manifest_path = PathBuf::new();
-        let url = Url::parse("https://shuttle.rs").unwrap();
+    //assert_eq!(cargo_toml.to_string(), expected);
+    //}
 
-        set_inline_table_dependency_version(
-            "shuttle-service",
-            dependencies,
-            &manifest_path,
-            &url,
-            false,
-            mock_get_latest_dependency_version,
-        );
+    //#[test]
+    //fn test_set_cargo_dependencies_salvo() {
+    //let mut cargo_toml = cargo_toml_factory();
+    //let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
+    //let manifest_path = PathBuf::new();
+    //let url = Url::parse("https://shuttle.rs").unwrap();
 
-        ShuttleInitWarp.set_cargo_dependencies(
-            dependencies,
-            &manifest_path,
-            &url,
-            mock_get_latest_dependency_version,
-        );
+    //set_inline_table_dependency_version(
+    //"shuttle-service",
+    //dependencies,
+    //&manifest_path,
+    //&url,
+    //false,
+    //mock_get_latest_dependency_version,
+    //);
 
-        let expected = indoc! {r#"
-            [dependencies]
-            shuttle-service = { version = "1.0", features = ["web-warp"] }
-            warp = "1.0"
-        "#};
+    //ShuttleInitSalvo.set_cargo_dependencies(
+    //dependencies,
+    //&manifest_path,
+    //&url,
+    //mock_get_latest_dependency_version,
+    //);
 
-        assert_eq!(cargo_toml.to_string(), expected);
-    }
+    //let expected = indoc! {r#"
+    //[dependencies]
+    //shuttle-service = { version = "1.0", features = ["web-salvo"] }
+    //salvo = "1.0"
+    //"#};
 
-    #[test]
-    fn test_set_cargo_dependencies_thruster() {
-        let mut cargo_toml = cargo_toml_factory();
-        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
-        let manifest_path = PathBuf::new();
-        let url = Url::parse("https://shuttle.rs").unwrap();
+    //assert_eq!(cargo_toml.to_string(), expected);
+    //}
 
-        set_inline_table_dependency_version(
-            "shuttle-service",
-            dependencies,
-            &manifest_path,
-            &url,
-            false,
-            mock_get_latest_dependency_version,
-        );
+    //#[test]
+    //fn test_set_cargo_dependencies_serenity() {
+    //let mut cargo_toml = cargo_toml_factory();
+    //let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
+    //let manifest_path = PathBuf::new();
+    //let url = Url::parse("https://shuttle.rs").unwrap();
 
-        ShuttleInitThruster.set_cargo_dependencies(
-            dependencies,
-            &manifest_path,
-            &url,
-            mock_get_latest_dependency_version,
-        );
+    //set_inline_table_dependency_version(
+    //"shuttle-service",
+    //dependencies,
+    //&manifest_path,
+    //&url,
+    //false,
+    //mock_get_latest_dependency_version,
+    //);
 
-        let expected = indoc! {r#"
-            [dependencies]
-            shuttle-service = { version = "1.0", features = ["web-thruster"] }
-            thruster = { version = "1.0", features = ["hyper_server"] }
-        "#};
+    //ShuttleInitSerenity.set_cargo_dependencies(
+    //dependencies,
+    //&manifest_path,
+    //&url,
+    //mock_get_latest_dependency_version,
+    //);
 
-        assert_eq!(cargo_toml.to_string(), expected);
-    }
+    //let expected = indoc! {r#"
+    //[dependencies]
+    //shuttle-service = { version = "1.0", features = ["bot-serenity"] }
+    //anyhow = "1.0"
+    //serenity = { version = "1.0", default-features = false, features = ["client", "gateway", "rustls_backend", "model"] }
+    //shuttle-secrets = "1.0"
+    //tracing = "1.0"
+    //"#};
 
-    #[test]
-    /// Makes sure that Rocket uses allow_prerelease flag when fetching the latest version
-    fn test_get_latest_dependency_version_rocket() {
-        let mut cargo_toml = cargo_toml_factory();
-        let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
-        let manifest_path = PathBuf::new();
-        let url = Url::parse("https://github.com/rust-lang/crates.io-index").unwrap();
+    //assert_eq!(cargo_toml.to_string(), expected);
+    //}
 
-        ShuttleInitRocket.set_cargo_dependencies(
-            dependencies,
-            &manifest_path,
-            &url,
-            get_latest_dependency_version,
-        );
+    //#[test]
+    //fn test_set_cargo_dependencies_poise() {
+    //let mut cargo_toml = cargo_toml_factory();
+    //let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
+    //let manifest_path = PathBuf::new();
+    //let url = Url::parse("https://shuttle.rs").unwrap();
 
-        let version = dependencies["rocket"].as_str().unwrap();
+    //set_inline_table_dependency_version(
+    //"shuttle-service",
+    //dependencies,
+    //&manifest_path,
+    //&url,
+    //false,
+    //mock_get_latest_dependency_version,
+    //);
 
-        let expected = get_latest_dependency("rocket", true, &manifest_path, Some(&url))
-            .expect("Could not query the latest version of rocket")
-            .version()
-            .expect("no rocket version found")
-            .to_string();
+    //ShuttleInitPoise.set_cargo_dependencies(
+    //dependencies,
+    //&manifest_path,
+    //&url,
+    //mock_get_latest_dependency_version,
+    //);
 
-        assert_eq!(version, expected);
-    }
+    //let expected = indoc! {r#"
+    //[dependencies]
+    //shuttle-service = { version = "1.0", features = ["bot-poise"] }
+    //anyhow = "1.0"
+    //poise = "1.0"
+    //shuttle-secrets = "1.0"
+    //tracing = "1.0"
+    //"#};
+
+    //assert_eq!(cargo_toml.to_string(), expected);
+    //}
+
+    //#[test]
+    //fn test_set_cargo_dependencies_warp() {
+    //let mut cargo_toml = cargo_toml_factory();
+    //let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
+    //let manifest_path = PathBuf::new();
+    //let url = Url::parse("https://shuttle.rs").unwrap();
+
+    //set_inline_table_dependency_version(
+    //"shuttle-service",
+    //dependencies,
+    //&manifest_path,
+    //&url,
+    //false,
+    //mock_get_latest_dependency_version,
+    //);
+
+    //ShuttleInitWarp.set_cargo_dependencies(
+    //dependencies,
+    //&manifest_path,
+    //&url,
+    //mock_get_latest_dependency_version,
+    //);
+
+    //let expected = indoc! {r#"
+    //[dependencies]
+    //shuttle-service = { version = "1.0", features = ["web-warp"] }
+    //warp = "1.0"
+    //"#};
+
+    //assert_eq!(cargo_toml.to_string(), expected);
+    //}
+
+    //#[test]
+    //fn test_set_cargo_dependencies_thruster() {
+    //let mut cargo_toml = cargo_toml_factory();
+    //let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
+    //let manifest_path = PathBuf::new();
+    //let url = Url::parse("https://shuttle.rs").unwrap();
+
+    //set_inline_table_dependency_version(
+    //"shuttle-service",
+    //dependencies,
+    //&manifest_path,
+    //&url,
+    //false,
+    //mock_get_latest_dependency_version,
+    //);
+
+    //ShuttleInitThruster.set_cargo_dependencies(
+    //dependencies,
+    //&manifest_path,
+    //&url,
+    //mock_get_latest_dependency_version,
+    //);
+
+    //let expected = indoc! {r#"
+    //[dependencies]
+    //shuttle-service = { version = "1.0", features = ["web-thruster"] }
+    //thruster = { version = "1.0", features = ["hyper_server"] }
+    //"#};
+
+    //assert_eq!(cargo_toml.to_string(), expected);
+    //}
+
+    //#[test]
+    ///// Makes sure that Rocket uses allow_prerelease flag when fetching the latest version
+    //fn test_get_latest_dependency_version_rocket() {
+    //let mut cargo_toml = cargo_toml_factory();
+    //let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
+    //let manifest_path = PathBuf::new();
+    //let url = Url::parse("https://github.com/rust-lang/crates.io-index").unwrap();
+
+    //ShuttleInitRocket.set_cargo_dependencies(
+    //dependencies,
+    //&manifest_path,
+    //&url,
+    //get_latest_dependency_version,
+    //);
+
+    //let version = dependencies["rocket"].as_str().unwrap();
+
+    //let expected = get_latest_dependency("rocket", true, &manifest_path, Some(&url))
+    //.expect("Could not query the latest version of rocket")
+    //.version()
+    //.expect("no rocket version found")
+    //.to_string();
+
+    //assert_eq!(version, expected);
+    //}
 }

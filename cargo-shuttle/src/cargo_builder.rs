@@ -9,6 +9,7 @@ use toml_edit::{value, Array, Document, Item, Table, Value};
 // todo - See if we can accept a str instead of a Sring throughout.
 // todo - See if we can use Path instead of PathBuff
 // todo - fix version call
+// todo - have a look in init.rs to see if we need to rename or remove  get_minimum_dep fn
 // todo - Add package settings to combine method
 // todo - we should be able to add vec! directly instead of having to pass in `Array::from_iter(vec!["dsfdsf"]);`
 // todo - make the combine functional on all types and not just the dependencies field
@@ -77,8 +78,10 @@ impl CargoBuilder {
     /// Saves the `CargoBuilder` values to the `path` provided, overwriting any existing matching
     /// values
     pub fn save_overwrite(self, path: PathBuf) -> Result<()> {
-        let mut cargo_doc = read_to_string(path)?.parse::<Document>()?;
+        let mut cargo_doc = read_to_string(path.clone())?.parse::<Document>()?;
         let toml_document = self.combine(cargo_doc)?;
+        let mut cargo_toml = File::create(path)?;
+        cargo_toml.write_all(toml_document.to_string().as_bytes())?;
         Ok(())
     }
 
@@ -157,7 +160,7 @@ mod cargo_builder_tests {
 
         let mut builder = CargoBuilder::new();
         let features = Array::from_iter(vec!["axum-web"]);
-        builder.add_dependency_var(dependency, "features".to_owned(), features);
+        builder.add_dependency_var(dependency, "features".to_owned(), Value::from(features));
         let toml_document = builder.get_document();
 
         assert_eq!(
@@ -174,8 +177,8 @@ mod cargo_builder_tests {
 
         let mut builder = CargoBuilder::new();
         let features = Array::from_iter(vec!["dsfdsf"]);
-        builder.add_dependency_var(dependency1, "path".to_owned(), "initial/path");
-        builder.add_dependency_var(dependency2, "path".to_owned(), "overwrite/path");
+        builder.add_dependency_var(dependency1, "path".to_owned(), Value::from("initial/path"));
+        builder.add_dependency_var(dependency2, "path".to_owned(), Value::from("overwrite/path"));
         let toml_document = builder.combine(existing_toml_doc).unwrap();
 
         assert_eq!(
@@ -191,7 +194,7 @@ mod cargo_builder_tests {
 
         let mock_dependencies = HashMap::from([(
             "test_dep".to_owned(),
-            HashMap::from([("features".to_owned(), value("overwrite value"))]),
+            HashMap::from([("features".to_owned(), Value::from("overwrite value"))]),
         )]);
 
         let builder = CargoBuilder {
@@ -203,7 +206,7 @@ mod cargo_builder_tests {
 
         assert_eq!(
             toml_document.to_string(),
-            "dependencies = { test_dep = { features = \"overwrite value\" } }\n"
+            "dependencieis = { test_dep = { features = \"overwrite value\" } }\n"
         );
     }
 }

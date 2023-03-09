@@ -396,14 +396,14 @@ async fn store_executable(
     runtime: &Runtime,
     id: &Uuid,
 ) -> Result<()> {
-    let bin_path = match runtime {
+    let executable_path = match runtime {
         Runtime::Next(path) => path,
         Runtime::Legacy(path) => path,
     };
 
-    let new_bin_path = storage_manager.deployment_executable_path(id)?;
+    let new_executable_path = storage_manager.deployment_executable_path(id)?;
 
-    fs::rename(bin_path, new_bin_path).await?;
+    fs::rename(executable_path, new_executable_path).await?;
 
     Ok(())
 }

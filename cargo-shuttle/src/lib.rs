@@ -404,7 +404,7 @@ impl Shuttle {
 
         let service_name = self.ctx.project_name().to_string();
 
-        let (is_wasm, bin_path) = match runtime {
+        let (is_wasm, executable_path) = match runtime {
             Runtime::Next(path) => (true, path),
             Runtime::Legacy(path) => (false, path),
         };
@@ -465,7 +465,7 @@ impl Shuttle {
 
                 runtime_path
             } else {
-                bin_path.clone()
+                executable_path.clone()
             }
         };
 
@@ -484,7 +484,7 @@ impl Shuttle {
         })?;
 
         let load_request = tonic::Request::new(LoadRequest {
-            path: bin_path
+            path: executable_path
                 .into_os_string()
                 .into_string()
                 .expect("to convert path to string"),

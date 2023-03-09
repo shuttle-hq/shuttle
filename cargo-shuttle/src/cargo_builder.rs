@@ -8,6 +8,7 @@ use toml_edit::{value, Array, Document, Item, Table, Value};
 
 // todo - See if we can accept a str instead of a Sring throughout.
 // todo - See if we can use Path instead of PathBuff
+// todo - fix version call
 // todo - Add package settings to combine method
 // todo - we should be able to add vec! directly instead of having to pass in `Array::from_iter(vec!["dsfdsf"]);`
 // todo - make the combine functional on all types and not just the dependencies field
@@ -15,7 +16,7 @@ use toml_edit::{value, Array, Document, Item, Table, Value};
 #[derive(Debug, Default)]
 pub struct CargoBuilder {
     packages: HashMap<String, String>,
-    dependencies: HashMap<String, HashMap<String, Item>>,
+    dependencies: HashMap<String, HashMap<String, Value>>,
 }
 
 pub struct Dependency {
@@ -46,20 +47,20 @@ impl CargoBuilder {
 
     /// Adds an inline dependency attribute to a current dependency. Creates a new dependency line
     /// if it doesn't already exist
-    pub fn add_dependency_var<V: Into<Value>>(
+    pub fn add_dependency_var(
         &mut self,
         dependency: Dependency,
         attribute_name: String,
-        dep_value: V,
+        dep_value: Value,
     ) -> &mut Self {
         match self.dependencies.get_mut(&dependency.name) {
             Some(x) => {
-                x.entry(attribute_name).or_insert(value(dep_value));
+                x.entry(attribute_name).or_insert(dep_value);
             }
             None => {
                 self.dependencies.insert(
                     dependency.name,
-                    HashMap::from([(attribute_name, value(dep_value))]),
+                    HashMap::from([(attribute_name, dep_value)]),
                 );
             }
         }
@@ -70,7 +71,7 @@ impl CargoBuilder {
     /// and calculating the version attributes of a dependency
     pub fn add_dependency(&mut self, dependency: Dependency) -> &mut Self {
         let version = dependency.get_latest_version();
-        self.add_dependency_var(dependency, "version".to_owned(), version)
+        self.add_dependency_var(dependency, "version".to_owned(), Value::from(version))
     }
 
     /// Saves the `CargoBuilder` values to the `path` provided, overwriting any existing matching
@@ -95,10 +96,10 @@ impl CargoBuilder {
             // Loop over child values 'version' / 'features' etc.
             if dep_attribute.len() == 1 && dep_attribute.contains_key("version") {
                 let dep_value = dep_attribute.get("version").unwrap();
-                cargo_doc["dependencies"][name.to_owned()] = dep_value.to_owned();
+                cargo_doc["dependencies"][name.to_owned()] = value(dep_value);
             } else {
                 for (dep_type, dep_value) in dep_attribute {
-                    cargo_doc["dependencies"][name.to_owned()][dep_type] = dep_value;
+                    cargo_doc["dependencies"][name.to_owned()][dep_type] = value(dep_value);
                 }
             }
         }

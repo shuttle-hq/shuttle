@@ -19,7 +19,6 @@ bincode = { version = "1.3.3", optional = true }
 cargo = { version = "0.65.0", optional = true }
 cargo_metadata = "0.15.2"
 crossbeam-channel = "0.5.6"
-futures = { version = "0.3.25", features = ["std"] }
 hyper = { version = "0.14.23", features = ["server", "tcp", "http1"], optional = true }
 num_cpus = { version = "1.14.0", optional = true }
 pipe = "0.4.0"
@@ -36,7 +35,6 @@ tokio = { version = "1.22.0", features = ["sync"] }
 tower = { version = "0.4.13", features = ["make"], optional = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
-uuid = { workspace = true, features = ["v4"] }
 warp = { version = "0.3.3", optional = true }
 
 # Tide does not have tokio support. So make sure async-std is compatible with tokio
@@ -55,10 +53,7 @@ workspace = true
 features = ["tracing", "service"]
 
 [dev-dependencies]
-portpicker = "0.1.1"
-sqlx = { version = "0.6.2", features = ["runtime-tokio-native-tls", "postgres"] }
 tokio = { version = "1.22.0", features = ["macros", "rt"] }
-uuid = { workspace = true, features = ["v4"] }
 
 [features]
 default = ["codegen"]

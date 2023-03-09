@@ -52,6 +52,11 @@ workspace = true
 workspace = true
 features = ["builder", "web-rocket"] # TODO: remove web-rocket
 
+[dev-dependencies]
+crossbeam-channel = "0.5.6"
+portpicker = "0.1.1"
+futures = { version = "0.3.25" }
+
 [features]
 next = [
     "cap-std", 

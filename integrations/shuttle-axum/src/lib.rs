@@ -34,6 +34,3 @@ impl shuttle_runtime::Service for AxumService {
 
 /// The return type that should be returned from the `shuttle_runtime::main` function.
 pub type ShuttleAxum = Result<AxumService, shuttle_runtime::Error>;
-
-pub use shuttle_runtime;
-pub use shuttle_runtime::*;

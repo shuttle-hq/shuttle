@@ -213,15 +213,10 @@ use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
-pub use async_trait::async_trait;
-
-// Pub uses by `codegen`
-pub use anyhow::Context;
-pub use tracing;
-pub use tracing_subscriber;
+use async_trait::async_trait;
 
 pub mod error;
-pub use error::Error;
+pub use error::{CustomError, Error};
 
 pub use shuttle_common::database;
 
@@ -455,22 +450,6 @@ where
 
 #[cfg(feature = "web-warp")]
 pub type ShuttleWarp<T> = Result<warp::filters::BoxedFilter<T>, Error>;
-
-#[cfg(feature = "web-axum")]
-#[async_trait]
-impl Service for axum::Router {
-    async fn bind(mut self, addr: SocketAddr) -> Result<(), error::Error> {
-        axum::Server::bind(&addr)
-            .serve(self.into_make_service())
-            .await
-            .map_err(error::CustomError::new)?;
-
-        Ok(())
-    }
-}
-
-#[cfg(feature = "web-axum")]
-pub type ShuttleAxum = Result<axum::Router, Error>;
 
 #[cfg(feature = "web-actix-web")]
 #[async_trait]

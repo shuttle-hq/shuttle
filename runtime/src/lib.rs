@@ -11,9 +11,9 @@ pub use logger::Logger;
 pub use next::{AxumWasm, NextArgs};
 pub use provisioner_factory::ProvisionerFactory;
 pub use shuttle_common::storage_manager::StorageManager;
-pub use shuttle_service::{main, Error, ResourceBuilder, Service};
+pub use shuttle_service::{main, CustomError, Error, ResourceBuilder, Service};
 
-pub type CustomError = anyhow::Error;
+// Dependencies required by the codegen
 pub use anyhow::Context;
 pub use tracing;
 pub use tracing_subscriber;

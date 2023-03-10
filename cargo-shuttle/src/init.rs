@@ -937,23 +937,24 @@ mod shuttle_init_tests {
     //}
 
     #[test]
-    fn test_set_cargo_dependencies_actix_web() {
+    fn test_set_cargo_dependencies() {
         let framework = Framework::ActixWeb;
         let init_config = framework.init_config();
 
         let mut cargo_builder = CargoBuilder::new();
-        let dependencies = init_config.get_minimum_dependencies();
 
+        let dependencies = init_config.get_minimum_dependencies();
         for &dep in dependencies.iter() {
-            cargo_builder.add_dependency(Dependency::new(dep.to_owned()));
+            cargo_builder.add_dependency_var(
+                Dependency::new(dep.to_owned()),
+                "version".to_owned(),
+                Value::from("1.0"),
+            );
         }
 
         let dependency_attributes = init_config.get_dependency_attributes();
-
         for (dependency, attribute) in dependency_attributes {
-            // HashMap<&str, HashMap<&str, Value>>;
             for (name, value) in attribute {
-                // HashMap<&str, HashMap<&str, Value>>;
                 cargo_builder.add_dependency_var(
                     Dependency::new(dependency.to_owned()),
                     name.to_owned(),
@@ -961,6 +962,12 @@ mod shuttle_init_tests {
                 );
             }
         }
+
+        // Test non-variable packages here.
+        // Test dependencies
+        let doc = cargo_builder.get_document();
+
+        assert_eq!(doc["dependencies"].to_string(), "sdfddsf");
     }
 
     //#[test]

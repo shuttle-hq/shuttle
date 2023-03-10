@@ -14,6 +14,11 @@ use toml_edit::{value, Array, Document, Item, Table, Value};
 // todo - we should be able to add vec! directly instead of having to pass in `Array::from_iter(vec!["dsfdsf"]);`
 // todo - make the combine functional on all types and not just the dependencies field
 
+pub enum CargoSection {
+    Dependency(Dependency),
+    Package
+}
+
 #[derive(Debug, Default)]
 pub struct CargoBuilder {
     packages: HashMap<String, String>,
@@ -48,42 +53,88 @@ impl CargoBuilder {
 
     /// Adds an inline dependency attribute to a current dependency. Creates a new dependency line
     /// if it doesn't already exist
+    pub fn add_var(
+        &mut self,
+        section: CargoSection,
+        attribute_name: String,
+        dep_value: Value,
+    ) -> &mut Self {
+        match section {
+            CargoSection::Dependency(x) => {
+                match self.dependencies.get_mut(&x.name) {
+                    Some(x) => {
+                        x.entry(attribute_name).or_insert(dep_value);
+                    }
+                    None => {
+                        self.dependencies.insert(
+                            x.name,
+                            HashMap::from([(attribute_name, dep_value)]),
+                        );
+                    }
+                }
+            },
+            CargoSection::Package => {
+                //match self.packages.get_mut(&dependency.name) {
+                    //Some(x) => {
+                        //x.entry(attribute_name).or_insert(dep_value);
+                    //}
+                    //None => {
+                        //self.packages.insert(
+                            //dependency.name,
+                            //HashMap::from([(attribute_name, dep_value)]),
+                        //);
+                    //}
+                //}
+            }
+        }
+        self
+    }
+    
+    //pub fn add_dependency_var(
+        //&mut self,
+        //dependency: Dependency,
+        //attribute_name: String,
+        //dep_value: Value,
+    //) -> &mut Self {
+            //match self.dependencies.get_mut(&dependency.name) {
+                //Some(x) => {
+                    //x.entry(attribute_name).or_insert(dep_value);
+                //}
+                //None => {
+                    //self.dependencies.insert(
+                        //dependency.name,
+                        //HashMap::from([(attribute_name, dep_value)]),
+                    //);
+                //}
+            //}
+        //self
+    //}
+
     pub fn add_dependency_var(
         &mut self,
         dependency: Dependency,
         attribute_name: String,
         dep_value: Value,
-    ) -> &mut Self {
-        match self.dependencies.get_mut(&dependency.name) {
-            Some(x) => {
-                x.entry(attribute_name).or_insert(dep_value);
-            }
-            None => {
-                self.dependencies.insert(
-                    dependency.name,
-                    HashMap::from([(attribute_name, dep_value)]),
-                );
-            }
-        }
-        self
+        ) -> &mut Self {
+        self.add_var(CargoSection::Dependency(dependency), attribute_name, dep_value)
     }
 
     /// Add a main dependency and calculates the current version. Convenience function for adding
     /// and calculating the version attributes of a dependency
     pub fn add_dependency(&mut self, dependency: Dependency) -> &mut Self {
         let version = dependency.get_latest_version();
-        self.add_dependency_var(dependency, "version".to_owned(), Value::from(version))
+        self.add_var(CargoSection::Dependency(dependency), "version".to_owned(), Value::from(version))
     }
 
     /// Saves the `CargoBuilder` values to the `path` provided, overwriting any existing matching
     /// values
-    pub fn save_overwrite(self, path: PathBuf) -> Result<()> {
-        let mut cargo_doc = read_to_string(path.clone())?.parse::<Document>()?;
-        let toml_document = self.combine(cargo_doc)?;
-        let mut cargo_toml = File::create(path)?;
-        cargo_toml.write_all(toml_document.to_string().as_bytes())?;
-        Ok(())
-    }
+    //pub fn save_overwrite(self, path: PathBuf) -> Result<()> {
+        //let mut cargo_doc = read_to_string(path.clone())?.parse::<Document>()?;
+        //let toml_document = self.combine(cargo_doc)?;
+        //let mut cargo_toml = File::create(path)?;
+        //cargo_toml.write_all(toml_document.to_string().as_bytes())?;
+        //Ok(())
+    //}
 
     /// Returns the toml_edit `Document` of the current settings
     pub fn get_document(self) -> Document {
@@ -160,7 +211,7 @@ mod cargo_builder_tests {
 
         let mut builder = CargoBuilder::new();
         let features = Array::from_iter(vec!["axum-web"]);
-        builder.add_dependency_var(dependency, "features".to_owned(), Value::from(features));
+        builder.add_var(CargoSection::Dependency(dependency), "features".to_owned(), Value::from(features));
         let toml_document = builder.get_document();
 
         assert_eq!(
@@ -177,8 +228,8 @@ mod cargo_builder_tests {
 
         let mut builder = CargoBuilder::new();
         let features = Array::from_iter(vec!["dsfdsf"]);
-        builder.add_dependency_var(dependency1, "path".to_owned(), Value::from("initial/path"));
-        builder.add_dependency_var(dependency2, "path".to_owned(), Value::from("overwrite/path"));
+        builder.add_var(CargoSection::Dependency(dependency1), "path".to_owned(), Value::from("initial/path"));
+        builder.add_var(CargoSection::Dependency(dependency2), "path".to_owned(), Value::from("overwrite/path"));
         let toml_document = builder.combine(existing_toml_doc).unwrap();
 
         assert_eq!(

@@ -21,13 +21,16 @@ use shuttle_proto::{
     runtime::{
         self,
         runtime_server::{Runtime, RuntimeServer},
-        LoadRequest, LoadResponse, StartRequest, StartResponse, StopRequest, StopResponse,
-        SubscribeLogsRequest,
+        LoadRequest, LoadResponse, StartRequest, StartResponse, StopReason, StopRequest,
+        StopResponse, SubscribeLogsRequest, SubscribeStopRequest, SubscribeStopResponse,
     },
 };
 use shuttle_service::{Factory, Service, ServiceName};
-use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
-use tokio::sync::oneshot;
+use tokio::sync::{broadcast, oneshot};
+use tokio::sync::{
+    broadcast::Sender,
+    mpsc::{self, UnboundedReceiver, UnboundedSender},
+};
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{
     transport::{Endpoint, Server},
@@ -70,6 +73,7 @@ pub struct Legacy<L, M, S> {
     // Mutexes are for interior mutability
     logs_rx: Mutex<Option<UnboundedReceiver<LogItem>>>,
     logs_tx: UnboundedSender<LogItem>,
+    stopped_tx: Sender<(StopReason, String)>,
     provisioner_address: Endpoint,
     kill_tx: Mutex<Option<oneshot::Sender<String>>>,
     storage_manager: M,
@@ -80,10 +84,12 @@ pub struct Legacy<L, M, S> {
 impl<L, M, S> Legacy<L, M, S> {
     pub fn new(provisioner_address: Endpoint, loader: L, storage_manager: M) -> Self {
         let (tx, rx) = mpsc::unbounded_channel();
+        let (stopped_tx, _stopped_rx) = broadcast::channel(10);
 
         Self {
             logs_rx: Mutex::new(Some(rx)),
             logs_tx: tx,
+            stopped_tx,
             kill_tx: Mutex::new(None),
             provisioner_address,
             storage_manager,
@@ -196,7 +202,12 @@ where
         *self.kill_tx.lock().unwrap() = Some(kill_tx);
 
         // start service as a background task with a kill receiver
-        tokio::spawn(run_until_stopped(service, service_address, kill_rx));
+        tokio::spawn(run_until_stopped(
+            service,
+            service_address,
+            self.stopped_tx.clone(),
+            kill_rx,
+        ));
 
         let message = StartResponse { success: true };
 
@@ -241,26 +252,60 @@ where
             Err(Status::internal("failed to stop deployment"))
         }
     }
+
+    type SubscribeStopStream = ReceiverStream<Result<SubscribeStopResponse, Status>>;
+
+    async fn subscribe_stop(
+        &self,
+        _request: Request<SubscribeStopRequest>,
+    ) -> Result<Response<Self::SubscribeStopStream>, Status> {
+        let mut stopped_rx = self.stopped_tx.subscribe();
+        let (tx, rx) = mpsc::channel(1);
+
+        // Move the stop channel into a stream to be returned
+        tokio::spawn(async move {
+            while let Ok((reason, message)) = stopped_rx.recv().await {
+                tx.send(Ok(SubscribeStopResponse {
+                    reason: reason as i32,
+                    message,
+                }))
+                .await
+                .unwrap();
+            }
+        });
+
+        Ok(Response::new(ReceiverStream::new(rx)))
+    }
 }
 
 /// Run the service until a stop signal is received
-#[instrument(skip(service, kill_rx))]
+#[instrument(skip(service, stopped_tx, kill_rx))]
 async fn run_until_stopped(
     // service: LoadedService,
     service: impl Service,
     addr: SocketAddr,
+    stopped_tx: tokio::sync::broadcast::Sender<(StopReason, String)>,
     kill_rx: tokio::sync::oneshot::Receiver<String>,
 ) {
     trace!("starting deployment on {}", &addr);
     tokio::select! {
-        _ = service.bind(addr) => {
-            trace!("deployment stopped on {}", &addr);
+        res = service.bind(addr) => {
+            match res {
+                Ok(_) => {
+                    stopped_tx.send((StopReason::End, String::new())).unwrap();
+                }
+                Err(error) => {
+                    stopped_tx.send((StopReason::Crash, error.to_string())).unwrap();
+                }
+            }
         },
         message = kill_rx => {
             match message {
-                Ok(msg) => trace!("{msg}"),
+                Ok(_) => {
+                    stopped_tx.send((StopReason::Request, String::new())).unwrap();
+                }
                 Err(_) => trace!("the sender dropped")
-            }
+            };
         }
     }
 }

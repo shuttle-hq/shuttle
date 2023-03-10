@@ -23,8 +23,8 @@ thiserror = { workspace = true }
 tokio = { version = "1.22.0", features = ["full"] }
 tokio-stream = "0.1.11"
 tonic = { workspace = true }
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
+tracing = { workspace = true, features = ["default"] }
+tracing-subscriber = { workspace = true, features = ["default", "env-filter", "fmt"] }
 uuid = { workspace = true, features = ["v4"] }
 
 # TODO: bump these crates to 6.0 when we bump rust to >= 1.66

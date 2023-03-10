@@ -14,7 +14,7 @@ WORKDIR /build
 FROM shuttle-build as cache
 WORKDIR /src
 COPY . .
-RUN find ${SRC_CRATES} \( -name "*.proto" -or -name "*.rs" -or -name "*.toml" -or -name "README.md" -or -name "*.sql" \) -type f -exec install -D \{\} /build/\{\} \;
+RUN find ${SRC_CRATES} \( -name "*.proto" -or -name "*.rs" -or -name "*.toml" -or -name "Cargo.lock" -or -name "README.md" -or -name "*.sql" \) -type f -exec install -D \{\} /build/\{\} \;
 
 FROM shuttle-build AS planner
 COPY --from=cache /build .

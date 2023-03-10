@@ -4,7 +4,7 @@ use quote::{quote, ToTokens};
 use syn::{
     parenthesized, parse::Parse, parse2, parse_macro_input, parse_quote, punctuated::Punctuated,
     spanned::Spanned, token::Paren, Attribute, Expr, FnArg, Ident, ItemFn, Pat, PatIdent, Path,
-    ReturnType, Signature, Stmt, Token, Type, TypePath,
+    PathSegment, ReturnType, Signature, Stmt, Token, Type, TypePath,
 };
 
 pub(crate) fn r#impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -12,11 +12,10 @@ pub(crate) fn r#impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let loader = Loader::from_item_fn(&mut fn_decl);
 
+    let main_fn = MainFn::from_item_fn(&mut fn_decl);
+
     let expanded = quote! {
-        #[tokio::main]
-        async fn main() {
-            shuttle_runtime::start(loader).await;
-        }
+        #main_fn
 
         #loader
 
@@ -30,6 +29,11 @@ struct Loader {
     fn_ident: Ident,
     fn_inputs: Vec<Input>,
     fn_return: TypePath,
+    import_path: PathSegment,
+}
+
+struct MainFn {
+    import_path: PathSegment,
 }
 
 #[derive(Debug, PartialEq)]
@@ -128,11 +132,32 @@ impl Loader {
             .collect();
 
         if let Some(type_path) = check_return_type(item_fn.sig.clone()) {
+            // We need the first segment of the path so we can import the codegen dependencies from it.
+            let Some(import_path) = type_path.path.segments.first().cloned() else {
+                return None;
+            };
+
             Some(Self {
                 fn_ident: item_fn.sig.ident.clone(),
                 fn_inputs: inputs,
                 fn_return: type_path,
+                import_path,
             })
+        } else {
+            None
+        }
+    }
+}
+
+impl MainFn {
+    pub(crate) fn from_item_fn(item_fn: &mut ItemFn) -> Option<Self> {
+        if let Some(type_path) = check_return_type(item_fn.sig.clone()) {
+            // We need the first segment of the path so we can import the codegen dependencies from it.
+            let Some(import_path) = type_path.path.segments.first().cloned() else {
+                return None;
+            };
+
+            Some(Self { import_path })
         } else {
             None
         }
@@ -193,6 +218,8 @@ impl ToTokens for Loader {
 
         let return_type = &self.fn_return;
 
+        let import_path = &self.import_path;
+
         let mut fn_inputs: Vec<_> = Vec::with_capacity(self.fn_inputs.len());
         let mut fn_inputs_builder: Vec<_> = Vec::with_capacity(self.fn_inputs.len());
         let mut fn_inputs_builder_options: Vec<_> = Vec::with_capacity(self.fn_inputs.len());
@@ -213,25 +240,25 @@ impl ToTokens for Loader {
             None
         } else {
             Some(parse_quote!(
-                use shuttle_service::ResourceBuilder;
+                use #import_path::shuttle_runtime::ResourceBuilder;
             ))
         };
 
         let loader = quote! {
-            async fn loader<S: shuttle_runtime::StorageManager>(
-                mut #factory_ident: shuttle_runtime::ProvisionerFactory<S>,
-                logger: shuttle_runtime::Logger,
+            async fn loader<S: #import_path::shuttle_runtime::StorageManager>(
+                mut #factory_ident: #import_path::shuttle_runtime::ProvisionerFactory<S>,
+                logger: #import_path::shuttle_runtime::Logger,
             ) -> #return_type {
-                use shuttle_service::Context;
-                use shuttle_service::tracing_subscriber::prelude::*;
+                use #import_path::shuttle_runtime::Context;
+                use #import_path::shuttle_runtime::tracing_subscriber::prelude::*;
                 #extra_imports
 
                 let filter_layer =
-                    shuttle_service::tracing_subscriber::EnvFilter::try_from_default_env()
-                        .or_else(|_| shuttle_service::tracing_subscriber::EnvFilter::try_new("INFO"))
+                        #import_path::shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
+                        .or_else(|_| #import_path::shuttle_runtime::tracing_subscriber::EnvFilter::try_new("INFO"))
                         .unwrap();
 
-                shuttle_service::tracing_subscriber::registry()
+                #import_path::shuttle_runtime::tracing_subscriber::registry()
                     .with(filter_layer)
                     .with(logger)
                     .init();
@@ -246,11 +273,27 @@ impl ToTokens for Loader {
     }
 }
 
+impl ToTokens for MainFn {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        let import_path = &self.import_path;
+
+        let main_fn = quote! {
+            #[tokio::main]
+            async fn main() {
+                #import_path::shuttle_runtime::start(loader).await;
+            }
+
+        };
+
+        main_fn.to_tokens(tokens);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
     use quote::quote;
-    use syn::{parse_quote, Ident};
+    use syn::{parse_quote, Ident, PathSegment};
 
     use super::{Builder, BuilderOptions, Input, Loader};
 
@@ -269,27 +312,30 @@ mod tests {
 
     #[test]
     fn output_with_return() {
+        let import_path: PathSegment = parse_quote!(shuttle_simple);
+
         let input = Loader {
             fn_ident: parse_quote!(simple),
             fn_inputs: Vec::new(),
             fn_return: parse_quote!(ShuttleSimple),
+            import_path,
         };
 
         let actual = quote!(#input);
         let expected = quote! {
-            async fn loader<S: shuttle_runtime::StorageManager>(
-                mut _factory: shuttle_runtime::ProvisionerFactory<S>,
-                logger: shuttle_runtime::Logger,
+            async fn loader<S: shuttle_simple::shuttle_runtime::StorageManager>(
+                mut _factory: shuttle_simple::shuttle_runtime::ProvisionerFactory<S>,
+                logger: shuttle_simple::shuttle_runtime::Logger,
             ) -> ShuttleSimple {
-                use shuttle_service::Context;
-                use shuttle_service::tracing_subscriber::prelude::*;
+                use shuttle_simple::shuttle_runtime::Context;
+                use shuttle_simple::shuttle_runtime::tracing_subscriber::prelude::*;
 
                 let filter_layer =
-                    shuttle_service::tracing_subscriber::EnvFilter::try_from_default_env()
-                        .or_else(|_| shuttle_service::tracing_subscriber::EnvFilter::try_new("INFO"))
+                    shuttle_simple::shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
+                        .or_else(|_| shuttle_simple::shuttle_runtime::tracing_subscriber::EnvFilter::try_new("INFO"))
                         .unwrap();
 
-                shuttle_service::tracing_subscriber::registry()
+                shuttle_simple::shuttle_runtime::tracing_subscriber::registry()
                     .with(filter_layer)
                     .with(logger)
                     .init();
@@ -334,6 +380,8 @@ mod tests {
 
     #[test]
     fn output_with_inputs() {
+        let import_path: PathSegment = parse_quote!(shuttle_complex);
+
         let input = Loader {
             fn_ident: parse_quote!(complex),
             fn_inputs: vec![
@@ -353,24 +401,25 @@ mod tests {
                 },
             ],
             fn_return: parse_quote!(ShuttleComplex),
+            import_path,
         };
 
         let actual = quote!(#input);
         let expected = quote! {
-            async fn loader<S: shuttle_runtime::StorageManager>(
-                mut factory: shuttle_runtime::ProvisionerFactory<S>,
-                logger: shuttle_runtime::Logger,
+            async fn loader<S: shuttle_complex::shuttle_runtime::StorageManager>(
+                mut factory: shuttle_complex::shuttle_runtime::ProvisionerFactory<S>,
+                logger: shuttle_complex::shuttle_runtime::Logger,
             ) -> ShuttleComplex {
-                use shuttle_service::Context;
-                use shuttle_service::tracing_subscriber::prelude::*;
-                use shuttle_service::ResourceBuilder;
+                use shuttle_complex::shuttle_runtime::Context;
+                use shuttle_complex::shuttle_runtime::tracing_subscriber::prelude::*;
+                use shuttle_complex::shuttle_runtime::ResourceBuilder;
 
                 let filter_layer =
-                    shuttle_service::tracing_subscriber::EnvFilter::try_from_default_env()
-                        .or_else(|_| shuttle_service::tracing_subscriber::EnvFilter::try_new("INFO"))
+                    shuttle_complex::shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
+                        .or_else(|_| shuttle_complex::shuttle_runtime::tracing_subscriber::EnvFilter::try_new("INFO"))
                         .unwrap();
 
-                shuttle_service::tracing_subscriber::registry()
+                shuttle_complex::shuttle_runtime::tracing_subscriber::registry()
                     .with(filter_layer)
                     .with(logger)
                     .init();
@@ -460,6 +509,8 @@ mod tests {
 
     #[test]
     fn output_with_input_options() {
+        let import_path: PathSegment = parse_quote!(shuttle_complex);
+
         let mut input = Loader {
             fn_ident: parse_quote!(complex),
             fn_inputs: vec![Input {
@@ -470,6 +521,7 @@ mod tests {
                 },
             }],
             fn_return: parse_quote!(ShuttleComplex),
+            import_path,
         };
 
         input.fn_inputs[0]
@@ -485,20 +537,20 @@ mod tests {
 
         let actual = quote!(#input);
         let expected = quote! {
-            async fn loader<S: shuttle_runtime::StorageManager>(
-                mut factory: shuttle_runtime::ProvisionerFactory<S>,
-                logger: shuttle_runtime::Logger,
+            async fn loader<S: shuttle_complex::shuttle_runtime::StorageManager>(
+                mut factory: shuttle_complex::shuttle_runtime::ProvisionerFactory<S>,
+                logger: shuttle_complex::shuttle_runtime::Logger,
             ) -> ShuttleComplex {
-                use shuttle_service::Context;
-                use shuttle_service::tracing_subscriber::prelude::*;
-                use shuttle_service::ResourceBuilder;
+                use shuttle_complex::shuttle_runtime::Context;
+                use shuttle_complex::shuttle_runtime::tracing_subscriber::prelude::*;
+                use shuttle_complex::shuttle_runtime::ResourceBuilder;
 
                 let filter_layer =
-                    shuttle_service::tracing_subscriber::EnvFilter::try_from_default_env()
-                        .or_else(|_| shuttle_service::tracing_subscriber::EnvFilter::try_new("INFO"))
+                    shuttle_complex::shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
+                        .or_else(|_| shuttle_complex::shuttle_runtime::tracing_subscriber::EnvFilter::try_new("INFO"))
                         .unwrap();
 
-                shuttle_service::tracing_subscriber::registry()
+                shuttle_complex::shuttle_runtime::tracing_subscriber::registry()
                     .with(filter_layer)
                     .with(logger)
                     .init();

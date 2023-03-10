@@ -57,7 +57,7 @@ pub async fn build_crate(
     let is_next = is_next(summary);
 
     if !is_next {
-        check_version(summary)?;
+        // check_version(summary)?;
         ensure_binary(current.manifest())?;
     } else {
         ensure_cdylib(current.manifest_mut())?;
@@ -208,28 +208,29 @@ fn ensure_cdylib(manifest: &mut Manifest) -> anyhow::Result<()> {
     }
 }
 
-/// Check that the crate being build is compatible with this version of loader
-fn check_version(summary: &Summary) -> anyhow::Result<()> {
-    let valid_version = VERSION.to_semver().unwrap();
+// TODO: do we still need this? If so we need to check the runtime version, since that's what the user depends on.
+// /// Check that the crate being build is compatible with this version of loader
+// fn check_version(summary: &Summary) -> anyhow::Result<()> {
+//     let valid_version = VERSION.to_semver().unwrap();
 
-    let version_req = if let Some(shuttle) = summary
-        .dependencies()
-        .iter()
-        .find(|dependency| dependency.package_name() == NAME)
-    {
-        shuttle.version_req()
-    } else {
-        return Err(anyhow!("this crate does not use the shuttle service"));
-    };
+//     let version_req = if let Some(shuttle) = summary
+//         .dependencies()
+//         .iter()
+//         .find(|dependency| dependency.package_name() == NAME)
+//     {
+//         shuttle.version_req()
+//     } else {
+//         return Err(anyhow!("this crate does not use the shuttle service"));
+//     };
 
-    if version_req.matches(&valid_version) {
-        Ok(())
-    } else {
-        Err(anyhow!(
-            "the version of `shuttle-service` specified as a dependency to this service ({version_req}) is not supported by this project instance ({valid_version}); try updating `shuttle-service` to '{valid_version}' or update the project instance using `cargo shuttle project rm` and `cargo shuttle project new`"
-        ))
-    }
-}
+//     if version_req.matches(&valid_version) {
+//         Ok(())
+//     } else {
+//         Err(anyhow!(
+//             "the version of `shuttle-service` specified as a dependency to this service ({version_req}) is not supported by this project instance ({valid_version}); try updating `shuttle-service` to '{valid_version}' or update the project instance using `cargo shuttle project rm` and `cargo shuttle project new`"
+//         ))
+//     }
+// }
 
 /// Ensure `panic = "abort"` is not set:
 fn check_no_panic(ws: &Workspace) -> anyhow::Result<()> {

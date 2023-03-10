@@ -1,91 +1,181 @@
 use std::{
-    collections::BTreeMap, iter::FromIterator, net::SocketAddr, ops::DerefMut, path::PathBuf,
-    str::FromStr, sync::Mutex,
+    collections::BTreeMap,
+    iter::FromIterator,
+    net::{Ipv4Addr, SocketAddr},
+    ops::DerefMut,
+    str::FromStr,
+    sync::Mutex,
+    time::Duration,
 };
 
-use anyhow::{anyhow, Context};
+use anyhow::Context;
 use async_trait::async_trait;
-use shuttle_common::{storage_manager::StorageManager, LogItem};
+use clap::Parser;
+use core::future::Future;
+use shuttle_common::{
+    storage_manager::{StorageManager, WorkingDirStorageManager},
+    LogItem,
+};
 use shuttle_proto::{
     provisioner::provisioner_client::ProvisionerClient,
     runtime::{
-        self, runtime_server::Runtime, LoadRequest, LoadResponse, StartRequest, StartResponse,
-        StopReason, StopRequest, StopResponse, SubscribeLogsRequest, SubscribeStopRequest,
-        SubscribeStopResponse,
+        self,
+        runtime_server::{Runtime, RuntimeServer},
+        LoadRequest, LoadResponse, StartRequest, StartResponse, StopReason, StopRequest,
+        StopResponse, SubscribeLogsRequest, SubscribeStopRequest, SubscribeStopResponse,
     },
 };
-use shuttle_service::{
-    loader::{LoadedService, Loader},
-    Factory, Logger, ServiceName,
-};
+use shuttle_service::{Factory, Service, ServiceName};
 use tokio::sync::{broadcast, oneshot};
 use tokio::sync::{
     broadcast::Sender,
     mpsc::{self, UnboundedReceiver, UnboundedSender},
 };
 use tokio_stream::wrappers::ReceiverStream;
-use tonic::{transport::Endpoint, Request, Response, Status};
+use tonic::{
+    transport::{Endpoint, Server},
+    Request, Response, Status,
+};
 use tracing::{error, instrument, trace};
 use uuid::Uuid;
 
-use crate::provisioner_factory::ProvisionerFactory;
+use crate::{provisioner_factory::ProvisionerFactory, Logger};
 
-mod error;
+use self::args::Args;
 
-pub struct Legacy<S>
-where
-    S: StorageManager,
-{
-    // Mutexes are for interior mutability
-    so_path: Mutex<Option<PathBuf>>,
-    logs_rx: Mutex<Option<UnboundedReceiver<LogItem>>>,
-    logs_tx: UnboundedSender<LogItem>,
-    stopped_tx: Sender<(Uuid, StopReason, String)>,
-    provisioner_address: Endpoint,
-    kill_tx: Mutex<Option<oneshot::Sender<String>>>,
-    secrets: Mutex<Option<BTreeMap<String, String>>>,
-    storage_manager: S,
+mod args;
+
+pub async fn start(
+    loader: impl Loader<ProvisionerFactory<WorkingDirStorageManager>> + Send + 'static,
+) {
+    let args = Args::parse();
+    let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), args.port);
+
+    let provisioner_address = args.provisioner_address;
+    let mut server_builder =
+        Server::builder().http2_keepalive_interval(Some(Duration::from_secs(60)));
+
+    let router = {
+        let legacy = Legacy::new(
+            provisioner_address,
+            loader,
+            WorkingDirStorageManager::new(args.storage_manager_path),
+        );
+
+        let svc = RuntimeServer::new(legacy);
+        server_builder.add_service(svc)
+    };
+
+    router.serve(addr).await.unwrap();
 }
 
-impl<S> Legacy<S>
-where
-    S: StorageManager,
-{
-    pub fn new(provisioner_address: Endpoint, storage_manager: S) -> Self {
+pub struct Legacy<L, M, S> {
+    // Mutexes are for interior mutability
+    logs_rx: Mutex<Option<UnboundedReceiver<LogItem>>>,
+    logs_tx: UnboundedSender<LogItem>,
+    stopped_tx: Sender<(StopReason, String)>,
+    provisioner_address: Endpoint,
+    kill_tx: Mutex<Option<oneshot::Sender<String>>>,
+    storage_manager: M,
+    loader: Mutex<Option<L>>,
+    service: Mutex<Option<S>>,
+}
+
+impl<L, M, S> Legacy<L, M, S> {
+    pub fn new(provisioner_address: Endpoint, loader: L, storage_manager: M) -> Self {
         let (tx, rx) = mpsc::unbounded_channel();
         let (stopped_tx, _stopped_rx) = broadcast::channel(10);
 
         Self {
-            so_path: Mutex::new(None),
             logs_rx: Mutex::new(Some(rx)),
             logs_tx: tx,
             stopped_tx,
             kill_tx: Mutex::new(None),
             provisioner_address,
-            secrets: Mutex::new(None),
             storage_manager,
+            loader: Mutex::new(Some(loader)),
+            service: Mutex::new(None),
         }
     }
 }
 
 #[async_trait]
-impl<S> Runtime for Legacy<S>
+pub trait Loader<Fac>
 where
-    S: StorageManager + 'static,
+    Fac: Factory,
+{
+    type Service: Service;
+
+    async fn load(
+        self,
+        factory: Fac,
+        logger: Logger,
+    ) -> Result<Self::Service, shuttle_service::Error>;
+}
+
+#[async_trait]
+impl<F, O, Fac, S> Loader<Fac> for F
+where
+    F: FnOnce(Fac, Logger) -> O + Send,
+    O: Future<Output = Result<S, shuttle_service::Error>> + Send,
+    Fac: Factory + 'static,
+    S: Service,
+{
+    type Service = S;
+
+    async fn load(
+        self,
+        factory: Fac,
+        logger: Logger,
+    ) -> Result<Self::Service, shuttle_service::Error> {
+        (self)(factory, logger).await
+    }
+}
+
+#[async_trait]
+impl<L, M, S> Runtime for Legacy<L, M, S>
+where
+    M: StorageManager + Send + Sync + 'static,
+    L: Loader<ProvisionerFactory<M>, Service = S> + Send + 'static,
+    S: Service + Send + 'static,
 {
     async fn load(&self, request: Request<LoadRequest>) -> Result<Response<LoadResponse>, Status> {
-        let LoadRequest { path, secrets, .. } = request.into_inner();
+        let LoadRequest {
+            path,
+            secrets,
+            service_name,
+        } = request.into_inner();
         trace!(path, "loading");
 
-        let so_path = PathBuf::from(path);
+        let secrets = BTreeMap::from_iter(secrets.into_iter());
 
-        if !so_path.exists() {
-            return Err(Status::not_found("'.so' to load does not exist"));
-        }
+        let provisioner_client = ProvisionerClient::connect(self.provisioner_address.clone())
+            .await
+            .context("failed to connect to provisioner")
+            .map_err(|err| Status::internal(err.to_string()))?;
 
-        *self.so_path.lock().unwrap() = Some(so_path);
+        let service_name = ServiceName::from_str(service_name.as_str())
+            .map_err(|err| Status::from_error(Box::new(err)))?;
 
-        *self.secrets.lock().unwrap() = Some(BTreeMap::from_iter(secrets.into_iter()));
+        let deployment_id = Uuid::new_v4();
+
+        let factory = ProvisionerFactory::new(
+            provisioner_client,
+            service_name,
+            deployment_id,
+            secrets,
+            self.storage_manager.clone(),
+        );
+        trace!("got factory");
+
+        let logs_tx = self.logs_tx.clone();
+        let logger = Logger::new(logs_tx, deployment_id);
+
+        let loader = self.loader.lock().unwrap().deref_mut().take().unwrap();
+
+        let service = loader.load(factory, logger).await.unwrap();
+
+        *self.service.lock().unwrap() = Some(service);
 
         let message = LoadResponse { success: true };
         Ok(Response::new(message))
@@ -96,75 +186,19 @@ where
         request: Request<StartRequest>,
     ) -> Result<Response<StartResponse>, Status> {
         trace!("legacy starting");
+        let service = self.service.lock().unwrap().deref_mut().take();
+        let service = service.unwrap();
 
-        let provisioner_client = ProvisionerClient::connect(self.provisioner_address.clone())
-            .await
-            .context("failed to connect to provisioner")
-            .map_err(|err| Status::internal(err.to_string()))?;
-
-        let so_path = self
-            .so_path
-            .lock()
-            .unwrap()
-            .as_ref()
-            .ok_or_else(|| -> error::Error {
-                error::Error::Start(anyhow!("trying to start a service that was not loaded"))
-            })
-            .map_err(|err| Status::from_error(Box::new(err)))?
-            .clone();
-        let secrets = self
-            .secrets
-            .lock()
-            .unwrap()
-            .as_ref()
-            .ok_or_else(|| -> error::Error {
-                error::Error::Start(anyhow!(
-                    "trying to get secrets from a service that was not loaded"
-                ))
-            })
-            .map_err(|err| Status::from_error(Box::new(err)))?
-            .clone();
-
-        trace!("prepare done");
-
-        let StartRequest {
-            deployment_id,
-            service_name,
-            ip,
-        } = request.into_inner();
+        let StartRequest { ip, .. } = request.into_inner();
         let service_address = SocketAddr::from_str(&ip)
             .context("invalid socket address")
             .map_err(|err| Status::invalid_argument(err.to_string()))?;
 
-        let service_name = ServiceName::from_str(service_name.as_str())
-            .map_err(|err| Status::from_error(Box::new(err)))?;
-
-        let deployment_id = Uuid::from_slice(&deployment_id)
-            .map_err(|error| Status::invalid_argument(error.to_string()))?;
-
-        let mut factory = ProvisionerFactory::new(
-            provisioner_client,
-            service_name,
-            deployment_id,
-            secrets,
-            self.storage_manager.clone(),
-        );
-        trace!("got factory");
-
-        let logs_tx = self.logs_tx.clone();
-
-        let logger = Logger::new(logs_tx, deployment_id);
+        let _logs_tx = self.logs_tx.clone();
 
         trace!(%service_address, "starting");
-        let service = load_service(service_address, so_path, &mut factory, logger)
-            .await
-            .map_err(|error| match error {
-                error::Error::Run(error) => Status::invalid_argument(error.to_string()),
-                error => Status::internal(error.to_string()),
-            })?;
 
         let (kill_tx, kill_rx) = tokio::sync::oneshot::channel();
-
         *self.kill_tx.lock().unwrap() = Some(kill_tx);
 
         // start service as a background task with a kill receiver
@@ -173,7 +207,6 @@ where
             service_address,
             self.stopped_tx.clone(),
             kill_rx,
-            deployment_id,
         ));
 
         let message = StartResponse { success: true };
@@ -205,18 +238,11 @@ where
         }
     }
 
-    async fn stop(&self, request: Request<StopRequest>) -> Result<Response<StopResponse>, Status> {
-        let StopRequest { deployment_id } = request.into_inner();
-        let deployment_id = Uuid::from_slice(&deployment_id).unwrap();
-
+    async fn stop(&self, _request: Request<StopRequest>) -> Result<Response<StopResponse>, Status> {
         let kill_tx = self.kill_tx.lock().unwrap().deref_mut().take();
 
         if let Some(kill_tx) = kill_tx {
-            trace!(%deployment_id, "stopping deployment");
-            if kill_tx
-                .send(format!("stopping deployment: {}", &deployment_id))
-                .is_err()
-            {
+            if kill_tx.send("stopping deployment".to_owned()).is_err() {
                 error!("the receiver dropped");
                 return Err(Status::internal("failed to stop deployment"));
             }
@@ -231,24 +257,20 @@ where
 
     async fn subscribe_stop(
         &self,
-        request: Request<SubscribeStopRequest>,
+        _request: Request<SubscribeStopRequest>,
     ) -> Result<Response<Self::SubscribeStopStream>, Status> {
-        let SubscribeStopRequest { deployment_id } = request.into_inner();
-        let deployment_id = Uuid::from_slice(&deployment_id).unwrap();
         let mut stopped_rx = self.stopped_tx.subscribe();
         let (tx, rx) = mpsc::channel(1);
 
         // Move the stop channel into a stream to be returned
         tokio::spawn(async move {
-            while let Ok((uuid, reason, message)) = stopped_rx.recv().await {
-                if uuid == deployment_id {
-                    tx.send(Ok(SubscribeStopResponse {
-                        reason: reason as i32,
-                        message,
-                    }))
-                    .await
-                    .unwrap();
-                }
+            while let Ok((reason, message)) = stopped_rx.recv().await {
+                tx.send(Ok(SubscribeStopResponse {
+                    reason: reason as i32,
+                    message,
+                }))
+                .await
+                .unwrap();
             }
         });
 
@@ -259,50 +281,31 @@ where
 /// Run the service until a stop signal is received
 #[instrument(skip(service, stopped_tx, kill_rx))]
 async fn run_until_stopped(
-    service: LoadedService,
+    // service: LoadedService,
+    service: impl Service,
     addr: SocketAddr,
-    stopped_tx: tokio::sync::broadcast::Sender<(Uuid, StopReason, String)>,
+    stopped_tx: tokio::sync::broadcast::Sender<(StopReason, String)>,
     kill_rx: tokio::sync::oneshot::Receiver<String>,
-    deployment_id: Uuid,
 ) {
-    let (handle, library) = service;
-
     trace!("starting deployment on {}", &addr);
     tokio::select! {
-        res = handle => {
-            match res.unwrap() {
+        res = service.bind(addr) => {
+            match res {
                 Ok(_) => {
-                    stopped_tx.send((deployment_id, StopReason::End, String::new())).unwrap();
+                    stopped_tx.send((StopReason::End, String::new())).unwrap();
                 }
                 Err(error) => {
-                    stopped_tx.send((deployment_id, StopReason::Crash, error.to_string())).unwrap();
+                    stopped_tx.send((StopReason::Crash, error.to_string())).unwrap();
                 }
             }
         },
         message = kill_rx => {
             match message {
                 Ok(_) => {
-                    stopped_tx.send((deployment_id, StopReason::Request, String::new())).unwrap();
+                    stopped_tx.send((StopReason::Request, String::new())).unwrap();
                 }
                 Err(_) => trace!("the sender dropped")
             };
         }
     }
-
-    tokio::spawn(async move {
-        trace!("closing .so file");
-        library.close().unwrap();
-    });
-}
-
-#[instrument(skip(addr, so_path, factory, logger))]
-async fn load_service(
-    addr: SocketAddr,
-    so_path: PathBuf,
-    factory: &mut dyn Factory,
-    logger: Logger,
-) -> error::Result<LoadedService> {
-    let loader = Loader::from_so_file(so_path)?;
-
-    Ok(loader.load(factory, addr, logger).await?)
 }

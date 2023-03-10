@@ -54,7 +54,7 @@ workspace = true
 
 [dependencies.shuttle-service]
 workspace = true
-features = ["loader"]
+features = ["builder"]
 
 [dev-dependencies]
 ctor = "0.1.26"

@@ -7,7 +7,6 @@ use shuttle_service::{
     error::CustomError,
     Factory, ResourceBuilder,
 };
-use tokio::runtime::Runtime;
 
 macro_rules! aws_engine {
     ($feature:expr, $pool_path:path, $options_path:path, $struct_ident:ident) => {
@@ -24,22 +23,16 @@ macro_rules! aws_engine {
                     Self {}
                 }
 
-                async fn build(self, factory: &mut dyn Factory, runtime: &Runtime) -> Result<$pool_path, shuttle_service::Error> {
+                async fn build(self, factory: &mut dyn Factory) -> Result<$pool_path, shuttle_service::Error> {
                     let connection_string = factory
                         .get_db_connection_string(Type::AwsRds(AwsRdsEngine::$struct_ident))
                         .await?;
 
-                    // A sqlx Pool cannot cross runtime boundaries, so make sure to create the Pool on the service end
-                    let pool = runtime
-                        .spawn(async move {
-                            $options_path::new()
-                                .min_connections(1)
-                                .max_connections(5)
-                                .connect(&connection_string)
-                                .await
-                        })
+                    let pool = $options_path::new()
+                        .min_connections(1)
+                        .max_connections(5)
+                        .connect(&connection_string)
                         .await
-                        .map_err(CustomError::new)?
                         .map_err(CustomError::new)?;
 
                     Ok(pool)

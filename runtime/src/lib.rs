@@ -1,8 +1,13 @@
-mod args;
-mod axum;
 mod legacy;
-pub mod provisioner_factory;
+mod logger;
+#[cfg(feature = "next")]
+mod next;
+mod provisioner_factory;
 
-pub use args::{Args, StorageManagerType};
-pub use axum::AxumWasm;
-pub use legacy::Legacy;
+pub use legacy::{start, Legacy};
+pub use logger::Logger;
+#[cfg(feature = "next")]
+pub use next::{AxumWasm, NextArgs};
+pub use provisioner_factory::ProvisionerFactory;
+pub use shuttle_common::storage_manager::StorageManager;
+pub use shuttle_service::{main, Error, Service};

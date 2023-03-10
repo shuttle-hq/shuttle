@@ -73,9 +73,7 @@ impl RuntimeManager {
         let success_legacy = if let Some(legacy_client) = &mut self.legacy {
             trace!(%id, "sending stop signal to legacy for deployment");
 
-            let stop_request = tonic::Request::new(StopRequest {
-                deployment_id: id.as_bytes().to_vec(),
-            });
+            let stop_request = tonic::Request::new(StopRequest {});
             let response = legacy_client.stop(stop_request).await.unwrap();
 
             response.into_inner().success
@@ -87,9 +85,7 @@ impl RuntimeManager {
         let success_next = if let Some(next_client) = &mut self.next {
             trace!(%id, "sending stop signal to next for deployment");
 
-            let stop_request = tonic::Request::new(StopRequest {
-                deployment_id: id.as_bytes().to_vec(),
-            });
+            let stop_request = tonic::Request::new(StopRequest {});
             let response = next_client.stop(stop_request).await.unwrap();
 
             response.into_inner().success

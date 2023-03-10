@@ -1,0 +1,29 @@
+error: method is not supported
+
+         = help: Try one of the following: `get`, `post`, `delete`, `put`, `options`, `head`, `trace` or `patch`
+
+ --> tests/ui/next/invalid-method.rs:2:42
+  |
+2 |     #[shuttle_codegen::endpoint(method = pet, route = "/hello")]
+  |                                          ^^^
+
+error: no method provided
+
+         = help: Add a method to your endpoint: `method = get`
+
+ --> tests/ui/next/invalid-method.rs:2:32
+  |
+2 |     #[shuttle_codegen::endpoint(method = pet, route = "/hello")]
+  |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: expected expression
+ --> tests/ui/next/invalid-method.rs:7:41
+  |
+7 |     #[shuttle_codegen::endpoint(method =, route = "/hello")]
+  |                                         ^
+
+error[E0601]: `main` function not found in crate `$CRATE`
+  --> tests/ui/next/invalid-method.rs:11:2
+   |
+11 | }
+   |  ^ consider adding a `main` function to `$DIR/tests/ui/next/invalid-method.rs`

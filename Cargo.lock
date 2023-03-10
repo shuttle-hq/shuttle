@@ -3824,16 +3824,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "libloading"
-version = "0.7.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b67380fd3b2fbe7527a606e18729d21c6f3951633d0500574c4dc22d2d638b9f"
-dependencies = [
- "cfg-if 1.0.0",
- "winapi",
-]
-
-[[package]]
 name = "libnghttp2-sys"
 version = "0.1.7+1.45.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6411,12 +6401,18 @@ dependencies = [
  "anyhow",
  "async-trait",
  "cap-std",
+ "chrono",
  "clap 4.0.27",
+ "crossbeam-channel",
  "futures",
  "hyper",
+ "portpicker",
  "rmp-serde",
+ "rocket",
+ "serde_json",
  "shuttle-common",
  "shuttle-proto",
+ "shuttle-secrets",
  "shuttle-service",
  "thiserror",
  "tokio",
@@ -6436,7 +6432,6 @@ version = "0.8.0"
 dependencies = [
  "async-trait",
  "shuttle-service",
- "tokio",
 ]
 
 [[package]]
@@ -6451,24 +6446,18 @@ dependencies = [
  "bincode",
  "cargo",
  "cargo_metadata",
- "chrono",
  "crossbeam-channel",
- "futures",
  "hyper",
- "libloading",
  "num_cpus",
  "pipe",
  "poem",
  "poise",
- "portpicker",
  "rocket",
  "salvo",
  "serde_json",
  "serenity",
  "shuttle-codegen",
  "shuttle-common",
- "sqlx",
- "sync_wrapper",
  "thiserror",
  "thruster",
  "tide",
@@ -6476,7 +6465,6 @@ dependencies = [
  "tower",
  "tracing",
  "tracing-subscriber",
- "uuid 1.2.2",
  "warp",
 ]
 

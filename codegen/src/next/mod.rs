@@ -1,8 +1,10 @@
+use std::collections::HashMap;
+
 use proc_macro_error::emit_error;
 use quote::{quote, ToTokens};
 use syn::{
-    parenthesized, parse::Parse, parse2, punctuated::Punctuated, token::Paren, Expr, File, Ident,
-    Item, ItemFn, Lit, LitStr, Token,
+    parenthesized, parse::Parse, parse2, punctuated::Punctuated, token::Paren, Expr, ExprLit, File,
+    Ident, Item, ItemFn, Lit, LitStr, Token,
 };
 
 #[derive(Debug, Eq, PartialEq)]
@@ -124,7 +126,22 @@ impl Endpoint {
                         has_err = true;
                     }
                     if let Expr::Path(path) = value {
-                        method = Some(path.path.segments[0].ident.clone());
+                        let method_ident = path.path.segments[0].ident.clone();
+
+                        match method_ident.to_string().as_str() {
+                            "get" | "post" | "delete" | "put" | "options" | "head" | "trace"
+                            | "patch" => {
+                                method = Some(method_ident);
+                            }
+                            _ => {
+                                emit_error!(
+                                    method_ident,
+                                    "method is not supported";
+                                    hint = "Try one of the following: `get`, `post`, `delete`, `put`, `options`, `head`, `trace` or `patch`"
+                                );
+                                has_err = true;
+                            }
+                        };
                     };
                 }
                 "route" => {
@@ -136,10 +153,13 @@ impl Endpoint {
                         );
                         has_err = true;
                     }
-                    if let Expr::Lit(literal) = value {
-                        if let Some(Lit::Str(literal)) = Some(literal.lit) {
-                            route = Some(literal);
-                        }
+
+                    if let Expr::Lit(ExprLit {
+                        lit: Lit::Str(literal),
+                        ..
+                    }) = value
+                    {
+                        route = Some(literal);
                     }
                 }
                 _ => {
@@ -184,6 +204,18 @@ impl Endpoint {
     }
 }
 
+#[derive(Debug, Eq, PartialEq)]
+pub struct EndpointChain<'a> {
+    route: &'a LitStr,
+    handlers: Vec<Handler>,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct Handler {
+    method: Ident,
+    function: Ident,
+}
+
 impl ToTokens for Endpoint {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let Self {
@@ -192,18 +224,27 @@ impl ToTokens for Endpoint {
             function,
         } = self;
 
-        match method.to_string().as_str() {
-            "get" | "post" | "delete" | "put" | "options" | "head" | "trace" | "patch" => {}
-            _ => {
-                emit_error!(
-                    method,
-                    "method is not supported";
-                    hint = "Try one of the following: `get`, `post`, `delete`, `put`, `options`, `head`, `trace` or `patch`"
-                )
-            }
-        };
+        let route = quote!(.route(#route, #method(#function)));
 
-        let route = quote!(.route(#route, shuttle_next::routing::#method(#function)));
+        route.to_tokens(tokens);
+    }
+}
+
+impl ToTokens for Handler {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        let Self { method, function } = self;
+
+        let handler = quote!(#method(#function));
+
+        handler.to_tokens(tokens);
+    }
+}
+
+impl<'a> ToTokens for EndpointChain<'a> {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        let Self { route, handlers } = self;
+
+        let route = quote!(.route(#route, shuttle_next::routing::#(#handlers).*));
 
         route.to_tokens(tokens);
     }
@@ -237,13 +278,46 @@ impl ToTokens for App {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let Self { endpoints } = self;
 
+        let mut endpoint_chains = endpoints
+            .iter()
+            .fold(HashMap::new(), |mut chain, endpoint| {
+                let entry = chain
+                    .entry(&endpoint.route)
+                    .or_insert_with(Vec::<Handler>::new);
+
+                let method = endpoint.method.clone();
+                let function = endpoint.function.clone();
+
+                if entry.iter().any(|handler| handler.method == method) {
+                    emit_error!(
+                        method,
+                        "only one method of each type is allowed per route";
+                        hint = format!("Remove one of the {} methods on the \"{}\" route.", method, endpoint.route.value())
+                    );
+                } else {
+                    entry.push(Handler { method, function });
+                }
+
+                chain
+            })
+            .into_iter()
+            .map(|(key, value)| EndpointChain {
+                route: key,
+                handlers: value,
+            })
+            .collect::<Vec<EndpointChain>>();
+
+        // syn::LitStr does not implement Ord, so rather than using a BTreeMap to build the chains, we
+        // use a HashMap and then sort the endpoint chains to ensure the output is deterministic.
+        endpoint_chains.sort_by(|a, b| a.route.value().cmp(&b.route.value()));
+
         let app = quote!(
             async fn __app(request: shuttle_next::Request<shuttle_next::body::BoxBody>,) -> shuttle_next::response::Response
             {
                 use shuttle_next::Service;
 
                 let mut router = shuttle_next::Router::new()
-                    #(#endpoints)*;
+                    #(#endpoint_chains)*;
 
                 let response = router.call(request).await.unwrap();
 
@@ -341,46 +415,91 @@ mod tests {
         };
 
         let actual = quote!(#endpoint);
-        let expected = quote!(.route("/hello", shuttle_next::routing::get(hello)));
+        let expected = quote!(.route("/hello", get(hello)));
 
         assert_eq!(actual.to_string(), expected.to_string());
     }
 
     #[test]
+    #[rustfmt::skip::macros(quote)]
     fn app_to_token() {
-        let app = App {
-            endpoints: vec![
-                Endpoint {
-                    route: parse_quote!("/hello"),
-                    method: parse_quote!(get),
-                    function: parse_quote!(hello),
+        let cases = vec![
+            (
+                App {
+                    endpoints: vec![
+                        Endpoint {
+                            route: parse_quote!("/hello"),
+                            method: parse_quote!(get),
+                            function: parse_quote!(hello),
+                        },
+                        Endpoint {
+                            route: parse_quote!("/goodbye"),
+                            method: parse_quote!(post),
+                            function: parse_quote!(goodbye),
+                        },
+                    ],
                 },
-                Endpoint {
-                    route: parse_quote!("/goodbye"),
-                    method: parse_quote!(post),
-                    function: parse_quote!(goodbye),
+                quote!(
+                    async fn __app(
+                        request: shuttle_next::Request<shuttle_next::body::BoxBody>,
+                    ) -> shuttle_next::response::Response {
+                        use shuttle_next::Service;
+
+                        let mut router = shuttle_next::Router::new()
+                            .route("/goodbye", shuttle_next::routing::post(goodbye))
+                            .route("/hello", shuttle_next::routing::get(hello));
+
+                        let response = router.call(request).await.unwrap();
+
+                        response
+                    }
+                ),
+            ),
+            (
+                App {
+                    endpoints: vec![
+                        Endpoint {
+                            route: parse_quote!("/hello"),
+                            method: parse_quote!(get),
+                            function: parse_quote!(hello),
+                        },
+                        Endpoint {
+                            route: parse_quote!("/goodbye"),
+                            method: parse_quote!(get),
+                            function: parse_quote!(get_goodbye),
+                        },
+                        Endpoint {
+                            route: parse_quote!("/goodbye"),
+                            method: parse_quote!(post),
+                            function: parse_quote!(post_goodbye),
+                        },
+                    ],
                 },
-            ],
-        };
+                quote!(
+                    async fn __app(
+                        request: shuttle_next::Request<shuttle_next::body::BoxBody>,
+                    ) -> shuttle_next::response::Response {
+                        use shuttle_next::Service;
 
-        let actual = quote!(#app);
-        let expected = quote!(
-            async fn __app(
-                request: shuttle_next::Request<shuttle_next::body::BoxBody>,
-            ) -> shuttle_next::response::Response {
-                use shuttle_next::Service;
+                        let mut router = shuttle_next::Router::new()
+                            .route(
+                                "/goodbye",
+                                shuttle_next::routing::get(get_goodbye).post(post_goodbye)
+                            )
+                            .route("/hello", shuttle_next::routing::get(hello));
 
-                let mut router = shuttle_next::Router::new()
-                    .route("/hello", shuttle_next::routing::get(hello))
-                    .route("/goodbye", shuttle_next::routing::post(goodbye));
+                        let response = router.call(request).await.unwrap();
 
-                let response = router.call(request).await.unwrap();
+                        response
+                    }
+                ),
+            ),
+        ];
 
-                response
-            }
-        );
-
-        assert_eq!(actual.to_string(), expected.to_string());
+        for (app, expected) in cases {
+            let actual = quote!(#app);
+            assert_eq!(actual.to_string(), expected.to_string());
+        }
     }
 
     #[test]

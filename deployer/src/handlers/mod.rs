@@ -18,7 +18,7 @@ use shuttle_common::models::secret;
 use shuttle_common::project::ProjectName;
 use shuttle_common::storage_manager::StorageManager;
 use shuttle_common::LogItem;
-use shuttle_service::loader::clean_crate;
+use shuttle_service::builder::clean_crate;
 use tower_http::auth::RequireAuthorizationLayer;
 use tower_http::trace::TraceLayer;
 use tracing::{debug, debug_span, error, field, instrument, trace, Span};

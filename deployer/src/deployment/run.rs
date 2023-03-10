@@ -287,15 +287,12 @@ async fn run(
 
     let start_request = tonic::Request::new(StartRequest {
         deployment_id: id.as_bytes().to_vec(),
-        service_name: service_name.clone(),
         ip: address.to_string(),
     });
 
     // Subscribe to stop before starting to catch immediate errors
     let mut stream = runtime_client
-        .subscribe_stop(tonic::Request::new(SubscribeStopRequest {
-            deployment_id: id.as_bytes().to_vec(),
-        }))
+        .subscribe_stop(tonic::Request::new(SubscribeStopRequest {}))
         .await
         .unwrap()
         .into_inner();

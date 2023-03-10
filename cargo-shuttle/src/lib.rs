@@ -30,7 +30,7 @@ use git2::{Repository, StatusOptions};
 use ignore::overrides::OverrideBuilder;
 use ignore::WalkBuilder;
 use shuttle_common::models::{project, secret};
-use shuttle_service::loader::{build_crate, Runtime};
+use shuttle_service::builder::{build_crate, Runtime};
 use std::fmt::Write;
 use strum::IntoEnumIterator;
 use tar::Builder;
@@ -376,7 +376,6 @@ impl Shuttle {
         });
 
         let working_directory = self.ctx.working_directory();
-        let id = Default::default();
 
         trace!("building project");
         println!(
@@ -384,7 +383,8 @@ impl Shuttle {
             "Building".bold().green(),
             working_directory.display()
         );
-        let runtime = build_crate(id, working_directory, false, tx).await?;
+
+        let runtime = build_crate(working_directory, false, tx).await?;
 
         trace!("loading secrets");
         let secrets_path = working_directory.join("Secrets.toml");
@@ -404,7 +404,7 @@ impl Shuttle {
 
         let service_name = self.ctx.project_name().to_string();
 
-        let (is_wasm, so_path) = match runtime {
+        let (is_wasm, bin_path) = match runtime {
             Runtime::Next(path) => (true, path),
             Runtime::Legacy(path) => (false, path),
         };
@@ -415,44 +415,54 @@ impl Shuttle {
             run_args.port + 1,
         ));
 
-        let get_runtime_executable = || {
-            let runtime_path = home::cargo_home()
-                .expect("failed to find cargo home dir")
-                .join("bin/shuttle-runtime");
+        let runtime_path = || {
+            if is_wasm {
+                let runtime_path = home::cargo_home()
+                    .expect("failed to find cargo home dir")
+                    .join("bin/shuttle-next");
 
-            if cfg!(debug_assertions) {
-                // Canonicalized path to shuttle-runtime for dev to work on windows
-                let path = std::fs::canonicalize(format!("{MANIFEST_DIR}/../runtime"))
-                    .expect("path to shuttle-runtime does not exist or is invalid");
+                if cfg!(debug_assertions) {
+                    // Canonicalized path to shuttle-runtime for dev to work on windows
+                    let path = std::fs::canonicalize(format!("{MANIFEST_DIR}/../runtime"))
+                        .expect("path to shuttle-runtime does not exist or is invalid");
 
-                std::process::Command::new("cargo")
-                    .arg("install")
-                    .arg("shuttle-runtime")
-                    .arg("--path")
-                    .arg(path)
-                    .output()
-                    .expect("failed to install the shuttle runtime");
-            } else {
-                // If the version of cargo-shuttle is different from shuttle-runtime,
-                // or it isn't installed, try to install shuttle-runtime from the production
-                // branch.
-                if let Err(err) = check_version(&runtime_path) {
-                    trace!("{}", err);
-
-                    trace!("installing shuttle-runtime");
+                    // TODO: Add --features next here when https://github.com/shuttle-hq/shuttle/pull/688 is merged
                     std::process::Command::new("cargo")
                         .arg("install")
                         .arg("shuttle-runtime")
-                        .arg("--git")
-                        .arg("https://github.com/shuttle-hq/shuttle")
-                        .arg("--branch")
-                        .arg("production")
+                        .arg("--path")
+                        .arg(path)
+                        .arg("--bin")
+                        .arg("shuttle-next")
                         .output()
                         .expect("failed to install the shuttle runtime");
-                };
-            };
+                } else {
+                    // If the version of cargo-shuttle is different from shuttle-runtime,
+                    // or it isn't installed, try to install shuttle-runtime from the production
+                    // branch.
+                    if let Err(err) = check_version(&runtime_path) {
+                        trace!("{}", err);
 
-            runtime_path
+                        trace!("installing shuttle-runtime");
+                        // TODO: Add --features next here when https://github.com/shuttle-hq/shuttle/pull/688 is merged
+                        std::process::Command::new("cargo")
+                            .arg("install")
+                            .arg("shuttle-runtime")
+                            .arg("--bin")
+                            .arg("shuttle-next")
+                            .arg("--git")
+                            .arg("https://github.com/shuttle-hq/shuttle")
+                            .arg("--branch")
+                            .arg("production")
+                            .output()
+                            .expect("failed to install the shuttle runtime");
+                    };
+                };
+
+                runtime_path
+            } else {
+                bin_path.clone()
+            }
         };
 
         let (mut runtime, mut runtime_client) = runtime::start(
@@ -460,7 +470,7 @@ impl Shuttle {
             runtime::StorageManagerType::WorkingDir(working_directory.to_path_buf()),
             &format!("http://localhost:{}", run_args.port + 1),
             run_args.port + 2,
-            get_runtime_executable,
+            runtime_path,
         )
         .await
         .map_err(|err| {
@@ -470,7 +480,7 @@ impl Shuttle {
         })?;
 
         let load_request = tonic::Request::new(LoadRequest {
-            path: so_path
+            path: bin_path
                 .into_os_string()
                 .into_string()
                 .expect("to convert path to string"),
@@ -515,8 +525,7 @@ impl Shuttle {
         let addr = SocketAddr::new(addr, run_args.port);
 
         let start_request = StartRequest {
-            deployment_id: id.as_bytes().to_vec(),
-            service_name,
+            deployment_id: Uuid::default().as_bytes().to_vec(),
             ip: addr.to_string(),
         };
 

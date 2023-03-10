@@ -11,7 +11,7 @@ use chrono::Utc;
 use crossbeam_channel::Sender;
 use opentelemetry::global;
 use serde_json::json;
-use shuttle_service::loader::{build_crate, get_config, Runtime};
+use shuttle_service::builder::{build_crate, get_config, Runtime};
 use tokio::time::{sleep, timeout};
 use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -206,7 +206,7 @@ impl Queued {
         });
 
         let project_path = project_path.canonicalize()?;
-        let runtime = build_deployment(self.id, &project_path, tx.clone()).await?;
+        let runtime = build_deployment(&project_path, tx.clone()).await?;
 
         if self.will_run_tests {
             info!(
@@ -321,11 +321,10 @@ async fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<
 
 #[instrument(skip(project_path, tx))]
 async fn build_deployment(
-    deployment_id: Uuid,
     project_path: &Path,
     tx: crossbeam_channel::Sender<Message>,
 ) -> Result<Runtime> {
-    build_crate(deployment_id, project_path, true, tx)
+    build_crate(project_path, true, tx)
         .await
         .map_err(|e| Error::Build(e.into()))
 }
@@ -413,7 +412,7 @@ mod tests {
     use std::{collections::BTreeMap, fs::File, io::Write, path::Path};
 
     use shuttle_common::storage_manager::ArtifactsStorageManager;
-    use shuttle_service::loader::Runtime;
+    use shuttle_service::builder::Runtime;
     use tempdir::TempDir;
     use tokio::fs;
     use uuid::Uuid;

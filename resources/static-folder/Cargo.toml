@@ -10,8 +10,7 @@ keywords = ["shuttle-service", "static-folder"]
 [dependencies]
 async-trait = "0.1.56"
 shuttle-service = { path = "../../service", version = "0.8.0", default-features = false }
-tokio = { version = "1.19.2", features = ["rt"] }
 
 [dev-dependencies]
 tempdir = "0.3.7"
-tokio = { version = "1.19.2", features = ["macros"] }
+tokio = { version = "1.19.2", features = ["macros", "rt"] }

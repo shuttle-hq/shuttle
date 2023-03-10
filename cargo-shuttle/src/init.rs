@@ -963,11 +963,39 @@ mod shuttle_init_tests {
             }
         }
 
+        let base_doc = indoc! {r#"
+            [package]
+            name = "woo5"
+            version = "0.1.0"
+            edition = "2021"
+            publish = false
+
+            [lib]
+
+            [dependencies]
+            shuttle-service = { version = "1.0", features = ["web-actix-web"] }
+            actix-web = "1.0"
+        "#};
+
         // Test non-variable packages here.
         // Test dependencies
-        let doc = cargo_builder.get_document();
+        let doc = cargo_builder.combine(base_doc);
 
-        assert_eq!(doc["dependencies"].to_string(), "sdfddsf");
+        let expected = indoc! {r#"
+            [package]
+            name = "woo5"
+            version = "0.1.0"
+            edition = "2021"
+            publish = false
+
+            [lib]
+
+            [dependencies]
+            shuttle-service = { version = "1.0", features = ["web-actix-web"] }
+            actix-web = "1.0"
+        "#};
+
+        assert_eq!(doc.to_string(), expected);
     }
 
     //#[test]

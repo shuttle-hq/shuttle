@@ -7,6 +7,5 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-trait = "0.1.56"
 axum = { version = "0.6.10" }
 shuttle-runtime = { path = "../../runtime", version = "0.1.0" }

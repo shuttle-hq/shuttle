@@ -515,21 +515,4 @@ impl Service for serenity::Client {
 #[cfg(feature = "bot-serenity")]
 pub type ShuttleSerenity = Result<serenity::Client, Error>;
 
-#[cfg(feature = "bot-poise")]
-#[async_trait]
-impl<T, E> Service for std::sync::Arc<poise::Framework<T, E>>
-where
-    T: std::marker::Send + std::marker::Sync + 'static,
-    E: std::marker::Send + std::marker::Sync + 'static,
-{
-    async fn bind(mut self, _addr: SocketAddr) -> Result<(), error::Error> {
-        self.start().await.map_err(error::CustomError::new)?;
-
-        Ok(())
-    }
-}
-
-#[cfg(feature = "bot-poise")]
-pub type ShuttlePoise<T, E> = Result<std::sync::Arc<poise::Framework<T, E>>, Error>;
-
 pub const NEXT_NAME: &str = "shuttle-next";

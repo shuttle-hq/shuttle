@@ -3,16 +3,13 @@ use crates_index::Index;
 use std::collections::BTreeMap;
 use toml_edit::{value, Document, Value};
 // todo - See if we can accept a str instead of a Sring throughout.
-// todo - Re-look at comments in this file
 // todo - add get_name/slug to Framework and have default method for creating framework
-// todo - should test all be named cargo_builder...
-// todo - have a look in init.rs to see if we need to rename or remove  get_minimum_dep fn
-// todo - make the combine functional on all types and not just the dependencies field
+// todo - have a look in init.rs to see if we need to rename or remove get_minimum_dep fn
+// clear out shit comments
 
 pub enum CargoSection {
     Dependency(Dependency),
     Package,
-    //Lib,
 }
 
 #[derive(Debug, Default)]
@@ -64,8 +61,9 @@ impl CargoBuilder {
         Default::default()
     }
 
-    /// Adds an inline dependency attribute to a current dependency. Creates a new dependency line
-    /// if it doesn't already exist
+    /// Adds an inline value attribute representing a `CargoSection` to be built via `combine` or
+    /// `get_document` methods, duplicate values are overwritten. Any `CargoSection::Dependency()`
+    /// values without a version will be calculated automatically
     pub fn add_var(
         &mut self,
         section: CargoSection,
@@ -98,7 +96,7 @@ impl CargoBuilder {
         self
     }
 
-    // Convenience function for inserting dependency with `String` only without `CargoSection`
+    // Convenience function for inserting dependency with `String` only without the use of `CargoSection`
     pub fn add_dependency_var(
         &mut self,
         dependency: Dependency,
@@ -113,7 +111,16 @@ impl CargoBuilder {
         )
     }
 
-    /// Add a main dependency and calculates the current version. Convenience function for adding
+    // Convenience function for inserting a package with name / values without the need for `CargoSection`
+    pub fn add_package(&mut self, package_name: &str, package_value: &str) -> &mut Self {
+        self.add_var(
+            CargoSection::Package,
+            package_name.to_owned(),
+            Value::from(package_value),
+        )
+    }
+
+    /// Add a main dependency and calculates the current version. This is a convenience function for adding
     /// and calculating the version attributes of a dependency
     pub fn add_dependency(&mut self, dependency: Dependency) -> &mut Self {
         let version = dependency.get_latest_version();
@@ -124,27 +131,16 @@ impl CargoBuilder {
         )
     }
 
-    /// Saves the `CargoBuilder` values to the `path` provided, overwriting any existing matching
-    /// values
-    //pub fn save_overwrite(self, path: PathBuf) -> Result<()> {
-    //let mut cargo_doc = read_to_string(path.clone())?.parse::<Document>()?;
-    //let toml_document = self.combine(cargo_doc)?;
-    //let mut cargo_toml = File::create(path)?;
-    //cargo_toml.write_all(toml_document.to_string().as_bytes())?;
-    //Ok(())
-    //}
-
-    /// Returns the toml_edit `Document` of the current settings
+    /// Returns the toml_edit `Document` for the current settings
     pub fn get_document(self) -> Document {
         let blank_doc = Document::new();
         self.combine(blank_doc).unwrap()
     }
 
-    /// Combines both provided toml `path` file with the settings of the `CargoBuilder` struct.
-    /// Duplicate settings will be overwritten by the `CargoBuilder` settings
+    /// Combines both provided toml `Document` with the settings of the `CargoBuilder` struct.
+    /// Duplicate values will be overwritten by the `CargoBuilder` settings
     pub fn combine(self, mut cargo_doc: Document) -> Result<Document> {
         for (name, dep_attribute) in self.dependencies {
-            // Loop over child values 'version' / 'features' etc.
             if dep_attribute.len() == 1 && dep_attribute.contains_key("version") {
                 let dep_value = dep_attribute.get("version").unwrap();
                 cargo_doc["dependencies"][name.to_owned()] = value(dep_value);
@@ -155,14 +151,16 @@ impl CargoBuilder {
             }
         }
 
-        // Loop through packages
+        for (name, dep_value) in self.packages {
+            cargo_doc["packages"][name.to_owned()] = value(dep_value);
+        }
 
         Ok(cargo_doc)
     }
 }
 
 #[cfg(test)]
-mod cargo_builder_tests {
+mod tests {
     use super::*;
     use toml_edit::Array;
 
@@ -173,9 +171,8 @@ mod cargo_builder_tests {
         }
     }
 
-    // Adding a new dependency
     #[test]
-    fn cargo_builder_add_dependency_new() {
+    fn add_dependency_new() {
         let dependency = get_mock_dependency("test-dep", Some("1.2.3".to_owned()));
 
         let mut builder = CargoBuilder::new();
@@ -188,9 +185,8 @@ mod cargo_builder_tests {
         );
     }
 
-    // Adding one dependency of the same name over another
     #[test]
-    fn cargo_builder_add_dependency_overwrite() {
+    fn add_dependency_overwrite() {
         let dependency1 = get_mock_dependency("test-dep", Some("1.1.1".to_owned()));
         let dependency2 = get_mock_dependency("test-dep", Some("1.2.2".to_owned()));
 
@@ -206,7 +202,7 @@ mod cargo_builder_tests {
     }
 
     #[test]
-    fn cargo_builder_add_dependency_additional() {
+    fn add_dependency_additional() {
         let dependency1 = get_mock_dependency("test-dep", Some("1.1.1".to_owned()));
 
         let mut builder = CargoBuilder::new();
@@ -228,7 +224,7 @@ mod cargo_builder_tests {
     }
 
     #[test]
-    fn cargo_builder_add_dependency_var_no_version() {
+    fn add_dependency_var_no_version() {
         let dependency = get_mock_dependency("test-dep", Some("1.1.1".to_owned()));
 
         let mut builder = CargoBuilder::new();
@@ -248,7 +244,7 @@ mod cargo_builder_tests {
     }
 
     #[test]
-    fn cargo_builder_add_var_new() {
+    fn add_var_new() {
         let dependency = get_mock_dependency("test-dep", Some("1.1.1".to_owned()));
         let mut builder = CargoBuilder::new();
         let features = Array::from_iter(vec!["axum-web"]);
@@ -266,7 +262,7 @@ mod cargo_builder_tests {
     }
 
     #[test]
-    fn cargo_builder_add_var_overwrite() {
+    fn add_var_overwrite() {
         let existing_toml_doc = Document::new();
         let dependency = get_mock_dependency("test-dep", Some("1.1.1".to_owned()));
         let overwrite_dependency = get_mock_dependency("test-dep", Some("1.2.2".to_owned()));
@@ -292,7 +288,7 @@ mod cargo_builder_tests {
     }
 
     #[test]
-    fn cargo_builder_combine_overwrite() {
+    fn combine_overwrite() {
         let mut doc_to_overwrite = Document::new();
         doc_to_overwrite["dependencies"]["test_dep"]["features"] = value("initial value");
 
@@ -311,6 +307,18 @@ mod cargo_builder_tests {
         assert_eq!(
             toml_document.to_string(),
             "dependencies = { test_dep = { features = \"overwrite value\" } }\n"
+        );
+    }
+
+    #[test]
+    fn add_package_new() {
+        let mut builder = CargoBuilder::new();
+        builder.add_package("description", "test description");
+        let toml_document = builder.get_document();
+
+        assert_eq!(
+            toml_document.to_string(),
+            "packages = { description = \"test description\" }\n"
         );
     }
 }

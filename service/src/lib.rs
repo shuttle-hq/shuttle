@@ -402,21 +402,6 @@ where
 #[cfg(feature = "web-warp")]
 pub type ShuttleWarp<T> = Result<warp::filters::BoxedFilter<T>, Error>;
 
-#[cfg(feature = "web-salvo")]
-#[async_trait]
-impl Service for salvo::Router {
-    async fn bind(mut self, addr: SocketAddr) -> Result<(), error::Error> {
-        salvo::Server::new(salvo::listener::TcpListener::bind(addr))
-            .serve(self)
-            .await;
-
-        Ok(())
-    }
-}
-
-#[cfg(feature = "web-salvo")]
-pub type ShuttleSalvo = Result<salvo::Router, Error>;
-
 #[cfg(feature = "web-thruster")]
 #[async_trait]
 impl<T> Service for T

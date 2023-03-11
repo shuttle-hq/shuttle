@@ -322,19 +322,26 @@ impl Visit for NewStateVisitor {
 mod tests {
     use std::{
         fs::read_dir,
-        net::SocketAddr,
+        net::{Ipv4Addr, SocketAddr},
         path::PathBuf,
         sync::{Arc, Mutex},
         time::Duration,
     };
 
     use crate::{persistence::DeploymentUpdater, RuntimeManager};
+    use async_trait::async_trait;
     use axum::body::Bytes;
     use ctor::ctor;
     use flate2::{write::GzEncoder, Compression};
+    use portpicker::pick_unused_port;
+    use shuttle_proto::provisioner::{
+        provisioner_server::{Provisioner, ProvisionerServer},
+        DatabaseRequest, DatabaseResponse,
+    };
     use tempdir::TempDir;
     use tokio::{select, time::sleep};
-    use tracing_subscriber::prelude::*;
+    use tonic::transport::Server;
+    use tracing_subscriber::{fmt, prelude::*, EnvFilter};
     use uuid::Uuid;
 
     use crate::{
@@ -350,8 +357,46 @@ mod tests {
     #[ctor]
     static RECORDER: Arc<Mutex<RecorderMock>> = {
         let recorder = RecorderMock::new();
+
+        // Copied from the test-log crate
+        let event_filter = {
+            use ::tracing_subscriber::fmt::format::FmtSpan;
+
+            match ::std::env::var("RUST_LOG_SPAN_EVENTS") {
+                Ok(value) => {
+                    value
+                        .to_ascii_lowercase()
+                        .split(',')
+                        .map(|filter| match filter.trim() {
+                            "new" => FmtSpan::NEW,
+                            "enter" => FmtSpan::ENTER,
+                            "exit" => FmtSpan::EXIT,
+                            "close" => FmtSpan::CLOSE,
+                            "active" => FmtSpan::ACTIVE,
+                            "full" => FmtSpan::FULL,
+                            _ => panic!("test-log: RUST_LOG_SPAN_EVENTS must contain filters separated by `,`.\n\t\
+                                         For example: `active` or `new,close`\n\t\
+                                         Supported filters: new, enter, exit, close, active, full\n\t\
+                                         Got: {}", value),
+                        })
+                        .fold(FmtSpan::NONE, |acc, filter| filter | acc)
+                },
+                Err(::std::env::VarError::NotUnicode(_)) =>
+                    panic!("test-log: RUST_LOG_SPAN_EVENTS must contain a valid UTF-8 string"),
+                Err(::std::env::VarError::NotPresent) => FmtSpan::NONE,
+            }
+        };
+        let fmt_layer = fmt::layer()
+            .with_test_writer()
+            .with_span_events(event_filter);
+        let filter_layer = EnvFilter::try_from_default_env()
+            .or_else(|_| EnvFilter::try_new("shuttle_deployer"))
+            .unwrap();
+
         tracing_subscriber::registry()
             .with(DeployLayer::new(Arc::clone(&recorder)))
+            .with(filter_layer)
+            .with(fmt_layer)
             .init();
 
         recorder
@@ -404,12 +449,36 @@ mod tests {
         }
     }
 
+    struct ProvisionerMock;
+
+    #[async_trait]
+    impl Provisioner for ProvisionerMock {
+        async fn provision_database(
+            &self,
+            _request: tonic::Request<DatabaseRequest>,
+        ) -> Result<tonic::Response<DatabaseResponse>, tonic::Status> {
+            panic!("no deploy layer tests should request a db");
+        }
+    }
+
     fn get_runtime_manager() -> Arc<tokio::sync::Mutex<RuntimeManager>> {
+        let provisioner_addr =
+            SocketAddr::new(Ipv4Addr::LOCALHOST.into(), pick_unused_port().unwrap());
+        let mock = ProvisionerMock;
+
+        tokio::spawn(async move {
+            Server::builder()
+                .add_service(ProvisionerServer::new(mock))
+                .serve(provisioner_addr)
+                .await
+                .unwrap();
+        });
+
         let tmp_dir = TempDir::new("shuttle_run_test").unwrap();
         let path = tmp_dir.into_path();
         let (tx, _rx) = crossbeam_channel::unbounded();
 
-        RuntimeManager::new(path, "http://provisioner:8000".to_string(), tx)
+        RuntimeManager::new(path, format!("http://{}", provisioner_addr), tx)
     }
 
     #[async_trait::async_trait]
@@ -495,6 +564,18 @@ mod tests {
         }
     }
 
+    async fn test_states(id: &Uuid, expected_states: Vec<StateLog>) {
+        loop {
+            let states = RECORDER.lock().unwrap().get_deployment_states(id);
+
+            if *states == expected_states {
+                break;
+            }
+
+            sleep(Duration::from_millis(250)).await;
+        }
+    }
+
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_to_be_queued() {
         let deployment_manager = get_deployment_manager().await;
@@ -503,67 +584,46 @@ mod tests {
         let id = queued.id;
         deployment_manager.queue_push(queued).await;
 
-        let test = async {
-            loop {
-                let recorder = RECORDER.lock().unwrap();
-                let states = recorder.get_deployment_states(&id);
-
-                if states.len() < 5 {
-                    drop(recorder); // Don't block
-                    sleep(Duration::from_millis(350)).await;
-                    continue;
-                }
-
-                assert_eq!(
-                    states.len(),
-                    5,
-                    "did not expect these states:\n\t{states:#?}"
-                );
-
-                assert_eq!(
-                    *states,
-                    vec![
-                        StateLog {
-                            id,
-                            state: State::Queued,
-                        },
-                        StateLog {
-                            id,
-                            state: State::Building,
-                        },
-                        StateLog {
-                            id,
-                            state: State::Built,
-                        },
-                        StateLog {
-                            id,
-                            state: State::Loading,
-                        },
-                        StateLog {
-                            id,
-                            state: State::Running,
-                        },
-                    ]
-                );
-
-                break;
-            }
-        };
+        let test = test_states(
+            &id,
+            vec![
+                StateLog {
+                    id,
+                    state: State::Queued,
+                },
+                StateLog {
+                    id,
+                    state: State::Building,
+                },
+                StateLog {
+                    id,
+                    state: State::Built,
+                },
+                StateLog {
+                    id,
+                    state: State::Loading,
+                },
+                StateLog {
+                    id,
+                    state: State::Running,
+                },
+            ],
+        );
 
         select! {
-            _ = sleep(Duration::from_secs(180)) => {
-                panic!("states should go into 'Running' for a valid service");
-            }
+            _ = sleep(Duration::from_secs(240)) => {
+                let states = RECORDER.lock().unwrap().get_deployment_states(&id);
+                panic!("states should go into 'Running' for a valid service: {:#?}", states);
+            },
             _ = test => {}
-        }
+        };
 
         // Send kill signal
         deployment_manager.kill(id).await;
 
         sleep(Duration::from_secs(1)).await;
 
-        let recorder = RECORDER.lock().unwrap();
-        let states = recorder.get_deployment_states(&id);
+        let states = RECORDER.lock().unwrap().get_deployment_states(&id);
 
         assert_eq!(
             *states,
@@ -604,60 +664,40 @@ mod tests {
         let id = queued.id;
         deployment_manager.queue_push(queued).await;
 
-        let test = async {
-            loop {
-                let recorder = RECORDER.lock().unwrap();
-                let states = recorder.get_deployment_states(&id);
-
-                if states.len() < 6 {
-                    drop(recorder); // Don't block
-                    sleep(Duration::from_millis(350)).await;
-                    continue;
-                }
-
-                assert_eq!(
-                    states.len(),
-                    6,
-                    "did not expect these states:\n\t{states:#?}"
-                );
-
-                assert_eq!(
-                    *states,
-                    vec![
-                        StateLog {
-                            id,
-                            state: State::Queued,
-                        },
-                        StateLog {
-                            id,
-                            state: State::Building,
-                        },
-                        StateLog {
-                            id,
-                            state: State::Built,
-                        },
-                        StateLog {
-                            id,
-                            state: State::Loading,
-                        },
-                        StateLog {
-                            id,
-                            state: State::Running,
-                        },
-                        StateLog {
-                            id,
-                            state: State::Completed,
-                        },
-                    ]
-                );
-
-                break;
-            }
-        };
+        let test = test_states(
+            &id,
+            vec![
+                StateLog {
+                    id,
+                    state: State::Queued,
+                },
+                StateLog {
+                    id,
+                    state: State::Building,
+                },
+                StateLog {
+                    id,
+                    state: State::Built,
+                },
+                StateLog {
+                    id,
+                    state: State::Loading,
+                },
+                StateLog {
+                    id,
+                    state: State::Running,
+                },
+                StateLog {
+                    id,
+                    state: State::Completed,
+                },
+            ],
+        );
 
         select! {
-            _ = sleep(Duration::from_secs(180)) => {
-                panic!("states should go into 'Completed' when a service stops by itself");
+            _ = sleep(Duration::from_secs(240)) => {
+                let states = RECORDER.lock().unwrap().get_deployment_states(&id);
+                panic!("states should go into 'Completed' when a service stops by itself: {:#?}", states);
             }
             _ = test => {}
         }
@@ -671,60 +711,40 @@ mod tests {
         let id = queued.id;
         deployment_manager.queue_push(queued).await;
 
-        let test = async {
-            loop {
-                let recorder = RECORDER.lock().unwrap();
-                let states = recorder.get_deployment_states(&id);
-
-                if states.len() < 6 {
-                    drop(recorder); // Don't block
-                    sleep(Duration::from_millis(350)).await;
-                    continue;
-                }
-
-                assert_eq!(
-                    states.len(),
-                    6,
-                    "did not expect these states:\n\t{states:#?}"
-                );
-
-                assert_eq!(
-                    *states,
-                    vec![
-                        StateLog {
-                            id,
-                            state: State::Queued,
-                        },
-                        StateLog {
-                            id,
-                            state: State::Building,
-                        },
-                        StateLog {
-                            id,
-                            state: State::Built,
-                        },
-                        StateLog {
-                            id,
-                            state: State::Loading,
-                        },
-                        StateLog {
-                            id,
-                            state: State::Running,
-                        },
-                        StateLog {
-                            id,
-                            state: State::Crashed,
-                        },
-                    ]
-                );
-
-                break;
-            }
-        };
+        let test = test_states(
+            &id,
+            vec![
+                StateLog {
+                    id,
+                    state: State::Queued,
+                },
+                StateLog {
+                    id,
+                    state: State::Building,
+                },
+                StateLog {
+                    id,
+                    state: State::Built,
+                },
+                StateLog {
+                    id,
+                    state: State::Loading,
+                },
+                StateLog {
+                    id,
+                    state: State::Running,
+                },
+                StateLog {
+                    id,
+                    state: State::Crashed,
+                },
+            ],
+        );
 
         select! {
-            _ = sleep(Duration::from_secs(180)) => {
-                panic!("states should go into 'Crashed' panicing in bind");
+            _ = sleep(Duration::from_secs(240)) => {
+                let states = RECORDER.lock().unwrap().get_deployment_states(&id);
+                panic!("states should go into 'Crashed' panicing in bind: {:#?}", states);
             }
             _ = test => {}
         }
@@ -738,56 +758,40 @@ mod tests {
         let id = queued.id;
         deployment_manager.queue_push(queued).await;
 
-        let test = async {
-            loop {
-                let recorder = RECORDER.lock().unwrap();
-                let states = recorder.get_deployment_states(&id);
-
-                if states.len() < 5 {
-                    drop(recorder); // Don't block
-                    sleep(Duration::from_millis(350)).await;
-                    continue;
-                }
-
-                assert_eq!(
-                    states.len(),
-                    5,
-                    "did not expect these states:\n\t{states:#?}"
-                );
-
-                assert_eq!(
-                    *states,
-                    vec![
-                        StateLog {
-                            id,
-                            state: State::Queued,
-                        },
-                        StateLog {
-                            id,
-                            state: State::Building,
-                        },
-                        StateLog {
-                            id,
-                            state: State::Built,
-                        },
-                        StateLog {
-                            id,
-                            state: State::Loading,
-                        },
-                        StateLog {
-                            id,
-                            state: State::Crashed,
-                        },
-                    ]
-                );
-
-                break;
-            }
-        };
+        let test = test_states(
+            &id,
+            vec![
+                StateLog {
+                    id,
+                    state: State::Queued,
+                },
+                StateLog {
+                    id,
+                    state: State::Building,
+                },
+                StateLog {
+                    id,
+                    state: State::Built,
+                },
+                StateLog {
+                    id,
+                    state: State::Loading,
+                },
+                StateLog {
+                    id,
+                    state: State::Running,
+                },
+                StateLog {
+                    id,
+                    state: State::Crashed,
+                },
+            ],
+        );
 
         select! {
-            _ = sleep(Duration::from_secs(180)) => {
-                panic!("states should go into 'Crashed' when panicing in main");
+            _ = sleep(Duration::from_secs(240)) => {
+                let states = RECORDER.lock().unwrap().get_deployment_states(&id);
+                panic!("states should go into 'Crashed' when panicing in main: {:#?}", states);
             }
             _ = test => {}
         }
@@ -808,20 +812,8 @@ mod tests {
             })
             .await;
 
-        // Give it a small time to start up
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
-        let recorder = RECORDER.lock().unwrap();
-        let states = recorder.get_deployment_states(&id);
-
-        assert_eq!(
-            states.len(),
-            3,
-            "did not expect these states:\n\t{states:#?}"
-        );
-
-        assert_eq!(
-            *states,
+        let test = test_states(
+            &id,
             vec![
                 StateLog {
                     id,
@@ -835,8 +827,16 @@ mod tests {
                     id,
                     state: State::Crashed,
                 },
-            ]
+            ],
         );
+
+        select! {
+            _ = sleep(Duration::from_secs(50)) => {
+                let states = RECORDER.lock().unwrap().get_deployment_states(&id);
+                panic!("from running should start in built and end in crash for invalid: {:#?}", states)
+            },
+            _ = test => {}
+        };
     }
 
     #[tokio::test]

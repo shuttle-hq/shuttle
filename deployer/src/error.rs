@@ -32,6 +32,8 @@ pub enum Error {
     GatewayClient(#[from] gateway_client::Error),
     #[error("Failed to get runtime: {0}")]
     Runtime(#[source] anyhow::Error),
+    #[error("Failed to call start on runtime: {0}")]
+    Start(String),
 }
 
 #[derive(Error, Debug)]

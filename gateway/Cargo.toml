@@ -39,9 +39,9 @@ strum = { version = "0.24.1", features = ["derive"] }
 tokio = { version = "1.22.0", features = [ "full" ] }
 tower = { version = "0.4.13", features = [ "steer" ] }
 tower-http = { version = "0.3.4", features = ["trace"] }
-tracing = { workspace = true }
+tracing = { workspace = true, features = ["default"] }
 tracing-opentelemetry = "0.18.0"
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tracing-subscriber = { workspace = true, features = ["default", "env-filter"] }
 ttl_cache = "0.5.1"
 uuid = { workspace = true, features = [ "v4" ] }
 

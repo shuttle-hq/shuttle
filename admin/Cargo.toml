@@ -12,8 +12,8 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 tokio = { version = "1.22.0", features = ["macros", "rt-multi-thread"] }
 toml = "0.5.9"
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tracing = { workspace = true, features = ["default"] }
+tracing-subscriber = { workspace = true, features = ["default", "env-filter"] }
 
 [dependencies.shuttle-common]
 workspace = true

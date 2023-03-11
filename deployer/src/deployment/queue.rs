@@ -128,7 +128,7 @@ async fn remove_from_queue(queue_client: impl BuildQueueClient, id: Uuid) {
     }
 }
 
-#[instrument(fields(id = %built.id, state = %State::Built))]
+#[instrument(skip(run_send), fields(id = %built.id, state = %State::Built))]
 async fn promote_to_run(mut built: Built, run_send: RunSender) {
     let cx = Span::current().context();
 

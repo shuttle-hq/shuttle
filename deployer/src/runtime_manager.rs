@@ -1,10 +1,13 @@
 use std::{convert::TryInto, path::PathBuf, sync::Arc};
 
 use anyhow::Context;
-use shuttle_proto::runtime::{self, runtime_client::RuntimeClient, SubscribeLogsRequest};
+use shuttle_proto::runtime::{
+    self, runtime_client::RuntimeClient, StopRequest, SubscribeLogsRequest,
+};
 use tokio::{process, sync::Mutex};
 use tonic::transport::Channel;
 use tracing::{info, instrument, trace};
+use uuid::Uuid;
 
 use crate::deployment::deploy_layer;
 
@@ -41,7 +44,7 @@ impl RuntimeManager {
     pub async fn get_runtime_client(
         &mut self,
         legacy_executable_path: Option<PathBuf>,
-    ) -> anyhow::Result<&mut RuntimeClient<Channel>> {
+    ) -> anyhow::Result<RuntimeClient<Channel>> {
         if legacy_executable_path.is_none() {
             Self::get_runtime_client_helper(
                 &mut self.next,
@@ -65,18 +68,47 @@ impl RuntimeManager {
         }
     }
 
+    /// Send a kill / stop signal for a deployment to any runtimes currently running
+    pub async fn kill(&mut self, id: &Uuid) -> bool {
+        let success_legacy = if let Some(legacy_client) = &mut self.legacy {
+            trace!(%id, "sending stop signal to legacy for deployment");
+
+            let stop_request = tonic::Request::new(StopRequest {});
+            let response = legacy_client.stop(stop_request).await.unwrap();
+
+            response.into_inner().success
+        } else {
+            trace!("no legacy client running");
+            true
+        };
+
+        let success_next = if let Some(next_client) = &mut self.next {
+            trace!(%id, "sending stop signal to next for deployment");
+
+            let stop_request = tonic::Request::new(StopRequest {});
+            let response = next_client.stop(stop_request).await.unwrap();
+
+            response.into_inner().success
+        } else {
+            trace!("no next client running");
+            true
+        };
+
+        success_legacy && success_next
+    }
+
     #[instrument(skip(runtime_option, process_option, log_sender))]
-    async fn get_runtime_client_helper<'a>(
-        runtime_option: &'a mut Option<RuntimeClient<Channel>>,
+    async fn get_runtime_client_helper(
+        runtime_option: &mut Option<RuntimeClient<Channel>>,
         process_option: &mut Option<Arc<std::sync::Mutex<process::Child>>>,
         legacy_executable_path: Option<PathBuf>,
         artifacts_path: PathBuf,
         provisioner_address: &str,
         log_sender: crossbeam_channel::Sender<deploy_layer::Log>,
-    ) -> anyhow::Result<&'a mut RuntimeClient<Channel>> {
+    ) -> anyhow::Result<RuntimeClient<Channel>> {
         if let Some(runtime_client) = runtime_option {
             trace!("returning previous client");
-            Ok(runtime_client)
+            Ok(runtime_client.clone())
         } else {
             trace!("making new client");
 
@@ -143,11 +175,11 @@ impl RuntimeManager {
                 }
             });
 
-            *runtime_option = Some(runtime_client);
+            *runtime_option = Some(runtime_client.clone());
             *process_option = Some(Arc::new(std::sync::Mutex::new(process)));
 
             // Safe to unwrap as it was just set
-            Ok(runtime_option.as_mut().unwrap())
+            Ok(runtime_client)
         }
     }
 }

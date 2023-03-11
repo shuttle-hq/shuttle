@@ -18,13 +18,14 @@ use shuttle_common::wasm::{Bytesable, Log, RequestWrapper, ResponseWrapper};
 use shuttle_proto::runtime::runtime_server::Runtime;
 use shuttle_proto::runtime::{
     self, LoadRequest, LoadResponse, StartRequest, StartResponse, StopRequest, StopResponse,
-    SubscribeLogsRequest,
+    SubscribeLogsRequest, SubscribeStopRequest, SubscribeStopResponse,
 };
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::{mpsc, oneshot};
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::Status;
 use tracing::{error, trace};
+use uuid::Uuid;
 use wasi_common::file::FileCaps;
 use wasmtime::{Engine, Linker, Module, Store};
 use wasmtime_wasi::sync::net::UnixStream as WasiUnixStream;
@@ -167,8 +168,19 @@ impl Runtime for AxumWasm {
             ))
         }
     }
-}
 
+    type SubscribeStopStream = ReceiverStream<Result<SubscribeStopResponse, Status>>;
+
+    async fn subscribe_stop(
+        &self,
+        _request: tonic::Request<SubscribeStopRequest>,
+    ) -> Result<tonic::Response<Self::SubscribeStopStream>, Status> {
+        // Next does not really have a stopped state. Endpoints are loaded if and when needed until a request is done
+        let (_tx, rx) = mpsc::channel(1);
+
+        Ok(tonic::Response::new(ReceiverStream::new(rx)))
+    }
+}
 struct RouterBuilder {
     engine: Engine,
     linker: Linker<WasiCtx>,
@@ -421,7 +433,6 @@ pub mod tests {
 
         let router = RouterBuilder::new()
             .unwrap()
-            .src("axum.wasm")
             .src("tests/resources/axum-wasm-expanded/target/wasm32-wasi/debug/shuttle_axum_expanded.wasm")
             .build()
             .unwrap();

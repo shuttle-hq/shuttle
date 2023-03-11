@@ -24,7 +24,7 @@ use std::net::SocketAddr;
 /// A wrapper type for a closure that returns an [actix_web::web::ServiceConfig] so we can implement
 /// [shuttle_runtime::Service] for it.
 #[derive(Clone)]
-pub struct ActixWebService<F>(F);
+pub struct ActixWebService<F>(pub F);
 
 #[shuttle_runtime::async_trait]
 impl<F> shuttle_runtime::Service for ActixWebService<F>

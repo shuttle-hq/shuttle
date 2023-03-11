@@ -19,7 +19,7 @@
 //! ```
 
 /// A wrapper type for [poem::Endpoint] so we can implement [shuttle_runtime::Service] for it.
-pub struct PoemService<T>(T);
+pub struct PoemService<T>(pub T);
 
 #[shuttle_runtime::async_trait]
 impl<T> shuttle_runtime::Service for PoemService<T>

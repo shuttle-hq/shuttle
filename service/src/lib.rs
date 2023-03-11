@@ -457,17 +457,4 @@ where
     }
 }
 
-#[cfg(feature = "bot-serenity")]
-#[async_trait]
-impl Service for serenity::Client {
-    async fn bind(mut self, _addr: SocketAddr) -> Result<(), error::Error> {
-        self.start().await.map_err(error::CustomError::new)?;
-
-        Ok(())
-    }
-}
-
-#[cfg(feature = "bot-serenity")]
-pub type ShuttleSerenity = Result<serenity::Client, Error>;
-
 pub const NEXT_NAME: &str = "shuttle-next";

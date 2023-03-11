@@ -193,7 +193,6 @@ impl Built {
         };
 
         let address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
-        let mut runtime_manager = runtime_manager.lock().await.clone();
 
         let legacy_executable_path = if self.is_next {
             Some(executable_path.clone())

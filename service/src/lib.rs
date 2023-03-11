@@ -386,20 +386,4 @@ pub trait Service: Send {
     async fn bind(mut self, addr: SocketAddr) -> Result<(), error::Error>;
 }
 
-#[cfg(feature = "web-tide")]
-#[async_trait]
-impl<T> Service for tide::Server<T>
-where
-    T: Clone + Send + Sync + 'static,
-{
-    async fn bind(mut self, addr: SocketAddr) -> Result<(), error::Error> {
-        self.listen(addr).await.map_err(error::CustomError::new)?;
-
-        Ok(())
-    }
-}
-
-#[cfg(feature = "web-tide")]
-pub type ShuttleTide<T> = Result<tide::Server<T>, Error>;
-
 pub const NEXT_NAME: &str = "shuttle-next";

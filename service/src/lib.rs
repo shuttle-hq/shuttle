@@ -402,27 +402,4 @@ where
 #[cfg(feature = "web-tide")]
 pub type ShuttleTide<T> = Result<tide::Server<T>, Error>;
 
-#[cfg(feature = "web-tower")]
-#[async_trait]
-impl<T> Service for T
-where
-    T: tower::Service<hyper::Request<hyper::Body>, Response = hyper::Response<hyper::Body>>
-        + Clone
-        + Send
-        + Sync
-        + 'static,
-    T::Error: std::error::Error + Send + Sync,
-    T::Future: std::future::Future + Send + Sync,
-{
-    async fn bind(mut self, addr: SocketAddr) -> Result<(), error::Error> {
-        let shared = tower::make::Shared::new(self);
-        hyper::Server::bind(&addr)
-            .serve(shared)
-            .await
-            .map_err(error::CustomError::new)?;
-
-        Ok(())
-    }
-}
-
 pub const NEXT_NAME: &str = "shuttle-next";

@@ -20,7 +20,6 @@ cargo_metadata = "0.15.2"
 crossbeam-channel = "0.5.6"
 hyper = { version = "0.14.23", features = ["server", "tcp", "http1"], optional = true }
 pipe = "0.4.0"
-rocket = { version = "0.5.0-rc.2", optional = true }
 salvo = { version = "0.37.5", optional = true }
 serde_json = { workspace = true }
 serenity = { version = "0.11.5", default-features = false, features = ["client", "gateway", "rustls_backend", "model"], optional = true }
@@ -56,7 +55,6 @@ default = ["codegen"]
 codegen = ["shuttle-codegen/frameworks"]
 builder = ["cargo"]
 
-web-rocket = ["rocket"]
 web-thruster = ["thruster"]
 web-tide = ["tide", "async-std"]
 web-tower = ["tower", "hyper"]

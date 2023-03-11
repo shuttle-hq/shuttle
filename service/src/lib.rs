@@ -386,36 +386,6 @@ pub trait Service: Send {
     async fn bind(mut self, addr: SocketAddr) -> Result<(), error::Error>;
 }
 
-#[cfg(feature = "web-rocket")]
-#[async_trait]
-impl Service for rocket::Rocket<rocket::Build> {
-    async fn bind(mut self, addr: SocketAddr) -> Result<(), error::Error> {
-        let shutdown = rocket::config::Shutdown {
-            ctrlc: false,
-            ..rocket::config::Shutdown::default()
-        };
-
-        let config = self
-            .figment()
-            .clone()
-            .merge((rocket::Config::ADDRESS, addr.ip()))
-            .merge((rocket::Config::PORT, addr.port()))
-            .merge((rocket::Config::LOG_LEVEL, rocket::config::LogLevel::Off))
-            .merge((rocket::Config::SHUTDOWN, shutdown));
-
-        let _rocket = self
-            .configure(config)
-            .launch()
-            .await
-            .map_err(error::CustomError::new)?;
-
-        Ok(())
-    }
-}
-
-#[cfg(feature = "web-rocket")]
-pub type ShuttleRocket = Result<rocket::Rocket<rocket::Build>, Error>;
-
 #[cfg(feature = "web-warp")]
 #[async_trait]
 impl<T> Service for T

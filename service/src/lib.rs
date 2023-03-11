@@ -386,22 +386,6 @@ pub trait Service: Send {
     async fn bind(mut self, addr: SocketAddr) -> Result<(), error::Error>;
 }
 
-#[cfg(feature = "web-warp")]
-#[async_trait]
-impl<T> Service for T
-where
-    T: Send + Sync + Clone + 'static + warp::Filter,
-    T::Extract: warp::reply::Reply,
-{
-    async fn bind(mut self, addr: SocketAddr) -> Result<(), error::Error> {
-        warp::serve(*self).run(addr).await;
-        Ok(())
-    }
-}
-
-#[cfg(feature = "web-warp")]
-pub type ShuttleWarp<T> = Result<warp::filters::BoxedFilter<T>, Error>;
-
 #[cfg(feature = "web-tide")]
 #[async_trait]
 impl<T> Service for tide::Server<T>

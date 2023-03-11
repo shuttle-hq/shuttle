@@ -416,25 +416,6 @@ impl Service for rocket::Rocket<rocket::Build> {
 #[cfg(feature = "web-rocket")]
 pub type ShuttleRocket = Result<rocket::Rocket<rocket::Build>, Error>;
 
-#[cfg(feature = "web-poem")]
-#[async_trait]
-impl<T> Service for T
-where
-    T: poem::Endpoint + Sync + Send + 'static,
-{
-    async fn bind(mut self, addr: SocketAddr) -> Result<(), error::Error> {
-        poem::Server::new(poem::listener::TcpListener::bind(addr))
-            .run(self)
-            .await
-            .map_err(error::CustomError::new)?;
-
-        Ok(())
-    }
-}
-
-#[cfg(feature = "web-poem")]
-pub type ShuttlePoem<T> = Result<T, Error>;
-
 #[cfg(feature = "web-warp")]
 #[async_trait]
 impl<T> Service for T

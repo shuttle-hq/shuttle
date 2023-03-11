@@ -37,5 +37,5 @@ impl From<axum::Router> for AxumService {
         Self(router)
     }
 }
-/// The return type that should be returned from the `shuttle_runtime::main` function.
+/// The return type that should be returned from the [shuttle_runtime::main] function.
 pub type ShuttleAxum = Result<AxumService, shuttle_runtime::Error>;

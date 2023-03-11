@@ -56,5 +56,5 @@ where
     }
 }
 
-/// The return type that should be returned from the `shuttle_runtime::main` function.
+/// The return type that should be returned from the [shuttle_runtime::main] function.
 pub type ShuttleActixWeb<F> = Result<ActixWebService<F>, shuttle_runtime::Error>;

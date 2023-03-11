@@ -8,5 +8,5 @@ edition = "2021"
 
 [dependencies]
 async-trait = "0.1.56"
-axum = { version = "0.6.0" }
+axum = { version = "0.6.10" }
 shuttle-runtime = { path = "../../runtime", version = "0.1.0" }

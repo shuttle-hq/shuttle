@@ -451,28 +451,6 @@ where
 #[cfg(feature = "web-warp")]
 pub type ShuttleWarp<T> = Result<warp::filters::BoxedFilter<T>, Error>;
 
-#[cfg(feature = "web-actix-web")]
-#[async_trait]
-impl<F> Service for F
-where
-    F: FnOnce(&mut actix_web::web::ServiceConfig) + Sync + Send + Clone + 'static,
-{
-    async fn bind(mut self, addr: SocketAddr) -> Result<(), Error> {
-        // Start a worker for each cpu, but no more than 4.
-        let worker_count = num_cpus::get().max(4);
-
-        let srv = actix_web::HttpServer::new(move || actix_web::App::new().configure(self.clone()))
-            .workers(worker_count)
-            .bind(addr)?
-            .run();
-        srv.await.map_err(error::CustomError::new)?;
-
-        Ok(())
-    }
-}
-#[cfg(feature = "web-actix-web")]
-pub type ShuttleActixWeb<F> = Result<F, Error>;
-
 #[cfg(feature = "web-salvo")]
 #[async_trait]
 impl Service for salvo::Router {

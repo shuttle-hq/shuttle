@@ -13,6 +13,9 @@ service Runtime {
   // Stop a started service
   rpc Stop(StopRequest) returns (StopResponse);
 
+  // Channel to notify a service has been stopped
+  rpc SubscribeStop(SubscribeStopRequest) returns (stream SubscribeStopResponse);
+
   // Subscribe to runtime logs
   rpc SubscribeLogs(SubscribeLogsRequest) returns (stream LogItem);
 }
@@ -50,6 +53,27 @@ message StopRequest {}
 message StopResponse {
   // Was the stop successful
   bool success = 1;
+}
+
+message SubscribeStopRequest {}
+
+message SubscribeStopResponse {
+  // Reason the service has stopped
+  StopReason reason = 1;
+
+  // Any extra message to go with the reason. If there are any
+  string message = 2;
+}
+
+enum StopReason {
+  // User requested this stop
+  Request = 0;
+
+  // Service stopped by itself
+  End = 1;
+
+  // Service crashed
+  Crash = 2;
 }
 
 message SubscribeLogsRequest {}

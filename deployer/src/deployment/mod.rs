@@ -15,14 +15,13 @@ use crate::{
     persistence::{DeploymentUpdater, SecretGetter, SecretRecorder, State},
     RuntimeManager,
 };
-use tokio::sync::{broadcast, mpsc, Mutex};
+use tokio::sync::{mpsc, Mutex};
 use uuid::Uuid;
 
 use self::{deploy_layer::LogRecorder, gateway_client::BuildQueueClient};
 
 const QUEUE_BUFFER_SIZE: usize = 100;
 const RUN_BUFFER_SIZE: usize = 100;
-const KILL_BUFFER_SIZE: usize = 10;
 
 pub struct DeploymentManagerBuilder<LR, SR, ADG, DU, SG, QC> {
     build_log_recorder: Option<LR>,
@@ -114,7 +113,6 @@ where
 
         let (queue_send, queue_recv) = mpsc::channel(QUEUE_BUFFER_SIZE);
         let (run_send, run_recv) = mpsc::channel(RUN_BUFFER_SIZE);
-        let (kill_send, _) = broadcast::channel(KILL_BUFFER_SIZE);
         let storage_manager = ArtifactsStorageManager::new(artifacts_path);
 
         let run_send_clone = run_send.clone();
@@ -130,9 +128,8 @@ where
         ));
         tokio::spawn(run::task(
             run_recv,
-            runtime_manager,
+            runtime_manager.clone(),
             deployment_updater,
-            kill_send.clone(),
             active_deployment_getter,
             secret_getter,
             storage_manager.clone(),
@@ -141,7 +138,7 @@ where
         DeploymentManager {
             queue_send,
             run_send,
-            kill_send,
+            runtime_manager,
             storage_manager,
         }
     }
@@ -151,7 +148,7 @@ where
 pub struct DeploymentManager {
     queue_send: QueueSender,
     run_send: RunSender,
-    kill_send: KillSender,
+    runtime_manager: Arc<Mutex<RuntimeManager>>,
     storage_manager: ArtifactsStorageManager,
 }
 
@@ -201,9 +198,7 @@ impl DeploymentManager {
     }
 
     pub async fn kill(&self, id: Uuid) {
-        if self.kill_send.receiver_count() > 0 {
-            self.kill_send.send(id).unwrap();
-        }
+        self.runtime_manager.lock().await.kill(&id).await;
     }
 
     pub fn storage_manager(&self) -> ArtifactsStorageManager {
@@ -216,6 +211,3 @@ type QueueReceiver = mpsc::Receiver<queue::Queued>;
 
 type RunSender = mpsc::Sender<run::Built>;
 type RunReceiver = mpsc::Receiver<run::Built>;
-
-type KillSender = broadcast::Sender<Uuid>;
-type KillReceiver = broadcast::Receiver<Uuid>;

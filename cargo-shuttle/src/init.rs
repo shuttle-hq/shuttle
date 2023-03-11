@@ -6,7 +6,6 @@ use std::path::{Path, PathBuf};
 use crate::cargo_builder::{CargoBuilder, Dependency};
 use anyhow::Result;
 use cargo::ops::NewOptions;
-use cargo_edit::{find, get_latest_dependency, registry_url};
 use indoc::indoc;
 use toml_edit::{value, Array, Document, Item, Table, Value};
 use url::{PathSegmentsMut, Url};
@@ -51,7 +50,7 @@ impl Framework {
 }
 
 pub trait ShuttleInit {
-    fn get_minimum_dependencies(&self) -> Vec<&str>;
+    fn get_base_dependencies(&self) -> Vec<&str>;
     fn get_dependency_attributes(&self) -> HashMap<&str, HashMap<&str, Value>>; // HashMap<&str, vec![&str]>;
     fn get_boilerplate_code_for_framework(&self) -> &'static str;
 }
@@ -59,7 +58,7 @@ pub trait ShuttleInit {
 pub struct ShuttleInitActixWeb;
 
 impl ShuttleInit for ShuttleInitActixWeb {
-    fn get_minimum_dependencies(&self) -> Vec<&str> {
+    fn get_base_dependencies(&self) -> Vec<&str> {
         vec!["actix-web"]
     }
 
@@ -93,7 +92,7 @@ impl ShuttleInit for ShuttleInitActixWeb {
 pub struct ShuttleInitAxum;
 
 impl ShuttleInit for ShuttleInitAxum {
-    fn get_minimum_dependencies(&self) -> Vec<&str> {
+    fn get_base_dependencies(&self) -> Vec<&str> {
         vec!["axum", "sync_wrapper"]
     }
 
@@ -126,7 +125,7 @@ impl ShuttleInit for ShuttleInitAxum {
 pub struct ShuttleInitRocket;
 
 impl ShuttleInit for ShuttleInitRocket {
-    fn get_minimum_dependencies(&self) -> Vec<&str> {
+    fn get_base_dependencies(&self) -> Vec<&str> {
         vec!["rocket"]
     }
 
@@ -159,7 +158,7 @@ impl ShuttleInit for ShuttleInitRocket {
 pub struct ShuttleInitTide;
 
 impl ShuttleInit for ShuttleInitTide {
-    fn get_minimum_dependencies(&self) -> Vec<&str> {
+    fn get_base_dependencies(&self) -> Vec<&str> {
         vec!["tide"]
     }
 
@@ -187,7 +186,7 @@ impl ShuttleInit for ShuttleInitTide {
 pub struct ShuttleInitPoem;
 
 impl ShuttleInit for ShuttleInitPoem {
-    fn get_minimum_dependencies(&self) -> Vec<&str> {
+    fn get_base_dependencies(&self) -> Vec<&str> {
         vec!["poem"]
     }
 
@@ -219,7 +218,7 @@ impl ShuttleInit for ShuttleInitPoem {
 pub struct ShuttleInitSalvo;
 
 impl ShuttleInit for ShuttleInitSalvo {
-    fn get_minimum_dependencies(&self) -> Vec<&str> {
+    fn get_base_dependencies(&self) -> Vec<&str> {
         vec!["salvo"]
     }
 
@@ -263,7 +262,7 @@ impl ShuttleInit for ShuttleInitSerenity {
     //serenity = { version = "0.11.5", default-features = false, features = ["client", "gateway", "rustls_backend", "model"] }
     //shuttle-secrets = "0.11.0"
     //tracing = "0.1.37"
-    fn get_minimum_dependencies(&self) -> Vec<&str> {
+    fn get_base_dependencies(&self) -> Vec<&str> {
         vec!["anyhow", "shuttle-secrets", "tracing"]
     }
 
@@ -337,7 +336,7 @@ impl ShuttleInit for ShuttleInitSerenity {
 pub struct ShuttleInitPoise;
 
 impl ShuttleInit for ShuttleInitPoise {
-    fn get_minimum_dependencies(&self) -> Vec<&str> {
+    fn get_base_dependencies(&self) -> Vec<&str> {
         vec!["anyhow", "poise", "shuttle-secrets", "tracing"]
     }
 
@@ -398,7 +397,7 @@ impl ShuttleInit for ShuttleInitPoise {
 pub struct ShuttleInitTower;
 
 impl ShuttleInit for ShuttleInitTower {
-    fn get_minimum_dependencies(&self) -> Vec<&str> {
+    fn get_base_dependencies(&self) -> Vec<&str> {
         vec![]
     }
 
@@ -465,7 +464,7 @@ impl ShuttleInit for ShuttleInitTower {
 pub struct ShuttleInitWarp;
 
 impl ShuttleInit for ShuttleInitWarp {
-    fn get_minimum_dependencies(&self) -> Vec<&str> {
+    fn get_base_dependencies(&self) -> Vec<&str> {
         vec!["actix-web"]
     }
 
@@ -492,7 +491,7 @@ impl ShuttleInit for ShuttleInitWarp {
 pub struct ShuttleInitThruster;
 
 impl ShuttleInit for ShuttleInitThruster {
-    fn get_minimum_dependencies(&self) -> Vec<&str> {
+    fn get_base_dependencies(&self) -> Vec<&str> {
         vec![]
     }
 
@@ -550,7 +549,7 @@ impl ShuttleInit for ShuttleInitThruster {
 
 pub struct ShuttleInitNoOp;
 impl ShuttleInit for ShuttleInitNoOp {
-    fn get_minimum_dependencies(&self) -> Vec<&str> {
+    fn get_base_dependencies(&self) -> Vec<&str> {
         vec![]
     }
 
@@ -581,12 +580,11 @@ pub fn build_cargo_file(cargo_contents: String, framework: Framework) -> Result<
     let mut cargo_doc = cargo_contents.parse::<Document>()?;
 
     cargo_doc["package"]["publish"] = value(false);
-    cargo_doc["lib"] = Item::Table(Table::new());
 
     let init_config = framework.init_config();
     let mut cargo_builder = CargoBuilder::new();
 
-    let dependencies = init_config.get_minimum_dependencies();
+    let dependencies = init_config.get_base_dependencies();
 
     for &dep in dependencies.iter() {
         cargo_builder.add_dependency(Dependency::new(dep.to_owned(), None));
@@ -611,11 +609,20 @@ pub fn build_cargo_file(cargo_contents: String, framework: Framework) -> Result<
 pub fn cargo_shuttle_init(path: PathBuf, framework: Framework) -> Result<()> {
 
     let cargo_toml_path = path.join("Cargo.toml");
-    let mut cargo_doc = read_to_string(path.clone())?; //.parse::<Document>()?;
+    let mut cargo_doc = read_to_string(cargo_toml_path.clone())?;
     let cargo_contents = build_cargo_file(cargo_doc, framework);
-    // save the file here
 
-    panic!("end");
+    //println!("{:?}", path.as_path());
+    //let manifest_path = find(Some(path.as_path())).unwrap();
+    //println!("reg path: {:?}", manifest_path.as_path());
+    //let url = registry_url(manifest_path.as_path(), None).expect("Could not find registry URL");
+    //println!("{:?}", url.to_string());
+    //panic!("...");
+    //url = Path: "https://github.com/rust-lang/crates.io-index"
+    
+    //let mut new_doc = cargo_contents.parse::<Document>()?;
+    let mut cargo_toml = File::create(cargo_toml_path).expect("this one");
+    cargo_toml.write_all(cargo_contents?.as_bytes())?;
 
     Ok(())
 }
@@ -635,7 +642,7 @@ mod shuttle_init_tests {
         let dep_feature_version = Some("2.0".to_owned());
         let mut cargo_builder = CargoBuilder::new();
 
-        let dependencies = init_config.get_minimum_dependencies();
+        let dependencies = init_config.get_base_dependencies();
 
         for &dep in dependencies.iter() {
             cargo_builder.add_dependency(Dependency::new(dep.to_owned(), dep_version.to_owned()));

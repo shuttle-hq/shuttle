@@ -1,15 +1,12 @@
 use anyhow::Result;
+use crates_index::Index;
 use std::collections::BTreeMap;
 use toml_edit::{value, Document, Value};
 // todo - See if we can accept a str instead of a Sring throughout.
 // todo - Re-look at comments in this file
-// todo - See if we can use Path instead of PathBuff
-// todo - fix version call
-// todo - add gent_sname/slug to Framework and have default method for creating framework
+// todo - add get_name/slug to Framework and have default method for creating framework
 // todo - should test all be named cargo_builder...
 // todo - have a look in init.rs to see if we need to rename or remove  get_minimum_dep fn
-// todo - Add package settings to combine method
-// todo - we should be able to add vec! directly instead of having to pass in `Array::from_iter(vec!["dsfdsf"]);`
 // todo - make the combine functional on all types and not just the dependencies field
 
 pub enum CargoSection {
@@ -22,7 +19,6 @@ pub enum CargoSection {
 pub struct CargoBuilder {
     packages: BTreeMap<String, Value>,
     dependencies: BTreeMap<String, BTreeMap<String, Value>>,
-    //libs: HashMap<String, Value>,
 }
 
 #[derive(Clone)]
@@ -47,7 +43,18 @@ impl Dependency {
     pub fn get_latest_version(&self) -> String {
         match &self.version {
             Some(x) => x.to_owned(),
-            None => "1.1.1".to_owned(),
+            None => {
+                let index = Index::new_cargo_default().unwrap();
+                let crate_ver = index
+                    .crate_(&self.name)
+                    .expect(&format!("Could not find package {} in registry", self.name));
+
+                crate_ver
+                    .highest_normal_version()
+                    .unwrap()
+                    .version()
+                    .to_string()
+            }
         }
     }
 }
@@ -136,8 +143,6 @@ impl CargoBuilder {
     /// Combines both provided toml `path` file with the settings of the `CargoBuilder` struct.
     /// Duplicate settings will be overwritten by the `CargoBuilder` settings
     pub fn combine(self, mut cargo_doc: Document) -> Result<Document> {
-        // Loop over main dependency name - `axum`,`actix` etc.
-        //panic!("{:#?}", self.dependencies);
         for (name, dep_attribute) in self.dependencies {
             // Loop over child values 'version' / 'features' etc.
             if dep_attribute.len() == 1 && dep_attribute.contains_key("version") {

@@ -5,7 +5,7 @@ use indoc::indoc;
 use std::collections::HashMap;
 use std::fs::{read_to_string, File};
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use toml_edit::{value, Array, Document, Value};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, strum::Display, strum::EnumIter)]
@@ -102,21 +102,7 @@ impl ShuttleInit for ShuttleInitAxum {
     }
 
     fn get_boilerplate_code_for_framework(&self) -> &'static str {
-        indoc! {r#"
-        use axum::{routing::get, Router};
-        use sync_wrapper::SyncWrapper;
-
-        async fn hello_world() -> &'static str {
-            "Hello, world!"
-        }
-
-        #[shuttle_service::main]
-        async fn axum() -> shuttle_service::ShuttleAxum {
-            let router = Router::new().route("/hello", get(hello_world));
-            let sync_wrapper = SyncWrapper::new(router);
-
-            Ok(sync_wrapper)
-        }"#}
+        include_str!("framework-boilerplate/axum.rs")
     }
 }
 
@@ -598,6 +584,22 @@ pub fn cargo_shuttle_init(path: PathBuf, framework: Framework) -> Result<()> {
     let cargo_contents = build_cargo_file(cargo_doc, framework);
     let mut cargo_toml = File::create(cargo_toml_path).expect("this one");
     cargo_toml.write_all(cargo_contents?.as_bytes())?;
+
+    // Write boilerplate to `src/lib.rs` file
+    let init_config = framework.init_config();
+    let lib_path = path.join("src").join("lib.rs");
+    let boilerplate = init_config.get_boilerplate_code_for_framework();
+    if !boilerplate.is_empty() {
+        write_lib_file(boilerplate, &lib_path)?;
+    }
+
+    Ok(())
+}
+
+/// Writes `boilerplate` code to the specified `lib.rs` file path.
+pub fn write_lib_file(boilerplate: &'static str, lib_path: &Path) -> Result<()> {
+    let mut lib_file = File::create(lib_path)?;
+    lib_file.write_all(boilerplate.as_bytes())?;
 
     Ok(())
 }

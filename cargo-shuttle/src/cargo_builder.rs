@@ -2,10 +2,6 @@ use anyhow::Result;
 use crates_index::Index;
 use std::collections::BTreeMap;
 use toml_edit::{value, Document, Value};
-// todo - See if we can accept a str instead of a Sring throughout.
-// todo - add get_name/slug to Framework and have default method for creating framework
-// todo - have a look in init.rs to see if we need to rename or remove get_minimum_dep fn
-// clear out shit comments
 
 pub enum CargoSection {
     Dependency(Dependency),

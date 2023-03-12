@@ -102,7 +102,21 @@ impl ShuttleInit for ShuttleInitAxum {
     }
 
     fn get_boilerplate_code_for_framework(&self) -> &'static str {
-        include_str!("framework-boilerplate/axum.rs")
+        indoc! {r#"
+        use axum::{routing::get, Router};
+        use sync_wrapper::SyncWrapper;
+
+        async fn hello_world() -> &'static str {
+            "Hello, world!"
+        }
+
+        #[shuttle_service::main]
+        async fn axum() -> shuttle_service::ShuttleAxum {
+            let router = Router::new().route("/hello", get(hello_world));
+            let sync_wrapper = SyncWrapper::new(router);
+
+            Ok(sync_wrapper)
+        }"#}
     }
 }
 

@@ -37,7 +37,7 @@ wasmtime-wasi = { version = "4.0.0", optional = true }
 
 [dependencies.shuttle-common]
 workspace = true
-features = ["service", "backend"]
+features = ["backend", "service"]
 
 [dependencies.shuttle-proto]
 workspace = true

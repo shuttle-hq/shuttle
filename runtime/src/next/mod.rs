@@ -426,7 +426,7 @@ pub mod tests {
             .unwrap();
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn axum() {
         compile_module();
 

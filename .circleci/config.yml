@@ -206,20 +206,6 @@ jobs:
                        -A clippy::format-push-string
       - run: cargo test --all-features --manifest-path << parameters.path >>/Cargo.toml -- --nocapture
       - save-cargo-cache
-  service-test:
-    # Using an image since tests will start a docker container
-    executor: image-ubuntu
-    steps:
-      - install-rust
-      - checkout
-      - restore-cargo-cache
-      - run:
-          name: Run unit tests
-          command: cargo test --package shuttle-service --features="codegen,builder" --lib -- --nocapture
-      - run:
-          name: Run integration tests
-          command: cargo test --package shuttle-service --features="codegen,builder" --test '*' -- --nocapture
-      - save-cargo-cache
   platform-test:
     parameters:
       crate:
@@ -411,9 +397,6 @@ workflows:
                 - services/shuttle-tide
                 - services/shuttle-tower
                 - services/shuttle-warp
-      - service-test:
-          requires:
-            - workspace
       - platform-test:
           requires:
             - workspace
@@ -422,17 +405,17 @@ workflows:
               crate:
                 [
                   "shuttle-auth",
-                  "shuttle-deployer",
                   "cargo-shuttle",
                   "shuttle-codegen",
                   "shuttle-common",
+                  "shuttle-deployer",
                   "shuttle-proto",
                   "shuttle-provisioner",
-                  "shuttle-runtime"
+                  "shuttle-runtime",
+                  "shuttle-service",
                 ]
       - e2e-test:
           requires:
-            - service-test
             - platform-test
             - check-standalone
           filters:

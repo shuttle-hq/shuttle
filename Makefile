@@ -50,6 +50,7 @@ DD_ENV=production
 # make sure we only ever go to production with `--tls=enable`
 USE_TLS=enable
 CARGO_PROFILE=release
+RUST_LOG=debug
 else
 DOCKER_COMPOSE_FILES=-f docker-compose.yml -f docker-compose.dev.yml
 STACK?=shuttle-dev
@@ -59,17 +60,25 @@ CONTAINER_REGISTRY=public.ecr.aws/shuttle-dev
 DD_ENV=unstable
 USE_TLS?=disable
 CARGO_PROFILE=debug
+RUST_LOG?=shuttle=trace,debug
 endif
 
 POSTGRES_EXTRA_PATH?=./extras/postgres
 POSTGRES_TAG?=14
 
 PANAMAX_EXTRA_PATH?=./extras/panamax
-PANAMAX_TAG?=1.0.6
+PANAMAX_TAG?=1.0.12
 
-RUST_LOG?=debug
+OTEL_EXTRA_PATH?=./extras/otel
+OTEL_TAG?=0.72.0
 
-DOCKER_COMPOSE_ENV=STACK=$(STACK) BACKEND_TAG=$(BACKEND_TAG) DEPLOYER_TAG=$(DEPLOYER_TAG) PROVISIONER_TAG=$(PROVISIONER_TAG) POSTGRES_TAG=${POSTGRES_TAG} PANAMAX_TAG=${PANAMAX_TAG} APPS_FQDN=$(APPS_FQDN) DB_FQDN=$(DB_FQDN) POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) RUST_LOG=$(RUST_LOG) CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) MONGO_INITDB_ROOT_USERNAME=$(MONGO_INITDB_ROOT_USERNAME) MONGO_INITDB_ROOT_PASSWORD=$(MONGO_INITDB_ROOT_PASSWORD) DD_ENV=$(DD_ENV) USE_TLS=$(USE_TLS)
+USE_PANAMAX?=enable
+ifeq ($(USE_PANAMAX), enable)
+PREPARE_ARGS+=-p 
+COMPOSE_PROFILES+=panamax
+endif
+
+DOCKER_COMPOSE_ENV=STACK=$(STACK) BACKEND_TAG=$(BACKEND_TAG) DEPLOYER_TAG=$(DEPLOYER_TAG) PROVISIONER_TAG=$(PROVISIONER_TAG) POSTGRES_TAG=${POSTGRES_TAG} PANAMAX_TAG=${PANAMAX_TAG} OTEL_TAG=${OTEL_TAG} APPS_FQDN=$(APPS_FQDN) DB_FQDN=$(DB_FQDN) POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) RUST_LOG=$(RUST_LOG) CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) MONGO_INITDB_ROOT_USERNAME=$(MONGO_INITDB_ROOT_USERNAME) MONGO_INITDB_ROOT_PASSWORD=$(MONGO_INITDB_ROOT_PASSWORD) DD_ENV=$(DD_ENV) USE_TLS=$(USE_TLS) COMPOSE_PROFILES=$(COMPOSE_PROFILES)
 
 .PHONY: images clean src up down deploy shuttle-% postgres docker-compose.rendered.yml test bump-% deploy-examples publish publish-% --validate-version
 
@@ -77,7 +86,7 @@ clean:
 	rm .shuttle-*
 	rm docker-compose.rendered.yml
 
-images: shuttle-provisioner shuttle-deployer shuttle-gateway postgres panamax
+images: shuttle-provisioner shuttle-deployer shuttle-gateway shuttle-auth postgres panamax otel
 
 postgres:
 	docker buildx build \
@@ -88,12 +97,22 @@ postgres:
 	       $(POSTGRES_EXTRA_PATH)
 
 panamax:
+	if [ $(USE_PANAMAX) = "enable" ]; then \
+		docker buildx build \
+			--build-arg PANAMAX_TAG=$(PANAMAX_TAG) \
+			--tag $(CONTAINER_REGISTRY)/panamax:$(PANAMAX_TAG) \
+			$(BUILDX_FLAGS) \
+			-f $(PANAMAX_EXTRA_PATH)/Containerfile \
+			$(PANAMAX_EXTRA_PATH); \
+	fi
+
+otel:
 	docker buildx build \
-	       --build-arg PANAMAX_TAG=$(PANAMAX_TAG) \
-	       --tag $(CONTAINER_REGISTRY)/panamax:$(PANAMAX_TAG) \
+	       --build-arg OTEL_TAG=$(OTEL_TAG) \
+	       --tag $(CONTAINER_REGISTRY)/otel:$(OTEL_TAG) \
 	       $(BUILDX_FLAGS) \
-	       -f $(PANAMAX_EXTRA_PATH)/Containerfile \
-	       $(PANAMAX_EXTRA_PATH)
+	       -f $(OTEL_EXTRA_PATH)/Containerfile \
+	       $(OTEL_EXTRA_PATH)
 
 docker-compose.rendered.yml: docker-compose.yml docker-compose.dev.yml
 	$(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE) $(DOCKER_COMPOSE_FILES) $(DOCKER_COMPOSE_CONFIG_FLAGS) -p $(STACK) config > $@
@@ -104,6 +123,9 @@ deploy: docker-compose.yml
 test:
 	cd e2e; POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) APPS_FQDN=$(APPS_FQDN) cargo test $(CARGO_TEST_FLAGS) -- --nocapture
 
+# Start the containers locally. This does not start panamax by default,
+# to start panamax locally run this command with an override for the profiles:
+# `make COMPOSE_PROFILES=panamax up`
 up: docker-compose.rendered.yml
 	CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) $(DOCKER_COMPOSE) -f $< -p $(STACK) up -d $(DOCKER_COMPOSE_FLAGS)
 
@@ -113,7 +135,8 @@ down: docker-compose.rendered.yml
 shuttle-%: ${SRC} Cargo.lock
 	docker buildx build \
 	       --build-arg folder=$(*) \
-		   --build-arg RUSTUP_TOOLCHAIN=$(RUSTUP_TOOLCHAIN) \
+           --build-arg prepare_args=$(PREPARE_ARGS) \
+	       --build-arg RUSTUP_TOOLCHAIN=$(RUSTUP_TOOLCHAIN) \
 		   --build-arg CARGO_PROFILE=$(CARGO_PROFILE) \
 	       --tag $(CONTAINER_REGISTRY)/$(*):$(COMMIT_SHA) \
 	       --tag $(CONTAINER_REGISTRY)/$(*):$(TAG) \

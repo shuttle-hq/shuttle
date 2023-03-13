@@ -13,6 +13,7 @@ use async_trait::async_trait;
 use clap::Parser;
 use core::future::Future;
 use shuttle_common::{
+    backends::{auth::ClaimLayer, tracing::InjectPropagationLayer},
     storage_manager::{StorageManager, WorkingDirStorageManager},
     LogItem,
 };
@@ -25,7 +26,7 @@ use shuttle_proto::{
         StopResponse, SubscribeLogsRequest, SubscribeStopRequest, SubscribeStopResponse,
     },
 };
-use shuttle_service::{Factory, Service, ServiceName};
+use shuttle_service::{Environment, Factory, Service, ServiceName};
 use tokio::sync::{broadcast, oneshot};
 use tokio::sync::{
     broadcast::Sender,
@@ -36,6 +37,7 @@ use tonic::{
     transport::{Endpoint, Server},
     Request, Response, Status,
 };
+use tower::ServiceBuilder;
 use tracing::{error, instrument, trace};
 use uuid::Uuid;
 
@@ -60,6 +62,7 @@ pub async fn start(
             provisioner_address,
             loader,
             WorkingDirStorageManager::new(args.storage_manager_path),
+            Environment::Local,
         );
 
         let svc = RuntimeServer::new(legacy);
@@ -79,10 +82,16 @@ pub struct Legacy<L, M, S> {
     storage_manager: M,
     loader: Mutex<Option<L>>,
     service: Mutex<Option<S>>,
+    env: Environment,
 }
 
 impl<L, M, S> Legacy<L, M, S> {
-    pub fn new(provisioner_address: Endpoint, loader: L, storage_manager: M) -> Self {
+    pub fn new(
+        provisioner_address: Endpoint,
+        loader: L,
+        storage_manager: M,
+        env: Environment,
+    ) -> Self {
         let (tx, rx) = mpsc::unbounded_channel();
         let (stopped_tx, _stopped_rx) = broadcast::channel(10);
 
@@ -95,6 +104,7 @@ impl<L, M, S> Legacy<L, M, S> {
             storage_manager,
             loader: Mutex::new(Some(loader)),
             service: Mutex::new(None),
+            env,
         }
     }
 }
@@ -149,10 +159,19 @@ where
 
         let secrets = BTreeMap::from_iter(secrets.into_iter());
 
-        let provisioner_client = ProvisionerClient::connect(self.provisioner_address.clone())
+        let channel = self
+            .provisioner_address
+            .clone()
+            .connect()
             .await
             .context("failed to connect to provisioner")
             .map_err(|err| Status::internal(err.to_string()))?;
+        let channel = ServiceBuilder::new()
+            .layer(ClaimLayer)
+            .layer(InjectPropagationLayer)
+            .service(channel);
+
+        let provisioner_client = ProvisionerClient::new(channel);
 
         let service_name = ServiceName::from_str(service_name.as_str())
             .map_err(|err| Status::from_error(Box::new(err)))?;
@@ -165,6 +184,7 @@ where
             deployment_id,
             secrets,
             self.storage_manager.clone(),
+            self.env,
         );
         trace!("got factory");
 
@@ -214,30 +234,6 @@ where
         Ok(Response::new(message))
     }
 
-    type SubscribeLogsStream = ReceiverStream<Result<runtime::LogItem, Status>>;
-
-    async fn subscribe_logs(
-        &self,
-        _request: Request<SubscribeLogsRequest>,
-    ) -> Result<Response<Self::SubscribeLogsStream>, Status> {
-        let logs_rx = self.logs_rx.lock().unwrap().deref_mut().take();
-
-        if let Some(mut logs_rx) = logs_rx {
-            let (tx, rx) = mpsc::channel(1);
-
-            // Move logger items into stream to be returned
-            tokio::spawn(async move {
-                while let Some(log) = logs_rx.recv().await {
-                    tx.send(Ok(log.into())).await.expect("to send log");
-                }
-            });
-
-            Ok(Response::new(ReceiverStream::new(rx)))
-        } else {
-            Err(Status::internal("logs have already been subscribed to"))
-        }
-    }
-
     async fn stop(&self, _request: Request<StopRequest>) -> Result<Response<StopResponse>, Status> {
         let kill_tx = self.kill_tx.lock().unwrap().deref_mut().take();
 
@@ -275,6 +271,30 @@ where
         });
 
         Ok(Response::new(ReceiverStream::new(rx)))
+    }
+
+    type SubscribeLogsStream = ReceiverStream<Result<runtime::LogItem, Status>>;
+
+    async fn subscribe_logs(
+        &self,
+        _request: Request<SubscribeLogsRequest>,
+    ) -> Result<Response<Self::SubscribeLogsStream>, Status> {
+        let logs_rx = self.logs_rx.lock().unwrap().deref_mut().take();
+
+        if let Some(mut logs_rx) = logs_rx {
+            let (tx, rx) = mpsc::channel(1);
+
+            // Move logger items into stream to be returned
+            tokio::spawn(async move {
+                while let Some(log) = logs_rx.recv().await {
+                    tx.send(Ok(log.into())).await.expect("to send log");
+                }
+            });
+
+            Ok(Response::new(ReceiverStream::new(rx)))
+        } else {
+            Err(Status::internal("logs have already been subscribed to"))
+        }
     }
 }
 

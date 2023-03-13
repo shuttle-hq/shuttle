@@ -6,6 +6,7 @@ use axum::Json;
 
 use serde::{ser::SerializeMap, Serialize};
 use shuttle_common::models::error::ApiError;
+use tracing::error;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -40,6 +41,8 @@ impl Serialize for Error {
 
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
+        error!(error = &self as &dyn std::error::Error, "request error");
+
         let code = match self {
             Error::NotFound => StatusCode::NOT_FOUND,
             _ => StatusCode::INTERNAL_SERVER_ERROR,

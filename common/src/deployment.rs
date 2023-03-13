@@ -15,3 +15,10 @@ pub enum State {
     Crashed,
     Unknown,
 }
+
+/// This which environment is this deployment taking place
+#[derive(Clone, Copy)]
+pub enum Environment {
+    Local,
+    Production,
+}

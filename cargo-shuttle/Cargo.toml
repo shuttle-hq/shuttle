@@ -1,8 +1,9 @@
 [package]
 name = "cargo-shuttle"
-version = "0.8.1"
+version = "0.11.2"
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 description = "A cargo command for the shuttle platform (https://www.shuttle.rs/)"
 homepage = "https://www.shuttle.rs"
 
@@ -15,8 +16,8 @@ cargo = "0.65.0"
 cargo-edit = { version = "0.11.6", features = ["cli"] }
 cargo_metadata = "0.15.2"
 chrono = { workspace = true }
-clap = { version = "3.2.17", features = ["derive", "env"] }
-clap_complete = "3.2.5"
+clap = { workspace = true, features = ["env"] }
+clap_complete = "4.0.7"
 crossbeam-channel = "0.5.6"
 crossterm = "0.25.0"
 dialoguer = { version = "0.10.2", features = ["fuzzy-select"] }
@@ -25,20 +26,23 @@ flate2 = "1.0.25"
 futures = "0.3.25"
 git2 = "0.14.2"
 home = "0.5.4"
-headers = "0.3.8"
+headers = { workspace = true }
 indicatif = "0.17.2"
 ignore = "0.4.18"
 indoc = "1.0.7"
 log = "0.4.17"
 openssl = { version = '0.10', optional = true }
-portpicker = "0.1.1"
+portpicker = { workspace = true }
 reqwest = { version = "0.11.13", features = ["json"] }
 reqwest-middleware = "0.2.0"
 reqwest-retry = "0.2.0"
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-sqlx = { version = "0.6.2", features = ["runtime-tokio-native-tls", "postgres"] }
-strum = { version = "0.24.1", features = ["derive"] }
+sqlx = { version = "0.6.2", features = [
+  "runtime-tokio-native-tls",
+  "postgres",
+] }
+strum = { workspace = true }
 tar = "0.4.38"
 tokio = { version = "1.22.0", features = ["macros"] }
 tokio-tungstenite = { version = "0.17.2", features = ["native-tls"] }
@@ -53,13 +57,13 @@ webbrowser = "0.8.2"
 
 [dependencies.shuttle-common]
 workspace = true
-features= ["models"]
+features = ["models"]
 
 [dependencies.shuttle-proto]
 workspace = true
 
 [dependencies.shuttle-secrets]
-version = "0.8.0"
+version = "0.11.0"
 path = "../resources/secrets"
 
 [dependencies.shuttle-service]

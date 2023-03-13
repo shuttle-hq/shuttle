@@ -27,7 +27,7 @@
 //! be a library crate with a `shuttle-service` dependency with the `web-rocket` feature on the `shuttle-service` dependency.
 //!
 //! ```toml
-//! shuttle-service = { version = "0.8.0", features = ["web-rocket"] }
+//! shuttle-service = { version = "0.11.0", features = ["web-rocket"] }
 //! ```
 //!
 //! A boilerplate code for your rocket project can also be found in `src/lib.rs`:
@@ -107,7 +107,7 @@
 //! Add `shuttle-shared-db` as a dependency with the `postgres` feature, and add `sqlx` as a dependency with the `runtime-tokio-native-tls` and `postgres` features inside `Cargo.toml`:
 //!
 //! ```toml
-//! shuttle-shared-db = { version = "0.8.0", features = ["postgres"] }
+//! shuttle-shared-db = { version = "0.11.0", features = ["postgres"] }
 //! sqlx = { version = "0.6.2", features = ["runtime-tokio-native-tls", "postgres"] }
 //! ```
 //!
@@ -217,6 +217,7 @@ pub use async_trait::async_trait;
 
 // Pub uses by `codegen`
 pub use anyhow::Context;
+pub use strfmt::strfmt;
 pub use tracing;
 pub use tracing_subscriber;
 
@@ -283,7 +284,7 @@ pub use shuttle_codegen::main;
 #[cfg(feature = "builder")]
 pub mod builder;
 
-pub use shuttle_common::project::ProjectName as ServiceName;
+pub use shuttle_common::{deployment::Environment, project::ProjectName as ServiceName};
 
 /// Factories can be used to request the provisioning of additional resources (like databases).
 ///
@@ -305,6 +306,9 @@ pub trait Factory: Send + Sync {
 
     /// Get the name for the service being deployed
     fn get_service_name(&self) -> ServiceName;
+
+    /// Get the environment for this deployment
+    fn get_environment(&self) -> Environment;
 
     /// Get the path where the build files are stored for this service
     fn get_build_path(&self) -> Result<PathBuf, crate::Error>;

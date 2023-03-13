@@ -43,6 +43,10 @@ pub struct Args {
     #[clap(long)]
     pub admin_secret: String,
 
+    /// Address to reach the authentication service at
+    #[clap(long, default_value = "http://127.0.0.1:8008")]
+    pub auth_uri: Uri,
+
     /// Uri to folder to store all artifacts
     #[clap(long, default_value = "/tmp")]
     pub artifacts_path: PathBuf,

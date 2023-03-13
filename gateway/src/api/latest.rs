@@ -593,7 +593,8 @@ pub mod tests {
             Request::builder()
                 .method("POST")
                 .uri(format!("/projects/{project}"))
-                .body(Body::empty())
+                .header("Content-Type", "application/json")
+                .body("{\"idle_minutes\": 3}".into())
                 .unwrap()
         };
 
@@ -762,7 +763,8 @@ pub mod tests {
         let create_project = Request::builder()
             .method("POST")
             .uri(format!("/projects/{matrix}"))
-            .body(Body::empty())
+            .header("Content-Type", "application/json")
+            .body("{\"idle_minutes\": 3}".into())
             .unwrap()
             .with_header(&authorization);
 

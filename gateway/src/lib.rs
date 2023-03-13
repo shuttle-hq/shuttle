@@ -801,7 +801,8 @@ pub mod tests {
             .request(
                 Request::post("/projects/matrix")
                     .with_header(&authorization)
-                    .body(Body::empty())
+                    .header("Content-Type", "application/json")
+                    .body("{\"idle_minutes\": 3}".into())
                     .unwrap(),
             )
             .map_ok(|resp| {

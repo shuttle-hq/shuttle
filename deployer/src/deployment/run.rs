@@ -182,7 +182,10 @@ impl Built {
         kill_old_deployments: impl futures::Future<Output = Result<()>>,
         cleanup: impl FnOnce(SubscribeStopResponse) + Send + 'static,
     ) -> Result<()> {
-        let so_path = storage_manager.deployment_library_path(&self.id)?;
+        // For legacy this is the path to the users project with an embedded runtime.
+        // For shuttle-next this is the path to the compiled .wasm file, which will be
+        // used in the load request.
+        let executable_path = storage_manager.deployment_executable_path(&self.id)?;
 
         let port = match pick_unused_port() {
             Some(port) => port,
@@ -194,10 +197,18 @@ impl Built {
         };
 
         let address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
+
+        let legacy_runtime_path = if self.is_next {
+            // The runtime client for next is the installed shuttle-next bin
+            None
+        } else {
+            Some(executable_path.clone())
+        };
+
         let runtime_client = runtime_manager
             .lock()
             .await
-            .get_runtime_client(self.is_next)
+            .get_runtime_client(legacy_runtime_path.clone())
             .await
             .map_err(Error::Runtime)?;
 
@@ -208,7 +219,7 @@ impl Built {
         load(
             self.service_name.clone(),
             self.service_id,
-            so_path,
+            executable_path.clone(),
             secret_getter,
             runtime_client.clone(),
         )
@@ -230,13 +241,13 @@ impl Built {
 async fn load(
     service_name: String,
     service_id: Uuid,
-    so_path: PathBuf,
+    executable_path: PathBuf,
     secret_getter: impl SecretGetter,
     mut runtime_client: RuntimeClient<Channel>,
 ) -> Result<()> {
     info!(
         "loading project from: {}",
-        so_path
+        executable_path
             .clone()
             .into_os_string()
             .into_string()
@@ -252,7 +263,10 @@ async fn load(
     let secrets = HashMap::from_iter(secrets);
 
     let load_request = tonic::Request::new(LoadRequest {
-        path: so_path.into_os_string().into_string().unwrap_or_default(),
+        path: executable_path
+            .into_os_string()
+            .into_string()
+            .unwrap_or_default(),
         service_name: service_name.clone(),
         secrets,
     });
@@ -662,10 +676,9 @@ mod tests {
         let id = Uuid::new_v4();
         let so_path = crate_dir.join("target/release").join(lib_name);
         let storage_manager = get_storage_manager();
-        let new_so_path = storage_manager.deployment_library_path(&id).unwrap();
+        let new_so_path = storage_manager.deployment_executable_path(&id).unwrap();
 
         std::fs::copy(so_path, new_so_path).unwrap();
-
         (
             Built {
                 id,

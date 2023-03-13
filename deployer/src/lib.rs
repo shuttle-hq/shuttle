@@ -65,12 +65,11 @@ pub async fn start(
         args.project,
     )
     .await;
-    let make_service = router.into_make_service();
 
     info!(address=%args.api_address, "Binding to and listening at address");
 
     axum::Server::bind(&args.api_address)
-        .serve(make_service)
+        .serve(router.into_make_service())
         .await
         .unwrap_or_else(|_| panic!("Failed to bind to address: {}", args.api_address));
 }

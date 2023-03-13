@@ -1,12 +1,11 @@
 use async_trait::async_trait;
+use fs_extra::dir::{copy, CopyOptions};
 use shuttle_service::{
     error::{CustomError, Error as ShuttleError},
     Factory, ResourceBuilder,
 };
-use std::{
-    fs::rename,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
+use tracing::{error, trace};
 
 pub struct StaticFolder<'a> {
     /// The folder to reach at runtime. Defaults to `static`
@@ -16,6 +15,7 @@ pub struct StaticFolder<'a> {
 pub enum Error {
     AbsolutePath,
     TransversedUp,
+    Copy(fs_extra::error::Error),
 }
 
 impl<'a> StaticFolder<'a> {
@@ -35,34 +35,59 @@ impl<'a> ResourceBuilder<PathBuf> for StaticFolder<'a> {
     async fn build(self, factory: &mut dyn Factory) -> Result<PathBuf, shuttle_service::Error> {
         let folder = Path::new(self.folder);
 
+        trace!(?folder, "building static folder");
+
         // Prevent users from users from reading anything outside of their crate's build folder
         if folder.is_absolute() {
+            error!("the static folder cannot be an absolute path");
             return Err(Error::AbsolutePath)?;
         }
 
         let input_dir = factory.get_build_path()?.join(self.folder);
+
+        trace!(input_directory = ?input_dir, "got input directory");
 
         match input_dir.canonicalize() {
             Ok(canonical_path) if canonical_path != input_dir => return Err(Error::TransversedUp)?,
             Ok(_) => {
                 // The path did not change to outside the crate's build folder
             }
-            Err(err) => return Err(err)?,
+            Err(err) => {
+                error!(
+                    error = &err as &dyn std::error::Error,
+                    "failed to get static folder"
+                );
+                return Err(err)?;
+            }
         }
 
-        let output_dir = factory.get_storage_path()?.join(self.folder);
+        let output_dir = factory.get_storage_path()?;
 
-        rename(input_dir, output_dir.clone())?;
+        trace!(output_directory = ?output_dir, "got output directory");
 
-        Ok(output_dir)
+        let copy_options = CopyOptions::new().overwrite(true);
+        match copy(&input_dir, &output_dir, &copy_options) {
+            Ok(_) => Ok(output_dir.join(self.folder)),
+            Err(error) => {
+                error!(
+                    error = &error as &dyn std::error::Error,
+                    "failed to copy static folder"
+                );
+
+                Err(Error::Copy(error))?
+            }
+        }
     }
 }
 
 impl From<Error> for shuttle_service::Error {
     fn from(error: Error) -> Self {
         let msg = match error {
-            Error::AbsolutePath => "Cannot use an absolute path for a static folder",
-            Error::TransversedUp => "Cannot transverse out of crate for a static folder",
+            Error::AbsolutePath => "Cannot use an absolute path for a static folder".to_string(),
+            Error::TransversedUp => {
+                "Cannot transverse out of crate for a static folder".to_string()
+            }
+            Error::Copy(error) => format!("Cannot copy static folder: {}", error),
         };
 
         ShuttleError::Custom(CustomError::msg(msg))
@@ -71,12 +96,12 @@ impl From<Error> for shuttle_service::Error {
 
 #[cfg(test)]
 mod tests {
-    use std::fs::{self};
+    use std::fs;
     use std::path::PathBuf;
 
     use async_trait::async_trait;
     use shuttle_service::{Factory, ResourceBuilder};
-    use tempdir::TempDir;
+    use tempfile::{Builder, TempDir};
 
     use crate::StaticFolder;
 
@@ -97,7 +122,7 @@ mod tests {
     impl MockFactory {
         fn new() -> Self {
             Self {
-                temp_dir: TempDir::new("static_folder").unwrap(),
+                temp_dir: Builder::new().prefix("static_folder").tempdir().unwrap(),
             }
         }
 
@@ -141,6 +166,10 @@ mod tests {
 
         fn get_service_name(&self) -> shuttle_service::ServiceName {
             panic!("no static folder test should try to get the service name")
+        }
+
+        fn get_environment(&self) -> shuttle_service::Environment {
+            panic!("no static folder test should try to get the environment")
         }
 
         fn get_build_path(&self) -> Result<std::path::PathBuf, shuttle_service::Error> {

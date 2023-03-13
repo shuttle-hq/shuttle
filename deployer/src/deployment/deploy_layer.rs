@@ -336,9 +336,9 @@ mod tests {
     use portpicker::pick_unused_port;
     use shuttle_proto::provisioner::{
         provisioner_server::{Provisioner, ProvisionerServer},
-        DatabaseRequest, DatabaseResponse,
+        DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse,
     };
-    use tempdir::TempDir;
+    use tempfile::Builder;
     use tokio::{select, time::sleep};
     use tonic::transport::Server;
     use tracing_subscriber::{fmt, prelude::*, EnvFilter};
@@ -459,6 +459,13 @@ mod tests {
         ) -> Result<tonic::Response<DatabaseResponse>, tonic::Status> {
             panic!("no deploy layer tests should request a db");
         }
+
+        async fn delete_database(
+            &self,
+            _request: tonic::Request<DatabaseRequest>,
+        ) -> Result<tonic::Response<DatabaseDeletionResponse>, tonic::Status> {
+            panic!("no deploy layer tests should request delete a db");
+        }
     }
 
     fn get_runtime_manager() -> Arc<tokio::sync::Mutex<RuntimeManager>> {
@@ -474,7 +481,7 @@ mod tests {
                 .unwrap();
         });
 
-        let tmp_dir = TempDir::new("shuttle_run_test").unwrap();
+        let tmp_dir = Builder::new().prefix("shuttle_run_test").tempdir().unwrap();
         let path = tmp_dir.into_path();
         let (tx, _rx) = crossbeam_channel::unbounded();
 
@@ -744,7 +751,7 @@ mod tests {
         select! {
             _ = sleep(Duration::from_secs(240)) => {
                 let states = RECORDER.lock().unwrap().get_deployment_states(&id);
-                panic!("states should go into 'Crashed' panicing in bind: {:#?}", states);
+                panic!("states should go into 'Crashed' panicking in bind: {:#?}", states);
             }
             _ = test => {}
         }
@@ -791,7 +798,7 @@ mod tests {
         select! {
             _ = sleep(Duration::from_secs(240)) => {
                 let states = RECORDER.lock().unwrap().get_deployment_states(&id);
-                panic!("states should go into 'Crashed' when panicing in main: {:#?}", states);
+                panic!("states should go into 'Crashed' when panicking in main: {:#?}", states);
             }
             _ = test => {}
         }
@@ -809,6 +816,7 @@ mod tests {
                 service_id: Uuid::new_v4(),
                 tracing_context: Default::default(),
                 is_next: false,
+                claim: None,
             })
             .await;
 
@@ -852,6 +860,7 @@ mod tests {
                 data: Bytes::from("violets are red").to_vec(),
                 will_run_tests: false,
                 tracing_context: Default::default(),
+                claim: None,
             })
             .await;
 
@@ -909,6 +918,7 @@ mod tests {
             data: bytes,
             will_run_tests: false,
             tracing_context: Default::default(),
+            claim: None,
         }
     }
 }

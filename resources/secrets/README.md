@@ -1,7 +1,9 @@
 # Shuttle Secrets
+
 This plugin manages secrets on [shuttle](https://www.shuttle.rs).
 
 ## Usage
+
 Add `shuttle-secrets` to the dependencies for your service, and add a `Secrets.toml` to the root of your project
 with the secrets you'd like to store. Make sure to add `Secrets.toml` to a `.gitignore` to omit your secrets from version control.
 

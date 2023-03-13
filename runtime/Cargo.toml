@@ -23,6 +23,7 @@ thiserror = { workspace = true }
 tokio = { version = "1.22.0", features = ["full"] }
 tokio-stream = "0.1.11"
 tonic = { workspace = true }
+tower = { workspace = true }
 tracing = { workspace = true, features = ["default"] }
 tracing-subscriber = { workspace = true, features = ["default", "env-filter", "fmt"] }
 uuid = { workspace = true, features = ["v4"] }

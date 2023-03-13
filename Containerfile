@@ -14,7 +14,7 @@ WORKDIR /build
 FROM shuttle-build as cache
 WORKDIR /src
 COPY . .
-RUN find ${SRC_CRATES} \( -name "*.proto" -or -name "*.rs" -or -name "*.toml" -or -name "README.md" -or -name "*.sql" \) -type f -exec install -D \{\} /build/\{\} \;
+RUN find ${SRC_CRATES} \( -name "*.proto" -or -name "*.rs" -or -name "*.toml" -or -name "Cargo.lock" -or -name "README.md" -or -name "*.sql" \) -type f -exec install -D \{\} /build/\{\} \;
 
 FROM shuttle-build AS planner
 COPY --from=cache /build .
@@ -22,10 +22,10 @@ RUN cargo chef prepare --recipe-path recipe.json
 
 FROM shuttle-build AS builder
 COPY --from=planner /build/recipe.json recipe.json
+ARG CARGO_PROFILE
 RUN cargo chef cook $(if [ "$CARGO_PROFILE" = "release" ]; then echo --${CARGO_PROFILE}; fi) --recipe-path recipe.json
 COPY --from=cache /build .
 ARG folder
-ARG CARGO_PROFILE
 # if CARGO_PROFILE is release, pass --release, else use default debug profile
 RUN cargo build --bin shuttle-${folder} $(if [ "$CARGO_PROFILE" = "release" ]; then echo --${CARGO_PROFILE}; fi)
 
@@ -43,8 +43,9 @@ COPY --from=cache /build/ /usr/src/shuttle/
 
 FROM shuttle-common
 ARG folder
+ARG prepare_args
 COPY ${folder}/prepare.sh /prepare.sh
-RUN /prepare.sh
+RUN /prepare.sh "${prepare_args}"
 ARG CARGO_PROFILE
 COPY --from=builder /build/target/${CARGO_PROFILE}/shuttle-${folder} /usr/local/bin/service
 ARG RUSTUP_TOOLCHAIN

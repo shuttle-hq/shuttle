@@ -17,7 +17,7 @@ use portpicker::pick_unused_port;
 use shuttle_common::database::{AwsRdsEngine, SharedEngine};
 use shuttle_proto::provisioner::{
     provisioner_server::{Provisioner, ProvisionerServer},
-    DatabaseRequest, DatabaseResponse,
+    DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse,
 };
 use shuttle_service::database::Type;
 use std::{collections::HashMap, io::stdout, net::SocketAddr, time::Duration};
@@ -264,6 +264,13 @@ impl Provisioner for LocalProvisioner {
             .await?;
 
         Ok(Response::new(res))
+    }
+
+    async fn delete_database(
+        &self,
+        _request: Request<DatabaseRequest>,
+    ) -> Result<Response<DatabaseDeletionResponse>, Status> {
+        panic!("local runner should not try to delete databases");
     }
 }
 

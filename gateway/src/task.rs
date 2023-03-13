@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot;
 use tokio::time::{sleep, timeout};
-use tracing::{error, info, info_span, warn};
+use tracing::{error, info_span, trace, warn};
 use uuid::Uuid;
 
 use crate::project::*;
@@ -126,6 +126,15 @@ pub fn destroy() -> impl Task<ProjectContext, Output = Project, Error = Error> {
     })
 }
 
+pub fn start() -> impl Task<ProjectContext, Output = Project, Error = Error> {
+    run(|ctx| async move {
+        match ctx.state.start() {
+            Ok(state) => TaskResult::Done(state),
+            Err(err) => TaskResult::Err(err),
+        }
+    })
+}
+
 pub fn check_health() -> impl Task<ProjectContext, Output = Project, Error = Error> {
     run(|ctx| async move {
         match ctx.state.refresh(&ctx.gateway).await {
@@ -133,7 +142,7 @@ pub fn check_health() -> impl Task<ProjectContext, Output = Project, Error = Err
                 if ready.is_healthy().await {
                     TaskResult::Done(Project::Ready(ready))
                 } else {
-                    TaskResult::Done(Project::Ready(ready).stop().unwrap())
+                    TaskResult::Done(Project::Ready(ready).reboot().unwrap())
                 }
             }
             Ok(update) => TaskResult::Done(update),
@@ -482,14 +491,14 @@ where
         };
 
         if let Some(update) = res.as_ref().ok() {
-            info!(new_state = ?update.state(), "new state");
+            trace!(new_state = ?update.state(), "new state");
             match self
                 .service
                 .update_project(&self.project_name, update)
                 .await
             {
                 Ok(_) => {
-                    info!(new_state = ?update.state(), "successfully updated project state");
+                    trace!(new_state = ?update.state(), "successfully updated project state");
                 }
                 Err(err) => {
                     error!(err = %err, "could not update project state");
@@ -498,7 +507,7 @@ where
             }
         }
 
-        info!(result = res.to_str(), "poll result");
+        trace!(result = res.to_str(), "poll result");
 
         match res {
             TaskResult::Pending(_) => TaskResult::Pending(()),

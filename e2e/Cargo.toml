@@ -11,4 +11,4 @@ portpicker = "0.1.1"
 rand = "0.8.5"
 reqwest = { version = "0.11.10", features = ["blocking", "json"] }
 which = "4.2.5"
-tempdir = "0.3.7"
+tempfile = "3.3.0"

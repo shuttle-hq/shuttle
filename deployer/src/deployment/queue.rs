@@ -11,6 +11,7 @@ use chrono::Utc;
 use crossbeam_channel::Sender;
 use opentelemetry::global;
 use serde_json::json;
+use shuttle_common::backends::auth::Claim;
 use shuttle_service::builder::{build_crate, get_config, Runtime};
 use tokio::time::{sleep, timeout};
 use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument, Span};
@@ -63,7 +64,7 @@ pub async fn task(
 
             async move {
                 match timeout(
-                    Duration::from_secs(60 * 5), // Timeout after 5 minutes if the build queue hangs or it takes too long for a slot to become available
+                    Duration::from_secs(60 * 3), // Timeout after 3 minutes if the build queue hangs or it takes too long for a slot to become available
                     wait_for_queue(queue_client.clone(), id),
                 )
                 .await
@@ -81,11 +82,15 @@ pub async fn task(
                     )
                     .await
                 {
-                    Ok(built) => promote_to_run(built, run_send_cloned).await,
-                    Err(err) => build_failed(&id, err),
+                    Ok(built) => {
+                        remove_from_queue(queue_client, id).await;
+                        promote_to_run(built, run_send_cloned).await
+                    }
+                    Err(err) => {
+                        remove_from_queue(queue_client, id).await;
+                        build_failed(&id, err)
+                    }
                 }
-
-                remove_from_queue(queue_client, id).await
             }
             .instrument(span)
             .await
@@ -103,6 +108,7 @@ fn build_failed(_id: &Uuid, error: impl std::error::Error + 'static) {
 
 #[instrument(skip(queue_client), fields(state = %State::Queued))]
 async fn wait_for_queue(queue_client: impl BuildQueueClient, id: Uuid) -> Result<()> {
+    trace!("getting a build slot");
     loop {
         let got_slot = queue_client.get_slot(id).await?;
 
@@ -148,6 +154,7 @@ pub struct Queued {
     pub data: Vec<u8>,
     pub will_run_tests: bool,
     pub tracing_context: HashMap<String, String>,
+    pub claim: Option<Claim>,
 }
 
 impl Queued {
@@ -234,6 +241,7 @@ impl Queued {
             service_id: self.service_id,
             tracing_context: Default::default(),
             is_next,
+            claim: self.claim,
         };
 
         Ok(built)
@@ -414,7 +422,7 @@ mod tests {
 
     use shuttle_common::storage_manager::ArtifactsStorageManager;
     use shuttle_service::builder::Runtime;
-    use tempdir::TempDir;
+    use tempfile::Builder;
     use tokio::fs;
     use uuid::Uuid;
 
@@ -422,7 +430,10 @@ mod tests {
 
     #[tokio::test]
     async fn extract_tar_gz_data() {
-        let dir = TempDir::new("shuttle-extraction-test").unwrap();
+        let dir = Builder::new()
+            .prefix("shuttle-extraction-test")
+            .tempdir()
+            .unwrap();
         let p = dir.path();
 
         // Files whose content should be replaced with the archive
@@ -541,7 +552,7 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
 
     #[tokio::test]
     async fn store_executable() {
-        let executables_dir = TempDir::new("executable-store").unwrap();
+        let executables_dir = Builder::new().prefix("executable-store").tempdir().unwrap();
         let executables_p = executables_dir.path();
         let storage_manager = ArtifactsStorageManager::new(executables_p.to_path_buf());
 
@@ -574,7 +585,7 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
 
     #[tokio::test]
     async fn get_secrets() {
-        let temp = TempDir::new("secrets").unwrap();
+        let temp = Builder::new().prefix("secrets").tempdir().unwrap();
         let temp_p = temp.path();
 
         let secret_p = temp_p.join("Secrets.toml");

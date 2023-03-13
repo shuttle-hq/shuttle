@@ -1,11 +1,16 @@
 use std::{collections::BTreeMap, path::PathBuf};
 
 use async_trait::async_trait;
-use shuttle_common::{database, storage_manager::StorageManager, DatabaseReadyInfo};
+use shuttle_common::{
+    backends::{auth::ClaimService, tracing::InjectPropagation},
+    database,
+    storage_manager::StorageManager,
+    DatabaseReadyInfo,
+};
 use shuttle_proto::provisioner::{
     database_request::DbType, provisioner_client::ProvisionerClient, DatabaseRequest,
 };
-use shuttle_service::{Factory, ServiceName};
+use shuttle_service::{Environment, Factory, ServiceName};
 use tonic::{transport::Channel, Request};
 use tracing::{debug, info, trace};
 use uuid::Uuid;
@@ -18,9 +23,10 @@ where
     service_name: ServiceName,
     deployment_id: Uuid,
     storage_manager: S,
-    provisioner_client: ProvisionerClient<Channel>,
+    provisioner_client: ProvisionerClient<ClaimService<InjectPropagation<Channel>>>,
     info: Option<DatabaseReadyInfo>,
     secrets: BTreeMap<String, String>,
+    env: Environment,
 }
 
 impl<S> ProvisionerFactory<S>
@@ -28,11 +34,12 @@ where
     S: StorageManager,
 {
     pub(crate) fn new(
-        provisioner_client: ProvisionerClient<Channel>,
+        provisioner_client: ProvisionerClient<ClaimService<InjectPropagation<Channel>>>,
         service_name: ServiceName,
         deployment_id: Uuid,
         secrets: BTreeMap<String, String>,
         storage_manager: S,
+        env: Environment,
     ) -> Self {
         Self {
             provisioner_client,
@@ -41,6 +48,7 @@ where
             storage_manager,
             info: None,
             secrets,
+            env,
         }
     }
 }
@@ -103,5 +111,9 @@ where
         self.storage_manager
             .deployment_storage_path(self.service_name.as_str(), &self.deployment_id)
             .map_err(Into::into)
+    }
+
+    fn get_environment(&self) -> shuttle_service::Environment {
+        self.env
     }
 }

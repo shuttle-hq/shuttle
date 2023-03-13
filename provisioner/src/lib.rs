@@ -6,12 +6,13 @@ use aws_sdk_rds::{error::ModifyDBInstanceErrorKind, model::DbInstance, types::Sd
 pub use error::Error;
 use mongodb::{bson::doc, options::ClientOptions};
 use rand::Rng;
-use shuttle_proto::provisioner::provisioner_server::Provisioner;
+use shuttle_common::backends::auth::{Claim, Scope};
 pub use shuttle_proto::provisioner::provisioner_server::ProvisionerServer;
 use shuttle_proto::provisioner::{
     aws_rds, database_request::DbType, shared, AwsRds, DatabaseRequest, DatabaseResponse, Shared,
 };
-use sqlx::{postgres::PgPoolOptions, PgPool};
+use shuttle_proto::provisioner::{provisioner_server::Provisioner, DatabaseDeletionResponse};
+use sqlx::{postgres::PgPoolOptions, ConnectOptions, Executor, PgPool};
 use tokio::time::sleep;
 use tonic::{Request, Response, Status};
 use tracing::{debug, info};
@@ -164,6 +165,23 @@ impl MyProvisioner {
                 .execute(&self.pool)
                 .await
                 .map_err(|e| Error::CreateDB(e.to_string()))?;
+
+            // Make sure database can't see other databases or other users
+            // For #557
+            let options = self.pool.connect_options().clone().database(&database_name);
+            let mut conn = options.connect().await?;
+
+            let stmts = vec![
+                "REVOKE ALL ON pg_user FROM public;",
+                "REVOKE ALL ON pg_roles FROM public;",
+                "REVOKE ALL ON pg_database FROM public;",
+            ];
+
+            for stmt in stmts {
+                conn.execute(stmt)
+                    .await
+                    .map_err(|e| Error::CreateDB(e.to_string()))?;
+            }
         }
 
         Ok(database_name)
@@ -298,6 +316,92 @@ impl MyProvisioner {
             port: engine_to_port(engine),
         })
     }
+
+    async fn delete_shared_db(
+        &self,
+        project_name: &str,
+        engine: shared::Engine,
+    ) -> Result<DatabaseDeletionResponse, Error> {
+        match engine {
+            shared::Engine::Postgres(_) => self.delete_pg(project_name).await?,
+            shared::Engine::Mongodb(_) => self.delete_mongodb(project_name).await?,
+        }
+        Ok(DatabaseDeletionResponse {})
+    }
+
+    async fn delete_pg(&self, project_name: &str) -> Result<(), Error> {
+        let database_name = format!("db-{project_name}");
+        let role_name = format!("user-{project_name}");
+
+        // Idenfitiers cannot be used as query parameters
+        let drop_db_query = format!("DROP DATABASE \"{database_name}\";");
+
+        // Drop the database. Note that this can fail if there are still active connections to it
+        sqlx::query(&drop_db_query)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| Error::DeleteRole(e.to_string()))?;
+
+        // Drop the role
+        let drop_role_query = format!("DROP ROLE IF EXISTS \"{role_name}\"");
+        sqlx::query(&drop_role_query)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| Error::DeleteDB(e.to_string()))?;
+
+        Ok(())
+    }
+
+    async fn delete_mongodb(&self, project_name: &str) -> Result<(), Error> {
+        let database_name = format!("mongodb-{project_name}");
+        let db = self.mongodb_client.database(&database_name);
+
+        // dropping a database in mongodb doesn't delete any associated users
+        // so do that first
+
+        let drop_users_command = doc! {
+            "dropAllUsersFromDatabase": 1
+        };
+
+        db.run_command(drop_users_command, None)
+            .await
+            .map_err(|e| Error::DeleteRole(e.to_string()))?;
+
+        // drop the actual database
+
+        db.drop(None)
+            .await
+            .map_err(|e| Error::DeleteDB(e.to_string()))?;
+
+        Ok(())
+    }
+
+    async fn delete_aws_rds(
+        &self,
+        project_name: &str,
+        engine: aws_rds::Engine,
+    ) -> Result<DatabaseDeletionResponse, Error> {
+        let client = &self.rds_client;
+        let instance_name = format!("{project_name}-{engine}");
+
+        // try to delete the db instance
+        let delete_result = client
+            .delete_db_instance()
+            .db_instance_identifier(&instance_name)
+            .send()
+            .await;
+
+        // Did we get an error that wasn't "db instance not found"
+        if let Err(SdkError::ServiceError { err, .. }) = delete_result {
+            if !err.is_db_instance_not_found_fault() {
+                return Err(Error::Plain(format!(
+                    "got unexpected error from AWS RDS service: {err}"
+                )));
+            }
+        }
+
+        Ok(DatabaseDeletionResponse {})
+    }
 }
 
 #[tonic::async_trait]
@@ -307,6 +411,8 @@ impl Provisioner for MyProvisioner {
         &self,
         request: Request<DatabaseRequest>,
     ) -> Result<Response<DatabaseResponse>, Status> {
+        verify_claim(&request)?;
+
         let request = request.into_inner();
         let db_type = request.db_type.unwrap();
 
@@ -322,6 +428,46 @@ impl Provisioner for MyProvisioner {
         };
 
         Ok(Response::new(reply))
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn delete_database(
+        &self,
+        request: Request<DatabaseRequest>,
+    ) -> Result<Response<DatabaseDeletionResponse>, Status> {
+        verify_claim(&request)?;
+
+        let request = request.into_inner();
+        let db_type = request.db_type.unwrap();
+
+        let reply = match db_type {
+            DbType::Shared(Shared { engine }) => {
+                self.delete_shared_db(&request.project_name, engine.expect("oneof to be set"))
+                    .await?
+            }
+            DbType::AwsRds(AwsRds { engine }) => {
+                self.delete_aws_rds(&request.project_name, engine.expect("oneof to be set"))
+                    .await?
+            }
+        };
+
+        Ok(Response::new(reply))
+    }
+}
+
+/// Verify the claim on the request has the correct scope to call this service
+fn verify_claim<B>(request: &Request<B>) -> Result<(), Status> {
+    let claim = request
+        .extensions()
+        .get::<Claim>()
+        .ok_or_else(|| Status::internal("could not get claim"))?;
+
+    if claim.scopes.contains(&Scope::ResourcesWrite) {
+        Ok(())
+    } else {
+        Err(Status::permission_denied(
+            "does not have resource allocation scope",
+        ))
     }
 }
 

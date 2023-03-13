@@ -10,3 +10,6 @@ edition = "2021"
 hyper = { version = "0.14.23", features = ["server", "tcp", "http1"] }
 shuttle-runtime = { path = "../../runtime", version = "0.1.0" }
 tower = { version = "0.4.13", features = ["make"] }
+
+[dev-dependencies]
+tokio = { version = "1.26.0", features = ["macros", "rt-multi-thread"] }

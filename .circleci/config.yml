@@ -159,7 +159,7 @@ commands:
             - << parameters.target >>.env
 
 jobs:
-  workspace-fmt:
+  workspace:
     executor: docker-rust
     steps:
       - checkout
@@ -170,14 +170,6 @@ jobs:
       # https://github.com/DevinR528/cargo-sort/pull/29 is merged
       # - run: cargo install cargo-sort
       # - run: cargo sort --check --workspace
-      - run: cargo check --workspace --all-targets
-      - save-cargo-cache
-  workspace-clippy:
-    executor: docker-rust
-    steps:
-      - checkout
-      - restore-cargo-cache
-      - install-protoc
       - run: |
           cargo clippy --tests \
                        --all-targets \
@@ -398,10 +390,7 @@ jobs:
 workflows:
   ci:
     jobs:
-      - workspace-fmt
-      - workspace-clippy:
-          requires:
-            - workspace-fmt
+      - workspace
       - check-standalone:
           matrix:
             parameters:
@@ -424,10 +413,10 @@ workflows:
                 - services/shuttle-warp
       - service-test:
           requires:
-            - workspace-clippy
+            - workspace
       - platform-test:
           requires:
-            - workspace-clippy
+            - workspace
           matrix:
             parameters:
               crate:

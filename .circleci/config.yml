@@ -173,10 +173,6 @@ jobs:
       - run: cargo check --workspace --all-targets
       - save-cargo-cache
   workspace-clippy:
-    parameters:
-      framework:
-        description: "Framework to activate"
-        type: string
     executor: docker-rust
     steps:
       - checkout
@@ -185,7 +181,7 @@ jobs:
       - run: |
           cargo clippy --tests \
                        --all-targets \
-                       --features="codegen,builder,<< parameters.framework >>" \
+                       --features="codegen,builder" \
                        --no-deps -- \
                        --D warnings \
                        -A clippy::let-unit-value \
@@ -404,25 +400,8 @@ workflows:
     jobs:
       - workspace-fmt
       - workspace-clippy:
-          name: workspace-clippy-<< matrix.framework >>
           requires:
             - workspace-fmt
-          matrix:
-            parameters:
-              framework:
-                [
-                  "web-actix-web",
-                  "web-axum",
-                  "web-rocket",
-                  "web-poem",
-                  "web-thruster",
-                  "web-tide",
-                  "web-tower",
-                  "web-warp",
-                  "web-salvo",
-                  "bot-serenity",
-                  "bot-poise",
-                ]
       - check-standalone:
           matrix:
             parameters:

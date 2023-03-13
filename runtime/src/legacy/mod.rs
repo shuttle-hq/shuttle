@@ -55,6 +55,10 @@ pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
     let mut server_builder =
         Server::builder().http2_keepalive_interval(Some(Duration::from_secs(60)));
 
+    // We wrap the StorageManager trait object in an Arc rather than a Box, since we need
+    // to clone it in the `ProvisionerFactory::new` call in the legacy runtime `load` method.
+    // We might be able to optimize this by implementing clone for a Box<dyn StorageManager>
+    // or by using static dispatch instead.
     let storage_manager: Arc<dyn StorageManager> = match args.storage_manager_type {
         args::StorageManagerType::Artifacts => {
             Arc::new(ArtifactsStorageManager::new(args.storage_manager_path))

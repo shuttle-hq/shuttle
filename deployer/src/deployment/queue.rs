@@ -168,7 +168,7 @@ impl Queued {
     ) -> Result<Built> {
         info!("Extracting received data");
 
-        let project_path = storage_manager.service_build_path(self.service_name.clone())?;
+        let project_path = storage_manager.service_build_path(&self.service_name)?;
 
         extract_tar_gz_data(self.data.as_slice(), &project_path).await?;
 

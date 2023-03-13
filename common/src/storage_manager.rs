@@ -4,12 +4,12 @@ use uuid::Uuid;
 
 pub trait StorageManager: Sync + Send {
     /// Path for a specific service build files
-    fn service_build_path(&self, service_name: String) -> Result<PathBuf, io::Error>;
+    fn service_build_path(&self, service_name: &str) -> Result<PathBuf, io::Error>;
 
     /// Path to folder for storing deployment files
     fn deployment_storage_path(
         &self,
-        service_name: String,
+        service_name: &str,
         deployment_id: &Uuid,
     ) -> Result<PathBuf, io::Error>;
 }
@@ -58,8 +58,8 @@ impl ArtifactsStorageManager {
 }
 
 impl StorageManager for ArtifactsStorageManager {
-    fn service_build_path(&self, service_name: String) -> Result<PathBuf, io::Error> {
-        let builds_path = self.builds_path()?.join(service_name.as_str());
+    fn service_build_path(&self, service_name: &str) -> Result<PathBuf, io::Error> {
+        let builds_path = self.builds_path()?.join(service_name);
         fs::create_dir_all(&builds_path)?;
 
         Ok(builds_path)
@@ -67,12 +67,12 @@ impl StorageManager for ArtifactsStorageManager {
 
     fn deployment_storage_path(
         &self,
-        service_name: String,
+        service_name: &str,
         deployment_id: &Uuid,
     ) -> Result<PathBuf, io::Error> {
         let storage_path = self
             .storage_path()?
-            .join(service_name.as_str())
+            .join(service_name)
             .join(deployment_id.to_string());
         fs::create_dir_all(&storage_path)?;
 
@@ -93,13 +93,13 @@ impl WorkingDirStorageManager {
 }
 
 impl StorageManager for WorkingDirStorageManager {
-    fn service_build_path(&self, _service_name: String) -> Result<PathBuf, io::Error> {
+    fn service_build_path(&self, _service_name: &str) -> Result<PathBuf, io::Error> {
         Ok(self.working_dir.clone())
     }
 
     fn deployment_storage_path(
         &self,
-        _service_name: String,
+        _service_name: &str,
         _deployment_id: &Uuid,
     ) -> Result<PathBuf, io::Error> {
         Ok(self.working_dir.clone())

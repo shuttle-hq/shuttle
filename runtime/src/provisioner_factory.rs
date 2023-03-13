@@ -94,13 +94,13 @@ impl Factory for ProvisionerFactory {
 
     fn get_build_path(&self) -> Result<PathBuf, shuttle_service::Error> {
         self.storage_manager
-            .service_build_path(self.service_name.to_string())
+            .service_build_path(self.service_name.as_str())
             .map_err(Into::into)
     }
 
     fn get_storage_path(&self) -> Result<PathBuf, shuttle_service::Error> {
         self.storage_manager
-            .deployment_storage_path(self.service_name.to_string(), &self.deployment_id)
+            .deployment_storage_path(self.service_name.as_str(), &self.deployment_id)
             .map_err(Into::into)
     }
 

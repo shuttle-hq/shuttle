@@ -405,7 +405,7 @@ async fn post_clean(
 ) -> Result<Json<Vec<String>>> {
     let project_path = deployment_manager
         .storage_manager()
-        .service_build_path(project_name)
+        .service_build_path(&project_name)
         .map_err(anyhow::Error::new)?;
 
     let lines = clean_crate(&project_path, true)?;

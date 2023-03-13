@@ -378,6 +378,7 @@ workflows:
     jobs:
       - workspace
       - check-standalone:
+          name: << matrix.path >>
           matrix:
             parameters:
               path:
@@ -398,6 +399,7 @@ workflows:
                 - services/shuttle-tower
                 - services/shuttle-warp
       - platform-test:
+          name: << matrix.crate >>
           requires:
             - workspace
           matrix:

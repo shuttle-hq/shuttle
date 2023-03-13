@@ -7,6 +7,6 @@ edition = "2021"
 
 [dependencies]
 axum = "0.6.0"
+shuttle-axum = { path = "../../../../services/shuttle-axum" }
 shuttle-runtime = { path = "../../../../runtime" }
-shuttle-service = { path = "../../../", features = ["web-axum"] }
 tokio = { version = "1.22.0" }

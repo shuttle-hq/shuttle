@@ -99,7 +99,6 @@ impl CargoBuilder {
         attribute_name: String,
         dep_value: Value,
     ) -> &mut Self {
-        //self.add_dependency(dependency.to_owned());
         self.add_var(
             CargoSection::Dependency(dependency),
             attribute_name,
@@ -222,7 +221,6 @@ mod tests {
     #[test]
     fn add_dependency_var_no_version() {
         let dependency = get_mock_dependency("test-dep", Some("1.1.1".to_owned()));
-
         let mut builder = CargoBuilder::new();
 
         builder.add_dependency_var(

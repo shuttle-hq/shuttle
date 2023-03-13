@@ -49,7 +49,7 @@ impl Framework {
 
 pub trait ShuttleInit {
     fn get_base_dependencies(&self) -> Vec<&str>;
-    fn get_dependency_attributes(&self) -> HashMap<&str, HashMap<&str, Value>>; // HashMap<&str, vec![&str]>;
+    fn get_dependency_attributes(&self) -> HashMap<&str, HashMap<&str, Value>>;
     fn get_boilerplate_code_for_framework(&self) -> &'static str;
 }
 
@@ -248,18 +248,6 @@ impl ShuttleInit for ShuttleInitSalvo {
 pub struct ShuttleInitSerenity;
 
 impl ShuttleInit for ShuttleInitSerenity {
-    //[package]
-    //name = "myproject"
-    //version = "0.1.0"
-    //edition = "2021"
-    //publish = false
-
-    //[dependencies]
-    //shuttle-service = { version = "0.11.0", features = ["bot-serenity"] }
-    //anyhow = "1.0.69"
-    //serenity = { version = "0.11.5", default-features = false, features = ["client", "gateway", "rustls_backend", "model"] }
-    //shuttle-secrets = "0.11.0"
-    //tracing = "0.1.37"
     fn get_base_dependencies(&self) -> Vec<&str> {
         vec!["anyhow", "shuttle-secrets", "tracing"]
     }

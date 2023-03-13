@@ -25,14 +25,6 @@ impl Dependency {
         Dependency { name, version }
     }
 
-    pub fn get_version(&self) -> &Option<String> {
-        &self.version
-    }
-
-    pub fn get_name(&self) -> &String {
-        &self.name
-    }
-
     pub fn get_latest_version(&self) -> String {
         match &self.version {
             Some(x) => x.to_owned(),
@@ -262,7 +254,6 @@ mod tests {
         let overwrite_dependency = get_mock_dependency("test-dep", Some("1.2.2".to_owned()));
 
         let mut builder = CargoBuilder::new();
-        let features = Array::from_iter(vec!["dsfdsf"]);
         builder.add_var(
             CargoSection::Dependency(dependency),
             "path".to_owned(),

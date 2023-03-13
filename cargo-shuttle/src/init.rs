@@ -611,10 +611,6 @@ mod shuttle_init_tests {
     use super::*;
     use crate::cargo_builder::CargoSection;
 
-    fn get_mock_dependency(name: &str, version: Option<String>) -> Dependency {
-        Dependency::new(name.to_owned(), None)
-    }
-
     fn get_framework_cargo_init(framework: Framework) -> Document {
         let init_config = framework.init_config();
         let dep_version = Some("1.0".to_owned());

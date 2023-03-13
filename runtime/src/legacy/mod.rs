@@ -165,7 +165,7 @@ where
             secrets,
             service_name,
         } = request.into_inner();
-        trace!(path, "loading");
+        trace!(path, "loading legacy project");
 
         let secrets = BTreeMap::from_iter(secrets.into_iter());
 

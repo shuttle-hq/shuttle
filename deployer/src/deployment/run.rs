@@ -182,6 +182,9 @@ impl Built {
         kill_old_deployments: impl futures::Future<Output = Result<()>>,
         cleanup: impl FnOnce(SubscribeStopResponse) + Send + 'static,
     ) -> Result<()> {
+        // For legacy this is the path to the users project with an embedded runtime.
+        // For shuttle-next this is the path to the compiled .wasm file, which will be
+        // used in the load request.
         let executable_path = storage_manager.deployment_executable_path(&self.id)?;
 
         let port = match pick_unused_port() {
@@ -195,16 +198,17 @@ impl Built {
 
         let address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), port);
 
-        let legacy_executable_path = if self.is_next {
-            Some(executable_path.clone())
-        } else {
+        let legacy_runtime_path = if self.is_next {
+            // The runtime client for next is the installed shuttle-next bin
             None
+        } else {
+            Some(executable_path.clone())
         };
 
         let runtime_client = runtime_manager
             .lock()
             .await
-            .get_runtime_client(legacy_executable_path.clone())
+            .get_runtime_client(legacy_runtime_path.clone())
             .await
             .map_err(Error::Runtime)?;
 

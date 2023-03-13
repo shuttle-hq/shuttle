@@ -79,7 +79,7 @@ impl Runtime for AxumWasm {
         request: tonic::Request<LoadRequest>,
     ) -> Result<tonic::Response<LoadResponse>, Status> {
         let wasm_path = request.into_inner().path;
-        trace!(wasm_path, "loading");
+        trace!(wasm_path, "loading shuttle-next project");
 
         let router = RouterBuilder::new()
             .map_err(|err| Status::from_error(err.into()))?

@@ -34,7 +34,6 @@ impl Dependency {
                 let crate_ver = index
                     .crate_(&self.name)
                     .unwrap_or_else(|| panic!("Could not find package {} in registry", self.name));
-                //.expect(&format!("Could not find package {} in registry", self.name));
 
                 crate_ver
                     .highest_normal_version()

@@ -224,9 +224,9 @@ impl Queued {
             run_pre_deploy_tests(&project_path, tx).await?;
         }
 
-        info!("Moving built library");
+        info!("Moving built executable");
 
-        store_lib(&storage_manager, &runtime, &self.id).await?;
+        store_executable(&storage_manager, &runtime, &self.id).await?;
 
         let is_next = matches!(runtime, Runtime::Next(_));
 
@@ -396,21 +396,22 @@ async fn run_pre_deploy_tests(
     }
 }
 
-/// Store 'so' file in the libs folder
+/// This will store the path to the executable for each runtime, which will be the users project with
+/// an embedded runtime for legacy, and a .wasm file for shuttle-next.
 #[instrument(skip(storage_manager, runtime, id))]
-async fn store_lib(
+async fn store_executable(
     storage_manager: &ArtifactsStorageManager,
     runtime: &Runtime,
     id: &Uuid,
 ) -> Result<()> {
-    let so_path = match runtime {
+    let executable_path = match runtime {
         Runtime::Next(path) => path,
         Runtime::Legacy(path) => path,
     };
 
-    let new_so_path = storage_manager.deployment_library_path(id)?;
+    let new_executable_path = storage_manager.deployment_executable_path(id)?;
 
-    fs::rename(so_path, new_so_path).await?;
+    fs::rename(executable_path, new_executable_path).await?;
 
     Ok(())
 }
@@ -550,30 +551,34 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
     }
 
     #[tokio::test]
-    async fn store_lib() {
-        let libs_dir = Builder::new().prefix("lib-store").tempdir().unwrap();
-        let libs_p = libs_dir.path();
-        let storage_manager = ArtifactsStorageManager::new(libs_p.to_path_buf());
+    async fn store_executable() {
+        let executables_dir = Builder::new().prefix("executable-store").tempdir().unwrap();
+        let executables_p = executables_dir.path();
+        let storage_manager = ArtifactsStorageManager::new(executables_p.to_path_buf());
 
         let build_p = storage_manager.builds_path().unwrap();
 
-        let so_path = build_p.join("xyz.so");
-        let runtime = Runtime::Legacy(so_path.clone());
+        let executable_path = build_p.join("xyz");
+        let runtime = Runtime::Legacy(executable_path.clone());
         let id = Uuid::new_v4();
 
-        fs::write(&so_path, "barfoo").await.unwrap();
+        fs::write(&executable_path, "barfoo").await.unwrap();
 
-        super::store_lib(&storage_manager, &runtime, &id)
+        super::store_executable(&storage_manager, &runtime, &id)
             .await
             .unwrap();
 
-        // Old '.so' file gone?
-        assert!(!so_path.exists());
+        // Old executable file gone?
+        assert!(!executable_path.exists());
 
         assert_eq!(
-            fs::read_to_string(libs_p.join("shuttle-libs").join(id.to_string()))
-                .await
-                .unwrap(),
+            fs::read_to_string(
+                executables_p
+                    .join("shuttle-executables")
+                    .join(id.to_string())
+            )
+            .await
+            .unwrap(),
             "barfoo"
         );
     }

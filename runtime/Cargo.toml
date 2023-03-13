@@ -37,14 +37,14 @@ wasmtime-wasi = { version = "4.0.0", optional = true }
 
 [dependencies.shuttle-common]
 workspace = true
-features = ["service"]
+features = ["service", "backend"]
 
 [dependencies.shuttle-proto]
 workspace = true
 
 [dependencies.shuttle-service]
 workspace = true
-features = ["builder"] # TODO: remove web-rocket
+features = ["builder"]
 
 [dev-dependencies]
 crossbeam-channel = "0.5.6"

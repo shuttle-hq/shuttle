@@ -4,7 +4,7 @@ use std::{
     net::{Ipv4Addr, SocketAddr},
     ops::DerefMut,
     str::FromStr,
-    sync::Mutex,
+    sync::{Arc, Mutex},
     time::Duration,
 };
 
@@ -14,7 +14,7 @@ use clap::Parser;
 use core::future::Future;
 use shuttle_common::{
     backends::{auth::ClaimLayer, tracing::InjectPropagationLayer},
-    storage_manager::{StorageManager, WorkingDirStorageManager},
+    storage_manager::{ArtifactsStorageManager, StorageManager, WorkingDirStorageManager},
     LogItem,
 };
 use shuttle_proto::{
@@ -47,9 +47,7 @@ use self::args::Args;
 
 mod args;
 
-pub async fn start(
-    loader: impl Loader<ProvisionerFactory<WorkingDirStorageManager>> + Send + 'static,
-) {
+pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
     let args = Args::parse();
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), args.port);
 
@@ -57,11 +55,24 @@ pub async fn start(
     let mut server_builder =
         Server::builder().http2_keepalive_interval(Some(Duration::from_secs(60)));
 
+    // We wrap the StorageManager trait object in an Arc rather than a Box, since we need
+    // to clone it in the `ProvisionerFactory::new` call in the legacy runtime `load` method.
+    // We might be able to optimize this by implementing clone for a Box<dyn StorageManager>
+    // or by using static dispatch instead.
+    let storage_manager: Arc<dyn StorageManager> = match args.storage_manager_type {
+        args::StorageManagerType::Artifacts => {
+            Arc::new(ArtifactsStorageManager::new(args.storage_manager_path))
+        }
+        args::StorageManagerType::WorkingDir => {
+            Arc::new(WorkingDirStorageManager::new(args.storage_manager_path))
+        }
+    };
+
     let router = {
         let legacy = Legacy::new(
             provisioner_address,
             loader,
-            WorkingDirStorageManager::new(args.storage_manager_path),
+            storage_manager,
             Environment::Local,
         );
 
@@ -72,24 +83,24 @@ pub async fn start(
     router.serve(addr).await.unwrap();
 }
 
-pub struct Legacy<L, M, S> {
+pub struct Legacy<L, S> {
     // Mutexes are for interior mutability
     logs_rx: Mutex<Option<UnboundedReceiver<LogItem>>>,
     logs_tx: UnboundedSender<LogItem>,
     stopped_tx: Sender<(StopReason, String)>,
     provisioner_address: Endpoint,
     kill_tx: Mutex<Option<oneshot::Sender<String>>>,
-    storage_manager: M,
+    storage_manager: Arc<dyn StorageManager>,
     loader: Mutex<Option<L>>,
     service: Mutex<Option<S>>,
     env: Environment,
 }
 
-impl<L, M, S> Legacy<L, M, S> {
+impl<L, S> Legacy<L, S> {
     pub fn new(
         provisioner_address: Endpoint,
         loader: L,
-        storage_manager: M,
+        storage_manager: Arc<dyn StorageManager>,
         env: Environment,
     ) -> Self {
         let (tx, rx) = mpsc::unbounded_channel();
@@ -143,10 +154,9 @@ where
 }
 
 #[async_trait]
-impl<L, M, S> Runtime for Legacy<L, M, S>
+impl<L, S> Runtime for Legacy<L, S>
 where
-    M: StorageManager + Send + Sync + 'static,
-    L: Loader<ProvisionerFactory<M>, Service = S> + Send + 'static,
+    L: Loader<ProvisionerFactory, Service = S> + Send + 'static,
     S: Service + Send + 'static,
 {
     async fn load(&self, request: Request<LoadRequest>) -> Result<Response<LoadResponse>, Status> {
@@ -155,7 +165,7 @@ where
             secrets,
             service_name,
         } = request.into_inner();
-        trace!(path, "loading");
+        trace!(path, "loading legacy project");
 
         let secrets = BTreeMap::from_iter(secrets.into_iter());
 

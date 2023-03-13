@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, path::PathBuf};
+use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
 
 use async_trait::async_trait;
 use shuttle_common::{
@@ -16,29 +16,23 @@ use tracing::{debug, info, trace};
 use uuid::Uuid;
 
 /// A factory (service locator) which goes through the provisioner crate
-pub struct ProvisionerFactory<S>
-where
-    S: StorageManager,
-{
+pub struct ProvisionerFactory {
     service_name: ServiceName,
     deployment_id: Uuid,
-    storage_manager: S,
+    storage_manager: Arc<dyn StorageManager>,
     provisioner_client: ProvisionerClient<ClaimService<InjectPropagation<Channel>>>,
     info: Option<DatabaseReadyInfo>,
     secrets: BTreeMap<String, String>,
     env: Environment,
 }
 
-impl<S> ProvisionerFactory<S>
-where
-    S: StorageManager,
-{
+impl ProvisionerFactory {
     pub(crate) fn new(
         provisioner_client: ProvisionerClient<ClaimService<InjectPropagation<Channel>>>,
         service_name: ServiceName,
         deployment_id: Uuid,
         secrets: BTreeMap<String, String>,
-        storage_manager: S,
+        storage_manager: Arc<dyn StorageManager>,
         env: Environment,
     ) -> Self {
         Self {
@@ -54,10 +48,7 @@ where
 }
 
 #[async_trait]
-impl<S> Factory for ProvisionerFactory<S>
-where
-    S: StorageManager + Sync + Send,
-{
+impl Factory for ProvisionerFactory {
     async fn get_db_connection_string(
         &mut self,
         db_type: database::Type,

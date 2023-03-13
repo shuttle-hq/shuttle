@@ -6,7 +6,7 @@ use shuttle_proto::runtime::{
 };
 use tokio::{process, sync::Mutex};
 use tonic::transport::Channel;
-use tracing::{info, instrument, trace};
+use tracing::{debug, info, instrument, trace};
 use uuid::Uuid;
 
 use crate::deployment::deploy_layer;
@@ -43,23 +43,27 @@ impl RuntimeManager {
 
     pub async fn get_runtime_client(
         &mut self,
-        is_next: bool,
+        legacy_runtime_path: Option<PathBuf>,
     ) -> anyhow::Result<RuntimeClient<Channel>> {
-        if is_next {
+        if legacy_runtime_path.is_none() {
+            debug!("Getting shuttle-next runtime client");
+
             Self::get_runtime_client_helper(
                 &mut self.next,
                 &mut self.next_process,
-                is_next,
+                None,
                 self.artifacts_path.clone(),
                 &self.provisioner_address,
                 self.log_sender.clone(),
             )
             .await
         } else {
+            debug!("Getting legacy runtime client");
+
             Self::get_runtime_client_helper(
                 &mut self.legacy,
                 &mut self.legacy_process,
-                is_next,
+                legacy_runtime_path,
                 self.artifacts_path.clone(),
                 &self.provisioner_address,
                 self.log_sender.clone(),
@@ -101,7 +105,7 @@ impl RuntimeManager {
     async fn get_runtime_client_helper(
         runtime_option: &mut Option<RuntimeClient<Channel>>,
         process_option: &mut Option<Arc<std::sync::Mutex<process::Child>>>,
-        is_next: bool,
+        legacy_runtime_path: Option<PathBuf>,
         artifacts_path: PathBuf,
         provisioner_address: &str,
         log_sender: crossbeam_channel::Sender<deploy_layer::Log>,
@@ -113,31 +117,50 @@ impl RuntimeManager {
             trace!("making new client");
 
             let port = portpicker::pick_unused_port().context("failed to find available port")?;
+            let is_next = legacy_runtime_path.is_none();
 
             let get_runtime_executable = || {
-                if cfg!(debug_assertions) {
-                    // If we're running deployer natively, install shuttle-runtime using the
-                    // version of runtime from the calling repo.
-                    let path = std::fs::canonicalize(format!("{MANIFEST_DIR}/../runtime"));
+                if let Some(legacy_runtime) = legacy_runtime_path {
+                    debug!(
+                        "Starting legacy runtime at: {}",
+                        legacy_runtime
+                            .clone()
+                            .into_os_string()
+                            .into_string()
+                            .unwrap_or_default()
+                    );
+                    legacy_runtime
+                } else {
+                    if cfg!(debug_assertions) {
+                        debug!("Installing shuttle-next runtime in debug mode from local source");
+                        // If we're running deployer natively, install shuttle-runtime using the
+                        // version of runtime from the calling repo.
+                        let path = std::fs::canonicalize(format!("{MANIFEST_DIR}/../runtime"));
 
-                    // The path will not be valid if we are in a deployer container, in which
-                    // case we don't try to install and use the one installed in deploy.sh.
-                    if let Ok(path) = path {
-                        std::process::Command::new("cargo")
-                            .arg("install")
-                            .arg("shuttle-runtime")
-                            .arg("--path")
-                            .arg(path)
-                            .output()
-                            .expect("failed to install the local version of shuttle-runtime");
+                        // The path will not be valid if we are in a deployer container, in which
+                        // case we don't try to install and use the one installed in deploy.sh.
+                        if let Ok(path) = path {
+                            std::process::Command::new("cargo")
+                                .arg("install")
+                                .arg("shuttle-runtime")
+                                .arg("--path")
+                                .arg(path)
+                                .arg("--bin")
+                                .arg("shuttle-next")
+                                .arg("--features")
+                                .arg("next")
+                                .output()
+                                .expect("failed to install the local version of shuttle-runtime");
+                        }
                     }
-                }
 
-                // If we're in a deployer built with the containerfile, the runtime will have
-                // been installed in deploy.sh.
-                home::cargo_home()
-                    .expect("failed to find path to cargo home")
-                    .join("bin/shuttle-runtime")
+                    debug!("Returning path to shuttle-next runtime",);
+                    // If we're in a deployer built with the containerfile, the runtime will have
+                    // been installed in deploy.sh.
+                    home::cargo_home()
+                        .expect("failed to find path to cargo home")
+                        .join("bin/shuttle-next")
+                }
             };
 
             let (process, runtime_client) = runtime::start(

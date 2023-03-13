@@ -32,6 +32,8 @@ async fn non_interactive_basic_init() {
     assert!(cargo_toml.contains("shuttle-service = { version = "));
 }
 
+// TODO: unignore when shuttle-rocket is published
+#[ignore]
 #[tokio::test]
 async fn non_interactive_rocket_init() {
     let temp_dir = Builder::new().prefix("rocket-init").tempdir().unwrap();
@@ -54,6 +56,8 @@ async fn non_interactive_rocket_init() {
     assert_valid_rocket_project(temp_dir_path.as_path(), "rocket-init");
 }
 
+// TODO: unignore when shuttle-rocket is published
+#[ignore]
 #[test]
 fn interactive_rocket_init() -> Result<(), Box<dyn std::error::Error>> {
     let temp_dir = Builder::new().prefix("rocket-init").tempdir().unwrap();
@@ -93,6 +97,8 @@ fn interactive_rocket_init() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+// TODO: unignore when shuttle-rocket is published
+#[ignore]
 #[test]
 fn interactive_rocket_init_dont_prompt_framework() -> Result<(), Box<dyn std::error::Error>> {
     let temp_dir = Builder::new().prefix("rocket-init").tempdir().unwrap();
@@ -128,6 +134,8 @@ fn interactive_rocket_init_dont_prompt_framework() -> Result<(), Box<dyn std::er
     Ok(())
 }
 
+// TODO: unignore when shuttle-rocket is published
+#[ignore]
 #[test]
 fn interactive_rocket_init_dont_prompt_name() -> Result<(), Box<dyn std::error::Error>> {
     let temp_dir = Builder::new().prefix("rocket-init").tempdir().unwrap();

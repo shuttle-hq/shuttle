@@ -204,7 +204,7 @@ impl ToTokens for Loader {
                             lit: Lit::Str(str), ..
                         }) => {
                             needs_vars = true;
-                            quote!(&shuttle_service::strfmt(#str, &vars)?)
+                            quote!(&shuttle_runtime::strfmt(#str, &vars)?)
                         }
                         other => quote!(#other),
                     };
@@ -513,7 +513,7 @@ mod tests {
                     .init();
 
                 let vars = std::collections::HashMap::from_iter(factory.get_secrets().await?.into_iter().map(|(key, value)| (format!("secrets.{}", key), value)));
-                let pool = shuttle_shared_db::Postgres::new().size(&shuttle_service::strfmt("10Gb", &vars)?).public(false).build(&mut factory).await.context(format!("failed to provision {}", stringify!(shuttle_shared_db::Postgres)))?;
+                let pool = shuttle_shared_db::Postgres::new().size(&shuttle_runtime::strfmt("10Gb", &vars)?).public(false).build(&mut factory).await.context(format!("failed to provision {}", stringify!(shuttle_shared_db::Postgres)))?;
 
                 complex(pool).await
             }

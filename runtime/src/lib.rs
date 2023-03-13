@@ -15,5 +15,6 @@ pub use shuttle_service::{main, CustomError, Error, ResourceBuilder, Service};
 
 // Dependencies required by the codegen
 pub use anyhow::Context;
+pub use strfmt::strfmt;
 pub use tracing;
 pub use tracing_subscriber;

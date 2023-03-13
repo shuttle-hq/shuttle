@@ -366,7 +366,7 @@ where
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use cap_std::os::unix::net::UnixStream;
     use serde_json::json;
     use std::io::{Read, Write};
@@ -499,7 +499,7 @@ mod test {
             (message, log.level)
         };
 
-        tracing_subscriber::registry().with(logger).init();
+        let _guard = tracing_subscriber::registry().with(logger).set_default();
 
         tracing::debug!("this is");
         tracing::info!("hi");

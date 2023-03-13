@@ -1,15 +1,13 @@
-use shuttle_service::Service;
-
 struct MyService;
 
-#[shuttle_service::async_trait]
-impl Service for MyService {
-    async fn bind(mut self, _: std::net::SocketAddr) -> Result<(), shuttle_service::error::Error> {
+#[shuttle_runtime::async_trait]
+impl shuttle_runtime::Service for MyService {
+    async fn bind(mut self, _: std::net::SocketAddr) -> Result<(), shuttle_runtime::Error> {
         Ok(())
     }
 }
 
-#[shuttle_service::main]
+#[shuttle_runtime::main]
 async fn self_stop() -> Result<MyService, shuttle_service::Error> {
     Ok(MyService)
 }

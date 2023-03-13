@@ -6,10 +6,10 @@ fn index() -> &'static str {
     "Hello, world!"
 }
 
-#[shuttle_service::main]
-async fn rocket() -> shuttle_service::ShuttleRocket {
+#[shuttle_runtime::main]
+async fn rocket() -> shuttle_rocket::ShuttleRocket {
     let rocket = rocket::build().mount("/hello", routes![index]);
-    Ok(rocket)
+    Ok(rocket.into())
 }
 
 #[cfg(test)]

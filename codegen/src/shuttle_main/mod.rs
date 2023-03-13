@@ -37,7 +37,7 @@ struct Input {
     /// The identifier for a resource input
     ident: Ident,
 
-    /// The shuttle_service builder for this resource
+    /// The shuttle_runtime builder for this resource
     builder: Builder,
 }
 
@@ -134,9 +134,9 @@ fn check_return_type(signature: Signature) -> Option<TypePath> {
         ReturnType::Default => {
             emit_error!(
                 signature,
-                "shuttle_service::main functions need to return a service";
+                "shuttle_runtime::main functions need to return a service";
                 hint = "See the docs for services with first class support";
-                doc = "https://docs.rs/shuttle-service/latest/shuttle_service/attr.main.html#shuttle-supported-services"
+                doc = "https://docs.rs/shuttle-service/latest/shuttle_runtime/attr.main.html#shuttle-supported-services"
             );
             None
         }
@@ -145,9 +145,9 @@ fn check_return_type(signature: Signature) -> Option<TypePath> {
             _ => {
                 emit_error!(
                     r#type,
-                    "shuttle_service::main functions need to return a first class service or 'Result<impl Service, shuttle_service::Error>";
+                    "shuttle_runtime::main functions need to return a first class service or 'Result<impl Service, shuttle_runtime::Error>";
                     hint = "See the docs for services with first class support";
-                    doc = "https://docs.rs/shuttle-service/latest/shuttle_service/attr.main.html#shuttle-supported-services"
+                    doc = "https://docs.rs/shuttle-service/latest/shuttle_runtime/attr.main.html#shuttle-supported-services"
                 );
                 None
             }
@@ -204,7 +204,7 @@ impl ToTokens for Loader {
                             lit: Lit::Str(str), ..
                         }) => {
                             needs_vars = true;
-                            quote!(&shuttle_service::strfmt(#str, &vars)?)
+                            quote!(&shuttle_runtime::strfmt(#str, &vars)?)
                         }
                         other => quote!(#other),
                     };
@@ -226,7 +226,7 @@ impl ToTokens for Loader {
             None
         } else {
             Some(parse_quote!(
-                use shuttle_service::ResourceBuilder;
+                use shuttle_runtime::ResourceBuilder;
             ))
         };
 
@@ -243,16 +243,16 @@ impl ToTokens for Loader {
                 mut #factory_ident: shuttle_runtime::ProvisionerFactory,
                 logger: shuttle_runtime::Logger,
             ) -> #return_type {
-                use shuttle_service::Context;
-                use shuttle_service::tracing_subscriber::prelude::*;
+                use shuttle_runtime::Context;
+                use shuttle_runtime::tracing_subscriber::prelude::*;
                 #extra_imports
 
                 let filter_layer =
-                    shuttle_service::tracing_subscriber::EnvFilter::try_from_default_env()
-                        .or_else(|_| shuttle_service::tracing_subscriber::EnvFilter::try_new("INFO"))
+                    shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
+                        .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("INFO"))
                         .unwrap();
 
-                shuttle_service::tracing_subscriber::registry()
+                shuttle_runtime::tracing_subscriber::registry()
                     .with(filter_layer)
                     .with(logger)
                     .init();
@@ -303,15 +303,15 @@ mod tests {
                 mut _factory: shuttle_runtime::ProvisionerFactory,
                 logger: shuttle_runtime::Logger,
             ) -> ShuttleSimple {
-                use shuttle_service::Context;
-                use shuttle_service::tracing_subscriber::prelude::*;
+                use shuttle_runtime::Context;
+                use shuttle_runtime::tracing_subscriber::prelude::*;
 
                 let filter_layer =
-                    shuttle_service::tracing_subscriber::EnvFilter::try_from_default_env()
-                        .or_else(|_| shuttle_service::tracing_subscriber::EnvFilter::try_new("INFO"))
+                    shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
+                        .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("INFO"))
                         .unwrap();
 
-                shuttle_service::tracing_subscriber::registry()
+                shuttle_runtime::tracing_subscriber::registry()
                     .with(filter_layer)
                     .with(logger)
                     .init();
@@ -383,16 +383,16 @@ mod tests {
                 mut factory: shuttle_runtime::ProvisionerFactory,
                 logger: shuttle_runtime::Logger,
             ) -> ShuttleComplex {
-                use shuttle_service::Context;
-                use shuttle_service::tracing_subscriber::prelude::*;
-                use shuttle_service::ResourceBuilder;
+                use shuttle_runtime::Context;
+                use shuttle_runtime::tracing_subscriber::prelude::*;
+                use shuttle_runtime::ResourceBuilder;
 
                 let filter_layer =
-                    shuttle_service::tracing_subscriber::EnvFilter::try_from_default_env()
-                        .or_else(|_| shuttle_service::tracing_subscriber::EnvFilter::try_new("INFO"))
+                    shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
+                        .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("INFO"))
                         .unwrap();
 
-                shuttle_service::tracing_subscriber::registry()
+                shuttle_runtime::tracing_subscriber::registry()
                     .with(filter_layer)
                     .with(logger)
                     .init();
@@ -498,22 +498,22 @@ mod tests {
                 mut factory: shuttle_runtime::ProvisionerFactory,
                 logger: shuttle_runtime::Logger,
             ) -> ShuttleComplex {
-                use shuttle_service::Context;
-                use shuttle_service::tracing_subscriber::prelude::*;
-                use shuttle_service::ResourceBuilder;
+                use shuttle_runtime::Context;
+                use shuttle_runtime::tracing_subscriber::prelude::*;
+                use shuttle_runtime::ResourceBuilder;
 
                 let filter_layer =
-                    shuttle_service::tracing_subscriber::EnvFilter::try_from_default_env()
-                        .or_else(|_| shuttle_service::tracing_subscriber::EnvFilter::try_new("INFO"))
+                    shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
+                        .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("INFO"))
                         .unwrap();
 
-                shuttle_service::tracing_subscriber::registry()
+                shuttle_runtime::tracing_subscriber::registry()
                     .with(filter_layer)
                     .with(logger)
                     .init();
 
                 let vars = std::collections::HashMap::from_iter(factory.get_secrets().await?.into_iter().map(|(key, value)| (format!("secrets.{}", key), value)));
-                let pool = shuttle_shared_db::Postgres::new().size(&shuttle_service::strfmt("10Gb", &vars)?).public(false).build(&mut factory).await.context(format!("failed to provision {}", stringify!(shuttle_shared_db::Postgres)))?;
+                let pool = shuttle_shared_db::Postgres::new().size(&shuttle_runtime::strfmt("10Gb", &vars)?).public(false).build(&mut factory).await.context(format!("failed to provision {}", stringify!(shuttle_shared_db::Postgres)))?;
 
                 complex(pool).await
             }

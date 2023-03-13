@@ -4,15 +4,15 @@ use anyhow::{anyhow, bail, Context};
 use cargo::core::compiler::{CompileKind, CompileMode, CompileTarget, MessageFormat};
 use cargo::core::{Manifest, Shell, Summary, Verbosity, Workspace};
 use cargo::ops::{clean, compile, CleanOptions, CompileOptions};
+use cargo::util::homedir;
 use cargo::util::interning::InternedString;
-use cargo::util::{homedir, ToSemver};
 use cargo::Config;
 use cargo_metadata::Message;
 use crossbeam_channel::Sender;
 use pipe::PipeWriter;
 use tracing::{error, trace};
 
-use crate::{NAME, NEXT_NAME, VERSION};
+use crate::NEXT_NAME;
 
 /// How to run/build the project
 pub enum Runtime {
@@ -57,7 +57,6 @@ pub async fn build_crate(
     let is_next = is_next(summary);
 
     if !is_next {
-        check_version(summary)?;
         ensure_binary(current.manifest())?;
     } else {
         ensure_cdylib(current.manifest_mut())?;
@@ -205,29 +204,6 @@ fn ensure_cdylib(manifest: &mut Manifest) -> anyhow::Result<()> {
         Ok(())
     } else {
         bail!("Your Shuttle project must be a library. Please add `[lib]` to your Cargo.toml file.")
-    }
-}
-
-/// Check that the crate being build is compatible with this version of loader
-fn check_version(summary: &Summary) -> anyhow::Result<()> {
-    let valid_version = VERSION.to_semver().unwrap();
-
-    let version_req = if let Some(shuttle) = summary
-        .dependencies()
-        .iter()
-        .find(|dependency| dependency.package_name() == NAME)
-    {
-        shuttle.version_req()
-    } else {
-        return Err(anyhow!("this crate does not use the shuttle service"));
-    };
-
-    if version_req.matches(&valid_version) {
-        Ok(())
-    } else {
-        Err(anyhow!(
-            "the version of `shuttle-service` specified as a dependency to this service ({version_req}) is not supported by this project instance ({valid_version}); try updating `shuttle-service` to '{valid_version}' or update the project instance using `cargo shuttle project rm` and `cargo shuttle project new`"
-        ))
     }
 }
 

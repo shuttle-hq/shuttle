@@ -93,6 +93,17 @@ commands:
             shuttle-shared-db = { path = "$PWD/resources/shared-db" }
             shuttle-secrets = { path = "$PWD/resources/secrets" }
             shuttle-static-folder = { path = "$PWD/resources/static-folder" }
+            shuttle-axum = { path = "$PWD/services/shuttle-axum" }
+            shuttle-actix-web = { path = "$PWD/services/shuttle-actix-web" }
+            shuttle-poem = { path = "$PWD/services/shuttle-poem" }
+            shuttle-poise = { path = "$PWD/services/shuttle-poise" }
+            shuttle-rocket = { path = "$PWD/services/shuttle-rocket" }
+            shuttle-salvo = { path = "$PWD/services/shuttle-salvo" }
+            shuttle-serenity = { path = "$PWD/services/shuttle-serenity" }
+            shuttle-thruster = { path = "$PWD/services/shuttle-thruster" }
+            shuttle-tide = { path = "$PWD/services/shuttle-tide" }
+            shuttle-tower = { path = "$PWD/services/shuttle-tower" }
+            shuttle-warp = { path = "$PWD/services/shuttle-warp" }
             EOF
   install-rust:
     steps:
@@ -162,10 +173,6 @@ jobs:
       - run: cargo check --workspace --all-targets
       - save-cargo-cache
   workspace-clippy:
-    parameters:
-      framework:
-        description: "Framework to activate"
-        type: string
     executor: docker-rust
     steps:
       - checkout
@@ -174,7 +181,7 @@ jobs:
       - run: |
           cargo clippy --tests \
                        --all-targets \
-                       --features="codegen,builder,<< parameters.framework >>" \
+                       --all-features \
                        --no-deps -- \
                        --D warnings \
                        -A clippy::let-unit-value \
@@ -393,25 +400,8 @@ workflows:
     jobs:
       - workspace-fmt
       - workspace-clippy:
-          name: workspace-clippy-<< matrix.framework >>
           requires:
             - workspace-fmt
-          matrix:
-            parameters:
-              framework:
-                [
-                  "web-actix-web",
-                  "web-axum",
-                  "web-rocket",
-                  "web-poem",
-                  "web-thruster",
-                  "web-tide",
-                  "web-tower",
-                  "web-warp",
-                  "web-salvo",
-                  "bot-serenity",
-                  "bot-poise",
-                ]
       - check-standalone:
           matrix:
             parameters:
@@ -421,6 +411,17 @@ workflows:
                 - resources/secrets
                 - resources/shared-db
                 - resources/static-folder
+                - services/shuttle-actix-web
+                - services/shuttle-axum
+                - services/shuttle-poem
+                - services/shuttle-poise
+                - services/shuttle-rocket
+                - services/shuttle-salvo
+                - services/shuttle-serenity
+                - services/shuttle-thruster
+                - services/shuttle-tide
+                - services/shuttle-tower
+                - services/shuttle-warp
       - service-test:
           requires:
             - workspace-clippy

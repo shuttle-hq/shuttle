@@ -16,6 +16,7 @@ async-trait = { workspace = true }
 chrono = { workspace = true }
 clap ={ version = "4.0.18", features = ["derive"] }
 serde_json = { workspace = true }
+strfmt = "0.2.2"
 thiserror = { workspace = true }
 tokio = { version = "1.22.0", features = ["full"] }
 tokio-stream = "0.1.11"
@@ -51,4 +52,15 @@ portpicker = "0.1.1"
 futures = { version = "0.3.25" }
 
 [features]
-next = ["cap-std", "futures", "hyper/server", "rmp-serde", "futures", "wasi-common", "wasmtime", "wasmtime-wasi", "shuttle-common/wasm"]
+default = []
+next = [
+    "cap-std", 
+    "futures", 
+    "hyper/server", 
+    "rmp-serde", 
+    "futures", 
+    "wasi-common", 
+    "wasmtime", 
+    "wasmtime-wasi",
+    "shuttle-common/wasm"
+]

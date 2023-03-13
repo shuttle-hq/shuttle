@@ -8,4 +8,4 @@ edition = "2021"
 [dependencies]
 axum = "0.6.0"
 shuttle-runtime = { path = "../../../../runtime" }
-shuttle-service = { path = "../../../", features = ["web-axum"] }
+shuttle-axum = { path = "../../../../services/shuttle-axum" }

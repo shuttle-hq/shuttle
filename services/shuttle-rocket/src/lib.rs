@@ -4,6 +4,7 @@
 //! #[macro_use]
 //! extern crate rocket;
 //!
+//! # fn main() {
 //! #[get("/")]
 //! fn index() -> &'static str {
 //!     "Hello, world!"
@@ -15,6 +16,7 @@
 //!
 //!     Ok(rocket.into())
 //! }
+//! # }
 //! ```
 use std::net::SocketAddr;
 

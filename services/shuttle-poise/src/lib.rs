@@ -1,7 +1,7 @@
 //! Shuttle service integration for the Poise discord bot framework.
 //! ## Example
 //! ```rust,no_run
-//! use anyhow::Context as _;
+//! use shuttle_runtime::Context as _;
 //! use poise::serenity_prelude as serenity;
 //! use shuttle_secrets::SecretStore;
 //! use shuttle_poise::ShuttlePoise;

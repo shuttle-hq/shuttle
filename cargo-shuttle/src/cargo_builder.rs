@@ -3,6 +3,7 @@ use crates_index::Index;
 use std::collections::BTreeMap;
 use toml_edit::{value, Document, Value};
 
+#[allow(dead_code)]
 pub enum CargoSection {
     Dependency(Dependency),
     Package,
@@ -32,7 +33,8 @@ impl Dependency {
                 let index = Index::new_cargo_default().unwrap();
                 let crate_ver = index
                     .crate_(&self.name)
-                    .expect(&format!("Could not find package {} in registry", self.name));
+                    .unwrap_or_else(|| panic!("Could not find package {} in registry", self.name));
+                //.expect(&format!("Could not find package {} in registry", self.name));
 
                 crate_ver
                     .highest_normal_version()
@@ -99,6 +101,7 @@ impl CargoBuilder {
     }
 
     // Convenience function for inserting a package with name / values without the need for `CargoSection`
+    #[allow(dead_code)]
     pub fn add_package(&mut self, package_name: &str, package_value: &str) -> &mut Self {
         self.add_var(
             CargoSection::Package,
@@ -119,6 +122,7 @@ impl CargoBuilder {
     }
 
     /// Returns the toml_edit `Document` for the current settings
+    #[allow(dead_code)]
     pub fn get_document(self) -> Document {
         let blank_doc = Document::new();
         self.combine(blank_doc).unwrap()
@@ -197,7 +201,7 @@ mod tests {
 
         builder.add_dependency(dependency1.to_owned());
         builder.add_var(
-            CargoSection::Dependency(dependency1.to_owned()),
+            CargoSection::Dependency(dependency1),
             "features".to_owned(),
             Value::from(features),
         );
@@ -215,11 +219,7 @@ mod tests {
         let dependency = get_mock_dependency("test-dep", Some("1.1.1".to_owned()));
         let mut builder = CargoBuilder::new();
 
-        builder.add_dependency_var(
-            dependency.to_owned(),
-            "features".to_owned(),
-            Value::from("afeature"),
-        );
+        builder.add_dependency_var(dependency, "features".to_owned(), Value::from("afeature"));
 
         let toml_document = builder.get_document();
 

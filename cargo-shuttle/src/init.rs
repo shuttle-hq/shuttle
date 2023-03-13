@@ -650,8 +650,7 @@ mod shuttle_init_tests {
 
         base_doc["package"]["publish"] = value(false);
 
-        let doc = cargo_builder.combine(base_doc).unwrap();
-        doc
+        cargo_builder.combine(base_doc).unwrap()
     }
 
     #[test]

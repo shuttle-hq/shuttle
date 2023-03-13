@@ -2,11 +2,11 @@ use std::fmt::Write;
 
 use anyhow::{Context, Result};
 use headers::{Authorization, HeaderMapExt};
-use reqwest::{Body, Response};
+use reqwest::Response;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, RequestBuilder};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use shuttle_common::models::{deployment, project, secret, service, ToJson};
 use shuttle_common::project::ProjectName;
 use shuttle_common::{ApiKey, ApiUrl, LogItem};
@@ -49,14 +49,23 @@ impl Client {
             let _ = write!(path, "?no-test");
         }
 
-        self.post(path, Some(data))
+        let url = format!("{}{}", self.api_url, path);
+
+        let mut builder = Self::get_retry_client().post(url);
+
+        builder = self.set_builder_auth(builder);
+
+        builder
+            .body(data)
+            .header("Transfer-Encoding", "chunked")
+            .send()
             .await
             .context("failed to send deployment to the Shuttle server")?
             .to_json()
             .await
     }
 
-    pub async fn delete_service(&self, project: &ProjectName) -> Result<service::Detailed> {
+    pub async fn stop_service(&self, project: &ProjectName) -> Result<service::Summary> {
         let path = format!(
             "/projects/{}/services/{}",
             project.as_str(),
@@ -86,10 +95,14 @@ impl Client {
         self.get(path).await
     }
 
-    pub async fn create_project(&self, project: &ProjectName) -> Result<project::Response> {
+    pub async fn create_project(
+        &self,
+        project: &ProjectName,
+        config: project::Config,
+    ) -> Result<project::Response> {
         let path = format!("/projects/{}", project.as_str());
 
-        self.post(path, Option::<String>::None)
+        self.post(path, Some(config))
             .await
             .context("failed to make create project request")?
             .to_json()
@@ -114,6 +127,15 @@ impl Client {
 
     pub async fn get_projects_list(&self) -> Result<Vec<project::Response>> {
         let path = "/projects".to_string();
+
+        self.get(path).await
+    }
+
+    pub async fn get_projects_list_filtered(
+        &self,
+        filter: String,
+    ) -> Result<Vec<project::Response>> {
+        let path = format!("/projects/{filter}");
 
         self.get(path).await
     }
@@ -212,11 +234,7 @@ impl Client {
             .await
     }
 
-    async fn post<T: Into<Body>>(
-        &self,
-        path: String,
-        body: Option<T>,
-    ) -> Result<Response, reqwest_middleware::Error> {
+    async fn post<T: Serialize>(&self, path: String, body: Option<T>) -> Result<Response> {
         let url = format!("{}{}", self.api_url, path);
 
         let mut builder = Self::get_retry_client().post(url);
@@ -224,11 +242,12 @@ impl Client {
         builder = self.set_builder_auth(builder);
 
         if let Some(body) = body {
+            let body = serde_json::to_string(&body)?;
             builder = builder.body(body);
-            builder = builder.header("Transfer-Encoding", "chunked");
+            builder = builder.header("Content-Type", "application/json");
         }
 
-        builder.send().await
+        Ok(builder.send().await?)
     }
 
     async fn delete<M>(&self, path: String) -> Result<M>

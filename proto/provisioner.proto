@@ -3,6 +3,7 @@ package provisioner;
 
 service Provisioner {
   rpc ProvisionDatabase(DatabaseRequest) returns (DatabaseResponse);
+  rpc DeleteDatabase(DatabaseRequest) returns (DatabaseDeletionResponse);
 }
 
 message DatabaseRequest {
@@ -28,9 +29,7 @@ message AwsRds {
   }
 }
 
-message RdsConfig {
-
-}
+message RdsConfig {}
 
 message DatabaseResponse {
   string username = 1;
@@ -41,3 +40,5 @@ message DatabaseResponse {
   string address_public = 6;
   string port = 7;
 }
+
+message DatabaseDeletionResponse {}

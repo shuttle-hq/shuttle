@@ -51,6 +51,7 @@ pub async fn start(
             service_id: existing_deployment.service_id,
             tracing_context: Default::default(),
             is_next: existing_deployment.is_next,
+            claim: None, // This will cause us to read the resource info from past provisions
         };
         deployment_manager.run_push(built).await;
     }
@@ -60,8 +61,10 @@ pub async fn start(
         deployment_manager,
         args.proxy_fqdn,
         args.admin_secret,
+        args.auth_uri,
         args.project,
-    );
+    )
+    .await;
     let make_service = router.into_make_service();
 
     info!(address=%args.api_address, "Binding to and listening at address");

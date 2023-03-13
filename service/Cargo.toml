@@ -1,8 +1,9 @@
 [package]
 name = "shuttle-service"
-version = "0.8.0"
+version = "0.11.0"
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 description = "Service traits and macros to deploy on the shuttle platform (https://www.shuttle.rs/)"
 homepage = "https://www.shuttle.rs"
 
@@ -19,6 +20,7 @@ cargo_metadata = "0.15.2"
 crossbeam-channel = "0.5.6"
 pipe = "0.4.0"
 serde_json = { workspace = true }
+strfmt = "0.2.2"
 thiserror = { workspace = true }
 tokio = { version = "1.26.0", features = ["sync"] }
 tracing = { workspace = true }

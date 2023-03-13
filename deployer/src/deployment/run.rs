@@ -8,12 +8,12 @@ use std::{
 use async_trait::async_trait;
 use opentelemetry::global;
 use portpicker::pick_unused_port;
-use shuttle_common::storage_manager::ArtifactsStorageManager;
+use shuttle_common::{backends::auth::Claim, storage_manager::ArtifactsStorageManager};
+
 use shuttle_proto::runtime::{
     runtime_client::RuntimeClient, LoadRequest, StartRequest, StopReason, SubscribeStopRequest,
     SubscribeStopResponse,
 };
-
 use tokio::sync::Mutex;
 use tonic::{transport::Channel, Code};
 use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument};
@@ -167,6 +167,7 @@ pub struct Built {
     pub service_id: Uuid,
     pub tracing_context: HashMap<String, String>,
     pub is_next: bool,
+    pub claim: Option<Claim>,
 }
 
 impl Built {
@@ -342,11 +343,11 @@ mod tests {
     use shuttle_proto::{
         provisioner::{
             provisioner_server::{Provisioner, ProvisionerServer},
-            DatabaseRequest, DatabaseResponse,
+            DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse,
         },
         runtime::{StopReason, SubscribeStopResponse},
     };
-    use tempdir::TempDir;
+    use tempfile::Builder;
     use tokio::{
         sync::{oneshot, Mutex},
         time::sleep,
@@ -365,7 +366,7 @@ mod tests {
     const RESOURCES_PATH: &str = "tests/resources";
 
     fn get_storage_manager() -> ArtifactsStorageManager {
-        let tmp_dir = TempDir::new("shuttle_run_test").unwrap();
+        let tmp_dir = Builder::new().prefix("shuttle_run_test").tempdir().unwrap();
         let path = tmp_dir.into_path();
 
         ArtifactsStorageManager::new(path)
@@ -385,6 +386,13 @@ mod tests {
         ) -> Result<tonic::Response<DatabaseResponse>, tonic::Status> {
             panic!("no run tests should request a db");
         }
+
+        async fn delete_database(
+            &self,
+            _request: tonic::Request<DatabaseRequest>,
+        ) -> Result<tonic::Response<DatabaseDeletionResponse>, tonic::Status> {
+            panic!("no run tests should delete a db");
+        }
     }
 
     fn get_runtime_manager() -> Arc<Mutex<RuntimeManager>> {
@@ -400,7 +408,7 @@ mod tests {
                 .unwrap();
         });
 
-        let tmp_dir = TempDir::new("shuttle_run_test").unwrap();
+        let tmp_dir = Builder::new().prefix("shuttle_run_test").tempdir().unwrap();
         let path = tmp_dir.into_path();
         let (tx, _rx) = crossbeam_channel::unbounded();
 
@@ -607,6 +615,7 @@ mod tests {
             service_id: Uuid::new_v4(),
             tracing_context: Default::default(),
             is_next: false,
+            claim: None,
         };
 
         let handle_cleanup = |_result| panic!("no service means no cleanup");
@@ -664,6 +673,7 @@ mod tests {
                 service_id: Uuid::new_v4(),
                 tracing_context: Default::default(),
                 is_next: false,
+                claim: None,
             },
             storage_manager,
         )

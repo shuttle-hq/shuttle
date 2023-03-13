@@ -37,7 +37,7 @@ thiserror = { workspace = true, optional = true }
 tonic = { version = "0.8.3", optional = true }
 tower = { workspace = true, optional = true }
 tower-http = { workspace = true, optional = true }
-tracing = { workspace = true }
+tracing = { workspace = true, features = ["std"] }
 tracing-opentelemetry = { workspace = true, optional = true }
 tracing-subscriber = { workspace = true, optional = true }
 ttl_cache = { workspace = true, optional = true }

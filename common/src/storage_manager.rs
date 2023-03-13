@@ -2,14 +2,14 @@ use std::{fs, io, path::PathBuf};
 
 use uuid::Uuid;
 
-pub trait StorageManager: Clone + Sync + Send {
+pub trait StorageManager: Sync + Send {
     /// Path for a specific service build files
-    fn service_build_path<S: AsRef<str>>(&self, service_name: S) -> Result<PathBuf, io::Error>;
+    fn service_build_path(&self, service_name: String) -> Result<PathBuf, io::Error>;
 
     /// Path to folder for storing deployment files
-    fn deployment_storage_path<S: AsRef<str>>(
+    fn deployment_storage_path(
         &self,
-        service_name: S,
+        service_name: String,
         deployment_id: &Uuid,
     ) -> Result<PathBuf, io::Error>;
 }
@@ -58,21 +58,21 @@ impl ArtifactsStorageManager {
 }
 
 impl StorageManager for ArtifactsStorageManager {
-    fn service_build_path<S: AsRef<str>>(&self, service_name: S) -> Result<PathBuf, io::Error> {
-        let builds_path = self.builds_path()?.join(service_name.as_ref());
+    fn service_build_path(&self, service_name: String) -> Result<PathBuf, io::Error> {
+        let builds_path = self.builds_path()?.join(service_name.as_str());
         fs::create_dir_all(&builds_path)?;
 
         Ok(builds_path)
     }
 
-    fn deployment_storage_path<S: AsRef<str>>(
+    fn deployment_storage_path(
         &self,
-        service_name: S,
+        service_name: String,
         deployment_id: &Uuid,
     ) -> Result<PathBuf, io::Error> {
         let storage_path = self
             .storage_path()?
-            .join(service_name.as_ref())
+            .join(service_name.as_str())
             .join(deployment_id.to_string());
         fs::create_dir_all(&storage_path)?;
 
@@ -93,13 +93,13 @@ impl WorkingDirStorageManager {
 }
 
 impl StorageManager for WorkingDirStorageManager {
-    fn service_build_path<S: AsRef<str>>(&self, _service_name: S) -> Result<PathBuf, io::Error> {
+    fn service_build_path(&self, _service_name: String) -> Result<PathBuf, io::Error> {
         Ok(self.working_dir.clone())
     }
 
-    fn deployment_storage_path<S: AsRef<str>>(
+    fn deployment_storage_path(
         &self,
-        _service_name: S,
+        _service_name: String,
         _deployment_id: &Uuid,
     ) -> Result<PathBuf, io::Error> {
         Ok(self.working_dir.clone())

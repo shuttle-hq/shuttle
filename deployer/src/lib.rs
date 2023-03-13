@@ -65,7 +65,6 @@ pub async fn start(
         args.project,
     )
     .await;
-    let make_service = router.into_make_service();
 
     info!(address=%args.api_address, "Binding to and listening at address");
 

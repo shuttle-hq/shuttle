@@ -22,7 +22,7 @@ exclude = [
   "resources/secrets",
   "resources/shared-db",
   "resources/static-folder",
-  "integrations"
+  "services"
 ]
 
 [workspace.package]

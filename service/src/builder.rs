@@ -57,7 +57,6 @@ pub async fn build_crate(
     let is_next = is_next(summary);
 
     if !is_next {
-        // check_version(summary)?;
         ensure_binary(current.manifest())?;
     } else {
         ensure_cdylib(current.manifest_mut())?;

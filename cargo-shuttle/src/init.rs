@@ -492,15 +492,6 @@ impl ShuttleInit for ShuttleInitSerenity {
         );
 
         set_key_value_dependency_version(
-            "shuttle-serenity",
-            dependencies,
-            manifest_path,
-            url,
-            true,
-            get_dependency_version_fn,
-        );
-
-        set_key_value_dependency_version(
             "shuttle-runtime",
             dependencies,
             manifest_path,
@@ -515,6 +506,15 @@ impl ShuttleInit for ShuttleInitSerenity {
             manifest_path,
             url,
             false,
+            get_dependency_version_fn,
+        );
+
+        set_key_value_dependency_version(
+            "shuttle-serenity",
+            dependencies,
+            manifest_path,
+            url,
+            true,
             get_dependency_version_fn,
         );
 
@@ -881,7 +881,7 @@ impl ShuttleInit for ShuttleInitThruster {
         get_dependency_version_fn: GetDependencyVersionFn,
     ) {
         set_key_value_dependency_version(
-            "shuttle-thruster",
+            "shuttle-runtime",
             dependencies,
             manifest_path,
             url,
@@ -890,7 +890,7 @@ impl ShuttleInit for ShuttleInitThruster {
         );
 
         set_key_value_dependency_version(
-            "shuttle-runtime",
+            "shuttle-thruster",
             dependencies,
             manifest_path,
             url,
@@ -1135,12 +1135,12 @@ mod shuttle_init_tests {
         set_inline_table_dependency_features(
             "shuttle-service",
             dependencies,
-            vec!["test-feature".to_string()],
+            vec!["builder".to_string()],
         );
 
         let expected = indoc! {r#"
             [dependencies]
-            shuttle-service = { features = ["test-feature"] }
+            shuttle-service = { features = ["builder"] }
         "#};
 
         assert_eq!(cargo_toml.to_string(), expected);
@@ -1200,15 +1200,6 @@ mod shuttle_init_tests {
         let manifest_path = PathBuf::new();
         let url = Url::parse("https://shuttle.rs").unwrap();
 
-        set_inline_table_dependency_version(
-            "shuttle-service",
-            dependencies,
-            &manifest_path,
-            &url,
-            false,
-            mock_get_latest_dependency_version,
-        );
-
         ShuttleInitActixWeb.set_cargo_dependencies(
             dependencies,
             &manifest_path,
@@ -1218,8 +1209,10 @@ mod shuttle_init_tests {
 
         let expected = indoc! {r#"
             [dependencies]
-            shuttle-service = { version = "1.0", features = ["web-actix-web"] }
             actix-web = "1.0"
+            shuttle-actix-web = "1.0"
+            shuttle-runtime = "1.0"
+            tokio = "1.0"
         "#};
 
         assert_eq!(cargo_toml.to_string(), expected);
@@ -1232,15 +1225,6 @@ mod shuttle_init_tests {
         let manifest_path = PathBuf::new();
         let url = Url::parse("https://shuttle.rs").unwrap();
 
-        set_inline_table_dependency_version(
-            "shuttle-service",
-            dependencies,
-            &manifest_path,
-            &url,
-            false,
-            mock_get_latest_dependency_version,
-        );
-
         ShuttleInitAxum.set_cargo_dependencies(
             dependencies,
             &manifest_path,
@@ -1250,9 +1234,10 @@ mod shuttle_init_tests {
 
         let expected = indoc! {r#"
             [dependencies]
-            shuttle-service = { version = "1.0", features = ["web-axum"] }
             axum = "1.0"
-            sync_wrapper = "1.0"
+            shuttle-axum = "1.0"
+            shuttle-runtime = "1.0"
+            tokio = "1.0"
         "#};
 
         assert_eq!(cargo_toml.to_string(), expected);
@@ -1265,15 +1250,6 @@ mod shuttle_init_tests {
         let manifest_path = PathBuf::new();
         let url = Url::parse("https://shuttle.rs").unwrap();
 
-        set_inline_table_dependency_version(
-            "shuttle-service",
-            dependencies,
-            &manifest_path,
-            &url,
-            false,
-            mock_get_latest_dependency_version,
-        );
-
         ShuttleInitRocket.set_cargo_dependencies(
             dependencies,
             &manifest_path,
@@ -1283,8 +1259,10 @@ mod shuttle_init_tests {
 
         let expected = indoc! {r#"
             [dependencies]
-            shuttle-service = { version = "1.0", features = ["web-rocket"] }
             rocket = "1.0"
+            shuttle-rocket = "1.0"
+            shuttle-runtime = "1.0"
+            tokio = "1.0"
         "#};
 
         assert_eq!(cargo_toml.to_string(), expected);
@@ -1297,15 +1275,6 @@ mod shuttle_init_tests {
         let manifest_path = PathBuf::new();
         let url = Url::parse("https://shuttle.rs").unwrap();
 
-        set_inline_table_dependency_version(
-            "shuttle-service",
-            dependencies,
-            &manifest_path,
-            &url,
-            false,
-            mock_get_latest_dependency_version,
-        );
-
         ShuttleInitTide.set_cargo_dependencies(
             dependencies,
             &manifest_path,
@@ -1315,7 +1284,9 @@ mod shuttle_init_tests {
 
         let expected = indoc! {r#"
             [dependencies]
-            shuttle-service = { version = "1.0", features = ["web-tide"] }
+            shuttle-tide = "1.0"
+            shuttle-runtime = "1.0"
+            tokio = "1.0"
             tide = "1.0"
         "#};
 
@@ -1329,15 +1300,6 @@ mod shuttle_init_tests {
         let manifest_path = PathBuf::new();
         let url = Url::parse("https://shuttle.rs").unwrap();
 
-        set_inline_table_dependency_version(
-            "shuttle-service",
-            dependencies,
-            &manifest_path,
-            &url,
-            false,
-            mock_get_latest_dependency_version,
-        );
-
         ShuttleInitTower.set_cargo_dependencies(
             dependencies,
             &manifest_path,
@@ -1347,9 +1309,11 @@ mod shuttle_init_tests {
 
         let expected = indoc! {r#"
             [dependencies]
-            shuttle-service = { version = "1.0", features = ["web-tower"] }
-            tower = { version = "1.0", features = ["full"] }
             hyper = { version = "1.0", features = ["full"] }
+            shuttle-runtime = "1.0"
+            shuttle-tower = "1.0"
+            tokio = "1.0"
+            tower = { version = "1.0", features = ["full"] }
         "#};
 
         assert_eq!(cargo_toml.to_string(), expected);
@@ -1362,15 +1326,6 @@ mod shuttle_init_tests {
         let manifest_path = PathBuf::new();
         let url = Url::parse("https://shuttle.rs").unwrap();
 
-        set_inline_table_dependency_version(
-            "shuttle-service",
-            dependencies,
-            &manifest_path,
-            &url,
-            false,
-            mock_get_latest_dependency_version,
-        );
-
         ShuttleInitPoem.set_cargo_dependencies(
             dependencies,
             &manifest_path,
@@ -1380,8 +1335,10 @@ mod shuttle_init_tests {
 
         let expected = indoc! {r#"
             [dependencies]
-            shuttle-service = { version = "1.0", features = ["web-poem"] }
             poem = "1.0"
+            shuttle-poem = "1.0"
+            shuttle-runtime = "1.0"
+            tokio = "1.0"
         "#};
 
         assert_eq!(cargo_toml.to_string(), expected);
@@ -1394,15 +1351,6 @@ mod shuttle_init_tests {
         let manifest_path = PathBuf::new();
         let url = Url::parse("https://shuttle.rs").unwrap();
 
-        set_inline_table_dependency_version(
-            "shuttle-service",
-            dependencies,
-            &manifest_path,
-            &url,
-            false,
-            mock_get_latest_dependency_version,
-        );
-
         ShuttleInitSalvo.set_cargo_dependencies(
             dependencies,
             &manifest_path,
@@ -1412,8 +1360,10 @@ mod shuttle_init_tests {
 
         let expected = indoc! {r#"
             [dependencies]
-            shuttle-service = { version = "1.0", features = ["web-salvo"] }
             salvo = "1.0"
+            shuttle-salvo = "1.0"
+            shuttle-runtime = "1.0"
+            tokio = "1.0"
         "#};
 
         assert_eq!(cargo_toml.to_string(), expected);
@@ -1426,15 +1376,6 @@ mod shuttle_init_tests {
         let manifest_path = PathBuf::new();
         let url = Url::parse("https://shuttle.rs").unwrap();
 
-        set_inline_table_dependency_version(
-            "shuttle-service",
-            dependencies,
-            &manifest_path,
-            &url,
-            false,
-            mock_get_latest_dependency_version,
-        );
-
         ShuttleInitSerenity.set_cargo_dependencies(
             dependencies,
             &manifest_path,
@@ -1444,10 +1385,12 @@ mod shuttle_init_tests {
 
         let expected = indoc! {r#"
             [dependencies]
-            shuttle-service = { version = "1.0", features = ["bot-serenity"] }
             anyhow = "1.0"
             serenity = { version = "1.0", default-features = false, features = ["client", "gateway", "rustls_backend", "model"] }
+            shuttle-runtime = "1.0"
             shuttle-secrets = "1.0"
+            shuttle-serenity = "1.0"
+            tokio = "1.0"
             tracing = "1.0"
         "#};
 
@@ -1461,15 +1404,6 @@ mod shuttle_init_tests {
         let manifest_path = PathBuf::new();
         let url = Url::parse("https://shuttle.rs").unwrap();
 
-        set_inline_table_dependency_version(
-            "shuttle-service",
-            dependencies,
-            &manifest_path,
-            &url,
-            false,
-            mock_get_latest_dependency_version,
-        );
-
         ShuttleInitPoise.set_cargo_dependencies(
             dependencies,
             &manifest_path,
@@ -1478,12 +1412,14 @@ mod shuttle_init_tests {
         );
 
         let expected = indoc! {r#"
-			[dependencies]
-			shuttle-service = { version = "1.0", features = ["bot-poise"] }
-			anyhow = "1.0"
-			poise = "1.0"
-			shuttle-secrets = "1.0"
-			tracing = "1.0"
+            [dependencies]
+            anyhow = "1.0"
+            poise = "1.0"
+            shuttle-poise = "1.0"
+            shuttle-runtime = "1.0"
+            shuttle-secrets = "1.0"
+            tokio = "1.0"
+            tracing = "1.0"
 		"#};
 
         assert_eq!(cargo_toml.to_string(), expected);
@@ -1496,15 +1432,6 @@ mod shuttle_init_tests {
         let manifest_path = PathBuf::new();
         let url = Url::parse("https://shuttle.rs").unwrap();
 
-        set_inline_table_dependency_version(
-            "shuttle-service",
-            dependencies,
-            &manifest_path,
-            &url,
-            false,
-            mock_get_latest_dependency_version,
-        );
-
         ShuttleInitWarp.set_cargo_dependencies(
             dependencies,
             &manifest_path,
@@ -1514,7 +1441,9 @@ mod shuttle_init_tests {
 
         let expected = indoc! {r#"
             [dependencies]
-            shuttle-service = { version = "1.0", features = ["web-warp"] }
+            shuttle-runtime = "1.0"
+            shuttle-warp = "1.0"
+            tokio = "1.0"
             warp = "1.0"
         "#};
 
@@ -1528,15 +1457,6 @@ mod shuttle_init_tests {
         let manifest_path = PathBuf::new();
         let url = Url::parse("https://shuttle.rs").unwrap();
 
-        set_inline_table_dependency_version(
-            "shuttle-service",
-            dependencies,
-            &manifest_path,
-            &url,
-            false,
-            mock_get_latest_dependency_version,
-        );
-
         ShuttleInitThruster.set_cargo_dependencies(
             dependencies,
             &manifest_path,
@@ -1546,13 +1466,17 @@ mod shuttle_init_tests {
 
         let expected = indoc! {r#"
             [dependencies]
-            shuttle-service = { version = "1.0", features = ["web-thruster"] }
+            shuttle-runtime = "1.0"
+            shuttle-thruster = "1.0"
             thruster = { version = "1.0", features = ["hyper_server"] }
+            tokio = "1.0"
         "#};
 
         assert_eq!(cargo_toml.to_string(), expected);
     }
 
+    // TODO: unignore this test when we publish shuttle-rocket
+    #[ignore]
     #[test]
     /// Makes sure that Rocket uses allow_prerelease flag when fetching the latest version
     fn test_get_latest_dependency_version_rocket() {

@@ -108,7 +108,6 @@ pub mod runtime {
     use tokio::process;
     use tonic::transport::{Channel, Endpoint};
     use tracing::info;
-    use uuid::Uuid;
 
     pub enum StorageManagerType {
         Artifacts(PathBuf),
@@ -116,37 +115,6 @@ pub mod runtime {
     }
 
     tonic::include_proto!("runtime");
-
-    impl From<shuttle_common::LogItem> for LogItem {
-        fn from(log: shuttle_common::LogItem) -> Self {
-            Self {
-                id: log.id.into_bytes().to_vec(),
-                timestamp: Some(Timestamp::from(SystemTime::from(log.timestamp))),
-                state: LogState::from(log.state) as i32,
-                level: LogLevel::from(log.level) as i32,
-                file: log.file,
-                line: log.line,
-                target: log.target,
-                fields: log.fields,
-            }
-        }
-    }
-
-    impl From<shuttle_common::deployment::State> for LogState {
-        fn from(state: shuttle_common::deployment::State) -> Self {
-            match state {
-                shuttle_common::deployment::State::Queued => Self::Queued,
-                shuttle_common::deployment::State::Building => Self::Building,
-                shuttle_common::deployment::State::Built => Self::Built,
-                shuttle_common::deployment::State::Loading => Self::Loading,
-                shuttle_common::deployment::State::Running => Self::Running,
-                shuttle_common::deployment::State::Completed => Self::Completed,
-                shuttle_common::deployment::State::Stopped => Self::Stopped,
-                shuttle_common::deployment::State::Crashed => Self::Crashed,
-                shuttle_common::deployment::State::Unknown => Self::Unknown,
-            }
-        }
-    }
 
     impl From<shuttle_common::log::Level> for LogLevel {
         fn from(level: shuttle_common::log::Level) -> Self {
@@ -165,31 +133,15 @@ pub mod runtime {
 
         fn try_from(log: LogItem) -> Result<Self, Self::Error> {
             Ok(Self {
-                id: Uuid::from_slice(&log.id)?,
+                id: Default::default(),
                 timestamp: DateTime::from(SystemTime::try_from(log.timestamp.unwrap_or_default())?),
-                state: LogState::from_i32(log.state).unwrap_or_default().into(),
+                state: shuttle_common::deployment::State::Running,
                 level: LogLevel::from_i32(log.level).unwrap_or_default().into(),
                 file: log.file,
                 line: log.line,
                 target: log.target,
                 fields: log.fields,
             })
-        }
-    }
-
-    impl From<LogState> for shuttle_common::deployment::State {
-        fn from(state: LogState) -> Self {
-            match state {
-                LogState::Queued => Self::Queued,
-                LogState::Building => Self::Building,
-                LogState::Built => Self::Built,
-                LogState::Loading => Self::Loading,
-                LogState::Running => Self::Running,
-                LogState::Completed => Self::Completed,
-                LogState::Stopped => Self::Stopped,
-                LogState::Crashed => Self::Crashed,
-                LogState::Unknown => Self::Unknown,
-            }
         }
     }
 
@@ -216,9 +168,7 @@ pub mod runtime {
             let line = if log.line == 0 { None } else { Some(log.line) };
 
             Self {
-                id: Default::default(),
                 timestamp: Some(Timestamp::from(SystemTime::from(log.timestamp))),
-                state: LogState::Running as i32,
                 level: LogLevel::from(log.level) as i32,
                 file,
                 line,
@@ -236,6 +186,18 @@ pub mod runtime {
                 shuttle_common::wasm::Level::Info => Self::Info,
                 shuttle_common::wasm::Level::Warn => Self::Warn,
                 shuttle_common::wasm::Level::Error => Self::Error,
+            }
+        }
+    }
+
+    impl From<&tracing::Level> for LogLevel {
+        fn from(level: &tracing::Level) -> Self {
+            match *level {
+                tracing::Level::TRACE => Self::Trace,
+                tracing::Level::DEBUG => Self::Debug,
+                tracing::Level::INFO => Self::Info,
+                tracing::Level::WARN => Self::Warn,
+                tracing::Level::ERROR => Self::Error,
             }
         }
     }

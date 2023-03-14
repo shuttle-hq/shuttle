@@ -117,10 +117,8 @@ impl TryFrom<runtime::LogItem> for Log {
 
     fn try_from(log: runtime::LogItem) -> Result<Self, Self::Error> {
         Ok(Self {
-            id: Uuid::from_slice(&log.id)?,
-            state: runtime::LogState::from_i32(log.state)
-                .unwrap_or_default()
-                .into(),
+            id: Default::default(),
+            state: State::Running,
             level: runtime::LogLevel::from_i32(log.level)
                 .unwrap_or_default()
                 .into(),
@@ -131,22 +129,6 @@ impl TryFrom<runtime::LogItem> for Log {
             fields: serde_json::from_slice(&log.fields)?,
             r#type: LogType::Event,
         })
-    }
-}
-
-impl From<runtime::LogState> for State {
-    fn from(state: runtime::LogState) -> Self {
-        match state {
-            runtime::LogState::Queued => Self::Queued,
-            runtime::LogState::Building => Self::Building,
-            runtime::LogState::Built => Self::Built,
-            runtime::LogState::Loading => Self::Loading,
-            runtime::LogState::Running => Self::Running,
-            runtime::LogState::Completed => Self::Completed,
-            runtime::LogState::Stopped => Self::Stopped,
-            runtime::LogState::Crashed => Self::Crashed,
-            runtime::LogState::Unknown => Self::Unknown,
-        }
     }
 }
 

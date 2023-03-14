@@ -15,14 +15,13 @@ use core::future::Future;
 use shuttle_common::{
     claims::{ClaimLayer, InjectPropagationLayer},
     storage_manager::{ArtifactsStorageManager, StorageManager, WorkingDirStorageManager},
-    LogItem,
 };
 use shuttle_proto::{
     provisioner::provisioner_client::ProvisionerClient,
     runtime::{
         self,
         runtime_server::{Runtime, RuntimeServer},
-        LoadRequest, LoadResponse, StartRequest, StartResponse, StopReason, StopRequest,
+        LoadRequest, LoadResponse, LogItem, StartRequest, StartResponse, StopReason, StopRequest,
         StopResponse, SubscribeLogsRequest, SubscribeStopRequest, SubscribeStopResponse,
     },
 };
@@ -376,7 +375,7 @@ where
             // Move logger items into stream to be returned
             tokio::spawn(async move {
                 while let Some(log) = logs_rx.recv().await {
-                    tx.send(Ok(log.into())).await.expect("to send log");
+                    tx.send(Ok(log)).await.expect("to send log");
                 }
             });
 

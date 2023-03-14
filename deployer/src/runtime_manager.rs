@@ -1,4 +1,4 @@
-use std::{collections::HashMap, convert::TryInto, path::PathBuf, sync::Arc};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use anyhow::Context;
 use shuttle_proto::runtime::{
@@ -111,7 +111,9 @@ impl RuntimeManager {
 
         tokio::spawn(async move {
             while let Ok(Some(log)) = stream.message().await {
-                if let Ok(log) = log.try_into() {
+                if let Ok(mut log) = deploy_layer::Log::try_from(log) {
+                    log.id = id;
+
                     sender.send(log).expect("to send log to persistence");
                 }
             }

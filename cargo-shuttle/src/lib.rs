@@ -157,11 +157,17 @@ impl Shuttle {
 
         // 3. Confirm the project directory
         let path = if interactive {
+            let path = args
+                .path
+                .to_str()
+                .context("path arg should always be set")?;
+
             println!("Where should we create this project?");
             let directory_str: String = Input::with_theme(&theme)
                 .with_prompt("Directory")
-                .default(".".to_owned())
+                .default(path.to_owned())
                 .interact()?;
+
             println!();
             args::parse_init_path(OsString::from(directory_str))?
         } else {

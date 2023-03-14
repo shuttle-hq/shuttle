@@ -866,7 +866,7 @@ impl ShuttleInit for ShuttleInitNoOp {
 
 /// Interoprates with `cargo` crate and calls `cargo init [path]`.
 pub fn cargo_init(path: PathBuf) -> Result<()> {
-    let opts = NewOptions::new(None, false, true, path, None, None, None)?;
+    let opts = NewOptions::new(None, true, false, path, None, None, None)?;
     let cargo_config = cargo::util::config::Config::default()?;
     let init_result = cargo::ops::init(&opts, &cargo_config)?;
 

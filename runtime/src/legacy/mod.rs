@@ -13,7 +13,7 @@ use async_trait::async_trait;
 use clap::Parser;
 use core::future::Future;
 use shuttle_common::{
-    backends::{auth::ClaimLayer, tracing::InjectPropagationLayer},
+    claims::{ClaimLayer, InjectPropagationLayer},
     storage_manager::{ArtifactsStorageManager, StorageManager, WorkingDirStorageManager},
     LogItem,
 };

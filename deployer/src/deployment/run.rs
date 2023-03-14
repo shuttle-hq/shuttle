@@ -8,7 +8,7 @@ use std::{
 use async_trait::async_trait;
 use opentelemetry::global;
 use portpicker::pick_unused_port;
-use shuttle_common::{backends::auth::Claim, storage_manager::ArtifactsStorageManager};
+use shuttle_common::{claims::Claim, storage_manager::ArtifactsStorageManager};
 
 use shuttle_proto::runtime::{
     runtime_client::RuntimeClient, LoadRequest, StartRequest, StopReason, SubscribeStopRequest,

@@ -21,7 +21,7 @@
 
 use chrono::{DateTime, Utc};
 use serde_json::json;
-use shuttle_common::{models::ParseError, tracing::JsonVisitor, STATE_MESSAGE};
+use shuttle_common::{tracing::JsonVisitor, ParseError, STATE_MESSAGE};
 use shuttle_proto::runtime;
 use std::{convert::TryFrom, str::FromStr, time::SystemTime};
 use tracing::{field::Visit, span, warn, Metadata, Subscriber};

@@ -4840,7 +4840,6 @@ version = "0.11.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "axum",
  "cargo",
  "cargo_metadata",
  "crossbeam-channel",

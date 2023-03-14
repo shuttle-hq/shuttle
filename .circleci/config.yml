@@ -14,7 +14,7 @@ executors:
     machine:
       image: ubuntu-2204:2022.04.1
       docker_layer_caching: true
-    resource_class: xlarge
+    resource_class: 2xlarge
 
 # sscache steps are from this guide
 # https://medium.com/@edouard.oger/rust-caching-on-circleci-using-sccache-c996344f0115
@@ -235,7 +235,6 @@ jobs:
             (cargo test --package << parameters.crate >> --all-features --test '*' -- --list 2>&1 | grep -q "no test target matches pattern") && echo "nothing to test" || cargo test --package << parameters.crate >> --all-features --test '*' -- --nocapture
       - save-cargo-cache
   e2e-test:
-    resource_class: xlarge
     executor: image-ubuntu
     steps:
       - install-rust
@@ -267,7 +266,6 @@ jobs:
           key: docker-buildx-{{ .Branch }}
           when: always
   build-and-push:
-    resource_class: xlarge
     executor: image-ubuntu
     steps:
       - checkout

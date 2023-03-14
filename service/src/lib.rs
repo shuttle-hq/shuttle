@@ -18,54 +18,53 @@
 //! $ cargo install cargo-shuttle
 //! ```
 //!
-//! Now that shuttle is installed, you can initialize a project with Rocket boilerplate:
+//! Now that shuttle is installed, you can initialize a project with Axum boilerplate:
 //! ```bash
-//! $ cargo shuttle init --rocket my-rocket-app
+//! $ cargo shuttle init --axum my-axum-app
 //! ```
 //!
-//! By looking at the `Cargo.toml` file of the generated `my-rocket-app` project you will see it has been made to
-//! be a library crate with a `shuttle-service` dependency with the `web-rocket` feature on the `shuttle-service` dependency.
+//! By looking at the `Cargo.toml` file of the generated `my-axum-app` project you will see it has been made to
+//! be a binary crate with a few dependencies including `shuttle-runtime` and `shuttle-axum`.
 //!
 //! ```toml
-//! shuttle-service = { version = "0.11.0", features = ["web-rocket"] }
+//! shuttle-runtime = "0.12.0"
+//! axum = "0.6.10"
+//! shuttle-axum = "0.12.0"
+//! tokio = "1.26"
 //! ```
 //!
-//! A boilerplate code for your rocket project can also be found in `src/lib.rs`:
+//! A boilerplate code for your axum project can also be found in `src/main.rs`:
 //!
 //! ```rust,no_run
-//! #[macro_use]
-//! extern crate rocket;
+//! use axum::{routing::get, Router};
 //!
-//! use shuttle_service::ShuttleRocket;
-//!
-//! #[get("/hello")]
-//! fn hello() -> &'static str {
+//! async fn hello_world() -> &'static str {
 //!     "Hello, world!"
 //! }
 //!
-//! #[shuttle_service::main]
-//! async fn init() -> ShuttleRocket {
-//!     let rocket = rocket::build().mount("/", routes![hello]);
+//! #[shuttle_runtime::main]
+//! async fn axum() -> shuttle_axum::ShuttleAxum {
+//!     let router = Router::new().route("/hello", get(hello_world));
 //!
-//!     Ok(rocket)
+//!     Ok(router.into())
 //! }
 //! ```
 //!
-//! See the [shuttle_service::main][main] macro for more information on supported services - such as `axum`.
-//! Or look at [more complete examples](https://github.com/shuttle-hq/examples), but
-//! take note that the examples may update before official releases.
+//! Check out [our docs](https://docs.shuttle.rs/introduction/welcome) to see all the frameworks we support, or
+//! our [examples](https://github.com/shuttle-hq/examples) if you prefer that format.
 //!
 //! ## Running locally
 //! To test your app locally before deploying, use:
 //!
 //! ```bash
-//! $ cargo shuttle run
+//! $ cargo shuttle run
 //! ```
 //!
 //! You should see your app build and start on the default port 8000. You can test this using;
 //!
 //! ```bash
-//! $ curl http://localhost:8000/hello
+//! $ curl http://localhost:8000/hello
+//!
 //! Hello, world!
 //! ```
 //!
@@ -75,43 +74,50 @@
 //! But, you will need to authenticate with the shuttle service first using:
 //!
 //! ```bash
-//! $ cargo shuttle login
+//! $ cargo shuttle login
 //! ```
 //!
-//! this will open a browser window and prompt you to connect using your GitHub account.
+//! This will open a browser window and prompt you to connect using your GitHub account.
 //!
 //! Before you can deploy, you have to create a project. This will start a deployer container for your
-//! project under the hood, ensuring isolation from other users' projects.
+//! project under the hood, ensuring isolation from other users' projects. PS. you don't have to do this
+//! now if you did in in the `cargo shuttle init` flow.
 //!
 //! ```bash
-//! $ cargo shuttle project new
+//! $ cargo shuttle project new
 //! ```
 //!
 //! Then, deploy the service with:
 //!
 //! ```bash
-//! $ cargo shuttle deploy
+//! $ cargo shuttle deploy
 //! ```
 //!
 //! Your service will immediately be available at `{crate_name}.shuttleapp.rs`. For example:
 //!
 //! ```bash
-//! $ curl https://my-rocket-app.shuttleapp.rs/hello
+//! $ curl https://my-axum-app.shuttleapp.rs/hello
 //! Hello, world!
 //! ```
 //!
 //! ## Using `sqlx`
 //!
-//! Here is a quick example to deploy a service that uses a postgres database and [sqlx](http://docs.rs/sqlx):
+//! Here is a quick example to deploy a rocket service that uses a postgres database and [sqlx](http://docs.rs/sqlx):
 //!
-//! Add `shuttle-shared-db` as a dependency with the `postgres` feature, and add `sqlx` as a dependency with the `runtime-tokio-native-tls` and `postgres` features inside `Cargo.toml`:
+//! Initialize a project with Rocket boilerplate:
+//! ```bash
+//! $ cargo shuttle init --rocket my-rocket-app
+//! ```
+//!
+//! Add `shuttle-shared-db` as a dependency with the `postgres` feature, and add `sqlx` as a dependency with the
+//! `runtime-tokio-native-tls` and `postgres` features inside `Cargo.toml`:
 //!
 //! ```toml
-//! shuttle-shared-db = { version = "0.11.0", features = ["postgres"] }
+//! shuttle-shared-db = { version = "0.12.0", features = ["postgres"] }
 //! sqlx = { version = "0.6.2", features = ["runtime-tokio-native-tls", "postgres"] }
 //! ```
 //!
-//! Now update the `#[shuttle_service::main]` function to take in a `PgPool`:
+//! Now update the `#[shuttle_runtime::main]` function to take in a `PgPool`:
 //!
 //! ```rust,no_run
 //! #[macro_use]
@@ -119,7 +125,7 @@
 //!
 //! use rocket::State;
 //! use sqlx::PgPool;
-//! use shuttle_service::ShuttleRocket;
+//! use shuttle_rocket::ShuttleRocket;
 //!
 //! struct MyState(PgPool);
 //!
@@ -129,12 +135,12 @@
 //!     "Hello, Postgres!"
 //! }
 //!
-//! #[shuttle_service::main]
+//! #[shuttle_runtime::main]
 //! async fn rocket(#[shuttle_shared_db::Postgres] pool: PgPool) -> ShuttleRocket {
 //!     let state = MyState(pool);
 //!     let rocket = rocket::build().manage(state).mount("/", routes![hello]);
 //!
-//!     Ok(rocket)
+//!     Ok(rocket.into())
 //! }
 //! ```
 //!
@@ -142,11 +148,11 @@
 //!
 //! For deploys, shuttle will provision a database for your application and connect it to the `PgPool` on your behalf.
 //!
-//! To learn more about shuttle managed resources, see [shuttle_service::main][main#getting-shuttle-managed-resources].
+//! To learn more about shuttle managed resources, see our [resource docs](https://docs.shuttle.rs/resources/shuttle-shared-db).
 //!
 //! ## Configuration
 //!
-//! The `cargo shuttle` command can be customised by creating a `Shuttle.toml` in the same location as your `Cargo.toml`.
+//! The `cargo shuttle` command can be customized by creating a `Shuttle.toml` in the same location as your `Cargo.toml`.
 //!
 //! ##### Change the name of your service
 //!
@@ -161,7 +167,7 @@
 //! Alternatively, you can override the project name on the command-line, by passing the --name argument to any subcommand like so:
 //!
 //! ```bash
-//! cargo shuttle deploy --name=$PROJECT_NAME
+//! $ cargo shuttle deploy --name=$PROJECT_NAME
 //! ```
 //!
 //! ##### Using Podman instead of Docker
@@ -229,46 +235,46 @@ extern crate shuttle_codegen;
 /// The simplest usage is when your service does not require any shuttle managed resources, so you only need to return a shuttle supported service:
 ///
 /// ```rust,no_run
-/// use shuttle_service::ShuttleRocket;
+/// use shuttle_rocket::ShuttleRocket;
 ///
-/// #[shuttle_service::main]
+/// #[shuttle_rocket::main]
 /// async fn rocket() -> ShuttleRocket {
 ///     let rocket = rocket::build();
 ///
-///     Ok(rocket)
+///     Ok(rocket.into())
 /// }
 /// ```
 ///
 /// ## shuttle supported services
-/// The following types can be returned from a `#[shuttle_service::main]` function and enjoy first class service support in shuttle. Be sure to also enable the correct feature on
-/// `shuttle-service` in `Cargo.toml` for the type to be recognized.
+/// The following types can be returned from a `#[shuttle_service::main]` function and enjoy first class service support in shuttle.
 ///
-/// | Return type                           | Feature flag | Service                                     | Version    | Example                                                                               |
-/// | ------------------------------------- | ------------ | ------------------------------------------- | ---------- | -----------------------------------------------------------------------------------   |
-/// | `ShuttleRocket`                       | web-rocket   | [rocket](https://docs.rs/rocket/0.5.0-rc.2) | 0.5.0-rc.2 | [GitHub](https://github.com/shuttle-hq/examples/tree/main/rocket/hello-world)         |
-/// | `ShuttleAxum`                         | web-axum     | [axum](https://docs.rs/axum/0.5)            | 0.5        | [GitHub](https://github.com/shuttle-hq/examples/tree/main/axum/hello-world)           |
-/// | `ShuttleSalvo`                        | web-salvo    | [salvo](https://docs.rs/salvo/0.34.3)       | 0.34.3     | [GitHub](https://github.com/shuttle-hq/examples/tree/main/salvo/hello-world)          |
-/// | `ShuttleTide`                         | web-tide     | [tide](https://docs.rs/tide/0.16.0)         | 0.16.0     | [GitHub](https://github.com/shuttle-hq/examples/tree/main/tide/hello-world)           |
-/// | `ShuttlePoem`                         | web-poem     | [poem](https://docs.rs/poem/1.3.35)         | 1.3.35     | [GitHub](https://github.com/shuttle-hq/examples/tree/main/poem/hello-world)           |
-/// | `Result<T, shuttle_service::Error>`   | web-tower    | [tower](https://docs.rs/tower/0.4.12)       | 0.14.12    | [GitHub](https://github.com/shuttle-hq/examples/tree/main/tower/hello-world)          |
-/// | `ShuttleSerenity`                     | bot-serenity | [serenity](https://docs.rs/serenity/0.11.5) | 0.11.5     | [GitHub](https://github.com/shuttle-hq/examples/tree/main/serenity/hello-world)       |
-/// | `ShuttlePoise`                        | bot-poise    | [poise](https://docs.rs/poise/0.5.2)        | 0.5.2      | [GitHub](https://github.com/shuttle-hq/examples/tree/main/poise/hello-world)          |
-/// | `ShuttleActixWeb`                     | web-actix-web| [actix-web](https://docs.rs/actix-web/4.2.1)| 4.2.1      | [GitHub](https://github.com/shuttle-hq/examples/tree/main/actix-web/hello-world)      |
+/// | Return type                           | Crate                                                         | Service                                     | Version    | Example                                                                               |
+/// | ------------------------------------- |-------------------------------------------------------------- | ------------------------------------------- | ---------- | -----------------------------------------------------------------------------------   |
+/// | `ShuttleActixWeb`                     |[shuttle-actix-web](https://crates.io/crates/shuttle-actix-web)| [actix-web](https://docs.rs/actix-web/4.3)  | 4.3        | [GitHub](https://github.com/shuttle-hq/examples/tree/main/actix-web/hello-world)      |
+/// | `ShuttleAxum`                         |[shuttle-axum](https://crates.io/crates/shuttle-axum)          | [axum](https://docs.rs/axum/0.6)            | 0.5        | [GitHub](https://github.com/shuttle-hq/examples/tree/main/axum/hello-world)           |
+/// | `ShuttlePoem`                         |[shuttle-poem](https://crates.io/crates/shuttle-poem)          | [poem](https://docs.rs/poem/1.3)            | 1.3        | [GitHub](https://github.com/shuttle-hq/examples/tree/main/poem/hello-world)           |
+/// | `ShuttlePoise`                        |[shuttle-poise](https://crates.io/crates/shuttle-poise)        | [poise](https://docs.rs/poise/0.5)          | 0.5        | [GitHub](https://github.com/shuttle-hq/examples/tree/main/poise/hello-world)          |
+/// | `ShuttleRocket`                       |[shuttle-rocket](https://crates.io/crates/shuttle-rocket)      | [rocket](https://docs.rs/rocket/0.5.0-rc.2) | 0.5.0-rc.2 | [GitHub](https://github.com/shuttle-hq/examples/tree/main/rocket/hello-world)         |
+/// | `ShuttleSalvo`                        |[shuttle-salvo](https://crates.io/crates/shuttle-salvo)        | [salvo](https://docs.rs/salvo/0.37)         | 0.37       | [GitHub](https://github.com/shuttle-hq/examples/tree/main/salvo/hello-world)          |
+/// | `ShuttleSerenity`                     |[shuttle-serenity](https://crates.io/crates/shuttle-serenity   | [serenity](https://docs.rs/serenity/0.11)   | 0.11       | [GitHub](https://github.com/shuttle-hq/examples/tree/main/serenity/hello-world)       |
+/// | `ShuttleThruster`                     |[shuttle-thruster](https://crates.io/crates/shuttle-thruster)  | [thruster](https://docs.rs/thruster/1.3)    | 1.3        | [GitHub](https://github.com/shuttle-hq/examples/tree/main/thruster/hello-world)       |
+/// | `ShuttleTower`                        |[shuttle-tower](https://crates.io/crates/shuttle-tower)        | [tower](https://docs.rs/tower/0.4)          | 0.4        | [GitHub](https://github.com/shuttle-hq/examples/tree/main/tower/hello-world)          |
+/// | `ShuttleTide`                         |[shuttle-tide](https://crates.io/crates/shuttle-tide)          | [tide](https://docs.rs/tide/0.16)           | 0.16       | [GitHub](https://github.com/shuttle-hq/examples/tree/main/tide/hello-world)           |
 ///
 /// # Getting shuttle managed resources
-/// Shuttle is able to manage resource dependencies for you. These resources are passed in as inputs to your `#[shuttle_service::main]` function and are configured using attributes:
+/// Shuttle is able to manage resource dependencies for you. These resources are passed in as inputs to your `#[shuttle_runtime::main]` function and are configured using attributes:
 /// ```rust,no_run
 /// use sqlx::PgPool;
-/// use shuttle_service::ShuttleRocket;
+/// use shuttle_rocket::ShuttleRocket;
 ///
 /// struct MyState(PgPool);
 ///
-/// #[shuttle_service::main]
+/// #[shuttle_runtime::main]
 /// async fn rocket(#[shuttle_shared_db::Postgres] pool: PgPool) -> ShuttleRocket {
 ///     let state = MyState(pool);
 ///     let rocket = rocket::build().manage(state);
 ///
-///     Ok(rocket)
+///     Ok(rocket.into())
 /// }
 /// ```
 ///
@@ -319,11 +325,11 @@ pub trait Factory: Send + Sync {
 /// You may want to create your own managed resource by implementing this trait for some builder `B` to construct resource `T`. [`Factory`] can be used to provision resources
 /// on shuttle's servers if your resource will need any.
 ///
-/// Your resource will be available on a [shuttle_service::main][main] function as follow:
+/// Your resource will be available on a [shuttle_runtime::main][main] function as follow:
 /// ```
-/// #[shuttle_service::main]
+/// #[shuttle_runtime::main]
 /// async fn my_service([custom_resource_crate::namespace::B] custom_resource: T)
-///     -> shuttle_service::ShuttleAxum {}
+///     -> shuttle_axum::ShuttleAxum {}
 /// ```
 ///
 /// Here `custom_resource_crate::namespace` is the crate and namespace to a builder `B` that implements [`ResourceBuilder`] to create resource `T`.
@@ -366,11 +372,11 @@ pub trait Factory: Send + Sync {
 ///
 /// Then using this resource in a service:
 /// ```
-/// #[shuttle_service::main]
+/// #[shuttle_runtime::main]
 /// async fn my_service(
 ///     [custom_resource_crate::Builder(name = "John")] resource: custom_resource_crate::Resource
 /// )
-///     -> shuttle_service::ShuttleAxum {}
+///     -> shuttle_axum::ShuttleAxum {}
 /// ```
 #[async_trait]
 pub trait ResourceBuilder<T> {

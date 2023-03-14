@@ -39,10 +39,8 @@ message LoadResponse {
 }
 
 message StartRequest {
-  // Id to associate with the deployment being started
-  bytes deployment_id = 1;
   // Address and port to start the service on
-  string ip = 3;
+  string ip = 1;
 }
 
 message StartResponse {

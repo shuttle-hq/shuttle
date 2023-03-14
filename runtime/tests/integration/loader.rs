@@ -1,5 +1,4 @@
 use shuttle_proto::runtime::{LoadRequest, StartRequest, StopReason, SubscribeStopRequest};
-use uuid::Uuid;
 
 use crate::helpers::{spawn_runtime, TestRuntime};
 
@@ -30,7 +29,6 @@ async fn bind_panic() {
         .into_inner();
 
     let start_request = StartRequest {
-        deployment_id: Uuid::default().as_bytes().to_vec(),
         ip: runtime_address.to_string(),
     };
 

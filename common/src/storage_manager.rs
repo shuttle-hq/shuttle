@@ -6,12 +6,8 @@ pub trait StorageManager: Sync + Send {
     /// Path for a specific service build files
     fn service_build_path(&self, service_name: &str) -> Result<PathBuf, io::Error>;
 
-    /// Path to folder for storing deployment files
-    fn deployment_storage_path(
-        &self,
-        service_name: &str,
-        deployment_id: &Uuid,
-    ) -> Result<PathBuf, io::Error>;
+    /// Path to folder for storing service files
+    fn service_storage_path(&self, service_name: &str) -> Result<PathBuf, io::Error>;
 }
 
 /// Manager to take care of directories for storing project, services and deployment files for deployer
@@ -65,15 +61,8 @@ impl StorageManager for ArtifactsStorageManager {
         Ok(builds_path)
     }
 
-    fn deployment_storage_path(
-        &self,
-        service_name: &str,
-        deployment_id: &Uuid,
-    ) -> Result<PathBuf, io::Error> {
-        let storage_path = self
-            .storage_path()?
-            .join(service_name)
-            .join(deployment_id.to_string());
+    fn service_storage_path(&self, service_name: &str) -> Result<PathBuf, io::Error> {
+        let storage_path = self.storage_path()?.join(service_name);
         fs::create_dir_all(&storage_path)?;
 
         Ok(storage_path)
@@ -97,11 +86,7 @@ impl StorageManager for WorkingDirStorageManager {
         Ok(self.working_dir.clone())
     }
 
-    fn deployment_storage_path(
-        &self,
-        _service_name: &str,
-        _deployment_id: &Uuid,
-    ) -> Result<PathBuf, io::Error> {
+    fn service_storage_path(&self, _service_name: &str) -> Result<PathBuf, io::Error> {
         Ok(self.working_dir.clone())
     }
 }

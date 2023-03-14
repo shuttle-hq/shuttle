@@ -101,7 +101,7 @@ impl Runtime for AxumWasm {
         &self,
         request: tonic::Request<StartRequest>,
     ) -> Result<tonic::Response<StartResponse>, Status> {
-        let StartRequest { deployment_id, ip } = request.into_inner();
+        let StartRequest { ip } = request.into_inner();
 
         let address = SocketAddr::from_str(&ip)
             .context("invalid socket address")
@@ -121,13 +121,7 @@ impl Runtime for AxumWasm {
             .context("tried to start a service that was not loaded")
             .map_err(|err| Status::internal(err.to_string()))?;
 
-        tokio::spawn(run_until_stopped(
-            router,
-            deployment_id,
-            address,
-            logs_tx,
-            kill_rx,
-        ));
+        tokio::spawn(run_until_stopped(router, address, logs_tx, kill_rx));
 
         let message = StartResponse { success: true };
 
@@ -235,7 +229,6 @@ impl Router {
     /// Send a HTTP request with body to given endpoint on the axum-wasm router and return the response
     async fn handle_request(
         &mut self,
-        deployment_id: Vec<u8>,
         req: hyper::Request<Body>,
         logs_tx: Sender<Result<runtime::LogItem, Status>>,
     ) -> anyhow::Result<Response<Body>> {
@@ -274,10 +267,7 @@ impl Router {
             let mut iter = logs_stream.bytes().filter_map(Result::ok);
 
             while let Some(log) = Log::from_bytes(&mut iter) {
-                let mut log: runtime::LogItem = log.into();
-                log.id = deployment_id.clone();
-
-                logs_tx.blocking_send(Ok(log)).expect("to send log");
+                logs_tx.blocking_send(Ok(log.into())).expect("to send log");
             }
         });
 
@@ -360,33 +350,28 @@ impl Router {
 /// and a kill receiver for stopping the server.
 async fn run_until_stopped(
     router: Router,
-    deployment_id: Vec<u8>,
     address: SocketAddr,
     logs_tx: Sender<Result<runtime::LogItem, Status>>,
     kill_rx: tokio::sync::oneshot::Receiver<String>,
 ) {
     let make_service = make_service_fn(move |_conn| {
-        let deployment_id = deployment_id.clone();
         let router = router.clone();
         let logs_tx = logs_tx.clone();
         async move {
             Ok::<_, Infallible>(service_fn(move |req: Request<Body>| {
-                let deployment_id = deployment_id.clone();
                 let mut router = router.clone();
                 let logs_tx = logs_tx.clone();
                 async move {
-                    Ok::<_, Infallible>(
-                        match router.handle_request(deployment_id, req, logs_tx).await {
-                            Ok(res) => res,
-                            Err(err) => {
-                                error!("error sending request: {}", err);
-                                Response::builder()
-                                    .status(hyper::http::StatusCode::INTERNAL_SERVER_ERROR)
-                                    .body(Body::empty())
-                                    .expect("building request with empty body should not fail")
-                            }
-                        },
-                    )
+                    Ok::<_, Infallible>(match router.handle_request(req, logs_tx).await {
+                        Ok(res) => res,
+                        Err(err) => {
+                            error!("error sending request: {}", err);
+                            Response::builder()
+                                .status(hyper::http::StatusCode::INTERNAL_SERVER_ERROR)
+                                .body(Body::empty())
+                                .expect("building request with empty body should not fail")
+                        }
+                    })
                 }
             }))
         }
@@ -414,7 +399,6 @@ pub mod tests {
 
     use super::*;
     use hyper::{http::HeaderValue, Method, Request, StatusCode, Version};
-    use uuid::Uuid;
 
     // Compile axum wasm module
     fn compile_module() {
@@ -439,7 +423,6 @@ pub mod tests {
             .build()
             .unwrap();
 
-        let id = Uuid::default().as_bytes().to_vec();
         let (tx, mut rx) = mpsc::channel(1);
 
         tokio::spawn(async move {
@@ -458,7 +441,7 @@ pub mod tests {
 
         let res = router
             .clone()
-            .handle_request(id.clone(), request, tx.clone())
+            .handle_request(request, tx.clone())
             .await
             .unwrap();
 
@@ -485,7 +468,7 @@ pub mod tests {
 
         let res = router
             .clone()
-            .handle_request(id.clone(), request, tx.clone())
+            .handle_request(request, tx.clone())
             .await
             .unwrap();
 
@@ -512,7 +495,7 @@ pub mod tests {
 
         let res = router
             .clone()
-            .handle_request(id.clone(), request, tx.clone())
+            .handle_request(request, tx.clone())
             .await
             .unwrap();
 
@@ -527,11 +510,7 @@ pub mod tests {
             .body("this should be uppercased".into())
             .unwrap();
 
-        let res = router
-            .clone()
-            .handle_request(id, request, tx)
-            .await
-            .unwrap();
+        let res = router.clone().handle_request(request, tx).await.unwrap();
 
         assert_eq!(res.status(), StatusCode::OK);
         assert_eq!(

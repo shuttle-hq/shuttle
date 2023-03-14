@@ -4820,7 +4820,6 @@ dependencies = [
  "tower",
  "tracing",
  "tracing-subscriber",
- "uuid",
  "wasi-common",
  "wasmtime",
  "wasmtime-wasi",

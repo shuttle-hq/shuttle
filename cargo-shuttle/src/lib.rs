@@ -580,7 +580,6 @@ impl Shuttle {
         let addr = SocketAddr::new(addr, run_args.port);
 
         let start_request = StartRequest {
-            deployment_id: Uuid::default().as_bytes().to_vec(),
             ip: addr.to_string(),
         };
 

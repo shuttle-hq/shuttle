@@ -39,7 +39,6 @@ use tonic::{
 };
 use tower::ServiceBuilder;
 use tracing::{error, info, trace};
-use uuid::Uuid;
 
 use crate::{provisioner_factory::ProvisionerFactory, Logger};
 
@@ -186,12 +185,9 @@ where
         let service_name = ServiceName::from_str(service_name.as_str())
             .map_err(|err| Status::from_error(Box::new(err)))?;
 
-        let deployment_id = Uuid::new_v4();
-
         let factory = ProvisionerFactory::new(
             provisioner_client,
             service_name,
-            deployment_id,
             secrets,
             self.storage_manager.clone(),
             self.env,
@@ -199,7 +195,7 @@ where
         trace!("got factory");
 
         let logs_tx = self.logs_tx.clone();
-        let logger = Logger::new(logs_tx, deployment_id);
+        let logger = Logger::new(logs_tx);
 
         let loader = self.loader.lock().unwrap().deref_mut().take().unwrap();
 

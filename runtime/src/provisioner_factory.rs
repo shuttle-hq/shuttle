@@ -13,12 +13,10 @@ use shuttle_proto::provisioner::{
 use shuttle_service::{Environment, Factory, ServiceName};
 use tonic::{transport::Channel, Request};
 use tracing::{debug, info, trace};
-use uuid::Uuid;
 
 /// A factory (service locator) which goes through the provisioner crate
 pub struct ProvisionerFactory {
     service_name: ServiceName,
-    deployment_id: Uuid,
     storage_manager: Arc<dyn StorageManager>,
     provisioner_client: ProvisionerClient<ClaimService<InjectPropagation<Channel>>>,
     info: Option<DatabaseReadyInfo>,
@@ -30,7 +28,6 @@ impl ProvisionerFactory {
     pub(crate) fn new(
         provisioner_client: ProvisionerClient<ClaimService<InjectPropagation<Channel>>>,
         service_name: ServiceName,
-        deployment_id: Uuid,
         secrets: BTreeMap<String, String>,
         storage_manager: Arc<dyn StorageManager>,
         env: Environment,
@@ -38,7 +35,6 @@ impl ProvisionerFactory {
         Self {
             provisioner_client,
             service_name,
-            deployment_id,
             storage_manager,
             info: None,
             secrets,
@@ -100,7 +96,7 @@ impl Factory for ProvisionerFactory {
 
     fn get_storage_path(&self) -> Result<PathBuf, shuttle_service::Error> {
         self.storage_manager
-            .deployment_storage_path(self.service_name.as_str(), &self.deployment_id)
+            .service_storage_path(self.service_name.as_str())
             .map_err(Into::into)
     }
 

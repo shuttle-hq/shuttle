@@ -1,17 +1,16 @@
 use chrono::Utc;
-use shuttle_common::{deployment::State, tracing::JsonVisitor, DeploymentId, LogItem};
+use shuttle_common::{deployment::State, tracing::JsonVisitor, LogItem};
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::Subscriber;
 use tracing_subscriber::Layer;
 
 pub struct Logger {
-    deployment_id: DeploymentId,
     tx: UnboundedSender<LogItem>,
 }
 
 impl Logger {
-    pub fn new(tx: UnboundedSender<LogItem>, deployment_id: DeploymentId) -> Self {
-        Self { tx, deployment_id }
+    pub fn new(tx: UnboundedSender<LogItem>) -> Self {
+        Self { tx }
     }
 }
 
@@ -33,7 +32,7 @@ where
             event.record(&mut visitor);
 
             LogItem {
-                id: self.deployment_id,
+                id: Default::default(),
                 state: State::Running,
                 level: metadata.level().into(),
                 timestamp: datetime,
@@ -62,7 +61,7 @@ mod tests {
     fn logging() {
         let (s, mut r) = mpsc::unbounded_channel();
 
-        let logger = Logger::new(s, Default::default());
+        let logger = Logger::new(s);
 
         let _guard = tracing_subscriber::registry().with(logger).set_default();
 

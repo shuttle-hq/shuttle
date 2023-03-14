@@ -308,7 +308,6 @@ async fn run(
         .expect("to set deployment address");
 
     let start_request = tonic::Request::new(StartRequest {
-        deployment_id: id.as_bytes().to_vec(),
         ip: address.to_string(),
     });
 

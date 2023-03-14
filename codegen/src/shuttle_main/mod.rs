@@ -93,7 +93,7 @@ impl Loader {
     pub(crate) fn from_item_fn(item_fn: &mut ItemFn) -> Option<Self> {
         let fn_ident = item_fn.sig.ident.clone();
 
-        if fn_ident.clone().to_string() == "main".to_string() {
+        if fn_ident.to_string().as_str() == "main" {
             emit_error!(
                 fn_ident,
                 "shuttle_runtime::main functions cannot be named `main`"
@@ -127,15 +127,11 @@ impl Loader {
             })
             .collect();
 
-        if let Some(type_path) = check_return_type(item_fn.sig.clone()) {
-            Some(Self {
-                fn_ident: fn_ident.clone(),
-                fn_inputs: inputs,
-                fn_return: type_path,
-            })
-        } else {
-            None
-        }
+        check_return_type(item_fn.sig.clone()).map(|type_path| Self {
+            fn_ident: fn_ident.clone(),
+            fn_inputs: inputs,
+            fn_return: type_path,
+        })
     }
 }
 

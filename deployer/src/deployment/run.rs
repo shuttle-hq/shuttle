@@ -208,7 +208,7 @@ impl Built {
         let runtime_client = runtime_manager
             .lock()
             .await
-            .get_runtime_client(legacy_runtime_path.clone())
+            .get_runtime_client(self.id, legacy_runtime_path.clone())
             .await
             .map_err(Error::Runtime)?;
 

@@ -135,7 +135,7 @@ impl Display for State {
             State::Destroyed => write!(f, "{}", "destroyed".blue()),
             State::Errored { message } => {
                 writeln!(f, "{}", "errored".red())?;
-                write!(f, "\tmessage: {}", message)
+                write!(f, "\tmessage: {message}")
             }
         }
     }
@@ -199,9 +199,8 @@ pub fn get_table(projects: &Vec<Response>) -> String {
         format!(
             r#"
 These projects are linked to this account
-{}
+{table}
 "#,
-            table,
         )
     }
 }

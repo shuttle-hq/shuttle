@@ -68,7 +68,7 @@ impl LocalProvisioner {
             env,
             is_ready_cmd,
         } = db_type_to_config(db_type);
-        let container_name = format!("shuttle_{}_{}", service_name, r#type);
+        let container_name = format!("shuttle_{service_name}_{type}");
 
         let container = match self.docker.inspect_container(&container_name, None).await {
             Ok(container) => {
@@ -297,7 +297,7 @@ fn print_layers(layers: &Vec<CreateImageInfo>) {
                 (Some(status), _) => status.to_string(),
                 _ => "Unknown".to_string(),
             };
-            println!("[{id} {}]", text);
+            println!("[{id} {text}]");
         } else {
             println!(
                 "{}",

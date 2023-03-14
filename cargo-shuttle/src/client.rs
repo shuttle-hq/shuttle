@@ -200,7 +200,7 @@ impl Client {
 
     async fn ws_get(&self, path: String) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>> {
         let ws_scheme = self.api_url.clone().replace("http", "ws");
-        let url = format!("{}{}", ws_scheme, path);
+        let url = format!("{ws_scheme}{path}");
         let mut request = url.into_client_request()?;
 
         if let Some(ref api_key) = self.api_key {

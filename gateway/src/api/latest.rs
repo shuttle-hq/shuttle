@@ -16,11 +16,10 @@ use futures::Future;
 use http::{StatusCode, Uri};
 use instant_acme::{AccountCredentials, ChallengeType};
 use serde::{Deserialize, Serialize};
-use shuttle_common::backends::auth::{
-    AuthPublicKey, JwtAuthenticationLayer, Scope, ScopedLayer, EXP_MINUTES,
-};
+use shuttle_common::backends::auth::{AuthPublicKey, JwtAuthenticationLayer, ScopedLayer};
 use shuttle_common::backends::cache::CacheManager;
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
+use shuttle_common::claims::{Scope, EXP_MINUTES};
 use shuttle_common::models::error::ErrorKind;
 use shuttle_common::models::{project, stats};
 use shuttle_common::request_span;
@@ -593,7 +592,8 @@ pub mod tests {
             Request::builder()
                 .method("POST")
                 .uri(format!("/projects/{project}"))
-                .body(Body::empty())
+                .header("Content-Type", "application/json")
+                .body("{\"idle_minutes\": 3}".into())
                 .unwrap()
         };
 
@@ -762,7 +762,8 @@ pub mod tests {
         let create_project = Request::builder()
             .method("POST")
             .uri(format!("/projects/{matrix}"))
-            .body(Body::empty())
+            .header("Content-Type", "application/json")
+            .body("{\"idle_minutes\": 3}".into())
             .unwrap()
             .with_header(&authorization);
 

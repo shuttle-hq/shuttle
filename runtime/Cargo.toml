@@ -14,7 +14,7 @@ required-features = ["next"]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
-clap ={ version = "4.0.18", features = ["derive"] }
+clap = { workspace = true }
 serde_json = { workspace = true }
 strfmt = "0.2.2"
 thiserror = { workspace = true }
@@ -37,19 +37,19 @@ wasmtime-wasi = { version = "4.0.0", optional = true }
 
 [dependencies.shuttle-common]
 workspace = true
-features = ["service", "backend"]
+features = ["claims"]
 
 [dependencies.shuttle-proto]
 workspace = true
 
 [dependencies.shuttle-service]
 workspace = true
-features = ["builder"]
 
 [dev-dependencies]
 crossbeam-channel = "0.5.6"
 portpicker = "0.1.1"
 futures = { version = "0.3.25" }
+shuttle-service = { workspace = true, features = ["builder"] }
 
 [features]
 default = []

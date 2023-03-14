@@ -1,0 +1,11 @@
+error: shuttle_runtime::main functions cannot be named `main`
+ --> tests/ui/main/duplicate-main-fn.rs:2:10
+  |
+2 | async fn main() -> ShuttleRocket {}
+  |          ^^^^
+
+error[E0601]: `main` function not found in crate `$CRATE`
+ --> tests/ui/main/duplicate-main-fn.rs:2:36
+  |
+2 | async fn main() -> ShuttleRocket {}
+  |                                    ^ consider adding a `main` function to `$DIR/tests/ui/main/duplicate-main-fn.rs`

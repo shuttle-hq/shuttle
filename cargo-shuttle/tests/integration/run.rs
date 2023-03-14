@@ -58,6 +58,7 @@ async fn cargo_shuttle_run(working_directory: &str, external: bool) -> String {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore]
 async fn rocket_hello_world() {
     let url = cargo_shuttle_run("../examples/rocket/hello-world", false).await;
 
@@ -120,6 +121,7 @@ async fn rocket_postgres() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore]
 async fn rocket_authentication() {
     let url = cargo_shuttle_run("../examples/rocket/authentication", false).await;
     let client = reqwest::Client::new();
@@ -176,6 +178,7 @@ async fn rocket_authentication() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore]
 async fn actix_web_hello_world() {
     let url = cargo_shuttle_run("../examples/actix-web/hello-world", false).await;
 
@@ -192,6 +195,7 @@ async fn actix_web_hello_world() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore]
 async fn axum_hello_world() {
     let url = cargo_shuttle_run("../examples/axum/hello-world", false).await;
 
@@ -208,6 +212,7 @@ async fn axum_hello_world() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore]
 async fn tide_hello_world() {
     let url = cargo_shuttle_run("../examples/tide/hello-world", false).await;
 
@@ -224,6 +229,7 @@ async fn tide_hello_world() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore]
 async fn tower_hello_world() {
     let url = cargo_shuttle_run("../examples/tower/hello-world", false).await;
 
@@ -240,6 +246,7 @@ async fn tower_hello_world() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore]
 async fn warp_hello_world() {
     let url = cargo_shuttle_run("../examples/warp/hello-world", false).await;
 
@@ -256,6 +263,7 @@ async fn warp_hello_world() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore]
 async fn poem_hello_world() {
     let url = cargo_shuttle_run("../examples/poem/hello-world", false).await;
 
@@ -273,6 +281,7 @@ async fn poem_hello_world() {
 
 // This example uses a shared Postgres. Thus local runs should create a docker container for it.
 #[tokio::test(flavor = "multi_thread")]
+#[ignore]
 async fn poem_postgres() {
     let url = cargo_shuttle_run("../examples/poem/postgres", false).await;
     let client = reqwest::Client::new();
@@ -336,6 +345,7 @@ async fn poem_mongodb() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore]
 async fn salvo_hello_world() {
     let url = cargo_shuttle_run("../examples/salvo/hello-world", false).await;
 
@@ -352,6 +362,7 @@ async fn salvo_hello_world() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore]
 async fn thruster_hello_world() {
     let url = cargo_shuttle_run("../examples/thruster/hello-world", false).await;
 

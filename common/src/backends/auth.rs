@@ -1,13 +1,11 @@
-use std::{convert::Infallible, future::Future, ops::Add, pin::Pin, sync::Arc};
+use std::{convert::Infallible, future::Future, pin::Pin, sync::Arc};
 
 use async_trait::async_trait;
 use bytes::Bytes;
-use chrono::{Duration, Utc};
 use headers::{authorization::Bearer, Authorization, HeaderMapExt};
 use http::{Request, Response, StatusCode, Uri};
 use http_body::combinators::UnsyncBoxBody;
 use hyper::{body, Body, Client};
-use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header as JwtHeader, Validation};
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
 use serde::{Deserialize, Serialize};
@@ -16,14 +14,14 @@ use tower::{Layer, Service};
 use tracing::{error, trace, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
+use crate::claims::{Claim, Scope};
+
 use super::{
     cache::{CacheManagement, CacheManager},
-    future::{ResponseFuture, StatusCodeFuture},
+    future::StatusCodeFuture,
     headers::XShuttleAdminSecret,
 };
 
-pub const EXP_MINUTES: i64 = 5;
-const ISS: &str = "shuttle";
 const PUBLIC_KEY_CACHE_KEY: &str = "shuttle.public-key";
 
 /// Layer to check the admin secret set by deployer is correct
@@ -86,162 +84,10 @@ where
     }
 }
 
-/// The scope of operations that can be performed on shuttle
-/// Every scope defaults to read and will use a suffix for updating tasks
-#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum Scope {
-    /// Read the details, such as status and address, of a deployment
-    Deployment,
-
-    /// Push a new deployment
-    DeploymentPush,
-
-    /// Read the logs of a deployment
-    Logs,
-
-    /// Read the details of a service
-    Service,
-
-    /// Create a new service
-    ServiceCreate,
-
-    /// Read the status of a project
-    Project,
-
-    /// Create a new project
-    ProjectCreate,
-
-    /// Get the resources for a project
-    Resources,
-
-    /// Provision new resources for a project or update existing ones
-    ResourcesWrite,
-
-    /// List the secrets of a project
-    Secret,
-
-    /// Add or update secrets of a project
-    SecretWrite,
-
-    /// Get list of users
-    User,
-
-    /// Add or update users
-    UserCreate,
-
-    /// Create an ACME account
-    AcmeCreate,
-
-    /// Create a custom domain,
-    CustomDomainCreate,
-
-    /// Admin level scope to internals
-    Admin,
-}
-
 #[derive(Deserialize, Serialize)]
 /// Response used internally to pass around JWT token
 pub struct ConvertResponse {
     pub token: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
-pub struct Claim {
-    /// Expiration time (as UTC timestamp).
-    pub exp: usize,
-    /// Issued at (as UTC timestamp).
-    iat: usize,
-    /// Issuer.
-    iss: String,
-    /// Not Before (as UTC timestamp).
-    nbf: usize,
-    /// Subject (whom token refers to).
-    pub sub: String,
-    /// Scopes this token can access
-    pub scopes: Vec<Scope>,
-    /// The original token that was parsed
-    token: Option<String>,
-}
-
-impl Claim {
-    /// Create a new claim for a user with the given scopes
-    pub fn new(sub: String, scopes: Vec<Scope>) -> Self {
-        let iat = Utc::now();
-        let exp = iat.add(Duration::minutes(EXP_MINUTES));
-
-        Self {
-            exp: exp.timestamp() as usize,
-            iat: iat.timestamp() as usize,
-            iss: ISS.to_string(),
-            nbf: iat.timestamp() as usize,
-            sub,
-            scopes,
-            token: None,
-        }
-    }
-
-    pub fn into_token(self, encoding_key: &EncodingKey) -> Result<String, StatusCode> {
-        if let Some(token) = self.token {
-            Ok(token)
-        } else {
-            encode(
-                &JwtHeader::new(jsonwebtoken::Algorithm::EdDSA),
-                &self,
-                encoding_key,
-            )
-            .map_err(|err| {
-                error!(
-                    error = &err as &dyn std::error::Error,
-                    "failed to convert claim to token"
-                );
-                match err.kind() {
-                    jsonwebtoken::errors::ErrorKind::Json(_) => StatusCode::INTERNAL_SERVER_ERROR,
-                    jsonwebtoken::errors::ErrorKind::Crypto(_) => StatusCode::SERVICE_UNAVAILABLE,
-                    _ => StatusCode::INTERNAL_SERVER_ERROR,
-                }
-            })
-        }
-    }
-
-    pub fn from_token(token: &str, public_key: &[u8]) -> Result<Self, StatusCode> {
-        let decoding_key = DecodingKey::from_ed_der(public_key);
-        let mut validation = Validation::new(jsonwebtoken::Algorithm::EdDSA);
-        validation.set_issuer(&[ISS]);
-
-        trace!(token, "converting token to claim");
-        let mut claim: Self = decode(token, &decoding_key, &validation)
-            .map_err(|err| {
-                error!(
-                    error = &err as &dyn std::error::Error,
-                    "failed to convert token to claim"
-                );
-                match err.kind() {
-                    jsonwebtoken::errors::ErrorKind::InvalidSignature
-                    | jsonwebtoken::errors::ErrorKind::InvalidAlgorithmName
-                    | jsonwebtoken::errors::ErrorKind::ExpiredSignature
-                    | jsonwebtoken::errors::ErrorKind::InvalidIssuer
-                    | jsonwebtoken::errors::ErrorKind::ImmatureSignature => {
-                        StatusCode::UNAUTHORIZED
-                    }
-                    jsonwebtoken::errors::ErrorKind::InvalidToken
-                    | jsonwebtoken::errors::ErrorKind::InvalidAlgorithm
-                    | jsonwebtoken::errors::ErrorKind::Base64(_)
-                    | jsonwebtoken::errors::ErrorKind::Json(_)
-                    | jsonwebtoken::errors::ErrorKind::Utf8(_) => StatusCode::BAD_REQUEST,
-                    jsonwebtoken::errors::ErrorKind::MissingAlgorithm => {
-                        StatusCode::INTERNAL_SERVER_ERROR
-                    }
-                    jsonwebtoken::errors::ErrorKind::Crypto(_) => StatusCode::SERVICE_UNAVAILABLE,
-                    _ => StatusCode::INTERNAL_SERVER_ERROR,
-                }
-            })?
-            .claims;
-
-        claim.token = Some(token.to_string());
-
-        Ok(claim)
-    }
 }
 
 /// Trait to get a public key asynchronously
@@ -439,53 +285,6 @@ where
     }
 }
 
-/// This layer takes a claim on a request extension and uses it's internal token to set the Authorization Bearer
-#[derive(Clone)]
-pub struct ClaimLayer;
-
-impl<S> Layer<S> for ClaimLayer {
-    type Service = ClaimService<S>;
-
-    fn layer(&self, inner: S) -> Self::Service {
-        ClaimService { inner }
-    }
-}
-
-#[derive(Clone)]
-pub struct ClaimService<S> {
-    inner: S,
-}
-
-impl<S, RequestError> Service<Request<UnsyncBoxBody<Bytes, RequestError>>> for ClaimService<S>
-where
-    S: Service<Request<UnsyncBoxBody<Bytes, RequestError>>> + Send + 'static,
-    S::Future: Send + 'static,
-{
-    type Response = S::Response;
-    type Error = S::Error;
-    type Future = ResponseFuture<S::Future>;
-
-    fn poll_ready(
-        &mut self,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), Self::Error>> {
-        self.inner.poll_ready(cx)
-    }
-
-    fn call(&mut self, mut req: Request<UnsyncBoxBody<Bytes, RequestError>>) -> Self::Future {
-        if let Some(claim) = req.extensions().get::<Claim>() {
-            if let Some(token) = claim.token.clone() {
-                req.headers_mut()
-                    .typed_insert(Authorization::bearer(&token).expect("to set JWT token"));
-            }
-        }
-
-        let future = self.inner.call(req);
-
-        ResponseFuture(future)
-    }
-}
-
 /// Check that the required scopes are set on the [Claim] extension on a [Request]
 #[derive(Clone)]
 pub struct ScopedLayer {
@@ -568,7 +367,9 @@ mod tests {
     use serde_json::json;
     use tower::{ServiceBuilder, ServiceExt};
 
-    use super::{Claim, JwtAuthenticationLayer, Scope, ScopedLayer};
+    use crate::claims::{Claim, Scope};
+
+    use super::{JwtAuthenticationLayer, ScopedLayer};
 
     #[test]
     fn to_token_and_back() {

@@ -9,10 +9,12 @@ executors:
   docker-rust:
     docker:
       - image: cimg/rust:1.65.0
+    resource_class: small
   image-ubuntu:
     machine:
       image: ubuntu-2204:2022.04.1
       docker_layer_caching: true
+    resource_class: xlarge
 
 # sscache steps are from this guide
 # https://medium.com/@edouard.oger/rust-caching-on-circleci-using-sccache-c996344f0115
@@ -159,8 +161,9 @@ commands:
             - << parameters.target >>.env
 
 jobs:
-  workspace-fmt:
+  workspace:
     executor: docker-rust
+    resource_class: xlarge
     steps:
       - checkout
       - restore-cargo-cache
@@ -170,14 +173,6 @@ jobs:
       # https://github.com/DevinR528/cargo-sort/pull/29 is merged
       # - run: cargo install cargo-sort
       # - run: cargo sort --check --workspace
-      - run: cargo check --workspace --all-targets
-      - save-cargo-cache
-  workspace-clippy:
-    executor: docker-rust
-    steps:
-      - checkout
-      - restore-cargo-cache
-      - install-protoc
       - run: |
           cargo clippy --tests \
                        --all-targets \
@@ -214,20 +209,6 @@ jobs:
                        -A clippy::format-push-string
       - run: cargo test --all-features --manifest-path << parameters.path >>/Cargo.toml -- --nocapture
       - save-cargo-cache
-  service-test:
-    # Using an image since tests will start a docker container
-    executor: image-ubuntu
-    steps:
-      - install-rust
-      - checkout
-      - restore-cargo-cache
-      - run:
-          name: Run unit tests
-          command: cargo test --package shuttle-service --features="codegen,builder" --lib -- --nocapture
-      - run:
-          name: Run integration tests
-          command: cargo test --package shuttle-service --features="codegen,builder" --test '*' -- --nocapture
-      - save-cargo-cache
   platform-test:
     parameters:
       crate:
@@ -254,7 +235,6 @@ jobs:
             (cargo test --package << parameters.crate >> --all-features --test '*' -- --list 2>&1 | grep -q "no test target matches pattern") && echo "nothing to test" || cargo test --package << parameters.crate >> --all-features --test '*' -- --nocapture
       - save-cargo-cache
   e2e-test:
-    resource_class: xlarge
     executor: image-ubuntu
     steps:
       - install-rust
@@ -286,7 +266,6 @@ jobs:
           key: docker-buildx-{{ .Branch }}
           when: always
   build-and-push:
-    resource_class: xlarge
     executor: image-ubuntu
     steps:
       - checkout
@@ -360,7 +339,7 @@ jobs:
   build-binaries-mac:
     macos:
       xcode: 12.5.1
-    resource_class: medium
+    resource_class: xlarge
     steps:
       - checkout
       - run:
@@ -398,11 +377,9 @@ jobs:
 workflows:
   ci:
     jobs:
-      - workspace-fmt
-      - workspace-clippy:
-          requires:
-            - workspace-fmt
+      - workspace
       - check-standalone:
+          name: << matrix.path >>
           matrix:
             parameters:
               path:
@@ -422,28 +399,26 @@ workflows:
                 - services/shuttle-tide
                 - services/shuttle-tower
                 - services/shuttle-warp
-      - service-test:
-          requires:
-            - workspace-clippy
       - platform-test:
+          name: << matrix.crate >>
           requires:
-            - workspace-clippy
+            - workspace
           matrix:
             parameters:
               crate:
                 [
                   "shuttle-auth",
-                  "shuttle-deployer",
                   "cargo-shuttle",
                   "shuttle-codegen",
                   "shuttle-common",
+                  "shuttle-deployer",
                   "shuttle-proto",
                   "shuttle-provisioner",
-                  "shuttle-runtime"
+                  "shuttle-runtime",
+                  "shuttle-service",
                 ]
       - e2e-test:
           requires:
-            - service-test
             - platform-test
             - check-standalone
           filters:
@@ -459,7 +434,7 @@ workflows:
           name: build-binaries-x86_64-gnu
           image: ubuntu-2204:2022.04.1
           target: x86_64-unknown-linux-gnu
-          resource_class: medium
+          resource_class: xlarge
           filters:
             branches:
               only: production
@@ -467,7 +442,7 @@ workflows:
           name: build-binaries-x86_64-musl
           image: ubuntu-2204:2022.04.1
           target: x86_64-unknown-linux-musl
-          resource_class: medium
+          resource_class: xlarge
           filters:
             branches:
               only: production
@@ -475,7 +450,7 @@ workflows:
           name: build-binaries-aarch64
           image: ubuntu-2004:202101-01
           target: aarch64-unknown-linux-musl
-          resource_class: arm.medium
+          resource_class: arm.xlarge
           filters:
             branches:
               only: production

@@ -1,15 +1,9 @@
-use std::time::Duration;
-
-use shuttle_proto::runtime::{LoadRequest, StartRequest};
+use shuttle_proto::runtime::{LoadRequest, StartRequest, StopReason, SubscribeStopRequest};
 use uuid::Uuid;
 
 use crate::helpers::{spawn_runtime, TestRuntime};
 
-/// This test does panic, but the panic happens in a spawned task inside the project runtime,
-/// so we get this output: `thread 'tokio-runtime-worker' panicked at 'panic in bind', src/main.rs:6:9`,
-/// but `should_panic(expected = "panic in bind")` doesn't catch it.
 #[tokio::test]
-#[should_panic(expected = "panic in bind")]
 async fn bind_panic() {
     let project_path = format!("{}/tests/resources/bind-panic", env!("CARGO_MANIFEST_DIR"));
 
@@ -29,20 +23,24 @@ async fn bind_panic() {
 
     let _ = runtime_client.load(load_request).await.unwrap();
 
+    let mut stream = runtime_client
+        .subscribe_stop(tonic::Request::new(SubscribeStopRequest {}))
+        .await
+        .unwrap()
+        .into_inner();
+
     let start_request = StartRequest {
         deployment_id: Uuid::default().as_bytes().to_vec(),
         ip: runtime_address.to_string(),
     };
 
-    // I also tried this without spawning, but it gave the same result. Panic but it isn't caught.
-    tokio::spawn(async move {
-        runtime_client
-            .start(tonic::Request::new(start_request))
-            .await
-            .unwrap();
-        // Give it a second to panic.
-        tokio::time::sleep(Duration::from_secs(1)).await;
-    })
-    .await
-    .unwrap();
+    runtime_client
+        .start(tonic::Request::new(start_request))
+        .await
+        .unwrap();
+
+    let reason = stream.message().await.unwrap().unwrap();
+
+    assert_eq!(reason.reason, StopReason::Crash as i32);
+    assert_eq!(reason.message, "panic in bind");
 }

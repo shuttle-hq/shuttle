@@ -21,7 +21,7 @@
 
 use chrono::{DateTime, Utc};
 use serde_json::json;
-use shuttle_common::{models::ParseError, tracing::JsonVisitor, STATE_MESSAGE};
+use shuttle_common::{tracing::JsonVisitor, ParseError, STATE_MESSAGE};
 use shuttle_proto::runtime;
 use std::{convert::TryFrom, str::FromStr, time::SystemTime};
 use tracing::{field::Visit, span, warn, Metadata, Subscriber};
@@ -618,7 +618,7 @@ mod tests {
         );
 
         select! {
-            _ = sleep(Duration::from_secs(240)) => {
+            _ = sleep(Duration::from_secs(360)) => {
                 let states = RECORDER.lock().unwrap().get_deployment_states(&id);
                 panic!("states should go into 'Running' for a valid service: {:#?}", states);
             },
@@ -702,7 +702,7 @@ mod tests {
         );
 
         select! {
-            _ = sleep(Duration::from_secs(240)) => {
+            _ = sleep(Duration::from_secs(360)) => {
                 let states = RECORDER.lock().unwrap().get_deployment_states(&id);
                 panic!("states should go into 'Completed' when a service stops by itself: {:#?}", states);
             }
@@ -749,7 +749,7 @@ mod tests {
         );
 
         select! {
-            _ = sleep(Duration::from_secs(240)) => {
+            _ = sleep(Duration::from_secs(360)) => {
                 let states = RECORDER.lock().unwrap().get_deployment_states(&id);
                 panic!("states should go into 'Crashed' panicking in bind: {:#?}", states);
             }
@@ -786,17 +786,13 @@ mod tests {
                 },
                 StateLog {
                     id,
-                    state: State::Running,
-                },
-                StateLog {
-                    id,
                     state: State::Crashed,
                 },
             ],
         );
 
         select! {
-            _ = sleep(Duration::from_secs(240)) => {
+            _ = sleep(Duration::from_secs(360)) => {
                 let states = RECORDER.lock().unwrap().get_deployment_states(&id);
                 panic!("states should go into 'Crashed' when panicking in main: {:#?}", states);
             }

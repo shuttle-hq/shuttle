@@ -91,6 +91,16 @@ impl Parse for BuilderOption {
 
 impl Loader {
     pub(crate) fn from_item_fn(item_fn: &mut ItemFn) -> Option<Self> {
+        let fn_ident = item_fn.sig.ident.clone();
+
+        if fn_ident.clone().to_string() == "main".to_string() {
+            emit_error!(
+                fn_ident,
+                "shuttle_runtime::main functions cannot be named `main`"
+            );
+            return None;
+        }
+
         let inputs: Vec<_> = item_fn
             .sig
             .inputs
@@ -119,7 +129,7 @@ impl Loader {
 
         if let Some(type_path) = check_return_type(item_fn.sig.clone()) {
             Some(Self {
-                fn_ident: item_fn.sig.ident.clone(),
+                fn_ident: fn_ident.clone(),
                 fn_inputs: inputs,
                 fn_return: type_path,
             })

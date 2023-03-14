@@ -11,6 +11,9 @@ description = "Runtime to start and manage any service that runs on shuttle"
 name = "shuttle-next"
 required-features = ["next"]
 
+[lib]
+doctest = false
+
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }

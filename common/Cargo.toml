@@ -30,7 +30,7 @@ prost-types = { workspace = true, optional = true }
 reqwest = { version = "0.11.13", optional = true }
 rmp-serde = { version = "1.1.1", optional = true }
 rustrict = { version = "0.5.5", optional = true }
-serde = { workspace = true, features = ["derive"] }
+serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true, optional = true }
 strum = { workspace = true, features = ["derive"], optional = true }
 thiserror = { workspace = true, optional = true }

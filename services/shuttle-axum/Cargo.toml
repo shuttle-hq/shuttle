@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-axum"
-version = "0.1.0"
+version = "0.12.0-rc1"
 edition = "2021"
 
 [workspace]
@@ -8,7 +8,7 @@ edition = "2021"
 
 [dependencies]
 axum = { version = "0.6.10" }
-shuttle-runtime = { path = "../../runtime", version = "0.1.0" }
+shuttle-runtime = { path = "../../runtime", version = "0.12.0-rc1" }
 
 [dev-dependencies]
 tokio = { version = "1.26.0", features = ["macros", "rt-multi-thread"] }

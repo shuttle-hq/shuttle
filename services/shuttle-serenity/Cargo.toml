@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-serenity"
-version = "0.1.0"
+version = "0.12.0-rc1"
 edition = "2021"
 
 [workspace]
@@ -8,7 +8,7 @@ edition = "2021"
 
 [dependencies]
 serenity = { version = "0.11.5", default-features = false, features = ["client", "gateway", "rustls_backend", "model"] }
-shuttle-runtime = { path = "../../runtime", version = "0.1.0" }
+shuttle-runtime = { path = "../../runtime", version = "0.12.0-rc1" }
 
 [dev-dependencies]
 anyhow = "1.0.69"

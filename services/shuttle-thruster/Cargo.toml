@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-thruster"
-version = "0.1.0"
+version = "0.12.0-rc1"
 edition = "2021"
 
 [workspace]
@@ -8,7 +8,7 @@ edition = "2021"
 
 [dependencies]
 thruster = { version = "1.3.0" }
-shuttle-runtime = { path = "../../runtime", version = "0.1.0" }
+shuttle-runtime = { path = "../../runtime", version = "0.12.0-rc1" }
 
 [dev-dependencies]
 thruster = { version = "1.3.0", features = ["hyper_server"] }

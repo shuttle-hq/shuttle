@@ -1,6 +1,6 @@
 [package]
 name = "cargo-shuttle"
-version = "0.11.2"
+version = "0.12.0-rc1"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -63,7 +63,7 @@ features = ["models"]
 workspace = true
 
 [dependencies.shuttle-secrets]
-version = "0.11.0"
+version = "0.12.0-rc1"
 path = "../resources/secrets"
 
 [dependencies.shuttle-service]

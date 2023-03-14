@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-poise"
-version = "0.1.0"
+version = "0.12.0-rc1"
 edition = "2021"
 
 [workspace]
@@ -8,7 +8,7 @@ edition = "2021"
 
 [dependencies]
 poise = { version = "0.5.2" }
-shuttle-runtime = { path = "../../runtime", version = "0.1.0" }
+shuttle-runtime = { path = "../../runtime", version = "0.12.0-rc1" }
 
 [dev-dependencies]
 shuttle-secrets = { path = "../../resources/secrets" }

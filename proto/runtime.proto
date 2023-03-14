@@ -34,6 +34,8 @@ message LoadRequest {
 message LoadResponse {
   // Could the service be loaded
   bool success = 1;
+  // Error message if not successful
+  string message = 2;
 }
 
 message StartRequest {

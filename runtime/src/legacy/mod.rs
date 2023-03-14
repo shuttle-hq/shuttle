@@ -203,11 +203,51 @@ where
 
         let loader = self.loader.lock().unwrap().deref_mut().take().unwrap();
 
-        let service = loader.load(factory, logger).await.unwrap();
+        let service = match tokio::spawn(loader.load(factory, logger)).await {
+            Ok(res) => match res {
+                Ok(service) => service,
+                Err(error) => {
+                    error!(%error, "loading service failed");
+
+                    let message = LoadResponse {
+                        success: false,
+                        message: error.to_string(),
+                    };
+                    return Ok(Response::new(message));
+                }
+            },
+            Err(error) => {
+                if error.is_panic() {
+                    let panic = error.into_panic();
+                    let msg = panic
+                        .downcast_ref::<&str>()
+                        .map(|x| x.to_string())
+                        .unwrap_or_else(|| "<no panic message>".to_string());
+
+                    error!(error = msg, "loading service panicked");
+
+                    let message = LoadResponse {
+                        success: false,
+                        message: msg,
+                    };
+                    return Ok(Response::new(message));
+                } else {
+                    error!(%error, "loading service crashed");
+                    let message = LoadResponse {
+                        success: false,
+                        message: error.to_string(),
+                    };
+                    return Ok(Response::new(message));
+                }
+            }
+        };
 
         *self.service.lock().unwrap() = Some(service);
 
-        let message = LoadResponse { success: true };
+        let message = LoadResponse {
+            success: true,
+            message: String::new(),
+        };
         Ok(Response::new(message))
     }
 

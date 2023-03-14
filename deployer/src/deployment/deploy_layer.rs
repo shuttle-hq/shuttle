@@ -786,10 +786,6 @@ mod tests {
                 },
                 StateLog {
                     id,
-                    state: State::Running,
-                },
-                StateLog {
-                    id,
                     state: State::Crashed,
                 },
             ],

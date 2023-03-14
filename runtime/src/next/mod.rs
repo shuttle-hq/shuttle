@@ -89,7 +89,10 @@ impl Runtime for AxumWasm {
 
         *self.router.lock().unwrap() = Some(router);
 
-        let message = LoadResponse { success: true };
+        let message = LoadResponse {
+            success: true,
+            message: String::new(),
+        };
 
         Ok(tonic::Response::new(message))
     }

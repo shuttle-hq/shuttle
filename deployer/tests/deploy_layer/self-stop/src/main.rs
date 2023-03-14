@@ -8,6 +8,6 @@ impl shuttle_runtime::Service for MyService {
 }
 
 #[shuttle_runtime::main]
-async fn self_stop() -> Result<MyService, shuttle_service::Error> {
+async fn self_stop() -> Result<MyService, shuttle_runtime::Error> {
     Ok(MyService)
 }

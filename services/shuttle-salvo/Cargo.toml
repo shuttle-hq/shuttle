@@ -2,6 +2,9 @@
 name = "shuttle-salvo"
 version = "0.12.0-rc1"
 edition = "2021"
+license = "Apache-2.0"
+description = "Service implementation to run a salvo webserver on shuttle"
+keywords = ["shuttle-service", "salvo"]
 
 [workspace]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

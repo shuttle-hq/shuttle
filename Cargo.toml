@@ -7,7 +7,6 @@ members = [
   "common",
   "deployer",
   "gateway",
-  "next",
   "proto",
   "provisioner",
   "runtime",

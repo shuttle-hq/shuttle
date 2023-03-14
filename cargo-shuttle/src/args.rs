@@ -203,7 +203,7 @@ pub struct InitArgs {
     #[command(flatten)]
     pub login_args: LoginArgs,
     /// Path to initialize a new shuttle project
-    #[arg(default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_path) )]
+    #[arg(default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_init_path) )]
     pub path: PathBuf,
 }
 

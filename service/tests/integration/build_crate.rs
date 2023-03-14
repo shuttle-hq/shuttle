@@ -30,7 +30,7 @@ async fn is_bin() {
 
     assert!(matches!(
         build_crate(Path::new(&project_path), false, tx).await,
-        Ok(Runtime::Legacy(_))
+        Ok(Runtime::Alpha(_))
     ));
     assert!(PathBuf::from(project_path)
         .join("target/debug/is-bin")

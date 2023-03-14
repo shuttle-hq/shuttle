@@ -42,24 +42,24 @@ impl RuntimeManager {
     pub async fn get_runtime_client(
         &mut self,
         id: Uuid,
-        legacy_runtime_path: Option<PathBuf>,
+        alpha_runtime_path: Option<PathBuf>,
     ) -> anyhow::Result<RuntimeClient<Channel>> {
         trace!("making new client");
 
         let port = portpicker::pick_unused_port().context("failed to find available port")?;
-        let is_next = legacy_runtime_path.is_none();
+        let is_next = alpha_runtime_path.is_none();
 
         let get_runtime_executable = || {
-            if let Some(legacy_runtime) = legacy_runtime_path {
+            if let Some(alpha_runtime) = alpha_runtime_path {
                 debug!(
-                    "Starting legacy runtime at: {}",
-                    legacy_runtime
+                    "Starting alpha runtime at: {}",
+                    alpha_runtime
                         .clone()
                         .into_os_string()
                         .into_string()
                         .unwrap_or_default()
                 );
-                legacy_runtime
+                alpha_runtime
             } else {
                 if cfg!(debug_assertions) {
                     debug!("Installing shuttle-next runtime in debug mode from local source");

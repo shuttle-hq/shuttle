@@ -397,7 +397,7 @@ async fn run_pre_deploy_tests(
 }
 
 /// This will store the path to the executable for each runtime, which will be the users project with
-/// an embedded runtime for legacy, and a .wasm file for shuttle-next.
+/// an embedded runtime for alpha, and a .wasm file for shuttle-next.
 #[instrument(skip(storage_manager, runtime, id))]
 async fn store_executable(
     storage_manager: &ArtifactsStorageManager,
@@ -406,7 +406,7 @@ async fn store_executable(
 ) -> Result<()> {
     let executable_path = match runtime {
         Runtime::Next(path) => path,
-        Runtime::Legacy(path) => path,
+        Runtime::Alpha(path) => path,
     };
 
     let new_executable_path = storage_manager.deployment_executable_path(id)?;
@@ -559,7 +559,7 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
         let build_p = storage_manager.builds_path().unwrap();
 
         let executable_path = build_p.join("xyz");
-        let runtime = Runtime::Legacy(executable_path.clone());
+        let runtime = Runtime::Alpha(executable_path.clone());
         let id = Uuid::new_v4();
 
         fs::write(&executable_path, "barfoo").await.unwrap();

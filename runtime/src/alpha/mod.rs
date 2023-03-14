@@ -54,7 +54,7 @@ pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
         Server::builder().http2_keepalive_interval(Some(Duration::from_secs(60)));
 
     // We wrap the StorageManager trait object in an Arc rather than a Box, since we need
-    // to clone it in the `ProvisionerFactory::new` call in the legacy runtime `load` method.
+    // to clone it in the `ProvisionerFactory::new` call in the alpha runtime `load` method.
     // We might be able to optimize this by implementing clone for a Box<dyn StorageManager>
     // or by using static dispatch instead.
     let storage_manager: Arc<dyn StorageManager> = match args.storage_manager_type {
@@ -67,21 +67,21 @@ pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
     };
 
     let router = {
-        let legacy = Legacy::new(
+        let alpha = Alpha::new(
             provisioner_address,
             loader,
             storage_manager,
             Environment::Local,
         );
 
-        let svc = RuntimeServer::new(legacy);
+        let svc = RuntimeServer::new(alpha);
         server_builder.add_service(svc)
     };
 
     router.serve(addr).await.unwrap();
 }
 
-pub struct Legacy<L, S> {
+pub struct Alpha<L, S> {
     // Mutexes are for interior mutability
     logs_rx: Mutex<Option<UnboundedReceiver<LogItem>>>,
     logs_tx: UnboundedSender<LogItem>,
@@ -94,7 +94,7 @@ pub struct Legacy<L, S> {
     env: Environment,
 }
 
-impl<L, S> Legacy<L, S> {
+impl<L, S> Alpha<L, S> {
     pub fn new(
         provisioner_address: Endpoint,
         loader: L,
@@ -152,7 +152,7 @@ where
 }
 
 #[async_trait]
-impl<L, S> Runtime for Legacy<L, S>
+impl<L, S> Runtime for Alpha<L, S>
 where
     L: Loader<ProvisionerFactory, Service = S> + Send + 'static,
     S: Service + Send + 'static,
@@ -163,7 +163,7 @@ where
             secrets,
             service_name,
         } = request.into_inner();
-        trace!(path, "loading legacy project");
+        trace!(path, "loading alpha project");
 
         let secrets = BTreeMap::from_iter(secrets.into_iter());
 
@@ -250,7 +250,7 @@ where
         &self,
         request: Request<StartRequest>,
     ) -> Result<Response<StartResponse>, Status> {
-        trace!("legacy starting");
+        trace!("alpha starting");
         let service = self.service.lock().unwrap().deref_mut().take();
         let service = service.unwrap();
 

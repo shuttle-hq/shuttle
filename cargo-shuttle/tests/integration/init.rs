@@ -30,7 +30,7 @@ async fn non_interactive_basic_init() {
 
     // Expected: name = "basic-initRANDOM_CHARS"
     assert!(cargo_toml.contains("name = \"basic-init"));
-    assert!(cargo_toml.contains("shuttle-service = "));
+    assert!(cargo_toml.contains("shuttle-runtime = "));
 }
 
 // TODO: unignore when shuttle-rocket is published

@@ -10,6 +10,9 @@ publish = false
 name = "shuttle-next"
 required-features = ["next"]
 
+[lib]
+doctest = false
+
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }

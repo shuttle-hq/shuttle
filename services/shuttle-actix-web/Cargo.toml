@@ -2,6 +2,9 @@
 name = "shuttle-actix-web"
 version = "0.12.0-rc1"
 edition = "2021"
+license = "Apache-2.0"
+description = "Service implementation to run an actix webserver on shuttle"
+keywords = ["shuttle-service", "actix"]
 
 [workspace]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

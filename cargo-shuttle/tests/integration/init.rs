@@ -27,9 +27,10 @@ async fn non_interactive_basic_init() {
     Shuttle::new().unwrap().run(args).await.unwrap();
 
     let cargo_toml = read_to_string(temp_dir_path.join("Cargo.toml")).unwrap();
+
     // Expected: name = "basic-initRANDOM_CHARS"
     assert!(cargo_toml.contains("name = \"basic-init"));
-    assert!(cargo_toml.contains("shuttle-service = { version = "));
+    assert!(cargo_toml.contains("shuttle-service = "));
 }
 
 // TODO: unignore when shuttle-rocket is published

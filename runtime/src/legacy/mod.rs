@@ -13,7 +13,7 @@ use async_trait::async_trait;
 use clap::Parser;
 use core::future::Future;
 use shuttle_common::{
-    backends::{auth::ClaimLayer, tracing::InjectPropagationLayer},
+    claims::{ClaimLayer, InjectPropagationLayer},
     storage_manager::{ArtifactsStorageManager, StorageManager, WorkingDirStorageManager},
     LogItem,
 };
@@ -38,7 +38,7 @@ use tonic::{
     Request, Response, Status,
 };
 use tower::ServiceBuilder;
-use tracing::{error, instrument, trace};
+use tracing::{error, info, trace};
 use uuid::Uuid;
 
 use crate::{provisioner_factory::ProvisionerFactory, Logger};
@@ -203,11 +203,51 @@ where
 
         let loader = self.loader.lock().unwrap().deref_mut().take().unwrap();
 
-        let service = loader.load(factory, logger).await.unwrap();
+        let service = match tokio::spawn(loader.load(factory, logger)).await {
+            Ok(res) => match res {
+                Ok(service) => service,
+                Err(error) => {
+                    error!(%error, "loading service failed");
+
+                    let message = LoadResponse {
+                        success: false,
+                        message: error.to_string(),
+                    };
+                    return Ok(Response::new(message));
+                }
+            },
+            Err(error) => {
+                if error.is_panic() {
+                    let panic = error.into_panic();
+                    let msg = panic
+                        .downcast_ref::<&str>()
+                        .map(|x| x.to_string())
+                        .unwrap_or_else(|| "<no panic message>".to_string());
+
+                    error!(error = msg, "loading service panicked");
+
+                    let message = LoadResponse {
+                        success: false,
+                        message: msg,
+                    };
+                    return Ok(Response::new(message));
+                } else {
+                    error!(%error, "loading service crashed");
+                    let message = LoadResponse {
+                        success: false,
+                        message: error.to_string(),
+                    };
+                    return Ok(Response::new(message));
+                }
+            }
+        };
 
         *self.service.lock().unwrap() = Some(service);
 
-        let message = LoadResponse { success: true };
+        let message = LoadResponse {
+            success: true,
+            message: String::new(),
+        };
         Ok(Response::new(message))
     }
 
@@ -231,13 +271,56 @@ where
         let (kill_tx, kill_rx) = tokio::sync::oneshot::channel();
         *self.kill_tx.lock().unwrap() = Some(kill_tx);
 
+        let stopped_tx = self.stopped_tx.clone();
+
+        let handle = tokio::runtime::Handle::current();
+
         // start service as a background task with a kill receiver
-        tokio::spawn(run_until_stopped(
-            service,
-            service_address,
-            self.stopped_tx.clone(),
-            kill_rx,
-        ));
+        tokio::spawn(async move {
+            let mut background = handle.spawn(service.bind(service_address));
+
+            tokio::select! {
+                res = &mut background => {
+                    match res {
+                        Ok(_) => {
+                            info!("service stopped all on its own");
+                            stopped_tx.send((StopReason::End, String::new())).unwrap();
+                        },
+                        Err(error) => {
+                            if error.is_panic() {
+                                let panic = error.into_panic();
+                                let msg = panic.downcast_ref::<&str>()
+                                    .map(|x| x.to_string())
+                                    .unwrap_or_else(|| "<no panic message>".to_string());
+
+                                error!(error = msg, "service panicked");
+
+                                stopped_tx
+                                    .send((StopReason::Crash, msg))
+                                    .unwrap();
+                            } else {
+                                error!(%error, "service crashed");
+                                stopped_tx
+                                    .send((StopReason::Crash, error.to_string()))
+                                    .unwrap();
+                            }
+                        },
+                    }
+                },
+                message = kill_rx => {
+                    match message {
+                        Ok(_) => {
+                            stopped_tx.send((StopReason::Request, String::new())).unwrap();
+                        }
+                        Err(_) => trace!("the sender dropped")
+                    };
+
+                    info!("will now abort the service");
+                    background.abort();
+                    background.await.unwrap().expect("to stop service");
+                }
+            }
+        });
 
         let message = StartResponse { success: true };
 
@@ -304,38 +387,6 @@ where
             Ok(Response::new(ReceiverStream::new(rx)))
         } else {
             Err(Status::internal("logs have already been subscribed to"))
-        }
-    }
-}
-
-/// Run the service until a stop signal is received
-#[instrument(skip(service, stopped_tx, kill_rx))]
-async fn run_until_stopped(
-    // service: LoadedService,
-    service: impl Service,
-    addr: SocketAddr,
-    stopped_tx: tokio::sync::broadcast::Sender<(StopReason, String)>,
-    kill_rx: tokio::sync::oneshot::Receiver<String>,
-) {
-    trace!("starting deployment on {}", &addr);
-    tokio::select! {
-        res = service.bind(addr) => {
-            match res {
-                Ok(_) => {
-                    stopped_tx.send((StopReason::End, String::new())).unwrap();
-                }
-                Err(error) => {
-                    stopped_tx.send((StopReason::Crash, error.to_string())).unwrap();
-                }
-            }
-        },
-        message = kill_rx => {
-            match message {
-                Ok(_) => {
-                    stopped_tx.send((StopReason::Request, String::new())).unwrap();
-                }
-                Err(_) => trace!("the sender dropped")
-            };
         }
     }
 }

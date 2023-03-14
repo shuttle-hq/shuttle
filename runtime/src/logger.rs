@@ -64,7 +64,7 @@ mod tests {
 
         let logger = Logger::new(s, Default::default());
 
-        tracing_subscriber::registry().with(logger).init();
+        let _guard = tracing_subscriber::registry().with(logger).set_default();
 
         tracing::debug!("this is");
         tracing::info!("hi");

@@ -41,7 +41,7 @@ shuttle-service = { path = "service", version = "0.11.0" }
 anyhow = "1.0.66"
 async-trait = "0.1.58"
 axum = { version = "0.6.0", default-features = false }
-chrono = { version = "0.4.23", default-features = false, features = ["clock"] }
+chrono = { version = "0.4.23", default-features = false }
 clap = { version = "4.0.27", features = [ "derive" ] }
 headers = "0.3.8"
 http = "0.2.8"

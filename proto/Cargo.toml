@@ -19,7 +19,7 @@ uuid = { workspace = true, features = ["v4"] }
 
 [dependencies.shuttle-common]
 workspace = true
-features = ["models", "service", "wasm"]
+features = ["error", "service", "wasm"]
 
 [build-dependencies]
 tonic-build = "0.8.3"

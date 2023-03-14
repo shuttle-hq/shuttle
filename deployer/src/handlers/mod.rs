@@ -13,10 +13,11 @@ use fqdn::FQDN;
 use futures::StreamExt;
 use hyper::Uri;
 use shuttle_common::backends::auth::{
-    AdminSecretLayer, AuthPublicKey, Claim, JwtAuthenticationLayer, Scope, ScopedLayer,
+    AdminSecretLayer, AuthPublicKey, JwtAuthenticationLayer, ScopedLayer,
 };
 use shuttle_common::backends::headers::XShuttleAccountName;
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
+use shuttle_common::claims::{Claim, Scope};
 use shuttle_common::models::secret;
 use shuttle_common::project::ProjectName;
 use shuttle_common::storage_manager::StorageManager;

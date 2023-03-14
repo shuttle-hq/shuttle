@@ -89,7 +89,10 @@ impl Runtime for AxumWasm {
 
         *self.router.lock().unwrap() = Some(router);
 
-        let message = LoadResponse { success: true };
+        let message = LoadResponse {
+            success: true,
+            message: String::new(),
+        };
 
         Ok(tonic::Response::new(message))
     }
@@ -426,7 +429,7 @@ pub mod tests {
             .unwrap();
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn axum() {
         compile_module();
 

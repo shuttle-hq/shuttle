@@ -8,7 +8,7 @@ use std::{
 use async_trait::async_trait;
 use opentelemetry::global;
 use portpicker::pick_unused_port;
-use shuttle_common::{backends::auth::Claim, storage_manager::ArtifactsStorageManager};
+use shuttle_common::{claims::Claim, storage_manager::ArtifactsStorageManager};
 
 use shuttle_proto::runtime::{
     runtime_client::RuntimeClient, LoadRequest, StartRequest, StopReason, SubscribeStopRequest,
@@ -276,8 +276,15 @@ async fn load(
 
     match response {
         Ok(response) => {
-            info!(response = ?response.into_inner(),  "loading response: ");
-            Ok(())
+            let response = response.into_inner();
+            info!(?response, "loading response");
+
+            if response.success {
+                Ok(())
+            } else {
+                error!(error = %response.message, "failed to load service");
+                Err(Error::Load(response.message))
+            }
         }
         Err(error) => {
             error!(%error, "failed to load service");
@@ -370,7 +377,6 @@ mod tests {
     use uuid::Uuid;
 
     use crate::{
-        error::Error,
         persistence::{DeploymentUpdater, Secret, SecretGetter},
         RuntimeManager,
     };
@@ -424,7 +430,13 @@ mod tests {
 
         let tmp_dir = Builder::new().prefix("shuttle_run_test").tempdir().unwrap();
         let path = tmp_dir.into_path();
-        let (tx, _rx) = crossbeam_channel::unbounded();
+        let (tx, rx) = crossbeam_channel::unbounded();
+
+        tokio::runtime::Handle::current().spawn_blocking(move || {
+            while let Ok(log) = rx.recv() {
+                println!("test log: {log:?}");
+            }
+        });
 
         RuntimeManager::new(path, format!("http://{}", provisioner_addr), tx)
     }
@@ -464,7 +476,7 @@ mod tests {
     // This test uses the kill signal to make sure a service does stop when asked to
     #[tokio::test]
     async fn can_be_killed() {
-        let (built, storage_manager) = make_so_and_built("sleep-async");
+        let (built, storage_manager) = make_and_built("sleep-async");
         let id = built.id;
         let runtime_manager = get_runtime_manager();
         let (cleanup_send, cleanup_recv) = oneshot::channel();
@@ -506,7 +518,7 @@ mod tests {
     // This test does not use a kill signal to stop the service. Rather the service decided to stop on its own without errors
     #[tokio::test]
     async fn self_stop() {
-        let (built, storage_manager) = make_so_and_built("sleep-async");
+        let (built, storage_manager) = make_and_built("sleep-async");
         let runtime_manager = get_runtime_manager();
         let (cleanup_send, cleanup_recv) = oneshot::channel();
 
@@ -544,7 +556,7 @@ mod tests {
     // Test for panics in Service::bind
     #[tokio::test]
     async fn panic_in_bind() {
-        let (built, storage_manager) = make_so_and_built("bind-panic");
+        let (built, storage_manager) = make_and_built("bind-panic");
         let runtime_manager = get_runtime_manager();
         let (cleanup_send, cleanup_recv) = oneshot::channel();
 
@@ -552,7 +564,7 @@ mod tests {
             StopReason::from_i32(response.reason).unwrap(),
             response.message,
         ) {
-            (StopReason::Crash, mes) if mes.contains("Panic occurred in `Service::bind`") => {
+            (StopReason::Crash, mes) if mes.contains("panic in bind") => {
                 cleanup_send.send(()).unwrap()
             }
             (_, mes) => panic!("expected stop due to crash: {mes}"),
@@ -583,20 +595,12 @@ mod tests {
 
     // Test for panics in the main function
     #[tokio::test]
+    #[should_panic(expected = "Load(\"main panic\")")]
     async fn panic_in_main() {
-        let (built, storage_manager) = make_so_and_built("main-panic");
+        let (built, storage_manager) = make_and_built("main-panic");
         let runtime_manager = get_runtime_manager();
-        let (cleanup_send, cleanup_recv) = oneshot::channel();
 
-        let handle_cleanup = |response: SubscribeStopResponse| match (
-            StopReason::from_i32(response.reason).unwrap(),
-            response.message,
-        ) {
-            (StopReason::Crash, mes) if mes.contains("Panic occurred in shuttle_service::main") => {
-                cleanup_send.send(()).unwrap()
-            }
-            (_, mes) => panic!("expected stop due to crash: {mes}"),
-        };
+        let handle_cleanup = |_result| panic!("service should never be started");
 
         let secret_getter = get_secret_getter();
 
@@ -611,50 +615,9 @@ mod tests {
             )
             .await
             .unwrap();
-
-        tokio::select! {
-            _ = sleep(Duration::from_secs(5)) => panic!("cleanup should have been called"),
-            Ok(()) = cleanup_recv => {}
-        }
-
-        // Prevent the runtime manager from dropping earlier, which will kill the processes it manages
-        drop(runtime_manager);
     }
 
-    #[tokio::test]
-    async fn missing_so() {
-        let built = Built {
-            id: Uuid::new_v4(),
-            service_name: "test".to_string(),
-            service_id: Uuid::new_v4(),
-            tracing_context: Default::default(),
-            is_next: false,
-            claim: None,
-        };
-
-        let handle_cleanup = |_result| panic!("no service means no cleanup");
-        let secret_getter = get_secret_getter();
-        let storage_manager = get_storage_manager();
-
-        let result = built
-            .handle(
-                storage_manager,
-                secret_getter,
-                get_runtime_manager(),
-                StubDeploymentUpdater,
-                kill_old_deployments(),
-                handle_cleanup,
-            )
-            .await;
-
-        assert!(
-            matches!(result, Err(Error::Load(_))),
-            "expected missing 'so' error: {:?}",
-            result
-        );
-    }
-
-    fn make_so_and_built(crate_name: &str) -> (Built, ArtifactsStorageManager) {
+    fn make_and_built(crate_name: &str) -> (Built, ArtifactsStorageManager) {
         let crate_dir: PathBuf = [RESOURCES_PATH, crate_name].iter().collect();
 
         Command::new("cargo")
@@ -665,12 +628,10 @@ mod tests {
             .wait()
             .unwrap();
 
-        let dashes_replaced = crate_name.replace('-', "_");
-
         let lib_name = if cfg!(target_os = "windows") {
-            format!("{}.dll", dashes_replaced)
+            format!("{}.exe", crate_name)
         } else {
-            format!("lib{}.so", dashes_replaced)
+            crate_name.to_string()
         };
 
         let id = Uuid::new_v4();

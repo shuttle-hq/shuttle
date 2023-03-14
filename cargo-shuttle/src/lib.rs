@@ -457,7 +457,7 @@ impl Shuttle {
 
         let (is_wasm, executable_path) = match runtime {
             Runtime::Next(path) => (true, path),
-            Runtime::Legacy(path) => (false, path),
+            Runtime::Alpha(path) => (false, path),
         };
 
         let provisioner = LocalProvisioner::new()?;

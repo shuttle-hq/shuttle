@@ -42,7 +42,7 @@ pub async fn spawn_runtime(project_path: String, service_name: &str) -> Result<T
 
     let (is_wasm, bin_path) = match runtime {
         Runtime::Next(path) => (true, path),
-        Runtime::Legacy(path) => (false, path),
+        Runtime::Alpha(path) => (false, path),
     };
 
     start_provisioner(DummyProvisioner, provisioner_address);

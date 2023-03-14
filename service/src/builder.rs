@@ -17,7 +17,7 @@ use crate::NEXT_NAME;
 /// How to run/build the project
 pub enum Runtime {
     Next(PathBuf),
-    Legacy(PathBuf),
+    Alpha(PathBuf),
 }
 
 /// Given a project directory path, builds the crate
@@ -70,7 +70,7 @@ pub async fn build_crate(
     Ok(if is_next {
         Runtime::Next(compilation.cdylibs[0].path.clone())
     } else {
-        Runtime::Legacy(compilation.binaries[0].path.clone())
+        Runtime::Alpha(compilation.binaries[0].path.clone())
     })
 }
 
@@ -176,7 +176,7 @@ fn is_next(summary: &Summary) -> bool {
         .any(|dependency| dependency.package_name() == NEXT_NAME)
 }
 
-/// Make sure the project is a binary for legacy projects.
+/// Make sure the project is a binary for alpha projects.
 fn ensure_binary(manifest: &Manifest) -> anyhow::Result<()> {
     if manifest.targets().iter().any(|target| target.is_bin()) {
         Ok(())

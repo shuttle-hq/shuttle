@@ -1,7 +1,7 @@
 # How to run
 
 ## The easy way
-Both the legacy and next examples can be run using the local client:
+Both the alpha and next examples can be run using the local client:
 
 ``` bash
 cd path/to/example
@@ -56,7 +56,7 @@ curl  localhost:8000/hello
 curl  localhost:8000/goodbye
 ```
 
-## shuttle-legacy
+## shuttle-alpha
 
 This will no longer load a `.so` file, the code to start the runtime will be 
 codegened for all services.
@@ -95,7 +95,7 @@ grpcurl -plaintext -import-path ../proto -proto runtime.proto -d '{"deployment_i
 # subscribe to logs
 grpcurl -plaintext -import-path ../proto -proto runtime.proto localhost:6001 runtime.Runtime/SubscribeLogs
 
-# stop (the service started in the legacy runtime can't currently be stopped)
+# stop the runtime
 grpcurl -plaintext -import-path ../proto -proto runtime.proto -d '{}' localhost:6001 runtime.Runtime/Stop
 ```
 

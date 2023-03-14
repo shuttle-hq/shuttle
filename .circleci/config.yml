@@ -90,7 +90,6 @@ commands:
             shuttle-service = { path = "$PWD/service" }
             shuttle-aws-rds = { path = "$PWD/resources/aws-rds" }
             shuttle-persist = { path = "$PWD/resources/persist" }
-            shuttle-next = { path = "$PWD/next" }
             shuttle-runtime = { path = "$PWD/runtime" }
             shuttle-shared-db = { path = "$PWD/resources/shared-db" }
             shuttle-secrets = { path = "$PWD/resources/secrets" }
@@ -390,6 +389,7 @@ workflows:
                 - resources/static-folder
                 - services/shuttle-actix-web
                 - services/shuttle-axum
+                - services/shuttle-next
                 - services/shuttle-poem
                 - services/shuttle-poise
                 - services/shuttle-rocket

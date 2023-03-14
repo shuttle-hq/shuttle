@@ -13,11 +13,13 @@ use crate::deployment::deploy_layer;
 
 const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
 
+type Runtimes = Arc<std::sync::Mutex<HashMap<Uuid, (process::Child, RuntimeClient<Channel>)>>>;
+
 /// Manager that can start up mutliple runtimes. This is needed so that two runtimes can be up when a new deployment is made:
 /// One runtime for the new deployment being loaded; another for the currently active deployment
 #[derive(Clone)]
 pub struct RuntimeManager {
-    runtimes: Arc<std::sync::Mutex<HashMap<Uuid, (process::Child, RuntimeClient<Channel>)>>>,
+    runtimes: Runtimes,
     artifacts_path: PathBuf,
     provisioner_address: String,
     log_sender: crossbeam_channel::Sender<deploy_layer::Log>,
@@ -30,7 +32,7 @@ impl RuntimeManager {
         log_sender: crossbeam_channel::Sender<deploy_layer::Log>,
     ) -> Arc<Mutex<Self>> {
         Arc::new(Mutex::new(Self {
-            runtimes: Arc::new(std::sync::Mutex::new(HashMap::new())),
+            runtimes: Default::default(),
             artifacts_path,
             provisioner_address,
             log_sender,

@@ -1,7 +1,7 @@
 # How to run
 
 ## The easy way
-Both the legacy and next examples can be run using the local client:
+Both the alpha and next examples can be run using the local client:
 
 ``` bash
 cd path/to/example
@@ -56,7 +56,7 @@ curl  localhost:8000/hello
 curl  localhost:8000/goodbye
 ```
 
-## shuttle-legacy
+## shuttle-alpha
 
 This will no longer load a `.so` file, the code to start the runtime will be 
 codegened for all services.
@@ -86,16 +86,16 @@ cargo build
 Then in another shell, load the service and start it up:
 
 ``` bash
-# load
+# load the service
 grpcurl -plaintext -import-path ../proto -proto runtime.proto -d '{"service_name": "Tonic", "path": "/home/<path to shuttle>/examples/rocket/hello-world/target/debug/libhello_world.so", "secrets": {"MY_API_KEY": "test"}}' localhost:6001 runtime.Runtime/Load
 
-# run (this deployment id is default uuid encoded as base64)
+# start the service
 grpcurl -plaintext -import-path ../proto -proto runtime.proto -d '{"deployment_id": "MDAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAw", "ip": "127.0.0.1:8000"}' localhost:6001 runtime.Runtime/Start
 
 # subscribe to logs
 grpcurl -plaintext -import-path ../proto -proto runtime.proto localhost:6001 runtime.Runtime/SubscribeLogs
 
-# stop (the service started in the legacy runtime can't currently be stopped)
+# stop the service
 grpcurl -plaintext -import-path ../proto -proto runtime.proto -d '{}' localhost:6001 runtime.Runtime/Stop
 ```
 

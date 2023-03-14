@@ -14,7 +14,7 @@ executors:
     machine:
       image: ubuntu-2204:2022.04.1
       docker_layer_caching: true
-    resource_class: 2xlarge
+    resource_class: xlarge
 
 # sscache steps are from this guide
 # https://medium.com/@edouard.oger/rust-caching-on-circleci-using-sccache-c996344f0115
@@ -162,8 +162,8 @@ commands:
 
 jobs:
   workspace:
-    # Using image to get a larger machine
-    executor: image-ubuntu
+    executor: docker-rust
+    resource_class: xlarge
     steps:
       - checkout
       - restore-cargo-cache

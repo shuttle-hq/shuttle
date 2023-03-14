@@ -873,7 +873,7 @@ pub fn cargo_init(path: PathBuf) -> Result<()> {
     // Mimic `cargo init` behavior and log status or error to shell
     cargo_config
         .shell()
-        .status("Created", format!("{} (shuttle) package", init_result))?;
+        .status("Created", format!("{init_result} (shuttle) package"))?;
 
     Ok(())
 }
@@ -890,7 +890,7 @@ pub fn cargo_shuttle_init(path: PathBuf, framework: Framework) -> Result<()> {
     cargo_doc["package"]["publish"] = value(false);
 
     // Get `[dependencies]` table
-    let mut dependencies = cargo_doc["dependencies"]
+    let dependencies = cargo_doc["dependencies"]
         .as_table_mut()
         .expect("manifest to have a dependencies table");
 
@@ -910,7 +910,7 @@ pub fn cargo_shuttle_init(path: PathBuf, framework: Framework) -> Result<()> {
 
     // Set framework-specific dependencies to the `dependencies` table
     init_config.set_cargo_dependencies(
-        &mut dependencies,
+        dependencies,
         &manifest_path,
         &url,
         get_latest_dependency_version,
@@ -985,7 +985,7 @@ fn get_latest_dependency_version(
 ) -> String {
     let latest_version =
         get_latest_dependency(crate_name, flag_allow_prerelease, manifest_path, Some(url))
-            .unwrap_or_else(|_| panic!("Could not query the latest version of {}", crate_name));
+            .unwrap_or_else(|_| panic!("Could not query the latest version of {crate_name}"));
     let latest_version = latest_version
         .version()
         .expect("No latest shuttle-service version available");

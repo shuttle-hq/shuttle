@@ -46,7 +46,7 @@ impl Display for Detailed {
         let resources = get_resources_table(&self.resources);
         let secrets = secret::get_table(&self.secrets);
 
-        write!(f, "{}{}{}", deploys, resources, secrets)
+        write!(f, "{deploys}{resources}{secrets}")
     }
 }
 
@@ -82,7 +82,7 @@ URI:           {}
 
         let resources = get_resources_table(&self.resources);
 
-        write!(f, "{}{}", deployment, resources)
+        write!(f, "{deployment}{resources}")
     }
 }
 
@@ -150,9 +150,8 @@ fn get_resources_table(resources: &Vec<resource::Response>) -> String {
 
         format!(
             r#"These resources are linked to this service
-{}
+{table}
 "#,
-            table
         )
     }
 }

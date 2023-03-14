@@ -162,8 +162,8 @@ commands:
 
 jobs:
   workspace:
-    executor: docker-rust
-    resource_class: xlarge
+    # Using image to get a larger machine
+    executor: image-ubuntu
     steps:
       - checkout
       - restore-cargo-cache

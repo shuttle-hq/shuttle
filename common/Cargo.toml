@@ -32,7 +32,7 @@ rmp-serde = { version = "1.1.1", optional = true }
 rustrict = { version = "0.5.5", optional = true }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true }
-strum = { workspace = true, features = ["derive"], optional = true }
+strum = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true, optional = true }
 tonic = { version = "0.8.3", optional = true }
 tower = { workspace = true, optional = true }
@@ -49,7 +49,7 @@ claims = ["bytes", "chrono/clock", "headers", "http", "http-body", "jsonwebtoken
 display = ["chrono/clock", "comfy-table", "crossterm"]
 error = ["prost-types", "thiserror", "uuid"]
 models = ["anyhow", "async-trait", "display", "http", "reqwest", "service"]
-service = ["chrono/serde", "once_cell", "rustrict", "serde/derive", "strum", "uuid"]
+service = ["chrono/serde", "once_cell", "rustrict", "serde/derive", "uuid"]
 tracing = []
 wasm = ["chrono/clock", "http-serde", "http", "rmp-serde", "tracing", "tracing-subscriber"]
 

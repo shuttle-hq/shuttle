@@ -2,7 +2,6 @@
 pub mod backends;
 #[cfg(feature = "claims")]
 pub mod claims;
-#[cfg(feature = "service")]
 pub mod database;
 #[cfg(feature = "service")]
 pub mod deployment;

@@ -10,6 +10,7 @@ use opentelemetry::global;
 use portpicker::pick_unused_port;
 use shuttle_common::{
     claims::{Claim, ClaimService, InjectPropagation},
+    resource,
     storage_manager::ArtifactsStorageManager,
 };
 
@@ -26,7 +27,7 @@ use uuid::Uuid;
 use super::{RunReceiver, State};
 use crate::{
     error::{Error, Result},
-    persistence::{DeploymentUpdater, SecretGetter},
+    persistence::{DeploymentUpdater, Resource, ResourceManager, SecretGetter},
     RuntimeManager,
 };
 
@@ -38,6 +39,7 @@ pub async fn task(
     deployment_updater: impl DeploymentUpdater,
     active_deployment_getter: impl ActiveDeploymentsGetter,
     secret_getter: impl SecretGetter,
+    resource_manager: impl ResourceManager,
     storage_manager: ArtifactsStorageManager,
 ) {
     info!("Run task started");
@@ -49,6 +51,7 @@ pub async fn task(
 
         let deployment_updater = deployment_updater.clone();
         let secret_getter = secret_getter.clone();
+        let resource_manager = resource_manager.clone();
         let storage_manager = storage_manager.clone();
 
         let old_deployments_killer = kill_old_deployments(
@@ -82,6 +85,7 @@ pub async fn task(
                     .handle(
                         storage_manager,
                         secret_getter,
+                        resource_manager,
                         runtime_manager,
                         deployment_updater,
                         old_deployments_killer,
@@ -174,12 +178,13 @@ pub struct Built {
 }
 
 impl Built {
-    #[instrument(skip(self, storage_manager, secret_getter, runtime_manager, deployment_updater, kill_old_deployments, cleanup), fields(id = %self.id, state = %State::Loading))]
+    #[instrument(skip(self, storage_manager, secret_getter, resource_manager, runtime_manager, deployment_updater, kill_old_deployments, cleanup), fields(id = %self.id, state = %State::Loading))]
     #[allow(clippy::too_many_arguments)]
     async fn handle(
         self,
         storage_manager: ArtifactsStorageManager,
         secret_getter: impl SecretGetter,
+        resource_manager: impl ResourceManager,
         runtime_manager: Arc<Mutex<RuntimeManager>>,
         deployment_updater: impl DeploymentUpdater,
         kill_old_deployments: impl futures::Future<Output = Result<()>>,
@@ -223,6 +228,7 @@ impl Built {
             self.service_id,
             executable_path.clone(),
             secret_getter,
+            resource_manager,
             runtime_client.clone(),
             self.claim,
         )
@@ -246,6 +252,7 @@ async fn load(
     service_id: Uuid,
     executable_path: PathBuf,
     secret_getter: impl SecretGetter,
+    resource_manager: impl ResourceManager,
     mut runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
     claim: Option<Claim>,
 ) -> Result<()> {
@@ -286,6 +293,19 @@ async fn load(
         Ok(response) => {
             let response = response.into_inner();
             info!(?response, "loading response");
+
+            for resource in response.resources {
+                let resource: resource::Response = serde_json::from_slice(&resource).unwrap();
+                let resource = Resource {
+                    service_id,
+                    r#type: resource.r#type.into(),
+                    data: resource.data,
+                };
+                resource_manager
+                    .insert_resource(&resource)
+                    .await
+                    .expect("to add resource to persistence");
+            }
 
             if response.success {
                 Ok(())
@@ -384,7 +404,7 @@ mod tests {
     use uuid::Uuid;
 
     use crate::{
-        persistence::{DeploymentUpdater, Secret, SecretGetter},
+        persistence::{DeploymentUpdater, Resource, ResourceManager, Secret, SecretGetter},
         RuntimeManager,
     };
 
@@ -460,8 +480,19 @@ mod tests {
         }
     }
 
-    fn get_secret_getter() -> StubSecretGetter {
-        StubSecretGetter
+    #[derive(Clone)]
+    struct StubResourceManager;
+
+    #[async_trait]
+    impl ResourceManager for StubResourceManager {
+        type Err = std::io::Error;
+
+        async fn insert_resource(&self, _resource: &Resource) -> Result<(), Self::Err> {
+            Ok(())
+        }
+        async fn get_resources(&self, _service_id: &Uuid) -> Result<Vec<Resource>, Self::Err> {
+            Ok(Vec::new())
+        }
     }
 
     #[derive(Clone)]
@@ -496,12 +527,11 @@ mod tests {
             _ => panic!("expected stop due to request"),
         };
 
-        let secret_getter = get_secret_getter();
-
         built
             .handle(
                 storage_manager,
-                secret_getter,
+                StubSecretGetter,
+                StubResourceManager,
                 runtime_manager.clone(),
                 StubDeploymentUpdater,
                 kill_old_deployments(),
@@ -537,12 +567,11 @@ mod tests {
             _ => panic!("expected stop due to self end"),
         };
 
-        let secret_getter = get_secret_getter();
-
         built
             .handle(
                 storage_manager,
-                secret_getter,
+                StubSecretGetter,
+                StubResourceManager,
                 runtime_manager.clone(),
                 StubDeploymentUpdater,
                 kill_old_deployments(),
@@ -577,12 +606,11 @@ mod tests {
             (_, mes) => panic!("expected stop due to crash: {mes}"),
         };
 
-        let secret_getter = get_secret_getter();
-
         built
             .handle(
                 storage_manager,
-                secret_getter,
+                StubSecretGetter,
+                StubResourceManager,
                 runtime_manager.clone(),
                 StubDeploymentUpdater,
                 kill_old_deployments(),
@@ -609,12 +637,11 @@ mod tests {
 
         let handle_cleanup = |_result| panic!("service should never be started");
 
-        let secret_getter = get_secret_getter();
-
         built
             .handle(
                 storage_manager,
-                secret_getter,
+                StubSecretGetter,
+                StubResourceManager,
                 runtime_manager.clone(),
                 StubDeploymentUpdater,
                 kill_old_deployments(),

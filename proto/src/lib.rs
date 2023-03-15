@@ -106,7 +106,7 @@ pub mod runtime {
     use prost_types::Timestamp;
     use shuttle_common::{
         claims::{ClaimLayer, ClaimService, InjectPropagation, InjectPropagationLayer},
-        database, ParseError,
+        ParseError,
     };
     use tokio::process;
     use tonic::transport::{Channel, Endpoint};

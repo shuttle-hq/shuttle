@@ -36,6 +36,8 @@ message LoadResponse {
   bool success = 1;
   // Error message if not successful
   string message = 2;
+  // Which resources where requested
+  repeated bytes resources = 10;
 }
 
 message StartRequest {

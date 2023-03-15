@@ -18,6 +18,7 @@ use shuttle_common::{
         tracing::ExtractPropagationLayer,
     },
     claims::{Claim, ClaimLayer, InjectPropagationLayer},
+    resource,
     storage_manager::{ArtifactsStorageManager, StorageManager, WorkingDirStorageManager},
 };
 use shuttle_proto::{
@@ -194,6 +195,8 @@ where
         let service_name = ServiceName::from_str(service_name.as_str())
             .map_err(|err| Status::from_error(Box::new(err)))?;
 
+        let resources: Arc<tokio::sync::Mutex<Vec<resource::Response>>> = Default::default();
+
         let factory = ProvisionerFactory::new(
             provisioner_client,
             service_name,
@@ -201,6 +204,7 @@ where
             self.storage_manager.clone(),
             self.env,
             claim,
+            resources.clone(),
         );
         trace!("got factory");
 
@@ -218,11 +222,26 @@ where
                     let message = LoadResponse {
                         success: false,
                         message: error.to_string(),
+                        resources: resources
+                            .lock()
+                            .await
+                            .clone()
+                            .into_iter()
+                            .map(resource::Response::into_bytes)
+                            .collect(),
                     };
                     return Ok(Response::new(message));
                 }
             },
             Err(error) => {
+                let resources = resources
+                    .lock()
+                    .await
+                    .clone()
+                    .into_iter()
+                    .map(resource::Response::into_bytes)
+                    .collect();
+
                 if error.is_panic() {
                     let panic = error.into_panic();
                     let msg = panic
@@ -235,6 +254,7 @@ where
                     let message = LoadResponse {
                         success: false,
                         message: msg,
+                        resources,
                     };
                     return Ok(Response::new(message));
                 } else {
@@ -242,6 +262,7 @@ where
                     let message = LoadResponse {
                         success: false,
                         message: error.to_string(),
+                        resources,
                     };
                     return Ok(Response::new(message));
                 }
@@ -253,6 +274,13 @@ where
         let message = LoadResponse {
             success: true,
             message: String::new(),
+            resources: resources
+                .lock()
+                .await
+                .clone()
+                .into_iter()
+                .map(resource::Response::into_bytes)
+                .collect(),
         };
         Ok(Response::new(message))
     }

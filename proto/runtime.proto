@@ -39,10 +39,8 @@ message LoadResponse {
 }
 
 message StartRequest {
-  // Id to associate with the deployment being started
-  bytes deployment_id = 1;
   // Address and port to start the service on
-  string ip = 3;
+  string ip = 1;
 }
 
 message StartResponse {
@@ -81,26 +79,12 @@ enum StopReason {
 message SubscribeLogsRequest {}
 
 message LogItem {
-  bytes id = 1;
   google.protobuf.Timestamp timestamp = 2;
-  LogState state = 3;
   LogLevel level = 4;
   optional string file = 5;
   optional uint32 line = 6;
   string target = 7;
   bytes fields = 8;
-}
-
-enum LogState {
-  Queued = 0;
-  Building = 1;
-  Built = 2;
-  Loading = 3;
-  Running = 4;
-  Completed = 5;
-  Stopped = 6;
-  Crashed = 7;
-  Unknown = 50;
 }
 
 enum LogLevel {

@@ -37,7 +37,7 @@ use shuttle_service::builder::{build_crate, Runtime};
 use std::fmt::Write;
 use strum::IntoEnumIterator;
 use tar::Builder;
-use tracing::trace;
+use tracing::{trace, warn};
 use uuid::Uuid;
 
 use crate::args::{DeploymentCommand, ProjectCommand};
@@ -477,6 +477,8 @@ impl Shuttle {
                     let path = std::fs::canonicalize(format!("{MANIFEST_DIR}/../runtime"))
                         .expect("path to shuttle-runtime does not exist or is invalid");
 
+                    trace!(?path, "installing runtime from local filesystem");
+
                     // TODO: Add --features next here when https://github.com/shuttle-hq/shuttle/pull/688 is merged
                     std::process::Command::new("cargo")
                         .arg("install")
@@ -494,7 +496,7 @@ impl Shuttle {
                     // or it isn't installed, try to install shuttle-runtime from the production
                     // branch.
                     if let Err(err) = check_version(&runtime_path) {
-                        trace!("{}", err);
+                        warn!("{}", err);
 
                         trace!("installing shuttle-runtime");
                         // TODO: Add --features next here when https://github.com/shuttle-hq/shuttle/pull/688 is merged
@@ -516,6 +518,7 @@ impl Shuttle {
 
                 runtime_path
             } else {
+                trace!(path = ?executable_path, "using alpha runtime");
                 executable_path.clone()
             }
         };
@@ -580,7 +583,6 @@ impl Shuttle {
         let addr = SocketAddr::new(addr, run_args.port);
 
         let start_request = StartRequest {
-            deployment_id: Uuid::default().as_bytes().to_vec(),
             ip: addr.to_string(),
         };
 

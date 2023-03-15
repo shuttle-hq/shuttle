@@ -1,17 +1,20 @@
+use std::time::SystemTime;
+
 use chrono::Utc;
-use shuttle_common::{deployment::State, tracing::JsonVisitor, DeploymentId, LogItem};
+use prost_types::Timestamp;
+use shuttle_common::tracing::JsonVisitor;
+use shuttle_proto::runtime::{LogItem, LogLevel};
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::Subscriber;
 use tracing_subscriber::Layer;
 
 pub struct Logger {
-    deployment_id: DeploymentId,
     tx: UnboundedSender<LogItem>,
 }
 
 impl Logger {
-    pub fn new(tx: UnboundedSender<LogItem>, deployment_id: DeploymentId) -> Self {
-        Self { tx, deployment_id }
+    pub fn new(tx: UnboundedSender<LogItem>) -> Self {
+        Self { tx }
     }
 }
 
@@ -33,10 +36,8 @@ where
             event.record(&mut visitor);
 
             LogItem {
-                id: self.deployment_id,
-                state: State::Running,
-                level: metadata.level().into(),
-                timestamp: datetime,
+                level: LogLevel::from(metadata.level()) as i32,
+                timestamp: Some(Timestamp::from(SystemTime::from(datetime))),
                 file: visitor.file.or_else(|| metadata.file().map(str::to_string)),
                 line: visitor.line.or_else(|| metadata.line()),
                 target: visitor
@@ -54,7 +55,6 @@ where
 mod tests {
     use super::*;
 
-    use shuttle_common::log::Level;
     use tokio::sync::mpsc;
     use tracing_subscriber::prelude::*;
 
@@ -62,7 +62,7 @@ mod tests {
     fn logging() {
         let (s, mut r) = mpsc::unbounded_channel();
 
-        let logger = Logger::new(s, Default::default());
+        let logger = Logger::new(s);
 
         let _guard = tracing_subscriber::registry().with(logger).set_default();
 
@@ -73,23 +73,23 @@ mod tests {
 
         assert_eq!(
             r.blocking_recv().map(to_tuple),
-            Some(("this is".to_string(), Level::Debug))
+            Some(("this is".to_string(), LogLevel::Debug as i32))
         );
         assert_eq!(
             r.blocking_recv().map(to_tuple),
-            Some(("hi".to_string(), Level::Info))
+            Some(("hi".to_string(), LogLevel::Info as i32))
         );
         assert_eq!(
             r.blocking_recv().map(to_tuple),
-            Some(("from".to_string(), Level::Warn))
+            Some(("from".to_string(), LogLevel::Warn as i32))
         );
         assert_eq!(
             r.blocking_recv().map(to_tuple),
-            Some(("logger".to_string(), Level::Error))
+            Some(("logger".to_string(), LogLevel::Error as i32))
         );
     }
 
-    fn to_tuple(log: LogItem) -> (String, Level) {
+    fn to_tuple(log: LogItem) -> (String, i32) {
         let fields: serde_json::Map<String, serde_json::Value> =
             serde_json::from_slice(&log.fields).unwrap();
 

@@ -15,14 +15,13 @@ use core::future::Future;
 use shuttle_common::{
     claims::{ClaimLayer, InjectPropagationLayer},
     storage_manager::{ArtifactsStorageManager, StorageManager, WorkingDirStorageManager},
-    LogItem,
 };
 use shuttle_proto::{
     provisioner::provisioner_client::ProvisionerClient,
     runtime::{
         self,
         runtime_server::{Runtime, RuntimeServer},
-        LoadRequest, LoadResponse, StartRequest, StartResponse, StopReason, StopRequest,
+        LoadRequest, LoadResponse, LogItem, StartRequest, StartResponse, StopReason, StopRequest,
         StopResponse, SubscribeLogsRequest, SubscribeStopRequest, SubscribeStopResponse,
     },
 };
@@ -39,7 +38,6 @@ use tonic::{
 };
 use tower::ServiceBuilder;
 use tracing::{error, info, trace};
-use uuid::Uuid;
 
 use crate::{provisioner_factory::ProvisionerFactory, Logger};
 
@@ -186,12 +184,9 @@ where
         let service_name = ServiceName::from_str(service_name.as_str())
             .map_err(|err| Status::from_error(Box::new(err)))?;
 
-        let deployment_id = Uuid::new_v4();
-
         let factory = ProvisionerFactory::new(
             provisioner_client,
             service_name,
-            deployment_id,
             secrets,
             self.storage_manager.clone(),
             self.env,
@@ -199,7 +194,7 @@ where
         trace!("got factory");
 
         let logs_tx = self.logs_tx.clone();
-        let logger = Logger::new(logs_tx, deployment_id);
+        let logger = Logger::new(logs_tx);
 
         let loader = self.loader.lock().unwrap().deref_mut().take().unwrap();
 
@@ -380,7 +375,7 @@ where
             // Move logger items into stream to be returned
             tokio::spawn(async move {
                 while let Some(log) = logs_rx.recv().await {
-                    tx.send(Ok(log.into())).await.expect("to send log");
+                    tx.send(Ok(log)).await.expect("to send log");
                 }
             });
 

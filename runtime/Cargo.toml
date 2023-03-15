@@ -19,6 +19,7 @@ anyhow = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
+prost-types = { workspace = true }
 serde_json = { workspace = true }
 strfmt = "0.2.2"
 thiserror = { workspace = true }
@@ -28,7 +29,6 @@ tonic = { workspace = true }
 tower = { workspace = true }
 tracing = { workspace = true, features = ["default"] }
 tracing-subscriber = { workspace = true, features = ["default", "env-filter", "fmt"] }
-uuid = { workspace = true, features = ["v4"] }
 
 # TODO: bump these crates to 6.0 when we bump rust to >= 1.66
 cap-std = { version = "1.0.2", optional = true }

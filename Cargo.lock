@@ -4751,7 +4751,6 @@ dependencies = [
  "tonic",
  "tonic-build",
  "tracing",
- "uuid",
 ]
 
 [[package]]
@@ -4793,6 +4792,7 @@ dependencies = [
  "futures",
  "hyper",
  "portpicker",
+ "prost-types",
  "rmp-serde",
  "serde_json",
  "shuttle-common",
@@ -4806,7 +4806,6 @@ dependencies = [
  "tower",
  "tracing",
  "tracing-subscriber",
- "uuid",
  "wasi-common",
  "wasmtime",
  "wasmtime-wasi",

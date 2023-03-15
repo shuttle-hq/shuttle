@@ -29,6 +29,7 @@ in
       sqlite
       fastmod
       pebble
+      kondo
     ];
 
     PROTOC = "${protobuf}/bin/protoc";

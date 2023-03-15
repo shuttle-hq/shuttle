@@ -16,7 +16,6 @@ prost-types = { workspace = true }
 tokio = { version = "1.22.0", features = ["process"] }
 tonic = { workspace = true }
 tracing = { workspace = true }
-uuid = { workspace = true, features = ["v4"] }
 
 [dependencies.shuttle-common]
 workspace = true

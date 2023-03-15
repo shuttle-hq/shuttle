@@ -22,4 +22,5 @@ workspace = true
 features = ["error", "service", "wasm"]
 
 [build-dependencies]
+protoc-bin-vendored = "3.0.0"
 tonic-build = "0.8.3"

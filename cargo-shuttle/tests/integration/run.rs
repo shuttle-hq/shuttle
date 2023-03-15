@@ -92,6 +92,7 @@ async fn rocket_secrets() {
 
 // This example uses a shared Postgres. Thus local runs should create a docker container for it.
 #[tokio::test(flavor = "multi_thread")]
+#[ignore]
 async fn rocket_postgres() {
     let url = cargo_shuttle_run("../examples/rocket/postgres", false).await;
     let client = reqwest::Client::new();
@@ -281,7 +282,6 @@ async fn poem_hello_world() {
 
 // This example uses a shared Postgres. Thus local runs should create a docker container for it.
 #[tokio::test(flavor = "multi_thread")]
-#[ignore]
 async fn poem_postgres() {
     let url = cargo_shuttle_run("../examples/poem/postgres", false).await;
     let client = reqwest::Client::new();

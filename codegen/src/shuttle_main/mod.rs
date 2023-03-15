@@ -391,7 +391,7 @@ mod tests {
             ) -> ShuttleComplex {
                 use shuttle_runtime::Context;
                 use shuttle_runtime::tracing_subscriber::prelude::*;
-                use shuttle_runtime::ResourceBuilder;
+                use shuttle_runtime::{Factory, ResourceBuilder};
 
                 let filter_layer =
                     shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
@@ -506,7 +506,7 @@ mod tests {
             ) -> ShuttleComplex {
                 use shuttle_runtime::Context;
                 use shuttle_runtime::tracing_subscriber::prelude::*;
-                use shuttle_runtime::ResourceBuilder;
+                use shuttle_runtime::{Factory, ResourceBuilder};
 
                 let filter_layer =
                     shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()

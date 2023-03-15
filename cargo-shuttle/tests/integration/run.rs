@@ -121,6 +121,65 @@ async fn rocket_postgres() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn axum_static_files() {
+    let url = cargo_shuttle_run("../examples/axum/static-files", false).await;
+    let client = reqwest::Client::new();
+
+    let request_text = client
+        .get(format!("{url}/hello"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+
+    assert_eq!(request_text, "Hello, world!");
+
+    let request_text = client
+        .get(format!("{url}"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+
+    assert!(
+        request_text.contains("This is an example of serving static files with axum and shuttle.")
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn shuttle_next() {
+    let url = cargo_shuttle_run("../examples/next/hello-world", false).await;
+    let client = reqwest::Client::new();
+
+    let request_text = client
+        .get(format!("{url}/hello"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+
+    assert_eq!(request_text, "Hello, World!");
+
+    let post_text = client
+        .post(format!("{url}/uppercase"))
+        .body("uppercase this")
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+
+    assert_eq!(post_text, "UPPERCASE THIS");
+}
+
+#[tokio::test(flavor = "multi_thread")]
 #[ignore]
 async fn rocket_authentication() {
     let url = cargo_shuttle_run("../examples/rocket/authentication", false).await;

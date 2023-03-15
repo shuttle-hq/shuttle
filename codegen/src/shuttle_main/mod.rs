@@ -232,7 +232,7 @@ impl ToTokens for Loader {
             None
         } else {
             Some(parse_quote!(
-                use shuttle_runtime::ResourceBuilder;
+                use shuttle_runtime::{Factory, ResourceBuilder};
             ))
         };
 

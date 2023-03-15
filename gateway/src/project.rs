@@ -717,7 +717,7 @@ impl ProjectCreating {
                         auth_uri,
                     ],
                     "Env": [
-                        "RUST_LOG=debug,shuttle=trace",
+                        "RUST_LOG=debug,shuttle=trace,h2=warn",
                     ]
                 })
             });

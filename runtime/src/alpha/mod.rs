@@ -13,7 +13,11 @@ use async_trait::async_trait;
 use clap::Parser;
 use core::future::Future;
 use shuttle_common::{
-    claims::{ClaimLayer, InjectPropagationLayer},
+    backends::{
+        auth::{AuthPublicKey, JwtAuthenticationLayer},
+        tracing::ExtractPropagationLayer,
+    },
+    claims::{Claim, ClaimLayer, InjectPropagationLayer},
     storage_manager::{ArtifactsStorageManager, StorageManager, WorkingDirStorageManager},
 };
 use shuttle_proto::{
@@ -50,8 +54,12 @@ pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), args.port);
 
     let provisioner_address = args.provisioner_address;
-    let mut server_builder =
-        Server::builder().http2_keepalive_interval(Some(Duration::from_secs(60)));
+    let mut server_builder = Server::builder()
+        .http2_keepalive_interval(Some(Duration::from_secs(60)))
+        .layer(JwtAuthenticationLayer::new(AuthPublicKey::new(
+            args.auth_uri,
+        )))
+        .layer(ExtractPropagationLayer);
 
     // We wrap the StorageManager trait object in an Arc rather than a Box, since we need
     // to clone it in the `ProvisionerFactory::new` call in the alpha runtime `load` method.
@@ -158,6 +166,8 @@ where
     S: Service + Send + 'static,
 {
     async fn load(&self, request: Request<LoadRequest>) -> Result<Response<LoadResponse>, Status> {
+        let claim = request.extensions().get::<Claim>().map(Clone::clone);
+
         let LoadRequest {
             path,
             secrets,
@@ -190,6 +200,7 @@ where
             secrets,
             self.storage_manager.clone(),
             self.env,
+            claim,
         );
         trace!("got factory");
 

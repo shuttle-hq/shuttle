@@ -6,6 +6,7 @@ use std::{
 
 use anyhow::Result;
 use async_trait::async_trait;
+use shuttle_common::claims::{ClaimService, InjectPropagation};
 use shuttle_proto::{
     provisioner::{
         provisioner_server::{Provisioner, ProvisionerServer},
@@ -20,7 +21,7 @@ use tonic::{
 };
 
 pub struct TestRuntime {
-    pub runtime_client: RuntimeClient<Channel>,
+    pub runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
     pub bin_path: String,
     pub service_name: String,
     pub runtime_address: SocketAddr,

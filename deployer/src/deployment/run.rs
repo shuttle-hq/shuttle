@@ -8,7 +8,10 @@ use std::{
 use async_trait::async_trait;
 use opentelemetry::global;
 use portpicker::pick_unused_port;
-use shuttle_common::{claims::Claim, storage_manager::ArtifactsStorageManager};
+use shuttle_common::{
+    claims::{Claim, ClaimService, InjectPropagation},
+    storage_manager::ArtifactsStorageManager,
+};
 
 use shuttle_proto::runtime::{
     runtime_client::RuntimeClient, LoadRequest, StartRequest, StopReason, SubscribeStopRequest,
@@ -214,7 +217,6 @@ impl Built {
 
         kill_old_deployments.await?;
 
-        info!("got handle for deployment");
         // Execute loaded service
         load(
             self.service_name.clone(),
@@ -222,6 +224,7 @@ impl Built {
             executable_path.clone(),
             secret_getter,
             runtime_client.clone(),
+            self.claim,
         )
         .await?;
 
@@ -243,7 +246,8 @@ async fn load(
     service_id: Uuid,
     executable_path: PathBuf,
     secret_getter: impl SecretGetter,
-    mut runtime_client: RuntimeClient<Channel>,
+    mut runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
+    claim: Option<Claim>,
 ) -> Result<()> {
     info!(
         "loading project from: {}",
@@ -262,7 +266,7 @@ async fn load(
         .map(|secret| (secret.key, secret.value));
     let secrets = HashMap::from_iter(secrets);
 
-    let load_request = tonic::Request::new(LoadRequest {
+    let mut load_request = tonic::Request::new(LoadRequest {
         path: executable_path
             .into_os_string()
             .into_string()
@@ -270,6 +274,10 @@ async fn load(
         service_name: service_name.clone(),
         secrets,
     });
+
+    if let Some(claim) = claim {
+        load_request.extensions_mut().insert(claim);
+    }
 
     debug!("loading service");
     let response = runtime_client.load(load_request).await;
@@ -297,7 +305,7 @@ async fn load(
 async fn run(
     id: Uuid,
     service_name: String,
-    mut runtime_client: RuntimeClient<Channel>,
+    mut runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
     address: SocketAddr,
     deployment_updater: impl DeploymentUpdater,
     cleanup: impl FnOnce(SubscribeStopResponse) + Send + 'static,

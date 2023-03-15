@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
 
 use async_trait::async_trait;
 use shuttle_common::{
-    claims::{ClaimService, InjectPropagation},
+    claims::{Claim, ClaimService, InjectPropagation},
     database,
     storage_manager::StorageManager,
     DatabaseReadyInfo,
@@ -22,6 +22,7 @@ pub struct ProvisionerFactory {
     info: Option<DatabaseReadyInfo>,
     secrets: BTreeMap<String, String>,
     env: Environment,
+    claim: Option<Claim>,
 }
 
 impl ProvisionerFactory {
@@ -31,6 +32,7 @@ impl ProvisionerFactory {
         secrets: BTreeMap<String, String>,
         storage_manager: Arc<dyn StorageManager>,
         env: Environment,
+        claim: Option<Claim>,
     ) -> Self {
         Self {
             provisioner_client,
@@ -39,6 +41,7 @@ impl ProvisionerFactory {
             info: None,
             secrets,
             env,
+            claim,
         }
     }
 }
@@ -62,6 +65,10 @@ impl Factory for ProvisionerFactory {
             project_name: self.service_name.to_string(),
             db_type: Some(db_type),
         });
+
+        if let Some(claim) = &self.claim {
+            request.extensions_mut().insert(claim.clone());
+        }
 
         let response = self
             .provisioner_client
@@ -88,6 +95,10 @@ impl Factory for ProvisionerFactory {
         self.service_name.clone()
     }
 
+    fn get_environment(&self) -> shuttle_service::Environment {
+        self.env
+    }
+
     fn get_build_path(&self) -> Result<PathBuf, shuttle_service::Error> {
         self.storage_manager
             .service_build_path(self.service_name.as_str())
@@ -98,9 +109,5 @@ impl Factory for ProvisionerFactory {
         self.storage_manager
             .service_storage_path(self.service_name.as_str())
             .map_err(Into::into)
-    }
-
-    fn get_environment(&self) -> shuttle_service::Environment {
-        self.env
     }
 }

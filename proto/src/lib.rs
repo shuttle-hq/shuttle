@@ -104,9 +104,13 @@ pub mod runtime {
     use anyhow::Context;
     use chrono::DateTime;
     use prost_types::Timestamp;
-    use shuttle_common::ParseError;
+    use shuttle_common::{
+        claims::{ClaimLayer, ClaimService, InjectPropagation, InjectPropagationLayer},
+        database, ParseError,
+    };
     use tokio::process;
     use tonic::transport::{Channel, Endpoint};
+    use tower::ServiceBuilder;
     use tracing::info;
 
     pub enum StorageManagerType {
@@ -208,7 +212,10 @@ pub mod runtime {
         provisioner_address: &str,
         port: u16,
         get_runtime_executable: impl FnOnce() -> PathBuf,
-    ) -> anyhow::Result<(process::Child, runtime_client::RuntimeClient<Channel>)> {
+    ) -> anyhow::Result<(
+        process::Child,
+        runtime_client::RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
+    )> {
         let (storage_manager_type, storage_manager_path) = match storage_manager_type {
             StorageManagerType::Artifacts(path) => ("artifacts", path),
             StorageManagerType::WorkingDir(path) => ("working-dir", path),
@@ -247,9 +254,12 @@ pub mod runtime {
             .context("creating runtime client endpoint")?
             .connect_timeout(Duration::from_secs(5));
 
-        let runtime_client = runtime_client::RuntimeClient::connect(conn)
-            .await
-            .context("connecting runtime client")?;
+        let channel = conn.connect().await.context("connecting runtime client")?;
+        let channel = ServiceBuilder::new()
+            .layer(ClaimLayer)
+            .layer(InjectPropagationLayer)
+            .service(channel);
+        let runtime_client = runtime_client::RuntimeClient::new(channel);
 
         Ok((runtime, runtime_client))
     }

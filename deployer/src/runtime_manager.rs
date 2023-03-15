@@ -1,6 +1,7 @@
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use anyhow::Context;
+use shuttle_common::claims::{ClaimService, InjectPropagation};
 use shuttle_proto::runtime::{
     self, runtime_client::RuntimeClient, StopRequest, SubscribeLogsRequest,
 };
@@ -13,7 +14,17 @@ use crate::deployment::deploy_layer;
 
 const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
 
-type Runtimes = Arc<std::sync::Mutex<HashMap<Uuid, (process::Child, RuntimeClient<Channel>)>>>;
+type Runtimes = Arc<
+    std::sync::Mutex<
+        HashMap<
+            Uuid,
+            (
+                process::Child,
+                RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
+            ),
+        >,
+    >,
+>;
 
 /// Manager that can start up mutliple runtimes. This is needed so that two runtimes can be up when a new deployment is made:
 /// One runtime for the new deployment being loaded; another for the currently active deployment
@@ -43,7 +54,7 @@ impl RuntimeManager {
         &mut self,
         id: Uuid,
         alpha_runtime_path: Option<PathBuf>,
-    ) -> anyhow::Result<RuntimeClient<Channel>> {
+    ) -> anyhow::Result<RuntimeClient<ClaimService<InjectPropagation<Channel>>>> {
         trace!("making new client");
 
         let port = portpicker::pick_unused_port().context("failed to find available port")?;

@@ -543,6 +543,7 @@ impl Shuttle {
                 .into_string()
                 .expect("to convert path to string"),
             service_name: service_name.clone(),
+            resources: Default::default(),
             secrets,
         });
         trace!("loading service");

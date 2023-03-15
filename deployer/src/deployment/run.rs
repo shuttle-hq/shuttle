@@ -265,6 +265,20 @@ async fn load(
             .unwrap_or_default()
     );
 
+    // Get resources from cache when a claim is not set (ie an idl project is started)
+    let resources = if claim.is_none() {
+        resource_manager
+            .get_resources(&service_id)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(resource::Response::from)
+            .map(resource::Response::into_bytes)
+            .collect()
+    } else {
+        Default::default()
+    };
+
     let secrets = secret_getter
         .get_secrets(&service_id)
         .await
@@ -279,6 +293,7 @@ async fn load(
             .into_string()
             .unwrap_or_default(),
         service_name: service_name.clone(),
+        resources,
         secrets,
     });
 

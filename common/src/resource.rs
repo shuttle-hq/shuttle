@@ -48,6 +48,10 @@ impl Response {
     pub fn into_bytes(self) -> Vec<u8> {
         serde_json::to_vec(&self).expect("to turn resource into a vec")
     }
+
+    pub fn from_bytes(bytes: Vec<u8>) -> Self {
+        serde_json::from_slice(&bytes).expect("to turn bytes into a resource")
+    }
 }
 
 impl Display for Type {

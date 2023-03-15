@@ -171,6 +171,7 @@ where
 
         let LoadRequest {
             path,
+            resources,
             secrets,
             service_name,
         } = request.into_inner();
@@ -195,7 +196,12 @@ where
         let service_name = ServiceName::from_str(service_name.as_str())
             .map_err(|err| Status::from_error(Box::new(err)))?;
 
-        let resources: Arc<tokio::sync::Mutex<Vec<resource::Response>>> = Default::default();
+        let resources = resources
+            .into_iter()
+            .map(resource::Response::from_bytes)
+            .collect();
+        let resources: Arc<tokio::sync::Mutex<Vec<resource::Response>>> =
+            Arc::new(tokio::sync::Mutex::new(resources));
 
         let factory = ProvisionerFactory::new(
             provisioner_client,

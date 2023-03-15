@@ -27,7 +27,9 @@ use sqlx::{query, Error as SqlxError, Row};
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, trace, warn, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
+use x509_parser::nom::AsBytes;
 use x509_parser::parse_x509_certificate;
+use x509_parser::prelude::parse_x509_pem;
 use x509_parser::time::ASN1Time;
 
 use crate::acme::{AccountWrapper, AcmeClient, CustomDomain};
@@ -645,9 +647,11 @@ impl GatewayService {
         // Safe to unwrap because a 'ChainAndPrivateKey' is built from a PEM.
         let chain_and_pk = certs.into_pem().unwrap();
 
-        let (_, x509_cert) = parse_x509_certificate(chain_and_pk.as_bytes()).unwrap();
+        let (_, pem) = parse_x509_pem(chain_and_pk.as_bytes())
+            .unwrap_or_else(|_| panic!("Malformed existing PEM certificate for the gateway."));
+        let (_, x509_cert) = parse_x509_certificate(pem.contents.as_bytes())
+            .unwrap_or_else(|_| panic!("Malformed existing X509 certificate for the gateway."));
         let diff = x509_cert.validity().not_after.sub(ASN1Time::now()).unwrap();
-
         if diff.whole_days() <= RENEWAL_VALIDITY_THRESHOLD_IN_DAYS {
             let tls_path = self.state_location.join("ssl.pem");
             let certs = self

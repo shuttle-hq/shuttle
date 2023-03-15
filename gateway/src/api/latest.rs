@@ -29,7 +29,9 @@ use tokio::sync::{Mutex, MutexGuard};
 use tracing::{field, instrument, trace};
 use ttl_cache::TtlCache;
 use uuid::Uuid;
+use x509_parser::nom::AsBytes;
 use x509_parser::parse_x509_certificate;
+use x509_parser::pem::parse_x509_pem;
 use x509_parser::time::ASN1Time;
 
 use crate::acme::{AcmeClient, CustomDomain};
@@ -395,7 +397,13 @@ async fn renew_custom_domain_acme_certificate(
     // Try retrieve the current certificate if any.
     match service.project_details_for_custom_domain(&fqdn).await {
         Ok(CustomDomain { certificate, .. }) => {
-            let (_, x509_cert_chain) = parse_x509_certificate(certificate.as_bytes())
+            let (_, pem) = parse_x509_pem(certificate.as_bytes()).unwrap_or_else(|_| {
+                panic!(
+                    "Malformed existing PEM certificate for {} project.",
+                    project_name
+                )
+            });
+            let (_, x509_cert_chain) = parse_x509_certificate(pem.contents.as_bytes())
                 .unwrap_or_else(|_| {
                     panic!(
                         "Malformed existing X509 certificate for {} project.",
@@ -407,6 +415,7 @@ async fn renew_custom_domain_acme_certificate(
                 .not_after
                 .sub(ASN1Time::now())
                 .unwrap();
+
             // If current certificate validity less_or_eq than 30 days, attempt renewal.
             if diff.whole_days() <= RENEWAL_VALIDITY_THRESHOLD_IN_DAYS {
                 return match acme_client

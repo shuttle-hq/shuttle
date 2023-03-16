@@ -88,14 +88,17 @@ commands:
             cat\<< EOF > ~/.cargo/config.toml
             [patch.crates-io]
             shuttle-service = { path = "$PWD/service" }
+            shuttle-runtime = { path = "$PWD/runtime" }
+
             shuttle-aws-rds = { path = "$PWD/resources/aws-rds" }
             shuttle-persist = { path = "$PWD/resources/persist" }
-            shuttle-runtime = { path = "$PWD/runtime" }
             shuttle-shared-db = { path = "$PWD/resources/shared-db" }
             shuttle-secrets = { path = "$PWD/resources/secrets" }
             shuttle-static-folder = { path = "$PWD/resources/static-folder" }
+
             shuttle-axum = { path = "$PWD/services/shuttle-axum" }
             shuttle-actix-web = { path = "$PWD/services/shuttle-actix-web" }
+            shuttle-next = { path = "$PWD/services/shuttle-next" }
             shuttle-poem = { path = "$PWD/services/shuttle-poem" }
             shuttle-poise = { path = "$PWD/services/shuttle-poise" }
             shuttle-rocket = { path = "$PWD/services/shuttle-rocket" }

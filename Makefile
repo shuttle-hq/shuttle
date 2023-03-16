@@ -116,11 +116,11 @@ images: shuttle-provisioner shuttle-deployer shuttle-gateway shuttle-auth postgr
 
 postgres:
 	$(DOCKER_BUILD) \
-			--build-arg POSTGRES_TAG=$(POSTGRES_TAG) \
-			--tag $(CONTAINER_REGISTRY)/postgres:$(POSTGRES_TAG) \
-			$(BUILDX_FLAGS) \
-			-f $(POSTGRES_EXTRA_PATH)/Containerfile \
-			$(POSTGRES_EXTRA_PATH)
+		--build-arg POSTGRES_TAG=$(POSTGRES_TAG) \
+		--tag $(CONTAINER_REGISTRY)/postgres:$(POSTGRES_TAG) \
+		$(BUILDX_FLAGS) \
+		-f $(POSTGRES_EXTRA_PATH)/Containerfile \
+		$(POSTGRES_EXTRA_PATH)
 
 panamax:
 	if [ $(USE_PANAMAX) = "enable" ]; then \
@@ -134,11 +134,11 @@ panamax:
 
 otel:
 	$(DOCKER_BUILD) \
-	       --build-arg OTEL_TAG=$(OTEL_TAG) \
-	       --tag $(CONTAINER_REGISTRY)/otel:$(OTEL_TAG) \
-	       $(BUILDX_FLAGS) \
-	       -f $(OTEL_EXTRA_PATH)/Containerfile \
-	       $(OTEL_EXTRA_PATH)
+		--build-arg OTEL_TAG=$(OTEL_TAG) \
+		--tag $(CONTAINER_REGISTRY)/otel:$(OTEL_TAG) \
+		$(BUILDX_FLAGS) \
+		-f $(OTEL_EXTRA_PATH)/Containerfile \
+		$(OTEL_EXTRA_PATH)
 
 deploy: docker-compose.yml
 	$(DOCKER_COMPOSE_ENV) docker stack deploy -c $< $(STACK)
@@ -157,17 +157,17 @@ down: $(DOCKER_COMPOSE_FILES)
 
 shuttle-%: ${SRC} Cargo.lock
 	$(DOCKER_BUILD) \
-			--build-arg PROTOC_ARCH=$(PROTOC_ARCH) \
-			--build-arg folder=$(*) \
-			--build-arg prepare_args=$(PREPARE_ARGS) \
-			--build-arg RUSTUP_TOOLCHAIN=$(RUSTUP_TOOLCHAIN) \
-		  	--build-arg CARGO_PROFILE=$(CARGO_PROFILE) \
-			--tag $(CONTAINER_REGISTRY)/$(*):$(COMMIT_SHA) \
-			--tag $(CONTAINER_REGISTRY)/$(*):$(TAG) \
-			--tag $(CONTAINER_REGISTRY)/$(*):latest \
-			$(BUILDX_FLAGS) \
-			-f Containerfile \
-			.
+		--build-arg PROTOC_ARCH=$(PROTOC_ARCH) \
+		--build-arg folder=$(*) \
+		--build-arg prepare_args=$(PREPARE_ARGS) \
+		--build-arg RUSTUP_TOOLCHAIN=$(RUSTUP_TOOLCHAIN) \
+		--build-arg CARGO_PROFILE=$(CARGO_PROFILE) \
+		--tag $(CONTAINER_REGISTRY)/$(*):$(COMMIT_SHA) \
+		--tag $(CONTAINER_REGISTRY)/$(*):$(TAG) \
+		--tag $(CONTAINER_REGISTRY)/$(*):latest \
+		$(BUILDX_FLAGS) \
+		-f Containerfile \
+		.
 
 # Bunch of targets to make bumping the shuttle version easier
 #

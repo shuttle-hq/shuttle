@@ -2,15 +2,15 @@ use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
 
 use async_trait::async_trait;
 use shuttle_common::{
-    claims::{ClaimService, InjectPropagation},
+    claims::{Claim, ClaimService, InjectPropagation},
     database,
+    resource::{self, ResourceInfo},
     storage_manager::StorageManager,
     DatabaseReadyInfo,
 };
-use shuttle_proto::provisioner::{
-    database_request::DbType, provisioner_client::ProvisionerClient, DatabaseRequest,
-};
+use shuttle_proto::provisioner::{provisioner_client::ProvisionerClient, DatabaseRequest};
 use shuttle_service::{Environment, Factory, ServiceName};
+use tokio::sync::Mutex;
 use tonic::{transport::Channel, Request};
 use tracing::{debug, info, trace};
 
@@ -19,9 +19,10 @@ pub struct ProvisionerFactory {
     service_name: ServiceName,
     storage_manager: Arc<dyn StorageManager>,
     provisioner_client: ProvisionerClient<ClaimService<InjectPropagation<Channel>>>,
-    info: Option<DatabaseReadyInfo>,
     secrets: BTreeMap<String, String>,
     env: Environment,
+    claim: Option<Claim>,
+    resources: Arc<Mutex<Vec<resource::Response>>>,
 }
 
 impl ProvisionerFactory {
@@ -31,14 +32,17 @@ impl ProvisionerFactory {
         secrets: BTreeMap<String, String>,
         storage_manager: Arc<dyn StorageManager>,
         env: Environment,
+        claim: Option<Claim>,
+        resources: Arc<Mutex<Vec<resource::Response>>>,
     ) -> Self {
         Self {
             provisioner_client,
             service_name,
             storage_manager,
-            info: None,
             secrets,
             env,
+            claim,
+            resources,
         }
     }
 }
@@ -51,17 +55,27 @@ impl Factory for ProvisionerFactory {
     ) -> Result<String, shuttle_service::Error> {
         info!("Provisioning a {db_type}. This can take a while...");
 
-        if let Some(ref info) = self.info {
+        if let Some(info) = self
+            .resources
+            .lock()
+            .await
+            .iter()
+            .find(|resource| resource.r#type == resource::Type::Database(db_type.clone()))
+        {
             debug!("A database has already been provisioned for this deployment, so reusing it");
-            return Ok(info.connection_string_private());
+
+            let resource = info.get_resource_info();
+            return Ok(resource.connection_string_private());
         }
 
-        let db_type: DbType = db_type.into();
-
-        let request = Request::new(DatabaseRequest {
+        let mut request = Request::new(DatabaseRequest {
             project_name: self.service_name.to_string(),
-            db_type: Some(db_type),
+            db_type: Some(db_type.clone().into()),
         });
+
+        if let Some(claim) = &self.claim {
+            request.extensions_mut().insert(claim.clone());
+        }
 
         let response = self
             .provisioner_client
@@ -73,10 +87,14 @@ impl Factory for ProvisionerFactory {
         let info: DatabaseReadyInfo = response.into();
         let conn_str = info.connection_string_private();
 
-        self.info = Some(info);
+        self.resources.lock().await.push(resource::Response {
+            r#type: resource::Type::Database(db_type),
+            data: serde_json::to_value(&info).expect("to convert DB info"),
+        });
 
         info!("Done provisioning database");
         trace!("giving a DB connection string: {}", conn_str);
+
         Ok(conn_str)
     }
 
@@ -86,6 +104,10 @@ impl Factory for ProvisionerFactory {
 
     fn get_service_name(&self) -> ServiceName {
         self.service_name.clone()
+    }
+
+    fn get_environment(&self) -> shuttle_service::Environment {
+        self.env
     }
 
     fn get_build_path(&self) -> Result<PathBuf, shuttle_service::Error> {
@@ -98,9 +120,5 @@ impl Factory for ProvisionerFactory {
         self.storage_manager
             .service_storage_path(self.service_name.as_str())
             .map_err(Into::into)
-    }
-
-    fn get_environment(&self) -> shuttle_service::Environment {
-        self.env
     }
 }

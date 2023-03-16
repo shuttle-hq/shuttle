@@ -92,6 +92,7 @@ impl Runtime for AxumWasm {
         let message = LoadResponse {
             success: true,
             message: String::new(),
+            resources: Vec::new(),
         };
 
         Ok(tonic::Response::new(message))

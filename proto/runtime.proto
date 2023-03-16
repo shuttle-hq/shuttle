@@ -27,8 +27,11 @@ message LoadRequest {
   // Path to compiled file to load for service
   string path = 2;
 
+  // A cache of resource details to use instead when asked
+  repeated bytes resources = 10;
+
   // Secrets that belong to this deployment
-  map<string, string> secrets = 10;
+  map<string, string> secrets = 20;
 }
 
 message LoadResponse {
@@ -36,6 +39,8 @@ message LoadResponse {
   bool success = 1;
   // Error message if not successful
   string message = 2;
+  // Which resources where requested
+  repeated bytes resources = 10;
 }
 
 message StartRequest {

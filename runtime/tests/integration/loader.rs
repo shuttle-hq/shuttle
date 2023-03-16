@@ -17,6 +17,7 @@ async fn bind_panic() {
     let load_request = tonic::Request::new(LoadRequest {
         path: bin_path,
         service_name,
+        resources: Default::default(),
         secrets,
     });
 

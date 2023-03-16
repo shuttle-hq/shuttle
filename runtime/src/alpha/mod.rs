@@ -13,7 +13,12 @@ use async_trait::async_trait;
 use clap::Parser;
 use core::future::Future;
 use shuttle_common::{
-    claims::{ClaimLayer, InjectPropagationLayer},
+    backends::{
+        auth::{AuthPublicKey, JwtAuthenticationLayer},
+        tracing::ExtractPropagationLayer,
+    },
+    claims::{Claim, ClaimLayer, InjectPropagationLayer},
+    resource,
     storage_manager::{ArtifactsStorageManager, StorageManager, WorkingDirStorageManager},
 };
 use shuttle_proto::{
@@ -50,8 +55,12 @@ pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), args.port);
 
     let provisioner_address = args.provisioner_address;
-    let mut server_builder =
-        Server::builder().http2_keepalive_interval(Some(Duration::from_secs(60)));
+    let mut server_builder = Server::builder()
+        .http2_keepalive_interval(Some(Duration::from_secs(60)))
+        .layer(JwtAuthenticationLayer::new(AuthPublicKey::new(
+            args.auth_uri,
+        )))
+        .layer(ExtractPropagationLayer);
 
     // We wrap the StorageManager trait object in an Arc rather than a Box, since we need
     // to clone it in the `ProvisionerFactory::new` call in the alpha runtime `load` method.
@@ -158,8 +167,11 @@ where
     S: Service + Send + 'static,
 {
     async fn load(&self, request: Request<LoadRequest>) -> Result<Response<LoadResponse>, Status> {
+        let claim = request.extensions().get::<Claim>().map(Clone::clone);
+
         let LoadRequest {
             path,
+            resources,
             secrets,
             service_name,
         } = request.into_inner();
@@ -184,12 +196,21 @@ where
         let service_name = ServiceName::from_str(service_name.as_str())
             .map_err(|err| Status::from_error(Box::new(err)))?;
 
+        let resources = resources
+            .into_iter()
+            .map(resource::Response::from_bytes)
+            .collect();
+        let resources: Arc<tokio::sync::Mutex<Vec<resource::Response>>> =
+            Arc::new(tokio::sync::Mutex::new(resources));
+
         let factory = ProvisionerFactory::new(
             provisioner_client,
             service_name,
             secrets,
             self.storage_manager.clone(),
             self.env,
+            claim,
+            resources.clone(),
         );
         trace!("got factory");
 
@@ -207,11 +228,26 @@ where
                     let message = LoadResponse {
                         success: false,
                         message: error.to_string(),
+                        resources: resources
+                            .lock()
+                            .await
+                            .clone()
+                            .into_iter()
+                            .map(resource::Response::into_bytes)
+                            .collect(),
                     };
                     return Ok(Response::new(message));
                 }
             },
             Err(error) => {
+                let resources = resources
+                    .lock()
+                    .await
+                    .clone()
+                    .into_iter()
+                    .map(resource::Response::into_bytes)
+                    .collect();
+
                 if error.is_panic() {
                     let panic = error.into_panic();
                     let msg = panic
@@ -224,6 +260,7 @@ where
                     let message = LoadResponse {
                         success: false,
                         message: msg,
+                        resources,
                     };
                     return Ok(Response::new(message));
                 } else {
@@ -231,6 +268,7 @@ where
                     let message = LoadResponse {
                         success: false,
                         message: error.to_string(),
+                        resources,
                     };
                     return Ok(Response::new(message));
                 }
@@ -242,6 +280,13 @@ where
         let message = LoadResponse {
             success: true,
             message: String::new(),
+            resources: resources
+                .lock()
+                .await
+                .clone()
+                .into_iter()
+                .map(resource::Response::into_bytes)
+                .collect(),
         };
         Ok(Response::new(message))
     }

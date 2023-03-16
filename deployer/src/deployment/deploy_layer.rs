@@ -310,7 +310,10 @@ mod tests {
         time::Duration,
     };
 
-    use crate::{persistence::DeploymentUpdater, RuntimeManager};
+    use crate::{
+        persistence::{DeploymentUpdater, Resource, ResourceManager},
+        RuntimeManager,
+    };
     use async_trait::async_trait;
     use axum::body::Bytes;
     use ctor::ctor;
@@ -467,7 +470,7 @@ mod tests {
         let path = tmp_dir.into_path();
         let (tx, _rx) = crossbeam_channel::unbounded();
 
-        RuntimeManager::new(path, format!("http://{}", provisioner_addr), tx)
+        RuntimeManager::new(path, format!("http://{}", provisioner_addr), None, tx)
     }
 
     #[async_trait::async_trait]
@@ -550,6 +553,21 @@ mod tests {
 
         async fn get_secrets(&self, _service_id: &Uuid) -> Result<Vec<Secret>, Self::Err> {
             Ok(Default::default())
+        }
+    }
+
+    #[derive(Clone)]
+    struct StubResourceManager;
+
+    #[async_trait::async_trait]
+    impl ResourceManager for StubResourceManager {
+        type Err = std::io::Error;
+
+        async fn insert_resource(&self, _resource: &Resource) -> Result<(), Self::Err> {
+            Ok(())
+        }
+        async fn get_resources(&self, _service_id: &Uuid) -> Result<Vec<Resource>, Self::Err> {
+            Ok(Vec::new())
         }
     }
 
@@ -861,6 +879,7 @@ mod tests {
             .active_deployment_getter(StubActiveDeploymentGetter)
             .artifacts_path(PathBuf::from("/tmp"))
             .secret_getter(StubSecretGetter)
+            .resource_manager(StubResourceManager)
             .runtime(get_runtime_manager())
             .deployment_updater(StubDeploymentUpdater)
             .queue_client(StubBuildQueueClient)

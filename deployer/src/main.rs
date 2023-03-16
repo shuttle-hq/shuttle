@@ -24,6 +24,7 @@ async fn main() {
     let runtime_manager = RuntimeManager::new(
         args.artifacts_path.clone(),
         args.provisioner_address.uri().to_string(),
+        Some(args.auth_uri.to_string()),
         persistence.get_log_sender(),
     );
 

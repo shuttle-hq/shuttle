@@ -12,7 +12,7 @@ use tracing::{instrument, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::{
-    persistence::{DeploymentUpdater, SecretGetter, SecretRecorder, State},
+    persistence::{DeploymentUpdater, ResourceManager, SecretGetter, SecretRecorder, State},
     RuntimeManager,
 };
 use tokio::sync::{mpsc, Mutex};
@@ -23,7 +23,7 @@ use self::{deploy_layer::LogRecorder, gateway_client::BuildQueueClient};
 const QUEUE_BUFFER_SIZE: usize = 100;
 const RUN_BUFFER_SIZE: usize = 100;
 
-pub struct DeploymentManagerBuilder<LR, SR, ADG, DU, SG, QC> {
+pub struct DeploymentManagerBuilder<LR, SR, ADG, DU, SG, RM, QC> {
     build_log_recorder: Option<LR>,
     secret_recorder: Option<SR>,
     active_deployment_getter: Option<ADG>,
@@ -31,16 +31,18 @@ pub struct DeploymentManagerBuilder<LR, SR, ADG, DU, SG, QC> {
     runtime_manager: Option<Arc<Mutex<RuntimeManager>>>,
     deployment_updater: Option<DU>,
     secret_getter: Option<SG>,
+    resource_manager: Option<RM>,
     queue_client: Option<QC>,
 }
 
-impl<LR, SR, ADG, DU, SG, QC> DeploymentManagerBuilder<LR, SR, ADG, DU, SG, QC>
+impl<LR, SR, ADG, DU, SG, RM, QC> DeploymentManagerBuilder<LR, SR, ADG, DU, SG, RM, QC>
 where
     LR: LogRecorder,
     SR: SecretRecorder,
     ADG: ActiveDeploymentsGetter,
     DU: DeploymentUpdater,
     SG: SecretGetter,
+    RM: ResourceManager,
     QC: BuildQueueClient,
 {
     pub fn build_log_recorder(mut self, build_log_recorder: LR) -> Self {
@@ -79,6 +81,12 @@ where
         self
     }
 
+    pub fn resource_manager(mut self, resource_manager: RM) -> Self {
+        self.resource_manager = Some(resource_manager);
+
+        self
+    }
+
     pub fn runtime(mut self, runtime_manager: Arc<Mutex<RuntimeManager>>) -> Self {
         self.runtime_manager = Some(runtime_manager);
 
@@ -110,6 +118,7 @@ where
             .deployment_updater
             .expect("a deployment updater to be set");
         let secret_getter = self.secret_getter.expect("a secret getter to be set");
+        let resource_manager = self.resource_manager.expect("a resource manager to be set");
 
         let (queue_send, queue_recv) = mpsc::channel(QUEUE_BUFFER_SIZE);
         let (run_send, run_recv) = mpsc::channel(RUN_BUFFER_SIZE);
@@ -132,6 +141,7 @@ where
             deployment_updater,
             active_deployment_getter,
             secret_getter,
+            resource_manager,
             storage_manager.clone(),
         ));
 
@@ -169,7 +179,8 @@ pub struct DeploymentManager {
 impl DeploymentManager {
     /// Create a new deployment manager. Manages one or more 'pipelines' for
     /// processing service building, loading, and deployment.
-    pub fn builder<LR, SR, ADG, DU, SG, QC>() -> DeploymentManagerBuilder<LR, SR, ADG, DU, SG, QC> {
+    pub fn builder<LR, SR, ADG, DU, SG, RM, QC>(
+    ) -> DeploymentManagerBuilder<LR, SR, ADG, DU, SG, RM, QC> {
         DeploymentManagerBuilder {
             build_log_recorder: None,
             secret_recorder: None,
@@ -178,6 +189,7 @@ impl DeploymentManager {
             runtime_manager: None,
             deployment_updater: None,
             secret_getter: None,
+            resource_manager: None,
             queue_client: None,
         }
     }

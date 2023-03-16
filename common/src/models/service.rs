@@ -1,6 +1,6 @@
 use crate::{
-    models::{deployment, resource, resource::ResourceInfo, secret},
-    DatabaseReadyInfo,
+    models::{deployment, secret},
+    resource::{self, ResourceInfo},
 };
 
 use comfy_table::{
@@ -32,12 +32,6 @@ pub struct Summary {
     pub deployment: Option<deployment::Response>,
     pub resources: Vec<resource::Response>,
     pub uri: String,
-}
-
-impl ResourceInfo for DatabaseReadyInfo {
-    fn connection_string_public(&self) -> String {
-        self.connection_string_public()
-    }
 }
 
 impl Display for Detailed {

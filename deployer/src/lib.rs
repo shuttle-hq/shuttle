@@ -37,6 +37,7 @@ pub async fn start(
         .runtime(runtime_manager)
         .deployment_updater(persistence.clone())
         .secret_getter(persistence.clone())
+        .resource_manager(persistence.clone())
         .queue_client(GatewayClient::new(args.gateway_uri))
         .build();
 

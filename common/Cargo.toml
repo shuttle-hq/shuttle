@@ -31,8 +31,8 @@ reqwest = { version = "0.11.13", optional = true }
 rmp-serde = { version = "1.1.1", optional = true }
 rustrict = { version = "0.5.5", optional = true }
 serde = { workspace = true, features = ["derive", "std"] }
-serde_json = { workspace = true, optional = true }
-strum = { workspace = true, features = ["derive"], optional = true }
+serde_json = { workspace = true }
+strum = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true, optional = true }
 tonic = { version = "0.8.3", optional = true }
 tower = { workspace = true, optional = true }
@@ -47,10 +47,10 @@ uuid = { workspace = true, features = ["v4", "serde"], optional = true }
 backend = ["async-trait", "axum/matched-path", "claims", "hyper/client", "opentelemetry-otlp", "thiserror", "tower-http", "tracing-subscriber/env-filter", "tracing-subscriber/fmt", "ttl_cache"]
 claims = ["bytes", "chrono/clock", "headers", "http", "http-body", "jsonwebtoken", "opentelemetry", "opentelemetry-http", "pin-project", "tower", "tracing", "tracing-opentelemetry"]
 display = ["chrono/clock", "comfy-table", "crossterm"]
-error = ["prost-types", "serde_json", "thiserror", "uuid"]
-models = ["anyhow", "async-trait", "display", "http", "reqwest", "serde_json", "service"]
-service = ["chrono/serde", "once_cell", "rustrict", "serde/derive", "strum", "uuid"]
-tracing = ["serde_json"]
+error = ["prost-types", "thiserror", "uuid"]
+models = ["anyhow", "async-trait", "display", "http", "reqwest", "service"]
+service = ["chrono/serde", "once_cell", "rustrict", "serde/derive", "uuid"]
+tracing = []
 wasm = ["chrono/clock", "http-serde", "http", "rmp-serde", "tracing", "tracing-subscriber"]
 
 [dev-dependencies]
@@ -59,7 +59,6 @@ base64 = "0.13.1"
 cap-std = "1.0.2"
 hyper = { workspace = true }
 ring = { workspace = true }
-serde_json = { workspace = true }
 tokio = { version = "1.22.0", features = ["macros", "rt-multi-thread"] }
 tower = { workspace = true, features = ["util"] }
 tracing-fluent-assertions = "0.3.0"

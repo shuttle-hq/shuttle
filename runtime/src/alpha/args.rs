@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use clap::{Parser, ValueEnum};
-use tonic::transport::Endpoint;
+use tonic::transport::{Endpoint, Uri};
 
 #[derive(Parser, Debug)]
 #[command(version)]
@@ -21,6 +21,10 @@ pub struct Args {
     /// Path to use for storage manager
     #[arg(long)]
     pub storage_manager_path: PathBuf,
+
+    /// Address to reach the authentication service at
+    #[arg(long, default_value = "http://127.0.0.1:8008")]
+    pub auth_uri: Uri,
 }
 
 #[derive(Clone, Debug, ValueEnum)]

@@ -104,9 +104,13 @@ pub mod runtime {
     use anyhow::Context;
     use chrono::DateTime;
     use prost_types::Timestamp;
-    use shuttle_common::ParseError;
+    use shuttle_common::{
+        claims::{ClaimLayer, ClaimService, InjectPropagation, InjectPropagationLayer},
+        ParseError,
+    };
     use tokio::process;
     use tonic::transport::{Channel, Endpoint};
+    use tower::ServiceBuilder;
     use tracing::info;
 
     pub enum StorageManagerType {
@@ -206,9 +210,13 @@ pub mod runtime {
         wasm: bool,
         storage_manager_type: StorageManagerType,
         provisioner_address: &str,
+        auth_uri: Option<&String>,
         port: u16,
         get_runtime_executable: impl FnOnce() -> PathBuf,
-    ) -> anyhow::Result<(process::Child, runtime_client::RuntimeClient<Channel>)> {
+    ) -> anyhow::Result<(
+        process::Child,
+        runtime_client::RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
+    )> {
         let (storage_manager_type, storage_manager_path) = match storage_manager_type {
             StorageManagerType::Artifacts(path) => ("artifacts", path),
             StorageManagerType::WorkingDir(path) => ("working-dir", path),
@@ -221,7 +229,7 @@ pub mod runtime {
         let args = if wasm {
             vec!["--port", port]
         } else {
-            vec![
+            let mut args = vec![
                 "--port",
                 port,
                 "--provisioner-address",
@@ -230,7 +238,13 @@ pub mod runtime {
                 storage_manager_type,
                 "--storage-manager-path",
                 storage_manager_path,
-            ]
+            ];
+
+            if let Some(auth_uri) = auth_uri {
+                args.append(&mut vec!["--auth-uri", auth_uri]);
+            }
+
+            args
         };
 
         let runtime = process::Command::new(runtime_executable_path)
@@ -247,9 +261,12 @@ pub mod runtime {
             .context("creating runtime client endpoint")?
             .connect_timeout(Duration::from_secs(5));
 
-        let runtime_client = runtime_client::RuntimeClient::connect(conn)
-            .await
-            .context("connecting runtime client")?;
+        let channel = conn.connect().await.context("connecting runtime client")?;
+        let channel = ServiceBuilder::new()
+            .layer(ClaimLayer)
+            .layer(InjectPropagationLayer)
+            .service(channel);
+        let runtime_client = runtime_client::RuntimeClient::new(channel);
 
         Ok((runtime, runtime_client))
     }

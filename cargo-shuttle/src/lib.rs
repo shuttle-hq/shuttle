@@ -527,6 +527,7 @@ impl Shuttle {
             is_wasm,
             runtime::StorageManagerType::WorkingDir(working_directory.to_path_buf()),
             &format!("http://localhost:{}", run_args.port + 1),
+            None,
             run_args.port + 2,
             runtime_path,
         )
@@ -543,6 +544,7 @@ impl Shuttle {
                 .into_string()
                 .expect("to convert path to string"),
             service_name: service_name.clone(),
+            resources: Default::default(),
             secrets,
         });
         trace!("loading service");

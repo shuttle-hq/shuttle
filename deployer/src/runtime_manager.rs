@@ -1,6 +1,7 @@
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use anyhow::Context;
+use shuttle_common::claims::{ClaimService, InjectPropagation};
 use shuttle_proto::runtime::{
     self, runtime_client::RuntimeClient, StopRequest, SubscribeLogsRequest,
 };
@@ -13,7 +14,17 @@ use crate::deployment::deploy_layer;
 
 const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
 
-type Runtimes = Arc<std::sync::Mutex<HashMap<Uuid, (process::Child, RuntimeClient<Channel>)>>>;
+type Runtimes = Arc<
+    std::sync::Mutex<
+        HashMap<
+            Uuid,
+            (
+                process::Child,
+                RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
+            ),
+        >,
+    >,
+>;
 
 /// Manager that can start up mutliple runtimes. This is needed so that two runtimes can be up when a new deployment is made:
 /// One runtime for the new deployment being loaded; another for the currently active deployment
@@ -22,6 +33,7 @@ pub struct RuntimeManager {
     runtimes: Runtimes,
     artifacts_path: PathBuf,
     provisioner_address: String,
+    auth_uri: Option<String>,
     log_sender: crossbeam_channel::Sender<deploy_layer::Log>,
 }
 
@@ -29,12 +41,14 @@ impl RuntimeManager {
     pub fn new(
         artifacts_path: PathBuf,
         provisioner_address: String,
+        auth_uri: Option<String>,
         log_sender: crossbeam_channel::Sender<deploy_layer::Log>,
     ) -> Arc<Mutex<Self>> {
         Arc::new(Mutex::new(Self {
             runtimes: Default::default(),
             artifacts_path,
             provisioner_address,
+            auth_uri,
             log_sender,
         }))
     }
@@ -43,7 +57,7 @@ impl RuntimeManager {
         &mut self,
         id: Uuid,
         alpha_runtime_path: Option<PathBuf>,
-    ) -> anyhow::Result<RuntimeClient<Channel>> {
+    ) -> anyhow::Result<RuntimeClient<ClaimService<InjectPropagation<Channel>>>> {
         trace!("making new client");
 
         let port = portpicker::pick_unused_port().context("failed to find available port")?;
@@ -97,6 +111,7 @@ impl RuntimeManager {
             is_next,
             runtime::StorageManagerType::Artifacts(self.artifacts_path.clone()),
             &self.provisioner_address,
+            self.auth_uri.as_ref(),
             port,
             get_runtime_executable,
         )

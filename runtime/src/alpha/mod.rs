@@ -15,7 +15,7 @@ use core::future::Future;
 use shuttle_common::{
     backends::{
         auth::{AuthPublicKey, JwtAuthenticationLayer},
-        tracing::ExtractPropagationLayer,
+        tracing::{setup_tracing, ExtractPropagationLayer},
     },
     claims::{Claim, ClaimLayer, InjectPropagationLayer},
     resource,
@@ -53,6 +53,8 @@ mod args;
 pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
     let args = Args::parse();
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), args.port);
+
+    setup_tracing(tracing_subscriber::registry(), "shuttle-alpha");
 
     let provisioner_address = args.provisioner_address;
     let mut server_builder = Server::builder()

@@ -65,6 +65,10 @@ impl<'a> ResourceBuilder<PathBuf> for StaticFolder<'a> {
 
         trace!(output_directory = ?output_dir, "got output directory");
 
+        if output_dir.join(self.folder) == input_dir {
+            return Ok(output_dir.join(self.folder));
+        }
+
         let copy_options = CopyOptions::new().overwrite(true);
         match copy(&input_dir, &output_dir, &copy_options) {
             Ok(_) => Ok(output_dir.join(self.folder)),

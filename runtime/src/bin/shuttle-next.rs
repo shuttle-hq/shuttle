@@ -4,7 +4,7 @@ use std::{
 };
 
 use clap::Parser;
-use shuttle_common::backends::tracing::setup_tracing;
+use shuttle_common::backends::tracing::{setup_tracing, ExtractPropagationLayer};
 use shuttle_proto::runtime::runtime_server::RuntimeServer;
 use shuttle_runtime::{AxumWasm, NextArgs};
 use tonic::transport::Server;
@@ -21,8 +21,9 @@ async fn main() {
 
     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), args.port);
 
-    let mut server_builder =
-        Server::builder().http2_keepalive_interval(Some(Duration::from_secs(60)));
+    let mut server_builder = Server::builder()
+        .http2_keepalive_interval(Some(Duration::from_secs(60)))
+        .layer(ExtractPropagationLayer);
 
     let axum = AxumWasm::default();
     let svc = RuntimeServer::new(axum);

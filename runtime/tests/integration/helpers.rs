@@ -55,6 +55,7 @@ pub async fn spawn_runtime(project_path: String, service_name: &str) -> Result<T
         is_wasm,
         runtime::StorageManagerType::WorkingDir(PathBuf::from(project_path.clone())),
         &format!("http://{}", provisioner_address),
+        None,
         runtime_port,
         runtime_path,
     )

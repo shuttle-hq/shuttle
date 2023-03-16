@@ -480,7 +480,7 @@ mod tests {
             }
         });
 
-        RuntimeManager::new(path, format!("http://{}", provisioner_addr), tx)
+        RuntimeManager::new(path, format!("http://{}", provisioner_addr), None, tx)
     }
 
     #[derive(Clone)]

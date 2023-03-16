@@ -210,6 +210,7 @@ pub mod runtime {
         wasm: bool,
         storage_manager_type: StorageManagerType,
         provisioner_address: &str,
+        auth_uri: Option<&String>,
         port: u16,
         get_runtime_executable: impl FnOnce() -> PathBuf,
     ) -> anyhow::Result<(
@@ -228,7 +229,7 @@ pub mod runtime {
         let args = if wasm {
             vec!["--port", port]
         } else {
-            vec![
+            let mut args = vec![
                 "--port",
                 port,
                 "--provisioner-address",
@@ -237,7 +238,13 @@ pub mod runtime {
                 storage_manager_type,
                 "--storage-manager-path",
                 storage_manager_path,
-            ]
+            ];
+
+            if let Some(auth_uri) = auth_uri {
+                args.append(&mut vec!["--auth-uri", auth_uri]);
+            }
+
+            args
         };
 
         let runtime = process::Command::new(runtime_executable_path)

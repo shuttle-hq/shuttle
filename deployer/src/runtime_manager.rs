@@ -33,6 +33,7 @@ pub struct RuntimeManager {
     runtimes: Runtimes,
     artifacts_path: PathBuf,
     provisioner_address: String,
+    auth_uri: Option<String>,
     log_sender: crossbeam_channel::Sender<deploy_layer::Log>,
 }
 
@@ -40,12 +41,14 @@ impl RuntimeManager {
     pub fn new(
         artifacts_path: PathBuf,
         provisioner_address: String,
+        auth_uri: Option<String>,
         log_sender: crossbeam_channel::Sender<deploy_layer::Log>,
     ) -> Arc<Mutex<Self>> {
         Arc::new(Mutex::new(Self {
             runtimes: Default::default(),
             artifacts_path,
             provisioner_address,
+            auth_uri,
             log_sender,
         }))
     }
@@ -108,6 +111,7 @@ impl RuntimeManager {
             is_next,
             runtime::StorageManagerType::Artifacts(self.artifacts_path.clone()),
             &self.provisioner_address,
+            self.auth_uri.as_ref(),
             port,
             get_runtime_executable,
         )

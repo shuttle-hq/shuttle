@@ -479,7 +479,6 @@ impl Shuttle {
 
                     trace!(?path, "installing runtime from local filesystem");
 
-                    // TODO: Add --features next here when https://github.com/shuttle-hq/shuttle/pull/688 is merged
                     std::process::Command::new("cargo")
                         .arg("install")
                         .arg("shuttle-runtime")
@@ -493,22 +492,16 @@ impl Shuttle {
                         .expect("failed to install the shuttle runtime");
                 } else {
                     // If the version of cargo-shuttle is different from shuttle-runtime,
-                    // or it isn't installed, try to install shuttle-runtime from the production
-                    // branch.
+                    // or it isn't installed, try to install shuttle-runtime from crates.io.
                     if let Err(err) = check_version(&runtime_path) {
                         warn!("{}", err);
 
                         trace!("installing shuttle-runtime");
-                        // TODO: Add --features next here when https://github.com/shuttle-hq/shuttle/pull/688 is merged
                         std::process::Command::new("cargo")
                             .arg("install")
                             .arg("shuttle-runtime")
                             .arg("--bin")
                             .arg("shuttle-next")
-                            .arg("--git")
-                            .arg("https://github.com/shuttle-hq/shuttle")
-                            .arg("--branch")
-                            .arg("production")
                             .arg("--features")
                             .arg("next")
                             .output()

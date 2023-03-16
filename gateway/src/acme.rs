@@ -24,6 +24,7 @@ use crate::proxy::AsResponderTo;
 use crate::{Error, ProjectName};
 
 const MAX_RETRIES: usize = 15;
+const MAX_RETRIES_CERTIFICATE_FETCHING: usize = 5;
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct CustomDomain {
@@ -103,7 +104,7 @@ impl AcmeClient {
     ) -> Result<(String, String), AcmeClientError> {
         trace!(identifier, "requesting acme certificate");
 
-        let (mut order, state) = AccountWrapper::from(credentials)
+        let mut order = AccountWrapper::from(credentials)
             .0
             .new_order(&NewOrder {
                 identifiers: &[Identifier::Dns(identifier.to_string())],
@@ -114,14 +115,10 @@ impl AcmeClient {
                 AcmeClientError::OrderCreation
             })?;
 
-        let authorizations =
-            order
-                .authorizations(&state.authorizations)
-                .await
-                .map_err(|error| {
-                    error!(%error, "failed to get authorizations information");
-                    AcmeClientError::AuthorizationCreation
-                })?;
+        let authorizations = order.authorizations().await.map_err(|error| {
+            error!(%error, "failed to get authorizations information");
+            AcmeClientError::AuthorizationCreation
+        })?;
 
         // There should only ever be 1 authorization as we only provide 1 domain at a time
         debug_assert!(authorizations.len() == 1);
@@ -145,15 +142,27 @@ impl AcmeClient {
             AcmeClientError::CertificateSigning
         })?;
 
-        let certificate_chain = order
-            .finalize(&signing_request, &state.finalize)
-            .await
-            .map_err(|error| {
-                error!(%error, "failed to finalize certificate request");
-                AcmeClientError::OrderFinalizing
-            })?;
+        order.finalize(&signing_request).await.map_err(|error| {
+            error!(%error, "failed to finalize certificate request");
+            AcmeClientError::OrderFinalizing
+        })?;
 
-        Ok((certificate_chain, certificate.serialize_private_key_pem()))
+        // Poll for certificate, do this for few rounds.
+        let mut res: Option<String> = None;
+        let mut retries = MAX_RETRIES_CERTIFICATE_FETCHING;
+        while res.is_none() && retries > 0 {
+            res = order.certificate().await.map_err(|error| {
+                error!(%error, "failed to fetch the certificate chain");
+                AcmeClientError::CertificateCreation
+            })?;
+            retries -= 1;
+            sleep(Duration::new(1, 0)).await;
+        }
+
+        Ok((
+            res.expect("panicked when returning the certificate chain"),
+            certificate.serialize_private_key_pem(),
+        ))
     }
 
     fn find_challenge(
@@ -176,7 +185,7 @@ impl AcmeClient {
         let mut delay = Duration::from_millis(250);
         let state = loop {
             sleep(delay).await;
-            let state = order.state().await.map_err(|error| {
+            let state = order.refresh().await.map_err(|error| {
                 error!(%error, "got error while fetching state");
                 AcmeClientError::FetchingState
             })?;

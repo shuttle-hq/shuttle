@@ -9,7 +9,6 @@ use shuttle_proto::runtime::runtime_server::RuntimeServer;
 use shuttle_runtime::{AxumWasm, NextArgs};
 use tonic::transport::Server;
 use tracing::trace;
-use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {

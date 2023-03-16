@@ -987,6 +987,7 @@ dependencies = [
  "crossterm",
  "dialoguer",
  "dirs",
+ "dunce",
  "flate2",
  "futures",
  "git2",

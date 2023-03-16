@@ -22,6 +22,7 @@ crossbeam-channel = "0.5.6"
 crossterm = "0.25.0"
 dialoguer = { version = "0.10.2", features = ["fuzzy-select"] }
 dirs = "4.0.0"
+dunce = "1.0.3"
 flate2 = "1.0.25"
 futures = "0.3.25"
 git2 = "0.14.2"

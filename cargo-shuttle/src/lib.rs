@@ -472,6 +472,8 @@ impl Shuttle {
                     .expect("failed to find cargo home dir")
                     .join("bin/shuttle-next");
 
+                println!("Installing shuttle runtime. This can take a while...");
+
                 if cfg!(debug_assertions) {
                     // Canonicalized path to shuttle-runtime for dev to work on windows
                     let path = std::fs::canonicalize(format!("{MANIFEST_DIR}/../runtime"))

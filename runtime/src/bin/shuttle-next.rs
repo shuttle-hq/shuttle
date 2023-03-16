@@ -4,6 +4,7 @@ use std::{
 };
 
 use clap::Parser;
+use shuttle_common::backends::tracing::setup_tracing;
 use shuttle_proto::runtime::runtime_server::RuntimeServer;
 use shuttle_runtime::{AxumWasm, NextArgs};
 use tonic::transport::Server;
@@ -14,16 +15,7 @@ use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 async fn main() {
     let args = NextArgs::parse();
 
-    // TODO: replace with tracing helper from main branch
-    let fmt_layer = fmt::layer();
-    let filter_layer = EnvFilter::try_from_default_env()
-        .or_else(|_| EnvFilter::try_new("info"))
-        .unwrap();
-
-    tracing_subscriber::registry()
-        .with(filter_layer)
-        .with(fmt_layer)
-        .init();
+    setup_tracing(tracing_subscriber::registry(), "shuttle-next");
 
     trace!(args = ?args, "parsed args");
 

@@ -258,10 +258,10 @@ impl ToTokens for Loader {
                         .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("INFO"))
                         .unwrap();
 
-                let _guard = shuttle_runtime::tracing_subscriber::registry()
+                shuttle_runtime::tracing_subscriber::registry()
                     .with(filter_layer)
                     .with(logger)
-                    .set_default(); // Scope our runtime logger to this thread scope only
+                    .init();
 
                 #vars
                 #(let #fn_inputs = #fn_inputs_builder::new()#fn_inputs_builder_options.build(&mut #factory_ident).await.context(format!("failed to provision {}", stringify!(#fn_inputs_builder)))?;)*
@@ -317,10 +317,10 @@ mod tests {
                         .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("INFO"))
                         .unwrap();
 
-                let _guard = shuttle_runtime::tracing_subscriber::registry()
+                shuttle_runtime::tracing_subscriber::registry()
                     .with(filter_layer)
                     .with(logger)
-                    .set_default();
+                    .init();
 
                 simple().await
             }
@@ -398,10 +398,10 @@ mod tests {
                         .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("INFO"))
                         .unwrap();
 
-                let _guard = shuttle_runtime::tracing_subscriber::registry()
+                shuttle_runtime::tracing_subscriber::registry()
                     .with(filter_layer)
                     .with(logger)
-                    .set_default();
+                    .init();
 
                 let pool = shuttle_shared_db::Postgres::new().build(&mut factory).await.context(format!("failed to provision {}", stringify!(shuttle_shared_db::Postgres)))?;
                 let redis = shuttle_shared_db::Redis::new().build(&mut factory).await.context(format!("failed to provision {}", stringify!(shuttle_shared_db::Redis)))?;
@@ -513,10 +513,10 @@ mod tests {
                         .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("INFO"))
                         .unwrap();
 
-                let _guard = shuttle_runtime::tracing_subscriber::registry()
+                shuttle_runtime::tracing_subscriber::registry()
                     .with(filter_layer)
                     .with(logger)
-                    .set_default();
+                    .init();
 
                 let vars = std::collections::HashMap::from_iter(factory.get_secrets().await?.into_iter().map(|(key, value)| (format!("secrets.{}", key), value)));
                 let pool = shuttle_shared_db::Postgres::new().size(&shuttle_runtime::strfmt("10Gb", &vars)?).public(false).build(&mut factory).await.context(format!("failed to provision {}", stringify!(shuttle_shared_db::Postgres)))?;

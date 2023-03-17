@@ -19,7 +19,11 @@ use tower::{Layer, Service};
 use tracing::{error, trace, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
-pub const EXP_MINUTES: i64 = 5;
+/// Minutes before a claim expires
+///
+/// We don't use the convention of 5 minutes because builds can take longer than 5 minutes. When this happens, requests
+/// to provisioner will fail as the token expired.
+pub const EXP_MINUTES: i64 = 15;
 const ISS: &str = "shuttle";
 
 /// The scope of operations that can be performed on shuttle
@@ -147,9 +151,11 @@ impl Claim {
                     "failed to convert token to claim"
                 );
                 match err.kind() {
+                    jsonwebtoken::errors::ErrorKind::ExpiredSignature => {
+                        StatusCode::from_u16(499).unwrap() // Expired status code which is safe to unwrap
+                    }
                     jsonwebtoken::errors::ErrorKind::InvalidSignature
                     | jsonwebtoken::errors::ErrorKind::InvalidAlgorithmName
-                    | jsonwebtoken::errors::ErrorKind::ExpiredSignature
                     | jsonwebtoken::errors::ErrorKind::InvalidIssuer
                     | jsonwebtoken::errors::ErrorKind::ImmatureSignature => {
                         StatusCode::UNAUTHORIZED

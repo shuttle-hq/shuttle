@@ -34,7 +34,7 @@ where
         .tracing()
         .with_exporter(
             opentelemetry_otlp::new_exporter()
-                .grpcio()
+                .tonic()
                 .with_endpoint("http://otel-collector:4317"),
         )
         .with_trace_config(

@@ -971,7 +971,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-shuttle"
-version = "0.12.0-rc1"
+version = "0.12.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -4538,7 +4538,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-admin"
-version = "0.12.0-rc1"
+version = "0.12.0"
 dependencies = [
  "anyhow",
  "clap 4.0.27",
@@ -4555,7 +4555,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-auth"
-version = "0.12.0-rc1"
+version = "0.12.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4584,7 +4584,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-codegen"
-version = "0.12.0-rc1"
+version = "0.12.0"
 dependencies = [
  "pretty_assertions",
  "proc-macro-error",
@@ -4596,7 +4596,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-common"
-version = "0.12.0-rc1"
+version = "0.12.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4641,7 +4641,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-deployer"
-version = "0.12.0-rc1"
+version = "0.12.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4689,7 +4689,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-gateway"
-version = "0.12.0-rc1"
+version = "0.12.0"
 dependencies = [
  "acme2",
  "anyhow",
@@ -4740,7 +4740,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-proto"
-version = "0.12.0-rc1"
+version = "0.12.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4757,7 +4757,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-provisioner"
-version = "0.12.0-rc1"
+version = "0.12.0"
 dependencies = [
  "aws-config",
  "aws-sdk-rds",
@@ -4783,7 +4783,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-runtime"
-version = "0.12.0-rc1"
+version = "0.12.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4815,7 +4815,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-secrets"
-version = "0.12.0-rc1"
+version = "0.12.0"
 dependencies = [
  "async-trait",
  "shuttle-service",
@@ -4823,7 +4823,7 @@ dependencies = [
 
 [[package]]
 name = "shuttle-service"
-version = "0.12.0-rc1"
+version = "0.12.0"
 dependencies = [
  "anyhow",
  "async-trait",

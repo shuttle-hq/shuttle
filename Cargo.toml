@@ -25,17 +25,17 @@ exclude = [
 ]
 
 [workspace.package]
-version = "0.12.0-rc1"
+version = "0.12.0"
 edition = "2021"
 license = "Apache-2.0"
 repository = "https://github.com/shuttle-hq/shuttle"
 
 # https://doc.rust-lang.org/cargo/reference/workspaces.html#the-workspacedependencies-table
 [workspace.dependencies]
-shuttle-codegen = { path = "codegen", version = "0.12.0-rc1" }
-shuttle-common = { path = "common", version = "0.12.0-rc1" }
-shuttle-proto = { path = "proto", version = "0.12.0-rc1" }
-shuttle-service = { path = "service", version = "0.12.0-rc1" }
+shuttle-codegen = { path = "codegen", version = "0.12.0" }
+shuttle-common = { path = "common", version = "0.12.0" }
+shuttle-proto = { path = "proto", version = "0.12.0" }
+shuttle-service = { path = "service", version = "0.12.0" }
 
 anyhow = "1.0.66"
 async-trait = "0.1.58"

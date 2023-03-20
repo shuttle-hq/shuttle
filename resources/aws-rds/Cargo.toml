@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-aws-rds"
-version = "0.12.0-rc1"
+version = "0.12.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Plugin to provision AWS RDS resources"
@@ -10,7 +10,7 @@ keywords = ["shuttle-service", "rds"]
 [dependencies]
 async-trait = "0.1.56"
 paste = "1.0.7"
-shuttle-service = { path = "../../service", version = "0.12.0-rc1", default-features = false }
+shuttle-service = { path = "../../service", version = "0.12.0", default-features = false }
 sqlx = { version = "0.6.2", features = ["runtime-tokio-native-tls"] }
 
 [features]

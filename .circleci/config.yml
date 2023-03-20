@@ -329,7 +329,7 @@ jobs:
       CARGO_NET_GIT_FETCH_WITH_CLI: "true"
     steps:
       - checkout
-      - run: choco install -y strawberryperl
+      - run: choco install -y strawberryperl protoc
       - run:
           name: Install Rust
           command: |

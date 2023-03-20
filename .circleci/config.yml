@@ -307,7 +307,7 @@ jobs:
       - checkout
       - run: sudo apt update && sudo DEBIAN_FRONTEND=noninteractive apt install -y libssl-dev musl-tools clang
       - install-protoc:
-          arch: << parameters.target >>
+          arch: << parameters.protoc_arch >>
       - run:
           name: Install Rust
           command: curl --proto '=https' --tlsv1.3 https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.65.0 --target << parameters.target >>

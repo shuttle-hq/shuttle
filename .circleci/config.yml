@@ -350,8 +350,8 @@ jobs:
           suffix: ".exe"
   build-binaries-mac:
     macos:
-      xcode: 14.2.0
-    resource_class: macos.m1.large.gen1
+      xcode: 12.5.1
+    resource_class: large
     steps:
       - checkout
       - install-protoc:

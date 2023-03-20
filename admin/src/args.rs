@@ -18,6 +18,9 @@ pub enum Command {
     /// Try to revive projects in the crashed state
     Revive,
 
+    /// Destroy all the current running projects
+    Destroy,
+
     /// Manage custom domains
     #[command(subcommand)]
     Acme(AcmeCommand),

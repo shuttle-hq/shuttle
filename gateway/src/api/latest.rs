@@ -299,6 +299,17 @@ async fn revive_projects(
         .map_err(|_| Error::from_kind(ErrorKind::Internal))
 }
 
+#[instrument(skip_all)]
+async fn destroy_projects(
+    State(RouterState {
+        service, sender, ..
+    }): State<RouterState>,
+) -> Result<(), Error> {
+    crate::project::exec::destroy(service, sender)
+        .await
+        .map_err(|_| Error::from_kind(ErrorKind::Internal))
+}
+
 #[instrument(skip_all, fields(%email, ?acme_server))]
 async fn create_acme_account(
     Extension(acme_client): Extension<AcmeClient>,
@@ -498,6 +509,10 @@ impl ApiBuilder {
             .route(
                 "/admin/revive",
                 post(revive_projects.layer(ScopedLayer::new(vec![Scope::Admin]))),
+            )
+            .route(
+                "/admin/destroy",
+                post(destroy_projects.layer(ScopedLayer::new(vec![Scope::Admin]))),
             )
             .route(
                 "/admin/stats/load",

@@ -24,6 +24,7 @@ async fn main() {
 
     let res = match args.command {
         Command::Revive => client.revive().await.expect("revive to succeed"),
+        Command::Destroy => client.destroy().await.expect("destroy to succeed"),
         Command::Acme(AcmeCommand::CreateAccount { email, acme_server }) => {
             let account = client
                 .acme_account_create(&email, acme_server)

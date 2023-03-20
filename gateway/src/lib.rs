@@ -344,7 +344,8 @@ pub mod tests {
     use jsonwebtoken::EncodingKey;
     use rand::distributions::{Alphanumeric, DistString, Distribution, Uniform};
     use ring::signature::{self, Ed25519KeyPair, KeyPair};
-    use shuttle_common::backends::auth::{Claim, ConvertResponse, Scope};
+    use shuttle_common::backends::auth::ConvertResponse;
+    use shuttle_common::claims::{Claim, Scope};
     use shuttle_common::models::project;
     use sqlx::SqlitePool;
     use tokio::sync::mpsc::channel;
@@ -801,7 +802,8 @@ pub mod tests {
             .request(
                 Request::post("/projects/matrix")
                     .with_header(&authorization)
-                    .body(Body::empty())
+                    .header("Content-Type", "application/json")
+                    .body("{\"idle_minutes\": 3}".into())
                     .unwrap(),
             )
             .map_ok(|resp| {

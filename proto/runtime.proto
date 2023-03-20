@@ -1,0 +1,101 @@
+syntax = "proto3";
+package runtime;
+
+import "google/protobuf/timestamp.proto";
+
+service Runtime {
+  // Load a service file to be ready to start it
+  rpc Load(LoadRequest) returns (LoadResponse);
+
+  // Start a loaded service file
+  rpc Start(StartRequest) returns (StartResponse);
+  
+  // Stop a started service
+  rpc Stop(StopRequest) returns (StopResponse);
+
+  // Channel to notify a service has been stopped
+  rpc SubscribeStop(SubscribeStopRequest) returns (stream SubscribeStopResponse);
+
+  // Subscribe to runtime logs
+  rpc SubscribeLogs(SubscribeLogsRequest) returns (stream LogItem);
+}
+
+message LoadRequest {
+  // Name of service to load
+  string service_name = 1;
+
+  // Path to compiled file to load for service
+  string path = 2;
+
+  // A cache of resource details to use instead when asked
+  repeated bytes resources = 10;
+
+  // Secrets that belong to this deployment
+  map<string, string> secrets = 20;
+}
+
+message LoadResponse {
+  // Could the service be loaded
+  bool success = 1;
+  // Error message if not successful
+  string message = 2;
+  // Which resources where requested
+  repeated bytes resources = 10;
+}
+
+message StartRequest {
+  // Address and port to start the service on
+  string ip = 1;
+}
+
+message StartResponse {
+  // Was the start successful
+  bool success = 1;
+}
+
+message StopRequest {}
+
+message StopResponse {
+  // Was the stop successful
+  bool success = 1;
+}
+
+message SubscribeStopRequest {}
+
+message SubscribeStopResponse {
+  // Reason the service has stopped
+  StopReason reason = 1;
+
+  // Any extra message to go with the reason. If there are any
+  string message = 2;
+}
+
+enum StopReason {
+  // User requested this stop
+  Request = 0;
+
+  // Service stopped by itself
+  End = 1;
+
+  // Service crashed
+  Crash = 2;
+}
+
+message SubscribeLogsRequest {}
+
+message LogItem {
+  google.protobuf.Timestamp timestamp = 2;
+  LogLevel level = 4;
+  optional string file = 5;
+  optional uint32 line = 6;
+  string target = 7;
+  bytes fields = 8;
+}
+
+enum LogLevel {
+  Trace = 0;
+  Debug = 1;
+  Info = 2;
+  Warn = 3;
+  Error = 4;
+}

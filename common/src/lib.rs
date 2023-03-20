@@ -1,16 +1,31 @@
 #[cfg(feature = "backend")]
 pub mod backends;
+#[cfg(feature = "claims")]
+pub mod claims;
 pub mod database;
+#[cfg(feature = "service")]
 pub mod deployment;
+#[cfg(feature = "service")]
 pub mod log;
 #[cfg(feature = "models")]
 pub mod models;
+#[cfg(feature = "service")]
 pub mod project;
+pub mod resource;
+#[cfg(feature = "service")]
+pub mod storage_manager;
+#[cfg(feature = "tracing")]
+pub mod tracing;
+#[cfg(feature = "wasm")]
+pub mod wasm;
 
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "service")]
 use uuid::Uuid;
 
+#[cfg(feature = "service")]
 pub use log::Item as LogItem;
+#[cfg(feature = "service")]
 pub use log::STATE_MESSAGE;
 
 #[cfg(debug_assertions)]
@@ -22,8 +37,20 @@ pub const API_URL_DEFAULT: &str = "https://api.shuttle.rs";
 pub type ApiKey = String;
 pub type ApiUrl = String;
 pub type Host = String;
+#[cfg(feature = "service")]
 pub type DeploymentId = Uuid;
-pub type Port = u16;
+
+#[cfg(feature = "error")]
+/// Errors that can occur when changing types. Especially from prost
+#[derive(thiserror::Error, Debug)]
+pub enum ParseError {
+    #[error("failed to parse UUID: {0}")]
+    Uuid(#[from] uuid::Error),
+    #[error("failed to parse timestamp: {0}")]
+    Timestamp(#[from] prost_types::TimestampError),
+    #[error("failed to parse serde: {0}")]
+    Serde(#[from] serde_json::Error),
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatabaseReadyInfo {

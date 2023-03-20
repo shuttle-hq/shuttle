@@ -6,7 +6,7 @@ use anyhow::Result;
 use cargo::ops::NewOptions;
 use cargo_edit::{find, get_latest_dependency, registry_url};
 use indoc::indoc;
-use toml_edit::{value, Array, Document, Item, Table};
+use toml_edit::{value, Array, Document, Table};
 use url::Url;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, strum::Display, strum::EnumIter)]
@@ -29,7 +29,7 @@ pub enum Framework {
 impl Framework {
     /// Returns a framework-specific struct that implements the trait `ShuttleInit`
     /// for writing framework-specific dependencies to `Cargo.toml` and generating
-    /// boilerplate code in `src/lib.rs`.
+    /// boilerplate code in `src/main.rs`.
     pub fn init_config(&self) -> Box<dyn ShuttleInit> {
         match self {
             Framework::ActixWeb => Box::new(ShuttleInitActixWeb),
@@ -78,29 +78,43 @@ impl ShuttleInit for ShuttleInitActixWeb {
             get_dependency_version_fn,
         );
 
-        set_inline_table_dependency_features(
-            "shuttle-service",
+        set_key_value_dependency_version(
+            "shuttle-actix-web",
             dependencies,
-            vec!["web-actix-web".to_string()],
+            manifest_path,
+            url,
+            true,
+            get_dependency_version_fn,
+        );
+
+        set_key_value_dependency_version(
+            "tokio",
+            dependencies,
+            manifest_path,
+            url,
+            true,
+            get_dependency_version_fn,
         );
     }
 
     fn get_boilerplate_code_for_framework(&self) -> &'static str {
         indoc! {r#"
         use actix_web::{get, web::ServiceConfig};
-        use shuttle_service::ShuttleActixWeb;
+        use shuttle_actix_web::ShuttleActixWeb;
 
         #[get("/hello")]
         async fn hello_world() -> &'static str {
             "Hello World!"
         }
 
-        #[shuttle_service::main]
+        #[shuttle_runtime::main]
         async fn actix_web(
-        ) -> ShuttleActixWeb<impl FnOnce(&mut ServiceConfig) + Sync + Send + Clone + 'static> {
-            Ok(move |cfg: &mut ServiceConfig| {
+        ) -> ShuttleActixWeb<impl FnOnce(&mut ServiceConfig) + Send + Clone + 'static> {
+            let config = move |cfg: &mut ServiceConfig| {
                 cfg.service(hello_world);
-            })
+            };
+
+            Ok(config.into())
         }"#}
     }
 }
@@ -124,17 +138,21 @@ impl ShuttleInit for ShuttleInitAxum {
             get_dependency_version_fn,
         );
 
-        set_inline_table_dependency_features(
-            "shuttle-service",
-            dependencies,
-            vec!["web-axum".to_string()],
-        );
         set_key_value_dependency_version(
-            "sync_wrapper",
+            "shuttle-axum",
             dependencies,
             manifest_path,
             url,
-            false,
+            true,
+            get_dependency_version_fn,
+        );
+
+        set_key_value_dependency_version(
+            "tokio",
+            dependencies,
+            manifest_path,
+            url,
+            true,
             get_dependency_version_fn,
         );
     }
@@ -142,18 +160,16 @@ impl ShuttleInit for ShuttleInitAxum {
     fn get_boilerplate_code_for_framework(&self) -> &'static str {
         indoc! {r#"
         use axum::{routing::get, Router};
-        use sync_wrapper::SyncWrapper;
 
         async fn hello_world() -> &'static str {
             "Hello, world!"
         }
 
-        #[shuttle_service::main]
-        async fn axum() -> shuttle_service::ShuttleAxum {
+        #[shuttle_runtime::main]
+        async fn axum() -> shuttle_axum::ShuttleAxum {
             let router = Router::new().route("/hello", get(hello_world));
-            let sync_wrapper = SyncWrapper::new(router);
 
-            Ok(sync_wrapper)
+            Ok(router.into())
         }"#}
     }
 }
@@ -177,10 +193,22 @@ impl ShuttleInit for ShuttleInitRocket {
             get_dependency_version_fn,
         );
 
-        set_inline_table_dependency_features(
-            "shuttle-service",
+        set_key_value_dependency_version(
+            "shuttle-rocket",
             dependencies,
-            vec!["web-rocket".to_string()],
+            manifest_path,
+            url,
+            true,
+            get_dependency_version_fn,
+        );
+
+        set_key_value_dependency_version(
+            "tokio",
+            dependencies,
+            manifest_path,
+            url,
+            true,
+            get_dependency_version_fn,
         );
     }
 
@@ -194,11 +222,11 @@ impl ShuttleInit for ShuttleInitRocket {
             "Hello, world!"
         }
 
-        #[shuttle_service::main]
-        async fn rocket() -> shuttle_service::ShuttleRocket {
+        #[shuttle_runtime::main]
+        async fn rocket() -> shuttle_rocket::ShuttleRocket {
             let rocket = rocket::build().mount("/hello", routes![index]);
 
-            Ok(rocket)
+            Ok(rocket.into())
         }"#}
     }
 }
@@ -213,10 +241,22 @@ impl ShuttleInit for ShuttleInitTide {
         url: &Url,
         get_dependency_version_fn: GetDependencyVersionFn,
     ) {
-        set_inline_table_dependency_features(
-            "shuttle-service",
+        set_key_value_dependency_version(
+            "shuttle-tide",
             dependencies,
-            vec!["web-tide".to_string()],
+            manifest_path,
+            url,
+            true,
+            get_dependency_version_fn,
+        );
+
+        set_key_value_dependency_version(
+            "tokio",
+            dependencies,
+            manifest_path,
+            url,
+            true,
+            get_dependency_version_fn,
         );
 
         set_key_value_dependency_version(
@@ -231,14 +271,14 @@ impl ShuttleInit for ShuttleInitTide {
 
     fn get_boilerplate_code_for_framework(&self) -> &'static str {
         indoc! {r#"
-        #[shuttle_service::main]
-        async fn tide() -> shuttle_service::ShuttleTide<()> {
+        #[shuttle_runtime::main]
+        async fn tide() -> shuttle_tide::ShuttleTide<()> {
             let mut app = tide::new();
             app.with(tide::log::LogMiddleware::new());
 
             app.at("/hello").get(|_| async { Ok("Hello, world!") });
 
-            Ok(app)
+            Ok(app.into())
         }"#}
     }
 }
@@ -253,12 +293,6 @@ impl ShuttleInit for ShuttleInitPoem {
         url: &Url,
         get_dependency_version_fn: GetDependencyVersionFn,
     ) {
-        set_inline_table_dependency_features(
-            "shuttle-service",
-            dependencies,
-            vec!["web-poem".to_string()],
-        );
-
         set_key_value_dependency_version(
             "poem",
             dependencies,
@@ -267,22 +301,41 @@ impl ShuttleInit for ShuttleInitPoem {
             false,
             get_dependency_version_fn,
         );
+
+        set_key_value_dependency_version(
+            "shuttle-poem",
+            dependencies,
+            manifest_path,
+            url,
+            true,
+            get_dependency_version_fn,
+        );
+
+        set_key_value_dependency_version(
+            "tokio",
+            dependencies,
+            manifest_path,
+            url,
+            true,
+            get_dependency_version_fn,
+        );
     }
 
     fn get_boilerplate_code_for_framework(&self) -> &'static str {
         indoc! {r#"
         use poem::{get, handler, Route};
+        use shuttle_poem::ShuttlePoem;
 
         #[handler]
         fn hello_world() -> &'static str {
             "Hello, world!"
         }
 
-        #[shuttle_service::main]
-        async fn poem() -> shuttle_service::ShuttlePoem<impl poem::Endpoint> {
+        #[shuttle_runtime::main]
+        async fn poem() -> ShuttlePoem<impl poem::Endpoint> {
             let app = Route::new().at("/hello", get(hello_world));
 
-            Ok(app)
+            Ok(app.into())
         }"#}
     }
 }
@@ -297,18 +350,30 @@ impl ShuttleInit for ShuttleInitSalvo {
         url: &Url,
         get_dependency_version_fn: GetDependencyVersionFn,
     ) {
-        set_inline_table_dependency_features(
-            "shuttle-service",
-            dependencies,
-            vec!["web-salvo".to_string()],
-        );
-
         set_key_value_dependency_version(
             "salvo",
             dependencies,
             manifest_path,
             url,
             false,
+            get_dependency_version_fn,
+        );
+
+        set_key_value_dependency_version(
+            "shuttle-salvo",
+            dependencies,
+            manifest_path,
+            url,
+            true,
+            get_dependency_version_fn,
+        );
+
+        set_key_value_dependency_version(
+            "tokio",
+            dependencies,
+            manifest_path,
+            url,
+            true,
             get_dependency_version_fn,
         );
     }
@@ -319,14 +384,14 @@ impl ShuttleInit for ShuttleInitSalvo {
 
         #[handler]
         async fn hello_world(res: &mut Response) {
-            res.render(Text::Plain("Hello, World!"));
+            res.render(Text::Plain("Hello, world!"));
         }
 
-        #[shuttle_service::main]
-        async fn salvo() -> shuttle_service::ShuttleSalvo {
-            let router = Router::new().get(hello_world);
+        #[shuttle_runtime::main]
+        async fn salvo() -> shuttle_salvo::ShuttleSalvo {
+            let router = Router::with_path("hello").get(hello_world);
 
-            Ok(router)
+            Ok(router.into())
         }"#}
     }
 }
@@ -341,12 +406,6 @@ impl ShuttleInit for ShuttleInitSerenity {
         url: &Url,
         get_dependency_version_fn: GetDependencyVersionFn,
     ) {
-        set_inline_table_dependency_features(
-            "shuttle-service",
-            dependencies,
-            vec!["bot-serenity".to_string()],
-        );
-
         set_key_value_dependency_version(
             "anyhow",
             dependencies,
@@ -388,6 +447,24 @@ impl ShuttleInit for ShuttleInitSerenity {
         );
 
         set_key_value_dependency_version(
+            "shuttle-serenity",
+            dependencies,
+            manifest_path,
+            url,
+            true,
+            get_dependency_version_fn,
+        );
+
+        set_key_value_dependency_version(
+            "tokio",
+            dependencies,
+            manifest_path,
+            url,
+            true,
+            get_dependency_version_fn,
+        );
+
+        set_key_value_dependency_version(
             "tracing",
             dependencies,
             manifest_path,
@@ -424,10 +501,10 @@ impl ShuttleInit for ShuttleInitSerenity {
             }
         }
 
-        #[shuttle_service::main]
+        #[shuttle_runtime::main]
         async fn serenity(
             #[shuttle_secrets::Secrets] secret_store: SecretStore,
-        ) -> shuttle_service::ShuttleSerenity {
+        ) -> shuttle_serenity::ShuttleSerenity {
             // Get the discord token set in `Secrets.toml`
             let token = if let Some(token) = secret_store.get("DISCORD_TOKEN") {
                 token
@@ -443,7 +520,7 @@ impl ShuttleInit for ShuttleInitSerenity {
                 .await
                 .expect("Err creating client");
 
-            Ok(client)
+            Ok(client.into())
         }"#}
     }
 }
@@ -458,12 +535,6 @@ impl ShuttleInit for ShuttleInitPoise {
         url: &Url,
         get_dependency_version_fn: GetDependencyVersionFn,
     ) {
-        set_inline_table_dependency_features(
-            "shuttle-service",
-            dependencies,
-            vec!["bot-poise".to_string()],
-        );
-
         set_key_value_dependency_version(
             "anyhow",
             dependencies,
@@ -483,11 +554,29 @@ impl ShuttleInit for ShuttleInitPoise {
         );
 
         set_key_value_dependency_version(
+            "shuttle-poise",
+            dependencies,
+            manifest_path,
+            url,
+            true,
+            get_dependency_version_fn,
+        );
+
+        set_key_value_dependency_version(
             "shuttle-secrets",
             dependencies,
             manifest_path,
             url,
             false,
+            get_dependency_version_fn,
+        );
+
+        set_key_value_dependency_version(
+            "tokio",
+            dependencies,
+            manifest_path,
+            url,
+            true,
             get_dependency_version_fn,
         );
 
@@ -504,47 +593,47 @@ impl ShuttleInit for ShuttleInitPoise {
     fn get_boilerplate_code_for_framework(&self) -> &'static str {
         indoc! {r#"
         use anyhow::Context as _;
-	use poise::serenity_prelude as serenity;
-	use shuttle_secrets::SecretStore;
-	use shuttle_service::ShuttlePoise;
+        use poise::serenity_prelude as serenity;
+        use shuttle_secrets::SecretStore;
+        use shuttle_poise::ShuttlePoise;
 
-	struct Data {} // User data, which is stored and accessible in all command invocations
-	type Error = Box<dyn std::error::Error + Send + Sync>;
-	type Context<'a> = poise::Context<'a, Data, Error>;
+        struct Data {} // User data, which is stored and accessible in all command invocations
+        type Error = Box<dyn std::error::Error + Send + Sync>;
+        type Context<'a> = poise::Context<'a, Data, Error>;
 
-	/// Responds with "world!"
-	#[poise::command(slash_command)]
-	async fn hello(ctx: Context<'_>) -> Result<(), Error> {
-		ctx.say("world!").await?;
-		Ok(())
-	}
+        /// Responds with "world!"
+        #[poise::command(slash_command)]
+        async fn hello(ctx: Context<'_>) -> Result<(), Error> {
+            ctx.say("world!").await?;
+            Ok(())
+        }
 
-	#[shuttle_service::main]
-	async fn poise(#[shuttle_secrets::Secrets] secret_store: SecretStore) -> ShuttlePoise<Data, Error> {
-		// Get the discord token set in `Secrets.toml`
-		let discord_token = secret_store
-			.get("DISCORD_TOKEN")
-			.context("'DISCORD_TOKEN' was not found")?;
+        #[shuttle_runtime::main]
+        async fn poise(#[shuttle_secrets::Secrets] secret_store: SecretStore) -> ShuttlePoise<Data, Error> {
+            // Get the discord token set in `Secrets.toml`
+            let discord_token = secret_store
+                .get("DISCORD_TOKEN")
+                .context("'DISCORD_TOKEN' was not found")?;
 
-		let framework = poise::Framework::builder()
-			.options(poise::FrameworkOptions {
-				commands: vec![hello()],
-				..Default::default()
-			})
-			.token(discord_token)
-			.intents(serenity::GatewayIntents::non_privileged())
-			.setup(|ctx, _ready, framework| {
-				Box::pin(async move {
-					poise::builtins::register_globally(ctx, &framework.options().commands).await?;
-					Ok(Data {})
-				})
-			})
-			.build()
-			.await
-			.map_err(shuttle_service::error::CustomError::new)?;
+            let framework = poise::Framework::builder()
+                .options(poise::FrameworkOptions {
+                    commands: vec![hello()],
+                    ..Default::default()
+                })
+                .token(discord_token)
+                .intents(serenity::GatewayIntents::non_privileged())
+                .setup(|ctx, _ready, framework| {
+                    Box::pin(async move {
+                        poise::builtins::register_globally(ctx, &framework.options().commands).await?;
+                        Ok(Data {})
+                    })
+                })
+                .build()
+                .await
+                .map_err(shuttle_runtime::CustomError::new)?;
 
-		Ok(framework)
-	}"#}
+            Ok(framework.into())
+        }"#}
     }
 }
 
@@ -558,10 +647,33 @@ impl ShuttleInit for ShuttleInitTower {
         url: &Url,
         get_dependency_version_fn: GetDependencyVersionFn,
     ) {
-        set_inline_table_dependency_features(
-            "shuttle-service",
+        set_inline_table_dependency_version(
+            "hyper",
             dependencies,
-            vec!["web-tower".to_string()],
+            manifest_path,
+            url,
+            false,
+            get_dependency_version_fn,
+        );
+
+        set_inline_table_dependency_features("hyper", dependencies, vec!["full".to_string()]);
+
+        set_key_value_dependency_version(
+            "shuttle-tower",
+            dependencies,
+            manifest_path,
+            url,
+            true,
+            get_dependency_version_fn,
+        );
+
+        set_key_value_dependency_version(
+            "tokio",
+            dependencies,
+            manifest_path,
+            url,
+            true,
+            get_dependency_version_fn,
         );
 
         set_inline_table_dependency_version(
@@ -574,17 +686,6 @@ impl ShuttleInit for ShuttleInitTower {
         );
 
         set_inline_table_dependency_features("tower", dependencies, vec!["full".to_string()]);
-
-        set_inline_table_dependency_version(
-            "hyper",
-            dependencies,
-            manifest_path,
-            url,
-            false,
-            get_dependency_version_fn,
-        );
-
-        set_inline_table_dependency_features("hyper", dependencies, vec!["full".to_string()]);
     }
 
     fn get_boilerplate_code_for_framework(&self) -> &'static str {
@@ -619,9 +720,11 @@ impl ShuttleInit for ShuttleInitTower {
             }
         }
 
-        #[shuttle_service::main]
-        async fn tower() -> Result<HelloWorld, shuttle_service::Error> {
-            Ok(HelloWorld)
+        #[shuttle_runtime::main]
+        async fn tower() -> shuttle_tower::ShuttleTower<HelloWorld> {
+            let service = HelloWorld;
+
+            Ok(service.into())
         }"#}
     }
 }
@@ -636,10 +739,22 @@ impl ShuttleInit for ShuttleInitWarp {
         url: &Url,
         get_dependency_version_fn: GetDependencyVersionFn,
     ) {
-        set_inline_table_dependency_features(
-            "shuttle-service",
+        set_key_value_dependency_version(
+            "shuttle-warp",
             dependencies,
-            vec!["web-warp".to_string()],
+            manifest_path,
+            url,
+            true,
+            get_dependency_version_fn,
+        );
+
+        set_key_value_dependency_version(
+            "tokio",
+            dependencies,
+            manifest_path,
+            url,
+            true,
+            get_dependency_version_fn,
         );
 
         set_key_value_dependency_version(
@@ -654,13 +769,13 @@ impl ShuttleInit for ShuttleInitWarp {
 
     fn get_boilerplate_code_for_framework(&self) -> &'static str {
         indoc! {r#"
-            use warp::Filter;
-            use warp::Reply;
-
-            #[shuttle_service::main]
-            async fn warp() -> shuttle_service::ShuttleWarp<(impl Reply,)> {
-                let route = warp::any().map(|| "Hello, World");
-                Ok(route.boxed())
+        use warp::Filter;
+        use warp::Reply;
+        
+        #[shuttle_runtime::main]
+        async fn warp() -> shuttle_warp::ShuttleWarp<(impl Reply,)> {
+            let route = warp::any().map(|| "Hello, World!");
+            Ok(route.boxed().into())
         }"#}
     }
 }
@@ -675,10 +790,13 @@ impl ShuttleInit for ShuttleInitThruster {
         url: &Url,
         get_dependency_version_fn: GetDependencyVersionFn,
     ) {
-        set_inline_table_dependency_features(
-            "shuttle-service",
+        set_key_value_dependency_version(
+            "shuttle-thruster",
             dependencies,
-            vec!["web-thruster".to_string()],
+            manifest_path,
+            url,
+            true,
+            get_dependency_version_fn,
         );
 
         set_inline_table_dependency_version(
@@ -695,6 +813,15 @@ impl ShuttleInit for ShuttleInitThruster {
             dependencies,
             vec!["hyper_server".to_string()],
         );
+
+        set_key_value_dependency_version(
+            "tokio",
+            dependencies,
+            manifest_path,
+            url,
+            true,
+            get_dependency_version_fn,
+        );
     }
 
     fn get_boilerplate_code_for_framework(&self) -> &'static str {
@@ -703,20 +830,21 @@ impl ShuttleInit for ShuttleInitThruster {
             context::basic_hyper_context::{generate_context, BasicHyperContext as Ctx, HyperRequest},
             m, middleware_fn, App, HyperServer, MiddlewareNext, MiddlewareResult, ThrusterServer,
         };
-
+        
         #[middleware_fn]
         async fn hello(mut context: Ctx, _next: MiddlewareNext<Ctx>) -> MiddlewareResult<Ctx> {
             context.body("Hello, World!");
             Ok(context)
         }
-
-        #[shuttle_service::main]
-        async fn thruster() -> shuttle_service::ShuttleThruster<HyperServer<Ctx, ()>> {
-            Ok(HyperServer::new(
+        
+        #[shuttle_runtime::main]
+        async fn thruster() -> shuttle_thruster::ShuttleThruster<HyperServer<Ctx, ()>> {
+            let server = HyperServer::new(
                 App::<HyperRequest, Ctx, ()>::create(generate_context, ()).get("/hello", m![hello]),
-            ))
-        }
-        "#}
+            );
+            
+            Ok(server.into())
+        }"#}
     }
 }
 
@@ -736,21 +864,21 @@ impl ShuttleInit for ShuttleInitNoOp {
     }
 }
 
-/// Interoprates with `cargo` crate and calls `cargo init --libs [path]`.
+/// Interoprates with `cargo` crate and calls `cargo init [path]`.
 pub fn cargo_init(path: PathBuf) -> Result<()> {
-    let opts = NewOptions::new(None, false, true, path, None, None, None)?;
+    let opts = NewOptions::new(None, true, false, path, None, None, None)?;
     let cargo_config = cargo::util::config::Config::default()?;
     let init_result = cargo::ops::init(&opts, &cargo_config)?;
 
     // Mimic `cargo init` behavior and log status or error to shell
     cargo_config
         .shell()
-        .status("Created", format!("{} (shuttle) package", init_result))?;
+        .status("Created", format!("{init_result} (shuttle) package"))?;
 
     Ok(())
 }
 
-/// Performs shuttle init on the existing files generated by `cargo init --libs [path]`.
+/// Performs shuttle init on the existing files generated by `cargo init [path]`.
 pub fn cargo_shuttle_init(path: PathBuf, framework: Framework) -> Result<()> {
     let cargo_toml_path = path.join("Cargo.toml");
     let mut cargo_doc = read_to_string(cargo_toml_path.clone())
@@ -758,36 +886,31 @@ pub fn cargo_shuttle_init(path: PathBuf, framework: Framework) -> Result<()> {
         .parse::<Document>()
         .unwrap();
 
-    // Remove empty dependencies table to re-insert after the lib table is inserted
-    cargo_doc.remove("dependencies");
-
-    // Create an empty `[lib]` table
-    cargo_doc["lib"] = Item::Table(Table::new());
-
     // Add publish: false to avoid accidental `cargo publish`
     cargo_doc["package"]["publish"] = value(false);
 
-    // Create `[dependencies]` table
-    let mut dependencies = Table::new();
+    // Get `[dependencies]` table
+    let dependencies = cargo_doc["dependencies"]
+        .as_table_mut()
+        .expect("manifest to have a dependencies table");
 
-    // Set "shuttle-service" version to `[dependencies]` table
     let manifest_path = find(Some(path.as_path())).unwrap();
     let url = registry_url(manifest_path.as_path(), None).expect("Could not find registry URL");
 
-    set_inline_table_dependency_version(
-        "shuttle-service",
-        &mut dependencies,
+    let init_config = framework.init_config();
+
+    set_key_value_dependency_version(
+        "shuttle-runtime",
+        dependencies,
         &manifest_path,
         &url,
-        false,
+        true, // TODO: disallow pre-release when releasing 0.12?
         get_latest_dependency_version,
     );
 
-    let init_config = framework.init_config();
-
     // Set framework-specific dependencies to the `dependencies` table
     init_config.set_cargo_dependencies(
-        &mut dependencies,
+        dependencies,
         &manifest_path,
         &url,
         get_latest_dependency_version,
@@ -796,14 +919,13 @@ pub fn cargo_shuttle_init(path: PathBuf, framework: Framework) -> Result<()> {
     // Truncate Cargo.toml and write the updated `Document` to it
     let mut cargo_toml = File::create(cargo_toml_path)?;
 
-    cargo_doc["dependencies"] = Item::Table(dependencies);
     cargo_toml.write_all(cargo_doc.to_string().as_bytes())?;
 
-    // Write boilerplate to `src/lib.rs` file
-    let lib_path = path.join("src").join("lib.rs");
+    // Write boilerplate to `src/main.rs` file
+    let main_path = path.join("src").join("main.rs");
     let boilerplate = init_config.get_boilerplate_code_for_framework();
     if !boilerplate.is_empty() {
-        write_lib_file(boilerplate, &lib_path)?;
+        write_main_file(boilerplate, &main_path)?;
     }
 
     Ok(())
@@ -863,7 +985,7 @@ fn get_latest_dependency_version(
 ) -> String {
     let latest_version =
         get_latest_dependency(crate_name, flag_allow_prerelease, manifest_path, Some(url))
-            .unwrap_or_else(|_| panic!("Could not query the latest version of {}", crate_name));
+            .unwrap_or_else(|_| panic!("Could not query the latest version of {crate_name}"));
     let latest_version = latest_version
         .version()
         .expect("No latest shuttle-service version available");
@@ -871,10 +993,10 @@ fn get_latest_dependency_version(
     latest_version.to_string()
 }
 
-/// Writes `boilerplate` code to the specified `lib.rs` file path.
-pub fn write_lib_file(boilerplate: &'static str, lib_path: &Path) -> Result<()> {
-    let mut lib_file = File::create(lib_path)?;
-    lib_file.write_all(boilerplate.as_bytes())?;
+/// Writes `boilerplate` code to the specified `main.rs` file path.
+pub fn write_main_file(boilerplate: &'static str, main_path: &Path) -> Result<()> {
+    let mut main_file = File::create(main_path)?;
+    main_file.write_all(boilerplate.as_bytes())?;
 
     Ok(())
 }
@@ -908,12 +1030,12 @@ mod shuttle_init_tests {
         set_inline_table_dependency_features(
             "shuttle-service",
             dependencies,
-            vec!["test-feature".to_string()],
+            vec!["builder".to_string()],
         );
 
         let expected = indoc! {r#"
             [dependencies]
-            shuttle-service = { features = ["test-feature"] }
+            shuttle-service = { features = ["builder"] }
         "#};
 
         assert_eq!(cargo_toml.to_string(), expected);
@@ -973,12 +1095,12 @@ mod shuttle_init_tests {
         let manifest_path = PathBuf::new();
         let url = Url::parse("https://shuttle.rs").unwrap();
 
-        set_inline_table_dependency_version(
-            "shuttle-service",
+        set_key_value_dependency_version(
+            "shuttle-runtime",
             dependencies,
             &manifest_path,
             &url,
-            false,
+            true,
             mock_get_latest_dependency_version,
         );
 
@@ -991,8 +1113,10 @@ mod shuttle_init_tests {
 
         let expected = indoc! {r#"
             [dependencies]
-            shuttle-service = { version = "1.0", features = ["web-actix-web"] }
+            shuttle-runtime = "1.0"
             actix-web = "1.0"
+            shuttle-actix-web = "1.0"
+            tokio = "1.0"
         "#};
 
         assert_eq!(cargo_toml.to_string(), expected);
@@ -1005,12 +1129,12 @@ mod shuttle_init_tests {
         let manifest_path = PathBuf::new();
         let url = Url::parse("https://shuttle.rs").unwrap();
 
-        set_inline_table_dependency_version(
-            "shuttle-service",
+        set_key_value_dependency_version(
+            "shuttle-runtime",
             dependencies,
             &manifest_path,
             &url,
-            false,
+            true,
             mock_get_latest_dependency_version,
         );
 
@@ -1023,9 +1147,10 @@ mod shuttle_init_tests {
 
         let expected = indoc! {r#"
             [dependencies]
-            shuttle-service = { version = "1.0", features = ["web-axum"] }
+            shuttle-runtime = "1.0"
             axum = "1.0"
-            sync_wrapper = "1.0"
+            shuttle-axum = "1.0"
+            tokio = "1.0"
         "#};
 
         assert_eq!(cargo_toml.to_string(), expected);
@@ -1038,12 +1163,12 @@ mod shuttle_init_tests {
         let manifest_path = PathBuf::new();
         let url = Url::parse("https://shuttle.rs").unwrap();
 
-        set_inline_table_dependency_version(
-            "shuttle-service",
+        set_key_value_dependency_version(
+            "shuttle-runtime",
             dependencies,
             &manifest_path,
             &url,
-            false,
+            true,
             mock_get_latest_dependency_version,
         );
 
@@ -1056,8 +1181,10 @@ mod shuttle_init_tests {
 
         let expected = indoc! {r#"
             [dependencies]
-            shuttle-service = { version = "1.0", features = ["web-rocket"] }
+            shuttle-runtime = "1.0"
             rocket = "1.0"
+            shuttle-rocket = "1.0"
+            tokio = "1.0"
         "#};
 
         assert_eq!(cargo_toml.to_string(), expected);
@@ -1070,12 +1197,12 @@ mod shuttle_init_tests {
         let manifest_path = PathBuf::new();
         let url = Url::parse("https://shuttle.rs").unwrap();
 
-        set_inline_table_dependency_version(
-            "shuttle-service",
+        set_key_value_dependency_version(
+            "shuttle-runtime",
             dependencies,
             &manifest_path,
             &url,
-            false,
+            true,
             mock_get_latest_dependency_version,
         );
 
@@ -1088,7 +1215,9 @@ mod shuttle_init_tests {
 
         let expected = indoc! {r#"
             [dependencies]
-            shuttle-service = { version = "1.0", features = ["web-tide"] }
+            shuttle-runtime = "1.0"
+            shuttle-tide = "1.0"
+            tokio = "1.0"
             tide = "1.0"
         "#};
 
@@ -1102,12 +1231,12 @@ mod shuttle_init_tests {
         let manifest_path = PathBuf::new();
         let url = Url::parse("https://shuttle.rs").unwrap();
 
-        set_inline_table_dependency_version(
-            "shuttle-service",
+        set_key_value_dependency_version(
+            "shuttle-runtime",
             dependencies,
             &manifest_path,
             &url,
-            false,
+            true,
             mock_get_latest_dependency_version,
         );
 
@@ -1120,9 +1249,11 @@ mod shuttle_init_tests {
 
         let expected = indoc! {r#"
             [dependencies]
-            shuttle-service = { version = "1.0", features = ["web-tower"] }
-            tower = { version = "1.0", features = ["full"] }
+            shuttle-runtime = "1.0"
             hyper = { version = "1.0", features = ["full"] }
+            shuttle-tower = "1.0"
+            tokio = "1.0"
+            tower = { version = "1.0", features = ["full"] }
         "#};
 
         assert_eq!(cargo_toml.to_string(), expected);
@@ -1135,12 +1266,12 @@ mod shuttle_init_tests {
         let manifest_path = PathBuf::new();
         let url = Url::parse("https://shuttle.rs").unwrap();
 
-        set_inline_table_dependency_version(
-            "shuttle-service",
+        set_key_value_dependency_version(
+            "shuttle-runtime",
             dependencies,
             &manifest_path,
             &url,
-            false,
+            true,
             mock_get_latest_dependency_version,
         );
 
@@ -1153,8 +1284,10 @@ mod shuttle_init_tests {
 
         let expected = indoc! {r#"
             [dependencies]
-            shuttle-service = { version = "1.0", features = ["web-poem"] }
+            shuttle-runtime = "1.0"
             poem = "1.0"
+            shuttle-poem = "1.0"
+            tokio = "1.0"
         "#};
 
         assert_eq!(cargo_toml.to_string(), expected);
@@ -1167,12 +1300,12 @@ mod shuttle_init_tests {
         let manifest_path = PathBuf::new();
         let url = Url::parse("https://shuttle.rs").unwrap();
 
-        set_inline_table_dependency_version(
-            "shuttle-service",
+        set_key_value_dependency_version(
+            "shuttle-runtime",
             dependencies,
             &manifest_path,
             &url,
-            false,
+            true,
             mock_get_latest_dependency_version,
         );
 
@@ -1185,8 +1318,10 @@ mod shuttle_init_tests {
 
         let expected = indoc! {r#"
             [dependencies]
-            shuttle-service = { version = "1.0", features = ["web-salvo"] }
+            shuttle-runtime = "1.0"
             salvo = "1.0"
+            shuttle-salvo = "1.0"
+            tokio = "1.0"
         "#};
 
         assert_eq!(cargo_toml.to_string(), expected);
@@ -1199,12 +1334,12 @@ mod shuttle_init_tests {
         let manifest_path = PathBuf::new();
         let url = Url::parse("https://shuttle.rs").unwrap();
 
-        set_inline_table_dependency_version(
-            "shuttle-service",
+        set_key_value_dependency_version(
+            "shuttle-runtime",
             dependencies,
             &manifest_path,
             &url,
-            false,
+            true,
             mock_get_latest_dependency_version,
         );
 
@@ -1217,10 +1352,12 @@ mod shuttle_init_tests {
 
         let expected = indoc! {r#"
             [dependencies]
-            shuttle-service = { version = "1.0", features = ["bot-serenity"] }
+            shuttle-runtime = "1.0"
             anyhow = "1.0"
             serenity = { version = "1.0", default-features = false, features = ["client", "gateway", "rustls_backend", "model"] }
             shuttle-secrets = "1.0"
+            shuttle-serenity = "1.0"
+            tokio = "1.0"
             tracing = "1.0"
         "#};
 
@@ -1234,12 +1371,12 @@ mod shuttle_init_tests {
         let manifest_path = PathBuf::new();
         let url = Url::parse("https://shuttle.rs").unwrap();
 
-        set_inline_table_dependency_version(
-            "shuttle-service",
+        set_key_value_dependency_version(
+            "shuttle-runtime",
             dependencies,
             &manifest_path,
             &url,
-            false,
+            true,
             mock_get_latest_dependency_version,
         );
 
@@ -1251,12 +1388,14 @@ mod shuttle_init_tests {
         );
 
         let expected = indoc! {r#"
-			[dependencies]
-			shuttle-service = { version = "1.0", features = ["bot-poise"] }
-			anyhow = "1.0"
-			poise = "1.0"
-			shuttle-secrets = "1.0"
-			tracing = "1.0"
+            [dependencies]
+            shuttle-runtime = "1.0"
+            anyhow = "1.0"
+            poise = "1.0"
+            shuttle-poise = "1.0"
+            shuttle-secrets = "1.0"
+            tokio = "1.0"
+            tracing = "1.0"
 		"#};
 
         assert_eq!(cargo_toml.to_string(), expected);
@@ -1269,12 +1408,12 @@ mod shuttle_init_tests {
         let manifest_path = PathBuf::new();
         let url = Url::parse("https://shuttle.rs").unwrap();
 
-        set_inline_table_dependency_version(
-            "shuttle-service",
+        set_key_value_dependency_version(
+            "shuttle-runtime",
             dependencies,
             &manifest_path,
             &url,
-            false,
+            true,
             mock_get_latest_dependency_version,
         );
 
@@ -1287,7 +1426,9 @@ mod shuttle_init_tests {
 
         let expected = indoc! {r#"
             [dependencies]
-            shuttle-service = { version = "1.0", features = ["web-warp"] }
+            shuttle-runtime = "1.0"
+            shuttle-warp = "1.0"
+            tokio = "1.0"
             warp = "1.0"
         "#};
 
@@ -1301,12 +1442,12 @@ mod shuttle_init_tests {
         let manifest_path = PathBuf::new();
         let url = Url::parse("https://shuttle.rs").unwrap();
 
-        set_inline_table_dependency_version(
-            "shuttle-service",
+        set_key_value_dependency_version(
+            "shuttle-runtime",
             dependencies,
             &manifest_path,
             &url,
-            false,
+            true,
             mock_get_latest_dependency_version,
         );
 
@@ -1319,13 +1460,17 @@ mod shuttle_init_tests {
 
         let expected = indoc! {r#"
             [dependencies]
-            shuttle-service = { version = "1.0", features = ["web-thruster"] }
+            shuttle-runtime = "1.0"
+            shuttle-thruster = "1.0"
             thruster = { version = "1.0", features = ["hyper_server"] }
+            tokio = "1.0"
         "#};
 
         assert_eq!(cargo_toml.to_string(), expected);
     }
 
+    // TODO: unignore this test when we publish shuttle-rocket
+    #[ignore]
     #[test]
     /// Makes sure that Rocket uses allow_prerelease flag when fetching the latest version
     fn test_get_latest_dependency_version_rocket() {
@@ -1333,6 +1478,15 @@ mod shuttle_init_tests {
         let dependencies = cargo_toml["dependencies"].as_table_mut().unwrap();
         let manifest_path = PathBuf::new();
         let url = Url::parse("https://github.com/rust-lang/crates.io-index").unwrap();
+
+        set_key_value_dependency_version(
+            "shuttle-runtime",
+            dependencies,
+            &manifest_path,
+            &url,
+            true,
+            mock_get_latest_dependency_version,
+        );
 
         ShuttleInitRocket.set_cargo_dependencies(
             dependencies,

@@ -1,0 +1,18 @@
+[package]
+name = "shuttle-poise"
+version = "0.12.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Service implementation to run a poise discord bot on shuttle"
+keywords = ["shuttle-service", "poise", "discord-bot", "serenity"]
+
+[workspace]
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+poise = { version = "0.5.2" }
+shuttle-runtime = { path = "../../runtime", version = "0.12.0" }
+
+[dev-dependencies]
+shuttle-secrets = { path = "../../resources/secrets" }
+tokio = { version = "1.26.0", features = ["macros", "rt-multi-thread"] }

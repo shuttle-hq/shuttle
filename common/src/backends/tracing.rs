@@ -11,15 +11,13 @@ use opentelemetry::{
     sdk::{propagation::TraceContextPropagator, trace, Resource},
     KeyValue,
 };
-use opentelemetry_http::{HeaderExtractor, HeaderInjector};
+use opentelemetry_http::HeaderExtractor;
 use opentelemetry_otlp::WithExportConfig;
 use pin_project::pin_project;
 use tower::{Layer, Service};
 use tracing::{debug_span, instrument::Instrumented, Instrument, Span, Subscriber};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use tracing_subscriber::{fmt, prelude::*, registry::LookupSpan, EnvFilter};
-
-use super::future::ResponseFuture;
 
 pub fn setup_tracing<S>(subscriber: S, service_name: &str)
 where
@@ -137,51 +135,5 @@ where
         let response_future = self.inner.call(req).instrument(span);
 
         ExtractPropagationFuture { response_future }
-    }
-}
-
-/// This layer adds the current tracing span to any outgoing request
-#[derive(Clone)]
-pub struct InjectPropagationLayer;
-
-impl<S> Layer<S> for InjectPropagationLayer {
-    type Service = InjectPropagation<S>;
-
-    fn layer(&self, inner: S) -> Self::Service {
-        InjectPropagation { inner }
-    }
-}
-
-#[derive(Clone)]
-pub struct InjectPropagation<S> {
-    inner: S,
-}
-
-impl<S, Body> Service<Request<Body>> for InjectPropagation<S>
-where
-    S: Service<Request<Body>> + Send + 'static,
-    S::Future: Send + 'static,
-{
-    type Response = S::Response;
-    type Error = S::Error;
-    type Future = ResponseFuture<S::Future>;
-
-    fn poll_ready(
-        &mut self,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), Self::Error>> {
-        self.inner.poll_ready(cx)
-    }
-
-    fn call(&mut self, mut req: Request<Body>) -> Self::Future {
-        let cx = Span::current().context();
-
-        global::get_text_map_propagator(|propagator| {
-            propagator.inject_context(&cx, &mut HeaderInjector(req.headers_mut()))
-        });
-
-        let future = self.inner.call(req);
-
-        ResponseFuture(future)
     }
 }

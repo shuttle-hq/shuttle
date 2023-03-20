@@ -704,9 +704,7 @@ impl ProjectCreating {
                         "--api-address",
                         format!("0.0.0.0:{RUNTIME_API_PORT}"),
                         "--provisioner-address",
-                        provisioner_host,
-                        "--provisioner-port",
-                        "8000",
+                        format!("http://{provisioner_host}:8000"),
                         "--proxy-address",
                         "0.0.0.0:8000",
                         "--proxy-fqdn",
@@ -719,7 +717,7 @@ impl ProjectCreating {
                         auth_uri,
                     ],
                     "Env": [
-                        "RUST_LOG=debug,shuttle=trace",
+                        "RUST_LOG=debug,shuttle=trace,h2=warn",
                     ]
                 })
             });

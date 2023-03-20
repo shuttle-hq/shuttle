@@ -3,16 +3,24 @@ name = "shuttle-proto"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-publish = false
+description = "Library for all the gRPC definitions used by shuttle"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = { workspace = true }
+chrono = { workspace = true }
+home = "0.5.4"
 prost = "0.11.2"
-tonic = "0.8.3"
+prost-types = { workspace = true }
+tokio = { version = "1.22.0", features = ["process"] }
+tonic = { workspace = true }
+tower = { workspace = true }
+tracing = { workspace = true }
 
 [dependencies.shuttle-common]
 workspace = true
-features = ["models"]
+features = ["claims", "error", "service", "wasm"]
 
 [build-dependencies]
 tonic-build = "0.8.3"

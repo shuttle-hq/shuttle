@@ -26,12 +26,18 @@ ARG CARGO_PROFILE
 RUN cargo chef cook $(if [ "$CARGO_PROFILE" = "release" ]; then echo --${CARGO_PROFILE}; fi) --recipe-path recipe.json
 COPY --from=cache /build .
 ARG folder
+# if CARGO_PROFILE is release, pass --release, else use default debug profile
 RUN cargo build --bin shuttle-${folder} $(if [ "$CARGO_PROFILE" = "release" ]; then echo --${CARGO_PROFILE}; fi)
 
 ARG RUSTUP_TOOLCHAIN
 FROM rust:${RUSTUP_TOOLCHAIN}-buster as shuttle-common
 RUN apt-get update &&\
     apt-get install -y curl
+# download protoc binary and unzip it in usr/bin
+RUN curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v21.9/protoc-21.9-linux-x86_64.zip &&\
+    unzip -o protoc-21.9-linux-x86_64.zip -d /usr bin/protoc &&\
+    unzip -o protoc-21.9-linux-x86_64.zip -d /usr/ 'include/*' &&\
+    rm -f protoc-21.9-linux-x86_64.zip
 RUN rustup component add rust-src
 COPY --from=cache /build/ /usr/src/shuttle/
 

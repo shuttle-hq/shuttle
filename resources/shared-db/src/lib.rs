@@ -1,7 +1,5 @@
 #![doc = include_str!("../README.md")]
 
-use tokio::runtime::Runtime;
-
 use async_trait::async_trait;
 use shuttle_service::{database, error::CustomError, Error, Factory, ResourceBuilder};
 
@@ -18,11 +16,7 @@ impl ResourceBuilder<sqlx::PgPool> for Postgres {
         Self { local_uri: None }
     }
 
-    async fn build(
-        self,
-        factory: &mut dyn Factory,
-        runtime: &Runtime,
-    ) -> Result<sqlx::PgPool, Error> {
+    async fn build(self, factory: &mut dyn Factory) -> Result<sqlx::PgPool, Error> {
         let connection_string = match factory.get_environment() {
             shuttle_service::Environment::Production => {
                 factory
@@ -44,17 +38,11 @@ impl ResourceBuilder<sqlx::PgPool> for Postgres {
             }
         };
 
-        // A sqlx Pool cannot cross runtime boundaries, so make sure to create the Pool on the service end
-        let pool = runtime
-            .spawn(async move {
-                sqlx::postgres::PgPoolOptions::new()
-                    .min_connections(1)
-                    .max_connections(5)
-                    .connect(&connection_string)
-                    .await
-            })
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .min_connections(1)
+            .max_connections(5)
+            .connect(&connection_string)
             .await
-            .map_err(CustomError::new)?
             .map_err(CustomError::new)?;
 
         Ok(pool)
@@ -84,11 +72,7 @@ impl ResourceBuilder<mongodb::Database> for MongoDb {
         Self { local_uri: None }
     }
 
-    async fn build(
-        self,
-        factory: &mut dyn Factory,
-        runtime: &Runtime,
-    ) -> Result<mongodb::Database, crate::Error> {
+    async fn build(self, factory: &mut dyn Factory) -> Result<mongodb::Database, crate::Error> {
         let connection_string = match factory.get_environment() {
             shuttle_service::Environment::Production => factory
                 .get_db_connection_string(database::Type::Shared(database::SharedEngine::MongoDb))
@@ -114,12 +98,7 @@ impl ResourceBuilder<mongodb::Database> for MongoDb {
         client_options.min_pool_size = Some(1);
         client_options.max_pool_size = Some(5);
 
-        // A mongodb client cannot cross runtime boundaries, so make sure to create the client on the service end
-        let client = runtime
-            .spawn(async move { mongodb::Client::with_options(client_options) })
-            .await
-            .map_err(CustomError::new)?
-            .map_err(CustomError::new)?;
+        let client = mongodb::Client::with_options(client_options).map_err(CustomError::new)?;
 
         // Return a handle to the database defined at the end of the connection string, which is the users provisioned
         // database

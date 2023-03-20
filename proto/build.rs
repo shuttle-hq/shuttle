@@ -1,5 +1,5 @@
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tonic_build::compile_protos("../proto/provisioner.proto")?;
+    tonic_build::configure().compile(&["./provisioner.proto", "./runtime.proto"], &["./"])?;
 
     Ok(())
 }

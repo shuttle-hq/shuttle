@@ -1,6 +1,6 @@
 use crate::{
-    models::{deployment, resource, resource::ResourceInfo, secret},
-    DatabaseReadyInfo,
+    models::{deployment, secret},
+    resource::{self, ResourceInfo},
 };
 
 use comfy_table::{
@@ -34,19 +34,13 @@ pub struct Summary {
     pub uri: String,
 }
 
-impl ResourceInfo for DatabaseReadyInfo {
-    fn connection_string_public(&self) -> String {
-        self.connection_string_public()
-    }
-}
-
 impl Display for Detailed {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let deploys = get_deployments_table(&self.deployments, &self.name);
         let resources = get_resources_table(&self.resources);
         let secrets = secret::get_table(&self.secrets);
 
-        write!(f, "{}{}{}", deploys, resources, secrets)
+        write!(f, "{deploys}{resources}{secrets}")
     }
 }
 
@@ -82,7 +76,7 @@ URI:           {}
 
         let resources = get_resources_table(&self.resources);
 
-        write!(f, "{}{}", deployment, resources)
+        write!(f, "{deployment}{resources}")
     }
 }
 
@@ -150,9 +144,8 @@ fn get_resources_table(resources: &Vec<resource::Response>) -> String {
 
         format!(
             r#"These resources are linked to this service
-{}
+{table}
 "#,
-            table
         )
     }
 }

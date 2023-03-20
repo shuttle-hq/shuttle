@@ -27,9 +27,10 @@ async fn non_interactive_basic_init() {
     Shuttle::new().unwrap().run(args).await.unwrap();
 
     let cargo_toml = read_to_string(temp_dir_path.join("Cargo.toml")).unwrap();
+
     // Expected: name = "basic-initRANDOM_CHARS"
     assert!(cargo_toml.contains("name = \"basic-init"));
-    assert!(cargo_toml.contains("shuttle-service = { version = "));
+    assert!(cargo_toml.contains("shuttle-runtime = "));
 }
 
 #[tokio::test]
@@ -167,11 +168,10 @@ fn interactive_rocket_init_dont_prompt_name() -> Result<(), Box<dyn std::error::
 fn assert_valid_rocket_project(path: &Path, name_prefix: &str) {
     let cargo_toml = read_to_string(path.join("Cargo.toml")).unwrap();
     assert!(cargo_toml.contains(&format!("name = \"{name_prefix}")));
-    assert!(cargo_toml.contains("shuttle-service = { version = "));
-    assert!(cargo_toml.contains("features = [\"web-rocket\"]"));
-    assert!(cargo_toml.contains("rocket = "));
+    assert!(cargo_toml.contains("shuttle-runtime = "));
+    assert!(cargo_toml.contains("shuttle-rocket = "));
 
-    let lib_file = read_to_string(path.join("src").join("lib.rs")).unwrap();
+    let main_file = read_to_string(path.join("src").join("main.rs")).unwrap();
     let expected = indoc! {r#"
     #[macro_use]
     extern crate rocket;
@@ -181,12 +181,12 @@ fn assert_valid_rocket_project(path: &Path, name_prefix: &str) {
         "Hello, world!"
     }
 
-    #[shuttle_service::main]
-    async fn rocket() -> shuttle_service::ShuttleRocket {
+    #[shuttle_runtime::main]
+    async fn rocket() -> shuttle_rocket::ShuttleRocket {
         let rocket = rocket::build().mount("/hello", routes![index]);
 
-        Ok(rocket)
+        Ok(rocket.into())
     }"#};
 
-    assert_eq!(lib_file, expected);
+    assert_eq!(main_file, expected);
 }

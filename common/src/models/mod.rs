@@ -1,7 +1,6 @@
 pub mod deployment;
 pub mod error;
 pub mod project;
-pub mod resource;
 pub mod secret;
 pub mod service;
 pub mod stats;
@@ -13,6 +12,7 @@ use http::StatusCode;
 use serde::de::DeserializeOwned;
 use tracing::trace;
 
+/// A to_json wrapper for handling our error states
 #[async_trait]
 pub trait ToJson {
     async fn to_json<T: DeserializeOwned>(self) -> Result<T>;

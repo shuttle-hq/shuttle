@@ -9,7 +9,7 @@ use axum::{
 };
 use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Deserializer, Serialize};
-use shuttle_common::backends::auth::Scope;
+use shuttle_common::claims::Scope;
 use sqlx::{query, Row, SqlitePool};
 use tracing::{trace, Span};
 

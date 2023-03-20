@@ -127,8 +127,8 @@ commands:
           name: Install protoc
           command: |
             curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v21.9/protoc-21.9-<< parameters.arch >>.zip &&\
-              sudo unzip -o protoc-21.9-<< parameters.arch >>.zip -d /usr bin/protoc &&\
-              sudo unzip -o protoc-21.9-<< parameters.arch >>.zip -d /usr/ 'include/*' &&\
+              sudo unzip -o protoc-21.9-<< parameters.arch >>.zip -d /usr/local bin/protoc &&\
+              sudo unzip -o protoc-21.9-<< parameters.arch >>.zip -d /usr/local 'include/*' &&\
               rm -f protoc-21.9-<< parameters.arch >>.zip
   make-artifact:
     parameters:

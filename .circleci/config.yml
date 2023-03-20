@@ -313,7 +313,7 @@ jobs:
   build-binaries-windows:
     executor:
       name: win/server-2022
-      size: medium
+      size: xlarge
       shell: bash.exe
     environment:
       CARGO_NET_GIT_FETCH_WITH_CLI: "true"
@@ -341,7 +341,7 @@ jobs:
   build-binaries-mac:
     macos:
       xcode: 12.5.1
-    resource_class: xlarge
+    resource_class: macos.m1.large.gen1
     steps:
       - checkout
       - run:

@@ -379,7 +379,7 @@ async fn run(
             info!(response = ?response.into_inner(),  "start client response: ");
 
             // Wait for stop reason
-            let reason = stream.message().await.unwrap();
+            let reason = stream.message().await.expect("message from tonic stream");
 
             cleanup(reason);
         }

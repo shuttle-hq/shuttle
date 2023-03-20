@@ -20,6 +20,10 @@ impl Client {
         self.post("/admin/revive", Option::<String>::None).await
     }
 
+    pub async fn destroy(&self) -> Result<String> {
+        self.post("/admin/destroy", Option::<String>::None).await
+    }
+
     pub async fn acme_account_create(
         &self,
         email: &str,

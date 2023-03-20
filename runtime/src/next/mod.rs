@@ -17,14 +17,14 @@ use hyper::{Body, Request, Response};
 use shuttle_common::wasm::{Bytesable, Log, RequestWrapper, ResponseWrapper};
 use shuttle_proto::runtime::runtime_server::Runtime;
 use shuttle_proto::runtime::{
-    self, LoadRequest, LoadResponse, StartRequest, StartResponse, StopRequest, StopResponse,
-    SubscribeLogsRequest, SubscribeStopRequest, SubscribeStopResponse,
+    self, LoadRequest, LoadResponse, StartRequest, StartResponse, StopReason, StopRequest,
+    StopResponse, SubscribeLogsRequest, SubscribeStopRequest, SubscribeStopResponse,
 };
 use tokio::sync::mpsc::{Receiver, Sender};
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::Status;
-use tracing::{error, trace};
+use tracing::{error, trace, warn};
 use wasi_common::file::FileCaps;
 use wasmtime::{Engine, Linker, Module, Store};
 use wasmtime_wasi::sync::net::UnixStream as WasiUnixStream;
@@ -45,6 +45,7 @@ pub struct AxumWasm {
     logs_rx: Mutex<Option<Receiver<Result<runtime::LogItem, Status>>>>,
     logs_tx: Sender<Result<runtime::LogItem, Status>>,
     kill_tx: Mutex<Option<oneshot::Sender<String>>>,
+    stopped_tx: broadcast::Sender<(StopReason, String)>,
 }
 
 impl AxumWasm {
@@ -57,11 +58,14 @@ impl AxumWasm {
         // seems acceptable so going with double the number for some headroom
         let (tx, rx) = mpsc::channel(1 << 15);
 
+        let (stopped_tx, _stopped_rx) = broadcast::channel(10);
+
         Self {
             router: Mutex::new(None),
             logs_rx: Mutex::new(Some(rx)),
             logs_tx: tx,
             kill_tx: Mutex::new(None),
+            stopped_tx,
         }
     }
 }
@@ -122,7 +126,11 @@ impl Runtime for AxumWasm {
             .context("tried to start a service that was not loaded")
             .map_err(|err| Status::internal(err.to_string()))?;
 
-        tokio::spawn(run_until_stopped(router, address, logs_tx, kill_rx));
+        let stopped_tx = self.stopped_tx.clone();
+
+        tokio::spawn(run_until_stopped(
+            router, address, logs_tx, kill_rx, stopped_tx,
+        ));
 
         let message = StartResponse { success: true };
 
@@ -160,9 +168,9 @@ impl Runtime for AxumWasm {
 
             Ok(tonic::Response::new(StopResponse { success: true }))
         } else {
-            Err(Status::internal(
-                "trying to stop a service that was not started",
-            ))
+            warn!("trying to stop a service that was not started");
+
+            Ok(tonic::Response::new(StopResponse { success: false }))
         }
     }
 
@@ -172,8 +180,21 @@ impl Runtime for AxumWasm {
         &self,
         _request: tonic::Request<SubscribeStopRequest>,
     ) -> Result<tonic::Response<Self::SubscribeStopStream>, Status> {
-        // Next does not really have a stopped state. Endpoints are loaded if and when needed until a request is done
-        let (_tx, rx) = mpsc::channel(1);
+        let mut stopped_rx = self.stopped_tx.subscribe();
+        let (tx, rx) = mpsc::channel(1);
+
+        // Move the stop channel into a stream to be returned
+        tokio::spawn(async move {
+            trace!("moved stop channel into thread");
+            while let Ok((reason, message)) = stopped_rx.recv().await {
+                tx.send(Ok(SubscribeStopResponse {
+                    reason: reason as i32,
+                    message,
+                }))
+                .await
+                .unwrap();
+            }
+        });
 
         Ok(tonic::Response::new(ReceiverStream::new(rx)))
     }
@@ -354,6 +375,7 @@ async fn run_until_stopped(
     address: SocketAddr,
     logs_tx: Sender<Result<runtime::LogItem, Status>>,
     kill_rx: tokio::sync::oneshot::Receiver<String>,
+    stopped_tx: broadcast::Sender<(StopReason, String)>,
 ) {
     let make_service = make_service_fn(move |_conn| {
         let router = router.clone();
@@ -383,12 +405,21 @@ async fn run_until_stopped(
     trace!("starting hyper server on: {}", &address);
     tokio::select! {
         _ = server => {
+            stopped_tx.send((StopReason::End, String::new())).unwrap();
             trace!("axum wasm server stopped");
         },
         message = kill_rx => {
             match message {
-                Ok(msg) => trace!("{msg}"),
-                Err(_) => trace!("the sender dropped")
+                Ok(msg) =>{
+                    stopped_tx.send((StopReason::Request, String::new())).unwrap();
+                    trace!("{msg}")
+                } ,
+                Err(_) => {
+                    stopped_tx
+                        .send((StopReason::Crash, "the kill sender dropped".to_string()))
+                        .unwrap();
+                    trace!("the sender dropped")
+                }
             }
         }
     };

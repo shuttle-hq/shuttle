@@ -42,7 +42,7 @@ use tonic::{
     Request, Response, Status,
 };
 use tower::ServiceBuilder;
-use tracing::{error, info, trace};
+use tracing::{error, info, trace, warn};
 
 use crate::{provisioner_factory::ProvisionerFactory, Logger};
 
@@ -378,7 +378,9 @@ where
 
             Ok(Response::new(StopResponse { success: true }))
         } else {
-            Err(Status::internal("failed to stop deployment"))
+            warn!("failed to stop deployment");
+
+            Ok(tonic::Response::new(StopResponse { success: false }))
         }
     }
 

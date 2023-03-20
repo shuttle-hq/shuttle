@@ -60,15 +60,25 @@ pub async fn task(
             active_deployment_getter.clone(),
             runtime_manager.clone(),
         );
-        let cleanup = move |response: SubscribeStopResponse| {
+        let cleanup = move |response: Option<SubscribeStopResponse>| {
             debug!(response = ?response,  "stop client response: ");
 
-            match StopReason::from_i32(response.reason).unwrap_or_default() {
-                StopReason::Request => stopped_cleanup(&id),
-                StopReason::End => completed_cleanup(&id),
-                StopReason::Crash => {
-                    crashed_cleanup(&id, Error::Run(anyhow::Error::msg(response.message).into()))
+            if let Some(response) = response {
+                match StopReason::from_i32(response.reason).unwrap_or_default() {
+                    StopReason::Request => stopped_cleanup(&id),
+                    StopReason::End => completed_cleanup(&id),
+                    StopReason::Crash => crashed_cleanup(
+                        &id,
+                        Error::Run(anyhow::Error::msg(response.message).into()),
+                    ),
                 }
+            } else {
+                crashed_cleanup(
+                    &id,
+                    Error::Runtime(anyhow::anyhow!(
+                        "stop subscribe channel stopped unexpectedly"
+                    )),
+                )
             }
         };
         let runtime_manager = runtime_manager.clone();
@@ -188,7 +198,7 @@ impl Built {
         runtime_manager: Arc<Mutex<RuntimeManager>>,
         deployment_updater: impl DeploymentUpdater,
         kill_old_deployments: impl futures::Future<Output = Result<()>>,
-        cleanup: impl FnOnce(SubscribeStopResponse) + Send + 'static,
+        cleanup: impl FnOnce(Option<SubscribeStopResponse>) + Send + 'static,
     ) -> Result<()> {
         // For alpha this is the path to the users project with an embedded runtime.
         // For shuttle-next this is the path to the compiled .wasm file, which will be
@@ -343,7 +353,7 @@ async fn run(
     mut runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
     address: SocketAddr,
     deployment_updater: impl DeploymentUpdater,
-    cleanup: impl FnOnce(SubscribeStopResponse) + Send + 'static,
+    cleanup: impl FnOnce(Option<SubscribeStopResponse>) + Send + 'static,
 ) {
     deployment_updater
         .set_address(&id, &address)
@@ -369,15 +379,15 @@ async fn run(
             info!(response = ?response.into_inner(),  "start client response: ");
 
             // Wait for stop reason
-            let reason = stream.message().await.unwrap().unwrap();
+            let reason = stream.message().await.expect("message from tonic stream");
 
             cleanup(reason);
         }
         Err(ref status) if status.code() == Code::InvalidArgument => {
-            cleanup(SubscribeStopResponse {
+            cleanup(Some(SubscribeStopResponse {
                 reason: StopReason::Crash as i32,
                 message: status.to_string(),
-            });
+            }));
         }
         Err(ref status) => {
             start_crashed_cleanup(
@@ -534,12 +544,15 @@ mod tests {
         let runtime_manager = get_runtime_manager();
         let (cleanup_send, cleanup_recv) = oneshot::channel();
 
-        let handle_cleanup = |response: SubscribeStopResponse| match (
-            StopReason::from_i32(response.reason).unwrap(),
-            response.message,
-        ) {
-            (StopReason::Request, mes) if mes.is_empty() => cleanup_send.send(()).unwrap(),
-            _ => panic!("expected stop due to request"),
+        let handle_cleanup = |response: Option<SubscribeStopResponse>| {
+            let response = response.unwrap();
+            match (
+                StopReason::from_i32(response.reason).unwrap(),
+                response.message,
+            ) {
+                (StopReason::Request, mes) if mes.is_empty() => cleanup_send.send(()).unwrap(),
+                _ => panic!("expected stop due to request"),
+            }
         };
 
         built
@@ -574,12 +587,15 @@ mod tests {
         let runtime_manager = get_runtime_manager();
         let (cleanup_send, cleanup_recv) = oneshot::channel();
 
-        let handle_cleanup = |response: SubscribeStopResponse| match (
-            StopReason::from_i32(response.reason).unwrap(),
-            response.message,
-        ) {
-            (StopReason::End, mes) if mes.is_empty() => cleanup_send.send(()).unwrap(),
-            _ => panic!("expected stop due to self end"),
+        let handle_cleanup = |response: Option<SubscribeStopResponse>| {
+            let response = response.unwrap();
+            match (
+                StopReason::from_i32(response.reason).unwrap(),
+                response.message,
+            ) {
+                (StopReason::End, mes) if mes.is_empty() => cleanup_send.send(()).unwrap(),
+                _ => panic!("expected stop due to self end"),
+            }
         };
 
         built
@@ -611,14 +627,17 @@ mod tests {
         let runtime_manager = get_runtime_manager();
         let (cleanup_send, cleanup_recv) = oneshot::channel();
 
-        let handle_cleanup = |response: SubscribeStopResponse| match (
-            StopReason::from_i32(response.reason).unwrap(),
-            response.message,
-        ) {
-            (StopReason::Crash, mes) if mes.contains("panic in bind") => {
-                cleanup_send.send(()).unwrap()
+        let handle_cleanup = |response: Option<SubscribeStopResponse>| {
+            let response = response.unwrap();
+            match (
+                StopReason::from_i32(response.reason).unwrap(),
+                response.message,
+            ) {
+                (StopReason::Crash, mes) if mes.contains("panic in bind") => {
+                    cleanup_send.send(()).unwrap()
+                }
+                (_, mes) => panic!("expected stop due to crash: {mes}"),
             }
-            (_, mes) => panic!("expected stop due to crash: {mes}"),
         };
 
         built

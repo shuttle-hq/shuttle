@@ -1611,6 +1611,26 @@ pub mod exec {
 
         Ok(())
     }
+
+    pub async fn destroy(
+        gateway: Arc<GatewayService>,
+        sender: Sender<BoxedTask>,
+    ) -> Result<(), ProjectError> {
+        for (project_name, _) in gateway
+            .iter_projects()
+            .await
+            .expect("could not list projects")
+        {
+            let _ = gateway
+                .new_task()
+                .project(project_name)
+                .and_then(task::destroy())
+                .send(&sender)
+                .await;
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]

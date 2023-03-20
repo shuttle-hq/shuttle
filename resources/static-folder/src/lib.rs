@@ -1,13 +1,11 @@
 use async_trait::async_trait;
+use fs_extra::dir::{copy, CopyOptions};
 use shuttle_service::{
     error::{CustomError, Error as ShuttleError},
     Factory, ResourceBuilder,
 };
-use std::{
-    fs::rename,
-    path::{Path, PathBuf},
-};
-use tokio::runtime::Runtime;
+use std::path::{Path, PathBuf};
+use tracing::{error, trace};
 
 pub struct StaticFolder<'a> {
     /// The folder to reach at runtime. Defaults to `static`
@@ -17,6 +15,7 @@ pub struct StaticFolder<'a> {
 pub enum Error {
     AbsolutePath,
     TransversedUp,
+    Copy(fs_extra::error::Error),
 }
 
 impl<'a> StaticFolder<'a> {
@@ -33,41 +32,66 @@ impl<'a> ResourceBuilder<PathBuf> for StaticFolder<'a> {
         Self { folder: "static" }
     }
 
-    async fn build(
-        self,
-        factory: &mut dyn Factory,
-        _runtime: &Runtime,
-    ) -> Result<PathBuf, shuttle_service::Error> {
+    async fn build(self, factory: &mut dyn Factory) -> Result<PathBuf, shuttle_service::Error> {
         let folder = Path::new(self.folder);
+
+        trace!(?folder, "building static folder");
 
         // Prevent users from users from reading anything outside of their crate's build folder
         if folder.is_absolute() {
+            error!("the static folder cannot be an absolute path");
             return Err(Error::AbsolutePath)?;
         }
 
         let input_dir = factory.get_build_path()?.join(self.folder);
+
+        trace!(input_directory = ?input_dir, "got input directory");
 
         match input_dir.canonicalize() {
             Ok(canonical_path) if canonical_path != input_dir => return Err(Error::TransversedUp)?,
             Ok(_) => {
                 // The path did not change to outside the crate's build folder
             }
-            Err(err) => return Err(err)?,
+            Err(err) => {
+                error!(
+                    error = &err as &dyn std::error::Error,
+                    "failed to get static folder"
+                );
+                return Err(err)?;
+            }
         }
 
-        let output_dir = factory.get_storage_path()?.join(self.folder);
+        let output_dir = factory.get_storage_path()?;
 
-        rename(input_dir, output_dir.clone())?;
+        trace!(output_directory = ?output_dir, "got output directory");
 
-        Ok(output_dir)
+        if output_dir.join(self.folder) == input_dir {
+            return Ok(output_dir.join(self.folder));
+        }
+
+        let copy_options = CopyOptions::new().overwrite(true);
+        match copy(&input_dir, &output_dir, &copy_options) {
+            Ok(_) => Ok(output_dir.join(self.folder)),
+            Err(error) => {
+                error!(
+                    error = &error as &dyn std::error::Error,
+                    "failed to copy static folder"
+                );
+
+                Err(Error::Copy(error))?
+            }
+        }
     }
 }
 
 impl From<Error> for shuttle_service::Error {
     fn from(error: Error) -> Self {
         let msg = match error {
-            Error::AbsolutePath => "Cannot use an absolute path for a static folder",
-            Error::TransversedUp => "Cannot transverse out of crate for a static folder",
+            Error::AbsolutePath => "Cannot use an absolute path for a static folder".to_string(),
+            Error::TransversedUp => {
+                "Cannot transverse out of crate for a static folder".to_string()
+            }
+            Error::Copy(error) => format!("Cannot copy static folder: {}", error),
         };
 
         ShuttleError::Custom(CustomError::msg(msg))
@@ -175,8 +199,7 @@ mod tests {
         // Call plugin
         let static_folder = StaticFolder::new();
 
-        let runtime = tokio::runtime::Runtime::new().unwrap();
-        let actual_folder = static_folder.build(&mut factory, &runtime).await.unwrap();
+        let actual_folder = static_folder.build(&mut factory).await.unwrap();
 
         assert_eq!(
             actual_folder,
@@ -189,8 +212,6 @@ mod tests {
             "Hello, test!",
             "expected file content to match"
         );
-
-        runtime.shutdown_background();
     }
 
     #[tokio::test]
@@ -198,15 +219,12 @@ mod tests {
     async fn cannot_use_absolute_path() {
         let mut factory = MockFactory::new();
         let static_folder = StaticFolder::new();
-        let runtime = tokio::runtime::Runtime::new().unwrap();
 
         let _ = static_folder
             .folder("/etc")
-            .build(&mut factory, &runtime)
+            .build(&mut factory)
             .await
             .unwrap();
-
-        runtime.shutdown_background();
     }
 
     #[tokio::test]
@@ -221,13 +239,10 @@ mod tests {
         // Call plugin
         let static_folder = StaticFolder::new();
 
-        let runtime = tokio::runtime::Runtime::new().unwrap();
         let _ = static_folder
             .folder("../escape")
-            .build(&mut factory, &runtime)
+            .build(&mut factory)
             .await
             .unwrap();
-
-        runtime.shutdown_background();
     }
 }

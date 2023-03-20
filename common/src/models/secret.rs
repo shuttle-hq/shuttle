@@ -38,9 +38,8 @@ pub fn get_table(secrets: &Vec<Response>) -> String {
 
         format!(
             r#"These secrets are linked to this service
-{}
+{table}
 "#,
-            table
         )
     }
 }

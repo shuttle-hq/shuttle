@@ -9,7 +9,7 @@ use axum::{
 use axum_sessions::extractors::{ReadableSession, WritableSession};
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
-use shuttle_common::{backends::auth::Claim, models::user};
+use shuttle_common::{claims::Claim, models::user};
 use tracing::instrument;
 
 use super::{

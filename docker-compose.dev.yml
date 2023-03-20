@@ -23,3 +23,9 @@ services:
         exec /usr/local/bin/service "$${@:0}"
     ports:
       - 5000:8000
+  panamax:
+    profiles:
+      - panamax
+  deck-chores:
+    profiles:
+      - panamax

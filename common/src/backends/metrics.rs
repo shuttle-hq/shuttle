@@ -54,6 +54,9 @@ impl<MakeSpan> TraceLayer<MakeSpan> {
     ///
     /// # Example
     /// ```
+    /// use shuttle_common::{request_span, backends::metrics::TraceLayer};
+    /// use tracing::field;
+    ///
     /// TraceLayer::new(|request| {
     ///     request_span!(
     ///         request,
@@ -206,7 +209,7 @@ mod tests {
     use tower::ServiceExt;
     use tracing::field;
     use tracing_fluent_assertions::{AssertionRegistry, AssertionsLayer};
-    use tracing_subscriber::{layer::SubscriberExt, Registry};
+    use tracing_subscriber::layer::SubscriberExt;
 
     use super::{Metrics, TraceLayer};
 
@@ -221,9 +224,9 @@ mod tests {
     #[tokio::test]
     async fn trace_layer() {
         let assertion_registry = AssertionRegistry::default();
-        let base_subscriber = Registry::default();
-        let subscriber = base_subscriber.with(AssertionsLayer::new(&assertion_registry));
-        tracing::subscriber::set_global_default(subscriber).unwrap();
+        let subscriber =
+            tracing_subscriber::registry().with(AssertionsLayer::new(&assertion_registry));
+        let _guard = tracing::subscriber::set_default(subscriber);
 
         // Put in own block to make sure assertion to not interfere with the next test
         {

@@ -5,7 +5,6 @@ use axum::{
     headers::{authorization::Bearer, Authorization, Cookie, Header, HeaderMapExt},
     response::Response,
 };
-use chrono::{TimeZone, Utc};
 use futures::future::BoxFuture;
 use http::{Request, StatusCode, Uri};
 use hyper::{
@@ -23,6 +22,11 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
     Lazy::new(|| ReverseProxy::new(Client::new()));
+
+/// Time to cache tokens for. Currently tokens take 15 minutes to expire (see [EXP_MINUTES]) which leaves a 10 minutes
+/// buffer (EXP_MINUTES - CACHE_MINUTES). We want the buffer to be atleast as long as the longest builds which has
+/// been observed to be around 5 minutes.
+const CACHE_MINUTES: u64 = 5;
 
 /// The idea of this layer is to do two things:
 /// 1. Forward all user related routes (`/login`, `/logout`, `/users/*`, etc) to our auth service
@@ -247,25 +251,11 @@ where
                                 }
                             };
 
-                            match extract_token_expiration(response.token.clone()) {
-                                Ok(expiration) => {
-                                    // Cache the token.
-                                    this.cache_manager.insert(
-                                        key.as_str(),
-                                        response.token.clone(),
-                                        expiration,
-                                    );
-                                }
-                                Err(status) => {
-                                    error!(
-                                        "failed to extract token expiration before inserting into cache"
-                                    );
-                                    return Ok(Response::builder()
-                                        .status(status)
-                                        .body(boxed(Body::empty()))
-                                        .unwrap());
-                                }
-                            };
+                            this.cache_manager.insert(
+                                key.as_str(),
+                                response.token.clone(),
+                                Duration::from_secs(CACHE_MINUTES * 60),
+                            );
 
                             trace!("token inserted in cache, request proceeding");
                             req.headers_mut()
@@ -288,46 +278,6 @@ where
             })
         }
     }
-}
-
-fn extract_token_expiration(token: String) -> Result<Duration, StatusCode> {
-    let (_header, rest) = token
-        .split_once('.')
-        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    let (claim, _sig) = rest
-        .split_once('.')
-        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    let claim = base64::decode_config(claim, base64::URL_SAFE_NO_PAD)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    let claim: serde_json::Map<String, serde_json::Value> =
-        serde_json::from_slice(&claim).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    let exp = claim["exp"]
-        .as_i64()
-        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    let expiration_timestamp = Utc
-        .timestamp_opt(exp, 0)
-        .single()
-        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    let duration = expiration_timestamp - Utc::now();
-
-    // We will use this duration to set the TTL for the JWT in the cache. We subtract 180 seconds
-    // to make sure a token from the cache will still be valid in cases where it will be used to
-    // authorize some operation, the operation takes some time, and then the token needs to be
-    // used again.
-    //
-    // This number should never be negative since the JWT has just been created, and so should be
-    // safe to cast to u64. However, if the number *is* negative it would wrap and the TTL duration
-    // would be near u64::MAX, so we use try_from to ensure that can't happen.
-    let duration_minus_buffer = u64::try_from(duration.num_seconds() - 180)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    Ok(std::time::Duration::from_secs(duration_minus_buffer))
 }
 
 fn make_token_request(uri: &str, header: impl Header) -> Request<Body> {

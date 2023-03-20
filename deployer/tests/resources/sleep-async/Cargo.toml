@@ -3,13 +3,10 @@ name = "sleep-async"
 version = "0.1.0"
 edition = "2021"
 
-[lib]
-crate-type = ["cdylib"]
-
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [workspace]
 
 [dependencies]
+shuttle-runtime = { path = "../../../../runtime" }
 tokio = { version = "1.0", features = ["time"]}
-shuttle-service = { path = "../../../../service" }

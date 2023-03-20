@@ -105,7 +105,7 @@ cargo shuttle init --rocket my-rocket-app
 This should generate the following dependency in `Cargo.toml`:
 
 ```toml
-shuttle-service = { version = "0.11.0", features = ["web-rocket"] }
+shuttle-service = { version = "0.12.0", features = ["web-rocket"] }
 ```
 
 The following boilerplate code should be generated into `src/lib.rs`:

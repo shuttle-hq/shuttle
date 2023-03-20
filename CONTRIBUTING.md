@@ -24,6 +24,9 @@ git clone git@github.com:shuttle-hq/shuttle.git
 cd shuttle
 ```
 
+> Note: We need the git tags for the local development workflow, but they may not be included when you clone the repository.
+To make sure you have them, run `git fetch upstream --tags`, where upstream is the name of the shuttle remote repository.
+
 You should now be ready to setup a local environment to test code changes to core `shuttle` packages as follows:
 
 From the root of the shuttle repo, build the required images with:
@@ -53,13 +56,26 @@ In order to test local changes to the library crates, you may want to add the be
 ```toml
 [patch.crates-io]
 shuttle-service = { path = "[base]/shuttle/service" }
-shuttle-common = { path = "[base]/shuttle/common" }
-shuttle-proto = { path = "[base]/shuttle/proto" }
+shuttle-runtime = { path = "[base]/shuttle/runtime" }
+
 shuttle-aws-rds = { path = "[base]/shuttle/resources/aws-rds" }
 shuttle-persist = { path = "[base]/shuttle/resources/persist" }
 shuttle-shared-db = { path = "[base]/shuttle/resources/shared-db" }
 shuttle-secrets = { path = "[base]/shuttle/resources/secrets" }
 shuttle-static-folder = { path = "[base]/shuttle/resources/static-folder" }
+
+shuttle-axum = { path = "[base]/shuttle/services/shuttle-axum" }
+shuttle-actix-web = { path = "[base]/shuttle/services/shuttle-actix-web" }
+shuttle-next = { path = "[base]/shuttle/services/shuttle-next" }
+shuttle-poem = { path = "[base]/shuttle/services/shuttle-poem" }
+shuttle-poise = { path = "[base]/shuttle/services/shuttle-poise" }
+shuttle-rocket = { path = "[base]/shuttle/services/shuttle-rocket" }
+shuttle-salvo = { path = "[base]/shuttle/services/shuttle-salvo" }
+shuttle-serenity = { path = "[base]/shuttle/services/shuttle-serenity" }
+shuttle-thruster = { path = "[base]/shuttle/services/shuttle-thruster" }
+shuttle-tide = { path = "[base]/shuttle/services/shuttle-tide" }
+shuttle-tower = { path = "[base]/shuttle/services/shuttle-tower" }
+shuttle-warp = { path = "[base]/shuttle/services/shuttle-warp" }
 ```
 
 Before we can login to our local instance of shuttle, we need to create a user.
@@ -164,7 +180,7 @@ To run the unit tests for a specific crate, from the root of the repository run:
 cargo test --package <crate-name> --all-features --lib -- --nocapture
 ```
 
-To run the integration tests for a spesific crate (if it has any), from the root of the repository run:
+To run the integration tests for a specific crate (if it has any), from the root of the repository run:
 
 ```bash
 # replace <crate-name> with the name of the crate to test, e.g. `cargo-shuttle`

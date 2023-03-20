@@ -1,0 +1,14 @@
+error: only one method of each type is allowed per route
+
+         = help: Remove one of the post methods on the "/hello" route.
+
+  --> tests/ui/next/duplicate-methods.rs:12:42
+   |
+12 |     #[shuttle_codegen::endpoint(method = post, route = "/hello")]
+   |                                          ^^^^
+
+error[E0601]: `main` function not found in crate `$CRATE`
+  --> tests/ui/next/duplicate-methods.rs:16:2
+   |
+16 | }
+   |  ^ consider adding a `main` function to `$DIR/tests/ui/next/duplicate-methods.rs`

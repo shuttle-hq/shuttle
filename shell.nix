@@ -13,6 +13,7 @@ in
     buildInputs = with nixpkgs; [
       ((rustChannelOf{ channel = "1.65.0"; }).rust.override {
         extensions = ["rust-src"];
+        targets = ["wasm32-wasi"];
       })
       cargo-watch
       terraform
@@ -28,6 +29,7 @@ in
       sqlite
       fastmod
       pebble
+      kondo
     ];
 
     PROTOC = "${protobuf}/bin/protoc";

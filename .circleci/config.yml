@@ -117,14 +117,19 @@ commands:
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --target add wasm32-wasi
             sudo apt update && sudo apt install -y libssl1.1
   install-protoc:
+    parameters:
+      arch:
+        description: "The architecture of protoc to install"
+        type: string
+        default: "linux-x86_64"
     steps:
       - run:
           name: Install protoc
           command: |
-            curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v21.9/protoc-21.9-linux-x86_64.zip &&\
-              sudo unzip -o protoc-21.9-linux-x86_64.zip -d /usr bin/protoc &&\
-              sudo unzip -o protoc-21.9-linux-x86_64.zip -d /usr/ 'include/*' &&\
-              rm -f protoc-21.9-linux-x86_64.zip
+            curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v21.9/protoc-21.9-<< parameters.arch >>.zip &&\
+              sudo unzip -o protoc-21.9-<< parameters.arch >>.zip -d /usr/local bin/protoc &&\
+              sudo unzip -o protoc-21.9-<< parameters.arch >>.zip -d /usr/local 'include/*' &&\
+              rm -f protoc-21.9-<< parameters.arch >>.zip
   make-artifact:
     parameters:
       target:
@@ -295,9 +300,14 @@ jobs:
       resource_class:
         description: "The resource type to use for the machine"
         type: string
+      protoc_arch:
+        description: "Architecture to use to install protoc"
+        type: string
     steps:
       - checkout
       - run: sudo apt update && sudo DEBIAN_FRONTEND=noninteractive apt install -y libssl-dev musl-tools clang
+      - install-protoc:
+          arch: << parameters.protoc_arch >>
       - run:
           name: Install Rust
           command: curl --proto '=https' --tlsv1.3 https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.65.0 --target << parameters.target >>
@@ -313,13 +323,13 @@ jobs:
   build-binaries-windows:
     executor:
       name: win/server-2022
-      size: medium
+      size: xlarge
       shell: bash.exe
     environment:
       CARGO_NET_GIT_FETCH_WITH_CLI: "true"
     steps:
       - checkout
-      - run: choco install -y strawberryperl
+      - run: choco install -y strawberryperl protoc
       - run:
           name: Install Rust
           command: |
@@ -341,9 +351,11 @@ jobs:
   build-binaries-mac:
     macos:
       xcode: 12.5.1
-    resource_class: xlarge
+    resource_class: medium
     steps:
       - checkout
+      - install-protoc:
+          arch: osx-x86_64
       - run:
           name: Install Rust
           command: curl --proto '=https' https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.65.0 --target x86_64-apple-darwin
@@ -437,6 +449,7 @@ workflows:
           name: build-binaries-x86_64-gnu
           image: ubuntu-2204:2022.04.1
           target: x86_64-unknown-linux-gnu
+          protoc_arch: linux-x86_64
           resource_class: xlarge
           filters:
             branches:
@@ -445,6 +458,7 @@ workflows:
           name: build-binaries-x86_64-musl
           image: ubuntu-2204:2022.04.1
           target: x86_64-unknown-linux-musl
+          protoc_arch: linux-x86_64
           resource_class: xlarge
           filters:
             branches:
@@ -453,6 +467,7 @@ workflows:
           name: build-binaries-aarch64
           image: ubuntu-2004:202101-01
           target: aarch64-unknown-linux-musl
+          protoc_arch: linux-aarch_64
           resource_class: arm.xlarge
           filters:
             branches:

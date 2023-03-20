@@ -351,7 +351,7 @@ jobs:
   build-binaries-mac:
     macos:
       xcode: 12.5.1
-    resource_class: large
+    resource_class: medium
     steps:
       - checkout
       - install-protoc:

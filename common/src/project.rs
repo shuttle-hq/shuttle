@@ -99,13 +99,12 @@ impl Display for ProjectNameError {
             ProjectNameError::InvalidName(name) => write!(
                 f,
                 r#"
-`{}` is an invalid project name. project name must
+`{name}` is an invalid project name. project name must
 1. start and end with alphanumeric characters.
 2. only contain characters inside of the alphanumeric range, except for `-`, or `_`.
 3. not be empty.,
 4. not contain profanity.
 5. not be a reserved word."#,
-                name
             ),
         }
     }

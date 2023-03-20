@@ -1,0 +1,18 @@
+[package]
+name = "shuttle-actix-web"
+version = "0.12.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Service implementation to run an actix webserver on shuttle"
+keywords = ["shuttle-service", "actix"]
+
+[workspace]
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+actix-web = { version = "4.3.1" }
+shuttle-runtime = { path = "../../runtime", version = "0.12.0" }
+num_cpus = "1.15.0"
+
+[dev-dependencies]
+tokio = { version = "1.26.0", features = ["macros", "rt-multi-thread"] }

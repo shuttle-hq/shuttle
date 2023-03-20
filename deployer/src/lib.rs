@@ -1,11 +1,8 @@
-use std::{convert::Infallible, net::SocketAddr};
+use std::{convert::Infallible, net::SocketAddr, sync::Arc};
 
 pub use args::Args;
-pub use deployment::{
-    deploy_layer::DeployLayer, provisioner_factory::AbstractProvisionerFactory,
-    runtime_logger::RuntimeLoggerFactory,
-};
-use deployment::{provisioner_factory, runtime_logger, Built, DeploymentManager};
+pub use deployment::deploy_layer::DeployLayer;
+use deployment::{Built, DeploymentManager};
 use fqdn::FQDN;
 use hyper::{
     server::conn::AddrStream,
@@ -13,6 +10,8 @@ use hyper::{
 };
 pub use persistence::Persistence;
 use proxy::AddressGetter;
+pub use runtime_manager::RuntimeManager;
+use tokio::sync::Mutex;
 use tracing::{error, info};
 
 use crate::deployment::gateway_client::GatewayClient;
@@ -23,20 +22,22 @@ mod error;
 mod handlers;
 mod persistence;
 mod proxy;
+mod runtime_manager;
 
 pub async fn start(
-    abstract_factory: impl provisioner_factory::AbstractFactory,
-    runtime_logger_factory: impl runtime_logger::Factory,
     persistence: Persistence,
+    runtime_manager: Arc<Mutex<RuntimeManager>>,
     args: Args,
 ) {
     let deployment_manager = DeploymentManager::builder()
-        .abstract_factory(abstract_factory)
-        .runtime_logger_factory(runtime_logger_factory)
         .build_log_recorder(persistence.clone())
         .secret_recorder(persistence.clone())
         .active_deployment_getter(persistence.clone())
         .artifacts_path(args.artifacts_path)
+        .runtime(runtime_manager)
+        .deployment_updater(persistence.clone())
+        .secret_getter(persistence.clone())
+        .resource_manager(persistence.clone())
         .queue_client(GatewayClient::new(args.gateway_uri))
         .build();
 
@@ -50,6 +51,7 @@ pub async fn start(
             service_name: existing_deployment.service_name,
             service_id: existing_deployment.service_id,
             tracing_context: Default::default(),
+            is_next: existing_deployment.is_next,
             claim: None, // This will cause us to read the resource info from past provisions
         };
         deployment_manager.run_push(built).await;
@@ -64,12 +66,11 @@ pub async fn start(
         args.project,
     )
     .await;
-    let make_service = router.into_make_service();
 
     info!(address=%args.api_address, "Binding to and listening at address");
 
     axum::Server::bind(&args.api_address)
-        .serve(make_service)
+        .serve(router.into_make_service())
         .await
         .unwrap_or_else(|_| panic!("Failed to bind to address: {}", args.api_address));
 }

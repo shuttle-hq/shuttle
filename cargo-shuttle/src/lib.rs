@@ -1,14 +1,16 @@
 mod args;
 mod client;
 pub mod config;
-mod factory;
 mod init;
+mod provisioner_server;
 
+use cargo::util::ToSemver;
 use indicatif::ProgressBar;
 use shuttle_common::models::project::{State, IDLE_MINUTES};
 use shuttle_common::project::ProjectName;
+use shuttle_proto::runtime::{self, LoadRequest, StartRequest, SubscribeLogsRequest};
 
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fs::{read_to_string, File};
 use std::io::stdout;
@@ -24,25 +26,26 @@ use clap_complete::{generate, Shell};
 use config::RequestContext;
 use crossterm::style::Stylize;
 use dialoguer::{theme::ColorfulTheme, Confirm, FuzzySelect, Input, Password};
-use factory::LocalFactory;
 use flate2::write::GzEncoder;
 use flate2::Compression;
-use futures::StreamExt;
+use futures::{StreamExt, TryFutureExt};
 use git2::{Repository, StatusOptions};
 use ignore::overrides::OverrideBuilder;
 use ignore::WalkBuilder;
 use shuttle_common::models::{project, secret};
-use shuttle_service::loader::{build_crate, Loader};
-use shuttle_service::Logger;
+use shuttle_service::builder::{build_crate, Runtime};
 use std::fmt::Write;
 use strum::IntoEnumIterator;
 use tar::Builder;
-use tokio::sync::mpsc;
-use tracing::trace;
+use tracing::{trace, warn};
 use uuid::Uuid;
 
 use crate::args::{DeploymentCommand, ProjectCommand};
 use crate::client::Client;
+use crate::provisioner_server::LocalProvisioner;
+
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
 
 pub struct Shuttle {
     ctx: RequestContext,
@@ -133,9 +136,9 @@ impl Shuttle {
                 println!("First, let's log in to your Shuttle account.");
                 self.login(args.login_args.clone()).await?;
                 println!();
-            } else if args.new && args.login_args.api_key.is_some() {
+            } else if args.login_args.api_key.is_some() {
                 self.login(args.login_args.clone()).await?;
-            } else {
+            } else if args.new {
                 bail!("Tried to login to create a Shuttle environment, but no API key was set.")
             }
         }
@@ -154,11 +157,17 @@ impl Shuttle {
 
         // 3. Confirm the project directory
         let path = if interactive {
+            let path = args
+                .path
+                .to_str()
+                .context("path arg should always be set")?;
+
             println!("Where should we create this project?");
             let directory_str: String = Input::with_theme(&theme)
                 .with_prompt("Directory")
-                .default(".".to_owned())
+                .default(path.to_owned())
                 .interact()?;
+
             println!();
             args::parse_init_path(OsString::from(directory_str))?
         } else {
@@ -413,7 +422,6 @@ impl Shuttle {
         });
 
         let working_directory = self.ctx.working_directory();
-        let id = Default::default();
 
         trace!("building project");
         println!(
@@ -422,7 +430,7 @@ impl Shuttle {
             working_directory.display()
         );
 
-        let so_path = build_crate(id, working_directory, run_args.release, tx).await?;
+        let runtime = build_crate(working_directory, run_args.release, tx).await?;
 
         trace!("loading secrets");
 
@@ -432,26 +440,137 @@ impl Shuttle {
             working_directory.join("Secrets.toml")
         };
 
-        let secrets: BTreeMap<String, String> =
-            if let Ok(secrets_str) = read_to_string(secrets_path) {
-                let secrets: BTreeMap<String, String> =
-                    secrets_str.parse::<toml::Value>()?.try_into()?;
+        let secrets: HashMap<String, String> = if let Ok(secrets_str) = read_to_string(secrets_path)
+        {
+            let secrets: HashMap<String, String> =
+                secrets_str.parse::<toml::Value>()?.try_into()?;
 
-                trace!(keys = ?secrets.keys(), "available secrets");
+            trace!(keys = ?secrets.keys(), "available secrets");
 
-                secrets
+            secrets
+        } else {
+            trace!("no Secrets.toml was found");
+            Default::default()
+        };
+
+        let service_name = self.ctx.project_name().to_string();
+
+        let (is_wasm, executable_path) = match runtime {
+            Runtime::Next(path) => (true, path),
+            Runtime::Alpha(path) => (false, path),
+        };
+
+        let provisioner = LocalProvisioner::new()?;
+        let provisioner_server = provisioner.start(SocketAddr::new(
+            Ipv4Addr::LOCALHOST.into(),
+            run_args.port + 1,
+        ));
+
+        let runtime_path = || {
+            if is_wasm {
+                let runtime_path = home::cargo_home()
+                    .expect("failed to find cargo home dir")
+                    .join("bin/shuttle-next");
+
+                println!("Installing shuttle runtime. This can take a while...");
+
+                if cfg!(debug_assertions) {
+                    // Canonicalized path to shuttle-runtime for dev to work on windows
+                    let path = std::fs::canonicalize(format!("{MANIFEST_DIR}/../runtime"))
+                        .expect("path to shuttle-runtime does not exist or is invalid");
+
+                    trace!(?path, "installing runtime from local filesystem");
+
+                    std::process::Command::new("cargo")
+                        .arg("install")
+                        .arg("shuttle-runtime")
+                        .arg("--path")
+                        .arg(path)
+                        .arg("--bin")
+                        .arg("shuttle-next")
+                        .arg("--features")
+                        .arg("next")
+                        .output()
+                        .expect("failed to install the shuttle runtime");
+                } else {
+                    // If the version of cargo-shuttle is different from shuttle-runtime,
+                    // or it isn't installed, try to install shuttle-runtime from crates.io.
+                    if let Err(err) = check_version(&runtime_path) {
+                        warn!("{}", err);
+
+                        trace!("installing shuttle-runtime");
+                        std::process::Command::new("cargo")
+                            .arg("install")
+                            .arg("shuttle-runtime")
+                            .arg("--bin")
+                            .arg("shuttle-next")
+                            .arg("--features")
+                            .arg("next")
+                            .output()
+                            .expect("failed to install the shuttle runtime");
+                    };
+                };
+
+                runtime_path
             } else {
-                trace!("no Secrets.toml was found");
-                Default::default()
-            };
+                trace!(path = ?executable_path, "using alpha runtime");
+                executable_path.clone()
+            }
+        };
 
-        let loader = Loader::from_so_file(so_path)?;
+        let (mut runtime, mut runtime_client) = runtime::start(
+            is_wasm,
+            runtime::StorageManagerType::WorkingDir(working_directory.to_path_buf()),
+            &format!("http://localhost:{}", run_args.port + 1),
+            None,
+            run_args.port + 2,
+            runtime_path,
+        )
+        .await
+        .map_err(|err| {
+            provisioner_server.abort();
 
-        let mut factory = LocalFactory::new(
-            self.ctx.project_name().clone(),
+            err
+        })?;
+
+        let load_request = tonic::Request::new(LoadRequest {
+            path: executable_path
+                .into_os_string()
+                .into_string()
+                .expect("to convert path to string"),
+            service_name: service_name.clone(),
+            resources: Default::default(),
             secrets,
-            working_directory.to_path_buf(),
-        )?;
+        });
+        trace!("loading service");
+        let _ = runtime_client
+            .load(load_request)
+            .or_else(|err| async {
+                provisioner_server.abort();
+                runtime.kill().await?;
+
+                Err(err)
+            })
+            .await?;
+
+        let mut stream = runtime_client
+            .subscribe_logs(tonic::Request::new(SubscribeLogsRequest {}))
+            .or_else(|err| async {
+                provisioner_server.abort();
+                runtime.kill().await?;
+
+                Err(err)
+            })
+            .await?
+            .into_inner();
+
+        tokio::spawn(async move {
+            while let Ok(Some(log)) = stream.message().await {
+                let log: shuttle_common::LogItem = log.try_into().expect("to convert log");
+                println!("{log}");
+            }
+        });
+
         let addr = if run_args.external {
             std::net::IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))
         } else {
@@ -460,30 +579,32 @@ impl Shuttle {
 
         let addr = SocketAddr::new(addr, run_args.port);
 
-        trace!("loading project");
+        let start_request = StartRequest {
+            ip: addr.to_string(),
+        };
+
+        trace!(?start_request, "starting service");
+        let response = runtime_client
+            .start(tonic::Request::new(start_request))
+            .or_else(|err| async {
+                provisioner_server.abort();
+                runtime.kill().await?;
+
+                Err(err)
+            })
+            .await?
+            .into_inner();
+
+        trace!(response = ?response,  "client response: ");
+
         println!(
             "\n{:>12} {} on http://{}",
             "Starting".bold().green(),
             self.ctx.project_name(),
             addr
         );
-        let (tx, mut rx) = mpsc::unbounded_channel();
 
-        tokio::spawn(async move {
-            while let Some(log) = rx.recv().await {
-                println!("{log}");
-            }
-        });
-
-        let logger = Logger::new(tx, id);
-        let (handle, so) = loader.load(&mut factory, addr, logger).await?;
-
-        handle.await??;
-
-        tokio::task::spawn_blocking(move || {
-            trace!("closing so file");
-            so.close().unwrap();
-        });
+        runtime.wait().await?;
 
         Ok(())
     }
@@ -768,6 +889,40 @@ impl Shuttle {
     }
 }
 
+fn check_version(runtime_path: &Path) -> Result<()> {
+    let valid_version = VERSION.to_semver().unwrap();
+
+    if !runtime_path.try_exists()? {
+        bail!("shuttle-runtime is not installed");
+    }
+
+    // Get runtime version from shuttle-runtime cli
+    let runtime_version = std::process::Command::new("cargo")
+        .arg("shuttle-runtime")
+        .arg("--version")
+        .output()
+        .context("failed to check the shuttle-runtime version")?
+        .stdout;
+
+    // Parse the version, splitting the version from the name and
+    // and pass it to `to_semver()`.
+    let runtime_version = std::str::from_utf8(&runtime_version)
+        .expect("shuttle-runtime version should be valid utf8")
+        .split_once(' ')
+        .expect("shuttle-runtime version should be in the `name version` format")
+        .1
+        .to_semver()
+        .context("failed to convert runtime version to semver")?;
+
+    if runtime_version == valid_version {
+        Ok(())
+    } else {
+        Err(anyhow!(
+            "shuttle-runtime and cargo-shuttle are not the same version"
+        ))
+    }
+}
+
 fn create_spinner() -> ProgressBar {
     let pb = indicatif::ProgressBar::new_spinner();
     pb.enable_steady_tick(std::time::Duration::from_millis(350));
@@ -899,7 +1054,7 @@ mod tests {
                 "Secrets.toml",
                 "Secrets.toml.example",
                 "Shuttle.toml",
-                "src/lib.rs",
+                "src/main.rs",
             ]
         );
     }

@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-gateway"
-version = "0.11.2"
+version = "0.12.0"
 edition.workspace = true
 license.workspace = true
 publish = false
@@ -8,7 +8,7 @@ publish = false
 [dependencies]
 acme2 = "0.5.1"
 async-trait = { workspace = true }
-axum = { workspace = true, features = [ "headers" ] }
+axum = { workspace = true, features = [ "default", "headers" ] }
 axum-server = { version = "0.4.4", features = [ "tls-rustls" ] }
 base64 = "0.13.1"
 bollard = "0.13.0"
@@ -38,9 +38,10 @@ sqlx = { version = "0.6.2", features = [ "sqlite", "json", "runtime-tokio-native
 strum = { workspace = true }
 tokio = { version = "1.22.0", features = [ "full" ] }
 tower = { workspace = true, features = [ "steer" ] }
-tracing = { workspace = true }
+tower-http = { version = "0.3.4", features = ["trace"] }
+tracing = { workspace = true, features = ["default"] }
 tracing-opentelemetry = { workspace = true }
-tracing-subscriber = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["default", "env-filter"] }
 ttl_cache = { workspace = true }
 uuid = { workspace = true, features = [ "v4" ] }
 

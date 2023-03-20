@@ -9,6 +9,7 @@ members = [
   "gateway",
   "proto",
   "provisioner",
+  "runtime",
   "service"
 ]
 
@@ -19,26 +20,27 @@ exclude = [
   "resources/persist",
   "resources/secrets",
   "resources/shared-db",
-  "resources/static-folder"
+  "resources/static-folder",
+  "services"
 ]
 
 [workspace.package]
-version = "0.11.0"
+version = "0.12.0"
 edition = "2021"
 license = "Apache-2.0"
 repository = "https://github.com/shuttle-hq/shuttle"
 
 # https://doc.rust-lang.org/cargo/reference/workspaces.html#the-workspacedependencies-table
 [workspace.dependencies]
-shuttle-codegen = { path = "codegen", version = "0.11.0" }
-shuttle-common = { path = "common", version = "0.11.2" }
-shuttle-proto = { path = "proto", version = "0.11.0" }
-shuttle-service = { path = "service", version = "0.11.0" }
+shuttle-codegen = { path = "codegen", version = "0.12.0" }
+shuttle-common = { path = "common", version = "0.12.0" }
+shuttle-proto = { path = "proto", version = "0.12.0" }
+shuttle-service = { path = "service", version = "0.12.0" }
 
 anyhow = "1.0.66"
 async-trait = "0.1.58"
-axum = "0.6.0"
-chrono = { version = "0.4.23", default-features = false, features = ["clock"] }
+axum = { version = "0.6.0", default-features = false }
+chrono = { version = "0.4.23", default-features = false }
 clap = { version = "4.0.27", features = [ "derive" ] }
 headers = "0.3.8"
 http = "0.2.8"
@@ -49,16 +51,18 @@ opentelemetry = { version = "0.18.0", features = ["rt-tokio"] }
 opentelemetry-http = "0.7.0"
 pin-project = "1.0.12"
 portpicker = "0.1.1"
+prost-types = "0.11.0"
 rand = "0.8.5"
 ring = "0.16.20"
-serde = "1.0.148"
+serde = { version = "1.0.148", default-features = false }
 serde_json = "1.0.89"
 strum = { version = "0.24.1", features = ["derive"] }
 thiserror = "1.0.37"
+tonic = "0.8.3"
 tower = "0.4.13"
 tower-http = { version = "0.3.4", features = ["trace"] }
-tracing = "0.1.37"
+tracing = { version = "0.1.37", default-features = false }
 tracing-opentelemetry = "0.18.0"
-tracing-subscriber = "0.3.16"
+tracing-subscriber = { version = "0.3.16", default-features = false, features = ["registry", "std"] }
 ttl_cache = "0.5.1"
 uuid = "1.2.2"

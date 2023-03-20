@@ -17,6 +17,7 @@ pub enum State {
 }
 
 /// This which environment is this deployment taking place
+#[derive(Clone, Copy)]
 pub enum Environment {
     Local,
     Production,

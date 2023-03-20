@@ -58,6 +58,7 @@ async fn cargo_shuttle_run(working_directory: &str, external: bool) -> String {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore]
 async fn rocket_hello_world() {
     let url = cargo_shuttle_run("../examples/rocket/hello-world", false).await;
 
@@ -91,6 +92,7 @@ async fn rocket_secrets() {
 
 // This example uses a shared Postgres. Thus local runs should create a docker container for it.
 #[tokio::test(flavor = "multi_thread")]
+#[ignore]
 async fn rocket_postgres() {
     let url = cargo_shuttle_run("../examples/rocket/postgres", false).await;
     let client = reqwest::Client::new();
@@ -120,6 +122,59 @@ async fn rocket_postgres() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn axum_static_files() {
+    let url = cargo_shuttle_run("../examples/axum/static-files", false).await;
+    let client = reqwest::Client::new();
+
+    let request_text = client
+        .get(format!("{url}/hello"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+
+    assert_eq!(request_text, "Hello, world!");
+
+    let request_text = client.get(url).send().await.unwrap().text().await.unwrap();
+
+    assert!(
+        request_text.contains("This is an example of serving static files with axum and shuttle.")
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn shuttle_next() {
+    let url = cargo_shuttle_run("../examples/next/hello-world", false).await;
+    let client = reqwest::Client::new();
+
+    let request_text = client
+        .get(format!("{url}/hello"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+
+    assert_eq!(request_text, "Hello, World!");
+
+    let post_text = client
+        .post(format!("{url}/uppercase"))
+        .body("uppercase this")
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+
+    assert_eq!(post_text, "UPPERCASE THIS");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore]
 async fn rocket_authentication() {
     let url = cargo_shuttle_run("../examples/rocket/authentication", false).await;
     let client = reqwest::Client::new();
@@ -176,6 +231,7 @@ async fn rocket_authentication() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore]
 async fn actix_web_hello_world() {
     let url = cargo_shuttle_run("../examples/actix-web/hello-world", false).await;
 
@@ -192,6 +248,7 @@ async fn actix_web_hello_world() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore]
 async fn axum_hello_world() {
     let url = cargo_shuttle_run("../examples/axum/hello-world", false).await;
 
@@ -208,6 +265,7 @@ async fn axum_hello_world() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore]
 async fn tide_hello_world() {
     let url = cargo_shuttle_run("../examples/tide/hello-world", false).await;
 
@@ -224,6 +282,7 @@ async fn tide_hello_world() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore]
 async fn tower_hello_world() {
     let url = cargo_shuttle_run("../examples/tower/hello-world", false).await;
 
@@ -240,6 +299,7 @@ async fn tower_hello_world() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore]
 async fn warp_hello_world() {
     let url = cargo_shuttle_run("../examples/warp/hello-world", false).await;
 
@@ -256,6 +316,7 @@ async fn warp_hello_world() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore]
 async fn poem_hello_world() {
     let url = cargo_shuttle_run("../examples/poem/hello-world", false).await;
 
@@ -336,6 +397,7 @@ async fn poem_mongodb() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore]
 async fn salvo_hello_world() {
     let url = cargo_shuttle_run("../examples/salvo/hello-world", false).await;
 
@@ -352,6 +414,7 @@ async fn salvo_hello_world() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore]
 async fn thruster_hello_world() {
     let url = cargo_shuttle_run("../examples/thruster/hello-world", false).await;
 

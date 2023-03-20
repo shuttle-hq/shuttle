@@ -9,10 +9,12 @@ executors:
   docker-rust:
     docker:
       - image: cimg/rust:1.65.0
+    resource_class: small
   image-ubuntu:
     machine:
       image: ubuntu-2204:2022.04.1
       docker_layer_caching: true
+    resource_class: xlarge
 
 # sscache steps are from this guide
 # https://medium.com/@edouard.oger/rust-caching-on-circleci-using-sccache-c996344f0115
@@ -86,18 +88,33 @@ commands:
             cat\<< EOF > ~/.cargo/config.toml
             [patch.crates-io]
             shuttle-service = { path = "$PWD/service" }
+            shuttle-runtime = { path = "$PWD/runtime" }
+
             shuttle-aws-rds = { path = "$PWD/resources/aws-rds" }
             shuttle-persist = { path = "$PWD/resources/persist" }
             shuttle-shared-db = { path = "$PWD/resources/shared-db" }
             shuttle-secrets = { path = "$PWD/resources/secrets" }
             shuttle-static-folder = { path = "$PWD/resources/static-folder" }
+
+            shuttle-axum = { path = "$PWD/services/shuttle-axum" }
+            shuttle-actix-web = { path = "$PWD/services/shuttle-actix-web" }
+            shuttle-next = { path = "$PWD/services/shuttle-next" }
+            shuttle-poem = { path = "$PWD/services/shuttle-poem" }
+            shuttle-poise = { path = "$PWD/services/shuttle-poise" }
+            shuttle-rocket = { path = "$PWD/services/shuttle-rocket" }
+            shuttle-salvo = { path = "$PWD/services/shuttle-salvo" }
+            shuttle-serenity = { path = "$PWD/services/shuttle-serenity" }
+            shuttle-thruster = { path = "$PWD/services/shuttle-thruster" }
+            shuttle-tide = { path = "$PWD/services/shuttle-tide" }
+            shuttle-tower = { path = "$PWD/services/shuttle-tower" }
+            shuttle-warp = { path = "$PWD/services/shuttle-warp" }
             EOF
   install-rust:
     steps:
       - run:
           name: Install Rust
           command: |
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --target add wasm32-wasi
             sudo apt update && sudo apt install -y libssl1.1
   install-protoc:
     steps:
@@ -146,33 +163,22 @@ commands:
             - << parameters.target >>.env
 
 jobs:
-  workspace-fmt:
+  workspace:
     executor: docker-rust
+    resource_class: xlarge
     steps:
       - checkout
       - restore-cargo-cache
       - install-protoc
       - run: cargo fmt --all --check
-      - run: cargo install cargo-sort
       # TODO: this is incompatible with workspace inheritance, uncomment when
       # https://github.com/DevinR528/cargo-sort/pull/29 is merged
+      # - run: cargo install cargo-sort
       # - run: cargo sort --check --workspace
-      - run: cargo check --workspace --all-targets
-      - save-cargo-cache
-  workspace-clippy:
-    parameters:
-      framework:
-        description: "Framework to activate"
-        type: string
-    executor: docker-rust
-    steps:
-      - checkout
-      - restore-cargo-cache
-      - install-protoc
       - run: |
           cargo clippy --tests \
                        --all-targets \
-                       --features="codegen,loader,<< parameters.framework >>" \
+                       --all-features \
                        --no-deps -- \
                        --D warnings \
                        -A clippy::let-unit-value \
@@ -190,9 +196,9 @@ jobs:
       - install-protoc
       - apply-patches
       - run: cargo fmt --all --check --manifest-path << parameters.path >>/Cargo.toml
-      - run: cargo install cargo-sort
       # TODO: this is incompatible with workspace inheritance, uncomment when
       # https://github.com/DevinR528/cargo-sort/pull/29 is merged
+      # - run: cargo install cargo-sort
       # - run: cargo sort --check << parameters.path >>
       - run: |
           cargo clippy --tests \
@@ -205,20 +211,6 @@ jobs:
                        -A clippy::format-push-string
       - run: cargo test --all-features --manifest-path << parameters.path >>/Cargo.toml -- --nocapture
       - save-cargo-cache
-  service-test:
-    # Using an image since tests will start a docker container
-    executor: image-ubuntu
-    steps:
-      - install-rust
-      - checkout
-      - restore-cargo-cache
-      - run:
-          name: Run unit tests
-          command: cargo test --package shuttle-service --features="codegen,loader" --lib -- --nocapture
-      - run:
-          name: Run integration tests
-          command: cargo test --package shuttle-service --features="codegen,loader" --test '*' -- --nocapture
-      - save-cargo-cache
   platform-test:
     parameters:
       crate:
@@ -228,6 +220,7 @@ jobs:
     executor: image-ubuntu
     steps:
       - install-rust
+      - install-protoc
       - checkout
       - run: git submodule sync
       - run: git submodule update --init
@@ -244,7 +237,6 @@ jobs:
             (cargo test --package << parameters.crate >> --all-features --test '*' -- --list 2>&1 | grep -q "no test target matches pattern") && echo "nothing to test" || cargo test --package << parameters.crate >> --all-features --test '*' -- --nocapture
       - save-cargo-cache
   e2e-test:
-    resource_class: xlarge
     executor: image-ubuntu
     steps:
       - install-rust
@@ -276,7 +268,6 @@ jobs:
           key: docker-buildx-{{ .Branch }}
           when: always
   build-and-push:
-    resource_class: xlarge
     executor: image-ubuntu
     steps:
       - checkout
@@ -350,7 +341,7 @@ jobs:
   build-binaries-mac:
     macos:
       xcode: 12.5.1
-    resource_class: medium
+    resource_class: xlarge
     steps:
       - checkout
       - run:
@@ -388,28 +379,9 @@ jobs:
 workflows:
   ci:
     jobs:
-      - workspace-fmt
-      - workspace-clippy:
-          name: workspace-clippy-<< matrix.framework >>
-          requires:
-            - workspace-fmt
-          matrix:
-            parameters:
-              framework:
-                [
-                  "web-actix-web",
-                  "web-axum",
-                  "web-rocket",
-                  "web-poem",
-                  "web-thruster",
-                  "web-tide",
-                  "web-tower",
-                  "web-warp",
-                  "web-salvo",
-                  "bot-serenity",
-                  "bot-poise",
-                ]
+      - workspace
       - check-standalone:
+          name: << matrix.path >>
           matrix:
             parameters:
               path:
@@ -418,27 +390,38 @@ workflows:
                 - resources/secrets
                 - resources/shared-db
                 - resources/static-folder
-      - service-test:
-          requires:
-            - workspace-clippy
+                - services/shuttle-actix-web
+                - services/shuttle-axum
+                - services/shuttle-next
+                - services/shuttle-poem
+                - services/shuttle-poise
+                - services/shuttle-rocket
+                - services/shuttle-salvo
+                - services/shuttle-serenity
+                - services/shuttle-thruster
+                - services/shuttle-tide
+                - services/shuttle-tower
+                - services/shuttle-warp
       - platform-test:
+          name: << matrix.crate >>
           requires:
-            - workspace-clippy
+            - workspace
           matrix:
             parameters:
               crate:
                 [
                   "shuttle-auth",
-                  "shuttle-deployer",
                   "cargo-shuttle",
                   "shuttle-codegen",
                   "shuttle-common",
+                  "shuttle-deployer",
                   "shuttle-proto",
                   "shuttle-provisioner",
+                  "shuttle-runtime",
+                  "shuttle-service",
                 ]
       - e2e-test:
           requires:
-            - service-test
             - platform-test
             - check-standalone
           filters:
@@ -454,7 +437,7 @@ workflows:
           name: build-binaries-x86_64-gnu
           image: ubuntu-2204:2022.04.1
           target: x86_64-unknown-linux-gnu
-          resource_class: medium
+          resource_class: xlarge
           filters:
             branches:
               only: production
@@ -462,7 +445,7 @@ workflows:
           name: build-binaries-x86_64-musl
           image: ubuntu-2204:2022.04.1
           target: x86_64-unknown-linux-musl
-          resource_class: medium
+          resource_class: xlarge
           filters:
             branches:
               only: production
@@ -470,7 +453,7 @@ workflows:
           name: build-binaries-aarch64
           image: ubuntu-2004:202101-01
           target: aarch64-unknown-linux-musl
-          resource_class: arm.medium
+          resource_class: arm.xlarge
           filters:
             branches:
               only: production

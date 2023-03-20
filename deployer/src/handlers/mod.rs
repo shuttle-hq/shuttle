@@ -13,14 +13,16 @@ use fqdn::FQDN;
 use futures::StreamExt;
 use hyper::Uri;
 use shuttle_common::backends::auth::{
-    AdminSecretLayer, AuthPublicKey, Claim, JwtAuthenticationLayer, Scope, ScopedLayer,
+    AdminSecretLayer, AuthPublicKey, JwtAuthenticationLayer, ScopedLayer,
 };
 use shuttle_common::backends::headers::XShuttleAccountName;
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
+use shuttle_common::claims::{Claim, Scope};
 use shuttle_common::models::secret;
 use shuttle_common::project::ProjectName;
+use shuttle_common::storage_manager::StorageManager;
 use shuttle_common::{request_span, LogItem};
-use shuttle_service::loader::clean_crate;
+use shuttle_service::builder::clean_crate;
 use tracing::{debug, error, field, instrument, trace};
 use uuid::Uuid;
 
@@ -208,6 +210,7 @@ async fn post_service(
         state: State::Queued,
         last_update: Utc::now(),
         address: None,
+        is_next: false,
     };
 
     let mut data = Vec::new();
@@ -403,7 +406,7 @@ async fn post_clean(
 ) -> Result<Json<Vec<String>>> {
     let project_path = deployment_manager
         .storage_manager()
-        .service_build_path(project_name)
+        .service_build_path(&project_name)
         .map_err(anyhow::Error::new)?;
 
     let lines = clean_crate(&project_path, true)?;

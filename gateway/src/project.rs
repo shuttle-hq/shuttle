@@ -704,9 +704,7 @@ impl ProjectCreating {
                         "--api-address",
                         format!("0.0.0.0:{RUNTIME_API_PORT}"),
                         "--provisioner-address",
-                        provisioner_host,
-                        "--provisioner-port",
-                        "8000",
+                        format!("http://{provisioner_host}:8000"),
                         "--proxy-address",
                         "0.0.0.0:8000",
                         "--proxy-fqdn",
@@ -719,7 +717,7 @@ impl ProjectCreating {
                         auth_uri,
                     ],
                     "Env": [
-                        "RUST_LOG=debug,shuttle=trace",
+                        "RUST_LOG=debug,shuttle=trace,h2=warn",
                     ]
                 })
             });
@@ -1321,7 +1319,7 @@ where
         // Stopping a docker containers sends a SIGTERM which will stop the tokio runtime that deployer starts up.
         // Killing this runtime causes the deployment to enter the `completed` state and it therefore does not
         // start up again when starting up the project's container. Luckily the kill command allows us to change the
-        // signal to prevent this from happenning.
+        // signal to prevent this from happening.
         //
         // In some future state when all deployers hadle `SIGTERM` correctly, this can be changed to docker stop
         // safely.

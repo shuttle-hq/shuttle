@@ -1,0 +1,14 @@
+[package]
+name = "not-bin"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+rocket = "0.5.0-rc.2"
+shuttle-rocket = { path = "../../../../services/shuttle-rocket" }
+shuttle-runtime = { path = "../../../../runtime" }

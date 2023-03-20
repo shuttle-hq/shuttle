@@ -1,7 +1,6 @@
 pub mod deployment;
 pub mod error;
 pub mod project;
-pub mod resource;
 pub mod secret;
 pub mod service;
 pub mod stats;
@@ -13,6 +12,7 @@ use http::StatusCode;
 use serde::de::DeserializeOwned;
 use tracing::trace;
 
+/// A to_json wrapper for handling our error states
 #[async_trait]
 pub trait ToJson {
     async fn to_json<T: DeserializeOwned>(self) -> Result<T>;
@@ -33,7 +33,7 @@ impl ToJson for reqwest::Response {
             status_code,
             StatusCode::OK | StatusCode::SWITCHING_PROTOCOLS
         ) {
-            serde_json::from_slice(&full).context("failed to parse a successfull response")
+            serde_json::from_slice(&full).context("failed to parse a successful response")
         } else {
             trace!("parsing response to common error");
             let res: error::ApiError = match serde_json::from_slice(&full) {

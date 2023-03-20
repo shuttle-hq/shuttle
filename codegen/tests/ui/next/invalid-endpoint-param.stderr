@@ -1,0 +1,14 @@
+error: invalid endpoint argument
+
+         = help: Only `method` and `route` are valid endpoint arguments.
+
+ --> tests/ui/next/invalid-endpoint-param.rs:2:67
+  |
+2 |     #[shuttle_codegen::endpoint(method = get, route = "/goodbye", invalid = bad)]
+  |                                                                   ^^^^^^^
+
+error[E0601]: `main` function not found in crate `$CRATE`
+ --> tests/ui/next/invalid-endpoint-param.rs:6:2
+  |
+6 | }
+  |  ^ consider adding a `main` function to `$DIR/tests/ui/next/invalid-endpoint-param.rs`

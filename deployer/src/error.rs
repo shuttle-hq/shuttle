@@ -38,7 +38,7 @@ pub enum Error {
 
 #[derive(Error, Debug)]
 pub enum TestError {
-    #[error("Tests failed")]
+    #[error("The deployment's tests failed.")]
     Failed(CliError),
     #[error("Failed to setup tests run: {0}")]
     Setup(#[from] anyhow::Error),

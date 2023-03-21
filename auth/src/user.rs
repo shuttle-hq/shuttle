@@ -183,8 +183,6 @@ pub enum AccountTier {
     Admin,
 }
 
-
-
 impl From<AccountTier> for Vec<Scope> {
     fn from(tier: AccountTier) -> Self {
         let mut base = vec![

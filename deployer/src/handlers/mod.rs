@@ -59,6 +59,10 @@ pub async fn make_router(
             get(get_service_summary).layer(ScopedLayer::new(vec![Scope::Service])),
         )
         .route(
+            "/projects/:project_name/services/:service_name/resources",
+            get(get_service_resources).layer(ScopedLayer::new(vec![Scope::Resources])),
+        )
+        .route(
             "/projects/:project_name/deployments/:deployment_id",
             get(get_deployment.layer(ScopedLayer::new(vec![Scope::Deployment])))
                 .delete(delete_deployment.layer(ScopedLayer::new(vec![Scope::DeploymentPush]))),
@@ -187,6 +191,25 @@ async fn get_service_summary(
         };
 
         Ok(Json(response))
+    } else {
+        Err(Error::NotFound)
+    }
+}
+
+#[instrument(skip_all, fields(%project_name, %service_name))]
+async fn get_service_resources(
+    Extension(persistence): Extension<Persistence>,
+    Path((project_name, service_name)): Path<(String, String)>,
+) -> Result<Json<Vec<shuttle_common::resource::Response>>> {
+    if let Some(service) = persistence.get_service_by_name(&service_name).await? {
+        let resources = persistence
+            .get_resources(&service.id)
+            .await?
+            .into_iter()
+            .map(Into::into)
+            .collect();
+
+        Ok(Json(resources))
     } else {
         Err(Error::NotFound)
     }

@@ -5,9 +5,13 @@ use serde_json::Value;
 
 use crate::{database, DatabaseReadyInfo};
 
+/// Common type to hold all the information we need for a generic resource
 #[derive(Clone, Deserialize, Serialize)]
 pub struct Response {
+    /// The type of this resource.
     pub r#type: Type,
+
+    /// The data associated with this resource. Use the [Self::r#type] to know how to parse this data.
     pub data: Value,
 }
 

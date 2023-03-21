@@ -94,7 +94,6 @@ clean:
 
 images: shuttle-provisioner shuttle-deployer shuttle-gateway shuttle-auth postgres panamax otel
 
-# We must specify the platform tag so that
 postgres:
 	docker buildx build \
 			--build-arg POSTGRES_TAG=$(POSTGRES_TAG) \

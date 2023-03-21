@@ -141,17 +141,17 @@ down: docker-compose.rendered.yml
 
 shuttle-%: ${SRC} Cargo.lock
 	docker buildx build \
-				--build-arg PROTOC_ARCH=$(PROTOC_ARCH) \
-				--build-arg folder=$(*) \
-        --build-arg prepare_args=$(PREPARE_ARGS) \
-				--build-arg RUSTUP_TOOLCHAIN=$(RUSTUP_TOOLCHAIN) \
+			--build-arg PROTOC_ARCH=$(PROTOC_ARCH) \
+			--build-arg folder=$(*) \
+			--build-arg prepare_args=$(PREPARE_ARGS) \
+			--build-arg RUSTUP_TOOLCHAIN=$(RUSTUP_TOOLCHAIN) \
 		  	--build-arg CARGO_PROFILE=$(CARGO_PROFILE) \
-				--tag $(CONTAINER_REGISTRY)/$(*):$(COMMIT_SHA) \
-				--tag $(CONTAINER_REGISTRY)/$(*):$(TAG) \
-				--tag $(CONTAINER_REGISTRY)/$(*):latest \
-				$(BUILDX_FLAGS) \
-				-f Containerfile \
-				.
+			--tag $(CONTAINER_REGISTRY)/$(*):$(COMMIT_SHA) \
+			--tag $(CONTAINER_REGISTRY)/$(*):$(TAG) \
+			--tag $(CONTAINER_REGISTRY)/$(*):latest \
+			$(BUILDX_FLAGS) \
+			-f Containerfile \
+			.
 
 # Bunch of targets to make bumping the shuttle version easier
 #

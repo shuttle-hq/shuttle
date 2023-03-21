@@ -8,7 +8,7 @@ orbs:
 executors:
   docker-rust:
     docker:
-      - image: cimg/rust:1.65.0
+      - image: cimg/rust:1.68.0
     resource_class: small
   image-ubuntu:
     machine:
@@ -310,7 +310,7 @@ jobs:
           arch: << parameters.protoc_arch >>
       - run:
           name: Install Rust
-          command: curl --proto '=https' --tlsv1.3 https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.65.0 --target << parameters.target >>
+          command: curl --proto '=https' --tlsv1.3 https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.68.0 --target << parameters.target >>
       - run:
           name: Build
           command: |
@@ -334,7 +334,7 @@ jobs:
           name: Install Rust
           command: |
             wget -OutFile "C:\rustup-init.exe" https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe
-            C:\rustup-init.exe -y --default-toolchain 1.65.0 --target x86_64-pc-windows-msvc
+            C:\rustup-init.exe -y --default-toolchain 1.68.0 --target x86_64-pc-windows-msvc
           shell: powershell.exe
       - run:
           name: Build
@@ -358,7 +358,7 @@ jobs:
           arch: osx-x86_64
       - run:
           name: Install Rust
-          command: curl --proto '=https' https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.65.0 --target x86_64-apple-darwin
+          command: curl --proto '=https' https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain 1.68.0 --target x86_64-apple-darwin
       - run:
           name: Build
           command: |

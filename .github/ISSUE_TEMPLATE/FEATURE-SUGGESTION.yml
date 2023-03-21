@@ -1,4 +1,4 @@
-0name: Feature suggestion
+name: Feature suggestion
 description: Suggest a feature or improvement
 title: "[Feature]: "
 labels: ["enhancement"]
@@ -26,5 +26,5 @@ body:
       label: Duplicate declaration
       description: Please confirm that you are not creating a duplicate issue.
       options:
-        - label: I have searched the issues and there are none like this.
+        - label: I have searched the issues and this feature has not been requested before.
           required: true

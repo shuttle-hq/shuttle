@@ -140,7 +140,7 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
     let acme_client = AcmeClient::new();
 
     let mut api_builder = ApiBuilder::new()
-        .with_service(Arc::<GatewayService>::clone(&gateway))
+        .with_service(Arc::clone(&gateway))
         .with_sender(sender.clone())
         .binding_to(args.control);
 

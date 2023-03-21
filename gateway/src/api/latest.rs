@@ -680,7 +680,7 @@ pub mod tests {
         });
 
         let mut router = ApiBuilder::new()
-            .with_service(Arc::<GatewayService>::clone(&service))
+            .with_service(Arc::clone(&service))
             .with_sender(sender)
             .with_default_routes()
             .with_auth_service(world.context().auth_uri)
@@ -837,7 +837,7 @@ pub mod tests {
         });
 
         let mut router = ApiBuilder::new()
-            .with_service(Arc::<GatewayService>::clone(&service))
+            .with_service(Arc::clone(&service))
             .with_sender(sender)
             .with_default_routes()
             .with_auth_service(world.context().auth_uri)

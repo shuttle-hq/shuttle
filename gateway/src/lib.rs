@@ -769,7 +769,7 @@ pub mod tests {
 
         let api_client = world.client(world.args.control);
         let api = ApiBuilder::new()
-            .with_service(Arc::<GatewayService>::clone(&service))
+            .with_service(Arc::clone(&service))
             .with_sender(log_out.clone())
             .with_default_routes()
             .with_auth_service(world.context().auth_uri)

@@ -156,7 +156,7 @@ impl AcmeClient {
                 AcmeClientError::CertificateCreation
             })?;
             retries -= 1;
-            sleep(Duration::new(1, 0)).await;
+            sleep(Duration::from_secs(1)).await;
         }
 
         Ok((

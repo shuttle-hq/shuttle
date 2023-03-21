@@ -151,21 +151,38 @@ The `--admin-secret` can safely be changed to your api-key to make testing easie
 
 ### Using Podman instead of Docker
 
-If you are using Podman over Docker, then expose a rootless socket of Podman using the following command:
+If you want to use Podman instead of Docker, you can configure the build process with environment variables.
 
-```bash
-podman system service --time=0 unix:///tmp/podman.sock
+Use Podman for building container images by setting `DOCKER_BUILD`.
+```
+export DOCKER_BUILD=podman build --network host
 ```
 
-Now make docker-compose use this socket by setting the following environment variable:
-
-```bash
-export DOCKER_HOST=unix:///tmp/podman.sock
+The shuttle containers expect access to a Docker-compatible API over a socket. Expose a rootless Podman socket either
+- [with systemd](https://github.com/containers/podman/tree/main/contrib/systemd), if your system supports it,
+    ```sh
+    systemctl start --user podman.service
+    ```
+- or by [running the server directly](https://docs.podman.io/en/latest/markdown/podman-system-service.1.html).
+    ```sh
+    podman system service --time=0 unix://$XDG_RUNTIME_DIR/podman.sock
+    ```
+Then set `DOCKER_SOCK` to the *absolute path* of the socket (no protocol prefix).
+```sh
+export DOCKER_SOCK=$(podman system info -f "{{.Host.RemoteSocket.Path}}")
 ```
 
-shuttle can now be run locally using the steps shown earlier.
+Finally, configure Docker Compose. You can either
+- configure Docker Compose to use the Podman socket by setting `DOCKER_HOST` (including the `unix://` protocol prefix),
+    ```sh
+    export DOCKER_HOST=unix://$(podman system info -f "{{.Host.RemoteSocket.Path}}")
+    ```
+- or install [Podman Compose](https://github.com/containers/podman-compose) and use it by setting `DOCKER_COMPOSE`.
+    ```sh
+    export DOCKER_COMPOSE=podman-compose
+    ```
 
-> Note: Testing the `gateway` with a rootless Podman does not work since Podman does not allow access to the `deployer` containers via IP address!
+If you are using `nftables`, even with `iptables-nft`, it may be necessary to install and configure the [nftables CNI plugins](https://github.com/greenpau/cni-plugins)
 
 ## Running Tests
 

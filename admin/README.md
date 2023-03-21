@@ -23,6 +23,11 @@ setting the `SSL_CERT_FILE` environment variable. If you deploy the `gateway` th
 need to export the `SSL_CERT_FILE` environmanet variable through the `docker-compose.yml` file, for the `gateway`
 service.
 
+**Note**: Building the containers locally will carry over to the images any "*.pem" files from the shuttle root
+directory, given they are needed to enable the `SSL_CERT_FILE` on the gateway. You can have you Pebble CA root
+certificate under shuttle root directory and this will be carried in the gateway container under `/usr/src/shuttle`.
+Then the `SSL_CERT_FILE` can be set as `/usr/src/shuttle/{path_to_pebble.minica.pem}`.
+
 ``` shell
 export SSL_CERT_FILE="$PWD/test/certs/pebble.minica.pem"
 ```
@@ -33,7 +38,7 @@ container that `https://localhost:14000/dir` points to the host machine pebble i
 `gateway`s `/etc/hosts` a new entry for `localhost` to point also to the `host.docker.internal` IP. The `host.docker.internal`
 IP can be found by running `ping host.docker.internal` in the `gateway` container.
 
-Now you'll want this admin client to use the local `Pebble` server when making new account. Therefore, use the
+Now you'll want this admin client to use the local `Pebble` server when making a new account. Therefore, use the
 following command when you create new accounts:
 
 ``` shell

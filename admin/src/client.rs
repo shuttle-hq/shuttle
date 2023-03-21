@@ -57,7 +57,7 @@ impl Client {
         &self,
         credentials: &serde_json::Value,
     ) -> Result<String> {
-        let path = "/admin//acme/gateway/renew".to_string();
+        let path = "/admin/acme/gateway/renew".to_string();
         self.post(&path, Some(credentials)).await
     }
 

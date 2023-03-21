@@ -376,9 +376,8 @@ async fn request_custom_domain_acme_certificate(
     resolver
         .serve_pem(&fqdn.to_string(), Cursor::new(buf))
         .await?;
-
     Ok(format!(
-        "New certificate created for {} project.",
+        r#""New certificate created for {} project.""#,
         project_name
     ))
 }
@@ -431,13 +430,16 @@ async fn renew_custom_domain_acme_certificate(
                         resolver
                             .serve_pem(&fqdn.to_string(), Cursor::new(buf))
                             .await?;
-                        Ok(format!("Certificate renewed for {} project.", project_name))
+                        Ok(format!(
+                            r#""Certificate renewed for {} project.""#,
+                            project_name
+                        ))
                     }
                     Err(err) => Err(err.into()),
                 };
             } else {
                 Ok(format!(
-                    "Certificate renewal skipped, {} project certificate still valid for {} days.",
+                    r#""Certificate renewal skipped, {} project certificate still valid for {} days.""#,
                     project_name, diff
                 ))
             }
@@ -456,7 +458,7 @@ async fn renew_gateway_acme_certificate(
     service
         .renew_certificate(&acme_client, resolver, credentials)
         .await;
-    Ok("Renewed the gate certificate.".to_string())
+    Ok(r#""Renewed the gateway certificate.""#.to_string())
 }
 
 async fn get_projects(

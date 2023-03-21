@@ -95,7 +95,6 @@ async fn get_projects_list(
     let projects = service
         .iter_user_projects_detailed(name.clone())
         .await?
-        .into_iter()
         .map(|project| project::Response {
             name: project.0.to_string(),
             state: project.1.into(),
@@ -395,7 +394,6 @@ async fn get_projects(
     let projects = service
         .iter_projects_detailed()
         .await?
-        .into_iter()
         .map(Into::into)
         .collect();
 

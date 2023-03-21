@@ -388,7 +388,7 @@ async fn run_pre_deploy_tests(
         no_fail_fast: false,
     };
 
-    cargo::ops::run_tests(&ws, &opts, &[]).map_err(|err| TestError::Failed(err))
+    cargo::ops::run_tests(&ws, &opts, &[]).map_err(TestError::Failed)
 }
 
 /// This will store the path to the executable for each runtime, which will be the users project with

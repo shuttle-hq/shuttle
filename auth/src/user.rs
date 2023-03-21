@@ -174,18 +174,16 @@ impl Key {
 #[sqlx(rename_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
+#[derive(Default)]
 pub enum AccountTier {
+    #[default]
     Basic,
     Pro,
     Team,
     Admin,
 }
 
-impl Default for AccountTier {
-    fn default() -> Self {
-        AccountTier::Basic
-    }
-}
+
 
 impl From<AccountTier> for Vec<Scope> {
     fn from(tier: AccountTier) -> Self {

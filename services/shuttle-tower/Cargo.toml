@@ -7,7 +7,6 @@ description = "Service implementation to run a tower webserver on shuttle"
 keywords = ["shuttle-service", "tower"]
 
 [workspace]
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 hyper = { version = "0.14.23", features = ["server", "tcp", "http1"] }

@@ -7,7 +7,6 @@ description = "Service implementation to run a salvo webserver on shuttle"
 keywords = ["shuttle-service", "salvo"]
 
 [workspace]
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 salvo = { version = "0.37.5" }

@@ -11,10 +11,9 @@ homepage = "https://www.shuttle.rs"
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 bollard = "0.13.0"
-# TODO: debug the libgit2-sys conflict with cargo-edit when upgrading cargo to 0.66
-cargo = "0.65.0"
-cargo-edit = { version = "0.11.6", features = ["cli"] }
-cargo_metadata = "0.15.2"
+cargo = { workspace = true }
+cargo-edit = { version = "0.11.9", features = ["cli"] }
+cargo_metadata = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["env"] }
 clap_complete = "4.1.5"
@@ -25,7 +24,9 @@ dirs = { workspace = true }
 dunce = "1.0.3"
 flate2 = { workspace = true }
 futures = { workspace = true }
-git2 = "0.14.2"
+# This needs to be 0.16.0 for its dependency on libgit2-sys to be compatible
+# with cargo 0.69.0's dependency on libgit2-sys.
+git2 = "0.16.0"
 home = { workspace = true }
 headers = { workspace = true }
 indicatif = "0.17.3"

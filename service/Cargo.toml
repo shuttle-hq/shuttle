@@ -13,9 +13,8 @@ doctest = false
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
-# TODO: debug the libgit2-sys conflict with cargo-edit when upgrading cargo to 0.66
-cargo = { version = "0.65.0", optional = true }
-cargo_metadata = { version = "0.15.2", optional = true }
+cargo = { workspace = true, optional = true }
+cargo_metadata = { workspace = true, optional = true }
 crossbeam-channel = { workspace = true, optional = true }
 pipe = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
@@ -39,4 +38,11 @@ tokio = { workspace = true, features = ["macros", "rt"] }
 default = ["codegen"]
 
 codegen = ["shuttle-codegen/frameworks"]
-builder = ["cargo", "cargo_metadata", "crossbeam-channel", "pipe", "tokio", "tracing"]
+builder = [
+    "cargo",
+    "cargo_metadata",
+    "crossbeam-channel",
+    "pipe",
+    "tokio",
+    "tracing",
+]

@@ -43,6 +43,8 @@ axum = { version = "0.6.0", default-features = false }
 base64 = "0.13.1"
 bytes = "1.4.0"
 cap-std = "1.0.2"
+cargo = "0.69.0"
+cargo_metadata = "0.15.3"
 chrono = { version = "0.4.23", default-features = false }
 clap = { version = "4.0.27", features = ["derive"] }
 crossbeam-channel = "0.5.7"

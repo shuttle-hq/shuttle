@@ -518,6 +518,20 @@ impl Shuttle {
             }
         };
 
+        let addr = if run_args.external {
+            std::net::IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))
+        } else {
+            Ipv4Addr::LOCALHOST.into()
+        };
+        let addr = SocketAddr::new(addr, run_args.port);
+
+        println!(
+            "\n{:>12} {} on http://{}",
+            "Starting".bold().green(),
+            self.ctx.project_name(),
+            addr
+        );
+
         let (mut runtime, mut runtime_client) = runtime::start(
             is_wasm,
             runtime::StorageManagerType::WorkingDir(working_directory.to_path_buf()),
@@ -571,14 +585,6 @@ impl Shuttle {
             }
         });
 
-        let addr = if run_args.external {
-            std::net::IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))
-        } else {
-            Ipv4Addr::LOCALHOST.into()
-        };
-
-        let addr = SocketAddr::new(addr, run_args.port);
-
         let start_request = StartRequest {
             ip: addr.to_string(),
         };
@@ -596,13 +602,6 @@ impl Shuttle {
             .into_inner();
 
         trace!(response = ?response,  "client response: ");
-
-        println!(
-            "\n{:>12} {} on http://{}",
-            "Starting".bold().green(),
-            self.ctx.project_name(),
-            addr
-        );
 
         runtime.wait().await?;
 
@@ -653,6 +652,10 @@ impl Shuttle {
                 }
             }
         }
+
+        // Temporary fix.
+        // TODO: Make get_service_summary endpoint wait for a bit and see if it entered Running/Crashed state.
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
         let service = client.get_service_summary(self.ctx.project_name()).await?;
 

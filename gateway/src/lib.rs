@@ -14,6 +14,7 @@ use axum::Json;
 use bollard::Docker;
 use futures::prelude::*;
 use serde::{Deserialize, Deserializer, Serialize};
+use service::ContainerSettings;
 use shuttle_common::models::error::{ApiError, ErrorKind};
 use tokio::sync::mpsc::error::SendError;
 use tracing::error;
@@ -28,8 +29,6 @@ pub mod service;
 pub mod task;
 pub mod tls;
 pub mod worker;
-
-use crate::service::{ContainerSettings, GatewayService};
 
 /// Server-side errors that do not have to do with the user runtime
 /// should be [`Error`]s.
@@ -751,7 +750,7 @@ pub mod tests {
     #[tokio::test]
     async fn end_to_end() {
         let world = World::new().await;
-        let service = Arc::new(GatewayService::init(world.args(), world.pool()).await);
+        let service = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await);
         let worker = Worker::new();
 
         let (log_out, mut log_in) = channel(256);
@@ -778,7 +777,7 @@ pub mod tests {
 
         let user = UserServiceBuilder::new()
             .with_service(Arc::clone(&service))
-            .with_task_sender(log_out.clone())
+            .with_task_sender(log_out)
             .with_public(world.fqdn())
             .with_user_proxy_binding_to(world.args.user);
 

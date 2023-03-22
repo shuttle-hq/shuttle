@@ -205,6 +205,8 @@ impl From<AccountTier> for Vec<Scope> {
                 Scope::UserCreate,
                 Scope::AcmeCreate,
                 Scope::CustomDomainCreate,
+                Scope::CustomDomainCertificateRenew,
+                Scope::GatewayCertificateRenew,
                 Scope::Admin,
             ]);
         }

@@ -175,6 +175,11 @@ jobs:
       - checkout
       - restore-cargo-cache
       - install-protoc
+      # Check this to make sure we do not include patched dependencies in
+      # the Cargo.lock.
+      - run:
+          command: |
+            [[ -z $(cat Cargo.lock | grep "\[\[patch.unused\]\]") ]]
       - run: cargo fmt --all --check
       # TODO: this is incompatible with workspace inheritance, uncomment when
       # https://github.com/DevinR528/cargo-sort/pull/29 is merged

@@ -235,8 +235,8 @@ graph BT
     deployer -.->|calls| provisioner
     service ---> common
     deployer --> common
-    cargo-shuttle --->|"features = ['loader']"| service
-    deployer -->|"features = ['loader']"| service
+    cargo-shuttle --->|"features = ['builder']"| service
+    deployer -->|"features = ['builder']"| service
     cargo-shuttle --> common
     service --> codegen
     proto ---> common
@@ -256,9 +256,13 @@ The redirect through `runtime` is to make it available under the prettier name o
 - `runtime` contains the `alpha` runtime, which embeds a `Loader` that sets up tracing, provisions resources and starts the users
 service. The `runtime` starts a GRPC server to communicate with the `deployer` for deployments or `cargo-shuttle` cli for local runs. The `runtime` crate also contains the `shuttle-next` binary, which is a standalone runtime binary that is started by the `deployer` or the `cargo-shuttle` cli. This also uses a GRPC server to communicate, and takes a users shuttle-next service as a `wasm32-wasi` module.
 - `service` is where our special `Service` trait is defined. Anything implementing this `Service` can be loaded by the `deployer` and the local runner in `cargo-shuttle`. The `service` library also defines the `ResourceBuilder` and `Factory` trais 
-which are used in our codegen to provision resources.
+which are used in our codegen to provision resources. The `service` library also contains the utilities we use for compiling users
+crates with `cargo`.
 - `proto` contains the gRPC server and client definitions to allow `deployer` to communicate with `provisioner`, and to allow
 the `deployer` and `cargo-shuttle` cli to communicate with the `alpha` and `shuttle-next` runtimes.
+- `resources` contains various implementations of `ResourceBuilder`, which are consumed in the `codegen` to provision resources.
+- `services` contains implementations of `Service` for common Rust web frameworks. Anything implementing `Service` can be deployed
+by shuttle.
 - `e2e` just contains tests which starts up the `deployer` in a container and then deploys services to it using `cargo-shuttle`.
 
 Lastly, the `user service` is not a folder in this repository, but is the user service that will be deployed by `deployer`.

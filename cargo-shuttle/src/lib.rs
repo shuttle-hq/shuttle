@@ -770,6 +770,23 @@ impl Shuttle {
         Ok(())
     }
 
+    async fn project_delete(&self, client: &Client) -> Result<()> {
+        self.wait_with_spinner(
+            &[
+                project::State::Destroyed,
+                project::State::Errored {
+                    message: Default::default(),
+                },
+            ],
+            client.delete_project(self.ctx.project_name()),
+            self.ctx.project_name(),
+            client,
+        )
+        .await?;
+
+        Ok(())
+    }
+
     async fn wait_with_spinner<'a, Fut>(
         &self,
         states_to_check: &[project::State],
@@ -793,23 +810,6 @@ impl Shuttle {
         }
         progress_bar.finish_and_clear();
         println!("{project}");
-        Ok(())
-    }
-
-    async fn project_delete(&self, client: &Client) -> Result<()> {
-        self.wait_with_spinner(
-            &[
-                project::State::Destroyed,
-                project::State::Errored {
-                    message: Default::default(),
-                },
-            ],
-            client.delete_project(self.ctx.project_name()),
-            self.ctx.project_name(),
-            client,
-        )
-        .await?;
-
         Ok(())
     }
 

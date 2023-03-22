@@ -7222,23 +7222,3 @@ dependencies = [
  "cc",
  "libc",
 ]
-
-[[patch.unused]]
-name = "shuttle-aws-rds"
-version = "0.12.0"
-
-[[patch.unused]]
-name = "shuttle-persist"
-version = "0.12.0"
-
-[[patch.unused]]
-name = "shuttle-poise"
-version = "0.12.0"
-
-[[patch.unused]]
-name = "shuttle-shared-db"
-version = "0.12.0"
-
-[[patch.unused]]
-name = "shuttle-static-folder"
-version = "0.12.0"

@@ -5,22 +5,18 @@ edition.workspace = true
 license.workspace = true
 description = "Service responsible for provisioning and managing resources for services"
 publish = false
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 aws-config = "0.51.0"
 aws-sdk-rds = "0.21.0"
 clap = { workspace = true, features = ["env"] }
-fqdn = "0.2.3"
+fqdn = { workspace = true }
 mongodb = "2.4.0"
-prost = "0.11.2"
+prost = { workspace = true }
 rand = { workspace = true }
-sqlx = { version = "0.6.2", features = [
-  "postgres",
-  "runtime-tokio-native-tls",
-] }
+sqlx = { workspace = true, features = ["postgres", "runtime-tokio-native-tls"] }
 thiserror = { workspace = true }
-tokio = { version = "1.22.0", features = ["macros", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 tonic = { workspace = true }
 tracing = { workspace = true, features = ["default"] }
 tracing-subscriber = { workspace = true, features = ["default", "fmt"] }
@@ -33,10 +29,10 @@ features = ["backend"]
 workspace = true
 
 [dev-dependencies]
-ctor = "0.1.26"
+ctor = { workspace = true }
 once_cell = { workspace = true }
 portpicker = { workspace = true }
 serde_json = { workspace = true }
 
 [build-dependencies]
-tonic-build = "0.8.3"
+tonic-build = { workspace = true }

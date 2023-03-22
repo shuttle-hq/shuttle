@@ -7,7 +7,6 @@ description = "Service implementation to run a rocket webserver on shuttle"
 keywords = ["shuttle-service", "rocket"]
 
 [workspace]
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 rocket = { version = "0.5.0-rc.2" }

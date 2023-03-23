@@ -353,14 +353,17 @@ impl ResourceManager for Persistence {
     type Err = Error;
 
     async fn insert_resource(&self, resource: &Resource) -> Result<()> {
-        sqlx::query("INSERT OR REPLACE INTO resources (service_id, type, data) VALUES (?, ?, ?)")
-            .bind(resource.service_id)
-            .bind(resource.r#type)
-            .bind(&resource.data)
-            .execute(&self.pool)
-            .await
-            .map(|_| ())
-            .map_err(Error::from)
+        sqlx::query(
+            "INSERT OR REPLACE INTO resources (service_id, type, config, data) VALUES (?, ?, ?, ?)",
+        )
+        .bind(resource.service_id)
+        .bind(resource.r#type)
+        .bind(&resource.config)
+        .bind(&resource.data)
+        .execute(&self.pool)
+        .await
+        .map(|_| ())
+        .map_err(Error::from)
     }
 
     async fn get_resources(&self, service_id: &Uuid) -> Result<Vec<Resource>> {

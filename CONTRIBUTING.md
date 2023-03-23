@@ -254,9 +254,9 @@ graph BT
 
 - `cargo-shuttle` is the CLI used by users to initialize, deploy and manage their projects and services on shuttle.
 - `gateway` starts and manages instances of `deployer`. It proxies commands from the user sent via the CLI on port 8001 and traffic on port 8000 to the correct instance of `deployer`.
-- `auth` is an authentication service that creates and manages users, in addition to converting API-keys/cookies to JWTs for authorization between internal services, like a `deployer` requesting a database from
-`provisioner`.
-- `deployer` is a service that runs in its own docker container, one per user project. It manages users' services and their state.
+- `auth` is an authentication service that creates and manages users. In addition to that, requests to the `gateway` that contain an api-key or cookie will be proxied to the `auth` service where it will be converted to a JWT for authorization between internal services (like a `deployer` requesting a database from
+`provisioner`).
+- `deployer` is a service that runs in its own docker container, one per user project. It manages a project's deployments and state.
 - `provisioner` is a service used for requesting databases and other resources, using a gRPC API.
 - `admin` is a simple CLI used for admin tasks like reviving and stopping projects, as well as requesting
 and renewing SSL certificates through the acme client in the `gateway`.

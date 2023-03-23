@@ -1,12 +1,14 @@
 use async_trait::async_trait;
 use fs_extra::dir::{copy, CopyOptions};
+use serde::Serialize;
 use shuttle_service::{
     error::{CustomError, Error as ShuttleError},
-    Factory, ResourceBuilder,
+    Factory, ResourceBuilder, Type,
 };
 use std::path::{Path, PathBuf};
 use tracing::{error, trace};
 
+#[derive(Serialize)]
 pub struct StaticFolder<'a> {
     /// The folder to reach at runtime. Defaults to `static`
     folder: &'a str,
@@ -28,11 +30,18 @@ impl<'a> StaticFolder<'a> {
 
 #[async_trait]
 impl<'a> ResourceBuilder<PathBuf> for StaticFolder<'a> {
+    const TYPE: Type = Type::Secrets;
+
+    type Output = PathBuf;
+
     fn new() -> Self {
         Self { folder: "static" }
     }
 
-    async fn build(self, factory: &mut dyn Factory) -> Result<PathBuf, shuttle_service::Error> {
+    async fn output(
+        self,
+        factory: &mut dyn Factory,
+    ) -> Result<Self::Output, shuttle_service::Error> {
         let folder = Path::new(self.folder);
 
         trace!(?folder, "building static folder");
@@ -82,6 +91,10 @@ impl<'a> ResourceBuilder<PathBuf> for StaticFolder<'a> {
             }
         }
     }
+
+    async fn build(build_data: &Self::Output) -> Result<PathBuf, shuttle_service::Error> {
+        Ok(build_data.clone())
+    }
 }
 
 impl From<Error> for shuttle_service::Error {
@@ -104,7 +117,7 @@ mod tests {
     use std::path::PathBuf;
 
     use async_trait::async_trait;
-    use shuttle_service::{Factory, ResourceBuilder};
+    use shuttle_service::{DatabaseReadyInfo, Factory, ResourceBuilder};
     use tempfile::{Builder, TempDir};
 
     use crate::StaticFolder;
@@ -155,10 +168,10 @@ mod tests {
 
     #[async_trait]
     impl Factory for MockFactory {
-        async fn get_db_connection_string(
+        async fn get_db_connection(
             &mut self,
             _db_type: shuttle_service::database::Type,
-        ) -> Result<String, shuttle_service::Error> {
+        ) -> Result<DatabaseReadyInfo, shuttle_service::Error> {
             panic!("no static folder test should try to get a db connection string")
         }
 
@@ -199,7 +212,7 @@ mod tests {
         // Call plugin
         let static_folder = StaticFolder::new();
 
-        let actual_folder = static_folder.build(&mut factory).await.unwrap();
+        let actual_folder = static_folder.output(&mut factory).await.unwrap();
 
         assert_eq!(
             actual_folder,
@@ -222,7 +235,7 @@ mod tests {
 
         let _ = static_folder
             .folder("/etc")
-            .build(&mut factory)
+            .output(&mut factory)
             .await
             .unwrap();
     }
@@ -241,7 +254,7 @@ mod tests {
 
         let _ = static_folder
             .folder("../escape")
-            .build(&mut factory)
+            .output(&mut factory)
             .await
             .unwrap();
     }

@@ -7,7 +7,9 @@ use async_trait::async_trait;
 pub mod error;
 pub use error::{CustomError, Error};
 
+use serde::{de::DeserializeOwned, Serialize};
 pub use shuttle_common::database;
+use shuttle_common::DatabaseReadyInfo;
 
 #[cfg(feature = "codegen")]
 extern crate shuttle_codegen;
@@ -71,18 +73,16 @@ pub use shuttle_common::{deployment::Environment, project::ProjectName as Servic
 
 /// Factories can be used to request the provisioning of additional resources (like databases).
 ///
-/// An instance of factory is passed by the deployer as an argument to [ResourceBuilder::build][ResourceBuilder::build] in the initial phase of deployment.
+/// An instance of factory is passed by the deployer as an argument to [ResourceBuilder::build][ResourceBuilder::output] in the initial phase of deployment.
 ///
 /// Also see the [main][main] macro.
 #[async_trait]
 pub trait Factory: Send + Sync {
-    /// Declare that the [Service][Service] requires a database.
-    ///
-    /// Returns the connection string to the provisioned database.
-    async fn get_db_connection_string(
+    /// Get a database connection
+    async fn get_db_connection(
         &mut self,
         db_type: database::Type,
-    ) -> Result<String, crate::Error>;
+    ) -> Result<DatabaseReadyInfo, crate::Error>;
 
     /// Get all the secrets for a service
     async fn get_secrets(&mut self) -> Result<BTreeMap<String, String>, crate::Error>;
@@ -162,9 +162,18 @@ pub trait Factory: Send + Sync {
 ///     -> shuttle_axum::ShuttleAxum {}
 /// ```
 #[async_trait]
-pub trait ResourceBuilder<T> {
+pub trait ResourceBuilder<T>: Serialize {
+    /// The output type used to build this resource later
+    type Output: Serialize + DeserializeOwned;
+
+    /// Create a new instance of this resource builder
     fn new() -> Self;
-    async fn build(self, factory: &mut dyn Factory) -> Result<T, crate::Error>;
+
+    /// Build this resource from its config output
+    async fn build(build_data: &Self::Output) -> Result<T, crate::Error>;
+
+    /// Get the config output of this builder
+    async fn output(self, factory: &mut dyn Factory) -> Result<Self::Output, crate::Error>;
 }
 
 /// The core trait of the shuttle platform. Every crate deployed to shuttle needs to implement this trait.

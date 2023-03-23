@@ -44,7 +44,7 @@ use tonic::{
 use tower::ServiceBuilder;
 use tracing::{error, info, trace, warn};
 
-use crate::{provisioner_factory::ProvisionerFactory, Logger};
+use crate::{provisioner_factory::ProvisionerFactory, Logger, ResourceTracker};
 
 use self::args::Args;
 
@@ -137,6 +137,7 @@ where
     async fn load(
         self,
         factory: Fac,
+        resource_tracker: ResourceTracker,
         logger: Logger,
     ) -> Result<Self::Service, shuttle_service::Error>;
 }
@@ -144,7 +145,7 @@ where
 #[async_trait]
 impl<F, O, Fac, S> Loader<Fac> for F
 where
-    F: FnOnce(Fac, Logger) -> O + Send,
+    F: FnOnce(Fac, ResourceTracker, Logger) -> O + Send,
     O: Future<Output = Result<S, shuttle_service::Error>> + Send,
     Fac: Factory + 'static,
     S: Service,
@@ -154,9 +155,10 @@ where
     async fn load(
         self,
         factory: Fac,
+        resource_tracker: ResourceTracker,
         logger: Logger,
     ) -> Result<Self::Service, shuttle_service::Error> {
-        (self)(factory, logger).await
+        (self)(factory, resource_tracker, logger).await
     }
 }
 
@@ -218,8 +220,9 @@ where
         let logger = Logger::new(logs_tx);
 
         let loader = self.loader.lock().unwrap().deref_mut().take().unwrap();
+        let resource_tracker = ResourceTracker;
 
-        let service = match tokio::spawn(loader.load(factory, logger)).await {
+        let service = match tokio::spawn(loader.load(factory, resource_tracker, logger)).await {
             Ok(res) => match res {
                 Ok(service) => service,
                 Err(error) => {

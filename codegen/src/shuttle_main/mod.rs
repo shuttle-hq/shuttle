@@ -228,6 +228,12 @@ impl ToTokens for Loader {
             parse_quote!(factory)
         };
 
+        let resource_tracker_ident: Ident = if self.fn_inputs.is_empty() {
+            parse_quote!(_resource_tracker)
+        } else {
+            parse_quote!(resource_tracker)
+        };
+
         let extra_imports: Option<Stmt> = if self.fn_inputs.is_empty() {
             None
         } else {
@@ -247,6 +253,7 @@ impl ToTokens for Loader {
         let loader = quote! {
             async fn loader(
                 mut #factory_ident: shuttle_runtime::ProvisionerFactory,
+                mut #resource_tracker_ident: shuttle_runtime::ResourceTracker,
                 logger: shuttle_runtime::Logger,
             ) -> #return_type {
                 use shuttle_runtime::Context;
@@ -264,7 +271,13 @@ impl ToTokens for Loader {
                     .init();
 
                 #vars
-                #(let #fn_inputs = #fn_inputs_builder::new()#fn_inputs_builder_options.build(&mut #factory_ident).await.context(format!("failed to provision {}", stringify!(#fn_inputs_builder)))?;)*
+                #(let #fn_inputs = shuttle_runtime::get_resource(
+                    #fn_inputs_builder::new()#fn_inputs_builder_options,
+                    stringify!(#fn_inputs_builder),
+                    &mut #factory_ident,
+                    &mut #resource_tracker_ident,
+                )
+                .await.context(format!("failed to provision {}", stringify!(#fn_inputs_builder)))?;)*
 
                 #fn_ident(#(#fn_inputs),*).await
             }

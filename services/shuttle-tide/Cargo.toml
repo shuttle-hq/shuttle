@@ -7,7 +7,6 @@ description = "Service implementation to run a tide webserver on shuttle"
 keywords = ["shuttle-service", "tide"]
 
 [workspace]
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 tide = { version = "0.16.0" }

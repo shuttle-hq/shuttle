@@ -228,9 +228,12 @@ graph BT
     provisioner:::binary
     service
     gateway:::binary
+    auth:::binary
     user([user service]):::external
     gateway --> common
     gateway -.->|starts instances| deployer
+    gateway -->|key| auth
+    auth -->|jwt| gateway
     deployer --> proto
     deployer -.->|calls| provisioner
     service ---> common
@@ -242,6 +245,7 @@ graph BT
     proto ---> common
     provisioner --> proto
     e2e -.->|starts up| gateway
+    e2e -.->|starts up| auth
     e2e -.->|calls| cargo-shuttle
     user -->|"features = ['codegen']"| service
 ```

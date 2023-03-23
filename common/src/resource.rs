@@ -11,6 +11,9 @@ pub struct Response {
     /// The type of this resource.
     pub r#type: Type,
 
+    /// The config used when creating this resource. Use the [Self::r#type] to know how to parse this data.
+    pub config: Value,
+
     /// The data associated with this resource. Use the [Self::r#type] to know how to parse this data.
     pub data: Value,
 }
@@ -38,6 +41,7 @@ impl ResourceInfo for DatabaseReadyInfo {
 #[serde(rename_all = "lowercase")]
 pub enum Type {
     Database(database::Type),
+    Secrets,
 }
 
 impl Response {
@@ -46,11 +50,16 @@ impl Response {
             Type::Database(_) => {
                 serde_json::from_value::<DatabaseReadyInfo>(self.data.clone()).unwrap()
             }
+            Type::Secrets => todo!(),
         }
     }
 
     pub fn into_bytes(self) -> Vec<u8> {
-        serde_json::to_vec(&self).expect("to turn resource into a vec")
+        self.to_bytes()
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        serde_json::to_vec(self).expect("to turn resource into a vec")
     }
 
     pub fn from_bytes(bytes: Vec<u8>) -> Self {
@@ -62,6 +71,7 @@ impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Type::Database(db_type) => write!(f, "database::{db_type}"),
+            Type::Secrets => write!(f, "secrets"),
         }
     }
 }

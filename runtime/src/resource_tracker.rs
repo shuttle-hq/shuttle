@@ -1,25 +1,51 @@
+use std::sync::{Arc, Mutex};
+
 use anyhow::Context;
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
+use shuttle_common::resource::{self, Type};
 use shuttle_service::ResourceBuilder;
 
 use crate::ProvisionerFactory;
 
 /// Used to keep track of which resources have been provisioned in the past and what is being provisioned for this deployment
-pub struct ResourceTracker;
+pub struct ResourceTracker {
+    past_resources: Vec<resource::Response>,
+    new_resources: Arc<Mutex<Vec<resource::Response>>>,
+}
 
 impl ResourceTracker {
-    /// Get the output of a resource that has been constructed in the past if it exists
-    pub fn get_cached_output(&self, namespace: &str, config: &Value) -> Option<Value> {
-        let value = serde_json::json!({"address_private":"localhost","address_public":"localhost","database_name":"postgres","engine":"postgres","port":"21673","role_name":"postgres","role_password":"postgres"});
+    pub fn new(
+        past_resources: Vec<resource::Response>,
+        new_resources: Arc<Mutex<Vec<resource::Response>>>,
+    ) -> Self {
+        Self {
+            past_resources,
+            new_resources,
+        }
+    }
 
-        Some(value)
+    /// Get the output of a resource that has been constructed in the past if it exists
+    pub fn get_cached_output(&self, r#type: Type, config: &Value) -> Option<Value> {
+        self.past_resources
+            .iter()
+            .find(|resource| resource.r#type == r#type && resource.config == *config)
+            .map(|resource| resource.data.clone())
     }
 
     /// Record a resource that has been requested
-    pub fn record_resource(&mut self, namespace: &str, config: Value, output: Value) {
+    pub fn record_resource(&mut self, r#type: Type, config: Value, output: Value) {
         println!("config: {}", config);
         println!("output: {}", output);
+
+        self.new_resources
+            .lock()
+            .expect("to get lock on new resources")
+            .push(resource::Response {
+                r#type,
+                config,
+                data: output,
+            })
     }
 }
 
@@ -28,7 +54,6 @@ impl ResourceTracker {
 /// This function is called by the codegen to create each type of needed resource.
 pub async fn get_resource<B, T, O>(
     builder: B,
-    namespace: &str,
     factory: &mut ProvisionerFactory,
     resource_tracker: &mut ResourceTracker,
 ) -> Result<T, shuttle_service::Error>
@@ -38,7 +63,7 @@ where
 {
     let config =
         serde_json::to_value(&builder).context("failed to turn builder config into a value")?;
-    let output = if let Some(output) = resource_tracker.get_cached_output(namespace, &config) {
+    let output = if let Some(output) = resource_tracker.get_cached_output(B::TYPE, &config) {
         match serde_json::from_value(output) {
             Ok(output) => output,
             Err(err) => {
@@ -65,7 +90,7 @@ where
     let output =
         serde_json::to_value(&output).context("failed to turn builder output into a value")?;
 
-    resource_tracker.record_resource(namespace, config, output);
+    resource_tracker.record_resource(B::TYPE, config, output);
 
     Ok(resource)
 }

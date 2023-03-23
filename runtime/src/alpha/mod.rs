@@ -198,12 +198,12 @@ where
         let service_name = ServiceName::from_str(service_name.as_str())
             .map_err(|err| Status::from_error(Box::new(err)))?;
 
-        let resources = resources
+        let past_resources = resources
             .into_iter()
             .map(resource::Response::from_bytes)
             .collect();
-        let resources: Arc<tokio::sync::Mutex<Vec<resource::Response>>> =
-            Arc::new(tokio::sync::Mutex::new(resources));
+        let new_resources = Arc::new(Mutex::new(Vec::new()));
+        let resource_tracker = ResourceTracker::new(past_resources, new_resources.clone());
 
         let factory = ProvisionerFactory::new(
             provisioner_client,
@@ -212,7 +212,6 @@ where
             self.storage_manager.clone(),
             self.env,
             claim,
-            resources.clone(),
         );
         trace!("got factory");
 
@@ -220,7 +219,6 @@ where
         let logger = Logger::new(logs_tx);
 
         let loader = self.loader.lock().unwrap().deref_mut().take().unwrap();
-        let resource_tracker = ResourceTracker;
 
         let service = match tokio::spawn(loader.load(factory, resource_tracker, logger)).await {
             Ok(res) => match res {
@@ -231,24 +229,22 @@ where
                     let message = LoadResponse {
                         success: false,
                         message: error.to_string(),
-                        resources: resources
+                        resources: new_resources
                             .lock()
-                            .await
-                            .clone()
-                            .into_iter()
-                            .map(resource::Response::into_bytes)
+                            .expect("to get lock no new resources")
+                            .iter()
+                            .map(resource::Response::to_bytes)
                             .collect(),
                     };
                     return Ok(Response::new(message));
                 }
             },
             Err(error) => {
-                let resources = resources
+                let resources = new_resources
                     .lock()
-                    .await
-                    .clone()
-                    .into_iter()
-                    .map(resource::Response::into_bytes)
+                    .expect("to get lock no new resources")
+                    .iter()
+                    .map(resource::Response::to_bytes)
                     .collect();
 
                 if error.is_panic() {
@@ -283,12 +279,11 @@ where
         let message = LoadResponse {
             success: true,
             message: String::new(),
-            resources: resources
+            resources: new_resources
                 .lock()
-                .await
-                .clone()
-                .into_iter()
-                .map(resource::Response::into_bytes)
+                .expect("to get lock no new resources")
+                .iter()
+                .map(resource::Response::to_bytes)
                 .collect(),
         };
         Ok(Response::new(message))

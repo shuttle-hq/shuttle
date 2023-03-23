@@ -23,12 +23,14 @@ pub struct Resource {
     pub service_id: Uuid,
     pub r#type: Type,
     pub data: serde_json::Value,
+    pub config: serde_json::Value,
 }
 
 impl From<Resource> for shuttle_common::resource::Response {
     fn from(resource: Resource) -> Self {
         shuttle_common::resource::Response {
             r#type: resource.r#type.into(),
+            config: resource.config,
             data: resource.data,
         }
     }
@@ -51,6 +53,7 @@ impl From<shuttle_common::resource::Type> for Type {
     fn from(r#type: shuttle_common::resource::Type) -> Self {
         match r#type {
             shuttle_common::resource::Type::Database(r#type) => Self::Database(r#type.into()),
+            shuttle_common::resource::Type::Secrets => todo!(),
         }
     }
 }

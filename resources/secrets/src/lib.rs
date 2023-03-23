@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use async_trait::async_trait;
 
 use serde::{Deserialize, Serialize};
-use shuttle_service::{Error, Factory, ResourceBuilder};
+use shuttle_service::{Error, Factory, ResourceBuilder, Type};
 
 #[derive(Serialize)]
 pub struct Secrets;
@@ -11,6 +11,8 @@ pub struct Secrets;
 /// Get a store with all the secrets available to a deployment
 #[async_trait]
 impl ResourceBuilder<SecretStore> for Secrets {
+    const TYPE: Type = Type::Secrets;
+
     type Output = SecretStore;
 
     fn new() -> Self {

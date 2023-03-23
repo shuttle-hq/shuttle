@@ -273,7 +273,6 @@ impl ToTokens for Loader {
                 #vars
                 #(let #fn_inputs = shuttle_runtime::get_resource(
                     #fn_inputs_builder::new()#fn_inputs_builder_options,
-                    stringify!(#fn_inputs_builder),
                     &mut #factory_ident,
                     &mut #resource_tracker_ident,
                 )

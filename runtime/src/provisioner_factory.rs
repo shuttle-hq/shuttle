@@ -4,15 +4,13 @@ use async_trait::async_trait;
 use shuttle_common::{
     claims::{Claim, ClaimService, InjectPropagation},
     database,
-    resource::{self, ResourceInfo},
     storage_manager::StorageManager,
     DatabaseReadyInfo,
 };
 use shuttle_proto::provisioner::{provisioner_client::ProvisionerClient, DatabaseRequest};
 use shuttle_service::{Environment, Factory, ServiceName};
-use tokio::sync::Mutex;
 use tonic::{transport::Channel, Request};
-use tracing::{debug, info, trace};
+use tracing::info;
 
 /// A factory (service locator) which goes through the provisioner crate
 pub struct ProvisionerFactory {
@@ -22,7 +20,6 @@ pub struct ProvisionerFactory {
     secrets: BTreeMap<String, String>,
     env: Environment,
     claim: Option<Claim>,
-    resources: Arc<Mutex<Vec<resource::Response>>>,
 }
 
 impl ProvisionerFactory {
@@ -33,7 +30,6 @@ impl ProvisionerFactory {
         storage_manager: Arc<dyn StorageManager>,
         env: Environment,
         claim: Option<Claim>,
-        resources: Arc<Mutex<Vec<resource::Response>>>,
     ) -> Self {
         Self {
             provisioner_client,
@@ -42,7 +38,6 @@ impl ProvisionerFactory {
             secrets,
             env,
             claim,
-            resources,
         }
     }
 }
@@ -54,19 +49,6 @@ impl Factory for ProvisionerFactory {
         db_type: database::Type,
     ) -> Result<DatabaseReadyInfo, shuttle_service::Error> {
         info!("Provisioning a {db_type}. This can take a while...");
-
-        // if let Some(info) = self
-        //     .resources
-        //     .lock()
-        //     .await
-        //     .iter()
-        //     .find(|resource| resource.r#type == resource::Type::Database(db_type.clone()))
-        // {
-        //     debug!("A database has already been provisioned for this deployment, so reusing it");
-
-        //     let resource = info.get_resource_info();
-        //     return Ok(resource.connection_string_private());
-        // }
 
         let mut request = Request::new(DatabaseRequest {
             project_name: self.service_name.to_string(),
@@ -85,11 +67,6 @@ impl Factory for ProvisionerFactory {
             .into_inner();
 
         let info: DatabaseReadyInfo = response.into();
-
-        self.resources.lock().await.push(resource::Response {
-            r#type: resource::Type::Database(db_type),
-            data: serde_json::to_value(&info).expect("to convert DB info"),
-        });
 
         info!("Done provisioning database");
 

@@ -8,8 +8,8 @@ pub mod error;
 pub use error::{CustomError, Error};
 
 use serde::{de::DeserializeOwned, Serialize};
-pub use shuttle_common::database;
 use shuttle_common::DatabaseReadyInfo;
+pub use shuttle_common::{database, resource::Type};
 
 #[cfg(feature = "codegen")]
 extern crate shuttle_codegen;
@@ -163,6 +163,9 @@ pub trait Factory: Send + Sync {
 /// ```
 #[async_trait]
 pub trait ResourceBuilder<T>: Serialize {
+    /// The type of resource this creates
+    const TYPE: Type;
+
     /// The output type used to build this resource later
     type Output: Serialize + DeserializeOwned;
 

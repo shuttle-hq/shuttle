@@ -9,6 +9,7 @@ keywords = ["shuttle-service", "rds"]
 [dependencies]
 async-trait = "0.1.56"
 paste = "1.0.7"
+serde = { version = "1.0.148", features = ["derive"] }
 shuttle-service = { path = "../../service", version = "0.12.0", default-features = false }
 sqlx = { version = "0.6.2", features = ["runtime-tokio-native-tls"] }
 

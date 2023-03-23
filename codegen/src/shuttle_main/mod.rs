@@ -319,6 +319,7 @@ mod tests {
         let expected = quote! {
             async fn loader(
                 mut _factory: shuttle_runtime::ProvisionerFactory,
+                mut _resource_tracker: shuttle_runtime::ResourceTracker,
                 logger: shuttle_runtime::Logger,
             ) -> ShuttleSimple {
                 use shuttle_runtime::Context;
@@ -399,6 +400,7 @@ mod tests {
         let expected = quote! {
             async fn loader(
                 mut factory: shuttle_runtime::ProvisionerFactory,
+                mut resource_tracker: shuttle_runtime::ResourceTracker,
                 logger: shuttle_runtime::Logger,
             ) -> ShuttleComplex {
                 use shuttle_runtime::Context;
@@ -415,8 +417,16 @@ mod tests {
                     .with(logger)
                     .init();
 
-                let pool = shuttle_shared_db::Postgres::new().build(&mut factory).await.context(format!("failed to provision {}", stringify!(shuttle_shared_db::Postgres)))?;
-                let redis = shuttle_shared_db::Redis::new().build(&mut factory).await.context(format!("failed to provision {}", stringify!(shuttle_shared_db::Redis)))?;
+                let pool = shuttle_runtime::get_resource(
+                    shuttle_shared_db::Postgres::new(),
+                    &mut factory,
+                    &mut resource_tracker,
+                ).await.context(format!("failed to provision {}", stringify!(shuttle_shared_db::Postgres)))?;
+                let redis = shuttle_runtime::get_resource(
+                    shuttle_shared_db::Redis::new(),
+                    &mut factory,
+                    &mut resource_tracker,
+                ).await.context(format!("failed to provision {}", stringify!(shuttle_shared_db::Redis)))?;
 
                 complex(pool, redis).await
             }
@@ -514,6 +524,7 @@ mod tests {
         let expected = quote! {
             async fn loader(
                 mut factory: shuttle_runtime::ProvisionerFactory,
+                mut resource_tracker: shuttle_runtime::ResourceTracker,
                 logger: shuttle_runtime::Logger,
             ) -> ShuttleComplex {
                 use shuttle_runtime::Context;
@@ -531,7 +542,11 @@ mod tests {
                     .init();
 
                 let vars = std::collections::HashMap::from_iter(factory.get_secrets().await?.into_iter().map(|(key, value)| (format!("secrets.{}", key), value)));
-                let pool = shuttle_shared_db::Postgres::new().size(&shuttle_runtime::strfmt("10Gb", &vars)?).public(false).build(&mut factory).await.context(format!("failed to provision {}", stringify!(shuttle_shared_db::Postgres)))?;
+                let pool = shuttle_runtime::get_resource (
+                    shuttle_shared_db::Postgres::new().size(&shuttle_runtime::strfmt("10Gb", &vars)?).public(false),
+                    &mut factory,
+                    &mut resource_tracker,
+                ).await.context(format!("failed to provision {}", stringify!(shuttle_shared_db::Postgres)))?;
 
                 complex(pool).await
             }

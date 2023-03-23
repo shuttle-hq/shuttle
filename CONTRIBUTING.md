@@ -246,15 +246,23 @@ graph BT
     user -->|"features = ['codegen']"| service
 ```
 
-First, `provisioner`, `gateway`, `deployer`, `auth`, `admin` and `cargo-shuttle` are binary crates with `provisioner`, `gateway`, `auth` and `deployer` being backend services. The `cargo-shuttle` binary is the `cargo shuttle` command-line interface used by users.
+### Binaries
 
-The rest are the following libraries:
+- `cargo-shuttle` is the CLI used by users to initialize, deploy and manage their projects and services on shuttle.
+- `gateway` starts and manages instances of `deployer`. It proxies commands from the user sent via the CLI on port 8001 and traffic on port 8000 to the correct instance of `deployer`.
+- `auth` is an authentication service that creates and manages users, in addition to converting API-keys/cookies to JWTs for authorization between internal services, like a `deployer` requesting a database from
+`provisioner`.
+- `deployer` is a service that runs in its own docker container, one per user project. It manages users' services and their state.
+- `provisioner` is a service used for requesting databases and other resources, using a gRPC API.
+- `admin` is a simple CLI used for admin tasks like reviving and stopping projects, as well as requesting
+and renewing SSL certificates through the acme client in the `gateway`.
+
+### Libraries
 
 - `common` contains shared models and functions used by the other libraries and binaries.
 - `codegen` contains our proc-macro code which gets exposed to user services from `runtime`.
 The redirect through `runtime` is to make it available under the prettier name of `shuttle_runtime::main`.
-- `runtime` contains the `alpha` runtime, which embeds a `Loader` that sets up tracing, provisions resources and starts the users
-service. The `runtime` starts a GRPC server to communicate with the `deployer` for deployments or `cargo-shuttle` cli for local runs. The `runtime` crate also contains the `shuttle-next` binary, which is a standalone runtime binary that is started by the `deployer` or the `cargo-shuttle` cli. This also uses a GRPC server to communicate, and takes a users shuttle-next service as a `wasm32-wasi` module.
+- `runtime` contains the `alpha` runtime, which embeds a `Loader` that sets up tracing, provisions resources and starts the users service. The `runtime` starts a GRPC server to communicate with the `deployer` for deployments or the `cargo-shuttle` CLI for local runs. The `runtime` crate also contains the `shuttle-next` binary, which is a standalone runtime binary that is started by the `deployer` or the `cargo-shuttle` CLI. This also uses a GRPC server to communicate, and takes a users shuttle-next service as a `wasm32-wasi` module.
 - `service` is where our special `Service` trait is defined. Anything implementing this `Service` can be loaded by the `deployer` and the local runner in `cargo-shuttle`. The `service` library also defines the `ResourceBuilder` and `Factory` trais 
 which are used in our codegen to provision resources. The `service` library also contains the utilities we use for compiling users
 crates with `cargo`.

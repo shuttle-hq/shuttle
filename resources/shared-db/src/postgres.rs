@@ -29,7 +29,6 @@ impl ResourceBuilder<sqlx::PgPool> for Postgres {
             ),
             shuttle_service::Environment::Local => {
                 if let Some(local_uri) = self.local_uri {
-                    // TODO: parse local connection string to DatabaseReadyInfo?
                     SharedDbOutput::Local(local_uri)
                 } else {
                     SharedDbOutput::Shared(

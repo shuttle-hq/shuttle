@@ -35,9 +35,6 @@ impl ResourceTracker {
 
     /// Record a resource that has been requested
     pub fn record_resource(&mut self, r#type: Type, config: Value, output: Value) {
-        println!("config: {}", config);
-        println!("output: {}", output);
-
         self.new_resources
             .lock()
             .expect("to get lock on new resources")

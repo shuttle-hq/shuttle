@@ -970,6 +970,7 @@ mod tests {
             r#type: ResourceType::Database(resource::DatabaseType::Shared(
                 resource::database::SharedType::Postgres,
             )),
+            config: json!({"reset": true}),
             data: json!({"username": "root"}),
         };
         let resource2 = Resource {
@@ -977,6 +978,7 @@ mod tests {
             r#type: ResourceType::Database(resource::DatabaseType::AwsRds(
                 resource::database::AwsRdsType::MariaDB,
             )),
+            config: json!({"scale": 4}),
             data: json!({"uri": "postgres://localhost"}),
         };
         let resource3 = Resource {
@@ -984,6 +986,7 @@ mod tests {
             r#type: ResourceType::Database(resource::DatabaseType::AwsRds(
                 resource::database::AwsRdsType::Postgres,
             )),
+            config: json!({"scale": 2}),
             data: json!({"username": "admin"}),
         };
         // This makes sure only the last instance of a type is saved (clashes with [resource1])
@@ -992,6 +995,7 @@ mod tests {
             r#type: ResourceType::Database(resource::DatabaseType::Shared(
                 resource::database::SharedType::Postgres,
             )),
+            config: json!({"local": true}),
             data: json!({"username": "foo"}),
         };
 

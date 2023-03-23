@@ -8,8 +8,7 @@ pub mod error;
 pub use error::{CustomError, Error};
 
 use serde::{de::DeserializeOwned, Serialize};
-use shuttle_common::DatabaseReadyInfo;
-pub use shuttle_common::{database, resource::Type};
+pub use shuttle_common::{database, resource::Type, DatabaseReadyInfo};
 
 #[cfg(feature = "codegen")]
 extern crate shuttle_codegen;

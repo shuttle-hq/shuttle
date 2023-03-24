@@ -10,7 +10,7 @@ use comfy_table::{
 };
 use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt::Display};
+use std::{collections::HashMap, fmt::Display, path::PathBuf};
 use uuid::Uuid;
 
 #[derive(Deserialize, Serialize)]
@@ -130,6 +130,8 @@ pub fn get_resources_table(resources: &Vec<resource::Response>) -> String {
             let title = match x.r#type {
                 Type::Database(_) => "Databases",
                 Type::Secrets => "Secrets",
+                Type::StaticFolder => "Static Folder",
+                Type::Persist => "Persist",
             };
 
             let elements = acc.entry(title).or_insert(Vec::new());
@@ -146,6 +148,14 @@ pub fn get_resources_table(resources: &Vec<resource::Response>) -> String {
 
         if let Some(secrets) = resource_groups.get("Secrets") {
             output.push(get_secrets_table(secrets));
+        };
+
+        if let Some(static_folders) = resource_groups.get("Static Folder") {
+            output.push(get_static_folder_table(static_folders));
+        };
+
+        if let Some(persist) = resource_groups.get("Persist") {
+            output.push(get_persist_table(persist));
         };
 
         output.join("\n")
@@ -196,6 +206,55 @@ fn get_secrets_table(secrets: &[&resource::Response]) -> String {
 
     format!(
         r#"These secrets can be accessed by the service
+{table}
+"#,
+    )
+}
+
+fn get_static_folder_table(static_folders: &[&resource::Response]) -> String {
+    let mut table = Table::new();
+
+    table
+        .load_preset(UTF8_FULL)
+        .apply_modifier(UTF8_ROUND_CORNERS)
+        .set_content_arrangement(ContentArrangement::DynamicFullWidth)
+        .set_header(vec![
+            Cell::new("Static Folders").set_alignment(CellAlignment::Center)
+        ]);
+
+    for folder in static_folders {
+        let path = serde_json::from_value::<PathBuf>(folder.data.clone())
+            .unwrap()
+            .display()
+            .to_string();
+
+        table.add_row(vec![path]);
+    }
+
+    format!(
+        r#"These static folders can be accessed by the service
+{table}
+"#,
+    )
+}
+
+fn get_persist_table(persist_instances: &[&resource::Response]) -> String {
+    let mut table = Table::new();
+
+    table
+        .load_preset(UTF8_FULL)
+        .apply_modifier(UTF8_ROUND_CORNERS)
+        .set_content_arrangement(ContentArrangement::DynamicFullWidth)
+        .set_header(vec![
+            Cell::new("Persist Instances").set_alignment(CellAlignment::Center)
+        ]);
+
+    for _ in persist_instances {
+        table.add_row(vec!["Instance"]);
+    }
+
+    format!(
+        r#"These instances are linked to this service
 {table}
 "#,
     )

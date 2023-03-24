@@ -23,6 +23,8 @@ pub struct Response {
 pub enum Type {
     Database(database::Type),
     Secrets,
+    StaticFolder,
+    Persist,
 }
 
 impl Response {
@@ -44,6 +46,8 @@ impl Display for Type {
         match self {
             Type::Database(db_type) => write!(f, "database::{db_type}"),
             Type::Secrets => write!(f, "secrets"),
+            Type::StaticFolder => write!(f, "static_folder"),
+            Type::Persist => write!(f, "persist"),
         }
     }
 }

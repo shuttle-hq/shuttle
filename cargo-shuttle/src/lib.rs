@@ -7,7 +7,9 @@ mod provisioner_server;
 use cargo::util::ToSemver;
 use indicatif::ProgressBar;
 use shuttle_common::models::project::{State, IDLE_MINUTES};
+use shuttle_common::models::service::get_resources_table;
 use shuttle_common::project::ProjectName;
+use shuttle_common::resource;
 use shuttle_proto::runtime::{self, LoadRequest, StartRequest, SubscribeLogsRequest};
 
 use std::collections::HashMap;
@@ -543,7 +545,7 @@ impl Shuttle {
             secrets,
         });
         trace!("loading service");
-        let _ = runtime_client
+        let response = runtime_client
             .load(load_request)
             .or_else(|err| async {
                 provisioner_server.abort();
@@ -551,7 +553,20 @@ impl Shuttle {
 
                 Err(err)
             })
-            .await?;
+            .await?
+            .into_inner();
+
+        if !response.success {
+            panic!("failed to load your service: {}", response.message);
+        }
+
+        let resources = response
+            .resources
+            .into_iter()
+            .map(resource::Response::from_bytes)
+            .collect();
+
+        let resources = get_resources_table(&resources);
 
         let mut stream = runtime_client
             .subscribe_logs(tonic::Request::new(SubscribeLogsRequest {}))
@@ -570,6 +585,8 @@ impl Shuttle {
                 println!("{log}");
             }
         });
+
+        println!("{resources}");
 
         let addr = if run_args.external {
             std::net::IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))

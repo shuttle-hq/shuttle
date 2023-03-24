@@ -1,8 +1,7 @@
-use std::collections::BTreeMap;
-
 use async_trait::async_trait;
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
+pub use shuttle_service::SecretStore;
 use shuttle_service::{Error, Factory, ResourceBuilder, Type};
 
 #[derive(Serialize)]
@@ -26,18 +25,6 @@ impl ResourceBuilder<SecretStore> for Secrets {
     async fn output(self, factory: &mut dyn Factory) -> Result<Self::Output, crate::Error> {
         let secrets = factory.get_secrets().await?;
 
-        Ok(SecretStore { secrets })
-    }
-}
-
-/// Store that holds all the secrets available to a deployment
-#[derive(Deserialize, Serialize, Clone)]
-pub struct SecretStore {
-    secrets: BTreeMap<String, String>,
-}
-
-impl SecretStore {
-    pub fn get(&self, key: &str) -> Option<String> {
-        self.secrets.get(key).map(ToOwned::to_owned)
+        Ok(SecretStore::new(secrets))
     }
 }

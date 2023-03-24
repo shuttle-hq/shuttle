@@ -49,8 +49,8 @@ impl From<Type> for shuttle_common::resource::Type {
         match r#type {
             Type::Database(r#type) => Self::Database(r#type.into()),
             Type::Secrets => Self::Secrets,
-            Type::StaticFolder => todo!(),
-            Type::Persist => todo!(),
+            Type::StaticFolder => Self::StaticFolder,
+            Type::Persist => Self::Persist,
         }
     }
 }
@@ -60,8 +60,8 @@ impl From<shuttle_common::resource::Type> for Type {
         match r#type {
             shuttle_common::resource::Type::Database(r#type) => Self::Database(r#type.into()),
             shuttle_common::resource::Type::Secrets => Self::Secrets,
-            shuttle_common::resource::Type::StaticFolder => todo!(),
-            shuttle_common::resource::Type::Persist => todo!(),
+            shuttle_common::resource::Type::StaticFolder => Self::StaticFolder,
+            shuttle_common::resource::Type::Persist => Self::Persist,
         }
     }
 }
@@ -71,8 +71,8 @@ impl Display for Type {
         match self {
             Type::Database(db_type) => write!(f, "database::{db_type}"),
             Type::Secrets => write!(f, "secrets"),
-            Type::StaticFolder => todo!(),
-            Type::Persist => todo!(),
+            Type::StaticFolder => write!(f, "static folder"),
+            Type::Persist => write!(f, "persist"),
         }
     }
 }

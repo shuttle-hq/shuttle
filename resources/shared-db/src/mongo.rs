@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use serde::Serialize;
-use shuttle_service::{database, error::CustomError, Error, Factory, ResourceBuilder, Type};
-
-use crate::SharedDbOutput;
+use shuttle_service::{
+    database, error::CustomError, DbOutput, Error, Factory, ResourceBuilder, Type,
+};
 
 #[derive(Serialize)]
 pub struct MongoDb {
@@ -14,7 +14,7 @@ pub struct MongoDb {
 impl ResourceBuilder<mongodb::Database> for MongoDb {
     const TYPE: Type = Type::Database(database::Type::Shared(database::SharedEngine::MongoDb));
 
-    type Output = SharedDbOutput;
+    type Output = DbOutput;
 
     fn new() -> Self {
         Self { local_uri: None }
@@ -22,7 +22,7 @@ impl ResourceBuilder<mongodb::Database> for MongoDb {
 
     async fn output(self, factory: &mut dyn Factory) -> Result<Self::Output, Error> {
         let info = match factory.get_environment() {
-            shuttle_service::Environment::Production => SharedDbOutput::Shared(
+            shuttle_service::Environment::Production => DbOutput::Info(
                 factory
                     .get_db_connection(database::Type::Shared(database::SharedEngine::MongoDb))
                     .await
@@ -30,9 +30,9 @@ impl ResourceBuilder<mongodb::Database> for MongoDb {
             ),
             shuttle_service::Environment::Local => {
                 if let Some(local_uri) = self.local_uri {
-                    SharedDbOutput::Local(local_uri)
+                    DbOutput::Local(local_uri)
                 } else {
-                    SharedDbOutput::Shared(
+                    DbOutput::Info(
                         factory
                             .get_db_connection(database::Type::Shared(
                                 database::SharedEngine::MongoDb,
@@ -48,8 +48,8 @@ impl ResourceBuilder<mongodb::Database> for MongoDb {
 
     async fn build(build_data: &Self::Output) -> Result<mongodb::Database, Error> {
         let connection_string = match build_data {
-            SharedDbOutput::Local(local_uri) => local_uri.clone(),
-            SharedDbOutput::Shared(info) => info.connection_string_private(),
+            DbOutput::Local(local_uri) => local_uri.clone(),
+            DbOutput::Info(info) => info.connection_string_private(),
         };
 
         let mut client_options = mongodb::options::ClientOptions::parse(connection_string)

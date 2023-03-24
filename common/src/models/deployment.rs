@@ -1,7 +1,10 @@
 use std::fmt::Display;
 
 use chrono::{DateTime, Utc};
-use comfy_table::Color;
+use comfy_table::{
+    modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, Cell, CellAlignment, Color,
+    ContentArrangement, Table,
+};
 use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -40,5 +43,45 @@ impl State {
             State::Crashed => Color::Red,
             State::Unknown => Color::Yellow,
         }
+    }
+}
+
+pub fn get_deployments_table(deployments: &Vec<Response>, service_name: &str) -> String {
+    if deployments.is_empty() {
+        format!(
+            "{}\n",
+            "No deployments are linked to this service".yellow().bold()
+        )
+    } else {
+        let mut table = Table::new();
+        table
+            .load_preset(UTF8_FULL)
+            .apply_modifier(UTF8_ROUND_CORNERS)
+            .set_content_arrangement(ContentArrangement::DynamicFullWidth)
+            .set_header(vec![
+                Cell::new("ID").set_alignment(CellAlignment::Center),
+                Cell::new("Status").set_alignment(CellAlignment::Center),
+                Cell::new("Last updated").set_alignment(CellAlignment::Center),
+            ]);
+
+        for deploy in deployments.iter() {
+            table.add_row(vec![
+                Cell::new(deploy.id),
+                Cell::new(&deploy.state)
+                    .fg(deploy.state.get_color())
+                    .set_alignment(CellAlignment::Center),
+                Cell::new(deploy.last_update.format("%Y-%m-%dT%H:%M:%SZ"))
+                    .set_alignment(CellAlignment::Center),
+            ]);
+        }
+
+        format!(
+            r#"
+Most recent deploys for {}
+{}
+"#,
+            service_name.bold(),
+            table,
+        )
     }
 }

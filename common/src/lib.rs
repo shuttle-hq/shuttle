@@ -54,6 +54,13 @@ pub enum ParseError {
     Serde(#[from] serde_json::Error),
 }
 
+/// Holds the output for a DB resource
+#[derive(Deserialize, Serialize)]
+pub enum DbOutput {
+    Info(DatabaseReadyInfo),
+    Local(String),
+}
+
 /// Holds the details for a database connection
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatabaseReadyInfo {

@@ -10,11 +10,3 @@ mod postgres;
 
 #[cfg(feature = "postgres")]
 pub use postgres::Postgres;
-
-use serde::{Deserialize, Serialize};
-
-#[derive(Deserialize, Serialize)]
-pub enum SharedDbOutput {
-    Shared(shuttle_service::DatabaseReadyInfo),
-    Local(String),
-}

@@ -53,6 +53,9 @@ pub enum Command {
     /// manage deployments of a shuttle service
     #[command(subcommand)]
     Deployment(DeploymentCommand),
+    /// manage resources of a shuttle project
+    #[command(subcommand)]
+    Resource(ResourceCommand),
     /// create a new shuttle service
     Init(InitArgs),
     /// generate shell completions
@@ -103,6 +106,12 @@ pub enum DeploymentCommand {
         /// ID of deployment to get status for
         id: Uuid,
     },
+}
+
+#[derive(Parser)]
+pub enum ResourceCommand {
+    /// list all the resources for a project
+    List,
 }
 
 #[derive(Parser)]

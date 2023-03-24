@@ -55,7 +55,7 @@ impl From<shuttle_common::resource::Type> for Type {
     fn from(r#type: shuttle_common::resource::Type) -> Self {
         match r#type {
             shuttle_common::resource::Type::Database(r#type) => Self::Database(r#type.into()),
-            shuttle_common::resource::Type::Secrets => todo!(),
+            shuttle_common::resource::Type::Secrets => Self::Secrets,
         }
     }
 }

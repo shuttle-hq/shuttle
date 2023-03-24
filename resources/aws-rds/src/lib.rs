@@ -2,18 +2,12 @@
 
 use async_trait::async_trait;
 use paste::paste;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use shuttle_service::{
     database::{self, AwsRdsEngine},
     error::CustomError,
-    Factory, ResourceBuilder, Type,
+    DbOutput, Factory, ResourceBuilder, Type,
 };
-
-#[derive(Deserialize, Serialize)]
-pub enum AwsRdsOutput {
-    Rds(shuttle_service::DatabaseReadyInfo),
-    Local(String),
-}
 
 macro_rules! aws_engine {
     ($feature:expr, $pool_path:path, $options_path:path, $struct_ident:ident) => {
@@ -31,7 +25,7 @@ macro_rules! aws_engine {
             impl ResourceBuilder<$pool_path> for $struct_ident {
                 const TYPE: Type = Type::Database(database::Type::AwsRds(AwsRdsEngine::$struct_ident));
 
-                type Output = AwsRdsOutput;
+                type Output = DbOutput;
 
                 fn new() -> Self {
                     Self { local_uri: None }
@@ -39,16 +33,16 @@ macro_rules! aws_engine {
 
                 async fn output(self, factory: &mut dyn Factory) -> Result<Self::Output, shuttle_service::Error> {
                     let info = match factory.get_environment() {
-                        shuttle_service::Environment::Production => AwsRdsOutput::Rds(
+                        shuttle_service::Environment::Production => DbOutput::Info(
                             factory
                                 .get_db_connection(database::Type::AwsRds(AwsRdsEngine::$struct_ident))
                                 .await?
                         ),
                         shuttle_service::Environment::Local => {
                             if let Some(local_uri) = self.local_uri {
-                                AwsRdsOutput::Local(local_uri)
+                                DbOutput::Local(local_uri)
                             } else {
-                                AwsRdsOutput::Rds(
+                                DbOutput::Info(
                                     factory
                                         .get_db_connection(database::Type::AwsRds(AwsRdsEngine::$struct_ident))
                                         .await?
@@ -62,8 +56,8 @@ macro_rules! aws_engine {
 
                 async fn build(build_data: &Self::Output) -> Result<$pool_path, shuttle_service::Error> {
                     let connection_string = match build_data {
-                        AwsRdsOutput::Local(local_uri) => local_uri.clone(),
-                        AwsRdsOutput::Rds(info) => info.connection_string_private(),
+                        DbOutput::Local(local_uri) => local_uri.clone(),
+                        DbOutput::Info(info) => info.connection_string_private(),
                     };
 
                     let pool = $options_path::new()

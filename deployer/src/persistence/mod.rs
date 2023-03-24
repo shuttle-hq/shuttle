@@ -353,14 +353,17 @@ impl ResourceManager for Persistence {
     type Err = Error;
 
     async fn insert_resource(&self, resource: &Resource) -> Result<()> {
-        sqlx::query("INSERT OR REPLACE INTO resources (service_id, type, data) VALUES (?, ?, ?)")
-            .bind(resource.service_id)
-            .bind(resource.r#type)
-            .bind(&resource.data)
-            .execute(&self.pool)
-            .await
-            .map(|_| ())
-            .map_err(Error::from)
+        sqlx::query(
+            "INSERT OR REPLACE INTO resources (service_id, type, config, data) VALUES (?, ?, ?, ?)",
+        )
+        .bind(resource.service_id)
+        .bind(resource.r#type)
+        .bind(&resource.config)
+        .bind(&resource.data)
+        .execute(&self.pool)
+        .await
+        .map(|_| ())
+        .map_err(Error::from)
     }
 
     async fn get_resources(&self, service_id: &Uuid) -> Result<Vec<Resource>> {
@@ -970,6 +973,7 @@ mod tests {
             r#type: ResourceType::Database(resource::DatabaseType::Shared(
                 resource::database::SharedType::Postgres,
             )),
+            config: json!({"reset": true}),
             data: json!({"username": "root"}),
         };
         let resource2 = Resource {
@@ -977,6 +981,7 @@ mod tests {
             r#type: ResourceType::Database(resource::DatabaseType::AwsRds(
                 resource::database::AwsRdsType::MariaDB,
             )),
+            config: json!({"scale": 4}),
             data: json!({"uri": "postgres://localhost"}),
         };
         let resource3 = Resource {
@@ -984,6 +989,7 @@ mod tests {
             r#type: ResourceType::Database(resource::DatabaseType::AwsRds(
                 resource::database::AwsRdsType::Postgres,
             )),
+            config: json!({"scale": 2}),
             data: json!({"username": "admin"}),
         };
         // This makes sure only the last instance of a type is saved (clashes with [resource1])
@@ -992,6 +998,7 @@ mod tests {
             r#type: ResourceType::Database(resource::DatabaseType::Shared(
                 resource::database::SharedType::Postgres,
             )),
+            config: json!({"local": true}),
             data: json!({"username": "foo"}),
         };
 

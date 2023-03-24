@@ -5243,6 +5243,7 @@ dependencies = [
  "portpicker",
  "prost-types",
  "rmp-serde",
+ "serde",
  "serde_json",
  "shuttle-common",
  "shuttle-proto",
@@ -5265,6 +5266,7 @@ name = "shuttle-secrets"
 version = "0.12.0"
 dependencies = [
  "async-trait",
+ "serde",
  "shuttle-service",
 ]
 
@@ -5278,7 +5280,7 @@ dependencies = [
  "cargo_metadata",
  "crossbeam-channel",
  "pipe",
- "serde_json",
+ "serde",
  "shuttle-codegen",
  "shuttle-common",
  "strfmt",

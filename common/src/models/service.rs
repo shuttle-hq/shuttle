@@ -1,6 +1,7 @@
 use crate::{
     models::{deployment, secret},
-    resource::{self, ResourceInfo},
+    resource::{self, Type},
+    DatabaseReadyInfo, SecretStore,
 };
 
 use comfy_table::{
@@ -9,7 +10,7 @@ use comfy_table::{
 };
 use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
-use std::fmt::Display;
+use std::{collections::HashMap, fmt::Display};
 use uuid::Uuid;
 
 #[derive(Deserialize, Serialize)]
@@ -121,31 +122,81 @@ Most recent deploys for {}
     }
 }
 
-fn get_resources_table(resources: &Vec<resource::Response>) -> String {
+pub fn get_resources_table(resources: &Vec<resource::Response>) -> String {
     if resources.is_empty() {
         format!("{}\n", "No resources are linked to this service".bold())
     } else {
-        let mut table = Table::new();
-        table
-            .load_preset(UTF8_FULL)
-            .apply_modifier(UTF8_ROUND_CORNERS)
-            .set_content_arrangement(ContentArrangement::DynamicFullWidth)
-            .set_header(vec![
-                Cell::new("Type").set_alignment(CellAlignment::Center),
-                Cell::new("Connection string").set_alignment(CellAlignment::Center),
-            ]);
+        let resource_groups = resources.iter().fold(HashMap::new(), |mut acc, x| {
+            let title = match x.r#type {
+                Type::Database(_) => "Databases",
+                Type::Secrets => "Secrets",
+            };
 
-        for resource in resources.iter() {
-            table.add_row(vec![
-                resource.r#type.to_string(),
-                resource.get_resource_info().connection_string_public(),
-            ]);
-        }
+            let elements = acc.entry(title).or_insert(Vec::new());
+            elements.push(x);
 
-        format!(
-            r#"These resources are linked to this service
+            acc
+        });
+
+        let mut output = Vec::new();
+
+        if let Some(databases) = resource_groups.get("Databases") {
+            output.push(get_databases_table(databases));
+        };
+
+        if let Some(secrets) = resource_groups.get("Secrets") {
+            output.push(get_secrets_table(secrets));
+        };
+
+        output.join("\n")
+    }
+}
+
+fn get_databases_table(databases: &Vec<&resource::Response>) -> String {
+    let mut table = Table::new();
+
+    table
+        .load_preset(UTF8_FULL)
+        .apply_modifier(UTF8_ROUND_CORNERS)
+        .set_content_arrangement(ContentArrangement::DynamicFullWidth)
+        .set_header(vec![
+            Cell::new("Type").set_alignment(CellAlignment::Center),
+            Cell::new("Connection string").set_alignment(CellAlignment::Center),
+        ]);
+
+    for database in databases {
+        let info = serde_json::from_value::<DatabaseReadyInfo>(database.data.clone()).unwrap();
+
+        table.add_row(vec![
+            database.r#type.to_string(),
+            info.connection_string_public(),
+        ]);
+    }
+
+    format!(
+        r#"These databases are linked to this service
 {table}
 "#,
-        )
+    )
+}
+
+fn get_secrets_table(secrets: &[&resource::Response]) -> String {
+    let mut table = Table::new();
+
+    table
+        .load_preset(UTF8_FULL)
+        .apply_modifier(UTF8_ROUND_CORNERS)
+        .set_header(vec![Cell::new("Key").set_alignment(CellAlignment::Center)]);
+
+    let secrets = serde_json::from_value::<SecretStore>(secrets[0].data.clone()).unwrap();
+
+    for key in secrets.secrets.keys() {
+        table.add_row(vec![key]);
     }
+
+    format!(
+        r#"These secrets can be accessed by the service
+{table}
+"#,
+    )
 }

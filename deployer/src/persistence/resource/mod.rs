@@ -23,12 +23,14 @@ pub struct Resource {
     pub service_id: Uuid,
     pub r#type: Type,
     pub data: serde_json::Value,
+    pub config: serde_json::Value,
 }
 
 impl From<Resource> for shuttle_common::resource::Response {
     fn from(resource: Resource) -> Self {
         shuttle_common::resource::Response {
             r#type: resource.r#type.into(),
+            config: resource.config,
             data: resource.data,
         }
     }
@@ -37,12 +39,14 @@ impl From<Resource> for shuttle_common::resource::Response {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Type {
     Database(DatabaseType),
+    Secrets,
 }
 
 impl From<Type> for shuttle_common::resource::Type {
     fn from(r#type: Type) -> Self {
         match r#type {
             Type::Database(r#type) => Self::Database(r#type.into()),
+            Type::Secrets => Self::Secrets,
         }
     }
 }
@@ -51,6 +55,7 @@ impl From<shuttle_common::resource::Type> for Type {
     fn from(r#type: shuttle_common::resource::Type) -> Self {
         match r#type {
             shuttle_common::resource::Type::Database(r#type) => Self::Database(r#type.into()),
+            shuttle_common::resource::Type::Secrets => Self::Secrets,
         }
     }
 }
@@ -59,6 +64,7 @@ impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Type::Database(db_type) => write!(f, "database::{db_type}"),
+            Type::Secrets => write!(f, "secrets"),
         }
     }
 }

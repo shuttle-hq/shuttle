@@ -7,7 +7,9 @@ mod provisioner_server;
 use cargo::util::ToSemver;
 use indicatif::ProgressBar;
 use shuttle_common::models::project::{State, IDLE_MINUTES};
+use shuttle_common::models::service::get_resources_table;
 use shuttle_common::project::ProjectName;
+use shuttle_common::resource;
 use shuttle_proto::runtime::{self, LoadRequest, StartRequest, SubscribeLogsRequest};
 
 use std::collections::HashMap;
@@ -16,6 +18,7 @@ use std::fs::{read_to_string, File};
 use std::io::stdout;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
+use std::process::exit;
 use std::str::FromStr;
 
 use anyhow::{anyhow, bail, Context, Result};
@@ -37,7 +40,7 @@ use shuttle_service::builder::{build_crate, Runtime};
 use std::fmt::Write;
 use strum::IntoEnumIterator;
 use tar::Builder;
-use tracing::{trace, warn};
+use tracing::{error, trace, warn};
 use uuid::Uuid;
 
 use crate::args::{DeploymentCommand, ProjectCommand};
@@ -543,7 +546,7 @@ impl Shuttle {
             secrets,
         });
         trace!("loading service");
-        let _ = runtime_client
+        let response = runtime_client
             .load(load_request)
             .or_else(|err| async {
                 provisioner_server.abort();
@@ -551,7 +554,21 @@ impl Shuttle {
 
                 Err(err)
             })
-            .await?;
+            .await?
+            .into_inner();
+
+        if !response.success {
+            error!(error = response.message, "failed to load your service");
+            exit(1);
+        }
+
+        let resources = response
+            .resources
+            .into_iter()
+            .map(resource::Response::from_bytes)
+            .collect();
+
+        let resources = get_resources_table(&resources);
 
         let mut stream = runtime_client
             .subscribe_logs(tonic::Request::new(SubscribeLogsRequest {}))
@@ -570,6 +587,8 @@ impl Shuttle {
                 println!("{log}");
             }
         });
+
+        println!("{resources}");
 
         let addr = if run_args.external {
             std::net::IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))

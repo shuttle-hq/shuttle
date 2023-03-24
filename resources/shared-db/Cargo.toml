@@ -9,6 +9,7 @@ keywords = ["shuttle-service", "database"]
 [dependencies]
 async-trait = "0.1.56"
 mongodb = { version = "2.3.0", optional = true }
+serde = { version = "1.0.148", features = ["derive"] }
 shuttle-service = { path = "../../service", version = "0.12.0", default-features = false }
 sqlx = { version = "0.6.2", features = ["runtime-tokio-native-tls"], optional = true }
 

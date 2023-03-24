@@ -17,7 +17,7 @@ cargo = { workspace = true, optional = true }
 cargo_metadata = { workspace = true, optional = true }
 crossbeam-channel = { workspace = true, optional = true }
 pipe = { workspace = true, optional = true }
-serde_json = { workspace = true, optional = true }
+serde = { workspace = true, features = ["derive"] }
 strfmt = "0.2.2"
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["sync"], optional = true }

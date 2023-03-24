@@ -1,9 +1,13 @@
 #![doc = include_str!("../README.md")]
 
 use async_trait::async_trait;
-use shuttle_service::{database, error::CustomError, Error, Factory, ResourceBuilder};
+use serde::Serialize;
+use shuttle_service::{
+    database, error::CustomError, DatabaseReadyInfo, Error, Factory, ResourceBuilder, Type,
+};
 
 #[cfg(feature = "postgres")]
+#[derive(Serialize)]
 pub struct Postgres {
     local_uri: Option<String>,
 }
@@ -12,31 +16,37 @@ pub struct Postgres {
 /// Get an `sqlx::PgPool` from any factory
 #[async_trait]
 impl ResourceBuilder<sqlx::PgPool> for Postgres {
+    const TYPE: Type = Type::Database(database::Type::Shared(database::SharedEngine::Postgres));
+
+    type Output = DatabaseReadyInfo;
+
     fn new() -> Self {
         Self { local_uri: None }
     }
 
-    async fn build(self, factory: &mut dyn Factory) -> Result<sqlx::PgPool, Error> {
-        let connection_string = match factory.get_environment() {
-            shuttle_service::Environment::Production => {
-                factory
-                    .get_db_connection_string(database::Type::Shared(
-                        database::SharedEngine::Postgres,
-                    ))
-                    .await?
-            }
-            shuttle_service::Environment::Local => {
-                if let Some(local_uri) = self.local_uri {
-                    local_uri
-                } else {
-                    factory
-                        .get_db_connection_string(database::Type::Shared(
-                            database::SharedEngine::Postgres,
-                        ))
-                        .await?
-                }
-            }
-        };
+    async fn output(self, factory: &mut dyn Factory) -> Result<Self::Output, crate::Error> {
+        // let info = match factory.get_environment() {
+        //     shuttle_service::Environment::Production => {
+        let info = factory
+            .get_db_connection(database::Type::Shared(database::SharedEngine::Postgres))
+            .await?;
+        // }
+        //     shuttle_service::Environment::Local => {
+        //         if let Some(local_uri) = self.local_uri {
+        //             local_uri
+        //         } else {
+        //             factory
+        //                 .get_db_connection(database::Type::Shared(database::SharedEngine::Postgres))
+        //                 .await?
+        //         }
+        //     }
+        // };
+
+        Ok(info)
+    }
+
+    async fn build(build_data: &Self::Output) -> Result<sqlx::PgPool, crate::Error> {
+        let connection_string = build_data.connection_string_private();
 
         let pool = sqlx::postgres::PgPoolOptions::new()
             .min_connections(1)

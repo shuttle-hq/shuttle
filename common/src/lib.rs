@@ -19,6 +19,8 @@ pub mod tracing;
 #[cfg(feature = "wasm")]
 pub mod wasm;
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "service")]
 use uuid::Uuid;
@@ -52,6 +54,7 @@ pub enum ParseError {
     Serde(#[from] serde_json::Error),
 }
 
+/// Holds the details for a database connection
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatabaseReadyInfo {
     engine: String,
@@ -104,5 +107,21 @@ impl DatabaseReadyInfo {
             self.port,
             self.database_name
         )
+    }
+}
+
+/// Store that holds all the secrets available to a deployment
+#[derive(Deserialize, Serialize, Clone)]
+pub struct SecretStore {
+    pub(crate) secrets: BTreeMap<String, String>,
+}
+
+impl SecretStore {
+    pub fn new(secrets: BTreeMap<String, String>) -> Self {
+        Self { secrets }
+    }
+
+    pub fn get(&self, key: &str) -> Option<String> {
+        self.secrets.get(key).map(ToOwned::to_owned)
     }
 }

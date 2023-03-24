@@ -246,11 +246,11 @@ fn get_persist_table(persist_instances: &[&resource::Response]) -> String {
         .apply_modifier(UTF8_ROUND_CORNERS)
         .set_content_arrangement(ContentArrangement::DynamicFullWidth)
         .set_header(vec![
-            Cell::new("Instances").set_alignment(CellAlignment::Center)
+            Cell::new("Persist Instances").set_alignment(CellAlignment::Center)
         ]);
 
-    for (i, _) in persist_instances.iter().enumerate() {
-        table.add_row(vec![format!("Persist Instance {i}")]);
+    for _ in persist_instances {
+        table.add_row(vec!["Instance"]);
     }
 
     format!(

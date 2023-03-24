@@ -18,6 +18,7 @@ use std::fs::{read_to_string, File};
 use std::io::stdout;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
+use std::process::exit;
 use std::str::FromStr;
 
 use anyhow::{anyhow, bail, Context, Result};
@@ -39,7 +40,7 @@ use shuttle_service::builder::{build_crate, Runtime};
 use std::fmt::Write;
 use strum::IntoEnumIterator;
 use tar::Builder;
-use tracing::{trace, warn};
+use tracing::{error, trace, warn};
 use uuid::Uuid;
 
 use crate::args::{DeploymentCommand, ProjectCommand};
@@ -557,7 +558,8 @@ impl Shuttle {
             .into_inner();
 
         if !response.success {
-            panic!("failed to load your service: {}", response.message);
+            error!(error = response.message, "failed to load your service");
+            exit(1);
         }
 
         let resources = response

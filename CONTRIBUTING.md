@@ -228,33 +228,53 @@ graph BT
     provisioner:::binary
     service
     gateway:::binary
+    auth:::binary
     user([user service]):::external
     gateway --> common
     gateway -.->|starts instances| deployer
+    gateway -->|key| auth
+    auth -->|jwt| gateway
     deployer --> proto
     deployer -.->|calls| provisioner
     service ---> common
     deployer --> common
-    cargo-shuttle --->|"features = ['loader']"| service
-    deployer -->|"features = ['loader']"| service
+    cargo-shuttle --->|"features = ['builder']"| service
+    deployer -->|"features = ['builder']"| service
     cargo-shuttle --> common
     service --> codegen
     proto ---> common
     provisioner --> proto
     e2e -.->|starts up| gateway
+    e2e -.->|starts up| auth
     e2e -.->|calls| cargo-shuttle
     user -->|"features = ['codegen']"| service
 ```
 
-First, `provisioner`, `gateway`, `deployer`, and `cargo-shuttle` are binary crates with `provisioner`, `gateway` and `deployer` being backend services. The `cargo-shuttle` binary is the `cargo shuttle` command used by users.
+### Binaries
 
-The rest are the following libraries:
+- `cargo-shuttle` is the CLI used by users to initialize, deploy and manage their projects and services on shuttle.
+- `gateway` starts and manages instances of `deployer`. It proxies commands from the user sent via the CLI on port 8001 and traffic on port 8000 to the correct instance of `deployer`.
+- `auth` is an authentication service that creates and manages users. In addition to that, requests to the `gateway` that contain an api-key or cookie will be proxied to the `auth` service where it will be converted to a JWT for authorization between internal services (like a `deployer` requesting a database from
+`provisioner`).
+- `deployer` is a service that runs in its own docker container, one per user project. It manages a project's deployments and state.
+- `provisioner` is a service used for requesting databases and other resources, using a gRPC API.
+- `admin` is a simple CLI used for admin tasks like reviving and stopping projects, as well as requesting
+and renewing SSL certificates through the acme client in the `gateway`.
+
+### Libraries
 
 - `common` contains shared models and functions used by the other libraries and binaries.
-- `codegen` contains our proc-macro code which gets exposed to user services from `service` by the `codegen` feature flag. The redirect through `service` is to make it available under the prettier name of `shuttle_service::main`.
-- `service` is where our special `Service` trait is defined. Anything implementing this `Service` can be loaded by the `deployer` and the local runner in `cargo-shuttle`.
-   The `codegen` automatically implements the `Service` trait for any user service.
-- `proto` contains the gRPC server and client definitions to allow `deployer` to communicate with `provisioner`.
+- `codegen` contains our proc-macro code which gets exposed to user services from `runtime`.
+The redirect through `runtime` is to make it available under the prettier name of `shuttle_runtime::main`.
+- `runtime` contains the `alpha` runtime, which embeds a gRPC server and a `Loader` in a service with the `shuttle_runtime::main` macro. The gRPC server receives commands from `deployer` like `start` and `stop`. The `Loader` sets up a tracing subscriber and provisions resources for the users service. The `runtime` crate also contains the `shuttle-next` binary, which is a standalone runtime binary that is started by the `deployer` or the `cargo-shuttle` CLI, responsible for loading and starting `shuttle-next` services.
+- `service` is where our special `Service` trait is defined. Anything implementing this `Service` can be loaded by the `deployer` and the local runner in `cargo-shuttle`. The `service` library also defines the `ResourceBuilder` and `Factory` trais 
+which are used in our codegen to provision resources. The `service` library also contains the utilities we use for compiling users
+crates with `cargo`.
+- `proto` contains the gRPC server and client definitions to allow `deployer` to communicate with `provisioner`, and to allow
+the `deployer` and `cargo-shuttle` cli to communicate with the `alpha` and `shuttle-next` runtimes.
+- `resources` contains various implementations of `ResourceBuilder`, which are consumed in the `codegen` to provision resources.
+- `services` contains implementations of `Service` for common Rust web frameworks. Anything implementing `Service` can be deployed
+by shuttle.
 - `e2e` just contains tests which starts up the `deployer` in a container and then deploys services to it using `cargo-shuttle`.
 
 Lastly, the `user service` is not a folder in this repository, but is the user service that will be deployed by `deployer`.

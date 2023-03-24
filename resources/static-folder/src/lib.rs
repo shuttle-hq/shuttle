@@ -30,7 +30,7 @@ impl<'a> StaticFolder<'a> {
 
 #[async_trait]
 impl<'a> ResourceBuilder<PathBuf> for StaticFolder<'a> {
-    const TYPE: Type = Type::Secrets;
+    const TYPE: Type = Type::StaticFolder;
 
     type Output = PathBuf;
 

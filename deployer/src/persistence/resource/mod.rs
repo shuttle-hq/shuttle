@@ -71,7 +71,7 @@ impl Display for Type {
         match self {
             Type::Database(db_type) => write!(f, "database::{db_type}"),
             Type::Secrets => write!(f, "secrets"),
-            Type::StaticFolder => write!(f, "static folder"),
+            Type::StaticFolder => write!(f, "static_folder"),
             Type::Persist => write!(f, "persist"),
         }
     }
@@ -87,7 +87,12 @@ impl FromStr for Type {
                 _ => Err(format!("'{prefix}' is an unknown resource type")),
             }
         } else {
-            Err(format!("'{s}' is an unknown resource type"))
+            match s {
+                "secrets" => Ok(Self::Secrets),
+                "static_folder" => Ok(Self::StaticFolder),
+                "persist" => Ok(Self::Persist),
+                _ => Err(format!("'{s}' is an unknown resource type")),
+            }
         }
     }
 }
@@ -131,6 +136,9 @@ mod tests {
             Type::Database(database::Type::AwsRds(database::AwsRdsType::MariaDB)),
             Type::Database(database::Type::Shared(database::SharedType::Postgres)),
             Type::Database(database::Type::Shared(database::SharedType::MongoDb)),
+            Type::Secrets,
+            Type::StaticFolder,
+            Type::Persist,
         ];
 
         for input in inputs {

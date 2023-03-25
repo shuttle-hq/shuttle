@@ -308,11 +308,7 @@ impl Shuttle {
         }
         progress_bar.finish_and_clear();
 
-        println!(
-            "{}\n{}",
-            "Successfully stopped service".bold(),
-            service
-        );
+        println!("{}\n{}", "Successfully stopped service".bold(), service);
 
         Ok(())
     }

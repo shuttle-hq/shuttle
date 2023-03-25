@@ -219,6 +219,7 @@ mod logger;
 #[cfg(feature = "next")]
 mod next;
 mod provisioner_factory;
+mod resource_tracker;
 
 pub use alpha::{start, Alpha};
 pub use async_trait::async_trait;
@@ -226,6 +227,7 @@ pub use logger::Logger;
 #[cfg(feature = "next")]
 pub use next::{AxumWasm, NextArgs};
 pub use provisioner_factory::ProvisionerFactory;
+pub use resource_tracker::{get_resource, ResourceTracker};
 pub use shuttle_common::storage_manager::StorageManager;
 pub use shuttle_service::{main, CustomError, Error, Factory, ResourceBuilder, Service};
 

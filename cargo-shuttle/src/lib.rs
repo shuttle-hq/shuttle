@@ -6,8 +6,11 @@ mod provisioner_server;
 
 use cargo::util::ToSemver;
 use indicatif::ProgressBar;
+use shuttle_common::models::deployment::get_deployments_table;
 use shuttle_common::models::project::{State, IDLE_MINUTES};
+use shuttle_common::models::resource::get_resources_table;
 use shuttle_common::project::ProjectName;
+use shuttle_common::resource;
 use shuttle_proto::runtime::{self, LoadRequest, StartRequest, SubscribeLogsRequest};
 
 use std::collections::HashMap;
@@ -16,6 +19,7 @@ use std::fs::{read_to_string, File};
 use std::io::stdout;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
+use std::process::exit;
 use std::str::FromStr;
 
 use anyhow::{anyhow, bail, Context, Result};
@@ -37,10 +41,10 @@ use shuttle_service::builder::{build_crate, Runtime};
 use std::fmt::Write;
 use strum::IntoEnumIterator;
 use tar::Builder;
-use tracing::{trace, warn};
+use tracing::{error, trace, warn};
 use uuid::Uuid;
 
-use crate::args::{DeploymentCommand, ProjectCommand};
+use crate::args::{DeploymentCommand, ProjectCommand, ResourceCommand};
 use crate::client::Client;
 use crate::provisioner_server::LocalProvisioner;
 
@@ -63,6 +67,7 @@ impl Shuttle {
             args.cmd,
             Command::Deploy(..)
                 | Command::Deployment(..)
+                | Command::Resource(..)
                 | Command::Project(..)
                 | Command::Stop
                 | Command::Clean
@@ -99,6 +104,7 @@ impl Shuttle {
                     Command::Deployment(DeploymentCommand::Status { id }) => {
                         self.deployment_get(&client, id).await
                     }
+                    Command::Resource(ResourceCommand::List) => self.resources_list(&client).await,
                     Command::Stop => self.stop(&client).await,
                     Command::Clean => self.clean(&client).await,
                     Command::Secrets => self.secrets(&client).await,
@@ -284,7 +290,8 @@ impl Shuttle {
     }
 
     async fn stop(&self, client: &Client) -> Result<()> {
-        let mut service = client.stop_service(self.ctx.project_name()).await?;
+        let proj_name = self.ctx.project_name();
+        let mut service = client.stop_service(proj_name).await?;
 
         let progress_bar = create_spinner();
         loop {
@@ -297,13 +304,12 @@ impl Shuttle {
             }
 
             progress_bar.set_message(format!("Stopping {}", deployment.id));
-            service = client.get_service_summary(self.ctx.project_name()).await?;
+            service = client.get_service(proj_name).await?;
         }
         progress_bar.finish_and_clear();
 
         println!(
-            r#"{}
-{}"#,
+            "{}\n{}",
             "Successfully stopped service".bold(),
             service
         );
@@ -323,7 +329,7 @@ impl Shuttle {
     }
 
     async fn status(&self, client: &Client) -> Result<()> {
-        let summary = client.get_service_summary(self.ctx.project_name()).await?;
+        let summary = client.get_service(self.ctx.project_name()).await?;
 
         println!("{summary}");
 
@@ -355,7 +361,7 @@ impl Shuttle {
         let id = if let Some(id) = id {
             id
         } else {
-            let summary = client.get_service_summary(self.ctx.project_name()).await?;
+            let summary = client.get_service(self.ctx.project_name()).await?;
 
             if let Some(deployment) = summary.deployment {
                 deployment.id
@@ -386,9 +392,11 @@ impl Shuttle {
     }
 
     async fn deployments_list(&self, client: &Client) -> Result<()> {
-        let details = client.get_service_details(self.ctx.project_name()).await?;
+        let proj_name = self.ctx.project_name();
+        let deployments = client.get_deployments(proj_name).await?;
+        let table = get_deployments_table(&deployments, proj_name.as_str());
 
-        println!("{details}");
+        println!("{table}");
 
         Ok(())
     }
@@ -399,6 +407,17 @@ impl Shuttle {
             .await?;
 
         println!("{deployment}");
+
+        Ok(())
+    }
+
+    async fn resources_list(&self, client: &Client) -> Result<()> {
+        let resources = client
+            .get_service_resources(self.ctx.project_name())
+            .await?;
+        let table = get_resources_table(&resources);
+
+        println!("{table}");
 
         Ok(())
     }
@@ -421,12 +440,13 @@ impl Shuttle {
             }
         });
 
+        let service_name = self.ctx.project_name();
         let working_directory = self.ctx.working_directory();
 
         trace!("building project");
         println!(
-            "{:>12} {}",
-            "Building".bold().green(),
+            "{} {}",
+            "    Building".bold().green(),
             working_directory.display()
         );
 
@@ -452,8 +472,6 @@ impl Shuttle {
             trace!("no Secrets.toml was found");
             Default::default()
         };
-
-        let service_name = self.ctx.project_name().to_string();
 
         let (is_wasm, executable_path) = match runtime {
             Runtime::Next(path) => (true, path),
@@ -518,20 +536,6 @@ impl Shuttle {
             }
         };
 
-        let addr = if run_args.external {
-            std::net::IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))
-        } else {
-            Ipv4Addr::LOCALHOST.into()
-        };
-        let addr = SocketAddr::new(addr, run_args.port);
-
-        println!(
-            "\n{:>12} {} on http://{}",
-            "Starting".bold().green(),
-            self.ctx.project_name(),
-            addr
-        );
-
         let (mut runtime, mut runtime_client) = runtime::start(
             is_wasm,
             runtime::StorageManagerType::WorkingDir(working_directory.to_path_buf()),
@@ -543,7 +547,6 @@ impl Shuttle {
         .await
         .map_err(|err| {
             provisioner_server.abort();
-
             err
         })?;
 
@@ -552,12 +555,12 @@ impl Shuttle {
                 .into_os_string()
                 .into_string()
                 .expect("to convert path to string"),
-            service_name: service_name.clone(),
+            service_name: service_name.to_string(),
             resources: Default::default(),
             secrets,
         });
         trace!("loading service");
-        let _ = runtime_client
+        let response = runtime_client
             .load(load_request)
             .or_else(|err| async {
                 provisioner_server.abort();
@@ -565,7 +568,13 @@ impl Shuttle {
 
                 Err(err)
             })
-            .await?;
+            .await?
+            .into_inner();
+
+        if !response.success {
+            error!(error = response.message, "failed to load your service");
+            exit(1);
+        }
 
         let mut stream = runtime_client
             .subscribe_logs(tonic::Request::new(SubscribeLogsRequest {}))
@@ -584,6 +593,28 @@ impl Shuttle {
                 println!("{log}");
             }
         });
+
+        let resources = response
+            .resources
+            .into_iter()
+            .map(resource::Response::from_bytes)
+            .collect();
+
+        println!("{}", get_resources_table(&resources));
+
+        let addr = if run_args.external {
+            Ipv4Addr::new(0, 0, 0, 0)
+        } else {
+            Ipv4Addr::LOCALHOST
+        };
+        let addr = SocketAddr::new(addr.into(), run_args.port);
+
+        println!(
+            "    {} {} on http://{}\n",
+            "Starting".bold().green(),
+            service_name,
+            addr
+        );
 
         let start_request = StartRequest {
             ip: addr.to_string(),
@@ -657,11 +688,16 @@ impl Shuttle {
         // TODO: Make get_service_summary endpoint wait for a bit and see if it entered Running/Crashed state.
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
-        let service = client.get_service_summary(self.ctx.project_name()).await?;
+        let service = client.get_service(self.ctx.project_name()).await?;
 
         // A deployment will only exist if there is currently one in the running state
         if let Some(ref new_deployment) = service.deployment {
-            println!("{service}");
+            let resources = client
+                .get_service_resources(self.ctx.project_name())
+                .await?;
+            let resources = get_resources_table(&resources);
+
+            println!("{resources}{service}");
 
             Ok(match new_deployment.state {
                 shuttle_common::deployment::State::Crashed => CommandOutcome::DeploymentFailure,

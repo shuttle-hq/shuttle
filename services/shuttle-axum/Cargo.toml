@@ -7,7 +7,6 @@ description = "Service implementation to run an axum webserver on shuttle"
 keywords = ["shuttle-service", "axum"]
 
 [workspace]
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 axum = { version = "0.6.10" }

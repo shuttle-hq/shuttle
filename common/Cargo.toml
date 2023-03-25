@@ -5,16 +5,15 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Common library for the shuttle platform (https://www.shuttle.rs/)"
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 anyhow = { workspace = true, optional = true }
-async-trait = { workspace = true , optional = true }
+async-trait = { workspace = true, optional = true }
 axum = { workspace = true, optional = true }
-bytes = { version = "1.3.0", optional = true }
+bytes = { workspace = true, optional = true }
 chrono = { workspace = true }
 comfy-table = { version = "6.1.3", optional = true }
-crossterm =  { version = "0.25.0", optional = true }
+crossterm = { workspace = true, optional = true }
 headers = { workspace = true, optional = true }
 http = { workspace = true, optional = true }
 http-body = { version = "0.4.5", optional = true }
@@ -27,14 +26,14 @@ opentelemetry-http = { workspace = true, optional = true }
 opentelemetry-otlp = { version = "0.11.0", optional = true }
 pin-project = { workspace = true, optional = true }
 prost-types = { workspace = true, optional = true }
-reqwest = { version = "0.11.13", optional = true }
-rmp-serde = { version = "1.1.1", optional = true }
-rustrict = { version = "0.5.5", optional = true }
+reqwest = { workspace = true, optional = true }
+rmp-serde = { workspace = true, optional = true }
+rustrict = { version = "0.7.4", optional = true }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true }
 strum = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true, optional = true }
-tonic = { version = "0.8.3", optional = true }
+tonic = { workspace = true, optional = true }
 tower = { workspace = true, optional = true }
 tower-http = { workspace = true, optional = true }
 tracing = { workspace = true, features = ["std"] }
@@ -44,22 +43,53 @@ ttl_cache = { workspace = true, optional = true }
 uuid = { workspace = true, features = ["v4", "serde"], optional = true }
 
 [features]
-backend = ["async-trait", "axum/matched-path", "claims", "hyper/client", "opentelemetry-otlp", "thiserror", "tower-http", "tracing-subscriber/env-filter", "tracing-subscriber/fmt", "ttl_cache"]
-claims = ["bytes", "chrono/clock", "headers", "http", "http-body", "jsonwebtoken", "opentelemetry", "opentelemetry-http", "pin-project", "tower", "tracing", "tracing-opentelemetry"]
+backend = [
+    "async-trait",
+    "axum/matched-path",
+    "claims",
+    "hyper/client",
+    "opentelemetry-otlp",
+    "thiserror",
+    "tower-http",
+    "tracing-subscriber/env-filter",
+    "tracing-subscriber/fmt",
+    "ttl_cache",
+]
+claims = [
+    "bytes",
+    "chrono/clock",
+    "headers",
+    "http",
+    "http-body",
+    "jsonwebtoken",
+    "opentelemetry",
+    "opentelemetry-http",
+    "pin-project",
+    "tower",
+    "tracing",
+    "tracing-opentelemetry",
+]
 display = ["chrono/clock", "comfy-table", "crossterm"]
 error = ["prost-types", "thiserror", "uuid"]
 models = ["anyhow", "async-trait", "display", "http", "reqwest", "service"]
 service = ["chrono/serde", "once_cell", "rustrict", "serde/derive", "uuid"]
 tracing = []
-wasm = ["chrono/clock", "http-serde", "http", "rmp-serde", "tracing", "tracing-subscriber"]
+wasm = [
+    "chrono/clock",
+    "http-serde",
+    "http",
+    "rmp-serde",
+    "tracing",
+    "tracing-subscriber",
+]
 
 [dev-dependencies]
 axum = { workspace = true }
-base64 = "0.13.1"
-cap-std = "1.0.2"
+base64 = { workspace = true }
+cap-std = { workspace = true }
 hyper = { workspace = true }
 ring = { workspace = true }
-tokio = { version = "1.22.0", features = ["macros", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 tower = { workspace = true, features = ["util"] }
 tracing-fluent-assertions = "0.3.0"
 tracing-subscriber = { version = "0.3", default-features = false }

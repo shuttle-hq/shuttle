@@ -9,7 +9,7 @@ use reqwest_retry::RetryTransientMiddleware;
 use serde::{Deserialize, Serialize};
 use shuttle_common::models::{deployment, project, secret, service, ToJson};
 use shuttle_common::project::ProjectName;
-use shuttle_common::{ApiKey, ApiUrl, LogItem};
+use shuttle_common::{resource, ApiKey, ApiUrl, LogItem};
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
@@ -75,7 +75,7 @@ impl Client {
         self.delete(path).await
     }
 
-    pub async fn get_service_details(&self, project: &ProjectName) -> Result<service::Detailed> {
+    pub async fn get_service(&self, project: &ProjectName) -> Result<service::Summary> {
         let path = format!(
             "/projects/{}/services/{}",
             project.as_str(),
@@ -85,9 +85,12 @@ impl Client {
         self.get(path).await
     }
 
-    pub async fn get_service_summary(&self, project: &ProjectName) -> Result<service::Summary> {
+    pub async fn get_service_resources(
+        &self,
+        project: &ProjectName,
+    ) -> Result<Vec<resource::Response>> {
         let path = format!(
-            "/projects/{}/services/{}/summary",
+            "/projects/{}/services/{}/resources",
             project.as_str(),
             project.as_str()
         );
@@ -182,6 +185,15 @@ impl Client {
         );
 
         self.ws_get(path).await
+    }
+
+    pub async fn get_deployments(
+        &self,
+        project: &ProjectName,
+    ) -> Result<Vec<deployment::Response>> {
+        let path = format!("/projects/{}/deployments", project.as_str());
+
+        self.get(path).await
     }
 
     pub async fn get_deployment_details(

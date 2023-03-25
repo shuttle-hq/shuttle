@@ -6,12 +6,12 @@ edition = "2021"
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["env"] }
-dirs = "4.0.0"
-reqwest = { version = "0.11.13", features = ["json"] }
+dirs = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-tokio = { version = "1.22.0", features = ["macros", "rt-multi-thread"] }
-toml = "0.5.9"
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+toml = { workspace = true }
 tracing = { workspace = true, features = ["default"] }
 tracing-subscriber = { workspace = true, features = ["default", "env-filter"] }
 

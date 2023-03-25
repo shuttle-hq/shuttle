@@ -414,7 +414,7 @@ impl Shuttle {
         let resources = client
             .get_service_resources(self.ctx.project_name())
             .await?;
-        let table = get_resources_table(&resources);
+        let table = get_resources_table(&resources, self.ctx.project_name().as_str());
 
         println!("{table}");
 
@@ -583,7 +583,7 @@ impl Shuttle {
             .map(resource::Response::from_bytes)
             .collect();
 
-        let resources = get_resources_table(&resources);
+        let resources = get_resources_table(&resources, self.ctx.project_name().as_str());
 
         let mut stream = runtime_client
             .subscribe_logs(tonic::Request::new(SubscribeLogsRequest {}))
@@ -695,7 +695,7 @@ impl Shuttle {
             let resources = client
                 .get_service_resources(self.ctx.project_name())
                 .await?;
-            let resources = get_resources_table(&resources);
+            let resources = get_resources_table(&resources, self.ctx.project_name().as_str());
 
             println!("{resources}{service}");
 

@@ -20,5 +20,5 @@ tracing = { workspace = true }
 workspace = true
 features = ["claims", "error", "service", "wasm"]
 
-[build-dependencies]
+[dev-dependencies]
 tonic-build = { workspace = true }

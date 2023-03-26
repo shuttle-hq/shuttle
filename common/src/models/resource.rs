@@ -78,10 +78,11 @@ fn get_databases_table(databases: &Vec<&Response>, service_name: &str) -> String
     }
 
     format!(
-        r#"These databases are linked to {}
+        r#"These {} are linked to {}
 {table}
 "#,
-        service_name.bold()
+        "databases".bold(),
+        service_name
     )
 }
 
@@ -102,10 +103,11 @@ fn get_secrets_table(secrets: &[&Response], service_name: &str) -> String {
     }
 
     format!(
-        r#"These secrets can be accessed by {}
+        r#"These {} can be accessed by {}
 {table}
 "#,
-        service_name.bold()
+        "secrets".bold(),
+        service_name
     )
 }
 
@@ -115,7 +117,7 @@ fn get_static_folder_table(static_folders: &[&Response], service_name: &str) -> 
     table
         .load_preset(UTF8_FULL)
         .apply_modifier(UTF8_ROUND_CORNERS)
-        .set_header(vec![Cell::new("Static Folders")
+        .set_header(vec![Cell::new("Folders")
             .set_alignment(CellAlignment::Center)
             .add_attribute(Attribute::Bold)]);
 
@@ -132,10 +134,11 @@ fn get_static_folder_table(static_folders: &[&Response], service_name: &str) -> 
     }
 
     format!(
-        r#"These static folders can be accessed by {}
+        r#"These {} can be accessed by {}
 {table}
 "#,
-        service_name.bold()
+        "static folders".bold(),
+        service_name
     )
 }
 
@@ -145,7 +148,7 @@ fn get_persist_table(persist_instances: &[&Response], service_name: &str) -> Str
     table
         .load_preset(UTF8_FULL)
         .apply_modifier(UTF8_ROUND_CORNERS)
-        .set_header(vec![Cell::new("Persist Instances")
+        .set_header(vec![Cell::new("Instances")
             .set_alignment(CellAlignment::Center)
             .add_attribute(Attribute::Bold)]);
 
@@ -154,9 +157,10 @@ fn get_persist_table(persist_instances: &[&Response], service_name: &str) -> Str
     }
 
     format!(
-        r#"These instances are linked to {}
+        r#"These {} are linked to {}
 {table}
 "#,
-        service_name.bold()
+        "persist instances".bold(),
+        service_name
     )
 }

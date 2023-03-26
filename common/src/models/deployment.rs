@@ -83,10 +83,11 @@ pub fn get_deployments_table(deployments: &Vec<Response>, service_name: &str) ->
 
         format!(
             r#"
-Most recent deployments for {}
+Most recent {} for {}
 {}
 "#,
-            service_name.bold(),
+            "deployments".bold(),
+            service_name,
             table,
         )
     }

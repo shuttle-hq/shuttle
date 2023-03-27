@@ -43,6 +43,24 @@ impl Client {
         self.post(&path, Some(credentials)).await
     }
 
+    pub async fn acme_renew_custom_domain_certificate(
+        &self,
+        fqdn: &str,
+        project_name: &ProjectName,
+        credentials: &serde_json::Value,
+    ) -> Result<String> {
+        let path = format!("/admin/acme/renew/{project_name}/{fqdn}");
+        self.post(&path, Some(credentials)).await
+    }
+
+    pub async fn acme_renew_gateway_certificate(
+        &self,
+        credentials: &serde_json::Value,
+    ) -> Result<String> {
+        let path = "/admin/acme/gateway/renew".to_string();
+        self.post(&path, Some(credentials)).await
+    }
+
     pub async fn get_projects(&self) -> Result<Vec<project::AdminResponse>> {
         self.get("/admin/projects").await
     }

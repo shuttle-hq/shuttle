@@ -105,7 +105,10 @@ cargo shuttle init --rocket my-rocket-app
 This should generate the following dependency in `Cargo.toml`:
 
 ```toml
-shuttle-service = { version = "0.12.0", features = ["web-rocket"] }
+rocket = "0.5.0-rc.2"
+shuttle-rocket = { version = "0.13.0" }
+shuttle-runtime = { version = "0.13.0" }
+tokio = { version = "1.26.0" }
 ```
 
 The following boilerplate code should be generated into `src/lib.rs`:
@@ -119,11 +122,11 @@ fn index() -> &'static str {
     "Hello, world!"
 }
 
-#[shuttle_service::main]
-async fn rocket() -> shuttle_service::ShuttleRocket {
+#[shuttle_runtime::main]
+async fn rocket() -> shuttle_rocket::ShuttleRocket {
     let rocket = rocket::build().mount("/hello", routes![index]);
 
-    Ok(rocket)
+    Ok(rocket.into())
 }
 ```
 

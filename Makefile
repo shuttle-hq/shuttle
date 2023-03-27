@@ -22,7 +22,7 @@ BUILDX_FLAGS=$(BUILDX_OP) $(PLATFORM_FLAGS) $(CACHE_FLAGS)
 
 # the rust version used by our containers, and as an override for our deployers
 # ensuring all user crates are compiled with the same rustc toolchain
-RUSTUP_TOOLCHAIN=1.65.0
+RUSTUP_TOOLCHAIN=1.68.0
 
 TAG?=$(shell git describe --tags)
 BACKEND_TAG?=$(TAG)
@@ -63,6 +63,12 @@ CARGO_PROFILE=debug
 RUST_LOG?=shuttle=trace,debug
 endif
 
+ARCH=$(shell uname -m)
+PROTOC_ARCH=$(ARCH)
+ifeq ($(ARCH), arm64)
+PROTOC_ARCH=aarch_64
+endif
+
 POSTGRES_EXTRA_PATH?=./extras/postgres
 POSTGRES_TAG?=14
 
@@ -90,11 +96,11 @@ images: shuttle-provisioner shuttle-deployer shuttle-gateway shuttle-auth postgr
 
 postgres:
 	docker buildx build \
-	       --build-arg POSTGRES_TAG=$(POSTGRES_TAG) \
-	       --tag $(CONTAINER_REGISTRY)/postgres:$(POSTGRES_TAG) \
-	       $(BUILDX_FLAGS) \
-	       -f $(POSTGRES_EXTRA_PATH)/Containerfile \
-	       $(POSTGRES_EXTRA_PATH)
+			--build-arg POSTGRES_TAG=$(POSTGRES_TAG) \
+			--tag $(CONTAINER_REGISTRY)/postgres:$(POSTGRES_TAG) \
+			$(BUILDX_FLAGS) \
+			-f $(POSTGRES_EXTRA_PATH)/Containerfile \
+			$(POSTGRES_EXTRA_PATH)
 
 panamax:
 	if [ $(USE_PANAMAX) = "enable" ]; then \
@@ -134,16 +140,17 @@ down: docker-compose.rendered.yml
 
 shuttle-%: ${SRC} Cargo.lock
 	docker buildx build \
-	       --build-arg folder=$(*) \
-           --build-arg prepare_args=$(PREPARE_ARGS) \
-	       --build-arg RUSTUP_TOOLCHAIN=$(RUSTUP_TOOLCHAIN) \
-		   --build-arg CARGO_PROFILE=$(CARGO_PROFILE) \
-	       --tag $(CONTAINER_REGISTRY)/$(*):$(COMMIT_SHA) \
-	       --tag $(CONTAINER_REGISTRY)/$(*):$(TAG) \
-	       --tag $(CONTAINER_REGISTRY)/$(*):latest \
-	       $(BUILDX_FLAGS) \
-	       -f Containerfile \
-	       .
+			--build-arg PROTOC_ARCH=$(PROTOC_ARCH) \
+			--build-arg folder=$(*) \
+			--build-arg prepare_args=$(PREPARE_ARGS) \
+			--build-arg RUSTUP_TOOLCHAIN=$(RUSTUP_TOOLCHAIN) \
+		  	--build-arg CARGO_PROFILE=$(CARGO_PROFILE) \
+			--tag $(CONTAINER_REGISTRY)/$(*):$(COMMIT_SHA) \
+			--tag $(CONTAINER_REGISTRY)/$(*):$(TAG) \
+			--tag $(CONTAINER_REGISTRY)/$(*):latest \
+			$(BUILDX_FLAGS) \
+			-f Containerfile \
+			.
 
 # Bunch of targets to make bumping the shuttle version easier
 #

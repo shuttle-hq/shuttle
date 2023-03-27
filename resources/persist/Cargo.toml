@@ -1,16 +1,15 @@
 [package]
 name = "shuttle-persist"
-version = "0.12.0"
+version = "0.13.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Plugin for persist objects"
 keywords = ["shuttle-service", "persistence"]
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 async-trait = "0.1.56"
 bincode = "1.2.1"
 serde = { version = "1.0.0", features = ["derive"] }
-shuttle-common = { path = "../../common", version = "0.12.0", default-features = false }
-shuttle-service = { path = "../../service", version = "0.12.0", default-features = false }
+shuttle-common = { path = "../../common", version = "0.13.0", default-features = false }
+shuttle-service = { path = "../../service", version = "0.13.0", default-features = false }
 thiserror = "1.0.32"

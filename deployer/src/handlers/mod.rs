@@ -55,8 +55,12 @@ pub async fn make_router(
                 .delete(stop_service.layer(ScopedLayer::new(vec![Scope::ServiceCreate]))),
         )
         .route(
-            "/projects/:project_name/services/:service_name/summary",
-            get(get_service_summary).layer(ScopedLayer::new(vec![Scope::Service])),
+            "/projects/:project_name/services/:service_name/resources",
+            get(get_service_resources).layer(ScopedLayer::new(vec![Scope::Resources])),
+        )
+        .route(
+            "/projects/:project_name/deployments",
+            get(get_deployments).layer(ScopedLayer::new(vec![Scope::Service])),
         )
         .route(
             "/projects/:project_name/deployments/:deployment_id",
@@ -123,46 +127,8 @@ async fn list_services(
     Ok(Json(services))
 }
 
-#[instrument(skip(persistence))]
-async fn get_service(
-    Extension(persistence): Extension<Persistence>,
-    Path((project_name, service_name)): Path<(String, String)>,
-) -> Result<Json<shuttle_common::models::service::Detailed>> {
-    if let Some(service) = persistence.get_service_by_name(&service_name).await? {
-        let deployments = persistence
-            .get_deployments(&service.id)
-            .await?
-            .into_iter()
-            .map(Into::into)
-            .collect();
-        let resources = persistence
-            .get_resources(&service.id)
-            .await?
-            .into_iter()
-            .map(Into::into)
-            .collect();
-        let secrets = persistence
-            .get_secrets(&service.id)
-            .await?
-            .into_iter()
-            .map(Into::into)
-            .collect();
-
-        let response = shuttle_common::models::service::Detailed {
-            name: service.name,
-            deployments,
-            resources,
-            secrets,
-        };
-
-        Ok(Json(response))
-    } else {
-        Err(Error::NotFound)
-    }
-}
-
 #[instrument(skip_all, fields(%project_name, %service_name))]
-async fn get_service_summary(
+async fn get_service(
     Extension(persistence): Extension<Persistence>,
     Extension(proxy_fqdn): Extension<FQDN>,
     Path((project_name, service_name)): Path<(String, String)>,
@@ -172,6 +138,25 @@ async fn get_service_summary(
             .get_active_deployment(&service.id)
             .await?
             .map(Into::into);
+
+        let response = shuttle_common::models::service::Summary {
+            uri: format!("https://{proxy_fqdn}"),
+            name: service.name,
+            deployment,
+        };
+
+        Ok(Json(response))
+    } else {
+        Err(Error::NotFound)
+    }
+}
+
+#[instrument(skip_all, fields(%project_name, %service_name))]
+async fn get_service_resources(
+    Extension(persistence): Extension<Persistence>,
+    Path((project_name, service_name)): Path<(String, String)>,
+) -> Result<Json<Vec<shuttle_common::resource::Response>>> {
+    if let Some(service) = persistence.get_service_by_name(&service_name).await? {
         let resources = persistence
             .get_resources(&service.id)
             .await?
@@ -179,14 +164,7 @@ async fn get_service_summary(
             .map(Into::into)
             .collect();
 
-        let response = shuttle_common::models::service::Summary {
-            uri: format!("https://{proxy_fqdn}"),
-            name: service.name,
-            deployment,
-            resources,
-        };
-
-        Ok(Json(response))
+        Ok(Json(resources))
     } else {
         Err(Error::NotFound)
     }
@@ -254,21 +232,32 @@ async fn stop_service(
             return Err(Error::NotFound);
         }
 
-        let resources = persistence
-            .get_resources(&service.id)
+        let response = shuttle_common::models::service::Summary {
+            name: service.name,
+            deployment: running_deployment.map(Into::into),
+            uri: format!("https://{proxy_fqdn}"),
+        };
+
+        Ok(Json(response))
+    } else {
+        Err(Error::NotFound)
+    }
+}
+
+#[instrument(skip(persistence))]
+async fn get_deployments(
+    Extension(persistence): Extension<Persistence>,
+    Path(project_name): Path<String>,
+) -> Result<Json<Vec<shuttle_common::models::deployment::Response>>> {
+    if let Some(service) = persistence.get_service_by_name(&project_name).await? {
+        let deployments = persistence
+            .get_deployments(&service.id)
             .await?
             .into_iter()
             .map(Into::into)
             .collect();
 
-        let response = shuttle_common::models::service::Summary {
-            name: service.name,
-            deployment: running_deployment.map(Into::into),
-            resources,
-            uri: format!("https://{proxy_fqdn}"),
-        };
-
-        Ok(Json(response))
+        Ok(Json(deployments))
     } else {
         Err(Error::NotFound)
     }

@@ -42,15 +42,30 @@ Shuttle is built for productivity, reliability and performance:
 
 ## Getting Started
 
-Run the following command to install shuttle:
+To run a shuttle project, you need to install protoc, check out the [protoc installation guide](https://docs.shuttle.rs/support/installing-protoc) in our docs.
 
-```bash
+The `cargo-shuttle` CLI can be installed with a pre-built binary or from source with cargo.
+
+Shuttle provides pre-built binaries of the `cargo-shuttle` CLI with every release
+for most platforms, they can be found on [our GitHub](https://github.com/shuttle-hq/shuttle/releases/latest).
+
+Our binaries can also be installed using [cargo-binstall](https://github.com/cargo-bins/cargo-binstall),
+which will automatically install the correct target for your system.
+To install with `cargo-binstall`, run:
+
+```sh
+cargo binstall cargo-shuttle
+```
+
+Although a bit slower, you can also install directly with cargo:
+
+```sh
 cargo install cargo-shuttle
 ```
 
-And then login:
+After installing, log in with:
 
-```bash
+```sh
 cargo shuttle login
 ```
 
@@ -63,8 +78,8 @@ cargo shuttle init --axum hello-world
 And to deploy it, write:
 
 ```bash
-cargo shuttle project new
-cargo shuttle project status // until the project is "ready"
+cd hello-world
+cargo shuttle project new  # Only needed if project has not already been created during init
 cargo shuttle deploy
 ```
 

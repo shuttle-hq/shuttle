@@ -76,6 +76,14 @@ pub enum Scope {
     /// Create a custom domain,
     CustomDomainCreate,
 
+    /// Renew the certificate of a custom domain.
+    CustomDomainCertificateRenew,
+
+    /// Request renewal of the gateway certificate.
+    /// Note: this step should be completed manually in terms
+    /// of DNS-01 challenge completion.
+    GatewayCertificateRenew,
+
     /// Admin level scope to internals
     Admin,
 }

@@ -599,10 +599,6 @@ impl GatewayService {
         buf.extend(chain.as_bytes());
         buf.extend(private_key.as_bytes());
         let certs = ChainAndPrivateKey::parse_pem(Cursor::new(buf)).expect("Malformed PEM buffer.");
-        resolver
-            .serve_default_der(certs.clone())
-            .await
-            .expect("Failed to serve the default certs");
 
         certs
     }
@@ -657,6 +653,10 @@ impl GatewayService {
             let certs = self
                 .create_certificate(acme, resolver.clone(), account.credentials())
                 .await;
+            resolver
+                .serve_default_der(certs.clone())
+                .await
+                .expect("Failed to serve the default certs");
             certs.save_pem(&tls_path).unwrap();
         }
     }

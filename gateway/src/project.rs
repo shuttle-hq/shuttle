@@ -24,9 +24,9 @@ use shuttle_common::models::project::IDLE_MINUTES;
 use tokio::time::{sleep, timeout};
 use tracing::{debug, error, info, instrument};
 
+use crate::service::ContainerSettings;
 use crate::{
-    ContainerSettings, DockerContext, EndState, Error, ErrorKind, IntoTryState, ProjectName,
-    Refresh, State, TryState,
+    DockerContext, EndState, Error, ErrorKind, IntoTryState, ProjectName, Refresh, State, TryState,
 };
 
 macro_rules! safe_unwrap {

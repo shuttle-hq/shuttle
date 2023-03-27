@@ -23,12 +23,14 @@ pub struct Resource {
     pub service_id: Uuid,
     pub r#type: Type,
     pub data: serde_json::Value,
+    pub config: serde_json::Value,
 }
 
 impl From<Resource> for shuttle_common::resource::Response {
     fn from(resource: Resource) -> Self {
         shuttle_common::resource::Response {
             r#type: resource.r#type.into(),
+            config: resource.config,
             data: resource.data,
         }
     }
@@ -37,12 +39,18 @@ impl From<Resource> for shuttle_common::resource::Response {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Type {
     Database(DatabaseType),
+    Secrets,
+    StaticFolder,
+    Persist,
 }
 
 impl From<Type> for shuttle_common::resource::Type {
     fn from(r#type: Type) -> Self {
         match r#type {
             Type::Database(r#type) => Self::Database(r#type.into()),
+            Type::Secrets => Self::Secrets,
+            Type::StaticFolder => Self::StaticFolder,
+            Type::Persist => Self::Persist,
         }
     }
 }
@@ -51,6 +59,9 @@ impl From<shuttle_common::resource::Type> for Type {
     fn from(r#type: shuttle_common::resource::Type) -> Self {
         match r#type {
             shuttle_common::resource::Type::Database(r#type) => Self::Database(r#type.into()),
+            shuttle_common::resource::Type::Secrets => Self::Secrets,
+            shuttle_common::resource::Type::StaticFolder => Self::StaticFolder,
+            shuttle_common::resource::Type::Persist => Self::Persist,
         }
     }
 }
@@ -59,6 +70,9 @@ impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Type::Database(db_type) => write!(f, "database::{db_type}"),
+            Type::Secrets => write!(f, "secrets"),
+            Type::StaticFolder => write!(f, "static_folder"),
+            Type::Persist => write!(f, "persist"),
         }
     }
 }
@@ -73,7 +87,12 @@ impl FromStr for Type {
                 _ => Err(format!("'{prefix}' is an unknown resource type")),
             }
         } else {
-            Err(format!("'{s}' is an unknown resource type"))
+            match s {
+                "secrets" => Ok(Self::Secrets),
+                "static_folder" => Ok(Self::StaticFolder),
+                "persist" => Ok(Self::Persist),
+                _ => Err(format!("'{s}' is an unknown resource type")),
+            }
         }
     }
 }
@@ -117,6 +136,9 @@ mod tests {
             Type::Database(database::Type::AwsRds(database::AwsRdsType::MariaDB)),
             Type::Database(database::Type::Shared(database::SharedType::Postgres)),
             Type::Database(database::Type::Shared(database::SharedType::MongoDb)),
+            Type::Secrets,
+            Type::StaticFolder,
+            Type::Persist,
         ];
 
         for input in inputs {

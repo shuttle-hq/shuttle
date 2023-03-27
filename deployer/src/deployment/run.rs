@@ -324,6 +324,7 @@ async fn load(
                 let resource = Resource {
                     service_id,
                     r#type: resource.r#type.into(),
+                    config: resource.config,
                     data: resource.data,
                 };
                 resource_manager

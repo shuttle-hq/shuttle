@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use comfy_table::{
-    modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, Cell, CellAlignment, ContentArrangement,
-    Table,
+    modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, Attribute, Cell, CellAlignment,
+    ContentArrangement, Table,
 };
 use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
@@ -22,8 +22,12 @@ pub fn get_table(secrets: &Vec<Response>) -> String {
             .apply_modifier(UTF8_ROUND_CORNERS)
             .set_content_arrangement(ContentArrangement::DynamicFullWidth)
             .set_header(vec![
-                Cell::new("Key").set_alignment(CellAlignment::Center),
-                Cell::new("Last updated").set_alignment(CellAlignment::Center),
+                Cell::new("Key")
+                    .set_alignment(CellAlignment::Center)
+                    .add_attribute(Attribute::Bold),
+                Cell::new("Last updated")
+                    .set_alignment(CellAlignment::Center)
+                    .add_attribute(Attribute::Bold),
             ]);
 
         for resource in secrets.iter() {

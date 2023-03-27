@@ -411,7 +411,7 @@ impl Shuttle {
         let resources = client
             .get_service_resources(self.ctx.project_name())
             .await?;
-        let table = get_resources_table(&resources);
+        let table = get_resources_table(&resources, self.ctx.project_name().as_str());
 
         println!("{table}");
 
@@ -691,7 +691,7 @@ impl Shuttle {
             let resources = client
                 .get_service_resources(self.ctx.project_name())
                 .await?;
-            let resources = get_resources_table(&resources);
+            let resources = get_resources_table(&resources, self.ctx.project_name().as_str());
 
             println!("{resources}{service}");
 

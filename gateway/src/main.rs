@@ -76,8 +76,7 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
             .and_then(task::refresh())
             .send(&sender)
             .await
-            .ok()
-            .unwrap();
+            .expect("failed sending the task");
     }
 
     let worker_handle = tokio::spawn(

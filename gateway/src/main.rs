@@ -64,6 +64,13 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
 
     let sender = worker.sender();
 
+    let worker_handle = tokio::spawn(
+        worker
+            .start()
+            .map_ok(|_| info!("worker terminated successfully"))
+            .map_err(|err| error!("worker error: {}", err)),
+    );
+
     for (project_name, _) in gateway
         .iter_projects()
         .await
@@ -76,15 +83,8 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
             .and_then(task::refresh())
             .send(&sender)
             .await
-            .expect("failed sending the task");
+            .expect("to refresh old projects");
     }
-
-    let worker_handle = tokio::spawn(
-        worker
-            .start()
-            .map_ok(|_| info!("worker terminated successfully"))
-            .map_err(|err| error!("worker error: {}", err)),
-    );
 
     // Every 60 secs go over all `::Ready` projects and check their health.
     let ambulance_handle = tokio::spawn({

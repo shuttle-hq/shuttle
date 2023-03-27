@@ -8,6 +8,7 @@ keywords = ["shuttle-service", "static-folder"]
 
 [dependencies]
 async-trait = "0.1.56"
+dunce = "1.0.3"
 fs_extra = "1.3.0"
 serde = { version = "1.0.148", features = ["derive"] }
 shuttle-service = { path = "../../service", version = "0.13.0", default-features = false }

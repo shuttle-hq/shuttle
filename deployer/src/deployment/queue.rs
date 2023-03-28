@@ -1,9 +1,9 @@
 use super::deploy_layer::{Log, LogRecorder, LogType};
 use super::gateway_client::BuildQueueClient;
-use super::storage_manager::StorageManager;
 use super::{Built, QueueReceiver, RunSender, State};
 use crate::error::{Error, Result, TestError};
-use crate::persistence::{LogLevel, SecretRecorder};
+use crate::persistence::{DeploymentUpdater, LogLevel, SecretRecorder};
+use shuttle_common::storage_manager::{ArtifactsStorageManager, StorageManager};
 
 use cargo::util::interning::InternedString;
 use cargo_metadata::Message;
@@ -11,8 +11,8 @@ use chrono::Utc;
 use crossbeam_channel::Sender;
 use opentelemetry::global;
 use serde_json::json;
-use shuttle_common::backends::auth::Claim;
-use shuttle_service::loader::{build_crate, get_config};
+use shuttle_common::claims::Claim;
+use shuttle_service::builder::{build_crate, get_config, Runtime};
 use tokio::time::{sleep, timeout};
 use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -35,9 +35,10 @@ use tokio::fs;
 pub async fn task(
     mut recv: QueueReceiver,
     run_send: RunSender,
+    deployment_updater: impl DeploymentUpdater,
     log_recorder: impl LogRecorder,
     secret_recorder: impl SecretRecorder,
-    storage_manager: StorageManager,
+    storage_manager: ArtifactsStorageManager,
     queue_client: impl BuildQueueClient,
 ) {
     info!("Queue task started");
@@ -47,6 +48,7 @@ pub async fn task(
 
         info!("Queued deployment at the front of the queue: {id}");
 
+        let deployment_updater = deployment_updater.clone();
         let run_send_cloned = run_send.clone();
         let log_recorder = log_recorder.clone();
         let secret_recorder = secret_recorder.clone();
@@ -72,7 +74,12 @@ pub async fn task(
                 }
 
                 match queued
-                    .handle(storage_manager, log_recorder, secret_recorder)
+                    .handle(
+                        storage_manager,
+                        deployment_updater,
+                        log_recorder,
+                        secret_recorder,
+                    )
                     .await
                 {
                     Ok(built) => {
@@ -127,7 +134,7 @@ async fn remove_from_queue(queue_client: impl BuildQueueClient, id: Uuid) {
     }
 }
 
-#[instrument(fields(id = %built.id, state = %State::Built))]
+#[instrument(skip(run_send), fields(id = %built.id, state = %State::Built))]
 async fn promote_to_run(mut built: Built, run_send: RunSender) {
     let cx = Span::current().context();
 
@@ -151,10 +158,11 @@ pub struct Queued {
 }
 
 impl Queued {
-    #[instrument(skip(self, storage_manager, log_recorder, secret_recorder), fields(id = %self.id, state = %State::Building))]
+    #[instrument(skip(self, storage_manager, deployment_updater, log_recorder, secret_recorder), fields(id = %self.id, state = %State::Building))]
     async fn handle(
         self,
-        storage_manager: StorageManager,
+        storage_manager: ArtifactsStorageManager,
+        deployment_updater: impl DeploymentUpdater,
         log_recorder: impl LogRecorder,
         secret_recorder: impl SecretRecorder,
     ) -> Result<Built> {
@@ -187,7 +195,6 @@ impl Queued {
                         target: String::new(),
                         fields: json!({ "build_line": line }),
                         r#type: LogType::Event,
-                        address: None,
                     },
                     message => Log {
                         id,
@@ -199,7 +206,6 @@ impl Queued {
                         target: String::new(),
                         fields: serde_json::to_value(message).unwrap(),
                         r#type: LogType::Event,
-                        address: None,
                     },
                 };
                 log_recorder.record(log);
@@ -207,7 +213,7 @@ impl Queued {
         });
 
         let project_path = project_path.canonicalize()?;
-        let so_path = build_deployment(self.id, &project_path, tx.clone()).await?;
+        let runtime = build_deployment(&project_path, tx.clone()).await?;
 
         if self.will_run_tests {
             info!(
@@ -218,15 +224,23 @@ impl Queued {
             run_pre_deploy_tests(&project_path, tx).await?;
         }
 
-        info!("Moving built library");
+        info!("Moving built executable");
 
-        store_lib(&storage_manager, so_path, &self.id).await?;
+        store_executable(&storage_manager, &runtime, &self.id).await?;
+
+        let is_next = matches!(runtime, Runtime::Next(_));
+
+        deployment_updater
+            .set_is_next(&id, is_next)
+            .await
+            .map_err(|e| Error::Build(Box::new(e)))?;
 
         let built = Built {
             id: self.id,
             service_name: self.service_name,
             service_id: self.service_id,
             tracing_context: Default::default(),
+            is_next,
             claim: self.claim,
         };
 
@@ -315,17 +329,12 @@ async fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<
 
 #[instrument(skip(project_path, tx))]
 async fn build_deployment(
-    deployment_id: Uuid,
     project_path: &Path,
     tx: crossbeam_channel::Sender<Message>,
-) -> Result<PathBuf> {
-    let so_path = build_crate(deployment_id, project_path, true, tx)
+) -> Result<Runtime> {
+    build_crate(project_path, true, tx)
         .await
-        .map_err(|e| Error::Build(e.into()))?;
-
-    trace!(?so_path, "got so path");
-
-    Ok(so_path)
+        .map_err(|e| Error::Build(e.into()))
 }
 
 #[instrument(skip(project_path, tx))]
@@ -379,24 +388,25 @@ async fn run_pre_deploy_tests(
         no_fail_fast: false,
     };
 
-    let test_failures = cargo::ops::run_tests(&ws, &opts, &[])?;
-
-    match test_failures {
-        Some(failures) => Err(failures.into()),
-        None => Ok(()),
-    }
+    cargo::ops::run_tests(&ws, &opts, &[]).map_err(TestError::Failed)
 }
 
-/// Store 'so' file in the libs folder
-#[instrument(skip(storage_manager, so_path, id))]
-async fn store_lib(
-    storage_manager: &StorageManager,
-    so_path: impl AsRef<Path>,
+/// This will store the path to the executable for each runtime, which will be the users project with
+/// an embedded runtime for alpha, and a .wasm file for shuttle-next.
+#[instrument(skip(storage_manager, runtime, id))]
+async fn store_executable(
+    storage_manager: &ArtifactsStorageManager,
+    runtime: &Runtime,
     id: &Uuid,
 ) -> Result<()> {
-    let new_so_path = storage_manager.deployment_library_path(id)?;
+    let executable_path = match runtime {
+        Runtime::Next(path) => path,
+        Runtime::Alpha(path) => path,
+    };
 
-    fs::rename(so_path, new_so_path).await?;
+    let new_executable_path = storage_manager.deployment_executable_path(id)?;
+
+    fs::rename(executable_path, new_executable_path).await?;
 
     Ok(())
 }
@@ -405,11 +415,13 @@ async fn store_lib(
 mod tests {
     use std::{collections::BTreeMap, fs::File, io::Write, path::Path};
 
+    use shuttle_common::storage_manager::ArtifactsStorageManager;
+    use shuttle_service::builder::Runtime;
     use tempfile::Builder;
     use tokio::fs;
     use uuid::Uuid;
 
-    use crate::{deployment::storage_manager::StorageManager, error::TestError};
+    use crate::error::TestError;
 
     #[tokio::test]
     async fn extract_tar_gz_data() {
@@ -534,29 +546,34 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
     }
 
     #[tokio::test]
-    async fn store_lib() {
-        let libs_dir = Builder::new().prefix("lib-store").tempdir().unwrap();
-        let libs_p = libs_dir.path();
-        let storage_manager = StorageManager::new(libs_p.to_path_buf());
+    async fn store_executable() {
+        let executables_dir = Builder::new().prefix("executable-store").tempdir().unwrap();
+        let executables_p = executables_dir.path();
+        let storage_manager = ArtifactsStorageManager::new(executables_p.to_path_buf());
 
         let build_p = storage_manager.builds_path().unwrap();
 
-        let so_path = build_p.join("xyz.so");
+        let executable_path = build_p.join("xyz");
+        let runtime = Runtime::Alpha(executable_path.clone());
         let id = Uuid::new_v4();
 
-        fs::write(&so_path, "barfoo").await.unwrap();
+        fs::write(&executable_path, "barfoo").await.unwrap();
 
-        super::store_lib(&storage_manager, &so_path, &id)
+        super::store_executable(&storage_manager, &runtime, &id)
             .await
             .unwrap();
 
-        // Old '.so' file gone?
-        assert!(!so_path.exists());
+        // Old executable file gone?
+        assert!(!executable_path.exists());
 
         assert_eq!(
-            fs::read_to_string(libs_p.join("shuttle-libs").join(id.to_string()))
-                .await
-                .unwrap(),
+            fs::read_to_string(
+                executables_p
+                    .join("shuttle-executables")
+                    .join(id.to_string())
+            )
+            .await
+            .unwrap(),
             "barfoo"
         );
     }

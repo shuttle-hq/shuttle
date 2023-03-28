@@ -1,0 +1,61 @@
+name: Bug Report
+description: File a bug report
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report!
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Also tell us, what did you expect to happen?
+      placeholder: Tell us what you see!
+      value: "A bug happened!"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: What version of `cargo-shuttle` are you running (`cargo shuttle --version`)?
+      placeholder: "v0.11.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Which operating systems are you seeing the problem on?
+      multiple: true
+      options:
+        - macOS
+        - Windows
+        - Linux
+    validations:
+      required: true
+  - type: dropdown
+    id: architecture
+    attributes:
+      label: Which CPU architectures are you seeing the problem on?
+      multiple: true
+      options:
+        - x86_64
+        - ARM64
+        - Other
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: Please copy and paste any relevant log output. This will be automatically formatted into code, so no need for backticks.
+      render: sh
+  - type: checkboxes
+    id: duplicate
+    attributes:
+      label: Duplicate declaration
+      description: Please confirm that you are not creating a duplicate issue.
+      options:
+        - label: I have searched the issues and there are none like this.
+          required: true
+

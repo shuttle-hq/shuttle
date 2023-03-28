@@ -14,6 +14,7 @@ use axum::Json;
 use bollard::Docker;
 use futures::prelude::*;
 use serde::{Deserialize, Deserializer, Serialize};
+use service::ContainerSettings;
 use shuttle_common::models::error::{ApiError, ErrorKind};
 use tokio::sync::mpsc::error::SendError;
 use tracing::error;
@@ -28,8 +29,6 @@ pub mod service;
 pub mod task;
 pub mod tls;
 pub mod worker;
-
-use crate::service::{ContainerSettings, GatewayService};
 
 /// Server-side errors that do not have to do with the user runtime
 /// should be [`Error`]s.
@@ -344,7 +343,8 @@ pub mod tests {
     use jsonwebtoken::EncodingKey;
     use rand::distributions::{Alphanumeric, DistString, Distribution, Uniform};
     use ring::signature::{self, Ed25519KeyPair, KeyPair};
-    use shuttle_common::backends::auth::{Claim, ConvertResponse, Scope};
+    use shuttle_common::backends::auth::ConvertResponse;
+    use shuttle_common::claims::{Claim, Scope};
     use shuttle_common::models::project;
     use sqlx::SqlitePool;
     use tokio::sync::mpsc::channel;
@@ -750,7 +750,7 @@ pub mod tests {
     #[tokio::test]
     async fn end_to_end() {
         let world = World::new().await;
-        let service = Arc::new(GatewayService::init(world.args(), world.pool()).await);
+        let service = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await);
         let worker = Worker::new();
 
         let (log_out, mut log_in) = channel(256);
@@ -770,13 +770,14 @@ pub mod tests {
         let api_client = world.client(world.args.control);
         let api = ApiBuilder::new()
             .with_service(Arc::clone(&service))
-            .with_sender(log_out)
+            .with_sender(log_out.clone())
             .with_default_routes()
             .with_auth_service(world.context().auth_uri)
             .binding_to(world.args.control);
 
         let user = UserServiceBuilder::new()
             .with_service(Arc::clone(&service))
+            .with_task_sender(log_out)
             .with_public(world.fqdn())
             .with_user_proxy_binding_to(world.args.user);
 
@@ -800,7 +801,8 @@ pub mod tests {
             .request(
                 Request::post("/projects/matrix")
                     .with_header(&authorization)
-                    .body(Body::empty())
+                    .header("Content-Type", "application/json")
+                    .body("{\"idle_minutes\": 3}".into())
                     .unwrap(),
             )
             .map_ok(|resp| {

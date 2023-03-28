@@ -1,4 +1,7 @@
+use std::io::Cursor;
 use std::net::Ipv4Addr;
+use std::ops::Sub;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::body::Body;
@@ -6,11 +9,12 @@ use axum::headers::HeaderMapExt;
 use axum::http::Request;
 use axum::response::Response;
 use bollard::{Docker, API_DEFAULT_VERSION};
-use fqdn::Fqdn;
+use fqdn::{Fqdn, FQDN};
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
 use hyper::Client;
 use hyper_reverse_proxy::ReverseProxy;
+use instant_acme::{AccountCredentials, ChallengeType};
 use once_cell::sync::Lazy;
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
@@ -20,14 +24,19 @@ use sqlx::migrate::Migrator;
 use sqlx::sqlite::SqlitePool;
 use sqlx::types::Json as SqlxJson;
 use sqlx::{query, Error as SqlxError, Row};
-use tracing::{debug, Span};
+use tokio::sync::mpsc::Sender;
+use tracing::{debug, trace, warn, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
+use x509_parser::nom::AsBytes;
+use x509_parser::parse_x509_certificate;
+use x509_parser::prelude::parse_x509_pem;
+use x509_parser::time::ASN1Time;
 
-use crate::acme::CustomDomain;
+use crate::acme::{AccountWrapper, AcmeClient, CustomDomain};
 use crate::args::ContextArgs;
-use crate::auth::ScopedUser;
 use crate::project::{Project, ProjectCreating};
-use crate::task::{BoxedTask, TaskBuilder};
+use crate::task::{self, BoxedTask, TaskBuilder};
+use crate::tls::{ChainAndPrivateKey, GatewayCertResolver, RENEWAL_VALIDITY_THRESHOLD_IN_DAYS};
 use crate::worker::TaskRouter;
 use crate::{AccountName, DockerContext, Error, ErrorKind, ProjectDetails, ProjectName};
 
@@ -177,6 +186,7 @@ pub struct GatewayService {
     provider: GatewayContextProvider,
     db: SqlitePool,
     task_router: TaskRouter<BoxedTask>,
+    state_location: PathBuf,
 }
 
 impl GatewayService {
@@ -184,7 +194,7 @@ impl GatewayService {
     ///
     /// * `args` - The [`Args`] with which the service was
     /// started. Will be passed as [`Context`] to workers and state.
-    pub async fn init(args: ContextArgs, db: SqlitePool) -> Self {
+    pub async fn init(args: ContextArgs, db: SqlitePool, state_location: PathBuf) -> Self {
         let docker = Docker::connect_with_unix(&args.docker_host, 60, API_DEFAULT_VERSION).unwrap();
 
         let container_settings = ContainerSettings::builder().from_args(&args).await;
@@ -197,18 +207,18 @@ impl GatewayService {
             provider,
             db,
             task_router,
+            state_location,
         }
     }
 
     pub async fn route(
         &self,
-        scoped_user: &ScopedUser,
+        project: &Project,
+        project_name: &ProjectName,
+        account_name: &AccountName,
         mut req: Request<Body>,
     ) -> Result<Response<Body>, Error> {
-        let project_name = &scoped_user.scope;
-        let target_ip = self
-            .find_project(project_name)
-            .await?
+        let target_ip = project
             .target_ip()?
             .ok_or_else(|| Error::from_kind(ErrorKind::ProjectNotReady))?;
 
@@ -219,7 +229,7 @@ impl GatewayService {
         let control_key = self.control_key_from_project_name(project_name).await?;
 
         let headers = req.headers_mut();
-        headers.typed_insert(XShuttleAccountName(scoped_user.user.name.to_string()));
+        headers.typed_insert(XShuttleAccountName(account_name.to_string()));
         headers.typed_insert(XShuttleAdminSecret(control_key));
 
         let cx = Span::current().context();
@@ -362,6 +372,7 @@ impl GatewayService {
         project_name: ProjectName,
         account_name: AccountName,
         is_admin: bool,
+        idle_minutes: u64,
     ) -> Result<Project, Error> {
         if let Some(row) = query(
             r#"
@@ -381,8 +392,10 @@ impl GatewayService {
             let project = row.get::<SqlxJson<Project>, _>("project_state").0;
             if project.is_destroyed() {
                 // But is in `::Destroyed` state, recreate it
-                let mut creating =
-                    ProjectCreating::new_with_random_initial_key(project_name.clone());
+                let mut creating = ProjectCreating::new_with_random_initial_key(
+                    project_name.clone(),
+                    idle_minutes,
+                );
                 // Restore previous custom domain, if any
                 match self.find_custom_domain_for_project(&project_name).await {
                     Ok(custom_domain) => {
@@ -409,7 +422,8 @@ impl GatewayService {
                 // Otherwise attempt to create a new one. This will fail
                 // outright if the project already exists (this happens if
                 // it belongs to another account).
-                self.insert_project(project_name, account_name).await
+                self.insert_project(project_name, account_name, idle_minutes)
+                    .await
             } else {
                 Err(Error::from_kind(ErrorKind::InvalidProjectName))
             }
@@ -420,9 +434,10 @@ impl GatewayService {
         &self,
         project_name: ProjectName,
         account_name: AccountName,
+        idle_minutes: u64,
     ) -> Result<Project, Error> {
         let project = SqlxJson(Project::Creating(
-            ProjectCreating::new_with_random_initial_key(project_name.clone()),
+            ProjectCreating::new_with_random_initial_key(project_name.clone(), idle_minutes),
         ));
 
         query("INSERT INTO projects (project_name, account_name, initial_key, project_state) VALUES (?1, ?2, ?3, ?4)")
@@ -451,14 +466,14 @@ impl GatewayService {
 
     pub async fn create_custom_domain(
         &self,
-        project_name: ProjectName,
+        project_name: &ProjectName,
         fqdn: &Fqdn,
         certs: &str,
         private_key: &str,
     ) -> Result<(), Error> {
         query("INSERT OR REPLACE INTO custom_domains (fqdn, project_name, certificate, private_key) VALUES (?1, ?2, ?3, ?4)")
             .bind(fqdn.to_string())
-            .bind(&project_name)
+            .bind(project_name)
             .bind(certs)
             .bind(private_key)
             .execute(&self.db)
@@ -536,6 +551,109 @@ impl GatewayService {
         Ok(iter)
     }
 
+    /// Returns the current certificate as a pair of the chain and private key.
+    /// If the pair doesn't exist for a specific project, create both the certificate
+    /// and the custom domain it will represent.
+    pub async fn create_custom_domain_certificate(
+        &self,
+        fqdn: &Fqdn,
+        acme_client: &AcmeClient,
+        project_name: &ProjectName,
+        creds: AccountCredentials<'_>,
+    ) -> Result<(String, String), Error> {
+        match self.project_details_for_custom_domain(fqdn).await {
+            Ok(CustomDomain {
+                certificate,
+                private_key,
+                ..
+            }) => Ok((certificate, private_key)),
+            Err(err) if err.kind() == ErrorKind::CustomDomainNotFound => {
+                let (certs, private_key) = acme_client
+                    .create_certificate(&fqdn.to_string(), ChallengeType::Http01, creds)
+                    .await?;
+                self.create_custom_domain(project_name, fqdn, &certs, &private_key)
+                    .await?;
+                Ok((certs, private_key))
+            }
+            Err(err) => Err(err),
+        }
+    }
+
+    async fn create_certificate<'a>(
+        &self,
+        acme: &AcmeClient,
+        creds: AccountCredentials<'a>,
+    ) -> ChainAndPrivateKey {
+        let public: FQDN = self.context().settings.fqdn.parse().unwrap();
+        let identifier = format!("*.{public}");
+
+        // Use ::Dns01 challenge because that's the only supported
+        // challenge type for wildcard domains.
+        let (chain, private_key) = acme
+            .create_certificate(&identifier, ChallengeType::Dns01, creds)
+            .await
+            .unwrap();
+
+        let mut buf = Vec::new();
+        buf.extend(chain.as_bytes());
+        buf.extend(private_key.as_bytes());
+
+        ChainAndPrivateKey::parse_pem(Cursor::new(buf)).expect("Malformed PEM buffer.")
+    }
+
+    /// Fetch the gateway certificate from the state location.
+    /// If not existent, create the gateway certificate and save it to the
+    /// gateway state.
+    pub async fn fetch_certificate(
+        &self,
+        acme: &AcmeClient,
+        creds: AccountCredentials<'_>,
+    ) -> ChainAndPrivateKey {
+        let tls_path = self.state_location.join("ssl.pem");
+        match ChainAndPrivateKey::load_pem(&tls_path) {
+            Ok(valid) => valid,
+            Err(_) => {
+                warn!(
+                    "no valid certificate found at {}, creating one...",
+                    tls_path.display()
+                );
+
+                let certs = self.create_certificate(acme, creds).await;
+                certs.clone().save_pem(&tls_path).unwrap();
+                certs
+            }
+        }
+    }
+
+    /// Renew the gateway certificate if there less than 30 days until the current
+    /// certificate expiration.
+    pub(crate) async fn renew_certificate(
+        &self,
+        acme: &AcmeClient,
+        resolver: Arc<GatewayCertResolver>,
+        creds: AccountCredentials<'_>,
+    ) {
+        let account = AccountWrapper::from(creds).0;
+        let certs = self.fetch_certificate(acme, account.credentials()).await;
+        // Safe to unwrap because a 'ChainAndPrivateKey' is built from a PEM.
+        let chain_and_pk = certs.into_pem().unwrap();
+
+        let (_, pem) = parse_x509_pem(chain_and_pk.as_bytes())
+            .unwrap_or_else(|_| panic!("Malformed existing PEM certificate for the gateway."));
+        let (_, x509_cert) = parse_x509_certificate(pem.contents.as_bytes())
+            .unwrap_or_else(|_| panic!("Malformed existing X509 certificate for the gateway."));
+        let diff = x509_cert.validity().not_after.sub(ASN1Time::now()).unwrap();
+        if diff.whole_days() <= RENEWAL_VALIDITY_THRESHOLD_IN_DAYS {
+            let tls_path = self.state_location.join("ssl.pem");
+            let certs = self.create_certificate(acme, account.credentials()).await;
+            resolver
+                .serve_default_der(certs.clone())
+                .await
+                .expect("Failed to serve the default certs");
+            certs.save_pem(&tls_path).unwrap();
+        }
+    }
+
     pub fn context(&self) -> GatewayContext {
         self.provider.context()
     }
@@ -545,8 +663,50 @@ impl GatewayService {
         TaskBuilder::new(self.clone())
     }
 
+    /// Find a project by name. And start the project if it is idle, waiting for it to start up
+    pub async fn find_or_start_project(
+        self: &Arc<Self>,
+        project_name: &ProjectName,
+        task_sender: Sender<BoxedTask>,
+    ) -> Result<Project, Error> {
+        let mut project = self.find_project(project_name).await?;
+
+        // Start the project if it is idle
+        if project.is_stopped() {
+            trace!(%project_name, "starting up idle project");
+
+            let handle = self
+                .new_task()
+                .project(project_name.clone())
+                .and_then(task::start())
+                .and_then(task::run_until_done())
+                .and_then(task::check_health())
+                .send(&task_sender)
+                .await?;
+
+            // Wait for project to come up and set new state
+            handle.await;
+            project = self.find_project(project_name).await?;
+        }
+
+        Ok(project)
+    }
+
     pub fn task_router(&self) -> TaskRouter<BoxedTask> {
         self.task_router.clone()
+    }
+
+    pub fn credentials(&self) -> AccountCredentials<'_> {
+        let creds_path = self.state_location.join("acme.json");
+        if !creds_path.exists() {
+            panic!(
+                "no ACME credentials found at {}, cannot continue with certificate creation",
+                creds_path.display()
+            );
+        }
+
+        serde_json::from_reader(std::fs::File::open(creds_path).expect("Invalid credentials path"))
+            .expect("Can not parse admin credentials from path")
     }
 }
 
@@ -571,6 +731,7 @@ pub mod tests {
     use fqdn::FQDN;
 
     use super::*;
+
     use crate::task::{self, TaskResult};
     use crate::tests::{assert_err_kind, World};
     use crate::{Error, ErrorKind};
@@ -578,7 +739,7 @@ pub mod tests {
     #[tokio::test]
     async fn service_create_find_delete_project() -> anyhow::Result<()> {
         let world = World::new().await;
-        let svc = Arc::new(GatewayService::init(world.args(), world.pool()).await);
+        let svc = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await);
 
         let neo: AccountName = "neo".parse().unwrap();
         let trinity: AccountName = "trinity".parse().unwrap();
@@ -592,7 +753,7 @@ pub mod tests {
         };
 
         let project = svc
-            .create_project(matrix.clone(), neo.clone(), false)
+            .create_project(matrix.clone(), neo.clone(), false, 0)
             .await
             .unwrap();
 
@@ -653,7 +814,7 @@ pub mod tests {
 
         // If recreated by a different user
         assert!(matches!(
-            svc.create_project(matrix.clone(), trinity.clone(), false)
+            svc.create_project(matrix.clone(), trinity.clone(), false, 0)
                 .await,
             Err(Error {
                 kind: ErrorKind::ProjectAlreadyExists,
@@ -663,7 +824,7 @@ pub mod tests {
 
         // If recreated by the same user
         assert!(matches!(
-            svc.create_project(matrix.clone(), neo, false).await,
+            svc.create_project(matrix.clone(), neo, false, 0).await,
             Ok(Project::Creating(_))
         ));
 
@@ -684,7 +845,7 @@ pub mod tests {
 
         // If recreated by an admin
         assert!(matches!(
-            svc.create_project(matrix, trinity, true).await,
+            svc.create_project(matrix, trinity, true, 0).await,
             Ok(Project::Creating(_))
         ));
 
@@ -694,12 +855,12 @@ pub mod tests {
     #[tokio::test]
     async fn service_create_ready_kill_restart_docker() -> anyhow::Result<()> {
         let world = World::new().await;
-        let svc = Arc::new(GatewayService::init(world.args(), world.pool()).await);
+        let svc = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await);
 
         let neo: AccountName = "neo".parse().unwrap();
         let matrix: ProjectName = "matrix".parse().unwrap();
 
-        svc.create_project(matrix.clone(), neo.clone(), false)
+        svc.create_project(matrix.clone(), neo.clone(), false, 0)
             .await
             .unwrap();
 
@@ -750,7 +911,7 @@ pub mod tests {
     #[tokio::test]
     async fn service_create_find_custom_domain() -> anyhow::Result<()> {
         let world = World::new().await;
-        let svc = Arc::new(GatewayService::init(world.args(), world.pool()).await);
+        let svc = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await);
 
         let account: AccountName = "neo".parse().unwrap();
         let project_name: ProjectName = "matrix".parse().unwrap();
@@ -764,11 +925,11 @@ pub mod tests {
         );
 
         let _ = svc
-            .create_project(project_name.clone(), account.clone(), false)
+            .create_project(project_name.clone(), account.clone(), false, 0)
             .await
             .unwrap();
 
-        svc.create_custom_domain(project_name.clone(), &domain, certificate, private_key)
+        svc.create_custom_domain(&project_name, &domain, certificate, private_key)
             .await
             .unwrap();
 
@@ -785,7 +946,7 @@ pub mod tests {
         let certificate = "dummy certificate update";
         let private_key = "dummy private key update";
 
-        svc.create_custom_domain(project_name.clone(), &domain, certificate, private_key)
+        svc.create_custom_domain(&project_name, &domain, certificate, private_key)
             .await
             .unwrap();
 
@@ -804,7 +965,7 @@ pub mod tests {
     #[tokio::test]
     async fn service_create_custom_domain_destroy_recreate_project() -> anyhow::Result<()> {
         let world = World::new().await;
-        let svc = Arc::new(GatewayService::init(world.args(), world.pool()).await);
+        let svc = Arc::new(GatewayService::init(world.args(), world.pool(), "".into()).await);
 
         let account: AccountName = "neo".parse().unwrap();
         let project_name: ProjectName = "matrix".parse().unwrap();
@@ -818,11 +979,11 @@ pub mod tests {
         );
 
         let _ = svc
-            .create_project(project_name.clone(), account.clone(), false)
+            .create_project(project_name.clone(), account.clone(), false, 0)
             .await
             .unwrap();
 
-        svc.create_custom_domain(project_name.clone(), &domain, certificate, private_key)
+        svc.create_custom_domain(&project_name, &domain, certificate, private_key)
             .await
             .unwrap();
 
@@ -836,7 +997,7 @@ pub mod tests {
         assert!(matches!(work.poll(()).await, TaskResult::Done(())));
 
         let recreated_project = svc
-            .create_project(project_name.clone(), account.clone(), false)
+            .create_project(project_name.clone(), account.clone(), false, 0)
             .await
             .unwrap();
 

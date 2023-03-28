@@ -1,16 +1,33 @@
 #[cfg(feature = "backend")]
 pub mod backends;
+#[cfg(feature = "claims")]
+pub mod claims;
 pub mod database;
+#[cfg(feature = "service")]
 pub mod deployment;
+#[cfg(feature = "service")]
 pub mod log;
 #[cfg(feature = "models")]
 pub mod models;
+#[cfg(feature = "service")]
 pub mod project;
+pub mod resource;
+#[cfg(feature = "service")]
+pub mod storage_manager;
+#[cfg(feature = "tracing")]
+pub mod tracing;
+#[cfg(feature = "wasm")]
+pub mod wasm;
+
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "service")]
 use uuid::Uuid;
 
+#[cfg(feature = "service")]
 pub use log::Item as LogItem;
+#[cfg(feature = "service")]
 pub use log::STATE_MESSAGE;
 
 #[cfg(debug_assertions)]
@@ -22,9 +39,29 @@ pub const API_URL_DEFAULT: &str = "https://api.shuttle.rs";
 pub type ApiKey = String;
 pub type ApiUrl = String;
 pub type Host = String;
+#[cfg(feature = "service")]
 pub type DeploymentId = Uuid;
-pub type Port = u16;
 
+#[cfg(feature = "error")]
+/// Errors that can occur when changing types. Especially from prost
+#[derive(thiserror::Error, Debug)]
+pub enum ParseError {
+    #[error("failed to parse UUID: {0}")]
+    Uuid(#[from] uuid::Error),
+    #[error("failed to parse timestamp: {0}")]
+    Timestamp(#[from] prost_types::TimestampError),
+    #[error("failed to parse serde: {0}")]
+    Serde(#[from] serde_json::Error),
+}
+
+/// Holds the output for a DB resource
+#[derive(Deserialize, Serialize)]
+pub enum DbOutput {
+    Info(DatabaseReadyInfo),
+    Local(String),
+}
+
+/// Holds the details for a database connection
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatabaseReadyInfo {
     engine: String,
@@ -77,5 +114,21 @@ impl DatabaseReadyInfo {
             self.port,
             self.database_name
         )
+    }
+}
+
+/// Store that holds all the secrets available to a deployment
+#[derive(Deserialize, Serialize, Clone)]
+pub struct SecretStore {
+    pub(crate) secrets: BTreeMap<String, String>,
+}
+
+impl SecretStore {
+    pub fn new(secrets: BTreeMap<String, String>) -> Self {
+        Self { secrets }
+    }
+
+    pub fn get(&self, key: &str) -> Option<String> {
+        self.secrets.get(key).map(ToOwned::to_owned)
     }
 }

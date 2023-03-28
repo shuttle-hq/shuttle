@@ -1,0 +1,30 @@
+name: Feature suggestion
+description: Suggest a feature or improvement
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to suggest a feature!
+  - type: textarea
+    id: describe
+    attributes:
+      label: Describe the feature
+      description: A high level description.
+      placeholder: A feature that allows users to...
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: Suggestion or Example of how the feature would be used
+      description: What should the feature look like?
+  - type: checkboxes
+    id: duplicate
+    attributes:
+      label: Duplicate declaration
+      description: Please confirm that you are not creating a duplicate issue.
+      options:
+        - label: I have searched the issues and this feature has not been requested before.
+          required: true

@@ -2,19 +2,25 @@ mod args;
 mod cargo_builder;
 mod client;
 pub mod config;
-mod factory;
 mod init;
+mod provisioner_server;
 
+use cargo::util::ToSemver;
 use indicatif::ProgressBar;
-use shuttle_common::models::project::State;
+use shuttle_common::models::deployment::get_deployments_table;
+use shuttle_common::models::project::{State, IDLE_MINUTES};
+use shuttle_common::models::resource::get_resources_table;
 use shuttle_common::project::ProjectName;
+use shuttle_common::resource;
+use shuttle_proto::runtime::{self, LoadRequest, StartRequest, SubscribeLogsRequest};
 
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fs::{read_to_string, File};
 use std::io::stdout;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
+use std::process::exit;
 use std::str::FromStr;
 
 use anyhow::{anyhow, bail, Context, Result};
@@ -25,25 +31,26 @@ use clap_complete::{generate, Shell};
 use config::RequestContext;
 use crossterm::style::Stylize;
 use dialoguer::{theme::ColorfulTheme, Confirm, FuzzySelect, Input, Password};
-use factory::LocalFactory;
 use flate2::write::GzEncoder;
 use flate2::Compression;
-use futures::StreamExt;
+use futures::{StreamExt, TryFutureExt};
 use git2::{Repository, StatusOptions};
 use ignore::overrides::OverrideBuilder;
 use ignore::WalkBuilder;
 use shuttle_common::models::{project, secret};
-use shuttle_service::loader::{build_crate, Loader};
-use shuttle_service::Logger;
+use shuttle_service::builder::{build_crate, Runtime};
 use std::fmt::Write;
 use strum::IntoEnumIterator;
 use tar::Builder;
-use tokio::sync::mpsc;
-use tracing::trace;
+use tracing::{error, trace, warn};
 use uuid::Uuid;
 
-use crate::args::{DeploymentCommand, ProjectCommand};
+use crate::args::{DeploymentCommand, ProjectCommand, ResourceCommand};
 use crate::client::Client;
+use crate::provisioner_server::LocalProvisioner;
+
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
 
 pub struct Shuttle {
     ctx: RequestContext,
@@ -61,6 +68,7 @@ impl Shuttle {
             args.cmd,
             Command::Deploy(..)
                 | Command::Deployment(..)
+                | Command::Resource(..)
                 | Command::Project(..)
                 | Command::Stop
                 | Command::Clean
@@ -97,10 +105,13 @@ impl Shuttle {
                     Command::Deployment(DeploymentCommand::Status { id }) => {
                         self.deployment_get(&client, id).await
                     }
+                    Command::Resource(ResourceCommand::List) => self.resources_list(&client).await,
                     Command::Stop => self.stop(&client).await,
                     Command::Clean => self.clean(&client).await,
                     Command::Secrets => self.secrets(&client).await,
-                    Command::Project(ProjectCommand::New) => self.project_create(&client).await,
+                    Command::Project(ProjectCommand::New { idle_minutes }) => {
+                        self.project_create(&client, idle_minutes).await
+                    }
                     Command::Project(ProjectCommand::Status { follow }) => {
                         self.project_status(&client, follow).await
                     }
@@ -132,9 +143,9 @@ impl Shuttle {
                 println!("First, let's log in to your Shuttle account.");
                 self.login(args.login_args.clone()).await?;
                 println!();
-            } else if args.new && args.login_args.api_key.is_some() {
+            } else if args.login_args.api_key.is_some() {
                 self.login(args.login_args.clone()).await?;
-            } else {
+            } else if args.new {
                 bail!("Tried to login to create a Shuttle environment, but no API key was set.")
             }
         }
@@ -153,11 +164,17 @@ impl Shuttle {
 
         // 3. Confirm the project directory
         let path = if interactive {
+            let path = args
+                .path
+                .to_str()
+                .context("path arg should always be set")?;
+
             println!("Where should we create this project?");
             let directory_str: String = Input::with_theme(&theme)
                 .with_prompt("Directory")
-                .default(".".to_owned())
+                .default(path.to_owned())
                 .interact()?;
+
             println!();
             args::parse_init_path(OsString::from(directory_str))?
         } else {
@@ -209,7 +226,7 @@ impl Shuttle {
             self.load_project(&mut project_args)?;
             let mut client = Client::new(self.ctx.api_url());
             client.set_api_key(self.ctx.api_key()?);
-            self.project_create(&client).await?;
+            self.project_create(&client, IDLE_MINUTES).await?;
         }
 
         Ok(())
@@ -287,7 +304,7 @@ impl Shuttle {
             }
 
             progress_bar.set_message(format!("Stopping {}", deployment.id));
-            service = client.get_service_summary(self.ctx.project_name()).await?;
+            service = client.get_service(self.ctx.project_name()).await?;
         }
         progress_bar.finish_and_clear();
 
@@ -313,7 +330,7 @@ impl Shuttle {
     }
 
     async fn status(&self, client: &Client) -> Result<()> {
-        let summary = client.get_service_summary(self.ctx.project_name()).await?;
+        let summary = client.get_service(self.ctx.project_name()).await?;
 
         println!("{summary}");
 
@@ -345,7 +362,7 @@ impl Shuttle {
         let id = if let Some(id) = id {
             id
         } else {
-            let summary = client.get_service_summary(self.ctx.project_name()).await?;
+            let summary = client.get_service(self.ctx.project_name()).await?;
 
             if let Some(deployment) = summary.deployment {
                 deployment.id
@@ -376,9 +393,10 @@ impl Shuttle {
     }
 
     async fn deployments_list(&self, client: &Client) -> Result<()> {
-        let details = client.get_service_details(self.ctx.project_name()).await?;
+        let deployments = client.get_deployments(self.ctx.project_name()).await?;
+        let table = get_deployments_table(&deployments, self.ctx.project_name().as_str());
 
-        println!("{details}");
+        println!("{table}");
 
         Ok(())
     }
@@ -389,6 +407,17 @@ impl Shuttle {
             .await?;
 
         println!("{deployment}");
+
+        Ok(())
+    }
+
+    async fn resources_list(&self, client: &Client) -> Result<()> {
+        let resources = client
+            .get_service_resources(self.ctx.project_name())
+            .await?;
+        let table = get_resources_table(&resources, self.ctx.project_name().as_str());
+
+        println!("{table}");
 
         Ok(())
     }
@@ -412,7 +441,6 @@ impl Shuttle {
         });
 
         let working_directory = self.ctx.working_directory();
-        let id = Default::default();
 
         trace!("building project");
         println!(
@@ -421,7 +449,7 @@ impl Shuttle {
             working_directory.display()
         );
 
-        let so_path = build_crate(id, working_directory, run_args.release, tx).await?;
+        let runtime = build_crate(working_directory, run_args.release, tx).await?;
 
         trace!("loading secrets");
 
@@ -431,26 +459,153 @@ impl Shuttle {
             working_directory.join("Secrets.toml")
         };
 
-        let secrets: BTreeMap<String, String> =
-            if let Ok(secrets_str) = read_to_string(secrets_path) {
-                let secrets: BTreeMap<String, String> =
-                    secrets_str.parse::<toml::Value>()?.try_into()?;
+        let secrets: HashMap<String, String> = if let Ok(secrets_str) = read_to_string(secrets_path)
+        {
+            let secrets: HashMap<String, String> =
+                secrets_str.parse::<toml::Value>()?.try_into()?;
 
-                trace!(keys = ?secrets.keys(), "available secrets");
+            trace!(keys = ?secrets.keys(), "available secrets");
 
-                secrets
+            secrets
+        } else {
+            trace!("no Secrets.toml was found");
+            Default::default()
+        };
+
+        let service_name = self.ctx.project_name().to_string();
+
+        let (is_wasm, executable_path) = match runtime {
+            Runtime::Next(path) => (true, path),
+            Runtime::Alpha(path) => (false, path),
+        };
+
+        let provisioner = LocalProvisioner::new()?;
+        let provisioner_server = provisioner.start(SocketAddr::new(
+            Ipv4Addr::LOCALHOST.into(),
+            run_args.port + 1,
+        ));
+
+        let runtime_path = || {
+            if is_wasm {
+                let runtime_path = home::cargo_home()
+                    .expect("failed to find cargo home dir")
+                    .join("bin/shuttle-next");
+
+                println!("Installing shuttle runtime. This can take a while...");
+
+                if cfg!(debug_assertions) {
+                    // Canonicalized path to shuttle-runtime for dev to work on windows
+                    let path = std::fs::canonicalize(format!("{MANIFEST_DIR}/../runtime"))
+                        .expect("path to shuttle-runtime does not exist or is invalid");
+
+                    trace!(?path, "installing runtime from local filesystem");
+
+                    std::process::Command::new("cargo")
+                        .arg("install")
+                        .arg("shuttle-runtime")
+                        .arg("--path")
+                        .arg(path)
+                        .arg("--bin")
+                        .arg("shuttle-next")
+                        .arg("--features")
+                        .arg("next")
+                        .output()
+                        .expect("failed to install the shuttle runtime");
+                } else {
+                    // If the version of cargo-shuttle is different from shuttle-runtime,
+                    // or it isn't installed, try to install shuttle-runtime from crates.io.
+                    if let Err(err) = check_version(&runtime_path) {
+                        warn!("{}", err);
+
+                        trace!("installing shuttle-runtime");
+                        std::process::Command::new("cargo")
+                            .arg("install")
+                            .arg("shuttle-runtime")
+                            .arg("--bin")
+                            .arg("shuttle-next")
+                            .arg("--features")
+                            .arg("next")
+                            .output()
+                            .expect("failed to install the shuttle runtime");
+                    };
+                };
+
+                runtime_path
             } else {
-                trace!("no Secrets.toml was found");
-                Default::default()
-            };
+                trace!(path = ?executable_path, "using alpha runtime");
+                executable_path.clone()
+            }
+        };
 
-        let loader = Loader::from_so_file(so_path)?;
+        let (mut runtime, mut runtime_client) = runtime::start(
+            is_wasm,
+            runtime::StorageManagerType::WorkingDir(working_directory.to_path_buf()),
+            &format!("http://localhost:{}", run_args.port + 1),
+            None,
+            run_args.port + 2,
+            runtime_path,
+        )
+        .await
+        .map_err(|err| {
+            provisioner_server.abort();
 
-        let mut factory = LocalFactory::new(
-            self.ctx.project_name().clone(),
+            err
+        })?;
+
+        let load_request = tonic::Request::new(LoadRequest {
+            path: executable_path
+                .into_os_string()
+                .into_string()
+                .expect("to convert path to string"),
+            service_name: service_name.clone(),
+            resources: Default::default(),
             secrets,
-            working_directory.to_path_buf(),
-        )?;
+        });
+        trace!("loading service");
+        let response = runtime_client
+            .load(load_request)
+            .or_else(|err| async {
+                provisioner_server.abort();
+                runtime.kill().await?;
+
+                Err(err)
+            })
+            .await?
+            .into_inner();
+
+        if !response.success {
+            error!(error = response.message, "failed to load your service");
+            exit(1);
+        }
+
+        let resources = response
+            .resources
+            .into_iter()
+            .map(resource::Response::from_bytes)
+            .collect();
+
+        let resources = get_resources_table(&resources, self.ctx.project_name().as_str());
+
+        let mut stream = runtime_client
+            .subscribe_logs(tonic::Request::new(SubscribeLogsRequest {}))
+            .or_else(|err| async {
+                provisioner_server.abort();
+                runtime.kill().await?;
+
+                Err(err)
+            })
+            .await?
+            .into_inner();
+
+        tokio::spawn(async move {
+            while let Ok(Some(log)) = stream.message().await {
+                let log: shuttle_common::LogItem = log.try_into().expect("to convert log");
+                println!("{log}");
+            }
+        });
+
+        println!("{resources}");
+
         let addr = if run_args.external {
             std::net::IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))
         } else {
@@ -459,30 +614,32 @@ impl Shuttle {
 
         let addr = SocketAddr::new(addr, run_args.port);
 
-        trace!("loading project");
+        let start_request = StartRequest {
+            ip: addr.to_string(),
+        };
+
+        trace!(?start_request, "starting service");
+        let response = runtime_client
+            .start(tonic::Request::new(start_request))
+            .or_else(|err| async {
+                provisioner_server.abort();
+                runtime.kill().await?;
+
+                Err(err)
+            })
+            .await?
+            .into_inner();
+
+        trace!(response = ?response,  "client response: ");
+
         println!(
             "\n{:>12} {} on http://{}",
             "Starting".bold().green(),
             self.ctx.project_name(),
             addr
         );
-        let (tx, mut rx) = mpsc::unbounded_channel();
 
-        tokio::spawn(async move {
-            while let Some(log) = rx.recv().await {
-                println!("{log}");
-            }
-        });
-
-        let logger = Logger::new(tx, id);
-        let (handle, so) = loader.load(&mut factory, addr, logger).await?;
-
-        handle.await??;
-
-        tokio::task::spawn_blocking(move || {
-            trace!("closing so file");
-            so.close().unwrap();
-        });
+        runtime.wait().await?;
 
         Ok(())
     }
@@ -532,11 +689,16 @@ impl Shuttle {
             }
         }
 
-        let service = client.get_service_summary(self.ctx.project_name()).await?;
+        let service = client.get_service(self.ctx.project_name()).await?;
 
         // A deployment will only exist if there is currently one in the running state
         if let Some(ref new_deployment) = service.deployment {
-            println!("{service}");
+            let resources = client
+                .get_service_resources(self.ctx.project_name())
+                .await?;
+            let resources = get_resources_table(&resources, self.ctx.project_name().as_str());
+
+            println!("{resources}{service}");
 
             Ok(match new_deployment.state {
                 shuttle_common::deployment::State::Crashed => CommandOutcome::DeploymentFailure,
@@ -549,7 +711,9 @@ impl Shuttle {
         }
     }
 
-    async fn project_create(&self, client: &Client) -> Result<()> {
+    async fn project_create(&self, client: &Client, idle_minutes: u64) -> Result<()> {
+        let config = project::Config { idle_minutes };
+
         self.wait_with_spinner(
             &[
                 project::State::Ready,
@@ -557,7 +721,7 @@ impl Shuttle {
                     message: Default::default(),
                 },
             ],
-            Client::create_project,
+            client.create_project(self.ctx.project_name(), config),
             self.ctx.project_name(),
             client,
         )
@@ -598,7 +762,7 @@ impl Shuttle {
                             message: Default::default(),
                         },
                     ],
-                    Client::get_project,
+                    client.get_project(self.ctx.project_name()),
                     self.ctx.project_name(),
                     client,
                 )
@@ -613,18 +777,17 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn wait_with_spinner<'a, F, Fut>(
+    async fn wait_with_spinner<'a, Fut>(
         &self,
         states_to_check: &[project::State],
-        f: F,
+        fut: Fut,
         project_name: &'a ProjectName,
         client: &'a Client,
     ) -> Result<(), anyhow::Error>
     where
-        F: Fn(&'a Client, &'a ProjectName) -> Fut,
         Fut: std::future::Future<Output = Result<project::Response>> + 'a,
     {
-        let mut project = f(client, project_name).await?;
+        let mut project = fut.await?;
 
         let progress_bar = create_spinner();
         loop {
@@ -648,7 +811,7 @@ impl Shuttle {
                     message: Default::default(),
                 },
             ],
-            Client::delete_project,
+            client.delete_project(self.ctx.project_name()),
             self.ctx.project_name(),
             client,
         )
@@ -763,6 +926,40 @@ impl Shuttle {
         }
 
         Ok(())
+    }
+}
+
+fn check_version(runtime_path: &Path) -> Result<()> {
+    let valid_version = VERSION.to_semver().unwrap();
+
+    if !runtime_path.try_exists()? {
+        bail!("shuttle-runtime is not installed");
+    }
+
+    // Get runtime version from shuttle-runtime cli
+    let runtime_version = std::process::Command::new("cargo")
+        .arg("shuttle-runtime")
+        .arg("--version")
+        .output()
+        .context("failed to check the shuttle-runtime version")?
+        .stdout;
+
+    // Parse the version, splitting the version from the name and
+    // and pass it to `to_semver()`.
+    let runtime_version = std::str::from_utf8(&runtime_version)
+        .expect("shuttle-runtime version should be valid utf8")
+        .split_once(' ')
+        .expect("shuttle-runtime version should be in the `name version` format")
+        .1
+        .to_semver()
+        .context("failed to convert runtime version to semver")?;
+
+    if runtime_version == valid_version {
+        Ok(())
+    } else {
+        Err(anyhow!(
+            "shuttle-runtime and cargo-shuttle are not the same version"
+        ))
     }
 }
 
@@ -897,7 +1094,7 @@ mod tests {
                 "Secrets.toml",
                 "Secrets.toml.example",
                 "Shuttle.toml",
-                "src/lib.rs",
+                "src/main.rs",
             ]
         );
     }

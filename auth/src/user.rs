@@ -9,7 +9,7 @@ use axum::{
 };
 use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Deserializer, Serialize};
-use shuttle_common::backends::auth::Scope;
+use shuttle_common::claims::Scope;
 use sqlx::{query, Row, SqlitePool};
 use tracing::{trace, Span};
 
@@ -174,17 +174,13 @@ impl Key {
 #[sqlx(rename_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
+#[derive(Default)]
 pub enum AccountTier {
+    #[default]
     Basic,
     Pro,
     Team,
     Admin,
-}
-
-impl Default for AccountTier {
-    fn default() -> Self {
-        AccountTier::Basic
-    }
 }
 
 impl From<AccountTier> for Vec<Scope> {
@@ -209,6 +205,8 @@ impl From<AccountTier> for Vec<Scope> {
                 Scope::UserCreate,
                 Scope::AcmeCreate,
                 Scope::CustomDomainCreate,
+                Scope::CustomDomainCertificateRenew,
+                Scope::GatewayCertificateRenew,
                 Scope::Admin,
             ]);
         }

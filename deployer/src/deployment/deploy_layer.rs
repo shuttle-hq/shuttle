@@ -21,9 +21,10 @@
 
 use chrono::{DateTime, Utc};
 use serde_json::json;
-use shuttle_common::STATE_MESSAGE;
-use std::{net::SocketAddr, str::FromStr};
-use tracing::{error, field::Visit, span, warn, Metadata, Subscriber};
+use shuttle_common::{tracing::JsonVisitor, ParseError, STATE_MESSAGE};
+use shuttle_proto::runtime;
+use std::{convert::TryFrom, str::FromStr, time::SystemTime};
+use tracing::{field::Visit, span, warn, Metadata, Subscriber};
 use tracing_subscriber::Layer;
 use uuid::Uuid;
 
@@ -62,8 +63,6 @@ pub struct Log {
     pub fields: serde_json::Value,
 
     pub r#type: LogType,
-
-    pub address: Option<String>,
 }
 
 impl From<Log> for persistence::Log {
@@ -105,23 +104,42 @@ impl From<Log> for shuttle_common::LogItem {
 
 impl From<Log> for DeploymentState {
     fn from(log: Log) -> Self {
-        let address = if let Some(address_str) = log.address {
-            match SocketAddr::from_str(&address_str) {
-                Ok(address) => Some(address),
-                Err(err) => {
-                    error!(error = %err, "failed to convert to [SocketAddr]");
-                    None
-                }
-            }
-        } else {
-            None
-        };
-
         Self {
             id: log.id,
             state: log.state,
             last_update: log.timestamp,
-            address,
+        }
+    }
+}
+
+impl TryFrom<runtime::LogItem> for Log {
+    type Error = ParseError;
+
+    fn try_from(log: runtime::LogItem) -> Result<Self, Self::Error> {
+        Ok(Self {
+            id: Default::default(),
+            state: State::Running,
+            level: runtime::LogLevel::from_i32(log.level)
+                .unwrap_or_default()
+                .into(),
+            timestamp: DateTime::from(SystemTime::try_from(log.timestamp.unwrap_or_default())?),
+            file: log.file,
+            line: log.line,
+            target: log.target,
+            fields: serde_json::from_slice(&log.fields)?,
+            r#type: LogType::Event,
+        })
+    }
+}
+
+impl From<runtime::LogLevel> for LogLevel {
+    fn from(level: runtime::LogLevel) -> Self {
+        match level {
+            runtime::LogLevel::Trace => Self::Trace,
+            runtime::LogLevel::Debug => Self::Debug,
+            runtime::LogLevel::Info => Self::Info,
+            runtime::LogLevel::Warn => Self::Warn,
+            runtime::LogLevel::Error => Self::Error,
         }
     }
 }
@@ -172,38 +190,18 @@ where
                 event.record(&mut visitor);
                 let metadata = event.metadata();
 
-                // Extract details from log::Log interface which is different from tracing
-                let target = if let Some(target) = visitor.0.remove("log.target") {
-                    target.as_str().unwrap_or_default().to_string()
-                } else {
-                    metadata.target().to_string()
-                };
-
-                let line = if let Some(line) = visitor.0.remove("log.line") {
-                    line.as_u64().and_then(|u| u32::try_from(u).ok())
-                } else {
-                    metadata.line()
-                };
-
-                let file = if let Some(file) = visitor.0.remove("log.file") {
-                    file.as_str().map(str::to_string)
-                } else {
-                    metadata.file().map(str::to_string)
-                };
-
-                visitor.0.remove("log.module_path");
-
                 self.recorder.record(Log {
                     id: details.id,
                     state: details.state,
                     level: metadata.level().into(),
                     timestamp: Utc::now(),
-                    file,
-                    line,
-                    target,
-                    fields: serde_json::Value::Object(visitor.0),
+                    file: visitor.file.or_else(|| metadata.file().map(str::to_string)),
+                    line: visitor.line.or_else(|| metadata.line()),
+                    target: visitor
+                        .target
+                        .unwrap_or_else(|| metadata.target().to_string()),
+                    fields: serde_json::Value::Object(visitor.fields),
                     r#type: LogType::Event,
-                    address: None,
                 });
                 break;
             }
@@ -247,7 +245,6 @@ where
             target: metadata.target().to_string(),
             fields: Default::default(),
             r#type: LogType::State,
-            address: details.address.clone(),
         });
 
         extensions.insert::<ScopeDetails>(details);
@@ -259,7 +256,6 @@ where
 struct ScopeDetails {
     id: Uuid,
     state: State,
-    address: Option<String>,
 }
 
 impl From<&tracing::Level> for LogLevel {
@@ -287,9 +283,6 @@ impl NewStateVisitor {
     /// Field containing the deployment state identifier
     const STATE_IDENT: &'static str = "state";
 
-    /// Field containing the deployment address identifier
-    const ADDRESS_IDENT: &'static str = "address";
-
     fn is_valid(metadata: &Metadata) -> bool {
         metadata.is_span()
             && metadata.fields().field(Self::ID_IDENT).is_some()
@@ -303,71 +296,45 @@ impl Visit for NewStateVisitor {
             self.details.state = State::from_str(&format!("{value:?}")).unwrap_or_default();
         } else if field.name() == Self::ID_IDENT {
             self.details.id = Uuid::try_parse(&format!("{value:?}")).unwrap_or_default();
-        } else if field.name() == Self::ADDRESS_IDENT {
-            self.details.address = Some(format!("{value:?}"));
         }
-    }
-}
-
-#[derive(Default)]
-struct JsonVisitor(serde_json::Map<String, serde_json::Value>);
-
-impl Visit for JsonVisitor {
-    fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
-        self.0.insert(field.name().to_string(), json!(value));
-    }
-    fn record_bool(&mut self, field: &tracing::field::Field, value: bool) {
-        self.0.insert(field.name().to_string(), json!(value));
-    }
-    fn record_u64(&mut self, field: &tracing::field::Field, value: u64) {
-        self.0.insert(field.name().to_string(), json!(value));
-    }
-    fn record_i64(&mut self, field: &tracing::field::Field, value: i64) {
-        self.0.insert(field.name().to_string(), json!(value));
-    }
-    fn record_f64(&mut self, field: &tracing::field::Field, value: f64) {
-        self.0.insert(field.name().to_string(), json!(value));
-    }
-    fn record_error(
-        &mut self,
-        field: &tracing::field::Field,
-        value: &(dyn std::error::Error + 'static),
-    ) {
-        self.0
-            .insert(field.name().to_string(), json!(value.to_string()));
-    }
-    fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
-        self.0
-            .insert(field.name().to_string(), json!(format!("{value:?}")));
     }
 }
 
 #[cfg(test)]
 mod tests {
     use std::{
-        collections::BTreeMap,
         fs::read_dir,
+        net::{Ipv4Addr, SocketAddr},
         path::PathBuf,
         sync::{Arc, Mutex},
         time::Duration,
     };
 
+    use crate::{
+        persistence::{DeploymentUpdater, Resource, ResourceManager},
+        RuntimeManager,
+    };
+    use async_trait::async_trait;
     use axum::body::Bytes;
     use ctor::ctor;
     use flate2::{write::GzEncoder, Compression};
-    use shuttle_common::backends::auth::Claim;
-    use shuttle_service::Logger;
-    use tokio::{select, sync::mpsc, time::sleep};
-    use tracing_subscriber::prelude::*;
+    use portpicker::pick_unused_port;
+    use shuttle_proto::provisioner::{
+        provisioner_server::{Provisioner, ProvisionerServer},
+        DatabaseDeletionResponse, DatabaseRequest, DatabaseResponse,
+    };
+    use tempfile::Builder;
+    use tokio::{select, time::sleep};
+    use tonic::transport::Server;
+    use tracing_subscriber::{fmt, prelude::*, EnvFilter};
     use uuid::Uuid;
 
     use crate::{
         deployment::{
-            deploy_layer::LogType, gateway_client::BuildQueueClient, provisioner_factory,
-            runtime_logger, storage_manager::StorageManager, ActiveDeploymentsGetter, Built,
-            DeploymentManager, Queued,
+            deploy_layer::LogType, gateway_client::BuildQueueClient, ActiveDeploymentsGetter,
+            Built, DeploymentManager, Queued,
         },
-        persistence::{SecretRecorder, State},
+        persistence::{Secret, SecretGetter, SecretRecorder, State},
     };
 
     use super::{DeployLayer, Log, LogRecorder};
@@ -375,8 +342,46 @@ mod tests {
     #[ctor]
     static RECORDER: Arc<Mutex<RecorderMock>> = {
         let recorder = RecorderMock::new();
+
+        // Copied from the test-log crate
+        let event_filter = {
+            use ::tracing_subscriber::fmt::format::FmtSpan;
+
+            match ::std::env::var("RUST_LOG_SPAN_EVENTS") {
+                Ok(value) => {
+                    value
+                        .to_ascii_lowercase()
+                        .split(',')
+                        .map(|filter| match filter.trim() {
+                            "new" => FmtSpan::NEW,
+                            "enter" => FmtSpan::ENTER,
+                            "exit" => FmtSpan::EXIT,
+                            "close" => FmtSpan::CLOSE,
+                            "active" => FmtSpan::ACTIVE,
+                            "full" => FmtSpan::FULL,
+                            _ => panic!("test-log: RUST_LOG_SPAN_EVENTS must contain filters separated by `,`.\n\t\
+                                         For example: `active` or `new,close`\n\t\
+                                         Supported filters: new, enter, exit, close, active, full\n\t\
+                                         Got: {}", value),
+                        })
+                        .fold(FmtSpan::NONE, |acc, filter| filter | acc)
+                },
+                Err(::std::env::VarError::NotUnicode(_)) =>
+                    panic!("test-log: RUST_LOG_SPAN_EVENTS must contain a valid UTF-8 string"),
+                Err(::std::env::VarError::NotPresent) => FmtSpan::NONE,
+            }
+        };
+        let fmt_layer = fmt::layer()
+            .with_test_writer()
+            .with_span_events(event_filter);
+        let filter_layer = EnvFilter::try_from_default_env()
+            .or_else(|_| EnvFilter::try_new("shuttle_deployer"))
+            .unwrap();
+
         tracing_subscriber::registry()
             .with(DeployLayer::new(Arc::clone(&recorder)))
+            .with(filter_layer)
+            .with(fmt_layer)
             .init();
 
         recorder
@@ -391,7 +396,6 @@ mod tests {
     struct StateLog {
         id: Uuid,
         state: State,
-        has_address: bool,
     }
 
     impl From<Log> for StateLog {
@@ -399,7 +403,6 @@ mod tests {
             Self {
                 id: log.id,
                 state: log.state,
-                has_address: log.address.is_some(),
             }
         }
     }
@@ -431,6 +434,45 @@ mod tests {
         }
     }
 
+    struct ProvisionerMock;
+
+    #[async_trait]
+    impl Provisioner for ProvisionerMock {
+        async fn provision_database(
+            &self,
+            _request: tonic::Request<DatabaseRequest>,
+        ) -> Result<tonic::Response<DatabaseResponse>, tonic::Status> {
+            panic!("no deploy layer tests should request a db");
+        }
+
+        async fn delete_database(
+            &self,
+            _request: tonic::Request<DatabaseRequest>,
+        ) -> Result<tonic::Response<DatabaseDeletionResponse>, tonic::Status> {
+            panic!("no deploy layer tests should request delete a db");
+        }
+    }
+
+    fn get_runtime_manager() -> Arc<tokio::sync::Mutex<RuntimeManager>> {
+        let provisioner_addr =
+            SocketAddr::new(Ipv4Addr::LOCALHOST.into(), pick_unused_port().unwrap());
+        let mock = ProvisionerMock;
+
+        tokio::spawn(async move {
+            Server::builder()
+                .add_service(ProvisionerServer::new(mock))
+                .serve(provisioner_addr)
+                .await
+                .unwrap();
+        });
+
+        let tmp_dir = Builder::new().prefix("shuttle_run_test").tempdir().unwrap();
+        let path = tmp_dir.into_path();
+        let (tx, _rx) = crossbeam_channel::unbounded();
+
+        RuntimeManager::new(path, format!("http://{}", provisioner_addr), None, tx)
+    }
+
     #[async_trait::async_trait]
     impl SecretRecorder for Arc<Mutex<RecorderMock>> {
         type Err = std::io::Error;
@@ -451,72 +493,19 @@ mod tests {
         }
     }
 
-    struct StubAbstractProvisionerFactory;
+    #[derive(Clone)]
+    struct StubDeploymentUpdater;
 
     #[async_trait::async_trait]
-    impl provisioner_factory::AbstractFactory for StubAbstractProvisionerFactory {
-        type Output = StubProvisionerFactory;
-        type Error = std::io::Error;
+    impl DeploymentUpdater for StubDeploymentUpdater {
+        type Err = std::io::Error;
 
-        async fn get_factory(
-            &self,
-            _project_name: shuttle_common::project::ProjectName,
-            _service_id: Uuid,
-            _deployment_id: Uuid,
-            _storage_manager: StorageManager,
-            _claim: Option<Claim>,
-        ) -> Result<Self::Output, Self::Error> {
-            Ok(StubProvisionerFactory)
-        }
-    }
-
-    struct StubProvisionerFactory;
-
-    #[async_trait::async_trait]
-    impl shuttle_service::Factory for StubProvisionerFactory {
-        async fn get_db_connection_string(
-            &mut self,
-            _db_type: shuttle_common::database::Type,
-        ) -> Result<String, shuttle_service::Error> {
-            panic!("did not expect any deploy_layer test to connect to the database")
+        async fn set_address(&self, _id: &Uuid, _address: &SocketAddr) -> Result<(), Self::Err> {
+            Ok(())
         }
 
-        async fn get_secrets(
-            &mut self,
-        ) -> Result<BTreeMap<String, String>, shuttle_service::Error> {
-            panic!("did not expect any deploy_layer test to get secrets")
-        }
-
-        fn get_service_name(&self) -> shuttle_service::ServiceName {
-            panic!("did not expect any deploy_layer test to get the service name")
-        }
-
-        fn get_environment(&self) -> shuttle_service::Environment {
-            panic!("did not expect any deploy_layer test to get the environment")
-        }
-
-        fn get_build_path(&self) -> Result<PathBuf, shuttle_service::Error> {
-            panic!("did not expect any deploy_layer test to get the build path")
-        }
-
-        fn get_storage_path(&self) -> Result<PathBuf, shuttle_service::Error> {
-            panic!("did not expect any deploy_layer test to get the storage path")
-        }
-    }
-
-    struct StubRuntimeLoggerFactory;
-
-    impl runtime_logger::Factory for StubRuntimeLoggerFactory {
-        fn get_logger(&self, id: Uuid) -> Logger {
-            let (tx, mut rx) = mpsc::unbounded_channel();
-
-            tokio::spawn(async move {
-                while let Some(log) = rx.recv().await {
-                    println!("{log}")
-                }
-            });
-
-            Logger::new(tx, id)
+        async fn set_is_next(&self, _id: &Uuid, _is_next: bool) -> Result<(), Self::Err> {
+            Ok(())
         }
     }
 
@@ -555,80 +544,93 @@ mod tests {
         }
     }
 
+    #[derive(Clone)]
+    struct StubSecretGetter;
+
+    #[async_trait::async_trait]
+    impl SecretGetter for StubSecretGetter {
+        type Err = std::io::Error;
+
+        async fn get_secrets(&self, _service_id: &Uuid) -> Result<Vec<Secret>, Self::Err> {
+            Ok(Default::default())
+        }
+    }
+
+    #[derive(Clone)]
+    struct StubResourceManager;
+
+    #[async_trait::async_trait]
+    impl ResourceManager for StubResourceManager {
+        type Err = std::io::Error;
+
+        async fn insert_resource(&self, _resource: &Resource) -> Result<(), Self::Err> {
+            Ok(())
+        }
+        async fn get_resources(&self, _service_id: &Uuid) -> Result<Vec<Resource>, Self::Err> {
+            Ok(Vec::new())
+        }
+    }
+
+    async fn test_states(id: &Uuid, expected_states: Vec<StateLog>) {
+        loop {
+            let states = RECORDER.lock().unwrap().get_deployment_states(id);
+
+            if *states == expected_states {
+                break;
+            }
+
+            sleep(Duration::from_millis(250)).await;
+        }
+    }
+
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_to_be_queued() {
-        let deployment_manager = get_deployment_manager();
+        let deployment_manager = get_deployment_manager().await;
 
         let queued = get_queue("sleep-async");
         let id = queued.id;
         deployment_manager.queue_push(queued).await;
 
-        let test = async {
-            loop {
-                let recorder = RECORDER.lock().unwrap();
-                let states = recorder.get_deployment_states(&id);
-
-                if states.len() < 5 {
-                    drop(recorder); // Don't block
-                    sleep(Duration::from_millis(350)).await;
-                    continue;
-                }
-
-                assert_eq!(
-                    states.len(),
-                    5,
-                    "did not expect these states:\n\t{states:#?}"
-                );
-
-                assert_eq!(
-                    *states,
-                    vec![
-                        StateLog {
-                            id,
-                            state: State::Queued,
-                            has_address: false,
-                        },
-                        StateLog {
-                            id,
-                            state: State::Building,
-                            has_address: false,
-                        },
-                        StateLog {
-                            id,
-                            state: State::Built,
-                            has_address: false,
-                        },
-                        StateLog {
-                            id,
-                            state: State::Loading,
-                            has_address: true,
-                        },
-                        StateLog {
-                            id,
-                            state: State::Running,
-                            has_address: true,
-                        },
-                    ]
-                );
-
-                break;
-            }
-        };
+        let test = test_states(
+            &id,
+            vec![
+                StateLog {
+                    id,
+                    state: State::Queued,
+                },
+                StateLog {
+                    id,
+                    state: State::Building,
+                },
+                StateLog {
+                    id,
+                    state: State::Built,
+                },
+                StateLog {
+                    id,
+                    state: State::Loading,
+                },
+                StateLog {
+                    id,
+                    state: State::Running,
+                },
+            ],
+        );
 
         select! {
-            _ = sleep(Duration::from_secs(180)) => {
-                panic!("states should go into 'Running' for a valid service");
-            }
+            _ = sleep(Duration::from_secs(360)) => {
+                let states = RECORDER.lock().unwrap().get_deployment_states(&id);
+                panic!("states should go into 'Running' for a valid service: {:#?}", states);
+            },
             _ = test => {}
-        }
+        };
 
         // Send kill signal
         deployment_manager.kill(id).await;
 
         sleep(Duration::from_secs(1)).await;
 
-        let recorder = RECORDER.lock().unwrap();
-        let states = recorder.get_deployment_states(&id);
+        let states = RECORDER.lock().unwrap().get_deployment_states(&id);
 
         assert_eq!(
             *states,
@@ -636,32 +638,26 @@ mod tests {
                 StateLog {
                     id,
                     state: State::Queued,
-                    has_address: false,
                 },
                 StateLog {
                     id,
                     state: State::Building,
-                    has_address: false,
                 },
                 StateLog {
                     id,
                     state: State::Built,
-                    has_address: false,
                 },
                 StateLog {
                     id,
                     state: State::Loading,
-                    has_address: true,
                 },
                 StateLog {
                     id,
                     state: State::Running,
-                    has_address: true,
                 },
                 StateLog {
                     id,
                     state: State::Stopped,
-                    has_address: false,
                 },
             ]
         );
@@ -669,72 +665,46 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_self_stop() {
-        let deployment_manager = get_deployment_manager();
+        let deployment_manager = get_deployment_manager().await;
 
         let queued = get_queue("self-stop");
         let id = queued.id;
         deployment_manager.queue_push(queued).await;
 
-        let test = async {
-            loop {
-                let recorder = RECORDER.lock().unwrap();
-                let states = recorder.get_deployment_states(&id);
-
-                if states.len() < 6 {
-                    drop(recorder); // Don't block
-                    sleep(Duration::from_millis(350)).await;
-                    continue;
-                }
-
-                assert_eq!(
-                    states.len(),
-                    6,
-                    "did not expect these states:\n\t{states:#?}"
-                );
-
-                assert_eq!(
-                    *states,
-                    vec![
-                        StateLog {
-                            id,
-                            state: State::Queued,
-                            has_address: false,
-                        },
-                        StateLog {
-                            id,
-                            state: State::Building,
-                            has_address: false,
-                        },
-                        StateLog {
-                            id,
-                            state: State::Built,
-                            has_address: false,
-                        },
-                        StateLog {
-                            id,
-                            state: State::Loading,
-                            has_address: true,
-                        },
-                        StateLog {
-                            id,
-                            state: State::Running,
-                            has_address: true,
-                        },
-                        StateLog {
-                            id,
-                            state: State::Completed,
-                            has_address: false,
-                        },
-                    ]
-                );
-
-                break;
-            }
-        };
+        let test = test_states(
+            &id,
+            vec![
+                StateLog {
+                    id,
+                    state: State::Queued,
+                },
+                StateLog {
+                    id,
+                    state: State::Building,
+                },
+                StateLog {
+                    id,
+                    state: State::Built,
+                },
+                StateLog {
+                    id,
+                    state: State::Loading,
+                },
+                StateLog {
+                    id,
+                    state: State::Running,
+                },
+                StateLog {
+                    id,
+                    state: State::Completed,
+                },
+            ],
+        );
 
         select! {
-            _ = sleep(Duration::from_secs(180)) => {
-                panic!("states should go into 'Completed' when a service stops by itself");
+            _ = sleep(Duration::from_secs(360)) => {
+                let states = RECORDER.lock().unwrap().get_deployment_states(&id);
+                panic!("states should go into 'Completed' when a service stops by itself: {:#?}", states);
             }
             _ = test => {}
         }
@@ -742,72 +712,46 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_bind_panic() {
-        let deployment_manager = get_deployment_manager();
+        let deployment_manager = get_deployment_manager().await;
 
         let queued = get_queue("bind-panic");
         let id = queued.id;
         deployment_manager.queue_push(queued).await;
 
-        let test = async {
-            loop {
-                let recorder = RECORDER.lock().unwrap();
-                let states = recorder.get_deployment_states(&id);
-
-                if states.len() < 6 {
-                    drop(recorder); // Don't block
-                    sleep(Duration::from_millis(350)).await;
-                    continue;
-                }
-
-                assert_eq!(
-                    states.len(),
-                    6,
-                    "did not expect these states:\n\t{states:#?}"
-                );
-
-                assert_eq!(
-                    *states,
-                    vec![
-                        StateLog {
-                            id,
-                            state: State::Queued,
-                            has_address: false,
-                        },
-                        StateLog {
-                            id,
-                            state: State::Building,
-                            has_address: false,
-                        },
-                        StateLog {
-                            id,
-                            state: State::Built,
-                            has_address: false,
-                        },
-                        StateLog {
-                            id,
-                            state: State::Loading,
-                            has_address: true,
-                        },
-                        StateLog {
-                            id,
-                            state: State::Running,
-                            has_address: true,
-                        },
-                        StateLog {
-                            id,
-                            state: State::Crashed,
-                            has_address: false,
-                        },
-                    ]
-                );
-
-                break;
-            }
-        };
+        let test = test_states(
+            &id,
+            vec![
+                StateLog {
+                    id,
+                    state: State::Queued,
+                },
+                StateLog {
+                    id,
+                    state: State::Building,
+                },
+                StateLog {
+                    id,
+                    state: State::Built,
+                },
+                StateLog {
+                    id,
+                    state: State::Loading,
+                },
+                StateLog {
+                    id,
+                    state: State::Running,
+                },
+                StateLog {
+                    id,
+                    state: State::Crashed,
+                },
+            ],
+        );
 
         select! {
-            _ = sleep(Duration::from_secs(180)) => {
-                panic!("states should go into 'Crashed' panicing in bind");
+            _ = sleep(Duration::from_secs(360)) => {
+                let states = RECORDER.lock().unwrap().get_deployment_states(&id);
+                panic!("states should go into 'Crashed' panicking in bind: {:#?}", states);
             }
             _ = test => {}
         }
@@ -815,67 +759,42 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn deployment_main_panic() {
-        let deployment_manager = get_deployment_manager();
+        let deployment_manager = get_deployment_manager().await;
 
         let queued = get_queue("main-panic");
         let id = queued.id;
         deployment_manager.queue_push(queued).await;
 
-        let test = async {
-            loop {
-                let recorder = RECORDER.lock().unwrap();
-                let states = recorder.get_deployment_states(&id);
-
-                if states.len() < 5 {
-                    drop(recorder); // Don't block
-                    sleep(Duration::from_millis(350)).await;
-                    continue;
-                }
-
-                assert_eq!(
-                    states.len(),
-                    5,
-                    "did not expect these states:\n\t{states:#?}"
-                );
-
-                assert_eq!(
-                    *states,
-                    vec![
-                        StateLog {
-                            id,
-                            state: State::Queued,
-                            has_address: false,
-                        },
-                        StateLog {
-                            id,
-                            state: State::Building,
-                            has_address: false,
-                        },
-                        StateLog {
-                            id,
-                            state: State::Built,
-                            has_address: false,
-                        },
-                        StateLog {
-                            id,
-                            state: State::Loading,
-                            has_address: true,
-                        },
-                        StateLog {
-                            id,
-                            state: State::Crashed,
-                            has_address: false,
-                        },
-                    ]
-                );
-
-                break;
-            }
-        };
+        let test = test_states(
+            &id,
+            vec![
+                StateLog {
+                    id,
+                    state: State::Queued,
+                },
+                StateLog {
+                    id,
+                    state: State::Building,
+                },
+                StateLog {
+                    id,
+                    state: State::Built,
+                },
+                StateLog {
+                    id,
+                    state: State::Loading,
+                },
+                StateLog {
+                    id,
+                    state: State::Crashed,
+                },
+            ],
+        );
 
         select! {
-            _ = sleep(Duration::from_secs(180)) => {
-                panic!("states should go into 'Crashed' when panicing in main");
+            _ = sleep(Duration::from_secs(360)) => {
+                let states = RECORDER.lock().unwrap().get_deployment_states(&id);
+                panic!("states should go into 'Crashed' when panicking in main: {:#?}", states);
             }
             _ = test => {}
         }
@@ -883,7 +802,7 @@ mod tests {
 
     #[tokio::test]
     async fn deployment_from_run() {
-        let deployment_manager = get_deployment_manager();
+        let deployment_manager = get_deployment_manager().await;
 
         let id = Uuid::new_v4();
         deployment_manager
@@ -892,47 +811,41 @@ mod tests {
                 service_name: "run-test".to_string(),
                 service_id: Uuid::new_v4(),
                 tracing_context: Default::default(),
+                is_next: false,
                 claim: None,
             })
             .await;
 
-        // Give it a small time to start up
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
-        let recorder = RECORDER.lock().unwrap();
-        let states = recorder.get_deployment_states(&id);
-
-        assert_eq!(
-            states.len(),
-            3,
-            "did not expect these states:\n\t{states:#?}"
-        );
-
-        assert_eq!(
-            *states,
+        let test = test_states(
+            &id,
             vec![
                 StateLog {
                     id,
                     state: State::Built,
-                    has_address: false,
                 },
                 StateLog {
                     id,
                     state: State::Loading,
-                    has_address: true,
                 },
                 StateLog {
                     id,
                     state: State::Crashed,
-                    has_address: false,
                 },
-            ]
+            ],
         );
+
+        select! {
+            _ = sleep(Duration::from_secs(50)) => {
+                let states = RECORDER.lock().unwrap().get_deployment_states(&id);
+                panic!("from running should start in built and end in crash for invalid: {:#?}", states)
+            },
+            _ = test => {}
+        };
     }
 
     #[tokio::test]
     async fn scope_with_nil_id() {
-        let deployment_manager = get_deployment_manager();
+        let deployment_manager = get_deployment_manager().await;
 
         let id = Uuid::nil();
         deployment_manager
@@ -959,14 +872,16 @@ mod tests {
         );
     }
 
-    fn get_deployment_manager() -> DeploymentManager {
+    async fn get_deployment_manager() -> DeploymentManager {
         DeploymentManager::builder()
-            .abstract_factory(StubAbstractProvisionerFactory)
-            .runtime_logger_factory(StubRuntimeLoggerFactory)
             .build_log_recorder(RECORDER.clone())
             .secret_recorder(RECORDER.clone())
             .active_deployment_getter(StubActiveDeploymentGetter)
             .artifacts_path(PathBuf::from("/tmp"))
+            .secret_getter(StubSecretGetter)
+            .resource_manager(StubResourceManager)
+            .runtime(get_runtime_manager())
+            .deployment_updater(StubDeploymentUpdater)
             .queue_client(StubBuildQueueClient)
             .build()
     }

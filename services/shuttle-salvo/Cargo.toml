@@ -1,0 +1,16 @@
+[package]
+name = "shuttle-salvo"
+version = "0.13.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Service implementation to run a salvo webserver on shuttle"
+keywords = ["shuttle-service", "salvo"]
+
+[workspace]
+
+[dependencies]
+salvo = { version = "0.37.5" }
+shuttle-runtime = { path = "../../runtime", version = "0.13.0" }
+
+[dev-dependencies]
+tokio = { version = "1.26.0", features = ["macros", "rt-multi-thread"] }

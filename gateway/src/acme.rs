@@ -14,6 +14,7 @@ use instant_acme::{
     Identifier, KeyAuthorization, LetsEncrypt, NewAccount, NewOrder, Order, OrderStatus,
 };
 use rcgen::{Certificate, CertificateParams, DistinguishedName};
+
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use tower::{Layer, Service};
@@ -23,6 +24,7 @@ use crate::proxy::AsResponderTo;
 use crate::{Error, ProjectName};
 
 const MAX_RETRIES: usize = 15;
+const MAX_RETRIES_CERTIFICATE_FETCHING: usize = 5;
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct CustomDomain {
@@ -60,7 +62,8 @@ impl AcmeClient {
         self.0.lock().await.remove(token);
     }
 
-    /// Create a new ACME account that can be restored using by deserializing the returned JSON into a [instant_acme::AccountCredentials]
+    /// Create a new ACME account that can be restored by using the deserialization
+    /// of the returned JSON into a [instant_acme::AccountCredentials]
     pub async fn create_account(
         &self,
         email: &str,
@@ -101,15 +104,8 @@ impl AcmeClient {
     ) -> Result<(String, String), AcmeClientError> {
         trace!(identifier, "requesting acme certificate");
 
-        let account = Account::from_credentials(credentials).map_err(|error| {
-            error!(
-                error = &error as &dyn std::error::Error,
-                "failed to convert acme credentials into account"
-            );
-            AcmeClientError::AccountCreation
-        })?;
-
-        let (mut order, state) = account
+        let mut order = AccountWrapper::from(credentials)
+            .0
             .new_order(&NewOrder {
                 identifiers: &[Identifier::Dns(identifier.to_string())],
             })
@@ -119,14 +115,10 @@ impl AcmeClient {
                 AcmeClientError::OrderCreation
             })?;
 
-        let authorizations =
-            order
-                .authorizations(&state.authorizations)
-                .await
-                .map_err(|error| {
-                    error!(%error, "failed to get authorizations information");
-                    AcmeClientError::AuthorizationCreation
-                })?;
+        let authorizations = order.authorizations().await.map_err(|error| {
+            error!(%error, "failed to get authorizations information");
+            AcmeClientError::AuthorizationCreation
+        })?;
 
         // There should only ever be 1 authorization as we only provide 1 domain at a time
         debug_assert!(authorizations.len() == 1);
@@ -150,15 +142,27 @@ impl AcmeClient {
             AcmeClientError::CertificateSigning
         })?;
 
-        let certificate_chain = order
-            .finalize(&signing_request, &state.finalize)
-            .await
-            .map_err(|error| {
-                error!(%error, "failed to finalize certificate request");
-                AcmeClientError::OrderFinalizing
-            })?;
+        order.finalize(&signing_request).await.map_err(|error| {
+            error!(%error, "failed to finalize certificate request");
+            AcmeClientError::OrderFinalizing
+        })?;
 
-        Ok((certificate_chain, certificate.serialize_private_key_pem()))
+        // Poll for certificate, do this for few rounds.
+        let mut res: Option<String> = None;
+        let mut retries = MAX_RETRIES_CERTIFICATE_FETCHING;
+        while res.is_none() && retries > 0 {
+            res = order.certificate().await.map_err(|error| {
+                error!(%error, "failed to fetch the certificate chain");
+                AcmeClientError::CertificateCreation
+            })?;
+            retries -= 1;
+            sleep(Duration::from_secs(1)).await;
+        }
+
+        Ok((
+            res.expect("panicked when returning the certificate chain"),
+            certificate.serialize_private_key_pem(),
+        ))
     }
 
     fn find_challenge(
@@ -181,7 +185,7 @@ impl AcmeClient {
         let mut delay = Duration::from_millis(250);
         let state = loop {
             sleep(delay).await;
-            let state = order.state().await.map_err(|error| {
+            let state = order.refresh().await.map_err(|error| {
                 error!(%error, "got error while fetching state");
                 AcmeClientError::FetchingState
             })?;
@@ -285,6 +289,24 @@ impl AcmeClient {
             .await;
 
         res
+    }
+}
+
+#[derive(Clone)]
+pub struct AccountWrapper(pub Account);
+
+impl<'a> From<AccountCredentials<'a>> for AccountWrapper {
+    fn from(value: AccountCredentials<'a>) -> Self {
+        AccountWrapper(
+            Account::from_credentials(value)
+                .map_err(|error| {
+                    error!(
+                        error = &error as &dyn std::error::Error,
+                        "failed to convert acme credentials into account"
+                    );
+                })
+                .expect("Malformed account credentials."),
+        )
     }
 }
 

@@ -1,4 +1,8 @@
-use std::{future::Future, pin::Pin};
+use std::{
+    future::Future,
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 use http::{Request, Response};
 use opentelemetry::{
@@ -7,10 +11,11 @@ use opentelemetry::{
     sdk::{propagation::TraceContextPropagator, trace, Resource},
     KeyValue,
 };
-use opentelemetry_http::{HeaderExtractor, HeaderInjector};
+use opentelemetry_http::HeaderExtractor;
 use opentelemetry_otlp::WithExportConfig;
+use pin_project::pin_project;
 use tower::{Layer, Service};
-use tracing::{debug_span, Span, Subscriber};
+use tracing::{debug_span, instrument::Instrumented, Instrument, Span, Subscriber};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use tracing_subscriber::{fmt, prelude::*, registry::LookupSpan, EnvFilter};
 
@@ -67,6 +72,36 @@ pub struct ExtractPropagation<S> {
     inner: S,
 }
 
+#[pin_project]
+pub struct ExtractPropagationFuture<F> {
+    #[pin]
+    response_future: F,
+}
+
+impl<F, Body, Error> Future for ExtractPropagationFuture<F>
+where
+    F: Future<Output = Result<Response<Body>, Error>>,
+{
+    type Output = Result<Response<Body>, Error>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+
+        match this.response_future.poll(cx) {
+            Poll::Ready(result) => match result {
+                Ok(response) => {
+                    Span::current().record("http.status_code", response.status().as_u16());
+
+                    Poll::Ready(Ok(response))
+                }
+                other => Poll::Ready(other),
+            },
+
+            Poll::Pending => Poll::Pending,
+        }
+    }
+}
+
 impl<S, Body, ResponseBody> Service<Request<Body>> for ExtractPropagation<S>
 where
     S: Service<Request<Body>, Response = Response<ResponseBody>> + Send + 'static,
@@ -74,8 +109,7 @@ where
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future =
-        Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
+    type Future = ExtractPropagationFuture<Instrumented<S::Future>>;
 
     fn poll_ready(
         &mut self,
@@ -95,67 +129,11 @@ where
         let parent_context = global::get_text_map_propagator(|propagator| {
             propagator.extract(&HeaderExtractor(req.headers()))
         });
+
         span.set_parent(parent_context);
 
-        let future = self.inner.call(req);
+        let response_future = self.inner.call(req).instrument(span);
 
-        Box::pin(async move {
-            let _guard = span.enter();
-
-            match future.await {
-                Ok(response) => {
-                    span.record("http.status_code", response.status().as_u16());
-                    Ok(response)
-                }
-                other => other,
-            }
-        })
-    }
-}
-
-/// This layer adds the current tracing span to any outgoing request
-#[derive(Clone)]
-pub struct InjectPropagationLayer;
-
-impl<S> Layer<S> for InjectPropagationLayer {
-    type Service = InjectPropagation<S>;
-
-    fn layer(&self, inner: S) -> Self::Service {
-        InjectPropagation { inner }
-    }
-}
-
-#[derive(Clone)]
-pub struct InjectPropagation<S> {
-    inner: S,
-}
-
-impl<S, Body> Service<Request<Body>> for InjectPropagation<S>
-where
-    S: Service<Request<Body>> + Send + 'static,
-    S::Future: Send + 'static,
-{
-    type Response = S::Response;
-    type Error = S::Error;
-    type Future =
-        Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
-
-    fn poll_ready(
-        &mut self,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), Self::Error>> {
-        self.inner.poll_ready(cx)
-    }
-
-    fn call(&mut self, mut req: Request<Body>) -> Self::Future {
-        let cx = Span::current().context();
-
-        global::get_text_map_propagator(|propagator| {
-            propagator.inject_context(&cx, &mut HeaderInjector(req.headers_mut()))
-        });
-
-        let future = self.inner.call(req);
-
-        Box::pin(async move { future.await })
+        ExtractPropagationFuture { response_future }
     }
 }

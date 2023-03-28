@@ -2,7 +2,7 @@ use axum_extra::extract::cookie::{self, Cookie};
 use http::{Request, StatusCode};
 use hyper::Body;
 use serde_json::{json, Value};
-use shuttle_common::backends::auth::Claim;
+use shuttle_common::claims::Claim;
 
 use crate::helpers::app;
 

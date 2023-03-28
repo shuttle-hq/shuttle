@@ -20,6 +20,10 @@ impl Client {
         self.post("/admin/revive", Option::<String>::None).await
     }
 
+    pub async fn destroy(&self) -> Result<String> {
+        self.post("/admin/destroy", Option::<String>::None).await
+    }
+
     pub async fn acme_account_create(
         &self,
         email: &str,
@@ -36,6 +40,24 @@ impl Client {
         credentials: &serde_json::Value,
     ) -> Result<String> {
         let path = format!("/admin/acme/request/{project_name}/{fqdn}");
+        self.post(&path, Some(credentials)).await
+    }
+
+    pub async fn acme_renew_custom_domain_certificate(
+        &self,
+        fqdn: &str,
+        project_name: &ProjectName,
+        credentials: &serde_json::Value,
+    ) -> Result<String> {
+        let path = format!("/admin/acme/renew/{project_name}/{fqdn}");
+        self.post(&path, Some(credentials)).await
+    }
+
+    pub async fn acme_renew_gateway_certificate(
+        &self,
+        credentials: &serde_json::Value,
+    ) -> Result<String> {
+        let path = "/admin/acme/gateway/renew".to_string();
         self.post(&path, Some(credentials)).await
     }
 

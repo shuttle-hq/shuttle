@@ -9,18 +9,47 @@
 mkdir -p $CARGO_HOME; \
 echo '[patch.crates-io]
 shuttle-service = { path = "/usr/src/shuttle/service" }
+shuttle-runtime = { path = "/usr/src/shuttle/runtime" }
+
 shuttle-aws-rds = { path = "/usr/src/shuttle/resources/aws-rds" }
 shuttle-persist = { path = "/usr/src/shuttle/resources/persist" }
 shuttle-shared-db = { path = "/usr/src/shuttle/resources/shared-db" }
 shuttle-secrets = { path = "/usr/src/shuttle/resources/secrets" }
-shuttle-static-folder = { path = "/usr/src/shuttle/resources/static-folder" }' > $CARGO_HOME/config.toml
+shuttle-static-folder = { path = "/usr/src/shuttle/resources/static-folder" }
 
-# Make future crates requests to our own mirror
-echo '
+shuttle-axum = { path = "/usr/src/shuttle/services/shuttle-axum" }
+shuttle-actix-web = { path = "/usr/src/shuttle/services/shuttle-actix-web" }
+shuttle-next = { path = "/usr/src/shuttle/services/shuttle-next" }
+shuttle-poem = { path = "/usr/src/shuttle/services/shuttle-poem" }
+shuttle-poise = { path = "/usr/src/shuttle/services/shuttle-poise" }
+shuttle-rocket = { path = "/usr/src/shuttle/services/shuttle-rocket" }
+shuttle-salvo = { path = "/usr/src/shuttle/services/shuttle-salvo" }
+shuttle-serenity = { path = "/usr/src/shuttle/services/shuttle-serenity" }
+shuttle-thruster = { path = "/usr/src/shuttle/services/shuttle-thruster" }
+shuttle-tide = { path = "/usr/src/shuttle/services/shuttle-tide" }
+shuttle-tower = { path = "/usr/src/shuttle/services/shuttle-tower" }
+shuttle-warp = { path = "/usr/src/shuttle/services/shuttle-warp" }' > $CARGO_HOME/config.toml
+
+# Add the wasm32-wasi target
+rustup target add wasm32-wasi
+
+# Install the shuttle runtime
+cargo install shuttle-runtime --path "/usr/src/shuttle/runtime" --bin shuttle-next --features next
+
+while getopts "p," o; do
+    case $o in
+        "p")
+            # Make future crates requests to our own mirror
+            echo '
 [source.shuttle-crates-io-mirror]
 registry = "http://panamax:8080/git/crates.io-index"
 [source.crates-io]
 replace-with = "shuttle-crates-io-mirror"' >> $CARGO_HOME/config.toml
+            ;;
+        *)
+            ;;
+    esac
+done
 
 # Prefetch crates.io index from our mirror
 # TODO: restore when we know how to prefetch from our mirror

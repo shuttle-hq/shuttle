@@ -969,7 +969,7 @@ dependencies = [
  "filetime",
  "flate2",
  "fwdansi",
- "git2",
+ "git2 0.16.0",
  "git2-curl",
  "glob",
  "hex 0.4.3",
@@ -1026,11 +1026,11 @@ dependencies = [
  "cargo_metadata",
  "clap",
  "concolor-control",
- "crates-index",
+ "crates-index 0.19.7",
  "dirs-next",
  "dunce",
  "env_proxy",
- "git2",
+ "git2 0.16.0",
  "hex 0.4.3",
  "indexmap",
  "native-tls",
@@ -1071,6 +1071,7 @@ dependencies = [
  "chrono",
  "clap",
  "clap_complete",
+ "crates-index 0.18.11",
  "crossbeam-channel",
  "crossterm",
  "dialoguer",
@@ -1078,7 +1079,7 @@ dependencies = [
  "dunce",
  "flate2",
  "futures",
- "git2",
+ "git2 0.16.0",
  "headers",
  "home",
  "ignore",
@@ -1513,11 +1514,32 @@ dependencies = [
 
 [[package]]
 name = "crates-index"
+version = "0.18.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "599f67b56f40863598cb30450427049935d05de2e36c61d33c050f04d7ec8cf2"
+dependencies = [
+ "git2 0.15.0",
+ "hex 0.4.3",
+ "home",
+ "memchr",
+ "num_cpus",
+ "rayon",
+ "rustc-hash",
+ "semver 1.0.17",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "smartstring",
+ "toml 0.5.11",
+]
+
+[[package]]
+name = "crates-index"
 version = "0.19.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "51ddd986d8b0405750d3da55a36cfa5ddad74a6dbf8826dec1cae40bf1218bd4"
 dependencies = [
- "git2",
+ "git2 0.16.0",
  "hex 0.4.3",
  "home",
  "memchr",
@@ -2483,6 +2505,21 @@ dependencies = [
 
 [[package]]
 name = "git2"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2994bee4a3a6a51eb90c218523be382fd7ea09b16380b9312e9dbe955ff7c7d1"
+dependencies = [
+ "bitflags 1.3.2",
+ "libc",
+ "libgit2-sys",
+ "log",
+ "openssl-probe",
+ "openssl-sys",
+ "url",
+]
+
+[[package]]
+name = "git2"
 version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be36bc9e0546df253c0cc41fd0af34f5e92845ad8509462ec76672fac6997f5b"
@@ -2503,7 +2540,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7577f4e6341ba7c90d883511130a45b956c274ba5f4d205d9f9da990f654cd33"
 dependencies = [
  "curl",
- "git2",
+ "git2 0.16.0",
  "log",
  "url",
 ]
@@ -5400,6 +5437,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a507befe795404456341dfab10cef66ead4c041f62b8b11bbb92bffe5d0953e0"
 
 [[package]]
+name = "smartstring"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3fb72c633efbaa2dd666986505016c32c3044395ceaf881518399d2f4127ee29"
+dependencies = [
+ "autocfg",
+ "serde",
+ "static_assertions",
+ "version_check",
+]
+
+[[package]]
 name = "smol_str"
 version = "0.1.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7414,3 +7463,19 @@ dependencies = [
  "libc",
  "pkg-config",
 ]
+
+[[patch.unused]]
+name = "shuttle-aws-rds"
+version = "0.13.0"
+
+[[patch.unused]]
+name = "shuttle-persist"
+version = "0.13.0"
+
+[[patch.unused]]
+name = "shuttle-shared-db"
+version = "0.13.0"
+
+[[patch.unused]]
+name = "shuttle-static-folder"
+version = "0.13.1"

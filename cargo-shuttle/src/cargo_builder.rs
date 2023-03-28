@@ -61,7 +61,7 @@ impl CargoBuilder {
     ) -> &mut Self {
         match section {
             CargoSection::Dependency(x) => {
-                let mut dependency = self.dependencies.entry(&x.name).or_insert(BTreeMap::new());
+                let dependency = self.dependencies.entry(x.to_owned().name).or_insert(BTreeMap::new());
                 dependency.insert(attribute_name, dep_value);
                 dependency.insert("version".to_owned(), Value::from(x.get_latest_version()));
             }
@@ -185,7 +185,7 @@ mod tests {
         let mut builder = CargoBuilder::new();
         let features = Array::from_iter(vec!["axum-web"]);
 
-        builder.add_dependency(dependency1.to_string());
+        builder.add_dependency(dependency1.to_owned());
         builder.add_var(
             CargoSection::Dependency(dependency1),
             "features".to_string(),

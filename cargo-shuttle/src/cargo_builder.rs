@@ -28,7 +28,7 @@ impl Dependency {
 
     pub fn get_latest_version(&self) -> String {
         match &self.version {
-            Some(x) => x.to_owned(),
+            Some(x) => x.to_string(),
             None => {
                 let index = Index::new_cargo_default().unwrap();
                 let crate_ver = index
@@ -61,22 +61,9 @@ impl CargoBuilder {
     ) -> &mut Self {
         match section {
             CargoSection::Dependency(x) => {
-                match self.dependencies.get_mut(&x.name) {
-                    Some(y) => {
-                        y.insert(attribute_name, dep_value);
-                    }
-                    None => {
-                        self.dependencies.insert(
-                            x.name.to_owned(),
-                            BTreeMap::from([(attribute_name, dep_value)]),
-                        );
-                    }
-                };
-
-                self.dependencies
-                    .get_mut(&x.name)
-                    .unwrap()
-                    .insert("version".to_owned(), Value::from(x.get_latest_version()));
+                let mut dependency = self.dependencies.entry(&x.name).or_insert(BTreeMap::new());
+                dependency.insert(attribute_name, dep_value);
+                dependency.insert("version".to_owned(), Value::from(x.get_latest_version()));
             }
             CargoSection::Package => {
                 self.packages.entry(attribute_name).or_insert(dep_value);
@@ -85,7 +72,7 @@ impl CargoBuilder {
         self
     }
 
-    // Convenience function for inserting dependency with `String` only without the use of `CargoSection`
+    /// Convenience function for inserting dependency with `String` only without the use of `CargoSection`
     pub fn add_dependency_var(
         &mut self,
         dependency: Dependency,
@@ -99,12 +86,12 @@ impl CargoBuilder {
         )
     }
 
-    // Convenience function for inserting a package with name / values without the need for `CargoSection`
+    /// Convenience function for inserting a package with name / values without the need for `CargoSection`
     #[allow(dead_code)]
     pub fn add_package(&mut self, package_name: &str, package_value: &str) -> &mut Self {
         self.add_var(
             CargoSection::Package,
-            package_name.to_owned(),
+            package_name.to_string(),
             Value::from(package_value),
         )
     }
@@ -115,7 +102,7 @@ impl CargoBuilder {
         let version = dependency.get_latest_version();
         self.add_var(
             CargoSection::Dependency(dependency),
-            "version".to_owned(),
+            "version".to_string(),
             Value::from(version),
         )
     }
@@ -133,16 +120,16 @@ impl CargoBuilder {
         for (name, dep_attribute) in self.dependencies {
             if dep_attribute.len() == 1 && dep_attribute.contains_key("version") {
                 let dep_value = dep_attribute.get("version").unwrap();
-                cargo_doc["dependencies"][name.to_owned()] = value(dep_value);
+                cargo_doc["dependencies"][name.to_string()] = value(dep_value);
             } else {
                 for (dep_type, dep_value) in dep_attribute {
-                    cargo_doc["dependencies"][name.to_owned()][dep_type] = value(dep_value);
+                    cargo_doc["dependencies"][name.to_string()][dep_type] = value(dep_value);
                 }
             }
         }
 
         for (name, dep_value) in self.packages {
-            cargo_doc["packages"][name.to_owned()] = value(dep_value);
+            cargo_doc["packages"][name.to_string()] = value(dep_value);
         }
 
         Ok(cargo_doc)
@@ -156,14 +143,14 @@ mod tests {
 
     fn get_mock_dependency(name: &str, version: Option<String>) -> Dependency {
         Dependency {
-            name: name.to_owned(),
+            name: name.to_string(),
             version,
         }
     }
 
     #[test]
     fn add_dependency_new() {
-        let dependency = get_mock_dependency("test-dep", Some("1.2.3".to_owned()));
+        let dependency = get_mock_dependency("test-dep", Some("1.2.3".to_string()));
 
         let mut builder = CargoBuilder::new();
         builder.add_dependency(dependency);
@@ -177,8 +164,8 @@ mod tests {
 
     #[test]
     fn add_dependency_overwrite() {
-        let dependency1 = get_mock_dependency("test-dep", Some("1.1.1".to_owned()));
-        let dependency2 = get_mock_dependency("test-dep", Some("1.2.2".to_owned()));
+        let dependency1 = get_mock_dependency("test-dep", Some("1.1.1".to_string()));
+        let dependency2 = get_mock_dependency("test-dep", Some("1.2.2".to_string()));
 
         let mut builder = CargoBuilder::new();
         builder.add_dependency(dependency1);
@@ -193,15 +180,15 @@ mod tests {
 
     #[test]
     fn add_dependency_additional() {
-        let dependency1 = get_mock_dependency("test-dep", Some("1.1.1".to_owned()));
+        let dependency1 = get_mock_dependency("test-dep", Some("1.1.1".to_string()));
 
         let mut builder = CargoBuilder::new();
         let features = Array::from_iter(vec!["axum-web"]);
 
-        builder.add_dependency(dependency1.to_owned());
+        builder.add_dependency(dependency1.to_string());
         builder.add_var(
             CargoSection::Dependency(dependency1),
-            "features".to_owned(),
+            "features".to_string(),
             Value::from(features),
         );
 
@@ -215,10 +202,10 @@ mod tests {
 
     #[test]
     fn add_dependency_var_no_version() {
-        let dependency = get_mock_dependency("test-dep", Some("1.1.1".to_owned()));
+        let dependency = get_mock_dependency("test-dep", Some("1.1.1".to_string()));
         let mut builder = CargoBuilder::new();
 
-        builder.add_dependency_var(dependency, "features".to_owned(), Value::from("afeature"));
+        builder.add_dependency_var(dependency, "features".to_string(), Value::from("afeature"));
 
         let toml_document = builder.get_document();
 
@@ -230,12 +217,12 @@ mod tests {
 
     #[test]
     fn add_var_new() {
-        let dependency = get_mock_dependency("test-dep", Some("1.1.1".to_owned()));
+        let dependency = get_mock_dependency("test-dep", Some("1.1.1".to_string()));
         let mut builder = CargoBuilder::new();
         let features = Array::from_iter(vec!["axum-web"]);
         builder.add_var(
             CargoSection::Dependency(dependency),
-            "features".to_owned(),
+            "features".to_string(),
             Value::from(features),
         );
         let toml_document = builder.get_document();
@@ -249,18 +236,18 @@ mod tests {
     #[test]
     fn add_var_overwrite() {
         let existing_toml_doc = Document::new();
-        let dependency = get_mock_dependency("test-dep", Some("1.1.1".to_owned()));
-        let overwrite_dependency = get_mock_dependency("test-dep", Some("1.2.2".to_owned()));
+        let dependency = get_mock_dependency("test-dep", Some("1.1.1".to_string()));
+        let overwrite_dependency = get_mock_dependency("test-dep", Some("1.2.2".to_string()));
 
         let mut builder = CargoBuilder::new();
         builder.add_var(
             CargoSection::Dependency(dependency),
-            "path".to_owned(),
+            "path".to_string(),
             Value::from("initial/path"),
         );
         builder.add_var(
             CargoSection::Dependency(overwrite_dependency),
-            "path".to_owned(),
+            "path".to_string(),
             Value::from("overwrite/path"),
         );
         let toml_document = builder.combine(existing_toml_doc).unwrap();
@@ -277,8 +264,8 @@ mod tests {
         doc_to_overwrite["dependencies"]["test_dep"]["features"] = value("initial value");
 
         let mock_dependencies = BTreeMap::from([(
-            "test_dep".to_owned(),
-            BTreeMap::from([("features".to_owned(), Value::from("overwrite value"))]),
+            "test_dep".to_string(),
+            BTreeMap::from([("features".to_string(), Value::from("overwrite value"))]),
         )]);
 
         let builder = CargoBuilder {

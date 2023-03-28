@@ -82,6 +82,7 @@ impl LocalProvisioner {
                 trace!("will create DB container {container_name}");
                 let options = Some(CreateContainerOptions {
                     name: container_name.clone(),
+                    platform: None,
                 });
                 let mut port_bindings = HashMap::new();
                 let host_port = pick_unused_port().expect("system to have a free port");

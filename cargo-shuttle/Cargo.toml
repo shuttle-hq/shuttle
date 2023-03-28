@@ -10,7 +10,7 @@ homepage = "https://www.shuttle.rs"
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
-bollard = "0.13.0"
+bollard = { workspace = true }
 cargo = { workspace = true }
 cargo-edit = { version = "0.11.9", features = ["cli"] }
 cargo_metadata = { workspace = true }

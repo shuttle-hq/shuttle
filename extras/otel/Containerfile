@@ -1,6 +1,6 @@
 ARG OTEL_TAG=
 
-FROM otel/opentelemetry-collector-contrib:${OTEL_TAG}
+FROM docker.io/otel/opentelemetry-collector-contrib:${OTEL_TAG}
 
 COPY otel-collector-config.yaml /etc/otel-collector-config.yaml
 

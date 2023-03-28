@@ -329,7 +329,7 @@ fn db_type_to_config(db_type: Type) -> EngineConfig {
     match db_type {
         Type::Shared(SharedEngine::Postgres) => EngineConfig {
             r#type: "shared_postgres".to_string(),
-            image: "postgres:11".to_string(),
+            image: "docker.io/library/postgres:11".to_string(),
             engine: "postgres".to_string(),
             username: "postgres".to_string(),
             password: "postgres".to_string(),
@@ -344,7 +344,7 @@ fn db_type_to_config(db_type: Type) -> EngineConfig {
         },
         Type::Shared(SharedEngine::MongoDb) => EngineConfig {
             r#type: "shared_mongodb".to_string(),
-            image: "mongo:5.0.10".to_string(),
+            image: "docker.io/library/mongo:5.0.10".to_string(),
             engine: "mongodb".to_string(),
             username: "mongodb".to_string(),
             password: "password".to_string(),
@@ -363,7 +363,7 @@ fn db_type_to_config(db_type: Type) -> EngineConfig {
         },
         Type::AwsRds(AwsRdsEngine::Postgres) => EngineConfig {
             r#type: "aws_rds_postgres".to_string(),
-            image: "postgres:13.4".to_string(),
+            image: "docker.io/library/postgres:13.4".to_string(),
             engine: "postgres".to_string(),
             username: "postgres".to_string(),
             password: "postgres".to_string(),
@@ -378,7 +378,7 @@ fn db_type_to_config(db_type: Type) -> EngineConfig {
         },
         Type::AwsRds(AwsRdsEngine::MariaDB) => EngineConfig {
             r#type: "aws_rds_mariadb".to_string(),
-            image: "mariadb:10.6.7".to_string(),
+            image: "docker.io/library/mariadb:10.6.7".to_string(),
             engine: "mariadb".to_string(),
             username: "root".to_string(),
             password: "mariadb".to_string(),
@@ -395,7 +395,7 @@ fn db_type_to_config(db_type: Type) -> EngineConfig {
         },
         Type::AwsRds(AwsRdsEngine::MySql) => EngineConfig {
             r#type: "aws_rds_mysql".to_string(),
-            image: "mysql:8.0.28".to_string(),
+            image: "docker.io/library/mysql:8.0.28".to_string(),
             engine: "mysql".to_string(),
             username: "root".to_string(),
             password: "mysql".to_string(),

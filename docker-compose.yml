@@ -146,7 +146,7 @@ services:
         constraints:
           - node.hostname==postgres
   mongodb:
-    image: mongo:5.0.10
+    image: docker.io/library/mongo:5.0.10
     restart: always
     networks:
       user-net:
@@ -189,7 +189,7 @@ services:
         constraints:
           - node.hostname==controller
   deck-chores:
-    image: funkyfuture/deck-chores:1
+    image: docker.io/funkyfuture/deck-chores:1
     restart: unless-stopped
     environment:
       TIMEZONE: UTC

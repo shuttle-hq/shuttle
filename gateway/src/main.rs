@@ -178,7 +178,7 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
         tokio::spawn(async move {
             // Make sure we have a certificate for ourselves.
             let certs = gateway
-                .fetch_certificate(&acme_client, resolver.clone(), gateway.credentials())
+                .fetch_certificate(&acme_client, gateway.credentials())
                 .await;
             resolver
                 .serve_default_der(certs)

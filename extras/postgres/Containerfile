@@ -1,6 +1,6 @@
 ARG POSTGRES_TAG=
 
-FROM postgres:${POSTGRES_TAG}
+FROM docker.io/postgres:${POSTGRES_TAG}
 
 RUN apt-get update &&\
     apt-get install --yes curl python3 python3-aiohttp

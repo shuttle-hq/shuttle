@@ -64,6 +64,13 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
 
     let sender = worker.sender();
 
+    let worker_handle = tokio::spawn(
+        worker
+            .start()
+            .map_ok(|_| info!("worker terminated successfully"))
+            .map_err(|err| error!("worker error: {}", err)),
+    );
+
     for (project_name, _) in gateway
         .iter_projects()
         .await
@@ -76,16 +83,8 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
             .and_then(task::refresh())
             .send(&sender)
             .await
-            .ok()
-            .unwrap();
+            .expect("to refresh old projects");
     }
-
-    let worker_handle = tokio::spawn(
-        worker
-            .start()
-            .map_ok(|_| info!("worker terminated successfully"))
-            .map_err(|err| error!("worker error: {}", err)),
-    );
 
     // Every 60 secs go over all `::Ready` projects and check their health.
     let ambulance_handle = tokio::spawn({
@@ -178,9 +177,13 @@ async fn start(db: SqlitePool, fs: PathBuf, args: StartArgs) -> io::Result<()> {
 
         tokio::spawn(async move {
             // Make sure we have a certificate for ourselves.
-            gateway
-                .fetch_certificate(&acme_client, resolver.clone(), gateway.credentials())
+            let certs = gateway
+                .fetch_certificate(&acme_client, gateway.credentials())
                 .await;
+            resolver
+                .serve_default_der(certs)
+                .await
+                .expect("failed to set certs to be served as default");
         });
     } else {
         warn!("TLS is disabled in the proxy service. This is only acceptable in testing, and should *never* be used in deployments.");

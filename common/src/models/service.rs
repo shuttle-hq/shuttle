@@ -29,7 +29,7 @@ Status:        {}
 Last Updated:  {}
 URI:           {}
 "#,
-                self.name,
+                self.name.clone().bold(),
                 deployment.id,
                 deployment
                     .state

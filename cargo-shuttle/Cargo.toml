@@ -1,6 +1,6 @@
 [package]
 name = "cargo-shuttle"
-version = "0.12.0"
+version = "0.13.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -10,7 +10,7 @@ homepage = "https://www.shuttle.rs"
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
-bollard = "0.13.0"
+bollard = { workspace = true }
 cargo = { workspace = true }
 cargo-edit = { version = "0.11.9", features = ["cli"] }
 cargo_metadata = { workspace = true }
@@ -65,7 +65,7 @@ features = ["models"]
 workspace = true
 
 [dependencies.shuttle-secrets]
-version = "0.12.0"
+version = "0.13.0"
 path = "../resources/secrets"
 
 [dependencies.shuttle-service]

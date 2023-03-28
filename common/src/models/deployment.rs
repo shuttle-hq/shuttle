@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use chrono::{DateTime, Utc};
 use comfy_table::{
-    modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, Cell, CellAlignment, Color,
+    modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, Attribute, Cell, CellAlignment, Color,
     ContentArrangement, Table,
 };
 use crossterm::style::Stylize;
@@ -59,9 +59,15 @@ pub fn get_deployments_table(deployments: &Vec<Response>, service_name: &str) ->
             .apply_modifier(UTF8_ROUND_CORNERS)
             .set_content_arrangement(ContentArrangement::DynamicFullWidth)
             .set_header(vec![
-                Cell::new("ID").set_alignment(CellAlignment::Center),
-                Cell::new("Status").set_alignment(CellAlignment::Center),
-                Cell::new("Last updated").set_alignment(CellAlignment::Center),
+                Cell::new("Deployment ID")
+                    .set_alignment(CellAlignment::Center)
+                    .add_attribute(Attribute::Bold),
+                Cell::new("Status")
+                    .set_alignment(CellAlignment::Center)
+                    .add_attribute(Attribute::Bold),
+                Cell::new("Last updated")
+                    .set_alignment(CellAlignment::Center)
+                    .add_attribute(Attribute::Bold),
             ]);
 
         for deploy in deployments.iter() {
@@ -77,10 +83,11 @@ pub fn get_deployments_table(deployments: &Vec<Response>, service_name: &str) ->
 
         format!(
             r#"
-Most recent deploys for {}
+Most recent {} for {}
 {}
 "#,
-            service_name.bold(),
+            "deployments".bold(),
+            service_name,
             table,
         )
     }

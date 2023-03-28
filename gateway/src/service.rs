@@ -582,7 +582,6 @@ impl GatewayService {
     async fn create_certificate<'a>(
         &self,
         acme: &AcmeClient,
-        resolver: Arc<GatewayCertResolver>,
         creds: AccountCredentials<'a>,
     ) -> ChainAndPrivateKey {
         let public: FQDN = self.context().settings.fqdn.parse().unwrap();
@@ -598,9 +597,8 @@ impl GatewayService {
         let mut buf = Vec::new();
         buf.extend(chain.as_bytes());
         buf.extend(private_key.as_bytes());
-        let certs = ChainAndPrivateKey::parse_pem(Cursor::new(buf)).expect("Malformed PEM buffer.");
 
-        certs
+        ChainAndPrivateKey::parse_pem(Cursor::new(buf)).expect("Malformed PEM buffer.")
     }
 
     /// Fetch the gateway certificate from the state location.
@@ -609,7 +607,6 @@ impl GatewayService {
     pub async fn fetch_certificate(
         &self,
         acme: &AcmeClient,
-        resolver: Arc<GatewayCertResolver>,
         creds: AccountCredentials<'_>,
     ) -> ChainAndPrivateKey {
         let tls_path = self.state_location.join("ssl.pem");
@@ -621,7 +618,7 @@ impl GatewayService {
                     tls_path.display()
                 );
 
-                let certs = self.create_certificate(acme, resolver, creds).await;
+                let certs = self.create_certificate(acme, creds).await;
                 certs.clone().save_pem(&tls_path).unwrap();
                 certs
             }
@@ -637,9 +634,7 @@ impl GatewayService {
         creds: AccountCredentials<'_>,
     ) {
         let account = AccountWrapper::from(creds).0;
-        let certs = self
-            .fetch_certificate(acme, resolver.clone(), account.credentials())
-            .await;
+        let certs = self.fetch_certificate(acme, account.credentials()).await;
         // Safe to unwrap because a 'ChainAndPrivateKey' is built from a PEM.
         let chain_and_pk = certs.into_pem().unwrap();
 
@@ -650,9 +645,7 @@ impl GatewayService {
         let diff = x509_cert.validity().not_after.sub(ASN1Time::now()).unwrap();
         if diff.whole_days() <= RENEWAL_VALIDITY_THRESHOLD_IN_DAYS {
             let tls_path = self.state_location.join("ssl.pem");
-            let certs = self
-                .create_certificate(acme, resolver.clone(), account.credentials())
-                .await;
+            let certs = self.create_certificate(acme, account.credentials()).await;
             resolver
                 .serve_default_der(certs.clone())
                 .await

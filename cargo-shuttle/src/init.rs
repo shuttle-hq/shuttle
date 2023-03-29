@@ -478,16 +478,16 @@ impl ShuttleInit for ShuttleInitNoOp {
     }
 }
 
-/// Interoprates with `cargo` crate and calls `cargo init --libs [path]`.
+/// Interoprates with `cargo` crate and calls `cargo init [path]`.
 pub fn cargo_init(path: PathBuf) -> Result<()> {
-    let opts = NewOptions::new(None, false, true, path, None, None, None)?;
+    let opts = NewOptions::new(None, true, false, path, None, None, None)?;
     let cargo_config = cargo::util::config::Config::default()?;
     let init_result = cargo::ops::init(&opts, &cargo_config)?;
 
     // Mimic `cargo init` behavior and log status or error to shell
     cargo_config
         .shell()
-        .status("Created", format!("{} (shuttle) package", init_result))?;
+        .status("Created", format!("{init_result} (shuttle) package"))?;
 
     Ok(())
 }
@@ -540,10 +540,10 @@ pub fn cargo_shuttle_init(path: PathBuf, framework: Framework) -> Result<()> {
     Ok(())
 }
 
-/// Writes `boilerplate` code to the specified `lib.rs` file path.
-pub fn write_lib_file(boilerplate: &'static str, lib_path: &Path) -> Result<()> {
-    let mut lib_file = File::create(lib_path)?;
-    lib_file.write_all(boilerplate.as_bytes())?;
+/// Writes `boilerplate` code to the specified `main.rs` file path.
+pub fn write_main_file(boilerplate: &'static str, main_path: &Path) -> Result<()> {
+    let mut main_file = File::create(main_path)?;
+    main_file.write_all(boilerplate.as_bytes())?;
 
     Ok(())
 }

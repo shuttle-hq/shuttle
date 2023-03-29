@@ -27,7 +27,7 @@ use std::time::Duration;
 
 use cargo::core::compiler::{CompileMode, MessageFormat};
 use cargo::core::Workspace;
-use cargo::ops::{CompileOptions, TestOptions};
+use cargo::ops::{self, CompileOptions, TestOptions};
 use flate2::read::GzDecoder;
 use tar::Archive;
 use tokio::fs;
@@ -384,13 +384,15 @@ async fn run_pre_deploy_tests(
     // Build tests with a maximum of 4 workers.
     compile_opts.build_config.jobs = 4;
 
+    compile_opts.spec = ops::Packages::All;
+
     let opts = TestOptions {
         compile_opts,
         no_run: false,
         no_fail_fast: false,
     };
 
-    cargo::ops::run_tests(&ws, &opts, &[]).map_err(TestError::Failed)
+    ops::run_tests(&ws, &opts, &[]).map_err(TestError::Failed)
 }
 
 /// This will store the path to the executable for each runtime, which will be the users project with

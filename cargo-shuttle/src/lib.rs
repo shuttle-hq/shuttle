@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::str::FromStr;
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{bail, Context, Result};
 pub use args::{Args, Command, DeployArgs, InitArgs, LoginArgs, ProjectArgs, RunArgs};
 use cargo_metadata::Message;
 use clap::CommandFactory;
@@ -68,7 +68,13 @@ impl Shuttle {
             Command::Deploy(..)
                 | Command::Deployment(..)
                 | Command::Resource(..)
-                | Command::Project(..)
+                | Command::Project(
+                    ProjectCommand::Start { .. }
+                    | ProjectCommand::Stop { .. }
+                    | ProjectCommand::Restart { .. }
+                    | ProjectCommand::Status { .. }
+                    // ProjectCommand::List does not need to know which project we are in
+                )
                 | Command::Stop
                 | Command::Clean
                 | Command::Secrets
@@ -108,8 +114,11 @@ impl Shuttle {
                     Command::Stop => self.stop(&client).await,
                     Command::Clean => self.clean(&client).await,
                     Command::Secrets => self.secrets(&client).await,
-                    Command::Project(ProjectCommand::New { idle_minutes }) => {
+                    Command::Project(ProjectCommand::Start { idle_minutes }) => {
                         self.project_create(&client, idle_minutes).await
+                    }
+                    Command::Project(ProjectCommand::Restart { idle_minutes }) => {
+                        self.project_recreate(&client, idle_minutes).await
                     }
                     Command::Project(ProjectCommand::Status { follow }) => {
                         self.project_status(&client, follow).await
@@ -117,7 +126,7 @@ impl Shuttle {
                     Command::Project(ProjectCommand::List { filter }) => {
                         self.projects_list(&client, filter).await
                     }
-                    Command::Project(ProjectCommand::Rm) => self.project_delete(&client).await,
+                    Command::Project(ProjectCommand::Stop) => self.project_delete(&client).await,
                     _ => {
                         unreachable!("commands that don't need a client have already been matched")
                     }
@@ -244,7 +253,7 @@ impl Shuttle {
         if let Some(working_directory) = root_directory_path {
             project_args.working_directory = working_directory;
         } else {
-            return Err(anyhow!("Could not locate the root of a cargo project. Are you inside a cargo project? You can also use `--working-directory` to locate your cargo project."));
+            bail!("Could not locate the root of a cargo project. Are you inside a cargo project? You can also use `--working-directory` to locate your cargo project.");
         }
 
         self.ctx.load_local(project_args)
@@ -366,7 +375,7 @@ impl Shuttle {
             if let Some(deployment) = summary.deployment {
                 deployment.id
             } else {
-                return Err(anyhow!("could not automatically find a running deployment for '{}'. Try passing a deployment ID manually", self.ctx.project_name()));
+                bail!("Could not automatically find a running deployment for '{}'. Try passing a deployment ID manually", self.ctx.project_name());
             }
         };
 
@@ -729,6 +738,13 @@ impl Shuttle {
         Ok(())
     }
 
+    async fn project_recreate(&self, client: &Client, idle_minutes: u64) -> Result<()> {
+        self.project_delete(client).await?;
+        self.project_create(client, idle_minutes).await?;
+
+        Ok(())
+    }
+
     async fn projects_list(&self, client: &Client, filter: Option<String>) -> Result<()> {
         let projects = match filter {
             Some(filter) => {
@@ -737,7 +753,7 @@ impl Shuttle {
                         .get_projects_list_filtered(filter.to_string())
                         .await?
                 } else {
-                    return Err(anyhow!("That's not a valid project status!"));
+                    bail!("That's not a valid project status!");
                 }
             }
             None => client.get_projects_list().await?,
@@ -751,26 +767,24 @@ impl Shuttle {
     }
 
     async fn project_status(&self, client: &Client, follow: bool) -> Result<()> {
-        match follow {
-            true => {
-                self.wait_with_spinner(
-                    &[
-                        project::State::Ready,
-                        project::State::Destroyed,
-                        project::State::Errored {
-                            message: Default::default(),
-                        },
-                    ],
-                    client.get_project(self.ctx.project_name()),
-                    self.ctx.project_name(),
-                    client,
-                )
-                .await?;
-            }
-            false => {
-                let project = client.get_project(self.ctx.project_name()).await?;
-                println!("{project}");
-            }
+        if follow {
+            self.wait_with_spinner(
+                &[
+                    project::State::Ready,
+                    project::State::Destroyed,
+                    project::State::Errored {
+                        message: Default::default(),
+                    },
+                ],
+                client.get_project(self.ctx.project_name()),
+                self.ctx.project_name(),
+                client,
+            )
+            .await?;
+        }
+        else {
+            let project = client.get_project(self.ctx.project_name()).await?;
+            println!("{project}");
         }
 
         Ok(())
@@ -918,9 +932,9 @@ impl Shuttle {
                 }
 
                 writeln!(error).expect("to append error");
-                writeln!(error, "to proceed despite this and include the uncommitted changes, pass the `--allow-dirty` flag").expect("to append error");
+                writeln!(error, "To proceed despite this and include the uncommitted changes, pass the `--allow-dirty` flag").expect("to append error");
 
-                return Err(anyhow::Error::msg(error));
+                bail!(error);
             }
         }
 
@@ -956,9 +970,7 @@ fn check_version(runtime_path: &Path) -> Result<()> {
     if runtime_version == valid_version {
         Ok(())
     } else {
-        Err(anyhow!(
-            "shuttle-runtime and cargo-shuttle are not the same version"
-        ))
+        bail!("shuttle-runtime and cargo-shuttle are not the same version")
     }
 }
 

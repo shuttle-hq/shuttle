@@ -61,7 +61,10 @@ impl CargoBuilder {
     ) -> &mut Self {
         match section {
             CargoSection::Dependency(x) => {
-                let dependency = self.dependencies.entry(x.to_owned().name).or_insert(BTreeMap::new());
+                let dependency = self
+                    .dependencies
+                    .entry(x.to_owned().name)
+                    .or_insert(BTreeMap::new());
                 dependency.insert(attribute_name, dep_value);
                 dependency.insert("version".to_owned(), Value::from(x.get_latest_version()));
             }

@@ -534,7 +534,7 @@ pub fn cargo_shuttle_init(path: PathBuf, framework: Framework) -> Result<()> {
     let lib_path = path.join("src").join("lib.rs");
     let boilerplate = init_config.get_boilerplate_code_for_framework();
     if !boilerplate.is_empty() {
-        write_lib_file(boilerplate, &lib_path)?;
+        write_main_file(boilerplate, &lib_path)?;
     }
 
     Ok(())

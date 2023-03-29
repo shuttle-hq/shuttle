@@ -16,9 +16,27 @@ use crate::{NEXT_NAME, RUNTIME_NAME};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 /// How to run/build the project
-pub enum Runtime {
-    Next(PathBuf),
-    Alpha(PathBuf),
+pub struct Runtime {
+    pub executable_path: PathBuf,
+    pub is_wasm: bool,
+    pub service_name: String,
+    pub working_directory: PathBuf,
+}
+
+impl Runtime {
+    pub fn new(
+        executable_path: PathBuf,
+        is_wasm: bool,
+        service_name: String,
+        working_directory: PathBuf,
+    ) -> Self {
+        Self {
+            executable_path,
+            is_wasm,
+            service_name,
+            working_directory,
+        }
+    }
 }
 
 /// Given a project directory path, builds the crate
@@ -75,7 +93,14 @@ pub async fn build_workspace(
         let mut alpha_binaries = compilation
             .binaries
             .iter()
-            .map(|binary| Runtime::Alpha(binary.path.clone()))
+            .map(|binary| {
+                Runtime::new(
+                    binary.path.clone(),
+                    false,
+                    binary.unit.pkg.name().to_string(),
+                    binary.unit.pkg.manifest_path().to_path_buf(),
+                )
+            })
             .collect();
 
         runtimes.append(&mut alpha_binaries);
@@ -88,7 +113,14 @@ pub async fn build_workspace(
         let mut next_libraries = compilation
             .cdylibs
             .iter()
-            .map(|binary| Runtime::Next(binary.path.clone()))
+            .map(|binary| {
+                Runtime::new(
+                    binary.path.clone(),
+                    true,
+                    binary.unit.pkg.name().to_string(),
+                    binary.unit.pkg.manifest_path().to_path_buf(),
+                )
+            })
             .collect();
 
         runtimes.append(&mut next_libraries);

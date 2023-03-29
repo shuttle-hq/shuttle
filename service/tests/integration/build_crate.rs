@@ -32,9 +32,12 @@ async fn is_bin() {
         build_workspace(Path::new(&project_path), false, tx)
             .await
             .unwrap(),
-        vec![Runtime::Alpha(
-            PathBuf::from(project_path).join("target/debug/is-bin")
-        )]
+        vec![Runtime::new(
+            PathBuf::from(&project_path).join("target/debug/is-bin"),
+            false,
+            "is_bin".to_string(),
+            PathBuf::from(&project_path).join("Cargo.toml")
+        ),]
     );
 }
 
@@ -62,8 +65,18 @@ async fn workspace() {
             .await
             .unwrap(),
         vec![
-            Runtime::Alpha(PathBuf::from(&project_path).join("target/debug/alpha")),
-            Runtime::Next(PathBuf::from(&project_path).join("target/wasm32-wasi/debug/next.wasm"))
+            Runtime::new(
+                PathBuf::from(&project_path).join("target/debug/alpha"),
+                false,
+                "alpha".to_string(),
+                PathBuf::from(&project_path).join("alpha/Cargo.toml")
+            ),
+            Runtime::new(
+                PathBuf::from(&project_path).join("target/wasm32-wasi/debug/next.wasm"),
+                true,
+                "next".to_string(),
+                PathBuf::from(&project_path).join("next/Cargo.toml")
+            ),
         ]
     );
 }

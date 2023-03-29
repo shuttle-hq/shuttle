@@ -57,14 +57,11 @@ pub struct ShuttleInitActixWeb;
 
 impl ShuttleInit for ShuttleInitActixWeb {
     fn get_base_dependencies(&self) -> Vec<&str> {
-        vec!["actix-web"]
+        vec!["actix-web", "shuttle-actix-web", "tokio", "shuttle-runtime"]
     }
 
     fn get_dependency_attributes(&self) -> HashMap<&str, HashMap<&str, Value>> {
-        HashMap::from([(
-            "shuttle-actix-web",
-            HashMap::from([("features", Value::from(Array::from_iter(["web-actix-web"])))]),
-        )])
+        HashMap::new()
     }
 
     fn get_boilerplate_code_for_framework(&self) -> &'static str {
@@ -90,14 +87,11 @@ pub struct ShuttleInitAxum;
 
 impl ShuttleInit for ShuttleInitAxum {
     fn get_base_dependencies(&self) -> Vec<&str> {
-        vec!["axum", "tokio"]
+        vec!["axum", "shuttle-axum", "tokio", "shuttle-runtime"]
     }
 
     fn get_dependency_attributes(&self) -> HashMap<&str, HashMap<&str, Value>> {
-        HashMap::from([(
-            "shuttle-axum",
-            HashMap::from([("features", Value::from(Array::from_iter(["web-axum"])))]),
-        )])
+        HashMap::new()
     }
 
     fn get_boilerplate_code_for_framework(&self) -> &'static str {
@@ -118,14 +112,11 @@ pub struct ShuttleInitRocket;
 
 impl ShuttleInit for ShuttleInitRocket {
     fn get_base_dependencies(&self) -> Vec<&str> {
-        vec!["rocket", "tokio"]
+        vec!["rocket", "shuttle-rocket", "tokio", "shuttle-runtime"]
     }
 
     fn get_dependency_attributes(&self) -> HashMap<&str, HashMap<&str, Value>> {
-        HashMap::from([(
-            "shuttle-rocket",
-            HashMap::from([("features", Value::from(Array::from_iter(["web-rocket"])))]),
-        )])
+        HashMap::new()
     }
 
     fn get_boilerplate_code_for_framework(&self) -> &'static str {
@@ -148,14 +139,11 @@ pub struct ShuttleInitTide;
 
 impl ShuttleInit for ShuttleInitTide {
     fn get_base_dependencies(&self) -> Vec<&str> {
-        vec!["tide", "tokio"]
+        vec!["tide", "shuttle-tide", "tokio", "shuttle-runtime"]
     }
 
     fn get_dependency_attributes(&self) -> HashMap<&str, HashMap<&str, Value>> {
-        HashMap::from([(
-            "shuttle-tide",
-            HashMap::from([("features", Value::from(Array::from_iter(["web-tide"])))]),
-        )])
+        HashMap::new()
     }
 
     fn get_boilerplate_code_for_framework(&self) -> &'static str {
@@ -174,14 +162,11 @@ pub struct ShuttleInitPoem;
 
 impl ShuttleInit for ShuttleInitPoem {
     fn get_base_dependencies(&self) -> Vec<&str> {
-        vec!["poem", "tokio"]
+        vec!["poem", "shuttle-poem", "tokio", "shuttle-runtime"]
     }
 
     fn get_dependency_attributes(&self) -> HashMap<&str, HashMap<&str, Value>> {
-        HashMap::from([(
-            "shuttle-poem",
-            HashMap::from([("features", Value::from(Array::from_iter(["web-poem"])))]),
-        )])
+        HashMap::new()
     }
 
     fn get_boilerplate_code_for_framework(&self) -> &'static str {
@@ -204,14 +189,11 @@ pub struct ShuttleInitSalvo;
 
 impl ShuttleInit for ShuttleInitSalvo {
     fn get_base_dependencies(&self) -> Vec<&str> {
-        vec!["salvo", "tokio"]
+        vec!["salvo", "shuttle-salvo", "tokio", "shuttle-runtime"]
     }
 
     fn get_dependency_attributes(&self) -> HashMap<&str, HashMap<&str, Value>> {
-        HashMap::from([(
-            "shuttle-salvo",
-            HashMap::from([("features", Value::from(Array::from_iter(["web-salvo"])))]),
-        )])
+        HashMap::new()
     }
 
     fn get_boilerplate_code_for_framework(&self) -> &'static str {
@@ -233,31 +215,32 @@ pub struct ShuttleInitSerenity;
 
 impl ShuttleInit for ShuttleInitSerenity {
     fn get_base_dependencies(&self) -> Vec<&str> {
-        vec!["anyhow", "shuttle-secrets", "tracing", "tokio"]
+        vec![
+            "anyhow",
+            "shuttle-serenity",
+            "shuttle-secrets",
+            "tracing",
+            "tokio",
+            "shuttle-runtime",
+        ]
     }
 
     fn get_dependency_attributes(&self) -> HashMap<&str, HashMap<&str, Value>> {
-        HashMap::from([
-            (
-                "shuttle-serenity",
-                HashMap::from([("features", Value::from(Array::from_iter(["bot-serenity"])))]),
-            ),
-            (
-                "serenity",
-                HashMap::from([
-                    (
-                        "features",
-                        Value::from(Array::from_iter([
-                            "client",
-                            "gateway",
-                            "rustls_backend",
-                            "model",
-                        ])),
-                    ),
-                    ("default-features", Value::from(false)),
-                ]),
-            ),
-        ])
+        HashMap::from([(
+            "serenity",
+            HashMap::from([
+                (
+                    "features",
+                    Value::from(Array::from_iter([
+                        "client",
+                        "gateway",
+                        "rustls_backend",
+                        "model",
+                    ])),
+                ),
+                ("default-features", Value::from(false)),
+            ]),
+        )])
     }
 
     fn get_boilerplate_code_for_framework(&self) -> &'static str {
@@ -308,14 +291,19 @@ pub struct ShuttleInitPoise;
 
 impl ShuttleInit for ShuttleInitPoise {
     fn get_base_dependencies(&self) -> Vec<&str> {
-        vec!["anyhow", "poise", "shuttle-secrets", "tracing", "tokio"]
+        vec![
+            "anyhow",
+            "poise",
+            "shuttle-poise",
+            "shuttle-secrets",
+            "tracing",
+            "tokio",
+            "shuttle-runtime",
+        ]
     }
 
     fn get_dependency_attributes(&self) -> HashMap<&str, HashMap<&str, Value>> {
-        HashMap::from([(
-            "shuttle-poise",
-            HashMap::from([("features", Value::from(Array::from_iter(["bot-poise"])))]),
-        )])
+        HashMap::new()
     }
 
     fn get_boilerplate_code_for_framework(&self) -> &'static str {
@@ -364,15 +352,11 @@ pub struct ShuttleInitTower;
 
 impl ShuttleInit for ShuttleInitTower {
     fn get_base_dependencies(&self) -> Vec<&str> {
-        vec!["tokio"]
+        vec!["tokio", "shuttle-tower", "shuttle-runtime"]
     }
 
     fn get_dependency_attributes(&self) -> HashMap<&str, HashMap<&str, Value>> {
         HashMap::from([
-            (
-                "shuttle-tower",
-                HashMap::from([("features", Value::from(Array::from_iter(["web-tower"])))]),
-            ),
             (
                 "tower",
                 HashMap::from([("features", Value::from(Array::from_iter(["full"])))]),
@@ -421,7 +405,7 @@ pub struct ShuttleInitWarp;
 
 impl ShuttleInit for ShuttleInitWarp {
     fn get_base_dependencies(&self) -> Vec<&str> {
-        vec!["shuttle-warp", "tokio", "warp"]
+        vec!["shuttle-warp", "tokio", "warp", "shuttle-runtime"]
     }
 
     fn get_dependency_attributes(&self) -> HashMap<&str, HashMap<&str, Value>> {
@@ -445,7 +429,7 @@ pub struct ShuttleInitThruster;
 
 impl ShuttleInit for ShuttleInitThruster {
     fn get_base_dependencies(&self) -> Vec<&str> {
-        vec!["shuttle-thruster", "tokio"]
+        vec!["shuttle-thruster", "tokio", "shuttle-runtime"]
     }
 
     fn get_dependency_attributes(&self) -> HashMap<&str, HashMap<&str, Value>> {
@@ -622,9 +606,9 @@ mod shuttle_init_tests {
             publish = false
 
             [dependencies]
-            shuttle-runtime = "1.0"
             actix-web = "1.0"
             shuttle-actix-web = "1.0"
+            shuttle-runtime = "1.0"
             tokio = "1.0"
         "#};
 
@@ -644,9 +628,9 @@ mod shuttle_init_tests {
             publish = false
 
             [dependencies]
-            shuttle-runtime = "1.0"
             axum = "1.0"
             shuttle-axum = "1.0"
+            shuttle-runtime = "1.0"
             tokio = "1.0"
         "#};
 
@@ -660,15 +644,15 @@ mod shuttle_init_tests {
         let framework = Framework::Rocket;
         let expected = indoc! {r#"
             [package]
-            name = "mproject"
+            name = "myproject"
             version = "0.1.0"
             edition = "2021"
             publish = false
 
             [dependencies]
-            shuttle-runtime = "1.0"
             rocket = "1.0"
             shuttle-rocket = "1.0"
+            shuttle-runtime = "1.0"
             tokio = "1.0"
         "#};
 
@@ -690,8 +674,8 @@ mod shuttle_init_tests {
             [dependencies]
             shuttle-runtime = "1.0"
             shuttle-tide = "1.0"
-            tokio = "1.0"
             tide = "1.0"
+            tokio = "1.0"
         "#};
 
         let doc = get_framework_cargo_init(framework);
@@ -710,11 +694,11 @@ mod shuttle_init_tests {
             publish = false
 
             [dependencies]
+            hyper = { features = ["full"], version = "2.0" }
             shuttle-runtime = "1.0"
-            hyper = { version = "2.0", features = ["full"] }
             shuttle-tower = "1.0"
             tokio = "1.0"
-            tower = { version = "2.0", features = ["full"] }
+            tower = { features = ["full"], version = "2.0" }
         "#};
 
         let doc = get_framework_cargo_init(framework);
@@ -733,11 +717,10 @@ mod shuttle_init_tests {
             publish = false
 
             [dependencies]
-            shuttle-runtime = "1.0"
             poem = "1.0"
             shuttle-poem = "1.0"
+            shuttle-runtime = "1.0"
             tokio = "1.0"
-            [package]
         "#};
 
         let doc = get_framework_cargo_init(framework);
@@ -756,8 +739,8 @@ mod shuttle_init_tests {
             publish = false
 
             [dependencies]
-            shuttle-runtime = "1.0"
             salvo = "1.0"
+            shuttle-runtime = "1.0"
             shuttle-salvo = "1.0"
             tokio = "1.0"
         "#};
@@ -778,9 +761,9 @@ mod shuttle_init_tests {
             publish = false
 
             [dependencies]
-            shuttle-runtime = "1.0"
             anyhow = "1.0"
-            serenity = { version = "2.0", default-features = false, features = ["client", "gateway", "rustls_backend", "model"] }
+            serenity = { default-features = false, features = ["client", "gateway", "rustls_backend", "model"], version = "2.0" }
+            shuttle-runtime = "1.0"
             shuttle-secrets = "1.0"
             shuttle-serenity = "1.0"
             tokio = "1.0"
@@ -803,10 +786,10 @@ mod shuttle_init_tests {
             publish = false
 
             [dependencies]
-            shuttle-runtime = "1.0"
             anyhow = "1.0"
             poise = "1.0"
             shuttle-poise = "1.0"
+            shuttle-runtime = "1.0"
             shuttle-secrets = "1.0"
             tokio = "1.0"
             tracing = "1.0"
@@ -830,7 +813,7 @@ mod shuttle_init_tests {
             [dependencies]
             shuttle-runtime = "1.0"
             shuttle-thruster = "1.0"
-            thruster = { version = "2.0", features = ["hyper_server"] }
+            thruster = { features = ["hyper_server"], version = "2.0" }
             tokio = "1.0"
         "#};
 

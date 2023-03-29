@@ -1,0 +1,7 @@
+[workspace]
+
+members = [
+    "alpha",
+    "next",
+    "shared",
+]

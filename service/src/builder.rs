@@ -2,8 +2,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, bail, Context};
 use cargo::core::compiler::{CompileKind, CompileMode, CompileTarget, MessageFormat};
-use cargo::core::{Manifest, Shell, Summary, Verbosity, Workspace};
-use cargo::ops::{clean, compile, CleanOptions, CompileOptions};
+use cargo::core::{Package, Shell, Verbosity, Workspace};
+use cargo::ops::{self, clean, compile, CleanOptions, CompileOptions};
 use cargo::util::homedir;
 use cargo::util::interning::InternedString;
 use cargo::Config;
@@ -12,8 +12,9 @@ use crossbeam_channel::Sender;
 use pipe::PipeWriter;
 use tracing::{error, trace};
 
-use crate::NEXT_NAME;
+use crate::{NEXT_NAME, RUNTIME_NAME};
 
+#[derive(Clone, Debug, Eq, PartialEq)]
 /// How to run/build the project
 pub enum Runtime {
     Next(PathBuf),
@@ -21,11 +22,11 @@ pub enum Runtime {
 }
 
 /// Given a project directory path, builds the crate
-pub async fn build_crate(
+pub async fn build_workspace(
     project_path: &Path,
     release_mode: bool,
     tx: Sender<Message>,
-) -> anyhow::Result<Runtime> {
+) -> anyhow::Result<Vec<Runtime>> {
     let (read, write) = pipe::pipe();
     let project_path = project_path.to_owned();
 
@@ -49,29 +50,51 @@ pub async fn build_crate(
 
     let config = get_config(write)?;
     let manifest_path = project_path.join("Cargo.toml");
-    let mut ws = Workspace::new(&manifest_path, &config)?;
-
-    let current = ws.current_mut().map_err(|_| anyhow!("A Shuttle project cannot have a virtual manifest file - please ensure the `package` table is present in your Cargo.toml file."))?;
-
-    let summary = current.manifest_mut().summary_mut();
-    let is_next = is_next(summary);
-
-    if !is_next {
-        ensure_binary(current.manifest())?;
-    } else {
-        ensure_cdylib(current.manifest_mut())?;
-    }
-
+    let ws = Workspace::new(&manifest_path, &config)?;
     check_no_panic(&ws)?;
 
-    let opts = get_compile_options(&config, release_mode, is_next)?;
-    let compilation = compile(&ws, &opts)?;
+    let mut alpha_packages = Vec::new();
+    let mut next_packages = Vec::new();
 
-    Ok(if is_next {
-        Runtime::Next(compilation.cdylibs[0].path.clone())
-    } else {
-        Runtime::Alpha(compilation.binaries[0].path.clone())
-    })
+    for member in ws.members() {
+        if is_next(member) {
+            ensure_cdylib(member)?;
+            next_packages.push(member.name().to_string());
+        } else if is_alpha(member) {
+            ensure_binary(member)?;
+            alpha_packages.push(member.name().to_string());
+        }
+    }
+
+    let mut runtimes = Vec::new();
+
+    if !alpha_packages.is_empty() {
+        let opts = get_compile_options(&config, alpha_packages, release_mode, false)?;
+        let compilation = compile(&ws, &opts)?;
+
+        let mut alpha_binaries = compilation
+            .binaries
+            .iter()
+            .map(|binary| Runtime::Alpha(binary.path.clone()))
+            .collect();
+
+        runtimes.append(&mut alpha_binaries);
+    }
+
+    if !next_packages.is_empty() {
+        let opts = get_compile_options(&config, next_packages, release_mode, true)?;
+        let compilation = compile(&ws, &opts)?;
+
+        let mut next_libraries = compilation
+            .cdylibs
+            .iter()
+            .map(|binary| Runtime::Next(binary.path.clone()))
+            .collect();
+
+        runtimes.append(&mut next_libraries);
+    }
+
+    Ok(runtimes)
 }
 
 pub fn clean_crate(project_path: &Path, release_mode: bool) -> anyhow::Result<Vec<String>> {
@@ -138,6 +161,7 @@ pub fn get_config(writer: PipeWriter) -> anyhow::Result<Config> {
 /// Get options to compile in build mode
 fn get_compile_options(
     config: &Config,
+    packages: Vec<String>,
     release_mode: bool,
     wasm: bool,
 ) -> anyhow::Result<CompileOptions> {
@@ -166,19 +190,28 @@ fn get_compile_options(
         CompileKind::Host
     }];
 
+    opts.spec = ops::Packages::Packages(packages);
+
     Ok(opts)
 }
 
-fn is_next(summary: &Summary) -> bool {
-    summary
+fn is_next(package: &Package) -> bool {
+    package
         .dependencies()
         .iter()
         .any(|dependency| dependency.package_name() == NEXT_NAME)
 }
 
+fn is_alpha(package: &Package) -> bool {
+    package
+        .dependencies()
+        .iter()
+        .any(|dependency| dependency.package_name() == RUNTIME_NAME)
+}
+
 /// Make sure the project is a binary for alpha projects.
-fn ensure_binary(manifest: &Manifest) -> anyhow::Result<()> {
-    if manifest.targets().iter().any(|target| target.is_bin()) {
+fn ensure_binary(package: &Package) -> anyhow::Result<()> {
+    if package.targets().iter().any(|target| target.is_bin()) {
         Ok(())
     } else {
         bail!("Your Shuttle project must be a binary.")
@@ -186,24 +219,11 @@ fn ensure_binary(manifest: &Manifest) -> anyhow::Result<()> {
 }
 
 /// Make sure "cdylib" is set for shuttle-next projects, else set it if possible.
-fn ensure_cdylib(manifest: &mut Manifest) -> anyhow::Result<()> {
-    if let Some(target) = manifest
-        .targets_mut()
-        .iter_mut()
-        .find(|target| target.is_lib())
-    {
-        if !target.is_cdylib() {
-            *target = cargo::core::manifest::Target::lib_target(
-                target.name(),
-                vec![cargo::core::compiler::CrateType::Cdylib],
-                target.src_path().path().unwrap().to_path_buf(),
-                target.edition(),
-            );
-        }
-
+fn ensure_cdylib(package: &Package) -> anyhow::Result<()> {
+    if package.targets().iter().any(|target| target.is_lib()) {
         Ok(())
     } else {
-        bail!("Your Shuttle project must be a library. Please add `[lib]` to your Cargo.toml file.")
+        bail!("Your Shuttle next project must be a library. Please add `[lib]` to your Cargo.toml file.")
     }
 }
 

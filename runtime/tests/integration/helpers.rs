@@ -14,7 +14,7 @@ use shuttle_proto::{
     },
     runtime::{self, runtime_client::RuntimeClient},
 };
-use shuttle_service::builder::{build_crate, Runtime};
+use shuttle_service::builder::{build_workspace, Runtime};
 use tonic::{
     transport::{Channel, Server},
     Request, Response, Status,
@@ -37,11 +37,11 @@ pub async fn spawn_runtime(project_path: String, service_name: &str) -> Result<T
     let runtime_address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), runtime_port);
 
     let (tx, _) = crossbeam_channel::unbounded();
-    let runtime = build_crate(Path::new(&project_path), false, tx).await?;
+    let runtimes = build_workspace(Path::new(&project_path), false, tx).await?;
 
     let secrets: HashMap<String, String> = Default::default();
 
-    let (is_wasm, bin_path) = match runtime {
+    let (is_wasm, bin_path) = match runtimes[0].clone() {
         Runtime::Next(path) => (true, path),
         Runtime::Alpha(path) => (false, path),
     };

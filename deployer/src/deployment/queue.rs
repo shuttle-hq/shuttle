@@ -12,7 +12,7 @@ use crossbeam_channel::Sender;
 use opentelemetry::global;
 use serde_json::json;
 use shuttle_common::claims::Claim;
-use shuttle_service::builder::{build_crate, get_config, Runtime};
+use shuttle_service::builder::{build_workspace, get_config, Runtime};
 use tokio::time::{sleep, timeout};
 use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -332,9 +332,11 @@ async fn build_deployment(
     project_path: &Path,
     tx: crossbeam_channel::Sender<Message>,
 ) -> Result<Runtime> {
-    build_crate(project_path, true, tx)
+    let runtimes = build_workspace(project_path, true, tx)
         .await
-        .map_err(|e| Error::Build(e.into()))
+        .map_err(|e| Error::Build(e.into()))?;
+
+    Ok(runtimes[0].clone())
 }
 
 #[instrument(skip(project_path, tx))]

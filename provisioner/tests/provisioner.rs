@@ -167,8 +167,19 @@ async fn shared_mongodb_role_does_not_exist() {
     .await
     .unwrap();
 
+    exec_mongosh(
+        r#"db.createUser({
+            user: "user-exist",
+            pwd: "secure_password",
+            roles: [
+                { role: "readWrite", db: "mongodb-not_exist" }
+            ]
+        })"#,
+        Some("mongodb-not_exist"),
+    );
+
     let user = exec_mongosh("db.getUser(\"user-not_exist\")", Some("mongodb-not_exist"));
-    assert_eq!(user, "");
+    assert_eq!(user, "null");
 
     provisioner
         .request_shared_db("not_exist", shared::Engine::Mongodb(String::new()))

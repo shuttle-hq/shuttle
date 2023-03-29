@@ -4,50 +4,32 @@ use quote::{quote, ToTokens};
 use syn::{
     parenthesized, parse::Parse, parse2, parse_macro_input, parse_quote, punctuated::Punctuated,
     spanned::Spanned, token::Paren, Attribute, Expr, ExprLit, FnArg, Ident, ItemFn, Lit, Pat,
-    PatIdent, Path, ReturnType, Signature, Stmt, Token, Type,
+    PatIdent, Path, ReturnType, Signature, Stmt, Token, Type, TypePath,
 };
 
 pub(crate) fn r#impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut fn_decl = parse_macro_input!(item as ItemFn);
 
-    let wrapper = Wrapper::from_item_fn(&mut fn_decl);
+    let loader = Loader::from_item_fn(&mut fn_decl);
 
     let expanded = quote! {
-        #wrapper
-
-        fn __binder(
-            service: Box<dyn shuttle_service::Service>,
-            addr: std::net::SocketAddr,
-            runtime: &shuttle_service::Runtime,
-        ) -> shuttle_service::ServeHandle {
-            use shuttle_service::Context;
-            runtime.spawn(async move { service.bind(addr).await.context("failed to bind service").map_err(Into::into) })
+        #[tokio::main]
+        async fn main() {
+            shuttle_runtime::start(loader).await;
         }
+
+        #loader
 
         #fn_decl
-
-        #[no_mangle]
-        pub extern "C" fn _create_service() -> *mut shuttle_service::Bootstrapper {
-            let builder: shuttle_service::StateBuilder<Box<dyn shuttle_service::Service>> =
-                |factory, runtime, logger| Box::pin(__shuttle_wrapper(factory, runtime, logger));
-
-            let bootstrapper = shuttle_service::Bootstrapper::new(
-                builder,
-                __binder,
-                shuttle_service::Runtime::new().unwrap(),
-            );
-
-            let boxed = Box::new(bootstrapper);
-            Box::into_raw(boxed)
-        }
     };
 
     expanded.into()
 }
 
-struct Wrapper {
+struct Loader {
     fn_ident: Ident,
     fn_inputs: Vec<Input>,
+    fn_return: TypePath,
 }
 
 #[derive(Debug, PartialEq)]
@@ -55,7 +37,7 @@ struct Input {
     /// The identifier for a resource input
     ident: Ident,
 
-    /// The shuttle_service builder for this resource
+    /// The shuttle_runtime builder for this resource
     builder: Builder,
 }
 
@@ -107,8 +89,18 @@ impl Parse for BuilderOption {
     }
 }
 
-impl Wrapper {
-    pub(crate) fn from_item_fn(item_fn: &mut ItemFn) -> Self {
+impl Loader {
+    pub(crate) fn from_item_fn(item_fn: &mut ItemFn) -> Option<Self> {
+        let fn_ident = item_fn.sig.ident.clone();
+
+        if fn_ident.to_string().as_str() == "main" {
+            emit_error!(
+                fn_ident,
+                "shuttle_runtime::main functions cannot be named `main`"
+            );
+            return None;
+        }
+
         let inputs: Vec<_> = item_fn
             .sig
             .inputs
@@ -135,31 +127,36 @@ impl Wrapper {
             })
             .collect();
 
-        check_return_type(&item_fn.sig);
-
-        Self {
-            fn_ident: item_fn.sig.ident.clone(),
+        check_return_type(item_fn.sig.clone()).map(|type_path| Self {
+            fn_ident: fn_ident.clone(),
             fn_inputs: inputs,
-        }
+            fn_return: type_path,
+        })
     }
 }
 
-fn check_return_type(signature: &Signature) {
-    match &signature.output {
-        ReturnType::Default => emit_error!(
-            signature,
-            "shuttle_service::main functions need to return a service";
-            hint = "See the docs for services with first class support";
-            doc = "https://docs.rs/shuttle-service/latest/shuttle_service/attr.main.html#shuttle-supported-services"
-        ),
-        ReturnType::Type(_, r#type) => match r#type.as_ref() {
-            Type::Path(_) => {}
-            _ => emit_error!(
-                r#type,
-                "shuttle_service::main functions need to return a first class service or 'Result<impl Service, shuttle_service::Error>";
+fn check_return_type(signature: Signature) -> Option<TypePath> {
+    match signature.output {
+        ReturnType::Default => {
+            emit_error!(
+                signature,
+                "shuttle_runtime::main functions need to return a service";
                 hint = "See the docs for services with first class support";
-                doc = "https://docs.rs/shuttle-service/latest/shuttle_service/attr.main.html#shuttle-supported-services"
-            ),
+                doc = "https://docs.rs/shuttle-service/latest/shuttle_runtime/attr.main.html#shuttle-supported-services"
+            );
+            None
+        }
+        ReturnType::Type(_, r#type) => match *r#type {
+            Type::Path(path) => Some(path),
+            _ => {
+                emit_error!(
+                    r#type,
+                    "shuttle_runtime::main functions need to return a first class service or 'Result<impl Service, shuttle_runtime::Error>";
+                    hint = "See the docs for services with first class support";
+                    doc = "https://docs.rs/shuttle-service/latest/shuttle_runtime/attr.main.html#shuttle-supported-services"
+                );
+                None
+            }
         },
     }
 }
@@ -186,9 +183,12 @@ fn attribute_to_builder(pat_ident: &PatIdent, attrs: Vec<Attribute>) -> syn::Res
     Ok(builder)
 }
 
-impl ToTokens for Wrapper {
+impl ToTokens for Loader {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let fn_ident = &self.fn_ident;
+
+        let return_type = &self.fn_return;
+
         let mut fn_inputs: Vec<_> = Vec::with_capacity(self.fn_inputs.len());
         let mut fn_inputs_builder: Vec<_> = Vec::with_capacity(self.fn_inputs.len());
         let mut fn_inputs_builder_options: Vec<_> = Vec::with_capacity(self.fn_inputs.len());
@@ -210,7 +210,7 @@ impl ToTokens for Wrapper {
                             lit: Lit::Str(str), ..
                         }) => {
                             needs_vars = true;
-                            quote!(&shuttle_service::strfmt(#str, &vars)?)
+                            quote!(&shuttle_runtime::strfmt(#str, &vars)?)
                         }
                         other => quote!(#other),
                     };
@@ -228,11 +228,17 @@ impl ToTokens for Wrapper {
             parse_quote!(factory)
         };
 
+        let resource_tracker_ident: Ident = if self.fn_inputs.is_empty() {
+            parse_quote!(_resource_tracker)
+        } else {
+            parse_quote!(resource_tracker)
+        };
+
         let extra_imports: Option<Stmt> = if self.fn_inputs.is_empty() {
             None
         } else {
             Some(parse_quote!(
-                use shuttle_service::ResourceBuilder;
+                use shuttle_runtime::{Factory, ResourceBuilder};
             ))
         };
 
@@ -244,68 +250,39 @@ impl ToTokens for Wrapper {
             None
         };
 
-        let wrapper = quote! {
-            async fn __shuttle_wrapper(
-                #factory_ident: &mut dyn shuttle_service::Factory,
-                runtime: &shuttle_service::Runtime,
-                logger: shuttle_service::Logger,
-            ) -> Result<Box<dyn shuttle_service::Service>, shuttle_service::Error> {
-                use shuttle_service::Context;
-                use shuttle_service::tracing_subscriber::prelude::*;
+        let loader = quote! {
+            async fn loader(
+                mut #factory_ident: shuttle_runtime::ProvisionerFactory,
+                mut #resource_tracker_ident: shuttle_runtime::ResourceTracker,
+                logger: shuttle_runtime::Logger,
+            ) -> #return_type {
+                use shuttle_runtime::Context;
+                use shuttle_runtime::tracing_subscriber::prelude::*;
                 #extra_imports
 
-                runtime.spawn_blocking(move || {
-                    let filter_layer =
-                        shuttle_service::tracing_subscriber::EnvFilter::try_from_default_env()
-                            .or_else(|_| shuttle_service::tracing_subscriber::EnvFilter::try_new("INFO"))
-                            .unwrap();
+                let filter_layer =
+                    shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
+                        .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("INFO"))
+                        .unwrap();
 
-                    shuttle_service::tracing_subscriber::registry()
-                        .with(filter_layer)
-                        .with(logger)
-                        .init(); // this sets the subscriber as the global default and also adds a compatibility layer for capturing `log::Record`s
-                })
-                .await
-                .map_err(|e| {
-                    if e.is_panic() {
-                        let mes = e
-                            .into_panic()
-                            .downcast_ref::<&str>()
-                            .map(|x| x.to_string())
-                            .unwrap_or_else(|| "panicked setting logger".to_string());
-
-                        shuttle_service::Error::BuildPanic(mes)
-                    } else {
-                        shuttle_service::Error::Custom(shuttle_service::error::CustomError::new(e).context("failed to set logger"))
-                    }
-                })?;
+                shuttle_runtime::tracing_subscriber::registry()
+                    .with(filter_layer)
+                    .with(logger)
+                    .init();
 
                 #vars
-                #(let #fn_inputs = #fn_inputs_builder::new()#fn_inputs_builder_options.build(#factory_ident, runtime).await.context(format!("failed to provision {}", stringify!(#fn_inputs_builder)))?;)*
+                #(let #fn_inputs = shuttle_runtime::get_resource(
+                    #fn_inputs_builder::new()#fn_inputs_builder_options,
+                    &mut #factory_ident,
+                    &mut #resource_tracker_ident,
+                )
+                .await.context(format!("failed to provision {}", stringify!(#fn_inputs_builder)))?;)*
 
-                runtime.spawn(async {
-                    #fn_ident(#(#fn_inputs),*)
-                        .await
-                        .map(|ok| Box::new(ok) as Box<dyn shuttle_service::Service>)
-                })
-                    .await
-                    .map_err(|e| {
-                        if e.is_panic() {
-                            let mes = e
-                                .into_panic()
-                                .downcast_ref::<&str>()
-                                .map(|x| x.to_string())
-                                .unwrap_or_else(|| "panicked calling main".to_string());
-
-                            shuttle_service::Error::BuildPanic(mes)
-                        } else {
-                            shuttle_service::Error::Custom(shuttle_service::error::CustomError::new(e).context("failed to call main"))
-                        }
-                    })?
+                #fn_ident(#(#fn_inputs),*).await
             }
         };
 
-        wrapper.to_tokens(tokens);
+        loader.to_tokens(tokens);
     }
 }
 
@@ -315,7 +292,7 @@ mod tests {
     use quote::quote;
     use syn::{parse_quote, Ident};
 
-    use super::{Builder, BuilderOptions, Input, Wrapper};
+    use super::{Builder, BuilderOptions, Input, Loader};
 
     #[test]
     fn from_with_return() {
@@ -323,7 +300,7 @@ mod tests {
             async fn simple() -> ShuttleAxum {}
         );
 
-        let actual = Wrapper::from_item_fn(&mut input);
+        let actual = Loader::from_item_fn(&mut input).unwrap();
         let expected_ident: Ident = parse_quote!(simple);
 
         assert_eq!(actual.fn_ident, expected_ident);
@@ -332,65 +309,33 @@ mod tests {
 
     #[test]
     fn output_with_return() {
-        let input = Wrapper {
+        let input = Loader {
             fn_ident: parse_quote!(simple),
             fn_inputs: Vec::new(),
+            fn_return: parse_quote!(ShuttleSimple),
         };
 
         let actual = quote!(#input);
         let expected = quote! {
-            async fn __shuttle_wrapper(
-                _factory: &mut dyn shuttle_service::Factory,
-                runtime: &shuttle_service::Runtime,
-                logger: shuttle_service::Logger,
-            ) -> Result<Box<dyn shuttle_service::Service>, shuttle_service::Error> {
-                use shuttle_service::Context;
-                use shuttle_service::tracing_subscriber::prelude::*;
-                runtime.spawn_blocking(move || {
-                    let filter_layer =
-                        shuttle_service::tracing_subscriber::EnvFilter::try_from_default_env()
-                            .or_else(|_| shuttle_service::tracing_subscriber::EnvFilter::try_new("INFO"))
-                            .unwrap();
+            async fn loader(
+                mut _factory: shuttle_runtime::ProvisionerFactory,
+                mut _resource_tracker: shuttle_runtime::ResourceTracker,
+                logger: shuttle_runtime::Logger,
+            ) -> ShuttleSimple {
+                use shuttle_runtime::Context;
+                use shuttle_runtime::tracing_subscriber::prelude::*;
 
-                    shuttle_service::tracing_subscriber::registry()
-                        .with(filter_layer)
-                        .with(logger)
-                        .init();
-                })
-                .await
-                .map_err(|e| {
-                    if e.is_panic() {
-                        let mes = e
-                            .into_panic()
-                            .downcast_ref::<&str>()
-                            .map(|x| x.to_string())
-                            .unwrap_or_else(|| "panicked setting logger".to_string());
+                let filter_layer =
+                    shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
+                        .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("INFO"))
+                        .unwrap();
 
-                        shuttle_service::Error::BuildPanic(mes)
-                    } else {
-                        shuttle_service::Error::Custom(shuttle_service::error::CustomError::new(e).context("failed to set logger"))
-                    }
-                })?;
+                shuttle_runtime::tracing_subscriber::registry()
+                    .with(filter_layer)
+                    .with(logger)
+                    .init();
 
-                runtime.spawn(async {
-                    simple()
-                        .await
-                        .map(|ok| Box::new(ok) as Box<dyn shuttle_service::Service>)
-                })
-                .await
-                .map_err(|e| {
-                    if e.is_panic() {
-                        let mes = e
-                            .into_panic()
-                            .downcast_ref::<&str>()
-                            .map(|x| x.to_string())
-                            .unwrap_or_else(|| "panicked calling main".to_string());
-
-                        shuttle_service::Error::BuildPanic(mes)
-                    } else {
-                        shuttle_service::Error::Custom(shuttle_service::error::CustomError::new(e).context("failed to call main"))
-                    }
-                })?
+                simple().await
             }
         };
 
@@ -403,7 +348,7 @@ mod tests {
             async fn complex(#[shuttle_shared_db::Postgres] pool: PgPool) -> ShuttleTide {}
         );
 
-        let actual = Wrapper::from_item_fn(&mut input);
+        let actual = Loader::from_item_fn(&mut input).unwrap();
         let expected_ident: Ident = parse_quote!(complex);
         let expected_inputs: Vec<Input> = vec![Input {
             ident: parse_quote!(pool),
@@ -430,7 +375,7 @@ mod tests {
 
     #[test]
     fn output_with_inputs() {
-        let input = Wrapper {
+        let input = Loader {
             fn_ident: parse_quote!(complex),
             fn_inputs: vec![
                 Input {
@@ -448,67 +393,42 @@ mod tests {
                     },
                 },
             ],
+            fn_return: parse_quote!(ShuttleComplex),
         };
 
         let actual = quote!(#input);
         let expected = quote! {
-            async fn __shuttle_wrapper(
-                factory: &mut dyn shuttle_service::Factory,
-                runtime: &shuttle_service::Runtime,
-                logger: shuttle_service::Logger,
-            ) -> Result<Box<dyn shuttle_service::Service>, shuttle_service::Error> {
-                use shuttle_service::Context;
-                use shuttle_service::tracing_subscriber::prelude::*;
-                use shuttle_service::ResourceBuilder;
+            async fn loader(
+                mut factory: shuttle_runtime::ProvisionerFactory,
+                mut resource_tracker: shuttle_runtime::ResourceTracker,
+                logger: shuttle_runtime::Logger,
+            ) -> ShuttleComplex {
+                use shuttle_runtime::Context;
+                use shuttle_runtime::tracing_subscriber::prelude::*;
+                use shuttle_runtime::{Factory, ResourceBuilder};
 
-                runtime.spawn_blocking(move || {
-                    let filter_layer =
-                        shuttle_service::tracing_subscriber::EnvFilter::try_from_default_env()
-                            .or_else(|_| shuttle_service::tracing_subscriber::EnvFilter::try_new("INFO"))
-                            .unwrap();
+                let filter_layer =
+                    shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
+                        .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("INFO"))
+                        .unwrap();
 
-                    shuttle_service::tracing_subscriber::registry()
-                        .with(filter_layer)
-                        .with(logger)
-                        .init();
-                })
-                .await
-                .map_err(|e| {
-                    if e.is_panic() {
-                        let mes = e
-                            .into_panic()
-                            .downcast_ref::<&str>()
-                            .map(|x| x.to_string())
-                            .unwrap_or_else(|| "panicked setting logger".to_string());
+                shuttle_runtime::tracing_subscriber::registry()
+                    .with(filter_layer)
+                    .with(logger)
+                    .init();
 
-                        shuttle_service::Error::BuildPanic(mes)
-                    } else {
-                        shuttle_service::Error::Custom(shuttle_service::error::CustomError::new(e).context("failed to set logger"))
-                    }
-                })?;
+                let pool = shuttle_runtime::get_resource(
+                    shuttle_shared_db::Postgres::new(),
+                    &mut factory,
+                    &mut resource_tracker,
+                ).await.context(format!("failed to provision {}", stringify!(shuttle_shared_db::Postgres)))?;
+                let redis = shuttle_runtime::get_resource(
+                    shuttle_shared_db::Redis::new(),
+                    &mut factory,
+                    &mut resource_tracker,
+                ).await.context(format!("failed to provision {}", stringify!(shuttle_shared_db::Redis)))?;
 
-                let pool = shuttle_shared_db::Postgres::new().build(factory, runtime).await.context(format!("failed to provision {}", stringify!(shuttle_shared_db::Postgres)))?;
-                let redis = shuttle_shared_db::Redis::new().build(factory, runtime).await.context(format!("failed to provision {}", stringify!(shuttle_shared_db::Redis)))?;
-
-                runtime.spawn(async {
-                    complex(pool, redis)
-                        .await
-                        .map(|ok| Box::new(ok) as Box<dyn shuttle_service::Service>)
-                })
-                .await
-                .map_err(|e| {
-                    if e.is_panic() {
-                        let mes = e
-                            .into_panic()
-                            .downcast_ref::<&str>()
-                            .map(|x| x.to_string())
-                            .unwrap_or_else(|| "panicked calling main".to_string());
-
-                        shuttle_service::Error::BuildPanic(mes)
-                    } else {
-                        shuttle_service::Error::Custom(shuttle_service::error::CustomError::new(e).context("failed to call main"))
-                    }
-                })?
+                complex(pool, redis).await
             }
         };
 
@@ -550,7 +470,7 @@ mod tests {
             }
         );
 
-        let actual = Wrapper::from_item_fn(&mut input);
+        let actual = Loader::from_item_fn(&mut input).unwrap();
         let expected_ident: Ident = parse_quote!(complex);
         let mut expected_inputs: Vec<Input> = vec![Input {
             ident: parse_quote!(pool),
@@ -577,7 +497,7 @@ mod tests {
 
     #[test]
     fn output_with_input_options() {
-        let mut input = Wrapper {
+        let mut input = Loader {
             fn_ident: parse_quote!(complex),
             fn_inputs: vec![Input {
                 ident: parse_quote!(pool),
@@ -586,6 +506,7 @@ mod tests {
                     options: Default::default(),
                 },
             }],
+            fn_return: parse_quote!(ShuttleComplex),
         };
 
         input.fn_inputs[0]
@@ -601,63 +522,33 @@ mod tests {
 
         let actual = quote!(#input);
         let expected = quote! {
-            async fn __shuttle_wrapper(
-                factory: &mut dyn shuttle_service::Factory,
-                runtime: &shuttle_service::Runtime,
-                logger: shuttle_service::Logger,
-            ) -> Result<Box<dyn shuttle_service::Service>, shuttle_service::Error> {
-                use shuttle_service::Context;
-                use shuttle_service::tracing_subscriber::prelude::*;
-                use shuttle_service::ResourceBuilder;
+            async fn loader(
+                mut factory: shuttle_runtime::ProvisionerFactory,
+                mut resource_tracker: shuttle_runtime::ResourceTracker,
+                logger: shuttle_runtime::Logger,
+            ) -> ShuttleComplex {
+                use shuttle_runtime::Context;
+                use shuttle_runtime::tracing_subscriber::prelude::*;
+                use shuttle_runtime::{Factory, ResourceBuilder};
 
-                runtime.spawn_blocking(move || {
-                    let filter_layer =
-                        shuttle_service::tracing_subscriber::EnvFilter::try_from_default_env()
-                            .or_else(|_| shuttle_service::tracing_subscriber::EnvFilter::try_new("INFO"))
-                            .unwrap();
+                let filter_layer =
+                    shuttle_runtime::tracing_subscriber::EnvFilter::try_from_default_env()
+                        .or_else(|_| shuttle_runtime::tracing_subscriber::EnvFilter::try_new("INFO"))
+                        .unwrap();
 
-                    shuttle_service::tracing_subscriber::registry()
-                        .with(filter_layer)
-                        .with(logger)
-                        .init();
-                })
-                .await
-                .map_err(|e| {
-                    if e.is_panic() {
-                        let mes = e
-                            .into_panic()
-                            .downcast_ref::<&str>()
-                            .map(|x| x.to_string())
-                            .unwrap_or_else(|| "panicked setting logger".to_string());
-
-                        shuttle_service::Error::BuildPanic(mes)
-                    } else {
-                        shuttle_service::Error::Custom(shuttle_service::error::CustomError::new(e).context("failed to set logger"))
-                    }
-                })?;
+                shuttle_runtime::tracing_subscriber::registry()
+                    .with(filter_layer)
+                    .with(logger)
+                    .init();
 
                 let vars = std::collections::HashMap::from_iter(factory.get_secrets().await?.into_iter().map(|(key, value)| (format!("secrets.{}", key), value)));
-                let pool = shuttle_shared_db::Postgres::new().size(&shuttle_service::strfmt("10Gb", &vars)?).public(false).build(factory, runtime).await.context(format!("failed to provision {}", stringify!(shuttle_shared_db::Postgres)))?;
+                let pool = shuttle_runtime::get_resource (
+                    shuttle_shared_db::Postgres::new().size(&shuttle_runtime::strfmt("10Gb", &vars)?).public(false),
+                    &mut factory,
+                    &mut resource_tracker,
+                ).await.context(format!("failed to provision {}", stringify!(shuttle_shared_db::Postgres)))?;
 
-                runtime.spawn(async {
-                    complex(pool)
-                        .await
-                        .map(|ok| Box::new(ok) as Box<dyn shuttle_service::Service>)
-                })
-                .await
-                .map_err(|e| {
-                    if e.is_panic() {
-                        let mes = e
-                            .into_panic()
-                            .downcast_ref::<&str>()
-                            .map(|x| x.to_string())
-                            .unwrap_or_else(|| "panicked calling main".to_string());
-
-                        shuttle_service::Error::BuildPanic(mes)
-                    } else {
-                        shuttle_service::Error::Custom(shuttle_service::error::CustomError::new(e).context("failed to call main"))
-                    }
-                })?
+                complex(pool).await
             }
         };
 
@@ -667,6 +558,6 @@ mod tests {
     #[test]
     fn ui() {
         let t = trybuild::TestCases::new();
-        t.compile_fail("tests/ui/*.rs");
+        t.compile_fail("tests/ui/main/*.rs");
     }
 }

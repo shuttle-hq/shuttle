@@ -1,10 +1,11 @@
+<!-- markdownlint-disable -->
 <p align="center">
 <img width="300" src="https://raw.githubusercontent.com/shuttle-hq/shuttle/master/assets/logo-rectangle-transparent.png"/>
 </p>
 <br>
 <p align=center>
-  <a href="https://docs.rs/shuttle-service">
-    <img alt="docs" src="https://img.shields.io/badge/doc-reference-orange">
+  <a href="https://docs.rs/shuttle-runtime">
+    <img alt="docs" src="https://img.shields.io/badge/docs-reference-orange">
   </a>
   <a href="https://github.com/shuttle-hq/shuttle/search?l=rust">
     <img alt="language" src="https://img.shields.io/badge/language-Rust-orange.svg">
@@ -16,6 +17,7 @@
     <img alt="discord" src="https://img.shields.io/discord/803236282088161321?logo=discord"/>
   </a>
 </p>
+<!-- markdownlint-restore -->
 
 ---
 
@@ -24,9 +26,10 @@
 [Shuttle](https://www.shuttle.rs/) is a Rust-native cloud development platform that lets you deploy your Rust apps for free.
 
 Shuttle is built for productivity, reliability and performance:
+
 - Zero-Configuration support for Rust using annotations
 - Automatic resource provisioning (databases, caches, subdomains, etc.) via [Infrastructure-From-Code](https://www.shuttle.rs/blog/2022/05/09/ifc)
-- First-class support for popular Rust frameworks ([Actix](https://docs.shuttle.rs/examples/actix), [Rocket](https://docs.shuttle.rs/examples/rocket), [Axum](https://docs.shuttle.rs/examples/axum), 
+- First-class support for popular Rust frameworks ([Actix](https://docs.shuttle.rs/examples/actix), [Rocket](https://docs.shuttle.rs/examples/rocket), [Axum](https://docs.shuttle.rs/examples/axum),
   [Tide](https://docs.shuttle.rs/examples/tide), [Poem](https://docs.shuttle.rs/examples/poem) and [Tower](https://docs.shuttle.rs/examples/tower))
 - Support for deploying Discord bots using [Serenity](https://docs.shuttle.rs/examples/serenity)
 - Scalable hosting (with optional self-hosting)
@@ -39,26 +42,44 @@ Shuttle is built for productivity, reliability and performance:
 
 ## Getting Started
 
-Run the following command to install shuttle:
+To run a shuttle project, you need to install protoc, check out the [protoc installation guide](https://docs.shuttle.rs/support/installing-protoc) in our docs.
 
-```bash
+The `cargo-shuttle` CLI can be installed with a pre-built binary or from source with cargo.
+
+Shuttle provides pre-built binaries of the `cargo-shuttle` CLI with every release
+for most platforms, they can be found on [our GitHub](https://github.com/shuttle-hq/shuttle/releases/latest).
+
+Our binaries can also be installed using [cargo-binstall](https://github.com/cargo-bins/cargo-binstall),
+which will automatically install the correct target for your system.
+To install with `cargo-binstall`, run:
+
+```sh
+cargo binstall cargo-shuttle
+```
+
+Although a bit slower, you can also install directly with cargo:
+
+```sh
 cargo install cargo-shuttle
 ```
 
-And then login:
+After installing, log in with:
 
-```bash
+```sh
 cargo shuttle login
 ```
 
 To initialize your project, simply write:
+
 ```bash
 cargo shuttle init --axum hello-world
 ```
+
 And to deploy it, write:
+
 ```bash
-cargo shuttle project new
-cargo shuttle project status // until the project is "ready"
+cd hello-world
+cargo shuttle project new  # Only needed if project has not already been created during init
 cargo shuttle deploy
 ```
 
@@ -66,7 +87,7 @@ And that's... it.
 
 ```bash
 $ cargo shuttle deploy
-   Finished dev [unoptimized + debuginfo] target(s) in 1m 01s
+   Finished release [optimized + debuginfo] target(s) in 1m 01s
 
         Project:            hello-world
         Deployment Id:      3d08ac34-ad63-41c1-836b-99afdc90af9f
@@ -75,14 +96,15 @@ $ cargo shuttle deploy
         Created At:         2022-04-01 08:32:34.412602556 UTC
 ```
 
-Feel free to build on-top of the generated `hello-world` boilerplate or take a stab at one of our [examples](https://docs.shuttle.rs/guide/axum-examples.html#hello-world).
+Feel free to build on-top of the generated `hello-world` boilerplate or take a stab at one of our [examples](https://docs.shuttle.rs/examples/axum).
 
 For the full documentation, visit [our docs](https://docs.shuttle.rs).
+
 ## Contributing to shuttle
 
 Contributing to shuttle is highly encouraged!
 
-If you want to setup a local environment to test code changes to core `shuttle` packages, or want to contribute to the project check out [our docs](https://docs.shuttle.rs/community/contribute). 
+If you want to setup a local environment to test code changes to core `shuttle` packages, or want to contribute to the project check out [our docs](https://docs.shuttle.rs/community/contribute).
 
 Even if you are not planning to submit any code; joining our [Discord server](https://discord.gg/shuttle) and providing feedback helps us a lot!
 
@@ -102,12 +124,12 @@ If you have any requests or suggestions feel free to open an issue.
 ## Status
 
 - [x] Alpha: We are testing Shuttle, API and deployments may be unstable
-- [x] Public Alpha: Anyone can sign up, but go easy on us, 
+- [x] Public Alpha: Anyone can sign up, but go easy on us,
   there are a few kinks
 - [ ] Public Beta: Stable enough for most non-enterprise use-cases
 - [ ] Public: Production-ready!
 
-We are currently in Public Alpha. Watch "releases" of this repo to get 
+We are currently in Public Alpha. Watch "releases" of this repo to get
 notified of major updates!
 
 ## Contributors ✨

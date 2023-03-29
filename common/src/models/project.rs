@@ -7,6 +7,9 @@ use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use strum::EnumString;
 
+// Timeframe before a project is considered idle
+pub const IDLE_MINUTES: u64 = 30;
+
 #[derive(Deserialize, Serialize, Clone)]
 pub struct Response {
     pub name: String,
@@ -132,7 +135,7 @@ impl Display for State {
             State::Destroyed => write!(f, "{}", "destroyed".blue()),
             State::Errored { message } => {
                 writeln!(f, "{}", "errored".red())?;
-                write!(f, "\tmessage: {}", message)
+                write!(f, "\tmessage: {message}")
             }
         }
     }
@@ -153,6 +156,12 @@ impl State {
             Self::Errored { .. } => Color::Red,
         }
     }
+}
+
+/// Config when creating a new project
+#[derive(Deserialize, Serialize)]
+pub struct Config {
+    pub idle_minutes: u64,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -190,9 +199,8 @@ pub fn get_table(projects: &Vec<Response>) -> String {
         format!(
             r#"
 These projects are linked to this account
-{}
+{table}
 "#,
-            table,
         )
     }
 }

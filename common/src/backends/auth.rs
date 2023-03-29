@@ -1,36 +1,27 @@
-use std::{
-    convert::Infallible,
-    future::Future,
-    ops::Add,
-    pin::Pin,
-    sync::Arc,
-    task::{Context, Poll},
-};
+use std::{convert::Infallible, future::Future, pin::Pin, sync::Arc};
 
 use async_trait::async_trait;
 use bytes::Bytes;
-use chrono::{Duration, Utc};
 use headers::{authorization::Bearer, Authorization, HeaderMapExt};
 use http::{Request, Response, StatusCode, Uri};
 use http_body::combinators::UnsyncBoxBody;
 use hyper::{body, Body, Client};
-use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header as JwtHeader, Validation};
 use opentelemetry::global;
 use opentelemetry_http::HeaderInjector;
-use pin_project::pin_project;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tower::{Layer, Service};
 use tracing::{error, trace, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
+use crate::claims::{Claim, Scope};
+
 use super::{
     cache::{CacheManagement, CacheManager},
+    future::StatusCodeFuture,
     headers::XShuttleAdminSecret,
 };
 
-pub const EXP_MINUTES: i64 = 5;
-const ISS: &str = "shuttle";
 const PUBLIC_KEY_CACHE_KEY: &str = "shuttle.public-key";
 
 /// Layer to check the admin secret set by deployer is correct
@@ -62,17 +53,16 @@ pub struct AdminSecret<S> {
     secret: String,
 }
 
-impl<S, ResponseError> Service<Request<Body>> for AdminSecret<S>
+impl<S> Service<Request<Body>> for AdminSecret<S>
 where
-    S: Service<Request<Body>, Response = Response<UnsyncBoxBody<Bytes, ResponseError>>>
+    S: Service<Request<Body>, Response = Response<UnsyncBoxBody<Bytes, axum::Error>>>
         + Send
         + 'static,
     S::Future: Send + 'static,
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future =
-        Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
+    type Future = StatusCodeFuture<S::Future>;
 
     fn poll_ready(
         &mut self,
@@ -82,80 +72,16 @@ where
     }
 
     fn call(&mut self, req: Request<Body>) -> Self::Future {
-        let error = match req.headers().typed_try_get::<XShuttleAdminSecret>() {
-            Ok(Some(secret)) if secret.0 == self.secret => None,
-            Ok(_) => Some(StatusCode::UNAUTHORIZED),
-            Err(_) => Some(StatusCode::BAD_REQUEST),
-        };
+        match req.headers().typed_try_get::<XShuttleAdminSecret>() {
+            Ok(Some(secret)) if secret.0 == self.secret => {
+                let future = self.inner.call(req);
 
-        if let Some(status) = error {
-            // Could not validate claim
-            Box::pin(async move {
-                Ok(Response::builder()
-                    .status(status)
-                    .body(Default::default())
-                    .unwrap())
-            })
-        } else {
-            let future = self.inner.call(req);
-
-            Box::pin(async move { future.await })
+                StatusCodeFuture::Poll(future)
+            }
+            Ok(_) => StatusCodeFuture::Code(StatusCode::UNAUTHORIZED),
+            Err(_) => StatusCodeFuture::Code(StatusCode::BAD_REQUEST),
         }
     }
-}
-
-/// The scope of operations that can be performed on shuttle
-/// Every scope defaults to read and will use a suffix for updating tasks
-#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum Scope {
-    /// Read the details, such as status and address, of a deployment
-    Deployment,
-
-    /// Push a new deployment
-    DeploymentPush,
-
-    /// Read the logs of a deployment
-    Logs,
-
-    /// Read the details of a service
-    Service,
-
-    /// Create a new service
-    ServiceCreate,
-
-    /// Read the status of a project
-    Project,
-
-    /// Create a new project
-    ProjectCreate,
-
-    /// Get the resources for a project
-    Resources,
-
-    /// Provision new resources for a project or update existing ones
-    ResourcesWrite,
-
-    /// List the secrets of a project
-    Secret,
-
-    /// Add or update secrets of a project
-    SecretWrite,
-
-    /// Get list of users
-    User,
-
-    /// Add or update users
-    UserCreate,
-
-    /// Create an ACME account
-    AcmeCreate,
-
-    /// Create a custom domain,
-    CustomDomainCreate,
-
-    /// Admin level scope to internals
-    Admin,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -164,105 +90,7 @@ pub struct ConvertResponse {
     pub token: String,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
-pub struct Claim {
-    /// Expiration time (as UTC timestamp).
-    pub exp: usize,
-    /// Issued at (as UTC timestamp).
-    iat: usize,
-    /// Issuer.
-    iss: String,
-    /// Not Before (as UTC timestamp).
-    nbf: usize,
-    /// Subject (whom token refers to).
-    pub sub: String,
-    /// Scopes this token can access
-    pub scopes: Vec<Scope>,
-    /// The original token that was parsed
-    token: Option<String>,
-}
-
-impl Claim {
-    /// Create a new claim for a user with the given scopes
-    pub fn new(sub: String, scopes: Vec<Scope>) -> Self {
-        let iat = Utc::now();
-        let exp = iat.add(Duration::minutes(EXP_MINUTES));
-
-        Self {
-            exp: exp.timestamp() as usize,
-            iat: iat.timestamp() as usize,
-            iss: ISS.to_string(),
-            nbf: iat.timestamp() as usize,
-            sub,
-            scopes,
-            token: None,
-        }
-    }
-
-    pub fn into_token(self, encoding_key: &EncodingKey) -> Result<String, StatusCode> {
-        if let Some(token) = self.token {
-            Ok(token)
-        } else {
-            encode(
-                &JwtHeader::new(jsonwebtoken::Algorithm::EdDSA),
-                &self,
-                encoding_key,
-            )
-            .map_err(|err| {
-                error!(
-                    error = &err as &dyn std::error::Error,
-                    "failed to convert claim to token"
-                );
-                match err.kind() {
-                    jsonwebtoken::errors::ErrorKind::Json(_) => StatusCode::INTERNAL_SERVER_ERROR,
-                    jsonwebtoken::errors::ErrorKind::Crypto(_) => StatusCode::SERVICE_UNAVAILABLE,
-                    _ => StatusCode::INTERNAL_SERVER_ERROR,
-                }
-            })
-        }
-    }
-
-    pub fn from_token(token: &str, public_key: &[u8]) -> Result<Self, StatusCode> {
-        let decoding_key = DecodingKey::from_ed_der(public_key);
-        let mut validation = Validation::new(jsonwebtoken::Algorithm::EdDSA);
-        validation.set_issuer(&[ISS]);
-
-        trace!(token, "converting token to claim");
-        let mut claim: Self = decode(token, &decoding_key, &validation)
-            .map_err(|err| {
-                error!(
-                    error = &err as &dyn std::error::Error,
-                    "failed to convert token to claim"
-                );
-                match err.kind() {
-                    jsonwebtoken::errors::ErrorKind::InvalidSignature
-                    | jsonwebtoken::errors::ErrorKind::InvalidAlgorithmName
-                    | jsonwebtoken::errors::ErrorKind::ExpiredSignature
-                    | jsonwebtoken::errors::ErrorKind::InvalidIssuer
-                    | jsonwebtoken::errors::ErrorKind::ImmatureSignature => {
-                        StatusCode::UNAUTHORIZED
-                    }
-                    jsonwebtoken::errors::ErrorKind::InvalidToken
-                    | jsonwebtoken::errors::ErrorKind::InvalidAlgorithm
-                    | jsonwebtoken::errors::ErrorKind::Base64(_)
-                    | jsonwebtoken::errors::ErrorKind::Json(_)
-                    | jsonwebtoken::errors::ErrorKind::Utf8(_) => StatusCode::BAD_REQUEST,
-                    jsonwebtoken::errors::ErrorKind::MissingAlgorithm => {
-                        StatusCode::INTERNAL_SERVER_ERROR
-                    }
-                    jsonwebtoken::errors::ErrorKind::Crypto(_) => StatusCode::SERVICE_UNAVAILABLE,
-                    _ => StatusCode::INTERNAL_SERVER_ERROR,
-                }
-            })?
-            .claims;
-
-        claim.token = Some(token.to_string());
-
-        Ok(claim)
-    }
-}
-
-/// Trait to get a public key asyncronously
+/// Trait to get a public key asynchronously
 #[async_trait]
 pub trait PublicKeyFn: Send + Sync + Clone {
     type Error: std::error::Error + Send;
@@ -457,72 +285,6 @@ where
     }
 }
 
-/// This layer takes a claim on a request extension and uses it's internal token to set the Authorization Bearer
-#[derive(Clone)]
-pub struct ClaimLayer;
-
-impl<S> Layer<S> for ClaimLayer {
-    type Service = ClaimService<S>;
-
-    fn layer(&self, inner: S) -> Self::Service {
-        ClaimService { inner }
-    }
-}
-
-#[derive(Clone)]
-pub struct ClaimService<S> {
-    inner: S,
-}
-
-#[pin_project]
-pub struct ClaimServiceFuture<F> {
-    #[pin]
-    response_future: F,
-}
-
-impl<F, Response, Error> Future for ClaimServiceFuture<F>
-where
-    F: Future<Output = Result<Response, Error>>,
-{
-    type Output = Result<Response, Error>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.project();
-
-        this.response_future.poll(cx)
-    }
-}
-
-impl<S, RequestError> Service<Request<UnsyncBoxBody<Bytes, RequestError>>> for ClaimService<S>
-where
-    S: Service<Request<UnsyncBoxBody<Bytes, RequestError>>> + Send + 'static,
-    S::Future: Send + 'static,
-{
-    type Response = S::Response;
-    type Error = S::Error;
-    type Future = ClaimServiceFuture<S::Future>;
-
-    fn poll_ready(
-        &mut self,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), Self::Error>> {
-        self.inner.poll_ready(cx)
-    }
-
-    fn call(&mut self, mut req: Request<UnsyncBoxBody<Bytes, RequestError>>) -> Self::Future {
-        if let Some(claim) = req.extensions().get::<Claim>() {
-            if let Some(token) = claim.token.clone() {
-                req.headers_mut()
-                    .typed_insert(Authorization::bearer(&token).expect("to set JWT token"));
-            }
-        }
-
-        let response_future = self.inner.call(req);
-
-        ClaimServiceFuture { response_future }
-    }
-}
-
 /// Check that the required scopes are set on the [Claim] extension on a [Request]
 #[derive(Clone)]
 pub struct ScopedLayer {
@@ -552,44 +314,6 @@ pub struct Scoped<S> {
     inner: S,
     required: Vec<Scope>,
 }
-#[pin_project]
-pub struct ScopedFuture<F> {
-    #[pin]
-    state: ResponseState<F>,
-}
-
-#[pin_project(project = ResponseStateProj)]
-pub enum ResponseState<F> {
-    Called {
-        #[pin]
-        inner: F,
-    },
-    Unauthorized,
-    Forbidden,
-}
-
-impl<F, Error> Future for ScopedFuture<F>
-where
-    F: Future<Output = Result<axum::response::Response, Error>>,
-{
-    type Output = Result<axum::response::Response, Error>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.project();
-
-        match this.state.project() {
-            ResponseStateProj::Called { inner } => inner.poll(cx),
-            ResponseStateProj::Unauthorized => Poll::Ready(Ok(Response::builder()
-                .status(StatusCode::UNAUTHORIZED)
-                .body(Default::default())
-                .unwrap())),
-            ResponseStateProj::Forbidden => Poll::Ready(Ok(Response::builder()
-                .status(StatusCode::FORBIDDEN)
-                .body(Default::default())
-                .unwrap())),
-        }
-    }
-}
 
 impl<S> Service<Request<Body>> for Scoped<S>
 where
@@ -601,7 +325,7 @@ where
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future = ScopedFuture<S::Future>;
+    type Future = StatusCodeFuture<S::Future>;
 
     fn poll_ready(
         &mut self,
@@ -614,7 +338,7 @@ where
         let Some(claim) = req.extensions().get::<Claim>() else {
             error!("claim extension is not set");
 
-            return ScopedFuture {state: ResponseState::Unauthorized};
+            return StatusCodeFuture::Code(StatusCode::UNAUTHORIZED);
         };
 
         if self
@@ -623,15 +347,9 @@ where
             .all(|scope| claim.scopes.contains(scope))
         {
             let response_future = self.inner.call(req);
-            ScopedFuture {
-                state: ResponseState::Called {
-                    inner: response_future,
-                },
-            }
+            StatusCodeFuture::Poll(response_future)
         } else {
-            ScopedFuture {
-                state: ResponseState::Forbidden,
-            }
+            StatusCodeFuture::Code(StatusCode::FORBIDDEN)
         }
     }
 }
@@ -649,7 +367,9 @@ mod tests {
     use serde_json::json;
     use tower::{ServiceBuilder, ServiceExt};
 
-    use super::{Claim, JwtAuthenticationLayer, Scope, ScopedLayer};
+    use crate::claims::{Claim, Scope};
+
+    use super::{JwtAuthenticationLayer, ScopedLayer};
 
     #[test]
     fn to_token_and_back() {

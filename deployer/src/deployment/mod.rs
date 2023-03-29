@@ -1,61 +1,50 @@
 pub mod deploy_layer;
 pub mod gateway_client;
-pub mod provisioner_factory;
 mod queue;
 mod run;
-pub mod runtime_logger;
-mod storage_manager;
 
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 pub use queue::Queued;
 pub use run::{ActiveDeploymentsGetter, Built};
+use shuttle_common::storage_manager::ArtifactsStorageManager;
 use tracing::{instrument, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
-use crate::persistence::{SecretRecorder, State};
-use tokio::sync::{broadcast, mpsc};
+use crate::{
+    persistence::{DeploymentUpdater, ResourceManager, SecretGetter, SecretRecorder, State},
+    RuntimeManager,
+};
+use tokio::sync::{mpsc, Mutex};
 use uuid::Uuid;
 
-use self::{
-    deploy_layer::LogRecorder, gateway_client::BuildQueueClient, storage_manager::StorageManager,
-};
+use self::{deploy_layer::LogRecorder, gateway_client::BuildQueueClient};
 
 const QUEUE_BUFFER_SIZE: usize = 100;
 const RUN_BUFFER_SIZE: usize = 100;
-const KILL_BUFFER_SIZE: usize = 10;
 
-pub struct DeploymentManagerBuilder<AF, RLF, LR, SR, ADG, QC> {
-    abstract_factory: Option<AF>,
-    runtime_logger_factory: Option<RLF>,
+pub struct DeploymentManagerBuilder<LR, SR, ADG, DU, SG, RM, QC> {
     build_log_recorder: Option<LR>,
     secret_recorder: Option<SR>,
     active_deployment_getter: Option<ADG>,
     artifacts_path: Option<PathBuf>,
+    runtime_manager: Option<Arc<Mutex<RuntimeManager>>>,
+    deployment_updater: Option<DU>,
+    secret_getter: Option<SG>,
+    resource_manager: Option<RM>,
     queue_client: Option<QC>,
 }
 
-impl<AF, RLF, LR, SR, ADG, QC> DeploymentManagerBuilder<AF, RLF, LR, SR, ADG, QC>
+impl<LR, SR, ADG, DU, SG, RM, QC> DeploymentManagerBuilder<LR, SR, ADG, DU, SG, RM, QC>
 where
-    AF: provisioner_factory::AbstractFactory,
-    RLF: runtime_logger::Factory,
     LR: LogRecorder,
     SR: SecretRecorder,
     ADG: ActiveDeploymentsGetter,
+    DU: DeploymentUpdater,
+    SG: SecretGetter,
+    RM: ResourceManager,
     QC: BuildQueueClient,
 {
-    pub fn abstract_factory(mut self, abstract_factory: AF) -> Self {
-        self.abstract_factory = Some(abstract_factory);
-
-        self
-    }
-
-    pub fn runtime_logger_factory(mut self, runtime_logger_factory: RLF) -> Self {
-        self.runtime_logger_factory = Some(runtime_logger_factory);
-
-        self
-    }
-
     pub fn build_log_recorder(mut self, build_log_recorder: LR) -> Self {
         self.build_log_recorder = Some(build_log_recorder);
 
@@ -86,17 +75,35 @@ where
         self
     }
 
+    pub fn secret_getter(mut self, secret_getter: SG) -> Self {
+        self.secret_getter = Some(secret_getter);
+
+        self
+    }
+
+    pub fn resource_manager(mut self, resource_manager: RM) -> Self {
+        self.resource_manager = Some(resource_manager);
+
+        self
+    }
+
+    pub fn runtime(mut self, runtime_manager: Arc<Mutex<RuntimeManager>>) -> Self {
+        self.runtime_manager = Some(runtime_manager);
+
+        self
+    }
+
+    pub fn deployment_updater(mut self, deployment_updater: DU) -> Self {
+        self.deployment_updater = Some(deployment_updater);
+
+        self
+    }
+
     /// Creates two Tokio tasks, one for building queued services, the other for
     /// executing/deploying built services. Two multi-producer, single consumer
     /// channels are also created which are for moving on-going service
     /// deployments between the aforementioned tasks.
     pub fn build(self) -> DeploymentManager {
-        let abstract_factory = self
-            .abstract_factory
-            .expect("an abstract factory to be set");
-        let runtime_logger_factory = self
-            .runtime_logger_factory
-            .expect("a runtime logger factory to be set");
         let build_log_recorder = self
             .build_log_recorder
             .expect("a build log recorder to be set");
@@ -106,17 +113,23 @@ where
             .expect("an active deployment getter to be set");
         let artifacts_path = self.artifacts_path.expect("artifacts path to be set");
         let queue_client = self.queue_client.expect("a queue client to be set");
+        let runtime_manager = self.runtime_manager.expect("a runtime manager to be set");
+        let deployment_updater = self
+            .deployment_updater
+            .expect("a deployment updater to be set");
+        let secret_getter = self.secret_getter.expect("a secret getter to be set");
+        let resource_manager = self.resource_manager.expect("a resource manager to be set");
 
         let (queue_send, queue_recv) = mpsc::channel(QUEUE_BUFFER_SIZE);
         let (run_send, run_recv) = mpsc::channel(RUN_BUFFER_SIZE);
-        let (kill_send, _) = broadcast::channel(KILL_BUFFER_SIZE);
-        let storage_manager = StorageManager::new(artifacts_path);
+        let storage_manager = ArtifactsStorageManager::new(artifacts_path);
 
         let run_send_clone = run_send.clone();
 
         tokio::spawn(queue::task(
             queue_recv,
             run_send_clone,
+            deployment_updater.clone(),
             build_log_recorder,
             secret_recorder,
             storage_manager.clone(),
@@ -124,17 +137,18 @@ where
         ));
         tokio::spawn(run::task(
             run_recv,
-            kill_send.clone(),
-            abstract_factory,
-            runtime_logger_factory,
+            runtime_manager.clone(),
+            deployment_updater,
             active_deployment_getter,
+            secret_getter,
+            resource_manager,
             storage_manager.clone(),
         ));
 
         DeploymentManager {
             queue_send,
             run_send,
-            kill_send,
+            runtime_manager,
             storage_manager,
         }
     }
@@ -144,8 +158,8 @@ where
 pub struct DeploymentManager {
     queue_send: QueueSender,
     run_send: RunSender,
-    kill_send: KillSender,
-    storage_manager: StorageManager,
+    runtime_manager: Arc<Mutex<RuntimeManager>>,
+    storage_manager: ArtifactsStorageManager,
 }
 
 /// ```no-test
@@ -165,15 +179,17 @@ pub struct DeploymentManager {
 impl DeploymentManager {
     /// Create a new deployment manager. Manages one or more 'pipelines' for
     /// processing service building, loading, and deployment.
-    pub fn builder<AF, RLF, LR, SR, ADG, QC>() -> DeploymentManagerBuilder<AF, RLF, LR, SR, ADG, QC>
-    {
+    pub fn builder<LR, SR, ADG, DU, SG, RM, QC>(
+    ) -> DeploymentManagerBuilder<LR, SR, ADG, DU, SG, RM, QC> {
         DeploymentManagerBuilder {
-            abstract_factory: None,
-            runtime_logger_factory: None,
             build_log_recorder: None,
             secret_recorder: None,
             active_deployment_getter: None,
             artifacts_path: None,
+            runtime_manager: None,
+            deployment_updater: None,
+            secret_getter: None,
+            resource_manager: None,
             queue_client: None,
         }
     }
@@ -194,12 +210,10 @@ impl DeploymentManager {
     }
 
     pub async fn kill(&self, id: Uuid) {
-        if self.kill_send.receiver_count() > 0 {
-            self.kill_send.send(id).unwrap();
-        }
+        self.runtime_manager.lock().await.kill(&id).await;
     }
 
-    pub fn storage_manager(&self) -> StorageManager {
+    pub fn storage_manager(&self) -> ArtifactsStorageManager {
         self.storage_manager.clone()
     }
 }
@@ -209,6 +223,3 @@ type QueueReceiver = mpsc::Receiver<queue::Queued>;
 
 type RunSender = mpsc::Sender<run::Built>;
 type RunReceiver = mpsc::Receiver<run::Built>;
-
-type KillSender = broadcast::Sender<Uuid>;
-type KillReceiver = broadcast::Receiver<Uuid>;

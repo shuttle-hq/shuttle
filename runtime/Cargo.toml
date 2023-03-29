@@ -1,0 +1,71 @@
+[package]
+name = "shuttle-runtime"
+version = "0.13.0"
+edition.workspace = true
+license.workspace = true
+description = "Runtime to start and manage any service that runs on shuttle"
+
+[[bin]]
+name = "shuttle-next"
+required-features = ["next"]
+
+[lib]
+doctest = false
+
+[dependencies]
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+chrono = { workspace = true }
+clap = { workspace = true }
+prost-types = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+strfmt = "0.2.2"
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+tokio-stream = "0.1.11"
+tonic = { workspace = true }
+tower = { workspace = true }
+tracing = { workspace = true, features = ["default"] }
+tracing-subscriber = { workspace = true, features = [
+    "default",
+    "env-filter",
+    "fmt",
+] }
+cap-std = { workspace = true, optional = true }
+futures = { workspace = true, optional = true }
+hyper = { workspace = true, optional = true }
+rmp-serde = { workspace = true, optional = true }
+wasi-common = { version = "7.0.0", optional = true }
+wasmtime = { version = "7.0.0", optional = true }
+wasmtime-wasi = { version = "7.0.0", optional = true }
+
+[dependencies.shuttle-common]
+workspace = true
+features = ["claims", "backend"]
+
+[dependencies.shuttle-proto]
+workspace = true
+
+[dependencies.shuttle-service]
+workspace = true
+
+[dev-dependencies]
+crossbeam-channel = { workspace = true }
+portpicker = "0.1.1"
+futures = { workspace = true }
+shuttle-service = { workspace = true, features = ["builder"] }
+
+[features]
+default = []
+next = [
+    "cap-std",
+    "futures",
+    "hyper/server",
+    "rmp-serde",
+    "futures",
+    "wasi-common",
+    "wasmtime",
+    "wasmtime-wasi",
+    "shuttle-common/wasm",
+]

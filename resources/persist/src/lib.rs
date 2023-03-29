@@ -1,8 +1,9 @@
 use async_trait::async_trait;
 use bincode::{deserialize_from, serialize_into, Error as BincodeError};
 use serde::de::DeserializeOwned;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use shuttle_common::project::ProjectName;
+use shuttle_service::Type;
 use shuttle_service::{Factory, ResourceBuilder};
 use std::fs;
 use std::fs::File;
@@ -10,7 +11,6 @@ use std::io::BufReader;
 use std::io::BufWriter;
 use std::path::PathBuf;
 use thiserror::Error;
-use tokio::runtime::Runtime;
 
 #[derive(Error, Debug)]
 pub enum PersistError {
@@ -24,8 +24,10 @@ pub enum PersistError {
     Deserialize(BincodeError),
 }
 
+#[derive(Serialize)]
 pub struct Persist;
 
+#[derive(Deserialize, Serialize, Clone)]
 pub struct PersistInstance {
     service_name: ProjectName,
 }
@@ -67,18 +69,25 @@ impl PersistInstance {
 
 #[async_trait]
 impl ResourceBuilder<PersistInstance> for Persist {
+    const TYPE: Type = Type::Persist;
+
+    type Output = PersistInstance;
+
     fn new() -> Self {
         Self {}
     }
 
-    async fn build(
+    async fn output(
         self,
         factory: &mut dyn Factory,
-        _runtime: &Runtime,
-    ) -> Result<PersistInstance, shuttle_service::Error> {
+    ) -> Result<Self::Output, shuttle_service::Error> {
         Ok(PersistInstance {
             service_name: factory.get_service_name(),
         })
+    }
+
+    async fn build(build_data: &Self::Output) -> Result<PersistInstance, shuttle_service::Error> {
+        Ok(build_data.clone())
     }
 }
 

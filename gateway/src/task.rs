@@ -126,6 +126,15 @@ pub fn destroy() -> impl Task<ProjectContext, Output = Project, Error = Error> {
     })
 }
 
+pub fn start() -> impl Task<ProjectContext, Output = Project, Error = Error> {
+    run(|ctx| async move {
+        match ctx.state.start() {
+            Ok(state) => TaskResult::Done(state),
+            Err(err) => TaskResult::Err(err),
+        }
+    })
+}
+
 pub fn check_health() -> impl Task<ProjectContext, Output = Project, Error = Error> {
     run(|ctx| async move {
         match ctx.state.refresh(&ctx.gateway).await {

@@ -1,62 +1,39 @@
 use std::path::{Path, PathBuf};
 
-use shuttle_service::loader::build_crate;
+use shuttle_service::builder::{build_crate, Runtime};
 
-#[tokio::test(flavor = "multi_thread")]
+#[tokio::test]
+#[should_panic(expected = "1 job failed")]
 async fn not_shuttle() {
     let (tx, _) = crossbeam_channel::unbounded();
     let project_path = format!("{}/tests/resources/not-shuttle", env!("CARGO_MANIFEST_DIR"));
-    let so_path = build_crate(Default::default(), Path::new(&project_path), false, tx)
+    build_crate(Path::new(&project_path), false, tx)
         .await
         .unwrap();
-
-    assert!(
-        so_path
-            .display()
-            .to_string()
-            .ends_with("tests/resources/not-shuttle/target/debug/libnot_shuttle.so"),
-        "did not get expected so_path: {}",
-        so_path.display()
-    );
 }
 
 #[tokio::test]
-#[should_panic(
-    expected = "Your Shuttle project must be a library. Please add `[lib]` to your Cargo.toml file."
-)]
-async fn not_lib() {
+#[should_panic(expected = "Your Shuttle project must be a binary.")]
+async fn not_bin() {
     let (tx, _) = crossbeam_channel::unbounded();
-    let project_path = format!("{}/tests/resources/not-lib", env!("CARGO_MANIFEST_DIR"));
-    build_crate(Default::default(), Path::new(&project_path), false, tx)
-        .await
-        .unwrap();
+    let project_path = format!("{}/tests/resources/not-bin", env!("CARGO_MANIFEST_DIR"));
+    match build_crate(Path::new(&project_path), false, tx).await {
+        Ok(_) => {}
+        Err(e) => panic!("{}", e.to_string()),
+    }
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn not_cdylib() {
+#[tokio::test]
+async fn is_bin() {
     let (tx, _) = crossbeam_channel::unbounded();
-    let project_path = format!("{}/tests/resources/not-cdylib", env!("CARGO_MANIFEST_DIR"));
-    assert!(
-        build_crate(Default::default(), Path::new(&project_path), false, tx)
-            .await
-            .is_ok()
-    );
-    assert!(PathBuf::from(project_path)
-        .join("target/debug/libnot_cdylib.so")
-        .exists());
-}
+    let project_path = format!("{}/tests/resources/is-bin", env!("CARGO_MANIFEST_DIR"));
 
-#[tokio::test(flavor = "multi_thread")]
-async fn is_cdylib() {
-    let (tx, _) = crossbeam_channel::unbounded();
-    let project_path = format!("{}/tests/resources/is-cdylib", env!("CARGO_MANIFEST_DIR"));
-    assert!(
-        build_crate(Default::default(), Path::new(&project_path), false, tx)
-            .await
-            .is_ok()
-    );
+    assert!(matches!(
+        build_crate(Path::new(&project_path), false, tx).await,
+        Ok(Runtime::Alpha(_))
+    ));
     assert!(PathBuf::from(project_path)
-        .join("target/debug/libis_cdylib.so")
+        .join("target/debug/is-bin")
         .exists());
 }
 
@@ -68,7 +45,7 @@ async fn not_found() {
         "{}/tests/resources/non-existing",
         env!("CARGO_MANIFEST_DIR")
     );
-    build_crate(Default::default(), Path::new(&project_path), false, tx)
+    build_crate(Path::new(&project_path), false, tx)
         .await
         .unwrap();
 }

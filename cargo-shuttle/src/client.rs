@@ -2,14 +2,14 @@ use std::fmt::Write;
 
 use anyhow::{Context, Result};
 use headers::{Authorization, HeaderMapExt};
-use reqwest::{Body, Response};
+use reqwest::Response;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, RequestBuilder};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use shuttle_common::models::{deployment, project, secret, service, ToJson};
 use shuttle_common::project::ProjectName;
-use shuttle_common::{ApiKey, ApiUrl, LogItem};
+use shuttle_common::{resource, ApiKey, ApiUrl, LogItem};
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
@@ -49,7 +49,16 @@ impl Client {
             let _ = write!(path, "?no-test");
         }
 
-        self.post(path, Some(data))
+        let url = format!("{}{}", self.api_url, path);
+
+        let mut builder = Self::get_retry_client().post(url);
+
+        builder = self.set_builder_auth(builder);
+
+        builder
+            .body(data)
+            .header("Transfer-Encoding", "chunked")
+            .send()
             .await
             .context("failed to send deployment to the Shuttle server")?
             .to_json()
@@ -66,7 +75,7 @@ impl Client {
         self.delete(path).await
     }
 
-    pub async fn get_service_details(&self, project: &ProjectName) -> Result<service::Detailed> {
+    pub async fn get_service(&self, project: &ProjectName) -> Result<service::Summary> {
         let path = format!(
             "/projects/{}/services/{}",
             project.as_str(),
@@ -76,9 +85,12 @@ impl Client {
         self.get(path).await
     }
 
-    pub async fn get_service_summary(&self, project: &ProjectName) -> Result<service::Summary> {
+    pub async fn get_service_resources(
+        &self,
+        project: &ProjectName,
+    ) -> Result<Vec<resource::Response>> {
         let path = format!(
-            "/projects/{}/services/{}/summary",
+            "/projects/{}/services/{}/resources",
             project.as_str(),
             project.as_str()
         );
@@ -86,10 +98,14 @@ impl Client {
         self.get(path).await
     }
 
-    pub async fn create_project(&self, project: &ProjectName) -> Result<project::Response> {
+    pub async fn create_project(
+        &self,
+        project: &ProjectName,
+        config: project::Config,
+    ) -> Result<project::Response> {
         let path = format!("/projects/{}", project.as_str());
 
-        self.post(path, Option::<String>::None)
+        self.post(path, Some(config))
             .await
             .context("failed to make create project request")?
             .to_json()
@@ -171,6 +187,15 @@ impl Client {
         self.ws_get(path).await
     }
 
+    pub async fn get_deployments(
+        &self,
+        project: &ProjectName,
+    ) -> Result<Vec<deployment::Response>> {
+        let path = format!("/projects/{}/deployments", project.as_str());
+
+        self.get(path).await
+    }
+
     pub async fn get_deployment_details(
         &self,
         project: &ProjectName,
@@ -187,7 +212,7 @@ impl Client {
 
     async fn ws_get(&self, path: String) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>> {
         let ws_scheme = self.api_url.clone().replace("http", "ws");
-        let url = format!("{}{}", ws_scheme, path);
+        let url = format!("{ws_scheme}{path}");
         let mut request = url.into_client_request()?;
 
         if let Some(ref api_key) = self.api_key {
@@ -221,11 +246,7 @@ impl Client {
             .await
     }
 
-    async fn post<T: Into<Body>>(
-        &self,
-        path: String,
-        body: Option<T>,
-    ) -> Result<Response, reqwest_middleware::Error> {
+    async fn post<T: Serialize>(&self, path: String, body: Option<T>) -> Result<Response> {
         let url = format!("{}{}", self.api_url, path);
 
         let mut builder = Self::get_retry_client().post(url);
@@ -233,11 +254,12 @@ impl Client {
         builder = self.set_builder_auth(builder);
 
         if let Some(body) = body {
+            let body = serde_json::to_string(&body)?;
             builder = builder.body(body);
-            builder = builder.header("Transfer-Encoding", "chunked");
+            builder = builder.header("Content-Type", "application/json");
         }
 
-        builder.send().await
+        Ok(builder.send().await?)
     }
 
     async fn delete<M>(&self, path: String) -> Result<M>

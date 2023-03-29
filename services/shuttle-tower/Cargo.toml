@@ -1,0 +1,17 @@
+[package]
+name = "shuttle-tower"
+version = "0.13.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Service implementation to run a tower webserver on shuttle"
+keywords = ["shuttle-service", "tower"]
+
+[workspace]
+
+[dependencies]
+hyper = { version = "0.14.23", features = ["server", "tcp", "http1"] }
+shuttle-runtime = { path = "../../runtime", version = "0.13.0" }
+tower = { version = "0.4.13", features = ["make"] }
+
+[dev-dependencies]
+tokio = { version = "1.26.0", features = ["macros", "rt-multi-thread"] }

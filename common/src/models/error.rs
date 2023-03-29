@@ -115,7 +115,7 @@ impl From<StatusCode> for ApiError {
     fn from(code: StatusCode) -> Self {
         let message = match code {
             StatusCode::OK | StatusCode::ACCEPTED | StatusCode::FOUND | StatusCode::SWITCHING_PROTOCOLS => {
-                unreachable!("we should not have an API error with a successfull status code")
+                unreachable!("we should not have an API error with a successful status code")
             }
             StatusCode::FORBIDDEN => "this request is not allowed",
             StatusCode::UNAUTHORIZED => {
@@ -137,7 +137,7 @@ impl From<StatusCode> for ApiError {
             },
             _ => {
                 error!(%code, "got an unexpected status code");
-                "an unexpected error occured. Please create a ticket to report this"
+                "an unexpected error occurred. Please create a ticket to report this"
             },
         };
 

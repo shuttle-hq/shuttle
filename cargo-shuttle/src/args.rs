@@ -1,6 +1,6 @@
 use std::{
     ffi::OsString,
-    fs::{canonicalize, create_dir_all},
+    fs::create_dir_all,
     io::{self, ErrorKind},
     path::PathBuf,
 };
@@ -8,7 +8,7 @@ use std::{
 use clap::builder::{OsStringValueParser, PossibleValue, TypedValueParser};
 use clap::Parser;
 use clap_complete::Shell;
-use shuttle_common::project::ProjectName;
+use shuttle_common::{models::project::IDLE_MINUTES, project::ProjectName};
 use uuid::Uuid;
 
 use crate::init::Framework;
@@ -53,6 +53,9 @@ pub enum Command {
     /// manage deployments of a shuttle service
     #[command(subcommand)]
     Deployment(DeploymentCommand),
+    /// manage resources of a shuttle project
+    #[command(subcommand)]
+    Resource(ResourceCommand),
     /// create a new shuttle service
     Init(InitArgs),
     /// generate shell completions
@@ -106,9 +109,19 @@ pub enum DeploymentCommand {
 }
 
 #[derive(Parser)]
+pub enum ResourceCommand {
+    /// list all the resources for a project
+    List,
+}
+
+#[derive(Parser)]
 pub enum ProjectCommand {
     /// create an environment for this project on shuttle
-    New,
+    New {
+        #[arg(long, default_value_t = IDLE_MINUTES)]
+        /// How long to wait before putting the project in an idle state due to inactivity. 0 means the project will never idle
+        idle_minutes: u64,
+    },
     /// list all projects belonging to the calling account
     List {
         #[arg(long)]
@@ -199,7 +212,7 @@ pub struct InitArgs {
     #[command(flatten)]
     pub login_args: LoginArgs,
     /// Path to initialize a new shuttle project
-    #[arg(default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_path) )]
+    #[arg(default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_init_path) )]
     pub path: PathBuf,
 }
 
@@ -237,7 +250,7 @@ impl InitArgs {
 
 // Helper function to parse and return the absolute path
 fn parse_path(path: OsString) -> Result<PathBuf, String> {
-    canonicalize(&path).map_err(|e| format!("could not turn {path:?} into a real path: {e}"))
+    dunce::canonicalize(&path).map_err(|e| format!("could not turn {path:?} into a real path: {e}"))
 }
 
 // Helper function to parse, create if not exists, and return the absolute path

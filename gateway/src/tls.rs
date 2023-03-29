@@ -18,6 +18,9 @@ use tokio::sync::RwLock;
 
 use crate::Error;
 
+/// LetsEncrypt recommends to renew a certificate when its close to 30 days validity window.
+pub const RENEWAL_VALIDITY_THRESHOLD_IN_DAYS: i64 = 30;
+
 #[derive(Clone)]
 pub struct ChainAndPrivateKey {
     chain: Vec<Certificate>,

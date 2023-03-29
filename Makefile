@@ -22,26 +22,28 @@ BUILDX_FLAGS=$(BUILDX_OP) $(PLATFORM_FLAGS) $(CACHE_FLAGS)
 
 # the rust version used by our containers, and as an override for our deployers
 # ensuring all user crates are compiled with the same rustc toolchain
-RUSTUP_TOOLCHAIN=1.65.0
+RUSTUP_TOOLCHAIN=1.68.0
 
 TAG?=$(shell git describe --tags)
 BACKEND_TAG?=$(TAG)
 DEPLOYER_TAG?=$(TAG)
 PROVISIONER_TAG?=$(TAG)
 
-DOCKER?=docker
+DOCKER_BUILD?=docker buildx build
 
 DOCKER_COMPOSE=$(shell which docker-compose)
 ifeq ($(DOCKER_COMPOSE),)
-DOCKER_COMPOSE=$(DOCKER) compose
+DOCKER_COMPOSE=docker compose
 endif
+
+DOCKER_SOCK?=/var/run/docker.sock
 
 POSTGRES_PASSWORD?=postgres
 MONGO_INITDB_ROOT_USERNAME?=mongodb
 MONGO_INITDB_ROOT_PASSWORD?=password
 
 ifeq ($(PROD),true)
-DOCKER_COMPOSE_FILES=-f docker-compose.yml
+DOCKER_COMPOSE_FILES=docker-compose.yml
 STACK=shuttle-prod
 APPS_FQDN=shuttleapp.rs
 DB_FQDN=db.shuttle.rs
@@ -52,7 +54,7 @@ USE_TLS=enable
 CARGO_PROFILE=release
 RUST_LOG=debug
 else
-DOCKER_COMPOSE_FILES=-f docker-compose.yml -f docker-compose.dev.yml
+DOCKER_COMPOSE_FILES=docker-compose.yml docker-compose.dev.yml
 STACK?=shuttle-dev
 APPS_FQDN=unstable.shuttleapp.rs
 DB_FQDN=db.unstable.shuttle.rs
@@ -63,16 +65,46 @@ CARGO_PROFILE=debug
 RUST_LOG?=shuttle=trace,debug
 endif
 
+ARCH=$(shell uname -m)
+PROTOC_ARCH=$(ARCH)
+ifeq ($(ARCH), arm64)
+PROTOC_ARCH=aarch_64
+endif
+
 POSTGRES_EXTRA_PATH?=./extras/postgres
 POSTGRES_TAG?=14
 
 PANAMAX_EXTRA_PATH?=./extras/panamax
-PANAMAX_TAG?=1.0.6
+PANAMAX_TAG?=1.0.12
 
 OTEL_EXTRA_PATH?=./extras/otel
 OTEL_TAG?=0.72.0
 
-DOCKER_COMPOSE_ENV=STACK=$(STACK) BACKEND_TAG=$(BACKEND_TAG) DEPLOYER_TAG=$(DEPLOYER_TAG) PROVISIONER_TAG=$(PROVISIONER_TAG) POSTGRES_TAG=${POSTGRES_TAG} PANAMAX_TAG=${PANAMAX_TAG} OTEL_TAG=${OTEL_TAG} APPS_FQDN=$(APPS_FQDN) DB_FQDN=$(DB_FQDN) POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) RUST_LOG=$(RUST_LOG) CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) MONGO_INITDB_ROOT_USERNAME=$(MONGO_INITDB_ROOT_USERNAME) MONGO_INITDB_ROOT_PASSWORD=$(MONGO_INITDB_ROOT_PASSWORD) DD_ENV=$(DD_ENV) USE_TLS=$(USE_TLS)
+USE_PANAMAX?=enable
+ifeq ($(USE_PANAMAX), enable)
+PREPARE_ARGS+=-p 
+COMPOSE_PROFILES+=panamax
+endif
+
+DOCKER_COMPOSE_ENV=\
+	STACK=$(STACK)\
+	BACKEND_TAG=$(BACKEND_TAG)\
+	DEPLOYER_TAG=$(DEPLOYER_TAG)\
+	PROVISIONER_TAG=$(PROVISIONER_TAG)\
+	POSTGRES_TAG=${POSTGRES_TAG}\
+	PANAMAX_TAG=${PANAMAX_TAG}\
+	OTEL_TAG=${OTEL_TAG}\
+	APPS_FQDN=$(APPS_FQDN)\
+	DB_FQDN=$(DB_FQDN)\
+	POSTGRES_PASSWORD=$(POSTGRES_PASSWORD)\
+	RUST_LOG=$(RUST_LOG)\
+	CONTAINER_REGISTRY=$(CONTAINER_REGISTRY)\
+	MONGO_INITDB_ROOT_USERNAME=$(MONGO_INITDB_ROOT_USERNAME)\
+	MONGO_INITDB_ROOT_PASSWORD=$(MONGO_INITDB_ROOT_PASSWORD)\
+	DD_ENV=$(DD_ENV)\
+	USE_TLS=$(USE_TLS)\
+	COMPOSE_PROFILES=$(COMPOSE_PROFILES)\
+	DOCKER_SOCK=$(DOCKER_SOCK)
 
 .PHONY: images clean src up down deploy shuttle-% postgres docker-compose.rendered.yml test bump-% deploy-examples publish publish-% --validate-version
 
@@ -83,31 +115,30 @@ clean:
 images: shuttle-provisioner shuttle-deployer shuttle-gateway shuttle-auth postgres panamax otel
 
 postgres:
-	docker buildx build \
-	       --build-arg POSTGRES_TAG=$(POSTGRES_TAG) \
-	       --tag $(CONTAINER_REGISTRY)/postgres:$(POSTGRES_TAG) \
-	       $(BUILDX_FLAGS) \
-	       -f $(POSTGRES_EXTRA_PATH)/Containerfile \
-	       $(POSTGRES_EXTRA_PATH)
+	$(DOCKER_BUILD) \
+		--build-arg POSTGRES_TAG=$(POSTGRES_TAG) \
+		--tag $(CONTAINER_REGISTRY)/postgres:$(POSTGRES_TAG) \
+		$(BUILDX_FLAGS) \
+		-f $(POSTGRES_EXTRA_PATH)/Containerfile \
+		$(POSTGRES_EXTRA_PATH)
 
 panamax:
-	docker buildx build \
-	       --build-arg PANAMAX_TAG=$(PANAMAX_TAG) \
-	       --tag $(CONTAINER_REGISTRY)/panamax:$(PANAMAX_TAG) \
-	       $(BUILDX_FLAGS) \
-	       -f $(PANAMAX_EXTRA_PATH)/Containerfile \
-	       $(PANAMAX_EXTRA_PATH)
+	if [ $(USE_PANAMAX) = "enable" ]; then \
+		$(DOCKER_BUILD) \
+			--build-arg PANAMAX_TAG=$(PANAMAX_TAG) \
+			--tag $(CONTAINER_REGISTRY)/panamax:$(PANAMAX_TAG) \
+			$(BUILDX_FLAGS) \
+			-f $(PANAMAX_EXTRA_PATH)/Containerfile \
+			$(PANAMAX_EXTRA_PATH); \
+	fi
 
 otel:
-	docker buildx build \
-	       --build-arg OTEL_TAG=$(OTEL_TAG) \
-	       --tag $(CONTAINER_REGISTRY)/otel:$(OTEL_TAG) \
-	       $(BUILDX_FLAGS) \
-	       -f $(OTEL_EXTRA_PATH)/Containerfile \
-	       $(OTEL_EXTRA_PATH)
-
-docker-compose.rendered.yml: docker-compose.yml docker-compose.dev.yml
-	$(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE) $(DOCKER_COMPOSE_FILES) $(DOCKER_COMPOSE_CONFIG_FLAGS) -p $(STACK) config > $@
+	$(DOCKER_BUILD) \
+		--build-arg OTEL_TAG=$(OTEL_TAG) \
+		--tag $(CONTAINER_REGISTRY)/otel:$(OTEL_TAG) \
+		$(BUILDX_FLAGS) \
+		-f $(OTEL_EXTRA_PATH)/Containerfile \
+		$(OTEL_EXTRA_PATH)
 
 deploy: docker-compose.yml
 	$(DOCKER_COMPOSE_ENV) docker stack deploy -c $< $(STACK)
@@ -115,23 +146,28 @@ deploy: docker-compose.yml
 test:
 	cd e2e; POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) APPS_FQDN=$(APPS_FQDN) cargo test $(CARGO_TEST_FLAGS) -- --nocapture
 
-up: docker-compose.rendered.yml
-	CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) $(DOCKER_COMPOSE) -f $< -p $(STACK) up -d $(DOCKER_COMPOSE_FLAGS)
+# Start the containers locally. This does not start panamax by default,
+# to start panamax locally run this command with an override for the profiles:
+# `make COMPOSE_PROFILES=panamax up`
+up: $(DOCKER_COMPOSE_FILES)
+	$(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE) $(addprefix -f ,$(DOCKER_COMPOSE_FILES)) -p $(STACK) up -d
 
-down: docker-compose.rendered.yml
-	CONTAINER_REGISTRY=$(CONTAINER_REGISTRY) $(DOCKER_COMPOSE) -f $< -p $(STACK) down $(DOCKER_COMPOSE_FLAGS)
+down: $(DOCKER_COMPOSE_FILES)
+	$(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE) $(addprefix -f ,$(DOCKER_COMPOSE_FILES)) -p $(STACK) down
 
 shuttle-%: ${SRC} Cargo.lock
-	docker buildx build \
-	       --build-arg folder=$(*) \
-		   --build-arg RUSTUP_TOOLCHAIN=$(RUSTUP_TOOLCHAIN) \
-		   --build-arg CARGO_PROFILE=$(CARGO_PROFILE) \
-	       --tag $(CONTAINER_REGISTRY)/$(*):$(COMMIT_SHA) \
-	       --tag $(CONTAINER_REGISTRY)/$(*):$(TAG) \
-	       --tag $(CONTAINER_REGISTRY)/$(*):latest \
-	       $(BUILDX_FLAGS) \
-	       -f Containerfile \
-	       .
+	$(DOCKER_BUILD) \
+		--build-arg PROTOC_ARCH=$(PROTOC_ARCH) \
+		--build-arg folder=$(*) \
+		--build-arg prepare_args=$(PREPARE_ARGS) \
+		--build-arg RUSTUP_TOOLCHAIN=$(RUSTUP_TOOLCHAIN) \
+		--build-arg CARGO_PROFILE=$(CARGO_PROFILE) \
+		--tag $(CONTAINER_REGISTRY)/$(*):$(COMMIT_SHA) \
+		--tag $(CONTAINER_REGISTRY)/$(*):$(TAG) \
+		--tag $(CONTAINER_REGISTRY)/$(*):latest \
+		$(BUILDX_FLAGS) \
+		-f Containerfile \
+		.
 
 # Bunch of targets to make bumping the shuttle version easier
 #

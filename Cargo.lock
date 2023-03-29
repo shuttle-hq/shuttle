@@ -7463,19 +7463,3 @@ dependencies = [
  "libc",
  "pkg-config",
 ]
-
-[[patch.unused]]
-name = "shuttle-aws-rds"
-version = "0.13.0"
-
-[[patch.unused]]
-name = "shuttle-persist"
-version = "0.13.0"
-
-[[patch.unused]]
-name = "shuttle-shared-db"
-version = "0.13.0"
-
-[[patch.unused]]
-name = "shuttle-static-folder"
-version = "0.13.1"

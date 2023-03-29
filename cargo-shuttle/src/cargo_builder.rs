@@ -15,15 +15,20 @@ pub struct CargoBuilder {
     dependencies: BTreeMap<String, BTreeMap<String, Value>>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct Dependency {
     name: String,
     version: Option<String>,
+    allow_pre_release: bool,
 }
 
 impl Dependency {
     pub fn new(name: String, version: Option<String>) -> Self {
-        Dependency { name, version }
+        Dependency {
+            name,
+            version,
+            ..Default::default()
+        }
     }
 
     pub fn get_latest_version(&self) -> String {
@@ -31,17 +36,24 @@ impl Dependency {
             Some(x) => x.to_string(),
             None => {
                 let index = Index::new_cargo_default().unwrap();
-                let crate_ver = index
+                let crate_select = index
                     .crate_(&self.name)
                     .unwrap_or_else(|| panic!("Could not find package {} in registry", self.name));
 
-                crate_ver
-                    .highest_normal_version()
-                    .unwrap()
-                    .version()
-                    .to_string()
+                let crate_ver = if self.allow_pre_release {
+                    crate_select.highest_version()
+                } else {
+                    crate_select.highest_normal_version().unwrap()
+                };
+
+                crate_ver.version().to_string()
             }
         }
+    }
+
+    pub fn allow_pre_release(mut self) -> Self {
+        self.allow_pre_release = true;
+        self
     }
 }
 
@@ -61,7 +73,10 @@ impl CargoBuilder {
     ) -> &mut Self {
         match section {
             CargoSection::Dependency(x) => {
-                let dependency = self.dependencies.entry(x.to_owned().name).or_insert(BTreeMap::new());
+                let dependency = self
+                    .dependencies
+                    .entry(x.to_owned().name)
+                    .or_insert(BTreeMap::new());
                 dependency.insert(attribute_name, dep_value);
                 dependency.insert("version".to_owned(), Value::from(x.get_latest_version()));
             }
@@ -145,7 +160,23 @@ mod tests {
         Dependency {
             name: name.to_string(),
             version,
+            ..Default::default()
         }
+    }
+
+    #[test]
+    fn set_prerelease_true() {
+        let dependency =
+            get_mock_dependency("test-dep", Some("1.2.3".to_string())).allow_pre_release();
+
+        assert_eq!(dependency.allow_pre_release, true);
+    }
+
+    #[test]
+    fn set_prerelease_false() {
+        let dependency = get_mock_dependency("test-dep", Some("1.2.3".to_string()));
+
+        assert_eq!(dependency.allow_pre_release, false);
     }
 
     #[test]

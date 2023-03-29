@@ -48,8 +48,18 @@ impl Framework {
 }
 
 pub trait ShuttleInit {
-    fn get_base_dependencies(&self) -> Vec<&str>;
-    fn get_dependency_attributes(&self) -> HashMap<&str, HashMap<&str, Value>>;
+    fn get_base_dependencies(&self) -> Vec<&str> {
+        vec![]
+    }
+
+    fn get_prerelease_dependencies(&self) -> Vec<&str> {
+        vec![]
+    }
+
+    fn get_dependency_attributes(&self) -> HashMap<&str, HashMap<&str, Value>> {
+        HashMap::new()
+    }
+    
     fn get_boilerplate_code_for_framework(&self) -> &'static str;
 }
 
@@ -60,18 +70,17 @@ impl ShuttleInit for ShuttleInitActixWeb {
         vec!["actix-web", "shuttle-actix-web", "tokio", "shuttle-runtime"]
     }
 
-    fn get_dependency_attributes(&self) -> HashMap<&str, HashMap<&str, Value>> {
-        HashMap::new()
-    }
 
     fn get_boilerplate_code_for_framework(&self) -> &'static str {
         indoc! {r#"
         use actix_web::{get, web::ServiceConfig};
         use shuttle_actix_web::ShuttleActixWeb;
+
         #[get("/hello")]
         async fn hello_world() -> &'static str {
             "Hello World!"
         }
+
         #[shuttle_runtime::main]
         async fn actix_web(
         ) -> ShuttleActixWeb<impl FnOnce(&mut ServiceConfig) + Send + Clone + 'static> {
@@ -90,16 +99,14 @@ impl ShuttleInit for ShuttleInitAxum {
         vec!["axum", "shuttle-axum", "tokio", "shuttle-runtime"]
     }
 
-    fn get_dependency_attributes(&self) -> HashMap<&str, HashMap<&str, Value>> {
-        HashMap::new()
-    }
-
     fn get_boilerplate_code_for_framework(&self) -> &'static str {
         indoc! {r#"
         use axum::{routing::get, Router};
+
         async fn hello_world() -> &'static str {
             "Hello, world!"
         }
+
         #[shuttle_runtime::main]
         async fn axum() -> shuttle_axum::ShuttleAxum {
             let router = Router::new().route("/hello", get(hello_world));
@@ -112,21 +119,23 @@ pub struct ShuttleInitRocket;
 
 impl ShuttleInit for ShuttleInitRocket {
     fn get_base_dependencies(&self) -> Vec<&str> {
-        vec!["rocket", "shuttle-rocket", "tokio", "shuttle-runtime"]
+        vec!["shuttle-rocket", "tokio", "shuttle-runtime"]
     }
 
-    fn get_dependency_attributes(&self) -> HashMap<&str, HashMap<&str, Value>> {
-        HashMap::new()
+    fn get_prerelease_dependencies(&self) -> Vec<&str> {
+        vec!["rocket"]
     }
 
     fn get_boilerplate_code_for_framework(&self) -> &'static str {
         indoc! {r#"
         #[macro_use]
         extern crate rocket;
+
         #[get("/")]
         fn index() -> &'static str {
             "Hello, world!"
         }
+
         #[shuttle_runtime::main]
         async fn rocket() -> shuttle_rocket::ShuttleRocket {
             let rocket = rocket::build().mount("/hello", routes![index]);
@@ -140,10 +149,6 @@ pub struct ShuttleInitTide;
 impl ShuttleInit for ShuttleInitTide {
     fn get_base_dependencies(&self) -> Vec<&str> {
         vec!["tide", "shuttle-tide", "tokio", "shuttle-runtime"]
-    }
-
-    fn get_dependency_attributes(&self) -> HashMap<&str, HashMap<&str, Value>> {
-        HashMap::new()
     }
 
     fn get_boilerplate_code_for_framework(&self) -> &'static str {
@@ -165,18 +170,16 @@ impl ShuttleInit for ShuttleInitPoem {
         vec!["poem", "shuttle-poem", "tokio", "shuttle-runtime"]
     }
 
-    fn get_dependency_attributes(&self) -> HashMap<&str, HashMap<&str, Value>> {
-        HashMap::new()
-    }
-
     fn get_boilerplate_code_for_framework(&self) -> &'static str {
         indoc! {r#"
         use poem::{get, handler, Route};
         use shuttle_poem::ShuttlePoem;
+
         #[handler]
         fn hello_world() -> &'static str {
             "Hello, world!"
         }
+
         #[shuttle_runtime::main]
         async fn poem() -> ShuttlePoem<impl poem::Endpoint> {
             let app = Route::new().at("/hello", get(hello_world));
@@ -192,17 +195,15 @@ impl ShuttleInit for ShuttleInitSalvo {
         vec!["salvo", "shuttle-salvo", "tokio", "shuttle-runtime"]
     }
 
-    fn get_dependency_attributes(&self) -> HashMap<&str, HashMap<&str, Value>> {
-        HashMap::new()
-    }
-
     fn get_boilerplate_code_for_framework(&self) -> &'static str {
         indoc! {r#"
         use salvo::prelude::*;
+
         #[handler]
         async fn hello_world(res: &mut Response) {
             res.render(Text::Plain("Hello, world!"));
         }
+        
         #[shuttle_runtime::main]
         async fn salvo() -> shuttle_salvo::ShuttleSalvo {
             let router = Router::with_path("hello").get(hello_world);
@@ -252,7 +253,9 @@ impl ShuttleInit for ShuttleInitSerenity {
         use serenity::prelude::*;
         use shuttle_secrets::SecretStore;
         use tracing::{error, info};
+        
         struct Bot;
+        
         #[async_trait]
         impl EventHandler for Bot {
             async fn message(&self, ctx: Context, msg: Message) {
@@ -266,6 +269,7 @@ impl ShuttleInit for ShuttleInitSerenity {
                 info!("{} is connected!", ready.user.name);
             }
         }
+
         #[shuttle_runtime::main]
         async fn serenity(
             #[shuttle_secrets::Secrets] secret_store: SecretStore,
@@ -302,25 +306,24 @@ impl ShuttleInit for ShuttleInitPoise {
         ]
     }
 
-    fn get_dependency_attributes(&self) -> HashMap<&str, HashMap<&str, Value>> {
-        HashMap::new()
-    }
-
     fn get_boilerplate_code_for_framework(&self) -> &'static str {
         indoc! {r#"
         use anyhow::Context as _;
         use poise::serenity_prelude as serenity;
         use shuttle_secrets::SecretStore;
         use shuttle_poise::ShuttlePoise;
+
         struct Data {} // User data, which is stored and accessible in all command invocations
         type Error = Box<dyn std::error::Error + Send + Sync>;
         type Context<'a> = poise::Context<'a, Data, Error>;
+        
         /// Responds with "world!"
         #[poise::command(slash_command)]
         async fn hello(ctx: Context<'_>) -> Result<(), Error> {
             ctx.say("world!").await?;
             Ok(())
         }
+
         #[shuttle_runtime::main]
         async fn poise(#[shuttle_secrets::Secrets] secret_store: SecretStore) -> ShuttlePoise<Data, Error> {
             // Get the discord token set in `Secrets.toml`
@@ -374,6 +377,7 @@ impl ShuttleInit for ShuttleInitTower {
         use std::future::Future;
         use std::pin::Pin;
         use std::task::{Context, Poll};
+
         #[derive(Clone)]
         struct HelloWorld;
         impl tower::Service<hyper::Request<hyper::Body>> for HelloWorld {
@@ -393,6 +397,7 @@ impl ShuttleInit for ShuttleInitTower {
                 Box::pin(fut)
             }
         }
+
         #[shuttle_runtime::main]
         async fn tower() -> shuttle_tower::ShuttleTower<HelloWorld> {
             let service = HelloWorld;
@@ -406,10 +411,6 @@ pub struct ShuttleInitWarp;
 impl ShuttleInit for ShuttleInitWarp {
     fn get_base_dependencies(&self) -> Vec<&str> {
         vec!["shuttle-warp", "tokio", "warp", "shuttle-runtime"]
-    }
-
-    fn get_dependency_attributes(&self) -> HashMap<&str, HashMap<&str, Value>> {
-        HashMap::new()
     }
 
     fn get_boilerplate_code_for_framework(&self) -> &'static str {
@@ -465,14 +466,6 @@ impl ShuttleInit for ShuttleInitThruster {
 
 pub struct ShuttleInitNoOp;
 impl ShuttleInit for ShuttleInitNoOp {
-    fn get_base_dependencies(&self) -> Vec<&str> {
-        vec![]
-    }
-
-    fn get_dependency_attributes(&self) -> HashMap<&str, HashMap<&str, Value>> {
-        HashMap::from([])
-    }
-
     fn get_boilerplate_code_for_framework(&self) -> &'static str {
         ""
     }
@@ -499,6 +492,12 @@ pub fn build_cargo_file(cargo_contents: String, framework: Framework) -> Result<
 
     let init_config = framework.init_config();
     let mut cargo_builder = CargoBuilder::new();
+
+    let pre_release_dependencies = init_config.get_prerelease_dependencies();
+
+    for &dep in pre_release_dependencies.iter() {
+        cargo_builder.add_dependency(Dependency::new(dep.to_owned(), None).allow_pre_release());
+    }
 
     let dependencies = init_config.get_base_dependencies();
 
@@ -557,13 +556,21 @@ mod shuttle_init_tests {
         let init_config = framework.init_config();
         let dep_version = Some("1.0".to_owned());
         let dep_feature_version = Some("2.0".to_owned());
+        let dep_prerelease_version = Some("3.0".to_owned());
         let mut cargo_builder = CargoBuilder::new();
+
+        let pre_release_dependencies = init_config.get_prerelease_dependencies();
+
+        for &dep in pre_release_dependencies.iter() {
+            cargo_builder.add_dependency(Dependency::new(dep.to_owned(), dep_prerelease_version.to_owned()).allow_pre_release());
+        }
 
         let dependencies = init_config.get_base_dependencies();
 
         for &dep in dependencies.iter() {
             cargo_builder.add_dependency(Dependency::new(dep.to_owned(), dep_version.to_owned()));
         }
+
 
         let dependency_attributes = init_config.get_dependency_attributes();
         for (dependency, attribute) in dependency_attributes {
@@ -650,7 +657,7 @@ mod shuttle_init_tests {
             publish = false
 
             [dependencies]
-            rocket = "1.0"
+            rocket = "3.0"
             shuttle-rocket = "1.0"
             shuttle-runtime = "1.0"
             tokio = "1.0"

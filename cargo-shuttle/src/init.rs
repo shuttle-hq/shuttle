@@ -622,8 +622,10 @@ mod shuttle_init_tests {
             publish = false
 
             [dependencies]
+            shuttle-runtime = "1.0"
             actix-web = "1.0"
-            shuttle-service = { features = ["web-actix-web"], version = "2.0" }
+            shuttle-actix-web = "1.0"
+            tokio = "1.0"
         "#};
 
         let doc = get_framework_cargo_init(framework);
@@ -642,9 +644,10 @@ mod shuttle_init_tests {
             publish = false
 
             [dependencies]
+            shuttle-runtime = "1.0"
             axum = "1.0"
-            shuttle-service = { features = ["web-axum"], version = "2.0" }
-            sync_wrapper = "1.0"
+            shuttle-axum = "1.0"
+            tokio = "1.0"
         "#};
 
         let doc = get_framework_cargo_init(framework);
@@ -657,14 +660,16 @@ mod shuttle_init_tests {
         let framework = Framework::Rocket;
         let expected = indoc! {r#"
             [package]
-            name = "myproject"
+            name = "mproject"
             version = "0.1.0"
             edition = "2021"
             publish = false
 
             [dependencies]
+            shuttle-runtime = "1.0"
             rocket = "1.0"
-            shuttle-service = { features = ["web-rocket"], version = "2.0" }
+            shuttle-rocket = "1.0"
+            tokio = "1.0"
         "#};
 
         let doc = get_framework_cargo_init(framework);
@@ -683,7 +688,9 @@ mod shuttle_init_tests {
             publish = false
 
             [dependencies]
-            shuttle-service = { features = ["web-tide"], version = "2.0" }
+            shuttle-runtime = "1.0"
+            shuttle-tide = "1.0"
+            tokio = "1.0"
             tide = "1.0"
         "#};
 
@@ -703,9 +710,11 @@ mod shuttle_init_tests {
             publish = false
 
             [dependencies]
-            hyper = { features = ["full"], version = "2.0" }
-            shuttle-service = { features = ["web-tower"], version = "2.0" }
-            tower = { features = ["full"], version = "2.0" }
+            shuttle-runtime = "1.0"
+            hyper = { version = "2.0", features = ["full"] }
+            shuttle-tower = "1.0"
+            tokio = "1.0"
+            tower = { version = "2.0", features = ["full"] }
         "#};
 
         let doc = get_framework_cargo_init(framework);
@@ -724,8 +733,11 @@ mod shuttle_init_tests {
             publish = false
 
             [dependencies]
+            shuttle-runtime = "1.0"
             poem = "1.0"
-            shuttle-service = { features = ["web-poem"], version = "2.0" }
+            shuttle-poem = "1.0"
+            tokio = "1.0"
+            [package]
         "#};
 
         let doc = get_framework_cargo_init(framework);
@@ -744,8 +756,10 @@ mod shuttle_init_tests {
             publish = false
 
             [dependencies]
+            shuttle-runtime = "1.0"
             salvo = "1.0"
-            shuttle-service = { features = ["web-salvo"], version = "2.0" }
+            shuttle-salvo = "1.0"
+            tokio = "1.0"
         "#};
 
         let doc = get_framework_cargo_init(framework);
@@ -764,10 +778,12 @@ mod shuttle_init_tests {
             publish = false
 
             [dependencies]
+            shuttle-runtime = "1.0"
             anyhow = "1.0"
-            serenity = { default-features = false, features = ["client", "gateway", "rustls_backend", "model"], version = "2.0" }
+            serenity = { version = "2.0", default-features = false, features = ["client", "gateway", "rustls_backend", "model"] }
             shuttle-secrets = "1.0"
-            shuttle-service = { features = ["bot-serenity"], version = "2.0" }
+            shuttle-serenity = "1.0"
+            tokio = "1.0"
             tracing = "1.0"
         "#};
 
@@ -787,10 +803,12 @@ mod shuttle_init_tests {
             publish = false
 
             [dependencies]
+            shuttle-runtime = "1.0"
             anyhow = "1.0"
             poise = "1.0"
+            shuttle-poise = "1.0"
             shuttle-secrets = "1.0"
-            shuttle-service = { features = ["bot-poise"], version = "2.0" }
+            tokio = "1.0"
             tracing = "1.0"
         "#};
 
@@ -810,8 +828,10 @@ mod shuttle_init_tests {
             publish = false
 
             [dependencies]
-            shuttle-service = { features = ["web-thruster"], version = "2.0" }
-            thruster = { features = ["hyper_server"], version = "2.0" }
+            shuttle-runtime = "1.0"
+            shuttle-thruster = "1.0"
+            thruster = { version = "2.0", features = ["hyper_server"] }
+            tokio = "1.0"
         "#};
 
         let doc = get_framework_cargo_init(framework);
@@ -819,4 +839,3 @@ mod shuttle_init_tests {
         assert_eq!(doc.to_string(), expected);
     }
 }
-

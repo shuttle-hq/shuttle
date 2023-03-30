@@ -12,7 +12,7 @@ use crossbeam_channel::Sender;
 use opentelemetry::global;
 use serde_json::json;
 use shuttle_common::claims::Claim;
-use shuttle_service::builder::{build_workspace, get_config, Runtime};
+use shuttle_service::builder::{build_workspace, get_config, BuiltService};
 use tokio::time::{sleep, timeout};
 use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -331,7 +331,7 @@ async fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<
 async fn build_deployment(
     project_path: &Path,
     tx: crossbeam_channel::Sender<Message>,
-) -> Result<Runtime> {
+) -> Result<BuiltService> {
     let runtimes = build_workspace(project_path, true, tx)
         .await
         .map_err(|e| Error::Build(e.into()))?;

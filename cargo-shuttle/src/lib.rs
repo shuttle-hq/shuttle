@@ -38,7 +38,7 @@ use git2::{Repository, StatusOptions};
 use ignore::overrides::OverrideBuilder;
 use ignore::WalkBuilder;
 use shuttle_common::models::{project, secret};
-use shuttle_service::builder::{build_workspace, Runtime};
+use shuttle_service::builder::{build_workspace, BuiltService};
 use std::fmt::Write;
 use strum::IntoEnumIterator;
 use tar::Builder;
@@ -455,19 +455,21 @@ impl Shuttle {
             run_args.port + 1,
         ));
 
-        let runtimes = build_workspace(working_directory, run_args.release, tx).await?;
+        // Compile all the alpha or shuttle-next services in the workspace.
+        let services = build_workspace(working_directory, run_args.release, tx).await?;
 
         let mut runtime_handles = JoinSet::new();
 
-        for Runtime {
-            executable_path,
-            is_wasm,
-            service_name,
-            working_directory,
-        } in runtimes
-        {
-            trace!("loading secrets");
+        // Start all the services.
+        for service in services {
+            let BuiltService {
+                executable_path,
+                is_wasm,
+                working_directory,
+                ..
+            } = service.clone();
 
+            trace!("loading secrets");
             let secrets_path = if working_directory.join("Secrets.dev.toml").exists() {
                 working_directory.join("Secrets.dev.toml")
             } else {
@@ -554,12 +556,14 @@ impl Shuttle {
                 err
             })?;
 
+            let service_name = service.service_name()?;
+
             let load_request = tonic::Request::new(LoadRequest {
                 path: executable_path
                     .into_os_string()
                     .into_string()
                     .expect("to convert path to string"),
-                service_name: service_name.clone(),
+                service_name: service_name.to_string(),
                 resources: Default::default(),
                 secrets,
             });
@@ -586,7 +590,7 @@ impl Shuttle {
                 .map(resource::Response::from_bytes)
                 .collect();
 
-            let resources = get_resources_table(&resources, &service_name);
+            let resources = get_resources_table(&resources, service_name.as_str());
 
             let mut stream = runtime_client
                 .subscribe_logs(tonic::Request::new(SubscribeLogsRequest {}))

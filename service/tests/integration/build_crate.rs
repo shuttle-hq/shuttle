@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use shuttle_service::builder::{build_workspace, Runtime};
+use shuttle_service::builder::{build_workspace, BuiltService};
 
 #[tokio::test]
 #[should_panic(expected = "1 job failed")]
@@ -32,10 +32,11 @@ async fn is_bin() {
         build_workspace(Path::new(&project_path), false, tx)
             .await
             .unwrap(),
-        vec![Runtime::new(
+        vec![BuiltService::new(
             PathBuf::from(&project_path).join("target/debug/is-bin"),
             false,
             "is_bin".to_string(),
+            PathBuf::from(&project_path),
             PathBuf::from(&project_path).join("Cargo.toml")
         ),]
     );
@@ -65,16 +66,18 @@ async fn workspace() {
             .await
             .unwrap(),
         vec![
-            Runtime::new(
+            BuiltService::new(
                 PathBuf::from(&project_path).join("target/debug/alpha"),
                 false,
                 "alpha".to_string(),
+                PathBuf::from(&project_path).join("alpha"),
                 PathBuf::from(&project_path).join("alpha/Cargo.toml")
             ),
-            Runtime::new(
+            BuiltService::new(
                 PathBuf::from(&project_path).join("target/wasm32-wasi/debug/next.wasm"),
                 true,
                 "next".to_string(),
+                PathBuf::from(&project_path).join("next"),
                 PathBuf::from(&project_path).join("next/Cargo.toml")
             ),
         ]

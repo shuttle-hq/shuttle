@@ -14,7 +14,7 @@ use shuttle_proto::{
     },
     runtime::{self, runtime_client::RuntimeClient},
 };
-use shuttle_service::builder::{build_workspace, Runtime};
+use shuttle_service::builder::{build_workspace, BuiltService};
 use tonic::{
     transport::{Channel, Server},
     Request, Response, Status,
@@ -41,7 +41,7 @@ pub async fn spawn_runtime(project_path: String, service_name: &str) -> Result<T
 
     let secrets: HashMap<String, String> = Default::default();
 
-    let Runtime {
+    let BuiltService {
         executable_path,
         is_wasm,
         ..

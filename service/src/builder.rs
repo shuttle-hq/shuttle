@@ -1,3 +1,4 @@
+use std::fs::read_to_string;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, bail, Context};
@@ -10,33 +11,69 @@ use cargo::Config;
 use cargo_metadata::Message;
 use crossbeam_channel::Sender;
 use pipe::PipeWriter;
-use tracing::{error, trace};
+use shuttle_common::project::ProjectName;
+use tracing::{debug, error, trace};
 
 use crate::{NEXT_NAME, RUNTIME_NAME};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-/// How to run/build the project
-pub struct Runtime {
+/// This represents a compiled alpha or shuttle-next service.
+pub struct BuiltService {
     pub executable_path: PathBuf,
     pub is_wasm: bool,
-    pub service_name: String,
+    pub package_name: String,
     pub working_directory: PathBuf,
+    pub manifest_path: PathBuf,
 }
 
-impl Runtime {
+impl BuiltService {
     pub fn new(
         executable_path: PathBuf,
         is_wasm: bool,
-        service_name: String,
+        package_name: String,
         working_directory: PathBuf,
+        manifest_path: PathBuf,
     ) -> Self {
         Self {
             executable_path,
             is_wasm,
-            service_name,
+            package_name,
             working_directory,
+            manifest_path,
         }
     }
+
+    /// Try to get the service name of a crate from Shuttle.toml in the crate root, if it doesn't
+    /// exist get it from the Cargo.toml package name of the crate.
+    pub fn service_name(&self) -> anyhow::Result<ProjectName> {
+        let shuttle_toml_path = self.working_directory.join("Shuttle.toml");
+
+        match extract_shuttle_toml_name(shuttle_toml_path) {
+            Ok(service_name) => Ok(service_name.parse()?),
+            Err(error) => {
+                debug!(?error, "failed to get service name from Shuttle.toml");
+
+                // Couldn't get name from Shuttle.toml, use package name instead.
+                Ok(self.package_name.parse()?)
+            }
+        }
+    }
+}
+
+fn extract_shuttle_toml_name(path: PathBuf) -> anyhow::Result<String> {
+    let shuttle_toml = read_to_string(path.clone()).context("Shuttle.toml not found")?;
+
+    let toml: toml::Value =
+        toml::from_str(&shuttle_toml).context("failed to parse Shuttle.toml")?;
+
+    let name = toml
+        .get("name")
+        .context("couldn't find `name` key in Shuttle.toml")?
+        .as_str()
+        .context("`name` key in Shuttle.toml must be a string")?
+        .to_string();
+
+    Ok(name)
 }
 
 /// Given a project directory path, builds the crate
@@ -44,7 +81,7 @@ pub async fn build_workspace(
     project_path: &Path,
     release_mode: bool,
     tx: Sender<Message>,
-) -> anyhow::Result<Vec<Runtime>> {
+) -> anyhow::Result<Vec<BuiltService>> {
     let (read, write) = pipe::pipe();
     let project_path = project_path.to_owned();
 
@@ -94,10 +131,11 @@ pub async fn build_workspace(
             .binaries
             .iter()
             .map(|binary| {
-                Runtime::new(
+                BuiltService::new(
                     binary.path.clone(),
                     false,
                     binary.unit.pkg.name().to_string(),
+                    binary.unit.pkg.root().to_path_buf(),
                     binary.unit.pkg.manifest_path().to_path_buf(),
                 )
             })
@@ -114,10 +152,11 @@ pub async fn build_workspace(
             .cdylibs
             .iter()
             .map(|binary| {
-                Runtime::new(
+                BuiltService::new(
                     binary.path.clone(),
                     true,
                     binary.unit.pkg.name().to_string(),
+                    binary.unit.pkg.root().to_path_buf(),
                     binary.unit.pkg.manifest_path().to_path_buf(),
                 )
             })

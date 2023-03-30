@@ -41,15 +41,16 @@ pub async fn spawn_runtime(project_path: String, service_name: &str) -> Result<T
 
     let secrets: HashMap<String, String> = Default::default();
 
-    let (is_wasm, bin_path) = match runtimes[0].clone() {
-        Runtime::Next(path) => (true, path),
-        Runtime::Alpha(path) => (false, path),
-    };
+    let Runtime {
+        executable_path,
+        is_wasm,
+        ..
+    } = runtimes[0].clone();
 
     start_provisioner(DummyProvisioner, provisioner_address);
 
     // TODO: update this to work with shuttle-next projects, see cargo-shuttle local run
-    let runtime_path = || bin_path.clone();
+    let runtime_path = || executable_path.clone();
 
     let (_, runtime_client) = runtime::start(
         is_wasm,
@@ -63,7 +64,7 @@ pub async fn spawn_runtime(project_path: String, service_name: &str) -> Result<T
 
     Ok(TestRuntime {
         runtime_client,
-        bin_path: bin_path
+        bin_path: executable_path
             .into_os_string()
             .into_string()
             .expect("to convert path to string"),

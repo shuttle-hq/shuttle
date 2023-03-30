@@ -69,11 +69,11 @@ impl Shuttle {
                 | Command::Deployment(..)
                 | Command::Resource(..)
                 | Command::Project(
-                    ProjectCommand::Start { .. }
-                    | ProjectCommand::Stop { .. }
-                    | ProjectCommand::Restart { .. }
-                    | ProjectCommand::Status { .. }
                     // ProjectCommand::List does not need to know which project we are in
+                    ProjectCommand::Start { .. }
+                        | ProjectCommand::Stop { .. }
+                        | ProjectCommand::Restart { .. }
+                        | ProjectCommand::Status { .. }
                 )
                 | Command::Stop
                 | Command::Clean
@@ -781,8 +781,7 @@ impl Shuttle {
                 client,
             )
             .await?;
-        }
-        else {
+        } else {
             let project = client.get_project(self.ctx.project_name()).await?;
             println!("{project}");
         }

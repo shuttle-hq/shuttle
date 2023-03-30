@@ -457,8 +457,6 @@ impl Shuttle {
 
         let runtimes = build_workspace(working_directory, run_args.release, tx).await?;
 
-        let mut service_count = 0;
-
         let mut runtime_handles = JoinSet::new();
 
         for Runtime {
@@ -468,8 +466,6 @@ impl Shuttle {
             working_directory,
         } in runtimes
         {
-            service_count += 1;
-
             trace!("loading secrets");
 
             let secrets_path = if working_directory.join("Secrets.dev.toml").exists() {
@@ -497,7 +493,7 @@ impl Shuttle {
                         .expect("failed to find cargo home dir")
                         .join("bin/shuttle-next");
 
-                    println!("Installing shuttle runtime. This can take a while...");
+                    println!("Installing shuttle-next runtime. This can take a while...");
 
                     if cfg!(debug_assertions) {
                         // Canonicalized path to shuttle-runtime for dev to work on windows
@@ -548,7 +544,7 @@ impl Shuttle {
                 runtime::StorageManagerType::WorkingDir(working_directory.to_path_buf()),
                 &format!("http://localhost:{}", run_args.port + 1),
                 None,
-                run_args.port + 2 + service_count, // TODO: use portpicker?
+                portpicker::pick_unused_port().unwrap(),
                 runtime_path,
             )
             .await
@@ -657,7 +653,7 @@ impl Shuttle {
             println!(
                 "a service future completed with exit status: {:?}",
                 res.unwrap().unwrap().code()
-            )
+            );
         }
 
         Ok(())

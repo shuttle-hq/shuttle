@@ -10,7 +10,7 @@ async-trait = { workspace = true }
 axum = { workspace = true, features = ["default", "headers"] }
 axum-server = { version = "0.4.4", features = ["tls-rustls"] }
 base64 = { workspace = true }
-bollard = "0.13.0"
+bollard = "0.14.0"
 chrono = { workspace = true }
 clap = { workspace = true }
 fqdn = { workspace = true }

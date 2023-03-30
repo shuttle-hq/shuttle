@@ -37,7 +37,7 @@ use git2::{Repository, StatusOptions};
 use ignore::overrides::OverrideBuilder;
 use ignore::WalkBuilder;
 use shuttle_common::models::{project, secret};
-use shuttle_service::builder::{build_crate, Runtime};
+use shuttle_service::builder::{build_workspace, Runtime};
 use std::fmt::Write;
 use strum::IntoEnumIterator;
 use tar::Builder;
@@ -446,7 +446,7 @@ impl Shuttle {
             working_directory.display()
         );
 
-        let runtime = build_crate(working_directory, run_args.release, tx).await?;
+        let runtimes = build_workspace(working_directory, run_args.release, tx).await?;
 
         trace!("loading secrets");
 
@@ -469,7 +469,7 @@ impl Shuttle {
             Default::default()
         };
 
-        let (is_wasm, executable_path) = match runtime {
+        let (is_wasm, executable_path) = match runtimes[0].clone() {
             Runtime::Next(path) => (true, path),
             Runtime::Alpha(path) => (false, path),
         };
@@ -596,7 +596,7 @@ impl Shuttle {
             .map(resource::Response::from_bytes)
             .collect();
 
-        println!("{}", get_resources_table(&resources));
+        println!("{}", get_resources_table(&resources, service_name.to_string().as_str()));
 
         let addr = if run_args.external {
             Ipv4Addr::new(0, 0, 0, 0)

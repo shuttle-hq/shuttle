@@ -12,7 +12,7 @@ use crossbeam_channel::Sender;
 use opentelemetry::global;
 use serde_json::json;
 use shuttle_common::claims::Claim;
-use shuttle_service::builder::{build_crate, get_config, Runtime};
+use shuttle_service::builder::{build_workspace, get_config, Runtime};
 use tokio::time::{sleep, timeout};
 use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -27,7 +27,7 @@ use std::time::Duration;
 
 use cargo::core::compiler::{CompileMode, MessageFormat};
 use cargo::core::Workspace;
-use cargo::ops::{CompileOptions, TestOptions};
+use cargo::ops::{self, CompileOptions, TestOptions};
 use flate2::read::GzDecoder;
 use tar::Archive;
 use tokio::fs;
@@ -332,9 +332,11 @@ async fn build_deployment(
     project_path: &Path,
     tx: crossbeam_channel::Sender<Message>,
 ) -> Result<Runtime> {
-    build_crate(project_path, true, tx)
+    let runtimes = build_workspace(project_path, true, tx)
         .await
-        .map_err(|e| Error::Build(e.into()))
+        .map_err(|e| Error::Build(e.into()))?;
+
+    Ok(runtimes[0].clone())
 }
 
 #[instrument(skip(project_path, tx))]
@@ -382,13 +384,15 @@ async fn run_pre_deploy_tests(
     // Build tests with a maximum of 4 workers.
     compile_opts.build_config.jobs = 4;
 
+    compile_opts.spec = ops::Packages::All;
+
     let opts = TestOptions {
         compile_opts,
         no_run: false,
         no_fail_fast: false,
     };
 
-    cargo::ops::run_tests(&ws, &opts, &[]).map_err(TestError::Failed)
+    ops::run_tests(&ws, &opts, &[]).map_err(TestError::Failed)
 }
 
 /// This will store the path to the executable for each runtime, which will be the users project with

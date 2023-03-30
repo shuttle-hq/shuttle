@@ -681,6 +681,7 @@ impl ProjectCreating {
 
         let create_container_options = CreateContainerOptions {
             name: self.container_name(ctx),
+            platform: None,
         };
 
         let container_config = self

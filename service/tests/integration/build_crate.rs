@@ -35,7 +35,7 @@ async fn is_bin() {
         vec![BuiltService::new(
             PathBuf::from(&project_path).join("target/debug/is-bin"),
             false,
-            "is_bin".to_string(),
+            "is-bin".to_string(),
             PathBuf::from(&project_path),
             PathBuf::from(&project_path).join("Cargo.toml")
         ),]

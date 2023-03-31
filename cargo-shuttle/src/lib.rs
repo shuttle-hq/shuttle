@@ -231,21 +231,8 @@ impl Shuttle {
         Ok(())
     }
 
-    fn find_root_directory(dir: &Path) -> Option<PathBuf> {
-        dir.ancestors()
-            .find(|ancestor| ancestor.join("Cargo.toml").exists())
-            .map(|path| path.to_path_buf())
-    }
-
     pub fn load_project(&mut self, project_args: &mut ProjectArgs) -> Result<()> {
         trace!("loading project arguments: {project_args:?}");
-        let root_directory_path = Self::find_root_directory(&project_args.working_directory);
-
-        if let Some(working_directory) = root_directory_path {
-            project_args.working_directory = working_directory;
-        } else {
-            return Err(anyhow!("Could not locate the root of a cargo project. Are you inside a cargo project? You can also use `--working-directory` to locate your cargo project."));
-        }
 
         self.ctx.load_local(project_args)
     }
@@ -1004,10 +991,12 @@ mod tests {
     use std::path::PathBuf;
     use std::str::FromStr;
 
-    fn path_from_workspace_root(path: &str) -> PathBuf {
+    pub fn path_from_workspace_root(path: &str) -> PathBuf {
         PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
             .join("..")
             .join(path)
+            .canonicalize()
+            .unwrap()
     }
 
     fn get_archive_entries(mut project_args: ProjectArgs) -> Vec<String> {
@@ -1038,18 +1027,6 @@ mod tests {
     }
 
     #[test]
-    fn find_root_directory_returns_proper_directory() {
-        let working_directory = path_from_workspace_root("examples/axum/hello-world/src");
-
-        let root_dir = Shuttle::find_root_directory(&working_directory).unwrap();
-
-        assert_eq!(
-            root_dir,
-            path_from_workspace_root("examples/axum/hello-world/")
-        );
-    }
-
-    #[test]
     fn load_project_returns_proper_working_directory_in_project_args() {
         let mut project_args = ProjectArgs {
             working_directory: path_from_workspace_root("examples/axum/hello-world/src"),
@@ -1061,7 +1038,11 @@ mod tests {
 
         assert_eq!(
             project_args.working_directory,
-            path_from_workspace_root("examples/axum/hello-world/")
+            path_from_workspace_root("examples/axum/hello-world/src")
+        );
+        assert_eq!(
+            project_args.workspace_path().unwrap(),
+            path_from_workspace_root("examples/axum/hello-world")
         );
     }
 
@@ -1105,7 +1086,21 @@ mod tests {
 
         fs::write(working_directory.join(".env"), "API_KEY = 'blabla'").unwrap();
         fs::write(working_directory.join(".ignore"), ".env").unwrap();
-        fs::write(working_directory.join("Cargo.toml"), "[package]").unwrap();
+        fs::write(
+            working_directory.join("Cargo.toml"),
+            r#"
+[package]
+name = "secrets"
+version = "0.1.0"
+"#,
+        )
+        .unwrap();
+        fs::create_dir_all(working_directory.join("src")).unwrap();
+        fs::write(
+            working_directory.join("src").join("main.rs"),
+            "fn main() {}",
+        )
+        .unwrap();
 
         let project_args = ProjectArgs {
             working_directory: working_directory.to_path_buf(),
@@ -1115,7 +1110,10 @@ mod tests {
         let mut entries = get_archive_entries(project_args);
         entries.sort();
 
-        assert_eq!(entries, vec![".ignore", "Cargo.toml"]);
+        assert_eq!(
+            entries,
+            vec![".ignore", "Cargo.lock", "Cargo.toml", "src/main.rs"]
+        );
     }
 
     #[test]
@@ -1125,7 +1123,21 @@ mod tests {
 
         fs::create_dir_all(working_directory.join("target")).unwrap();
         fs::write(working_directory.join("target").join("binary"), "12345").unwrap();
-        fs::write(working_directory.join("Cargo.toml"), "[package]").unwrap();
+        fs::write(
+            working_directory.join("Cargo.toml"),
+            r#"
+[package]
+name = "exclude_target"
+version = "0.1.0"
+"#,
+        )
+        .unwrap();
+        fs::create_dir_all(working_directory.join("src")).unwrap();
+        fs::write(
+            working_directory.join("src").join("main.rs"),
+            "fn main() {}",
+        )
+        .unwrap();
 
         let project_args = ProjectArgs {
             working_directory: working_directory.to_path_buf(),
@@ -1135,6 +1147,6 @@ mod tests {
         let mut entries = get_archive_entries(project_args);
         entries.sort();
 
-        assert_eq!(entries, vec!["Cargo.toml"]);
+        assert_eq!(entries, vec!["Cargo.lock", "Cargo.toml", "src/main.rs"]);
     }
 }

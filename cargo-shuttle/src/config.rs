@@ -3,7 +3,6 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
-use cargo_metadata::MetadataCommand;
 use serde::{Deserialize, Serialize};
 use shuttle_common::project::ProjectName;
 use shuttle_common::{ApiKey, ApiUrl, API_URL_DEFAULT};
@@ -236,25 +235,6 @@ pub struct RequestContext {
     api_url: Option<String>,
 }
 
-fn find_crate_name<P: AsRef<Path>>(working_directory: P) -> Result<ProjectName> {
-    let meta = MetadataCommand::new()
-        .current_dir(working_directory.as_ref())
-        .exec()
-        .unwrap();
-    let package_name = meta
-        .root_package()
-        .ok_or_else(|| {
-            anyhow!(
-                "could not find a root package in `{}`",
-                working_directory.as_ref().display()
-            )
-        })?
-        .name
-        .clone()
-        .parse()?;
-    Ok(package_name)
-}
-
 impl RequestContext {
     /// Create a [`RequestContext`], only loading in the global configuration details.
     pub fn load_global() -> Result<Self> {
@@ -290,7 +270,7 @@ impl RequestContext {
         project_args: &ProjectArgs,
     ) -> Result<Config<LocalConfigManager, ProjectConfig>> {
         let local_manager =
-            LocalConfigManager::new(&project_args.working_directory, "Shuttle.toml".to_string());
+            LocalConfigManager::new(&project_args.workspace_path()?, "Shuttle.toml".to_string());
         let mut project = Config::new(local_manager);
 
         if !project.exists() {
@@ -302,6 +282,11 @@ impl RequestContext {
 
         let config = project.as_mut().unwrap();
 
+        // Project names are preferred in this order:
+        // 1. Name given on command line
+        // 2. Name from Shuttle.toml file
+        // 3. Name from Cargo.toml package if it's a crate
+        // 3. Name from the workspace directory if it's a workspace
         match (&project_args.name, &config.name) {
             // Command-line name parameter trumps everything
             (Some(name_from_args), _) => {
@@ -315,7 +300,7 @@ impl RequestContext {
             // If name key is not in project config, then we infer from crate name
             (None, None) => {
                 trace!("using crate name as project name");
-                config.name = Some(find_crate_name(&project_args.working_directory)?);
+                config.name = Some(project_args.project_name()?);
             }
         };
         Ok(project)
@@ -430,6 +415,18 @@ mod tests {
         let local_config = RequestContext::get_local_config(&project_args).unwrap();
 
         assert_eq!(unwrap_project_name(&local_config), "hello-world-axum-app");
+    }
+
+    #[test]
+    fn get_local_config_finds_name_from_workspace_dir() {
+        let project_args = ProjectArgs {
+            working_directory: path_from_workspace_root("examples/rocket/workspace/hello-world/"),
+            name: None,
+        };
+
+        let local_config = RequestContext::get_local_config(&project_args).unwrap();
+
+        assert_eq!(unwrap_project_name(&local_config), "workspace");
     }
 
     #[test]

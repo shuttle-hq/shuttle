@@ -270,7 +270,7 @@ impl RequestContext {
         project_args: &ProjectArgs,
     ) -> Result<Config<LocalConfigManager, ProjectConfig>> {
         let local_manager =
-            LocalConfigManager::new(&project_args.workspace_path()?, "Shuttle.toml".to_string());
+            LocalConfigManager::new(project_args.workspace_path()?, "Shuttle.toml".to_string());
         let mut project = Config::new(local_manager);
 
         if !project.exists() {

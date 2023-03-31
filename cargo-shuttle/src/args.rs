@@ -75,7 +75,7 @@ impl ProjectArgs {
                 .context("failed to get project name from workspace path")?
                 .to_os_string()
                 .into_string()
-                .expect("to turn workspace name into path")
+                .expect("workspace file name should be valid unicode")
                 .parse()?
         };
 

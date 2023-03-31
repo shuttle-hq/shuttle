@@ -51,6 +51,10 @@ impl DockerInstance {
 
         Self::wait_ready(Duration::from_secs(120), &is_ready_cmd);
 
+        // Mongo starts up twice. So wait for the first one to finish
+        sleep(Duration::from_millis(350));
+        Self::wait_ready(Duration::from_secs(120), &is_ready_cmd);
+
         Self {
             container_name,
             uri: format!("{engine}://{engine}:password@localhost:{host_port}"),

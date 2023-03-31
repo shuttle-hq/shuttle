@@ -21,6 +21,7 @@ serde = { workspace = true, features = ["derive"] }
 strfmt = "0.2.2"
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["sync"], optional = true }
+toml = { workspace = true, optional = true  }
 tracing = { workspace = true, optional = true }
 
 [dependencies.shuttle-codegen]
@@ -44,5 +45,6 @@ builder = [
     "crossbeam-channel",
     "pipe",
     "tokio",
+    "toml",
     "tracing",
 ]

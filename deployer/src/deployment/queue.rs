@@ -12,7 +12,7 @@ use crossbeam_channel::Sender;
 use opentelemetry::global;
 use serde_json::json;
 use shuttle_common::claims::Claim;
-use shuttle_service::builder::{build_workspace, get_config, Runtime};
+use shuttle_service::builder::{build_workspace, get_config, BuiltService};
 use tokio::time::{sleep, timeout};
 use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -226,9 +226,9 @@ impl Queued {
 
         info!("Moving built executable");
 
-        store_executable(&storage_manager, &runtime, &self.id).await?;
+        store_executable(&storage_manager, runtime.executable_path.clone(), &self.id).await?;
 
-        let is_next = matches!(runtime, Runtime::Next(_));
+        let is_next = runtime.is_wasm;
 
         deployment_updater
             .set_is_next(&id, is_next)
@@ -331,7 +331,7 @@ async fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<
 async fn build_deployment(
     project_path: &Path,
     tx: crossbeam_channel::Sender<Message>,
-) -> Result<Runtime> {
+) -> Result<BuiltService> {
     let runtimes = build_workspace(project_path, true, tx)
         .await
         .map_err(|e| Error::Build(e.into()))?;
@@ -397,17 +397,12 @@ async fn run_pre_deploy_tests(
 
 /// This will store the path to the executable for each runtime, which will be the users project with
 /// an embedded runtime for alpha, and a .wasm file for shuttle-next.
-#[instrument(skip(storage_manager, runtime, id))]
+#[instrument(skip(storage_manager, executable_path, id))]
 async fn store_executable(
     storage_manager: &ArtifactsStorageManager,
-    runtime: &Runtime,
+    executable_path: PathBuf,
     id: &Uuid,
 ) -> Result<()> {
-    let executable_path = match runtime {
-        Runtime::Next(path) => path,
-        Runtime::Alpha(path) => path,
-    };
-
     let new_executable_path = storage_manager.deployment_executable_path(id)?;
 
     fs::rename(executable_path, new_executable_path).await?;
@@ -420,7 +415,6 @@ mod tests {
     use std::{collections::BTreeMap, fs::File, io::Write, path::Path};
 
     use shuttle_common::storage_manager::ArtifactsStorageManager;
-    use shuttle_service::builder::Runtime;
     use tempfile::Builder;
     use tokio::fs;
     use uuid::Uuid;
@@ -558,12 +552,11 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
         let build_p = storage_manager.builds_path().unwrap();
 
         let executable_path = build_p.join("xyz");
-        let runtime = Runtime::Alpha(executable_path.clone());
         let id = Uuid::new_v4();
 
         fs::write(&executable_path, "barfoo").await.unwrap();
 
-        super::store_executable(&storage_manager, &runtime, &id)
+        super::store_executable(&storage_manager, executable_path.clone(), &id)
             .await
             .unwrap();
 

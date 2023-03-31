@@ -992,11 +992,11 @@ mod tests {
     use std::str::FromStr;
 
     pub fn path_from_workspace_root(path: &str) -> PathBuf {
-        PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
+        let path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
             .join("..")
-            .join(path)
-            .canonicalize()
-            .unwrap()
+            .join(path);
+
+        dunce::canonicalize(path).unwrap()
     }
 
     fn get_archive_entries(mut project_args: ProjectArgs) -> Vec<String> {

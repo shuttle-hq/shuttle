@@ -5,6 +5,8 @@ use std::{
     path::PathBuf,
 };
 
+use anyhow::Context;
+use cargo_metadata::MetadataCommand;
 use clap::builder::{OsStringValueParser, PossibleValue, TypedValueParser};
 use clap::Parser;
 use clap_complete::Shell;
@@ -44,6 +46,41 @@ pub struct ProjectArgs {
     /// Specify the name of the project (overrides crate name)
     #[arg(global = true, long)]
     pub name: Option<ProjectName>,
+}
+
+impl ProjectArgs {
+    pub fn workspace_path(&self) -> anyhow::Result<PathBuf> {
+        let path = MetadataCommand::new()
+            .current_dir(&self.working_directory)
+            .exec()
+            .context("failed to get cargo metadata")?
+            .workspace_root
+            .into();
+
+        Ok(path)
+    }
+
+    pub fn project_name(&self) -> anyhow::Result<ProjectName> {
+        let workspace_path = self.workspace_path()?;
+
+        let meta = MetadataCommand::new()
+            .current_dir(&workspace_path)
+            .exec()
+            .unwrap();
+        let package_name = if let Some(root_package) = meta.root_package() {
+            root_package.name.clone().parse()?
+        } else {
+            workspace_path
+                .file_name()
+                .context("failed to get project name from workspace path")?
+                .to_os_string()
+                .into_string()
+                .expect("workspace file name should be valid unicode")
+                .parse()?
+        };
+
+        Ok(package_name)
+    }
 }
 
 #[derive(Parser)]
@@ -270,6 +307,8 @@ pub(crate) fn parse_init_path(path: OsString) -> Result<PathBuf, io::Error> {
 mod tests {
     use strum::IntoEnumIterator;
 
+    use crate::tests::path_from_workspace_root;
+
     use super::*;
 
     fn init_args_factory(framework: &str) -> InitArgs {
@@ -316,5 +355,46 @@ mod tests {
             let args = init_args_factory(&framework.to_string());
             assert_eq!(args.framework(), Some(framework));
         }
+    }
+
+    #[test]
+    fn workspace_path() {
+        let project_args = ProjectArgs {
+            working_directory: path_from_workspace_root("examples/axum/hello-world/src"),
+            name: None,
+        };
+
+        assert_eq!(
+            project_args.workspace_path().unwrap(),
+            path_from_workspace_root("examples/axum/hello-world/")
+        );
+    }
+
+    #[test]
+    fn project_name() {
+        let project_args = ProjectArgs {
+            working_directory: path_from_workspace_root("examples/axum/hello-world/src"),
+            name: None,
+        };
+
+        assert_eq!(
+            project_args.project_name().unwrap().to_string(),
+            "hello-world"
+        );
+    }
+
+    #[test]
+    fn project_name_in_workspace() {
+        let project_args = ProjectArgs {
+            working_directory: path_from_workspace_root(
+                "examples/rocket/workspace/hello-world/src",
+            ),
+            name: None,
+        };
+
+        assert_eq!(
+            project_args.project_name().unwrap().to_string(),
+            "workspace"
+        );
     }
 }

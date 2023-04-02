@@ -229,7 +229,7 @@ impl RouterBuilder {
         let module = Module::from_file(&self.engine, file)?;
 
         for export in module.exports() {
-            println!("export: {}", export.name());
+            trace!("export: {}", export.name());
         }
 
         Ok(Router {

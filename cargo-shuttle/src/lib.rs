@@ -12,6 +12,7 @@ use shuttle_common::models::resource::get_resources_table;
 use shuttle_common::project::ProjectName;
 use shuttle_common::resource;
 use shuttle_proto::runtime::{self, LoadRequest, StartRequest, SubscribeLogsRequest};
+use tokio::task::JoinSet;
 
 use std::collections::HashMap;
 use std::ffi::OsString;
@@ -37,7 +38,7 @@ use git2::{Repository, StatusOptions};
 use ignore::overrides::OverrideBuilder;
 use ignore::WalkBuilder;
 use shuttle_common::models::{project, secret};
-use shuttle_service::builder::{build_crate, Runtime};
+use shuttle_service::builder::{build_workspace, BuiltService};
 use std::fmt::Write;
 use strum::IntoEnumIterator;
 use tar::Builder;
@@ -225,21 +226,8 @@ impl Shuttle {
         Ok(())
     }
 
-    fn find_root_directory(dir: &Path) -> Option<PathBuf> {
-        dir.ancestors()
-            .find(|ancestor| ancestor.join("Cargo.toml").exists())
-            .map(|path| path.to_path_buf())
-    }
-
     pub fn load_project(&mut self, project_args: &mut ProjectArgs) -> Result<()> {
         trace!("loading project arguments: {project_args:?}");
-        let root_directory_path = Self::find_root_directory(&project_args.working_directory);
-
-        if let Some(working_directory) = root_directory_path {
-            project_args.working_directory = working_directory;
-        } else {
-            return Err(anyhow!("Could not locate the root of a cargo project. Are you inside a cargo project? You can also use `--working-directory` to locate your cargo project."));
-        }
 
         self.ctx.load_local(project_args)
     }
@@ -284,7 +272,8 @@ impl Shuttle {
     }
 
     async fn stop(&self, client: &Client) -> Result<()> {
-        let mut service = client.stop_service(self.ctx.project_name()).await?;
+        let proj_name = self.ctx.project_name();
+        let mut service = client.stop_service(proj_name).await?;
 
         let progress_bar = create_spinner();
         loop {
@@ -297,16 +286,11 @@ impl Shuttle {
             }
 
             progress_bar.set_message(format!("Stopping {}", deployment.id));
-            service = client.get_service(self.ctx.project_name()).await?;
+            service = client.get_service(proj_name).await?;
         }
         progress_bar.finish_and_clear();
 
-        println!(
-            r#"{}
-{}"#,
-            "Successfully stopped service".bold(),
-            service
-        );
+        println!("{}\n{}", "Successfully stopped service".bold(), service);
 
         Ok(())
     }
@@ -386,8 +370,9 @@ impl Shuttle {
     }
 
     async fn deployments_list(&self, client: &Client) -> Result<()> {
-        let deployments = client.get_deployments(self.ctx.project_name()).await?;
-        let table = get_deployments_table(&deployments, self.ctx.project_name().as_str());
+        let proj_name = self.ctx.project_name();
+        let deployments = client.get_deployments(proj_name).await?;
+        let table = get_deployments_table(&deployments, proj_name.as_str());
 
         println!("{table}");
 
@@ -437,40 +422,10 @@ impl Shuttle {
 
         trace!("building project");
         println!(
-            "{:>12} {}",
-            "Building".bold().green(),
+            "{} {}",
+            "    Building".bold().green(),
             working_directory.display()
         );
-
-        let runtime = build_crate(working_directory, run_args.release, tx).await?;
-
-        trace!("loading secrets");
-
-        let secrets_path = if working_directory.join("Secrets.dev.toml").exists() {
-            working_directory.join("Secrets.dev.toml")
-        } else {
-            working_directory.join("Secrets.toml")
-        };
-
-        let secrets: HashMap<String, String> = if let Ok(secrets_str) = read_to_string(secrets_path)
-        {
-            let secrets: HashMap<String, String> =
-                secrets_str.parse::<toml::Value>()?.try_into()?;
-
-            trace!(keys = ?secrets.keys(), "available secrets");
-
-            secrets
-        } else {
-            trace!("no Secrets.toml was found");
-            Default::default()
-        };
-
-        let service_name = self.ctx.project_name().to_string();
-
-        let (is_wasm, executable_path) = match runtime {
-            Runtime::Next(path) => (true, path),
-            Runtime::Alpha(path) => (false, path),
-        };
 
         let provisioner = LocalProvisioner::new()?;
         let provisioner_server = provisioner.start(SocketAddr::new(
@@ -478,161 +433,207 @@ impl Shuttle {
             run_args.port + 1,
         ));
 
-        let runtime_path = || {
-            if is_wasm {
-                let runtime_path = home::cargo_home()
-                    .expect("failed to find cargo home dir")
-                    .join("bin/shuttle-next");
+        // Compile all the alpha or shuttle-next services in the workspace.
+        let services = build_workspace(working_directory, run_args.release, tx).await?;
 
-                println!("Installing shuttle runtime. This can take a while...");
+        let mut runtime_handles = JoinSet::new();
 
-                if cfg!(debug_assertions) {
-                    // Canonicalized path to shuttle-runtime for dev to work on windows
-                    let path = std::fs::canonicalize(format!("{MANIFEST_DIR}/../runtime"))
-                        .expect("path to shuttle-runtime does not exist or is invalid");
+        // Start all the services.
+        for service in services {
+            let BuiltService {
+                executable_path,
+                is_wasm,
+                working_directory,
+                ..
+            } = service.clone();
 
-                    trace!(?path, "installing runtime from local filesystem");
+            trace!("loading secrets");
+            let secrets_path = if working_directory.join("Secrets.dev.toml").exists() {
+                working_directory.join("Secrets.dev.toml")
+            } else {
+                working_directory.join("Secrets.toml")
+            };
 
-                    std::process::Command::new("cargo")
-                        .arg("install")
-                        .arg("shuttle-runtime")
-                        .arg("--path")
-                        .arg(path)
-                        .arg("--bin")
-                        .arg("shuttle-next")
-                        .arg("--features")
-                        .arg("next")
-                        .output()
-                        .expect("failed to install the shuttle runtime");
+            let secrets: HashMap<String, String> =
+                if let Ok(secrets_str) = read_to_string(secrets_path) {
+                    let secrets: HashMap<String, String> =
+                        secrets_str.parse::<toml::Value>()?.try_into()?;
+
+                    trace!(keys = ?secrets.keys(), "available secrets");
+
+                    secrets
                 } else {
-                    // If the version of cargo-shuttle is different from shuttle-runtime,
-                    // or it isn't installed, try to install shuttle-runtime from crates.io.
-                    if let Err(err) = check_version(&runtime_path) {
-                        warn!("{}", err);
+                    trace!("no Secrets.toml was found");
+                    Default::default()
+                };
 
-                        trace!("installing shuttle-runtime");
+            let runtime_path = || {
+                if is_wasm {
+                    let runtime_path = home::cargo_home()
+                        .expect("failed to find cargo home dir")
+                        .join("bin/shuttle-next");
+
+                    println!("Installing shuttle-next runtime. This can take a while...");
+
+                    if cfg!(debug_assertions) {
+                        // Canonicalized path to shuttle-runtime for dev to work on windows
+                        let path = std::fs::canonicalize(format!("{MANIFEST_DIR}/../runtime"))
+                            .expect("path to shuttle-runtime does not exist or is invalid");
+
+                        trace!(?path, "installing runtime from local filesystem");
+
                         std::process::Command::new("cargo")
                             .arg("install")
                             .arg("shuttle-runtime")
+                            .arg("--path")
+                            .arg(path)
                             .arg("--bin")
                             .arg("shuttle-next")
                             .arg("--features")
                             .arg("next")
                             .output()
                             .expect("failed to install the shuttle runtime");
+                    } else {
+                        // If the version of cargo-shuttle is different from shuttle-runtime,
+                        // or it isn't installed, try to install shuttle-runtime from crates.io.
+                        if let Err(err) = check_version(&runtime_path) {
+                            warn!("{}", err);
+
+                            trace!("installing shuttle-runtime");
+                            std::process::Command::new("cargo")
+                                .arg("install")
+                                .arg("shuttle-runtime")
+                                .arg("--bin")
+                                .arg("shuttle-next")
+                                .arg("--features")
+                                .arg("next")
+                                .output()
+                                .expect("failed to install the shuttle runtime");
+                        };
                     };
-                };
 
-                runtime_path
-            } else {
-                trace!(path = ?executable_path, "using alpha runtime");
-                executable_path.clone()
-            }
-        };
+                    runtime_path
+                } else {
+                    trace!(path = ?executable_path, "using alpha runtime");
+                    executable_path.clone()
+                }
+            };
 
-        let (mut runtime, mut runtime_client) = runtime::start(
-            is_wasm,
-            runtime::StorageManagerType::WorkingDir(working_directory.to_path_buf()),
-            &format!("http://localhost:{}", run_args.port + 1),
-            None,
-            run_args.port + 2,
-            runtime_path,
-        )
-        .await
-        .map_err(|err| {
-            provisioner_server.abort();
-
-            err
-        })?;
-
-        let load_request = tonic::Request::new(LoadRequest {
-            path: executable_path
-                .into_os_string()
-                .into_string()
-                .expect("to convert path to string"),
-            service_name: service_name.clone(),
-            resources: Default::default(),
-            secrets,
-        });
-        trace!("loading service");
-        let response = runtime_client
-            .load(load_request)
-            .or_else(|err| async {
+            let (mut runtime, mut runtime_client) = runtime::start(
+                is_wasm,
+                runtime::StorageManagerType::WorkingDir(working_directory.to_path_buf()),
+                &format!("http://localhost:{}", run_args.port + 1),
+                None,
+                portpicker::pick_unused_port().expect("unable to find available port"),
+                runtime_path,
+            )
+            .await
+            .map_err(|err| {
                 provisioner_server.abort();
-                runtime.kill().await?;
 
-                Err(err)
-            })
-            .await?
-            .into_inner();
+                err
+            })?;
 
-        if !response.success {
-            error!(error = response.message, "failed to load your service");
-            exit(1);
+            let service_name = service.service_name()?;
+
+            let load_request = tonic::Request::new(LoadRequest {
+                path: executable_path
+                    .into_os_string()
+                    .into_string()
+                    .expect("to convert path to string"),
+                service_name: service_name.to_string(),
+                resources: Default::default(),
+                secrets,
+            });
+            trace!("loading service");
+            let response = runtime_client
+                .load(load_request)
+                .or_else(|err| async {
+                    provisioner_server.abort();
+                    runtime.kill().await?;
+
+                    Err(err)
+                })
+                .await?
+                .into_inner();
+
+            if !response.success {
+                error!(error = response.message, "failed to load your service");
+                exit(1);
+            }
+
+            let resources = response
+                .resources
+                .into_iter()
+                .map(resource::Response::from_bytes)
+                .collect();
+
+            println!("{}", get_resources_table(&resources, service_name.as_str()));
+
+            let mut stream = runtime_client
+                .subscribe_logs(tonic::Request::new(SubscribeLogsRequest {}))
+                .or_else(|err| async {
+                    provisioner_server.abort();
+                    runtime.kill().await?;
+
+                    Err(err)
+                })
+                .await?
+                .into_inner();
+
+            tokio::spawn(async move {
+                while let Ok(Some(log)) = stream.message().await {
+                    let log: shuttle_common::LogItem = log.try_into().expect("to convert log");
+                    println!("{log}");
+                }
+            });
+
+            let addr = SocketAddr::new(
+                if run_args.external {
+                    Ipv4Addr::new(0, 0, 0, 0)
+                } else {
+                    Ipv4Addr::LOCALHOST
+                }
+                .into(),
+                portpicker::pick_unused_port().expect("unable to find available port"),
+            );
+
+            println!(
+                "    {} {} on http://{}\n",
+                "Starting".bold().green(),
+                service_name,
+                addr
+            );
+
+            let start_request = StartRequest {
+                ip: addr.to_string(),
+            };
+
+            trace!(?start_request, "starting service");
+            let response = runtime_client
+                .start(tonic::Request::new(start_request))
+                .or_else(|err| async {
+                    provisioner_server.abort();
+                    runtime.kill().await?;
+
+                    Err(err)
+                })
+                .await?
+                .into_inner();
+
+            trace!(response = ?response,  "client response: ");
+
+            runtime_handles.spawn(async move { runtime.wait().await });
         }
 
-        let resources = response
-            .resources
-            .into_iter()
-            .map(resource::Response::from_bytes)
-            .collect();
-
-        let resources = get_resources_table(&resources, self.ctx.project_name().as_str());
-
-        let mut stream = runtime_client
-            .subscribe_logs(tonic::Request::new(SubscribeLogsRequest {}))
-            .or_else(|err| async {
-                provisioner_server.abort();
-                runtime.kill().await?;
-
-                Err(err)
-            })
-            .await?
-            .into_inner();
-
-        tokio::spawn(async move {
-            while let Ok(Some(log)) = stream.message().await {
-                let log: shuttle_common::LogItem = log.try_into().expect("to convert log");
-                println!("{log}");
-            }
-        });
-
-        println!("{resources}");
-
-        let addr = if run_args.external {
-            std::net::IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))
-        } else {
-            Ipv4Addr::LOCALHOST.into()
-        };
-
-        let addr = SocketAddr::new(addr, run_args.port);
-
-        let start_request = StartRequest {
-            ip: addr.to_string(),
-        };
-
-        trace!(?start_request, "starting service");
-        let response = runtime_client
-            .start(tonic::Request::new(start_request))
-            .or_else(|err| async {
-                provisioner_server.abort();
-                runtime.kill().await?;
-
-                Err(err)
-            })
-            .await?
-            .into_inner();
-
-        trace!(response = ?response,  "client response: ");
-
-        println!(
-            "\n{:>12} {} on http://{}",
-            "Starting".bold().green(),
-            self.ctx.project_name(),
-            addr
-        );
-
-        runtime.wait().await?;
+        // TODO: figure out how best to handle the runtime handles, and what to do if
+        // one completes.
+        while let Some(res) = runtime_handles.join_next().await {
+            println!(
+                "a service future completed with exit status: {:?}",
+                res.unwrap().unwrap().code()
+            );
+        }
 
         Ok(())
     }
@@ -681,6 +682,10 @@ impl Shuttle {
                 }
             }
         }
+
+        // Temporary fix.
+        // TODO: Make get_service_summary endpoint wait for a bit and see if it entered Running/Crashed state.
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
         let service = client.get_service(self.ctx.project_name()).await?;
 
@@ -998,10 +1003,12 @@ mod tests {
     use std::path::PathBuf;
     use std::str::FromStr;
 
-    fn path_from_workspace_root(path: &str) -> PathBuf {
-        PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
+    pub fn path_from_workspace_root(path: &str) -> PathBuf {
+        let path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
             .join("..")
-            .join(path)
+            .join(path);
+
+        dunce::canonicalize(path).unwrap()
     }
 
     fn get_archive_entries(mut project_args: ProjectArgs) -> Vec<String> {
@@ -1032,18 +1039,6 @@ mod tests {
     }
 
     #[test]
-    fn find_root_directory_returns_proper_directory() {
-        let working_directory = path_from_workspace_root("examples/axum/hello-world/src");
-
-        let root_dir = Shuttle::find_root_directory(&working_directory).unwrap();
-
-        assert_eq!(
-            root_dir,
-            path_from_workspace_root("examples/axum/hello-world/")
-        );
-    }
-
-    #[test]
     fn load_project_returns_proper_working_directory_in_project_args() {
         let mut project_args = ProjectArgs {
             working_directory: path_from_workspace_root("examples/axum/hello-world/src"),
@@ -1055,7 +1050,11 @@ mod tests {
 
         assert_eq!(
             project_args.working_directory,
-            path_from_workspace_root("examples/axum/hello-world/")
+            path_from_workspace_root("examples/axum/hello-world/src")
+        );
+        assert_eq!(
+            project_args.workspace_path().unwrap(),
+            path_from_workspace_root("examples/axum/hello-world")
         );
     }
 
@@ -1099,7 +1098,21 @@ mod tests {
 
         fs::write(working_directory.join(".env"), "API_KEY = 'blabla'").unwrap();
         fs::write(working_directory.join(".ignore"), ".env").unwrap();
-        fs::write(working_directory.join("Cargo.toml"), "[package]").unwrap();
+        fs::write(
+            working_directory.join("Cargo.toml"),
+            r#"
+[package]
+name = "secrets"
+version = "0.1.0"
+"#,
+        )
+        .unwrap();
+        fs::create_dir_all(working_directory.join("src")).unwrap();
+        fs::write(
+            working_directory.join("src").join("main.rs"),
+            "fn main() {}",
+        )
+        .unwrap();
 
         let project_args = ProjectArgs {
             working_directory: working_directory.to_path_buf(),
@@ -1109,7 +1122,10 @@ mod tests {
         let mut entries = get_archive_entries(project_args);
         entries.sort();
 
-        assert_eq!(entries, vec![".ignore", "Cargo.toml"]);
+        assert_eq!(
+            entries,
+            vec![".ignore", "Cargo.lock", "Cargo.toml", "src/main.rs"]
+        );
     }
 
     #[test]
@@ -1119,7 +1135,21 @@ mod tests {
 
         fs::create_dir_all(working_directory.join("target")).unwrap();
         fs::write(working_directory.join("target").join("binary"), "12345").unwrap();
-        fs::write(working_directory.join("Cargo.toml"), "[package]").unwrap();
+        fs::write(
+            working_directory.join("Cargo.toml"),
+            r#"
+[package]
+name = "exclude_target"
+version = "0.1.0"
+"#,
+        )
+        .unwrap();
+        fs::create_dir_all(working_directory.join("src")).unwrap();
+        fs::write(
+            working_directory.join("src").join("main.rs"),
+            "fn main() {}",
+        )
+        .unwrap();
 
         let project_args = ProjectArgs {
             working_directory: working_directory.to_path_buf(),
@@ -1129,6 +1159,6 @@ mod tests {
         let mut entries = get_archive_entries(project_args);
         entries.sort();
 
-        assert_eq!(entries, vec!["Cargo.toml"]);
+        assert_eq!(entries, vec!["Cargo.lock", "Cargo.toml", "src/main.rs"]);
     }
 }

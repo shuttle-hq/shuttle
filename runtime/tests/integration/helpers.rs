@@ -14,7 +14,7 @@ use shuttle_proto::{
     },
     runtime::{self, runtime_client::RuntimeClient},
 };
-use shuttle_service::builder::{build_crate, Runtime};
+use shuttle_service::builder::{build_workspace, BuiltService};
 use tonic::{
     transport::{Channel, Server},
     Request, Response, Status,
@@ -37,19 +37,20 @@ pub async fn spawn_runtime(project_path: String, service_name: &str) -> Result<T
     let runtime_address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), runtime_port);
 
     let (tx, _) = crossbeam_channel::unbounded();
-    let runtime = build_crate(Path::new(&project_path), false, tx).await?;
+    let runtimes = build_workspace(Path::new(&project_path), false, tx).await?;
 
     let secrets: HashMap<String, String> = Default::default();
 
-    let (is_wasm, bin_path) = match runtime {
-        Runtime::Next(path) => (true, path),
-        Runtime::Alpha(path) => (false, path),
-    };
+    let BuiltService {
+        executable_path,
+        is_wasm,
+        ..
+    } = runtimes[0].clone();
 
     start_provisioner(DummyProvisioner, provisioner_address);
 
     // TODO: update this to work with shuttle-next projects, see cargo-shuttle local run
-    let runtime_path = || bin_path.clone();
+    let runtime_path = || executable_path.clone();
 
     let (_, runtime_client) = runtime::start(
         is_wasm,
@@ -63,7 +64,7 @@ pub async fn spawn_runtime(project_path: String, service_name: &str) -> Result<T
 
     Ok(TestRuntime {
         runtime_client,
-        bin_path: bin_path
+        bin_path: executable_path
             .into_os_string()
             .into_string()
             .expect("to convert path to string"),

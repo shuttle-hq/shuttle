@@ -171,6 +171,8 @@ jobs:
   workspace:
     executor: docker-rust
     resource_class: xlarge
+    environment:
+      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
     steps:
       - checkout
       - restore-cargo-cache
@@ -200,6 +202,8 @@ jobs:
         description: "Path to crate external from workspace"
         type: string
     executor: docker-rust
+    environment:
+      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
     steps:
       - checkout
       - restore-cargo-cache
@@ -228,6 +232,8 @@ jobs:
         type: string
     # Using an image since tests will start a docker container
     executor: image-ubuntu
+    environment:
+      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
     steps:
       - install-rust
       - install-protoc
@@ -248,6 +254,8 @@ jobs:
       - save-cargo-cache
   e2e-test:
     executor: image-ubuntu
+    environment:
+      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
     steps:
       - install-rust
       - checkout
@@ -279,6 +287,8 @@ jobs:
           when: always
   build-and-push:
     executor: image-ubuntu
+    environment:
+      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
     steps:
       - checkout
       - restore-buildx-cache
@@ -295,6 +305,8 @@ jobs:
     machine:
       image: << parameters.image >>
     resource_class: << parameters.resource_class >>
+    environment:
+      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
     parameters:
       target:
         description: "Linux target to build for"
@@ -332,6 +344,7 @@ jobs:
       shell: bash.exe
     environment:
       CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
     steps:
       - checkout
       - run: choco install -y strawberryperl protoc
@@ -357,6 +370,8 @@ jobs:
     macos:
       xcode: 12.5.1
     resource_class: medium
+    environment:
+      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
     steps:
       - checkout
       - install-protoc:

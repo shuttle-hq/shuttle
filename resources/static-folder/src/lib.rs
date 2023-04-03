@@ -32,10 +32,16 @@ impl<'a> StaticFolder<'a> {
 impl<'a> ResourceBuilder<PathBuf> for StaticFolder<'a> {
     const TYPE: Type = Type::StaticFolder;
 
+    type Config = &'a str;
+
     type Output = PathBuf;
 
     fn new() -> Self {
         Self { folder: "static" }
+    }
+
+    fn config(&self) -> &&'a str {
+        &self.folder
     }
 
     async fn output(

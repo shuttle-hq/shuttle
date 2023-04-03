@@ -139,17 +139,29 @@ pub trait Factory: Send + Sync {
 ///
 /// #[async_trait]
 /// impl ResourceBuilder<Resource> for Builder {
+///     const TYPE: Type = Type::Custom;
+///
+///     type Config = Self;
+///
+///     type Output = String;
+///
 ///     fn new() -> Self {
 ///         Self {
 ///             name: String::new(),
 ///         }
 ///     }
 ///
-///     async fn build(
-///         self,
-///         factory: &mut dyn Factory,
-///     ) -> Result<Resource, shuttle_service::Error> {
-///         Ok(Resource { name: self.name })
+///     fn config(&self) -> &Self::Config {
+///         &self
+///     }
+///
+///
+///     async fn output(self, factory: &mut dyn Factory) -> Result<Self::Output, shuttle_service::Error> {
+///         Ok(self.name)
+///     }
+///
+///     async fn build(build_data: &Self::Output) -> Result<Resource, shuttle_service::Error> {
+///         Ok(Resource { name: build_data })
 ///     }
 /// }
 /// ```

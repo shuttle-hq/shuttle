@@ -6,7 +6,7 @@ use serde::Serialize;
 use shuttle_service::{
     database::{self, AwsRdsEngine},
     error::CustomError,
-    DbOutput, Factory, ResourceBuilder, Type,
+    DbInput, DbOutput, Factory, ResourceBuilder, Type,
 };
 
 macro_rules! aws_engine {
@@ -16,7 +16,7 @@ macro_rules! aws_engine {
             #[cfg(feature = $feature)]
             #[doc = "A resource connected to an AWS RDS " $struct_ident " instance"]
             pub struct $struct_ident{
-                local_uri: Option<String>,
+                config: DbInput,
             }
 
             #[cfg(feature = $feature)]
@@ -25,10 +25,15 @@ macro_rules! aws_engine {
             impl ResourceBuilder<$pool_path> for $struct_ident {
                 const TYPE: Type = Type::Database(database::Type::AwsRds(AwsRdsEngine::$struct_ident));
 
+                type Config = DbInput;
                 type Output = DbOutput;
 
                 fn new() -> Self {
-                    Self { local_uri: None }
+                    Self { config: Default::default() }
+                }
+
+                fn config(&self) -> &Self::Config {
+                    &self.config
                 }
 
                 async fn output(self, factory: &mut dyn Factory) -> Result<Self::Output, shuttle_service::Error> {
@@ -39,7 +44,7 @@ macro_rules! aws_engine {
                                 .await?
                         ),
                         shuttle_service::Environment::Local => {
-                            if let Some(local_uri) = self.local_uri {
+                            if let Some(local_uri) = self.config.local_uri {
                                 DbOutput::Local(local_uri)
                             } else {
                                 DbOutput::Info(
@@ -75,7 +80,7 @@ macro_rules! aws_engine {
             impl $struct_ident {
                 /// Use a custom connection string for local runs
                 pub fn local_uri(mut self, local_uri: &str) -> Self {
-                    self.local_uri = Some(local_uri.to_string());
+                    self.config.local_uri = Some(local_uri.to_string());
 
                     self
                 }

@@ -278,7 +278,8 @@ impl Shuttle {
     }
 
     async fn stop(&self, client: &Client) -> Result<()> {
-        let mut service = client.stop_service(self.ctx.project_name()).await?;
+        let proj_name = self.ctx.project_name();
+        let mut service = client.stop_service(proj_name).await?;
 
         let progress_bar = create_spinner();
         loop {
@@ -291,16 +292,11 @@ impl Shuttle {
             }
 
             progress_bar.set_message(format!("Stopping {}", deployment.id));
-            service = client.get_service(self.ctx.project_name()).await?;
+            service = client.get_service(proj_name).await?;
         }
         progress_bar.finish_and_clear();
 
-        println!(
-            r#"{}
-{}"#,
-            "Successfully stopped service".bold(),
-            service
-        );
+        println!("{}\n{}", "Successfully stopped service".bold(), service);
 
         Ok(())
     }
@@ -380,8 +376,9 @@ impl Shuttle {
     }
 
     async fn deployments_list(&self, client: &Client) -> Result<()> {
-        let deployments = client.get_deployments(self.ctx.project_name()).await?;
-        let table = get_deployments_table(&deployments, self.ctx.project_name().as_str());
+        let proj_name = self.ctx.project_name();
+        let deployments = client.get_deployments(proj_name).await?;
+        let table = get_deployments_table(&deployments, proj_name.as_str());
 
         println!("{table}");
 
@@ -431,8 +428,8 @@ impl Shuttle {
 
         trace!("building project");
         println!(
-            "{:>12} {}",
-            "Building".bold().green(),
+            "{} {}",
+            "    Building".bold().green(),
             working_directory.display()
         );
 
@@ -533,7 +530,7 @@ impl Shuttle {
                 runtime::StorageManagerType::WorkingDir(working_directory.to_path_buf()),
                 &format!("http://localhost:{}", run_args.port + 1),
                 None,
-                portpicker::pick_unused_port().unwrap(),
+                portpicker::pick_unused_port().expect("unable to find available port"),
                 runtime_path,
             )
             .await
@@ -577,7 +574,7 @@ impl Shuttle {
                 .map(resource::Response::from_bytes)
                 .collect();
 
-            let resources = get_resources_table(&resources, service_name.as_str());
+            println!("{}", get_resources_table(&resources, service_name.as_str()));
 
             let mut stream = runtime_client
                 .subscribe_logs(tonic::Request::new(SubscribeLogsRequest {}))
@@ -597,17 +594,21 @@ impl Shuttle {
                 }
             });
 
-            println!("{resources}");
-
-            let addr = if run_args.external {
-                std::net::IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))
-            } else {
-                Ipv4Addr::LOCALHOST.into()
-            };
-
             let addr = SocketAddr::new(
-                addr,
+                if run_args.external {
+                    Ipv4Addr::new(0, 0, 0, 0)
+                } else {
+                    Ipv4Addr::LOCALHOST
+                }
+                .into(),
                 portpicker::pick_unused_port().expect("unable to find available port"),
+            );
+
+            println!(
+                "    {} {} on http://{}\n",
+                "Starting".bold().green(),
+                service_name,
+                addr
             );
 
             let start_request = StartRequest {
@@ -627,13 +628,6 @@ impl Shuttle {
                 .into_inner();
 
             trace!(response = ?response,  "client response: ");
-
-            println!(
-                "\n{:>12} {} on http://{}",
-                "Starting".bold().green(),
-                &service_name,
-                addr
-            );
 
             runtime_handles.spawn(async move { runtime.wait().await });
         }
@@ -694,6 +688,10 @@ impl Shuttle {
                 }
             }
         }
+
+        // Temporary fix.
+        // TODO: Make get_service_summary endpoint wait for a bit and see if it entered Running/Crashed state.
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
         let service = client.get_service(self.ctx.project_name()).await?;
 

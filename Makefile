@@ -228,9 +228,9 @@ deploy-examples: deploy-examples/rocket/hello-world \
 	echo "All example have been redeployed"
 
 deploy-examples/%:
-	cd examples/$(*); $(shuttle-command) project rm || echo -e "\x1B[33m>> Nothing to remove for $*\x1B[39m"
+	cd examples/$(*); $(shuttle-command) project stop || echo -e "\x1B[33m>> Nothing to remove for $*\x1B[39m"
 	sleep 5
-	cd examples/$(*); $(shuttle-command) project new
+	cd examples/$(*); $(shuttle-command) project start
 	sleep 5
 	cd examples/$(*); $(shuttle-command) deploy
 

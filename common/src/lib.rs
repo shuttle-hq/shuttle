@@ -54,6 +54,12 @@ pub enum ParseError {
     Serde(#[from] serde_json::Error),
 }
 
+/// Holds the input for a DB resource
+#[derive(Deserialize, Serialize, Default)]
+pub struct DbInput {
+    pub local_uri: Option<String>,
+}
+
 /// Holds the output for a DB resource
 #[derive(Deserialize, Serialize)]
 pub enum DbOutput {

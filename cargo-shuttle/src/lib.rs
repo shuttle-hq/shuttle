@@ -89,43 +89,39 @@ impl Shuttle {
             Command::Logout => self.logout().await,
             Command::Feedback => self.feedback().await,
             Command::Run(run_args) => self.local_run(run_args).await,
-            need_client => {
-                let mut client = Client::new(self.ctx.api_url());
-                client.set_api_key(self.ctx.api_key()?);
-
-                match need_client {
-                    Command::Deploy(deploy_args) => {
-                        return self.deploy(deploy_args, &client).await;
-                    }
-                    Command::Status => self.status(&client).await,
-                    Command::Logs { id, follow } => self.logs(&client, id, follow).await,
-                    Command::Deployment(DeploymentCommand::List) => {
-                        self.deployments_list(&client).await
-                    }
-                    Command::Deployment(DeploymentCommand::Status { id }) => {
-                        self.deployment_get(&client, id).await
-                    }
-                    Command::Resource(ResourceCommand::List) => self.resources_list(&client).await,
-                    Command::Stop => self.stop(&client).await,
-                    Command::Clean => self.clean(&client).await,
-                    Command::Secrets => self.secrets(&client).await,
-                    Command::Project(ProjectCommand::New { idle_minutes }) => {
-                        self.project_create(&client, idle_minutes).await
-                    }
-                    Command::Project(ProjectCommand::Status { follow }) => {
-                        self.project_status(&client, follow).await
-                    }
-                    Command::Project(ProjectCommand::List { filter }) => {
-                        self.projects_list(&client, filter).await
-                    }
-                    Command::Project(ProjectCommand::Rm) => self.project_delete(&client).await,
-                    _ => {
-                        unreachable!("commands that don't need a client have already been matched")
-                    }
-                }
+            Command::Deploy(deploy_args) => {
+                return self.deploy(deploy_args, &self.client()?).await;
             }
+            Command::Status => self.status(&self.client()?).await,
+            Command::Logs { id, follow } => self.logs(&self.client()?, id, follow).await,
+            Command::Deployment(DeploymentCommand::List) => {
+                self.deployments_list(&self.client()?).await
+            }
+            Command::Deployment(DeploymentCommand::Status { id }) => {
+                self.deployment_get(&self.client()?, id).await
+            }
+            Command::Resource(ResourceCommand::List) => self.resources_list(&self.client()?).await,
+            Command::Stop => self.stop(&self.client()?).await,
+            Command::Clean => self.clean(&self.client()?).await,
+            Command::Secrets => self.secrets(&self.client()?).await,
+            Command::Project(ProjectCommand::New { idle_minutes }) => {
+                self.project_create(&self.client()?, idle_minutes).await
+            }
+            Command::Project(ProjectCommand::Status { follow }) => {
+                self.project_status(&self.client()?, follow).await
+            }
+            Command::Project(ProjectCommand::List { filter }) => {
+                self.projects_list(&self.client()?, filter).await
+            }
+            Command::Project(ProjectCommand::Rm) => self.project_delete(&self.client()?).await,
         }
         .map(|_| CommandOutcome::Ok)
+    }
+
+    fn client(&self) -> Result<Client> {
+        let mut client = Client::new(self.ctx.api_url());
+        client.set_api_key(self.ctx.api_key()?);
+        Ok(client)
     }
 
     /// Log in, initialize a project and potentially create the Shuttle environment for it.
@@ -224,9 +220,7 @@ impl Shuttle {
             project_args.working_directory = path;
 
             self.load_project(&mut project_args)?;
-            let mut client = Client::new(self.ctx.api_url());
-            client.set_api_key(self.ctx.api_key()?);
-            self.project_create(&client, IDLE_MINUTES).await?;
+            self.project_create(&self.client()?, IDLE_MINUTES).await?;
         }
 
         Ok(())
@@ -781,6 +775,23 @@ impl Shuttle {
         Ok(())
     }
 
+    async fn project_delete(&self, client: &Client) -> Result<()> {
+        self.wait_with_spinner(
+            &[
+                project::State::Destroyed,
+                project::State::Errored {
+                    message: Default::default(),
+                },
+            ],
+            client.delete_project(self.ctx.project_name()),
+            self.ctx.project_name(),
+            client,
+        )
+        .await?;
+
+        Ok(())
+    }
+
     async fn wait_with_spinner<'a, Fut>(
         &self,
         states_to_check: &[project::State],
@@ -804,23 +815,6 @@ impl Shuttle {
         }
         progress_bar.finish_and_clear();
         println!("{project}");
-        Ok(())
-    }
-
-    async fn project_delete(&self, client: &Client) -> Result<()> {
-        self.wait_with_spinner(
-            &[
-                project::State::Destroyed,
-                project::State::Errored {
-                    message: Default::default(),
-                },
-            ],
-            client.delete_project(self.ctx.project_name()),
-            self.ctx.project_name(),
-            client,
-        )
-        .await?;
-
         Ok(())
     }
 

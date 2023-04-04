@@ -1,0 +1,13 @@
+[package]
+name = "next"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = [ "cdylib" ]
+
+[dependencies]
+shared = { path = "../shared", version = "0.1.0" }
+shuttle-next = { path = "../../../../../services/shuttle-next" }
+tracing = "0.1.37"
+futures = "0.3.25"

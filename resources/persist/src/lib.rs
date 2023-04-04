@@ -71,10 +71,16 @@ impl PersistInstance {
 impl ResourceBuilder<PersistInstance> for Persist {
     const TYPE: Type = Type::Persist;
 
+    type Config = ();
+
     type Output = PersistInstance;
 
     fn new() -> Self {
         Self {}
+    }
+
+    fn config(&self) -> &Self::Config {
+        &()
     }
 
     async fn output(

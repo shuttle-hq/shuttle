@@ -1,12 +1,12 @@
 use async_trait::async_trait;
 use serde::Serialize;
 use shuttle_service::{
-    database, error::CustomError, DbOutput, Error, Factory, ResourceBuilder, Type,
+    database, error::CustomError, DbInput, DbOutput, Error, Factory, ResourceBuilder, Type,
 };
 
 #[derive(Serialize)]
 pub struct Postgres {
-    local_uri: Option<String>,
+    config: DbInput,
 }
 
 /// Get an `sqlx::PgPool` from any factory
@@ -14,10 +14,18 @@ pub struct Postgres {
 impl ResourceBuilder<sqlx::PgPool> for Postgres {
     const TYPE: Type = Type::Database(database::Type::Shared(database::SharedEngine::Postgres));
 
+    type Config = DbInput;
+
     type Output = DbOutput;
 
     fn new() -> Self {
-        Self { local_uri: None }
+        Self {
+            config: Default::default(),
+        }
+    }
+
+    fn config(&self) -> &Self::Config {
+        &self.config
     }
 
     async fn output(self, factory: &mut dyn Factory) -> Result<Self::Output, Error> {
@@ -28,7 +36,7 @@ impl ResourceBuilder<sqlx::PgPool> for Postgres {
                     .await?,
             ),
             shuttle_service::Environment::Local => {
-                if let Some(local_uri) = self.local_uri {
+                if let Some(local_uri) = self.config.local_uri {
                     DbOutput::Local(local_uri)
                 } else {
                     DbOutput::Info(
@@ -65,7 +73,7 @@ impl ResourceBuilder<sqlx::PgPool> for Postgres {
 impl Postgres {
     /// Use a custom connection string for local runs
     pub fn local_uri(mut self, local_uri: &str) -> Self {
-        self.local_uri = Some(local_uri.to_string());
+        self.config.local_uri = Some(local_uri.to_string());
 
         self
     }

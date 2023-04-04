@@ -59,7 +59,7 @@ pub trait ShuttleInit {
     fn get_dependency_attributes(&self) -> HashMap<&str, HashMap<&str, Value>> {
         HashMap::new()
     }
-    
+
     fn get_boilerplate_code_for_framework(&self) -> &'static str;
 }
 
@@ -69,7 +69,6 @@ impl ShuttleInit for ShuttleInitActixWeb {
     fn get_base_dependencies(&self) -> Vec<&str> {
         vec!["actix-web", "shuttle-actix-web", "tokio", "shuttle-runtime"]
     }
-
 
     fn get_boilerplate_code_for_framework(&self) -> &'static str {
         indoc! {r#"
@@ -562,7 +561,10 @@ mod shuttle_init_tests {
         let pre_release_dependencies = init_config.get_prerelease_dependencies();
 
         for &dep in pre_release_dependencies.iter() {
-            cargo_builder.add_dependency(Dependency::new(dep.to_owned(), dep_prerelease_version.to_owned()).allow_pre_release());
+            cargo_builder.add_dependency(
+                Dependency::new(dep.to_owned(), dep_prerelease_version.to_owned())
+                    .allow_pre_release(),
+            );
         }
 
         let dependencies = init_config.get_base_dependencies();
@@ -570,7 +572,6 @@ mod shuttle_init_tests {
         for &dep in dependencies.iter() {
             cargo_builder.add_dependency(Dependency::new(dep.to_owned(), dep_version.to_owned()));
         }
-
 
         let dependency_attributes = init_config.get_dependency_attributes();
         for (dependency, attribute) in dependency_attributes {

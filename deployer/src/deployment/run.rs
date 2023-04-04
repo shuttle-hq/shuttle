@@ -203,7 +203,8 @@ impl Built {
         // For alpha this is the path to the users project with an embedded runtime.
         // For shuttle-next this is the path to the compiled .wasm file, which will be
         // used in the load request.
-        let executable_path = storage_manager.deployment_executable_path(&self.id)?;
+        let executable_path =
+            storage_manager.deployment_executable_path(&self.id, &self.service_name)?;
 
         let port = match pick_unused_port() {
             Some(port) => port,
@@ -275,7 +276,7 @@ async fn load(
             .unwrap_or_default()
     );
 
-    // Get resources from cache when a claim is not set (ie an idl project is started)
+    // Get resources from cache when a claim is not set (i.e. an idle project is started)
     let resources = if claim.is_none() {
         resource_manager
             .get_resources(&service_id)
@@ -704,9 +705,11 @@ mod tests {
         };
 
         let id = Uuid::new_v4();
-        let so_path = crate_dir.join("target/release").join(lib_name);
+        let so_path = crate_dir.join("target/release").join(lib_name.clone());
         let storage_manager = get_storage_manager();
-        let new_so_path = storage_manager.deployment_executable_path(&id).unwrap();
+        let new_so_path = storage_manager
+            .deployment_executable_path(&id, &lib_name)
+            .unwrap();
 
         std::fs::copy(so_path, new_so_path).unwrap();
         (

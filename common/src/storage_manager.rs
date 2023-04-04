@@ -30,16 +30,25 @@ impl ArtifactsStorageManager {
     }
 
     /// The directory in which compiled executables are stored.
-    pub fn executables_path(&self) -> Result<PathBuf, io::Error> {
-        let executables_path = self.artifacts_path.join("shuttle-executables");
+    pub fn executables_path(&self, deployment_id: String) -> Result<PathBuf, io::Error> {
+        let executables_path = self
+            .artifacts_path
+            .join("shuttle-executables")
+            .join(deployment_id.to_string());
         fs::create_dir_all(&executables_path)?;
 
         Ok(executables_path)
     }
 
     /// Path to executable for a service
-    pub fn deployment_executable_path(&self, deployment_id: &Uuid) -> Result<PathBuf, io::Error> {
-        let executable_path = self.executables_path()?.join(deployment_id.to_string());
+    pub fn deployment_executable_path(
+        &self,
+        deployment_id: &Uuid,
+        service_name: &str,
+    ) -> Result<PathBuf, io::Error> {
+        let executable_path = self
+            .executables_path(deployment_id.to_string())?
+            .join(service_name);
 
         Ok(executable_path)
     }

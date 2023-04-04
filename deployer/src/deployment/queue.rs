@@ -82,9 +82,11 @@ pub async fn task(
                     )
                     .await
                 {
-                    Ok(built) => {
+                    Ok(built_services) => {
                         remove_from_queue(queue_client, id).await;
-                        promote_to_run(built, run_send_cloned).await
+                        for built in built_services {
+                            promote_to_run(built, run_send_cloned.clone()).await
+                        }
                     }
                     Err(err) => {
                         remove_from_queue(queue_client, id).await;
@@ -165,15 +167,12 @@ impl Queued {
         deployment_updater: impl DeploymentUpdater,
         log_recorder: impl LogRecorder,
         secret_recorder: impl SecretRecorder,
-    ) -> Result<Built> {
+    ) -> Result<Vec<Built>> {
         info!("Extracting received data");
 
         let project_path = storage_manager.service_build_path(&self.service_name)?;
 
         extract_tar_gz_data(self.data.as_slice(), &project_path).await?;
-
-        let secrets = get_secrets(&project_path).await?;
-        set_secrets(secrets, &self.service_id, secret_recorder).await?;
 
         info!("Building deployment");
 
@@ -213,38 +212,54 @@ impl Queued {
         });
 
         let project_path = project_path.canonicalize()?;
-        let runtime = build_deployment(&project_path, tx.clone()).await?;
+        let services = build_deployment(&project_path, tx.clone()).await?;
 
-        if self.will_run_tests {
-            info!(
-                build_line = "Running tests before starting up",
-                "Running deployment's unit tests"
-            );
+        let mut built_services = Vec::new();
+        for service in services {
+            // TODO: this will set secrets tied to the service ID so they will be accessible for all services.
+            let secrets = get_secrets(&service.working_directory).await?;
+            set_secrets(secrets, &self.service_id, secret_recorder.clone()).await?;
 
-            run_pre_deploy_tests(&project_path, tx).await?;
+            if self.will_run_tests {
+                info!(
+                    build_line = "Running tests before starting up",
+                    "Running deployment's unit tests"
+                );
+
+                run_pre_deploy_tests(&service.working_directory, tx.clone()).await?;
+            }
+
+            info!("Moving built executable");
+
+            store_executable(
+                &storage_manager,
+                service.executable_path.clone(),
+                &self.id,
+                // TODO: unwrap
+                service.service_name().unwrap().as_ref(),
+            )
+            .await?;
+
+            let is_next = service.is_wasm;
+
+            deployment_updater
+                .set_is_next(&id, is_next)
+                .await
+                .map_err(|e| Error::Build(Box::new(e)))?;
+
+            let built = Built {
+                id: self.id,
+                // TODO: unwrap
+                service_name: service.service_name().unwrap().to_string(),
+                service_id: self.service_id,
+                tracing_context: Default::default(),
+                is_next,
+                claim: self.claim.clone(),
+            };
+
+            built_services.push(built);
         }
-
-        info!("Moving built executable");
-
-        store_executable(&storage_manager, runtime.executable_path.clone(), &self.id).await?;
-
-        let is_next = runtime.is_wasm;
-
-        deployment_updater
-            .set_is_next(&id, is_next)
-            .await
-            .map_err(|e| Error::Build(Box::new(e)))?;
-
-        let built = Built {
-            id: self.id,
-            service_name: self.service_name,
-            service_id: self.service_id,
-            tracing_context: Default::default(),
-            is_next,
-            claim: self.claim,
-        };
-
-        Ok(built)
+        Ok(built_services)
     }
 }
 
@@ -331,12 +346,12 @@ async fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<
 async fn build_deployment(
     project_path: &Path,
     tx: crossbeam_channel::Sender<Message>,
-) -> Result<BuiltService> {
-    let runtimes = build_workspace(project_path, true, tx)
+) -> Result<Vec<BuiltService>> {
+    let built_services = build_workspace(project_path, true, tx)
         .await
         .map_err(|e| Error::Build(e.into()))?;
 
-    Ok(runtimes[0].clone())
+    Ok(built_services)
 }
 
 #[instrument(skip(project_path, tx))]
@@ -395,15 +410,18 @@ async fn run_pre_deploy_tests(
     ops::run_tests(&ws, &opts, &[]).map_err(TestError::Failed)
 }
 
-/// This will store the path to the executable for each runtime, which will be the users project with
+/// This will store the path to the executables for each deployment, which will be the users project with
 /// an embedded runtime for alpha, and a .wasm file for shuttle-next.
 #[instrument(skip(storage_manager, executable_path, id))]
 async fn store_executable(
     storage_manager: &ArtifactsStorageManager,
     executable_path: PathBuf,
     id: &Uuid,
+    service_name: &str,
 ) -> Result<()> {
-    let new_executable_path = storage_manager.deployment_executable_path(id)?;
+    let new_executable_path = storage_manager.deployment_executable_path(id, service_name)?;
+
+    fs::try_exists(new_executable_path.clone()).await.unwrap();
 
     fs::rename(executable_path, new_executable_path).await?;
 
@@ -556,7 +574,7 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
 
         fs::write(&executable_path, "barfoo").await.unwrap();
 
-        super::store_executable(&storage_manager, executable_path.clone(), &id)
+        super::store_executable(&storage_manager, executable_path.clone(), &id, "xyz")
             .await
             .unwrap();
 
@@ -568,6 +586,7 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
                 executables_p
                     .join("shuttle-executables")
                     .join(id.to_string())
+                    .join("xyz")
             )
             .await
             .unwrap(),

@@ -8,7 +8,9 @@ pub mod error;
 pub use error::{CustomError, Error};
 
 use serde::{de::DeserializeOwned, Serialize};
-pub use shuttle_common::{database, resource::Type, DatabaseReadyInfo, DbOutput, SecretStore};
+pub use shuttle_common::{
+    database, resource::Type, DatabaseReadyInfo, DbInput, DbOutput, SecretStore,
+};
 
 #[cfg(feature = "codegen")]
 extern crate shuttle_codegen;
@@ -137,17 +139,29 @@ pub trait Factory: Send + Sync {
 ///
 /// #[async_trait]
 /// impl ResourceBuilder<Resource> for Builder {
+///     const TYPE: Type = Type::Custom;
+///
+///     type Config = Self;
+///
+///     type Output = String;
+///
 ///     fn new() -> Self {
 ///         Self {
 ///             name: String::new(),
 ///         }
 ///     }
 ///
-///     async fn build(
-///         self,
-///         factory: &mut dyn Factory,
-///     ) -> Result<Resource, shuttle_service::Error> {
-///         Ok(Resource { name: self.name })
+///     fn config(&self) -> &Self::Config {
+///         &self
+///     }
+///
+///
+///     async fn output(self, factory: &mut dyn Factory) -> Result<Self::Output, shuttle_service::Error> {
+///         Ok(self.name)
+///     }
+///
+///     async fn build(build_data: &Self::Output) -> Result<Resource, shuttle_service::Error> {
+///         Ok(Resource { name: build_data })
 ///     }
 /// }
 /// ```
@@ -161,9 +175,12 @@ pub trait Factory: Send + Sync {
 ///     -> shuttle_axum::ShuttleAxum {}
 /// ```
 #[async_trait]
-pub trait ResourceBuilder<T>: Serialize {
+pub trait ResourceBuilder<T> {
     /// The type of resource this creates
     const TYPE: Type;
+
+    /// The internal config being constructed by this builder. This will be used to find cached [Self::Output].
+    type Config: Serialize;
 
     /// The output type used to build this resource later
     type Output: Serialize + DeserializeOwned;
@@ -171,11 +188,22 @@ pub trait ResourceBuilder<T>: Serialize {
     /// Create a new instance of this resource builder
     fn new() -> Self;
 
-    /// Build this resource from its config output
-    async fn build(build_data: &Self::Output) -> Result<T, crate::Error>;
+    /// Get the internal config state of the builder
+    ///
+    /// If the exact same config was returned by a previous deployement that used this resource, then [Self::output()]
+    /// will not be called to get the builder output again. Rather the output state of the previous deployment
+    /// will be passed to [Self::build()].
+    fn config(&self) -> &Self::Config;
 
     /// Get the config output of this builder
+    ///
+    /// This method is where the actual resource provisioning should take place and is expected to take the longest. It
+    /// can at times even take minutes. That is why the output of this method is cached and calling this method can be
+    /// skipped as explained in [Self::config()].
     async fn output(self, factory: &mut dyn Factory) -> Result<Self::Output, crate::Error>;
+
+    /// Build this resource from its config output
+    async fn build(build_data: &Self::Output) -> Result<T, crate::Error>;
 }
 
 /// The core trait of the shuttle platform. Every crate deployed to shuttle needs to implement this trait.

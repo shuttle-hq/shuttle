@@ -89,43 +89,39 @@ impl Shuttle {
             Command::Logout => self.logout().await,
             Command::Feedback => self.feedback().await,
             Command::Run(run_args) => self.local_run(run_args).await,
-            need_client => {
-                let mut client = Client::new(self.ctx.api_url());
-                client.set_api_key(self.ctx.api_key()?);
-
-                match need_client {
-                    Command::Deploy(deploy_args) => {
-                        return self.deploy(deploy_args, &client).await;
-                    }
-                    Command::Status => self.status(&client).await,
-                    Command::Logs { id, follow } => self.logs(&client, id, follow).await,
-                    Command::Deployment(DeploymentCommand::List) => {
-                        self.deployments_list(&client).await
-                    }
-                    Command::Deployment(DeploymentCommand::Status { id }) => {
-                        self.deployment_get(&client, id).await
-                    }
-                    Command::Resource(ResourceCommand::List) => self.resources_list(&client).await,
-                    Command::Stop => self.stop(&client).await,
-                    Command::Clean => self.clean(&client).await,
-                    Command::Secrets => self.secrets(&client).await,
-                    Command::Project(ProjectCommand::New { idle_minutes }) => {
-                        self.project_create(&client, idle_minutes).await
-                    }
-                    Command::Project(ProjectCommand::Status { follow }) => {
-                        self.project_status(&client, follow).await
-                    }
-                    Command::Project(ProjectCommand::List { filter }) => {
-                        self.projects_list(&client, filter).await
-                    }
-                    Command::Project(ProjectCommand::Rm) => self.project_delete(&client).await,
-                    _ => {
-                        unreachable!("commands that don't need a client have already been matched")
-                    }
-                }
+            Command::Deploy(deploy_args) => {
+                return self.deploy(deploy_args, &self.client()?).await;
             }
+            Command::Status => self.status(&self.client()?).await,
+            Command::Logs { id, follow } => self.logs(&self.client()?, id, follow).await,
+            Command::Deployment(DeploymentCommand::List) => {
+                self.deployments_list(&self.client()?).await
+            }
+            Command::Deployment(DeploymentCommand::Status { id }) => {
+                self.deployment_get(&self.client()?, id).await
+            }
+            Command::Resource(ResourceCommand::List) => self.resources_list(&self.client()?).await,
+            Command::Stop => self.stop(&self.client()?).await,
+            Command::Clean => self.clean(&self.client()?).await,
+            Command::Secrets => self.secrets(&self.client()?).await,
+            Command::Project(ProjectCommand::New { idle_minutes }) => {
+                self.project_create(&self.client()?, idle_minutes).await
+            }
+            Command::Project(ProjectCommand::Status { follow }) => {
+                self.project_status(&self.client()?, follow).await
+            }
+            Command::Project(ProjectCommand::List { filter }) => {
+                self.projects_list(&self.client()?, filter).await
+            }
+            Command::Project(ProjectCommand::Rm) => self.project_delete(&self.client()?).await,
         }
         .map(|_| CommandOutcome::Ok)
+    }
+
+    fn client(&self) -> Result<Client> {
+        let mut client = Client::new(self.ctx.api_url());
+        client.set_api_key(self.ctx.api_key()?);
+        Ok(client)
     }
 
     /// Log in, initialize a project and potentially create the Shuttle environment for it.
@@ -224,9 +220,7 @@ impl Shuttle {
             project_args.working_directory = path;
 
             self.load_project(&mut project_args)?;
-            let mut client = Client::new(self.ctx.api_url());
-            client.set_api_key(self.ctx.api_key()?);
-            self.project_create(&client, IDLE_MINUTES).await?;
+            self.project_create(&self.client()?, IDLE_MINUTES).await?;
         }
 
         Ok(())
@@ -278,7 +272,8 @@ impl Shuttle {
     }
 
     async fn stop(&self, client: &Client) -> Result<()> {
-        let mut service = client.stop_service(self.ctx.project_name()).await?;
+        let proj_name = self.ctx.project_name();
+        let mut service = client.stop_service(proj_name).await?;
 
         let progress_bar = create_spinner();
         loop {
@@ -291,16 +286,11 @@ impl Shuttle {
             }
 
             progress_bar.set_message(format!("Stopping {}", deployment.id));
-            service = client.get_service(self.ctx.project_name()).await?;
+            service = client.get_service(proj_name).await?;
         }
         progress_bar.finish_and_clear();
 
-        println!(
-            r#"{}
-{}"#,
-            "Successfully stopped service".bold(),
-            service
-        );
+        println!("{}\n{}", "Successfully stopped service".bold(), service);
 
         Ok(())
     }
@@ -380,8 +370,9 @@ impl Shuttle {
     }
 
     async fn deployments_list(&self, client: &Client) -> Result<()> {
-        let deployments = client.get_deployments(self.ctx.project_name()).await?;
-        let table = get_deployments_table(&deployments, self.ctx.project_name().as_str());
+        let proj_name = self.ctx.project_name();
+        let deployments = client.get_deployments(proj_name).await?;
+        let table = get_deployments_table(&deployments, proj_name.as_str());
 
         println!("{table}");
 
@@ -431,8 +422,8 @@ impl Shuttle {
 
         trace!("building project");
         println!(
-            "{:>12} {}",
-            "Building".bold().green(),
+            "{} {}",
+            "    Building".bold().green(),
             working_directory.display()
         );
 
@@ -533,7 +524,7 @@ impl Shuttle {
                 runtime::StorageManagerType::WorkingDir(working_directory.to_path_buf()),
                 &format!("http://localhost:{}", run_args.port + 1),
                 None,
-                portpicker::pick_unused_port().unwrap(),
+                portpicker::pick_unused_port().expect("unable to find available port"),
                 runtime_path,
             )
             .await
@@ -577,7 +568,7 @@ impl Shuttle {
                 .map(resource::Response::from_bytes)
                 .collect();
 
-            let resources = get_resources_table(&resources, service_name.as_str());
+            println!("{}", get_resources_table(&resources, service_name.as_str()));
 
             let mut stream = runtime_client
                 .subscribe_logs(tonic::Request::new(SubscribeLogsRequest {}))
@@ -597,17 +588,21 @@ impl Shuttle {
                 }
             });
 
-            println!("{resources}");
-
-            let addr = if run_args.external {
-                std::net::IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))
-            } else {
-                Ipv4Addr::LOCALHOST.into()
-            };
-
             let addr = SocketAddr::new(
-                addr,
+                if run_args.external {
+                    Ipv4Addr::new(0, 0, 0, 0)
+                } else {
+                    Ipv4Addr::LOCALHOST
+                }
+                .into(),
                 portpicker::pick_unused_port().expect("unable to find available port"),
+            );
+
+            println!(
+                "    {} {} on http://{}\n",
+                "Starting".bold().green(),
+                service_name,
+                addr
             );
 
             let start_request = StartRequest {
@@ -627,13 +622,6 @@ impl Shuttle {
                 .into_inner();
 
             trace!(response = ?response,  "client response: ");
-
-            println!(
-                "\n{:>12} {} on http://{}",
-                "Starting".bold().green(),
-                &service_name,
-                addr
-            );
 
             runtime_handles.spawn(async move { runtime.wait().await });
         }
@@ -694,6 +682,10 @@ impl Shuttle {
                 }
             }
         }
+
+        // Temporary fix.
+        // TODO: Make get_service_summary endpoint wait for a bit and see if it entered Running/Crashed state.
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
         let service = client.get_service(self.ctx.project_name()).await?;
 
@@ -783,6 +775,23 @@ impl Shuttle {
         Ok(())
     }
 
+    async fn project_delete(&self, client: &Client) -> Result<()> {
+        self.wait_with_spinner(
+            &[
+                project::State::Destroyed,
+                project::State::Errored {
+                    message: Default::default(),
+                },
+            ],
+            client.delete_project(self.ctx.project_name()),
+            self.ctx.project_name(),
+            client,
+        )
+        .await?;
+
+        Ok(())
+    }
+
     async fn wait_with_spinner<'a, Fut>(
         &self,
         states_to_check: &[project::State],
@@ -806,23 +815,6 @@ impl Shuttle {
         }
         progress_bar.finish_and_clear();
         println!("{project}");
-        Ok(())
-    }
-
-    async fn project_delete(&self, client: &Client) -> Result<()> {
-        self.wait_with_spinner(
-            &[
-                project::State::Destroyed,
-                project::State::Errored {
-                    message: Default::default(),
-                },
-            ],
-            client.delete_project(self.ctx.project_name()),
-            self.ctx.project_name(),
-            client,
-        )
-        .await?;
-
         Ok(())
     }
 

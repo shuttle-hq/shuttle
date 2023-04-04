@@ -58,8 +58,8 @@ where
     B: ResourceBuilder<T, Output = O>,
     O: Serialize + DeserializeOwned,
 {
-    let config =
-        serde_json::to_value(&builder).context("failed to turn builder config into a value")?;
+    let config = serde_json::to_value(builder.config())
+        .context("failed to turn builder config into a value")?;
     let output = if let Some(output) = resource_tracker.get_cached_output(B::TYPE, &config) {
         match serde_json::from_value(output) {
             Ok(output) => output,

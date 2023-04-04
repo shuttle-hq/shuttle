@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::collections::HashMap;
 
 use comfy_table::{
     modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, Attribute, Cell, CellAlignment,
@@ -122,13 +122,7 @@ fn get_static_folder_table(static_folders: &[&Response], service_name: &str) -> 
             .add_attribute(Attribute::Bold)]);
 
     for folder in static_folders {
-        let path = serde_json::from_value::<PathBuf>(folder.data.clone())
-            .unwrap()
-            .file_name()
-            .expect("static folder path should have a final component")
-            .to_str()
-            .expect("static folder file name should be valid unicode")
-            .to_owned();
+        let path = serde_json::from_value::<String>(folder.config.clone()).unwrap();
 
         table.add_row(vec![path]);
     }

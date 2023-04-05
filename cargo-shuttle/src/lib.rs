@@ -885,8 +885,9 @@ impl Shuttle {
         if let Ok(repo) = Repository::discover(working_directory) {
             let repo_path = repo
                 .workdir()
-                .context("getting working directory of repository")?
-                .canonicalize()?;
+                .context("getting working directory of repository")?;
+
+            let repo_path = dunce::canonicalize(repo_path)?;
 
             trace!(?repo_path, "found git repository");
 

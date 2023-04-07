@@ -1,0 +1,20 @@
+[package]
+name = "shuttle-orchestrator"
+edition.workspace = true
+license.workspace = true
+version = "0.13.0"
+publish = false
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+kube = { version = "0.82.0", default-features = false, features = ["client", "rustls-tls", "runtime"] }
+k8s-openapi = { version = "0.18.0", features = ["v1_26"] }
+tokio = { workspace = true, features = ["full"] }
+tracing = { workspace = true, features = ["default"] }
+tracing-subscriber = { workspace = true, features = ["default", "env-filter"] }
+tower = { workspace = true, features = ["limit"] }
+tower-http = { workspace = true, features = ["trace", "decompression-gzip"] }
+hyper = { workspace = true, features = ["client", "http1", "stream", "tcp"] }
+serde_json = { workspace = true }
+serde = { workspace = true }

@@ -11,6 +11,7 @@ members = [
   "provisioner",
   "runtime",
   "service",
+  "orchestrator"
 ]
 
 exclude = [
@@ -72,7 +73,7 @@ rand = "0.8.5"
 reqwest = "0.11.13"
 ring = "0.16.20"
 rmp-serde = "1.1.1"
-serde = { version = "1.0.148", default-features = false }
+serde = { version = " 1.0.159", default-features = false }
 serde_json = "1.0.89"
 sqlx = "0.6.2"
 strum = { version = "0.24.1", features = ["derive"] }

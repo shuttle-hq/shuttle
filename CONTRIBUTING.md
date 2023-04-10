@@ -151,16 +151,19 @@ AUTH_CONTAINER_ID=$(docker ps -aqf "name=shuttle-auth") \
 ```
 
 Before we can run commands against a local deployer, we need to get a valid JWT and set it in our
-`.config/shuttle/config.toml` as our `api_key`:
+`.config/shuttle/config.toml` as our `api_key`. By running the following curl command, we will request
+that our api-key in the `Authorization` header be converted to a JWT, which will be returned in the response:
 
 ```bash
 curl -H "Authorization: Bearer test-key" localhost:8008/auth/key
 ```
 
-Now copy the `token` value, the full JWT, and write it to your shuttle config (which will be in one of
+Now copy the `token` value (just the value, not the key) from the curl response, and write it to your shuttle
+config (which will be a file named `config.toml` in a directory named `shuttle` in one of 
 [these places](https://docs.rs/dirs/latest/dirs/fn.config_dir.html) depending on your OS).
 
 ```bash
+# replace <jwt> with the token from the previous command
 echo "api_key = '<jwt>'" > ~/.config/shuttle/config.toml
 ```
 

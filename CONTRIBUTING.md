@@ -1,5 +1,16 @@
 # Contributing
 
+## Tenets
+
+Our goal with shuttle open-source maintenance is to foster a thriving, collaborative, and sustainable ecosystem around the project, which allows it to continue to grow and evolve over time.
+
+We will strive to adhere to the following tenets:
+
+1. Encourage collaboration: One of the primary objectives of maintenance is to encourage collaboration among contributors. This can be achieved by creating an atmosphere where people feel safe and encouraged to ask questions on PRs and issues. Contributors should feel comfortable asking for clarification, discussing issues, and proposing solutions without fear of criticism or hostility.
+2. Communicate transparently: Another objective of maintenance is to ensure transparent communication about the project's goals, progress, and roadmap. This includes providing regular updates on project status, notifying contributors about relevant changes, and communicating expectations for contributions. This creates an environment where people feel they are in the know of things, which helps them feel invested in the project's success.
+3. Recognize contributions: Another important objective of maintenance is to recognize contributors' efforts and contributions. This can be achieved by acknowledging contributions publicly, providing feedback and support, and actively engaging with contributors. This creates an environment where people feel their efforts were helpful and that their contributions are valued.
+4. Provide support: Finally, an important objective of maintenance is to provide support to contributors when needed. This includes providing guidance on how to contribute, responding to questions and concerns, and helping contributors resolve issues. This creates an environment where people feel they will get help when needed, which helps build trust and fosters collaboration.
+
 ## Raise an Issue
 
 Raising [issues](https://github.com/shuttle-hq/shuttle/issues) is encouraged.

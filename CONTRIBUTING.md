@@ -140,11 +140,37 @@ The steps outlined above starts all the services used by shuttle locally (ie. bo
 docker compose -f docker-compose.rendered.yml up provisioner
 ```
 
-This prevents `gateway` from starting up. Now you can start deployer only using:
+This starts the provisioner and the auth service, while preventing `gateway` from starting up. Next up we need to
+insert an admin user into the `auth` state using the ID of the `auth` container and the auth CLI `init` command:
 
 ```bash
-provisioner_address=$(docker inspect --format '{{(index .NetworkSettings.Networks "shuttle_default").IPAddress}}' shuttle_prod_hello-world-rocket-app_run)
-cargo run -p shuttle-deployer -- --provisioner-address $provisioner_address --provisioner-port 8000 --proxy-fqdn local.rs --admin-secret test-key --project <project_name>
+AUTH_CONTAINER_ID=$(docker ps -aqf "name=shuttle-auth") \
+    docker exec $AUTH_CONTAINER_ID ./usr/local/bin/service \
+    --state=/var/lib/shuttle-auth \
+    init --name admin --key test-key
+```
+
+Before we can run commands against a local deployer, we need to get a valid JWT and set it in our
+`.config/shuttle/config.toml` as our `api_key`:
+
+```bash
+curl -H "Authorization: Bearer test-key" localhost:8008/auth/key
+```
+
+Now copy the `token` value, the full JWT, and write it to your shuttle config (which will be in one of
+[these places](https://docs.rs/dirs/latest/dirs/fn.config_dir.html) depending on your OS).
+
+```bash
+echo "api_key = '<jwt>'" > ~/.config/shuttle/config.toml
+```
+
+Finally we need to comment out the admin layer in the deployer handlers. So in `deployer/handlers/mod.rs`,
+comment out this line: `.layer(AdminSecretLayer::new(admin_secret))`.
+
+And that's it, we're ready to start our deployer!
+
+```bash
+cargo run -p shuttle-deployer -- --provisioner-address http://localhost:8000 --proxy-fqdn local.rs --admin-secret test-key --project <project_name>
 ```
 
 The `--admin-secret` can safely be changed to your api-key to make testing easier. While `<project_name>` needs to match the name of the project that will be deployed to this deployer. This is the `Cargo.toml` or `Shuttle.toml` name for the project.

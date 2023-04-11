@@ -436,9 +436,11 @@ impl Shuttle {
         );
 
         let provisioner = LocalProvisioner::new()?;
+        let provisioner_port =
+            portpicker::pick_unused_port().expect("unable to find available port");
         let provisioner_server = provisioner.start(SocketAddr::new(
             Ipv4Addr::LOCALHOST.into(),
-            run_args.port + 1,
+            provisioner_port,
         ));
 
         // Compile all the alpha or shuttle-next services in the workspace.
@@ -447,7 +449,7 @@ impl Shuttle {
         let mut runtime_handles = JoinSet::new();
 
         // Start all the services.
-        for service in services {
+        for (i, service) in services.iter().enumerate() {
             let BuiltService {
                 executable_path,
                 is_wasm,
@@ -530,9 +532,9 @@ impl Shuttle {
             let (mut runtime, mut runtime_client) = runtime::start(
                 is_wasm,
                 runtime::StorageManagerType::WorkingDir(working_directory.to_path_buf()),
-                &format!("http://localhost:{}", run_args.port + 1),
+                &format!("http://localhost:{provisioner_port}"),
                 None,
-                portpicker::pick_unused_port().expect("unable to find available port"),
+                run_args.port + 1 + i as u16,
                 runtime_path,
             )
             .await
@@ -603,7 +605,7 @@ impl Shuttle {
                     Ipv4Addr::LOCALHOST
                 }
                 .into(),
-                portpicker::pick_unused_port().expect("unable to find available port"),
+                run_args.port + i as u16,
             );
 
             println!(

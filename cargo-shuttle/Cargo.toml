@@ -11,7 +11,6 @@ homepage = "https://www.shuttle.rs"
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 bollard = { workspace = true }
-cargo = { workspace = true }
 cargo-edit = { version = "0.11.9", features = ["cli"] }
 cargo_metadata = { workspace = true }
 chrono = { workspace = true }
@@ -56,6 +55,7 @@ tracing-subscriber = { workspace = true, features = [
 url = "2.3.1"
 uuid = { workspace = true, features = ["v4"] }
 webbrowser = "0.8.2"
+semver = "1.0.17"
 
 [dependencies.shuttle-common]
 workspace = true

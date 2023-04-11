@@ -4,7 +4,6 @@ pub mod config;
 mod init;
 mod provisioner_server;
 
-//use cargo::util::ToSemver;
 use indicatif::ProgressBar;
 use shuttle_common::models::deployment::get_deployments_table;
 use shuttle_common::models::project::{State, IDLE_MINUTES};

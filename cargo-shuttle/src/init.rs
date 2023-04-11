@@ -3,7 +3,6 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
-use cargo::ops::NewOptions;
 use cargo_edit::{find, get_latest_dependency, registry_url};
 use indoc::indoc;
 use toml_edit::{value, Array, Document, Table};
@@ -866,14 +865,12 @@ impl ShuttleInit for ShuttleInitNoOp {
 
 /// Interoprates with `cargo` crate and calls `cargo init [path]`.
 pub fn cargo_init(path: PathBuf) -> Result<()> {
-    let opts = NewOptions::new(None, true, false, path, None, None, None)?;
-    let cargo_config = cargo::util::config::Config::default()?;
-    let init_result = cargo::ops::init(&opts, &cargo_config)?;
-
-    // Mimic `cargo init` behavior and log status or error to shell
-    cargo_config
-        .shell()
-        .status("Created", format!("{init_result} (shuttle) package"))?;
+    std::process::Command::new("cargo")
+        .arg("init")
+        .arg("--bin")
+        .arg(path)
+        .output()
+        .expect("Failed to initialize with cargo init.");
 
     Ok(())
 }

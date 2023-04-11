@@ -4,7 +4,6 @@ pub mod config;
 mod init;
 mod provisioner_server;
 
-use cargo::util::ToSemver;
 use indicatif::ProgressBar;
 use shuttle_common::models::deployment::get_deployments_table;
 use shuttle_common::models::project::{State, IDLE_MINUTES};
@@ -895,8 +894,9 @@ impl Shuttle {
         if let Ok(repo) = Repository::discover(working_directory) {
             let repo_path = repo
                 .workdir()
-                .context("getting working directory of repository")?
-                .canonicalize()?;
+                .context("getting working directory of repository")?;
+
+            let repo_path = dunce::canonicalize(repo_path)?;
 
             trace!(?repo_path, "found git repository");
 
@@ -951,7 +951,9 @@ impl Shuttle {
 }
 
 fn check_version(runtime_path: &Path) -> Result<()> {
-    let valid_version = VERSION.to_semver().unwrap();
+    let valid_version = semver::Version::from_str(VERSION)
+        .context("failed to convert runtime version to semver")?
+        .to_string();
 
     if !runtime_path.try_exists()? {
         bail!("shuttle-runtime is not installed");
@@ -967,13 +969,15 @@ fn check_version(runtime_path: &Path) -> Result<()> {
 
     // Parse the version, splitting the version from the name and
     // and pass it to `to_semver()`.
-    let runtime_version = std::str::from_utf8(&runtime_version)
-        .expect("shuttle-runtime version should be valid utf8")
-        .split_once(' ')
-        .expect("shuttle-runtime version should be in the `name version` format")
-        .1
-        .to_semver()
-        .context("failed to convert runtime version to semver")?;
+    let runtime_version = semver::Version::from_str(
+        std::str::from_utf8(&runtime_version)
+            .expect("shuttle-runtime version should be valid utf8")
+            .split_once(' ')
+            .expect("shuttle-runtime version should be in the `name version` format")
+            .1,
+    )
+    .context("failed to convert runtime version to semver")?
+    .to_string();
 
     if runtime_version == valid_version {
         Ok(())

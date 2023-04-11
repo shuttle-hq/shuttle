@@ -43,7 +43,7 @@ MONGO_INITDB_ROOT_USERNAME?=mongodb
 MONGO_INITDB_ROOT_PASSWORD?=password
 
 ifeq ($(PROD),true)
-DOCKER_COMPOSE_FILES=-f docker-compose.yml
+DOCKER_COMPOSE_FILES=docker-compose.yml
 STACK=shuttle-prod
 APPS_FQDN=shuttleapp.rs
 DB_FQDN=db.shuttle.rs
@@ -54,7 +54,7 @@ USE_TLS=enable
 CARGO_PROFILE=release
 RUST_LOG=debug
 else
-DOCKER_COMPOSE_FILES=-f docker-compose.yml -f docker-compose.dev.yml
+DOCKER_COMPOSE_FILES=docker-compose.yml docker-compose.dev.yml
 STACK?=shuttle-dev
 APPS_FQDN=unstable.shuttleapp.rs
 DB_FQDN=db.unstable.shuttle.rs
@@ -147,7 +147,7 @@ test:
 	cd e2e; POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) APPS_FQDN=$(APPS_FQDN) cargo test $(CARGO_TEST_FLAGS) -- --nocapture
 
 docker-compose.rendered.yml: docker-compose.yml docker-compose.dev.yml
-	$(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE) $(DOCKER_COMPOSE_FILES) $(DOCKER_COMPOSE_CONFIG_FLAGS) -p $(STACK) config > $@
+	$(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml $(DOCKER_COMPOSE_CONFIG_FLAGS) -p $(STACK) config > $@
 
 # Start the containers locally. This does not start panamax by default,
 # to start panamax locally run this command with an override for the profiles:

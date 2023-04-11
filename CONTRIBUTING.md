@@ -151,11 +151,48 @@ The steps outlined above starts all the services used by shuttle locally (ie. bo
 docker compose -f docker-compose.rendered.yml up provisioner
 ```
 
-This prevents `gateway` from starting up. Now you can start deployer only using:
+This starts the provisioner and the auth service, while preventing `gateway` from starting up. Next up we need to
+insert an admin user into the `auth` state using the ID of the `auth` container and the auth CLI `init` command:
 
 ```bash
-provisioner_address=$(docker inspect --format '{{(index .NetworkSettings.Networks "shuttle_default").IPAddress}}' shuttle_prod_hello-world-rocket-app_run)
-cargo run -p shuttle-deployer -- --provisioner-address $provisioner_address --provisioner-port 8000 --proxy-fqdn local.rs --admin-secret test-key --project <project_name>
+AUTH_CONTAINER_ID=$(docker ps -aqf "name=shuttle-auth") \
+    docker exec $AUTH_CONTAINER_ID ./usr/local/bin/service \
+    --state=/var/lib/shuttle-auth \
+    init --name admin --key test-key
+```
+
+Before we can run commands against a local deployer, we need to get a valid JWT and set it in our
+`.config/shuttle/config.toml` as our `api_key`. By running the following curl command, we will request
+that our api-key in the `Authorization` header be converted to a JWT, which will be returned in the response:
+
+```bash
+curl -H "Authorization: Bearer test-key" localhost:8008/auth/key
+```
+
+Now copy the `token` value (just the value, not the key) from the curl response, and write it to your shuttle
+config (which will be a file named `config.toml` in a directory named `shuttle` in one of 
+[these places](https://docs.rs/dirs/latest/dirs/fn.config_dir.html) depending on your OS).
+
+```bash
+# replace <jwt> with the token from the previous command
+echo "api_key = '<jwt>'" > ~/.config/shuttle/config.toml
+```
+
+> Note: if you have [`jq`](https://github.com/stedolan/jq/wiki/Installation) installed you can combine the two
+>above commands into the following:
+>```bash
+>curl -s -H "Authorization: Bearer test-key" localhost:8008/auth/key \
+>    | jq -r '.token' \
+>    | read token; echo "api_key='$token'" > ~/.config/shuttle/config.toml
+>```
+
+Finally we need to comment out the admin layer in the deployer handlers. So in `deployer/handlers/mod.rs`,
+in the `make_router` function comment out this line: `.layer(AdminSecretLayer::new(admin_secret))`.
+
+And that's it, we're ready to start our deployer!
+
+```bash
+cargo run -p shuttle-deployer -- --provisioner-address http://localhost:8000 --proxy-fqdn local.rs --admin-secret test-key --project <project_name>
 ```
 
 The `--admin-secret` can safely be changed to your api-key to make testing easier. While `<project_name>` needs to match the name of the project that will be deployed to this deployer. This is the `Cargo.toml` or `Shuttle.toml` name for the project.

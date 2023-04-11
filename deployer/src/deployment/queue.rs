@@ -172,9 +172,6 @@ impl Queued {
 
         extract_tar_gz_data(self.data.as_slice(), &project_path).await?;
 
-        let secrets = get_secrets(&project_path).await?;
-        set_secrets(secrets, &self.service_id, secret_recorder).await?;
-
         info!("Building deployment");
 
         let (tx, rx): (crossbeam_channel::Sender<Message>, _) = crossbeam_channel::bounded(0);
@@ -213,7 +210,17 @@ impl Queued {
         });
 
         let project_path = project_path.canonicalize()?;
+
+        // Currently returns the first found shuttle service in a given workspace.
         let runtime = build_deployment(&project_path, tx.clone()).await?;
+
+        // Get the Secrets.toml from the shuttle service in the workspace.
+        let secrets = get_secrets(&runtime.working_directory).await?;
+
+        // Set the secrets from the service, ignoring any Secrets.toml if it is in the root of the workspace.
+        // TODO: refactor this when we support starting multiple services. Do we want to set secrets in the
+        // workspace root?
+        set_secrets(secrets, &self.service_id, secret_recorder).await?;
 
         if self.will_run_tests {
             info!(

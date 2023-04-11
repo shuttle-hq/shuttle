@@ -148,6 +148,10 @@ cargo run --manifest-path ../../../Cargo.toml --bin cargo-shuttle -- logs
 The steps outlined above starts all the services used by shuttle locally (ie. both `gateway` and `deployer`). However, sometimes you will want to quickly test changes to `deployer` only. To do this replace `make up` with the following:
 
 ```bash
+# first generate the local docker-compose file
+make docker-compose.rendered.yml
+
+# then run it
 docker compose -f docker-compose.rendered.yml up provisioner
 ```
 
@@ -178,13 +182,14 @@ config (which will be a file named `config.toml` in a directory named `shuttle` 
 echo "api_key = '<jwt>'" > ~/.config/shuttle/config.toml
 ```
 
-> Note: if you have [`jq`](https://github.com/stedolan/jq/wiki/Installation) installed you can combine the two
->above commands into the following:
->```bash
->curl -s -H "Authorization: Bearer test-key" localhost:8008/auth/key \
->    | jq -r '.token' \
->    | read token; echo "api_key='$token'" > ~/.config/shuttle/config.toml
->```
+> Note: The JWT will expire in 15 minutes, at which point you need to run the commands again.
+> If you have [`jq`](https://github.com/stedolan/jq/wiki/Installation) installed you can combine
+> the two above commands into the following:
+> ```bash
+> curl -s -H "Authorization: Bearer test-key" localhost:8008/auth/key \
+>     | jq -r '.token' \
+>     | read token; echo "api_key='$token'" > ~/.config/shuttle/config.toml
+> ```
 
 Finally we need to comment out the admin layer in the deployer handlers. So in `deployer/handlers/mod.rs`,
 in the `make_router` function comment out this line: `.layer(AdminSecretLayer::new(admin_secret))`.

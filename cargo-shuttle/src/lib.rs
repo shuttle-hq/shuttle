@@ -853,8 +853,18 @@ impl Shuttle {
         {
             let dir_entry = dir_entry.context("get directory entry")?;
 
-            // It's not possible to add a directory to an archive
             if dir_entry.file_type().context("get file type")?.is_dir() {
+                let secrets_path = dir_entry.path().join("Secrets.toml");
+
+                // Make sure to add any `Secrets.toml` files in the subdirectories.
+                if secrets_path.exists() {
+                    let path = secrets_path
+                        .strip_prefix(base_directory)
+                        .context("strip the base of the archive entry")?;
+                    tar.append_path_with_name(secrets_path.clone(), path)?;
+                }
+
+                // It's not possible to add a directory to an archive
                 continue;
             }
 
@@ -867,7 +877,7 @@ impl Shuttle {
                 .context("archive entry")?;
         }
 
-        // Make sure to add any `Secrets.toml` files
+        // Make sure to add any `Secrets.toml` files in the root of the workspace.
         let secrets_path = self.ctx.working_directory().join("Secrets.toml");
         if secrets_path.exists() {
             tar.append_path_with_name(secrets_path, Path::new("shuttle").join("Secrets.toml"))?;

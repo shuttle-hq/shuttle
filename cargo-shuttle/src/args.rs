@@ -7,13 +7,15 @@ use std::{
 
 use anyhow::Context;
 use cargo_metadata::MetadataCommand;
-use clap::builder::{OsStringValueParser, PossibleValue, TypedValueParser};
-use clap::Parser;
+use clap::{
+    builder::{OsStringValueParser, PossibleValue, TypedValueParser},
+    Parser, ValueEnum,
+};
 use clap_complete::Shell;
 use shuttle_common::{models::project::IDLE_MINUTES, project::ProjectName};
 use uuid::Uuid;
 
-use crate::init::Framework;
+use crate::init::Template;
 
 #[derive(Parser)]
 #[command(
@@ -27,12 +29,12 @@ use crate::init::Framework;
         .hide(true))
 )]
 pub struct Args {
-    /// Run this command against the API at the supplied URL
-    /// (allows targeting a custom deployed instance for this command only)
-    #[arg(long, env = "SHUTTLE_API")]
-    pub api_url: Option<String>,
     #[command(flatten)]
     pub project_args: ProjectArgs,
+    /// Run this command against the API at the supplied URL
+    /// (allows targeting a custom deployed instance for this command only, mainly for development)
+    #[arg(long, env = "SHUTTLE_API")]
+    pub api_url: Option<String>,
     #[command(subcommand)]
     pub cmd: Command,
 }
@@ -41,7 +43,7 @@ pub struct Args {
 #[derive(Parser, Debug)]
 pub struct ProjectArgs {
     /// Specify the working directory
-    #[arg(global = true, long, default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_path))]
+    #[arg(global = true, long, default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_init_path))]
     pub working_directory: PathBuf,
     /// Specify the name of the project (overrides crate name)
     #[arg(global = true, long)]
@@ -85,27 +87,19 @@ impl ProjectArgs {
 
 #[derive(Parser)]
 pub enum Command {
+    /// Create a new shuttle project
+    Init(InitArgs),
+    /// Run a shuttle service locally
+    Run(RunArgs),
     /// Deploy a shuttle service
     Deploy(DeployArgs),
     /// Manage deployments of a shuttle service
     #[command(subcommand)]
     Deployment(DeploymentCommand),
-    /// Manage resources of a shuttle project
-    #[command(subcommand)]
-    Resource(ResourceCommand),
-    /// Create a new shuttle project
-    Init(InitArgs),
-    /// Generate shell completions
-    Generate {
-        /// Which shell
-        #[arg(short, long, env, default_value_t = Shell::Bash)]
-        shell: Shell,
-        /// Output to a file (stdout by default)
-        #[arg(short, long, env)]
-        output: Option<PathBuf>,
-    },
     /// View the status of a shuttle service
     Status,
+    /// Stop this shuttle service
+    Stop,
     /// View the logs of a deployment in this shuttle service
     Logs {
         /// Deployment ID to get logs for. Defaults to currently running deployment
@@ -115,23 +109,31 @@ pub enum Command {
         /// Follow log output
         follow: bool,
     },
-    /// Remove cargo build artifacts in the shuttle environment
-    Clean,
-    /// Stop this shuttle service
-    Stop,
+    /// List or manage projects on shuttle
+    #[command(subcommand)]
+    Project(ProjectCommand),
+    /// Manage resources of a shuttle project
+    #[command(subcommand)]
+    Resource(ResourceCommand),
     /// Manage secrets for this shuttle service
     Secrets,
+    /// Remove cargo build artifacts in the shuttle environment
+    Clean,
     /// Login to the shuttle platform
     Login(LoginArgs),
     /// Log out of the shuttle platform
     Logout,
-    /// Run a shuttle service locally
-    Run(RunArgs),
+    /// Generate shell completions
+    Generate {
+        /// Which shell
+        #[arg(short, long, env, default_value_t = Shell::Bash)]
+        shell: Shell,
+        /// Output to a file (stdout by default)
+        #[arg(short, long, env)]
+        output: Option<PathBuf>,
+    },
     /// Open an issue on GitHub and provide feedback
     Feedback,
-    /// List or manage projects on shuttle
-    #[command(subcommand)]
-    Project(ProjectCommand),
 }
 
 #[derive(Parser)]
@@ -154,11 +156,7 @@ pub enum ResourceCommand {
 #[derive(Parser)]
 pub enum ProjectCommand {
     /// Create an environment for this project on shuttle
-    Start {
-        #[arg(long, default_value_t = IDLE_MINUTES)]
-        /// How long to wait before putting the project in an idle state due to inactivity. 0 means the project will never idle
-        idle_minutes: u64,
-    },
+    Start(ProjectStartArgs),
     /// Check the status of this project's environment on shuttle
     Status {
         #[arg(short, long)]
@@ -168,17 +166,21 @@ pub enum ProjectCommand {
     /// Destroy this project's environment (container) on shuttle
     Stop,
     /// Destroy and create an environment for this project on shuttle
-    Restart {
-        #[arg(long, default_value_t = IDLE_MINUTES)]
-        /// How long to wait before putting the project in an idle state due to inactivity. 0 means the project will never idle
-        idle_minutes: u64,
-    },
+    Restart(ProjectStartArgs),
     /// List all projects belonging to the calling account
     List {
         #[arg(long)]
         /// Return projects filtered by a given project status
         filter: Option<String>,
     },
+}
+
+#[derive(Parser, Debug)]
+pub struct ProjectStartArgs {
+    #[arg(long, default_value_t = IDLE_MINUTES)]
+    /// How long to wait before putting the project in an idle state due to inactivity.
+    /// 0 means the project will never idle
+    pub idle_minutes: u64,
 }
 
 #[derive(Parser, Clone, Debug)]
@@ -213,90 +215,80 @@ pub struct RunArgs {
 
 #[derive(Parser, Debug)]
 pub struct InitArgs {
-    /// Initialize with actix-web framework
-    #[arg(long="actix_web", conflicts_with_all = &["axum", "rocket", "tide", "tower", "poem", "serenity", "poise", "warp", "salvo", "thruster", "no_framework"])]
-    pub actix_web: bool,
-    /// Initialize with axum framework
-    #[arg(long, conflicts_with_all = &["actix_web","rocket", "tide", "tower", "poem", "serenity", "poise", "warp", "salvo", "thruster", "no_framework"])]
-    pub axum: bool,
-    /// Initialize with rocket framework
-    #[arg(long, conflicts_with_all = &["actix_web","axum", "tide", "tower", "poem", "serenity", "poise", "warp", "salvo", "thruster", "no_framework"])]
-    pub rocket: bool,
-    /// Initialize with tide framework
-    #[arg(long, conflicts_with_all = &["actix_web","axum", "rocket", "tower", "poem", "serenity", "poise", "warp", "salvo", "thruster", "no_framework"])]
-    pub tide: bool,
-    /// Initialize with tower framework
-    #[arg(long, conflicts_with_all = &["actix_web","axum", "rocket", "tide", "poem", "serenity", "poise", "warp", "salvo", "thruster", "no_framework"])]
-    pub tower: bool,
-    /// Initialize with poem framework
-    #[arg(long, conflicts_with_all = &["actix_web","axum", "rocket", "tide", "tower", "serenity", "poise", "warp", "salvo", "thruster", "no_framework"])]
-    pub poem: bool,
-    /// Initialize with salvo framework
-    #[arg(long, conflicts_with_all = &["actix_web","axum", "rocket", "tide", "tower", "poem", "warp", "serenity", "poise", "thruster", "no_framework"])]
-    pub salvo: bool,
-    /// Initialize with serenity framework
-    #[arg(long, conflicts_with_all = &["actix_web","axum", "rocket", "tide", "tower", "poem", "warp", "poise", "salvo", "thruster", "no_framework"])]
-    pub serenity: bool,
-    /// Initialize with poise framework
-    #[clap(long, conflicts_with_all = &["actix_web","axum", "rocket", "tide", "tower", "poem", "warp", "serenity", "salvo", "thruster", "no_framework"])]
-    pub poise: bool,
-    /// Initialize with warp framework
-    #[arg(long, conflicts_with_all = &["actix_web","axum", "rocket", "tide", "tower", "poem", "serenity", "poise", "salvo", "thruster", "no_framework"])]
-    pub warp: bool,
-    /// Initialize with thruster framework
-    #[arg(long, conflicts_with_all = &["actix_web","axum", "rocket", "tide", "tower", "poem", "warp", "salvo", "serenity", "poise", "no_framework"])]
-    pub thruster: bool,
-    /// Initialize without a framework
-    #[arg(long, conflicts_with_all = &["actix_web","axum", "rocket", "tide", "tower", "poem", "warp", "salvo", "serenity", "poise", "thruster"])]
-    pub no_framework: bool,
+    /// Initialize the project with a template
+    #[arg(long, short, value_enum)]
+    pub template: Option<InitTemplateArg>,
     /// Whether to create the environment for this project on shuttle
     #[arg(long)]
-    pub new: bool,
+    pub create_env: bool,
     #[command(flatten)]
     pub login_args: LoginArgs,
     /// Path to initialize a new shuttle project
-    #[arg(default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_init_path) )]
+    #[arg(default_value = ".", value_parser = OsStringValueParser::new().try_map(parse_init_path))]
     pub path: PathBuf,
 }
 
+#[derive(ValueEnum, Clone, Debug)]
+pub enum InitTemplateArg {
+    /// Initialize with actix-web framework
+    ActixWeb,
+    /// Initialize with axum framework
+    Axum,
+    /// Initialize with poem framework
+    Poem,
+    /// Initialize with poise framework
+    Poise,
+    /// Initialize with rocket framework
+    Rocket,
+    /// Initialize with salvo framework
+    Salvo,
+    /// Initialize with serenity framework
+    Serenity,
+    /// Initialize with tide framework
+    Tide,
+    /// Initialize with thruster framework
+    Thruster,
+    /// Initialize with tower framework
+    Tower,
+    /// Initialize with warp framework
+    Warp,
+    /// Initialize with no template
+    None,
+}
+
 impl InitArgs {
-    pub fn framework(&self) -> Option<Framework> {
-        if self.actix_web {
-            Some(Framework::ActixWeb)
-        } else if self.axum {
-            Some(Framework::Axum)
-        } else if self.rocket {
-            Some(Framework::Rocket)
-        } else if self.tide {
-            Some(Framework::Tide)
-        } else if self.tower {
-            Some(Framework::Tower)
-        } else if self.poem {
-            Some(Framework::Poem)
-        } else if self.salvo {
-            Some(Framework::Salvo)
-        } else if self.poise {
-            Some(Framework::Poise)
-        } else if self.serenity {
-            Some(Framework::Serenity)
-        } else if self.warp {
-            Some(Framework::Warp)
-        } else if self.thruster {
-            Some(Framework::Thruster)
-        } else if self.no_framework {
-            Some(Framework::None)
-        } else {
-            None
-        }
+    /// `None` -> No template chosen, ask for it
+    ///
+    /// `Some(Template::None)` -> Init with a blank cargo project
+    pub fn framework(&self) -> Option<Template> {
+        // Why separate enums?
+        // Future might have more options that pre-defined templates
+        self.template.as_ref().map(|t| {
+            use InitTemplateArg::*;
+            match t {
+                ActixWeb => Template::ActixWeb,
+                Axum => Template::Axum,
+                Poem => Template::Poem,
+                Poise => Template::Poise,
+                Rocket => Template::Rocket,
+                Salvo => Template::Salvo,
+                Serenity => Template::Serenity,
+                Tide => Template::Tide,
+                Thruster => Template::Thruster,
+                Tower => Template::Tower,
+                Warp => Template::Warp,
+                None => Template::None,
+            }
+        })
     }
 }
 
-// Helper function to parse and return the absolute path
+/// Helper function to parse and return the absolute path
 fn parse_path(path: OsString) -> Result<PathBuf, String> {
     dunce::canonicalize(&path).map_err(|e| format!("could not turn {path:?} into a real path: {e}"))
 }
 
-// Helper function to parse, create if not exists, and return the absolute path
+/// Helper function to parse, create if not exists, and return the absolute path
 pub(crate) fn parse_init_path(path: OsString) -> Result<PathBuf, io::Error> {
     // Create the directory if does not exist
     create_dir_all(&path)?;
@@ -311,56 +303,33 @@ pub(crate) fn parse_init_path(path: OsString) -> Result<PathBuf, io::Error> {
 
 #[cfg(test)]
 mod tests {
-    use strum::IntoEnumIterator;
-
     use crate::tests::path_from_workspace_root;
 
     use super::*;
 
-    fn init_args_factory(framework: &str) -> InitArgs {
-        let mut init_args = InitArgs {
-            actix_web: false,
-            axum: false,
-            rocket: false,
-            tide: false,
-            tower: false,
-            poem: false,
-            salvo: false,
-            serenity: false,
-            poise: false,
-            warp: false,
-            thruster: false,
-            no_framework: false,
-            new: false,
+    #[test]
+    fn test_init_args_framework() {
+        let init_args = InitArgs {
+            template: Some(InitTemplateArg::Axum),
+            create_env: false,
             login_args: LoginArgs { api_key: None },
             path: PathBuf::new(),
         };
-
-        match framework {
-            "actix-web" => init_args.actix_web = true,
-            "axum" => init_args.axum = true,
-            "rocket" => init_args.rocket = true,
-            "tide" => init_args.tide = true,
-            "tower" => init_args.tower = true,
-            "poem" => init_args.poem = true,
-            "salvo" => init_args.salvo = true,
-            "serenity" => init_args.serenity = true,
-            "poise" => init_args.poise = true,
-            "warp" => init_args.warp = true,
-            "thruster" => init_args.thruster = true,
-            "none" => init_args.no_framework = true,
-            _ => unreachable!(),
-        }
-
-        init_args
-    }
-
-    #[test]
-    fn test_init_args_framework() {
-        for framework in Framework::iter() {
-            let args = init_args_factory(&framework.to_string());
-            assert_eq!(args.framework(), Some(framework));
-        }
+        assert_eq!(init_args.framework(), Some(Template::Axum));
+        let init_args = InitArgs {
+            template: Some(InitTemplateArg::None),
+            create_env: false,
+            login_args: LoginArgs { api_key: None },
+            path: PathBuf::new(),
+        };
+        assert_eq!(init_args.framework(), Some(Template::None));
+        let init_args = InitArgs {
+            template: None,
+            create_env: false,
+            login_args: LoginArgs { api_key: None },
+            path: PathBuf::new(),
+        };
+        assert_eq!(init_args.framework(), None);
     }
 
     #[test]

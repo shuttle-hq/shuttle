@@ -106,8 +106,8 @@ This should generate the following dependency in `Cargo.toml`:
 
 ```toml
 rocket = "0.5.0-rc.2"
-shuttle-rocket = { version = "0.13.0" }
-shuttle-runtime = { version = "0.13.0" }
+shuttle-rocket = { version = "0.14.0" }
+shuttle-runtime = { version = "0.14.0" }
 tokio = { version = "1.26.0" }
 ```
 
@@ -166,7 +166,7 @@ cargo shuttle login --api-key <your-api-key-from-browser>
 To deploy your shuttle project to the cloud, run:
 
 ```sh
-cargo shuttle project new
+cargo shuttle project start
 cargo shuttle deploy
 ```
 

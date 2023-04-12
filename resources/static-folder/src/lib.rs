@@ -32,10 +32,16 @@ impl<'a> StaticFolder<'a> {
 impl<'a> ResourceBuilder<PathBuf> for StaticFolder<'a> {
     const TYPE: Type = Type::StaticFolder;
 
+    type Config = &'a str;
+
     type Output = PathBuf;
 
     fn new() -> Self {
         Self { folder: "static" }
+    }
+
+    fn config(&self) -> &&'a str {
+        &self.folder
     }
 
     async fn output(
@@ -56,7 +62,7 @@ impl<'a> ResourceBuilder<PathBuf> for StaticFolder<'a> {
 
         trace!(input_directory = ?input_dir, "got input directory");
 
-        match input_dir.canonicalize() {
+        match dunce::canonicalize(input_dir.clone()) {
             Ok(canonical_path) if canonical_path != input_dir => return Err(Error::TransversedUp)?,
             Ok(_) => {
                 // The path did not change to outside the crate's build folder

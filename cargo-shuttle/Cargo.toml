@@ -1,6 +1,6 @@
 [package]
 name = "cargo-shuttle"
-version = "0.13.0"
+version = "0.14.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -10,8 +10,7 @@ homepage = "https://www.shuttle.rs"
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
-bollard = "0.13.0"
-cargo = { workspace = true }
+bollard = { workspace = true }
 cargo-edit = { version = "0.11.9", features = ["cli"] }
 cargo_metadata = { workspace = true }
 chrono = { workspace = true }
@@ -56,6 +55,7 @@ tracing-subscriber = { workspace = true, features = [
 url = "2.3.1"
 uuid = { workspace = true, features = ["v4"] }
 webbrowser = "0.8.2"
+semver = "1.0.17"
 
 [dependencies.shuttle-common]
 workspace = true
@@ -65,7 +65,7 @@ features = ["models"]
 workspace = true
 
 [dependencies.shuttle-secrets]
-version = "0.13.0"
+version = "0.14.0"
 path = "../resources/secrets"
 
 [dependencies.shuttle-service]

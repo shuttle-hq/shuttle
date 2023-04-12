@@ -1,5 +1,16 @@
 # Contributing
 
+## Tenets
+
+Our goal with shuttle open-source maintenance is to foster a thriving, collaborative, and sustainable ecosystem around the project, which allows it to continue to grow and evolve over time.
+
+We will strive to adhere to the following tenets:
+
+1. Encourage collaboration: One of the primary objectives of maintenance is to encourage collaboration among contributors. This can be achieved by creating an atmosphere where people feel safe and encouraged to ask questions on PRs and issues. Contributors should feel comfortable asking for clarification, discussing issues, and proposing solutions without fear of criticism or hostility.
+2. Communicate transparently: Another objective of maintenance is to ensure transparent communication about the project's goals, progress, and roadmap. This includes providing regular updates on project status, notifying contributors about relevant changes, and communicating expectations for contributions. This creates an environment where people feel they are in the know of things, which helps them feel invested in the project's success.
+3. Recognize contributions: Another important objective of maintenance is to recognize contributors' efforts and contributions. This can be achieved by acknowledging contributions publicly, providing feedback and support, and actively engaging with contributors. This creates an environment where people feel their efforts were helpful and that their contributions are valued.
+4. Provide support: Finally, an important objective of maintenance is to provide support to contributors when needed. This includes providing guidance on how to contribute, responding to questions and concerns, and helping contributors resolve issues. This creates an environment where people feel they will get help when needed, which helps build trust and fosters collaboration.
+
 ## Raise an Issue
 
 Raising [issues](https://github.com/shuttle-hq/shuttle/issues) is encouraged.
@@ -109,7 +120,7 @@ start a deployer container:
 
 ```bash
 # the --manifest-path is used to locate the root of the shuttle workspace
-cargo run --manifest-path ../../../Cargo.toml --bin cargo-shuttle -- project new
+cargo run --manifest-path ../../../Cargo.toml --bin cargo-shuttle -- project start
 ```
 
 Deploy the example:
@@ -137,35 +148,94 @@ cargo run --manifest-path ../../../Cargo.toml --bin cargo-shuttle -- logs
 The steps outlined above starts all the services used by shuttle locally (ie. both `gateway` and `deployer`). However, sometimes you will want to quickly test changes to `deployer` only. To do this replace `make up` with the following:
 
 ```bash
+# first generate the local docker-compose file
+make docker-compose.rendered.yml
+
+# then run it
 docker compose -f docker-compose.rendered.yml up provisioner
 ```
 
-This prevents `gateway` from starting up. Now you can start deployer only using:
+This starts the provisioner and the auth service, while preventing `gateway` from starting up. Next up we need to
+insert an admin user into the `auth` state using the ID of the `auth` container and the auth CLI `init` command:
 
 ```bash
-provisioner_address=$(docker inspect --format '{{(index .NetworkSettings.Networks "shuttle_default").IPAddress}}' shuttle_prod_hello-world-rocket-app_run)
-cargo run -p shuttle-deployer -- --provisioner-address $provisioner_address --provisioner-port 8000 --proxy-fqdn local.rs --admin-secret test-key --project <project_name>
+AUTH_CONTAINER_ID=$(docker ps -aqf "name=shuttle-auth") \
+    docker exec $AUTH_CONTAINER_ID ./usr/local/bin/service \
+    --state=/var/lib/shuttle-auth \
+    init --name admin --key test-key
+```
+
+Before we can run commands against a local deployer, we need to get a valid JWT and set it in our
+`.config/shuttle/config.toml` as our `api_key`. By running the following curl command, we will request
+that our api-key in the `Authorization` header be converted to a JWT, which will be returned in the response:
+
+```bash
+curl -H "Authorization: Bearer test-key" localhost:8008/auth/key
+```
+
+Now copy the `token` value (just the value, not the key) from the curl response, and write it to your shuttle
+config (which will be a file named `config.toml` in a directory named `shuttle` in one of 
+[these places](https://docs.rs/dirs/latest/dirs/fn.config_dir.html) depending on your OS).
+
+```bash
+# replace <jwt> with the token from the previous command
+echo "api_key = '<jwt>'" > ~/.config/shuttle/config.toml
+```
+
+> Note: The JWT will expire in 15 minutes, at which point you need to run the commands again.
+> If you have [`jq`](https://github.com/stedolan/jq/wiki/Installation) installed you can combine
+> the two above commands into the following:
+> ```bash
+> curl -s -H "Authorization: Bearer test-key" localhost:8008/auth/key \
+>     | jq -r '.token' \
+>     | read token; echo "api_key='$token'" > ~/.config/shuttle/config.toml
+> ```
+
+Finally we need to comment out the admin layer in the deployer handlers. So in `deployer/handlers/mod.rs`,
+in the `make_router` function comment out this line: `.layer(AdminSecretLayer::new(admin_secret))`.
+
+And that's it, we're ready to start our deployer!
+
+```bash
+cargo run -p shuttle-deployer -- --provisioner-address http://localhost:8000 --proxy-fqdn local.rs --admin-secret test-key --project <project_name>
 ```
 
 The `--admin-secret` can safely be changed to your api-key to make testing easier. While `<project_name>` needs to match the name of the project that will be deployed to this deployer. This is the `Cargo.toml` or `Shuttle.toml` name for the project.
 
 ### Using Podman instead of Docker
 
-If you are using Podman over Docker, then expose a rootless socket of Podman using the following command:
+If you want to use Podman instead of Docker, you can configure the build process with environment variables.
 
-```bash
-podman system service --time=0 unix:///tmp/podman.sock
+Use Podman for building container images by setting `DOCKER_BUILD`.
+```
+export DOCKER_BUILD=podman build --network host
 ```
 
-Now make docker-compose use this socket by setting the following environment variable:
-
-```bash
-export DOCKER_HOST=unix:///tmp/podman.sock
+The shuttle containers expect access to a Docker-compatible API over a socket. Expose a rootless Podman socket either
+- [with systemd](https://github.com/containers/podman/tree/main/contrib/systemd), if your system supports it,
+    ```sh
+    systemctl start --user podman.service
+    ```
+- or by [running the server directly](https://docs.podman.io/en/latest/markdown/podman-system-service.1.html).
+    ```sh
+    podman system service --time=0 unix://$XDG_RUNTIME_DIR/podman.sock
+    ```
+Then set `DOCKER_SOCK` to the *absolute path* of the socket (no protocol prefix).
+```sh
+export DOCKER_SOCK=$(podman system info -f "{{.Host.RemoteSocket.Path}}")
 ```
 
-shuttle can now be run locally using the steps shown earlier.
+Finally, configure Docker Compose. You can either
+- configure Docker Compose to use the Podman socket by setting `DOCKER_HOST` (including the `unix://` protocol prefix),
+    ```sh
+    export DOCKER_HOST=unix://$(podman system info -f "{{.Host.RemoteSocket.Path}}")
+    ```
+- or install [Podman Compose](https://github.com/containers/podman-compose) and use it by setting `DOCKER_COMPOSE`.
+    ```sh
+    export DOCKER_COMPOSE=podman-compose
+    ```
 
-> Note: Testing the `gateway` with a rootless Podman does not work since Podman does not allow access to the `deployer` containers via IP address!
+If you are using `nftables`, even with `iptables-nft`, it may be necessary to install and configure the [nftables CNI plugins](https://github.com/greenpau/cni-plugins)
 
 ## Running Tests
 

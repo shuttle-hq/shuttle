@@ -25,9 +25,7 @@ async fn cargo_shuttle_command(
 }
 
 #[tokio::test]
-#[should_panic(
-    expected = "Could not locate the root of a cargo project. Are you inside a cargo project? You can also use `--working-directory` to locate your cargo project."
-)]
+#[should_panic(expected = "failed to start `cargo metadata`: No such file or directory")]
 async fn fails_if_working_directory_does_not_exist() {
     cargo_shuttle_command(Command::Status, "/path_that_does_not_exist")
         .await
@@ -35,9 +33,7 @@ async fn fails_if_working_directory_does_not_exist() {
 }
 
 #[tokio::test]
-#[should_panic(
-    expected = "Could not locate the root of a cargo project. Are you inside a cargo project? You can also use `--working-directory` to locate your cargo project."
-)]
+#[should_panic(expected = "could not find `Cargo.toml` in `/` or any parent directory")]
 async fn fails_if_working_directory_not_part_of_cargo_workspace() {
     cargo_shuttle_command(Command::Status, "/").await.unwrap();
 }

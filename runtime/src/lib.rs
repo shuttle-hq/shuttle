@@ -27,9 +27,9 @@
 //! be a binary crate with a few dependencies including `shuttle-runtime` and `shuttle-axum`.
 //!
 //! ```toml
-//! shuttle-runtime = "0.13.0"
+//! shuttle-runtime = "0.14.0"
 //! axum = "0.6.10"
-//! shuttle-axum = "0.13.0"
+//! shuttle-axum = "0.14.0"
 //! tokio = "1.26"
 //! ```
 //!
@@ -84,7 +84,7 @@
 //! now if you did in in the `cargo shuttle init` flow.
 //!
 //! ```bash
-//! $ cargo shuttle project new
+//! $ cargo shuttle project start
 //! ```
 //!
 //! Then, deploy the service with:
@@ -113,7 +113,7 @@
 //! `runtime-tokio-native-tls` and `postgres` features inside `Cargo.toml`:
 //!
 //! ```toml
-//! shuttle-shared-db = { version = "0.13.0", features = ["postgres"] }
+//! shuttle-shared-db = { version = "0.14.0", features = ["postgres"] }
 //! sqlx = { version = "0.6.2", features = ["runtime-tokio-native-tls", "postgres"] }
 //! ```
 //!

@@ -859,7 +859,10 @@ impl Shuttle {
 
             // Make sure to add any `Secrets.toml` files.
             if secrets_path.exists() {
-                tar.append_path_with_name(secrets_path, Path::new("shuttle").join("Secrets.toml"))?;
+                let path = secrets_path
+                    .strip_prefix(base_directory)
+                    .context("strip the base of the archive entry")?;
+                tar.append_path_with_name(secrets_path.clone(), path)?;
             }
 
             // It's not possible to add a directory to an archive
@@ -874,6 +877,11 @@ impl Shuttle {
 
             tar.append_path_with_name(dir_entry.path(), path)
                 .context("archive entry")?;
+        }
+
+        let secrets_path = self.ctx.working_directory().join("Secrets.toml");
+        if secrets_path.exists() {
+            tar.append_path_with_name(secrets_path, Path::new("shuttle").join("Secrets.toml"))?;
         }
 
         let encoder = tar.into_inner().context("get encoder from tar archive")?;

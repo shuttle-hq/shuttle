@@ -885,10 +885,7 @@ impl Shuttle {
 
         let secrets_path = self.ctx.working_directory().join("Secrets.toml");
         if secrets_path.exists() {
-            entries.insert(
-                secrets_path.clone(),
-                Path::new("shuttle").join("Secrets.toml"),
-            );
+            entries.insert(secrets_path, Path::new("shuttle").join("Secrets.toml"));
         }
 
         // Append all the entries to the archive.

@@ -848,6 +848,10 @@ impl Shuttle {
             .build()
             .context("build an override")?;
 
+        // Add all the entries to a map to avoid duplication of the Secrets.toml file
+        // if it is in the root of the workspace.
+        let mut entries = HashMap::new();
+
         for dir_entry in WalkBuilder::new(working_directory)
             .hidden(false)
             .overrides(overrides)
@@ -857,16 +861,17 @@ impl Shuttle {
 
             let secrets_path = dir_entry.path().join("Secrets.toml");
 
-            // Make sure to add any `Secrets.toml` files.
-            if secrets_path.exists() {
-                let path = secrets_path
-                    .strip_prefix(base_directory)
-                    .context("strip the base of the archive entry")?;
-                tar.append_path_with_name(secrets_path.clone(), path)?;
-            }
-
-            // It's not possible to add a directory to an archive
             if dir_entry.file_type().context("get file type")?.is_dir() {
+                // Make sure to add any `Secrets.toml` files.
+                if secrets_path.exists() {
+                    let path = secrets_path
+                        .strip_prefix(base_directory)
+                        .context("strip the base of the archive entry")?
+                        .to_path_buf();
+                    entries.insert(secrets_path.clone(), path.clone());
+                }
+
+                // It's not possible to add a directory to an archive
                 continue;
             }
 
@@ -875,13 +880,20 @@ impl Shuttle {
                 .strip_prefix(base_directory)
                 .context("strip the base of the archive entry")?;
 
-            tar.append_path_with_name(dir_entry.path(), path)
-                .context("archive entry")?;
+            entries.insert(dir_entry.path().to_path_buf(), path.to_path_buf());
         }
 
         let secrets_path = self.ctx.working_directory().join("Secrets.toml");
         if secrets_path.exists() {
-            tar.append_path_with_name(secrets_path, Path::new("shuttle").join("Secrets.toml"))?;
+            entries.insert(
+                secrets_path.clone(),
+                Path::new("shuttle").join("Secrets.toml"),
+            );
+        }
+
+        // Append all the entries to the archive.
+        for (k, v) in entries {
+            tar.append_path_with_name(k, v)?;
         }
 
         let encoder = tar.into_inner().context("get encoder from tar archive")?;

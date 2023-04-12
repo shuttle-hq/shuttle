@@ -120,7 +120,7 @@ start a deployer container:
 
 ```bash
 # the --manifest-path is used to locate the root of the shuttle workspace
-cargo run --manifest-path ../../../Cargo.toml --bin cargo-shuttle -- project new
+cargo run --manifest-path ../../../Cargo.toml --bin cargo-shuttle -- project start
 ```
 
 Deploy the example:

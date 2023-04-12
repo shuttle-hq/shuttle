@@ -309,7 +309,7 @@ impl Services {
     ///
     /// * `target` - A string that describes the test target
     /// * `example_path` - Path to a specific example within the examples dir, this is where
-    ///   `project new` and `deploy` will run
+    ///   `project start` and `deploy` will run
     /// * `color` - a preferably unique `crossterm::style::Color` to distinguish test logs
     pub fn new_docker<D, C>(target: D, example_path: D, color: C) -> Self
     where

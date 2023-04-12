@@ -84,7 +84,7 @@
 //! now if you did in in the `cargo shuttle init` flow.
 //!
 //! ```bash
-//! $ cargo shuttle project new
+//! $ cargo shuttle project start
 //! ```
 //!
 //! Then, deploy the service with:

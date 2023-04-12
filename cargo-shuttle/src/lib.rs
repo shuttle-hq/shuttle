@@ -534,7 +534,7 @@ impl Shuttle {
                 runtime::StorageManagerType::WorkingDir(working_directory.to_path_buf()),
                 &format!("http://localhost:{provisioner_port}"),
                 None,
-                run_args.port + 1 + i as u16,
+                run_args.port - (1 + i) as u16,
                 runtime_path,
             )
             .await

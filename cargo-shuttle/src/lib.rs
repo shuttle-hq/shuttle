@@ -859,10 +859,7 @@ impl Shuttle {
 
             // Make sure to add any `Secrets.toml` files.
             if secrets_path.exists() {
-                let path = secrets_path
-                    .strip_prefix(base_directory)
-                    .context("strip the base of the archive entry")?;
-                tar.append_path_with_name(secrets_path.clone(), path)?;
+                tar.append_path_with_name(secrets_path, Path::new("shuttle").join("Secrets.toml"))?;
             }
 
             // It's not possible to add a directory to an archive

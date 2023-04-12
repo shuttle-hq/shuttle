@@ -12,7 +12,7 @@ use crossbeam_channel::Sender;
 use opentelemetry::global;
 use serde_json::json;
 use shuttle_common::claims::Claim;
-use shuttle_service::builder::{build_crate, get_config, Runtime};
+use shuttle_service::builder::{build_workspace, get_config, BuiltService};
 use tokio::time::{sleep, timeout};
 use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -27,7 +27,7 @@ use std::time::Duration;
 
 use cargo::core::compiler::{CompileMode, MessageFormat};
 use cargo::core::Workspace;
-use cargo::ops::{CompileOptions, TestOptions};
+use cargo::ops::{self, CompileOptions, TestOptions};
 use flate2::read::GzDecoder;
 use tar::Archive;
 use tokio::fs;
@@ -172,9 +172,6 @@ impl Queued {
 
         extract_tar_gz_data(self.data.as_slice(), &project_path).await?;
 
-        let secrets = get_secrets(&project_path).await?;
-        set_secrets(secrets, &self.service_id, secret_recorder).await?;
-
         info!("Building deployment");
 
         let (tx, rx): (crossbeam_channel::Sender<Message>, _) = crossbeam_channel::bounded(0);
@@ -213,7 +210,17 @@ impl Queued {
         });
 
         let project_path = project_path.canonicalize()?;
+
+        // Currently returns the first found shuttle service in a given workspace.
         let runtime = build_deployment(&project_path, tx.clone()).await?;
+
+        // Get the Secrets.toml from the shuttle service in the workspace.
+        let secrets = get_secrets(&runtime.working_directory).await?;
+
+        // Set the secrets from the service, ignoring any Secrets.toml if it is in the root of the workspace.
+        // TODO: refactor this when we support starting multiple services. Do we want to set secrets in the
+        // workspace root?
+        set_secrets(secrets, &self.service_id, secret_recorder).await?;
 
         if self.will_run_tests {
             info!(
@@ -226,9 +233,9 @@ impl Queued {
 
         info!("Moving built executable");
 
-        store_executable(&storage_manager, &runtime, &self.id).await?;
+        store_executable(&storage_manager, runtime.executable_path.clone(), &self.id).await?;
 
-        let is_next = matches!(runtime, Runtime::Next(_));
+        let is_next = runtime.is_wasm;
 
         deployment_updater
             .set_is_next(&id, is_next)
@@ -331,10 +338,12 @@ async fn extract_tar_gz_data(data: impl Read, dest: impl AsRef<Path>) -> Result<
 async fn build_deployment(
     project_path: &Path,
     tx: crossbeam_channel::Sender<Message>,
-) -> Result<Runtime> {
-    build_crate(project_path, true, tx)
+) -> Result<BuiltService> {
+    let runtimes = build_workspace(project_path, true, tx)
         .await
-        .map_err(|e| Error::Build(e.into()))
+        .map_err(|e| Error::Build(e.into()))?;
+
+    Ok(runtimes[0].clone())
 }
 
 #[instrument(skip(project_path, tx))]
@@ -382,28 +391,25 @@ async fn run_pre_deploy_tests(
     // Build tests with a maximum of 4 workers.
     compile_opts.build_config.jobs = 4;
 
+    compile_opts.spec = ops::Packages::All;
+
     let opts = TestOptions {
         compile_opts,
         no_run: false,
         no_fail_fast: false,
     };
 
-    cargo::ops::run_tests(&ws, &opts, &[]).map_err(TestError::Failed)
+    ops::run_tests(&ws, &opts, &[]).map_err(TestError::Failed)
 }
 
 /// This will store the path to the executable for each runtime, which will be the users project with
 /// an embedded runtime for alpha, and a .wasm file for shuttle-next.
-#[instrument(skip(storage_manager, runtime, id))]
+#[instrument(skip(storage_manager, executable_path, id))]
 async fn store_executable(
     storage_manager: &ArtifactsStorageManager,
-    runtime: &Runtime,
+    executable_path: PathBuf,
     id: &Uuid,
 ) -> Result<()> {
-    let executable_path = match runtime {
-        Runtime::Next(path) => path,
-        Runtime::Alpha(path) => path,
-    };
-
     let new_executable_path = storage_manager.deployment_executable_path(id)?;
 
     fs::rename(executable_path, new_executable_path).await?;
@@ -416,7 +422,6 @@ mod tests {
     use std::{collections::BTreeMap, fs::File, io::Write, path::Path};
 
     use shuttle_common::storage_manager::ArtifactsStorageManager;
-    use shuttle_service::builder::Runtime;
     use tempfile::Builder;
     use tokio::fs;
     use uuid::Uuid;
@@ -554,12 +559,11 @@ ff0e55bda1ff01000000000000000000e0079c01ff12a55500280000",
         let build_p = storage_manager.builds_path().unwrap();
 
         let executable_path = build_p.join("xyz");
-        let runtime = Runtime::Alpha(executable_path.clone());
         let id = Uuid::new_v4();
 
         fs::write(&executable_path, "barfoo").await.unwrap();
 
-        super::store_executable(&storage_manager, &runtime, &id)
+        super::store_executable(&storage_manager, executable_path.clone(), &id)
             .await
             .unwrap();
 

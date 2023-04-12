@@ -10,7 +10,7 @@ pub mod provisioner {
         DatabaseReadyInfo,
     };
 
-    tonic::include_proto!("provisioner");
+    include!("generated/provisioner.rs");
 
     impl From<DatabaseResponse> for DatabaseReadyInfo {
         fn from(response: DatabaseResponse) -> Self {
@@ -118,7 +118,7 @@ pub mod runtime {
         WorkingDir(PathBuf),
     }
 
-    tonic::include_proto!("runtime");
+    include!("generated/runtime.rs");
 
     impl From<shuttle_common::log::Level> for LogLevel {
         fn from(level: shuttle_common::log::Level) -> Self {

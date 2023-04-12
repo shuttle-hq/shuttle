@@ -66,22 +66,20 @@ pub async fn start(loader: impl Loader<ProvisionerFactory> + Send + 'static) {
     // to clone it in the `ProvisionerFactory::new` call in the alpha runtime `load` method.
     // We might be able to optimize this by implementing clone for a Box<dyn StorageManager>
     // or by using static dispatch instead.
-    let storage_manager: Arc<dyn StorageManager> = match args.storage_manager_type {
-        args::StorageManagerType::Artifacts => {
-            Arc::new(ArtifactsStorageManager::new(args.storage_manager_path))
-        }
-        args::StorageManagerType::WorkingDir => {
-            Arc::new(WorkingDirStorageManager::new(args.storage_manager_path))
-        }
-    };
+    let (storage_manager, env): (Arc<dyn StorageManager>, Environment) =
+        match args.storage_manager_type {
+            args::StorageManagerType::Artifacts => (
+                Arc::new(ArtifactsStorageManager::new(args.storage_manager_path)),
+                Environment::Production,
+            ),
+            args::StorageManagerType::WorkingDir => (
+                Arc::new(WorkingDirStorageManager::new(args.storage_manager_path)),
+                Environment::Local,
+            ),
+        };
 
     let router = {
-        let alpha = Alpha::new(
-            provisioner_address,
-            loader,
-            storage_manager,
-            Environment::Local,
-        );
+        let alpha = Alpha::new(provisioner_address, loader, storage_manager, env);
 
         let svc = RuntimeServer::new(alpha);
         server_builder.add_service(svc)

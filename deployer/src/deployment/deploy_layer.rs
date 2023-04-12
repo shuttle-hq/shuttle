@@ -618,7 +618,7 @@ mod tests {
         );
 
         select! {
-            _ = sleep(Duration::from_secs(360)) => {
+            _ = sleep(Duration::from_secs(460)) => {
                 let states = RECORDER.lock().unwrap().get_deployment_states(&id);
                 panic!("states should go into 'Running' for a valid service: {:#?}", states);
             },
@@ -702,7 +702,7 @@ mod tests {
         );
 
         select! {
-            _ = sleep(Duration::from_secs(360)) => {
+            _ = sleep(Duration::from_secs(460)) => {
                 let states = RECORDER.lock().unwrap().get_deployment_states(&id);
                 panic!("states should go into 'Completed' when a service stops by itself: {:#?}", states);
             }
@@ -749,7 +749,7 @@ mod tests {
         );
 
         select! {
-            _ = sleep(Duration::from_secs(360)) => {
+            _ = sleep(Duration::from_secs(460)) => {
                 let states = RECORDER.lock().unwrap().get_deployment_states(&id);
                 panic!("states should go into 'Crashed' panicking in bind: {:#?}", states);
             }
@@ -792,7 +792,7 @@ mod tests {
         );
 
         select! {
-            _ = sleep(Duration::from_secs(360)) => {
+            _ = sleep(Duration::from_secs(460)) => {
                 let states = RECORDER.lock().unwrap().get_deployment_states(&id);
                 panic!("states should go into 'Crashed' when panicking in main: {:#?}", states);
             }

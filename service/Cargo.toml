@@ -1,6 +1,6 @@
 [package]
 name = "shuttle-service"
-version = "0.13.0"
+version = "0.14.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -21,6 +21,7 @@ serde = { workspace = true, features = ["derive"] }
 strfmt = "0.2.2"
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["sync"], optional = true }
+toml = { workspace = true, optional = true  }
 tracing = { workspace = true, optional = true }
 
 [dependencies.shuttle-codegen]
@@ -44,5 +45,6 @@ builder = [
     "crossbeam-channel",
     "pipe",
     "tokio",
+    "toml",
     "tracing",
 ]

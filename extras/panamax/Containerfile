@@ -1,6 +1,6 @@
 ARG PANAMAX_TAG=
 
-FROM panamaxrs/panamax:${PANAMAX_TAG}
+FROM docker.io/panamaxrs/panamax:${PANAMAX_TAG}
 
 COPY mirror.toml /mirror/mirror.toml
 

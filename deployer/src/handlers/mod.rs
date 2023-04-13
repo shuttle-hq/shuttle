@@ -12,9 +12,7 @@ use chrono::{TimeZone, Utc};
 use fqdn::FQDN;
 use futures::StreamExt;
 use hyper::Uri;
-use shuttle_common::backends::auth::{
-    AdminSecretLayer, AuthPublicKey, JwtAuthenticationLayer, ScopedLayer,
-};
+use shuttle_common::backends::auth::{AuthPublicKey, JwtAuthenticationLayer, ScopedLayer};
 use shuttle_common::backends::headers::XShuttleAccountName;
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
 use shuttle_common::claims::{Claim, Scope};
@@ -24,6 +22,8 @@ use shuttle_common::storage_manager::StorageManager;
 use shuttle_common::{request_span, LogItem};
 use shuttle_service::builder::clean_crate;
 use tracing::{debug, error, field, instrument, trace};
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 use uuid::Uuid;
 
 use crate::deployment::{DeploymentManager, Queued};
@@ -35,23 +35,56 @@ pub use {self::error::Error, self::error::Result};
 
 mod project;
 
+#[derive(OpenApi)]
+#[openapi(
+    paths(
+        get_services,
+        get_service,
+        create_service,
+        stop_service,
+        get_service_resources,
+        get_deployments,
+        get_deployment,
+        delete_deployment,
+        get_logs_subscribe,
+        get_logs,
+        get_secrets,
+        clean_project
+    ),
+    components(schemas(
+        shuttle_common::models::service::Summary,
+        shuttle_common::resource::Response,
+        shuttle_common::resource::Type,
+        shuttle_common::database::Type,
+        shuttle_common::database::AwsRdsEngine,
+        shuttle_common::database::SharedEngine,
+        shuttle_common::models::service::Response,
+        shuttle_common::models::deployment::Response,
+        shuttle_common::log::Item,
+        shuttle_common::models::secret::Response,
+        shuttle_common::log::Level,
+        shuttle_common::deployment::State
+    ))
+)]
+struct ApiDoc;
+
 pub async fn make_router(
     persistence: Persistence,
     deployment_manager: DeploymentManager,
     proxy_fqdn: FQDN,
-    admin_secret: String,
+    _admin_secret: String,
     auth_uri: Uri,
     project_name: ProjectName,
 ) -> Router {
     Router::new()
         .route(
             "/projects/:project_name/services",
-            get(list_services.layer(ScopedLayer::new(vec![Scope::Service]))),
+            get(get_services.layer(ScopedLayer::new(vec![Scope::Service]))),
         )
         .route(
             "/projects/:project_name/services/:service_name",
             get(get_service.layer(ScopedLayer::new(vec![Scope::Service])))
-                .post(post_service.layer(ScopedLayer::new(vec![Scope::ServiceCreate])))
+                .post(create_service.layer(ScopedLayer::new(vec![Scope::ServiceCreate])))
                 .delete(stop_service.layer(ScopedLayer::new(vec![Scope::ServiceCreate]))),
         )
         .route(
@@ -81,13 +114,13 @@ pub async fn make_router(
         )
         .route(
             "/projects/:project_name/clean",
-            post(post_clean.layer(ScopedLayer::new(vec![Scope::DeploymentPush]))),
+            post(clean_project.layer(ScopedLayer::new(vec![Scope::DeploymentPush]))),
         )
         .layer(Extension(persistence))
         .layer(Extension(deployment_manager))
         .layer(Extension(proxy_fqdn))
         .layer(JwtAuthenticationLayer::new(AuthPublicKey::new(auth_uri)))
-        .layer(AdminSecretLayer::new(admin_secret))
+        // .layer(AdminSecretLayer::new(admin_secret))
         // This route should be below the auth bearer since it does not need authentication
         .route("/projects/:project_name/status", get(get_status))
         .route_layer(from_extractor::<Metrics>())
@@ -110,11 +143,22 @@ pub async fn make_router(
             .build(),
         )
         .route_layer(from_extractor::<project::ProjectNameGuard>())
+        .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .layer(Extension(project_name))
 }
 
 #[instrument(skip_all)]
-async fn list_services(
+#[utoipa::path(
+    get,
+    path = "/projects/{project_name}/services",
+    responses(
+        (status = 200, description = "Lists the services owned by a project.", body = [shuttle_common::models::service::Response])
+    ),
+    params(
+        ("project_name" = String, Path, description = "Name of the project that owns the services."),
+    )
+)]
+async fn get_services(
     Extension(persistence): Extension<Persistence>,
 ) -> Result<Json<Vec<shuttle_common::models::service::Response>>> {
     let services = persistence
@@ -128,6 +172,18 @@ async fn list_services(
 }
 
 #[instrument(skip_all, fields(%project_name, %service_name))]
+#[instrument(skip_all)]
+#[utoipa::path(
+    get,
+    path = "/projects/{project_name}/services/{service_name}",
+    responses(
+        (status = 200, description = "Gets a specific service summary.", body = shuttle_common::models::service::Summary)
+    ),
+    params(
+        ("project_name" = String, Path, description = "Name of the project that owns the service."),
+        ("service_name" = String, Path, description = "Name of the service.")
+    )
+)]
 async fn get_service(
     Extension(persistence): Extension<Persistence>,
     Extension(proxy_fqdn): Extension<FQDN>,
@@ -152,6 +208,17 @@ async fn get_service(
 }
 
 #[instrument(skip_all, fields(%project_name, %service_name))]
+#[utoipa::path(
+    get,
+    path = "/projects/{project_name}/services/{service_name}/resources",
+    responses(
+        (status = 200, description = "Gets a specific service resources.", body = shuttle_common::resource::Response)
+    ),
+    params(
+        ("project_name" = String, Path, description = "Name of the project that owns the service."),
+        ("service_name" = String, Path, description = "Name of the service.")
+    )
+)]
 async fn get_service_resources(
     Extension(persistence): Extension<Persistence>,
     Path((project_name, service_name)): Path<(String, String)>,
@@ -171,7 +238,18 @@ async fn get_service_resources(
 }
 
 #[instrument(skip_all, fields(%project_name, %service_name))]
-async fn post_service(
+#[utoipa::path(
+    post,
+    path = "/projects/{project_name}/services/{service_name}",
+    responses(
+        (status = 200, description = "Creates a specific service owned by a specific project.", body = shuttle_common::models::deployment::Response)
+    ),
+    params(
+        ("project_name" = String, Path, description = "Name of the project that owns the service."),
+        ("service_name" = String, Path, description = "Name of the service.")
+    )
+)]
+async fn create_service(
     Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(claim): Extension<Claim>,
@@ -217,6 +295,17 @@ async fn post_service(
 }
 
 #[instrument(skip_all, fields(%project_name, %service_name))]
+#[utoipa::path(
+    delete,
+    path = "/projects/{project_name}/services/{service_name}",
+    responses(
+        (status = 200, description = "Stops a specific service owned by a specific project.", body = shuttle_common::models::service::Summary)
+    ),
+    params(
+        ("project_name" = String, Path, description = "Name of the project that owns the service."),
+        ("service_name" = String, Path, description = "Name of the service.")
+    )
+)]
 async fn stop_service(
     Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
@@ -245,6 +334,16 @@ async fn stop_service(
 }
 
 #[instrument(skip(persistence))]
+#[utoipa::path(
+    get,
+    path = "/projects/{project_name}/deployments",
+    responses(
+        (status = 200, description = "Gets deployments information associated to a specific project.", body = shuttle_common::models::deployment::Response)
+    ),
+    params(
+        ("project_name" = String, Path, description = "Name of the project that owns the deployments.")
+    )
+)]
 async fn get_deployments(
     Extension(persistence): Extension<Persistence>,
     Path(project_name): Path<String>,
@@ -264,6 +363,18 @@ async fn get_deployments(
 }
 
 #[instrument(skip_all, fields(%project_name, %deployment_id))]
+#[instrument(skip(persistence))]
+#[utoipa::path(
+    get,
+    path = "/projects/{project_name}/deployments/{deployment_id}",
+    responses(
+        (status = 200, description = "Gets a specific deployment information.", body = shuttle_common::models::deployment::Response)
+    ),
+    params(
+        ("project_name" = String, Path, description = "Name of the project that owns the deployment."),
+        ("deployment_id" = String, Path, description = "The deployment id in uuid format.")
+    )
+)]
 async fn get_deployment(
     Extension(persistence): Extension<Persistence>,
     Path((project_name, deployment_id)): Path<(String, Uuid)>,
@@ -276,6 +387,17 @@ async fn get_deployment(
 }
 
 #[instrument(skip_all, fields(%project_name, %deployment_id))]
+#[utoipa::path(
+    delete,
+    path = "/projects/{project_name}/deployments/{deployment_id}",
+    responses(
+        (status = 200, description = "Deletes a specific deployment.", body = shuttle_common::models::deployment::Response)
+    ),
+    params(
+        ("project_name" = String, Path, description = "Name of the project that owns the deployment."),
+        ("deployment_id" = String, Path, description = "The deployment id in uuid format.")
+    )
+)]
 async fn delete_deployment(
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(persistence): Extension<Persistence>,
@@ -291,6 +413,17 @@ async fn delete_deployment(
 }
 
 #[instrument(skip_all, fields(%project_name, %deployment_id))]
+#[utoipa::path(
+    get,
+    path = "/projects/{project_name}/ws/deployments/{deployment_id}/logs",
+    responses(
+        (status = 200, description = "Gets the logs a specific deployment.", body = [shuttle_common::log::Item])
+    ),
+    params(
+        ("project_name" = String, Path, description = "Name of the project that owns the deployment."),
+        ("deployment_id" = String, Path, description = "The deployment id in uuid format.")
+    )
+)]
 async fn get_logs(
     Extension(persistence): Extension<Persistence>,
     Path((project_name, deployment_id)): Path<(String, Uuid)>,
@@ -309,6 +442,17 @@ async fn get_logs(
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/projects/{project_name}/deployments/{deployment_id}/logs",
+    responses(
+        (status = 200, description = "Subscribes to a specific deployment logs.")
+    ),
+    params(
+        ("project_name" = String, Path, description = "Name of the project that owns the deployment."),
+        ("deployment_id" = String, Path, description = "The deployment id in uuid format.")
+    )
+)]
 async fn get_logs_subscribe(
     Extension(persistence): Extension<Persistence>,
     Path((_project_name, deployment_id)): Path<(String, Uuid)>,
@@ -371,6 +515,17 @@ async fn logs_websocket_handler(mut s: WebSocket, persistence: Persistence, id: 
 }
 
 #[instrument(skip_all, fields(%project_name, %service_name))]
+#[utoipa::path(
+    get,
+    path = "/projects/{project_name}/secrets/{service_name}",
+    responses(
+        (status = 200, description = "Gets the secrets a specific service.", body = [shuttle_common::models::secret::Response])
+    ),
+    params(
+        ("project_name" = String, Path, description = "Name of the project that owns the service."),
+        ("service_name" = String, Path, description = "Name of the service.")
+    )
+)]
 async fn get_secrets(
     Extension(persistence): Extension<Persistence>,
     Path((project_name, service_name)): Path<(String, String)>,
@@ -389,7 +544,17 @@ async fn get_secrets(
     }
 }
 
-async fn post_clean(
+#[utoipa::path(
+    post,
+    path = "/projects/{project_name}/clean",
+    responses(
+        (status = 200, description = "Clean a specific project build artifacts.", body = [String])
+    ),
+    params(
+        ("project_name" = String, Path, description = "Name of the project that owns the service."),
+    )
+)]
+async fn clean_project(
     Extension(deployment_manager): Extension<DeploymentManager>,
     Path(project_name): Path<String>,
 ) -> Result<Json<Vec<String>>> {

@@ -1,9 +1,9 @@
-mod deployment;
+pub mod deployment;
 mod error;
-mod log;
+pub mod log;
 mod resource;
 mod secret;
-mod service;
+pub mod service;
 mod state;
 mod user;
 

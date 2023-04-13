@@ -5,10 +5,12 @@ use comfy_table::{
 };
 use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, ToSchema)]
 pub struct Response {
     pub key: String,
+    #[schema(value_type = KnownFormat::DateTime)]
     pub last_update: DateTime<Utc>,
 }
 

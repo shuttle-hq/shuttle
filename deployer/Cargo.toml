@@ -52,6 +52,8 @@ tracing-subscriber = { workspace = true, features = [
   "env-filter",
   "fmt",
 ] }
+utoipa = { workspace = true }
+utoipa-swagger-ui = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
 
 [dependencies.shuttle-common]

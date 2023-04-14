@@ -147,7 +147,7 @@ async fn get_service(
 
         Ok(Json(response))
     } else {
-        Err(Error::NotFound)
+        Err(Error::NotFound("service not found".to_string()))
     }
 }
 
@@ -166,7 +166,7 @@ async fn get_service_resources(
 
         Ok(Json(resources))
     } else {
-        Err(Error::NotFound)
+        Err(Error::NotFound("service not found".to_string()))
     }
 }
 
@@ -229,7 +229,7 @@ async fn stop_service(
         if let Some(ref deployment) = running_deployment {
             deployment_manager.kill(deployment.id).await;
         } else {
-            return Err(Error::NotFound);
+            return Err(Error::NotFound("no running deployment found".to_string()));
         }
 
         let response = shuttle_common::models::service::Summary {
@@ -240,7 +240,7 @@ async fn stop_service(
 
         Ok(Json(response))
     } else {
-        Err(Error::NotFound)
+        Err(Error::NotFound("service not found".to_string()))
     }
 }
 
@@ -259,7 +259,7 @@ async fn get_deployments(
 
         Ok(Json(deployments))
     } else {
-        Err(Error::NotFound)
+        Err(Error::NotFound("service not found".to_string()))
     }
 }
 
@@ -271,7 +271,7 @@ async fn get_deployment(
     if let Some(deployment) = persistence.get_deployment(&deployment_id).await? {
         Ok(Json(deployment.into()))
     } else {
-        Err(Error::NotFound)
+        Err(Error::NotFound("deployment not found".to_string()))
     }
 }
 
@@ -286,7 +286,7 @@ async fn delete_deployment(
 
         Ok(Json(deployment.into()))
     } else {
-        Err(Error::NotFound)
+        Err(Error::NotFound("deployment not found".to_string()))
     }
 }
 
@@ -305,7 +305,7 @@ async fn get_logs(
                 .collect(),
         ))
     } else {
-        Err(Error::NotFound)
+        Err(Error::NotFound("deployment not found".to_string()))
     }
 }
 
@@ -385,7 +385,7 @@ async fn get_secrets(
 
         Ok(Json(keys))
     } else {
-        Err(Error::NotFound)
+        Err(Error::NotFound("service not found".to_string()))
     }
 }
 

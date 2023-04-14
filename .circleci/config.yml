@@ -418,8 +418,9 @@ jobs:
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
       - run:
           name: "Install Shuttle"
-          command: CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse cargo install cargo-shuttle --path ./cargo-shuttle
+          command:  cargo install cargo-shuttle --path ./cargo-shuttle
       - run: cargo shuttle --version
+      - run: ./circleci/qa.sh
 
 
 workflows:

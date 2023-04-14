@@ -13,7 +13,20 @@ cargo shuttle init --name qa-linux --axum
 cargo shuttle run &
 sleep 60
 
+echo "Testing local hello endpoint"
 output=$(curl --silent localhost:8000/hello)
-[ "$output" != "Hello, worl" ] && ( echo "Did not expect output: $output"; exit 1 )
+[ "$output" != "Hello, world!" ] && ( echo "Did not expect output: $output"; exit 1 )
+
+kill $(jobs -p)
+
+cargo shuttle project start
+
+cargo shuttle deploy --allow-dirty
+
+echo "Testing remote hello endpoint"
+output=$(curl --silent qa-linux.unstable.shuttle.rs/hello)
+[ "$output" != "Hello, world!" ] && ( echo "Did not expect output: $output"; exit 1 )
+
+cargo shuttle project stop
 
 exit 0

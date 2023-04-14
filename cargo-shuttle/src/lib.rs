@@ -9,7 +9,7 @@ use shuttle_common::models::deployment::get_deployments_table;
 use shuttle_common::models::project::{State, IDLE_MINUTES};
 use shuttle_common::models::resource::get_resources_table;
 use shuttle_common::project::ProjectName;
-use shuttle_common::{resource, ApiKey};
+use shuttle_common::resource;
 use shuttle_proto::runtime::{self, LoadRequest, StartRequest, SubscribeLogsRequest};
 use tokio::task::JoinSet;
 
@@ -261,12 +261,32 @@ impl Shuttle {
 
                 Password::with_theme(&ColorfulTheme::default())
                     .with_prompt("API key")
-                    .validate_with(|input: &String| ApiKey::parse(input).map(|_| {}))
+                    .validate_with(|input: &String| {
+                        let key = input.trim().to_string();
+
+                        let mut errors = vec![];
+                        if !key.chars().all(char::is_alphanumeric) {
+                            errors.push(
+                                "The API key should consist of only alphanumeric characters.",
+                            );
+                        };
+
+                        if key.len() != 16 {
+                            errors.push("The API key should be exactly 16 characters in length.");
+                        };
+
+                        if errors.is_empty() {
+                            Ok(())
+                        } else {
+                            let message = errors.join("\n");
+                            Err(format!("Invalid API key:\n{message}"))
+                        }
+                    })
                     .interact()?
             }
         };
 
-        let api_key = ApiKey::parse(&api_key_str)?;
+        let api_key = api_key_str.trim().parse()?;
 
         self.ctx.set_api_key(api_key)?;
 

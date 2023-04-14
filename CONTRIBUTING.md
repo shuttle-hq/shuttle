@@ -93,15 +93,13 @@ Before we can login to our local instance of shuttle, we need to create a user.
 The following command inserts a user into the `auth` state with admin privileges:
 
 ```bash
-# the --key needs to be 16 alphanumeric characters
-docker compose --file docker-compose.rendered.yml --project-name shuttle-dev exec auth /usr/local/bin/service --state=/var/lib/shuttle-auth init --name admin --key dh9z58jttoes3qvt
+docker compose --file docker-compose.rendered.yml --project-name shuttle-dev exec auth /usr/local/bin/service --state=/var/lib/shuttle-auth init --name admin --key test-key
 ```
 
 Login to shuttle service in a new terminal window from the root of the shuttle directory:
 
 ```bash
-# the --api-kei should be the same one you inserted in the auth state
-cargo run --bin cargo-shuttle -- login --api-key "dh9z58jttoes3qvt"
+cargo run --bin cargo-shuttle -- login --api-key "test-key"
 ```
 
 The [shuttle examples](https://github.com/shuttle-hq/examples) are linked to the main repo as a [git submodule](https://git-scm.com/book/en/v2/Git-Tools-Submodules), to initialize it run the following commands:
@@ -187,11 +185,11 @@ echo "api_key = '<jwt>'" > ~/.config/shuttle/config.toml
 > Note: The JWT will expire in 15 minutes, at which point you need to run the commands again.
 > If you have [`jq`](https://github.com/stedolan/jq/wiki/Installation) installed you can combine
 > the two above commands into the following:
-> ```bash
-> curl -s -H "Authorization: Bearer test-key" localhost:8008/auth/key \
->     | jq -r '.token' \
->     | read token; echo "api_key='$token'" > ~/.config/shuttle/config.toml
-> ```
+```bash
+curl -s -H "Authorization: Bearer test-key" localhost:8008/auth/key \
+    | jq -r '.token' \
+    | read token; echo "api_key='$token'" > ~/.config/shuttle/config.toml
+```
 
 Finally we need to comment out the admin layer in the deployer handlers. So in `deployer/handlers/mod.rs`,
 in the `make_router` function comment out this line: `.layer(AdminSecretLayer::new(admin_secret))`.

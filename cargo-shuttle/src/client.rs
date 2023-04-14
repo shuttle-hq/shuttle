@@ -216,7 +216,7 @@ impl Client {
         let mut request = url.into_client_request()?;
 
         if let Some(ref api_key) = self.api_key {
-            let auth_header = Authorization::bearer(api_key.as_ref())?;
+            let auth_header = Authorization::bearer(api_key)?;
             request.headers_mut().typed_insert(auth_header);
         }
 
@@ -282,7 +282,7 @@ impl Client {
 
     fn set_builder_auth(&self, builder: RequestBuilder) -> RequestBuilder {
         if let Some(ref api_key) = self.api_key {
-            builder.bearer_auth(api_key.as_ref())
+            builder.bearer_auth(api_key)
         } else {
             builder
         }

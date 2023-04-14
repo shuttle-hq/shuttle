@@ -17,7 +17,7 @@ echo "Testing local hello endpoint"
 output=$(curl --silent localhost:8000/hello)
 [ "$output" != "Hello, world!" ] && ( echo "Did not expect output: $output"; exit 1 )
 
-kill $(jobs -p)
+killall cargo-shuttle
 
 cargo shuttle project start
 

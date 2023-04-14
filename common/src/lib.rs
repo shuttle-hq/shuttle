@@ -21,6 +21,7 @@ pub mod wasm;
 
 use std::collections::BTreeMap;
 
+use anyhow::bail;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "service")]
 use uuid::Uuid;
@@ -36,11 +37,41 @@ pub const API_URL_DEFAULT: &str = "http://localhost:8001";
 #[cfg(not(debug_assertions))]
 pub const API_URL_DEFAULT: &str = "https://api.shuttle.rs";
 
-pub type ApiKey = String;
 pub type ApiUrl = String;
 pub type Host = String;
 #[cfg(feature = "service")]
 pub type DeploymentId = Uuid;
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct ApiKey(String);
+
+impl ApiKey {
+    pub fn parse(key: &str) -> anyhow::Result<Self> {
+        let key = key.trim().to_string();
+
+        let mut errors = vec![];
+        if !key.chars().all(char::is_alphanumeric) {
+            errors.push("The API key should consist of only alphanumeric characters.");
+        };
+
+        if key.len() != 16 {
+            errors.push("The API key should be exactly 16 characters in length.");
+        };
+
+        if !errors.is_empty() {
+            let message = errors.join("\n");
+            bail!("Invalid API key:\n{message}")
+        }
+
+        Ok(Self(key))
+    }
+}
+
+impl AsRef<str> for ApiKey {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
 
 #[cfg(feature = "error")]
 /// Errors that can occur when changing types. Especially from prost
@@ -136,5 +167,33 @@ impl SecretStore {
 
     pub fn get(&self, key: &str) -> Option<String> {
         self.secrets.get(key).map(ToOwned::to_owned)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use proptest::prelude::*;
+
+    use crate::ApiKey;
+
+    proptest! {
+        #[test]
+        // The API key should be a 16 character alphanumeric string.
+        fn parses_valid_keys(s in "[a-zA-Z0-9]{16}") {
+            println!("s: {s}, len: {}", s.len());
+            ApiKey::parse(&s).unwrap();
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "The API key should be exactly 16 characters in length.")]
+    fn invalid_length() {
+        ApiKey::parse("tooshort").unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "The API key should consist of only alphanumeric characters.")]
+    fn non_alphanumeric() {
+        ApiKey::parse("dh9z58jttoes3qv@").unwrap();
     }
 }

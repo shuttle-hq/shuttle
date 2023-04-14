@@ -9,7 +9,7 @@ use shuttle_common::models::deployment::get_deployments_table;
 use shuttle_common::models::project::{State, IDLE_MINUTES};
 use shuttle_common::models::resource::get_resources_table;
 use shuttle_common::project::ProjectName;
-use shuttle_common::resource;
+use shuttle_common::{resource, ApiKey};
 use shuttle_proto::runtime::{self, LoadRequest, StartRequest, SubscribeLogsRequest};
 use tokio::task::JoinSet;
 
@@ -261,11 +261,12 @@ impl Shuttle {
 
                 Password::with_theme(&ColorfulTheme::default())
                     .with_prompt("API key")
+                    .validate_with(|input: &String| ApiKey::parse(input).map(|_| {}))
                     .interact()?
             }
         };
 
-        let api_key = api_key_str.trim().parse()?;
+        let api_key = ApiKey::parse(&api_key_str)?;
 
         self.ctx.set_api_key(api_key)?;
 

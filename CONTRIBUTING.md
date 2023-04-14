@@ -93,13 +93,15 @@ Before we can login to our local instance of shuttle, we need to create a user.
 The following command inserts a user into the `auth` state with admin privileges:
 
 ```bash
-docker compose --file docker-compose.rendered.yml --project-name shuttle-dev exec auth /usr/local/bin/service --state=/var/lib/shuttle-auth init --name admin --key test-key
+# the --key needs to be 16 alphanumeric characters
+docker compose --file docker-compose.rendered.yml --project-name shuttle-dev exec auth /usr/local/bin/service --state=/var/lib/shuttle-auth init --name admin --key dh9z58jttoes3qvt
 ```
 
 Login to shuttle service in a new terminal window from the root of the shuttle directory:
 
 ```bash
-cargo run --bin cargo-shuttle -- login --api-key "test-key"
+# the --api-kei should be the same one you inserted in the auth state
+cargo run --bin cargo-shuttle -- login --api-key "dh9z58jttoes3qvt"
 ```
 
 The [shuttle examples](https://github.com/shuttle-hq/examples) are linked to the main repo as a [git submodule](https://git-scm.com/book/en/v2/Git-Tools-Submodules), to initialize it run the following commands:

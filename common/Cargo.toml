@@ -88,6 +88,7 @@ axum = { workspace = true }
 base64 = { workspace = true }
 cap-std = { workspace = true }
 hyper = { workspace = true }
+proptest = "1.1.0"
 ring = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 tower = { workspace = true, features = ["util"] }

@@ -1,5 +1,7 @@
 #! /usr/bin/env sh
 
+set -ue
+
 # Prepare directory
 mkdir -p /tmp/qa-linux
 cd /tmp/qa-linux

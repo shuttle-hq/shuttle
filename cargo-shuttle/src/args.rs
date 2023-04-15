@@ -112,6 +112,10 @@ pub enum Command {
         id: Option<Uuid>,
 
         #[arg(short, long)]
+        /// If there is no active deployment, view logs from the latest one
+        latest: bool,
+
+        #[arg(short, long)]
         /// Follow log output
         follow: bool,
     },

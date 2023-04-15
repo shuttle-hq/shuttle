@@ -98,7 +98,9 @@ impl Shuttle {
                 return self.deploy(deploy_args, &self.client()?).await;
             }
             Command::Status => self.status(&self.client()?).await,
-            Command::Logs { id, follow } => self.logs(&self.client()?, id, follow).await,
+            Command::Logs { id, latest, follow } => {
+                self.logs(&self.client()?, id, latest, follow).await
+            }
             Command::Deployment(DeploymentCommand::List) => {
                 self.deployments_list(&self.client()?).await
             }
@@ -343,16 +345,42 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn logs(&self, client: &Client, id: Option<Uuid>, follow: bool) -> Result<()> {
+    async fn logs(
+        &self,
+        client: &Client,
+        id: Option<Uuid>,
+        latest: bool,
+        follow: bool,
+    ) -> Result<()> {
         let id = if let Some(id) = id {
             id
         } else {
-            let summary = client.get_service(self.ctx.project_name()).await?;
+            let proj_name = self.ctx.project_name();
+            let summary = client.get_service(proj_name).await?;
 
             if let Some(deployment) = summary.deployment {
+                // Active deployment
                 deployment.id
+            } else if latest {
+                // Find latest non-active deployment
+                let deployments = client.get_deployments(proj_name).await?;
+                if deployments.len() == 0 {
+                    bail!("Could not find any deployments for '{}'. Try passing a deployment ID manually", proj_name);
+                }
+                let most_recent = deployments
+                    .into_iter()
+                    .reduce(|acc, dep| {
+                        if acc.last_update > dep.last_update {
+                            acc
+                        } else {
+                            dep
+                        }
+                    })
+                    .unwrap(); // length 0 is checked above
+
+                most_recent.id
             } else {
-                bail!("Could not automatically find a running deployment for '{}'. Try passing a deployment ID manually", self.ctx.project_name());
+                bail!("Could not find a running deployment for '{}'. Try with '--latest', or pass a deployment ID manually", proj_name);
             }
         };
 

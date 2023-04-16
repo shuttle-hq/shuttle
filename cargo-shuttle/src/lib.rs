@@ -364,7 +364,7 @@ impl Shuttle {
             } else if latest {
                 // Find latest non-active deployment
                 let deployments = client.get_deployments(proj_name).await?;
-                if deployments.len() == 0 {
+                if deployments.is_empty() {
                     bail!("Could not find any deployments for '{}'. Try passing a deployment ID manually", proj_name);
                 }
                 let most_recent = deployments

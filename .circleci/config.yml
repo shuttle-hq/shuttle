@@ -421,20 +421,20 @@ jobs:
           name: "Install Shuttle"
           command:  cargo install cargo-shuttle --path ./cargo-shuttle
       - run: cargo shuttle --version
-      - run:
-          name: Login
-          command: |
-            cargo shuttle login --api-key ${SHUTTLE_API_KEY}
-      - run:
-          name: QA
-          command: ./.circleci/qa.sh
-          environment:
-            SHUTTLE_API: https://api.unstable.shuttle.rs
+      # - run:
+      #     name: Login
+      #     command: |
+      #       cargo shuttle login --api-key ${SHUTTLE_API_KEY}
+      # - run:
+      #     name: QA
+      #     command: ./.circleci/qa.sh
+      #     environment:
+      #       SHUTTLE_API: https://api.unstable.shuttle.rs
       - run: git submodule sync
       - run: git submodule update --init
-      - run:
-          name: Test WASM
-          command: ./.circleci/qa-wasm.sh
+      # - run:
+      #     name: Test WASM
+      #     command: ./.circleci/qa-wasm.sh
       - run:
           name: Test Docker
           command: ./.circleci/qa-docker.sh

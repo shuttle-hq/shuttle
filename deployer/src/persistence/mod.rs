@@ -190,7 +190,7 @@ impl Persistence {
     }
 
     pub async fn get_deployments(&self, service_id: &Uuid) -> Result<Vec<Deployment>> {
-        sqlx::query_as("SELECT * FROM deployments WHERE service_id = ?")
+        sqlx::query_as("SELECT * FROM deployments WHERE service_id = ? ORDER BY last_update")
             .bind(service_id)
             .fetch_all(&self.pool)
             .await

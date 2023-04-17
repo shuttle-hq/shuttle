@@ -363,16 +363,7 @@ impl Shuttle {
                 if deployments.is_empty() {
                     bail!("Could not find any deployments for '{}'. Try passing a deployment ID manually", proj_name);
                 }
-                let most_recent = deployments
-                    .into_iter()
-                    .reduce(|acc, dep| {
-                        if acc.last_update > dep.last_update {
-                            acc
-                        } else {
-                            dep
-                        }
-                    })
-                    .unwrap(); // length 0 is checked above
+                let most_recent = deployments.last().unwrap(); // length 0 is checked above
 
                 most_recent.id
             } else if let Some(deployment) = client.get_service(proj_name).await?.deployment {

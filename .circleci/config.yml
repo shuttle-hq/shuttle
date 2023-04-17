@@ -471,6 +471,10 @@ jobs:
           name: Test WASM
           command: ./.circleci/qa-wasm.sh
       - run:
+          name: "Install Docker"
+          command: |
+            brew install --cask docker
+      - run:
           name: Test Docker
           command: ./.circleci/qa-docker.sh
 

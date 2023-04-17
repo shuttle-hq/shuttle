@@ -430,6 +430,11 @@ jobs:
           command: ./.circleci/qa.sh
           environment:
             SHUTTLE_API: https://api.unstable.shuttle.rs
+      - run: git submodule sync
+      - run: git submodule update --init
+      - run:
+          name: Test WASM
+          command: ./.circleci/qa-wasm.sh
 
 workflows:
   # ci:

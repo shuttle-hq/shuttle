@@ -428,7 +428,8 @@ jobs:
       - run:
           name: QA
           command: ./.circleci/qa.sh
-
+          environment:
+            SHUTTLE_API: https://api.unstable.shuttle.rs
 
 workflows:
   # ci:

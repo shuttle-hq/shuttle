@@ -608,12 +608,12 @@ mod tests {
     async fn deployment_order() {
         let (p, _) = Persistence::new_in_memory().await;
 
-        let xyz_id = add_service(&p.pool).await.unwrap();
         let service_id = add_service(&p.pool).await.unwrap();
+        let other_id = add_service(&p.pool).await.unwrap();
 
         let deployment_other = Deployment {
             id: Uuid::new_v4(),
-            service_id,
+            service_id: other_id,
             state: State::Running,
             last_update: Utc.with_ymd_and_hms(2023, 4, 17, 1, 1, 2).unwrap(),
             address: None,
@@ -621,7 +621,7 @@ mod tests {
         };
         let deployment_crashed = Deployment {
             id: Uuid::new_v4(),
-            service_id: xyz_id,
+            service_id,
             state: State::Crashed,
             last_update: Utc.with_ymd_and_hms(2023, 4, 17, 1, 1, 2).unwrap(), // second
             address: None,
@@ -629,7 +629,7 @@ mod tests {
         };
         let deployment_stopped = Deployment {
             id: Uuid::new_v4(),
-            service_id: xyz_id,
+            service_id,
             state: State::Stopped,
             last_update: Utc.with_ymd_and_hms(2023, 4, 17, 1, 1, 1).unwrap(), // first
             address: None,
@@ -637,7 +637,7 @@ mod tests {
         };
         let deployment_running = Deployment {
             id: Uuid::new_v4(),
-            service_id: xyz_id,
+            service_id,
             state: State::Running,
             last_update: Utc.with_ymd_and_hms(2023, 4, 17, 1, 1, 3).unwrap(), // third
             address: Some(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 9876)),

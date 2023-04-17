@@ -356,13 +356,9 @@ impl Shuttle {
             id
         } else {
             let proj_name = self.ctx.project_name();
-            let summary = client.get_service(proj_name).await?;
 
-            if let Some(deployment) = summary.deployment {
-                // Active deployment
-                deployment.id
-            } else if latest {
-                // Find latest non-active deployment
+            if latest {
+                // Find latest deployment (not always an active one)
                 let deployments = client.get_deployments(proj_name).await?;
                 if deployments.is_empty() {
                     bail!("Could not find any deployments for '{}'. Try passing a deployment ID manually", proj_name);
@@ -379,6 +375,9 @@ impl Shuttle {
                     .unwrap(); // length 0 is checked above
 
                 most_recent.id
+            } else if let Some(deployment) = client.get_service(proj_name).await?.deployment {
+                // Active deployment
+                deployment.id
             } else {
                 bail!("Could not find a running deployment for '{}'. Try with '--latest', or pass a deployment ID manually", proj_name);
             }

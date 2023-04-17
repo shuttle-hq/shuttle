@@ -537,6 +537,7 @@ workflows:
   #             only: production
   release:
     jobs:
+      - linux-qa
       # - linux-qa:
       #     filters:
       #       branches:

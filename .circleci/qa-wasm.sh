@@ -13,7 +13,7 @@ cd examples/next/hello-world
 
 # Start locally
 cargo shuttle run &
-sleep 70
+sleep 150
 
 echo "Testing local wasm endpoint"
 output=$(curl --silent localhost:8000/hello)

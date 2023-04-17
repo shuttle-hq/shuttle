@@ -11,7 +11,7 @@ cargo shuttle init --name qa-$1 --axum
 
 # Start locally
 cargo shuttle run &
-sleep 70
+sleep 150
 
 echo "Testing local hello endpoint"
 output=$(curl --silent localhost:8000/hello)

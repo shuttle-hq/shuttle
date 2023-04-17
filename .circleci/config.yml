@@ -441,7 +441,7 @@ jobs:
   mac-qa:
     macos:
       xcode: 12.5.1
-    resource_class: medium
+    resource_class: large
     steps:
       - checkout
       - run:

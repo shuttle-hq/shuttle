@@ -495,7 +495,7 @@ impl ActiveDeploymentsGetter for Persistence {
 mod tests {
     use std::net::{Ipv4Addr, SocketAddr};
 
-    use chrono::{TimeZone, Utc};
+    use chrono::{TimeZone, Utc, Duration};
     use rand::Rng;
     use serde_json::json;
 
@@ -614,12 +614,13 @@ mod tests {
         let (p, _) = Persistence::new_in_memory().await;
 
         let service_id = add_service(&p.pool).await.unwrap();
+        let time = Utc::now();
 
         let deployment_crashed = Deployment {
             id: Uuid::new_v4(),
             service_id,
             state: State::Crashed,
-            last_update: Utc::now(),
+            last_update: time,
             address: None,
             is_next: false,
         };
@@ -627,7 +628,7 @@ mod tests {
             id: Uuid::new_v4(),
             service_id,
             state: State::Stopped,
-            last_update: Utc::now(),
+            last_update: time.checked_add_signed(Duration::seconds(1)).unwrap(),
             address: None,
             is_next: false,
         };
@@ -635,7 +636,7 @@ mod tests {
             id: Uuid::new_v4(),
             service_id,
             state: State::Running,
-            last_update: Utc::now(),
+            last_update: time.checked_add_signed(Duration::seconds(2)).unwrap(),
             address: Some(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 9876)),
             is_next: false,
         };
@@ -643,7 +644,7 @@ mod tests {
             id: Uuid::new_v4(),
             service_id,
             state: State::Queued,
-            last_update: Utc::now(),
+            last_update: time.checked_add_signed(Duration::seconds(3)).unwrap(),
             address: None,
             is_next: false,
         };
@@ -651,7 +652,7 @@ mod tests {
             id: Uuid::new_v4(),
             service_id,
             state: State::Building,
-            last_update: Utc::now(),
+            last_update: time.checked_add_signed(Duration::seconds(3)).unwrap(),
             address: None,
             is_next: false,
         };
@@ -659,7 +660,7 @@ mod tests {
             id: Uuid::new_v4(),
             service_id,
             state: State::Built,
-            last_update: Utc::now(),
+            last_update: time.checked_add_signed(Duration::seconds(4)).unwrap(),
             address: None,
             is_next: true,
         };
@@ -667,7 +668,7 @@ mod tests {
             id: Uuid::new_v4(),
             service_id,
             state: State::Loading,
-            last_update: Utc::now(),
+            last_update: time.checked_add_signed(Duration::seconds(5)).unwrap(),
             address: None,
             is_next: false,
         };

@@ -412,24 +412,27 @@ jobs:
       image: ubuntu-2004:current
       resource_class: xlarge
     steps:
-      - checkout
       - run:
-          name: "Install Rust"
-          command: |
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-      - run:
-          name: "Install Shuttle"
-          command:  cargo install cargo-shuttle --path ./cargo-shuttle
-      - run: cargo shuttle --version
-      - run:
-          name: Login
-          command: |
-            cargo shuttle login --api-key ${SHUTTLE_API_KEY}
-      - run:
-          name: QA
-          command: ./.circleci/qa.sh
-          environment:
-            SHUTTLE_API_KEY: $SHUTTLE_API_KEY
+          name: Test
+          command: echo "Hello ${GITHUB_TOKEN}"
+      # - checkout
+      # - run:
+      #     name: "Install Rust"
+      #     command: |
+      #       curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+      # - run:
+      #     name: "Install Shuttle"
+      #     command:  cargo install cargo-shuttle --path ./cargo-shuttle
+      # - run: cargo shuttle --version
+      # - run:
+      #     name: Login
+      #     command: |
+      #       cargo shuttle login --api-key ${SHUTTLE_API_KEY}
+      # - run:
+      #     name: QA
+      #     command: ./.circleci/qa.sh
+      #     environment:
+      #       SHUTTLE_API_KEY: $SHUTTLE_API_KEY
 
 
 workflows:

@@ -435,6 +435,9 @@ jobs:
       - run:
           name: Test WASM
           command: ./.circleci/qa-wasm.sh
+      - run:
+          name: Test Docker
+          command: ./.circleci/qa-docker.sh
 
 workflows:
   # ci:

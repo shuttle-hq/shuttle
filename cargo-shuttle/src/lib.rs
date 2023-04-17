@@ -970,8 +970,7 @@ fn check_version(runtime_path: &Path) -> Result<()> {
     }
 
     // Get runtime version from shuttle-runtime cli
-    let runtime_version = std::process::Command::new("cargo")
-        .arg("shuttle-runtime")
+    let runtime_version = std::process::Command::new(runtime_path)
         .arg("--version")
         .output()
         .context("failed to check the shuttle-runtime version")?

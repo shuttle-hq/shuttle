@@ -24,7 +24,7 @@ cargo shuttle project start
 cargo shuttle deploy --allow-dirty
 
 echo "Testing remote hello endpoint"
-output=$(curl --silent qa-linux.unstable.shuttle.rs/hello)
+output=$(curl --silent https://qa-linux.unstable.shuttleapp.rs/hello)
 [ "$output" != "Hello, world!" ] && ( echo "Did not expect output: $output"; exit 1 )
 
 cargo shuttle project stop

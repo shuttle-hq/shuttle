@@ -422,10 +422,12 @@ jobs:
           command:  cargo install cargo-shuttle --path ./cargo-shuttle
       - run: cargo shuttle --version
       - run:
+          name: Login
+          command: |
+            cargo shuttle login --api-key ${SHUTTLE_API_KEY}
+      - run:
           name: QA
           command: ./.circleci/qa.sh
-          environment:
-            SHUTTLE_API_KEY: $SHUTTLE_API_KEY
 
 
 workflows:

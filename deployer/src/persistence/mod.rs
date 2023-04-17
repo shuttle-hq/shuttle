@@ -615,11 +615,6 @@ mod tests {
 
         let service_id = add_service(&p.pool).await.unwrap();
 
-        let queued_id = Uuid::new_v4();
-        let building_id = Uuid::new_v4();
-        let built_id = Uuid::new_v4();
-        let loading_id = Uuid::new_v4();
-
         let deployment_crashed = Deployment {
             id: Uuid::new_v4(),
             service_id,
@@ -645,7 +640,7 @@ mod tests {
             is_next: false,
         };
         let deployment_queued = Deployment {
-            id: queued_id,
+            id: Uuid::new_v4(),
             service_id,
             state: State::Queued,
             last_update: Utc::now(),
@@ -653,7 +648,7 @@ mod tests {
             is_next: false,
         };
         let deployment_building = Deployment {
-            id: building_id,
+            id: Uuid::new_v4(),
             service_id,
             state: State::Building,
             last_update: Utc::now(),
@@ -661,7 +656,7 @@ mod tests {
             is_next: false,
         };
         let deployment_built = Deployment {
-            id: built_id,
+            id: Uuid::new_v4(),
             service_id,
             state: State::Built,
             last_update: Utc::now(),
@@ -669,7 +664,7 @@ mod tests {
             is_next: true,
         };
         let deployment_loading = Deployment {
-            id: loading_id,
+            id: Uuid::new_v4(),
             service_id,
             state: State::Loading,
             last_update: Utc::now(),
@@ -702,10 +697,10 @@ mod tests {
             (deployment_crashed.id, State::Crashed),
             (deployment_stopped.id, State::Stopped),
             (deployment_running.id, State::Running),
-            (queued_id, State::Stopped),
-            (built_id, State::Stopped),
-            (building_id, State::Stopped),
-            (loading_id, State::Stopped),
+            (deployment_queued.id, State::Stopped),
+            (deployment_building.id, State::Stopped),
+            (deployment_built.id, State::Stopped),
+            (deployment_loading.id, State::Stopped),
         ];
 
         assert_eq!(

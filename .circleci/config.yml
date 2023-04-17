@@ -445,6 +445,10 @@ jobs:
     steps:
       - checkout
       - run:
+          name: "Install Protobuf"
+          command: |
+            brew install protobuf
+      - run:
           name: "Install Rust"
           command: |
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y

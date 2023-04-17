@@ -427,7 +427,7 @@ jobs:
             cargo shuttle login --api-key ${SHUTTLE_API_KEY}
       - run:
           name: QA
-          command: ./.circleci/qa.sh
+          command: ./.circleci/qa.sh linux
           environment:
             SHUTTLE_API: https://api.unstable.shuttle.rs
       - run: git submodule sync
@@ -462,7 +462,7 @@ jobs:
             cargo shuttle login --api-key ${SHUTTLE_API_KEY}
       - run:
           name: QA
-          command: ./.circleci/qa.sh
+          command: ./.circleci/qa.sh mac
           environment:
             SHUTTLE_API: https://api.unstable.shuttle.rs
       - run: git submodule sync

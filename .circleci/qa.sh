@@ -3,11 +3,11 @@
 set -ue
 
 # Prepare directory
-mkdir -p /tmp/qa-linux
-cd /tmp/qa-linux
+mkdir -p /tmp/qa-$1
+cd /tmp/qa-$1
 
 # Init app
-cargo shuttle init --name qa-linux --axum
+cargo shuttle init --name qa-$1 --axum
 
 # Start locally
 cargo shuttle run &
@@ -24,7 +24,7 @@ cargo shuttle project start
 cargo shuttle deploy --allow-dirty
 
 echo "Testing remote hello endpoint"
-output=$(curl --silent https://qa-linux.unstable.shuttleapp.rs/hello)
+output=$(curl --silent https://qa-$1.unstable.shuttleapp.rs/hello)
 [ "$output" != "Hello, world!" ] && ( echo "Did not expect output: $output"; exit 1 )
 
 cargo shuttle project stop

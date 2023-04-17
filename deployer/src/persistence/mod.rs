@@ -707,7 +707,7 @@ mod tests {
             id: Uuid::new_v4(),
             service_id,
             state: State::Building,
-            last_update: time.checked_add_signed(Duration::seconds(3)).unwrap(),
+            last_update: time.checked_add_signed(Duration::seconds(4)).unwrap(),
             address: None,
             is_next: false,
         };
@@ -715,7 +715,7 @@ mod tests {
             id: Uuid::new_v4(),
             service_id,
             state: State::Built,
-            last_update: time.checked_add_signed(Duration::seconds(4)).unwrap(),
+            last_update: time.checked_add_signed(Duration::seconds(5)).unwrap(),
             address: None,
             is_next: true,
         };
@@ -723,7 +723,7 @@ mod tests {
             id: Uuid::new_v4(),
             service_id,
             state: State::Loading,
-            last_update: time.checked_add_signed(Duration::seconds(5)).unwrap(),
+            last_update: time.checked_add_signed(Duration::seconds(6)).unwrap(),
             address: None,
             is_next: false,
         };

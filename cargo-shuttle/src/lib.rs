@@ -360,17 +360,18 @@ impl Shuttle {
             if latest {
                 // Find latest deployment (not always an active one)
                 let deployments = client.get_deployments(proj_name).await?;
-                if deployments.is_empty() {
-                    bail!("Could not find any deployments for '{}'. Try passing a deployment ID manually", proj_name);
-                }
-                let most_recent = deployments.last().unwrap(); // length 0 is checked above
+                let most_recent = deployments.last().context(format!(
+                    "Could not find any deployments for '{proj_name}'. Try passing a deployment ID manually",
+                ))?;
 
                 most_recent.id
             } else if let Some(deployment) = client.get_service(proj_name).await?.deployment {
                 // Active deployment
                 deployment.id
             } else {
-                bail!("Could not find a running deployment for '{}'. Try with '--latest', or pass a deployment ID manually", proj_name);
+                bail!(
+                    "Could not find a running deployment for '{proj_name}'. Try with '--latest', or pass a deployment ID manually"
+                );
             }
         };
 

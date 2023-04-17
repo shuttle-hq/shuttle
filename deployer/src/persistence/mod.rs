@@ -495,7 +495,7 @@ impl ActiveDeploymentsGetter for Persistence {
 mod tests {
     use std::net::{Ipv4Addr, SocketAddr};
 
-    use chrono::{TimeZone, Utc, Duration};
+    use chrono::{Duration, TimeZone, Utc};
     use rand::Rng;
     use serde_json::json;
 
@@ -604,10 +604,65 @@ mod tests {
         );
     }
 
+    #[tokio::test(flavor = "multi_thread")]
+    async fn deployment_order() {
+        let (p, _) = Persistence::new_in_memory().await;
+
+        let xyz_id = add_service(&p.pool).await.unwrap();
+        let service_id = add_service(&p.pool).await.unwrap();
+
+        let deployment_other = Deployment {
+            id: Uuid::new_v4(),
+            service_id,
+            state: State::Running,
+            last_update: Utc.with_ymd_and_hms(2023, 4, 17, 1, 1, 2).unwrap(),
+            address: None,
+            is_next: false,
+        };
+        let deployment_crashed = Deployment {
+            id: Uuid::new_v4(),
+            service_id: xyz_id,
+            state: State::Crashed,
+            last_update: Utc.with_ymd_and_hms(2023, 4, 17, 1, 1, 2).unwrap(), // second
+            address: None,
+            is_next: false,
+        };
+        let deployment_stopped = Deployment {
+            id: Uuid::new_v4(),
+            service_id: xyz_id,
+            state: State::Stopped,
+            last_update: Utc.with_ymd_and_hms(2023, 4, 17, 1, 1, 1).unwrap(), // first
+            address: None,
+            is_next: false,
+        };
+        let deployment_running = Deployment {
+            id: Uuid::new_v4(),
+            service_id: xyz_id,
+            state: State::Running,
+            last_update: Utc.with_ymd_and_hms(2023, 4, 17, 1, 1, 3).unwrap(), // third
+            address: Some(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 9876)),
+            is_next: true,
+        };
+
+        for deployment in [
+            &deployment_other,
+            &deployment_crashed,
+            &deployment_stopped,
+            &deployment_running,
+        ] {
+            p.insert_deployment(deployment.clone()).await.unwrap();
+        }
+
+        let actual = p.get_deployments(&service_id).await.unwrap();
+        let expected = vec![deployment_stopped, deployment_crashed, deployment_running];
+
+        assert_eq!(actual, expected, "deployments should be sorted by time");
+    }
+
     // Test that we are correctly cleaning up any stale / unexpected states for a deployment
     // The reason this does not clean up two (or more) running states for a single deployment is because
     // it should theoretically be impossible for a service to have two deployments in the running state.
-    // And even if a service where to have this, then the start ups of these deployments (more specifically
+    // And even if a service were to have this, then the start ups of these deployments (more specifically
     // the last deployment that is starting up) will stop all the deployments correctly.
     #[tokio::test(flavor = "multi_thread")]
     async fn cleanup_invalid_states() {

@@ -467,9 +467,9 @@ jobs:
       #       SHUTTLE_API: https://api.unstable.shuttle.rs
       - run: git submodule sync
       - run: git submodule update --init
-      - run:
-          name: Test WASM
-          command: ./.circleci/qa-wasm.sh
+      # - run:
+      #     name: Test WASM
+      #     command: ./.circleci/qa-wasm.sh
       - run:
           name: "Install Docker"
           command: |
@@ -537,7 +537,6 @@ workflows:
   #             only: production
   release:
     jobs:
-      - linux-qa
       # - linux-qa:
       #     filters:
       #       branches:

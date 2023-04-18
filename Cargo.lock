@@ -5246,6 +5246,8 @@ dependencies = [
  "tracing-opentelemetry",
  "tracing-subscriber",
  "ttl_cache",
+ "utoipa",
+ "utoipa-swagger-ui",
  "uuid",
  "x509-parser",
 ]

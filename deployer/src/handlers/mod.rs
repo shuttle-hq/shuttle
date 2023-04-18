@@ -12,7 +12,9 @@ use chrono::{TimeZone, Utc};
 use fqdn::FQDN;
 use futures::StreamExt;
 use hyper::Uri;
-use shuttle_common::backends::auth::{AuthPublicKey, JwtAuthenticationLayer, ScopedLayer};
+use shuttle_common::backends::auth::{
+    AdminSecretLayer, AuthPublicKey, JwtAuthenticationLayer, ScopedLayer,
+};
 use shuttle_common::backends::headers::XShuttleAccountName;
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
 use shuttle_common::claims::{Claim, Scope};
@@ -23,6 +25,7 @@ use shuttle_common::{request_span, LogItem};
 use shuttle_service::builder::clean_crate;
 use tracing::{debug, error, field, instrument, trace};
 use utoipa::OpenApi;
+
 use utoipa_swagger_ui::SwaggerUi;
 use uuid::Uuid;
 
@@ -59,6 +62,7 @@ mod project;
         shuttle_common::database::AwsRdsEngine,
         shuttle_common::database::SharedEngine,
         shuttle_common::models::service::Response,
+        shuttle_common::models::secret::Response,
         shuttle_common::models::deployment::Response,
         shuttle_common::log::Item,
         shuttle_common::models::secret::Response,
@@ -72,11 +76,15 @@ pub async fn make_router(
     persistence: Persistence,
     deployment_manager: DeploymentManager,
     proxy_fqdn: FQDN,
-    _admin_secret: String,
+    admin_secret: String,
     auth_uri: Uri,
     project_name: ProjectName,
 ) -> Router {
     Router::new()
+        .merge(SwaggerUi::new("/projects/:project_name/swagger-ui").url(
+            "/projects/:project_name/api-docs/openapi.json",
+            ApiDoc::openapi(),
+        ))
         .route(
             "/projects/:project_name/services",
             get(get_services.layer(ScopedLayer::new(vec![Scope::Service]))),
@@ -120,7 +128,7 @@ pub async fn make_router(
         .layer(Extension(deployment_manager))
         .layer(Extension(proxy_fqdn))
         .layer(JwtAuthenticationLayer::new(AuthPublicKey::new(auth_uri)))
-        // .layer(AdminSecretLayer::new(admin_secret))
+        .layer(AdminSecretLayer::new(admin_secret))
         // This route should be below the auth bearer since it does not need authentication
         .route("/projects/:project_name/status", get(get_status))
         .route_layer(from_extractor::<Metrics>())
@@ -143,7 +151,6 @@ pub async fn make_router(
             .build(),
         )
         .route_layer(from_extractor::<project::ProjectNameGuard>())
-        .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .layer(Extension(project_name))
 }
 
@@ -152,13 +159,14 @@ pub async fn make_router(
     get,
     path = "/projects/{project_name}/services",
     responses(
-        (status = 200, description = "Lists the services owned by a project.", body = [shuttle_common::models::service::Response])
+        (status = 200, description = "Lists the services owned by a project.", body = [shuttle_common::models::service::Response]),
+        (status = 500, description = "Database error.", body = String)
     ),
     params(
         ("project_name" = String, Path, description = "Name of the project that owns the services."),
     )
 )]
-async fn get_services(
+pub async fn get_services(
     Extension(persistence): Extension<Persistence>,
 ) -> Result<Json<Vec<shuttle_common::models::service::Response>>> {
     let services = persistence
@@ -177,14 +185,16 @@ async fn get_services(
     get,
     path = "/projects/{project_name}/services/{service_name}",
     responses(
-        (status = 200, description = "Gets a specific service summary.", body = shuttle_common::models::service::Summary)
+        (status = 200, description = "Gets a specific service summary.", body = shuttle_common::models::service::Summary),
+        (status = 500, description = "Database error.", body = String),
+        (status = 404, description = "Record could not be found.", body = String),
     ),
     params(
         ("project_name" = String, Path, description = "Name of the project that owns the service."),
         ("service_name" = String, Path, description = "Name of the service.")
     )
 )]
-async fn get_service(
+pub async fn get_service(
     Extension(persistence): Extension<Persistence>,
     Extension(proxy_fqdn): Extension<FQDN>,
     Path((project_name, service_name)): Path<(String, String)>,
@@ -212,14 +222,16 @@ async fn get_service(
     get,
     path = "/projects/{project_name}/services/{service_name}/resources",
     responses(
-        (status = 200, description = "Gets a specific service resources.", body = shuttle_common::resource::Response)
+        (status = 200, description = "Gets a specific service resources.", body = shuttle_common::resource::Response),
+        (status = 500, description = "Database error.", body = String),
+        (status = 404, description = "Record could not be found.", body = String),
     ),
     params(
         ("project_name" = String, Path, description = "Name of the project that owns the service."),
         ("service_name" = String, Path, description = "Name of the service.")
     )
 )]
-async fn get_service_resources(
+pub async fn get_service_resources(
     Extension(persistence): Extension<Persistence>,
     Path((project_name, service_name)): Path<(String, String)>,
 ) -> Result<Json<Vec<shuttle_common::resource::Response>>> {
@@ -242,14 +254,16 @@ async fn get_service_resources(
     post,
     path = "/projects/{project_name}/services/{service_name}",
     responses(
-        (status = 200, description = "Creates a specific service owned by a specific project.", body = shuttle_common::models::deployment::Response)
+        (status = 200, description = "Creates a specific service owned by a specific project.", body = shuttle_common::models::deployment::Response),
+        (status = 500, description = "Database or streaming error.", body = String),
+        (status = 404, description = "Record could not be found.", body = String),
     ),
     params(
         ("project_name" = String, Path, description = "Name of the project that owns the service."),
         ("service_name" = String, Path, description = "Name of the service.")
     )
 )]
-async fn create_service(
+pub async fn create_service(
     Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(claim): Extension<Claim>,
@@ -299,14 +313,16 @@ async fn create_service(
     delete,
     path = "/projects/{project_name}/services/{service_name}",
     responses(
-        (status = 200, description = "Stops a specific service owned by a specific project.", body = shuttle_common::models::service::Summary)
+        (status = 200, description = "Stops a specific service owned by a specific project.", body = shuttle_common::models::service::Summary),
+        (status = 500, description = "Database error.", body = String),
+        (status = 404, description = "Record could not be found.", body = String),
     ),
     params(
         ("project_name" = String, Path, description = "Name of the project that owns the service."),
         ("service_name" = String, Path, description = "Name of the service.")
     )
 )]
-async fn stop_service(
+pub async fn stop_service(
     Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(proxy_fqdn): Extension<FQDN>,
@@ -338,13 +354,15 @@ async fn stop_service(
     get,
     path = "/projects/{project_name}/deployments",
     responses(
-        (status = 200, description = "Gets deployments information associated to a specific project.", body = shuttle_common::models::deployment::Response)
+        (status = 200, description = "Gets deployments information associated to a specific project.", body = shuttle_common::models::deployment::Response),
+        (status = 500, description = "Database error.", body = String),
+        (status = 404, description = "Record could not be found.", body = String),
     ),
     params(
         ("project_name" = String, Path, description = "Name of the project that owns the deployments.")
     )
 )]
-async fn get_deployments(
+pub async fn get_deployments(
     Extension(persistence): Extension<Persistence>,
     Path(project_name): Path<String>,
 ) -> Result<Json<Vec<shuttle_common::models::deployment::Response>>> {
@@ -368,14 +386,16 @@ async fn get_deployments(
     get,
     path = "/projects/{project_name}/deployments/{deployment_id}",
     responses(
-        (status = 200, description = "Gets a specific deployment information.", body = shuttle_common::models::deployment::Response)
+        (status = 200, description = "Gets a specific deployment information.", body = shuttle_common::models::deployment::Response),
+        (status = 500, description = "Database or streaming error.", body = String),
+        (status = 404, description = "Record could not be found.", body = String),
     ),
     params(
         ("project_name" = String, Path, description = "Name of the project that owns the deployment."),
         ("deployment_id" = String, Path, description = "The deployment id in uuid format.")
     )
 )]
-async fn get_deployment(
+pub async fn get_deployment(
     Extension(persistence): Extension<Persistence>,
     Path((project_name, deployment_id)): Path<(String, Uuid)>,
 ) -> Result<Json<shuttle_common::models::deployment::Response>> {
@@ -391,14 +411,16 @@ async fn get_deployment(
     delete,
     path = "/projects/{project_name}/deployments/{deployment_id}",
     responses(
-        (status = 200, description = "Deletes a specific deployment.", body = shuttle_common::models::deployment::Response)
+        (status = 200, description = "Deletes a specific deployment.", body = shuttle_common::models::deployment::Response),
+        (status = 500, description = "Database or streaming error.", body = String),
+        (status = 404, description = "Record could not be found.", body = String),
     ),
     params(
         ("project_name" = String, Path, description = "Name of the project that owns the deployment."),
         ("deployment_id" = String, Path, description = "The deployment id in uuid format.")
     )
 )]
-async fn delete_deployment(
+pub async fn delete_deployment(
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(persistence): Extension<Persistence>,
     Path((project_name, deployment_id)): Path<(String, Uuid)>,
@@ -417,14 +439,16 @@ async fn delete_deployment(
     get,
     path = "/projects/{project_name}/ws/deployments/{deployment_id}/logs",
     responses(
-        (status = 200, description = "Gets the logs a specific deployment.", body = [shuttle_common::log::Item])
+        (status = 200, description = "Gets the logs a specific deployment.", body = [shuttle_common::log::Item]),
+        (status = 500, description = "Database or streaming error.", body = String),
+        (status = 404, description = "Record could not be found.", body = String),
     ),
     params(
         ("project_name" = String, Path, description = "Name of the project that owns the deployment."),
         ("deployment_id" = String, Path, description = "The deployment id in uuid format.")
     )
 )]
-async fn get_logs(
+pub async fn get_logs(
     Extension(persistence): Extension<Persistence>,
     Path((project_name, deployment_id)): Path<(String, Uuid)>,
 ) -> Result<Json<Vec<LogItem>>> {
@@ -453,7 +477,7 @@ async fn get_logs(
         ("deployment_id" = String, Path, description = "The deployment id in uuid format.")
     )
 )]
-async fn get_logs_subscribe(
+pub async fn get_logs_subscribe(
     Extension(persistence): Extension<Persistence>,
     Path((_project_name, deployment_id)): Path<(String, Uuid)>,
     ws_upgrade: ws::WebSocketUpgrade,
@@ -519,14 +543,16 @@ async fn logs_websocket_handler(mut s: WebSocket, persistence: Persistence, id: 
     get,
     path = "/projects/{project_name}/secrets/{service_name}",
     responses(
-        (status = 200, description = "Gets the secrets a specific service.", body = [shuttle_common::models::secret::Response])
+        (status = 200, description = "Gets the secrets a specific service.", body = [shuttle_common::models::secret::Response]),
+        (status = 500, description = "Database or streaming error.", body = String),
+        (status = 404, description = "Record could not be found.", body = String),
     ),
     params(
         ("project_name" = String, Path, description = "Name of the project that owns the service."),
         ("service_name" = String, Path, description = "Name of the service.")
     )
 )]
-async fn get_secrets(
+pub async fn get_secrets(
     Extension(persistence): Extension<Persistence>,
     Path((project_name, service_name)): Path<(String, String)>,
 ) -> Result<Json<Vec<secret::Response>>> {
@@ -548,13 +574,14 @@ async fn get_secrets(
     post,
     path = "/projects/{project_name}/clean",
     responses(
-        (status = 200, description = "Clean a specific project build artifacts.", body = [String])
+        (status = 200, description = "Clean a specific project build artifacts.", body = [String]),
+        (status = 500, description = "Clean project error.", body = String),
     ),
     params(
         ("project_name" = String, Path, description = "Name of the project that owns the service."),
     )
 )]
-async fn clean_project(
+pub async fn clean_project(
     Extension(deployment_manager): Extension<DeploymentManager>,
     Path(project_name): Path<String>,
 ) -> Result<Json<Vec<String>>> {

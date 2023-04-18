@@ -7,8 +7,9 @@ use axum::Json;
 use serde::{ser::SerializeMap, Serialize};
 use shuttle_common::models::error::ApiError;
 use tracing::error;
+use utoipa::ToSchema;
 
-#[derive(thiserror::Error, Debug)]
+#[derive(thiserror::Error, Debug, ToSchema)]
 pub enum Error {
     #[error("Streaming error: {0}")]
     Streaming(#[from] axum::Error),

@@ -190,7 +190,7 @@ impl Persistence {
     }
 
     pub async fn get_deployments(&self, service_id: &Uuid) -> Result<Vec<Deployment>> {
-        sqlx::query_as("SELECT * FROM deployments WHERE service_id = ?")
+        sqlx::query_as("SELECT * FROM deployments WHERE service_id = ? ORDER BY last_update")
             .bind(service_id)
             .fetch_all(&self.pool)
             .await
@@ -495,7 +495,7 @@ impl ActiveDeploymentsGetter for Persistence {
 mod tests {
     use std::net::{Ipv4Addr, SocketAddr};
 
-    use chrono::{TimeZone, Utc};
+    use chrono::{Duration, TimeZone, Utc};
     use rand::Rng;
     use serde_json::json;
 
@@ -604,27 +604,26 @@ mod tests {
         );
     }
 
-    // Test that we are correctly cleaning up any stale / unexpected states for a deployment
-    // The reason this does not clean up two (or more) running states for a single deployment is because
-    // it should theoretically be impossible for a service to have two deployments in the running state.
-    // And even if a service where to have this, then the start ups of these deployments (more specifically
-    // the last deployment that is starting up) will stop all the deployments correctly.
     #[tokio::test(flavor = "multi_thread")]
-    async fn cleanup_invalid_states() {
+    async fn deployment_order() {
         let (p, _) = Persistence::new_in_memory().await;
 
         let service_id = add_service(&p.pool).await.unwrap();
+        let other_id = add_service(&p.pool).await.unwrap();
 
-        let queued_id = Uuid::new_v4();
-        let building_id = Uuid::new_v4();
-        let built_id = Uuid::new_v4();
-        let loading_id = Uuid::new_v4();
-
+        let deployment_other = Deployment {
+            id: Uuid::new_v4(),
+            service_id: other_id,
+            state: State::Running,
+            last_update: Utc.with_ymd_and_hms(2023, 4, 17, 1, 1, 2).unwrap(),
+            address: None,
+            is_next: false,
+        };
         let deployment_crashed = Deployment {
             id: Uuid::new_v4(),
             service_id,
             state: State::Crashed,
-            last_update: Utc::now(),
+            last_update: Utc.with_ymd_and_hms(2023, 4, 17, 1, 1, 2).unwrap(), // second
             address: None,
             is_next: false,
         };
@@ -632,7 +631,7 @@ mod tests {
             id: Uuid::new_v4(),
             service_id,
             state: State::Stopped,
-            last_update: Utc::now(),
+            last_update: Utc.with_ymd_and_hms(2023, 4, 17, 1, 1, 1).unwrap(), // first
             address: None,
             is_next: false,
         };
@@ -640,39 +639,91 @@ mod tests {
             id: Uuid::new_v4(),
             service_id,
             state: State::Running,
-            last_update: Utc::now(),
+            last_update: Utc.with_ymd_and_hms(2023, 4, 17, 1, 1, 3).unwrap(), // third
+            address: Some(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 9876)),
+            is_next: true,
+        };
+
+        for deployment in [
+            &deployment_other,
+            &deployment_crashed,
+            &deployment_stopped,
+            &deployment_running,
+        ] {
+            p.insert_deployment(deployment.clone()).await.unwrap();
+        }
+
+        let actual = p.get_deployments(&service_id).await.unwrap();
+        let expected = vec![deployment_stopped, deployment_crashed, deployment_running];
+
+        assert_eq!(actual, expected, "deployments should be sorted by time");
+    }
+
+    // Test that we are correctly cleaning up any stale / unexpected states for a deployment
+    // The reason this does not clean up two (or more) running states for a single deployment is because
+    // it should theoretically be impossible for a service to have two deployments in the running state.
+    // And even if a service were to have this, then the start ups of these deployments (more specifically
+    // the last deployment that is starting up) will stop all the deployments correctly.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn cleanup_invalid_states() {
+        let (p, _) = Persistence::new_in_memory().await;
+
+        let service_id = add_service(&p.pool).await.unwrap();
+        let time = Utc::now();
+
+        let deployment_crashed = Deployment {
+            id: Uuid::new_v4(),
+            service_id,
+            state: State::Crashed,
+            last_update: time,
+            address: None,
+            is_next: false,
+        };
+        let deployment_stopped = Deployment {
+            id: Uuid::new_v4(),
+            service_id,
+            state: State::Stopped,
+            last_update: time.checked_add_signed(Duration::seconds(1)).unwrap(),
+            address: None,
+            is_next: false,
+        };
+        let deployment_running = Deployment {
+            id: Uuid::new_v4(),
+            service_id,
+            state: State::Running,
+            last_update: time.checked_add_signed(Duration::seconds(2)).unwrap(),
             address: Some(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 9876)),
             is_next: false,
         };
         let deployment_queued = Deployment {
-            id: queued_id,
+            id: Uuid::new_v4(),
             service_id,
             state: State::Queued,
-            last_update: Utc::now(),
+            last_update: time.checked_add_signed(Duration::seconds(3)).unwrap(),
             address: None,
             is_next: false,
         };
         let deployment_building = Deployment {
-            id: building_id,
+            id: Uuid::new_v4(),
             service_id,
             state: State::Building,
-            last_update: Utc::now(),
+            last_update: time.checked_add_signed(Duration::seconds(4)).unwrap(),
             address: None,
             is_next: false,
         };
         let deployment_built = Deployment {
-            id: built_id,
+            id: Uuid::new_v4(),
             service_id,
             state: State::Built,
-            last_update: Utc::now(),
+            last_update: time.checked_add_signed(Duration::seconds(5)).unwrap(),
             address: None,
             is_next: true,
         };
         let deployment_loading = Deployment {
-            id: loading_id,
+            id: Uuid::new_v4(),
             service_id,
             state: State::Loading,
-            last_update: Utc::now(),
+            last_update: time.checked_add_signed(Duration::seconds(6)).unwrap(),
             address: None,
             is_next: false,
         };
@@ -702,10 +753,10 @@ mod tests {
             (deployment_crashed.id, State::Crashed),
             (deployment_stopped.id, State::Stopped),
             (deployment_running.id, State::Running),
-            (queued_id, State::Stopped),
-            (built_id, State::Stopped),
-            (building_id, State::Stopped),
-            (loading_id, State::Stopped),
+            (deployment_queued.id, State::Stopped),
+            (deployment_building.id, State::Stopped),
+            (deployment_built.id, State::Stopped),
+            (deployment_loading.id, State::Stopped),
         ];
 
         assert_eq!(

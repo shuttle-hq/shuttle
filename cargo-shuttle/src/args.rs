@@ -110,7 +110,9 @@ pub enum Command {
     Logs {
         /// Deployment ID to get logs for. Defaults to currently running deployment
         id: Option<Uuid>,
-
+        #[arg(short, long)]
+        /// View logs from the most recent deployment (which is not always the latest running one)
+        latest: bool,
         #[arg(short, long)]
         /// Follow log output
         follow: bool,

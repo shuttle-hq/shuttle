@@ -91,6 +91,9 @@ impl StatusResponse {
     responses(
         (status = 200, description = "Sucesffuly got a specific project information.", body = shuttle_common::models::project::Response),
         (status = 500, description = "Server internal error.")
+    ),
+    params(
+        ("project_name" = String, Path, description = "The name of the project."),
     )
 )]
 async fn get_project(
@@ -155,6 +158,9 @@ async fn get_projects_list(
     responses(
         (status = 200, description = "Sucesffuly created a specific project.", body = shuttle_common::models::project::Response),
         (status = 500, description = "Server internal error.")
+    ),
+    params(
+        ("project_name" = String, Path, description = "The name of the project."),
     )
 )]
 async fn create_project(
@@ -192,6 +198,9 @@ async fn create_project(
     responses(
         (status = 200, description = "Sucesffuly destroyed a specific project.", body = shuttle_common::models::project::Response),
         (status = 500, description = "Server internal error.")
+    ),
+    params(
+        ("project_name" = String, Path, description = "The name of the project."),
     )
 )]
 async fn destroy_project(
@@ -272,7 +281,7 @@ async fn get_status(State(RouterState { sender, .. }): State<RouterState>) -> Re
     post,
     path = "/stats/load",
     responses(
-        (status = 200, description = "Successfully fetched the build queue load.", body = shttle_common::models::stats::LoadResponse),
+        (status = 200, description = "Successfully fetched the build queue load.", body = shuttle_common::models::stats::LoadResponse),
         (status = 500, description = "Server internal error.")
     )
 )]
@@ -412,12 +421,13 @@ async fn destroy_projects(
     post,
     path = "/admin/acme/{email}",
     responses(
-        (status = 200, description = "Created an acme account.", body = String),
+        (status = 200, description = "Created an acme account.", content_type = "application/json", body = String),
         (status = 500, description = "Server internal error.")
     ),
     params(
         ("email" = String, Path, description = "An email the acme account binds to."),
-    )
+    ),
+
 )]
 async fn create_acme_account(
     Extension(acme_client): Extension<AcmeClient>,
@@ -616,6 +626,19 @@ async fn get_projects(
     Ok(AxumJson(projects))
 }
 
+struct SecurityAddon;
+
+impl Modify for SecurityAddon {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        if let Some(components) = openapi.components.as_mut() {
+            components.add_security_scheme(
+                "Gateway API Key",
+                SecurityScheme::ApiKey(ApiKey::Header(ApiKeyValue::new("Bearer"))),
+            )
+        }
+    }
+}
+
 #[derive(OpenApi)]
 #[openapi(
     paths(
@@ -636,26 +659,16 @@ async fn get_projects(
         get_load_admin,
         delete_load_admin
     ),
+    modifiers(&SecurityAddon),
     components(schemas(
         shuttle_common::models::project::Response,
         shuttle_common::models::stats::LoadResponse,
-        shuttle_common::models::project::AdminResponse
+        shuttle_common::models::project::AdminResponse,
+        shuttle_common::models::stats::LoadResponse,
+        shuttle_common::models::project::State
     ))
 )]
-struct ApiDoc;
-
-struct SecurityAddon;
-
-impl Modify for SecurityAddon {
-    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
-        if let Some(components) = openapi.components.as_mut() {
-            components.add_security_scheme(
-                "api_key",
-                SecurityScheme::ApiKey(ApiKey::Header(ApiKeyValue::new("todo_apikey"))),
-            )
-        }
-    }
-}
+pub struct ApiDoc;
 
 #[derive(Clone)]
 pub(crate) struct RouterState {
@@ -789,6 +802,8 @@ impl ApiBuilder {
                     .delete(delete_load_admin)
                     .layer(ScopedLayer::new(vec![Scope::Admin])),
             )
+            // TODO: The `/admin/swagger-ui` responds with a 303 See Other response which is followed in
+            // browsers but leads to 404 Not Found. This must be investigated.
             .merge(
                 SwaggerUi::new("/admin/swagger-ui")
                     .url("/admin/api-docs/openapi.json", ApiDoc::openapi()),

@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 #[derive(Deserialize, Serialize, ToSchema)]
+#[schema(as = shuttle_common::models::secret::Response)]
 pub struct Response {
     pub key: String,
     #[schema(value_type = KnownFormat::DateTime)]

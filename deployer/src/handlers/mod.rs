@@ -70,7 +70,7 @@ mod project;
         shuttle_common::deployment::State
     ))
 )]
-struct ApiDoc;
+pub struct ApiDoc;
 
 pub async fn make_router(
     persistence: Persistence,
@@ -81,6 +81,8 @@ pub async fn make_router(
     project_name: ProjectName,
 ) -> Router {
     Router::new()
+        // TODO: The `/swagger-ui` responds with a 303 See Other response which is followed in
+        // browsers but leads to 404 Not Found. This must be investigated.
         .merge(SwaggerUi::new("/projects/:project_name/swagger-ui").url(
             "/projects/:project_name/api-docs/openapi.json",
             ApiDoc::openapi(),

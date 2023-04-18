@@ -15,12 +15,13 @@ pub const IDLE_MINUTES: u64 = 30;
 #[schema(as = shuttle_common::models::project::Response)]
 pub struct Response {
     pub name: String,
+    #[schema(value_type = shuttle_common::models::project::State)]
     pub state: State,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, EnumString, ToSchema)]
-#[schema(as = shuttle_common::models::project::State)]
 #[serde(rename_all = "lowercase")]
+#[schema(as = shuttle_common::models::project::State)]
 pub enum State {
     Creating { recreate_count: usize },
     Attaching { recreate_count: usize },

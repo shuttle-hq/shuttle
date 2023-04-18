@@ -15,11 +15,11 @@ pub struct Response {
     pub r#type: Type,
 
     /// The config used when creating this resource. Use the [Self::r#type] to know how to parse this data.
-    #[schema(value_type = object)]
+    #[schema(value_type = Object)]
     pub config: Value,
 
     /// The data associated with this resource. Use the [Self::r#type] to know how to parse this data.
-    #[schema(value_type = object)]
+    #[schema(value_type = Object)]
     pub data: Value,
 }
 

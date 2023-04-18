@@ -7,7 +7,7 @@ cd examples/rocket/postgres
 
 # Start locally
 cargo shuttle run &
-sleep 190
+sleep 300
 
 echo "Testing local docker endpoint"
 output=$(curl --silent --request POST --header "Content-Type: application/json" --data '{"note": "test"}' localhost:8000/todo)

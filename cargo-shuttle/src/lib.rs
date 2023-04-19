@@ -11,6 +11,7 @@ use shuttle_common::models::resource::get_resources_table;
 use shuttle_common::project::ProjectName;
 use shuttle_common::resource;
 use shuttle_proto::runtime::{self, LoadRequest, StartRequest, SubscribeLogsRequest};
+
 use tokio::task::JoinSet;
 
 use std::collections::HashMap;
@@ -527,10 +528,9 @@ impl Shuttle {
 
                     if cfg!(debug_assertions) {
                         // Canonicalized path to shuttle-runtime for dev to work on windows
+
                         let path = std::fs::canonicalize(format!("{MANIFEST_DIR}/../runtime"))
                             .expect("path to shuttle-runtime does not exist or is invalid");
-
-                        trace!(?path, "installing runtime from local filesystem");
 
                         std::process::Command::new("cargo")
                             .arg("install")
@@ -580,12 +580,9 @@ impl Shuttle {
             .await
             .map_err(|err| {
                 provisioner_server.abort();
-
                 err
             })?;
-
             let service_name = service.service_name()?;
-
             let load_request = tonic::Request::new(LoadRequest {
                 path: executable_path
                     .into_os_string()
@@ -595,6 +592,7 @@ impl Shuttle {
                 resources: Default::default(),
                 secrets,
             });
+
             trace!("loading service");
             let response = runtime_client
                 .load(load_request)
@@ -609,6 +607,10 @@ impl Shuttle {
 
             if !response.success {
                 error!(error = response.message, "failed to load your service");
+                // TODO: we must kill the rest of the runtimes when we'll start multiple services from a workspace,
+                // but now this is not concerning given we're not supporting more than one services.
+                provisioner_server.abort();
+                runtime.kill().await?;
                 exit(1);
             }
 
@@ -665,14 +667,12 @@ impl Shuttle {
                 .or_else(|err| async {
                     provisioner_server.abort();
                     runtime.kill().await?;
-
                     Err(err)
                 })
                 .await?
                 .into_inner();
 
             trace!(response = ?response,  "client response: ");
-
             runtime_handles.spawn(async move { runtime.wait().await });
         }
 

@@ -249,6 +249,7 @@ pub mod runtime {
 
         let runtime = process::Command::new(runtime_executable_path)
             .args(&args)
+            .kill_on_drop(true)
             .spawn()
             .context("spawning runtime process")?;
 

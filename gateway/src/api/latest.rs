@@ -89,7 +89,7 @@ impl StatusResponse {
     get,
     path = "/projects/{project_name}",
     responses(
-        (status = 200, description = "Sucesffuly got a specific project information.", body = shuttle_common::models::project::Response),
+        (status = 200, description = "Successfully got a specific project information.", body = shuttle_common::models::project::Response),
         (status = 500, description = "Server internal error.")
     ),
     params(
@@ -113,7 +113,7 @@ async fn get_project(
     get,
     path = "/projects",
     responses(
-        (status = 200, description = "Sucesffuly got the projects list.", body = [shuttle_common::models::project::Response]),
+        (status = 200, description = "Successfully got the projects list.", body = [shuttle_common::models::project::Response]),
         (status = 500, description = "Server internal error.")
     )
 )]
@@ -156,7 +156,7 @@ async fn get_projects_list(
     post,
     path = "/projects/{project_name}",
     responses(
-        (status = 200, description = "Sucesffuly created a specific project.", body = shuttle_common::models::project::Response),
+        (status = 200, description = "Successfully created a specific project.", body = shuttle_common::models::project::Response),
         (status = 500, description = "Server internal error.")
     ),
     params(
@@ -196,7 +196,7 @@ async fn create_project(
     delete,
     path = "/projects/{project_name}",
     responses(
-        (status = 200, description = "Sucesffuly destroyed a specific project.", body = shuttle_common::models::project::Response),
+        (status = 200, description = "Successfully destroyed a specific project.", body = shuttle_common::models::project::Response),
         (status = 500, description = "Server internal error.")
     ),
     params(

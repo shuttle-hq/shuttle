@@ -87,7 +87,7 @@ tonic-build = "0.8.3"
 tower = "0.4.13"
 tower-http = { version = "0.4.0", features = ["trace"] }
 tracing = { version = "0.1.37", default-features = false }
-# temporary git dependency until 0.19 is released
+# Remove git dependency when https://github.com/tokio-rs/tracing-opentelemetry/pull/12 is merged and released
 tracing-opentelemetry = { git = "https://github.com/oddgrd/tracing-opentelemetry", branch = "update-opentelemetry-0.19" }
 tracing-subscriber = { version = "0.3.16", default-features = false, features = [
   "registry",

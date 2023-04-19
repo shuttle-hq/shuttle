@@ -47,6 +47,8 @@ tracing = { workspace = true, features = ["default"] }
 tracing-opentelemetry = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["default", "env-filter"] }
 ttl_cache = { workspace = true }
+utoipa = { workspace = true }
+utoipa-swagger-ui = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
 x509-parser = "0.14.0"
 

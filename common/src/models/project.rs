@@ -6,18 +6,22 @@ use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use strum::EnumString;
+use utoipa::ToSchema;
 
 // Timeframe before a project is considered idle
 pub const IDLE_MINUTES: u64 = 30;
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone, ToSchema)]
+#[schema(as = shuttle_common::models::project::Response)]
 pub struct Response {
     pub name: String,
+    #[schema(value_type = shuttle_common::models::project::State)]
     pub state: State,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, EnumString)]
+#[derive(Clone, Debug, Deserialize, Serialize, EnumString, ToSchema)]
 #[serde(rename_all = "lowercase")]
+#[schema(as = shuttle_common::models::project::State)]
 pub enum State {
     Creating { recreate_count: usize },
     Attaching { recreate_count: usize },
@@ -164,7 +168,8 @@ pub struct Config {
     pub idle_minutes: u64,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, ToSchema)]
+#[schema(as = shuttle_common::models::project::AdminResponse)]
 pub struct AdminResponse {
     pub project_name: String,
     pub account_name: String,

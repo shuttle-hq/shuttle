@@ -1,7 +1,8 @@
 use strum::{Display, EnumString};
+use utoipa::ToSchema;
 
 /// States a deployment can be in
-#[derive(sqlx::Type, Debug, Display, Clone, Copy, EnumString, PartialEq, Eq)]
+#[derive(sqlx::Type, Debug, Display, Clone, Copy, EnumString, PartialEq, Eq, ToSchema)]
 pub enum State {
     /// Deployment is queued to be build
     Queued,

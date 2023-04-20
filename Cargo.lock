@@ -1094,7 +1094,6 @@ dependencies = [
  "serde_json",
  "shuttle-common",
  "shuttle-proto",
- "shuttle-secrets",
  "shuttle-service",
  "sqlx",
  "strum",
@@ -5326,15 +5325,6 @@ dependencies = [
  "wasi-common",
  "wasmtime",
  "wasmtime-wasi",
-]
-
-[[package]]
-name = "shuttle-secrets"
-version = "0.14.0"
-dependencies = [
- "async-trait",
- "serde",
- "shuttle-service",
 ]
 
 [[package]]

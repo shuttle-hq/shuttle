@@ -607,10 +607,9 @@ impl Shuttle {
 
             if !response.success {
                 error!(error = response.message, "failed to load your service");
-                // TODO: we must kill the rest of the runtimes when we'll start multiple services from a workspace,
-                // but now this is not concerning given we're not supporting more than one services.
                 provisioner_server.abort();
                 runtime.kill().await?;
+                runtime_handles.abort_all();
                 exit(1);
             }
 

@@ -20,8 +20,8 @@ The folder obtained will be consistent between deployments, but will not be in t
 
 
 ``` rust
-#[shuttle_service::main]
-async fn main(
+#[shuttle_runtime::main]
+async fn app(
     #[shuttle_static_folder::StaticFolder] static_folder: PathBuf,
 ) -> __ { ... }
 ```
@@ -37,8 +37,8 @@ async fn main(
 Since this plugin defaults to the `static` folder, the arguments can be used to use the `public` folder instead.
 
 ``` rust
-#[shuttle_service::main]
-async fn main(
+#[shuttle_runtime::main]
+async fn app(
     #[shuttle_static_folder::StaticFolder(folder = "public")] public_folder: PathBuf,
 ) -> __ { ... }
 ```

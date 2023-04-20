@@ -8,8 +8,13 @@ use std::fmt::{Display, Formatter};
 use strum::EnumString;
 use utoipa::ToSchema;
 
-// Timeframe before a project is considered idle
+/// Timeframe before a project is considered idle
 pub const IDLE_MINUTES: u64 = 30;
+
+/// Function to set [IDLE_MINUTES] as a serde default
+pub const fn idle_minutes() -> u64 {
+    IDLE_MINUTES
+}
 
 #[derive(Deserialize, Serialize, Clone, ToSchema)]
 #[schema(as = shuttle_common::models::project::Response)]

@@ -20,7 +20,7 @@ use hyper::Client;
 use once_cell::sync::Lazy;
 use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Serialize};
-use shuttle_common::models::project::IDLE_MINUTES;
+use shuttle_common::models::project::{idle_minutes, IDLE_MINUTES};
 use tokio::time::{sleep, timeout};
 use tracing::{debug, error, info, instrument};
 
@@ -582,6 +582,7 @@ pub struct ProjectCreating {
     #[serde(default)]
     recreate_count: usize,
     /// Label set on container as to how many minutes to wait before a project is considered idle
+    #[serde(default = "idle_minutes")]
     idle_minutes: u64,
 }
 

@@ -410,7 +410,7 @@ jobs:
   linux-qa:
     machine:
       image: ubuntu-2004:current
-      resource_class: xlarge
+    resource_class: xlarge
     steps:
       - checkout
       - run:

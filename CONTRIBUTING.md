@@ -159,7 +159,7 @@ This starts the provisioner and the auth service, while preventing `gateway` fro
 start a local run of the deployer:
 
 ```bash
-cargo run -p shuttle-deployer -- --provisioner-address http://localhost:8000 --proxy-fqdn local.rs --admin-secret test-key --local --project <project_name>
+cargo run -p shuttle-deployer -- --provisioner-address http://localhost:5000 --proxy-fqdn local.rs --admin-secret test-key --local --project <project_name>
 ```
 
 The `<project_name>` needs to match the name of the project that will be deployed to this deployer. This is the `Cargo.toml` or `Shuttle.toml` name for the project.

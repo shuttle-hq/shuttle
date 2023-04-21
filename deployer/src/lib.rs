@@ -12,7 +12,7 @@ pub use persistence::Persistence;
 use proxy::AddressGetter;
 pub use runtime_manager::RuntimeManager;
 use tokio::sync::Mutex;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use crate::deployment::gateway_client::GatewayClient;
 
@@ -57,15 +57,21 @@ pub async fn start(
         deployment_manager.run_push(built).await;
     }
 
-    let router = handlers::make_router(
+    let builder = handlers::RouterBuilder::new(
         persistence,
         deployment_manager,
         args.proxy_fqdn,
-        args.admin_secret,
-        args.auth_uri,
         args.project,
-    )
-    .await;
+    );
+
+    let router = if args.local {
+        warn!("Building deployer router with auth disabled, this should only be used for development.");
+        builder.with_local_admin_layer().into_router()
+    } else {
+        builder
+            .with_auth_layer(args.auth_uri, args.admin_secret)
+            .into_router()
+    };
 
     info!(address=%args.api_address, "Binding to and listening at address");
 

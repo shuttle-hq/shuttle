@@ -88,6 +88,42 @@ pub enum Scope {
     Admin,
 }
 
+impl Scope {
+    /// Standard scopes for a new user in the free tier.
+    pub fn base() -> Vec<Self> {
+        vec![
+            Scope::Deployment,
+            Scope::DeploymentPush,
+            Scope::Logs,
+            Scope::Service,
+            Scope::ServiceCreate,
+            Scope::Project,
+            Scope::ProjectCreate,
+            Scope::Resources,
+            Scope::ResourcesWrite,
+            Scope::Secret,
+            Scope::SecretWrite,
+        ]
+    }
+
+    /// All scopes for an admin user.
+    pub fn admin() -> Vec<Self> {
+        let mut base = Scope::base();
+
+        base.extend(vec![
+            Scope::User,
+            Scope::UserCreate,
+            Scope::AcmeCreate,
+            Scope::CustomDomainCreate,
+            Scope::CustomDomainCertificateRenew,
+            Scope::GatewayCertificateRenew,
+            Scope::Admin,
+        ]);
+
+        base
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
 pub struct Claim {
     /// Expiration time (as UTC timestamp).

@@ -4,7 +4,7 @@ use axum::extract::ws::{self, WebSocket};
 use axum::extract::{Extension, Path, Query};
 use axum::handler::Handler;
 use axum::headers::HeaderMapExt;
-use axum::middleware::from_extractor;
+use axum::middleware::{from_extractor, map_request};
 use axum::routing::{get, post, Router};
 use axum::{extract::BodyStream, Json};
 use bytes::BufMut;
@@ -34,8 +34,9 @@ use crate::persistence::{Deployment, Log, Persistence, ResourceManager, SecretGe
 
 use std::collections::HashMap;
 
-pub use {self::error::Error, self::error::Result};
+pub use {self::error::Error, self::error::Result, self::local::set_admin_claim};
 
+mod local;
 mod project;
 
 #[derive(OpenApi)]
@@ -72,88 +73,118 @@ mod project;
 )]
 pub struct ApiDoc;
 
-pub async fn make_router(
-    persistence: Persistence,
-    deployment_manager: DeploymentManager,
-    proxy_fqdn: FQDN,
-    admin_secret: String,
-    auth_uri: Uri,
+#[derive(Clone)]
+pub struct RouterBuilder {
+    router: Router,
     project_name: ProjectName,
-) -> Router {
-    Router::new()
-        // TODO: The `/swagger-ui` responds with a 303 See Other response which is followed in
-        // browsers but leads to 404 Not Found. This must be investigated.
-        .merge(SwaggerUi::new("/projects/:project_name/swagger-ui").url(
-            "/projects/:project_name/api-docs/openapi.json",
-            ApiDoc::openapi(),
-        ))
-        .route(
-            "/projects/:project_name/services",
-            get(get_services.layer(ScopedLayer::new(vec![Scope::Service]))),
-        )
-        .route(
-            "/projects/:project_name/services/:service_name",
-            get(get_service.layer(ScopedLayer::new(vec![Scope::Service])))
-                .post(create_service.layer(ScopedLayer::new(vec![Scope::ServiceCreate])))
-                .delete(stop_service.layer(ScopedLayer::new(vec![Scope::ServiceCreate]))),
-        )
-        .route(
-            "/projects/:project_name/services/:service_name/resources",
-            get(get_service_resources).layer(ScopedLayer::new(vec![Scope::Resources])),
-        )
-        .route(
-            "/projects/:project_name/deployments",
-            get(get_deployments).layer(ScopedLayer::new(vec![Scope::Service])),
-        )
-        .route(
-            "/projects/:project_name/deployments/:deployment_id",
-            get(get_deployment.layer(ScopedLayer::new(vec![Scope::Deployment])))
-                .delete(delete_deployment.layer(ScopedLayer::new(vec![Scope::DeploymentPush]))),
-        )
-        .route(
-            "/projects/:project_name/ws/deployments/:deployment_id/logs",
-            get(get_logs_subscribe.layer(ScopedLayer::new(vec![Scope::Logs]))),
-        )
-        .route(
-            "/projects/:project_name/deployments/:deployment_id/logs",
-            get(get_logs.layer(ScopedLayer::new(vec![Scope::Logs]))),
-        )
-        .route(
-            "/projects/:project_name/secrets/:service_name",
-            get(get_secrets.layer(ScopedLayer::new(vec![Scope::Secret]))),
-        )
-        .route(
-            "/projects/:project_name/clean",
-            post(clean_project.layer(ScopedLayer::new(vec![Scope::DeploymentPush]))),
-        )
-        .layer(Extension(persistence))
-        .layer(Extension(deployment_manager))
-        .layer(Extension(proxy_fqdn))
-        .layer(JwtAuthenticationLayer::new(AuthPublicKey::new(auth_uri)))
-        .layer(AdminSecretLayer::new(admin_secret))
-        // This route should be below the auth bearer since it does not need authentication
-        .route("/projects/:project_name/status", get(get_status))
-        .route_layer(from_extractor::<Metrics>())
-        .layer(
-            TraceLayer::new(|request| {
-                let account_name = request
-                    .headers()
-                    .typed_get::<XShuttleAccountName>()
-                    .unwrap_or_default();
+}
 
-                request_span!(
-                    request,
-                    account.name = account_name.0,
-                    request.params.project_name = field::Empty,
-                    request.params.service_name = field::Empty,
-                    request.params.deployment_id = field::Empty,
-                )
-            })
-            .with_propagation()
-            .build(),
-        )
-        .route_layer(from_extractor::<project::ProjectNameGuard>())
-        .layer(Extension(project_name))
+impl RouterBuilder {
+    pub fn new(
+        persistence: Persistence,
+        deployment_manager: DeploymentManager,
+        proxy_fqdn: FQDN,
+        project_name: ProjectName,
+    ) -> Self {
+        let router = Router::new()
+            // TODO: The `/swagger-ui` responds with a 303 See Other response which is followed in
+            // browsers but leads to 404 Not Found. This must be investigated.
+            .merge(SwaggerUi::new("/projects/:project_name/swagger-ui").url(
+                "/projects/:project_name/api-docs/openapi.json",
+                ApiDoc::openapi(),
+            ))
+            .route(
+                "/projects/:project_name/services",
+                get(get_services.layer(ScopedLayer::new(vec![Scope::Service]))),
+            )
+            .route(
+                "/projects/:project_name/services/:service_name",
+                get(get_service.layer(ScopedLayer::new(vec![Scope::Service])))
+                    .post(create_service.layer(ScopedLayer::new(vec![Scope::ServiceCreate])))
+                    .delete(stop_service.layer(ScopedLayer::new(vec![Scope::ServiceCreate]))),
+            )
+            .route(
+                "/projects/:project_name/services/:service_name/resources",
+                get(get_service_resources).layer(ScopedLayer::new(vec![Scope::Resources])),
+            )
+            .route(
+                "/projects/:project_name/deployments",
+                get(get_deployments).layer(ScopedLayer::new(vec![Scope::Service])),
+            )
+            .route(
+                "/projects/:project_name/deployments/:deployment_id",
+                get(get_deployment.layer(ScopedLayer::new(vec![Scope::Deployment])))
+                    .delete(delete_deployment.layer(ScopedLayer::new(vec![Scope::DeploymentPush]))),
+            )
+            .route(
+                "/projects/:project_name/ws/deployments/:deployment_id/logs",
+                get(get_logs_subscribe.layer(ScopedLayer::new(vec![Scope::Logs]))),
+            )
+            .route(
+                "/projects/:project_name/deployments/:deployment_id/logs",
+                get(get_logs.layer(ScopedLayer::new(vec![Scope::Logs]))),
+            )
+            .route(
+                "/projects/:project_name/secrets/:service_name",
+                get(get_secrets.layer(ScopedLayer::new(vec![Scope::Secret]))),
+            )
+            .route(
+                "/projects/:project_name/clean",
+                post(clean_project.layer(ScopedLayer::new(vec![Scope::DeploymentPush]))),
+            )
+            .layer(Extension(persistence))
+            .layer(Extension(deployment_manager))
+            .layer(Extension(proxy_fqdn));
+
+        Self {
+            router,
+            project_name,
+        }
+    }
+
+    pub fn with_auth_layer(mut self, auth_uri: Uri, admin_secret: String) -> Self {
+        let auth_public_key = AuthPublicKey::new(auth_uri);
+
+        self.router = self
+            .router
+            .layer(JwtAuthenticationLayer::new(auth_public_key))
+            .layer(AdminSecretLayer::new(admin_secret));
+
+        self
+    }
+
+    /// Sets an admin jwt extension on every request for use when running deployer locally.
+    pub fn with_local_admin_layer(mut self) -> Self {
+        self.router = self.router.layer(map_request(set_admin_claim));
+
+        self
+    }
+
+    pub fn into_router(self) -> Router {
+        self.router
+            .route("/projects/:project_name/status", get(get_status))
+            .route_layer(from_extractor::<Metrics>())
+            .layer(
+                TraceLayer::new(|request| {
+                    let account_name = request
+                        .headers()
+                        .typed_get::<XShuttleAccountName>()
+                        .unwrap_or_default();
+
+                    request_span!(
+                        request,
+                        account.name = account_name.0,
+                        request.params.project_name = field::Empty,
+                        request.params.service_name = field::Empty,
+                        request.params.deployment_id = field::Empty,
+                    )
+                })
+                .with_propagation()
+                .build(),
+            )
+            .route_layer(from_extractor::<project::ProjectNameGuard>())
+            .layer(Extension(self.project_name))
+    }
 }
 
 #[instrument(skip_all)]

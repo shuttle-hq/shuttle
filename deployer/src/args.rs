@@ -50,4 +50,8 @@ pub struct Args {
     /// Uri to folder to store all artifacts
     #[clap(long, default_value = "/tmp")]
     pub artifacts_path: PathBuf,
+
+    /// Run deployer without auth locally
+    #[arg(long)]
+    pub local: bool,
 }

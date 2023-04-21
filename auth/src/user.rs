@@ -185,33 +185,11 @@ pub enum AccountTier {
 
 impl From<AccountTier> for Vec<Scope> {
     fn from(tier: AccountTier) -> Self {
-        let mut base = vec![
-            Scope::Deployment,
-            Scope::DeploymentPush,
-            Scope::Logs,
-            Scope::Service,
-            Scope::ServiceCreate,
-            Scope::Project,
-            Scope::ProjectCreate,
-            Scope::Resources,
-            Scope::ResourcesWrite,
-            Scope::Secret,
-            Scope::SecretWrite,
-        ];
-
         if tier == AccountTier::Admin {
-            base.append(&mut vec![
-                Scope::User,
-                Scope::UserCreate,
-                Scope::AcmeCreate,
-                Scope::CustomDomainCreate,
-                Scope::CustomDomainCertificateRenew,
-                Scope::GatewayCertificateRenew,
-                Scope::Admin,
-            ]);
+            Scope::admin()
+        } else {
+            Scope::base()
         }
-
-        base
     }
 }
 

@@ -24,6 +24,9 @@ use shuttle_common::storage_manager::StorageManager;
 use shuttle_common::{request_span, LogItem};
 use shuttle_service::builder::clean_crate;
 use tracing::{debug, error, field, instrument, trace};
+use utoipa::OpenApi;
+
+use utoipa_swagger_ui::SwaggerUi;
 use uuid::Uuid;
 
 use crate::deployment::{DeploymentManager, Queued};
@@ -35,6 +38,40 @@ pub use {self::error::Error, self::error::Result};
 
 mod project;
 
+#[derive(OpenApi)]
+#[openapi(
+    paths(
+        get_services,
+        get_service,
+        create_service,
+        stop_service,
+        get_service_resources,
+        get_deployments,
+        get_deployment,
+        delete_deployment,
+        get_logs_subscribe,
+        get_logs,
+        get_secrets,
+        clean_project
+    ),
+    components(schemas(
+        shuttle_common::models::service::Summary,
+        shuttle_common::resource::Response,
+        shuttle_common::resource::Type,
+        shuttle_common::database::Type,
+        shuttle_common::database::AwsRdsEngine,
+        shuttle_common::database::SharedEngine,
+        shuttle_common::models::service::Response,
+        shuttle_common::models::secret::Response,
+        shuttle_common::models::deployment::Response,
+        shuttle_common::log::Item,
+        shuttle_common::models::secret::Response,
+        shuttle_common::log::Level,
+        shuttle_common::deployment::State
+    ))
+)]
+pub struct ApiDoc;
+
 pub async fn make_router(
     persistence: Persistence,
     deployment_manager: DeploymentManager,
@@ -44,14 +81,20 @@ pub async fn make_router(
     project_name: ProjectName,
 ) -> Router {
     Router::new()
+        // TODO: The `/swagger-ui` responds with a 303 See Other response which is followed in
+        // browsers but leads to 404 Not Found. This must be investigated.
+        .merge(SwaggerUi::new("/projects/:project_name/swagger-ui").url(
+            "/projects/:project_name/api-docs/openapi.json",
+            ApiDoc::openapi(),
+        ))
         .route(
             "/projects/:project_name/services",
-            get(list_services.layer(ScopedLayer::new(vec![Scope::Service]))),
+            get(get_services.layer(ScopedLayer::new(vec![Scope::Service]))),
         )
         .route(
             "/projects/:project_name/services/:service_name",
             get(get_service.layer(ScopedLayer::new(vec![Scope::Service])))
-                .post(post_service.layer(ScopedLayer::new(vec![Scope::ServiceCreate])))
+                .post(create_service.layer(ScopedLayer::new(vec![Scope::ServiceCreate])))
                 .delete(stop_service.layer(ScopedLayer::new(vec![Scope::ServiceCreate]))),
         )
         .route(
@@ -81,7 +124,7 @@ pub async fn make_router(
         )
         .route(
             "/projects/:project_name/clean",
-            post(post_clean.layer(ScopedLayer::new(vec![Scope::DeploymentPush]))),
+            post(clean_project.layer(ScopedLayer::new(vec![Scope::DeploymentPush]))),
         )
         .layer(Extension(persistence))
         .layer(Extension(deployment_manager))
@@ -114,7 +157,18 @@ pub async fn make_router(
 }
 
 #[instrument(skip_all)]
-async fn list_services(
+#[utoipa::path(
+    get,
+    path = "/projects/{project_name}/services",
+    responses(
+        (status = 200, description = "Lists the services owned by a project.", body = [shuttle_common::models::service::Response]),
+        (status = 500, description = "Database error.", body = String)
+    ),
+    params(
+        ("project_name" = String, Path, description = "Name of the project that owns the services."),
+    )
+)]
+pub async fn get_services(
     Extension(persistence): Extension<Persistence>,
 ) -> Result<Json<Vec<shuttle_common::models::service::Response>>> {
     let services = persistence
@@ -128,7 +182,21 @@ async fn list_services(
 }
 
 #[instrument(skip_all, fields(%project_name, %service_name))]
-async fn get_service(
+#[instrument(skip_all)]
+#[utoipa::path(
+    get,
+    path = "/projects/{project_name}/services/{service_name}",
+    responses(
+        (status = 200, description = "Gets a specific service summary.", body = shuttle_common::models::service::Summary),
+        (status = 500, description = "Database error.", body = String),
+        (status = 404, description = "Record could not be found.", body = String),
+    ),
+    params(
+        ("project_name" = String, Path, description = "Name of the project that owns the service."),
+        ("service_name" = String, Path, description = "Name of the service.")
+    )
+)]
+pub async fn get_service(
     Extension(persistence): Extension<Persistence>,
     Extension(proxy_fqdn): Extension<FQDN>,
     Path((project_name, service_name)): Path<(String, String)>,
@@ -152,7 +220,20 @@ async fn get_service(
 }
 
 #[instrument(skip_all, fields(%project_name, %service_name))]
-async fn get_service_resources(
+#[utoipa::path(
+    get,
+    path = "/projects/{project_name}/services/{service_name}/resources",
+    responses(
+        (status = 200, description = "Gets a specific service resources.", body = shuttle_common::resource::Response),
+        (status = 500, description = "Database error.", body = String),
+        (status = 404, description = "Record could not be found.", body = String),
+    ),
+    params(
+        ("project_name" = String, Path, description = "Name of the project that owns the service."),
+        ("service_name" = String, Path, description = "Name of the service.")
+    )
+)]
+pub async fn get_service_resources(
     Extension(persistence): Extension<Persistence>,
     Path((project_name, service_name)): Path<(String, String)>,
 ) -> Result<Json<Vec<shuttle_common::resource::Response>>> {
@@ -171,7 +252,20 @@ async fn get_service_resources(
 }
 
 #[instrument(skip_all, fields(%project_name, %service_name))]
-async fn post_service(
+#[utoipa::path(
+    post,
+    path = "/projects/{project_name}/services/{service_name}",
+    responses(
+        (status = 200, description = "Creates a specific service owned by a specific project.", body = shuttle_common::models::deployment::Response),
+        (status = 500, description = "Database or streaming error.", body = String),
+        (status = 404, description = "Record could not be found.", body = String),
+    ),
+    params(
+        ("project_name" = String, Path, description = "Name of the project that owns the service."),
+        ("service_name" = String, Path, description = "Name of the service.")
+    )
+)]
+pub async fn create_service(
     Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(claim): Extension<Claim>,
@@ -217,7 +311,20 @@ async fn post_service(
 }
 
 #[instrument(skip_all, fields(%project_name, %service_name))]
-async fn stop_service(
+#[utoipa::path(
+    delete,
+    path = "/projects/{project_name}/services/{service_name}",
+    responses(
+        (status = 200, description = "Stops a specific service owned by a specific project.", body = shuttle_common::models::service::Summary),
+        (status = 500, description = "Database error.", body = String),
+        (status = 404, description = "Record could not be found.", body = String),
+    ),
+    params(
+        ("project_name" = String, Path, description = "Name of the project that owns the service."),
+        ("service_name" = String, Path, description = "Name of the service.")
+    )
+)]
+pub async fn stop_service(
     Extension(persistence): Extension<Persistence>,
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(proxy_fqdn): Extension<FQDN>,
@@ -245,7 +352,19 @@ async fn stop_service(
 }
 
 #[instrument(skip(persistence))]
-async fn get_deployments(
+#[utoipa::path(
+    get,
+    path = "/projects/{project_name}/deployments",
+    responses(
+        (status = 200, description = "Gets deployments information associated to a specific project.", body = shuttle_common::models::deployment::Response),
+        (status = 500, description = "Database error.", body = String),
+        (status = 404, description = "Record could not be found.", body = String),
+    ),
+    params(
+        ("project_name" = String, Path, description = "Name of the project that owns the deployments.")
+    )
+)]
+pub async fn get_deployments(
     Extension(persistence): Extension<Persistence>,
     Path(project_name): Path<String>,
 ) -> Result<Json<Vec<shuttle_common::models::deployment::Response>>> {
@@ -264,7 +383,21 @@ async fn get_deployments(
 }
 
 #[instrument(skip_all, fields(%project_name, %deployment_id))]
-async fn get_deployment(
+#[instrument(skip(persistence))]
+#[utoipa::path(
+    get,
+    path = "/projects/{project_name}/deployments/{deployment_id}",
+    responses(
+        (status = 200, description = "Gets a specific deployment information.", body = shuttle_common::models::deployment::Response),
+        (status = 500, description = "Database or streaming error.", body = String),
+        (status = 404, description = "Record could not be found.", body = String),
+    ),
+    params(
+        ("project_name" = String, Path, description = "Name of the project that owns the deployment."),
+        ("deployment_id" = String, Path, description = "The deployment id in uuid format.")
+    )
+)]
+pub async fn get_deployment(
     Extension(persistence): Extension<Persistence>,
     Path((project_name, deployment_id)): Path<(String, Uuid)>,
 ) -> Result<Json<shuttle_common::models::deployment::Response>> {
@@ -276,7 +409,20 @@ async fn get_deployment(
 }
 
 #[instrument(skip_all, fields(%project_name, %deployment_id))]
-async fn delete_deployment(
+#[utoipa::path(
+    delete,
+    path = "/projects/{project_name}/deployments/{deployment_id}",
+    responses(
+        (status = 200, description = "Deletes a specific deployment.", body = shuttle_common::models::deployment::Response),
+        (status = 500, description = "Database or streaming error.", body = String),
+        (status = 404, description = "Record could not be found.", body = String),
+    ),
+    params(
+        ("project_name" = String, Path, description = "Name of the project that owns the deployment."),
+        ("deployment_id" = String, Path, description = "The deployment id in uuid format.")
+    )
+)]
+pub async fn delete_deployment(
     Extension(deployment_manager): Extension<DeploymentManager>,
     Extension(persistence): Extension<Persistence>,
     Path((project_name, deployment_id)): Path<(String, Uuid)>,
@@ -291,7 +437,20 @@ async fn delete_deployment(
 }
 
 #[instrument(skip_all, fields(%project_name, %deployment_id))]
-async fn get_logs(
+#[utoipa::path(
+    get,
+    path = "/projects/{project_name}/ws/deployments/{deployment_id}/logs",
+    responses(
+        (status = 200, description = "Gets the logs a specific deployment.", body = [shuttle_common::log::Item]),
+        (status = 500, description = "Database or streaming error.", body = String),
+        (status = 404, description = "Record could not be found.", body = String),
+    ),
+    params(
+        ("project_name" = String, Path, description = "Name of the project that owns the deployment."),
+        ("deployment_id" = String, Path, description = "The deployment id in uuid format.")
+    )
+)]
+pub async fn get_logs(
     Extension(persistence): Extension<Persistence>,
     Path((project_name, deployment_id)): Path<(String, Uuid)>,
 ) -> Result<Json<Vec<LogItem>>> {
@@ -309,7 +468,18 @@ async fn get_logs(
     }
 }
 
-async fn get_logs_subscribe(
+#[utoipa::path(
+    get,
+    path = "/projects/{project_name}/deployments/{deployment_id}/logs",
+    responses(
+        (status = 200, description = "Subscribes to a specific deployment logs.")
+    ),
+    params(
+        ("project_name" = String, Path, description = "Name of the project that owns the deployment."),
+        ("deployment_id" = String, Path, description = "The deployment id in uuid format.")
+    )
+)]
+pub async fn get_logs_subscribe(
     Extension(persistence): Extension<Persistence>,
     Path((_project_name, deployment_id)): Path<(String, Uuid)>,
     ws_upgrade: ws::WebSocketUpgrade,
@@ -371,7 +541,20 @@ async fn logs_websocket_handler(mut s: WebSocket, persistence: Persistence, id: 
 }
 
 #[instrument(skip_all, fields(%project_name, %service_name))]
-async fn get_secrets(
+#[utoipa::path(
+    get,
+    path = "/projects/{project_name}/secrets/{service_name}",
+    responses(
+        (status = 200, description = "Gets the secrets a specific service.", body = [shuttle_common::models::secret::Response]),
+        (status = 500, description = "Database or streaming error.", body = String),
+        (status = 404, description = "Record could not be found.", body = String),
+    ),
+    params(
+        ("project_name" = String, Path, description = "Name of the project that owns the service."),
+        ("service_name" = String, Path, description = "Name of the service.")
+    )
+)]
+pub async fn get_secrets(
     Extension(persistence): Extension<Persistence>,
     Path((project_name, service_name)): Path<(String, String)>,
 ) -> Result<Json<Vec<secret::Response>>> {
@@ -389,7 +572,18 @@ async fn get_secrets(
     }
 }
 
-async fn post_clean(
+#[utoipa::path(
+    post,
+    path = "/projects/{project_name}/clean",
+    responses(
+        (status = 200, description = "Clean a specific project build artifacts.", body = [String]),
+        (status = 500, description = "Clean project error.", body = String),
+    ),
+    params(
+        ("project_name" = String, Path, description = "Name of the project that owns the service."),
+    )
+)]
+pub async fn clean_project(
     Extension(deployment_manager): Extension<DeploymentManager>,
     Path(project_name): Path<String>,
 ) -> Result<Json<Vec<String>>> {

@@ -28,6 +28,10 @@ use tokio::sync::mpsc::Sender;
 use tokio::sync::{Mutex, MutexGuard};
 use tracing::{field, instrument, trace};
 use ttl_cache::TtlCache;
+
+use utoipa::openapi::security::{ApiKey, ApiKeyValue, SecurityScheme};
+use utoipa::{Modify, OpenApi};
+use utoipa_swagger_ui::SwaggerUi;
 use uuid::Uuid;
 use x509_parser::nom::AsBytes;
 use x509_parser::parse_x509_certificate;
@@ -81,6 +85,17 @@ impl StatusResponse {
 }
 
 #[instrument(skip(service))]
+#[utoipa::path(
+    get,
+    path = "/projects/{project_name}",
+    responses(
+        (status = 200, description = "Successfully got a specific project information.", body = shuttle_common::models::project::Response),
+        (status = 500, description = "Server internal error.")
+    ),
+    params(
+        ("project_name" = String, Path, description = "The name of the project."),
+    )
+)]
 async fn get_project(
     State(RouterState { service, .. }): State<RouterState>,
     ScopedUser { scope, .. }: ScopedUser,
@@ -94,6 +109,14 @@ async fn get_project(
     Ok(AxumJson(response))
 }
 
+#[utoipa::path(
+    get,
+    path = "/projects",
+    responses(
+        (status = 200, description = "Successfully got the projects list.", body = [shuttle_common::models::project::Response]),
+        (status = 500, description = "Server internal error.")
+    )
+)]
 async fn get_projects_list(
     State(RouterState { service, .. }): State<RouterState>,
     User { name, .. }: User,
@@ -129,7 +152,18 @@ async fn get_projects_list(
 // }
 
 #[instrument(skip_all, fields(%project))]
-async fn post_project(
+#[utoipa::path(
+    post,
+    path = "/projects/{project_name}",
+    responses(
+        (status = 200, description = "Successfully created a specific project.", body = shuttle_common::models::project::Response),
+        (status = 500, description = "Server internal error.")
+    ),
+    params(
+        ("project_name" = String, Path, description = "The name of the project."),
+    )
+)]
+async fn create_project(
     State(RouterState {
         service, sender, ..
     }): State<RouterState>,
@@ -158,7 +192,18 @@ async fn post_project(
 }
 
 #[instrument(skip_all, fields(%project))]
-async fn delete_project(
+#[utoipa::path(
+    delete,
+    path = "/projects/{project_name}",
+    responses(
+        (status = 200, description = "Successfully destroyed a specific project.", body = shuttle_common::models::project::Response),
+        (status = 500, description = "Server internal error.")
+    ),
+    params(
+        ("project_name" = String, Path, description = "The name of the project."),
+    )
+)]
+async fn destroy_project(
     State(RouterState {
         service, sender, ..
     }): State<RouterState>,
@@ -204,6 +249,14 @@ async fn route_project(
         .await
 }
 
+#[utoipa::path(
+    get,
+    path = "/",
+    responses(
+        (status = 200, description = "Get the gateway operational status."),
+        (status = 500, description = "Server internal error.")
+    )
+)]
 async fn get_status(State(RouterState { sender, .. }): State<RouterState>) -> Response<Body> {
     let (status, body) = if sender.is_closed() || sender.capacity() == 0 {
         (
@@ -224,6 +277,14 @@ async fn get_status(State(RouterState { sender, .. }): State<RouterState>) -> Re
 }
 
 #[instrument(skip_all)]
+#[utoipa::path(
+    post,
+    path = "/stats/load",
+    responses(
+        (status = 200, description = "Successfully fetched the build queue load.", body = shuttle_common::models::stats::LoadResponse),
+        (status = 500, description = "Server internal error.")
+    )
+)]
 async fn post_load(
     State(RouterState { running_builds, .. }): State<RouterState>,
     AxumJson(build): AxumJson<stats::LoadRequest>,
@@ -246,6 +307,14 @@ async fn post_load(
 }
 
 #[instrument(skip_all)]
+#[utoipa::path(
+    delete,
+    path = "/stats/load",
+    responses(
+        (status = 200, description = "Successfully removed the build with the ID specified in the load request from the build queue.", body = shuttle_common::models::stats::LoadResponse),
+        (status = 500, description = "Server internal error.")
+    )
+)]
 async fn delete_load(
     State(RouterState { running_builds, .. }): State<RouterState>,
     AxumJson(build): AxumJson<stats::LoadRequest>,
@@ -260,6 +329,14 @@ async fn delete_load(
 }
 
 #[instrument(skip_all)]
+#[utoipa::path(
+    get,
+    path = "/admin/stats/load",
+    responses(
+        (status = 200, description = "Successfully gets the build queue load as an admin.", body = shuttle_common::models::stats::LoadResponse),
+        (status = 500, description = "Server internal error.")
+    )
+)]
 async fn get_load_admin(
     State(RouterState { running_builds, .. }): State<RouterState>,
 ) -> Result<AxumJson<stats::LoadResponse>, Error> {
@@ -271,6 +348,14 @@ async fn get_load_admin(
 }
 
 #[instrument(skip_all)]
+#[utoipa::path(
+    delete,
+    path = "/admin/stats/load",
+    responses(
+        (status = 200, description = "Successfully clears the build queue.", body = shuttle_common::models::stats::LoadResponse),
+        (status = 500, description = "Server internal error.")
+    )
+)]
 async fn delete_load_admin(
     State(RouterState { running_builds, .. }): State<RouterState>,
 ) -> Result<AxumJson<stats::LoadResponse>, Error> {
@@ -294,6 +379,14 @@ fn calculate_capacity(running_builds: &mut MutexGuard<TtlCache<Uuid, ()>>) -> st
 }
 
 #[instrument(skip_all)]
+#[utoipa::path(
+    post,
+    path = "/admin/revive",
+    responses(
+        (status = 200, description = "Successfully revived stopped or errored projects."),
+        (status = 500, description = "Server internal error.")
+    )
+)]
 async fn revive_projects(
     State(RouterState {
         service, sender, ..
@@ -305,6 +398,14 @@ async fn revive_projects(
 }
 
 #[instrument(skip_all)]
+#[utoipa::path(
+    post,
+    path = "/admin/destroy",
+    responses(
+        (status = 200, description = "Successfully destroyed the projects."),
+        (status = 500, description = "Server internal error.")
+    )
+)]
 async fn destroy_projects(
     State(RouterState {
         service, sender, ..
@@ -316,6 +417,18 @@ async fn destroy_projects(
 }
 
 #[instrument(skip_all, fields(%email, ?acme_server))]
+#[utoipa::path(
+    post,
+    path = "/admin/acme/{email}",
+    responses(
+        (status = 200, description = "Created an acme account.", content_type = "application/json", body = String),
+        (status = 500, description = "Server internal error.")
+    ),
+    params(
+        ("email" = String, Path, description = "An email the acme account binds to."),
+    ),
+
+)]
 async fn create_acme_account(
     Extension(acme_client): Extension<AcmeClient>,
     Path(email): Path<String>,
@@ -327,6 +440,18 @@ async fn create_acme_account(
 }
 
 #[instrument(skip_all, fields(%project_name, %fqdn))]
+#[utoipa::path(
+    post,
+    path = "/admin/acme/request/{project_name}/{fqdn}",
+    responses(
+        (status = 200, description = "Successfully requested a custom domain for the the project."),
+        (status = 500, description = "Server internal error.")
+    ),
+    params(
+        ("project_name" = String, Path, description = "The project name associated to the requested custom domain."),
+        ("fqdn" = String, Path, description = "The fqdn that represents the requested custom domain."),
+    )
+)]
 async fn request_custom_domain_acme_certificate(
     State(RouterState {
         service, sender, ..
@@ -383,6 +508,18 @@ async fn request_custom_domain_acme_certificate(
 }
 
 #[instrument(skip_all, fields(%project_name, %fqdn))]
+#[utoipa::path(
+    post,
+    path = "/admin/acme/renew/{project_name}/{fqdn}",
+    responses(
+        (status = 200, description = "Successfully renewed the project TLS certificate for the appointed custom domain fqdn."),
+        (status = 500, description = "Server internal error.")
+    ),
+    params(
+        ("project_name" = String, Path, description = "The project name associated to the requested custom domain."),
+        ("fqdn" = String, Path, description = "The fqdn that represents the requested custom domain."),
+    )
+)]
 async fn renew_custom_domain_acme_certificate(
     State(RouterState { service, .. }): State<RouterState>,
     Extension(acme_client): Extension<AcmeClient>,
@@ -449,6 +586,14 @@ async fn renew_custom_domain_acme_certificate(
 }
 
 #[instrument(skip_all)]
+#[utoipa::path(
+    post,
+    path = "/admin/acme/gateway/renew",
+    responses(
+        (status = 200, description = "Successfully renewed the gateway TLS certificate."),
+        (status = 500, description = "Server internal error.")
+    )
+)]
 async fn renew_gateway_acme_certificate(
     State(RouterState { service, .. }): State<RouterState>,
     Extension(acme_client): Extension<AcmeClient>,
@@ -461,6 +606,14 @@ async fn renew_gateway_acme_certificate(
     Ok(r#""Renewed the gateway certificate.""#.to_string())
 }
 
+#[utoipa::path(
+    post,
+    path = "/admin/projects",
+    responses(
+        (status = 200, description = "Successfully fetched the projects list.", body = shuttle_common::models::project::AdminResponse),
+        (status = 500, description = "Server internal error.")
+    )
+)]
 async fn get_projects(
     State(RouterState { service, .. }): State<RouterState>,
 ) -> Result<AxumJson<Vec<project::AdminResponse>>, Error> {
@@ -472,6 +625,50 @@ async fn get_projects(
 
     Ok(AxumJson(projects))
 }
+
+struct SecurityAddon;
+
+impl Modify for SecurityAddon {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        if let Some(components) = openapi.components.as_mut() {
+            components.add_security_scheme(
+                "Gateway API Key",
+                SecurityScheme::ApiKey(ApiKey::Header(ApiKeyValue::new("Bearer"))),
+            )
+        }
+    }
+}
+
+#[derive(OpenApi)]
+#[openapi(
+    paths(
+        create_acme_account,
+        request_custom_domain_acme_certificate,
+        renew_custom_domain_acme_certificate,
+        renew_gateway_acme_certificate,
+        get_status,
+        get_projects_list,
+        get_project,
+        destroy_project,
+        create_project,
+        post_load,
+        delete_load,
+        get_projects,
+        revive_projects,
+        destroy_projects,
+        get_load_admin,
+        delete_load_admin
+    ),
+    modifiers(&SecurityAddon),
+    components(schemas(
+        shuttle_common::models::project::Response,
+        shuttle_common::models::stats::LoadResponse,
+        shuttle_common::models::project::AdminResponse,
+        shuttle_common::models::stats::LoadResponse,
+        shuttle_common::models::project::State
+    ))
+)]
+pub struct ApiDoc;
 
 #[derive(Clone)]
 pub(crate) struct RouterState {
@@ -582,8 +779,8 @@ impl ApiBuilder {
             .route(
                 "/projects/:project_name",
                 get(get_project.layer(ScopedLayer::new(vec![Scope::Project])))
-                    .delete(delete_project.layer(ScopedLayer::new(vec![Scope::ProjectCreate])))
-                    .post(post_project.layer(ScopedLayer::new(vec![Scope::ProjectCreate]))),
+                    .delete(destroy_project.layer(ScopedLayer::new(vec![Scope::ProjectCreate])))
+                    .post(create_project.layer(ScopedLayer::new(vec![Scope::ProjectCreate]))),
             )
             .route("/projects/:project_name/*any", any(route_project))
             .route("/stats/load", post(post_load).delete(delete_load))
@@ -604,7 +801,14 @@ impl ApiBuilder {
                 get(get_load_admin)
                     .delete(delete_load_admin)
                     .layer(ScopedLayer::new(vec![Scope::Admin])),
-            );
+            )
+            // TODO: The `/admin/swagger-ui` responds with a 303 See Other response which is followed in
+            // browsers but leads to 404 Not Found. This must be investigated.
+            .merge(
+                SwaggerUi::new("/admin/swagger-ui")
+                    .url("/admin/api-docs/openapi.json", ApiDoc::openapi()),
+            )
+            .layer(ScopedLayer::new(vec![Scope::Admin]));
         self
     }
 

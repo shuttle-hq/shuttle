@@ -5,17 +5,23 @@ use chrono::{DateTime, Utc};
 #[cfg(feature = "display")]
 use crossterm::style::{StyledContent, Stylize};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::deployment::State;
 
 pub const STATE_MESSAGE: &str = "NEW STATE";
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
+#[schema(as = shuttle_common::log::Item)]
 pub struct Item {
+    #[schema(value_type = KnownFormat::Uuid)]
     pub id: Uuid,
+    #[schema(value_type = KnownFormat::DateTime)]
     pub timestamp: DateTime<Utc>,
+    #[schema(value_type = shuttle_common::deployment::State)]
     pub state: State,
+    #[schema(value_type = shuttle_common::log::Level)]
     pub level: Level,
     pub file: Option<String>,
     pub line: Option<u32>,
@@ -77,8 +83,9 @@ impl std::fmt::Display for Item {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, ToSchema)]
 #[serde(rename_all = "lowercase")]
+#[schema(as = shuttle_common::log::Level)]
 pub enum Level {
     Trace,
     Debug,

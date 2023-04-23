@@ -581,14 +581,12 @@ workflows:
             branches:
               only: production
       - build-binaries-windows:
-          requires:
-            - linux-qa
           filters:
             branches:
               only: production
       - build-binaries-mac:
           requires:
-            - linux-qa
+            - mac-qa
           filters:
             branches:
               only: production

@@ -22,14 +22,15 @@ pub mod wasm;
 use std::collections::BTreeMap;
 
 use anyhow::bail;
-use serde::{Deserialize, Serialize};
-#[cfg(feature = "service")]
-use uuid::Uuid;
-
 #[cfg(feature = "service")]
 pub use log::Item as LogItem;
 #[cfg(feature = "service")]
 pub use log::STATE_MESSAGE;
+#[cfg(feature = "persist")]
+use rand::distributions::{Alphanumeric, DistString};
+use serde::{Deserialize, Serialize};
+#[cfg(feature = "service")]
+use uuid::Uuid;
 
 #[cfg(debug_assertions)]
 pub const API_URL_DEFAULT: &str = "http://localhost:8001";
@@ -42,7 +43,10 @@ pub type Host = String;
 #[cfg(feature = "service")]
 pub type DeploymentId = Uuid;
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
+#[cfg_attr(feature = "persist", derive(sqlx::Type, PartialEq, Hash, Eq))]
+#[cfg_attr(feature = "persist", serde(transparent))]
+#[cfg_attr(feature = "persist", sqlx(transparent))]
 pub struct ApiKey(String);
 
 impl ApiKey {
@@ -64,6 +68,11 @@ impl ApiKey {
         }
 
         Ok(Self(key))
+    }
+
+    #[cfg(feature = "persist")]
+    pub fn generate() -> Self {
+        Self(Alphanumeric.sample_string(&mut rand::thread_rng(), 16))
     }
 }
 
@@ -180,7 +189,6 @@ mod tests {
         #[test]
         // The API key should be a 16 character alphanumeric string.
         fn parses_valid_keys(s in "[a-zA-Z0-9]{16}") {
-            println!("s: {s}, len: {}", s.len());
             ApiKey::parse(&s).unwrap();
         }
     }

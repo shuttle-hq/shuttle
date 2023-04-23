@@ -26,12 +26,18 @@ opentelemetry-http = { workspace = true, optional = true }
 opentelemetry-otlp = { version = "0.11.0", optional = true }
 pin-project = { workspace = true, optional = true }
 prost-types = { workspace = true, optional = true }
+rand = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true }
 rmp-serde = { workspace = true, optional = true }
 rustrict = { version = "0.7.4", optional = true }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true }
 strum = { workspace = true, features = ["derive"] }
+sqlx = { workspace = true, optional = true, features = [
+    "sqlite",
+    "json",
+    "runtime-tokio-native-tls",
+] }
 thiserror = { workspace = true, optional = true }
 tonic = { workspace = true, optional = true }
 tower = { workspace = true, optional = true }
@@ -72,6 +78,7 @@ claims = [
 display = ["chrono/clock", "comfy-table", "crossterm"]
 error = ["prost-types", "thiserror", "uuid"]
 models = ["anyhow", "async-trait", "display", "http", "reqwest", "service"]
+persist = ["sqlx", "rand"]
 service = ["chrono/serde", "once_cell", "rustrict", "serde/derive", "uuid"]
 tracing = []
 wasm = [

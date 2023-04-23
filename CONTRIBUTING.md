@@ -185,11 +185,11 @@ echo "api_key = '<jwt>'" > ~/.config/shuttle/config.toml
 > Note: The JWT will expire in 15 minutes, at which point you need to run the commands again.
 > If you have [`jq`](https://github.com/stedolan/jq/wiki/Installation) installed you can combine
 > the two above commands into the following:
-> ```bash
-> curl -s -H "Authorization: Bearer test-key" localhost:8008/auth/key \
->     | jq -r '.token' \
->     | read token; echo "api_key='$token'" > ~/.config/shuttle/config.toml
-> ```
+```bash
+curl -s -H "Authorization: Bearer test-key" localhost:8008/auth/key \
+    | jq -r '.token' \
+    | read token; echo "api_key='$token'" > ~/.config/shuttle/config.toml
+```
 
 Finally we need to comment out the admin layer in the deployer handlers. So in `deployer/handlers/mod.rs`,
 in the `make_router` function comment out this line: `.layer(AdminSecretLayer::new(admin_secret))`.

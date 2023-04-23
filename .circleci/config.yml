@@ -230,9 +230,6 @@ jobs:
         type: string
     # Using an image since tests will start a docker container
     executor: image-ubuntu
-    environment:
-      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
-      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
     steps:
       - install-rust
       - install-protoc

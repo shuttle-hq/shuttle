@@ -108,9 +108,9 @@ impl Scope {
 
     /// All scopes for an admin user.
     pub fn admin() -> Vec<Self> {
-        let mut base = Scope::base();
+        let mut scopes = Scope::base();
 
-        base.extend(vec![
+        scopes.extend(vec![
             Scope::User,
             Scope::UserCreate,
             Scope::AcmeCreate,
@@ -120,7 +120,7 @@ impl Scope {
             Scope::Admin,
         ]);
 
-        base
+        scopes
     }
 }
 

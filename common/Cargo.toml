@@ -93,4 +93,4 @@ ring = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 tower = { workspace = true, features = ["util"] }
 tracing-fluent-assertions = "0.3.0"
-tracing-subscriber = { workspace = true, default-features = false }
+tracing-subscriber = { workspace = true }

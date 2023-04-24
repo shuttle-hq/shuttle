@@ -53,7 +53,7 @@ The images get built with [cargo-chef](https://github.com/LukeMathWalker/cargo-c
 You can now start a local deployment of shuttle and the required containers with:
 
 ```bash
-make up
+USE_PANAMAX=disable make up
 ```
 
 > Note: `make up` does not start [panamax](https://github.com/panamax-rs/panamax) by default, if you do need to start panamax for local development, run this command with `make COMPOSE_PROFILES=panamax up`.

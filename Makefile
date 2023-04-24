@@ -65,12 +65,6 @@ CARGO_PROFILE=debug
 RUST_LOG?=shuttle=trace,debug
 endif
 
-ARCH=$(shell uname -m)
-PROTOC_ARCH=$(ARCH)
-ifeq ($(ARCH), arm64)
-PROTOC_ARCH=aarch_64
-endif
-
 POSTGRES_EXTRA_PATH?=./extras/postgres
 POSTGRES_TAG?=14
 
@@ -160,7 +154,6 @@ down: $(DOCKER_COMPOSE_FILES)
 
 shuttle-%: ${SRC} Cargo.lock
 	$(DOCKER_BUILD) \
-		--build-arg PROTOC_ARCH=$(PROTOC_ARCH) \
 		--build-arg folder=$(*) \
 		--build-arg prepare_args=$(PREPARE_ARGS) \
 		--build-arg RUSTUP_TOOLCHAIN=$(RUSTUP_TOOLCHAIN) \

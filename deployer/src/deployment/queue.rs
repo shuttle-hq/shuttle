@@ -1,18 +1,19 @@
 use super::deploy_layer::{Log, LogRecorder, LogType};
 use super::gateway_client::BuildQueueClient;
 use super::{Built, QueueReceiver, RunSender, State};
-use crate::error::{Error, Result, TestError};
+use crate::error::{CliError, Error, Result, TestError};
 use crate::persistence::{DeploymentUpdater, LogLevel, SecretRecorder};
 use shuttle_common::storage_manager::{ArtifactsStorageManager, StorageManager};
 
-use cargo::util::interning::InternedString;
+//use cargo::util::interning::InternedString;
 use cargo_metadata::Message;
 use chrono::Utc;
 use crossbeam_channel::Sender;
 use opentelemetry::global;
 use serde_json::json;
 use shuttle_common::claims::Claim;
-use shuttle_service::builder::{build_workspace, get_config, BuiltService};
+use shuttle_service::builder::{build_workspace, BuiltService};
+use tokio::process::Command;
 use tokio::time::{sleep, timeout};
 use tracing::{debug, debug_span, error, info, instrument, trace, warn, Instrument, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -25,9 +26,9 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use cargo::core::compiler::{CompileMode, MessageFormat};
-use cargo::core::Workspace;
-use cargo::ops::{self, CompileOptions, TestOptions};
+//use cargo::core::compiler::{CompileMode, MessageFormat};
+//use cargo::core::Workspace;
+//use cargo::ops::{self, CompileOptions, TestOptions};
 use flate2::read::GzDecoder;
 use tar::Archive;
 use tokio::fs;
@@ -351,15 +352,16 @@ async fn run_pre_deploy_tests(
     project_path: &Path,
     tx: Sender<Message>,
 ) -> std::result::Result<(), TestError> {
-    let (read, write) = pipe::pipe();
+    let (read, _) = pipe::pipe();
     let project_path = project_path.to_owned();
 
     // This needs to be on a separate thread, else deployer will block (reason currently unknown :D)
+    let tx_clone = tx.clone();
     tokio::task::spawn_blocking(move || {
         for message in Message::parse_stream(read) {
             match message {
                 Ok(message) => {
-                    if let Err(error) = tx.send(message) {
+                    if let Err(error) = tx_clone.send(message) {
                         error!("failed to send cargo message on channel: {error}");
                     }
                 }
@@ -370,36 +372,37 @@ async fn run_pre_deploy_tests(
         }
     });
 
-    let config = get_config(write)?;
     let manifest_path = project_path.join("Cargo.toml");
 
-    let ws = Workspace::new(&manifest_path, &config)?;
+    let mut cargo = Command::new("cargo");
+    cargo
+        .arg("test")
+        .arg("--manifest-path")
+        .arg(&manifest_path)
+        .arg("--message-format=json")
+        .arg("--release")
+        .arg("--jobs=4");
 
-    let mut compile_opts = CompileOptions::new(&config, CompileMode::Test)?;
+    let output = cargo.output().await.unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
 
-    compile_opts.build_config.message_format = MessageFormat::Json {
-        render_diagnostics: false,
-        short: false,
-        ansi: false,
-    };
+    for line in stdout.lines() {
+        let message: Message = serde_json::from_str(line).unwrap();
+        if let Err(error) = tx.send(message) {
+            error!("failed to send cargo message on channel: {error}");
+        }
+    }
 
-    // We set the tests to build with the release profile since deployments compile
-    // with the release profile by default. This means crates don't need to be
-    // recompiled in debug mode for the tests, reducing memory usage during deployment.
-    compile_opts.build_config.requested_profile = InternedString::new("release");
+    if !output.status.success() {
+        return Err(TestError::Failed(CliError {
+            error: Some(anyhow::Error::msg(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            )),
+            exit_code: output.status.code().unwrap_or(-1),
+        }));
+    }
 
-    // Build tests with a maximum of 4 workers.
-    compile_opts.build_config.jobs = 4;
-
-    compile_opts.spec = ops::Packages::All;
-
-    let opts = TestOptions {
-        compile_opts,
-        no_run: false,
-        no_fail_fast: false,
-    };
-
-    ops::run_tests(&ws, &opts, &[]).map_err(TestError::Failed)
+    Ok(())
 }
 
 /// This will store the path to the executable for each runtime, which will be the users project with

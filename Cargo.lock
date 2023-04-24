@@ -5156,7 +5156,6 @@ dependencies = [
  "async-trait",
  "axum",
  "bytes",
- "cargo",
  "cargo_metadata",
  "chrono",
  "clap",

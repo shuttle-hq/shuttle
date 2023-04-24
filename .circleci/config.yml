@@ -398,7 +398,7 @@ jobs:
   linux-qa:
     machine:
       image: ubuntu-2004:current
-    resource_class: xlarge
+      resource_class: medium
     steps:
       - checkout
       - run:
@@ -415,7 +415,7 @@ jobs:
             cargo shuttle login --api-key ${SHUTTLE_API_KEY}
       - run:
           name: QA
-          command: ./.circleci/qa.sh
+          command: ./.circleci/qa.sh linux
           environment:
             SHUTTLE_API: https://api.unstable.shuttle.rs
       - run: git submodule sync
@@ -426,6 +426,47 @@ jobs:
       - run:
           name: Test Docker
           command: ./.circleci/qa-docker.sh
+  mac-qa:
+    macos:
+      xcode: 12.5.1
+    resource_class: medium
+    steps:
+      - checkout
+      - run:
+          name: "Install Protobuf"
+          command: |
+            brew install protobuf
+      - run:
+          name: "Install Rust"
+          command: |
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+      - run:
+          name: "Install Shuttle"
+          command:  cargo install cargo-shuttle --path ./cargo-shuttle
+      - run: cargo shuttle --version
+      - run:
+          name: Login
+          command: |
+            cargo shuttle login --api-key ${SHUTTLE_API_KEY}
+      - run:
+          name: QA
+          command: ./.circleci/qa.sh mac
+          environment:
+            SHUTTLE_API: https://api.unstable.shuttle.rs
+      - run: git submodule sync
+      - run: git submodule update --init
+      - run:
+          name: Test WASM
+          command: ./.circleci/qa-wasm.sh
+      # We can't run Docker inside the MacOs executor at this time
+      # https://support.circleci.com/hc/en-us/articles/360045029591-Can-I-use-Docker-within-the-macOS-executor-
+      # - run:
+      #     name: "Install Docker"
+      #     command: |
+      #       brew install --cask docker
+      # - run:
+      #     name: Test Docker
+      #     command: ./.circleci/qa-docker.sh
 
 workflows:
   ci:
@@ -490,6 +531,10 @@ workflows:
           filters:
             branches:
               only: production
+      - mac-qa:
+          filters:
+            branches:
+              only: production
       - build-binaries-linux:
           name: build-binaries-x86_64-gnu
           image: ubuntu-2204:2022.04.1
@@ -521,14 +566,12 @@ workflows:
             branches:
               only: production
       - build-binaries-windows:
-          requires:
-            - linux-qa
           filters:
             branches:
               only: production
       - build-binaries-mac:
           requires:
-            - linux-qa
+            - mac-qa
           filters:
             branches:
               only: production

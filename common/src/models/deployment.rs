@@ -7,15 +7,21 @@ use comfy_table::{
 };
 use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::deployment::State;
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, ToSchema)]
+#[schema(as = shuttle_common::models::deployment::Response)]
 pub struct Response {
+    #[schema(value_type = KnownFormat::Uuid)]
     pub id: Uuid,
+    #[schema(value_type = KnownFormat::Uuid)]
     pub service_id: Uuid,
+    #[schema(value_type = shuttle_common::deployment::State)]
     pub state: State,
+    #[schema(value_type = KnownFormat::DateTime)]
     pub last_update: DateTime<Utc>,
 }
 

@@ -7,8 +7,9 @@ use axum::Json;
 use serde::{ser::SerializeMap, Serialize};
 use shuttle_common::models::error::ApiError;
 use tracing::error;
+use utoipa::ToSchema;
 
-#[derive(thiserror::Error, Debug)]
+#[derive(thiserror::Error, Debug, ToSchema)]
 pub enum Error {
     #[error("Streaming error: {0}")]
     Streaming(#[from] axum::Error),
@@ -20,8 +21,8 @@ pub enum Error {
         to: String,
         message: String,
     },
-    #[error("record could not be found")]
-    NotFound,
+    #[error("{0}, try running `cargo shuttle deploy`")]
+    NotFound(String),
     #[error("Custom error: {0}")]
     Custom(#[from] anyhow::Error),
 }
@@ -44,7 +45,7 @@ impl IntoResponse for Error {
         error!(error = &self as &dyn std::error::Error, "request error");
 
         let code = match self {
-            Error::NotFound => StatusCode::NOT_FOUND,
+            Error::NotFound(_) => StatusCode::NOT_FOUND,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
 

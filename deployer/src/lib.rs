@@ -19,7 +19,7 @@ use crate::deployment::gateway_client::GatewayClient;
 mod args;
 mod deployment;
 mod error;
-mod handlers;
+pub mod handlers;
 mod persistence;
 mod proxy;
 mod runtime_manager;

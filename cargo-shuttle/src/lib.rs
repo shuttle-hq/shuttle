@@ -98,7 +98,9 @@ impl Shuttle {
                 return self.deploy(deploy_args, &self.client()?).await;
             }
             Command::Status => self.status(&self.client()?).await,
-            Command::Logs { id, follow } => self.logs(&self.client()?, id, follow).await,
+            Command::Logs { id, latest, follow } => {
+                self.logs(&self.client()?, id, latest, follow).await
+            }
             Command::Deployment(DeploymentCommand::List) => {
                 self.deployments_list(&self.client()?).await
             }
@@ -364,16 +366,33 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn logs(&self, client: &Client, id: Option<Uuid>, follow: bool) -> Result<()> {
+    async fn logs(
+        &self,
+        client: &Client,
+        id: Option<Uuid>,
+        latest: bool,
+        follow: bool,
+    ) -> Result<()> {
         let id = if let Some(id) = id {
             id
         } else {
-            let summary = client.get_service(self.ctx.project_name()).await?;
+            let proj_name = self.ctx.project_name();
 
-            if let Some(deployment) = summary.deployment {
+            if latest {
+                // Find latest deployment (not always an active one)
+                let deployments = client.get_deployments(proj_name).await?;
+                let most_recent = deployments.last().context(format!(
+                    "Could not find any deployments for '{proj_name}'. Try passing a deployment ID manually",
+                ))?;
+
+                most_recent.id
+            } else if let Some(deployment) = client.get_service(proj_name).await?.deployment {
+                // Active deployment
                 deployment.id
             } else {
-                bail!("Could not automatically find a running deployment for '{}'. Try passing a deployment ID manually", self.ctx.project_name());
+                bail!(
+                    "Could not find a running deployment for '{proj_name}'. Try with '--latest', or pass a deployment ID manually"
+                );
             }
         };
 
@@ -528,7 +547,7 @@ impl Shuttle {
                         // If the version of cargo-shuttle is different from shuttle-runtime,
                         // or it isn't installed, try to install shuttle-runtime from crates.io.
                         if let Err(err) = check_version(&runtime_path) {
-                            warn!("{}", err);
+                            warn!(error = ?err, "failed to check installed runtime version");
 
                             trace!("installing shuttle-runtime");
                             std::process::Command::new("cargo")
@@ -991,8 +1010,7 @@ fn check_version(runtime_path: &Path) -> Result<()> {
     }
 
     // Get runtime version from shuttle-runtime cli
-    let runtime_version = std::process::Command::new("cargo")
-        .arg("shuttle-runtime")
+    let runtime_version = std::process::Command::new(runtime_path)
         .arg("--version")
         .output()
         .context("failed to check the shuttle-runtime version")?
@@ -1005,7 +1023,8 @@ fn check_version(runtime_path: &Path) -> Result<()> {
             .expect("shuttle-runtime version should be valid utf8")
             .split_once(' ')
             .expect("shuttle-runtime version should be in the `name version` format")
-            .1,
+            .1
+            .trim(),
     )
     .context("failed to convert runtime version to semver")?
     .to_string();

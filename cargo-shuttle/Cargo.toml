@@ -64,10 +64,6 @@ features = ["models"]
 [dependencies.shuttle-proto]
 workspace = true
 
-[dependencies.shuttle-secrets]
-version = "0.14.0"
-path = "../resources/secrets"
-
 [dependencies.shuttle-service]
 workspace = true
 features = ["builder"]

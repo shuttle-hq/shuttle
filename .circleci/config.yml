@@ -398,7 +398,7 @@ jobs:
   linux-qa:
     machine:
       image: ubuntu-2004:current
-      resource_class: medium
+    resource_class: medium
     steps:
       - checkout
       - run:
@@ -432,10 +432,6 @@ jobs:
     resource_class: medium
     steps:
       - checkout
-      - run:
-          name: "Install Protobuf"
-          command: |
-            brew install protobuf
       - run:
           name: "Install Rust"
           command: |

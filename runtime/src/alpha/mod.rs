@@ -315,6 +315,21 @@ where
         tokio::spawn(async move {
             let mut background = handle.spawn(service.bind(service_address));
 
+            let (_sigterm_notif, _sigint_notif) = if cfg!(target_family = "unix") {
+                (
+                    Some(
+                        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                            .expect("Can not get the SIGTERM signal receptor"),
+                    ),
+                    Some(
+                        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
+                            .expect("Can not get the SIGINT signal receptor"),
+                    ),
+                )
+            } else {
+                (None, None)
+            };
+
             tokio::select! {
                 res = &mut background => {
                     match res {
@@ -354,7 +369,7 @@ where
                     info!("will now abort the service");
                     background.abort();
                     background.await.unwrap().expect("to stop service");
-                }
+                },
             }
         });
 

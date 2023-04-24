@@ -483,13 +483,16 @@ jobs:
     executor:
       name: win/server-2022
       # size: medium
-      size: xlarge
+      size: large
       shell: powershell.exe
     environment:
       CARGO_NET_GIT_FETCH_WITH_CLI: "true"
       PATH: "$PATH:$USERPROFILE\\.cargo\\bin"
     steps:
-      - run: echo "$SHUTTLE_API_KEY"
+      - run:
+          name: "Test env var"
+          command: |
+            echo "why $env:SHUTTLE_API_KEY"
       # - checkout
       # - run:
       #     name: "Install Protobuf"

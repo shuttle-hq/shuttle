@@ -317,7 +317,7 @@ async fn load(
     match response {
         Ok(response) => {
             let response = response.into_inner();
-            info!(?response, "loading response");
+            info!(?response.success, "loading response");
 
             for resource in response.resources {
                 let resource: resource::Response = serde_json::from_slice(&resource).unwrap();

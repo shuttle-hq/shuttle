@@ -490,33 +490,33 @@ jobs:
       PATH: "$PATH:$USERPROFILE\\.cargo\\bin"
     steps:
       - checkout
-      # - run:
-      #     name: "Install Protobuf"
-      #     command: |
-      #       choco install -y protoc
-      # - run:
-      #     name: Install Rust
-      #     command: |
-      #       wget -OutFile "C:\rustup-init.exe" https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe
-      #       C:\rustup-init.exe -y --default-toolchain 1.68.0 --target x86_64-pc-windows-msvc
-      # - run:
-      #     name: "Install Shuttle"
-      #     command:  ..\.cargo\bin\cargo.exe install cargo-shuttle --path ./cargo-shuttle
-      # - run: ..\.cargo\bin\cargo.exe shuttle --version
-      # - run:
-      #     name: Login
-      #     command: |
-      #       ..\.cargo\bin\cargo.exe shuttle login --api-key $env:SHUTTLE_API_KEY
       - run:
-          name: QA
-          command: ./.circleci/qa.ps1
-          environment:
-            SHUTTLE_API: https://api.unstable.shuttle.rs
-      # - run: git submodule sync
-      # - run: git submodule update --init
+          name: "Install Protobuf"
+          command: |
+            choco install -y protoc
+      - run:
+          name: Install Rust
+          command: |
+            wget -OutFile "C:\rustup-init.exe" https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe
+            C:\rustup-init.exe -y --default-toolchain 1.68.0 --target x86_64-pc-windows-msvc
+      - run:
+          name: "Install Shuttle"
+          command:  ..\.cargo\bin\cargo.exe install cargo-shuttle --path ./cargo-shuttle
+      - run: ..\.cargo\bin\cargo.exe shuttle --version
+      - run:
+          name: Login
+          command: |
+            ..\.cargo\bin\cargo.exe shuttle login --api-key $env:SHUTTLE_API_KEY
       # - run:
-      #     name: Test WASM
-      #     command: ./.circleci/qa-wasm.sh
+      #     name: QA
+      #     command: ./.circleci/qa.ps1
+      #     environment:
+      #       SHUTTLE_API: https://api.unstable.shuttle.rs
+      - run: git submodule sync
+      - run: git submodule update --init
+      - run:
+          name: Test WASM
+          command: ./.circleci/qa-wasm.ps1
       # - run:
       #     name: "Install Docker"
       #     command: |

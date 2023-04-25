@@ -1,5 +1,11 @@
 #! /usr/bin/env sh
 
+# Would actually like to error on all errors, but `Enable-ExperimentalFeature`
+# does not work for this version of Windows
+# https://github.com/PowerShell/PowerShell/issues/3415#issuecomment-1354457563
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
 # Prepare directory
 mkdir -p /tmp/qa-windows
 cd /tmp/qa-windows

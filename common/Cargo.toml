@@ -40,7 +40,7 @@ tracing = { workspace = true, features = ["std"] }
 tracing-opentelemetry = { workspace = true, optional = true }
 tracing-subscriber = { workspace = true, optional = true }
 ttl_cache = { workspace = true, optional = true }
-utoipa = { workspace = true }
+utoipa = { workspace = true, optional = true }
 uuid = { workspace = true, features = ["v4", "serde"], optional = true }
 
 [features]
@@ -54,7 +54,7 @@ backend = [
     "tower-http",
     "tracing-subscriber/env-filter",
     "tracing-subscriber/fmt",
-    "ttl_cache",
+    "ttl_cache"
 ]
 claims = [
     "bytes",
@@ -72,6 +72,7 @@ claims = [
 ]
 display = ["chrono/clock", "comfy-table", "crossterm"]
 error = ["prost-types", "thiserror", "uuid"]
+openapi = ["utoipa/chrono", "utoipa/uuid"]
 models = ["anyhow", "async-trait", "display", "http", "reqwest", "service"]
 service = ["chrono/serde", "once_cell", "rustrict", "serde/derive", "uuid"]
 tracing = []

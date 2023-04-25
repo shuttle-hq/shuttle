@@ -54,7 +54,7 @@ x509-parser = "0.14.0"
 
 [dependencies.shuttle-common]
 workspace = true
-features = ["backend", "models"]
+features = ["backend", "models", "openapi"]
 
 [dev-dependencies]
 anyhow = { workspace = true }

@@ -58,7 +58,7 @@ uuid = { workspace = true, features = ["v4"] }
 
 [dependencies.shuttle-common]
 workspace = true
-features = ["backend", "models"]
+features = ["backend", "models", "openapi"]
 
 [dependencies.shuttle-proto]
 workspace = true

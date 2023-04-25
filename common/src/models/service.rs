@@ -1,24 +1,27 @@
 use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
+#[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::models::deployment;
 
-#[derive(Deserialize, Serialize, ToSchema)]
-#[schema(as = shuttle_common::models::service::Response)]
+#[derive(Deserialize, Serialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[cfg_attr(feature = "openapi", schema(as = shuttle_common::models::service::Response))]
 pub struct Response {
-    #[schema(value_type = KnownFormat::Uuid)]
+    #[cfg_attr(feature = "openapi", schema(value_type = KnownFormat::Uuid))]
     pub id: Uuid,
     pub name: String,
 }
 
-#[derive(Deserialize, Serialize, ToSchema)]
-#[schema(as = shuttle_common::models::service::Summary)]
+#[derive(Deserialize, Serialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[cfg_attr(feature = "openapi", schema(as = shuttle_common::models::service::Summary))]
 pub struct Summary {
     pub name: String,
-    #[schema(value_type = shuttle_common::models::deployment::Response)]
+    #[cfg_attr(feature = "openapi", schema(value_type = shuttle_common::models::deployment::Response))]
     pub deployment: Option<deployment::Response>,
     pub uri: String,
 }

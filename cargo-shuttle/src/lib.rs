@@ -17,6 +17,7 @@ use shuttle_proto::runtime::{self, LoadRequest, StartRequest, StopRequest, Subsc
 use tokio::process::Child;
 use tokio::task::JoinHandle;
 use tonic::transport::Channel;
+use tonic::Status;
 
 use std::collections::HashMap;
 use std::ffi::OsString;
@@ -646,6 +647,29 @@ impl Shuttle {
         Ok((runtime, runtime_client))
     }
 
+    async fn stop_runtime(
+        &self,
+        runtime: &mut Child,
+        runtime_client: &mut RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
+        provisioner_server: &JoinHandle<Result<(), tonic::transport::Error>>,
+    ) -> Result<(), Status> {
+        let stop_request = StopRequest {};
+        trace!(
+            ?stop_request,
+            "stopping service because it received a signal"
+        );
+        runtime_client
+            .stop(tonic::Request::new(stop_request))
+            .or_else(|err| async {
+                provisioner_server.abort();
+                runtime.kill().await?;
+                Err(err)
+            })
+            .await?
+            .into_inner();
+        Ok(())
+    }
+
     async fn local_run(&self, run_args: RunArgs) -> Result<()> {
         trace!("starting a local run for a service: {run_args:?}");
 
@@ -750,23 +774,10 @@ impl Shuttle {
         // If prior signal received is set to true we must stop all the existing runtimes and
         // exit the `local_run`.
         if signal_received {
-            for mut rt in runtimes {
-                let stop_request = StopRequest {};
-                trace!(
-                    ?stop_request,
-                    "stopping service because it received a signal"
-                );
-                let _response =
-                    rt.1.stop(tonic::Request::new(stop_request))
-                        .or_else(|err| async {
-                            provisioner_server.abort();
-                            rt.0.kill().await?;
-                            Err(err)
-                        })
-                        .await?
-                        .into_inner();
+            for (mut rt, mut rt_client) in runtimes {
+                self.stop_runtime(&mut rt, &mut rt_client, &provisioner_server)
+                    .await?;
             }
-
             return Ok(());
         }
 
@@ -775,30 +786,18 @@ impl Shuttle {
         if cfg!(target_family = "unix") {
             let sigterm = sigterm_notif.as_mut().expect("SIGTERM reactor failure");
             let sigint = sigint_notif.as_mut().expect("SIGINT reactor failure");
-            for mut rt in runtimes {
+            for (mut rt, mut rt_client) in runtimes {
                 // If we received a signal while waiting for any runtime we must stop the rest and exit
                 // the waiting loop.
                 if signal_received {
-                    let stop_request = StopRequest {};
-                    trace!(
-                        ?stop_request,
-                        "stopping service because it received a signal"
-                    );
-                    let _response =
-                        rt.1.stop(tonic::Request::new(stop_request))
-                            .or_else(|err| async {
-                                provisioner_server.abort();
-                                rt.0.kill().await?;
-                                Err(err)
-                            })
-                            .await?
-                            .into_inner();
+                    self.stop_runtime(&mut rt, &mut rt_client, &provisioner_server)
+                        .await?;
                     continue;
                 }
 
                 // Receiving a signal will stop the current runtime we're waiting for.
                 signal_received = tokio::select! {
-                    res = rt.0.wait() => {
+                    res = rt.wait() => {
                         println!(
                             "a service future completed with exit status: {:?}",
                             res.unwrap().code()
@@ -809,35 +808,14 @@ impl Shuttle {
                         println!(
                             "cargo-shuttle received SIGTERM. Killing all the runtimes..."
                         );
-
-                        let stop_request = StopRequest {};
-                        trace!(?stop_request, "stopping service because of SIGTERM");
-                        let _response = rt.1
-                            .stop(tonic::Request::new(stop_request))
-                            .or_else(|err| async {
-                                provisioner_server.abort();
-                                rt.0.kill().await?;
-                                Err(err)
-                            })
-                            .await?
-                            .into_inner();
+                        self.stop_runtime(&mut rt, &mut rt_client, &provisioner_server).await?;
                         true
                     },
                     _ = sigint.recv() => {
                         println!(
                             "cargo-shuttle received SIGINT. Killing all the runtimes..."
                         );
-                        let stop_request = StopRequest {};
-                        trace!(?stop_request, "stopping service because of SIGINT");
-                        let _response = rt.1
-                            .stop(tonic::Request::new(stop_request))
-                            .or_else(|err| async {
-                                provisioner_server.abort();
-                                rt.0.kill().await?;
-                                Err(err)
-                            })
-                            .await?
-                            .into_inner();
+                        self.stop_runtime(&mut rt, &mut rt_client, &provisioner_server).await?;
                         true
                     }
                 };

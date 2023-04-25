@@ -25,6 +25,7 @@ use std::fs::{read_to_string, File};
 use std::io::stdout;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
+
 use std::process::exit;
 use std::str::FromStr;
 
@@ -455,16 +456,17 @@ impl Shuttle {
     }
 
     async fn spin_local_runtime(
-        &self,
         run_args: &RunArgs,
         service: &BuiltService,
         provisioner_server: &JoinHandle<Result<(), tonic::transport::Error>>,
         i: u16,
         provisioner_port: u16,
-    ) -> Result<(
-        Child,
-        RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
-    )> {
+    ) -> Result<
+        Option<(
+            Child,
+            RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
+        )>,
+    > {
         let BuiltService {
             executable_path,
             is_wasm,
@@ -581,9 +583,7 @@ impl Shuttle {
 
         if !response.success {
             error!(error = response.message, "failed to load your service");
-            provisioner_server.abort();
-            runtime.kill().await?;
-            exit(1);
+            return Ok(None);
         }
 
         let resources = response
@@ -644,21 +644,17 @@ impl Shuttle {
             .into_inner();
 
         trace!(response = ?response,  "client response: ");
-        Ok((runtime, runtime_client))
+        Ok(Some((runtime, runtime_client)))
     }
 
     async fn stop_runtime(
-        &self,
         runtime: &mut Child,
         runtime_client: &mut RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
         provisioner_server: &JoinHandle<Result<(), tonic::transport::Error>>,
     ) -> Result<(), Status> {
         let stop_request = StopRequest {};
-        trace!(
-            ?stop_request,
-            "stopping service because it received a signal"
-        );
-        runtime_client
+        trace!(?stop_request, "stopping service");
+        let _response = runtime_client
             .stop(tonic::Request::new(stop_request))
             .or_else(|err| async {
                 provisioner_server.abort();
@@ -667,6 +663,34 @@ impl Shuttle {
             })
             .await?
             .into_inner();
+        Ok(())
+    }
+
+    async fn add_runtime_info(
+        runtime: Option<(
+            Child,
+            RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
+        )>,
+        existing_runtimes: &mut Vec<(
+            Child,
+            RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
+        )>,
+        provisioner_server: &JoinHandle<Result<(), tonic::transport::Error>>,
+    ) -> Result<(), Status> {
+        match runtime {
+            Some(inner) => existing_runtimes.push(inner),
+            None => {
+                // Stopping all runtimes gracefully and then forcefully because we must follow up with a `std::process:exit`
+                // which doesn't guarantee destructors run, which means dropped runtimes don't result in killed runtimes (per
+                // https://docs.rs/tokio/latest/tokio/process/struct.Child.html#caveats).
+                for rt_info in existing_runtimes {
+                    Shuttle::stop_runtime(&mut rt_info.0, &mut rt_info.1, provisioner_server)
+                        .await?;
+                    rt_info.0.kill().await?;
+                }
+                exit(1);
+            }
+        };
         Ok(())
     }
 
@@ -736,8 +760,8 @@ impl Shuttle {
                 let sigterm = sigterm_notif.as_mut().expect("SIGTERM reactor failure");
                 let sigint = sigint_notif.as_mut().expect("SIGINT reactor failure");
                 signal_received = tokio::select! {
-                    runtime_info = self.spin_local_runtime(&run_args, service, &provisioner_server, i as u16, provisioner_port) => {
-                        runtimes.push(runtime_info.unwrap());
+                    res = Shuttle::spin_local_runtime(&run_args, service, &provisioner_server, i as u16, provisioner_port) => {
+                        Shuttle::add_runtime_info(res.unwrap(), &mut runtimes, &provisioner_server).await?;
                         false
                     },
                     _ = sigterm.recv() => {
@@ -758,8 +782,8 @@ impl Shuttle {
                     break;
                 }
             } else {
-                runtimes.push(
-                    self.spin_local_runtime(
+                Shuttle::add_runtime_info(
+                    Shuttle::spin_local_runtime(
                         &run_args,
                         service,
                         &provisioner_server,
@@ -767,7 +791,10 @@ impl Shuttle {
                         provisioner_port,
                     )
                     .await?,
-                );
+                    &mut runtimes,
+                    &provisioner_server,
+                )
+                .await?;
             }
         }
 
@@ -775,8 +802,7 @@ impl Shuttle {
         // exit the `local_run`.
         if signal_received {
             for (mut rt, mut rt_client) in runtimes {
-                self.stop_runtime(&mut rt, &mut rt_client, &provisioner_server)
-                    .await?;
+                Shuttle::stop_runtime(&mut rt, &mut rt_client, &provisioner_server).await?;
             }
             return Ok(());
         }
@@ -790,8 +816,7 @@ impl Shuttle {
                 // If we received a signal while waiting for any runtime we must stop the rest and exit
                 // the waiting loop.
                 if signal_received {
-                    self.stop_runtime(&mut rt, &mut rt_client, &provisioner_server)
-                        .await?;
+                    Shuttle::stop_runtime(&mut rt, &mut rt_client, &provisioner_server).await?;
                     continue;
                 }
 
@@ -808,14 +833,14 @@ impl Shuttle {
                         println!(
                             "cargo-shuttle received SIGTERM. Killing all the runtimes..."
                         );
-                        self.stop_runtime(&mut rt, &mut rt_client, &provisioner_server).await?;
+                        Shuttle::stop_runtime(&mut rt, &mut rt_client, &provisioner_server).await?;
                         true
                     },
                     _ = sigint.recv() => {
                         println!(
                             "cargo-shuttle received SIGINT. Killing all the runtimes..."
                         );
-                        self.stop_runtime(&mut rt, &mut rt_client, &provisioner_server).await?;
+                        Shuttle::stop_runtime(&mut rt, &mut rt_client, &provisioner_server).await?;
                         true
                     }
                 };

@@ -684,8 +684,6 @@ impl Shuttle {
         // Compile all the alpha or shuttle-next services in the workspace.
         let services = build_workspace(working_directory, run_args.release, tx).await?;
 
-        // TODO: figure out how best to handle the runtime handles, and what to do if
-        // one completes.
         let (mut sigterm_notif, mut sigint_notif) = if cfg!(target_family = "unix") {
             (
                 Some(
@@ -773,7 +771,7 @@ impl Shuttle {
         }
 
         // If no signal was received during runtimes initialization, then we must handle each runtime until
-        // comletion and handle the signals during this time.
+        // completion and handle the signals during this time.
         if cfg!(target_family = "unix") {
             let sigterm = sigterm_notif.as_mut().expect("SIGTERM reactor failure");
             let sigint = sigint_notif.as_mut().expect("SIGINT reactor failure");

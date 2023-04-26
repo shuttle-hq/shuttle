@@ -765,6 +765,16 @@ impl ApiBuilder {
     }
 
     pub fn with_default_routes(mut self) -> Self {
+        let admin_routes = Router::new()
+            .route("/projects", get(get_projects))
+            .route("/revive", post(revive_projects))
+            .route("/destroy", post(destroy_projects))
+            .route("/stats/load", get(get_load_admin).delete(delete_load_admin))
+            // TODO: The `/swagger-ui` responds with a 303 See Other response which is followed in
+            // browsers but leads to 404 Not Found. This must be investigated.
+            .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
+            .layer(ScopedLayer::new(vec![Scope::Admin]));
+
         self.router = self
             .router
             .route("/", get(get_status))
@@ -772,10 +782,6 @@ impl ApiBuilder {
                 "/projects",
                 get(get_projects_list.layer(ScopedLayer::new(vec![Scope::Project]))),
             )
-            // .route(
-            //     "/projects/:state",
-            //     get(get_projects_list_with_filter.layer(ScopedLayer::new(vec![Scope::Project]))),
-            // )
             .route(
                 "/projects/:project_name",
                 get(get_project.layer(ScopedLayer::new(vec![Scope::Project])))
@@ -784,31 +790,8 @@ impl ApiBuilder {
             )
             .route("/projects/:project_name/*any", any(route_project))
             .route("/stats/load", post(post_load).delete(delete_load))
-            .route(
-                "/admin/projects",
-                get(get_projects.layer(ScopedLayer::new(vec![Scope::Admin]))),
-            )
-            .route(
-                "/admin/revive",
-                post(revive_projects.layer(ScopedLayer::new(vec![Scope::Admin]))),
-            )
-            .route(
-                "/admin/destroy",
-                post(destroy_projects.layer(ScopedLayer::new(vec![Scope::Admin]))),
-            )
-            .route(
-                "/admin/stats/load",
-                get(get_load_admin)
-                    .delete(delete_load_admin)
-                    .layer(ScopedLayer::new(vec![Scope::Admin])),
-            )
-            // TODO: The `/admin/swagger-ui` responds with a 303 See Other response which is followed in
-            // browsers but leads to 404 Not Found. This must be investigated.
-            .merge(
-                SwaggerUi::new("/admin/swagger-ui")
-                    .url("/admin/api-docs/openapi.json", ApiDoc::openapi()),
-            )
-            .layer(ScopedLayer::new(vec![Scope::Admin]));
+            .nest("/admin", admin_routes);
+
         self
     }
 

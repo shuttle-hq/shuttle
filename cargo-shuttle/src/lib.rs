@@ -679,13 +679,22 @@ impl Shuttle {
         match runtime {
             Some(inner) => existing_runtimes.push(inner),
             None => {
-                // Stopping all runtimes gracefully and then forcefully because we must follow up with a `std::process:exit`
-                // which doesn't guarantee destructors run, which means dropped runtimes don't result in killed runtimes (per
-                // https://docs.rs/tokio/latest/tokio/process/struct.Child.html#caveats).
                 provisioner_server.abort();
                 for rt_info in existing_runtimes {
-                    Shuttle::stop_runtime(&mut rt_info.0, &mut rt_info.1).await?;
-                    rt_info.0.kill().await?;
+                    let mut killed_by_error = false;
+                    // Stopping all runtimes gracefully first, but if this errors out the function kills the runtime forcefully.
+                    Shuttle::stop_runtime(&mut rt_info.0, &mut rt_info.1)
+                        .await
+                        .unwrap_or_else(|err| {
+                            info!(status = ?err, "stopping the runtime errored out");
+                            killed_by_error = true;
+                        });
+
+                    // If the runtime stopping is successful, we still need to kill it forcefully because we exit outside the loop
+                    // and destructors will not be guaranteed to run.
+                    if !killed_by_error {
+                        rt_info.0.kill().await?;
+                    }
                 }
                 exit(1);
             }

@@ -657,6 +657,7 @@ impl Shuttle {
             .stop(tonic::Request::new(stop_request))
             .or_else(|err| async {
                 runtime.kill().await?;
+                error!(status = ?err, "killed the runtime by force because stopping it errored out");
                 Err(err)
             })
             .await?
@@ -681,18 +682,17 @@ impl Shuttle {
             None => {
                 provisioner_server.abort();
                 for rt_info in existing_runtimes {
-                    let mut killed_by_error = false;
+                    let mut errored_out = false;
                     // Stopping all runtimes gracefully first, but if this errors out the function kills the runtime forcefully.
                     Shuttle::stop_runtime(&mut rt_info.0, &mut rt_info.1)
                         .await
-                        .unwrap_or_else(|err| {
-                            info!(status = ?err, "stopping the runtime errored out");
-                            killed_by_error = true;
+                        .unwrap_or_else(|_| {
+                            errored_out = true;
                         });
 
                     // If the runtime stopping is successful, we still need to kill it forcefully because we exit outside the loop
                     // and destructors will not be guaranteed to run.
-                    if !killed_by_error {
+                    if !errored_out {
                         rt_info.0.kill().await?;
                     }
                 }

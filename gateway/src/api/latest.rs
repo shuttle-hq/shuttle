@@ -977,7 +977,7 @@ pub mod tests {
         let get_load = || {
             Request::builder()
                 .method("GET")
-                .uri(format!("/admin/stats/load"))
+                .uri("/admin/stats/load")
                 .body(Body::empty())
                 .unwrap()
         };

@@ -483,7 +483,7 @@ jobs:
     executor:
       name: win/server-2022
       # size: medium
-      size: large
+      size: xlarge
       shell: powershell.exe
     environment:
       CARGO_NET_GIT_FETCH_WITH_CLI: "true"
@@ -514,16 +514,12 @@ jobs:
       #       SHUTTLE_API: https://api.unstable.shuttle.rs
       - run: git submodule sync
       - run: git submodule update --init
+      # - run:
+      #     name: Test WASM
+      #     command: ./.circleci/qa-wasm.ps1
       - run:
-          name: Test WASM
-          command: ./.circleci/qa-wasm.ps1
-      # - run:
-      #     name: "Install Docker"
-      #     command: |
-      #       brew install --cask docker
-      # - run:
-      #     name: Test Docker
-      #     command: ./.circleci/qa-docker.sh
+          name: Test Docker
+          command: ./.circleci/qa-docker.ps1
 
 workflows:
 #   ci:

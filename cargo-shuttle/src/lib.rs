@@ -48,7 +48,7 @@ use shuttle_service::builder::{build_workspace, BuiltService};
 use std::fmt::Write;
 use strum::IntoEnumIterator;
 use tar::Builder;
-use tracing::{error, trace, warn};
+use tracing::{error, info, trace, warn};
 use uuid::Uuid;
 
 use crate::args::{DeploymentCommand, ProjectCommand, ResourceCommand};
@@ -650,19 +650,18 @@ impl Shuttle {
     async fn stop_runtime(
         runtime: &mut Child,
         runtime_client: &mut RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
-        provisioner_server: &JoinHandle<Result<(), tonic::transport::Error>>,
     ) -> Result<(), Status> {
         let stop_request = StopRequest {};
-        trace!(?stop_request, "stopping service");
-        let _response = runtime_client
+        info!(?stop_request, "stopping service");
+        let response = runtime_client
             .stop(tonic::Request::new(stop_request))
             .or_else(|err| async {
-                provisioner_server.abort();
                 runtime.kill().await?;
                 Err(err)
             })
             .await?
             .into_inner();
+        info!(response = ?response,  "client stop response: ");
         Ok(())
     }
 
@@ -683,9 +682,9 @@ impl Shuttle {
                 // Stopping all runtimes gracefully and then forcefully because we must follow up with a `std::process:exit`
                 // which doesn't guarantee destructors run, which means dropped runtimes don't result in killed runtimes (per
                 // https://docs.rs/tokio/latest/tokio/process/struct.Child.html#caveats).
+                provisioner_server.abort();
                 for rt_info in existing_runtimes {
-                    Shuttle::stop_runtime(&mut rt_info.0, &mut rt_info.1, provisioner_server)
-                        .await?;
+                    Shuttle::stop_runtime(&mut rt_info.0, &mut rt_info.1).await?;
                     rt_info.0.kill().await?;
                 }
                 exit(1);
@@ -801,8 +800,13 @@ impl Shuttle {
         // If prior signal received is set to true we must stop all the existing runtimes and
         // exit the `local_run`.
         if signal_received {
+            provisioner_server.abort();
             for (mut rt, mut rt_client) in runtimes {
-                Shuttle::stop_runtime(&mut rt, &mut rt_client, &provisioner_server).await?;
+                Shuttle::stop_runtime(&mut rt, &mut rt_client)
+                    .await
+                    .unwrap_or_else(|err| {
+                        info!(status = ?err, "stopping the runtime errored out");
+                    });
             }
             return Ok(());
         }
@@ -816,7 +820,11 @@ impl Shuttle {
                 // If we received a signal while waiting for any runtime we must stop the rest and exit
                 // the waiting loop.
                 if signal_received {
-                    Shuttle::stop_runtime(&mut rt, &mut rt_client, &provisioner_server).await?;
+                    Shuttle::stop_runtime(&mut rt, &mut rt_client)
+                        .await
+                        .unwrap_or_else(|err| {
+                            info!(status = ?err, "stopping the runtime errored out");
+                        });
                     continue;
                 }
 
@@ -833,14 +841,20 @@ impl Shuttle {
                         println!(
                             "cargo-shuttle received SIGTERM. Killing all the runtimes..."
                         );
-                        Shuttle::stop_runtime(&mut rt, &mut rt_client, &provisioner_server).await?;
+                        provisioner_server.abort();
+                        Shuttle::stop_runtime(&mut rt, &mut rt_client).await.unwrap_or_else(|err| {
+                            info!(status = ?err, "stopping the runtime errored out");
+                        });
                         true
                     },
                     _ = sigint.recv() => {
                         println!(
                             "cargo-shuttle received SIGINT. Killing all the runtimes..."
                         );
-                        Shuttle::stop_runtime(&mut rt, &mut rt_client, &provisioner_server).await?;
+                        provisioner_server.abort();
+                        Shuttle::stop_runtime(&mut rt, &mut rt_client).await.unwrap_or_else(|err| {
+                            info!(status = ?err, "stopping the runtime errored out");
+                        });
                         true
                     }
                 };

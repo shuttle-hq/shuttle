@@ -974,6 +974,38 @@ pub mod tests {
             .await
             .unwrap();
 
+        let get_load = || {
+            Request::builder()
+                .method("GET")
+                .uri(format!("/admin/stats/load"))
+                .body(Body::empty())
+                .unwrap()
+        };
+
+        // Non-admin user cannot access admin routes
+        router
+            .call(get_load().with_header(&authorization))
+            .map_ok(|resp| {
+                assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+            })
+            .await
+            .unwrap();
+
+        // Create new admin user
+        let admin_neo_key = world.create_user("admin-neo");
+        world.set_super_user("admin-neo");
+
+        let authorization = Authorization::bearer(&admin_neo_key).unwrap();
+
+        // Admin user can access admin routes
+        router
+            .call(get_load().with_header(&authorization))
+            .map_ok(|resp| {
+                assert_eq!(resp.status(), StatusCode::OK);
+            })
+            .await
+            .unwrap();
+
         // TODO: setting the user to admin here doesn't update the cached token, so the
         // commands will still fail. We need to add functionality for this or modify the test.
         // world.set_super_user("trinity");

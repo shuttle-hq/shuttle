@@ -5390,7 +5390,6 @@ dependencies = [
  "async-trait",
  "cap-std",
  "chrono",
- "clap",
  "crossbeam-channel",
  "futures",
  "hyper",

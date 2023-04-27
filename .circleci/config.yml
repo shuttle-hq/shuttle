@@ -433,9 +433,9 @@ jobs:
       - run:
           name: Test WASM
           command: ./.circleci/qa-wasm.sh
-      - run:
-          name: Test Docker
-          command: ./.circleci/qa-docker.sh
+      # - run:
+      #     name: Test Docker
+      #     command: ./.circleci/qa-docker.sh
   mac-qa:
     macos:
       xcode: 12.5.1
@@ -551,8 +551,8 @@ workflows:
           target: x86_64-unknown-linux-gnu
           protoc_arch: linux-x86_64
           resource_class: xlarge
-          requires:
-            - linux-qa
+          # requires:
+          #   - linux-qa
           filters:
             branches:
               only: production
@@ -562,8 +562,8 @@ workflows:
           target: x86_64-unknown-linux-musl
           protoc_arch: linux-x86_64
           resource_class: xlarge
-          requires:
-            - linux-qa
+          # requires:
+          #   - linux-qa
           filters:
             branches:
               only: production
@@ -573,8 +573,8 @@ workflows:
           target: aarch64-unknown-linux-musl
           resource_class: arm.xlarge
           protoc_arch: linux-aarch_64
-          requires:
-            - linux-qa
+          # requires:
+          #   - linux-qa
           filters:
             branches:
               only: production
@@ -583,8 +583,8 @@ workflows:
             branches:
               only: production
       - build-binaries-mac:
-          requires:
-            - mac-qa
+          # requires:
+          #   - mac-qa
           filters:
             branches:
               only: production

@@ -338,6 +338,7 @@ jobs:
       CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
     steps:
       - checkout
+      - run: choco install -y strawberryperl
       - run:
           name: Install Rust
           command: |

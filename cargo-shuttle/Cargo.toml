@@ -41,7 +41,7 @@ serde_json = { workspace = true }
 sqlx = { workspace = true, features = ["runtime-tokio-native-tls", "postgres"] }
 strum = { workspace = true }
 tar = { workspace = true }
-tokio = { workspace = true, features = ["macros"] }
+tokio = { workspace = true, features = ["macros", "signal"] }
 tokio-tungstenite = { version = "0.18.0", features = ["native-tls"] }
 toml = { workspace = true }
 toml_edit = { workspace = true }

@@ -12,6 +12,7 @@ async fn bind_panic() {
         secrets,
         mut runtime_client,
         runtime_address,
+        runtime: _runtime, // Keep it to not be dropped and have the process killed.
     } = spawn_runtime(project_path, "bind-panic").await.unwrap();
 
     let load_request = tonic::Request::new(LoadRequest {
@@ -21,7 +22,7 @@ async fn bind_panic() {
         secrets,
     });
 
-    let _ = runtime_client.load(load_request).await.unwrap();
+    runtime_client.load(load_request).await.unwrap();
 
     let mut stream = runtime_client
         .subscribe_stop(tonic::Request::new(SubscribeStopRequest {}))

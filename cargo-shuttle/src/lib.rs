@@ -989,10 +989,12 @@ impl Shuttle {
     async fn projects_list(&self, client: &Client, filter: Option<String>) -> Result<()> {
         let projects = match filter {
             Some(filter) => {
-                if let Ok(filter) = State::from_str(filter.trim()) {
-                    client
-                        .get_projects_list_filtered(filter.to_string())
-                        .await?
+                if let Ok(_filter) = State::from_str(filter.trim()) {
+                    // TODO: gateway/api -> get_projects_list_with_filter
+                    bail!("Project status filtering is currently disabled.");
+                    // client
+                    //     .get_projects_list_filtered(filter.to_string())
+                    //     .await?
                 } else {
                     bail!("That's not a valid project status!");
                 }

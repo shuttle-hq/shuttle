@@ -537,14 +537,14 @@ workflows:
               only: production
   release:
     jobs:
-      # - linux-qa:
-      #     filters:
-      #       branches:
-      #         only: production
-      # - mac-qa:
-      #     filters:
-      #       branches:
-      #         only: production
+      - linux-qa:
+          filters:
+            branches:
+              only: production
+      - mac-qa:
+          filters:
+            branches:
+              only: production
       - build-binaries-linux:
           name: build-binaries-x86_64-gnu
           image: ubuntu-2204:2022.04.1

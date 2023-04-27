@@ -657,7 +657,7 @@ impl Shuttle {
             .stop(tonic::Request::new(stop_request))
             .or_else(|err| async {
                 runtime.kill().await?;
-                error!(status = ?err, "killed the runtime by force because stopping it errored out");
+                trace!(status = ?err, "killed the runtime by force because stopping it errored out");
                 Err(err)
             })
             .await?

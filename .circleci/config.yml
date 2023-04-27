@@ -289,6 +289,10 @@ jobs:
       CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
     steps:
       - checkout
+      - run: 
+          name: Set git tag in bash_env
+          command: |
+            echo TAG=$(git describe --tags --abbrev=0) >> $BASH_ENV
       - restore-buildx-cache
       - aws-ecr/ecr-login:
           aws-access-key-id: AWS_ACCESS_KEY_ID
@@ -297,7 +301,7 @@ jobs:
       - run:
           name: Make and push images
           command: |
-            PUSH=true PLATFORMS=linux/amd64 make images
+            PUSH=true PROD=false PLATFORMS=linux/amd64 TAG=$TAG make images
       - save-buildx-cache
   build-binaries-linux:
     machine:
@@ -529,12 +533,17 @@ workflows:
           filters:
             branches:
               only: production
-      - build-and-push:
-          requires:
-            - e2e-test
+      - push-unstable:
+          type: approval
           filters:
             branches:
-              only: production
+              only: main
+      - build-and-push:
+          requires: 
+            - push-unstable
+          filters:
+            branches:
+              only: main
   release:
     jobs:
       - linux-qa:

@@ -106,8 +106,8 @@ This should generate the following dependency in `Cargo.toml`:
 
 ```toml
 rocket = "0.5.0-rc.2"
-shuttle-rocket = { version = "0.14.0" }
-shuttle-runtime = { version = "0.14.0" }
+shuttle-rocket = { version = "0.15.0" }
+shuttle-runtime = { version = "0.15.0" }
 tokio = { version = "1.26.0" }
 ```
 

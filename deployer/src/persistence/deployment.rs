@@ -4,11 +4,12 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use sqlx::{sqlite::SqliteRow, FromRow, Row};
 use tracing::error;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::state::State;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, ToSchema)]
 pub struct Deployment {
     pub id: Uuid,
     pub service_id: Uuid,

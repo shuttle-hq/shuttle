@@ -537,14 +537,14 @@ workflows:
               only: production
   release:
     jobs:
-      - linux-qa
-          # filters:
-          #   branches:
-          #     only: production
-      - mac-qa
-          # filters:
-          #   branches:
-          #     only: production
+      - linux-qa:
+          filters:
+            branches:
+              only: production
+      - mac-qa:
+          filters:
+            branches:
+              only: production
       - build-binaries-linux:
           name: build-binaries-x86_64-gnu
           image: ubuntu-2204:2022.04.1
@@ -553,9 +553,9 @@ workflows:
           resource_class: xlarge
           requires:
             - linux-qa
-          # filters:
-          #   branches:
-          #     only: production
+          filters:
+            branches:
+              only: production
       - build-binaries-linux:
           name: build-binaries-x86_64-musl
           image: ubuntu-2204:2022.04.1
@@ -564,9 +564,9 @@ workflows:
           resource_class: xlarge
           requires:
             - linux-qa
-          # filters:
-          #   branches:
-          #     only: production
+          filters:
+            branches:
+              only: production
       - build-binaries-linux:
           name: build-binaries-aarch64
           image: ubuntu-2004:202101-01
@@ -575,19 +575,19 @@ workflows:
           protoc_arch: linux-aarch_64
           requires:
             - linux-qa
-          # filters:
-          #   branches:
-          #     only: production
-      - build-binaries-windows
-          # filters:
-          #   branches:
-          #     only: production
+          filters:
+            branches:
+              only: production
+      - build-binaries-windows:
+          filters:
+            branches:
+              only: production
       - build-binaries-mac:
           requires:
             - mac-qa
-          # filters:
-          #   branches:
-          #     only: production
+          filters:
+            branches:
+              only: production
       - publish-github-release:
           requires:
             - build-binaries-x86_64-gnu
@@ -595,6 +595,6 @@ workflows:
             - build-binaries-aarch64
             - build-binaries-windows
             - build-binaries-mac
-          # filters:
-          #   branches:
-          #     only: production
+          filters:
+            branches:
+              only: production

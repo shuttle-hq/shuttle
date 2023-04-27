@@ -6,18 +6,30 @@ use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use strum::EnumString;
+#[cfg(feature = "openapi")]
+use utoipa::ToSchema;
 
-// Timeframe before a project is considered idle
+/// Timeframe before a project is considered idle
 pub const IDLE_MINUTES: u64 = 30;
 
+/// Function to set [IDLE_MINUTES] as a serde default
+pub const fn idle_minutes() -> u64 {
+    IDLE_MINUTES
+}
+
 #[derive(Deserialize, Serialize, Clone)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[cfg_attr(feature = "openapi", schema(as = shuttle_common::models::project::Response))]
 pub struct Response {
     pub name: String,
+    #[cfg_attr(feature = "openapi", schema(value_type = shuttle_common::models::project::State))]
     pub state: State,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, EnumString)]
 #[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[cfg_attr(feature = "openapi", schema(as = shuttle_common::models::project::State))]
 pub enum State {
     Creating { recreate_count: usize },
     Attaching { recreate_count: usize },
@@ -165,6 +177,8 @@ pub struct Config {
 }
 
 #[derive(Deserialize, Serialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[cfg_attr(feature = "openapi", schema(as = shuttle_common::models::project::AdminResponse))]
 pub struct AdminResponse {
     pub project_name: String,
     pub account_name: String,

@@ -17,6 +17,14 @@
     <img alt="discord" src="https://img.shields.io/discord/803236282088161321?logo=discord"/>
   </a>
 </p>
+<p align="center">
+  <a href="https://console.algora.io/org/shuttle/bounties?status=open">
+    <img alt="open bounties" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fconsole.algora.io%2Fapi%2Fshields%2Fshuttle%2Fbounties%3Fstatus%3Dopen"/>
+  </a>
+  <a href="https://console.algora.io/org/shuttle/bounties?status=completed">
+    <img alt="rewarded bounties" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fconsole.algora.io%2Fapi%2Fshields%2Fshuttle%2Fbounties%3Fstatus%3Dcompleted"/>
+  </a>
+</p>
 <!-- markdownlint-restore -->
 
 ---
@@ -74,6 +82,10 @@ To initialize your project, simply write:
 ```bash
 cargo shuttle init --axum hello-world
 ```
+
+> Note: if you use [sparse registries](https://blog.rust-lang.org/inside-rust/2023/01/30/cargo-sparse-protocol.html) (which
+> is enabled by default on `nightly`), you may encounter [this bug](https://github.com/shuttle-hq/shuttle/issues/821) when 
+> running the `init` command. To resolve this, see [this comment](https://github.com/shuttle-hq/shuttle/issues/821#issuecomment-1525317860).
 
 And to deploy it, write:
 

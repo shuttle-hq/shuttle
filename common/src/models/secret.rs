@@ -5,10 +5,15 @@ use comfy_table::{
 };
 use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "openapi")]
+use utoipa::ToSchema;
 
 #[derive(Deserialize, Serialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[cfg_attr(feature = "openapi", schema(as = shuttle_common::models::secret::Response))]
 pub struct Response {
     pub key: String,
+    #[cfg_attr(feature = "openapi", schema(value_type = KnownFormat::DateTime))]
     pub last_update: DateTime<Utc>,
 }
 

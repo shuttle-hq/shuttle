@@ -139,7 +139,7 @@ impl GlobalConfig {
         self.api_key = None;
     }
 
-    pub fn api_url(&self) -> Option<ApiKey> {
+    pub fn api_url(&self) -> Option<ApiUrl> {
         self.api_url.clone()
     }
 }

@@ -7,15 +7,23 @@ use comfy_table::{
 };
 use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "openapi")]
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::deployment::State;
 
 #[derive(Deserialize, Serialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[cfg_attr(feature = "openapi", schema(as = shuttle_common::models::deployment::Response))]
 pub struct Response {
+    #[cfg_attr(feature = "openapi", schema(value_type = KnownFormat::Uuid))]
     pub id: Uuid,
+    #[cfg_attr(feature = "openapi", schema(value_type = KnownFormat::Uuid))]
     pub service_id: Uuid,
+    #[cfg_attr(feature = "openapi", schema(value_type = shuttle_common::deployment::State))]
     pub state: State,
+    #[cfg_attr(feature = "openapi", schema(value_type = KnownFormat::DateTime))]
     pub last_update: DateTime<Utc>,
 }
 

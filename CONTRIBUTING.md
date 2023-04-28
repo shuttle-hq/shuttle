@@ -165,9 +165,15 @@ AUTH_CONTAINER_ID=$(docker ps -aqf "name=shuttle-auth") \
     --state=/var/lib/shuttle-auth \
     init --name admin --key test-key
 ```
-
 > Note: if you have done this already for this container you will get a "UNIQUE constraint failed"
 > error, you can ignore this.
+
+We need to make sure we're logged in with the same key we inserted for the admin user in the
+previous step:
+
+```bash
+cargo shuttle login --api-key test-key
+```
 
 We're now ready to start a local run of the deployer:
 

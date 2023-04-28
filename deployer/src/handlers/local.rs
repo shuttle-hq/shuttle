@@ -1,7 +1,7 @@
 use std::net::Ipv4Addr;
 
 use axum::{
-    headers::{Authorization, HeaderMapExt},
+    headers::{authorization::Bearer, Authorization, Cookie, Header, HeaderMapExt},
     http::Request,
     middleware::Next,
     response::Response,
@@ -9,27 +9,22 @@ use axum::{
 };
 use hyper::{
     client::{connect::dns::GaiResolver, HttpConnector},
-    header::AUTHORIZATION,
     Body, Client, StatusCode, Uri,
 };
 use hyper_reverse_proxy::ReverseProxy;
 use once_cell::sync::Lazy;
 use serde_json::Value;
-
-const LOCAL_ADMIN_KEY: &str = "test-key";
+use tracing::error;
 
 static PROXY_CLIENT: Lazy<ReverseProxy<HttpConnector<GaiResolver>>> =
     Lazy::new(|| ReverseProxy::new(Client::new()));
 
-/// This middleware sends a request to the auth service with a [LOCAL_ADMIN_KEY] Bearer token, to
-/// convert the [LOCAL_ADMIN_KEY] to a JWT. We extract the JWT and set it as the Bearer token of
-/// the request as it proceeds into the deployer router, where it is converted to a Claim with the
-/// token included. This way we can both access the admin scoped routes on deployer, and using the
-/// token in the Claim we can pass the ClaimLayer in the provisioner and runtime clients when we
-/// need to start services and provision resources.
+/// This middleware proxies a request to the auth service to get a JWT, which we need to access
+/// the deployer endpoints, and we'll also need it in the claim layer of the provisioner and runtime
+/// clients.
 ///
 /// Follow the steps in https://github.com/shuttle-hq/shuttle/blob/main/CONTRIBUTING.md#testing-deployer-only
-/// to learn how to insert the [LOCAL_ADMIN_KEY] in the auth state.
+/// to learn how to insert an admin user in the auth state.
 ///
 /// WARNING: do not set this layer in production.
 pub async fn set_jwt_bearer<B>(
@@ -37,35 +32,55 @@ pub async fn set_jwt_bearer<B>(
     mut request: Request<B>,
     next: Next<B>,
 ) -> Result<Response, StatusCode> {
-    let auth_request = Request::builder()
-        .uri("http://localhost:8008/auth/key")
-        .header(AUTHORIZATION, format!("Bearer {LOCAL_ADMIN_KEY}"))
-        .body(Body::empty())
-        .unwrap();
+    let mut auth_details = None;
 
-    let response = PROXY_CLIENT
-        .call(
-            Ipv4Addr::LOCALHOST.into(),
-            &auth_uri.to_string(),
-            auth_request,
-        )
-        .await
-        .expect("failed to proxy request to auth service");
+    if let Some(bearer) = request.headers().typed_get::<Authorization<Bearer>>() {
+        auth_details = Some(make_token_request("/auth/key", bearer));
+    }
 
-    // Since this will only be used for local development, we can always trust the client
-    // to not send a large body, so we skip the size check.
-    let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
-    let convert: Value = serde_json::from_slice(&body).unwrap();
+    if let Some(cookie) = request.headers().typed_get::<Cookie>() {
+        auth_details = Some(make_token_request("/auth/session", cookie));
+    }
 
-    let token = convert["token"]
-        .as_str()
-        .expect("response body should have a token");
+    if let Some(token_request) = auth_details {
+        let response = PROXY_CLIENT
+            .call(
+                Ipv4Addr::LOCALHOST.into(),
+                &auth_uri.to_string(),
+                token_request,
+            )
+            .await
+            .expect("failed to proxy request to auth service");
 
-    request
+        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let convert: Value = serde_json::from_slice(&body)
+            .expect("failed to deserialize body as JSON, did you login?");
+
+        let token = convert["token"]
+            .as_str()
+            .expect("response body should have a token");
+
+        request
+            .headers_mut()
+            .typed_insert(Authorization::bearer(token).expect("to set JWT token"));
+
+        let response = next.run(request).await;
+
+        Ok(response)
+    } else {
+        error!("No api-key bearer token or cookie found, make sure you are logged in.");
+        Err(StatusCode::UNAUTHORIZED)
+    }
+}
+
+fn make_token_request(uri: &str, header: impl Header) -> Request<Body> {
+    let mut token_request = Request::builder().uri(uri);
+    token_request
         .headers_mut()
-        .typed_insert(Authorization::bearer(token).expect("to set JWT token"));
+        .expect("manual request to be valid")
+        .typed_insert(header);
 
-    let response = next.run(request).await;
-
-    Ok(response)
+    token_request
+        .body(Body::empty())
+        .expect("manual request to be valid")
 }

@@ -12,7 +12,7 @@ pub use persistence::Persistence;
 use proxy::AddressGetter;
 pub use runtime_manager::RuntimeManager;
 use tokio::sync::Mutex;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 use crate::deployment::gateway_client::GatewayClient;
 
@@ -62,14 +62,14 @@ pub async fn start(
         deployment_manager,
         args.proxy_fqdn,
         args.project,
+        args.auth_uri,
     );
 
     let router = if args.local {
-        warn!("Building deployer router with auth disabled, this should only be used for development.");
         builder.with_local_admin_layer().into_router()
     } else {
         builder
-            .with_auth_layer(args.auth_uri, args.admin_secret)
+            .with_admin_secret_layer(args.admin_secret)
             .into_router()
     };
 

@@ -4,7 +4,7 @@ use axum::extract::ws::{self, WebSocket};
 use axum::extract::{Extension, Path, Query};
 use axum::handler::Handler;
 use axum::headers::HeaderMapExt;
-use axum::middleware::{from_extractor, map_request};
+use axum::middleware::{self, from_extractor};
 use axum::routing::{get, post, Router};
 use axum::{extract::BodyStream, Json};
 use bytes::BufMut;
@@ -23,7 +23,7 @@ use shuttle_common::project::ProjectName;
 use shuttle_common::storage_manager::StorageManager;
 use shuttle_common::{request_span, LogItem};
 use shuttle_service::builder::clean_crate;
-use tracing::{debug, error, field, instrument, trace};
+use tracing::{debug, error, field, instrument, trace, warn};
 use utoipa::OpenApi;
 
 use utoipa_swagger_ui::SwaggerUi;
@@ -34,7 +34,7 @@ use crate::persistence::{Deployment, Log, Persistence, ResourceManager, SecretGe
 
 use std::collections::HashMap;
 
-pub use {self::error::Error, self::error::Result, self::local::set_admin_claim};
+pub use {self::error::Error, self::error::Result, self::local::set_jwt_bearer};
 
 mod local;
 mod project;
@@ -77,6 +77,7 @@ pub struct ApiDoc;
 pub struct RouterBuilder {
     router: Router,
     project_name: ProjectName,
+    auth_uri: Uri,
 }
 
 impl RouterBuilder {
@@ -85,6 +86,7 @@ impl RouterBuilder {
         deployment_manager: DeploymentManager,
         proxy_fqdn: FQDN,
         project_name: ProjectName,
+        auth_uri: Uri,
     ) -> Self {
         let router = Router::new()
             // TODO: The `/swagger-ui` responds with a 303 See Other response which is followed in
@@ -134,28 +136,31 @@ impl RouterBuilder {
             )
             .layer(Extension(persistence))
             .layer(Extension(deployment_manager))
-            .layer(Extension(proxy_fqdn));
+            .layer(Extension(proxy_fqdn))
+            .layer(JwtAuthenticationLayer::new(AuthPublicKey::new(
+                auth_uri.clone(),
+            )));
 
         Self {
             router,
             project_name,
+            auth_uri,
         }
     }
 
-    pub fn with_auth_layer(mut self, auth_uri: Uri, admin_secret: String) -> Self {
-        let auth_public_key = AuthPublicKey::new(auth_uri);
-
-        self.router = self
-            .router
-            .layer(JwtAuthenticationLayer::new(auth_public_key))
-            .layer(AdminSecretLayer::new(admin_secret));
+    pub fn with_admin_secret_layer(mut self, admin_secret: String) -> Self {
+        self.router = self.router.layer(AdminSecretLayer::new(admin_secret));
 
         self
     }
 
-    /// Sets an admin jwt extension on every request for use when running deployer locally.
+    /// Sets an admin JWT bearer token on every request for use when running deployer locally.
     pub fn with_local_admin_layer(mut self) -> Self {
-        self.router = self.router.layer(map_request(set_admin_claim));
+        warn!("Building deployer router with auth bypassed, this should only be used for local development.");
+        self.router = self
+            .router
+            .layer(middleware::from_fn(set_jwt_bearer))
+            .layer(Extension(self.auth_uri.clone()));
 
         self
     }

@@ -1,11 +1,13 @@
 use serde::{Deserialize, Serialize};
 use strum::Display;
+#[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
-#[derive(Clone, Debug, Deserialize, Display, Serialize, ToSchema)]
+#[derive(Clone, Debug, Deserialize, Display, Serialize)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
-#[schema(as = shuttle_common::deployment::State)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[cfg_attr(feature = "openapi", schema(as = shuttle_common::deployment::State))]
 pub enum State {
     Queued,
     Building,

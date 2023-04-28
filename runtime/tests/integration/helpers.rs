@@ -15,6 +15,7 @@ use shuttle_proto::{
     runtime::{self, runtime_client::RuntimeClient},
 };
 use shuttle_service::builder::{build_workspace, BuiltService};
+use tokio::process::Child;
 use tonic::{
     transport::{Channel, Server},
     Request, Response, Status,
@@ -26,6 +27,7 @@ pub struct TestRuntime {
     pub service_name: String,
     pub runtime_address: SocketAddr,
     pub secrets: HashMap<String, String>,
+    pub runtime: Child,
 }
 
 pub async fn spawn_runtime(project_path: String, service_name: &str) -> Result<TestRuntime> {
@@ -52,7 +54,7 @@ pub async fn spawn_runtime(project_path: String, service_name: &str) -> Result<T
     // TODO: update this to work with shuttle-next projects, see cargo-shuttle local run
     let runtime_path = || executable_path.clone();
 
-    let (_, runtime_client) = runtime::start(
+    let (runtime, runtime_client) = runtime::start(
         is_wasm,
         runtime::StorageManagerType::WorkingDir(PathBuf::from(project_path.clone())),
         &format!("http://{}", provisioner_address),
@@ -71,6 +73,7 @@ pub async fn spawn_runtime(project_path: String, service_name: &str) -> Result<T
         service_name: service_name.to_string(),
         runtime_address,
         secrets,
+        runtime,
     })
 }
 

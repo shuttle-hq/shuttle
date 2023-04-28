@@ -176,11 +176,7 @@ pub enum ProjectCommand {
         idle_minutes: u64,
     },
     /// List all projects belonging to the calling account
-    List {
-        #[arg(long)]
-        /// Return projects filtered by a given project status
-        filter: Option<String>,
-    },
+    List,
 }
 
 #[derive(Parser, Clone, Debug)]

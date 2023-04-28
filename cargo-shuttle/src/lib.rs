@@ -7,7 +7,7 @@ mod provisioner_server;
 use indicatif::ProgressBar;
 use shuttle_common::claims::{ClaimService, InjectPropagation};
 use shuttle_common::models::deployment::get_deployments_table;
-use shuttle_common::models::project::{State, IDLE_MINUTES};
+use shuttle_common::models::project::IDLE_MINUTES;
 use shuttle_common::models::resource::get_resources_table;
 use shuttle_common::project::ProjectName;
 use shuttle_common::resource;
@@ -127,9 +127,7 @@ impl Shuttle {
             Command::Project(ProjectCommand::Status { follow }) => {
                 self.project_status(&self.client()?, follow).await
             }
-            Command::Project(ProjectCommand::List { filter }) => {
-                self.projects_list(&self.client()?, filter).await
-            }
+            Command::Project(ProjectCommand::List) => self.projects_list(&self.client()?).await,
             Command::Project(ProjectCommand::Stop) => self.project_delete(&self.client()?).await,
         }
         .map(|_| CommandOutcome::Ok)
@@ -986,22 +984,8 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn projects_list(&self, client: &Client, filter: Option<String>) -> Result<()> {
-        let projects = match filter {
-            Some(filter) => {
-                if let Ok(_filter) = State::from_str(filter.trim()) {
-                    // TODO: gateway/api -> get_projects_list_with_filter
-                    bail!("Project status filtering is currently disabled.");
-                    // client
-                    //     .get_projects_list_filtered(filter.to_string())
-                    //     .await?
-                } else {
-                    bail!("That's not a valid project status!");
-                }
-            }
-            None => client.get_projects_list().await?,
-        };
-
+    async fn projects_list(&self, client: &Client) -> Result<()> {
+        let projects = client.get_projects_list().await?;
         let projects_table = project::get_table(&projects);
 
         println!("{projects_table}");

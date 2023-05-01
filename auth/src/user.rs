@@ -148,7 +148,7 @@ where
             .map_err(|_| Error::KeyMissing)
             .and_then(|TypedHeader(Authorization(bearer))| {
                 let bearer = bearer.token().trim();
-                Ok(ApiKey::parse(bearer).map_err(|_| Self::Rejection::Unauthorized)?)
+                ApiKey::parse(bearer).map_err(|_| Self::Rejection::Unauthorized)
             })?;
 
         trace!("got bearer key");

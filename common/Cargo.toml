@@ -7,7 +7,7 @@ repository.workspace = true
 description = "Common library for the shuttle platform (https://www.shuttle.rs/)"
 
 [dependencies]
-anyhow = { workspace = true, optional = true }
+anyhow = { workspace = true }
 async-trait = { workspace = true, optional = true }
 axum = { workspace = true, optional = true }
 bytes = { workspace = true, optional = true }
@@ -75,7 +75,7 @@ claims = [
 display = ["chrono/clock", "comfy-table", "crossterm"]
 error = ["prost-types", "thiserror", "uuid"]
 openapi = ["utoipa/chrono", "utoipa/uuid"]
-models = ["anyhow", "async-trait", "display", "http", "reqwest", "service"]
+models = ["async-trait", "display", "http", "reqwest", "service"]
 persist = ["sqlx/sqlite", "rand"]
 service = ["chrono/serde", "once_cell", "rustrict", "serde/derive", "uuid"]
 tracing = []

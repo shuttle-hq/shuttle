@@ -9,7 +9,7 @@ use axum::{
 };
 use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Deserializer, Serialize};
-use shuttle_common::claims::Scope;
+use shuttle_common::claims::{Scope, ScopeBuilder};
 use sqlx::{query, Row, SqlitePool};
 use tracing::{trace, Span};
 
@@ -185,11 +185,13 @@ pub enum AccountTier {
 
 impl From<AccountTier> for Vec<Scope> {
     fn from(tier: AccountTier) -> Self {
+        let mut builder = ScopeBuilder::new();
+
         if tier == AccountTier::Admin {
-            Scope::admin()
-        } else {
-            Scope::base()
+            builder = builder.with_admin()
         }
+
+        builder.build()
     }
 }
 

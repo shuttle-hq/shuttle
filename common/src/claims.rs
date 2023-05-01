@@ -88,39 +88,46 @@ pub enum Scope {
     Admin,
 }
 
-impl Scope {
-    /// Standard scopes for a new user in the free tier.
-    pub fn base() -> Vec<Self> {
-        vec![
-            Scope::Deployment,
-            Scope::DeploymentPush,
-            Scope::Logs,
-            Scope::Service,
-            Scope::ServiceCreate,
-            Scope::Project,
-            Scope::ProjectCreate,
-            Scope::Resources,
-            Scope::ResourcesWrite,
-            Scope::Secret,
-            Scope::SecretWrite,
-        ]
+/// Standard scopes for new users.
+const BASE_SCOPES: [Scope; 11] = [
+    Scope::Deployment,
+    Scope::DeploymentPush,
+    Scope::Logs,
+    Scope::Service,
+    Scope::ServiceCreate,
+    Scope::Project,
+    Scope::ProjectCreate,
+    Scope::Resources,
+    Scope::ResourcesWrite,
+    Scope::Secret,
+    Scope::SecretWrite,
+];
+
+/// Additional scopes for admin users.
+const ADMIN_SCOPES: [Scope; 7] = [
+    Scope::User,
+    Scope::UserCreate,
+    Scope::AcmeCreate,
+    Scope::CustomDomainCreate,
+    Scope::CustomDomainCertificateRenew,
+    Scope::GatewayCertificateRenew,
+    Scope::Admin,
+];
+
+pub struct ScopeBuilder(Vec<Scope>);
+
+impl ScopeBuilder {
+    pub fn new() -> Self {
+        Self(BASE_SCOPES.to_vec())
     }
 
-    /// All scopes for an admin user.
-    pub fn admin() -> Vec<Self> {
-        let mut scopes = Scope::base();
+    pub fn with_admin(mut self) -> Self {
+        self.0.extend(ADMIN_SCOPES.into_iter());
+        self
+    }
 
-        scopes.extend(vec![
-            Scope::User,
-            Scope::UserCreate,
-            Scope::AcmeCreate,
-            Scope::CustomDomainCreate,
-            Scope::CustomDomainCertificateRenew,
-            Scope::GatewayCertificateRenew,
-            Scope::Admin,
-        ]);
-
-        scopes
+    pub fn build(self) -> Vec<Scope> {
+        self.0
     }
 }
 

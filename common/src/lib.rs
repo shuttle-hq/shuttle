@@ -49,7 +49,7 @@ pub struct ApiKey(String);
 
 impl ApiKey {
     pub fn parse(key: &str) -> anyhow::Result<Self> {
-        let key = key.trim().to_string();
+        let key = key.trim();
 
         let mut errors = vec![];
         if !key.chars().all(char::is_alphanumeric) {
@@ -65,7 +65,7 @@ impl ApiKey {
             bail!("Invalid API key:\n{message}")
         }
 
-        Ok(Self(key))
+        Ok(Self(key.to_string()))
     }
 
     #[cfg(feature = "persist")]

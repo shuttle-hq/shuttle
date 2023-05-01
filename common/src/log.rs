@@ -5,6 +5,8 @@ use chrono::{DateTime, Utc};
 #[cfg(feature = "display")]
 use crossterm::style::{StyledContent, Stylize};
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "openapi")]
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::deployment::State;
@@ -12,10 +14,16 @@ use crate::deployment::State;
 pub const STATE_MESSAGE: &str = "NEW STATE";
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[cfg_attr(feature = "openapi", schema(as = shuttle_common::log::Item))]
 pub struct Item {
+    #[cfg_attr(feature = "openapi", schema(value_type = KnownFormat::Uuid))]
     pub id: Uuid,
+    #[cfg_attr(feature = "openapi", schema(value_type = KnownFormat::DateTime))]
     pub timestamp: DateTime<Utc>,
+    #[cfg_attr(feature = "openapi", schema(value_type = shuttle_common::deployment::State))]
     pub state: State,
+    #[cfg_attr(feature = "openapi", schema(value_type = shuttle_common::log::Level))]
     pub level: Level,
     pub file: Option<String>,
     pub line: Option<u32>,
@@ -79,6 +87,8 @@ impl std::fmt::Display for Item {
 
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
 #[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[cfg_attr(feature = "openapi", schema(as = shuttle_common::log::Level))]
 pub enum Level {
     Trace,
     Debug,

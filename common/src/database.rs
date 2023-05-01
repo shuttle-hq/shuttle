@@ -2,9 +2,13 @@ use std::fmt::Display;
 
 use serde::{Deserialize, Serialize};
 use strum::Display;
+#[cfg(feature = "openapi")]
+use utoipa::ToSchema;
 
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
 #[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[cfg_attr(feature = "openapi", schema(as = shuttle_common::database::Type))]
 pub enum Type {
     AwsRds(AwsRdsEngine),
     Shared(SharedEngine),
@@ -13,6 +17,7 @@ pub enum Type {
 #[derive(Clone, Debug, Deserialize, Display, Serialize, Eq, PartialEq)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub enum AwsRdsEngine {
     Postgres,
     MySql,
@@ -22,6 +27,7 @@ pub enum AwsRdsEngine {
 #[derive(Clone, Debug, Deserialize, Display, Serialize, Eq, PartialEq)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub enum SharedEngine {
     Postgres,
     MongoDb,

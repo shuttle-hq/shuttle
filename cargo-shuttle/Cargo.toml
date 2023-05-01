@@ -1,6 +1,6 @@
 [package]
 name = "cargo-shuttle"
-version = "0.14.0"
+version = "0.15.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -41,7 +41,7 @@ serde_json = { workspace = true }
 sqlx = { workspace = true, features = ["runtime-tokio-native-tls", "postgres"] }
 strum = { workspace = true }
 tar = { workspace = true }
-tokio = { workspace = true, features = ["macros"] }
+tokio = { workspace = true, features = ["macros", "signal"] }
 tokio-tungstenite = { version = "0.18.0", features = ["native-tls"] }
 toml = { workspace = true }
 toml_edit = { workspace = true }
@@ -63,10 +63,6 @@ features = ["models"]
 
 [dependencies.shuttle-proto]
 workspace = true
-
-[dependencies.shuttle-secrets]
-version = "0.14.0"
-path = "../resources/secrets"
 
 [dependencies.shuttle-service]
 workspace = true

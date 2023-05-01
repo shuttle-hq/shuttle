@@ -26,8 +26,6 @@ use anyhow::bail;
 pub use log::Item as LogItem;
 #[cfg(feature = "service")]
 pub use log::STATE_MESSAGE;
-#[cfg(feature = "persist")]
-use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "service")]
 use uuid::Uuid;
@@ -72,6 +70,8 @@ impl ApiKey {
 
     #[cfg(feature = "persist")]
     pub fn generate() -> Self {
+        use rand::distributions::{Alphanumeric, DistString};
+
         Self(Alphanumeric.sample_string(&mut rand::thread_rng(), 16))
     }
 }
@@ -188,20 +188,27 @@ mod tests {
     proptest! {
         #[test]
         // The API key should be a 16 character alphanumeric string.
-        fn parses_valid_keys(s in "[a-zA-Z0-9]{16}") {
+        fn parses_valid_api_keys(s in "[a-zA-Z0-9]{16}") {
             ApiKey::parse(&s).unwrap();
         }
     }
 
     #[test]
+    fn generated_api_key_is_valid() {
+        let key = ApiKey::generate();
+
+        assert!(ApiKey::parse(key.as_ref()).is_ok());
+    }
+
+    #[test]
     #[should_panic(expected = "The API key should be exactly 16 characters in length.")]
-    fn invalid_length() {
+    fn invalid_api_key_length() {
         ApiKey::parse("tooshort").unwrap();
     }
 
     #[test]
     #[should_panic(expected = "The API key should consist of only alphanumeric characters.")]
-    fn non_alphanumeric() {
+    fn non_alphanumeric_api_key() {
         ApiKey::parse("dh9z58jttoes3qv@").unwrap();
     }
 }

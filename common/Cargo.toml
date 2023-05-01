@@ -33,11 +33,7 @@ rustrict = { version = "0.7.4", optional = true }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true }
 strum = { workspace = true, features = ["derive"] }
-sqlx = { workspace = true, optional = true, features = [
-    "sqlite",
-    "json",
-    "runtime-tokio-native-tls",
-] }
+sqlx = { workspace = true, optional = true, features = ["runtime-tokio-native-tls"] }
 thiserror = { workspace = true, optional = true }
 tonic = { workspace = true, optional = true }
 tower = { workspace = true, optional = true }
@@ -80,7 +76,7 @@ display = ["chrono/clock", "comfy-table", "crossterm"]
 error = ["prost-types", "thiserror", "uuid"]
 openapi = ["utoipa/chrono", "utoipa/uuid"]
 models = ["anyhow", "async-trait", "display", "http", "reqwest", "service"]
-persist = ["sqlx", "rand"]
+persist = ["sqlx/sqlite", "rand"]
 service = ["chrono/serde", "once_cell", "rustrict", "serde/derive", "uuid"]
 tracing = []
 wasm = [

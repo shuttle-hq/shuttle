@@ -533,14 +533,14 @@ workflows:
           filters:
             branches:
               only: production
-      - push-unstable:
+      - approve-push-unstable:
           type: approval
           filters:
             branches:
               only: main
       - build-and-push:
           requires: 
-            - push-unstable
+            - approve-push-unstable
           filters:
             branches:
               only: main

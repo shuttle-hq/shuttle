@@ -131,6 +131,12 @@ impl ScopeBuilder {
     }
 }
 
+impl Default for ScopeBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
 pub struct Claim {
     /// Expiration time (as UTC timestamp).

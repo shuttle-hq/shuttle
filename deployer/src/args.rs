@@ -51,7 +51,7 @@ pub struct Args {
     #[clap(long, default_value = "/tmp")]
     pub artifacts_path: PathBuf,
 
-    /// Run deployer without auth locally
+    /// Add an auth layer to deployer for local development
     #[arg(long)]
     pub local: bool,
 }

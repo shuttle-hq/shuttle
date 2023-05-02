@@ -163,7 +163,7 @@ Next up we need to insert an admin user into the `auth` state using the ID of th
 container and the auth CLI `init` command:
 
 ```bash
-AUTH_CONTAINER_ID=$(docker ps -aqf "name=shuttle-auth") \
+AUTH_CONTAINER_ID=$(docker ps -qf "name=auth") \
     docker exec $AUTH_CONTAINER_ID ./usr/local/bin/service \
     --state=/var/lib/shuttle-auth \
     init --name admin --key test-key

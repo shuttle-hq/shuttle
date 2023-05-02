@@ -148,7 +148,10 @@ cargo run --manifest-path ../../../Cargo.toml --bin cargo-shuttle -- logs
 The steps outlined above starts all the services used by shuttle locally (ie. both `gateway` and `deployer`). However, sometimes you will want to quickly test changes to `deployer` only. To do this replace `make up` with the following:
 
 ```bash
-# first generate the local docker-compose file
+# if you didn't do this already, make the images
+USE_PANAMAX=disable make images
+
+# then generate the local docker-compose file
 make docker-compose.rendered.yml
 
 # then run it
@@ -182,6 +185,16 @@ cargo run -p shuttle-deployer -- --provisioner-address http://localhost:5000 --a
 ```
 
 The `<project_name>` needs to match the name of the project that will be deployed to this deployer. This is the `Cargo.toml` or `Shuttle.toml` name for the project.
+
+Now that your local deployer is running, you can run commands against using the cargo-shuttle CLI.
+To do that you should navigate into an example, it needs to have the same project name as the
+one you submitted when starting the deployer above. Then you can use the CLI like you normally
+would:
+
+```bash
+# the manifest path is the path to the root shuttle manifest from the example directory
+cargo run --bin cargo-shuttle --manifest-path="../../../Cargo.toml" -- deploy
+```
 
 ### Using Podman instead of Docker
 

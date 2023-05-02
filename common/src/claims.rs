@@ -88,41 +88,41 @@ pub enum Scope {
     Admin,
 }
 
-/// Standard scopes for new users.
-const BASE_SCOPES: [Scope; 11] = [
-    Scope::Deployment,
-    Scope::DeploymentPush,
-    Scope::Logs,
-    Scope::Service,
-    Scope::ServiceCreate,
-    Scope::Project,
-    Scope::ProjectCreate,
-    Scope::Resources,
-    Scope::ResourcesWrite,
-    Scope::Secret,
-    Scope::SecretWrite,
-];
-
-/// Additional scopes for admin users.
-const ADMIN_SCOPES: [Scope; 7] = [
-    Scope::User,
-    Scope::UserCreate,
-    Scope::AcmeCreate,
-    Scope::CustomDomainCreate,
-    Scope::CustomDomainCertificateRenew,
-    Scope::GatewayCertificateRenew,
-    Scope::Admin,
-];
-
 pub struct ScopeBuilder(Vec<Scope>);
 
 impl ScopeBuilder {
+    /// Create a builder with the standard scopes for new users.
     pub fn new() -> Self {
-        Self(BASE_SCOPES.to_vec())
+        Self(vec![
+            Scope::Deployment,
+            Scope::DeploymentPush,
+            Scope::Logs,
+            Scope::Service,
+            Scope::ServiceCreate,
+            Scope::Project,
+            Scope::ProjectCreate,
+            Scope::Resources,
+            Scope::ResourcesWrite,
+            Scope::Secret,
+            Scope::SecretWrite,
+        ])
     }
 
+    /// Extend the current scopes with admin scopes.
     pub fn with_admin(mut self) -> Self {
-        self.0.extend(ADMIN_SCOPES.into_iter());
+        self.0.extend(vec![
+            Scope::Deployment,
+            Scope::DeploymentPush,
+            Scope::Logs,
+            Scope::Service,
+            Scope::ServiceCreate,
+            Scope::Project,
+            Scope::ProjectCreate,
+            Scope::Resources,
+            Scope::ResourcesWrite,
+            Scope::Secret,
+            Scope::SecretWrite,
+        ]);
         self
     }
 

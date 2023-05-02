@@ -133,7 +133,7 @@ Test if the deployment is working:
 
 ```bash
 # the Host header should match the Host from the deploy output
-curl --header "Host: {app}.unstable.shuttleapp.rs" localhost:8000/hello
+curl --header "Host: {app}.unstable.shuttleapp.rs" localhost:8000
 ```
 
 View logs from the current deployment:

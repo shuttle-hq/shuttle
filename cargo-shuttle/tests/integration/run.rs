@@ -63,7 +63,7 @@ async fn rocket_hello_world() {
     let url = cargo_shuttle_run("../examples/rocket/hello-world", false).await;
 
     let request_text = reqwest::Client::new()
-        .get(format!("{url}/hello"))
+        .get(format!("{url}"))
         .send()
         .await
         .unwrap()
@@ -150,7 +150,7 @@ async fn shuttle_next() {
     let client = reqwest::Client::new();
 
     let request_text = client
-        .get(format!("{url}/hello"))
+        .get(format!("{url}"))
         .send()
         .await
         .unwrap()
@@ -236,7 +236,7 @@ async fn actix_web_hello_world() {
     let url = cargo_shuttle_run("../examples/actix-web/hello-world", false).await;
 
     let request_text = reqwest::Client::new()
-        .get(format!("{url}/hello"))
+        .get(format!("{url}"))
         .send()
         .await
         .unwrap()
@@ -253,7 +253,7 @@ async fn axum_hello_world() {
     let url = cargo_shuttle_run("../examples/axum/hello-world", false).await;
 
     let request_text = reqwest::Client::new()
-        .get(format!("{url}/hello"))
+        .get(format!("{url}"))
         .send()
         .await
         .unwrap()
@@ -270,7 +270,7 @@ async fn tide_hello_world() {
     let url = cargo_shuttle_run("../examples/tide/hello-world", false).await;
 
     let request_text = reqwest::Client::new()
-        .get(format!("{url}/hello"))
+        .get(format!("{url}"))
         .send()
         .await
         .unwrap()
@@ -287,7 +287,7 @@ async fn tower_hello_world() {
     let url = cargo_shuttle_run("../examples/tower/hello-world", false).await;
 
     let request_text = reqwest::Client::new()
-        .get(format!("{url}/hello"))
+        .get(format!("{url}"))
         .send()
         .await
         .unwrap()
@@ -304,7 +304,7 @@ async fn warp_hello_world() {
     let url = cargo_shuttle_run("../examples/warp/hello-world", false).await;
 
     let request_text = reqwest::Client::new()
-        .get(format!("{url}/hello"))
+        .get(format!("{url}"))
         .send()
         .await
         .unwrap()
@@ -321,7 +321,7 @@ async fn poem_hello_world() {
     let url = cargo_shuttle_run("../examples/poem/hello-world", false).await;
 
     let request_text = reqwest::Client::new()
-        .get(format!("{url}/hello"))
+        .get(format!("{url}"))
         .send()
         .await
         .unwrap()
@@ -402,7 +402,7 @@ async fn salvo_hello_world() {
     let url = cargo_shuttle_run("../examples/salvo/hello-world", false).await;
 
     let request_text = reqwest::Client::new()
-        .get(format!("{url}/hello"))
+        .get(format!("{url}"))
         .send()
         .await
         .unwrap()
@@ -419,7 +419,7 @@ async fn thruster_hello_world() {
     let url = cargo_shuttle_run("../examples/thruster/hello-world", false).await;
 
     let request_text = reqwest::Client::new()
-        .get(format!("{url}/hello"))
+        .get(format!("{url}"))
         .send()
         .await
         .unwrap()
@@ -435,7 +435,7 @@ async fn rocket_hello_world_with_router_ip() {
     let url = cargo_shuttle_run("../examples/rocket/hello-world", true).await;
 
     let request_text = reqwest::Client::new()
-        .get(format!("{url}/hello"))
+        .get(format!("{url}"))
         .send()
         .await
         .unwrap()

@@ -101,7 +101,7 @@ impl ShuttleInit for ShuttleInitActixWeb {
         use actix_web::{get, web::ServiceConfig};
         use shuttle_actix_web::ShuttleActixWeb;
 
-        #[get("/hello")]
+        #[get("/")]
         async fn hello_world() -> &'static str {
             "Hello World!"
         }
@@ -166,7 +166,7 @@ impl ShuttleInit for ShuttleInitAxum {
 
         #[shuttle_runtime::main]
         async fn axum() -> shuttle_axum::ShuttleAxum {
-            let router = Router::new().route("/hello", get(hello_world));
+            let router = Router::new().route("/", get(hello_world));
 
             Ok(router.into())
         }"#}
@@ -223,7 +223,7 @@ impl ShuttleInit for ShuttleInitRocket {
 
         #[shuttle_runtime::main]
         async fn rocket() -> shuttle_rocket::ShuttleRocket {
-            let rocket = rocket::build().mount("/hello", routes![index]);
+            let rocket = rocket::build().mount("/", routes![index]);
 
             Ok(rocket.into())
         }"#}
@@ -275,7 +275,7 @@ impl ShuttleInit for ShuttleInitTide {
             let mut app = tide::new();
             app.with(tide::log::LogMiddleware::new());
 
-            app.at("/hello").get(|_| async { Ok("Hello, world!") });
+            app.at("/").get(|_| async { Ok("Hello, world!") });
 
             Ok(app.into())
         }"#}
@@ -332,7 +332,7 @@ impl ShuttleInit for ShuttleInitPoem {
 
         #[shuttle_runtime::main]
         async fn poem() -> ShuttlePoem<impl poem::Endpoint> {
-            let app = Route::new().at("/hello", get(hello_world));
+            let app = Route::new().at("/", get(hello_world));
 
             Ok(app.into())
         }"#}
@@ -839,7 +839,7 @@ impl ShuttleInit for ShuttleInitThruster {
         #[shuttle_runtime::main]
         async fn thruster() -> shuttle_thruster::ShuttleThruster<HyperServer<Ctx, ()>> {
             let server = HyperServer::new(
-                App::<HyperRequest, Ctx, ()>::create(generate_context, ()).get("/hello", m![hello]),
+                App::<HyperRequest, Ctx, ()>::create(generate_context, ()).get("/", m![hello]),
             );
             
             Ok(server.into())

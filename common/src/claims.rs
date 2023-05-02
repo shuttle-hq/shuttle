@@ -88,6 +88,55 @@ pub enum Scope {
     Admin,
 }
 
+pub struct ScopeBuilder(Vec<Scope>);
+
+impl ScopeBuilder {
+    /// Create a builder with the standard scopes for new users.
+    pub fn new() -> Self {
+        Self(vec![
+            Scope::Deployment,
+            Scope::DeploymentPush,
+            Scope::Logs,
+            Scope::Service,
+            Scope::ServiceCreate,
+            Scope::Project,
+            Scope::ProjectCreate,
+            Scope::Resources,
+            Scope::ResourcesWrite,
+            Scope::Secret,
+            Scope::SecretWrite,
+        ])
+    }
+
+    /// Extend the current scopes with admin scopes.
+    pub fn with_admin(mut self) -> Self {
+        self.0.extend(vec![
+            Scope::Deployment,
+            Scope::DeploymentPush,
+            Scope::Logs,
+            Scope::Service,
+            Scope::ServiceCreate,
+            Scope::Project,
+            Scope::ProjectCreate,
+            Scope::Resources,
+            Scope::ResourcesWrite,
+            Scope::Secret,
+            Scope::SecretWrite,
+        ]);
+        self
+    }
+
+    pub fn build(self) -> Vec<Scope> {
+        self.0
+    }
+}
+
+impl Default for ScopeBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
 pub struct Claim {
     /// Expiration time (as UTC timestamp).

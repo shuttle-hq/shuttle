@@ -57,7 +57,7 @@ pub async fn start(
         deployment_manager.run_push(built).await;
     }
 
-    let builder = handlers::RouterBuilder::new(
+    let mut builder = handlers::RouterBuilder::new(
         persistence,
         deployment_manager,
         args.proxy_fqdn,
@@ -65,13 +65,14 @@ pub async fn start(
         args.auth_uri,
     );
 
-    let router = if args.local {
-        builder.with_local_admin_layer().into_router()
+    if args.local {
+        // If the --local flag is passed, setup an auth layer in deployer
+        builder = builder.with_local_admin_layer()
     } else {
-        builder
-            .with_admin_secret_layer(args.admin_secret)
-            .into_router()
+        builder = builder.with_admin_secret_layer(args.admin_secret)
     };
+
+    let router = builder.into_router();
 
     info!(address=%args.api_address, "Binding to and listening at address");
 

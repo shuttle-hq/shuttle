@@ -5364,6 +5364,18 @@ dependencies = [
 
 [[package]]
 name = "shuttle-deployer"
+version = "0.16.0"
+dependencies = [
+ "clap",
+ "http",
+ "shuttle-common",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "shuttle-deployer-alpha"
 version = "0.14.0"
 dependencies = [
  "anyhow",

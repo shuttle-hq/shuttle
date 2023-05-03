@@ -52,7 +52,7 @@ Shuttle is built for productivity, reliability and performance:
 
 ## Console Sneak Peek (gif)
 ![console-sneak-peek](https://i.imgur.com/1qdWipP.gif)
-*The gif above demonstrates the ease of adding/managing resources to your project(s) in our upcoming console. Bear in mind that the ease of adding resources is already there, albeit without the visualization coming from the console*
+*The gif above demonstrates the ease of adding/managing resources to your project(s) in our upcoming console. Bear in mind that the ease of adding resources is already there, albeit without the visualization coming from the console.*
 
 ## Getting Started
 

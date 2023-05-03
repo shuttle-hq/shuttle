@@ -38,27 +38,27 @@ impl TempCargoHome {
                 write!(
                     config,
                     r#"[patch.crates-io]
-shuttle-service = { path = "{}" }
-shuttle-runtime = { path = "{}" }
+shuttle-service = {{ path = "{}" }}
+shuttle-runtime = {{ path = "{}" }}
 
-shuttle-aws-rds = { path = "{}" }
-shuttle-persist = { path = "{}" }
-shuttle-shared-db = { path = "{}" }
-shuttle-secrets = { path = "{}" }
-shuttle-static-folder = { path = "{}" }
+shuttle-aws-rds = {{ path = "{}" }}
+shuttle-persist = {{ path = "{}" }}
+shuttle-shared-db = {{ path = "{}" }}
+shuttle-secrets = {{ path = "{}" }}
+shuttle-static-folder = {{ path = "{}" }}
 
-shuttle-axum = { path = "{}" }
-shuttle-actix-web = { path = "{}" }
-shuttle-next = { path = "{}" }
-shuttle-poem = { path = "{}" }
-shuttle-poise = { path = "{}" }
-shuttle-rocket = { path = "{}" }
-shuttle-salvo = { path = "{}" }
-shuttle-serenity = { path = "{}" }
-shuttle-thruster = { path = "{}" }
-shuttle-tide = { path = "{}" }
-shuttle-tower = { path = "{}" }
-shuttle-warp = { path = "{}" }"#,
+shuttle-axum = {{ path = "{}" }}
+shuttle-actix-web = {{ path = "{}" }}
+shuttle-next = {{ path = "{}" }}
+shuttle-poem = {{ path = "{}" }}
+shuttle-poise = {{ path = "{}" }}
+shuttle-rocket = {{ path = "{}" }}
+shuttle-salvo = {{ path = "{}" }}
+shuttle-serenity = {{ path = "{}" }}
+shuttle-thruster = {{ path = "{}" }}
+shuttle-tide = {{ path = "{}" }}
+shuttle-tower = {{ path = "{}" }}
+shuttle-warp = {{ path = "{}" }}"#,
                     WORKSPACE_ROOT.join("service").display(),
                     WORKSPACE_ROOT.join("runtime").display(),
                     WORKSPACE_ROOT.join("resources").join("aws-rds").display(),
@@ -192,9 +192,9 @@ CARGO_HOME: {}
                 "--project-name",
                 "shuttle-dev",
                 "exec",
-                "gateway",
+                "auth",
                 "/usr/local/bin/service",
-                "--state=/var/lib/shuttle",
+                "--state=/var/lib/shuttle-auth",
                 "init",
                 "--name",
                 "test",
@@ -455,7 +455,7 @@ impl Services {
 
     /// Starts a project and deploys a service for the example in `self.example_path`
     pub fn deploy(&self) {
-        self.run_client(["project", "new"])
+        self.run_client(["project", "start"])
             .wait()
             .ensure_success("failed to run deploy");
 
@@ -484,6 +484,6 @@ impl Services {
 impl Drop for Services {
     fn drop(&mut self) {
         // Initiate project destruction on test completion
-        _ = self.run_client(["project", "rm"]).wait();
+        _ = self.run_client(["project", "stop"]).wait();
     }
 }

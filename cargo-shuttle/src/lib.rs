@@ -902,7 +902,8 @@ impl Shuttle {
             .get_logs_ws(self.ctx.project_name(), &deployment.id)
             .await?;
 
-        let mut last_state: shuttle_common::deployment::State = shuttle_common::deployment::State::Unknown;
+        let mut last_state: shuttle_common::deployment::State = 
+            shuttle_common::deployment::State::Unknown;
 
         loop {
             let mesg = stream.next().await;

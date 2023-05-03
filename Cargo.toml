@@ -6,6 +6,7 @@ members = [
   "codegen",
   "common",
   "deployer",
+  "deployer-alpha",
   "gateway",
   "proto",
   "provisioner",

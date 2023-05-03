@@ -943,6 +943,10 @@ impl Shuttle {
                     };
                 }
             } else {
+                println!("Reconnecting websockets logging");
+                // A wait time short enough for not much state to have changed, long enough that
+                // the terminal isn't completely spammed
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
                 stream = client
                     .get_logs_ws(self.ctx.project_name(), &deployment.id)
                     .await?;

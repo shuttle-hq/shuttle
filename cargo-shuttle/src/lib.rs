@@ -127,7 +127,9 @@ impl Shuttle {
             Command::Project(ProjectCommand::Status { follow }) => {
                 self.project_status(&self.client()?, follow).await
             }
-            Command::Project(ProjectCommand::List) => self.projects_list(&self.client()?).await,
+            Command::Project(ProjectCommand::List { page, limit }) => {
+                self.projects_list(page, limit, &self.client()?).await
+            }
             Command::Project(ProjectCommand::Stop) => self.project_delete(&self.client()?).await,
         }
         .map(|_| CommandOutcome::Ok)
@@ -984,8 +986,8 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn projects_list(&self, client: &Client) -> Result<()> {
-        let projects = client.get_projects_list().await?;
+    async fn projects_list(&self, page: u32, limit: u32, client: &Client) -> Result<()> {
+        let projects = client.get_projects_list(page, limit).await?;
         let projects_table = project::get_table(&projects);
 
         println!("{projects_table}");

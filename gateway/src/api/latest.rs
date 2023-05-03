@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::body::Body;
-use axum::extract::{Extension, Path, State};
+use axum::extract::{Extension, Path, Query, State};
 use axum::handler::Handler;
 use axum::http::Request;
 use axum::middleware::from_extractor;
@@ -109,6 +109,12 @@ async fn get_project(
     Ok(AxumJson(response))
 }
 
+#[derive(Debug, Clone, Copy, Deserialize)]
+struct PaginationDetails {
+    page: u32,
+    limit: u32,
+}
+
 #[utoipa::path(
     get,
     path = "/projects",
@@ -120,9 +126,11 @@ async fn get_project(
 async fn get_projects_list(
     State(RouterState { service, .. }): State<RouterState>,
     User { name, .. }: User,
+    Query(PaginationDetails { page, limit }): Query<PaginationDetails>,
 ) -> Result<AxumJson<Vec<project::Response>>, Error> {
     let projects = service
-        .iter_user_projects_detailed(name.clone())
+        // The `offset` is page size * amount of pages
+        .iter_user_projects_detailed(&name, limit * page, limit)
         .await?
         .map(|project| project::Response {
             name: project.0.to_string(),

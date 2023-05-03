@@ -23,7 +23,7 @@ use sqlx::error::DatabaseError;
 use sqlx::migrate::Migrator;
 use sqlx::sqlite::SqlitePool;
 use sqlx::types::Json as SqlxJson;
-use sqlx::{query, Error as SqlxError, Row};
+use sqlx::{query, Error as SqlxError, QueryBuilder, Row};
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, trace, warn, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -271,20 +271,38 @@ impl GatewayService {
 
     pub async fn iter_user_projects_detailed(
         &self,
-        account_name: AccountName,
+        account_name: &AccountName,
+        offset: u32,
+        limit: u32,
     ) -> Result<impl Iterator<Item = (ProjectName, Project)>, Error> {
-        let iter =
-            query("SELECT project_name, project_state FROM projects WHERE account_name = ?1")
-                .bind(account_name)
-                .fetch_all(&self.db)
-                .await?
-                .into_iter()
-                .map(|row| {
-                    (
-                        row.get("project_name"),
-                        row.get::<SqlxJson<Project>, _>("project_state").0,
-                    )
-                });
+        let mut query = QueryBuilder::new(
+            "SELECT project_name, project_state FROM projects WHERE account_name = ",
+        );
+
+        query.push_bind(account_name);
+
+        // TODO(AlphaKeks): right now, if the user specifies `--limit 0`, they will get a
+        // response along the lines of `No projects are linked to this account`. We could
+        // either change that message or use `1` as a minimum so that projects will _always_ be
+        // displayed (assuming the user has any).
+        let limit = limit.max(1);
+        query.push(" LIMIT ").push_bind(limit);
+
+        if offset > 0 {
+            query.push(" OFFSET ").push_bind(offset);
+        }
+
+        let iter = query
+            .build()
+            .fetch_all(&self.db)
+            .await?
+            .into_iter()
+            .map(|row| {
+                (
+                    row.get("project_name"),
+                    row.get::<SqlxJson<Project>, _>("project_state").0,
+                )
+            });
         Ok(iter)
     }
 
@@ -772,7 +790,7 @@ pub mod tests {
             }
         );
         assert_eq!(
-            svc.iter_user_projects_detailed(neo.clone())
+            svc.iter_user_projects_detailed(&neo, 0, u32::MAX)
                 .await
                 .unwrap()
                 .map(|item| item.0)

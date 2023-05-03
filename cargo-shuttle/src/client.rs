@@ -128,8 +128,12 @@ impl Client {
         self.get(path).await
     }
 
-    pub async fn get_projects_list(&self) -> Result<Vec<project::Response>> {
-        let path = "/projects".to_string();
+    pub async fn get_projects_list(&self, page: u32, limit: u32) -> Result<Vec<project::Response>> {
+        let path = format!(
+            "/projects?limit={}&page={}",
+            limit,
+            page.checked_sub(1).unwrap_or(1)
+        );
 
         self.get(path).await
     }

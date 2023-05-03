@@ -56,7 +56,7 @@ async fn post_user() {
 
     // Reset API key for non-existing user.
     let request = Request::builder()
-        .uri(format!("/users/non-existing/reset-key"))
+        .uri("/users/non-existing/reset-key")
         .method("PUT")
         .body(Body::empty())
         .unwrap();
@@ -65,7 +65,7 @@ async fn post_user() {
 
     // Reset API key for existing user.
     let request = Request::builder()
-        .uri(format!("/users/test-user/reset-key"))
+        .uri("/users/test-user/reset-key")
         .method("PUT")
         .body(Body::empty())
         .unwrap();

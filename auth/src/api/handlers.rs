@@ -39,6 +39,13 @@ pub(crate) async fn post_user(
     Ok(Json(user.into()))
 }
 
+pub(crate) async fn put_user_reset_key(
+    State(user_manager): State<UserManagerState>,
+    Path(account_name): Path<AccountName>,
+) -> Result<(), Error> {
+    user_manager.reset_key(account_name).await
+}
+
 pub(crate) async fn login(
     mut session: WritableSession,
     State(user_manager): State<UserManagerState>,

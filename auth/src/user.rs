@@ -8,7 +8,10 @@ use axum::{
     TypedHeader,
 };
 use serde::{Deserialize, Deserializer, Serialize};
-use shuttle_common::{claims::Scope, ApiKey};
+use shuttle_common::{
+    claims::{Scope, ScopeBuilder},
+    ApiKey,
+};
 use sqlx::{query, Row, SqlitePool};
 use tracing::{trace, Span};
 
@@ -172,33 +175,13 @@ pub enum AccountTier {
 
 impl From<AccountTier> for Vec<Scope> {
     fn from(tier: AccountTier) -> Self {
-        let mut base = vec![
-            Scope::Deployment,
-            Scope::DeploymentPush,
-            Scope::Logs,
-            Scope::Service,
-            Scope::ServiceCreate,
-            Scope::Project,
-            Scope::ProjectCreate,
-            Scope::Resources,
-            Scope::ResourcesWrite,
-            Scope::Secret,
-            Scope::SecretWrite,
-        ];
+        let mut builder = ScopeBuilder::new();
 
         if tier == AccountTier::Admin {
-            base.append(&mut vec![
-                Scope::User,
-                Scope::UserCreate,
-                Scope::AcmeCreate,
-                Scope::CustomDomainCreate,
-                Scope::CustomDomainCertificateRenew,
-                Scope::GatewayCertificateRenew,
-                Scope::Admin,
-            ]);
+            builder = builder.with_admin()
         }
 
-        base
+        builder.build()
     }
 }
 

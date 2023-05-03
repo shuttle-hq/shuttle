@@ -186,7 +186,7 @@ pub struct LoginArgs {
     pub api_key: Option<String>,
 }
 
-#[derive(Parser)]
+#[derive(Parser, Clone)]
 pub struct DeployArgs {
     /// Allow deployment with uncommited files
     #[arg(long)]

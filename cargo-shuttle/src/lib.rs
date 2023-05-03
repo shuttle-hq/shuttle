@@ -51,7 +51,7 @@ use tar::Builder;
 use tracing::{error, trace, warn};
 use uuid::Uuid;
 
-use crate::args::{DeploymentCommand, ProjectCommand, ResourceCommand};
+use crate::args::{DeploymentCommand, ProjectCommand, ProjectStartArgs, ResourceCommand};
 use crate::client::Client;
 use crate::provisioner_server::LocalProvisioner;
 
@@ -118,10 +118,10 @@ impl Shuttle {
             Command::Stop => self.stop(&self.client()?).await,
             Command::Clean => self.clean(&self.client()?).await,
             Command::Secrets => self.secrets(&self.client()?).await,
-            Command::Project(ProjectCommand::Start { idle_minutes }) => {
+            Command::Project(ProjectCommand::Start(ProjectStartArgs { idle_minutes })) => {
                 self.project_create(&self.client()?, idle_minutes).await
             }
-            Command::Project(ProjectCommand::Restart { idle_minutes }) => {
+            Command::Project(ProjectCommand::Restart(ProjectStartArgs { idle_minutes })) => {
                 self.project_recreate(&self.client()?, idle_minutes).await
             }
             Command::Project(ProjectCommand::Status { follow }) => {
@@ -156,7 +156,7 @@ impl Shuttle {
                 println!();
             } else if args.login_args.api_key.is_some() {
                 self.login(args.login_args.clone()).await?;
-            } else if args.new {
+            } else if args.create_env {
                 bail!("Tried to login to create a Shuttle environment, but no API key was set.")
             }
         }
@@ -199,7 +199,7 @@ impl Shuttle {
                 println!(
                     "Shuttle works with a range of web frameworks. Which one do you want to use?"
                 );
-                let frameworks = init::Framework::iter().collect::<Vec<_>>();
+                let frameworks = init::Template::iter().collect::<Vec<_>>();
                 let index = FuzzySelect::with_theme(&theme)
                     .items(&frameworks)
                     .default(0)
@@ -210,14 +210,14 @@ impl Shuttle {
         };
 
         // 5. Initialize locally
-        init::cargo_init(path.clone())?;
+        init::cargo_init(path.clone(), project_args.name.clone().unwrap())?;
         init::cargo_shuttle_init(path.clone(), framework)?;
         println!();
 
         // 6. Confirm that the user wants to create the project environment on Shuttle
         let should_create_environment = if !interactive {
-            args.new
-        } else if args.new {
+            args.create_env
+        } else if args.create_env {
             true
         } else {
             let should_create = Confirm::with_theme(&theme)

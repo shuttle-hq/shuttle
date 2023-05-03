@@ -2,7 +2,7 @@ use std::process::exit;
 
 use clap::Parser;
 use shuttle_common::backends::tracing::setup_tracing;
-use shuttle_deployer::{start, start_proxy, Args, DeployLayer, Persistence, RuntimeManager};
+use shuttle_deployer_alpha::{start, start_proxy, Args, DeployLayer, Persistence, RuntimeManager};
 use tokio::select;
 use tracing::{error, trace};
 use tracing_subscriber::prelude::*;
@@ -18,7 +18,7 @@ async fn main() {
     let (persistence, _) = Persistence::new(&args.state).await;
     setup_tracing(
         tracing_subscriber::registry().with(DeployLayer::new(persistence.clone())),
-        "deployer",
+        "deployer-alpha",
     );
 
     let runtime_manager = RuntimeManager::new(

@@ -9,5 +9,5 @@ async fn main() {
 
     trace!(args = ?args, "parsed args");
 
-    setup_tracing(tracing_subscriber::registry(), "auth");
+    setup_tracing(tracing_subscriber::registry(), "deployer");
 }

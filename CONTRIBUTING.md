@@ -181,7 +181,7 @@ cargo shuttle login --api-key test-key
 We're now ready to start a local run of the deployer:
 
 ```bash
-cargo run -p shuttle-deployer -- --provisioner-address http://localhost:5000 --auth-uri http://localhost:8008 --proxy-fqdn local.rs --admin-secret test-key --local --project <project_name>
+cargo run -p shuttle-deployer -- --provisioner-address http://localhost:3000 --auth-uri http://localhost:8008 --proxy-fqdn local.rs --admin-secret test-key --local --project <project_name>
 ```
 
 The `<project_name>` needs to match the name of the project that will be deployed to this deployer. This is the `Cargo.toml` or `Shuttle.toml` name for the project.

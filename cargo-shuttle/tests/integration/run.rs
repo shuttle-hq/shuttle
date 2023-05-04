@@ -149,14 +149,7 @@ async fn shuttle_next() {
     let url = cargo_shuttle_run("../examples/next/hello-world", false).await;
     let client = reqwest::Client::new();
 
-    let request_text = client
-        .get(&url)
-        .send()
-        .await
-        .unwrap()
-        .text()
-        .await
-        .unwrap();
+    let request_text = client.get(&url).send().await.unwrap().text().await.unwrap();
 
     assert_eq!(request_text, "Hello, World!");
 

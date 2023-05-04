@@ -30,9 +30,7 @@ commands:
           name: Install sccache
           command: |
             export SCCACHE_VERSION='v0.4.2'
-            ls ~/.cargo/bin/sccache || curl -L https://github.com/mozilla/sccache/releases/download/$SCCACHE_VERSION/sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl.tar.gz | tar -xz
-            mkdir ~/.cargo && mkdir ~/.cargo/bin
-            mv sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl/sccache ~/.cargo/bin/sccache
+            ls ~/.cargo/bin/sccache || curl -L https://github.com/mozilla/sccache/releases/download/$SCCACHE_VERSION/sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl.tar.gz | tar -xz && mv sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl/sccache ~/.cargo/bin/sccache
             # This configures Rust to use sccache.
             echo 'export "RUSTC_WRAPPER"="sccache"' >> $BASH_ENV
             sccache --version

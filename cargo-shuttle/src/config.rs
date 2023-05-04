@@ -122,17 +122,17 @@ impl ConfigManager for LocalConfigManager {
 /// Global client config for things like API keys.
 #[derive(Deserialize, Serialize, Default)]
 pub struct GlobalConfig {
-    pub api_key: Option<ApiKey>,
+    api_key: Option<String>,
     pub api_url: Option<ApiUrl>,
 }
 
 impl GlobalConfig {
-    pub fn api_key(&self) -> Option<&ApiKey> {
-        self.api_key.as_ref()
+    pub fn api_key(&self) -> Option<Result<ApiKey>> {
+        self.api_key.as_ref().map(|key| ApiKey::parse(key))
     }
 
-    pub fn set_api_key(&mut self, api_key: ApiKey) -> Option<ApiKey> {
-        self.api_key.replace(api_key)
+    pub fn set_api_key(&mut self, api_key: ApiKey) -> Option<String> {
+        self.api_key.replace(api_key.as_ref().to_string())
     }
 
     pub fn clear_api_key(&mut self) {
@@ -324,24 +324,22 @@ impl RequestContext {
     /// otherwise from the global configuration. Returns an error if
     /// an API key is not set.
     pub fn api_key(&self) -> Result<ApiKey> {
-        std::env::var("SHUTTLE_API_KEY")
-            .context("environment variable SHUTTLE_API_KEY is not set or invalid")
-            .or_else(|_| {
-                self.global
-                    .as_ref()
-                    .unwrap()
-                    .api_key()
-                    .map(|key| key.to_owned())
-                    .ok_or_else(|| {
-                        anyhow!(
-                            "Configuration file: `{}`",
-                            self.global.manager.path().display()
-                        )
-                        .context(anyhow!(
-                            "No valid API key found, try logging in first with:\n\tcargo shuttle login"
-                        ))
-                    })
-            })
+        let api_key = std::env::var("SHUTTLE_API_KEY");
+
+        if let Ok(key) = api_key {
+            ApiKey::parse(&key).context("environment variable SHUTTLE_API_KEY is invalid")
+        } else {
+            match self.global.as_ref().unwrap().api_key() {
+                Some(key) => key,
+                None => Err(anyhow!(
+                    "Configuration file: `{}`",
+                    self.global.manager.path().display()
+                )
+                .context(anyhow!(
+                    "No valid API key found, try logging in first with:\n\tcargo shuttle login"
+                ))),
+            }
+        }
     }
 
     /// Get the current context working directory
@@ -358,10 +356,10 @@ impl RequestContext {
     }
 
     /// Set the API key to the global configuration. Will persist the file.
-    pub fn set_api_key(&mut self, api_key: ApiKey) -> Result<Option<ApiKey>> {
-        let res = self.global.as_mut().unwrap().set_api_key(api_key);
+    pub fn set_api_key(&mut self, api_key: ApiKey) -> Result<()> {
+        self.global.as_mut().unwrap().set_api_key(api_key);
         self.global.save()?;
-        Ok(res)
+        Ok(())
     }
 
     pub fn clear_api_key(&mut self) -> Result<()> {

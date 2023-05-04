@@ -1,13 +1,19 @@
 use crate::r#type::Type;
 use async_trait::async_trait;
-use sqlx::{migrate::Migrator, SqlitePool};
+use sqlx::{migrate::Migrator, QueryBuilder, SqlitePool};
 use uuid::Uuid;
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
 #[async_trait]
 pub trait Dal {
-    async fn add_resources(&self, resources: Vec<Resource>);
+    type Error: std::error::Error;
+
+    /// Add a set of resources
+    async fn add_resources(&self, resources: Vec<Resource>) -> Result<(), Self::Error>;
+
+    /// Get the resources that belong to a service
+    async fn get_resources(&self, service_id: Uuid) -> Result<Vec<Resource>, Self::Error>;
 }
 
 pub struct Sqlite {
@@ -30,22 +36,33 @@ impl Sqlite {
 
 #[async_trait]
 impl Dal for Sqlite {
-    async fn add_resources(&self, resources: Vec<Resource>) {
-        sqlx::query(
-            "INSERT OR REPLACE INTO resources (id, service_id, type, config, data) VALUES (?, ?, ?, ?, ?)",
-        )
-        .bind(resources[0].id)
-        .bind(resources[0].service_id)
-        .bind(resources[0].r#type)
-        .bind(&resources[0].config)
-        .bind(&resources[0].data)
-        .execute(&self.pool)
-        .await
-        .unwrap();
+    type Error = sqlx::Error;
+
+    async fn add_resources(&self, resources: Vec<Resource>) -> Result<(), Self::Error> {
+        let mut query_builder = QueryBuilder::new(
+            "INSERT OR REPLACE INTO resources (id, service_id, type, config, data) ",
+        );
+
+        query_builder.push_values(resources, |mut b, resource| {
+            b.push_bind(resource.id)
+                .push_bind(resource.service_id)
+                .push_bind(resource.r#type)
+                .push_bind(resource.config)
+                .push_bind(resource.data);
+        });
+
+        query_builder.build().execute(&self.pool).await.map(|_| ())
+    }
+
+    async fn get_resources(&self, service_id: Uuid) -> Result<Vec<Resource>, Self::Error> {
+        sqlx::query_as(r#"SELECT * FROM resources WHERE service_id = ?"#)
+            .bind(service_id)
+            .fetch_all(&self.pool)
+            .await
     }
 }
 
-#[derive(sqlx::FromRow, Debug, Eq, PartialEq)]
+#[derive(sqlx::FromRow, Clone, Debug, Eq, PartialEq)]
 pub struct Resource {
     pub id: Uuid,
     pub service_id: Uuid,
@@ -67,7 +84,7 @@ mod tests {
     use super::Sqlite;
 
     #[tokio::test]
-    async fn add_resource() {
+    async fn manage_resources() {
         let dal = Sqlite::new_in_memory().await;
         let service_id = Uuid::new_v4();
 
@@ -95,7 +112,17 @@ mod tests {
             data: json!({"path": "/tmp/static"}),
         };
 
-        dal.add_resources(vec![database, secrets, static_folder])
-            .await;
+        dal.add_resources(vec![
+            database.clone(),
+            secrets.clone(),
+            static_folder.clone(),
+        ])
+        .await
+        .unwrap();
+
+        let expected = vec![database, secrets, static_folder];
+        let actual = dal.get_resources(service_id).await.unwrap();
+
+        assert_eq!(expected, actual);
     }
 }

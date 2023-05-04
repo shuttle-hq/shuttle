@@ -10,6 +10,7 @@ members = [
   "gateway",
   "proto",
   "provisioner",
+  "resource-recorder",
   "runtime",
   "service",
   "orchestrator"

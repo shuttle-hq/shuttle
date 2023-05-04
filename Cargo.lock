@@ -5537,6 +5537,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "shuttle-resource-recorder"
+version = "0.14.0"
+dependencies = [
+ "clap",
+ "shuttle-common",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "shuttle-runtime"
 version = "0.14.0"
 dependencies = [

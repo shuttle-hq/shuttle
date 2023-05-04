@@ -5366,12 +5366,20 @@ dependencies = [
 name = "shuttle-deployer"
 version = "0.16.0"
 dependencies = [
+ "anyhow",
+ "axum",
+ "bytes",
  "clap",
+ "futures",
  "http",
+ "serde",
  "shuttle-common",
+ "thiserror",
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "utoipa",
+ "uuid",
 ]
 
 [[package]]
@@ -7768,3 +7776,4 @@ dependencies = [
  "libc",
  "pkg-config",
 ]
+

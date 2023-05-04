@@ -8,12 +8,20 @@ description = "Service to execute the deployment of projects on shuttle"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = { workspace = true }
+axum = { workspace = true, features = ["headers", "json", "query", "ws"] }
+bytes = { workspace = true }
 clap = { workspace = true }
+futures = { workspace = true }
 http = { workspace = true }
-tokio = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+utoipa = { workspace = true }
+uuid = { workspace = true, features = ["v4"] }
 
 [dependencies.shuttle-common]
 workspace = true
-features = ["backend"]
+features = ["backend", "models", "openapi"]

@@ -85,6 +85,8 @@ impl ProjectArgs {
 
 #[derive(Parser)]
 pub enum Command {
+    /// Deploy a shuttle service on the alpha deployer
+    DeployAlpha(DeployAlphaArgs),
     /// Deploy a shuttle service
     Deploy(DeployArgs),
     /// Manage deployments of a shuttle service
@@ -191,11 +193,20 @@ pub struct LoginArgs {
 }
 
 #[derive(Parser)]
-pub struct DeployArgs {
+pub struct DeployAlphaArgs {
     /// Allow deployment with uncommited files
     #[arg(long)]
     pub allow_dirty: bool,
     /// Don't run pre-deploy tests
+    #[arg(long)]
+    pub no_test: bool,
+}
+
+#[derive(Parser)]
+pub struct DeployArgs {
+    /// Allow deployment with uncommited files
+    #[arg(long)]
+    pub allow_dirty: bool,
     #[arg(long)]
     pub no_test: bool,
 }

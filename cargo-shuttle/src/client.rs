@@ -33,7 +33,7 @@ impl Client {
         self.api_key = Some(api_key);
     }
 
-    pub async fn deploy(
+    pub async fn deploy_alpha(
         &self,
         data: Vec<u8>,
         project: &ProjectName,
@@ -61,6 +61,26 @@ impl Client {
             .send()
             .await
             .context("failed to send deployment to the Shuttle server")?
+            .to_json()
+            .await
+    }
+
+    pub async fn deploy(
+        &self,
+        data: Vec<u8>,
+        project: &ProjectName,
+        _no_test: bool,
+    ) -> Result<String> {
+        let path = format!("/deploy/{}", project.as_str(),);
+        let url = format!("{}{}", self.api_url, path);
+        let mut builder = Self::get_retry_client().post(url);
+        builder = self.set_builder_auth(builder);
+        builder
+            .body(data)
+            .header("Transfer-Encoding", "chunked")
+            .send()
+            .await
+            .context("failed to send the data to shuttle-deployer")?
             .to_json()
             .await
     }

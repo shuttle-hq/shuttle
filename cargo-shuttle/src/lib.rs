@@ -4,6 +4,7 @@ pub mod config;
 mod init;
 mod provisioner_server;
 
+use args::DeployArgs;
 use indicatif::ProgressBar;
 use shuttle_common::claims::{ClaimService, InjectPropagation};
 use shuttle_common::models::deployment::get_deployments_table;
@@ -30,7 +31,7 @@ use std::process::exit;
 use std::str::FromStr;
 
 use anyhow::{bail, Context, Result};
-pub use args::{Args, Command, DeployArgs, InitArgs, LoginArgs, ProjectArgs, RunArgs};
+pub use args::{Args, Command, DeployAlphaArgs, InitArgs, LoginArgs, ProjectArgs, RunArgs};
 use cargo_metadata::Message;
 use clap::CommandFactory;
 use clap_complete::{generate, Shell};
@@ -72,7 +73,8 @@ impl Shuttle {
         trace!("running local client");
         if matches!(
             args.cmd,
-            Command::Deploy(..)
+            Command::DeployAlpha(..)
+                | Command::Deploy(..)
                 | Command::Deployment(..)
                 | Command::Resource(..)
                 | Command::Project(
@@ -101,6 +103,9 @@ impl Shuttle {
             Command::Logout => self.logout().await,
             Command::Feedback => self.feedback().await,
             Command::Run(run_args) => self.local_run(run_args).await,
+            Command::DeployAlpha(deploy_args) => {
+                return self.deploy_alpha(deploy_args, &self.client()?).await;
+            }
             Command::Deploy(deploy_args) => {
                 return self.deploy(deploy_args, &self.client()?).await;
             }
@@ -882,7 +887,7 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn deploy(&self, args: DeployArgs, client: &Client) -> Result<CommandOutcome> {
+    async fn deploy_alpha(&self, args: DeployAlphaArgs, client: &Client) -> Result<CommandOutcome> {
         if !args.allow_dirty {
             self.is_dirty()?;
         }
@@ -890,7 +895,7 @@ impl Shuttle {
         let data = self.make_archive()?;
 
         let deployment = client
-            .deploy(data, self.ctx.project_name(), args.no_test)
+            .deploy_alpha(data, self.ctx.project_name(), args.no_test)
             .await?;
 
         let mut stream = client
@@ -951,6 +956,18 @@ impl Shuttle {
 
             Ok(CommandOutcome::DeploymentFailure)
         }
+    }
+
+    async fn deploy(&self, args: DeployArgs, client: &Client) -> Result<CommandOutcome> {
+        if !args.allow_dirty {
+            self.is_dirty()?;
+        }
+
+        let data = self.make_archive()?;
+        client
+            .deploy(data, self.ctx.project_name(), args.no_test)
+            .await?;
+        Ok(CommandOutcome::Ok)
     }
 
     async fn project_create(&self, client: &Client, idle_minutes: u64) -> Result<()> {

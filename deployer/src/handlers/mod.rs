@@ -1,4 +1,6 @@
 use axum::handler::Handler;
+use std::path::PathBuf;
+
 use axum::{
     middleware,
     routing::{post, Router},
@@ -6,10 +8,12 @@ use axum::{
 };
 use http::Uri;
 use shuttle_common::{
-    backends::auth::{AdminSecretLayer, AuthPublicKey, JwtAuthenticationLayer, ScopedLayer},
+    backends::auth::{AuthPublicKey, JwtAuthenticationLayer, ScopedLayer},
     claims::Scope,
 };
 use tracing::warn;
+
+use crate::builder::MockedBuilder;
 
 pub mod error;
 mod local;
@@ -39,8 +43,8 @@ impl RouterBuilder {
         }
     }
 
-    pub fn with_admin_secret_layer(mut self, admin_secret: String) -> Self {
-        self.router = self.router.layer(AdminSecretLayer::new(admin_secret));
+    pub fn with_mocked_builder_image_archive_path(mut self, path: PathBuf) -> Self {
+        self.router = self.router.layer(Extension(MockedBuilder::new(path)));
 
         self
     }

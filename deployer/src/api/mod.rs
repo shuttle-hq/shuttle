@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use tracing::{debug, error, instrument};
 use utoipa::OpenApi;
 
-use crate::handlers::error::Result;
+use crate::{builder::MockedBuilder, handlers::error::Result};
 
 #[derive(OpenApi)]
 #[openapi(paths(deploy_project))]
@@ -30,6 +30,7 @@ pub struct ApiDoc;
 )]
 pub async fn deploy_project(
     Extension(_claim): Extension<Claim>,
+    Extension(mocked_builder): Extension<MockedBuilder>,
     Path(project_name): Path<String>,
     Query(_params): Query<HashMap<String, String>>,
     mut stream: BodyStream,
@@ -42,6 +43,13 @@ pub async fn deploy_project(
         data.put(buf);
     }
     debug!("Received a total of {} bytes", data.len());
+
+    debug!("Seding project source code to the builder.");
+    let image_archive = mocked_builder.get_default_image_archive(&data).await;
+    debug!(
+        "Received an image archive of length: {}. I will deploy it next, but hang in a bit...",
+        image_archive.len()
+    );
 
     Ok(Json(format!("Received a total of {} bytes", data.len())))
 }

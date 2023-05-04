@@ -56,6 +56,7 @@ impl Dal for Sqlite {
             .execute(&mut transaction)
             .await?;
 
+        // Making mutliple DB "connections" is fine since the sqlite is on the same machine
         for mut resource in resources {
             if let Some(r_service_id) = resource.service_id {
                 if r_service_id != service_id {
@@ -102,6 +103,7 @@ pub struct Resource {
 }
 
 impl Resource {
+    /// Create a new type of resource
     fn new(r#type: Type, data: serde_json::Value, config: serde_json::Value) -> Self {
         Self {
             id: None,
@@ -171,7 +173,7 @@ mod tests {
         // This time the user is adding secrets but dropping the static folders
         let mut secrets = Resource::new(Type::Secrets, json!({}), json!({"password": "p@ssw0rd"}));
 
-        let database = actual[0].clone();
+        let mut database = actual[0].clone();
         let mut static_folder = actual[1].clone();
 
         dal.add_resources(service_id, vec![database.clone(), secrets.clone()])
@@ -180,9 +182,32 @@ mod tests {
 
         let actual = dal.get_resources(service_id).await.unwrap();
 
+        // The query would set these
         static_folder.is_active = false;
         secrets.id = actual[1].id;
         secrets.created_at = actual[1].created_at;
+
+        let expected = vec![database.clone(), secrets.clone(), static_folder.clone()]
+            .into_iter()
+            .map(|mut r| {
+                r.service_id = Some(service_id);
+                r
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(expected, actual);
+
+        // This time the user is using only the database with updates
+        database.data = json!({"private": true});
+
+        dal.add_resources(service_id, vec![database.clone()])
+            .await
+            .unwrap();
+
+        let actual = dal.get_resources(service_id).await.unwrap();
+
+        // The query would set this
+        secrets.is_active = false;
 
         let expected = vec![database, secrets, static_folder]
             .into_iter()

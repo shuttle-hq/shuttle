@@ -24,7 +24,7 @@ impl RouterBuilder {
     pub fn new(auth_uri: &Uri) -> Self {
         let router = Router::new()
             .route(
-                "/deploy/:project_name",
+                "/project/:project_name",
                 post(
                     super::api::deploy_project.layer(ScopedLayer::new(vec![Scope::DeploymentPush])),
                 ),

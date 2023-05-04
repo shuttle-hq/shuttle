@@ -7,7 +7,7 @@ use futures::StreamExt;
 use shuttle_common::claims::Claim;
 use std::collections::HashMap;
 use tracing::{debug, error, instrument};
-use utoipa::{OpenApi};
+use utoipa::OpenApi;
 
 use crate::handlers::error::Result;
 
@@ -19,7 +19,7 @@ pub struct ApiDoc;
 #[instrument(skip_all, fields(%project_name))]
 #[utoipa::path(
     post,
-    path = "/deploy/{project_name}",
+    path = "/project/{project_name}",
     responses(
         (status = 200, description = "Deploys a project by receiving an associated project archive.", content_type = "application/json", body = String),
         (status = 500, description = "Error while receiving byte stream.", body = String),

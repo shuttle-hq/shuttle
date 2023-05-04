@@ -7,8 +7,14 @@ use futures::StreamExt;
 use shuttle_common::claims::Claim;
 use std::collections::HashMap;
 use tracing::{debug, error, instrument};
+use utoipa::{OpenApi};
 
 use crate::handlers::error::Result;
+
+#[derive(OpenApi)]
+#[openapi(paths(deploy_project))]
+// TODO: update the ApiDoc upon adding new deployer APIs.
+pub struct ApiDoc;
 
 #[instrument(skip_all, fields(%project_name))]
 #[utoipa::path(

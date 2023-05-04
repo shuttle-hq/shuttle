@@ -13,8 +13,6 @@ use utoipa::ToSchema;
 pub enum Error {
     #[error("Streaming error: {0}")]
     Streaming(#[from] axum::Error),
-    #[error("{0}, try running `cargo shuttle deploy`")]
-    NotFound(String),
     #[error("Custom error: {0}")]
     Custom(#[from] anyhow::Error),
 }
@@ -36,10 +34,7 @@ impl IntoResponse for Error {
     fn into_response(self) -> Response {
         error!(error = &self as &dyn std::error::Error, "request error");
 
-        let code = match self {
-            Error::NotFound(_) => StatusCode::NOT_FOUND,
-            _ => StatusCode::INTERNAL_SERVER_ERROR,
-        };
+        let code = StatusCode::INTERNAL_SERVER_ERROR;
 
         (
             code,

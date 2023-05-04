@@ -14,6 +14,7 @@ sqlx = { workspace = true, features = [
     "json",
     "runtime-tokio-rustls",
     "migrate",
+    "uuid",
 ] }
 strum = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread"] }

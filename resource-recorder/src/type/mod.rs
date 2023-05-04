@@ -1,4 +1,6 @@
-use std::{fmt::Display, str::FromStr};
+use std::{borrow::Cow, fmt::Display, str::FromStr};
+
+use sqlx::Database;
 
 pub mod database;
 
@@ -38,6 +40,36 @@ impl FromStr for Type {
                 _ => Err(format!("'{s}' is an unknown resource type")),
             }
         }
+    }
+}
+
+impl<DB: Database> sqlx::Type<DB> for Type
+where
+    str: sqlx::Type<DB>,
+{
+    fn type_info() -> <DB as Database>::TypeInfo {
+        <str as sqlx::Type<DB>>::type_info()
+    }
+}
+
+impl<'q> sqlx::Encode<'q, sqlx::Sqlite> for Type {
+    fn encode_by_ref(
+        &self,
+        args: &mut Vec<sqlx::sqlite::SqliteArgumentValue<'q>>,
+    ) -> sqlx::encode::IsNull {
+        args.push(sqlx::sqlite::SqliteArgumentValue::Text(Cow::Owned(
+            self.to_string(),
+        )));
+
+        sqlx::encode::IsNull::No
+    }
+}
+
+impl<'r> sqlx::Decode<'r, sqlx::Sqlite> for Type {
+    fn decode(value: sqlx::sqlite::SqliteValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
+        let value = <&str as sqlx::Decode<sqlx::Sqlite>>::decode(value)?;
+
+        Self::from_str(value).map_err(Into::into)
     }
 }
 

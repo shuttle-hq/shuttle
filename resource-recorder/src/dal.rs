@@ -1,18 +1,47 @@
 use crate::r#type::Type;
 use async_trait::async_trait;
+use sqlx::{migrate::Migrator, SqlitePool};
 use uuid::Uuid;
+
+pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 
 #[async_trait]
 pub trait Dal {
     async fn add_resources(&self, resources: Vec<Resource>);
 }
 
-pub struct Sqlite;
+pub struct Sqlite {
+    pool: SqlitePool,
+}
+
+impl Sqlite {
+    #[allow(dead_code)]
+    async fn new_in_memory() -> Self {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        Self::from_pool(pool).await
+    }
+
+    async fn from_pool(pool: SqlitePool) -> Self {
+        MIGRATIONS.run(&pool).await.unwrap();
+
+        Self { pool }
+    }
+}
 
 #[async_trait]
 impl Dal for Sqlite {
     async fn add_resources(&self, resources: Vec<Resource>) {
-        todo!();
+        sqlx::query(
+            "INSERT OR REPLACE INTO resources (id, service_id, type, config, data) VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(resources[0].id)
+        .bind(resources[0].service_id)
+        .bind(resources[0].r#type)
+        .bind(&resources[0].config)
+        .bind(&resources[0].data)
+        .execute(&self.pool)
+        .await
+        .unwrap();
     }
 }
 
@@ -39,7 +68,7 @@ mod tests {
 
     #[tokio::test]
     async fn add_resource() {
-        let dal = Sqlite;
+        let dal = Sqlite::new_in_memory().await;
         let service_id = Uuid::new_v4();
 
         let database = Resource {

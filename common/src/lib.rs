@@ -20,6 +20,8 @@ pub mod tracing;
 pub mod wasm;
 
 use std::collections::BTreeMap;
+use std::fmt::Debug;
+use std::fmt::Display;
 
 use anyhow::bail;
 #[cfg(feature = "service")]
@@ -41,7 +43,7 @@ pub type Host = String;
 #[cfg(feature = "service")]
 pub type DeploymentId = Uuid;
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "persist", derive(sqlx::Type, PartialEq, Hash, Eq))]
 #[cfg_attr(feature = "persist", serde(transparent))]
 #[cfg_attr(feature = "persist", sqlx(transparent))]
@@ -79,6 +81,20 @@ impl ApiKey {
 impl AsRef<str> for ApiKey {
     fn as_ref(&self) -> &str {
         &self.0
+    }
+}
+
+// Ensure we can't accidentaly log an ApiKey
+impl Debug for ApiKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ApiKey: REDACTED")
+    }
+}
+
+// Ensure we can't accidentaly log an ApiKey
+impl Display for ApiKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
     }
 }
 

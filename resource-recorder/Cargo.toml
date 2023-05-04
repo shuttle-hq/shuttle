@@ -6,10 +6,20 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+async-trait = { workspace = true }
 clap = { workspace = true }
+serde_json = { workspace = true }
+sqlx = { workspace = true, features = [
+    "sqlite",
+    "json",
+    "runtime-tokio-rustls",
+    "migrate",
+] }
+strum = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["default"] }
+uuid = { workspace = true, features = ["v4"] }
 
 [dependencies.shuttle-common]
 workspace = true

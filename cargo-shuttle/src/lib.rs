@@ -108,8 +108,8 @@ impl Shuttle {
             Command::Logs { id, latest, follow } => {
                 self.logs(&self.client()?, id, latest, follow).await
             }
-            Command::Deployment(DeploymentCommand::List) => {
-                self.deployments_list(&self.client()?).await
+            Command::Deployment(DeploymentCommand::List { page, limit }) => {
+                self.deployments_list(&self.client()?, page, limit).await
             }
             Command::Deployment(DeploymentCommand::Status { id }) => {
                 self.deployment_get(&self.client()?, id).await
@@ -128,7 +128,7 @@ impl Shuttle {
                 self.project_status(&self.client()?, follow).await
             }
             Command::Project(ProjectCommand::List { page, limit }) => {
-                self.projects_list(page, limit, &self.client()?).await
+                self.projects_list(&self.client()?, page, limit).await
             }
             Command::Project(ProjectCommand::Stop) => self.project_delete(&self.client()?).await,
         }
@@ -387,7 +387,7 @@ impl Shuttle {
 
             if latest {
                 // Find latest deployment (not always an active one)
-                let deployments = client.get_deployments(proj_name).await?;
+                let deployments = client.get_deployments(proj_name, 0, u32::MAX).await?;
                 let most_recent = deployments.last().context(format!(
                     "Could not find any deployments for '{proj_name}'. Try passing a deployment ID manually",
                 ))?;
@@ -424,9 +424,9 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn deployments_list(&self, client: &Client) -> Result<()> {
+    async fn deployments_list(&self, client: &Client, page: u32, limit: u32) -> Result<()> {
         let proj_name = self.ctx.project_name();
-        let deployments = client.get_deployments(proj_name).await?;
+        let deployments = client.get_deployments(proj_name, page, limit).await?;
         let table = get_deployments_table(&deployments, proj_name.as_str());
 
         println!("{table}");
@@ -986,7 +986,12 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn projects_list(&self, page: u32, limit: u32, client: &Client) -> Result<()> {
+    async fn projects_list(&self, client: &Client, page: u32, limit: u32) -> Result<()> {
+        if limit == 0 {
+            println!();
+            return Ok(());
+        }
+
         let projects = client.get_projects_list(page, limit).await?;
         let projects_table = project::get_table(&projects);
 

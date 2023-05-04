@@ -141,7 +141,15 @@ pub enum Command {
 #[derive(Parser)]
 pub enum DeploymentCommand {
     /// List all the deployments for a service
-    List,
+    List {
+        #[arg(long = "page", default_value = "1")]
+        /// Which page to display
+        page: u32,
+
+        #[arg(long, default_value = "10")]
+        /// How many projects per page to display
+        limit: u32,
+    },
     /// View status of a deployment
     Status {
         /// ID of deployment to get status for

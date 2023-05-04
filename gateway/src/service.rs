@@ -278,14 +278,7 @@ impl GatewayService {
         let mut query = QueryBuilder::new(
             "SELECT project_name, project_state FROM projects WHERE account_name = ",
         );
-
         query.push_bind(account_name);
-
-        // TODO(AlphaKeks): right now, if the user specifies `--limit 0`, they will get a
-        // response along the lines of `No projects are linked to this account`. We could
-        // either change that message or use `1` as a minimum so that projects will _always_ be
-        // displayed (assuming the user has any).
-        let limit = limit.max(1);
         query.push(" LIMIT ").push_bind(limit);
 
         if offset > 0 {
@@ -394,9 +387,9 @@ impl GatewayService {
     ) -> Result<Project, Error> {
         if let Some(row) = query(
             r#"
-        SELECT project_name, account_name, initial_key, project_state 
-        FROM projects 
-        WHERE (project_name = ?1) 
+        SELECT project_name, account_name, initial_key, project_state
+        FROM projects
+        WHERE (project_name = ?1)
         AND (account_name = ?2 OR ?3)
         "#,
         )
@@ -796,6 +789,41 @@ pub mod tests {
                 .map(|item| item.0)
                 .collect::<Vec<_>>(),
             vec![matrix.clone()]
+        );
+
+        let mut all_projects: Vec<ProjectName> = (1..60)
+            .map(|p| ProjectName(format!("matrix-{p}")))
+            .collect();
+        for p in &all_projects {
+            svc.create_project(p.clone(), neo.clone(), false, 0)
+                .await
+                .unwrap();
+        }
+        all_projects.insert(0, matrix.clone());
+
+        assert_eq!(
+            svc.iter_user_projects_detailed(&neo, 0, u32::MAX)
+                .await
+                .unwrap()
+                .map(|item| item.0)
+                .collect::<Vec<_>>(),
+            all_projects
+        );
+        assert_eq!(
+            svc.iter_user_projects_detailed(&neo, 0, 20)
+                .await
+                .unwrap()
+                .map(|item| item.0)
+                .collect::<Vec<_>>(),
+            all_projects[..20]
+        );
+        assert_eq!(
+            svc.iter_user_projects_detailed(&neo, 20, 20)
+                .await
+                .unwrap()
+                .map(|item| item.0)
+                .collect::<Vec<_>>(),
+            all_projects[20..40]
         );
 
         // assert_eq!(

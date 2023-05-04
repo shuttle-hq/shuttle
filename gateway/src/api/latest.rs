@@ -30,7 +30,7 @@ use tracing::{field, instrument, trace};
 use ttl_cache::TtlCache;
 
 use utoipa::openapi::security::{ApiKey, ApiKeyValue, SecurityScheme};
-use utoipa::{Modify, OpenApi};
+use utoipa::{IntoParams, Modify, OpenApi};
 use utoipa_swagger_ui::SwaggerUi;
 use uuid::Uuid;
 use x509_parser::nom::AsBytes;
@@ -84,6 +84,14 @@ impl StatusResponse {
     }
 }
 
+#[derive(Debug, Clone, Copy, Deserialize, IntoParams)]
+struct PaginationDetails {
+    /// Page to fetch, starting from 0.
+    page: Option<u32>,
+    /// Number of results per page.
+    limit: Option<u32>,
+}
+
 #[instrument(skip(service))]
 #[utoipa::path(
     get,
@@ -109,18 +117,15 @@ async fn get_project(
     Ok(AxumJson(response))
 }
 
-#[derive(Debug, Clone, Copy, Deserialize)]
-struct PaginationDetails {
-    page: u32,
-    limit: u32,
-}
-
 #[utoipa::path(
     get,
     path = "/projects",
     responses(
         (status = 200, description = "Successfully got the projects list.", body = [shuttle_common::models::project::Response]),
         (status = 500, description = "Server internal error.")
+    ),
+    params(
+        PaginationDetails
     )
 )]
 async fn get_projects_list(
@@ -128,6 +133,8 @@ async fn get_projects_list(
     User { name, .. }: User,
     Query(PaginationDetails { page, limit }): Query<PaginationDetails>,
 ) -> Result<AxumJson<Vec<project::Response>>, Error> {
+    let limit = limit.unwrap_or(u32::MAX);
+    let page = page.unwrap_or(0);
     let projects = service
         // The `offset` is page size * amount of pages
         .iter_user_projects_detailed(&name, limit * page, limit)

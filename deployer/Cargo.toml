@@ -14,7 +14,11 @@ bytes = { workspace = true }
 clap = { workspace = true }
 futures = { workspace = true }
 http = { workspace = true }
+hyper = { workspace = true, features = ["client", "http1", "http2", "tcp"] }
+hyper-reverse-proxy = { git = "https://github.com/chesedo/hyper-reverse-proxy", branch = "master" }
+once_cell = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 tracing = { workspace = true }

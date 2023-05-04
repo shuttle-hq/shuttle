@@ -1,7 +1,7 @@
 use clap::Parser;
 use shuttle_common::backends::tracing::setup_tracing;
 use shuttle_deployer::args::Args;
-use shuttle_deployer::handlers::make_router;
+use shuttle_deployer::handlers::RouterBuilder;
 use tracing::trace;
 
 #[tokio::main(flavor = "multi_thread")]
@@ -9,9 +9,16 @@ async fn main() {
     let args = Args::parse();
 
     trace!(args = ?args, "parsed args");
-
     setup_tracing(tracing_subscriber::registry(), "deployer");
-    let router = make_router(args.auth_uri).await;
+
+    // Configure the deployer router.
+    let mut router_builder = RouterBuilder::new(&args.auth_uri);
+    if args.local {
+        router_builder = router_builder.with_local_admin_layer();
+    }
+
+    let router = router_builder.into_router();
+
     axum::Server::bind(&args.api_address)
         .serve(router.into_make_service())
         .await

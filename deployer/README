@@ -13,16 +13,9 @@ AUTH_CONTAINER_ID=$(docker ps -aqf "name=shuttle-auth") \
     init --name admin --key test-key
 ```
 
-Create the corresponding JWT token and copy it to the shuttle config:
+Start the deployer prepared for a local run:
 ```bash
-curl -s -H "Authorization: Bearer test-key" localhost:8008/auth/key \
-    | jq -r '.token' \
-    | read token; echo "api_key='$token'" > ~/.config/shuttle/config.toml
-```
-
-Start the deployer:
-```bash
-RUST_LOG=DEBUG cargo run --manifest-path deployer/Cargo.toml --bin shuttle-deployer -- --api-address 0.0.0.0:8001
+RUST_LOG=DEBUG cargo run --manifest-path deployer/Cargo.toml --bin shuttle-deployer -- --api-address 0.0.0.0:8001 --local
 ```
 
 In another terminal go to a shuttle project from the examples directory and run:

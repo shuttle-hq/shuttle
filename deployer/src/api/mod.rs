@@ -8,7 +8,7 @@ use shuttle_common::claims::Claim;
 use std::collections::HashMap;
 use tracing::{debug, error, instrument};
 
-use super::error::Result;
+use crate::handlers::error::Result;
 
 #[instrument(skip_all, fields(%project_name))]
 #[utoipa::path(

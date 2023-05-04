@@ -1,42 +1,62 @@
-use axum::{handler::Handler, headers::HeaderMapExt, routing::post, Router};
+use axum::handler::Handler;
+use axum::{
+    middleware,
+    routing::{post, Router},
+    Extension,
+};
 use http::Uri;
 use shuttle_common::{
-    backends::{
-        auth::{AuthPublicKey, JwtAuthenticationLayer, ScopedLayer},
-        headers::XShuttleAccountName,
-        metrics::TraceLayer,
-    },
+    backends::auth::{AdminSecretLayer, AuthPublicKey, JwtAuthenticationLayer, ScopedLayer},
     claims::Scope,
-    request_span,
 };
+use tracing::warn;
 
-use tracing::field;
+pub mod error;
+mod local;
 
-mod deployment;
-mod error;
+#[derive(Clone)]
+pub struct RouterBuilder {
+    router: Router,
+    auth_uri: Uri,
+}
 
-pub async fn make_router(auth_uri: Uri) -> Router {
-    Router::new()
-        .route(
-            "/deploy/:project_name",
-            post(deployment::deploy_project.layer(ScopedLayer::new(vec![Scope::DeploymentPush]))),
-        )
-        .layer(JwtAuthenticationLayer::new(AuthPublicKey::new(auth_uri)))
-        // This route should be below the auth bearer since it does not need authentication
-        .layer(
-            TraceLayer::new(|request| {
-                let account_name = request
-                    .headers()
-                    .typed_get::<XShuttleAccountName>()
-                    .unwrap_or_default();
+impl RouterBuilder {
+    pub fn new(auth_uri: &Uri) -> Self {
+        let router = Router::new()
+            .route(
+                "/deploy/:project_name",
+                post(
+                    super::api::deploy_project.layer(ScopedLayer::new(vec![Scope::DeploymentPush])),
+                ),
+            )
+            .layer(JwtAuthenticationLayer::new(AuthPublicKey::new(
+                auth_uri.clone(),
+            )));
 
-                request_span!(
-                    request,
-                    account.name = account_name.0,
-                    request.params.project_name = field::Empty,
-                )
-            })
-            .with_propagation()
-            .build(),
-        )
+        Self {
+            router,
+            auth_uri: auth_uri.clone(),
+        }
+    }
+
+    pub fn with_admin_secret_layer(mut self, admin_secret: String) -> Self {
+        self.router = self.router.layer(AdminSecretLayer::new(admin_secret));
+
+        self
+    }
+
+    /// Sets an admin JWT bearer token on every request for use when running deployer locally.
+    pub fn with_local_admin_layer(mut self) -> Self {
+        warn!("Building deployer router with auth bypassed, this should only be used for local development.");
+        self.router = self
+            .router
+            .layer(middleware::from_fn(local::set_jwt_bearer))
+            .layer(Extension(self.auth_uri.clone()));
+
+        self
+    }
+
+    pub fn into_router(self) -> Router {
+        self.router
+    }
 }

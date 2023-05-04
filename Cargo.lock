@@ -5372,7 +5372,11 @@ dependencies = [
  "clap",
  "futures",
  "http",
+ "hyper",
+ "hyper-reverse-proxy 0.5.2-dev (git+https://github.com/chesedo/hyper-reverse-proxy?branch=master)",
+ "once_cell",
  "serde",
+ "serde_json",
  "shuttle-common",
  "thiserror",
  "tokio",
@@ -7776,4 +7780,3 @@ dependencies = [
  "libc",
  "pkg-config",
 ]
-

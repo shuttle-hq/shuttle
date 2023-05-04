@@ -17,10 +17,8 @@ async fn main() {
         router_builder = router_builder.with_local_admin_layer();
     }
 
-    let router = router_builder.into_router();
-
     axum::Server::bind(&args.api_address)
-        .serve(router.into_make_service())
+        .serve(router_builder.into_router().into_make_service())
         .await
         .unwrap_or_else(|_| panic!("Failed to bind to address: {}", args.api_address));
 }

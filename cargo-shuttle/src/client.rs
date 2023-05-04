@@ -1,5 +1,3 @@
-
-
 use anyhow::{Context, Result};
 use headers::{Authorization, HeaderMapExt};
 use reqwest::Response;

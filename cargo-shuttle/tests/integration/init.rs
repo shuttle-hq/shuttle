@@ -21,15 +21,15 @@ async fn non_interactive_basic_init() {
         "dh9z58jttoes3qvt",
         "--name",
         "my-project",
-        "--no-framework",
+        "--template",
+        "none",
         temp_dir_path.to_str().unwrap(),
     ]);
     Shuttle::new().unwrap().run(args).await.unwrap();
 
     let cargo_toml = read_to_string(temp_dir_path.join("Cargo.toml")).unwrap();
 
-    // Expected: name = "basic-initRANDOM_CHARS"
-    assert!(cargo_toml.contains("name = \"basic-init"));
+    assert!(cargo_toml.contains("name = \"my-project\""));
     assert!(cargo_toml.contains("shuttle-runtime = "));
 }
 
@@ -47,12 +47,13 @@ async fn non_interactive_rocket_init() {
         "dh9z58jttoes3qvt",
         "--name",
         "my-project",
-        "--rocket",
+        "--template",
+        "rocket",
         temp_dir_path.to_str().unwrap(),
     ]);
     Shuttle::new().unwrap().run(args).await.unwrap();
 
-    assert_valid_rocket_project(temp_dir_path.as_path(), "rocket-init");
+    assert_valid_rocket_project(temp_dir_path.as_path(), "my-project");
 }
 
 #[test]
@@ -89,7 +90,7 @@ fn interactive_rocket_init() -> Result<(), Box<dyn std::error::Error>> {
     session.flush()?;
     session.exp_string("yes")?;
 
-    assert_valid_rocket_project(temp_dir_path.as_path(), "rocket-init");
+    assert_valid_rocket_project(temp_dir_path.as_path(), "my-project");
 
     Ok(())
 }
@@ -107,7 +108,8 @@ fn interactive_rocket_init_dont_prompt_framework() -> Result<(), Box<dyn std::er
         "init",
         "--api-key",
         "dh9z58jttoes3qvt",
-        "--rocket",
+        "--template",
+        "rocket",
     ]);
     let mut session = rexpect::session::spawn_command(command, Some(2000))?;
 
@@ -124,7 +126,7 @@ fn interactive_rocket_init_dont_prompt_framework() -> Result<(), Box<dyn std::er
     session.flush()?;
     session.exp_string("yes")?;
 
-    assert_valid_rocket_project(temp_dir_path.as_path(), "rocket-init");
+    assert_valid_rocket_project(temp_dir_path.as_path(), "my-project");
 
     Ok(())
 }
@@ -160,14 +162,14 @@ fn interactive_rocket_init_dont_prompt_name() -> Result<(), Box<dyn std::error::
     session.flush()?;
     session.exp_string("yes")?;
 
-    assert_valid_rocket_project(temp_dir_path.as_path(), "rocket-init");
+    assert_valid_rocket_project(temp_dir_path.as_path(), "my-project");
 
     Ok(())
 }
 
-fn assert_valid_rocket_project(path: &Path, name_prefix: &str) {
+fn assert_valid_rocket_project(path: &Path, name: &str) {
     let cargo_toml = read_to_string(path.join("Cargo.toml")).unwrap();
-    assert!(cargo_toml.contains(&format!("name = \"{name_prefix}")));
+    assert!(cargo_toml.contains(&format!("name = \"{name}\"")));
     assert!(cargo_toml.contains("shuttle-runtime = "));
     assert!(cargo_toml.contains("shuttle-rocket = "));
 

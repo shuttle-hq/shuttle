@@ -5541,6 +5541,7 @@ name = "shuttle-resource-recorder"
 version = "0.14.0"
 dependencies = [
  "async-trait",
+ "chrono",
  "clap",
  "serde_json",
  "shuttle-common",

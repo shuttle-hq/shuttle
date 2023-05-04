@@ -7,13 +7,15 @@ repository.workspace = true
 
 [dependencies]
 async-trait = { workspace = true }
+chrono = { workspace = true }
 clap = { workspace = true }
 serde_json = { workspace = true }
 sqlx = { workspace = true, features = [
-    "sqlite",
+    "chrono",
     "json",
-    "runtime-tokio-rustls",
     "migrate",
+    "runtime-tokio-rustls",
+    "sqlite",
     "uuid",
 ] }
 strum = { workspace = true }

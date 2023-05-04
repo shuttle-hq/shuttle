@@ -181,7 +181,7 @@ CARGO_HOME: {}
         let admin_key = if let Ok(key) = env::var("SHUTTLE_API_KEY") {
             key
         } else {
-            "e2e-test-key".to_string()
+            "dh9z58jttoes3qvt".to_string()
         };
 
         _ = Command::new(DOCKER.as_os_str())
@@ -415,7 +415,7 @@ impl Services {
             let mut run = Command::new(WORKSPACE_ROOT.join("target/debug/cargo-shuttle"));
 
             if env::var("SHUTTLE_API_KEY").is_err() {
-                run.env("SHUTTLE_API_KEY", "e2e-test-key");
+                run.env("SHUTTLE_API_KEY", "dh9z58jttoes3qvt");
             }
 
             run.env("CARGO_HOME", CARGO_HOME.path());
@@ -444,7 +444,7 @@ impl Services {
         let mut run = Command::new(WORKSPACE_ROOT.join("target/debug/cargo-shuttle"));
 
         if env::var("SHUTTLE_API_KEY").is_err() {
-            run.env("SHUTTLE_API_KEY", "e2e-test-key");
+            run.env("SHUTTLE_API_KEY", "dh9z58jttoes3qvt");
         }
 
         run.env("CARGO_HOME", CARGO_HOME.path());

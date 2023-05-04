@@ -16,7 +16,7 @@ pub struct Args {
     pub state: String,
 
     /// Address to connect to the provisioning service
-    #[clap(long, default_value = "http://provisioner:5000")]
+    #[clap(long, default_value = "http://provisioner:3000")]
     pub provisioner_address: Endpoint,
 
     /// FQDN where the proxy can be reached at

@@ -1,6 +1,7 @@
 use crate::r#type::Type;
 use async_trait::async_trait;
 use sqlx::{migrate::Migrator, QueryBuilder, SqlitePool};
+use tracing::warn;
 use uuid::Uuid;
 
 pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
@@ -9,8 +10,12 @@ pub static MIGRATIONS: Migrator = sqlx::migrate!("./migrations");
 pub trait Dal {
     type Error: std::error::Error;
 
-    /// Add a set of resources
-    async fn add_resources(&self, resources: Vec<Resource>) -> Result<(), Self::Error>;
+    /// Add a set of resources for a service
+    async fn add_resources(
+        &self,
+        service_id: Uuid,
+        resources: Vec<Resource>,
+    ) -> Result<(), Self::Error>;
 
     /// Get the resources that belong to a service
     async fn get_resources(&self, service_id: Uuid) -> Result<Vec<Resource>, Self::Error>;
@@ -38,14 +43,29 @@ impl Sqlite {
 impl Dal for Sqlite {
     type Error = sqlx::Error;
 
-    async fn add_resources(&self, resources: Vec<Resource>) -> Result<(), Self::Error> {
+    async fn add_resources(
+        &self,
+        service_id: Uuid,
+        resources: Vec<Resource>,
+    ) -> Result<(), Self::Error> {
         let mut query_builder = QueryBuilder::new(
             "INSERT OR REPLACE INTO resources (id, service_id, type, config, data) ",
         );
 
-        query_builder.push_values(resources, |mut b, resource| {
+        query_builder.push_values(resources, |mut b, mut resource| {
+            if let Some(r_service_id) = resource.service_id {
+                if r_service_id != service_id {
+                    warn!("adding a resource that belongs to another service");
+                }
+            }
+
+            // Make a new id for new resources
+            if resource.id.is_none() {
+                resource.id = Some(Uuid::new_v4());
+            }
+
             b.push_bind(resource.id)
-                .push_bind(resource.service_id)
+                .push_bind(service_id)
                 .push_bind(resource.r#type)
                 .push_bind(resource.config)
                 .push_bind(resource.data);
@@ -64,8 +84,8 @@ impl Dal for Sqlite {
 
 #[derive(sqlx::FromRow, Clone, Debug, Eq, PartialEq)]
 pub struct Resource {
-    pub id: Uuid,
-    pub service_id: Uuid,
+    pub id: Option<Uuid>,
+    pub service_id: Option<Uuid>,
     pub r#type: Type,
     pub data: serde_json::Value,
     pub config: serde_json::Value,
@@ -89,8 +109,8 @@ mod tests {
         let service_id = Uuid::new_v4();
 
         let database = Resource {
-            id: Uuid::new_v4(),
-            service_id,
+            id: None,
+            service_id: None,
             r#type: Type::Database(crate::r#type::database::Type::Shared(
                 crate::r#type::database::SharedType::Postgres,
             )),
@@ -98,31 +118,44 @@ mod tests {
             data: json!({"username": "test"}),
         };
         let secrets = Resource {
-            id: Uuid::new_v4(),
-            service_id,
+            id: None,
+            service_id: None,
             r#type: Type::Secrets,
             config: json!({}),
             data: json!({"password": "p@ssw0rd"}),
         };
         let static_folder = Resource {
-            id: Uuid::new_v4(),
-            service_id,
+            id: None,
+            service_id: None,
             r#type: Type::StaticFolder,
             config: json!({"path": "static"}),
             data: json!({"path": "/tmp/static"}),
         };
 
-        dal.add_resources(vec![
-            database.clone(),
-            secrets.clone(),
-            static_folder.clone(),
-        ])
+        dal.add_resources(
+            service_id,
+            vec![database.clone(), secrets.clone(), static_folder.clone()],
+        )
         .await
         .unwrap();
 
-        let expected = vec![database, secrets, static_folder];
+        let expected = vec![database, secrets, static_folder]
+            .into_iter()
+            .map(|mut r| {
+                r.service_id = Some(service_id);
+                r
+            })
+            .collect::<Vec<_>>();
         let actual = dal.get_resources(service_id).await.unwrap();
+        let actual_without_id = actual
+            .iter()
+            .map(|r| {
+                let mut r = r.clone();
+                r.id = None;
+                r
+            })
+            .collect::<Vec<_>>();
 
-        assert_eq!(expected, actual);
+        assert_eq!(expected, actual_without_id);
     }
 }

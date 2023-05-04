@@ -4,7 +4,7 @@ use shuttle_deployer::args::Args;
 use shuttle_deployer::handlers::RouterBuilder;
 use tracing::trace;
 
-#[tokio::main(flavor = "multi_thread")]
+#[tokio::main]
 async fn main() {
     let args = Args::parse();
 

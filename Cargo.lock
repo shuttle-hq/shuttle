@@ -5366,12 +5366,24 @@ dependencies = [
 name = "shuttle-deployer"
 version = "0.16.0"
 dependencies = [
+ "anyhow",
+ "axum",
+ "bytes",
  "clap",
+ "futures",
  "http",
+ "hyper",
+ "hyper-reverse-proxy 0.5.2-dev (git+https://github.com/chesedo/hyper-reverse-proxy?branch=master)",
+ "once_cell",
+ "serde",
+ "serde_json",
  "shuttle-common",
+ "thiserror",
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "utoipa",
+ "uuid",
 ]
 
 [[package]]

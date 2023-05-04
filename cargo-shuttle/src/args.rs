@@ -195,9 +195,6 @@ pub struct DeployArgs {
     /// Allow deployment with uncommited files
     #[arg(long)]
     pub allow_dirty: bool,
-    /// Don't run pre-deploy tests
-    #[arg(long)]
-    pub no_test: bool,
 }
 
 #[derive(Parser, Debug)]

@@ -4,6 +4,7 @@ pub mod config;
 mod init;
 mod provisioner_server;
 
+use args::DeployArgs;
 use indicatif::ProgressBar;
 use shuttle_common::claims::{ClaimService, InjectPropagation};
 use shuttle_common::models::deployment::get_deployments_table;
@@ -30,7 +31,7 @@ use std::process::exit;
 use std::str::FromStr;
 
 use anyhow::{bail, Context, Result};
-pub use args::{Args, Command, DeployArgs, InitArgs, LoginArgs, ProjectArgs, RunArgs};
+pub use args::{Args, Command, InitArgs, LoginArgs, ProjectArgs, RunArgs};
 use cargo_metadata::Message;
 use clap::CommandFactory;
 use clap_complete::{generate, Shell};
@@ -888,69 +889,8 @@ impl Shuttle {
         }
 
         let data = self.make_archive()?;
-
-        let deployment = client
-            .deploy(data, self.ctx.project_name(), args.no_test)
-            .await?;
-
-        let mut stream = client
-            .get_logs_ws(self.ctx.project_name(), &deployment.id)
-            .await?;
-
-        while let Some(Ok(msg)) = stream.next().await {
-            if let tokio_tungstenite::tungstenite::Message::Text(line) = msg {
-                let log_item: shuttle_common::LogItem =
-                    serde_json::from_str(&line).expect("to parse log line");
-
-                match log_item.state {
-                    shuttle_common::deployment::State::Queued
-                    | shuttle_common::deployment::State::Building
-                    | shuttle_common::deployment::State::Built
-                    | shuttle_common::deployment::State::Loading => {
-                        println!("{log_item}");
-                    }
-                    shuttle_common::deployment::State::Crashed => {
-                        println!();
-                        println!("{}", "Deployment crashed".red());
-                        println!("Run the following for more details");
-                        println!();
-                        print!("cargo shuttle logs {}", deployment.id);
-                        println!();
-
-                        return Ok(CommandOutcome::DeploymentFailure);
-                    }
-                    shuttle_common::deployment::State::Running
-                    | shuttle_common::deployment::State::Completed
-                    | shuttle_common::deployment::State::Stopped
-                    | shuttle_common::deployment::State::Unknown => break,
-                }
-            }
-        }
-
-        // Temporary fix.
-        // TODO: Make get_service_summary endpoint wait for a bit and see if it entered Running/Crashed state.
-        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-
-        let service = client.get_service(self.ctx.project_name()).await?;
-
-        // A deployment will only exist if there is currently one in the running state
-        if let Some(ref new_deployment) = service.deployment {
-            let resources = client
-                .get_service_resources(self.ctx.project_name())
-                .await?;
-            let resources = get_resources_table(&resources, self.ctx.project_name().as_str());
-
-            println!("{resources}{service}");
-
-            Ok(match new_deployment.state {
-                shuttle_common::deployment::State::Crashed => CommandOutcome::DeploymentFailure,
-                _ => CommandOutcome::Ok,
-            })
-        } else {
-            println!("Deployment has not entered the running state");
-
-            Ok(CommandOutcome::DeploymentFailure)
-        }
+        client.deploy(data, self.ctx.project_name()).await?;
+        Ok(CommandOutcome::Ok)
     }
 
     async fn project_create(&self, client: &Client, idle_minutes: u64) -> Result<()> {

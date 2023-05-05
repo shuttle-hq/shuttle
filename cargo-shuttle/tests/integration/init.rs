@@ -18,7 +18,7 @@ async fn non_interactive_basic_init() {
         "http://shuttle.invalid:80",
         "init",
         "--api-key",
-        "fake-api-key",
+        "dh9z58jttoes3qvt",
         "--name",
         "my-project",
         "--template",
@@ -44,7 +44,7 @@ async fn non_interactive_rocket_init() {
         "http://shuttle.invalid:80",
         "init",
         "--api-key",
-        "fake-api-key",
+        "dh9z58jttoes3qvt",
         "--name",
         "my-project",
         "--template",
@@ -68,7 +68,7 @@ fn interactive_rocket_init() -> Result<(), Box<dyn std::error::Error>> {
         "http://shuttle.invalid:80",
         "init",
         "--api-key",
-        "fake-api-key",
+        "dh9z58jttoes3qvt",
     ]);
     let mut session = rexpect::session::spawn_command(command, Some(2000))?;
 
@@ -107,7 +107,7 @@ fn interactive_rocket_init_dont_prompt_framework() -> Result<(), Box<dyn std::er
         "http://shuttle.invalid:80",
         "init",
         "--api-key",
-        "fake-api-key",
+        "dh9z58jttoes3qvt",
         "--template",
         "rocket",
     ]);
@@ -143,7 +143,7 @@ fn interactive_rocket_init_dont_prompt_name() -> Result<(), Box<dyn std::error::
         "http://shuttle.invalid:80",
         "init",
         "--api-key",
-        "fake-api-key",
+        "dh9z58jttoes3qvt",
         "--name",
         "my-project",
     ]);

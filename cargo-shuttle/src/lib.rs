@@ -902,12 +902,11 @@ impl Shuttle {
             .get_logs_ws(self.ctx.project_name(), &deployment.id)
             .await?;
 
-        let mut last_state: shuttle_common::deployment::State =
-            shuttle_common::deployment::State::Unknown;
+        let mut last_state: Option<shuttle_common::deployment::State> = None;
 
         loop {
-            let mesg = stream.next().await;
-            if let Some(Ok(msg)) = mesg {
+            let message = stream.next().await;
+            if let Some(Ok(msg)) = message {
                 if let tokio_tungstenite::tungstenite::Message::Text(line) = msg {
                     let log_item: shuttle_common::LogItem =
                         serde_json::from_str(&line).expect("to parse log line");
@@ -917,7 +916,7 @@ impl Shuttle {
                         | shuttle_common::deployment::State::Building
                         | shuttle_common::deployment::State::Built
                         | shuttle_common::deployment::State::Loading => {
-                            last_state = log_item.state.clone();
+                            last_state = Some(log_item.state.clone());
                             println!("{log_item}");
                         }
                         shuttle_common::deployment::State::Crashed => {
@@ -928,7 +927,7 @@ impl Shuttle {
                             println!();
                             print!("cargo shuttle logs {}", &deployment.id);
                             println!();
-                            if last_state == shuttle_common::deployment::State::Unknown {
+                            if last_state.is_none() {
                                 println!("Note: Deploy failed immediately");
                             };
 
@@ -938,7 +937,7 @@ impl Shuttle {
                         | shuttle_common::deployment::State::Completed
                         | shuttle_common::deployment::State::Stopped
                         | shuttle_common::deployment::State::Unknown => {
-                            last_state = log_item.state;
+                            last_state = Some(log_item.state);
                             break;
                         }
                     };
@@ -977,19 +976,19 @@ impl Shuttle {
             println!("{}", "Deployment has not entered the running state".red());
             println!();
             match last_state {
-                shuttle_common::deployment::State::Stopped => {
-                    println!("This may be because the deployment is stopped")
+                Some(shuttle_common::deployment::State::Stopped) => {
+                    println!("State: Stopped - Deployment was running, but has been stopped by the user.")
                 }
-                shuttle_common::deployment::State::Completed => {
-                    println!("This may be because the deployment is completed")
+                Some(shuttle_common::deployment::State::Completed) => {
+                    println!("State: Completed - Deployment was running, but stopped running all by itself.")
                 }
-                shuttle_common::deployment::State::Unknown => {
-                    println!("This may be because deployment was in an unknown state")
+                Some(shuttle_common::deployment::State::Unknown) => {
+                    println!("State: Unknown - This may be because deployment was in an unknown stateWe never expect this state and entering this state should be considered a bug.")
                 }
-                shuttle_common::deployment::State::Running => {
-                    println!("Deployment was running, check the logs for details")
+                Some(shuttle_common::deployment::State::Running) => {
+                    println!("State: Running - Deployment is running ie. its thread is active.")
                 }
-                _ => println!("This should not be possible"),
+                _ => unreachable!(),
             }
 
             println!();

@@ -74,7 +74,7 @@ impl Parse for BuilderOptions {
 
         Ok(Self {
             paren_token: parenthesized!(content in input),
-            options: content.parse_terminated(BuilderOption::parse)?,
+            options: content.parse_terminated(BuilderOption::parse, Token![,])?,
         })
     }
 }
@@ -169,14 +169,14 @@ fn attribute_to_builder(pat_ident: &PatIdent, attrs: Vec<Attribute>) -> syn::Res
         ));
     }
 
-    let options = if attrs[0].tokens.is_empty() {
+    let options = if attrs[0].to_token_stream().is_empty() {
         Default::default()
     } else {
-        parse2(attrs[0].tokens.clone())?
+        parse2(attrs[0].to_token_stream().clone())?
     };
 
     let builder = Builder {
-        path: attrs[0].path.clone(),
+        path: attrs[0].path().clone(),
         options,
     };
 

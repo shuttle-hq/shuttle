@@ -16,7 +16,6 @@ use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 use tracing::error;
 use uuid::Uuid;
 
-#[derive(Clone)]
 pub struct Client {
     api_url: ApiUrl,
     api_key: Option<ApiKey>,

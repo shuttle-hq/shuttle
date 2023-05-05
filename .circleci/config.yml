@@ -509,7 +509,7 @@ workflows:
                 - services/shuttle-tower
                 - services/shuttle-warp
       - check-standalone:
-          name: resources/shared-db
+          name: "resources/shared-db: << matrix.features >>"
           matrix:
             alias: check-standalone-shared-db
             parameters:

@@ -13,6 +13,9 @@ service ResourceRecorder {
   // Get the resources belonging to a service
   rpc GetServiceResources(ServiceResourcesRequest) returns (ResourcesResponse);
 
+  // Get a resource
+  rpc GetResource(Resource) returns (ResourceResponse);
+
   // Delete a resource
   rpc DeleteResource(Resource) returns (ResultResponse);
 }

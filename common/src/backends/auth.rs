@@ -295,15 +295,13 @@ where
                             Poll::Ready(Ok(response))
                         },
                         Ok(claim) => {
-                            request.extensions_mut().insert(claim);
                             match self.as_mut().project_replace(JwtAuthenticationFuture::Error) {
                                 JwtAuthenticationFutureProjOwn::HasTokenWaitingForPublicKey { 
-                                    request, mut service, ..
+                                    mut request, mut service, ..
                                 } => {
-                                    let inner_future = service.call(request);
-                                    let next_state = 
-                                        JwtAuthenticationFuture::WaitForFuture { future: inner_future };
-                                    self.as_mut().set(next_state);
+                                    request.extensions_mut().insert(claim);
+                                    let future = service.call(request);
+                                    self.as_mut().set(JwtAuthenticationFuture::WaitForFuture { future });
                                     self.poll(cx)
                                 },
                                 _ => unreachable!(),
@@ -328,11 +326,7 @@ where
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future = JwtAuthenticationFuture<
-        F,
-        S,
-        ResponseError
-    >;
+    type Future = JwtAuthenticationFuture<F, S, ResponseError>;
 
     fn poll_ready(
         &mut self,

@@ -53,24 +53,6 @@ async fn post_user() {
     assert_eq!(user["name"], "pro-user");
     assert_eq!(user["account_tier"], "pro");
     assert!(user["key"].to_string().is_ascii());
-
-    // Reset API key for non-existing user.
-    let request = Request::builder()
-        .uri("/users/non-existing/reset-key")
-        .method("PUT")
-        .body(Body::empty())
-        .unwrap();
-    let response = app.send_request(request).await;
-    assert_eq!(response.status(), StatusCode::NOT_FOUND);
-
-    // Reset API key for existing user.
-    let request = Request::builder()
-        .uri("/users/test-user/reset-key")
-        .method("PUT")
-        .body(Body::empty())
-        .unwrap();
-    let response = app.send_request(request).await;
-    assert_eq!(response.status(), StatusCode::OK);
 }
 
 #[tokio::test]
@@ -120,4 +102,29 @@ async fn get_user() {
     let persisted_user: Value = serde_json::from_slice(&body).unwrap();
 
     assert_eq!(user, persisted_user);
+}
+
+#[tokio::test]
+async fn test_reset_key() {
+    let app = app().await;
+
+    // Reset API key for non-existing user.
+    let request = Request::builder()
+        .uri("/users/non-existing/reset-key")
+        .method("PUT")
+        .body(Body::empty())
+        .unwrap();
+    let response = app.send_request(request).await;
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+    // Reset API key for existing user.
+    let response = app.post_user("test-user", "basic").await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let request = Request::builder()
+        .uri("/users/test-user/reset-key")
+        .method("PUT")
+        .body(Body::empty())
+        .unwrap();
+    let response = app.send_request(request).await;
+    assert_eq!(response.status(), StatusCode::OK);
 }

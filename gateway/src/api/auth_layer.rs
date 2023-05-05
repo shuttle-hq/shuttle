@@ -1,4 +1,4 @@
-use std::{convert::Infallible, net::Ipv4Addr, sync::Arc, time::Duration};
+use std::{convert::Infallible, fmt::Debug, net::Ipv4Addr, sync::Arc, time::Duration};
 
 use axum::{
     body::{boxed, HttpBody},
@@ -73,6 +73,7 @@ pub struct ShuttleAuthService<S> {
 impl<S> Service<Request<Body>> for ShuttleAuthService<S>
 where
     S: Service<Request<Body>, Response = Response> + Send + Clone + 'static,
+    S::Error: Debug,
     S::Future: Send + 'static,
 {
     type Response = S::Response;
@@ -214,8 +215,7 @@ where
                             // Bubble up auth errors
                             if token_response.status() != StatusCode::OK {
                                 let (parts, body) = token_response.into_parts();
-                                let body = <Body as HttpBody>::map_err(body, axum::Error::new)
-                                    .boxed_unsync();
+                                let body = body.map_err(axum::Error::new).boxed_unsync();
 
                                 return Ok(Response::from_parts(parts, body));
                             }
@@ -236,7 +236,7 @@ where
                                 }
                             };
 
-                            let response: ConvertResponse = match serde_json::from_slice(&body) {
+                            let response = match serde_json::from_slice::<ConvertResponse>(&body) {
                                 Ok(response) => response,
                                 Err(error) => {
                                     error!(
@@ -251,23 +251,25 @@ where
                                 }
                             };
 
+                            let bearer =
+                                Authorization::bearer(&response.token).expect("bearer token");
+
                             this.cache_manager.insert(
                                 key.as_str(),
-                                response.token.clone(),
+                                response.token,
                                 Duration::from_secs(CACHE_MINUTES * 60),
                             );
 
                             trace!("token inserted in cache, request proceeding");
-                            req.headers_mut()
-                                .typed_insert(Authorization::bearer(&response.token).unwrap());
+                            req.headers_mut().typed_insert(bearer);
                         }
                     };
                 }
 
                 match this.inner.call(req).await {
                     Ok(response) => Ok(response),
-                    Err(_) => {
-                        error!("unexpected internal error from gateway");
+                    Err(error) => {
+                        error!(?error, "unexpected internal error from gateway");
 
                         Ok(Response::builder()
                             .status(StatusCode::SERVICE_UNAVAILABLE)

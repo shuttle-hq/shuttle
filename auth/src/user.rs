@@ -124,7 +124,7 @@ where
         let user_manager: UserManagerState = UserManagerState::from_ref(state);
 
         let user = user_manager
-            .get_user_by_key(key.as_ref().clone())
+            .get_user_by_key(key.into())
             .await
             // Absorb any error into `Unauthorized`
             .map_err(|_| Error::Unauthorized)?;
@@ -146,13 +146,12 @@ impl From<User> for shuttle_common::models::user::Response {
     }
 }
 
-/// A wrapper around [ApiKey] so we can implement [FromRequestParts]
-/// for it.
+/// A wrapper around [ApiKey] so we can implement [FromRequestParts] for it.
 pub struct Key(ApiKey);
 
-impl AsRef<ApiKey> for Key {
-    fn as_ref(&self) -> &ApiKey {
-        &self.0
+impl From<Key> for ApiKey {
+    fn from(key: Key) -> Self {
+        key.0
     }
 }
 
@@ -210,11 +209,17 @@ impl From<AccountTier> for Vec<Scope> {
 #[sqlx(transparent)]
 pub struct AccountName(String);
 
+impl From<String> for AccountName {
+    fn from(s: String) -> Self {
+        Self(s)
+    }
+}
+
 impl FromStr for AccountName {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self(s.to_string()))
+        Ok(s.to_string().into())
     }
 }
 

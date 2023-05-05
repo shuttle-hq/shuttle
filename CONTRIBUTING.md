@@ -256,7 +256,7 @@ cargo test --package <crate-name> --all-features --test '*' -- --nocapture
 To run the end-to-end tests, from the root of the repository run:
 
 ```bash
-make test
+USE_PANAMAX=disable make test
 ```
 
 > Note: Running all the end-to-end tests may take a long time, so it is recommended to run individual tests shipped as part of each crate in the workspace first.

@@ -39,7 +39,7 @@ where
 
             attrs.record(&mut visitor);
 
-            // TODO: This is a hack to get the name of span to show up in the logs
+            // Make the span name the log message
             visitor.fields.insert(
                 "message".to_string(),
                 format!("[span] {}", metadata.name()).into(),

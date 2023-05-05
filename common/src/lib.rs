@@ -195,6 +195,13 @@ impl SecretStore {
     }
 }
 
+pub(crate) fn split_first_component(s: &str) -> (&str, Option<&str>) {
+    match s.split_once("::") {
+        Some((first, rest)) => (first, Some(rest)),
+        None => (s, None),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use proptest::prelude::*;

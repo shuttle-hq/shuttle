@@ -59,6 +59,7 @@ jsonwebtoken = { version = "8.2.0" }
 once_cell = "1.16.0"
 opentelemetry = { version = "0.18.0", features = ["rt-tokio"] }
 opentelemetry-http = "0.7.0"
+percent-encoding = "2.2"
 pin-project = "1.0.12"
 pipe = "0.4.0"
 portpicker = "0.1.1"

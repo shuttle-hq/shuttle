@@ -311,7 +311,7 @@ mod tests {
     };
 
     use crate::{
-        persistence::{DeploymentUpdater, Resource, ResourceManager},
+        persistence::{DeploymentUpdater, Resource, ResourcePersistence, ResourceType},
         RuntimeManager,
     };
     use async_trait::async_trait;
@@ -557,17 +557,31 @@ mod tests {
     }
 
     #[derive(Clone)]
-    struct StubResourceManager;
+    struct StubResourcePersistence;
 
     #[async_trait::async_trait]
-    impl ResourceManager for StubResourceManager {
+    impl ResourcePersistence for StubResourcePersistence {
         type Err = std::io::Error;
 
         async fn insert_resource(&self, _resource: &Resource) -> Result<(), Self::Err> {
             Ok(())
         }
+        async fn get_resource(
+            &self,
+            _service_id: &Uuid,
+            _type: ResourceType,
+        ) -> Result<Option<Resource>, Self::Err> {
+            Ok(None)
+        }
         async fn get_resources(&self, _service_id: &Uuid) -> Result<Vec<Resource>, Self::Err> {
             Ok(Vec::new())
+        }
+        async fn delete_resource(
+            &self,
+            _service_id: &Uuid,
+            _type: ResourceType,
+        ) -> Result<(), Self::Err> {
+            Ok(())
         }
     }
 
@@ -879,7 +893,7 @@ mod tests {
             .active_deployment_getter(StubActiveDeploymentGetter)
             .artifacts_path(PathBuf::from("/tmp"))
             .secret_getter(StubSecretGetter)
-            .resource_manager(StubResourceManager)
+            .resource_manager(StubResourcePersistence)
             .runtime(get_runtime_manager())
             .deployment_updater(StubDeploymentUpdater)
             .queue_client(StubBuildQueueClient)

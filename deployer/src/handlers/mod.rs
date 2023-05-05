@@ -5,7 +5,7 @@ use axum::extract::{Extension, Path, Query};
 use axum::handler::Handler;
 use axum::headers::HeaderMapExt;
 use axum::middleware::{self, from_extractor};
-use axum::routing::{get, post, Router};
+use axum::routing::{delete, get, post, Router};
 use axum::{extract::BodyStream, Json};
 use bytes::BufMut;
 use chrono::{TimeZone, Utc};
@@ -21,7 +21,7 @@ use shuttle_common::claims::{Claim, Scope};
 use shuttle_common::models::secret;
 use shuttle_common::project::ProjectName;
 use shuttle_common::storage_manager::StorageManager;
-use shuttle_common::{request_span, LogItem};
+use shuttle_common::{request_span, resource, LogItem};
 use shuttle_service::builder::clean_crate;
 use tracing::{debug, error, field, instrument, trace, warn};
 use utoipa::OpenApi;
@@ -30,7 +30,8 @@ use utoipa_swagger_ui::SwaggerUi;
 use uuid::Uuid;
 
 use crate::deployment::{DeploymentManager, Queued};
-use crate::persistence::{Deployment, Log, Persistence, ResourceManager, SecretGetter, State};
+use crate::persistence::{Deployment, Log, Persistence, ResourcePersistence, SecretGetter, State};
+use crate::resource::ResourceManager;
 
 use std::collections::HashMap;
 
@@ -47,6 +48,7 @@ mod project;
         create_service,
         stop_service,
         get_service_resources,
+        delete_service_resource,
         get_deployments,
         get_deployment,
         delete_deployment,
@@ -84,6 +86,7 @@ impl RouterBuilder {
     pub fn new(
         persistence: Persistence,
         deployment_manager: DeploymentManager,
+        resource_manager: ResourceManager,
         proxy_fqdn: FQDN,
         project_name: ProjectName,
         auth_uri: Uri,
@@ -108,6 +111,11 @@ impl RouterBuilder {
             .route(
                 "/projects/:project_name/services/:service_name/resources",
                 get(get_service_resources).layer(ScopedLayer::new(vec![Scope::Resources])),
+            )
+            .route(
+                "/projects/:project_name/services/:service_name/resources/:resource_type",
+                delete(delete_service_resource)
+                    .layer(ScopedLayer::new(vec![Scope::ResourcesWrite])),
             )
             .route(
                 "/projects/:project_name/deployments",
@@ -136,6 +144,7 @@ impl RouterBuilder {
             )
             .layer(Extension(persistence))
             .layer(Extension(deployment_manager))
+            .layer(Extension(resource_manager))
             .layer(Extension(proxy_fqdn))
             .layer(JwtAuthenticationLayer::new(AuthPublicKey::new(
                 auth_uri.clone(),
@@ -285,6 +294,58 @@ pub async fn get_service_resources(
     } else {
         Err(Error::NotFound("service not found".to_string()))
     }
+}
+
+#[instrument(skip_all, fields(%project_name, %service_name, %resource_type))]
+#[utoipa::path(
+    delete,
+    path = "/projects/{project_name}/services/{service_name}/resources/{resource_type}",
+    responses(
+        (status = 200, description = "Deletes a resource owned by a service."),
+        (status = 500, description = "Database error.", body = String),
+        (status = 404, description = "Record could not be found.", body = String),
+    ),
+    params(
+        ("project_name" = String, Path, description = "Name of the project that owns the service."),
+        ("service_name" = String, Path, description = "Name of the service.")
+    )
+)]
+pub async fn delete_service_resource(
+    Extension(persistence): Extension<Persistence>,
+    Extension(mut resource_manager): Extension<ResourceManager>,
+    Path((project_name, service_name, resource_type)): Path<(String, String, String)>,
+) -> Result<()> {
+    let service = persistence
+        .get_service_by_name(&service_name)
+        .await?
+        .ok_or_else(|| Error::NotFound("service not found".to_string()))?;
+
+    let resource_type: shuttle_common::resource::Type =
+        resource_type
+            .parse()
+            .map_err(|e: resource::ParseError| Error::Convert {
+                from: "String".to_string(),
+                to: "ResourceType".to_string(),
+                message: e.to_string(),
+            })?;
+    // TODO: totally replace persistence::ResourceType with shuttle_common::resource::Type
+    // or implement From<&shuttle_common::resource::Type> for persistence::ResourceType
+    let persistence_resource_type = resource_type.into();
+
+    persistence
+        .get_resource(&service.id, persistence_resource_type)
+        .await?
+        .ok_or_else(|| Error::NotFound("resource not found".to_string()))?;
+
+    resource_manager
+        .delete_resource(&project_name, &resource_type)
+        .await
+        .map_err(|e| Error::Custom(e.into()))?;
+    persistence
+        .delete_resource(&service.id, persistence_resource_type)
+        .await?;
+
+    Ok(())
 }
 
 #[instrument(skip_all, fields(%project_name, %service_name))]

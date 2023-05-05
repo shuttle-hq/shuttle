@@ -1,11 +1,11 @@
-use std::fmt::Display;
+use std::{fmt::Display, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
-use crate::database;
+use crate::{database, split_first_component};
 
 /// Common type to hold all the information we need for a generic resource
 #[derive(Clone, Deserialize, Serialize)]
@@ -25,7 +25,7 @@ pub struct Response {
     pub data: Value,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, Eq, PartialEq)]
 #[serde(rename_all = "lowercase")]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[cfg_attr(feature = "openapi", schema(as = shuttle_common::resource::Type))]
@@ -61,3 +61,30 @@ impl Display for Type {
         }
     }
 }
+
+impl FromStr for Type {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match split_first_component(s) {
+            ("database", Some(db_type)) => {
+                Ok(Type::Database(db_type.parse().map_err(|_| ParseError)?))
+            }
+            ("secrets", None) => Ok(Type::Secrets),
+            ("static_folder", None) => Ok(Type::StaticFolder),
+            ("persist", None) => Ok(Type::Persist),
+            _ => Err(ParseError),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct ParseError;
+
+impl Display for ParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "invalid resource type")
+    }
+}
+
+impl std::error::Error for ParseError {}

@@ -27,7 +27,7 @@ use uuid::Uuid;
 use super::{RunReceiver, State};
 use crate::{
     error::{Error, Result},
-    persistence::{DeploymentUpdater, Resource, ResourceManager, SecretGetter},
+    persistence::{DeploymentUpdater, Resource, ResourcePersistence, SecretGetter},
     RuntimeManager,
 };
 
@@ -39,7 +39,7 @@ pub async fn task(
     deployment_updater: impl DeploymentUpdater,
     active_deployment_getter: impl ActiveDeploymentsGetter,
     secret_getter: impl SecretGetter,
-    resource_manager: impl ResourceManager,
+    resource_manager: impl ResourcePersistence,
     storage_manager: ArtifactsStorageManager,
 ) {
     info!("Run task started");
@@ -194,7 +194,7 @@ impl Built {
         self,
         storage_manager: ArtifactsStorageManager,
         secret_getter: impl SecretGetter,
-        resource_manager: impl ResourceManager,
+        resource_manager: impl ResourcePersistence,
         runtime_manager: Arc<Mutex<RuntimeManager>>,
         deployment_updater: impl DeploymentUpdater,
         kill_old_deployments: impl futures::Future<Output = Result<()>>,
@@ -262,7 +262,7 @@ async fn load(
     service_id: Uuid,
     executable_path: PathBuf,
     secret_getter: impl SecretGetter,
-    resource_manager: impl ResourceManager,
+    resource_manager: impl ResourcePersistence,
     mut runtime_client: RuntimeClient<ClaimService<InjectPropagation<Channel>>>,
     claim: Option<Claim>,
 ) -> Result<()> {
@@ -433,7 +433,9 @@ mod tests {
     use uuid::Uuid;
 
     use crate::{
-        persistence::{DeploymentUpdater, Resource, ResourceManager, Secret, SecretGetter},
+        persistence::{
+            DeploymentUpdater, Resource, ResourcePersistence, ResourceType, Secret, SecretGetter,
+        },
         RuntimeManager,
     };
 
@@ -510,17 +512,31 @@ mod tests {
     }
 
     #[derive(Clone)]
-    struct StubResourceManager;
+    struct StubResourcePersistence;
 
     #[async_trait]
-    impl ResourceManager for StubResourceManager {
+    impl ResourcePersistence for StubResourcePersistence {
         type Err = std::io::Error;
 
         async fn insert_resource(&self, _resource: &Resource) -> Result<(), Self::Err> {
             Ok(())
         }
+        async fn get_resource(
+            &self,
+            _service_id: &Uuid,
+            _type: ResourceType,
+        ) -> Result<Option<Resource>, Self::Err> {
+            Ok(None)
+        }
         async fn get_resources(&self, _service_id: &Uuid) -> Result<Vec<Resource>, Self::Err> {
             Ok(Vec::new())
+        }
+        async fn delete_resource(
+            &self,
+            _service_id: &Uuid,
+            _type: ResourceType,
+        ) -> Result<(), Self::Err> {
+            Ok(())
         }
     }
 
@@ -563,7 +579,7 @@ mod tests {
             .handle(
                 storage_manager,
                 StubSecretGetter,
-                StubResourceManager,
+                StubResourcePersistence,
                 runtime_manager.clone(),
                 StubDeploymentUpdater,
                 kill_old_deployments(),
@@ -606,7 +622,7 @@ mod tests {
             .handle(
                 storage_manager,
                 StubSecretGetter,
-                StubResourceManager,
+                StubResourcePersistence,
                 runtime_manager.clone(),
                 StubDeploymentUpdater,
                 kill_old_deployments(),
@@ -648,7 +664,7 @@ mod tests {
             .handle(
                 storage_manager,
                 StubSecretGetter,
-                StubResourceManager,
+                StubResourcePersistence,
                 runtime_manager.clone(),
                 StubDeploymentUpdater,
                 kill_old_deployments(),
@@ -679,7 +695,7 @@ mod tests {
             .handle(
                 storage_manager,
                 StubSecretGetter,
-                StubResourceManager,
+                StubResourcePersistence,
                 runtime_manager.clone(),
                 StubDeploymentUpdater,
                 kill_old_deployments(),

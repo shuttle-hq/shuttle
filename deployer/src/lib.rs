@@ -10,6 +10,7 @@ use hyper::{
 };
 pub use persistence::Persistence;
 use proxy::AddressGetter;
+pub use resource::ResourceManager;
 pub use runtime_manager::RuntimeManager;
 use tokio::sync::Mutex;
 use tracing::{error, info};
@@ -22,10 +23,12 @@ mod error;
 pub mod handlers;
 mod persistence;
 mod proxy;
+mod resource;
 mod runtime_manager;
 
 pub async fn start(
     persistence: Persistence,
+    resource_manager: ResourceManager,
     runtime_manager: Arc<Mutex<RuntimeManager>>,
     args: Args,
 ) {
@@ -60,6 +63,7 @@ pub async fn start(
     let mut builder = handlers::RouterBuilder::new(
         persistence,
         deployment_manager,
+        resource_manager,
         args.proxy_fqdn,
         args.project,
         args.auth_uri,

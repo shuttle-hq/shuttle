@@ -115,6 +115,9 @@ impl Shuttle {
                 self.deployment_get(&self.client()?, id).await
             }
             Command::Resource(ResourceCommand::List) => self.resources_list(&self.client()?).await,
+            Command::Resource(ResourceCommand::Delete { resource_type }) => {
+                self.resource_delete(&self.client()?, &resource_type).await
+            }
             Command::Stop => self.stop(&self.client()?).await,
             Command::Clean => self.clean(&self.client()?).await,
             Command::Secrets => self.secrets(&self.client()?).await,
@@ -429,6 +432,16 @@ impl Shuttle {
         let table = get_resources_table(&resources, self.ctx.project_name().as_str());
 
         println!("{table}");
+
+        Ok(())
+    }
+
+    async fn resource_delete(&self, client: &Client, resource_type: &resource::Type) -> Result<()> {
+        client
+            .delete_service_resource(self.ctx.project_name(), resource_type)
+            .await?;
+
+        println!("Deleted resource {resource_type}");
 
         Ok(())
     }

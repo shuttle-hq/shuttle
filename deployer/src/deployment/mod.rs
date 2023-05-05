@@ -12,7 +12,7 @@ use tracing::{instrument, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::{
-    persistence::{DeploymentUpdater, ResourceManager, SecretGetter, SecretRecorder, State},
+    persistence::{DeploymentUpdater, ResourcePersistence, SecretGetter, SecretRecorder, State},
     RuntimeManager,
 };
 use tokio::sync::{mpsc, Mutex};
@@ -35,14 +35,14 @@ pub struct DeploymentManagerBuilder<LR, SR, ADG, DU, SG, RM, QC> {
     queue_client: Option<QC>,
 }
 
-impl<LR, SR, ADG, DU, SG, RM, QC> DeploymentManagerBuilder<LR, SR, ADG, DU, SG, RM, QC>
+impl<LR, SR, ADG, DU, SG, RP, QC> DeploymentManagerBuilder<LR, SR, ADG, DU, SG, RP, QC>
 where
     LR: LogRecorder,
     SR: SecretRecorder,
     ADG: ActiveDeploymentsGetter,
     DU: DeploymentUpdater,
     SG: SecretGetter,
-    RM: ResourceManager,
+    RP: ResourcePersistence,
     QC: BuildQueueClient,
 {
     pub fn build_log_recorder(mut self, build_log_recorder: LR) -> Self {
@@ -81,7 +81,7 @@ where
         self
     }
 
-    pub fn resource_manager(mut self, resource_manager: RM) -> Self {
+    pub fn resource_manager(mut self, resource_manager: RP) -> Self {
         self.resource_manager = Some(resource_manager);
 
         self

@@ -1,7 +1,7 @@
 pub mod deployment;
 mod error;
 pub mod log;
-mod resource;
+pub mod resource;
 mod secret;
 pub mod service;
 mod state;
@@ -30,7 +30,7 @@ use self::deployment::DeploymentRunnable;
 pub use self::deployment::{Deployment, DeploymentState, DeploymentUpdater};
 pub use self::error::Error as PersistenceError;
 pub use self::log::{Level as LogLevel, Log};
-pub use self::resource::{Resource, ResourceManager, Type as ResourceType};
+pub use self::resource::{Resource, ResourcePersistence, Type as ResourceType};
 pub use self::secret::{Secret, SecretGetter, SecretRecorder};
 pub use self::service::Service;
 pub use self::state::State;
@@ -349,7 +349,7 @@ impl LogRecorder for Persistence {
 }
 
 #[async_trait::async_trait]
-impl ResourceManager for Persistence {
+impl ResourcePersistence for Persistence {
     type Err = Error;
 
     async fn insert_resource(&self, resource: &Resource) -> Result<()> {
@@ -371,6 +371,29 @@ impl ResourceManager for Persistence {
             .bind(service_id)
             .fetch_all(&self.pool)
             .await
+            .map_err(Error::from)
+    }
+
+    async fn get_resource(
+        &self,
+        service_id: &Uuid,
+        r#type: ResourceType,
+    ) -> Result<Option<Resource>> {
+        sqlx::query_as(r#"SELECT * FROM resources WHERE service_id = ? AND type = ?"#)
+            .bind(service_id)
+            .bind(r#type)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(Error::from)
+    }
+
+    async fn delete_resource(&self, service_id: &Uuid, r#type: ResourceType) -> Result<()> {
+        sqlx::query(r#"DELETE FROM resources WHERE service_id = ? AND type = ?"#)
+            .bind(service_id)
+            .bind(r#type)
+            .execute(&self.pool)
+            .await
+            .map(|_| ())
             .map_err(Error::from)
     }
 }

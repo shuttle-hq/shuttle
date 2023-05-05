@@ -12,7 +12,7 @@ use clap::{
     Parser, ValueEnum,
 };
 use clap_complete::Shell;
-use shuttle_common::{models::project::IDLE_MINUTES, project::ProjectName};
+use shuttle_common::{models::project::IDLE_MINUTES, project::ProjectName, resource};
 use uuid::Uuid;
 
 use crate::init::Template;
@@ -153,6 +153,11 @@ pub enum DeploymentCommand {
 pub enum ResourceCommand {
     /// List all the resources for a project
     List,
+    /// Delete a resource
+    Delete {
+        /// Type of the resource to delete
+        resource_type: resource::Type,
+    },
 }
 
 #[derive(Parser)]

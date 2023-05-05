@@ -2,7 +2,9 @@ use std::process::exit;
 
 use clap::Parser;
 use shuttle_common::backends::tracing::setup_tracing;
-use shuttle_deployer::{start, start_proxy, Args, DeployLayer, Persistence, RuntimeManager};
+use shuttle_deployer::{
+    start, start_proxy, Args, DeployLayer, Persistence, ResourceManager, RuntimeManager,
+};
 use tokio::select;
 use tracing::{error, trace};
 use tracing_subscriber::prelude::*;
@@ -21,6 +23,10 @@ async fn main() {
         "deployer",
     );
 
+    let resource_manager = ResourceManager::new(&args.provisioner_address)
+        .await
+        .unwrap();
+
     let runtime_manager = RuntimeManager::new(
         args.artifacts_path.clone(),
         args.provisioner_address.uri().to_string(),
@@ -32,7 +38,7 @@ async fn main() {
         _ = start_proxy(args.proxy_address, args.proxy_fqdn.clone(), persistence.clone()) => {
             error!("Proxy stopped.")
         },
-        _ = start(persistence, runtime_manager, args) => {
+        _ = start(persistence, resource_manager, runtime_manager, args) => {
             error!("Deployment service stopped.")
         },
     }

@@ -323,13 +323,13 @@ impl MyProvisioner {
         engine: shared::Engine,
     ) -> Result<DatabaseDeletionResponse, Error> {
         match engine {
-            shared::Engine::Postgres(_) => self.delete_pg(project_name).await?,
-            shared::Engine::Mongodb(_) => self.delete_mongodb(project_name).await?,
+            shared::Engine::Postgres(_) => self.delete_shared_postgres(project_name).await?,
+            shared::Engine::Mongodb(_) => self.delete_shared_mongodb(project_name).await?,
         }
         Ok(DatabaseDeletionResponse {})
     }
 
-    async fn delete_pg(&self, project_name: &str) -> Result<(), Error> {
+    async fn delete_shared_postgres(&self, project_name: &str) -> Result<(), Error> {
         let database_name = format!("db-{project_name}");
         let role_name = format!("user-{project_name}");
 
@@ -352,7 +352,7 @@ impl MyProvisioner {
         Ok(())
     }
 
-    async fn delete_mongodb(&self, project_name: &str) -> Result<(), Error> {
+    async fn delete_shared_mongodb(&self, project_name: &str) -> Result<(), Error> {
         let database_name = format!("mongodb-{project_name}");
         let db = self.mongodb_client.database(&database_name);
 
@@ -418,11 +418,11 @@ impl Provisioner for MyProvisioner {
 
         let reply = match db_type {
             DbType::Shared(Shared { engine }) => {
-                self.request_shared_db(&request.project_name, engine.expect("oneof to be set"))
+                self.request_shared_db(&request.project_name, engine.expect("engine to be set"))
                     .await?
             }
             DbType::AwsRds(AwsRds { engine }) => {
-                self.request_aws_rds(&request.project_name, engine.expect("oneof to be set"))
+                self.request_aws_rds(&request.project_name, engine.expect("engine to be set"))
                     .await?
             }
         };
@@ -442,11 +442,11 @@ impl Provisioner for MyProvisioner {
 
         let reply = match db_type {
             DbType::Shared(Shared { engine }) => {
-                self.delete_shared_db(&request.project_name, engine.expect("oneof to be set"))
+                self.delete_shared_db(&request.project_name, engine.expect("engine to be set"))
                     .await?
             }
             DbType::AwsRds(AwsRds { engine }) => {
-                self.delete_aws_rds(&request.project_name, engine.expect("oneof to be set"))
+                self.delete_aws_rds(&request.project_name, engine.expect("engine to be set"))
                     .await?
             }
         };

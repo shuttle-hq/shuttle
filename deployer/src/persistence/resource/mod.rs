@@ -11,11 +11,17 @@ pub use self::database::Type as DatabaseType;
 
 /// Types that can record and retrieve resource allocations
 #[async_trait::async_trait]
-pub trait ResourceManager: Clone + Send + Sync + 'static {
+pub trait ResourcePersistence: Clone + Send + Sync + 'static {
     type Err: std::error::Error;
 
     async fn insert_resource(&self, resource: &Resource) -> Result<(), Self::Err>;
+    async fn get_resource(
+        &self,
+        service_id: &Uuid,
+        r#type: Type,
+    ) -> Result<Option<Resource>, Self::Err>;
     async fn get_resources(&self, service_id: &Uuid) -> Result<Vec<Resource>, Self::Err>;
+    async fn delete_resource(&self, service_id: &Uuid, r#type: Type) -> Result<(), Self::Err>;
 }
 
 #[derive(sqlx::FromRow, Debug, Eq, PartialEq)]
@@ -81,18 +87,9 @@ impl FromStr for Type {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if let Some((prefix, rest)) = s.split_once("::") {
-            match prefix {
-                "database" => Ok(Self::Database(DatabaseType::from_str(rest)?)),
-                _ => Err(format!("'{prefix}' is an unknown resource type")),
-            }
-        } else {
-            match s {
-                "secrets" => Ok(Self::Secrets),
-                "static_folder" => Ok(Self::StaticFolder),
-                "persist" => Ok(Self::Persist),
-                _ => Err(format!("'{s}' is an unknown resource type")),
-            }
+        match shuttle_common::resource::Type::from_str(s) {
+            Ok(t) => Ok(t.into()),
+            Err(e) => Err(e.to_string()),
         }
     }
 }

@@ -225,21 +225,15 @@ pub enum JwtAuthenticationFuture<
     // If there was an error return a BAD_REQUEST.
     Error,
 
-    // If we have no token, just invoke the underlying future
-    NoToken { #[pin] future: TService::Future },
+    WaitForFuture { #[pin] future: TService::Future },
 
     // We have a token and need to run our logic.
     HasTokenWaitingForPublicKey {
         bearer: Authorization<Bearer>,
         request: Request<Body>,
-        public_key_fn: PubKeyFn,
-        #[pin] public_key_future: Option<Pin<Box<dyn Future<Output = Result<Vec<u8>, PubKeyFn::Error>> + Send + 'a>>>,
+        #[pin] public_key_future: Pin<Box<dyn Future<Output = Result<Vec<u8>, PubKeyFn::Error>> + Send + 'a>>,
         service: TService
     },
-
-    HasTokenWaitingForInnerFuture {
-        #[pin] future: TService::Future
-    }
 }
 
 impl<
@@ -264,70 +258,60 @@ where
                         .unwrap();
                 Poll::Ready(Ok(response))
             },
-            JwtAuthenticationFutureProj::NoToken { future } => future.poll(cx),
-            JwtAuthenticationFutureProj::HasTokenWaitingForInnerFuture { future } => future.poll(cx),
+            JwtAuthenticationFutureProj::WaitForFuture { future } => 
+                future.poll(cx),
             JwtAuthenticationFutureProj::HasTokenWaitingForPublicKey { 
                 bearer, request, 
-                public_key_fn, mut public_key_future,
+                public_key_future,
                 ..
-            } => match public_key_future.as_mut().as_pin_mut() {
-                None => {
-                    let public_key_fn = public_key_fn.clone();
-                    let future = Box::pin(async move {
-                        public_key_fn.public_key().await
-                    });
-                    public_key_future.set(Some(future));
-                    self.poll(cx)
+            } => match public_key_future.poll(cx) {
+                Poll::Pending => Poll::Pending,
+                Poll::Ready(Err(error)) => {
+                    error!(
+                        error = &error as &dyn std::error::Error,
+                        "failed to get public key from auth service"
+                    );
+                    let response = 
+                        Response::builder()
+                            .status(StatusCode::SERVICE_UNAVAILABLE)
+                            .body(Default::default())
+                            .unwrap();
+
+                    Poll::Ready(Ok(response))
                 },
-                Some(public_key_future) => match public_key_future.poll(cx) {
-                    Poll::Pending => Poll::Pending,
-                    Poll::Ready(Err(error)) => {
-                        error!(
-                            error = &error as &dyn std::error::Error,
-                            "failed to get public key from auth service"
-                        );
-                        let response = 
-                            Response::builder()
-                                .status(StatusCode::SERVICE_UNAVAILABLE)
-                                .body(Default::default())
-                                .unwrap();
+                Poll::Ready(Ok(public_key)) => {
+                    let claim_result = Claim::from_token(
+                        bearer.token().trim(), &public_key
+                    );
+                    match claim_result {
+                        Err(code) => {
+                            error!(code = %code, "failed to decode JWT");
 
-                        Poll::Ready(Ok(response))
-                    },
-                    Poll::Ready(Ok(public_key)) => {
-                        let claim_result = Claim::from_token(
-                            bearer.token().trim(), &public_key
-                        );
-                        match claim_result {
-                            Err(code) => {
-                                error!(code = %code, "failed to decode JWT");
+                            let response = 
+                                Response::builder()
+                                    .status(code)
+                                    .body(Default::default())
+                                    .unwrap();
 
-                                let response = 
-                                    Response::builder()
-                                        .status(code)
-                                        .body(Default::default())
-                                        .unwrap();
-
-                                Poll::Ready(Ok(response))
-                            },
-                            Ok(claim) => {
-                                request.extensions_mut().insert(claim);
-                                match self.as_mut().project_replace(JwtAuthenticationFuture::Error) {
-                                    JwtAuthenticationFutureProjOwn::HasTokenWaitingForPublicKey { 
-                                        request, mut service, ..
-                                    } => {
-                                        let inner_future = service.call(request);
-                                        let next_state = 
-                                            JwtAuthenticationFuture::HasTokenWaitingForInnerFuture { future: inner_future };
-                                        self.as_mut().set(next_state);
-                                        self.poll(cx)
-                                    },
-                                    _ => unreachable!(),
-                                }
-                            },
-                        }
+                            Poll::Ready(Ok(response))
+                        },
+                        Ok(claim) => {
+                            request.extensions_mut().insert(claim);
+                            match self.as_mut().project_replace(JwtAuthenticationFuture::Error) {
+                                JwtAuthenticationFutureProjOwn::HasTokenWaitingForPublicKey { 
+                                    request, mut service, ..
+                                } => {
+                                    let inner_future = service.call(request);
+                                    let next_state = 
+                                        JwtAuthenticationFuture::WaitForFuture { future: inner_future };
+                                    self.as_mut().set(next_state);
+                                    self.poll(cx)
+                                },
+                                _ => unreachable!(),
+                            }
+                        },
                     }
-                },
+                }
             }
         }
     }
@@ -362,18 +346,21 @@ where
     fn call(&mut self, req: Request<Body>) -> Self::Future {
         match req.headers().typed_try_get::<Authorization<Bearer>>() {
             Ok(Some(bearer)) => {
+                let public_key_fn = self.public_key_fn.clone();
+                let public_key_future = Box::pin(async move {
+                    public_key_fn.public_key().await
+                });
                 Self::Future::HasTokenWaitingForPublicKey {
                     bearer,
                     request: req,
-                    public_key_fn: self.public_key_fn.clone(),
-                    public_key_future: None,
+                    public_key_future,
                     service: self.inner.clone()
                 }
             }
             Ok(None) => {
                 let future = self.inner.call(req);
 
-                Self::Future::NoToken { future }
+                Self::Future::WaitForFuture { future }
             }
             Err(_) => Self::Future::Error
         }

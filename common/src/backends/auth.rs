@@ -214,8 +214,7 @@ pub struct JwtAuthentication<S, F> {
 
 #[pin_project(project = JwtAuthenticationFutureProj, project_replace = JwtAuthenticationFutureProjOwn)]
 pub enum JwtAuthenticationFuture<
-    'a,
-    PubKeyFn : PublicKeyFn + 'a, 
+    PubKeyFn : PublicKeyFn, 
     TService : Service<
         Request<Body>, 
         Response = Response<UnsyncBoxBody<Bytes, ResponseError>>
@@ -231,14 +230,14 @@ pub enum JwtAuthenticationFuture<
     HasTokenWaitingForPublicKey {
         bearer: Authorization<Bearer>,
         request: Request<Body>,
-        #[pin] public_key_future: Pin<Box<dyn Future<Output = Result<Vec<u8>, PubKeyFn::Error>> + Send + 'a>>,
+        #[pin] public_key_future: Pin<Box<dyn Future<Output = Result<Vec<u8>, PubKeyFn::Error>> + Send>>,
         service: TService
     },
 }
 
 impl<
-    'a, PubKeyFn, TService, ResponseError
-> Future for JwtAuthenticationFuture<'a, PubKeyFn, TService, ResponseError> 
+    PubKeyFn, TService, ResponseError
+> Future for JwtAuthenticationFuture<PubKeyFn, TService, ResponseError> 
 where 
     PubKeyFn : PublicKeyFn + 'static,
     TService : Service<
@@ -330,7 +329,6 @@ where
     type Response = S::Response;
     type Error = S::Error;
     type Future = JwtAuthenticationFuture<
-        'static,
         F,
         S,
         ResponseError

@@ -51,7 +51,7 @@
 //! ```
 //!
 //! Check out [our docs](https://docs.shuttle.rs/introduction/welcome) to see all the frameworks we support, or
-//! our [examples](https://github.com/shuttle-hq/examples) if you prefer that format.
+//! our [examples](https://github.com/shuttle-hq/shuttle-examples) if you prefer that format.
 //!
 //! ## Running locally
 //! To test your app locally before deploying, use:

@@ -398,7 +398,8 @@ pub async fn stop_service(
         (status = 404, description = "Record could not be found.", body = String),
     ),
     params(
-        ("project_name" = String, Path, description = "Name of the project that owns the deployments.")
+        ("project_name" = String, Path, description = "Name of the project that owns the deployments."),
+        PaginationDetails
     )
 )]
 pub async fn get_deployments(

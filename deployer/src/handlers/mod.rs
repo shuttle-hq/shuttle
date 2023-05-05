@@ -12,7 +12,6 @@ use chrono::{TimeZone, Utc};
 use fqdn::FQDN;
 use futures::StreamExt;
 use hyper::Uri;
-use serde::Deserialize;
 use shuttle_common::backends::auth::{
     AdminSecretLayer, AuthPublicKey, JwtAuthenticationLayer, ScopedLayer,
 };

@@ -260,7 +260,7 @@ where
             JwtAuthenticationFutureProj::WaitForFuture { future } => 
                 future.poll(cx),
             JwtAuthenticationFutureProj::HasTokenWaitingForPublicKey { 
-                bearer, request, 
+                bearer, 
                 public_key_future,
                 ..
             } => match public_key_future.poll(cx) {
@@ -304,7 +304,7 @@ where
                                     self.as_mut().set(JwtAuthenticationFuture::WaitForFuture { future });
                                     self.poll(cx)
                                 },
-                                _ => unreachable!(),
+                                _ => unreachable!("We know that we're in the 'HasTokenWaitingForPublicKey' state"),
                             }
                         },
                     }

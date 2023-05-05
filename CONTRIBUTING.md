@@ -104,7 +104,7 @@ Login to shuttle service in a new terminal window from the root of the shuttle d
 cargo run --bin cargo-shuttle -- login --api-key "dh9z58jttoes3qvt"
 ```
 
-The [shuttle examples](https://github.com/shuttle-hq/examples) are linked to the main repo as a [git submodule](https://git-scm.com/book/en/v2/Git-Tools-Submodules), to initialize it run the following commands:
+The [shuttle examples](https://github.com/shuttle-hq/shuttle-examples) are linked to the main repo as a [git submodule](https://git-scm.com/book/en/v2/Git-Tools-Submodules), to initialize it run the following commands:
 
 ```bash
 git submodule init

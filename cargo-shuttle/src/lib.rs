@@ -425,6 +425,11 @@ impl Shuttle {
     }
 
     async fn deployments_list(&self, client: &Client, page: u32, limit: u32) -> Result<()> {
+        if limit == 0 {
+            println!();
+            return Ok(());
+        }
+
         let proj_name = self.ctx.project_name();
         let deployments = client.get_deployments(proj_name, page, limit).await?;
         let table = get_deployments_table(&deployments, proj_name.as_str());

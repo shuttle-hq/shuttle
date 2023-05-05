@@ -278,8 +278,11 @@ impl GatewayService {
         let mut query = QueryBuilder::new(
             "SELECT project_name, project_state FROM projects WHERE account_name = ",
         );
-        query.push_bind(account_name);
-        query.push(" LIMIT ").push_bind(limit);
+
+        query
+            .push_bind(account_name)
+            .push(" LIMIT ")
+            .push_bind(limit);
 
         if offset > 0 {
             query.push(" OFFSET ").push_bind(offset);

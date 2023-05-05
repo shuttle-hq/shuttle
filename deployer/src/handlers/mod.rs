@@ -19,13 +19,14 @@ use shuttle_common::backends::auth::{
 use shuttle_common::backends::headers::XShuttleAccountName;
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
 use shuttle_common::claims::{Claim, Scope};
+use shuttle_common::models::deployment::PaginationDetails;
 use shuttle_common::models::secret;
 use shuttle_common::project::ProjectName;
 use shuttle_common::storage_manager::StorageManager;
 use shuttle_common::{request_span, LogItem};
 use shuttle_service::builder::clean_crate;
 use tracing::{debug, error, field, instrument, trace, warn};
-use utoipa::{IntoParams, OpenApi};
+use utoipa::OpenApi;
 
 use utoipa_swagger_ui::SwaggerUi;
 use uuid::Uuid;
@@ -73,14 +74,6 @@ mod project;
     ))
 )]
 pub struct ApiDoc;
-
-#[derive(Debug, Clone, Copy, Deserialize, IntoParams)]
-pub struct PaginationDetails {
-    /// Page to fetch, starting from 0.
-    page: Option<u32>,
-    /// Number of results per page.
-    limit: Option<u32>,
-}
 
 #[derive(Clone)]
 pub struct RouterBuilder {

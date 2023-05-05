@@ -22,6 +22,7 @@ use shuttle_common::backends::cache::CacheManager;
 use shuttle_common::backends::metrics::{Metrics, TraceLayer};
 use shuttle_common::claims::{Scope, EXP_MINUTES};
 use shuttle_common::models::error::ErrorKind;
+use shuttle_common::models::project::PaginationDetails;
 use shuttle_common::models::{project, stats};
 use shuttle_common::request_span;
 use tokio::sync::mpsc::Sender;
@@ -30,7 +31,7 @@ use tracing::{field, instrument, trace};
 use ttl_cache::TtlCache;
 
 use utoipa::openapi::security::{ApiKey, ApiKeyValue, SecurityScheme};
-use utoipa::{IntoParams, Modify, OpenApi};
+use utoipa::{Modify, OpenApi};
 use utoipa_swagger_ui::SwaggerUi;
 use uuid::Uuid;
 use x509_parser::nom::AsBytes;
@@ -82,14 +83,6 @@ impl StatusResponse {
             status: GatewayStatus::Unhealthy,
         }
     }
-}
-
-#[derive(Debug, Clone, Copy, Deserialize, IntoParams)]
-struct PaginationDetails {
-    /// Page to fetch, starting from 0.
-    page: Option<u32>,
-    /// Number of results per page.
-    limit: Option<u32>,
 }
 
 #[instrument(skip(service))]

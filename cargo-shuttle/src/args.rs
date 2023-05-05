@@ -142,7 +142,7 @@ pub enum Command {
 pub enum DeploymentCommand {
     /// List all the deployments for a service
     List {
-        #[arg(long = "page", default_value = "1")]
+        #[arg(long, default_value = "1")]
         /// Which page to display
         page: u32,
 

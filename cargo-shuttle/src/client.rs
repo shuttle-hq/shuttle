@@ -185,10 +185,10 @@ impl Client {
         limit: u32,
     ) -> Result<Vec<deployment::Response>> {
         let path = format!(
-            "/projects/{}/deployments?page={}&limit={}",
+            "/projects/{}/deployments?limit={}&page={}",
             project.as_str(),
-            page.saturating_sub(1),
-            limit
+            limit,
+            page.saturating_sub(1)
         );
 
         self.get(path).await

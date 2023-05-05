@@ -779,6 +779,7 @@ pub fn write_main_file(boilerplate: &'static str, main_path: &Path) -> Result<()
 #[cfg(test)]
 mod shuttle_init_tests {
     use super::*;
+    use indoc::indoc;
 
     fn cargo_toml_factory() -> Document {
         indoc! {r#"

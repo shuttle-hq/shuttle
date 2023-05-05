@@ -7,10 +7,10 @@ mod provisioner_server;
 use indicatif::ProgressBar;
 use shuttle_common::claims::{ClaimService, InjectPropagation};
 use shuttle_common::models::deployment::get_deployments_table;
-use shuttle_common::models::project::{State, IDLE_MINUTES};
+use shuttle_common::models::project::IDLE_MINUTES;
 use shuttle_common::models::resource::get_resources_table;
 use shuttle_common::project::ProjectName;
-use shuttle_common::resource;
+use shuttle_common::{resource, ApiKey};
 use shuttle_proto::runtime::runtime_client::RuntimeClient;
 use shuttle_proto::runtime::{self, LoadRequest, StartRequest, StopRequest, SubscribeLogsRequest};
 
@@ -51,7 +51,7 @@ use tar::Builder;
 use tracing::{error, trace, warn};
 use uuid::Uuid;
 
-use crate::args::{DeploymentCommand, ProjectCommand, ResourceCommand};
+use crate::args::{DeploymentCommand, ProjectCommand, ProjectStartArgs, ResourceCommand};
 use crate::client::Client;
 use crate::provisioner_server::LocalProvisioner;
 
@@ -118,18 +118,16 @@ impl Shuttle {
             Command::Stop => self.stop(&self.client()?).await,
             Command::Clean => self.clean(&self.client()?).await,
             Command::Secrets => self.secrets(&self.client()?).await,
-            Command::Project(ProjectCommand::Start { idle_minutes }) => {
+            Command::Project(ProjectCommand::Start(ProjectStartArgs { idle_minutes })) => {
                 self.project_create(&self.client()?, idle_minutes).await
             }
-            Command::Project(ProjectCommand::Restart { idle_minutes }) => {
+            Command::Project(ProjectCommand::Restart(ProjectStartArgs { idle_minutes })) => {
                 self.project_recreate(&self.client()?, idle_minutes).await
             }
             Command::Project(ProjectCommand::Status { follow }) => {
                 self.project_status(&self.client()?, follow).await
             }
-            Command::Project(ProjectCommand::List { filter }) => {
-                self.projects_list(&self.client()?, filter).await
-            }
+            Command::Project(ProjectCommand::List) => self.projects_list(&self.client()?).await,
             Command::Project(ProjectCommand::Stop) => self.project_delete(&self.client()?).await,
         }
         .map(|_| CommandOutcome::Ok)
@@ -158,7 +156,7 @@ impl Shuttle {
                 println!();
             } else if args.login_args.api_key.is_some() {
                 self.login(args.login_args.clone()).await?;
-            } else if args.new {
+            } else if args.create_env {
                 bail!("Tried to login to create a Shuttle environment, but no API key was set.")
             }
         }
@@ -201,7 +199,7 @@ impl Shuttle {
                 println!(
                     "Shuttle works with a range of web frameworks. Which one do you want to use?"
                 );
-                let frameworks = init::Framework::iter().collect::<Vec<_>>();
+                let frameworks = init::Template::iter().collect::<Vec<_>>();
                 let index = FuzzySelect::with_theme(&theme)
                     .items(&frameworks)
                     .default(0)
@@ -212,14 +210,14 @@ impl Shuttle {
         };
 
         // 5. Initialize locally
-        init::cargo_init(path.clone())?;
+        init::cargo_init(path.clone(), project_args.name.clone().unwrap())?;
         init::cargo_shuttle_init(path.clone(), framework)?;
         println!();
 
         // 6. Confirm that the user wants to create the project environment on Shuttle
         let should_create_environment = if !interactive {
-            args.new
-        } else if args.new {
+            args.create_env
+        } else if args.create_env {
             true
         } else {
             let should_create = Confirm::with_theme(&theme)
@@ -270,32 +268,12 @@ impl Shuttle {
 
                 Password::with_theme(&ColorfulTheme::default())
                     .with_prompt("API key")
-                    .validate_with(|input: &String| {
-                        let key = input.trim().to_string();
-
-                        let mut errors = vec![];
-                        if !key.chars().all(char::is_alphanumeric) {
-                            errors.push(
-                                "The API key should consist of only alphanumeric characters.",
-                            );
-                        };
-
-                        if key.len() != 16 {
-                            errors.push("The API key should be exactly 16 characters in length.");
-                        };
-
-                        if errors.is_empty() {
-                            Ok(())
-                        } else {
-                            let message = errors.join("\n");
-                            Err(format!("Invalid API key:\n{message}"))
-                        }
-                    })
+                    .validate_with(|input: &String| ApiKey::parse(input).map(|_| {}))
                     .interact()?
             }
         };
 
-        let api_key = api_key_str.trim().parse()?;
+        let api_key = ApiKey::parse(&api_key_str)?;
 
         self.ctx.set_api_key(api_key)?;
 
@@ -986,20 +964,8 @@ impl Shuttle {
         Ok(())
     }
 
-    async fn projects_list(&self, client: &Client, filter: Option<String>) -> Result<()> {
-        let projects = match filter {
-            Some(filter) => {
-                if let Ok(filter) = State::from_str(filter.trim()) {
-                    client
-                        .get_projects_list_filtered(filter.to_string())
-                        .await?
-                } else {
-                    bail!("That's not a valid project status!");
-                }
-            }
-            None => client.get_projects_list().await?,
-        };
-
+    async fn projects_list(&self, client: &Client) -> Result<()> {
+        let projects = client.get_projects_list().await?;
         let projects_table = project::get_table(&projects);
 
         println!("{projects_table}");

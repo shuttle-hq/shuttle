@@ -93,13 +93,15 @@ Before we can login to our local instance of shuttle, we need to create a user.
 The following command inserts a user into the `auth` state with admin privileges:
 
 ```bash
-docker compose --file docker-compose.rendered.yml --project-name shuttle-dev exec auth /usr/local/bin/service --state=/var/lib/shuttle-auth init --name admin --key test-key
+# the --key needs to be 16 alphanumeric characters
+docker compose --file docker-compose.rendered.yml --project-name shuttle-dev exec auth /usr/local/bin/service --state=/var/lib/shuttle-auth init --name admin --key dh9z58jttoes3qvt
 ```
 
 Login to shuttle service in a new terminal window from the root of the shuttle directory:
 
 ```bash
-cargo run --bin cargo-shuttle -- login --api-key "test-key"
+# the --api-kei should be the same one you inserted in the auth state
+cargo run --bin cargo-shuttle -- login --api-key "dh9z58jttoes3qvt"
 ```
 
 The [shuttle examples](https://github.com/shuttle-hq/examples) are linked to the main repo as a [git submodule](https://git-scm.com/book/en/v2/Git-Tools-Submodules), to initialize it run the following commands:
@@ -148,59 +150,53 @@ cargo run --manifest-path ../../../Cargo.toml --bin cargo-shuttle -- logs
 The steps outlined above starts all the services used by shuttle locally (ie. both `gateway` and `deployer`). However, sometimes you will want to quickly test changes to `deployer` only. To do this replace `make up` with the following:
 
 ```bash
-# first generate the local docker-compose file
+# if you didn't do this already, make the images
+USE_PANAMAX=disable make images
+
+# then generate the local docker-compose file
 make docker-compose.rendered.yml
 
 # then run it
 docker compose -f docker-compose.rendered.yml up provisioner
 ```
 
-This starts the provisioner and the auth service, while preventing `gateway` from starting up. Next up we need to
-insert an admin user into the `auth` state using the ID of the `auth` container and the auth CLI `init` command:
+This starts the provisioner and the auth service, while preventing `gateway` from starting up.
+Next up we need to insert an admin user into the `auth` state using the ID of the `auth`
+container and the auth CLI `init` command:
 
 ```bash
-AUTH_CONTAINER_ID=$(docker ps -aqf "name=shuttle-auth") \
+AUTH_CONTAINER_ID=$(docker ps -qf "name=auth") \
     docker exec $AUTH_CONTAINER_ID ./usr/local/bin/service \
     --state=/var/lib/shuttle-auth \
     init --name admin --key test-key
 ```
+> Note: if you have done this already for this container you will get a "UNIQUE constraint failed"
+> error, you can ignore this.
 
-Before we can run commands against a local deployer, we need to get a valid JWT and set it in our
-`.config/shuttle/config.toml` as our `api_key`. By running the following curl command, we will request
-that our api-key in the `Authorization` header be converted to a JWT, which will be returned in the response:
-
-```bash
-curl -H "Authorization: Bearer test-key" localhost:8008/auth/key
-```
-
-Now copy the `token` value (just the value, not the key) from the curl response, and write it to your shuttle
-config (which will be a file named `config.toml` in a directory named `shuttle` in one of 
-[these places](https://docs.rs/dirs/latest/dirs/fn.config_dir.html) depending on your OS).
+We need to make sure we're logged in with the same key we inserted for the admin user in the
+previous step:
 
 ```bash
-# replace <jwt> with the token from the previous command
-echo "api_key = '<jwt>'" > ~/.config/shuttle/config.toml
+cargo shuttle login --api-key test-key
 ```
 
-> Note: The JWT will expire in 15 minutes, at which point you need to run the commands again.
-> If you have [`jq`](https://github.com/stedolan/jq/wiki/Installation) installed you can combine
-> the two above commands into the following:
-```bash
-curl -s -H "Authorization: Bearer test-key" localhost:8008/auth/key \
-    | jq -r '.token' \
-    | read token; echo "api_key='$token'" > ~/.config/shuttle/config.toml
-```
-
-Finally we need to comment out the admin layer in the deployer handlers. So in `deployer/handlers/mod.rs`,
-in the `make_router` function comment out this line: `.layer(AdminSecretLayer::new(admin_secret))`.
-
-And that's it, we're ready to start our deployer!
+We're now ready to start a local run of the deployer:
 
 ```bash
-cargo run -p shuttle-deployer -- --provisioner-address http://localhost:8000 --proxy-fqdn local.rs --admin-secret test-key --project <project_name>
+cargo run -p shuttle-deployer -- --provisioner-address http://localhost:3000 --auth-uri http://localhost:8008 --proxy-fqdn local.rs --admin-secret test-key --local --project <project_name>
 ```
 
-The `--admin-secret` can safely be changed to your api-key to make testing easier. While `<project_name>` needs to match the name of the project that will be deployed to this deployer. This is the `Cargo.toml` or `Shuttle.toml` name for the project.
+The `<project_name>` needs to match the name of the project that will be deployed to this deployer. This is the `Cargo.toml` or `Shuttle.toml` name for the project.
+
+Now that your local deployer is running, you can run commands against using the cargo-shuttle CLI.
+To do that you should navigate into an example, it needs to have the same project name as the
+one you submitted when starting the deployer above. Then you can use the CLI like you normally
+would:
+
+```bash
+# the manifest path is the path to the root shuttle manifest from the example directory
+cargo run --bin cargo-shuttle --manifest-path="../../../Cargo.toml" -- deploy
+```
 
 ### Using Podman instead of Docker
 
@@ -260,7 +256,7 @@ cargo test --package <crate-name> --all-features --test '*' -- --nocapture
 To run the end-to-end tests, from the root of the repository run:
 
 ```bash
-make test
+USE_PANAMAX=disable make test
 ```
 
 > Note: Running all the end-to-end tests may take a long time, so it is recommended to run individual tests shipped as part of each crate in the workspace first.

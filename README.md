@@ -44,9 +44,15 @@ Shuttle is built for productivity, reliability and performance:
 
 📖 Check out our documentation to get started quickly: [docs.shuttle.rs](https://docs.shuttle.rs)
 
-⭐ If you find shuttle interesting, consider starring this repo to help spread the word.
-
 🙋‍♂️ If you have any questions, join our [Discord](https://discord.gg/shuttle) server.
+
+⭐ If you find shuttle interesting, and would like to stay up-to-date, consider starring this repo to help spread the word.
+
+![star](https://i.imgur.com/kLWmThm.gif)
+
+## Console Sneak Peek (gif)
+![console-sneak-peek](https://i.imgur.com/1qdWipP.gif)
+*The gif above demonstrates the ease of adding/managing resources to your project(s) in our upcoming console. Bear in mind that the ease of adding resources is already there, albeit without the visualization coming from the console.*
 
 ## Getting Started
 

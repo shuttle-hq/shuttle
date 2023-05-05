@@ -202,6 +202,10 @@ jobs:
       path:
         description: "Path to crate external from workspace"
         type: string
+      features:
+        description: "Features to enable"
+        type: string
+        default: --all-features
     executor: docker-rust
     environment:
       CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
@@ -218,13 +222,13 @@ jobs:
       - run: |
           cargo clippy --tests \
                        --all-targets \
-                       --all-features \
+                       << parameters.features >> \
                        --manifest-path << parameters.path >>/Cargo.toml \
                        --no-deps -- \
                        --D warnings \
                        -A clippy::let-unit-value \
                        -A clippy::format-push-string
-      - run: cargo test --all-features --manifest-path << parameters.path >>/Cargo.toml -- --nocapture
+      - run: cargo test << parameters.features >> --manifest-path << parameters.path >>/Cargo.toml -- --nocapture
       - save-cargo-cache
   platform-test:
     parameters:
@@ -491,7 +495,6 @@ workflows:
                 - resources/aws-rds
                 - resources/persist
                 - resources/secrets
-                - resources/shared-db
                 - resources/static-folder
                 - services/shuttle-actix-web
                 - services/shuttle-axum
@@ -505,6 +508,16 @@ workflows:
                 - services/shuttle-tide
                 - services/shuttle-tower
                 - services/shuttle-warp
+      - check-standalone:
+          name: resources/shared-db
+          matrix:
+            alias: check-standalone-shared-db
+            parameters:
+              path: [resources/shared-db]
+              features:
+                - "-F mongodb"
+                - "-F postgres"
+                - "-F postgres-rustls"
       - platform-test:
           name: << matrix.crate >>
           requires:
@@ -527,6 +540,7 @@ workflows:
           requires:
             - platform-test
             - check-standalone
+            - check-standalone-shared-db
           filters:
             branches:
               only: production

@@ -11,7 +11,8 @@ async-trait = "0.1.56"
 mongodb = { version = "2.3.0", optional = true }
 serde = { version = "1.0.148", features = ["derive"] }
 shuttle-service = { path = "../../service", version = "0.15.0", default-features = false }
-sqlx = { version = "0.6.2", features = ["runtime-tokio-native-tls"], optional = true }
+sqlx = { version = "0.6.2", optional = true }
 
 [features]
-postgres = ["sqlx/postgres"]
+postgres = ["sqlx/postgres", "sqlx/runtime-tokio-native-tls"]
+postgres-rustls = ["sqlx/postgres", "sqlx/runtime-tokio-rustls"]

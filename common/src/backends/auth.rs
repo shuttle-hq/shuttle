@@ -212,6 +212,8 @@ pub struct JwtAuthentication<S, F> {
     public_key_fn: F,
 }
 
+type AsyncTraitFuture<A> = Pin<Box<dyn Future<Output = A> + Send>>;
+
 #[pin_project(project = JwtAuthenticationFutureProj, project_replace = JwtAuthenticationFutureProjOwn)]
 pub enum JwtAuthenticationFuture<
     PubKeyFn: PublicKeyFn,
@@ -231,7 +233,7 @@ pub enum JwtAuthenticationFuture<
         bearer: Authorization<Bearer>,
         request: Request<Body>,
         #[pin]
-        public_key_future: Pin<Box<dyn Future<Output = Result<Vec<u8>, PubKeyFn::Error>> + Send>>,
+        public_key_future: AsyncTraitFuture<Result<Vec<u8>, PubKeyFn::Error>>,
         service: TService,
     },
 }

@@ -19,6 +19,7 @@
 //!     Ok(config.into())
 //! }
 //! ```
+use actix_web::{web, HttpResponse};
 use std::net::SocketAddr;
 
 /// A wrapper type for a closure that returns an [actix_web::web::ServiceConfig] so we can implement
@@ -35,11 +36,14 @@ where
         // Start a worker for each cpu, but no more than 4.
         let worker_count = num_cpus::get().min(4);
 
-        let server =
-            actix_web::HttpServer::new(move || actix_web::App::new().configure(self.0.clone()))
-                .workers(worker_count)
-                .bind(addr)?
-                .run();
+        let server = actix_web::HttpServer::new(move || {
+            actix_web::App::new()
+                .configure(self.0.clone())
+                .route("/healthz", web::get().to(HttpResponse::Ok))
+        })
+        .workers(worker_count)
+        .bind(addr)?
+        .run();
 
         server.await.map_err(shuttle_runtime::CustomError::new)?;
 

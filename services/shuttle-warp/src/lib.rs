@@ -20,20 +20,28 @@ pub struct WarpService<T>(pub T);
 #[shuttle_runtime::async_trait]
 impl<T> shuttle_runtime::Service for WarpService<T>
 where
-    T: Send + Sync + Clone + 'static + warp::Filter,
+    T: Send + Sync + Clone + 'static + warp::Filter<Error = warp::Rejection>,
     T::Extract: warp::reply::Reply,
 {
     /// Takes the router that is returned by the user in their [shuttle_runtime::main] function
     /// and binds to an address passed in by shuttle.
     async fn bind(mut self, addr: SocketAddr) -> Result<(), Error> {
-        warp::serve((*self).clone()).run(addr).await;
+        use warp::Filter;
+
+        let app_filter = (*self).clone();
+        let health = warp::path("healthz")
+            .and(warp::get())
+            .and(warp::path::end())
+            .map(warp::reply);
+
+        warp::serve(health.or(app_filter)).bind(addr).await;
         Ok(())
     }
 }
 
 impl<T> From<T> for WarpService<T>
 where
-    T: Send + Sync + Clone + 'static + warp::Filter,
+    T: Send + Sync + Clone + 'static + warp::Filter<Error = warp::Rejection>,
     T::Extract: warp::reply::Reply,
 {
     fn from(router: T) -> Self {

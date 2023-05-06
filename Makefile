@@ -153,7 +153,9 @@ docker-compose.rendered.yml: docker-compose.yml docker-compose.dev.yml
 # to start panamax locally run this command with an override for the profiles:
 # `make COMPOSE_PROFILES=panamax up`
 up: $(DOCKER_COMPOSE_FILES)
-	$(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE) $(addprefix -f ,$(DOCKER_COMPOSE_FILES)) -p $(STACK) up -d
+	if [ "$(SHUTTLE_DETACH)" = "disable" ]; then DETACH=""; else DETACH="-d"; fi
+	$(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE) $(addprefix -f ,$(DOCKER_COMPOSE_FILES)) -p $(STACK) up $(DETACH)
+		
 
 down: $(DOCKER_COMPOSE_FILES)
 	$(DOCKER_COMPOSE_ENV) $(DOCKER_COMPOSE) $(addprefix -f ,$(DOCKER_COMPOSE_FILES)) -p $(STACK) down

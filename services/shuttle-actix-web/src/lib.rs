@@ -56,5 +56,15 @@ where
     }
 }
 
-/// The return type that should be returned from the [shuttle_runtime::main] function.
+/// Return type from the `[shuttle_runtime::main]` macro for an Actix-based service.
+///
+/// # Example
+///
+/// ```
+/// #[shuttle_runtime::main]
+/// async fn example_service()
+///  -> ShuttleActixWeb<impl FnOnce(&mut ServiceConfig) + Send + Clone + 'static> {
+///     todo!();    
+/// }
+/// ```
 pub type ShuttleActixWeb<F> = Result<ActixWebService<F>, shuttle_runtime::Error>;

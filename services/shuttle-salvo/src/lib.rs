@@ -27,8 +27,19 @@ impl shuttle_runtime::Service for SalvoService {
     /// Takes the router that is returned by the user in their [shuttle_runtime::main] function
     /// and binds to an address passed in by shuttle.
     async fn bind(mut self, addr: SocketAddr) -> Result<(), Error> {
+        use salvo::prelude::*;
+
+        #[handler]
+        async fn healthz_handler(res: &mut Response) {
+            res.set_status_code(StatusCode::OK);
+        }
+
+        let healthz_router = salvo::Router::with_path("healthz").get(healthz_handler);
+
+        let app = salvo::Router::new().push(healthz_router).push(self.0);
+
         salvo::Server::new(salvo::listener::TcpListener::bind(addr))
-            .serve(self.0)
+            .serve(app)
             .await;
 
         Ok(())

@@ -1,4 +1,6 @@
 #![doc = include_str!("../README.md")]
+//! [Shuttle AWS RDS](https://docs.shuttle.rs/resources/shuttle-aws-rds)
+//! Plugin to provision databases using AWS RDS on Shuttle.
 
 use async_trait::async_trait;
 use paste::paste;

@@ -72,5 +72,15 @@ impl From<serenity::Client> for SerenityService {
     }
 }
 
-/// The return type that should be returned from the [shuttle_runtime::main] function.
+/// Return type from the `[shuttle_runtime::main]` macro for a Serenity-based service.
+///
+/// # Example
+///
+/// ```
+/// #[shuttle_runtime::main]
+/// async fn example_service()
+///  -> ShuttleSerenity<impl FnOnce(&mut ServiceConfig) + Send + Clone + 'static> {
+///     todo!();    
+/// }
+/// ```
 pub type ShuttleSerenity = Result<SerenityService, Error>;

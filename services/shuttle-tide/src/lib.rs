@@ -36,5 +36,16 @@ impl<T> From<tide::Server<T>> for TideService<T> {
         Self(router)
     }
 }
-/// The return type that should be returned from the [shuttle_runtime::main] function.
+
+/// Return type from the `[shuttle_runtime::main]` macro for a Tide-based service.
+///
+/// # Example
+///
+/// ```
+/// #[shuttle_runtime::main]
+/// async fn example_service()
+///  -> ShuttleTide<impl FnOnce(&mut ServiceConfig) + Send + Clone + 'static> {
+///     todo!();    
+/// }
+/// ```
 pub type ShuttleTide<T> = Result<TideService<T>, Error>;

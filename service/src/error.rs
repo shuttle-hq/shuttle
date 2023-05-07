@@ -18,4 +18,5 @@ pub enum Error {
     Custom(#[from] CustomError),
 }
 
+/// A custom error type for shuttle. Wraps anyhow::error.
 pub type CustomError = anyhow::Error;

@@ -18,10 +18,17 @@
 //! }
 //! # }
 //! ```
+use rocket::http::Status;
+use rocket::response::status;
 use std::net::SocketAddr;
 
 /// A wrapper type for [rocket::Rocket<rocket::Build>] so we can implement [shuttle_runtime::Service] for it.
 pub struct RocketService(pub rocket::Rocket<rocket::Build>);
+
+#[rocket::get("/healthz")]
+fn health_check() -> status::Custom<()> {
+    status::Custom(Status::Ok, ())
+}
 
 #[shuttle_runtime::async_trait]
 impl shuttle_runtime::Service for RocketService {
@@ -45,6 +52,7 @@ impl shuttle_runtime::Service for RocketService {
         let _rocket = self
             .0
             .configure(config)
+            .mount("/", rocket::routes![health_check])
             .launch()
             .await
             .map_err(shuttle_runtime::CustomError::new)?;

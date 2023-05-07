@@ -16,7 +16,6 @@
 //! }
 //!
 //! ```
-use salvo::Listener;
 use shuttle_runtime::Error;
 use std::net::SocketAddr;
 
@@ -28,9 +27,20 @@ impl shuttle_runtime::Service for SalvoService {
     /// Takes the router that is returned by the user in their [shuttle_runtime::main] function
     /// and binds to an address passed in by shuttle.
     async fn bind(mut self, addr: SocketAddr) -> Result<(), Error> {
-        let listener = salvo::conn::TcpListener::new(addr).bind().await;
+        use salvo::prelude::*;
 
-        salvo::Server::new(listener).serve(self.0).await;
+        #[handler]
+        async fn healthz_handler(res: &mut Response) {
+            res.status_code(StatusCode::OK);
+        }
+
+        let healthz_router = salvo::Router::with_path("healthz").get(healthz_handler);
+
+        let app = salvo::Router::new().push(healthz_router).push(self.0);
+
+        salvo::Server::new(salvo::conn::TcpListener::new(addr).bind().await)
+            .serve(app)
+            .await;
 
         Ok(())
     }

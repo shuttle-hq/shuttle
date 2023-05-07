@@ -6,6 +6,18 @@ mod shuttle_main;
 use proc_macro::TokenStream;
 use proc_macro_error::proc_macro_error;
 
+/// Setups up the `shuttle_runtime` to be executed. Allows
+/// for user to setup a runtime without needing to explicitly
+/// create one.
+///
+/// # Example
+///
+/// ```
+/// [shuttle_runtime::main]
+/// async fn entry_point() {
+///     todo!();
+/// }
+/// ```
 #[cfg(feature = "frameworks")]
 #[proc_macro_error]
 #[proc_macro_attribute]

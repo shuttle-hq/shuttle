@@ -106,8 +106,8 @@ This should generate the following dependency in `Cargo.toml`:
 
 ```toml
 rocket = "0.5.0-rc.2"
-shuttle-rocket = { version = "0.15.0" }
-shuttle-runtime = { version = "0.15.0" }
+shuttle-rocket = { version = "0.16.0" }
+shuttle-runtime = { version = "0.16.0" }
 tokio = { version = "1.26.0" }
 ```
 
@@ -124,7 +124,7 @@ fn index() -> &'static str {
 
 #[shuttle_runtime::main]
 async fn rocket() -> shuttle_rocket::ShuttleRocket {
-    let rocket = rocket::build().mount("/hello", routes![index]);
+    let rocket = rocket::build().mount("/", routes![index]);
 
     Ok(rocket.into())
 }
@@ -142,7 +142,7 @@ cargo shuttle run
 This will compile your shuttle project and start it on the default port `8000`. Test it by:
 
 ```sh
-$ curl http://localhost:8000/hello
+$ curl http://localhost:8000
 Hello, world!
 ```
 
@@ -173,7 +173,7 @@ cargo shuttle deploy
 Your service will immediately be available at `{crate_name}.shuttleapp.rs`. For instance:
 
 ```sh
-$ curl https://my-rocket-app.shuttleapp.rs/hello
+$ curl https://my-rocket-app.shuttleapp.rs
 Hello, world!
 ```
 

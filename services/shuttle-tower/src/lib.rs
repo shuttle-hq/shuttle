@@ -39,7 +39,7 @@
 //! }
 //! ```
 use shuttle_runtime::{CustomError, Error};
-use std::net::SocketAddr;
+use std::{net::SocketAddr, pin::Pin, task::Poll};
 
 /// A wrapper type for [tower::Service] so we can implement [shuttle_runtime::Service] for it.
 pub struct TowerService<T>(pub T);
@@ -58,7 +58,8 @@ where
     /// Takes the service that is returned by the user in their [shuttle_runtime::main] function
     /// and binds to an address passed in by shuttle.
     async fn bind(mut self, addr: SocketAddr) -> Result<(), Error> {
-        let shared = tower::make::Shared::new(self.0);
+        let shared = tower::make::Shared::new(HealthCheck::new(self.0));
+
         hyper::Server::bind(&addr)
             .serve(shared)
             .await
@@ -80,6 +81,48 @@ where
 {
     fn from(service: T) -> Self {
         Self(service)
+    }
+}
+
+#[derive(Clone)]
+struct HealthCheck<S> {
+    inner: S,
+}
+
+impl<S> HealthCheck<S> {
+    pub fn new(inner: S) -> Self {
+        Self { inner }
+    }
+}
+
+impl<S> tower::Service<hyper::Request<hyper::Body>> for HealthCheck<S>
+where
+    S: tower::Service<hyper::Request<hyper::Body>, Response = hyper::Response<hyper::Body>>
+        + 'static,
+    S::Error: std::error::Error + Send + Sync,
+    S::Future: std::future::Future + Send + Sync,
+{
+    type Response = S::Response;
+    type Error = S::Error;
+    type Future = Pin<
+        Box<dyn std::future::Future<Output = Result<Self::Response, Self::Error>> + Send + Sync>,
+    >;
+
+    fn poll_ready(&mut self, cx: &mut std::task::Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
+
+    fn call(&mut self, req: hyper::Request<hyper::Body>) -> Self::Future {
+        if req.uri().path() == "/healthz" {
+            let resp = hyper::Response::builder()
+                .status(hyper::StatusCode::OK)
+                .body(hyper::Body::empty())
+                .expect("Unable to create the `hyper::Response` object");
+
+            Box::pin(async { Ok(resp) })
+        } else {
+            Box::pin(self.inner.call(req))
+        }
     }
 }
 

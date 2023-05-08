@@ -65,7 +65,7 @@ impl Dal for Sqlite {
             .await?;
 
         // Making mutliple DB "connections" is fine since the sqlite is on the same machine
-        for mut resource in resources {
+        for resource in resources {
             if let Some(r_project_id) = resource.project_id {
                 if r_project_id != project_id {
                     warn!("adding a resource that belongs to another project");

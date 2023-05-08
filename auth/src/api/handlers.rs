@@ -92,7 +92,7 @@ pub(crate) async fn convert_key(
     let User {
         name, account_tier, ..
     } = user_manager
-        .get_user_by_key(key.as_ref().clone())
+        .get_user_by_key(key)
         .await
         .map_err(|_| StatusCode::UNAUTHORIZED)?;
 

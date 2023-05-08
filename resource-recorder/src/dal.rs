@@ -24,6 +24,9 @@ pub trait Dal {
 
     /// Get the resources that belong to a service
     async fn get_service_resources(&self, service_id: Uuid) -> Result<Vec<Resource>, Self::Error>;
+
+    /// Delete a resource
+    async fn delete_resource(&self, resource: &Resource) -> Result<(), Self::Error>;
 }
 
 pub struct Sqlite {
@@ -101,6 +104,16 @@ impl Dal for Sqlite {
             .bind(service_id)
             .fetch_all(&self.pool)
             .await
+    }
+
+    async fn delete_resource(&self, resource: &Resource) -> Result<(), Self::Error> {
+        sqlx::query("DELETE FROM resources WHERE project_id = ? AND service_id = ? AND type = ?")
+            .bind(resource.project_id)
+            .bind(resource.service_id)
+            .bind(resource.r#type)
+            .execute(&self.pool)
+            .await
+            .map(|_| ())
     }
 }
 
@@ -271,11 +284,26 @@ mod tests {
         static_folder2.service_id = Some(service_id3);
         static_folder2.created_at = actual[0].created_at;
 
-        let expected = vec![static_folder2];
+        let expected = vec![static_folder2.clone()];
 
         assert_eq!(expected, actual);
 
         let actual = dal.get_project_resources(project_id2).await.unwrap();
         assert_eq!(expected, actual);
+
+        // Deleting a resource
+        dal.delete_resource(&static_folder2).await.unwrap();
+
+        let actual = dal.get_service_resources(service_id3).await.unwrap();
+        assert!(
+            actual.is_empty(),
+            "service should have no resources after deletion: {actual:?}"
+        );
+
+        let actual = dal.get_project_resources(project_id2).await.unwrap();
+        assert!(
+            actual.is_empty(),
+            "project should have no resources after deletion: {actual:?}"
+        );
     }
 }

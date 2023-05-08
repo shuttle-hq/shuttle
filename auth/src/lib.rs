@@ -7,7 +7,6 @@ mod user;
 use std::{io, str::FromStr, time::Duration};
 
 use args::StartArgs;
-use shuttle_common::ApiKey;
 use sqlx::{
     migrate::Migrator,
     query,
@@ -16,7 +15,10 @@ use sqlx::{
 };
 use tracing::info;
 
-use crate::{api::serve, user::AccountTier};
+use crate::{
+    api::serve,
+    user::{AccountTier, Key},
+};
 pub use api::ApiBuilder;
 pub use args::{Args, Commands, InitArgs};
 
@@ -39,8 +41,8 @@ pub async fn start(pool: SqlitePool, args: StartArgs) -> io::Result<()> {
 
 pub async fn init(pool: SqlitePool, args: InitArgs) -> io::Result<()> {
     let key = match args.key {
-        Some(ref key) => ApiKey::parse(key).unwrap(),
-        None => ApiKey::generate(),
+        Some(ref key) => Key::from_str(key).unwrap(),
+        None => Key::new_random(),
     };
 
     query("INSERT INTO users (account_name, key, account_tier) VALUES (?1, ?2, ?3)")
@@ -51,11 +53,8 @@ pub async fn init(pool: SqlitePool, args: InitArgs) -> io::Result<()> {
         .await
         .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
-    println!(
-        "`{}` created as super user with key: {}",
-        args.name,
-        key.as_ref()
-    );
+    println!("`{}` created as super user with key: {key}", args.name,);
+
     Ok(())
 }
 

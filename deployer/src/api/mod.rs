@@ -44,7 +44,7 @@ pub async fn deploy_project(
     }
     debug!("Received a total of {} bytes", data.len());
 
-    debug!("Seding project source code to the builder.");
+    debug!("Sending project source code to the builder.");
     let image_archive = mocked_builder.get_default_image_archive(&data).await;
     debug!(
         "Received an image archive of length: {}. I will deploy it next, but hang in a bit...",

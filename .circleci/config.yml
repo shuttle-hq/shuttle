@@ -509,6 +509,8 @@ workflows:
                 - services/shuttle-tower
                 - services/shuttle-warp
       - check-standalone:
+        # shuttle-shared-db has mutually exclusive features
+        # so we run checks for each feature separately
           name: "resources/shared-db: << matrix.features >>"
           matrix:
             alias: check-standalone-shared-db
